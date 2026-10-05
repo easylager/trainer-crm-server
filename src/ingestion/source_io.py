@@ -1,6 +1,7 @@
 """Load parser source bytes from a local fixture_dir (tests) or HTTP (worker)."""
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import socket
@@ -122,17 +123,19 @@ async def _read_body_limited(response: aiohttp.ClientResponse, limit: int) -> by
     return b"".join(chunks)
 
 
-async def _get_bytes_follow_redirects(
+async def _get_follow_redirects(
     session: aiohttp.ClientSession,
     url: str,
     *,
     headers: dict[str, str],
     proxy: str | None,
     limit: int,
-) -> bytes:
+) -> tuple[bytes, str | None]:
+    """GET with manual redirects; returns (body, charset from Content-Type or None)."""
     current = url
     for _ in range(MAX_HTTP_REDIRECTS + 1):
-        assert_fetch_url_allowed(current)
+        # getaddrinfo is blocking: resolve in a worker thread, not on the event loop.
+        await asyncio.to_thread(assert_fetch_url_allowed, current)
         async with session.get(current, headers=headers, proxy=proxy, allow_redirects=False) as response:
             if response.status in {301, 302, 303, 307, 308}:
                 location = response.headers.get("Location")
@@ -141,14 +144,28 @@ async def _get_bytes_follow_redirects(
                 current = urljoin(current, location)
                 continue
             response.raise_for_status()
-            return await _read_body_limited(response, limit)
+            charset = getattr(response, "charset", None)
+            body = await _read_body_limited(response, limit)
+            return body, charset if isinstance(charset, str) and charset else None
     raise FetchRejectedError(f"too many redirects (>{MAX_HTTP_REDIRECTS})")
 
 
-async def fetch_http_bytes(url: str, *, headers: dict[str, str] | None = None, timeout_s: float = 20) -> bytes:
+async def _get_bytes_follow_redirects(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    headers: dict[str, str],
+    proxy: str | None,
+    limit: int,
+) -> bytes:
+    body, _charset = await _get_follow_redirects(session, url, headers=headers, proxy=proxy, limit=limit)
+    return body
+
+
+async def _fetch_http(url: str, *, headers: dict[str, str] | None, timeout_s: float) -> tuple[bytes, str | None]:
     request_headers = {"User-Agent": _USER_AGENT, **(headers or {})}
     async with client_session(timeout_s) as session:
-        return await _get_bytes_follow_redirects(
+        return await _get_follow_redirects(
             session,
             url,
             headers=request_headers,
@@ -157,9 +174,23 @@ async def fetch_http_bytes(url: str, *, headers: dict[str, str] | None = None, t
         )
 
 
+async def fetch_http_bytes(url: str, *, headers: dict[str, str] | None = None, timeout_s: float = 20) -> bytes:
+    body, _charset = await _fetch_http(url, headers=headers, timeout_s=timeout_s)
+    return body
+
+
+def _decode_body(raw: bytes, charset: str | None) -> str:
+    # Same as aiohttp's response.text(): charset from Content-Type, else UTF-8.
+    # Regional .by sites still serve windows-1251 — forcing UTF-8 would garble them.
+    try:
+        return raw.decode(charset or "utf-8", errors="replace")
+    except LookupError:
+        return raw.decode("utf-8", errors="replace")
+
+
 async def fetch_http_text(url: str, *, headers: dict[str, str] | None = None) -> str:
-    raw = await fetch_http_bytes(url, headers=headers, timeout_s=20)
-    return raw.decode("utf-8", errors="replace")
+    raw, charset = await _fetch_http(url, headers=headers, timeout_s=20)
+    return _decode_body(raw, charset)
 
 
 async def fetch_http_text_optional(url: str, *, headers: dict[str, str] | None = None) -> str | None:

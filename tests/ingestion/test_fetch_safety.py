@@ -133,3 +133,82 @@ async def test_fetch_accepts_small_public_response(monkeypatch) -> None:
     monkeypatch.setattr("src.ingestion.source_io.client_session", lambda _timeout: _FakeSession())
     monkeypatch.setattr("src.ingestion.source_io.assert_fetch_url_allowed", lambda _url: None)
     assert await fetch_http_bytes("https://example.test/file") == body
+
+
+def _fake_session_factory(body: bytes, charset: str | None):
+    class _FakeResponse:
+        status = 200
+        headers = {"Content-Length": str(len(body))}
+
+        def __init__(self) -> None:
+            self.charset = charset
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        @property
+        def content(self):
+            return self
+
+        async def iter_chunked(self, _size: int):
+            yield body
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def get(self, url, **kwargs):
+            return _FakeResponse()
+
+    return lambda _timeout: _FakeSession()
+
+
+@pytest.mark.asyncio
+async def test_fetch_http_text_honours_content_type_charset(monkeypatch) -> None:
+    """Regression (batch review of TASK-188): windows-1251 pages must not be decoded as UTF-8."""
+    from src.ingestion.source_io import fetch_http_text
+
+    text = "Массовое катание 29 декабря"
+    monkeypatch.setattr(
+        "src.ingestion.source_io.client_session",
+        _fake_session_factory(text.encode("cp1251"), "windows-1251"),
+    )
+    monkeypatch.setattr("src.ingestion.source_io.assert_fetch_url_allowed", lambda _url: None)
+    assert await fetch_http_text("https://example.test/page") == text
+
+
+@pytest.mark.asyncio
+async def test_fetch_http_text_defaults_to_utf8_without_charset(monkeypatch) -> None:
+    from src.ingestion.source_io import fetch_http_text
+
+    text = "Лёд"
+    monkeypatch.setattr(
+        "src.ingestion.source_io.client_session", _fake_session_factory(text.encode("utf-8"), None)
+    )
+    monkeypatch.setattr("src.ingestion.source_io.assert_fetch_url_allowed", lambda _url: None)
+    assert await fetch_http_text("https://example.test/page") == text
+
+
+@pytest.mark.asyncio
+async def test_ssrf_dns_check_runs_off_the_event_loop(monkeypatch) -> None:
+    """Regression (batch review of TASK-188): blocking getaddrinfo must not run on the loop thread."""
+    import threading
+
+    seen: list[str] = []
+
+    def _check(_url: str) -> None:
+        seen.append(threading.current_thread().name)
+
+    monkeypatch.setattr("src.ingestion.source_io.client_session", _fake_session_factory(b"ok", None))
+    monkeypatch.setattr("src.ingestion.source_io.assert_fetch_url_allowed", _check)
+    assert await fetch_http_bytes("https://example.test/file") == b"ok"
+    assert seen and seen[0] != threading.current_thread().name
