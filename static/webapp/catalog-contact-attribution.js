@@ -14,7 +14,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var HINT = 'По желанию — можно упомянуть, что вы из каталога Glide.';
+  var HINT = 'Многие пишут тренеру: «из каталога Glide».';
 
   return {
     hintText: function () {

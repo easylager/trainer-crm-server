@@ -3690,7 +3690,7 @@
       function catalogContactHintText() {
         var M = window.CatalogContactAttribution;
         if (M && typeof M.hintText === 'function') return M.hintText();
-        return 'По желанию — можно упомянуть, что вы из каталога Glide.';
+        return 'Многие пишут тренеру: «из каталога Glide».';
       }
 
       /** После innerHTML += на #trainerDetailActions подсказку нужно вставить заново. */
