@@ -1611,6 +1611,18 @@
   }
 
   /**
+   * TASK-179. Основание ближайшего сеанса: не-live (сетка, фото, вручную) клиент
+   * должен видеть текстом. Пустая строка — сеанс снят с сайта катка (live).
+   */
+  function scheduleBasisHint(live) {
+    var b = String((live && live.schedule_basis) || 'live');
+    if (b === 'projected') return 'Обычная сетка — уточните по телефону';
+    if (b === 'photo') return 'С фото — уточните по телефону';
+    if (b === 'manual') return 'Вручную — уточните по телефону';
+    return '';
+  }
+
+  /**
    * TASK-090. Карточка «Льда» — табло, а не строка списка: кадр во всю ширину,
    * время как якорь, глубина предложения отдельной строкой. Функция чистая:
    * решает, ЧТО написано в каждом слоте, разметку собирает ice-tab.js.
@@ -1629,7 +1641,11 @@
     if (prices && currency) prices += ' ' + currency;
     var more = Number(live.more_count);
     var depth;
-    if (isSession && more > 0) {
+    var basisLine = isSession ? scheduleBasisHint(live) : '';
+    if (basisLine) {
+      // TASK-179: «откуда расписание» важнее счётчика сеансов — у проекции он ничего не обещает.
+      depth = basisLine;
+    } else if (isSession && more > 0) {
       // more_count — все будущие сеансы, а не «за неделю»: обещать окно нельзя.
       depth = 'Ещё ' + more + ' ' + pluralRu(more, 'сеанс', 'сеанса', 'сеансов') + ' в расписании';
     } else if (isSession) {

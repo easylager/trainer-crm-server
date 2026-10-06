@@ -345,6 +345,14 @@
     return 'Массовое катание';
   }
 
+  function scheduleBasisHint(session) {
+    var b = String((session && session.schedule_basis) || 'live');
+    if (b === 'projected') return 'Обычная сетка — уточните по телефону';
+    if (b === 'photo') return 'Расписание с фото — уточните по телефону';
+    if (b === 'manual') return 'Внесено вручную — уточните по телефону';
+    return '';
+  }
+
   /**
    * Кнопка строки сеанса. Раньше на каждом сеансе стояло «Билет на месте» — даже у Замка,
    * где билеты продаются онлайн с остатком мест: приложение врало. Теперь только факт:
@@ -381,6 +389,8 @@
       var s = sessions[i];
       var nowState = sessionNowState(s, now);
       var meta = formatSessionPrices(s);
+      var basisNote = scheduleBasisHint(s);
+      if (basisNote) meta = basisNote + (meta ? ' · ' + meta : '');
       if (nowState !== 'upcoming') continue;
       var cta = iceRowCta(s, opts.ticketsUrl);
       rows.push({
@@ -389,6 +399,7 @@
         time: hhmm(s.starts_at_local),
         title: iceKindLabel(s),
         meta: meta,
+        scheduleBasis: String(s.schedule_basis || 'live'),
         cta: cta.cta,
         ctaKind: cta.ctaKind,
         href: cta.href,
@@ -1098,6 +1109,7 @@
     compareSessionsByStart: compareSessionsByStart,
     ymdInTimeZone: ymdInTimeZone,
     iceKindLabel: iceKindLabel,
+    scheduleBasisHint: scheduleBasisHint,
     iceRowCta: iceRowCta,
     buildRibbonForDay: buildRibbonForDay,
     buildWeekSummaries: buildWeekSummaries,

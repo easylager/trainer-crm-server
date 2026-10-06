@@ -393,6 +393,7 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
             "price_rental_minor": item.get("next_price_rental_minor"),
             "currency_code": session_currency,
             "more_count": more,
+            "schedule_basis": item.get("next_schedule_basis") or "live",
         }
     if intent == INTENT_COACH:
         trainers = int(item.get("trainer_count") or 0)
@@ -509,6 +510,7 @@ SELECT
     nxt.price_child_minor AS next_price_child_minor,
     nxt.price_rental_minor AS next_price_rental_minor,
     nxt.currency_code AS next_currency_code,
+    nxt.schedule_basis AS next_schedule_basis,
     nxw.id AS win_session_id,
     nxw.kind AS win_kind,
     nxw.starts_at_utc AS win_starts_at_utc,
@@ -518,6 +520,7 @@ SELECT
     nxw.price_child_minor AS win_price_child_minor,
     nxw.price_rental_minor AS win_price_rental_minor,
     nxw.currency_code AS win_currency_code,
+    nxw.schedule_basis AS win_schedule_basis,
     COALESCE(sa.future_count, 0) AS future_session_count,
     COALESCE(sa.sessions_48h, 0) AS sessions_48h,
     sa.max_observed_at AS sessions_observed_at,
@@ -537,7 +540,8 @@ LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 LEFT JOIN LATERAL (
     SELECT s.id, s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
-           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code
+           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code,
+           s.schedule_basis
     FROM ice_sessions s
     WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
     ORDER BY s.starts_at_utc
@@ -547,7 +551,8 @@ LEFT JOIN LATERAL (
 -- «выходные»). Без окна границы — «сейчас … +1 год», и nxw совпадает с nxt.
 LEFT JOIN LATERAL (
     SELECT s.id, s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
-           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code
+           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code,
+           s.schedule_basis
     FROM ice_sessions s
     WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
       AND s.starts_at_utc >= :win_from AND s.starts_at_utc < :win_to
@@ -1050,6 +1055,7 @@ _WINDOW_FIELDS = (
     ("win_price_child_minor", "next_price_child_minor"),
     ("win_price_rental_minor", "next_price_rental_minor"),
     ("win_currency_code", "next_currency_code"),
+    ("win_schedule_basis", "next_schedule_basis"),
 )
 
 
@@ -1433,7 +1439,7 @@ async def list_public_arena_sessions(
             SELECT id, arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                    price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                    price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-                   source_id, observed_at, valid_until, confidence
+                   source_id, observed_at, valid_until, confidence, schedule_basis
             FROM ice_sessions s
             WHERE s.arena_id = :aid
               AND {_CURRENT_SESSION_SQL}
@@ -1474,6 +1480,7 @@ async def list_public_arena_sessions(
         "observed_at",
         "valid_until",
         "confidence",
+        "schedule_basis",
     ]
     by_date: dict[str, list[dict[str, Any]]] = {}
     for raw in result.fetchall():

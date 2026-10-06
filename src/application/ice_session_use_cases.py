@@ -258,6 +258,7 @@ def serialize_ice_session(row: Mapping[str, Any]) -> dict[str, Any]:
         "observed_at": _as_utc(row["observed_at"]).isoformat() if row.get("observed_at") else None,
         "valid_until": _as_utc(row["valid_until"]).isoformat() if row.get("valid_until") else None,
         "confidence": row.get("confidence"),
+        "schedule_basis": row.get("schedule_basis") or "live",
     }
 
 
@@ -265,7 +266,7 @@ _SESSION_COLUMNS = """
     id, arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
     price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
     price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-    source_id, observed_at, valid_until, confidence
+    source_id, observed_at, valid_until, confidence, schedule_basis
 """
 
 
@@ -295,6 +296,7 @@ def _row_to_mapping(row: Any) -> dict[str, Any]:
         "observed_at",
         "valid_until",
         "confidence",
+        "schedule_basis",
     ]
     return dict(zip(keys, row, strict=True))
 
@@ -352,6 +354,7 @@ async def _insert_session(
     source_id: str | None,
     observed_at: datetime,
     confidence: float | None,
+    schedule_basis: str = "manual",
 ) -> dict[str, Any]:
     from sqlalchemy import text as sql_text
 
@@ -363,12 +366,12 @@ async def _insert_session(
                 arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                 price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                 price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-                source_id, observed_at, confidence
+                source_id, observed_at, confidence, schedule_basis
             ) VALUES (
                 :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date, :starts_at_local, :ends_at_local,
                 :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor, :currency_code,
                 :price_note, :session_label, :age_note, :capacity_note, :external_url, :status, :recurrence_key,
-                :source_id, :observed_at, :confidence
+                :source_id, :observed_at, :confidence, :schedule_basis
             )
             RETURNING {_SESSION_COLUMNS}
             """
@@ -396,6 +399,7 @@ async def _insert_session(
             "source_id": source_id,
             "observed_at": observed_at,
             "confidence": confidence,
+            "schedule_basis": schedule_basis,
         },
     )
     return _row_to_mapping(result.fetchone())
@@ -471,6 +475,7 @@ async def create_ice_session(
             source_id=SOURCE_ADMIN,
             observed_at=now,
             confidence=1.0,
+            schedule_basis="manual",
         )
         inserted.append(row)
         existing.append(row)
@@ -802,12 +807,12 @@ async def rematerialize_recurrence(
                     arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                     price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                     price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-                    source_id, observed_at, confidence
+                    source_id, observed_at, confidence, schedule_basis
                 ) VALUES (
                     :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date, :starts_at_local, :ends_at_local,
                     :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor, :currency_code,
                     :price_note, :session_label, :age_note, :capacity_note, :external_url, :status, :recurrence_key,
-                    :source_id, :observed_at, :confidence
+                    :source_id, :observed_at, :confidence, :schedule_basis
                 )
                 ON CONFLICT (recurrence_key, local_date) WHERE recurrence_key IS NOT NULL
                 DO NOTHING
@@ -837,6 +842,7 @@ async def rematerialize_recurrence(
                 "source_id": SOURCE_ADMIN,
                 "observed_at": now,
                 "confidence": 1.0,
+                "schedule_basis": template.get("schedule_basis") or "manual",
             },
         )
         row = inserted.fetchone()

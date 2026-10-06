@@ -83,13 +83,13 @@ class SqlAlchemyIceSessionPublisher:
                     starts_at_local, ends_at_local,
                     price_adult_minor, price_child_minor, price_rental_minor, price_minor,
                     currency_code, session_label, age_note, capacity_note, external_url, status,
-                    source_id, observed_at, valid_until
+                    source_id, observed_at, valid_until, schedule_basis
                 ) VALUES (
                     :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date,
                     :starts_at_local, :ends_at_local,
                     :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor,
                     :currency_code, :session_label, :age_note, :capacity_note, :external_url, :status,
-                    :source_id, :observed_at, :valid_until
+                    :source_id, :observed_at, :valid_until, :schedule_basis
                 )
                 """
             ),
@@ -114,5 +114,6 @@ class SqlAlchemyIceSessionPublisher:
                 "source_id": source_id,
                 "observed_at": draft.observed_at,
                 "valid_until": draft.valid_until,
+                "schedule_basis": draft.schedule_basis,
             },
         )

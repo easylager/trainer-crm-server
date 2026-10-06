@@ -399,6 +399,10 @@ class IceSession(Base):
             "EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 BETWEEN 30 AND 120",
             name="ck_ice_sessions_duration",
         ),
+        CheckConstraint(
+            "schedule_basis IN ('live', 'projected', 'photo', 'manual')",
+            name="ck_ice_sessions_schedule_basis",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -427,6 +431,8 @@ class IceSession(Base):
     observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
+    # TASK-179: откуда расписание — live / projected / photo / manual (migration 0218).
+    schedule_basis: Mapped[str] = mapped_column(String(16), nullable=False, server_default="live")
 
 
 class IceCityInterest(Base):

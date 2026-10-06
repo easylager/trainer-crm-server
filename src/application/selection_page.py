@@ -32,6 +32,7 @@ from src.application.arena_public_use_cases import (
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
 from src.application.place_links import catalog_start_param, place_path, place_query
+from src.shared.schedule_basis import public_basis_css_class
 from src.application.place_page import absolute_day_label
 from src.application.schedule_staleness import (
     LEVEL_STALE,
@@ -101,7 +102,7 @@ async def _window_slots(
         await session.execute(
             text(f"""
                 SELECT s.id, s.arena_id, s.local_date, s.starts_at_local, s.price_adult_minor,
-                       s.price_minor, s.currency_code
+                       s.price_minor, s.currency_code, s.schedule_basis
                 FROM ice_sessions s
                 WHERE s.arena_id = ANY(:ids)
                   AND {_CURRENT_SESSION_SQL}
@@ -298,8 +299,10 @@ def _place_html(
             s.get("price_adult_minor") if s.get("price_adult_minor") is not None else s.get("price_minor"),
             str(s.get("currency_code") or "BYN"),
         )
+        basis_cls = public_basis_css_class(str(s.get("schedule_basis") or "live"))
+        slot_cls = "slot" + (f" {basis_cls}" if basis_cls else "")
         chips += (
-            f'<a class="slot" href="{_esc(href + place_query(session_id=int(s["id"])))}">'
+            f'<a class="{_esc(slot_cls)}" href="{_esc(href + place_query(session_id=int(s["id"])))}">'
             f'<span class="slot__time">{_esc(hhmm)}</span>'
             f'<span class="slot__price">{_esc(day_text)}{(" · " + _esc(price)) if price else ""}</span></a>'
         )

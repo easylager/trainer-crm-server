@@ -80,6 +80,7 @@
     .unconfirmed li { margin: 0 0 6px; font-size: 14px; color: var(--ic-muted); }
     .unconfirmed li b { color: var(--ic-ink); font-weight: 600; }
     .unconfirmed a { color: var(--ic-accent); }
+    .arena__basis { margin: 10px 0 0; color: var(--ic-muted); font-size: 13px; line-height: 1.4; }
     .slots { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
     .slot {
       display: flex;
@@ -92,6 +93,12 @@
     }
     .slot__time { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .slot__price { font-size: 13px; color: var(--ic-muted); font-variant-numeric: tabular-nums; }
+    .slot--basis-projected,
+    .slot--basis-photo,
+    .slot--basis-manual {
+      border: 1px dashed rgba(15, 143, 138, 0.55);
+      background: rgba(15, 143, 138, 0.08);
+    }
     .empty {
       background: var(--ic-surface);
       border: 1px solid var(--ic-line);
