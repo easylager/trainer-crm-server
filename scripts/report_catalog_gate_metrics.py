@@ -20,8 +20,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.application.catalog_consumer_events import (  # noqa: E402
+    get_catalog_top_arenas_by_events,
     get_catalog_virality_cb_metrics,
     get_catalog_wau,
+    get_catalog_weekly_unique_by_city,
+    metrics_comparable_since,
 )
 from src.application.client_delight_metrics import get_share_counts  # noqa: E402
 
@@ -58,6 +61,10 @@ async def main() -> int:
     try:
         async with factory() as session:
             try:
+                comparable = await metrics_comparable_since(session)
+            except Exception:  # noqa: BLE001
+                comparable = None
+            try:
                 wau = await get_catalog_wau(session, days=args.days, as_of=as_of)
             except Exception as exc:  # noqa: BLE001
                 wau = {"error": f"catalog_consumer_events: {exc.__class__.__name__}"}
@@ -69,10 +76,23 @@ async def main() -> int:
                 shares = await get_share_counts(session, days=args.days, as_of=as_of)
             except Exception as exc:  # noqa: BLE001
                 shares = {"error": f"client_share_events: {exc.__class__.__name__}"}
+            try:
+                weekly_cities = await get_catalog_weekly_unique_by_city(session, weeks=4, as_of=as_of)
+            except Exception as exc:  # noqa: BLE001
+                weekly_cities = {"error": f"weekly_by_city: {exc.__class__.__name__}"}
+            try:
+                top_arenas = await get_catalog_top_arenas_by_events(session, days=args.days, as_of=as_of)
+            except Exception as exc:  # noqa: BLE001
+                top_arenas = {"error": f"top_arenas: {exc.__class__.__name__}"}
     finally:
         await engine.dispose()
 
     print(f"Каталог — окно {args.days} дн., as_of {as_of.isoformat()}")
+    print(
+        "Сопоставимый ряд WAU/дедупа (TASK-189): "
+        + (f"с {comparable.isoformat()}" if comparable else "ещё нет строк нового формата (dedup_key)")
+    )
+    print("(catalog_entry_clicks / ice_city_interest в коде есть; на проде не писались — см. аудит 2026-10-05)")
     print()
     if "error" in wau:
         print(f"WAU: {wau['error']}")
@@ -88,7 +108,7 @@ async def main() -> int:
         sw = cb["shares_per_wau"]
         print(f"  shares / WAU:                                 {sw if sw is not None else '—'}")
         print(f"  public_telegram_cta_clicks:                   {cb['public_telegram_cta_clicks']}")
-        print(f"  miniapp_deeplink_entries (arena_/catalog*):   {cb['miniapp_deeplink_entries']}")
+        print(f"  miniapp share-opens (диплинк из чата):        {cb['miniapp_deeplink_entries']}")
         op = cb["share_to_deeplink_open_pct"]
         print(f"  deeplink_entries / share_events:                {f'{op}%' if op is not None else '—'}")
     print()
@@ -100,6 +120,30 @@ async def main() -> int:
         print("Шеры (client_share_events):")
         for kind, v in sorted(shares["by_kind"].items()):
             print(f"  {kind:<14} {v['events']} событий, {v['sharers']} человек")
+    print()
+    if isinstance(weekly_cities, dict) and "error" in weekly_cities:
+        print(f"Недели × города: {weekly_cities['error']}")
+    elif not weekly_cities:
+        print("Недели × города: нет строк после comparable_since")
+    else:
+        print("Недели × города (уникальные actor_hash):")
+        for row in weekly_cities[:40]:
+            print(
+                f"  {row['week_start'] or '—':<12} {row['city_name'] or 'без города'!s:<16} "
+                f"actors={row['unique_actors']} events={row['events']}"
+            )
+    print()
+    if isinstance(top_arenas, dict) and "error" in top_arenas:
+        print(f"Топ арен: {top_arenas['error']}")
+    elif not top_arenas:
+        print("Топ арен: нет данных")
+    else:
+        print(f"Топ арен за {args.days} дн.:")
+        for row in top_arenas:
+            print(
+                f"  arena={row['arena_id']} {row['arena_name'] or '—'} city={row['city_id']} "
+                f"events={row['events']} actors={row['unique_actors']}"
+            )
     return 0
 
 

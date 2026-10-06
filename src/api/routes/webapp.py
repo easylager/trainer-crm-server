@@ -392,8 +392,11 @@ from src.application.client_share_message import (
 )
 from src.application.catalog_consumer_events import (
     KIND_MINIAPP_CATALOG_ENTRY,
+    is_share_attributed_deeplink_open,
     record_catalog_consumer_event,
+    resolve_entry_scope,
     telegram_actor_hash,
+    telegram_launch_context,
 )
 from src.application.client_delight_metrics import record_client_share
 from src.application.place_links import is_valid_start_param
@@ -3148,29 +3151,40 @@ async def post_client_catalog_presence(
     response: Response,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
 ) -> dict:
     """
     Успешный вход в мини-апп каталога (вкладка Поиск, карточка места, startapp после шаринга).
-    Один раз на surface + день на пользователя (дедуп на сервере).
+    Одна строка на актёра × город × арену × сутки (Минск) — дедуп на сервере (TASK-189):
+    shell и карточка арены одного входа по диплинку дают одну строку.
     """
     response.headers["Cache-Control"] = "no-store"
     surface = (body.surface or "").strip().lower()
     if surface not in _MINIAPP_CATALOG_SURFACES:
         raise HTTPException(status_code=400, detail="Unknown catalog surface")
-    sp = (body.start_param or "").strip() or None
+    launch = telegram_launch_context(cred.raw) if principal.platform == MiniAppPlatform.TELEGRAM else {}
+    # Подписанный start_param из initData важнее присланного телом.
+    sp = (launch.get("start_param") or body.start_param or "").strip() or None
     if sp and not is_valid_start_param(sp):
         sp = None
-    day = datetime.now(timezone.utc).date()
-    actor = telegram_actor_hash(client_catalog_telegram_key(principal), day)
+    city_id, arena_id = await resolve_entry_scope(
+        session, start_param=sp, city_id=body.city_id, arena_id=body.arena_id
+    )
+    chat_type = launch.get("chat_type")
     inserted = await record_catalog_consumer_event(
         session,
         kind=KIND_MINIAPP_CATALOG_ENTRY,
         surface=surface,
-        actor_hash=actor,
-        city_id=body.city_id,
-        arena_id=body.arena_id,
+        actor_hash=telegram_actor_hash(client_catalog_telegram_key(principal)),
+        city_id=city_id,
+        arena_id=arena_id,
         start_param=sp,
-        payload={"ingress": "miniapp", "platform": principal.platform.value},
+        payload={
+            "ingress": "miniapp",
+            "platform": principal.platform.value,
+            "chat_type": chat_type,
+            "share_deeplink": is_share_attributed_deeplink_open(sp, chat_type=chat_type),
+        },
     )
     return {"ok": True, "recorded": inserted}
 
