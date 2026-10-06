@@ -416,6 +416,27 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
     }
 
 
+def _unconfirmed_live_if_very_stale(
+    item: Mapping[str, Any], live: dict[str, Any], freshness: Mapping[str, Any]
+) -> dict[str, Any]:
+    """TASK-180: > 72 ч без удачного прогона — сеанс не выдаём за текущее расписание.
+
+    Ни дня, ни времени, ни цены: строка «Расписание не обновлялось N дней — уточните
+    по телефону», а сам каток остаётся в ленте (телефон и сайт — в карточке места).
+    """
+    from src.application.schedule_staleness import LEVEL_VERY_STALE, staleness_level, very_stale_note
+
+    if staleness_level(freshness) != LEVEL_VERY_STALE:
+        return live
+    note = very_stale_note(
+        freshness,
+        now=datetime.now(timezone.utc),
+        has_phone=bool(str(item.get("phone") or "").strip()),
+        has_site=bool(str(item.get("website_url") or "").strip()),
+    )
+    return {"kind": "unconfirmed", "text": note, "currency_code": live.get("currency_code")}
+
+
 def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     hero = item.get("hero")
     thumb = None
@@ -428,6 +449,9 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
             # на 390pt при DPR2 это мыло, поэтому список отдаёт ещё и card (800px).
             card = variants.get("card") or variants.get("hero") or thumb
     live = _build_live(item, intent=intent, today=today)
+    freshness = item.get("_freshness") or _schedule_freshness(item)
+    if live.get("kind") == "session":
+        live = _unconfirmed_live_if_very_stale(item, live, freshness)
     venue_type = normalize_venue_type(item.get("venue_type"))
     amenities = _as_mapping(item.get("amenities"))
     payload: dict[str, Any] = {
@@ -456,7 +480,7 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "live": live,
         "live_line": live.get("text"),
         # TASK-146: та же свежесть расписания, что в карточке (schedule_stale и др.).
-        "freshness": _schedule_freshness(item),
+        "freshness": freshness,
         # TASK-180: у очень устаревшего расписания карточка просит «уточните по телефону» —
         # только если телефон действительно есть (он и так публичный в карточке места).
         "phone": item.get("phone"),
@@ -882,6 +906,10 @@ async def list_public_ice_arenas(
     )
     if window is not None:
         _apply_window(rows)
+    if intent_value == INTENT_SKATE:
+        # TASK-180: очень устаревший каток не попадает «в окно» — его сеанс мы не
+        # показываем как ответ на «Сегодня вечером», он уходит к остальным с честной строкой.
+        _mark_unconfirmed_schedules(rows)
     if near_pt is not None:
         nlat, nlon = near_pt
         for row in rows:
@@ -1023,6 +1051,17 @@ _WINDOW_FIELDS = (
     ("win_price_rental_minor", "next_price_rental_minor"),
     ("win_currency_code", "next_currency_code"),
 )
+
+
+def _mark_unconfirmed_schedules(rows: list[dict[str, Any]]) -> None:
+    from src.application.schedule_staleness import LEVEL_VERY_STALE, staleness_level
+
+    for row in rows:
+        fresh = _schedule_freshness(row)
+        row["_freshness"] = fresh
+        if staleness_level(fresh) == LEVEL_VERY_STALE and row.get("next_session_id") is not None:
+            row["window_hit"] = False
+            row["outside_window"] = False
 
 
 def _apply_window(rows: list[dict[str, Any]]) -> None:

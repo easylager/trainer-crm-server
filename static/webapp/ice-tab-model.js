@@ -45,6 +45,29 @@
     return !!(freshness && freshness.schedule_stale && !freshness.schedule_very_stale);
   }
 
+  /** TASK-180: > 72 ч без удачного прогона — сеансы не показываем как текущее расписание. */
+  function scheduleVeryStale(item) {
+    item = item || {};
+    if (String((item.live || {}).kind || '') === 'unconfirmed') return true;
+    var freshness = item.freshness || {};
+    var S = staleApi();
+    if (S) return S.stalenessLevel(freshness) === 'very_stale';
+    return !!(freshness.schedule_stale && freshness.schedule_very_stale);
+  }
+
+  function unconfirmedLine(item, now) {
+    item = item || {};
+    var live = item.live || {};
+    if (String(live.kind || '') === 'unconfirmed' && live.text) return String(live.text).trim();
+    var S = staleApi();
+    var opts = {
+      hasPhone: !!String(item.phone || '').trim(),
+      hasSite: !!String(item.website_url || '').trim(),
+    };
+    var line = S ? S.veryStaleNote(item.freshness || {}, now || new Date(), opts) : '';
+    return line || 'Расписание не подтверждено — уточните у катка';
+  }
+
   function pluralRu(n, one, few, many) {
     var abs = Math.abs(n) % 100;
     if (abs >= 11 && abs <= 14) return many;
@@ -1473,7 +1496,10 @@
     var kind = String(live.kind || '');
     /* Окно — про сеансы льда. Улица без расписания, магазин, «уточняется» — не
        ответ на чип «Сегодня вечером»; на «Все» они остаются в основной ленте. */
+    // TASK-180: неподтверждённое (очень устаревшее) расписание — не ответ на окно.
+    if (kind === 'unconfirmed') return false;
     if (kind !== 'session') return true;
+    if (scheduleVeryStale(item)) return false;
     return !live.outside_window;
   }
 
@@ -1559,6 +1585,9 @@
     if (kind === 'trainers' || kind === 'groups') {
       return String(live.text || '').trim();
     }
+    if (kind === 'unconfirmed' || (kind === 'session' && scheduleVeryStale(item))) {
+      return unconfirmedLine(item, now);
+    }
     if (kind === 'session') {
       var parts = [];
       var when = sessionWhenLabel(live, now);
@@ -1590,7 +1619,9 @@
     item = item || {};
     opts = opts || {};
     var live = item.live || {};
-    var isSession = String(live.kind || '') === 'session';
+    var veryStale = scheduleVeryStale(item);
+    // TASK-180: очень устаревший сеанс — не «сеанс»: ни дня, ни времени, ни цены.
+    var isSession = String(live.kind || '') === 'session' && !veryStale;
     var off = !!opts.window && !inWindow(item, opts.window);
     var name = String(item.name || '');
     var currency = live.currency_code || item.currency_code || '';
@@ -1629,7 +1660,8 @@
       name: name,
       where: formatMeta(item),
       prices: prices,
-      status: isSession ? '' : formatLiveLine(item, now),
+      status: isSession ? '' : veryStale ? unconfirmedLine(item, now) : formatLiveLine(item, now),
+      veryStale: veryStale,
       depth: depth,
       tone: liveTone(item),
       // TASK-146: тип места — цветная рейка карточки (DEC-006: своя семантика,
@@ -1989,6 +2021,7 @@
     sortByDistance: sortByDistance,
     orderForFeed: orderForFeed,
     boardCardView: boardCardView,
+    scheduleVeryStale: scheduleVeryStale,
     formatEmptyList: formatEmptyList,
     formatEmptySearch: formatEmptySearch,
     formatSortCaption: formatSortCaption,

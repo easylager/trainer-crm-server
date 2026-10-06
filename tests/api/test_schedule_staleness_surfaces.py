@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from sqlalchemy import text
 
-from src.application.arena_public_use_cases import get_hub_ice_teaser
+from src.application.arena_public_use_cases import get_hub_ice_teaser, list_public_ice_arenas
 from src.application.ice_city_day import get_city_ice_day
 from src.application.ice_city_day_og import og_footer
 from src.application.ice_city_day_page import render_ice_city_day_page
@@ -209,3 +209,64 @@ async def test_hub_teaser_skips_very_stale_and_flags_stale(app_use_test_db, db_s
     assert by_arena[ids["stale"]]["schedule_stale"] is True
     assert by_arena[ids["fresh"]]["schedule_stale"] is False
     assert by_arena[ids["manual"]]["schedule_stale"] is False
+
+
+@pytest.mark.asyncio
+async def test_city_day_keeps_today_when_all_today_arenas_are_very_stale(
+    app_use_test_db, db_session
+) -> None:
+    """Сегодня сеансы есть только у «забытого» катка — день не уезжает на завтра.
+
+    Иначе пропадал бы и список «Расписание не подтверждено» на сегодня.
+    ``now`` — 06:00 по Минску того дня, где лежат сеансы, чтобы 13:00 был впереди.
+    """
+    target = date.today() + timedelta(days=2)
+    now = datetime(target.year, target.month, target.day, 6, 0, tzinfo=MINSK).astimezone(timezone.utc)
+    cid = await _insert_city(db_session, name=f"Стейл-{uuid.uuid4().hex[:6]}")
+    very = await _insert_arena(db_session, cid, name="Каток Забытый", phone="+375 17 123-45-67")
+    tomorrow_rink = await _insert_arena(db_session, cid, name="Каток Завтрашний")
+    await _add_future_session(db_session, very, days_ahead=2, observed_at=now - timedelta(hours=80))
+    await _job(db_session, very, last_ok_at=now - timedelta(hours=80))
+    # Завтра есть свежий сеанс — раньше страница уезжала бы на него.
+    await _add_future_session(db_session, tomorrow_rink, days_ahead=3, observed_at=now)
+    await db_session.flush()
+
+    day = await get_city_ice_day(db_session, city_id=cid, now=now)
+
+    assert day["local_date"] == target.isoformat()
+    assert day["is_today"] is True
+    assert day["arenas"] == [] and day["session_count"] == 0
+    assert [u["arena_id"] for u in day["unconfirmed"]] == [very]
+    html = render_ice_city_day_page(
+        city_name="Стейл", day=day, canonical_url="/ice/x/today", og_image_url="/og.png", cta_url=None
+    )
+    assert "Расписание не подтверждено" in html and "Каток Забытый" in html
+    assert "Каток Завтрашний" not in html
+
+
+@pytest.mark.asyncio
+async def test_public_list_does_not_advertise_very_stale_session(app_use_test_db, db_session) -> None:
+    """Лента Mini App: у очень устаревшего катка нет дня/времени/цены — только «уточните»."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    ids = await _city_with_arenas(db_session, now)
+
+    res = await list_public_ice_arenas(db_session, city_id=ids["city"], intent="skate")
+    by_id = {it["id"]: it for it in res["items"]}
+
+    very = by_id[ids["very"]]
+    assert very["freshness"]["schedule_very_stale"] is True
+    assert very["live"]["kind"] == "unconfirmed"
+    assert "starts_at_local" not in very["live"] and "session_id" not in very["live"]
+    days = (now.astimezone(MINSK).date() - (now - timedelta(hours=80)).astimezone(MINSK).date()).days
+    assert very["live"]["text"] == f"Расписание не обновлялось {days} дня — уточните по телефону"
+    assert very["live_line"] == very["live"]["text"]
+    for key in ("fresh", "stale", "manual"):
+        assert by_id[ids[key]]["live"]["kind"] == "session"
+
+    # Окно на день сеансов: забытый каток не считается попаданием в окно.
+    day_iso = (date.today() + timedelta(days=2)).isoformat()
+    windowed = await list_public_ice_arenas(
+        db_session, city_id=ids["city"], intent="skate", day=day_iso
+    )
+    assert windowed["window"]["hits"] == 3
+    assert windowed["items"][-1]["id"] == ids["very"]

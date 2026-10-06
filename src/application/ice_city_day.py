@@ -324,7 +324,9 @@ async def get_city_ice_day(
     day = on_date or today
     rows, unconfirmed, fresh = await _load_day_checked(session, city_id=city_id, day=day, now=now)
     fell_through = False
-    if not rows and on_date is None:
+    # TASK-180: если сегодня сеансы есть, но все — у арен с неподтверждённым расписанием,
+    # день остаётся сегодняшним: список «Расписание не подтверждено» и есть ответ на сегодня.
+    if not rows and not unconfirmed and on_date is None:
         day = today + timedelta(days=1)
         rows, unconfirmed, fresh = await _load_day_checked(
             session, city_id=city_id, day=day, now=now
