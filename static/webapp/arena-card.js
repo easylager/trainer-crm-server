@@ -17,6 +17,8 @@
     focus: null,
     /* Сеанс для «Позвать» / «Поделиться»; тап по времени в сетке. */
     sharePickSessionId: null,
+    sessionsError: false,
+    trainersError: false,
   };
 
   function esc(s) {
@@ -149,10 +151,18 @@
    */
   function goBooking(trainerId, opts) {
     opts = opts || {};
+    var arenaId = state.card && state.card.id;
+    if (global.BookingClient && typeof global.BookingClient.markArenaCatalogStack === 'function') {
+      global.BookingClient.markArenaCatalogStack(arenaId);
+    } else {
+      try {
+        global.sessionStorage.setItem('tcb_catalog_arena_stack_v1', String(arenaId));
+      } catch (eMark) { /* private mode */ }
+    }
     shellNav(
       M.buildBookingHref({
         trainerId: trainerId,
-        arenaId: state.card && state.card.id,
+        arenaId: arenaId,
         groupId: opts.groupId,
       })
     );
@@ -718,6 +728,18 @@
        это не «данных пока нет», а неверный вопрос к площадке. */
     // has_skating — каток или уличный лёд (сервер: venue_types.has_public_skating).
     if (!skatingCard()) return '';
+    if (state.sessionsError) {
+      return (
+        '<div class="arena-sec">' +
+        '<p class="arena-h">Расписание</p>' +
+        '<div class="arena-empty">' +
+        '<b>Не удалось загрузить расписание</b>' +
+        '<p>Похоже, пропала связь. Расписание можно загрузить заново.</p>' +
+        '<button type="button" class="arena-btn" data-action="retry-sessions">Повторить</button>' +
+        '</div>' +
+        '</div>'
+      );
+    }
     var feed = M.iceFeedView({
       card: state.card,
       hasSessions: hasAnySessions(),
@@ -744,6 +766,14 @@
         '</div>'
       );
     }
+    if (feed.mode === 'unconfirmed') {
+      return (
+        '<div class="arena-sec">' +
+        '<p class="arena-h">Расписание</p>' +
+        '<p class="arena-stale">' + esc(feed.banner || '') + '</p>' +
+        '</div>'
+      );
+    }
     var days = strip();
     if (!state.day) {
       // День из ленты — если он есть в полосе; иначе свой умный дефолт.
@@ -758,6 +788,9 @@
     var hasTicketLinks = daySessions.some(function (s) {
       return M.iceRowCta(s, state.card && state.card.tickets_url).href;
     });
+    var staleNote = M.shouldWarnScheduleStale(state.card.freshness)
+      ? M.staleScheduleNote(state.card.freshness, new Date(), state.card)
+      : '';
     return (
       '<div class="arena-sec">' +
       '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
@@ -765,6 +798,7 @@
         ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
         : '') +
       '</div>' +
+      (staleNote ? '<p class="arena-stale">' + esc(staleNote) + '</p>' : '') +
       '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
@@ -773,6 +807,16 @@
   }
 
   function renderTrainers() {
+    if (state.trainersError) {
+      return (
+        '<div class="arena-sec"><p class="arena-h">Тренеры на этой арене</p>' +
+        '<div class="arena-empty">' +
+        '<b>Не удалось загрузить тренеров</b>' +
+        '<p>Похоже, пропала связь. Список тренеров можно загрузить заново.</p>' +
+        '<button type="button" class="arena-btn" data-action="retry-trainers">Повторить</button>' +
+        '</div></div>'
+      );
+    }
     var items = (state.trainers && state.trainers.items) || [];
     if (!items.length) return '';
     var html =
@@ -1149,6 +1193,65 @@
       return;
     }
     if (action === 'report') openModal();
+    if (action === 'retry-trainers') {
+      reloadTrainers();
+      return;
+    }
+    if (action === 'retry-sessions') {
+      reloadSessions();
+      return;
+    }
+  }
+
+  function arenaApiBase() {
+    if (!state.ref) return '';
+    return '/api/public/arenas/' + encodeURIComponent(state.ref);
+  }
+
+  function applyScheduleFocus() {
+    if (state.focus && state.focus.sessionId && !state.focus.day && state.sessions) {
+      var found = M.dayForSession(state.sessions.days, state.focus.sessionId);
+      if (found) state.focus.day = found;
+    }
+    if (state.focus && state.focus.sessionId) {
+      state.sharePickSessionId = String(state.focus.sessionId);
+    }
+  }
+
+  function reloadSessions() {
+    var base = arenaApiBase();
+    if (!base || !state.card) return;
+    state.sessionsError = false;
+    var today = todayIso();
+    var to = addDaysIso(today, 13);
+    fetchJson(base + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to))
+      .then(function (data) {
+        state.sessions = data || { days: [] };
+        state.sessionsError = false;
+        applyScheduleFocus();
+        paint();
+      })
+      .catch(function () {
+        state.sessionsError = true;
+        paint();
+      });
+  }
+
+  function reloadTrainers() {
+    var base = arenaApiBase();
+    if (!base || !state.card) return;
+    state.trainersError = false;
+    fetchJson(base + '/trainers')
+      .then(function (data) {
+        state.trainers = data || { items: [], groups: [] };
+        state.trainersError = false;
+        paint();
+      })
+      .catch(function () {
+        state.trainersError = true;
+        state.trainers = { items: [], groups: [] };
+        paint();
+      });
   }
 
   function fetchJson(url) {
@@ -1181,30 +1284,21 @@
       return;
     }
     applyPrefetchHero(state.ref);
-    var base = '/api/public/arenas/' + encodeURIComponent(state.ref);
-    var today = todayIso();
-    var to = addDaysIso(today, 13);
-    Promise.all([
-      fetchJson(base),
-      fetchJson(base + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to)),
-      fetchJson(base + '/trainers'),
-    ])
-      .then(function (parts) {
-        if (!parts[0]) {
+    var base = arenaApiBase();
+    state.sessionsError = false;
+    state.trainersError = false;
+    fetchJson(base)
+      .then(function (card) {
+        if (!card) {
           showError('Арена не найдена.');
           return;
         }
-        state.card = parts[0];
-        state.sessions = parts[1] || { days: [] };
-        state.trainers = parts[2] || { items: [], groups: [] };
-        if (state.focus && state.focus.sessionId && !state.focus.day) {
-          var found = M.dayForSession(state.sessions.days, state.focus.sessionId);
-          if (found) state.focus.day = found;
-        }
-        if (state.focus && state.focus.sessionId) {
-          state.sharePickSessionId = String(state.focus.sessionId);
-        }
+        state.card = card;
+        state.sessions = { days: [] };
+        state.trainers = { items: [], groups: [] };
         paint();
+        reloadSessions();
+        reloadTrainers();
         if (global.ClientShell && global.ClientShell.reportCatalogPresence) {
           global.ClientShell.reportCatalogPresence('miniapp_arena', start, { arena_id: Number(state.ref) });
         }
