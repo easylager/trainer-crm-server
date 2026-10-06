@@ -91,11 +91,12 @@ async def test_place_page_phone_mode_ssr(app_use_test_db, db_session) -> None:
 async def test_place_page_season_closed_ssr(app_use_test_db, db_session) -> None:
     cid = await _insert_city(db_session, name=f"Closed-{uuid.uuid4().hex[:6]}")
     arena_id = await _insert_arena(db_session, cid, name="Каток Жодино закрыт")
+    reopen = date.today() + timedelta(days=60)  # всегда в будущем, иначе «откроется» пропадёт
     await _set_mode(
         db_session,
         arena_id,
         mode="season_closed",
-        reopen=date(2026, 11, 1),
+        reopen=reopen,
         note="ремонт",
     )
     await db_session.commit()
@@ -103,7 +104,7 @@ async def test_place_page_season_closed_ssr(app_use_test_db, db_session) -> None
     view = await load_place_view(db_session, str(arena_id))
     html = _schedule_html(view, base_path=f"/p/{arena_id}", invite=False)
     assert SEASON_CLOSED_LINE in html
-    assert "откроется 01.11" in html
+    assert f"откроется {reopen:%d.%m}" in html
     assert "ремонт" in html
 
 
@@ -114,6 +115,7 @@ async def test_admin_patch_schedule_mode(app_use_test_db, db_session) -> None:
 
     cid = await _insert_city(db_session, name=f"Admin-{uuid.uuid4().hex[:6]}")
     arena_id = await _insert_arena(db_session, cid, name="Админ режим")
+    reopen_iso = (date.today() + timedelta(days=90)).isoformat()
     await db_session.commit()
 
     app.dependency_overrides[get_admin_miniapp_principal] = lambda: MiniAppPrincipal(
@@ -129,7 +131,7 @@ async def test_admin_patch_schedule_mode(app_use_test_db, db_session) -> None:
             f"/api/webapp/admin/arenas/{arena_id}",
             json={
                 "schedule_mode": "season_closed",
-                "reopen_date": "2026-12-01",
+                "reopen_date": reopen_iso,
                 "schedule_mode_note": "тест",
             },
         )
@@ -145,5 +147,5 @@ async def test_admin_patch_schedule_mode(app_use_test_db, db_session) -> None:
         )
     ).one()
     assert row[0] == "season_closed"
-    assert str(row[1]) == "2026-12-01"
+    assert str(row[1]) == reopen_iso
     assert row[2] == "тест"
