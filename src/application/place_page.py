@@ -58,7 +58,7 @@ from src.application.schedule_staleness import (
     staleness_level,
     very_stale_note,
 )
-from src.shared.html_template import fill_placeholders, json_for_script, safe_external_url
+from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
 from src.shared.venue_types import has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
@@ -306,9 +306,10 @@ async def load_place_view(
     *,
     session_id: int | None = None,
     now: datetime | None = None,
+    city_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Карточка места + неделя расписания + выбранный сеанс. ``None`` — места нет в каталоге."""
-    card = await get_public_arena_card(session, arena_ref)
+    card = await get_public_arena_card(session, arena_ref, city_id=city_id)
     if card is None:
         return None
     now = now or datetime.now(timezone.utc)
@@ -925,6 +926,7 @@ def render_place_page(
     city_page_url: str | None,
     share: Mapping[str, str],
     invite: bool = False,
+    country: str | None = None,
 ) -> str:
     card = view["card"]
     title = page_title(view, invite=invite)
@@ -990,6 +992,7 @@ def render_place_page(
     robots = "noindex, follow" if (view.get("focus") is not None or invite) else "index, follow"
 
     html = _TEMPLATE_PATH.read_text(encoding="utf-8")
+    lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
     replacements = {
         "__OG_TITLE__": _esc(title),
         "__OG_DESCRIPTION__": _esc(og_description(view)),
@@ -997,6 +1000,8 @@ def render_place_page(
         "__OG_URL__": _esc(share["share_url"]),
         "__OG_IMAGE__": _esc(og_image_url),
         "__STORY_IMAGE__": _esc(story_image_url),
+        "__LANG__": lang,
+        "__OG_LOCALE__": og_locale,
         "__ROBOTS__": robots,
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
         "__CITY__": _esc(city or "Беларусь"),

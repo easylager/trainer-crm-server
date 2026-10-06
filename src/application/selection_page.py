@@ -31,7 +31,7 @@ from src.application.arena_public_use_cases import (
 )
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
-from src.application.place_links import catalog_start_param, place_path, place_query
+from src.application.place_links import catalog_start_param, join_public_origin, place_path, place_query
 from src.shared.schedule_basis import public_basis_css_class
 from src.application.place_page import absolute_day_label
 from src.application.schedule_staleness import (
@@ -42,7 +42,7 @@ from src.application.schedule_staleness import (
     staleness_level,
     very_stale_note,
 )
-from src.shared.html_template import fill_placeholders, json_for_script
+from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import VENUE_TYPE_KEYS, has_public_skating
 
@@ -382,18 +382,31 @@ def render_selection_page(
     )
     dock = f'<div class="dock"><a class="cta" href="{_esc(cta_url)}">Открыть в Telegram</a></div>' if cta_url else ""
     body = hero + note + places + _share_html(share, venue_type="ice" if view.get("skating") else "shop") + dock
+    elements = []
+    for n, item in enumerate(view["items"]):
+        slug = str(item.get("slug") or "").strip()
+        path = place_path(city_name=city_name, slug=slug) if slug else f"/p/{int(item['id'])}"
+        elements.append(
+            {
+                "@type": "ListItem",
+                "position": n + 1,
+                "name": item.get("name"),
+                "url": join_public_origin(canonical_url, path),
+            }
+        )
     ld = json_for_script(
         {
             "@context": "https://schema.org",
             "@type": "ItemList",
             "name": share_title,
-            "itemListElement": [
-                {"@type": "ListItem", "position": n + 1, "name": i.get("name")} for n, i in enumerate(view["items"])
-            ],
+            "itemListElement": elements,
         }
     )
     page = _TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city_name)} сегодня</a>' if city_page_url else ""
+    # ?t= и ?w= — та же подборка с фильтром. В индекс идёт только базовый /c/{город}.
+    variant = bool(view.get("venue") or view.get("when"))
+    lang, og_locale = html_lang_for_country(str(view["city"].get("country") or ""))
     return fill_placeholders(
         page,
         {
@@ -403,7 +416,9 @@ def render_selection_page(
             "__OG_URL__": _esc(share["share_url"]),
             "__OG_IMAGE__": _esc(og_image_url),
             "__STORY_IMAGE__": _esc(story_image_url or og_image_url),
-            "__ROBOTS__": "index, follow",
+            "__LANG__": lang,
+            "__OG_LOCALE__": og_locale,
+            "__ROBOTS__": "noindex, follow" if variant else "index, follow",
             "__JSONLD__": ld,
             "__CITY__": _esc(city_name),
             "__CITY_LINK__": city_link,

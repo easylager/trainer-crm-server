@@ -14,6 +14,8 @@ from typing import Any
 
 from sqlalchemy import bindparam, text
 
+from src.shared.currency import resolve_trainer_currencies
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.repositories.client_trainer_edge_repository import ClientTrainerEdgeRepository
@@ -387,4 +389,9 @@ async def trainer_display_hints_by_ids(
             "primary_arena_name": arena,
             "min_price_cents": int(mp) if mp is not None else None,
         }
+    # TASK-196: валюта минимальной цены — из города тренера (BY → BYN, RU → RUB),
+    # одним запросом на пакет; рисует её чип «от X …» на экране сохранённых.
+    currency_by_tid = await resolve_trainer_currencies(session, uniq)
+    for tid in out:
+        out[tid]["currency_code"] = currency_by_tid.get(int(tid))
     return out

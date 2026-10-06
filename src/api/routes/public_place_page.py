@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import text
@@ -190,6 +192,7 @@ async def place_page(
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
         share=share_payload(view, page_url=share_url, invite=False),
         invite=invite,
+        country=str(city.get("country") or ""),
     )
     await record_public_page_view(
         session,
@@ -271,15 +274,43 @@ async def place_story_image(
 # поиска — «массовое катание <город> расписание», «заточка коньков <район>».
 # ---------------------------------------------------------------------------
 
+# Видимость — тот же предикат, что у списка и карточки (TASK-177). Свой фильтр не копируем.
+# lastmod места — что новее: правка профиля или начало самого позднего сеанса.
 _SITEMAP_SQL = text(f"""
-    SELECT c.name AS city_name, p.slug, a.venue_type
+    SELECT c.name AS city_name, p.slug, a.venue_type,
+           GREATEST(p.updated_at, sess.last_at) AS lastmod
     FROM arenas a
     JOIN arena_profiles p ON p.arena_id = a.id
     JOIN cities c ON c.id = a.city_id
+    LEFT JOIN (
+        SELECT arena_id, MAX(starts_at_utc) AS last_at
+        FROM ice_sessions
+        GROUP BY arena_id
+    ) sess ON sess.arena_id = a.id
     WHERE {PUBLIC_ARENA_VISIBLE_SQL}
       AND p.status = 'published' AND p.slug IS NOT NULL
     ORDER BY c.sort_order, c.id, a.id
     """)
+
+
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _sitemap_lastmod(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return _aware(value).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _newer(left: datetime | None, right: datetime | None) -> datetime | None:
+    if left is None:
+        return right
+    if right is None:
+        return left
+    return left if _aware(left) >= _aware(right) else right
 
 
 @router.get("/sitemap.xml")
@@ -288,24 +319,34 @@ async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
 
     base = _base()
     rows = (await session.execute(_SITEMAP_SQL, public_scope_params())).mappings().all()
-    urls: list[tuple[str, str]] = [(base + "/", "weekly")]
-    seen_cities: set[str] = set()
-    shop_cities: set[str] = set()
+    # «/» — лендинг тренера, в поиске каталога ему не место. Варианты /c/?t= тоже
+    # не кладём: они noindex и канонизируются на базовый /c/{город}.
+    by_city: dict[str, list[tuple[str, str, datetime | None]]] = {}
+    city_stamp: dict[str, datetime | None] = {}
+    order: list[str] = []
     for row in rows:
         city_name = str(row["city_name"])
-        if city_name not in seen_cities:
-            seen_cities.add(city_name)
-            urls.append((ice_city_day_page_url(base_url=base, city_name=city_name), "daily"))
-            # Подборка города — ответ на «где покататься в <город>» (TASK-146).
-            urls.append((f"{base}/c/{city_slug(city_name)}", "daily"))
-        if row["venue_type"] == "shop" and city_name not in shop_cities:
-            shop_cities.add(city_name)
-            urls.append((f"{base}/c/{city_slug(city_name)}?t=shop", "weekly"))
+        if city_name not in by_city:
+            by_city[city_name] = []
+            order.append(city_name)
+            city_stamp[city_name] = None
+        stamp = row["lastmod"] if isinstance(row["lastmod"], datetime) else None
+        city_stamp[city_name] = _newer(city_stamp[city_name], stamp)
         freq = "daily" if row["venue_type"] == "ice" else "weekly"
-        urls.append((place_page_url(base_url=base, city_name=city_name, slug=str(row["slug"])), freq))
+        loc = place_page_url(base_url=base, city_name=city_name, slug=str(row["slug"]))
+        by_city[city_name].append((loc, freq, stamp))
+    urls: list[tuple[str, str, datetime | None]] = []
+    for city_name in order:
+        stamp = city_stamp[city_name]
+        urls.append((ice_city_day_page_url(base_url=base, city_name=city_name), "daily", stamp))
+        # Подборка города — ответ на «где покататься в <город>» (TASK-146).
+        urls.append((f"{base}/c/{city_slug(city_name)}", "daily", stamp))
+        urls.extend(by_city[city_name])
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-    for loc, freq in urls:
-        body.append(f"<url><loc>{escape(loc)}</loc><changefreq>{freq}</changefreq></url>")
+    for loc, freq, stamp in urls:
+        lastmod = _sitemap_lastmod(stamp)
+        extra = f"<lastmod>{escape(lastmod)}</lastmod>" if lastmod else ""
+        body.append(f"<url><loc>{escape(loc)}</loc>{extra}<changefreq>{freq}</changefreq></url>")
     body.append("</urlset>")
     return Response(
         content="\n".join(body),
@@ -364,9 +405,11 @@ async def selection_page(
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
     view = await load_selection_view(session, city=city, venue=venue, when=when)
+    # Любой ?t= / ?w= канонизируется на базовую подборку города, а не на самого себя.
+    canonical_path = selection_path(city_name=city_name, venue=None, when=None)
     html = render_selection_page(
         view,
-        canonical_url=base + path,
+        canonical_url=base + canonical_path,
         og_image_url=base + selection_image_path(city_name=city_name, venue=venue, when=when),
         cta_url=public_telegram_cta_url(
             base,

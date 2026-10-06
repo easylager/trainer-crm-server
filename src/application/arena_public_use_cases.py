@@ -1284,7 +1284,17 @@ async def resolve_merged_arena_id(session: AsyncSession, arena_id: int) -> int |
     return current if current != int(arena_id) else None
 
 
-async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str, Any] | None:
+async def _load_arena_by_ref(
+    session: AsyncSession, arena_ref: str, *, city_id: int | None = None
+) -> dict[str, Any] | None:
+    """Карточка по id (уникален глобально) или по slug.
+
+    Slug уникален только внутри города: «Ледовая арена» встречается много раз.
+    slug + город → карточка этого города. Голый slug (старые ссылки ``arena_<slug>``
+    до TASK-146) → карточка, только если среди публично видимых арен
+    (``PUBLIC_ARENA_VISIBLE_SQL``) он ровно один; 0 или >1 → ``None`` (404),
+    а не «меньший id» — чужая карточка.
+    """
     now = datetime.now(timezone.utc)
     params: dict[str, Any] = {
         "now": now,
@@ -1303,9 +1313,15 @@ async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str,
     else:
         sql += " AND p.slug = :slug"
         params["slug"] = arena_ref.strip()
+        if city_id is not None:
+            sql += " AND a.city_id = :slug_city_id"
+            params["slug_city_id"] = int(city_id)
+    # LIMIT 2: для голого slug нужно отличить «один» от «неоднозначно».
     sql += " ORDER BY a.id LIMIT 2"
     result = await session.execute(text(sql), params)
     rows = [_row_to_arena_dict(row) for row in result.mappings()]
+    if len(rows) > 1 and not arena_ref.isdigit() and city_id is None:
+        return None
     return rows[0] if rows else None
 
 
@@ -1353,8 +1369,10 @@ def _freshness_payload(
     }
 
 
-async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[str, Any] | None:
-    row = await _load_arena_by_ref(session, arena_ref)
+async def get_public_arena_card(
+    session: AsyncSession, arena_ref: str, *, city_id: int | None = None
+) -> dict[str, Any] | None:
+    row = await _load_arena_by_ref(session, arena_ref, city_id=city_id)
     if row is None:
         return None
     await attach_arena_media_payloads(session, [row])
@@ -1424,8 +1442,9 @@ async def list_public_arena_sessions(
     *,
     date_from: date | None = None,
     date_to: date | None = None,
+    city_id: int | None = None,
 ) -> dict[str, Any] | None:
-    row = await _load_arena_by_ref(session, arena_ref)
+    row = await _load_arena_by_ref(session, arena_ref, city_id=city_id)
     if row is None:
         return None
     start = date_from or _today_minsk()
@@ -1503,9 +1522,9 @@ async def list_public_arena_sessions(
 
 
 async def list_public_arena_trainers(
-    session: AsyncSession, arena_ref: str
+    session: AsyncSession, arena_ref: str, *, city_id: int | None = None
 ) -> dict[str, Any] | None:
-    row = await _load_arena_by_ref(session, arena_ref)
+    row = await _load_arena_by_ref(session, arena_ref, city_id=city_id)
     if row is None:
         return None
     items, total = await list_active_trainers_for_client(

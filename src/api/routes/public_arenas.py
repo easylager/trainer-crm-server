@@ -29,6 +29,7 @@ from src.application.ice_city_day import (
     compose_ice_city_day_share_message,
     get_city_ice_day,
     ice_city_day_page_url,
+    resolve_city_by_ref,
     summary_line,
 )
 from src.application.place_links import place_image_url, place_page_url
@@ -46,6 +47,27 @@ router = APIRouter(prefix="/api/public", tags=["public-ice"])
 
 def _query_error(exc: IcePublicQueryError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
+
+
+async def _slug_city_id(
+    session: AsyncSession, arena_ref: str, city_id: int | None, city: str | None
+) -> int | None:
+    """Город для поиска по slug. Числовой id арены город не требует.
+
+    Без города — ``None``: голый slug разрешается, только если он один среди публично
+    видимых арен (``_load_arena_by_ref``), иначе 404. Явно указанный, но неизвестный
+    город — сразу 404.
+    """
+    if str(arena_ref).strip().isdigit():
+        return None
+    resolved = int(city_id) if city_id is not None else None
+    raw = (city or "").strip()
+    if resolved is None and raw:
+        found = await resolve_city_by_ref(session, raw)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Arena not found")
+        resolved = int(found["id"])
+    return resolved
 
 
 @router.get("/ice/map-config")
@@ -243,12 +265,15 @@ async def get_public_arena_sessions(
     response: Response,
     date_from: date | None = Query(None, alias="from"),
     date_to: date | None = Query(None, alias="to"),
+    city_id: int | None = Query(None),
+    city: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Canonical ice_sessions feed grouped by local_date. Expired slots are omitted."""
     response.headers["Cache-Control"] = "no-store"
+    scoped = await _slug_city_id(session, arena_ref, city_id, city)
     payload = await list_public_arena_sessions(
-        session, arena_ref, date_from=date_from, date_to=date_to
+        session, arena_ref, date_from=date_from, date_to=date_to, city_id=scoped
     )
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
@@ -259,11 +284,14 @@ async def get_public_arena_sessions(
 async def get_public_arena_trainers(
     arena_ref: str,
     response: Response,
+    city_id: int | None = Query(None),
+    city: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Trainers on an arena with can_book from get_trainer_booking_availability."""
     response.headers["Cache-Control"] = "no-store"
-    payload = await list_public_arena_trainers(session, arena_ref)
+    scoped = await _slug_city_id(session, arena_ref, city_id, city)
+    payload = await list_public_arena_trainers(session, arena_ref, city_id=scoped)
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
     for trainer in payload["items"]:
@@ -340,6 +368,8 @@ async def get_public_place_share(
     share_context: str | None = Query(None, description="Где нажали: arena_card, ice_list, hub."),
     record: bool = Query(True, description="false — предпросмотр в шите: показать, но не считать шерингом."),
     channel: str | None = Query(None, description="Канал: telegram | copy | story | system."),
+    city_id: int | None = Query(None),
+    city: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -358,7 +388,8 @@ async def get_public_place_share(
     одно намерение отправить, с каналом в ``payload.channel`` (Q-007: что реально шерят и куда).
     """
     response.headers["Cache-Control"] = "no-store"
-    view = await load_place_view(session, arena_ref, session_id=session_id)
+    scoped = await _slug_city_id(session, arena_ref, city_id, city)
+    view = await load_place_view(session, arena_ref, session_id=session_id, city_id=scoped)
     if view is None or not view["card"].get("slug"):
         raise HTTPException(status_code=404, detail="Arena not found")
     card = view["card"]
@@ -406,11 +437,14 @@ async def get_public_place_share(
 async def get_public_arena_card_route(
     arena_ref: str,
     response: Response,
+    city_id: int | None = Query(None, description="Город, если arena_ref — slug, а не id."),
+    city: str | None = Query(None, description="Slug или id города. Вместе со slug арены."),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Arena card: profile, media, tier on read, honest freshness/source."""
     response.headers["Cache-Control"] = "no-store"
-    payload = await get_public_arena_card(session, arena_ref)
+    scoped = await _slug_city_id(session, arena_ref, city_id, city)
+    payload = await get_public_arena_card(session, arena_ref, city_id=scoped)
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
     return payload

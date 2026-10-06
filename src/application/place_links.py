@@ -61,6 +61,20 @@ def place_query(*, session_id: int | None = None, invite: bool = False) -> str:
     return ("?" + urlencode(params)) if params else ""
 
 
+def join_public_origin(canonical_url: str, path: str) -> str:
+    """Абсолютный URL, если у канонической страницы есть origin, иначе сам ``path``.
+
+    Канонические адреса каталога — ``/p/``, ``/c/``, ``/ice/``. Всё до этого маркера
+    и есть схема с хостом (``https://glide.example``); в тестах база бывает пустой,
+    и тогда ссылка остаётся корневой.
+    """
+    for marker in ("/ice/", "/c/", "/p/"):
+        idx = canonical_url.find(marker)
+        if idx > 0:
+            return canonical_url[:idx] + path
+    return path
+
+
 def place_page_url(
     *,
     base_url: str,

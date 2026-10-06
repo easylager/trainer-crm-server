@@ -23,9 +23,9 @@ from src.application.ice_city_day import (
     price_range_line,
     summary_line,
 )
-from src.application.place_links import place_path
+from src.application.place_links import join_public_origin, place_path
 from src.application.schedule_staleness import UNCONFIRMED_HEADING
-from src.shared.html_template import fill_placeholders
+from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
@@ -129,6 +129,64 @@ def _empty_html(city_name: str, day_label: str) -> str:
     )
 
 
+def _event_json(arena: Mapping[str, Any], slot: Mapping[str, Any], *, place_url: str) -> dict[str, Any]:
+    """Один сеанс дня как schema.org Event: место, интервал, цена в валюте сеанса."""
+    event: dict[str, Any] = {
+        "@type": "Event",
+        "name": f"Массовое катание — {arena.get('name')}",
+        "startDate": slot.get("starts_at_utc"),
+        "endDate": slot.get("ends_at_utc"),
+        "eventStatus": "https://schema.org/EventScheduled",
+        "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+        "url": place_url,
+        "location": {
+            "@type": "Place",
+            "name": arena.get("name"),
+            "url": place_url,
+        },
+    }
+    address = str(arena.get("address") or "").strip()
+    if address:
+        event["location"]["address"] = address
+    minor = slot.get("price_adult_minor")
+    if minor is not None:
+        event["offers"] = {
+            "@type": "Offer",
+            "price": f"{int(minor) / 100:.2f}",
+            "priceCurrency": slot.get("currency_code") or "BYN",
+            "url": place_url,
+        }
+    return event
+
+
+def _day_json_ld(day: Mapping[str, Any], *, city_name: str, canonical_url: str) -> str:
+    """ItemList сеансов дня. Сериализация — только ``json_for_script`` (TASK-181)."""
+    elements: list[dict[str, Any]] = []
+    for arena in day.get("arenas") or []:
+        slug = str(arena.get("slug") or "").strip()
+        place_url = join_public_origin(canonical_url, place_path(city_name=city_name, slug=slug)) if slug else ""
+        for slot in arena.get("sessions") or []:
+            if not place_url or not slot.get("starts_at_utc"):
+                continue
+            elements.append(
+                {
+                    "@type": "ListItem",
+                    "position": len(elements) + 1,
+                    "url": place_url,
+                    "item": _event_json(arena, slot, place_url=place_url),
+                }
+            )
+    return json_for_script(
+        {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": f"Лёд в городе {city_name}",
+            "url": canonical_url,
+            "itemListElement": elements,
+        }
+    )
+
+
 def render_ice_city_day_page(
     *,
     city_name: str,
@@ -136,6 +194,7 @@ def render_ice_city_day_page(
     canonical_url: str,
     og_image_url: str,
     cta_url: str | None,
+    country: str | None = None,
 ) -> str:
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
 
@@ -165,12 +224,19 @@ def render_ice_city_day_page(
         footer = "Расписание обновляется по данным катков."
 
     html = template
+    lang, og_locale = html_lang_for_country(country)
+    # Пустой день и город без опубликованных сеансов — 200 для человека, но не для индекса.
+    robots = "index, follow" if int(day.get("session_count") or 0) > 0 else "noindex"
     values = {
         "__DESCRIPTION__": _esc(description),
         "__OG_TITLE__": _esc(og_title),
         "__OG_DESCRIPTION__": _esc(og_description),
         "__CANONICAL__": _esc(canonical_url),
         "__OG_IMAGE__": _esc(og_image_url),
+        "__LANG__": lang,
+        "__OG_LOCALE__": og_locale,
+        "__ROBOTS__": robots,
+        "__JSONLD__": _day_json_ld(day, city_name=city_name, canonical_url=canonical_url),
         "__DAY_LABEL_UPPER__": _esc(day_label.upper()),
         "__CITY__": _esc(city_name),
         "__FOOTER__": footer,
