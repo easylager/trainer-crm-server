@@ -182,7 +182,12 @@ async def test_city_day_page_hides_in_progress_slots(app_use_test_db, db_session
     async with _client() as client:
         page = await client.get(f"/ice/{city_slug(name)}/today")
     assert page.status_code == 200, page.text
-    assert started_hhmm not in page.text
+    # Время ищем в разметке слота, не во всём HTML: в JSON-LD есть UTC-суффиксы
+    # вида ``+00:00``, и при старте «идущего» сеанса ровно в полночь (``00:00``)
+    # сырой ``not in page.text`` даёт ложный fail.
+    assert f'<span class="slot__time">{started_hhmm}' not in page.text
+    if upcoming.date() == now_minsk.date():
+        assert f'<span class="slot__time">{upcoming_hhmm}' in page.text
 
 
 @pytest.mark.asyncio
