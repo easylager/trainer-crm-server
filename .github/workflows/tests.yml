@@ -43,6 +43,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Python toolchain matches runtime.txt
+        run: pytest tests/unit/test_python_runtime_alignment.py -q
+
       - name: Format check (black)
         run: black --check src/ tests/ --diff
         continue-on-error: true  # Soft until formatting is cleaned up

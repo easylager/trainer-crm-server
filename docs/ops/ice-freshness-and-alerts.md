@@ -41,8 +41,8 @@ ice ingest tick failed error=RuntimeError duration=0.3s   # плюс traceback �
 результаты: WARNING `ice ingest lock: unlock failed`, соединение выбрасывается из пула,
 Postgres снимает лок вместе с ним.
 
-**Инцидент 2026-10-04…05.** Прод собран Nixpacks на Python **3.11** (`runtime.txt`),
-CI и локальные venv — 3.12. `scheduler_lock.py` использовал синтаксис PEP 695
+**Инцидент 2026-10-04…05.** Прод был на Python **3.11** (`runtime.txt`), CI и локальные venv — 3.12.
+С TASK-200 прод, CI и ruff выровнены на **3.12**. `scheduler_lock.py` использовал синтаксис PEP 695
 (`def f[T]()`), импорт шёл внутри цикла до `try` → `SyntaxError` убивал задачу при первом
 тике, исключение лежало в задаче до остановки сервиса, в логах — ничего. С 10-03 вечера
 прогоны делались только вручную (`run_ice_ingest_once.py`). Защита:
