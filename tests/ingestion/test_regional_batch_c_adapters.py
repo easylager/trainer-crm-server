@@ -126,10 +126,14 @@ async def test_orsha_arena_ocr_matches_expected_fixture() -> None:
     """AC: OCR of Ld-07-13.jpg yields exactly the 3 gold MK slots; OL/Ol dropped."""
     skip_unless_tesseract_rus()
     expected = _expected("orsha-arena")
+    # OCR week headers are day+month only — anchor to fixture capture date so CI
+    # calendar (e.g. October) does not shift inferred years and pick the wrong Ld-*.jpg.
+    orsha_config = dict(ORSHA_ARENA_CONFIG)
+    orsha_config["run_date"] = str(expected["captured_at"])[:10]
     job = _job(
         arena_id=31,
         parser_key=PARSER_KEY_ORSHA_ARENA,
-        config=ORSHA_ARENA_CONFIG,
+        config=orsha_config,
         slug="orsha-arena",
         job_id=103,
     )
