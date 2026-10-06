@@ -26,6 +26,20 @@ def fill_placeholders(template: str, values: Mapping[str, str]) -> str:
     return _PLACEHOLDER_RE.sub(_sub, template)
 
 
+def html_lang_for_country(country: str | None) -> tuple[str, str]:
+    """``(html lang, og:locale)`` страницы каталога по стране города.
+
+    Белорусский город говорит по-русски в Беларуси (``ru-BY``), российский — ``ru-RU``.
+    Страна неизвестна — прежний ``ru`` / ``ru_RU``, без выдуманного региона.
+    """
+    code = (country or "").strip().upper()
+    if code == "BY":
+        return "ru-BY", "ru_BY"
+    if code == "RU":
+        return "ru-RU", "ru_RU"
+    return "ru", "ru_RU"
+
+
 def json_for_script(payload: Any) -> str:
     """JSON для ``<script type="application/ld+json">``: ни ``</script>``, ни ``<!--`` не закроют тег.
 

@@ -143,6 +143,8 @@ SELECT
     p.tickets_url   AS tickets_url,
     s.id            AS session_id,
     s.kind          AS kind,
+    s.starts_at_utc,
+    s.ends_at_utc,
     s.starts_at_local,
     s.ends_at_local,
     s.price_adult_minor,
@@ -166,6 +168,15 @@ WHERE a.city_id = :cid
   AND (s.valid_until IS NULL OR s.valid_until >= :now)
 ORDER BY a.name, s.starts_at_local, s.id
 """
+
+
+def _iso_utc(value: Any) -> str | None:
+    """ISO-8601 для JSON-LD ``startDate``/``endDate``. Наивный штамп считаем UTC."""
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
 
 
 def _hhmm(value: Any) -> str:
@@ -251,6 +262,8 @@ def _group_by_arena(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
             {
                 "session_id": int(row["session_id"]),
                 "kind": row["kind"],
+                "starts_at_utc": _iso_utc(row["starts_at_utc"]),
+                "ends_at_utc": _iso_utc(row["ends_at_utc"]),
                 "starts_at_local": _hhmm(row["starts_at_local"]),
                 "ends_at_local": _hhmm(row["ends_at_local"]),
                 "price_adult_minor": row["price_adult_minor"],
