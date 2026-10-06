@@ -1287,10 +1287,13 @@ async def resolve_merged_arena_id(session: AsyncSession, arena_id: int) -> int |
 async def _load_arena_by_ref(
     session: AsyncSession, arena_ref: str, *, city_id: int | None = None
 ) -> dict[str, Any] | None:
-    """Карточка по id (уникален глобально) или по slug вместе с городом.
+    """Карточка по id (уникален глобально) или по slug.
 
     Slug уникален только внутри города: «Ледовая арена» встречается много раз.
-    Голый slug без города раньше отдавал минимальный id — чужую карточку.
+    slug + город → карточка этого города. Голый slug (старые ссылки ``arena_<slug>``
+    до TASK-146) → карточка, только если среди публично видимых арен
+    (``PUBLIC_ARENA_VISIBLE_SQL``) он ровно один; 0 или >1 → ``None`` (404),
+    а не «меньший id» — чужая карточка.
     """
     now = datetime.now(timezone.utc)
     params: dict[str, Any] = {
@@ -1307,15 +1310,18 @@ async def _load_arena_by_ref(
     if arena_ref.isdigit():
         sql += " AND a.id = :arena_id"
         params["arena_id"] = int(arena_ref)
-    elif city_id is None:
-        return None
     else:
-        sql += " AND p.slug = :slug AND a.city_id = :slug_city_id"
+        sql += " AND p.slug = :slug"
         params["slug"] = arena_ref.strip()
-        params["slug_city_id"] = int(city_id)
-    sql += " ORDER BY a.id LIMIT 1"
+        if city_id is not None:
+            sql += " AND a.city_id = :slug_city_id"
+            params["slug_city_id"] = int(city_id)
+    # LIMIT 2: для голого slug нужно отличить «один» от «неоднозначно».
+    sql += " ORDER BY a.id LIMIT 2"
     result = await session.execute(text(sql), params)
     rows = [_row_to_arena_dict(row) for row in result.mappings()]
+    if len(rows) > 1 and not arena_ref.isdigit() and city_id is None:
+        return None
     return rows[0] if rows else None
 
 

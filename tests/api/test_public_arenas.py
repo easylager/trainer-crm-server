@@ -572,7 +572,9 @@ async def test_arena_card_exposes_honest_freshness_and_source(
     assert freshness["schedule_observed_at"] is not None
     assert freshness["source_url"] == "https://zamok.example/ice"
     assert freshness["source_label"]
-    assert slug_only.status_code == 404
+    # TASK-192: единственный публично видимый «katok-s-saytom» — старая ссылка arena_<slug> жива.
+    assert slug_only.status_code == 200, slug_only.text
+    assert slug_only.json()["id"] == with_source
     assert slug_card.status_code == 200, slug_card.text
     assert slug_card.json()["id"] == with_source
 

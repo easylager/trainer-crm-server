@@ -54,7 +54,9 @@ async def _slug_city_id(
 ) -> int | None:
     """Город для поиска по slug. Числовой id арены город не требует.
 
-    Slug без города (или с неизвестным городом) — 404, а не «первая попавшаяся» карточка.
+    Без города — ``None``: голый slug разрешается, только если он один среди публично
+    видимых арен (``_load_arena_by_ref``), иначе 404. Явно указанный, но неизвестный
+    город — сразу 404.
     """
     if str(arena_ref).strip().isdigit():
         return None
@@ -62,9 +64,9 @@ async def _slug_city_id(
     raw = (city or "").strip()
     if resolved is None and raw:
         found = await resolve_city_by_ref(session, raw)
-        resolved = int(found["id"]) if found else None
-    if resolved is None:
-        raise HTTPException(status_code=404, detail="Arena not found")
+        if found is None:
+            raise HTTPException(status_code=404, detail="Arena not found")
+        resolved = int(found["id"])
     return resolved
 
 

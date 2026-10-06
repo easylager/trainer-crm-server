@@ -235,8 +235,8 @@ async def test_catalog_pages_use_country_locale(app_use_test_db, db_session, mon
 
 
 @pytest.mark.asyncio
-async def test_bare_arena_slug_is_404_until_the_city_is_known(app_use_test_db, db_session) -> None:
-    """Один и тот же slug в двух городах — не «меньший id», а 404 без города."""
+async def test_ambiguous_bare_arena_slug_is_404_until_the_city_is_known(app_use_test_db, db_session) -> None:
+    """Один и тот же slug в двух городах — не «меньший id», а 404 без города (старые ссылки: однозначный slug — 200)."""
     first_name = f"Первый {uuid.uuid4().hex[:6]}"
     second_name = f"Второй {uuid.uuid4().hex[:6]}"
     empty_name = f"Третий {uuid.uuid4().hex[:6]}"
@@ -267,3 +267,50 @@ async def test_bare_arena_slug_is_404_until_the_city_is_known(app_use_test_db, d
     assert by_first.status_code == 200 and by_first.json()["id"] == first_id
     assert by_second.status_code == 200 and by_second.json()["id"] == second_id
     assert by_id.status_code == 200 and by_id.json()["id"] == first_id
+
+
+@pytest.mark.asyncio
+async def test_unique_bare_arena_slug_still_resolves_on_every_public_route(app_use_test_db, db_session) -> None:
+    """Старые ссылки ``arena_<slug>`` (до TASK-146): slug один на весь каталог → 200 везде."""
+    city = await _insert_city(db_session, name=f"Старый {uuid.uuid4().hex[:6]}")
+    arena_id = await _insert_arena(db_session, city, name=f"Уникальный каток {uuid.uuid4().hex[:8]}")
+    slug = str(
+        (
+            await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": arena_id})
+        ).scalar_one()
+    )
+    await db_session.commit()
+
+    async with _client() as client:
+        card = await client.get(f"/api/public/arenas/{slug}")
+        sessions = await client.get(f"/api/public/arenas/{slug}/sessions")
+        trainers = await client.get(f"/api/public/arenas/{slug}/trainers")
+        share = await client.get(f"/api/public/arenas/{slug}/share", params={"record": "false"})
+        by_id = await client.get(f"/api/public/arenas/{arena_id}")
+        unknown_city = await client.get(f"/api/public/arenas/{slug}", params={"city": "net-takogo"})
+    assert card.status_code == 200 and card.json()["id"] == arena_id
+    assert sessions.status_code == 200, sessions.text
+    assert trainers.status_code == 200, trainers.text
+    assert share.status_code == 200, share.text
+    assert by_id.status_code == 200 and by_id.json()["id"] == arena_id
+    assert unknown_city.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_bare_slug_is_404_on_every_public_route(app_use_test_db, db_session) -> None:
+    first = await _insert_city(db_session, name=f"Раз {uuid.uuid4().hex[:6]}")
+    second = await _insert_city(db_session, name=f"Два {uuid.uuid4().hex[:6]}")
+    arena_name = f"Ледовая арена {uuid.uuid4().hex[:6]}"
+    first_id = await _insert_arena(db_session, first, name=arena_name)
+    await _insert_arena(db_session, second, name=arena_name)
+    slug = str(
+        (
+            await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": first_id})
+        ).scalar_one()
+    )
+    await db_session.commit()
+
+    async with _client() as client:
+        for suffix in ("", "/sessions", "/trainers", "/share"):
+            resp = await client.get(f"/api/public/arenas/{slug}{suffix}")
+            assert resp.status_code == 404, (suffix, resp.status_code)
