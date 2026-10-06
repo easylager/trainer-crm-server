@@ -217,6 +217,9 @@ jobs:
           node-version: "24"
 
       - name: Run JS tests
+        # TZ is pinned deliberately: tests must not depend on the machine timezone.
+        env:
+          TZ: UTC
         # Glob, not a directory: `node --test tests/js/` does not pick the files up.
         run: node --test tests/js/*.test.js
 

@@ -6,6 +6,8 @@
  *  AC-3 60 мест: все доступны и в ленте («Показать ещё»), и на карте.
  *  AC-4 холодное открытие — ровно один запрос ленты.
  *  F5   сбой подсчёта тренеров не превращает загруженную ленту в «Не удалось загрузить».
+ * Тесты обязаны быть независимы от TZ машины: моменты времени задаются явно
+ * (ISO с Z/+03:00 или Date.UTC), а не через new Date(y, m, d, h) в локальной зоне.
  * Run: node --test tests/js/task-182-list-honesty.test.js
  */
 'use strict';
@@ -325,7 +327,8 @@ describe('TASK-182 AC-2: часы через полночь, одна реали
   it('карточка места: та же логика («открыт до 00:00», «открыт до 02:00»)', () => {
     delete require.cache[require.resolve(arenaModelPath)];
     const A = require(arenaModelPath);
-    const at = (h, m) => new Date(2026, 9, 6, h, m);
+    // Момент задаётся явно по Минску (UTC+3, без DST), а не в TZ машины.
+    const at = (h, m) => new Date(Date.UTC(2026, 9, 6, h - 3, m));
     assert.equal(A.openUntilLabel({ daily: { open: '10:00', close: '00:00' } }, at(12, 0)), 'открыт до 00:00');
     assert.equal(A.openUntilLabel({ daily: { open: '18:00', close: '02:00' } }, at(1, 0)), 'открыт до 02:00');
   });
