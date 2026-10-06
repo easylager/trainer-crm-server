@@ -20,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.repositories.trainer_repository import TrainerRepository
+from src.shared.validation import has_markup_chars
 from src.shared.venue_types import normalize_trainer_venue_type
 
 logger = logging.getLogger(__name__)
@@ -185,11 +186,15 @@ async def create_trainer_arena(
         raise ValueError("Укажите название арены.")
     if len(nm) > ARENA_NAME_MAX_LEN:
         raise ValueError(f"Название арены — не длиннее {ARENA_NAME_MAX_LEN} символов.")
+    if has_markup_chars(nm):
+        raise ValueError("Название арены не может содержать символы < и >.")
     addr = (address or "").strip()
     if not addr:
         raise ValueError("Укажите адрес арены.")
     if len(addr) > ARENA_ADDRESS_MAX_LEN:
         raise ValueError(f"Адрес — не длиннее {ARENA_ADDRESS_MAX_LEN} символов.")
+    if has_markup_chars(addr):
+        raise ValueError("Адрес не может содержать символы < и >.")
 
     repo = TrainerRepository(session)
     trainer = await repo.get_by_id(trainer_id)

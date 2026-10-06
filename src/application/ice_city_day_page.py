@@ -24,6 +24,7 @@ from src.application.ice_city_day import (
     summary_line,
 )
 from src.application.place_links import place_path
+from src.shared.html_template import fill_placeholders
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
 
@@ -123,25 +124,28 @@ def render_ice_city_day_page(
         footer = "Расписание обновляется по данным катков."
 
     html = template
-    html = html.replace("__DESCRIPTION__", _esc(description))
-    html = html.replace("__OG_TITLE__", _esc(og_title))
-    html = html.replace("__OG_DESCRIPTION__", _esc(og_description))
-    html = html.replace("__CANONICAL__", _esc(canonical_url))
-    html = html.replace("__OG_IMAGE__", _esc(og_image_url))
-    html = html.replace("__DAY_LABEL_UPPER__", _esc(day_label.upper()))
-    html = html.replace("__CITY__", _esc(city_name))
-    html = html.replace("__FOOTER__", footer)
-    html = html.replace("__BODY__", body)
-
+    values = {
+        "__DESCRIPTION__": _esc(description),
+        "__OG_TITLE__": _esc(og_title),
+        "__OG_DESCRIPTION__": _esc(og_description),
+        "__CANONICAL__": _esc(canonical_url),
+        "__OG_IMAGE__": _esc(og_image_url),
+        "__DAY_LABEL_UPPER__": _esc(day_label.upper()),
+        "__CITY__": _esc(city_name),
+        "__FOOTER__": footer,
+        "__BODY__": body,
+    }
     if cta_url:
-        html = html.replace("__CTA_URL__", _esc(cta_url))
+        values["__CTA_URL__"] = _esc(cta_url)
     else:
         # Кнопка без адреса — мёртвая кнопка. Лучше её не рисовать вовсе.
+        # Вырезаем из шаблона до подстановки: в теле могут быть свои «<a class="cta"».
         start = html.find('<a class="cta"')
         end = html.find("</a>", start)
         if start != -1 and end != -1:
             html = html[:start] + html[end + 4 :]
-    return html
+    # Один проход: вставленные имена арен не разворачивают чужие плейсхолдеры.
+    return fill_placeholders(html, values)
 
 
 def ice_city_day_paths(city_name: str) -> tuple[str, str]:

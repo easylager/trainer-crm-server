@@ -7,13 +7,13 @@ src/ingestion/adapters.py — new file, that module is untouched.
 """
 from __future__ import annotations
 
-import io
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from src.ingestion.dates import minsk_today
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -23,6 +23,8 @@ from src.ingestion.seed_config_regional_batch_b import (
     PARSER_KEY_LIDA_LDS,
     PARSER_KEY_NOVOPOLOTSK_LDS,
 )
+from src.ingestion.cpu_work import run_cpu_bound
+from src.ingestion.image_io import open_image_bytes
 from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -226,7 +228,7 @@ def _neman_slots_from_html(html: str, config: dict[str, Any]) -> list[ExtractedS
     if not _neman_title_matches(html, needle):
         return []
 
-    pub = _neman_publication_date(html) or date.today()
+    pub = _neman_publication_date(html) or minsk_today()
     duration = int(config.get("default_duration_minutes") or 60)
     default_label = str(config.get("session_label") or "лёд Пышки")
     text = _neman_article_text(html)
@@ -378,9 +380,9 @@ def _lida_ocr_schedule(image_bytes: bytes) -> list[tuple[date, str]]:
     except ImportError:
         return []
 
-    img = Image.open(io.BytesIO(image_bytes))
+    img = open_image_bytes(image_bytes)
     text = pytesseract.image_to_string(img, lang="rus", config="--psm 6")
-    ref = date.today()
+    ref = minsk_today()
     slots: list[tuple[date, str]] = []
     for match in _LIDA_OCR_DATE_LINE.finditer(text):
         month = _MONTHS_GENITIVE.get(match.group(2).lower())
@@ -417,7 +419,7 @@ def _lida_slots_from_weekday_config(
     if week_start_raw:
         week_start = date.fromisoformat(str(week_start_raw))
     else:
-        week_start = _lida_monday_on_or_before(date.today())
+        week_start = _lida_monday_on_or_before(minsk_today())
     horizon = int(job.config.get("horizon_days") or 7)
     raw_schedule = job.config.get("weekday_schedule")
     schedule: dict[int, list[str]] = (
@@ -464,7 +466,7 @@ class LidaLdsParser(IceParser):
             basename = urlparse(url).path.rsplit("/", 1)[-1]
             try:
                 image_bytes = await _lida_load_image_bytes(job, url, basename)
-                parsed = _lida_ocr_schedule(image_bytes)
+                parsed = await run_cpu_bound(_lida_ocr_schedule, image_bytes)
             except Exception:
                 continue
             if len(parsed) > len(best):

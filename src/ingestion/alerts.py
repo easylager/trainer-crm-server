@@ -6,17 +6,14 @@ import logging
 import os
 from collections import defaultdict
 from dataclasses import replace
-from datetime import date, datetime
-from typing import Any, Callable, Iterable
+from datetime import datetime
+from typing import Any, Awaitable, Callable, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ingestion.health import IceHealthSnapshot, SilentJob, calibration_summary
 
 logger = logging.getLogger(__name__)
-
-_last_silent_alert_date: date | None = None
-_last_weekly_digest_date: date | None = None
 
 DIGEST_WEEKDAY_SUNDAY = 6
 DIGEST_HOUR_MINSK = 10
@@ -196,17 +193,30 @@ async def send_ice_health_to_admins(
     return delivered
 
 
-async def tick_ice_health_alerts(session: AsyncSession, *, now: datetime) -> str | None:
-    """Immediate batched alert for newly silent sources / stale-city threshold."""
-    global _last_silent_alert_date
-    from src.ingestion.health import detect_silent_jobs, stale_session_share_by_city
+async def tick_ice_health_alerts(
+    session: AsyncSession,
+    *,
+    now: datetime,
+    sender: Callable[..., Awaitable[bool | None]] | None = None,
+) -> str | None:
+    """Immediate batched alert for newly silent sources / stale-city threshold.
 
+    Раз в сутки по Минску. Дедуп — в ``ice_ops_alerts`` (TASK-178), а не в памяти:
+    рестарт воркера или вторая реплика не дают второго сообщения за день.
+    Недоставленное (sender вернул False) повторится на следующем тике.
+    """
+    from src.ingestion.health import detect_silent_jobs, stale_session_share_by_city
+    from src.ingestion.ops_alerts import (
+        KEY_SILENT_SOURCES_DAILY,
+        mark_ops_alert_sent,
+        sent_today_minsk,
+    )
+
+    if await sent_today_minsk(session, KEY_SILENT_SOURCES_DAILY, now=now):
+        return None
     silent = await detect_silent_jobs(session, now=now)
     stale = [row for row in await stale_session_share_by_city(session, now=now) if row.over_threshold]
     if not silent and not stale:
-        return None
-    today = now.date()
-    if _last_silent_alert_date == today:
         return None
     parts = []
     if silent:
@@ -220,8 +230,10 @@ async def tick_ice_health_alerts(session: AsyncSession, *, now: datetime) -> str
             )
         parts.append("\n".join(lines))
     body = "\n\n".join(parts)
-    await send_ice_health_to_admins(body, event="ice health alert")
-    _last_silent_alert_date = today
+    delivered = await (sender or send_ice_health_to_admins)(body, event="ice health alert")
+    if delivered is False:
+        return None
+    await mark_ops_alert_sent(session, KEY_SILENT_SOURCES_DAILY, now=now)
     return body
 
 
@@ -249,26 +261,35 @@ async def _calibration_for_digest() -> dict[str, Any] | None:
         return None
 
 
-async def tick_ice_health_weekly_digest(session: AsyncSession, *, now: datetime) -> str | None:
-    """One Sunday message: silent sources, stale share, A count next to share."""
-    global _last_weekly_digest_date
+async def tick_ice_health_weekly_digest(
+    session: AsyncSession,
+    *,
+    now: datetime,
+    sender: Callable[..., Awaitable[bool | None]] | None = None,
+) -> str | None:
+    """One Sunday message: silent sources, stale share, A count next to share.
+
+    Дедуп — в ``ice_ops_alerts`` (TASK-178): одно воскресное сообщение и после рестарта.
+    """
     from src.ingestion.health import ice_health_snapshot
+    from src.ingestion.ops_alerts import KEY_WEEKLY_DIGEST, mark_ops_alert_sent, sent_today_minsk
 
     local = _minsk_now(now)
     if local.weekday() != DIGEST_WEEKDAY_SUNDAY:
         return None
     if local.hour < DIGEST_HOUR_MINSK:
         return None
-    today = local.date()
-    if _last_weekly_digest_date == today:
+    if await sent_today_minsk(session, KEY_WEEKLY_DIGEST, now=now):
         return None
     snap = await ice_health_snapshot(session, now=now)
     cal = await _calibration_for_digest()
     if cal is not None:
         snap = replace(snap, calibration=cal)
     body = format_weekly_digest(snap)
-    await send_ice_health_to_admins(body, event="ice health weekly digest")
-    _last_weekly_digest_date = today
+    delivered = await (sender or send_ice_health_to_admins)(body, event="ice health weekly digest")
+    if delivered is False:
+        return None
+    await mark_ops_alert_sent(session, KEY_WEEKLY_DIGEST, now=now)
     return body
 
 

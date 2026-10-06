@@ -25,6 +25,7 @@ import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from src.ingestion.dates import parser_reference_date
 from src.ingestion.htmlutil import parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -91,7 +92,7 @@ class BrestLdsParser(IceParser):
         fixed_start = str(job.config.get("fixed_start") or "21:15")
         fixed_end = str(job.config.get("fixed_end") or "22:15")
         horizon = int(job.config.get("horizon_days") or 7)
-        run_date = date.fromisoformat(str(job.config.get("run_date") or date.today().isoformat()))
+        run_date = parser_reference_date(job.config)
         session_label = str(job.config.get("session_label") or "СВ кат")
         age_note = str(job.config.get("age_note") or "детям до 12 лет")
         slots: list[ExtractedSlot] = []

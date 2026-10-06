@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [master, main, develop, staging, release/**]
 
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   DATABASE_URL: postgresql+asyncpg://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm_test
   DATABASE_URL_SYNC: postgresql://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm_test

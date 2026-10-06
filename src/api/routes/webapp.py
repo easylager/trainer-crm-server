@@ -4958,6 +4958,16 @@ def _admin_venue_type(raw: str | None) -> str | None:
     return key
 
 
+def _reject_arena_markup(*, name: str | None, address: str | None) -> None:
+    """Название и адрес площадки — только текст: ``<``/``>`` в них — заготовка инъекции (TASK-181)."""
+    from src.shared.validation import has_markup_chars
+
+    if has_markup_chars(name):
+        raise HTTPException(status_code=400, detail="Name must not contain < or >")
+    if has_markup_chars(address):
+        raise HTTPException(status_code=400, detail="Address must not contain < or >")
+
+
 class AdminArenaPatchBody(BaseModel):
     city_id: int | None = None
     name: str | None = None
@@ -5057,6 +5067,7 @@ async def post_admin_arena(
     name = (body.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
+    _reject_arena_markup(name=name, address=body.address)
     # Ensure city exists
     r_chk = await session.execute(text("SELECT 1 FROM cities WHERE id = :cid"), {"cid": body.city_id})
     if not r_chk.fetchone():
@@ -5107,6 +5118,7 @@ async def patch_admin_arena(
     """Update arena fields. Admin only."""
     from sqlalchemy import text
 
+    _reject_arena_markup(name=body.name, address=body.address)
     updates = []
     params: dict[str, Any] = {"id": arena_id}
     if body.city_id is not None:

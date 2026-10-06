@@ -6,6 +6,7 @@ import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from src.ingestion.dates import minsk_today
 from src.ingestion.htmlutil import parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -84,7 +85,7 @@ def _parse_ledlife_style_table(
     pivot_year: int | None = None,
 ) -> list[ExtractedSlot]:
     """Schedule grid shared by ledlife.by and junost.by origin pages."""
-    anchor = pivot_year or date.today().year
+    anchor = pivot_year or minsk_today().year
     slots: list[ExtractedSlot] = []
     current_date: date | None = None
     for table in parse_tables(html):
@@ -424,7 +425,7 @@ def _parse_junost_paragraph_schedule(
     pivot_year: int | None = None,
 ) -> list[ExtractedSlot]:
     """Weekend MK blocks on junost.by news-style pages (no schedule table)."""
-    anchor = pivot_year or date.today().year
+    anchor = pivot_year or minsk_today().year
     focus = html
     title = re.search(r"Сеансы\s+массовых\s+катаний", html, re.I)
     if title:

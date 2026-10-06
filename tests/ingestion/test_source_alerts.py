@@ -12,6 +12,8 @@ import pytest
 from sqlalchemy import text
 
 from src.ingestion.alerts import send_ice_health_to_admins
+from src.ingestion.freshness import next_source_state
+from src.ingestion.types import ScrapeRunRecord, SourceState
 from src.ingestion.source_alerts import (
     KIND_FAILING,
     KIND_RECOVERED,
@@ -91,7 +93,7 @@ def test_transition_reminder_and_recovery() -> None:
     assert "Пользователи видят: расписание от" in recovered.text
 
 
-def test_stale_without_errors_alerts_only_when_users_see_sessions() -> None:
+def test_stale_without_errors_alerts_even_when_storefront_is_empty() -> None:
     stale = _row(
         failure_streak=0,
         failing_since=None,
@@ -102,7 +104,10 @@ def test_stale_without_errors_alerts_only_when_users_see_sessions() -> None:
     [alert] = decide_source_alerts([stale], now=_NOW)
     assert "не подтверждалось" in alert.text
     assert "Последний успешный прогон: 1 окт, 05:00" in alert.text
-    assert decide_source_alerts([replace(stale, shown_sessions=0)], now=_NOW) == []
+    # TASK-178: пустая витрина — не повод молчать: источник автоматический, а сеансов нет.
+    [empty_alert] = decide_source_alerts([replace(stale, shown_sessions=0)], now=_NOW)
+    assert empty_alert.kind == KIND_FAILING
+    assert "расписания нет" in empty_alert.text
 
 
 def test_muted_or_disabled_source_does_not_alert_and_clears_open_alert() -> None:
@@ -138,6 +143,141 @@ def test_many_arenas_in_one_tick_fit_into_few_messages() -> None:
     assert 1 < len(chunks) < 10
     assert all(len(c) <= 3800 for c in chunks)
     assert sum(c.count("🔴") for c in chunks) == 40
+
+
+# ── TASK-178: честное «восстановлено» ────────────────────────────────────
+
+
+def _run(status: str, at: datetime, *, slots: int = 0, code: str | None = None, dropped: int = 0, msg=None):
+    return ScrapeRunRecord(
+        job_id=1,
+        arena_id=10,
+        parser_key="minskarena_saleframe_v1",
+        status=status,
+        slot_count=slots,
+        slots_dropped=dropped,
+        error_message=msg,
+        started_at=at,
+        finished_at=at,
+        error_code=code,
+    )
+
+
+def _apply(row: SourceHealthRow, alerts, now: datetime) -> SourceHealthRow:
+    """То же, что _apply_alert_state делает в БД после доставки."""
+    for alert in alerts:
+        state = "ok" if alert.kind == KIND_RECOVERED else "failing"
+        row = replace(row, alert_state=state, alert_sent_at=now)
+    return row
+
+
+def _with_state(row: SourceHealthRow, state: SourceState, shown: int) -> SourceHealthRow:
+    return replace(
+        row,
+        last_ok_at=state.last_ok_at,
+        failing_since=state.failing_since,
+        failure_streak=state.failure_streak,
+        last_error_code=state.last_error_code,
+        last_error_summary=state.last_error_summary,
+        shown_sessions=shown,
+    )
+
+
+@pytest.mark.parametrize("broken_run", ["error", "empty"])
+def test_layout_break_then_sessions_expire_never_reports_recovery(broken_run: str) -> None:
+    """AC-1: вёрстка сломалась → 🔴; старые сеансы истекли → пусто при пустой витрине.
+
+    Раньше пустой прогон при пустой витрине обнулял серию, и алерт слал ложное ✅
+    «восстановлен… расписания нет», после чего молчал навсегда.
+    """
+    t0 = _NOW - timedelta(hours=10)  # 03:00 по Минску
+    state = SourceState(last_ok_at=t0 - timedelta(hours=1), last_ok_slot_count=12)
+    row = _row(
+        alert_state="ok",
+        alert_sent_at=None,
+        last_ok_at=state.last_ok_at,
+        failure_streak=0,
+        failing_since=None,
+        last_error_code=None,
+        last_error_summary=None,
+    )
+    sent: list[str] = []
+
+    def tick(now: datetime) -> None:
+        nonlocal row
+        alerts = decide_source_alerts([row], now=now)
+        sent.extend(a.kind for a in alerts)
+        row = _apply(row, alerts, now)
+
+    def broken(at: datetime) -> ScrapeRunRecord:
+        if broken_run == "error":
+            return _run("error", at, code="extract_error", msg="no table on page")
+        return _run("empty", at, code="empty_source", msg="извлечено 0, опубликовано 0")
+
+    # Сломалось, пока у нас висят 12 сеансов: два прогона подряд → 🔴.
+    shown = 12
+    for i in range(2):
+        at = t0 + timedelta(minutes=15 * i)
+        state = next_source_state(state, broken(at), shown_sessions=shown)
+        row = _with_state(row, state, shown)
+        tick(at)
+    assert sent == [KIND_FAILING]
+
+    # Сеансы истекли: витрина пуста, источник по-прежнему отдаёт пусто — каждые 45 минут сутки.
+    shown = 0
+    at = t0 + timedelta(minutes=30)
+    while at < t0 + timedelta(hours=24):
+        state = next_source_state(
+            state, _run("empty", at, code="empty_source", msg="извлечено 0"), shown_sessions=shown
+        )
+        row = _with_state(row, state, shown)
+        tick(at)
+        at += timedelta(minutes=45)
+    assert KIND_RECOVERED not in sent
+    assert row.alert_state == "failing"
+    assert sent.count(KIND_REMINDER) >= 2  # 🟠 по расписанию напоминаний (днём, раз в 4 ч)
+
+    # Починили парсер: реальный ok со слотами → одно ✅ «источник восстановлен».
+    state = next_source_state(state, _run("ok", at, slots=9), shown_sessions=0)
+    row = _with_state(row, state, 9)
+    alerts = decide_source_alerts([row], now=at)
+    assert [a.kind for a in alerts] == [KIND_RECOVERED]
+    assert alerts[0].text.startswith("✅ Лёд: источник восстановлен")
+
+
+def test_only_past_sessions_on_site_gets_a_grace_before_alerting() -> None:
+    """Неделя на сайте закончилась, новую не выложили: не будим админа 6 ч спустя."""
+    row = _row(
+        failure_streak=0,
+        failing_since=None,
+        last_ok_at=_NOW - timedelta(hours=10),
+        last_error_code="empty_after_filter",
+        last_error_summary="извлечено 16, опубликовано 0: в прошлом 16",
+        shown_sessions=0,
+    )
+    assert decide_source_alerts([row], now=_NOW) == []
+    [alert] = decide_source_alerts([replace(row, last_ok_at=_NOW - timedelta(hours=37))], now=_NOW)
+    assert "на сайте только прошедшие сеансы" in alert.text
+    assert "в прошлом 16" in alert.text
+    # Источник, который ни разу не дал ok (Витебск: на сайте апрель), — алерт, не тишина.
+    never = replace(row, last_ok_at=None, created_at=_NOW - timedelta(days=30))
+    assert [a.kind for a in decide_source_alerts([never], now=_NOW)] == [KIND_FAILING]
+
+
+def test_alert_cleared_without_ok_run_is_not_called_recovery() -> None:
+    row = _row(
+        alert_state="failing",
+        alert_sent_at=_NOW - timedelta(hours=1),
+        failure_streak=0,
+        failing_since=None,
+        last_error_code=None,
+        last_ok_at=_NOW - timedelta(hours=8),
+        config={"stale_after_hours": 24},
+    )
+    [alert] = decide_source_alerts([row], now=_NOW)
+    assert alert.kind == KIND_RECOVERED
+    assert not alert.text.startswith("✅ Лёд: источник восстановлен")
+    assert "без удачного прогона" in alert.text
 
 
 # ── Тик на реальной БД, Telegram замокан ─────────────────────────────────

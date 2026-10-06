@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
+from src.ingestion.dates import infer_date_from_day_month, parser_reference_date
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -296,7 +297,7 @@ class ZamokHtmlParser(IceParser):
         duration = int(job.config.get("duration_minutes") or 45)
         suffix = str(job.config.get("slot_start_suffix") or ":15")
         horizon = int(job.config.get("horizon_days") or 7)
-        run_date = date.fromisoformat(str(job.config.get("run_date") or date.today().isoformat()))
+        run_date = parser_reference_date(job.config)
         prices = _zamok_price_map(html)
         tickets_url = _zamok_tickets_url(html)
         weekday_adult = prices.get("weekday_adult")
@@ -417,7 +418,7 @@ class ChizhovkaHtmlParser(IceParser):
     async def extract(self, job: ParserJob) -> Extraction:
         schedule = await load_source_text(job, filename="schedule.html", url_keys=("schedule_url",))
         prices = await load_source_text(job, filename="prices.html", url_keys=("prices_url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        reference = parser_reference_date(job.config)
         duration = int(job.config.get("default_duration_minutes") or 60)
         keep = {label.upper() for label in job.config.get("keep_rink_labels") or ["МА", "БА"]}
         adult = _price_from_named_row(prices, "ВЗРОСЛЫЙ БИЛЕТ")
@@ -434,7 +435,9 @@ class ChizhovkaHtmlParser(IceParser):
                     header_dates.append(None)
                     continue
                 month = _MONTHS[match.group(2).lower()]
-                header_dates.append(date(year, month, int(match.group(1))))
+                header_dates.append(
+                    infer_date_from_day_month(int(match.group(1)), month, reference)
+                )
             if not any(header_dates):
                 continue
             for row in table[1:]:
@@ -600,7 +603,7 @@ class DiamondHtmlParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         html = await load_source_text(job, filename="ledovaya-arena.html", url_keys=("schedule_url", "url"))
-        year = int(job.config.get("run_year") or date.today().year)
+        reference = parser_reference_date(job.config)
         drop = [label.lower() for label in job.config.get("drop_labels") or []]
         keep = [label.lower() for label in job.config.get("keep_labels") or ["мк"]]
         disco_marker = str(job.config.get("disco_marker") or "ДИСКОТЕКА").lower()
@@ -610,7 +613,9 @@ class DiamondHtmlParser(IceParser):
             if not title_match:
                 continue
             month = _MONTHS[title_match.group(3).lower()]
-            local_date = date(year, month, int(title_match.group(2)))
+            local_date = infer_date_from_day_month(int(title_match.group(2)), month, reference)
+            if local_date is None:
+                continue
             weekend = local_date.weekday() >= 5
             adult = 1200 if weekend else 1100
             child = 900 if weekend else 800

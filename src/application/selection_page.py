@@ -15,7 +15,6 @@ Telegram» ведёт в каталог с теми же фильтрами (``c
 from __future__ import annotations
 
 import html as html_lib
-import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -34,6 +33,7 @@ from src.application.ice_city_day import city_slug, format_price_minor, plural_r
 from src.application.ice_time_windows import WHEN_KEYS
 from src.application.place_links import catalog_start_param, place_path, place_query
 from src.application.place_page import absolute_day_label
+from src.shared.html_template import fill_placeholders, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import VENUE_TYPE_KEYS, has_public_skating
 
@@ -323,7 +323,7 @@ def render_selection_page(
     )
     dock = f'<div class="dock"><a class="cta" href="{_esc(cta_url)}">Открыть в Telegram</a></div>' if cta_url else ""
     body = hero + note + places + _share_html(share, venue_type="ice" if view.get("skating") else "shop") + dock
-    ld = json.dumps(
+    ld = json_for_script(
         {
             "@context": "https://schema.org",
             "@type": "ItemList",
@@ -331,27 +331,27 @@ def render_selection_page(
             "itemListElement": [
                 {"@type": "ListItem", "position": n + 1, "name": i.get("name")} for n, i in enumerate(view["items"])
             ],
-        },
-        ensure_ascii=False,
-    ).replace("</", "<\\/")
+        }
+    )
     page = _TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city_name)} сегодня</a>' if city_page_url else ""
-    for key, value in {
-        "__OG_TITLE__": _esc(share_title),
-        "__OG_DESCRIPTION__": _esc(share_description),
-        "__CANONICAL__": _esc(canonical_url),
-        "__OG_URL__": _esc(share["share_url"]),
-        "__OG_IMAGE__": _esc(og_image_url),
-        "__STORY_IMAGE__": _esc(story_image_url or og_image_url),
-        "__ROBOTS__": "index, follow",
-        "__JSONLD__": ld,
-        "__CITY__": _esc(city_name),
-        "__CITY_LINK__": city_link,
-        "__TRUST__": "<p>Расписание — с сайтов катков и от администраций; время и цену уточняйте на месте.</p>",
-        "__BODY__": body,
-    }.items():
-        page = page.replace(key, value)
-    return page
+    return fill_placeholders(
+        page,
+        {
+            "__OG_TITLE__": _esc(share_title),
+            "__OG_DESCRIPTION__": _esc(share_description),
+            "__CANONICAL__": _esc(canonical_url),
+            "__OG_URL__": _esc(share["share_url"]),
+            "__OG_IMAGE__": _esc(og_image_url),
+            "__STORY_IMAGE__": _esc(story_image_url or og_image_url),
+            "__ROBOTS__": "index, follow",
+            "__JSONLD__": ld,
+            "__CITY__": _esc(city_name),
+            "__CITY_LINK__": city_link,
+            "__TRUST__": "<p>Расписание — с сайтов катков и от администраций; время и цену уточняйте на месте.</p>",
+            "__BODY__": body,
+        },
+    )
 
 
 def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[str, str]:
