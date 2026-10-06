@@ -2328,6 +2328,11 @@ async def get_client_pass_products(
 
 class ClientPassOrderRequestBody(BaseModel):
     pass_product_id: int = Field(..., ge=1)
+    trainer_id: int | None = Field(
+        None,
+        ge=1,
+        description="Trainer on the catalog card. Omitted: the client's primary trainer.",
+    )
 
 
 @router.get("/client/pass-order/catalog")
@@ -2351,7 +2356,7 @@ async def post_client_pass_order_request(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     x_profile_id: str | None = Header(None),
 ):
-    """Create a personalized «purchase pass» client_request to the primary trainer."""
+    """Create a «purchase pass» client_request. Body trainer_id = catalog card; else primary trainer."""
     telegram_id = client_catalog_telegram_key(principal)
     ik = (idempotency_key or "").strip()
     idem_cache_key = (f"pop{telegram_id}_{ik}"[:64]) if ik else ""
@@ -2374,6 +2379,7 @@ async def post_client_pass_order_request(
         client_id=client_id,
         telegram_id=telegram_id,
         pass_product_id=body.pass_product_id,
+        trainer_id=body.trainer_id,
     )
     if result.get("ok"):
         out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
@@ -2404,6 +2410,7 @@ async def post_client_pass_order_request(
             "Заявка уже отправлена ранее.",
         ),
         "client_mismatch": (403, "Не удалось подтвердить аккаунт."),
+        "trainer_not_found": (404, "Этот тренер сейчас не принимает заявки."),
     }
     status_code, detail = mapping.get(err, (400, "Не удалось отправить заявку."))
     raise HTTPException(status_code=status_code, detail=detail)
@@ -2417,6 +2424,11 @@ class ClientCertOrderRequestBody(BaseModel):
         None,
         gt=0,
         description="BYN face value when the certificate product has no fixed amount (any-amount product).",
+    )
+    trainer_id: int | None = Field(
+        None,
+        ge=1,
+        description="Trainer on the catalog card. Omitted: the client's primary trainer.",
     )
 
 
@@ -2441,7 +2453,7 @@ async def post_client_cert_order_request(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     x_profile_id: str | None = Header(None),
 ):
-    """Create a personalized «order certificate» client_request to the primary trainer."""
+    """Create an «order certificate» client_request. Body trainer_id = catalog card; else primary."""
     telegram_id = client_catalog_telegram_key(principal)
     ik = (idempotency_key or "").strip()
     idem_cache_key = (f"coc{telegram_id}_{ik}"[:64]) if ik else ""
@@ -2467,6 +2479,7 @@ async def post_client_cert_order_request(
         recipient_email=body.recipient_email,
         recipient_name=body.recipient_name,
         nominal_byn=body.nominal_byn,
+        trainer_id=body.trainer_id,
     )
     if result.get("ok"):
         out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
@@ -2497,6 +2510,7 @@ async def post_client_cert_order_request(
             "Заявка уже отправлена ранее.",
         ),
         "client_mismatch": (403, "Не удалось подтвердить аккаунт."),
+        "trainer_not_found": (404, "Этот тренер сейчас не принимает заявки."),
         "invalid_email": (422, "Укажите корректный email."),
         "nominal_required": (422, "Укажите сумму сертификата (номинал, " + BYR_SIGN + ")."),
         "nominal_invalid": (422, "Некорректная сумма. Укажите разумный номинал, " + BYR_SIGN + "."),
