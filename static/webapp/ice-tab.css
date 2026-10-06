@@ -2040,6 +2040,13 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
   margin-top: var(--app-space-4);
 }
 
+/* Магазины: страница 2+ не догрузилась (TASK-182). */
+.ice-rest-failed__note {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-caption);
+  color: var(--tg-theme-hint-color);
+}
+
 .ice-share__icon {
   font-size: var(--app-text-body);
   line-height: 1;

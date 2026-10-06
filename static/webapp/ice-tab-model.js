@@ -328,7 +328,7 @@
   function catalogStateAfterCityChange(city, current) {
     current = current || {};
     return {
-      intent: pickCityIntent(city, current.intent),
+      intent: pickCityIntent(city, cityIntentBasis(current)),
       venueTypes: [],
       shopService: '',
       shopDiscipline: '',
@@ -942,6 +942,17 @@
       return Number(a.id) - Number(b.id);
     });
     return list.slice(0, cap);
+  }
+
+  /**
+   * Чей выбор вкладки уважать при смене города. Автопереход на тренеров
+   * (autoCoach) — решение прошлого города, не человека: для нового города
+   * исходим из «Катания», иначе город с катками откроется на тренерах.
+   */
+  function cityIntentBasis(current) {
+    current = current || {};
+    if (current.autoCoach && current.intent === INTENTS.coach) return INTENTS.skate;
+    return current.intent;
   }
 
   function pickCityIntent(city, currentIntent) {
@@ -1933,6 +1944,7 @@
     shouldShowSkateChip: shouldShowSkateChip,
     sanitizeIntent: sanitizeIntent,
     pickCityIntent: pickCityIntent,
+    cityIntentBasis: cityIntentBasis,
     serviceChipLabel: serviceChipLabel,
     cityCountryLabel: cityCountryLabel,
     coerceIntent: coerceIntent,

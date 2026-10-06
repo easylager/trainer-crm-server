@@ -22,6 +22,9 @@
     venueTypes: [],
     venueFacets: [],
     shopSourceItems: [],
+    /* Магазины: страница 2+ не догрузилась — показываем загруженное и «Догрузить». */
+    shopRestFailed: false,
+    shopRestLoading: false,
     shopService: '',
     shopDiscipline: '',
     shopOpenNow: false,
@@ -1006,7 +1009,11 @@
           hasSkate: M.shouldShowSkateChip(state.skateCount),
         });
       }
-      renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
+      /* Фильтр мог отсечь первую страницу, а нужное — в несгруженном хвосте:
+         «ничего не нашли» тут было бы враньём, честнее предложить догрузку. */
+      var shopRestOnly = shopScope ? shopRestHtml() : '';
+      if (shopRestOnly) list.innerHTML = shopRestOnly;
+      else renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
       showActiveList();
       return;
     }
@@ -1252,9 +1259,11 @@
     var scope = M.catalogScope(state.intent, state.venueTypes);
     if (scope === 'shop') {
       state.shopSourceItems = incoming.slice();
+      state.shopRestFailed = !!(data && data.rest_failed);
       syncShopListFromFilters();
     } else {
       state.shopSourceItems = [];
+      state.shopRestFailed = false;
       state.items = incoming.slice();
       state.total = data && data.total != null ? data.total : incoming.length;
     }
@@ -1456,6 +1465,7 @@
     pendingGen = gen;
     state.loading = true;
     state.loadingMore = false;
+    state.shopRestLoading = false;
     state.mapItems = null;
     state.mapLoading = false;
     state.cursor = null;
@@ -1580,15 +1590,17 @@
       }
       pages += 1;
       var url = M.buildListUrl(Object.assign({}, query, { limit: M.MAP_PAGE_LIMIT, cursor: cursor }));
+      /* Сбой страницы 2+ не стирает уже загруженное: отдаём то, что есть,
+         с cursor на несгруженный хвост и rest_failed — экран предложит догрузить. */
+      var partial = function () {
+        return Object.assign({}, first, { items: items, next_cursor: cursor, rest_failed: true });
+      };
       return fetchJson(url).then(function (data) {
-        if (!data) {
-          cursor = null;
-          return step();
-        }
+        if (!data) return partial();
         items = M.appendPage(items, data.items);
         cursor = data.next_cursor || null;
         return step();
-      });
+      }, partial);
     }
     return step();
   }
@@ -1604,7 +1616,7 @@
       .then(function (data) {
         if (gen !== fetchGen) return;
         state.mapLoading = false;
-        state.mapItems = data.items;
+        state.mapItems = data.rest_failed ? null : data.items;
         if (mapCtl && mapViewActive()) {
           mapCtl.setListItems(mapSourceItems());
           mapCtl.refresh();
@@ -1659,7 +1671,41 @@
       });
   }
 
+  /** Магазины: догрузить хвост после сбоя страницы 2+ — загруженное остаётся на экране. */
+  function loadShopRest() {
+    if (!state.shopRestFailed || state.shopRestLoading || !state.cursor || !state.listQuery) {
+      return Promise.resolve();
+    }
+    var gen = fetchGen;
+    state.shopRestLoading = true;
+    renderList();
+    return fetchRestPages(
+      state.listQuery,
+      { items: state.shopSourceItems, next_cursor: state.cursor, venue_type_facets: state.venueFacets, window: state.window },
+      gen
+    ).then(function (data) {
+      if (gen !== fetchGen) return;
+      state.shopRestLoading = false;
+      if (M.catalogScope(state.intent, state.venueTypes) !== 'shop') return;
+      applyArenaPayload(data);
+      onListLoaded();
+    });
+  }
+
+  function shopRestHtml() {
+    if (M.catalogScope(state.intent, state.venueTypes) !== 'shop' || !state.shopRestFailed) return '';
+    return (
+      '<div class="ice-rest-failed" role="status">' +
+      '<p class="ice-rest-failed__note">Показали не все магазины — связь прервалась.</p>' +
+      '<button type="button" class="btn-neutral btn-block ice-more" data-ice-shop-rest="1"' +
+      (state.shopRestLoading ? ' disabled aria-busy="true">Загружаем…' : '>Догрузить остальные') +
+      '</button></div>'
+    );
+  }
+
   function loadMoreHtml() {
+    var shopRest = shopRestHtml();
+    if (shopRest) return shopRest;
     var view = M.loadMoreView({
       intent: state.intent,
       venueTypes: state.venueTypes,
@@ -1861,6 +1907,7 @@
       state.shopOpenNow = cityCatalog.shopOpenNow;
       state.shopWhen = cityCatalog.shopWhen;
       state.shopSourceItems = [];
+      state.shopRestFailed = false;
       state.items = [];
       state.total = 0;
       state.venueFacets = [];
@@ -1871,7 +1918,7 @@
       var nextIntent =
         state.venueTypes && state.venueTypes.length
           ? state.intent
-          : M.pickCityIntent(city, state.intent);
+          : M.pickCityIntent(city, M.cityIntentBasis(state));
       if (nextIntent !== state.intent) {
         state.autoCoach = nextIntent === 'coach';
         state.intent = nextIntent;
@@ -2264,6 +2311,11 @@
   }
 
   function onRootClick(ev) {
+    if (ev.target.closest('[data-ice-shop-rest]')) {
+      ev.preventDefault();
+      loadShopRest();
+      return;
+    }
     if (ev.target.closest('[data-ice-more]')) {
       ev.preventDefault();
       loadMore();

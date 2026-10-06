@@ -119,7 +119,10 @@ async function bootCatalog(opts) {
     const u = String(url);
     requests.push(u);
     if (u.includes('/api/public/ice/cities')) return json({ items: cities });
-    if (u.includes('/api/public/ice/arenas')) return json(opts.arenas(u));
+    if (u.includes('/api/public/ice/arenas')) {
+      if (opts.fetchFail && opts.fetchFail(u)) return Promise.reject(new Error('offline'));
+      return json(opts.arenas(u));
+    }
     if (u.includes('/api/public/trainers')) {
       if (opts.trainers) return opts.trainers(u);
       return json({ items: [], total: 0 });
@@ -431,5 +434,85 @@ describe('TASK-182 F5: сбой подсчёта тренеров не лома�
     assert.ok(trainerCalls(requests).length === 1, requests.join(' | '));
     assert.doesNotMatch(elements.iceListSkate.innerHTML, /Не удалось загрузить список/);
     assert.match(elements.iceListSkate.innerHTML, /нет массового катания|нет катков/);
+  });
+});
+
+function pickCity(elements, id) {
+  const item = {
+    getAttribute: (name) => (name === 'data-city-id' ? String(id) : null),
+  };
+  const target = { closest: (sel) => (sel === '[data-city-id]' ? item : null) };
+  elements.iceCityList.dispatch('click', { target, preventDefault() {} });
+}
+
+describe('TASK-182 ревью: автопереход на тренеров не переезжает в другой город', () => {
+  it('cityIntentBasis: autoCoach — это «Катание», выбор человека — как есть', () => {
+    delete require.cache[require.resolve(modelPath)];
+    const M = require(modelPath);
+    assert.equal(M.cityIntentBasis({ intent: 'coach', autoCoach: true }), 'skate');
+    assert.equal(M.cityIntentBasis({ intent: 'coach', autoCoach: false }), 'coach');
+    assert.equal(M.cityIntentBasis({ intent: 'skate', autoCoach: true }), 'skate');
+    const withRinks = { skate_count: 5, trainer_count: 3 };
+    assert.equal(M.catalogStateAfterCityChange(withRinks, { intent: 'coach', autoCoach: true }).intent, 'skate');
+    assert.equal(M.catalogStateAfterCityChange(withRinks, { intent: 'coach', autoCoach: false }).intent, 'coach');
+    const noRinks = { skate_count: 0, trainer_count: 3 };
+    assert.equal(M.catalogStateAfterCityChange(noRinks, { intent: 'coach', autoCoach: true }).intent, 'coach');
+  });
+
+  it('город A без льда → тренеры; город B с катками → лента катков', async () => {
+    const { requests, elements } = await bootCatalog({
+      cities: [
+        { id: 1, name: 'Бобруйск', skate_count: null, trainer_count: 2 },
+        { id: 2, name: 'Минск', skate_count: 3, trainer_count: 9 },
+      ],
+      arenas: (u) =>
+        param(u, 'city_id') === '2'
+          ? pagedPlaces(3)(u)
+          : { items: [], total: 0, next_cursor: null, venue_type_facets: [] },
+      trainers: () => json({ items: [{ id: 7, name: 'Тренер' }], total: 1 }),
+    });
+    assert.equal(elements.iceListSkate.hidden, true, 'в A на экране тренеры');
+    requests.length = 0;
+    pickCity(elements, 2);
+    await flushPromises();
+    assert.ok(arenaCalls(requests).some((u) => param(u, 'city_id') === '2'), requests.join(' | '));
+    assert.equal(elements.iceListSkate.hidden, false, 'в B на экране катки');
+    assert.equal(placeNames(elements.iceListSkate.innerHTML).size, 3);
+  });
+});
+
+describe('TASK-182 ревью: сбой догрузки магазинов не стирает первую страницу', () => {
+  function shopPages(n) {
+    const base = pagedPlaces(n);
+    return (u) => {
+      const body = base(u);
+      body.items = body.items.map((it) => Object.assign({}, it, { venue_type: 'shop' }));
+      return body;
+    };
+  }
+
+  it('страница 2 упала → видны 100 магазинов и «Догрузить остальные»; повтор догружает хвост', async () => {
+    const fail = new Set(['100']);
+    const { elements, requests } = await bootCatalog({
+      savedState: { intent: 'skate', cityId: 1, venueTypes: ['shop'] },
+      arenas: shopPages(130),
+      fetchFail: (u) => fail.has(param(u, 'cursor') || ''),
+    });
+    const html = elements.iceListSkate.innerHTML;
+    assert.doesNotMatch(html, /Не удалось загрузить список/);
+    assert.equal(placeNames(html).size, 100);
+    assert.match(html, /data-ice-shop-rest/);
+    assert.match(html, /Показали не все магазины/);
+
+    fail.clear();
+    requests.length = 0;
+    const target = { closest: (sel) => (sel === '[data-ice-shop-rest]' ? target : null) };
+    elements.iceList.dispatch('click', { target, preventDefault() {} });
+    await flushPromises();
+    assert.equal(arenaCalls(requests).length, 1, requests.join(' | '));
+    assert.equal(param(arenaCalls(requests)[0], 'cursor'), '100');
+    const after = elements.iceListSkate.innerHTML;
+    assert.equal(placeNames(after).size, 130);
+    assert.doesNotMatch(after, /data-ice-shop-rest/);
   });
 });
