@@ -2,21 +2,86 @@
   "schema_version": "canonical-slot-v1",
   "arena_id": 18,
   "city": "Молодечно",
-  "parser_key": "molodechno_src_html_v1",
+  "parser_key": "molodechno_src_v1",
   "timezone": "Europe/Minsk",
   "currency_code": "BYN",
-  "captured_at": "2026-09-05T23:55:00+03:00",
+  "captured_at": "2026-10-06T12:00:00+03:00",
   "source_files": [
     "ledovaya-arena.html"
   ],
-  "ice_closed_since": "2026-05-01",
-  "status": "empty",
-  "notes": "«Остановочный период ледовой арены с 1 мая 2026 г.» Session list is blank. Prices exist (adult 8.00 / child to 14 7.00 / 45 min) but rental amount is not in the table. Do not invent times.",
-  "price_catalog_if_reopened": {
-    "adult_minor": 800,
-    "child_minor": 700,
-    "rental_minor": null,
-    "age_note": "детский до 14 лет"
-  },
-  "sessions": []
+  "notes": "src.by/WDKL/ледовая-арена: даты DD.MM. без года, несколько времён через запятую. Сеанс 45 мин. Цены — строки «сеанс свободного катания» на 45 минут (не абонементы). Проката в таблице нет.",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-10",
+      "starts_at_local": "14:15",
+      "ends_at_local": "15:00",
+      "price_adult_minor": 800,
+      "price_child_minor": 700,
+      "price_rental_minor": null,
+      "session_label": null,
+      "age_note": "детский до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-10",
+      "starts_at_local": "17:30",
+      "ends_at_local": "18:15",
+      "price_adult_minor": 800,
+      "price_child_minor": 700,
+      "price_rental_minor": null,
+      "session_label": null,
+      "age_note": "детский до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-10",
+      "starts_at_local": "19:15",
+      "ends_at_local": "20:00",
+      "price_adult_minor": 800,
+      "price_child_minor": 700,
+      "price_rental_minor": null,
+      "session_label": null,
+      "age_note": "детский до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-11",
+      "starts_at_local": "15:15",
+      "ends_at_local": "16:00",
+      "price_adult_minor": 800,
+      "price_child_minor": 700,
+      "price_rental_minor": null,
+      "session_label": null,
+      "age_note": "детский до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-11",
+      "starts_at_local": "17:00",
+      "ends_at_local": "17:45",
+      "price_adult_minor": 800,
+      "price_child_minor": 700,
+      "price_rental_minor": null,
+      "session_label": null,
+      "age_note": "детский до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-11",
+      "starts_at_local": "19:00",
+      "ends_at_local": "19:45",
+      "price_adult_minor": 800,
+      "price_child_minor": 700,
+      "price_rental_minor": null,
+      "session_label": null,
+      "age_note": "детский до 14 лет"
+    }
+  ]
 }

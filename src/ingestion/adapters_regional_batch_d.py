@@ -1,4 +1,4 @@
-"""Regional batch D IceParser strategies (arenas 38/19/42/33). Extract only — no DB writes.
+"""Regional batch D IceParser strategies (arenas 38/18/19/42/33). Extract only — no DB writes.
 
 Follows the style of ``src/ingestion/adapters.py``. Sources and gotchas: ``.ai/parsers/*.md``.
 """
@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
@@ -17,9 +17,11 @@ from src.ingestion.parsers import IceParser
 from src.ingestion.seed_config_regional_batch_d import (
     PARSER_KEY_BOBRUISK_ARENA,
     PARSER_KEY_GOMEL_LDS,
+    PARSER_KEY_MOLODECHNO_SRC,
     PARSER_KEY_SHKLOV_ARENA,
     PARSER_KEY_SOLIGORSK_SZK,
 )
+from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE
 from src.ingestion.cpu_work import run_cpu_bound
 from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
@@ -311,6 +313,99 @@ class SoligorskSzkParser(IceParser):
                     )
                 )
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+
+
+# --------------------------------------------------------------------------
+# СРЦ Молодечно (arena_id 18)
+# --------------------------------------------------------------------------
+
+_MOLODECHNO_DAY_LINE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.\s*в\s*(.+)$", re.I)
+_TIME_HM = re.compile(r"(\d{1,2}):(\d{2})")
+_MOLODECHNO_AGE_NOTE = "детский до 14 лет"
+
+
+def _molodechno_end_time(start_h: int, start_m: int, duration_minutes: int) -> str:
+    end = datetime(2000, 1, 1, start_h, start_m) + timedelta(minutes=duration_minutes)
+    return _fmt(end.hour, end.minute)
+
+
+def _molodechno_prices(html: str) -> tuple[int | None, int | None]:
+    adult = child = None
+    for table in parse_tables(html):
+        for row in table:
+            if len(row) < 3:
+                continue
+            label = row[0].lower()
+            unit = row[2].lower()
+            if "сеанс свободного катания" not in label:
+                continue
+            if "45" not in unit:
+                continue
+            price = parse_price_to_minor(row[1], already_minor=False)
+            if "до 14" in label:
+                child = price
+            elif "взросл" in label:
+                adult = price
+    return adult, child
+
+
+def _molodechno_schedule_slots(
+    html: str,
+    *,
+    reference: date,
+    duration_minutes: int,
+) -> list[tuple[date, str, str]]:
+    marker = html.lower().find("сеансы массового катания")
+    region = html[marker : marker + 4000] if marker >= 0 else html
+    results: list[tuple[date, str, str]] = []
+    for line in _detag_lines(region):
+        m = _MOLODECHNO_DAY_LINE.match(line)
+        if not m:
+            continue
+        local_date = infer_date_from_day_month(int(m.group(1)), int(m.group(2)), reference)
+        if local_date is None:
+            continue
+        for seg in re.split(r",", m.group(3)):
+            tm = _TIME_HM.search(seg)
+            if not tm:
+                continue
+            start = _fmt(int(tm.group(1)), int(tm.group(2)))
+            end = _molodechno_end_time(int(tm.group(1)), int(tm.group(2)), duration_minutes)
+            results.append((local_date, start, end))
+    return results
+
+
+class MolodechnoSrcParser(IceParser):
+    parser_key = PARSER_KEY_MOLODECHNO_SRC
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        html = await load_source_text(job, filename="ledovaya-arena.html", url_keys=("url",))
+        reference = parser_reference_date(job.config)
+        duration = int(job.config.get("default_duration_minutes") or 45)
+        adult, child = _molodechno_prices(html)
+        slots: list[ExtractedSlot] = []
+        for local_date, start, end in _molodechno_schedule_slots(
+            html, reference=reference, duration_minutes=duration
+        ):
+            slots.append(
+                ExtractedSlot(
+                    local_date=local_date.isoformat(),
+                    starts_at_local=start,
+                    ends_at_local=end,
+                    kind_raw="Массовое катание",
+                    price_adult=adult,
+                    price_child=child,
+                    price_rental=None,
+                    age_note=_MOLODECHNO_AGE_NOTE,
+                )
+            )
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=html,
+            slots=slots,
+            schedule_basis=SCHEDULE_BASIS_LIVE,
+        )
 
 
 # --------------------------------------------------------------------------

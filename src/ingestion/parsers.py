@@ -60,6 +60,7 @@ def default_registry() -> ParserRegistry:
     from src.ingestion.adapters_regional_batch_d import (
         BobruiskArenaParser,
         GomelLdsParser,
+        MolodechnoSrcParser,
         ShklovArenaParser,
         SoligorskSzkParser,
     )
@@ -108,6 +109,7 @@ def default_registry() -> ParserRegistry:
         GorkiLdsParser(),
         OstrovetsLdsParser(),
         BobruiskArenaParser(),
+        MolodechnoSrcParser(),
         SoligorskSzkParser(),
         ShklovArenaParser(),
         GomelLdsParser(),
@@ -163,6 +165,7 @@ from src.ingestion.adapters_regional_batch_c import (  # noqa: E402
 from src.ingestion.adapters_regional_batch_d import (  # noqa: E402
     BobruiskArenaParser,
     GomelLdsParser,
+    MolodechnoSrcParser,
     ShklovArenaParser,
     SoligorskSzkParser,
 )
@@ -191,6 +194,7 @@ __all__ = [
     "LidaLdsParser",
     "MinskArenaSaleframeParser",
     "MinskSpeedOvalParser",
+    "MolodechnoSrcParser",
     "MogilevDsParser",
     "NovopolotskLdsParser",
     "OrshaArenaParser",
