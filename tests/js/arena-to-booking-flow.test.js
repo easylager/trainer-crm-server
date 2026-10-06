@@ -106,6 +106,26 @@ describe('контракт возврата знает про арену', () =>
     assert.equal(resolveBookingReturn('requests', {}).path, 'client-requests');
     assert.equal(resolveBookingReturn('saved-trainers', {}).path, 'client-saved-trainers');
   });
+
+  it('возврат на арену снимает каталог со стека истории, а не пушит новую арену', () => {
+    const src = read('booking-client.js');
+    const start = src.indexOf('function navigateBookingReturn');
+    const body = src.slice(start, start + 900);
+    assert.match(body, /from === 'arena' && tryHistoryBackToArena\(ctx\.arenaId\)/);
+    assert.match(src, /function tryHistoryBackToArena/);
+    assert.match(src, /history\.back\(\)/);
+    assert.match(src, /ARENA_CATALOG_STACK_KEY/);
+  });
+});
+
+describe('арена помечает стек перед открытием каталога', () => {
+  it('goBooking пишет ключ возврата по истории', () => {
+    const src = read('arena-card.js');
+    const start = src.indexOf('function goBooking');
+    const body = src.slice(start, src.indexOf('function photoUrl'));
+    assert.match(body, /markArenaCatalogStack/);
+    assert.match(body, /tcb_catalog_arena_stack_v1/);
+  });
 });
 
 describe('пустой «Выберите время» больше не тупик', () => {

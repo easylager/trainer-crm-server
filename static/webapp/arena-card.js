@@ -153,10 +153,18 @@
    */
   function goBooking(trainerId, opts) {
     opts = opts || {};
+    var arenaId = state.card && state.card.id;
+    if (global.BookingClient && typeof global.BookingClient.markArenaCatalogStack === 'function') {
+      global.BookingClient.markArenaCatalogStack(arenaId);
+    } else {
+      try {
+        global.sessionStorage.setItem('tcb_catalog_arena_stack_v1', String(arenaId));
+      } catch (eMark) { /* private mode */ }
+    }
     shellNav(
       M.buildBookingHref({
         trainerId: trainerId,
-        arenaId: state.card && state.card.id,
+        arenaId: arenaId,
         groupId: opts.groupId,
       })
     );
