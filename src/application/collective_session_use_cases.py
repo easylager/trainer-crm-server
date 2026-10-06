@@ -23,6 +23,7 @@ from src.application.collective_use_cases import (
     list_active_trainer_ids_for_collective_slug,
 )
 from src.shared.config import Settings
+from src.shared.currency import DEFAULT_CURRENCY, resolve_trainer_currency
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +87,15 @@ def compute_center_booking_price_cents(
     raise ValueError("invalid_attendance_mode")
 
 
-def center_tariff_catalog() -> dict[str, Any]:
-    """Public PAYG tariff card for client UI."""
+def center_tariff_catalog(currency_code: str = DEFAULT_CURRENCY) -> dict[str, Any]:
+    """Public PAYG tariff card for client UI.
+
+    ``currency_code`` — валюта города владельца коллектива (TASK-196): BY → BYN,
+    RU → RUB. Раньше здесь был захардкожен BYN, и клиент подписывал им центы
+    любого центра.
+    """
     return {
-        "currency": "BYN",
+        "currency_code": currency_code,
         "lane_hour_cents": CENTER_TARIFF_LANE_HOUR_CENTS,
         "guest_surcharge_cents": CENTER_TARIFF_GUEST_SURCHARGE_CENTS,
         "coach_individual_cents": CENTER_TARIFF_COACH_INDIVIDUAL_CENTS,
@@ -565,12 +571,17 @@ async def list_public_collective_sessions(
         collective_id=int(coll["id"]),
         active_only=True,
     )
+    # TASK-196: центру тоже нужна валюта города — BY → BYN, RU → RUB (владелец задаёт город).
+    owner_trainer_id = await _get_collective_owner_trainer_id(session, int(coll["id"]))
+    center_currency = (
+        await resolve_trainer_currency(session, owner_trainer_id) if owner_trainer_id else DEFAULT_CURRENCY
+    )
     return {
         "collective_id": coll["id"],
         "slug": coll["slug"],
         "display_name": coll["display_name"],
         "schedule_mode": coll.get("schedule_mode"),
-        "tariffs": center_tariff_catalog(),
+        "tariffs": center_tariff_catalog(center_currency),
         "pass_products": pass_products,
         "sessions": filtered,
     }

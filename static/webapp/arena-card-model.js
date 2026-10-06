@@ -979,23 +979,36 @@
     return bits.join(' · ');
   }
 
+  /* TASK-196: валюта услуги — код из полезной нагрузки. Отображение — конвенция
+     TASK-109: RUB знаком ₽, BYN буквами. */
+  function priceCurrencyLabel(code) {
+    var c = String(code || '').trim().toUpperCase();
+    return c === 'RUB' ? '₽' : (c || 'BYN');
+  }
+
   function trainerSubtitle(trainer) {
     trainer = trainer || {};
     var services = trainer.services || [];
     var names = [];
     var minPrice = null;
+    var minCur = 'BYN';
     var i;
     for (i = 0; i < services.length; i++) {
       var s = services[i];
       if (s.name) names.push(s.name);
       var p = s.price_cents != null ? Number(s.price_cents) : s.price_byn != null ? Number(s.price_byn) * 100 : NaN;
-      if (!isNaN(p) && p > 0 && (minPrice == null || p < minPrice)) minPrice = p;
+      if (!isNaN(p) && p > 0 && (minPrice == null || p < minPrice)) {
+        minPrice = p;
+        // Валюта — у услуги с минимальной ценой (TASK-196): тренер из RU-города
+        // показывает цены в RUB. Полезные нагрузки без валюты читаются как BYN.
+        minCur = String(s.currency_code || 'BYN');
+      }
     }
     var bits = [];
     if (names.length) bits.push(names[0]);
     if (minPrice != null) {
-      var fmt = formatMinor(minPrice, 'BYN');
-      if (fmt) bits.push('от ' + fmt.amount + ' BYN');
+      var fmt = formatMinor(minPrice, priceCurrencyLabel(minCur));
+      if (fmt) bits.push('от ' + (fmt.withCurrency || fmt.amount));
     }
     return bits.join(' · ');
   }

@@ -1285,23 +1285,34 @@
     return s;
   }
 
+  /* TASK-196: валюта услуги — код из полезной нагрузки (как currency_code у
+     сеансов льда). Отображение — конвенция TASK-109 для цен тренера: RUB
+     знаком ₽, BYN буквами (глиф НБРБ Telegram не рисует). */
+  function priceCurrencyLabel(code) {
+    var c = String(code || '').trim().toUpperCase();
+    return c === 'RUB' ? '₽' : (c || 'BYN');
+  }
+
   function formatTrainerPriceFrom(item) {
     var services = (item && item.services) || [];
     var min = null;
+    var minCur = '';
     for (var i = 0; i < services.length; i++) {
       var s = services[i] || {};
       var v = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
       if (v == null) continue;
       var n = Number(v);
       if (isNaN(n)) continue;
-      if (min == null || n < min) min = n;
+      if (min == null || n < min) {
+        min = n;
+        // Валюта берётся у услуги с минимальной ценой (TASK-196): у тренера
+        // из RU-города цены в RUB, у минского — в BYN.
+        minCur = String(s.currency_code || '');
+      }
     }
     if (min == null) return '';
     var num = min === Math.floor(min) ? String(min) : min.toFixed(2);
-    // «BYN» захардкожен так же, как в каталоге (formatCatalogServicePrice):
-    // валюты в услуге нет, и расходиться с каталогом на одном и том же товаре
-    // хуже, чем разделить с ним известное ограничение по Москве.
-    return 'от ' + num + ' BYN';
+    return 'от ' + num + ' ' + priceCurrencyLabel(minCur);
   }
 
   function formatTrainerExperience(profile) {

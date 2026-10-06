@@ -16,6 +16,7 @@ from src.shared.price_tier_kind import (
     price_tier_sort_key,
     sql_order_case_tier_kind,
 )
+from src.shared.currency import DEFAULT_CURRENCY, resolve_trainer_currencies
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL, CATALOG_STATE_DRAFT
 from src.shared.specialist_roles import specialist_role_display
@@ -535,6 +536,9 @@ class TrainerRepository:
         )
         service_rows = rsv.fetchall()
         out["service_ids"] = [r[0] for r in service_rows]
+        # TASK-196: валюта услуг — из города тренера (BY → BYN, RU → RUB), как у сеансов льда.
+        currency_by_tid = await resolve_trainer_currencies(self._session, [trainer_id])
+        trainer_currency = currency_by_tid.get(int(trainer_id), DEFAULT_CURRENCY)
         tiers_by_sid: dict[int, list[dict[str, Any]]] = {}
         if service_rows:
             rv = await self._session.execute(
@@ -564,6 +568,7 @@ class TrainerRepository:
                         "label": lab or price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL,
                         "price_cents": pc,
                         "price_byn": round(pc / 100, 2),
+                        "currency_code": trainer_currency,
                         "sort_order": so,
                     }
                 )
@@ -612,6 +617,7 @@ class TrainerRepository:
                     "price_child_byn": legacy_child_byn,
                     "price_byn_min": price_byn_min,
                     "price_byn_max": price_byn_max,
+                    "currency_code": trainer_currency,
                     "price_tiers": tiers,
                     "description": svc_desc,
                     "group_price_cents": gpc_row,
@@ -1494,6 +1500,8 @@ class TrainerRepository:
         ids = [row[0] for row in rows]
         placeholders = ", ".join(f":id{i}" for i in range(len(ids)))
         id_params = {f"id{i}": v for i, v in enumerate(ids)}
+        # TASK-196: валюта услуг — из города каждого тренера (BY → BYN, RU → RUB), одним запросом на страницу.
+        currency_by_tid = await resolve_trainer_currencies(self._session, ids)
         edu_by_tid = await self.batch_public_education_entries(ids)
         rph = await self._session.execute(
             text(f"SELECT trainer_id, file_key, file_key_list, sort_order FROM trainer_photos WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, sort_order"),
@@ -1555,6 +1563,7 @@ class TrainerRepository:
                     "label": lab or price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL,
                     "price_cents": pc,
                     "price_byn": round(pc / 100, 2),
+                    "currency_code": currency_by_tid.get(t_id, DEFAULT_CURRENCY),
                     "sort_order": so,
                 }
             )
@@ -1595,6 +1604,7 @@ class TrainerRepository:
                     "price_child_byn": legacy_child_byn,
                     "price_byn_min": price_byn_min,
                     "price_byn_max": price_byn_max,
+                    "currency_code": currency_by_tid.get(tid, DEFAULT_CURRENCY),
                     "price_tiers": tiers,
                     "description": svc_desc_row,
                     "group_price_cents": gpc_row,
