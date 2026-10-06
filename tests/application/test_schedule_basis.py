@@ -16,6 +16,10 @@ def test_parser_default_basis_brest_is_projected() -> None:
     assert basis_for_parser_job("brest_lds_v1", {}) == SCHEDULE_BASIS_PROJECTED
 
 
+def test_parser_default_basis_weekly_grid_is_projected() -> None:
+    assert basis_for_parser_job("weekly_grid_v1", {}) == SCHEDULE_BASIS_PROJECTED
+
+
 def test_normalizer_uses_extraction_basis() -> None:
     job = ParserJob(
         id=1,

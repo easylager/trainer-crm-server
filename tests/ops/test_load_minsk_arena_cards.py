@@ -53,6 +53,7 @@ def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
     assert by_id[115] == "konkobezhnaya-arena"
     assert by_id[38] == "bobruisk-arena"
     assert by_id[41] == "ostrovets-lds"
+    assert by_id[44] == "mozyr-global-ice"
     for card in cards.values():
         assert card.arena_id in loader.TARGET_ARENA_IDS
         assert card.enough_facts
@@ -66,6 +67,19 @@ def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
     assert cards["minsk-junost"].publishable_photo_count == 0
     assert cards["minsk-ledlife"].publishable_photo_count == 0
     assert cards["konkobezhnaya-arena"].publishable_photo_count == 3
+
+
+def test_mozyr_global_ice_dossier_parses(cards) -> None:
+    card = cards["mozyr-global-ice"]
+    assert card.arena_id == 44
+    assert card.phone == "+375333339009"
+    assert card.website_url == "https://www.instagram.com/global_ice_/"
+    assert card.season_start_month == 1 and card.season_end_month == 12
+    assert card.social_urls.get("instagram") == "https://www.instagram.com/global_ice_/"
+    assert card.amenities.get("skate_rental") is True
+    assert card.amenities.get("skate_sharpening") is True
+    assert card.publishable_photo_count == 1
+    assert card.enough_facts and card.status == "published"
 
 
 def test_zamok_is_the_fullest_card(cards) -> None:
@@ -479,3 +493,70 @@ async def test_apply_uploads_diamond_local_png(
     assert media[1] and "DiaMond" in media[1]
     assert media[2] and "diamondcity.by" in media[2]
     assert media[3] == "published"
+
+
+@pytest.mark.asyncio
+async def test_apply_mozyr_global_ice_profile(
+    loader, cards, db_session, tmp_path: Path, monkeypatch
+) -> None:
+    city = (await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))).scalar()
+    if city is None:
+        pytest.skip("need seed cities")
+    city_id = int(city)
+    ins = await db_session.execute(
+        text(
+            """
+            INSERT INTO arenas (id, city_id, name, address, latitude, longitude, is_active, is_confirmed)
+            VALUES (44, :cid, 'Global ICE', 'бульвар Дружбы, 11А', 52.0309001, 29.2427777, true, true)
+            ON CONFLICT (id) DO UPDATE SET city_id = EXCLUDED.city_id
+            RETURNING id
+            """
+        ),
+        {"cid": int(city_id)},
+    )
+    arena_id = int(ins.scalar_one())
+    await db_session.flush()
+
+    def fake_upload(arena_id: int, _body: bytes, _content_type: str) -> dict:
+        token = uuid.uuid4().hex[:8]
+        variants = {
+            "thumb": f"arenas/{arena_id}/{token}_thumb.jpg",
+            "card": f"arenas/{arena_id}/{token}_card.jpg",
+            "hero": f"arenas/{arena_id}/{token}_hero.jpg",
+        }
+        return {"storage_key": variants["hero"], "variants": variants, "width": 32, "height": 24}
+
+    monkeypatch.setattr("src.infrastructure.s3.upload_arena_photo", fake_upload)
+
+    result = await loader.apply_card(
+        db_session,
+        cards["mozyr-global-ice"],
+        fixtures_dir=tmp_path,
+        seed_sessions=False,
+        arena_id=arena_id,
+        repo_root=_ROOT,
+        fetch_photo=lambda _url: None,
+    )
+    await db_session.flush()
+    assert result.error is None
+    assert result.photos_uploaded == 1
+
+    row = (
+        await db_session.execute(
+            text(
+                """
+                SELECT phone, short_description, social_urls, opening_hours, season_start_month,
+                       season_end_month, status
+                FROM arena_profiles WHERE arena_id = :id
+                """
+            ),
+            {"id": arena_id},
+        )
+    ).fetchone()
+    assert row is not None
+    assert row[0] == "+375333339009"
+    assert row[1] and "800" in row[1]
+    assert row[2].get("instagram") == "https://www.instagram.com/global_ice_/"
+    assert row[3] and "Пн–Чт" in row[3]["note"]
+    assert row[4] == 1 and row[5] == 12
+    assert row[6] == "published"

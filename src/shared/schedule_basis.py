@@ -21,6 +21,7 @@ PARSER_DEFAULT_SCHEDULE_BASIS: dict[str, str] = {
     "zamok_html_v1": SCHEDULE_BASIS_PROJECTED,
     "junost_instagram_caption_v1": SCHEDULE_BASIS_PHOTO,
     "lida_lds_v1": SCHEDULE_BASIS_PHOTO,
+    "weekly_grid_v1": SCHEDULE_BASIS_PROJECTED,
 }
 
 _BASIS_HINT_RU: dict[str, str] = {
