@@ -117,6 +117,7 @@
 | [ice-ingest-prod-from-local.md](instructions/ice-ingest-prod-from-local.md) | Ingest льда в прод с Mac: `run_ice_ingest_prod_local.sh`, public Postgres URL, почему не `railway.internal` |
 | [ice-ingest-by-egress.md](instructions/ice-ingest-by-egress.md) | Ingest СДЮШОР (ledlife) с ноутбука в РБ: tinyproxy, Railway `DATABASE_URL` |
 | [ice-ingest-junost-instagram.md](instructions/ice-ingest-junost-instagram.md) | Юность: копипаст подписи IG → прод (`ingest_junost_from_caption.py`) |
+| [junost-caption-update.md](ops/junost-caption-update.md) | Юность: обновить подпись расписания через `set_junost_caption.py` (dry-run / `--apply`) |
 | [catalog-share-launch.md](ops/catalog-share-launch.md) | Чеклист выката шаринга каталога: env, фото, магазины, og, телеметрия 0212, 20 минут руками |
 | [platform-processes-for-legal-by-v1.md](ops/platform-processes-for-legal-by-v1.md) | Описание процессов платформы для юристов (BY) |
 
