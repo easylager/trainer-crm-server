@@ -289,7 +289,7 @@
   padding: 10px 2px;
   border-radius: var(--app-radius-md);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--app-text-kicker);
   line-height: 1.2;
   font-weight: var(--app-weight-semibold);
   cursor: pointer;

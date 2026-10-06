@@ -563,7 +563,7 @@ a.arena-row {
   width: 32px;
   height: 32px;
   border-radius: var(--app-radius-pill);
-  font-size: 22px;
+  font-size: var(--app-icon-lg);
   line-height: 1;
   cursor: pointer;
 }
@@ -917,7 +917,7 @@ button.arena-time--picked small { color: var(--glide-ink-teal, var(--app-cta-fil
   border-left: 1px solid var(--glide-line);
   background: var(--glide-card);
   color: var(--glide-ink-teal, var(--app-cta-fill));
-  font-size: 16px;
+  font-size: var(--app-icon-sm);
   font-weight: var(--app-weight-semibold);
   cursor: pointer;
   appearance: none;
