@@ -1,13 +1,17 @@
 """Due-job runner. Extract → normalize → validate; publisher writes ice_sessions."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
+import time
+from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
 from src.application.ice_session_use_cases import IceSessionValidationError
+from src.ingestion.cpu_work import IngestTimeoutError
 from src.ingestion.freshness import (
     ERROR_CODE_EMPTY_AFTER_FILTER,
     ERROR_CODE_EMPTY_SOURCE,
@@ -36,6 +40,20 @@ logger = logging.getLogger(__name__)
 # на тик гасит залп после простоя воркера: остальное догонит следующий тик (60 с).
 MAX_JOBS_PER_TICK = 20
 
+# TASK-188: лимит на extract целиком (OCR/PDF внутри extract). Переопределяется job.config.
+DEFAULT_JOB_TIMEOUT_S = 120.0
+CONFIG_JOB_TIMEOUT_S = "job_timeout_s"
+ERROR_CODE_INTERNAL = "internal_error"
+ERROR_CODE_TIMEOUT = "timeout"
+
+# TASK-188: тик держит advisory-лок ингеста; 20 заданий × 120 с — это ~40 минут. После
+# бюджета новые задания не стартуют: остальные просроченные догонит следующий тик.
+TICK_BUDGET_S = 300.0
+
+
+class ExtractDeadlineExceeded(IngestTimeoutError):
+    """Внешний дедлайн на extract целиком (job_timeout_s) истёк."""
+
 
 class IceIngestScheduler:
     def __init__(
@@ -51,6 +69,9 @@ class IceIngestScheduler:
         rng: random.Random | None = None,
         max_jobs_per_tick: int | None = MAX_JOBS_PER_TICK,
         checkpoint: Callable[[], Awaitable[None]] | None = None,
+        job_savepoint: Callable[[], AbstractAsyncContextManager] | None = None,
+        tick_budget_s: float | None = TICK_BUDGET_S,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._store = store
         self._recorder = recorder or LoggingScrapeRunRecorder()
@@ -69,6 +90,11 @@ class IceIngestScheduler:
         # Коммит после каждого задания: новое расписание видно пользователю сразу после
         # своего прогона, а не в конце тика, где до него может быть ещё 20 сайтов.
         self._checkpoint = checkpoint
+        # TASK-188: изоляция одного задания (обычно session.begin_nested): сбой его
+        # бухгалтерии откатывается до savepoint, и internal_error пишется в чистую сессию.
+        self._job_savepoint = job_savepoint
+        self._tick_budget_s = tick_budget_s
+        self._clock = clock
         # TASK-176: сколько заданий было просрочено на последнем тике (до потолка) — для heartbeat.
         self.last_due_count = 0
 
@@ -80,36 +106,108 @@ class IceIngestScheduler:
         self.last_due_count = len(due_jobs)
         if self._max_jobs_per_tick is not None:
             due_jobs = due_jobs[: self._max_jobs_per_tick]
-        for job in due_jobs:
-            record, drafts = await self._run_one(job, now)
+        tick_started = self._clock()
+        for index, job in enumerate(due_jobs):
+            elapsed = self._clock() - tick_started
+            if self._tick_budget_s is not None and outcomes and elapsed >= self._tick_budget_s:
+                logger.warning(
+                    "ice ingest tick budget %.0fs spent after %d job(s) (%.0fs); "
+                    "%d due job(s) deferred to next tick",
+                    self._tick_budget_s,
+                    len(outcomes),
+                    elapsed,
+                    len(due_jobs) - index,
+                )
+                break
+            outcomes.append(await self._run_due_job(job, now))
+        return outcomes
+
+    async def _run_due_job(self, job: ParserJob, now: datetime) -> ScrapeRunRecord:
+        savepoint = self._job_savepoint() if self._job_savepoint is not None else nullcontext()
+        try:
+            async with savepoint:
+                record = await self._execute_job_tick(job, now)
+        except Exception as exc:  # noqa: BLE001 — isolate one job; siblings must run
+            logger.exception(
+                "tick bookkeeping failed for job %s (arena %s); advancing with internal_error",
+                job.id,
+                job.arena_id,
+            )
+            record = await self._recover_job_after_tick_error(job, now, exc)
+        if self._checkpoint is not None:
+            await self._checkpoint()
+        return record
+
+    async def _execute_job_tick(self, job: ParserJob, now: datetime) -> ScrapeRunRecord:
+        record, drafts = await self._run_one(job, now)
+        run_id = await self._recorder.record(record)
+        if run_id is not None:
+            record = replace(record, persisted_id=run_id)
+        if (
+            self._publisher is not None
+            and record.status == RUN_STATUS_OK
+            and drafts
+            and run_id is not None
+        ):
+            try:
+                await self._publisher.publish(record, drafts, run_id=run_id)
+            except Exception as exc:  # noqa: BLE001 — one job's publish must not sink the tick
+                logger.exception(
+                    "publish failed for job %s (arena %s); leaving ice_sessions untouched",
+                    job.id,
+                    job.arena_id,
+                )
+                record = replace(
+                    record,
+                    status=RUN_STATUS_ERROR,
+                    error_code="publish_error",
+                    error_message=str(exc),
+                )
+                await self._recorder.mark_publish_error(
+                    run_id, error_code="publish_error", error_message=str(exc)
+                )
+        state = await self._next_state(job, record, now)
+        await self._store.mark_attempted(
+            job.id,
+            last_run_at=now,
+            next_run_at=next_poll_at(
+                job_id=job.id,
+                config=job.config,
+                status=record.status,
+                state=state,
+                now=now,
+                rng=self._rng,
+            ),
+            state=state,
+        )
+        return record
+
+    async def _recover_job_after_tick_error(
+        self, job: ParserJob, now: datetime, exc: BaseException
+    ) -> ScrapeRunRecord:
+        record = self._record(
+            job,
+            status=RUN_STATUS_ERROR,
+            started_at=now,
+            finished_at=now,
+            error_message=str(exc),
+            error_code=ERROR_CODE_INTERNAL,
+        )
+        try:
             run_id = await self._recorder.record(record)
             if run_id is not None:
                 record = replace(record, persisted_id=run_id)
-            if (
-                self._publisher is not None
-                and record.status == RUN_STATUS_OK
-                and drafts
-                and run_id is not None
-            ):
-                try:
-                    await self._publisher.publish(record, drafts, run_id=run_id)
-                except Exception as exc:  # noqa: BLE001 — one job's publish must not sink the tick
-                    logger.exception(
-                        "publish failed for job %s (arena %s); leaving ice_sessions untouched",
-                        job.id,
-                        job.arena_id,
-                    )
-                    record = replace(
-                        record,
-                        status=RUN_STATUS_ERROR,
-                        error_code="publish_error",
-                        error_message=str(exc),
-                    )
-                    await self._recorder.mark_publish_error(
-                        run_id, error_code="publish_error", error_message=str(exc)
-                    )
-            outcomes.append(record)
+        except Exception:
+            logger.exception(
+                "could not persist scrape run after internal_error for job %s",
+                job.id,
+            )
+        try:
             state = await self._next_state(job, record, now)
+        except Exception:
+            logger.exception("could not compute source state after tick failure for job %s", job.id)
+            state = job.state
+        try:
             await self._store.mark_attempted(
                 job.id,
                 last_run_at=now,
@@ -123,9 +221,9 @@ class IceIngestScheduler:
                 ),
                 state=state,
             )
-            if self._checkpoint is not None:
-                await self._checkpoint()
-        return outcomes
+        except Exception:
+            logger.exception("could not mark job %s attempted after tick failure", job.id)
+        return record
 
     async def _next_state(self, job: ParserJob, record: ScrapeRunRecord, now: datetime):
         """Серия сбоев / last_ok_at. Пустой прогон — сбой, только если витрина не пуста."""
@@ -164,9 +262,10 @@ class IceIngestScheduler:
                 empty,
             )
         proxy = self._by_egress_proxy_url if config_requires_by_egress(job.config) else None
+        timeout_s = self._job_timeout_seconds(job.config)
         try:
             with egress_proxy(proxy):
-                extraction = await parser.extract(job)
+                extraction = await self._extract_with_deadline(parser, job, timeout_s)
             drafts, report = self._normalize(extraction, job, now)
             validated = self._validator.validate(drafts)
         except IceSessionValidationError as exc:
@@ -178,6 +277,34 @@ class IceIngestScheduler:
                     finished_at=now,
                     error_message=str(exc),
                     error_code="validation_error",
+                ),
+                empty,
+            )
+        except IngestTimeoutError as exc:
+            # Наш дедлайн на extract или дедлайн CPU-шага (OCR/PDF): сообщение уже точное.
+            logger.warning("parser %s timed out for job %s: %s", job.parser_key, job.id, exc)
+            return (
+                self._record(
+                    job,
+                    status=RUN_STATUS_ERROR,
+                    started_at=started,
+                    finished_at=now,
+                    error_message=str(exc),
+                    error_code=ERROR_CODE_TIMEOUT,
+                ),
+                empty,
+            )
+        except TimeoutError as exc:
+            # Таймаут изнутри extract (aiohttp и пр.) — не наш дедлайн: реальное сообщение + traceback.
+            logger.exception("parser %s hit an inner timeout for job %s", job.parser_key, job.id)
+            return (
+                self._record(
+                    job,
+                    status=RUN_STATUS_ERROR,
+                    started_at=started,
+                    finished_at=now,
+                    error_message=_describe_exception(exc),
+                    error_code=ERROR_CODE_TIMEOUT,
                 ),
                 empty,
             )
@@ -230,6 +357,28 @@ class IceIngestScheduler:
         )
 
     @staticmethod
+    async def _extract_with_deadline(parser, job: ParserJob, timeout_s: float):
+        deadline = asyncio.timeout(timeout_s)
+        try:
+            async with deadline:
+                return await parser.extract(job)
+        except TimeoutError as exc:
+            if deadline.expired():
+                raise ExtractDeadlineExceeded(f"extract timed out after {timeout_s}s") from exc
+            raise
+
+    @staticmethod
+    def _job_timeout_seconds(config: dict | None) -> float:
+        raw = (config or {}).get(CONFIG_JOB_TIMEOUT_S)
+        if raw is None or str(raw).strip() == "":
+            return DEFAULT_JOB_TIMEOUT_S
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return DEFAULT_JOB_TIMEOUT_S
+        return value if value > 0 else DEFAULT_JOB_TIMEOUT_S
+
+    @staticmethod
     def _record(
         job: ParserJob,
         *,
@@ -255,3 +404,9 @@ class IceIngestScheduler:
             snapshot=snapshot,
             error_code=error_code,
         )
+
+
+def _describe_exception(exc: BaseException) -> str:
+    text = str(exc)
+    name = type(exc).__name__
+    return f"{name}: {text}" if text else name
