@@ -560,7 +560,8 @@ async def test_arena_card_exposes_honest_freshness_and_source(
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         card = await client.get(f"/api/public/arenas/{with_source}")
-        slug_card = await client.get("/api/public/arenas/katok-s-saytom")
+        slug_only = await client.get("/api/public/arenas/katok-s-saytom")
+        slug_card = await client.get("/api/public/arenas/katok-s-saytom", params={"city_id": cid})
         bare_card = await client.get(f"/api/public/arenas/{bare}")
     assert card.status_code == 200, card.text
     body = card.json()
@@ -571,6 +572,7 @@ async def test_arena_card_exposes_honest_freshness_and_source(
     assert freshness["schedule_observed_at"] is not None
     assert freshness["source_url"] == "https://zamok.example/ice"
     assert freshness["source_label"]
+    assert slug_only.status_code == 404
     assert slug_card.status_code == 200, slug_card.text
     assert slug_card.json()["id"] == with_source
 
