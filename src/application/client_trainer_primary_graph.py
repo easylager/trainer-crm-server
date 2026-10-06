@@ -301,6 +301,8 @@ def edge_json_with_trainer_hints(
     base["services"] = h.get("services", [])
     base["primary_arena_name"] = h.get("primary_arena_name")
     base["min_price_cents"] = h.get("min_price_cents")
+    # TASK-196: валюта минимальной цены — из города тренера (BY → BYN, RU → RUB).
+    base["currency_code"] = h.get("currency_code")
     if next_bookings is not None:
         base["next_booking"] = next_bookings.get(tid)
     return base

@@ -559,17 +559,25 @@
         if (pc === 'CERT') return 'Сертификат покрывает';
         var cents = booking.price_cents;
         if (cents != null && cents !== '' && !isNaN(parseInt(cents, 10))) {
-          return formatBynFromCents(cents);
+          return formatBynFromCents(cents, booking.currency_code);
         }
         return null;
       }
 
-      function formatBynFromCents(cents) {
+      /* TASK-196: валюта цены записи — код из полезной нагрузки записей
+         (/client/bookings). Отображение — конвенция TASK-109: RUB знаком ₽,
+         BYN буквами. Старые ответы без валюты читаются как BYN. */
+      function priceCurrencyLabel(code) {
+        var c = String(code || '').trim().toUpperCase();
+        return c === 'RUB' ? '₽' : (c || 'BYN');
+      }
+
+      function formatBynFromCents(cents, currency) {
         if (cents == null || cents === '') return '';
         var n = parseInt(cents, 10);
         if (isNaN(n)) return '';
         var v = n / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' BYN';
+        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' ' + priceCurrencyLabel(currency);
       }
 
       window.openBookingDetail = function(bookingId) {

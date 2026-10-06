@@ -12,7 +12,7 @@
  *
  * Card metadata is intent-driven, not historical:
  *   - primary  → "Следующая запись X числа" / "Запись доступна"
- *   - saved    → чип «от X BYN», арена, услуги — почему вернуться сейчас
+ *   - saved    → чип «от X ₽/BYN» (валюта города тренера, TASK-196), арена, услуги — почему вернуться сейчас
  *   - past     → "N занятий вместе" / "последняя X числа"
  */
 (function () {
@@ -83,10 +83,18 @@
     return count + ' ' + pluralRu(count, 'занятие', 'занятия', 'занятий');
   }
 
-  function priceByn(cents) {
+  /* TASK-196: валюта минимальной цены — код из полезной нагрузки рёбер
+     (/client/trainer-edges). Отображение — конвенция TASK-109: RUB знаком ₽,
+     BYN буквами. Старые ответы без валюты читаются как BYN. */
+  function priceCurrencyLabel(code) {
+    var c = String(code || '').trim().toUpperCase();
+    return c === 'RUB' ? '₽' : (c || 'BYN');
+  }
+
+  function priceByn(cents, currency) {
     if (cents == null) return null;
     var byn = Math.round(cents / 100);
-    return 'от ' + esc(String(byn)) + ' BYN';
+    return 'от ' + esc(String(byn)) + ' ' + esc(priceCurrencyLabel(currency));
   }
 
   /** "12 мая" / "сегодня" / "завтра" — concise upcoming/past date label. */
@@ -231,8 +239,8 @@
       if (edge.primary_arena_name) {
         chips.push('<span class="st-stat-chip"><span class="st-stat-chip-icon">◉</span>' + esc(edge.primary_arena_name) + '</span>');
       }
-        if (edge.min_price_cents != null) {
-        var p = priceByn(edge.min_price_cents);
+      if (edge.min_price_cents != null) {
+        var p = priceByn(edge.min_price_cents, edge.currency_code);
         if (p) chips.push('<span class="st-stat-chip st-stat-chip-plain">' + esc(p) + '</span>');
       }
       if (chips.length) {
@@ -280,7 +288,7 @@
       if (d && t) return { icon: '⏱', text: 'Запись ' + d + ' в ' + t, kind: 'booking' };
     }
     if (edge.min_price_cents != null) {
-      var p = priceByn(edge.min_price_cents);
+      var p = priceByn(edge.min_price_cents, edge.currency_code);
       if (p) return { icon: null, text: p, kind: 'price' };
     }
     if (edge.primary_arena_name) {

@@ -1192,17 +1192,26 @@
         el.style.display = 'block';
       }
 
+      /* TASK-196: валюта услуги — код из полезной нагрузки карточки тренера
+         (/api/public/trainers/{id}). Отображение — конвенция TASK-109: RUB
+         знаком ₽, BYN буквами. Старые ответы без валюты — BYN. */
+      function priceCurrencyLabel(code) {
+        var c = String(code || '').trim().toUpperCase();
+        return c === 'RUB' ? '₽' : (c || 'BYN');
+      }
+
       function formatBookServicePrice(s) {
         var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
         var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
         if (minV == null && s.price_byn == null) return 'по запросу';
+        var cur = priceCurrencyLabel(s.currency_code);
         if (minV != null && maxV != null && minV !== maxV) {
           var a = minV === Math.floor(minV) ? String(minV) : minV.toFixed(2);
-          return 'от ' + a + ' BYN';
+          return 'от ' + a + ' ' + cur;
         }
         var v = minV != null ? minV : s.price_byn;
         var numStr = v === Math.floor(v) ? String(v) : v.toFixed(2);
-        return numStr + ' BYN';
+        return numStr + ' ' + cur;
       }
 
       function serviceDisplayNameForId(serviceId) {
@@ -1457,7 +1466,8 @@
           inp.value = String(tier.id);
           const pb = tier.price_byn;
           const priceNum = pb === Math.floor(pb) ? String(pb) : Number(pb).toFixed(2);
-          const priceHtml = escapeHtmlBook(priceNum) + ' BYN';
+          // TASK-196: валюта тира — из полезной нагрузки (₽ для RUB), не «BYN» наизусть.
+          const priceHtml = escapeHtmlBook(priceNum) + ' ' + escapeHtmlBook(priceCurrencyLabel(tier.currency_code));
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
           tierTxt.className = 'tier-radio-text';

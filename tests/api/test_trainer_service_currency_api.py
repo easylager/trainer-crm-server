@@ -14,6 +14,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from src.api.app import app
+from tests.api.test_webapp_client_miniapp_integration import (
+    _client_auth_headers,
+    patch_client_init_auth,
+)
 from tests.db_catalog_helpers import require_seed_service_id
 
 
@@ -117,3 +121,50 @@ async def test_ru_city_trainer_prices_come_in_rub(app_use_test_db, db_session) -
         assert by_listing.status_code == 200, by_listing.text
         by_item = next(it for it in by_listing.json()["items"] if it["id"] == by_tid)
         assert _our_service(by_item, service_id)["currency_code"] == "BYN"
+
+
+@pytest.mark.asyncio
+async def test_saved_trainer_edge_carries_trainer_currency(app_use_test_db, db_session) -> None:
+    """Ревью TASK-196: чип «от X …» на экране сохранённых берёт валюту из ребра."""
+    import uuid as _uuid
+
+    service_id = await require_seed_service_id(db_session)
+    ru_city = await _insert_city(db_session, country="RU")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        ru_tid = await _create_listed_trainer(
+            client, db_session, city_id=ru_city, service_id=service_id, price_cents=400000
+        )
+
+    # Клиент сохраняет тренера — ребро появляется в /client/trainer-edges.
+    client_tid = 7_900_000_000 + (_uuid.uuid4().int % 2_000_000_000)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_sessions (telegram_id, state)
+            VALUES (:tid, 'idle')
+            ON CONFLICT (telegram_id) DO NOTHING
+            """
+        ),
+        {"tid": client_tid},
+    )
+    await db_session.execute(
+        text("INSERT INTO clients (first_name, telegram_id, is_sandbox) VALUES ('Клиент', :tid, false)"),
+        {"tid": client_tid},
+    )
+    await db_session.commit()
+
+    with patch_client_init_auth(client_tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r_save = await client.post(
+                "/api/webapp/client/trainer-edges/save",
+                json={"trainer_id": ru_tid},
+                headers=_client_auth_headers(),
+            )
+            assert r_save.status_code == 200, r_save.text
+            r_edges = await client.get("/api/webapp/client/trainer-edges", headers=_client_auth_headers())
+
+    assert r_edges.status_code == 200, r_edges.text
+    edge = next(e for e in r_edges.json()["all"] if e["trainer_id"] == ru_tid)
+    assert edge["min_price_cents"] == 400000
+    assert edge["currency_code"] == "RUB"
