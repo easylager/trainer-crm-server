@@ -14,6 +14,14 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  /* TASK-182: часы работы — общий модуль с карточкой места (opening-hours.js). */
+  var OH =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./opening-hours.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.OpeningHours
+        : null;
+
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
   var MINSK_TZ = 'Europe/Minsk';
@@ -142,6 +150,68 @@
     return 'places';
   }
 
+  /**
+   * TASK-182 (F1). Автопереход на «Тренеров» — только когда сервер честно сказал
+   * «в городе нет льда»: лента мест (не магазины), без чипа другого типа, total = 0
+   * в ответе сервера. Пустота после клиентских фильтров (магазины + «Открыто сейчас»
+   * в 23:30) — это пустой результат фильтра, а не повод менять выбор человека.
+   */
+  function noIceInCity(intent, venueTypes, data) {
+    if (coerceIntent(intent) !== INTENTS.skate) return false;
+    if (catalogScope(intent, venueTypes) !== 'places') return false;
+    var v = venueTypes || [];
+    if (v.length && !(v.length === 1 && v[0] === 'ice')) return false;
+    if (!data || typeof data !== 'object') return false;
+    var total = data.total != null ? Number(data.total) : (data.items || []).length;
+    return total === 0 && !(data.items || []).length;
+  }
+
+  /** Страница списка от сервера: лимит первой страницы и страниц для карты. */
+  var LIST_PAGE_LIMIT = 50;
+  /* Сервер режет limit до MAX_LIST_LIMIT = 100 (arena_public_use_cases.py). */
+  var MAP_PAGE_LIMIT = 100;
+  /* Страховка от бесконечной догрузки: 20 × 100 мест на город — с запасом. */
+  var MAX_PAGES = 20;
+
+  /** Дописать страницу к списку без дублей по id (страницы считаются по offset). */
+  function appendPage(items, more) {
+    var out = (items || []).slice();
+    var seen = {};
+    for (var i = 0; i < out.length; i++) {
+      if (out[i] && out[i].id != null) seen[String(out[i].id)] = true;
+    }
+    (more || []).forEach(function (it) {
+      if (it && it.id != null) {
+        if (seen[String(it.id)]) return;
+        seen[String(it.id)] = true;
+      }
+      out.push(it);
+    });
+    return out;
+  }
+
+  /**
+   * «Показать ещё» под лентой: есть ли следующая страница. Места — по next_cursor
+   * сервера; тренеры — по total и offset (= уже показанным).
+   */
+  function loadMoreView(opts) {
+    opts = opts || {};
+    var shown = (opts.items || []).length;
+    var intent = coerceIntent(opts.intent);
+    if (opts.loading || !shown) return null;
+    if (catalogScope(intent, opts.venueTypes) === 'shop') return null;
+    var more = false;
+    if (intent === INTENTS.coach) more = Number(opts.total) > shown;
+    else more = !!opts.cursor;
+    if (!more) return null;
+    var left = Math.max(0, Number(opts.total) - shown);
+    return {
+      label: opts.loadingMore ? 'Загружаем…' : 'Показать ещё',
+      busy: !!opts.loadingMore,
+      left: left,
+    };
+  }
+
   function sumFacetCounts(facets, keys) {
     var n = 0;
     for (var i = 0; i < keys.length; i++) n += facetCount(facets, keys[i]);
@@ -258,7 +328,7 @@
   function catalogStateAfterCityChange(city, current) {
     current = current || {};
     return {
-      intent: pickCityIntent(city, current.intent),
+      intent: pickCityIntent(city, cityIntentBasis(current)),
       venueTypes: [],
       shopService: '',
       shopDiscipline: '',
@@ -303,8 +373,6 @@
     { key: 'weekend', label: 'В выходные' },
   ];
 
-  var WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-
   function shopServicesOf(item) {
     return (item && item.shop_services) || [];
   }
@@ -332,55 +400,8 @@
     );
   }
 
-  function normalizeHhmm(raw) {
-    var text = String(raw || '').trim().replace('.', ':');
-    if (!text) return '';
-    var parts = text.split(':');
-    var h = parseInt(parts[0], 10);
-    var m = parseInt(parts[1] || '0', 10);
-    if (isNaN(h) || isNaN(m) || h < 0 || h > 24 || m < 0 || m > 59) return '';
-    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
-  }
-
-  function hhmmToMinutes(hhmm) {
-    var n = normalizeHhmm(hhmm);
-    if (!n) return null;
-    var p = n.split(':');
-    return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
-  }
-
-  function parseDayIntervals(raw) {
-    if (!raw) return [];
-    if (raw.length && raw[0] && raw[0].length === 2 && typeof raw[0][0] === 'string') {
-      var out = [];
-      for (var i = 0; i < raw.length; i++) {
-        var o = normalizeHhmm(raw[i][0]);
-        var c = normalizeHhmm(raw[i][1]);
-        if (o && c) out.push([o, c]);
-      }
-      return out;
-    }
-    if (raw.length === 2) {
-      var o = normalizeHhmm(raw[0]);
-      var c = normalizeHhmm(raw[1]);
-      return o && c ? [[o, c]] : [];
-    }
-    return [];
-  }
-
   function intervalsForWeekday(openingHours, weekday) {
-    var hours = openingHours && typeof openingHours === 'object' ? openingHours : {};
-    var weekly = hours.weekly;
-    if (weekly && typeof weekly === 'object') {
-      return parseDayIntervals(weekly[WEEKDAY_KEYS[weekday % 7]]);
-    }
-    var daily = hours.daily;
-    if (daily && typeof daily === 'object') {
-      var o = normalizeHhmm(daily.open);
-      var c = normalizeHhmm(daily.close);
-      return o && c ? [[o, c]] : [];
-    }
-    return [];
+    return OH.intervalsForWeekday(openingHours, weekday);
   }
 
   function weekdayMinsk(now) {
@@ -404,42 +425,27 @@
         hourCycle: 'h23',
       }).format(now);
     } catch (e) {
-      return normalizeHhmm(now.getHours() + ':' + now.getMinutes());
+      return OH.normHhmm(now.getHours() + ':' + now.getMinutes());
     }
   }
 
   function shopOpenAtMinutes(item, weekday, nowMins) {
-    var intervals = intervalsForWeekday(item.opening_hours, weekday);
-    for (var i = 0; i < intervals.length; i++) {
-      var open = hhmmToMinutes(intervals[i][0]);
-      var close = hhmmToMinutes(intervals[i][1]);
-      if (open == null || close == null) continue;
-      if (nowMins >= open && nowMins < close) return true;
-    }
-    return false;
+    return OH.isOpenAt(item.opening_hours, weekday, nowMins);
   }
 
   function shopOpenOnWeekday(item, weekday) {
-    return intervalsForWeekday(item.opening_hours, weekday).length > 0;
+    return OH.opensOnWeekday(item.opening_hours, weekday);
   }
 
   function shopOpenEveningToday(item, weekday, nowMins) {
-    var intervals = intervalsForWeekday(item.opening_hours, weekday);
-    var evening = 18 * 60;
-    for (var i = 0; i < intervals.length; i++) {
-      var open = hhmmToMinutes(intervals[i][0]);
-      var close = hhmmToMinutes(intervals[i][1]);
-      if (open == null || close == null) continue;
-      if (close > evening && open < close && nowMins < close) return true;
-    }
-    return false;
+    return OH.openAfterToday(item.opening_hours, weekday, nowMins, 18 * 60);
   }
 
   function shopMatchesHours(item, filters, now) {
     filters = filters || {};
     now = now instanceof Date ? now : new Date();
     var today = weekdayMinsk(now);
-    var nowMins = hhmmToMinutes(hhmmMinsk(now));
+    var nowMins = OH.toMinutes(hhmmMinsk(now));
     if (filters.shopOpenNow) {
       if (!item.opening_hours) return false;
       return shopOpenAtMinutes(item, today, nowMins != null ? nowMins : 0);
@@ -936,6 +942,17 @@
       return Number(a.id) - Number(b.id);
     });
     return list.slice(0, cap);
+  }
+
+  /**
+   * Чей выбор вкладки уважать при смене города. Автопереход на тренеров
+   * (autoCoach) — решение прошлого города, не человека: для нового города
+   * исходим из «Катания», иначе город с катками откроется на тренерах.
+   */
+  function cityIntentBasis(current) {
+    current = current || {};
+    if (current.autoCoach && current.intent === INTENTS.coach) return INTENTS.skate;
+    return current.intent;
   }
 
   function pickCityIntent(city, currentIntent) {
@@ -1890,6 +1907,13 @@
     hasActiveShopFilters: hasActiveShopFilters,
     formatEmptyShopFilters: formatEmptyShopFilters,
     intervalsForWeekday: intervalsForWeekday,
+    shopOpenAtMinutes: shopOpenAtMinutes,
+    noIceInCity: noIceInCity,
+    appendPage: appendPage,
+    loadMoreView: loadMoreView,
+    LIST_PAGE_LIMIT: LIST_PAGE_LIMIT,
+    MAP_PAGE_LIMIT: MAP_PAGE_LIMIT,
+    MAX_PAGES: MAX_PAGES,
     shopMatchesHours: shopMatchesHours,
     formatNearGeoBlockedMessage: formatNearGeoBlockedMessage,
     whenPickerVisible: whenPickerVisible,
@@ -1920,6 +1944,7 @@
     shouldShowSkateChip: shouldShowSkateChip,
     sanitizeIntent: sanitizeIntent,
     pickCityIntent: pickCityIntent,
+    cityIntentBasis: cityIntentBasis,
     serviceChipLabel: serviceChipLabel,
     cityCountryLabel: cityCountryLabel,
     coerceIntent: coerceIntent,
