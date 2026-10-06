@@ -1,4 +1,4 @@
-"""job.config for Global ICE Мозырь (arena_id 44) — weekly_grid_v1, no live schedule URL."""
+"""job.config for Global ICE Мозырь (weekly_grid_v1) — no live schedule URL."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ MOZYR_GLOBAL_ICE_CONFIG: dict = {
     "step_minutes": 60,
     "duration_minutes": 45,
     "default_duration_minutes": 45,
-    "age_note": "детский билет",
     "prices_already_minor": True,
     "requires_by_egress": False,
     "weekday_windows": {

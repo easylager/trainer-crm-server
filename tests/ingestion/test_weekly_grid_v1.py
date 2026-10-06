@@ -14,7 +14,7 @@ from src.shared.schedule_basis import SCHEDULE_BASIS_PROJECTED
 def _job(config: dict) -> ParserJob:
     return ParserJob(
         id=1,
-        arena_id=44,
+        arena_id=205,
         parser_key="weekly_grid_v1",
         is_enabled=True,
         cadence="daily",

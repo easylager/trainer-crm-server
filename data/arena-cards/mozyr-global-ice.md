@@ -1,5 +1,4 @@
 # Card: Global ICE (ТЦ Global Market)
-- arena_id: 44
 - slug: mozyr-global-ice
 - verified_at: 2026-10-07
 - verified_by: TASK-205 (Instagram @global_ice_, владелец 2026-10-06/07)

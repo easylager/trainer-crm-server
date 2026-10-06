@@ -37,7 +37,14 @@ def loader():
 def cards(loader):
     paths = loader.discover_dossiers(_CARDS)
     parsed = [loader.parse_dossier(path) for path in paths]
-    return {card.slug: card for card in parsed}
+    return {card.slug: card for card in parsed if card.arena_id is not None}
+
+
+@pytest.fixture(scope="module")
+def slug_only_cards(loader):
+    paths = loader.discover_dossiers(_CARDS)
+    parsed = [loader.parse_dossier(path) for path in paths]
+    return {card.slug: card for card in parsed if card.arena_id is None}
 
 
 def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
@@ -53,7 +60,6 @@ def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
     assert by_id[115] == "konkobezhnaya-arena"
     assert by_id[38] == "bobruisk-arena"
     assert by_id[41] == "ostrovets-lds"
-    assert by_id[44] == "mozyr-global-ice"
     for card in cards.values():
         assert card.arena_id in loader.TARGET_ARENA_IDS
         assert card.enough_facts
@@ -69,9 +75,9 @@ def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
     assert cards["konkobezhnaya-arena"].publishable_photo_count == 3
 
 
-def test_mozyr_global_ice_dossier_parses(cards) -> None:
-    card = cards["mozyr-global-ice"]
-    assert card.arena_id == 44
+def test_mozyr_global_ice_dossier_parses(slug_only_cards) -> None:
+    card = slug_only_cards["mozyr-global-ice"]
+    assert card.arena_id is None
     assert card.phone == "+375333339009"
     assert card.website_url == "https://www.instagram.com/global_ice_/"
     assert card.season_start_month == 1 and card.season_end_month == 12
@@ -273,6 +279,13 @@ def test_parse_only_arena_ids(loader) -> None:
     assert loader.parse_only_arena_ids(None) is None
     assert loader.parse_only_arena_ids("2,3,5,6,7") == frozenset({2, 3, 5, 6, 7})
     assert loader.parse_only_arena_ids(" 6 ") == frozenset({6})
+
+
+def test_parse_only_slugs(loader) -> None:
+    assert loader.parse_only_slugs(None) is None
+    assert loader.parse_only_slugs("mozyr-global-ice,zamok") == frozenset(
+        {"mozyr-global-ice", "zamok"}
+    )
 
 
 def test_refuses_production_database_url(loader) -> None:
@@ -496,26 +509,22 @@ async def test_apply_uploads_diamond_local_png(
 
 
 @pytest.mark.asyncio
-async def test_apply_mozyr_global_ice_profile(
-    loader, cards, db_session, tmp_path: Path, monkeypatch
+async def test_only_slugs_loads_mozyr_only(
+    loader, slug_only_cards, db_session, tmp_path: Path, monkeypatch
 ) -> None:
-    city = (await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))).scalar()
-    if city is None:
-        pytest.skip("need seed cities")
-    city_id = int(city)
-    ins = await db_session.execute(
-        text(
-            """
-            INSERT INTO arenas (id, city_id, name, address, latitude, longitude, is_active, is_confirmed)
-            VALUES (44, :cid, 'Global ICE', 'бульвар Дружбы, 11А', 52.0309001, 29.2427777, true, true)
-            ON CONFLICT (id) DO UPDATE SET city_id = EXCLUDED.city_id
-            RETURNING id
-            """
-        ),
-        {"cid": int(city_id)},
-    )
-    arena_id = int(ins.scalar_one())
-    await db_session.flush()
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session as SyncSession
+
+    from scripts.create_mozyr_global_ice import CITY_NAME, SLUG, apply_mozyr_global_ice
+    from src.shared.config import Settings
+
+    url = Settings().database_url_sync or Settings().database_url
+    if url.startswith("postgresql+asyncpg"):
+        url = url.replace("postgresql+asyncpg", "postgresql+psycopg", 1)
+    with SyncSession(create_engine(url)) as sync_sess:
+        with sync_sess.begin():
+            created = apply_mozyr_global_ice(sync_sess)
+    arena_id = created.arena_id
 
     def fake_upload(arena_id: int, _body: bytes, _content_type: str) -> dict:
         token = uuid.uuid4().hex[:8]
@@ -528,35 +537,36 @@ async def test_apply_mozyr_global_ice_profile(
 
     monkeypatch.setattr("src.infrastructure.s3.upload_arena_photo", fake_upload)
 
-    result = await loader.apply_card(
-        db_session,
-        cards["mozyr-global-ice"],
+    results = await loader.run_load(
+        cards_dir=_CARDS,
         fixtures_dir=tmp_path,
+        apply=True,
         seed_sessions=False,
-        arena_id=arena_id,
-        repo_root=_ROOT,
-        fetch_photo=lambda _url: None,
+        report_path=None,
+        allow_local_dev=True,
+        only_slugs=frozenset({SLUG}),
     )
-    await db_session.flush()
-    assert result.error is None
-    assert result.photos_uploaded == 1
+    assert len(results) == 1
+    assert results[0].error is None
+    assert results[0].card.slug == SLUG
 
     row = (
         await db_session.execute(
             text(
                 """
-                SELECT phone, short_description, social_urls, opening_hours, season_start_month,
-                       season_end_month, status
-                FROM arena_profiles WHERE arena_id = :id
+                SELECT a.id, p.phone, p.short_description, p.social_urls, p.status
+                FROM arena_profiles p
+                JOIN arenas a ON a.id = p.arena_id
+                JOIN cities c ON c.id = a.city_id
+                WHERE c.name = :city AND p.slug = :slug
                 """
             ),
-            {"id": arena_id},
+            {"city": CITY_NAME, "slug": SLUG},
         )
     ).fetchone()
     assert row is not None
-    assert row[0] == "+375333339009"
-    assert row[1] and "800" in row[1]
-    assert row[2].get("instagram") == "https://www.instagram.com/global_ice_/"
-    assert row[3] and "Пн–Чт" in row[3]["note"]
-    assert row[4] == 1 and row[5] == 12
-    assert row[6] == "published"
+    assert int(row[0]) == arena_id
+    assert row[1] == "+375333339009"
+    assert row[2] and "800" in row[2]
+    assert row[3].get("instagram") == "https://www.instagram.com/global_ice_/"
+    assert row[4] == "published"

@@ -112,7 +112,8 @@ def build_weekly_grid_slots(job: ParserJob) -> list[ExtractedSlot]:
     run_date_raw = cfg.get("run_date")
     run_date = date.fromisoformat(str(run_date_raw)) if run_date_raw else minsk_today()
     kind_raw = str(cfg.get("kind") or "public_skate")
-    age_note = str(cfg.get("age_note") or "")
+    raw_age = cfg.get("age_note")
+    age_note = str(raw_age).strip() if raw_age else None
     slots: list[ExtractedSlot] = []
     for offset in range(horizon):
         local_date = run_date + timedelta(days=offset)
@@ -138,7 +139,7 @@ def build_weekly_grid_slots(job: ParserJob) -> list[ExtractedSlot]:
                     price_adult=adult,
                     price_child=child,
                     price_rental=rental,
-                    age_note=age_note or None,
+                    age_note=age_note,
                 )
             )
     return slots

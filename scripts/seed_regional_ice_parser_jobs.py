@@ -70,10 +70,6 @@ def build_regional_job_seeds() -> list[JobSeed]:
         PARSER_KEY_VITEBSK_DS,
         VITEBSK_DS_CONFIG,
     )
-    from src.ingestion.seed_config_mozyr_global_ice import (
-        MOZYR_GLOBAL_ICE_CONFIG,
-        PARSER_KEY_WEEKLY_GRID_V1,
-    )
     from src.ingestion.seed_config_regional_batch_d import (
         BOBRUISK_ARENA_CONFIG,
         GOMEL_LDS_CONFIG,
@@ -107,7 +103,6 @@ def build_regional_job_seeds() -> list[JobSeed]:
         (19, PARSER_KEY_SOLIGORSK_SZK, SOLIGORSK_SZK_CONFIG, "daily"),
         (42, PARSER_KEY_SHKLOV_ARENA, SHKLOV_ARENA_CONFIG, "daily"),
         (33, PARSER_KEY_GOMEL_LDS, GOMEL_LDS_CONFIG, "daily"),
-        (44, PARSER_KEY_WEEKLY_GRID_V1, MOZYR_GLOBAL_ICE_CONFIG, "daily"),
     ]
     return [
         JobSeed(

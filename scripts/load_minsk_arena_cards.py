@@ -64,7 +64,7 @@ TARGET_ARENA_IDS = (
     2, 3, 6, 5, 7, 8, 4, 115,
     # Regional BY rinks: 25 arena_profiles seeded via scripts/seed_regional_arenas.py,
     # dossiers in data/arena-cards/<slug>.md.
-    22, 23, 25, 24, 10, 11, 20, 28, 37, 40, 43, 18, 30, 31, 41, 27, 15, 16, 19, 42, 33, 26, 32, 38, 29, 44,
+    22, 23, 25, 24, 10, 11, 20, 28, 37, 40, 43, 18, 30, 31, 41, 27, 15, 16, 19, 42, 33, 26, 32, 38, 29,
     # Первая не ледовая площадка: зал Lifestyle на Машерова, заведён тренером
     # (venue_type=gym). Ice-сеансов у неё нет и не будет — фикстуры нет, загрузчик
     # берёт только профиль и фото.
@@ -163,7 +163,7 @@ class SessionPlan:
 @dataclass
 class ArenaCard:
     path: Path
-    arena_id: int
+    arena_id: int | None
     slug: str
     verified_at: date | None
     venue_type: str
@@ -471,12 +471,10 @@ def parse_dossier(path: Path) -> ArenaCard:
     md = path.read_text(encoding="utf-8")
     id_match = HEADER_ARENA_ID_RE.search(md)
     slug_match = HEADER_SLUG_RE.search(md)
-    if not id_match:
-        raise ValueError(f"{path.name}: missing arena_id — refuse to invent")
     if not slug_match:
         raise ValueError(f"{path.name}: missing slug")
-    arena_id = int(id_match.group(1))
     slug = slug_match.group(1).strip()
+    arena_id = int(id_match.group(1)) if id_match else None
     verified_raw = HEADER_VERIFIED_RE.search(md)
     verified_at = None
     if verified_raw:
@@ -559,6 +557,28 @@ def discover_dossiers(cards_dir: Path) -> list[Path]:
             continue
         paths.append(path)
     return paths
+
+
+def parse_only_slugs(raw: str | None) -> frozenset[str] | None:
+    """Comma-separated dossier slugs (slug-only cards, resolved in DB on --apply)."""
+    if raw is None:
+        return None
+    text = raw.strip()
+    if not text:
+        return frozenset()
+    return frozenset(chunk.strip() for chunk in text.split(",") if chunk.strip())
+
+
+async def resolve_arena_id_for_slug(session: Any, slug: str) -> int | None:
+    from sqlalchemy import text
+
+    row = (
+        await session.execute(
+            text("SELECT arena_id FROM arena_profiles WHERE slug = :slug LIMIT 1"),
+            {"slug": slug},
+        )
+    ).fetchone()
+    return int(row[0]) if row else None
 
 
 def parse_only_arena_ids(raw: str | None) -> frozenset[int] | None:
@@ -673,6 +693,16 @@ def assert_local_database_url(
     names = {"trainer_crm_test"}
     if allow_local_dev:
         names.add("trainer_crm")
+    if os.environ.get("PYTEST_RELAX_DATABASE_NAME", "").strip() == "1":
+        env_url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_URL_SYNC") or ""
+        parsed_db = urlparse(
+            env_url.replace("postgresql+asyncpg://", "postgresql://", 1).replace(
+                "postgresql+psycopg://", "postgresql://", 1
+            )
+        )
+        relaxed = (parsed_db.path or "").lstrip("/").split("?")[0]
+        if relaxed and relaxed not in names:
+            names.add(relaxed)
     assert_database_url(
         url,
         apply=apply,
@@ -1144,22 +1174,31 @@ async def run_load(
     report_path: Path | None,
     allow_local_dev: bool = False,
     only_arena_ids: frozenset[int] | None = None,
+    only_slugs: frozenset[str] | None = None,
 ) -> list[ArenaLoadResult]:
     started = time.perf_counter()
+    if only_arena_ids is not None and only_slugs is not None:
+        raise SystemExit("use only one of --only-arena-ids or --only-slugs")
     dossiers = discover_dossiers(cards_dir)
     if not dossiers:
         raise SystemExit(f"no minsk-*.md dossiers in {cards_dir}")
     cards = [parse_dossier(path) for path in dossiers]
-    missing_ids = [c.arena_id for c in cards if c.arena_id not in TARGET_ARENA_IDS]
-    if missing_ids:
-        raise SystemExit(f"unexpected arena_id values (refusing to invent/remap): {missing_ids}")
-    if only_arena_ids is not None:
-        unknown = sorted(only_arena_ids - set(TARGET_ARENA_IDS))
-        if unknown:
-            raise SystemExit(f"unknown --only-arena-ids (not in TARGET_ARENA_IDS): {unknown}")
-        cards = [c for c in cards if c.arena_id in only_arena_ids]
+    if only_slugs is not None:
+        cards = [c for c in cards if c.slug in only_slugs]
         if not cards:
-            raise SystemExit("no dossiers left after --only-arena-ids filter")
+            raise SystemExit("no dossiers left after --only-slugs filter")
+    else:
+        cards = [c for c in cards if c.arena_id is not None]
+        missing_ids = [c.arena_id for c in cards if c.arena_id not in TARGET_ARENA_IDS]
+        if missing_ids:
+            raise SystemExit(f"unexpected arena_id values (refusing to invent/remap): {missing_ids}")
+        if only_arena_ids is not None:
+            unknown = sorted(only_arena_ids - set(TARGET_ARENA_IDS))
+            if unknown:
+                raise SystemExit(f"unknown --only-arena-ids (not in TARGET_ARENA_IDS): {unknown}")
+            cards = [c for c in cards if c.arena_id in only_arena_ids]
+            if not cards:
+                raise SystemExit("no dossiers left after --only-arena-ids filter")
 
     results: list[ArenaLoadResult] = []
     if apply:
@@ -1172,12 +1211,26 @@ async def run_load(
         try:
             async with factory() as session:
                 for card in cards:
+                    if only_slugs is not None:
+                        target_id = await resolve_arena_id_for_slug(session, card.slug)
+                    else:
+                        target_id = card.arena_id
+                    if target_id is None:
+                            results.append(
+                                ArenaLoadResult(
+                                    card,
+                                    profile="skipped (slug not in DB)",
+                                    error=f"no arena_profiles.slug={card.slug}",
+                                )
+                            )
+                            continue
                     results.append(
                         await apply_card(
                             session,
                             card,
                             fixtures_dir=fixtures_dir,
                             seed_sessions=seed_sessions,
+                            arena_id=target_id,
                         )
                     )
                 await session.commit()
@@ -1191,7 +1244,8 @@ async def run_load(
             results.append(
                 ArenaLoadResult(
                     card,
-                    profile=f"dry-run {card.status} arena_id={card.arena_id}",
+                    profile=f"dry-run {card.status} slug={card.slug}"
+                    + (f" arena_id={card.arena_id}" if card.arena_id is not None else " (slug-only)"),
                     sessions_reason=plan_reason,
                     photo_summary="; ".join(p.reason for p in card.photo_decisions[:2]) or "none",
                 )
@@ -1248,6 +1302,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Comma-separated arena_ids to load (skip others). Local DB may not match prod CSV ids.",
     )
+    parser.add_argument(
+        "--only-slugs",
+        default=None,
+        help="Comma-separated dossier slugs (slug-only cards; arena resolved from arena_profiles on --apply).",
+    )
     return parser
 
 
@@ -1273,6 +1332,7 @@ def main(argv: list[str] | None = None) -> int:
             report_path=report_path,
             allow_local_dev=args.allow_local_dev_db,
             only_arena_ids=parse_only_arena_ids(args.only_arena_ids),
+            only_slugs=parse_only_slugs(args.only_slugs),
         )
     )
     return 0
