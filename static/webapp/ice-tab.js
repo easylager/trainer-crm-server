@@ -859,6 +859,10 @@
         ? '<span class="ice-board__prices">' + esc(v.prices) + '</span>'
         : ''
       : '<span class="ice-board__status">' + esc(v.status) + '</span>';
+    if (v.callHref) {
+      facts +=
+        '<a class="ice-board__call" href="' + esc(v.callHref) + '" data-action="external">Позвонить</a>';
+    }
     /* «Позвать» — поверх кадра, но вне ссылки карточки: вложенная кнопка в <a> ломает
        клик на iOS, а тап должен звать друга, а не открывать карточку. */
     var invite =

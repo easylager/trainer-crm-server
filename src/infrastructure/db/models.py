@@ -283,6 +283,10 @@ class ArenaProfile(Base):
             "season_end_month IS NULL OR (season_end_month BETWEEN 1 AND 12)",
             name="ck_arena_profiles_season_end",
         ),
+        CheckConstraint(
+            "schedule_mode IN ('auto', 'phone', 'season_closed')",
+            name="ck_arena_profiles_schedule_mode",
+        ),
     )
 
     arena_id: Mapped[int] = mapped_column(
@@ -302,6 +306,9 @@ class ArenaProfile(Base):
     opening_hours: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
     season_start_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
     season_end_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
+    schedule_mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="auto")
+    reopen_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
+    schedule_mode_note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

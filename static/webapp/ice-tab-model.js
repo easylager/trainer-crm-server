@@ -37,6 +37,10 @@
     return rootRef.ScheduleStalenessModel || null;
   }
 
+  function scheduleModeApi() {
+    return rootRef.ArenaScheduleModeModel || null;
+  }
+
   function ymdInMinsk(d) {
     return MT ? MT.dateIso(d) : '';
   }
@@ -1468,6 +1472,7 @@
        ответ на чип «Сегодня вечером»; на «Все» они остаются в основной ленте. */
     // TASK-180: неподтверждённое (очень устаревшее) расписание — не ответ на окно.
     if (kind === 'unconfirmed') return false;
+    if (kind === 'phone' || kind === 'season_closed') return false;
     if (kind !== 'session') return true;
     if (scheduleVeryStale(item)) return false;
     return !live.outside_window;
@@ -1573,7 +1578,9 @@
       return parts.join(' · ');
     }
     // TASK-146: магазин и зал — без сеансов; сервер уже сказал, что там есть и когда открыто.
-    if (kind === 'place' || kind === 'closed') return String(live.text || '').trim();
+    if (kind === 'place' || kind === 'closed' || kind === 'phone' || kind === 'season_closed') {
+      return String(live.text || '').trim();
+    }
     var tier = String(item.tier || '').toUpperCase();
     if (tier === 'C') return 'Есть в справочнике · данных пока нет';
     if (tier === 'B') return 'Расписание уточняется · есть телефон и сайт';
@@ -1602,9 +1609,10 @@
     opts = opts || {};
     now = now instanceof Date ? now : new Date();
     var live = item.live || {};
+    var liveKind = String(live.kind || '');
     var veryStale = scheduleVeryStale(item);
     // TASK-180: очень устаревший сеанс — не «сеанс»: ни дня, ни времени, ни цены.
-    var isSession = String(live.kind || '') === 'session' && !veryStale;
+    var isSession = liveKind === 'session' && !veryStale;
     /* PDEC-005 / TASK-184: начавшийся сеанс не показываем как ближайший. */
     if (isSession && MT.liveSessionStarted(live, now, item.timezone)) isSession = false;
     var off = !!opts.window && !inWindow(item, opts.window);
@@ -1635,6 +1643,11 @@
     if (stale && isSession && S && S.STALE_SHORT) {
       depth = 'Расписание ' + S.STALE_SHORT + ' · ' + depth;
     }
+    var SM = scheduleModeApi();
+    var callHref = '';
+    if (liveKind === 'phone' && SM) {
+      callHref = SM.phoneToTelHref(item.phone);
+    }
     return {
       stale: stale,
       href: arenaHref(item),
@@ -1662,6 +1675,7 @@
       // TASK-146: карточка вне окна — приглушённая, время не герой, и прямо сказано почему.
       offWindow: off,
       offLabel: off ? windowMissLabel(opts.window) + (isSession ? ' · ближайший' : '') : '',
+      callHref: callHref,
     };
   }
 

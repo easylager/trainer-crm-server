@@ -5001,6 +5001,9 @@ class AdminArenaPatchBody(BaseModel):
     opening_hours: dict[str, Any] | None = None
     season_start_month: int | None = None
     season_end_month: int | None = None
+    schedule_mode: str | None = None
+    reopen_date: date | None = None
+    schedule_mode_note: str | None = None
     amenities: dict[str, bool] | None = None
     status: str | None = None
 
@@ -5020,7 +5023,8 @@ async def get_admin_arenas(
     sql = """
         SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.sort_order, a.is_active,
                p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
-               p.tickets_url, p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+               p.tickets_url,                p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+               p.schedule_mode, p.reopen_date, p.schedule_mode_note,
                p.amenities, p.status, a.venue_type
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -5057,9 +5061,12 @@ async def get_admin_arenas(
             "opening_hours": row[15],
             "season_start_month": row[16],
             "season_end_month": row[17],
-            "amenities": row[18] or {},
-            "status": row[19] or "published",
-            "venue_type": row[20] or "ice",
+            "schedule_mode": row[18] or "auto",
+            "reopen_date": row[19].isoformat() if row[19] else None,
+            "schedule_mode_note": row[20],
+            "amenities": row[21] or {},
+            "status": row[22] or "published",
+            "venue_type": row[23] or "ice",
         }
         for row in rows
     ]

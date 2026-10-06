@@ -9,11 +9,14 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const stalePath = path.resolve(__dirname, '../../static/webapp/schedule-staleness-model.js');
+const modePath = path.resolve(__dirname, '../../static/webapp/arena-schedule-mode-model.js');
 const modelPath = path.resolve(__dirname, '../../static/webapp/ice-tab-model.js');
 
 function loadModel() {
   delete require.cache[require.resolve(stalePath)];
   require(stalePath);
+  delete require.cache[require.resolve(modePath)];
+  require(modePath);
   const resolved = require.resolve(modelPath);
   delete require.cache[resolved];
   return require(modelPath);
@@ -1361,5 +1364,35 @@ describe('TASK-180: очень устаревшее расписание в ле
     const line = formatLiveLine(base, now);
     assert.match(line, /не обновлялось 4 дня/);
     assert.doesNotMatch(line, /18:00/);
+  });
+});
+
+describe('TASK-204 schedule_mode on board card', () => {
+  const now = new Date('2026-10-06T12:00:00Z');
+
+  it('phone — статус и кнопка звонка', () => {
+    const { boardCardView } = loadModel();
+    const item = {
+      id: 1,
+      name: 'Берёза',
+      phone: '+375291112233',
+      live: { kind: 'phone', text: 'Расписание по телефону' },
+    };
+    const v = boardCardView(item, now, {});
+    assert.equal(v.isSession, false);
+    assert.equal(v.status, 'Расписание по телефону');
+    assert.equal(v.callHref, 'tel:+375291112233');
+  });
+
+  it('season_closed — текст без сеанса', () => {
+    const { boardCardView } = loadModel();
+    const item = {
+      id: 2,
+      name: 'Жодино',
+      live: { kind: 'season_closed', text: 'Сезон закрыт · откроется 01.11 — ремонт' },
+    };
+    const v = boardCardView(item, now, {});
+    assert.equal(v.isSession, false);
+    assert.match(v.status, /Сезон закрыт/);
   });
 });

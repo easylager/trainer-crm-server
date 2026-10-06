@@ -30,6 +30,7 @@ from src.application.schedule_staleness import (
     staleness_level,
     very_stale_note,
 )
+from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.ice_discovery_scope import (
     PUBLIC_ARENA_VISIBLE_SQL,
     public_city_scope_sql,
@@ -161,6 +162,7 @@ LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 WHERE a.city_id = :cid
   AND {PUBLIC_ARENA_VISIBLE_SQL}
+  AND {arena_schedule_mode_sql()} <> 'season_closed'
   AND s.status = :st
   AND s.kind IN ('public_skate', 'open_ice')
   AND s.local_date = :day

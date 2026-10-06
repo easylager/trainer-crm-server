@@ -15,6 +15,12 @@ from typing import Any, Mapping, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.arena_schedule_mode import (
+    SCHEDULE_MODE_SEASON_CLOSED,
+    normalize_schedule_mode,
+    validate_schedule_mode_patch,
+)
+
 ARENA_PROFILE_STATUS_DRAFT = "draft"
 ARENA_PROFILE_STATUS_PUBLISHED = "published"
 ARENA_PROFILE_STATUS_ARCHIVED = "archived"
@@ -569,6 +575,42 @@ async def apply_admin_arena_profile_patch(
                 raise ValueError("tickets_url must be an http(s) URL")
             assignments.append("tickets_url = :tickets_url")
             params["tickets_url"] = url
+    schedule_keys = {"schedule_mode", "reopen_date", "schedule_mode_note"}
+    if schedule_keys & fields.keys():
+        row = (
+            await session.execute(
+                text(
+                    """
+                    SELECT schedule_mode, reopen_date, schedule_mode_note
+                    FROM arena_profiles WHERE arena_id = :id
+                    """
+                ),
+                {"id": _arena_id},
+            )
+        ).mappings().first()
+        merged = {
+            "schedule_mode": normalize_schedule_mode((row or {}).get("schedule_mode")),
+            "reopen_date": (row or {}).get("reopen_date"),
+            "schedule_mode_note": (row or {}).get("schedule_mode_note"),
+        }
+        for key in schedule_keys:
+            if key in fields:
+                merged[key] = fields[key]
+        validated = validate_schedule_mode_patch(merged)
+        mode = validated.get("schedule_mode", merged["schedule_mode"])
+        if "schedule_mode" in fields:
+            assignments.append("schedule_mode = :schedule_mode")
+            params["schedule_mode"] = mode
+        if mode == SCHEDULE_MODE_SEASON_CLOSED:
+            if "reopen_date" in fields:
+                assignments.append("reopen_date = :reopen_date")
+                params["reopen_date"] = validated.get("reopen_date")
+            if "schedule_mode_note" in fields:
+                assignments.append("schedule_mode_note = :schedule_mode_note")
+                params["schedule_mode_note"] = validated.get("schedule_mode_note")
+        elif "schedule_mode" in fields:
+            assignments.append("reopen_date = NULL")
+            assignments.append("schedule_mode_note = NULL")
     if not assignments:
         return
     assignments.append("updated_at = now()")

@@ -746,6 +746,19 @@
         '</div>'
       );
     }
+    if (feed.mode === 'phone') {
+      var call =
+        feed.callHref
+          ? '<a class="arena-btn arena-btn--call" href="' + esc(feed.callHref) + '">Позвонить</a>'
+          : '';
+      return (
+        '<div class="arena-sec">' +
+        '<p class="arena-h">Расписание</p>' +
+        '<div class="arena-closed">' + esc(feed.banner) + '</div>' +
+        call +
+        '</div>'
+      );
+    }
     if (feed.mode === 'none') {
       return '';
     }

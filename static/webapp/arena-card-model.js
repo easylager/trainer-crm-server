@@ -19,6 +19,10 @@
     return rootRef.ScheduleStalenessModel || null;
   }
 
+  function scheduleModeApi() {
+    return rootRef.ArenaScheduleModeModel || null;
+  }
+
   var RuText = typeof globalThis !== 'undefined' ? globalThis.RuText : null;
   /* TASK-182: часы работы — общий модуль со вкладкой «Лёд» (opening-hours.js). */
   var OH =
@@ -661,6 +665,19 @@
   function iceFeedView(opts) {
     opts = opts || {};
     var card = opts.card || {};
+    var SM = scheduleModeApi();
+    var mode = SM ? SM.normalizeMode(card.schedule_mode) : 'auto';
+    if (SM && mode === 'phone') {
+      return {
+        mode: 'phone',
+        banner: SM.phoneLine(),
+        showRibbon: false,
+        callHref: SM.phoneToTelHref(card.phone),
+      };
+    }
+    if (SM && mode === 'season_closed') {
+      return { mode: 'closed', banner: SM.seasonClosedLine(card), showRibbon: false };
+    }
     var banner = seasonClosedBanner(card);
     if (banner) {
       return { mode: 'closed', banner: banner, showRibbon: false };

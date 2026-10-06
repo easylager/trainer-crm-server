@@ -50,6 +50,13 @@ from src.application.arena_profile import (
     opening_hours_schema_org,
 )
 from src.application.place_links import place_query
+from src.shared.arena_schedule_mode import (
+    PHONE_LINE,
+    SCHEDULE_MODE_PHONE,
+    SCHEDULE_MODE_SEASON_CLOSED,
+    normalize_schedule_mode,
+    season_closed_user_line,
+)
 from src.application.schedule_staleness import (
     LEVEL_FRESH,
     LEVEL_VERY_STALE,
@@ -319,7 +326,16 @@ async def load_place_view(
     lookup_days: list[dict[str, Any]] = []
     level = LEVEL_FRESH
     schedule_note = ""
-    if _skating(card):
+    schedule_mode = normalize_schedule_mode(card.get("schedule_mode"))
+    if _skating(card) and schedule_mode == SCHEDULE_MODE_PHONE:
+        schedule_note = PHONE_LINE
+    elif _skating(card) and schedule_mode == SCHEDULE_MODE_SEASON_CLOSED:
+        reopen = _parse_iso_date(card.get("schedule_reopen_date"))
+        schedule_note = season_closed_user_line(
+            reopen_date=reopen,
+            note=card.get("schedule_mode_note"),
+        )
+    if _skating(card) and schedule_mode not in (SCHEDULE_MODE_PHONE, SCHEDULE_MODE_SEASON_CLOSED):
         feed = await list_public_arena_sessions(
             session,
             str(card["id"]),
@@ -378,6 +394,15 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
     today: date = view["today"]
     now: datetime = view["now"]
     if _skating(card):
+        mode = normalize_schedule_mode(card.get("schedule_mode"))
+        if mode == SCHEDULE_MODE_PHONE:
+            return "closed", PHONE_LINE
+        if mode == SCHEDULE_MODE_SEASON_CLOSED:
+            reopen = _parse_iso_date(card.get("schedule_reopen_date"))
+            return "closed", season_closed_user_line(
+                reopen_date=reopen,
+                note=card.get("schedule_mode_note"),
+            )
         if card.get("in_season") is False:
             start = card.get("season_start_month")
             if start:
@@ -544,9 +569,34 @@ def _slot_chip(slot: Mapping[str, Any], *, focused: bool, base_path: str, invite
     )
 
 
+def _schedule_mode_call_html(card: Mapping[str, Any]) -> str:
+    phone = str(card.get("phone") or "").strip()
+    tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+    if phone and tel:
+        return f'<p class="sched__mode"><a href="tel:{_esc(tel)}">Позвонить</a></p>'
+    return ""
+
+
 def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
     card = view["card"]
-    if not _skating(card) or card.get("in_season") is False:
+    if not _skating(card):
+        return ""
+    mode = normalize_schedule_mode(card.get("schedule_mode"))
+    if mode == SCHEDULE_MODE_PHONE:
+        return (
+            '<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>'
+            f'<p class="sched__mode">{_esc(PHONE_LINE)}</p>'
+            + _schedule_mode_call_html(card)
+            + "</section>"
+        )
+    if mode == SCHEDULE_MODE_SEASON_CLOSED:
+        reopen = _parse_iso_date(card.get("schedule_reopen_date"))
+        line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
+        return (
+            '<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>'
+            f'<p class="sched__mode">{_esc(line)}</p></section>'
+        )
+    if card.get("in_season") is False:
         return ""
     days = view.get("days") or []
     focus = view.get("focus")
