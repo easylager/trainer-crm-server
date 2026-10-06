@@ -3184,6 +3184,11 @@
       text-align: center;
     }
 
+    /* «Упомяните Glide» под «Написать тренеру»: ближе к своей кнопке, чем к следующей (gap 10px). */
+    .trainer-detail-actions .trainer-contact-hint {
+      margin: -4px 2px 2px;
+    }
+
     /* ── In-app toast ────────────────────────────────────────────────────────── */
     /* Slides in from the bottom; auto-dismissed by JS. */
     .app-toast {

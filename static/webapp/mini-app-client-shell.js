@@ -726,8 +726,8 @@
   function prefetchCatalogAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'catalog-main.js?v=2026100690', as: 'script' },
-      { href: base + 'mini-app-catalog.css?v=202605273', as: 'style' },
+      { href: base + 'catalog-main.js?v=2026100697', as: 'script' },
+      { href: base + 'mini-app-catalog.css?v=2026100697', as: 'style' },
       { href: base + 'mini-app-phone-field.js?v=202606281', as: 'script' },
     ];
     assets.forEach(function (spec) {

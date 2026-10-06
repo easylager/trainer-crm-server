@@ -3744,6 +3744,15 @@
       }
 
       /**
+       * Подпись «упомяните Glide» под «Написать тренеру» (TASK-202). Вызывать после
+       * последнего innerHTML += на контейнере — пересборка стирает подпись.
+       */
+      function ensureCatalogContactHint(container) {
+        var M = window.CatalogContactAttribution;
+        if (M && typeof M.ensureHint === 'function') M.ensureHint(container);
+      }
+
+      /**
        * Dual-chip row: [🔔 Напомнить] [❤️ Сохранить].
        * Compact secondary actions — never obscure the primary CTA.
        * noSlots=true adds a subtle pulse to the notify chip to draw attention.
@@ -6447,6 +6456,7 @@
             errActions.innerHTML = '';
             appendContactTrainerButton(errActions, tt, { primary: true, label: 'Написать тренеру' });
             errActions.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            ensureCatalogContactHint(errActions);
             appendTrainerActionChips(errActions, tt, false);
             document.getElementById('trainerDetailSecondary').innerHTML = '';
           });
@@ -6513,6 +6523,7 @@
         if (t.has_pass_products || t.has_certificate_products) {
           actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
         }
+        ensureCatalogContactHint(actionsEl);
         appendTrainerActionChips(actionsEl, t, slots.length === 0);
         var btnBook = document.getElementById('btnBookFromDetail');
         if (btnBook)
@@ -6817,6 +6828,7 @@
             });
           }
           actionsLeadEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+          ensureCatalogContactHint(actionsLeadEl);
           appendTrainerActionChips(actionsLeadEl, t, true);
           document.getElementById('trainerDetailSecondary').innerHTML = '';
           wirePhoneCallLinks(document.getElementById('trainerDetailSlots'));
@@ -6835,6 +6847,7 @@
             errActions.innerHTML = '';
             appendContactTrainerButton(errActions, t, { primary: true, label: 'Написать тренеру' });
             errActions.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            ensureCatalogContactHint(errActions);
             appendTrainerActionChips(errActions, t, false);
             document.getElementById('trainerDetailSecondary').innerHTML = '';
           });
