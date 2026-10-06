@@ -8,6 +8,17 @@
 с флагом `--apply`. Если в посте нет даты/времени или все даты уже прошли, он
 останавливается и в базу ничего не пишет.
 
+## 0. Перед началом
+
+Все команды выполняются **из корня репозитория**, где лежит `.env` с токенами ботов:
+скрипт импортирует настройки приложения. Адрес прод-базы берём из Railway и держим в
+переменной окружения — на экран его не печатаем:
+
+```bash
+cd <папка с репозиторием>
+DB="$(railway variables --service Postgres-W--1 --kv | grep '^DATABASE_PUBLIC_URL=' | cut -d= -f2-)"
+```
+
 ## 1. Взять текст поста
 
 1. Открой пост [@junost.by](https://www.instagram.com/junost.by/) с расписанием на ближайшие выходные.
@@ -30,13 +41,13 @@
 ## 2. Проверить без записи (dry-run)
 
 ```bash
-cd <папка с репозиторием>
-PUB="$(railway run -s Postgres-W--1 -- printenv DATABASE_PUBLIC_URL)"
-DB="postgresql://${PUB#postgresql://}"
-
 DATABASE_URL="$DB" DATABASE_URL_SYNC="$DB" PYTHONPATH=. .venv/bin/python \
-  scripts/set_junost_caption.py --file ~/Desktop/junost-post.txt
+  scripts/set_junost_caption.py --file ~/Desktop/junost-post.txt --i-know-this-is-prod
 ```
+
+Флаг `--i-know-this-is-prod` нужен и здесь: защита (`src/shared/ops_db_guard.py`)
+отказывается подключаться к облачному хосту без него. Dry-run при этом **по-прежнему
+ничего не пишет** — без `--apply` транзакция только читает.
 
 В выводе — таблица «дата, начало–конец, цены» и строка `Dry-run — в базу ничего не
 записано`. Проверь глазами, что даты и времена совпадают с постом.
@@ -56,13 +67,16 @@ DATABASE_URL="$DB" DATABASE_URL_SYNC="$DB" PYTHONPATH=. .venv/bin/python \
 ## 4. Проверить результат (только чтение)
 
 ```bash
-railway run -s Postgres-W--1 -- psql "$DATABASE_PUBLIC_URL" -c \
-  "SELECT local_date, starts_at_local, ends_at_local, price_adult_minor, price_child_minor, status
-   FROM ice_sessions WHERE arena_id = 8 ORDER BY starts_at_utc DESC LIMIT 10;"
+DATABASE_URL="$DB" DATABASE_URL_SYNC="$DB" PYTHONPATH=. .venv/bin/python \
+  scripts/set_junost_caption.py --show --i-know-this-is-prod
 ```
 
-Ожидаемо: строки с датами из поста, `price_adult_minor=800`, `price_child_minor=600`.
-Сеансов нет — подожди тик планировщика и повтори запрос.
+`--show` ничего не пишет (транзакция `READ ONLY`) и `psql` не требует. Он печатает
+будущие сеансы арены 8 (дата, начало–конец, цены, основание расписания) и последние
+запуски job id=4 (время старта, статус, сколько сеансов найдено).
+
+Ожидаемо: строки с датами из поста, цены `8.00` / `6.00`, у последнего запуска
+статус `ok`. Сеансов нет — подожди тик планировщика и повтори `--show`.
 
 ## Если скрипт ругается
 
@@ -72,6 +86,8 @@ railway run -s Postgres-W--1 -- psql "$DATABASE_PUBLIC_URL" -c \
 | `Все сеансы ... уже прошли` | Пост старый | Взять свежий пост на ближайшие выходные |
 | `parser_key=... ожидался` / `нет job id=4` | Настроили другой парсер | Прислать текст ошибки разработчику |
 | `Текст поста пустой` | Файл пустой или текст не передался | Проверить `--file` |
+| `Не задан DATABASE_URL` (код выхода 2) | Переменная `DB` пустая | Повторить шаг 0 (`railway login`, если не залогинен) |
+| `refusing cloud/prod database host` (код выхода 2) | Забыт `--i-know-this-is-prod` | Добавить флаг |
 
 Скрипт строчку подключения к базе не печатает — URL в вывод не попадает.
 

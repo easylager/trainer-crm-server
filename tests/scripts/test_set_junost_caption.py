@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 
 import pytest
@@ -215,3 +215,107 @@ def test_cloud_url_refused_without_prod_ack() -> None:
         script.assert_database_url(
             "postgresql://u:p@x.proxy.rlwy.net.railway.app:5432/railway", apply=False, allow_prod=False
         )
+
+
+# --- сообщения об ошибках подключения (без traceback, код 2) ----------------
+
+CLOUD_URL = "postgresql://u:s3cret@x.proxy.rlwy.net.railway.app:5432/railway"
+
+
+def _run_main(monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> int:
+    monkeypatch.setattr("sys.argv", ["set_junost_caption.py", *argv])
+    with pytest.raises(SystemExit) as info:
+        script.main()
+    return info.value.code
+
+
+def test_missing_database_url_exits_2_with_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL_SYNC", raising=False)
+    post = tmp_path / "post.txt"
+    post.write_text(EXAMPLE_CAPTION, encoding="utf-8")
+    monkeypatch.setattr(script, "minsk_today", lambda: TODAY)
+
+    code = _run_main(monkeypatch, ["--file", str(post)])
+
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "DATABASE_URL" in err
+    assert "Traceback" not in err
+
+
+def test_cloud_url_without_prod_flag_exits_2_without_leaking_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("DATABASE_URL_SYNC", CLOUD_URL)
+    post = tmp_path / "post.txt"
+    post.write_text(EXAMPLE_CAPTION, encoding="utf-8")
+    monkeypatch.setattr(script, "minsk_today", lambda: TODAY)
+
+    code = _run_main(monkeypatch, ["--file", str(post)])
+
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "ОШИБКА" in err
+    assert "s3cret" not in err
+    assert "Traceback" not in err
+
+
+def test_show_cloud_url_without_prod_flag_exits_2(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("DATABASE_URL_SYNC", CLOUD_URL)
+
+    assert _run_main(monkeypatch, ["--show"]) == 2
+    assert "s3cret" not in capsys.readouterr().err
+
+
+# --- --show: только чтение --------------------------------------------------
+
+
+class _Rows:
+    def __init__(self, rows: list[tuple]) -> None:
+        self._rows = rows
+
+    def fetchall(self) -> list[tuple]:
+        return self._rows
+
+
+class _ShowSession(_Session):
+    async def execute(self, query: object, params: dict | None = None) -> _Rows:
+        sql = str(query)
+        self.queries.append(sql)
+        if "UPDATE" in sql or "INSERT" in sql or "DELETE" in sql:
+            raise AssertionError("--show не должен писать")
+        if "FROM ice_sessions" in sql:
+            return _Rows([
+                (date(2026, 10, 11), time(17, 0), time(17, 45), 800, 600, None, "manual"),
+            ])
+        if "FROM ice_scrape_runs" in sql:
+            return _Rows([(datetime(2026, 10, 6, 9, 30, tzinfo=timezone.utc), "ok", 2)])
+        return _Rows([])
+
+
+def test_show_prints_sessions_and_runs_read_only(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    session = _ShowSession()
+    _patch_run_dependencies(monkeypatch, session)
+
+    asyncio.run(script.show(i_know_this_is_prod=False, today=TODAY))
+
+    out = capsys.readouterr().out
+    assert "11.10.2026" in out and "17:00–17:45" in out
+    assert "8.00" in out and "6.00" in out and "manual" in out
+    assert "06.10.2026 09:30:00" in out and "ok" in out
+    assert any("READ ONLY" in sql for sql in session.queries)
+    assert session.commits == 0
+
+
+def test_format_show_handles_empty_results() -> None:
+    out = script.format_show([], [], today=TODAY)
+
+    assert "нет" in out
+    assert "запусков ещё не было" in out

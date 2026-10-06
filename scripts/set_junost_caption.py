@@ -9,9 +9,12 @@
 (по Europe/Minsk). Работа с прод-БД — только через ``src/shared/ops_db_guard.py``:
 ``--i-know-this-is-prod`` обязателен для облачного хоста.
 
-Использование:
-  # проверить текст (dry-run, в БД ничего не пишет):
+Использование (из корня репозитория, где лежит .env — скрипт импортирует настройки приложения):
+  # проверить текст (dry-run, в БД ничего не пишет; к прод-БД всё равно нужен --i-know-this-is-prod):
   PYTHONPATH=. .venv/bin/python scripts/set_junost_caption.py --file ~/Desktop/junost-post.txt
+
+  # посмотреть, что лежит в БД (только чтение): будущие сеансы арены 8 и последние запуски job 4:
+  PYTHONPATH=. .venv/bin/python scripts/set_junost_caption.py --show --i-know-this-is-prod
 
   # записать в прод-БД (public URL из Railway):
   DATABASE_URL_SYNC=<public> DATABASE_URL=<public> PYTHONPATH=. .venv/bin/python \
@@ -48,6 +51,7 @@ from src.shared.ops_db_guard import (  # noqa: E402
     async_database_url,
     normalize_db_url,
     warn_prod_ack,
+    ProdDatabaseError,
 )
 
 ARENA_ID = 8
@@ -57,6 +61,10 @@ PARSER_KEY = "junost_instagram_caption_v1"
 
 class CaptionError(RuntimeError):
     """Пост нельзя применить: пустой, без сеансов, устаревший или job не тот."""
+
+
+class ConnectionSetupError(RuntimeError):
+    """Не удалось выбрать базу: нет DATABASE_URL или защита ops_db_guard отказала."""
 
 
 @dataclass(frozen=True)
@@ -140,8 +148,31 @@ def format_plan(plan: CaptionPlan) -> str:
 def _db_url() -> str:
     raw = os.environ.get("DATABASE_URL_SYNC") or os.environ.get("DATABASE_URL")
     if not raw:
-        raise SystemExit("Задай DATABASE_URL_SYNC или DATABASE_URL.")
+        raise ConnectionSetupError(
+            "Не задан DATABASE_URL (или DATABASE_URL_SYNC) — скрипту некуда подключаться. "
+            "Как получить адрес прод-базы — в docs/ops/junost-caption-update.md."
+        )
     return normalize_db_url(raw)
+
+
+def _open_engine(*, apply: bool, i_know_this_is_prod: bool):
+    """Проверить URL защитой ops_db_guard и создать движок (URL нигде не печатается)."""
+    url = _db_url()
+    try:
+        assert_database_url(url, apply=apply, allow_prod=i_know_this_is_prod)
+        if i_know_this_is_prod:
+            assert_railway_target_database(url)
+            warn_prod_ack()
+        return create_async_engine(async_database_url(url))
+    except ProdDatabaseError as exc:
+        raise ConnectionSetupError(_scrub(str(exc), url)) from exc
+
+
+def _scrub(message: str, url: str) -> str:
+    """Не дать адресу базы (с паролем) попасть в сообщение об ошибке."""
+    for secret in (url, normalize_db_url(url)):
+        message = message.replace(secret, "<DATABASE_URL>")
+    return message
 
 
 async def load_job(session: AsyncSession, *, job_id: int = JOB_ID) -> dict:
@@ -197,12 +228,7 @@ async def run(*, caption: str, apply: bool, i_know_this_is_prod: bool, today: da
         "и next_run_at = now() — планировщик подхватит при следующем тике."
     )
 
-    url = _db_url()
-    assert_database_url(url, apply=apply, allow_prod=i_know_this_is_prod)
-    if i_know_this_is_prod:
-        assert_railway_target_database(url)
-        warn_prod_ack()
-    engine = create_async_engine(async_database_url(url))
+    engine = _open_engine(apply=apply, i_know_this_is_prod=i_know_this_is_prod)
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         async with Session() as session:
@@ -220,6 +246,64 @@ async def run(*, caption: str, apply: bool, i_know_this_is_prod: bool, today: da
         await engine.dispose()
 
 
+SHOW_SESSIONS_SQL = """
+    SELECT local_date, starts_at_local, ends_at_local,
+           price_adult_minor, price_child_minor, price_rental_minor, schedule_basis
+    FROM ice_sessions
+    WHERE arena_id = :arena_id AND status = 'active' AND local_date >= :today
+    ORDER BY starts_at_utc
+"""
+SHOW_RUNS_SQL = """
+    SELECT started_at, status, slots_found
+    FROM ice_scrape_runs
+    WHERE job_id = :job_id
+    ORDER BY started_at DESC
+    LIMIT :lim
+"""
+
+
+def format_show(sessions: list[tuple], runs: list[tuple], *, today: date) -> str:
+    lines = [f"Будущие сеансы арены {ARENA_ID} (с {today:%d.%m.%Y}, Europe/Minsk):"]
+    if not sessions:
+        lines.append("  нет — планировщик ещё не собрал сеансы (подожди тик и повтори --show).")
+    else:
+        header = f"{'Дата':<10} {'Начало–конец':<12} {'Взросл.':>8} {'Детск.':>7} {'Прокат':>7}  основание"
+        lines += [header, "-" * len(header)]
+        for d, start, end, adult, child, rental, basis in sessions:
+            span = f"{start:%H:%M}–{end:%H:%M}"
+            lines.append(
+                f"{d:%d.%m.%Y} {span:<12} {_rub(adult):>8} {_rub(child):>7} {_rub(rental):>7}  {basis}"
+            )
+    lines.append(f"\nПоследние запуски парсера (job id={JOB_ID}):")
+    if not runs:
+        lines.append("  запусков ещё не было.")
+    else:
+        lines.append(f"{'Начало (UTC)':<18} {'Статус':<10} {'Найдено сеансов':>15}")
+        for started, status, found in runs:
+            lines.append(f"{started:%d.%m.%Y %H:%M:%S}  {status:<10} {found:>15}")
+    return "\n".join(lines)
+
+
+async def show(*, i_know_this_is_prod: bool, today: date | None = None) -> None:
+    """Только чтение: что сейчас лежит в БД по Юности."""
+    day = today or minsk_today()
+    engine = _open_engine(apply=False, i_know_this_is_prod=i_know_this_is_prod)
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        async with Session() as session:
+            await session.execute(text("SET TRANSACTION READ ONLY"))
+            sessions = (
+                await session.execute(text(SHOW_SESSIONS_SQL), {"arena_id": ARENA_ID, "today": day})
+            ).fetchall()
+            runs = (
+                await session.execute(text(SHOW_RUNS_SQL), {"job_id": JOB_ID, "lim": 5})
+            ).fetchall()
+            await session.rollback()
+        print(format_show([tuple(r) for r in sessions], [tuple(r) for r in runs], today=day))
+    finally:
+        await engine.dispose()
+
+
 def _read_caption(args: argparse.Namespace) -> str:
     if args.file is not None:
         return args.file.read_text(encoding="utf-8")
@@ -231,17 +315,30 @@ def _read_caption(args: argparse.Namespace) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--file", type=Path, help="Файл с текстом поста (UTF-8). Без него — stdin.")
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Только чтение: показать будущие сеансы арены 8 и последние запуски job 4.",
+    )
     parser.add_argument("--apply", action="store_true", help="Записать в БД (по умолчанию dry-run).")
     add_i_know_this_is_prod_argument(parser)
     args = parser.parse_args()
 
-    caption = _read_caption(args)
     try:
+        if args.show:
+            if args.apply or args.file is not None:
+                parser.error("--show только читает: его нельзя сочетать с --apply и --file.")
+            asyncio.run(show(i_know_this_is_prod=args.i_know_this_is_prod))
+            return
+        caption = _read_caption(args)
         asyncio.run(
             run(caption=caption, apply=args.apply, i_know_this_is_prod=args.i_know_this_is_prod)
         )
     except CaptionError as exc:
         raise SystemExit(f"ОШИБКА: {exc}") from exc
+    except ConnectionSetupError as exc:
+        print(f"ОШИБКА: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
 
 if __name__ == "__main__":
