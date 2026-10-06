@@ -1,0 +1,369 @@
+{
+  "census_date": "2026-10-06",
+  "country": "BY",
+  "scope": "Eleven published indoor rinks without an automatic public-skating schedule, plus indoor rinks with public skating absent from data/by-arenas-prod.csv and data/arena-cards.",
+  "class_legend": {
+    "A": "Machine-readable online schedule with dates (HTML table or text, JSON/API, or PDF). A parser is possible.",
+    "B": "Images or social posts only. Manual entry or OCR.",
+    "C": "Phone only, or no online session schedule.",
+    "D": "No public skating now: closed or off-season."
+  },
+  "recommendation_legend": {
+    "write_parser": "писать парсер",
+    "manual_weekly": "ручной ввод раз в неделю",
+    "phone_status": "честный статус: по телефону",
+    "hide_until_season": "скрыть до сезона"
+  },
+  "rinks": [
+    {
+      "arena_id": 26,
+      "city": "Береза",
+      "name": "Ледовая арена",
+      "class": "C",
+      "recommendation": "phone_status",
+      "source_url": "https://hockey.by/icearenas/",
+      "format": "Federation catalog entry. No session grid.",
+      "update_frequency": "not found",
+      "schedule_example": "not found",
+      "prices": "not found",
+      "contacts": {
+        "phones": ["+375 164 34-46-76", "+375 164 34-55-46"],
+        "social": []
+      },
+      "parser": null,
+      "notes": "relax.by states a 45-minute session and no times. ledov-bereza.ibiz.by lists office hours Mon–Fri 09:00–18:00, not sessions. Instagram, VK, and Telegram schedule posts were not found.",
+      "sources": [
+        "https://hockey.by/icearenas/",
+        "https://bereza.relax.by/",
+        "https://ledov-bereza.ibiz.by/"
+      ]
+    },
+    {
+      "arena_id": 35,
+      "city": "Жлобин",
+      "name": "Ледовый дворец «Металлург»",
+      "class": "C",
+      "recommendation": "phone_status",
+      "source_url": "https://zorzhlobin.by/uslugi/",
+      "format": "HTML price card. Duration 45 min. No dates or clock times.",
+      "update_frequency": "not found",
+      "schedule_example": "not found",
+      "prices": "Ticket 7.00 BYN without skates; skate pair 5.00 BYN; family ticket 3 people 20.00 BYN and 4 people 26.00 BYN without skates; pass with skates 55.00 BYN, without skates 35.00 BYN.",
+      "contacts": {
+        "phones": ["+375 44 788 56 00", "+375 44 788 56 11", "+375 233 45-09-32", "+375 233 45-09-31"],
+        "email": "ledovik.z@tut.by",
+        "social": []
+      },
+      "parser": null,
+      "notes": "Club page says public skating happens when the ice is free of events, and that the complex includes a small ice arena. No separate public-skating grid for the small arena. hockey.vot.by lists 28 Feb and 1 Mar sessions with no year next to 2024-2025 league blocks; not a 2026-10-06 schedule.",
+      "sources": [
+        "https://zorzhlobin.by/uslugi/",
+        "https://metallurg.hockey.by/clubs/arena/",
+        "https://hockey.by/icearenas/",
+        "http://hockey.vot.by/index.php?cPath=33562"
+      ]
+    },
+    {
+      "arena_id": 20,
+      "city": "Жодино",
+      "name": "Ледовая площадка ГУ СДЮШОР",
+      "class": "D",
+      "recommendation": "hide_until_season",
+      "source_url": "https://www.xn----8sbkhlnbugdd1c.xn--90ais/%d1%80%d0%b0%d1%81%d0%bf%d0%b8%d1%81%d0%b0%d0%bd%d0%b8%d0%b5-2/",
+      "format": "HTML. Season-closed banner. Date/time table present and empty.",
+      "update_frequency": "not found",
+      "schedule_example": "Season ended for repairs and maintenance. Reopening date not found.",
+      "prices": "Still listed: session adult 6.00 BYN, child under 14 5.00 BYN; skate rental 4.50 / 3.50 BYN. Session length 45 min. Cap above 90 people.",
+      "contacts": {
+        "phones": ["8(017)75 5 85 90"],
+        "social": []
+      },
+      "parser": {
+        "when": "after the date table is filled again",
+        "url": "https://www.xn----8sbkhlnbugdd1c.xn--90ais/%d1%80%d0%b0%d1%81%d0%bf%d0%b8%d1%81%d0%b0%d0%bd%d0%b8%d0%b5-2/",
+        "structure": "HTML table columns Дата and Время работы"
+      },
+      "notes": "Punycode host is ледоваяплощадка.бел. Prices page does not say the tariff is withdrawn.",
+      "sources": [
+        "https://www.xn----8sbkhlnbugdd1c.xn--90ais/%d1%80%d0%b0%d1%81%d0%bf%d0%b8%d1%81%d0%b0%d0%bd%d0%b8%d0%b5-2/",
+        "https://www.xn----8sbkhlnbugdd1c.xn--90ais/%d1%86%d0%b5%d0%bd%d1%8b/",
+        "https://www.xn----8sbkhlnbugdd1c.xn--90ais/%D0%BA%D0%BE%D0%BD%D1%82%D0%B0%D0%BA%D1%82%D1%8B/"
+      ]
+    },
+    {
+      "arena_id": 28,
+      "city": "Ивацевичи",
+      "name": "Ледовая арена",
+      "class": "C",
+      "recommendation": "phone_status",
+      "source_url": "https://www.ivacevichi.brest-region.gov.by/ru/zima2026-ru",
+      "format": "HTML district page. Indoor arena is not in the public-skating table.",
+      "update_frequency": "not found",
+      "schedule_example": "not found for the indoor rink. The public-skating row is ul. Severnaya 2 (school 3), 08:00–19:30.",
+      "prices": "not found",
+      "contacts": {
+        "phones": ["+375 164 59-00-53"],
+        "social": []
+      },
+      "parser": null,
+      "notes": "Address conflict: district page and product CSV use Sportivnaya 3; hockey.by uses Lenina 74. Facility page lists public skating as a service and building hours Mon 12:00–22:00, Tue–Sun 08:00–22:00, with no session dates. sdusshor.ivacevichi.edu.by timed out. masterskating.ru points at Instagram led_arena_basseyn; those posts were not retrieved, so class B was not assigned.",
+      "sources": [
+        "https://www.ivacevichi.brest-region.gov.by/ru/zima2026-ru",
+        "https://ivacevichi.brest-region.gov.by/ru/2011-02-14-12-48-58-2000001360-ru",
+        "https://hockey.by/icearenas/",
+        "https://masterskating.ru/rollers/ledovaya-arena-v-ivantsevichi/"
+      ]
+    },
+    {
+      "arena_id": 40,
+      "city": "Лунинец",
+      "name": "СК Олимп-2011",
+      "class": "C",
+      "recommendation": "phone_status",
+      "source_url": "https://hockey.by/icearenas/",
+      "format": "Federation catalog. School site timed out.",
+      "update_frequency": "not found",
+      "schedule_example": "not found",
+      "prices": "not found",
+      "contacts": {
+        "phones": ["+375 164 73-52-77"],
+        "social": []
+      },
+      "parser": null,
+      "notes": "http://dussch.luninec.edu.by/ru/main.aspx timed out on 2026-10-06. icearenaolimp.orgs.biz says to call 8 (01647) 3-52-77 and prints no sessions.",
+      "sources": [
+        "https://hockey.by/icearenas/",
+        "http://dussch.luninec.edu.by/ru/main.aspx",
+        "https://icearenaolimp.orgs.biz/"
+      ]
+    },
+    {
+      "arena_id": 9,
+      "city": "Минск",
+      "name": "Олимпик-арена",
+      "class": "C",
+      "recommendation": "phone_status",
+      "source_url": "https://olympicarena.by/",
+      "format": "HTML brochure. No public-skating words on the homepage.",
+      "update_frequency": "not found",
+      "schedule_example": "not found",
+      "prices": "not found",
+      "contacts": {
+        "phones": ["+375 (17) 377-80-40", "+375 (29) 158-73-78", "+375 (44) 775-50-92", "+375 (44) 512-90-62", "+375 (33) 619-17-87"],
+        "email": "info@olympicarena.by",
+        "social": []
+      },
+      "parser": null,
+      "notes": "Homepage describes two ice sheets as training bases. The only skate mention is the HOCKEY ROOM sharpening desk. hockey.by lists +375 (44) 512-90-62, which is not on the homepage.",
+      "sources": [
+        "https://olympicarena.by/",
+        "https://hockey.by/icearenas/"
+      ]
+    },
+    {
+      "arena_id": 18,
+      "city": "Молодечно",
+      "name": "Спортивно-развлекательный центр",
+      "class": "A",
+      "recommendation": "write_parser",
+      "source_url": "https://src.by/WDKL/%D0%BB%D0%B5%D0%B4%D0%BE%D0%B2%D0%B0%D1%8F-%D0%B0%D1%80%D0%B5%D0%BD%D0%B0",
+      "format": "WordPress HTML. Dated paragraphs plus price tables.",
+      "update_frequency": "Not stated. On 2026-10-06 the page held only the next two days. Older weeks are not kept in the HTML.",
+      "schedule_example": "10.10 at 14:15, 17:30, 19:15; 11.10 at 15:15, 17:00, 19:00. Year is not printed; on census day those dates are 10–11 October 2026. Session length 45 min.",
+      "prices": "Child under 14: 7.00 BYN / 45 min; passes 4/8/12 visits 28/49/75 BYN. Adult: 8.00 BYN; passes 32/56/80 BYN. Skate rental is paid at the desk; the rental amount is not in this table.",
+      "contacts": {
+        "phones": ["80176580850", "80447111713", "80176707778"],
+        "social": [
+          "https://www.instagram.com/src.olimpik2011/",
+          "https://t.me/LedovijDVOREC"
+        ]
+      },
+      "parser": {
+        "url": "https://src.by/WDKL/%D0%BB%D0%B5%D0%B4%D0%BE%D0%B2%D0%B0%D1%8F-%D0%B0%D1%80%D0%B5%D0%BD%D0%B0",
+        "structure": "Paragraphs immediately after the heading «Сеансы массового катания:», pattern «ДД.ММ. в ЧЧ:ММ, ЧЧ:ММ». Assign the year as the next such date that is not in the past. Session length is a separate sentence (45 minutes). Ignore the rink-hire table (231–399 BYN per hour).",
+        "timezone": "Europe/Minsk"
+      },
+      "notes": "Telegram t.me/LedovijDVOREC preview on 2026-10-06 did not carry the ice grid. Latest text posts there were 2026-08-26 and 2026-09-07.",
+      "sources": [
+        "https://src.by/WDKL/%D0%BB%D0%B5%D0%B4%D0%BE%D0%B2%D0%B0%D1%8F-%D0%B0%D1%80%D0%B5%D0%BD%D0%B0",
+        "https://src.by/",
+        "https://t.me/s/LedovijDVOREC"
+      ]
+    },
+    {
+      "arena_id": 27,
+      "city": "Пружаны",
+      "name": "Ледовая арена ГУ СДЮШОР №2",
+      "class": "C",
+      "recommendation": "phone_status",
+      "source_url": "https://pruzhany-dysh2.by/complex/ice/wt",
+      "format": "HTML sentence: ask by phone. Rules say the grid is posted in the foyer.",
+      "update_frequency": "not found",
+      "schedule_example": "not found. Rules: session is 45 minutes.",
+      "prices": "not found",
+      "contacts": {
+        "phones": ["8(01632) 3-59-14", "8(01632) 3-54-14", "+375 163 29-54-13"],
+        "email": "pruzhany.dysh2@mail.ru",
+        "social": []
+      },
+      "parser": null,
+      "notes": "Rink page phone 8(01632) 3-59-14. District page says daily except Monday and phone 8(01632) 3-54-14, with no revision date. hockey.by phone differs again. Address: vul. Zavodskaya 15.",
+      "sources": [
+        "https://pruzhany-dysh2.by/complex/ice/wt",
+        "https://pruzhany-dysh2.by/complex/ice/pravila-pov-ice",
+        "https://pruzhany-dysh2.by/complex/ice/services",
+        "https://www.pruzhany.brest-region.gov.by/ru/sport-ru/view/2013-07-15-07-03-21-2000001506",
+        "https://hockey.by/icearenas/"
+      ]
+    },
+    {
+      "arena_id": 15,
+      "city": "Раубичи",
+      "name": "РЦОП по зимним видам спорта",
+      "class": "D",
+      "recommendation": "hide_until_season",
+      "source_url": "https://www.rau.by/skates/",
+      "format": "HTML statement that public skating is not held. Prices remain on the page.",
+      "update_frequency": "not found",
+      "schedule_example": "Массовые катания не проводятся. Reopening date not found.",
+      "prices": "Adult 7.00 BYN, child 5.00 BYN, skate rental 5.00 BYN.",
+      "contacts": {
+        "phones": ["+375 (29) 129 06 79", "+375 (17) 516 61 09", "+375 (29) 629 52 22", "+375 (29) 129 06 66", "+375 17 507-44-99"],
+        "social": [
+          "https://vk.com/raubichiolympics",
+          "https://t.me/raubichi_relax_by",
+          "https://www.instagram.com/rau.by/"
+        ]
+      },
+      "parser": {
+        "when": "if /skates/ starts listing sessions as text again",
+        "url": "https://www.rau.by/skates/",
+        "structure": "Heading «Расписание массовых катаний» followed by either the not-held line or session text."
+      },
+      "notes": "Page says to follow social networks. Telegram preview had no messages on 2026-10-06, so class B was not assigned. /Katok/ and /skates/ publish different administrator phones.",
+      "sources": [
+        "https://www.rau.by/skates/",
+        "https://www.rau.by/Katok/",
+        "https://hockey.by/icearenas/"
+      ]
+    },
+    {
+      "arena_id": 36,
+      "city": "Светлогорск",
+      "name": "Ледовый дворец",
+      "class": "C",
+      "recommendation": "phone_status",
+      "source_url": null,
+      "format": "Official site not found.",
+      "update_frequency": "not found",
+      "schedule_example": "not found",
+      "prices": "not found",
+      "contacts": {
+        "phones": ["+375 (29) 874-88-42"],
+        "social": []
+      },
+      "parser": null,
+      "notes": "Gomel-region palace at Sverdlova 40 in by-arenas-prod.csv. Not the Kaliningrad FOK at Yablochnaya 13. The fetched hockey.by/icearenas/ page did not list Svetlogorsk. dir.by and sv-biznes.by publish different undated grids and were not used as the current schedule. The phone is from sv-biznes.by only.",
+      "sources": [
+        "https://hockey.by/icearenas/",
+        "https://dir.by/belarus/svetlogorsk/ledovyj_dvorec/?lang=rus",
+        "https://sv-biznes.by/organization/otdykh/sportzaly-basseyny/66536/"
+      ]
+    },
+    {
+      "arena_id": 16,
+      "city": "Силичи",
+      "name": "Крытый каток РГЦ «Силичи»",
+      "class": "D",
+      "recommendation": "hide_until_season",
+      "source_url": "https://silichy.by/zavershaem-ledoviy-sezon-15-marta",
+      "format": "HTML news post. A stale hours page still shows last winter's grid.",
+      "update_frequency": "Season closed 2026-03-25. Next opening date not found.",
+      "schedule_example": "News dated 2026-03-24: last day 25 March; last listed sessions 24 March (Tuesday) 18:00 / 19:30 / 21:00.",
+      "prices": "not found on the closing post",
+      "contacts": {
+        "phones": ["+375 29 592 41 09", "+375 44 787-75-17"],
+        "email": "info@silichy.by",
+        "social": []
+      },
+      "parser": {
+        "when": "after a new-season opening post",
+        "url": "https://silichy.by/",
+        "structure": "HTML news with weekday session lists. Do not parse aktualnoe-vremya-raboti while it still says «from 14 December» with no year."
+      },
+      "notes": "The «open on 3 December» post is dated 2021-11-26. Homepage informer on census day did not list the rink. hockey.by phone +375 44 787-75-17 differs from the resort reception.",
+      "sources": [
+        "https://silichy.by/zavershaem-ledoviy-sezon-15-marta",
+        "https://silichy.by/vse-na-led-3-dekabrya-otkrivaem-katok",
+        "https://silichy.by/aktualnoe-vremya-raboti",
+        "https://silichy.by/",
+        "https://hockey.by/icearenas/"
+      ]
+    }
+  ],
+  "new_rinks": [
+    {
+      "city": "Мозырь",
+      "name": "Global ICE (ТЦ Global Market)",
+      "indoor": true,
+      "public_skating": true,
+      "class": "C",
+      "recommendation": "phone_status",
+      "address": "Гомельская область, Мозырь, бульвар Дружбы, 11А",
+      "latitude": 52.0309001,
+      "longitude": 29.2427777,
+      "coordinate_source": "https://nominatim.openstreetmap.org/search?format=json&q=Global%20Market%20%D0%9C%D0%BE%D0%B7%D1%8B%D1%80%D1%8C",
+      "source_url": "https://www.mazyr.by/2025/12/novost-kotoruyu-zhdali-v-global-market-segodnya-otkroyut-katok-nachalo-v-16-00/",
+      "format": "News article at opening. No living schedule page found on 2026-10-06.",
+      "update_frequency": "not found",
+      "schedule_example": "On 2025-12-28 the news post gave hours Mon–Thu 11:00–22:00, Fri–Sun 11:00–23:00. Not reconfirmed for 2026-10-06.",
+      "prices": "not found",
+      "contacts": {
+        "phones": ["+375 29 672-11-14", "+375 23 455-09-46", "+375 44 779-74-44"],
+        "phones_note": "Mall administration numbers from gmc.by. A rink-desk phone was not found.",
+        "social": []
+      },
+      "in_by_arenas_prod_csv": false,
+      "in_arena_cards": false,
+      "sources": [
+        "https://www.mazyr.by/2025/12/novost-kotoruyu-zhdali-v-global-market-segodnya-otkroyut-katok-nachalo-v-16-00/",
+        "https://gp.by/novosti/obshchestvo/news311896.html",
+        "https://gmc.by/143060-global-market-torgovyi-centr.html"
+      ]
+    }
+  ],
+  "checked_not_new": [
+    {
+      "name": "Жлобин, ледовая арена 2022 / малая арена комплекса",
+      "reason": "Listed on hockey.by without an address and mentioned on the Metallurg page. No separate public-skating schedule found. The main palace is arena_id 35."
+    },
+    {
+      "name": "Минск, малая арена Дворца спорта",
+      "reason": "On hockey.by at Pobediteley 4A. Wikipedia describes it as a training sheet. No public-skating schedule found. sportpalace.by points public skating to the Nemiga rink."
+    },
+    {
+      "name": "Минск, F1 на Немиге",
+      "reason": "Outdoor seasonal rink. f1katok.by on 2026-10-06 said closed until next season. Already in data/minsk-arena-sources.csv."
+    },
+    {
+      "name": "Могилёв, ул. Орловского, 24а",
+      "reason": "News describes outdoor skating."
+    },
+    {
+      "name": "Борисов, стадион, ул. Гагарина, 46",
+      "reason": "Outdoor rink that depends on frost."
+    }
+  ],
+  "summary": {
+    "gap_rinks": 11,
+    "class_counts": {"A": 1, "B": 0, "C": 7, "D": 3},
+    "write_parser": 1,
+    "manual_weekly": 0,
+    "phone_status": 7,
+    "hide_until_season": 3,
+    "new_indoor_public_skating_rinks": 1,
+    "automatable_names": ["Молодечно, Спортивно-развлекательный центр"],
+    "phone_only_names": ["Береза", "Жлобин", "Ивацевичи", "Лунинец", "Олимпик-арена", "Пружаны", "Светлогорск"],
+    "hide_until_season_names": ["Жодино", "Раубичи", "Силичи"]
+  }
+}
