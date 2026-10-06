@@ -21,10 +21,16 @@
       : typeof globalThis !== 'undefined'
         ? globalThis.OpeningHours
         : null;
+  /* TASK-184: календарь и «сейчас» — Europe/Minsk (или TZ арены). */
+  var MT =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./minsk-time.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.MinskTime
+        : null;
 
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
-  var MINSK_TZ = 'Europe/Minsk';
   var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
 
   function staleApi() {
@@ -32,11 +38,7 @@
   }
 
   function ymdInMinsk(d) {
-    try {
-      return new Intl.DateTimeFormat('en-CA', { timeZone: MINSK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-    } catch (e) {
-      return '';
-    }
+    return MT ? MT.dateIso(d) : '';
   }
 
   function scheduleStaleWarn(freshness) {
@@ -435,28 +437,11 @@
   }
 
   function weekdayMinsk(now) {
-    now = now instanceof Date ? now : new Date();
-    try {
-      var wd = new Intl.DateTimeFormat('en-US', { timeZone: MINSK_TZ, weekday: 'short' }).format(now);
-      var map = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
-      return map[wd] != null ? map[wd] : 0;
-    } catch (e) {
-      return (now.getDay() + 6) % 7;
-    }
+    return MT.weekdayMon0(now);
   }
 
   function hhmmMinsk(now) {
-    now = now instanceof Date ? now : new Date();
-    try {
-      return new Intl.DateTimeFormat('en-GB', {
-        timeZone: MINSK_TZ,
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-      }).format(now);
-    } catch (e) {
-      return OH.normHhmm(now.getHours() + ':' + now.getMinutes());
-    }
+    return OH.normHhmm(MT.hhmm(now));
   }
 
   function shopOpenAtMinutes(item, weekday, nowMins) {
@@ -1398,10 +1383,7 @@
   }
 
   function formatDistanceKm(km) {
-    if (km == null || km === '' || isNaN(Number(km))) return '';
-    var n = Number(km);
-    var text = Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
-    return text + ' км';
+    return MT.formatDistanceKm(km);
   }
 
   function formatMeta(item) {
@@ -1422,34 +1404,12 @@
     return 'c';
   }
 
-  function pad2(n) {
-    return n < 10 ? '0' + n : String(n);
-  }
-
   function minskDateIso(now) {
-    var parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: MINSK_TZ,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(now);
-    var y = '1970';
-    var m = '01';
-    var d = '01';
-    var i;
-    for (i = 0; i < parts.length; i++) {
-      if (parts[i].type === 'year') y = parts[i].value;
-      if (parts[i].type === 'month') m = parts[i].value;
-      if (parts[i].type === 'day') d = parts[i].value;
-    }
-    return y + '-' + m + '-' + d;
+    return MT.dateIso(now);
   }
 
   function addDaysIso(iso, days) {
-    var bits = String(iso).split('-');
-    if (bits.length < 3) return iso;
-    var dt = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]) + days));
-    return dt.getUTCFullYear() + '-' + pad2(dt.getUTCMonth() + 1) + '-' + pad2(dt.getUTCDate());
+    return MT.addDaysIso(iso, days);
   }
 
   function formatMinorAmount(minor) {
@@ -1478,8 +1438,7 @@
     if (localDate === today) return 'Сегодня';
     if (localDate === addDaysIso(today, 1)) return 'Завтра';
     // День недели обязателен: под чипом «Выходные» голое «03.10» не говорит, суббота ли это.
-    var bits = localDate.split('-');
-    var wd = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]))).getUTCDay();
+    var wd = MT.weekdaySun0FromIso(localDate);
     return WEEKDAYS_SHORT_RU[wd] + ', ' + localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
   }
 
@@ -1630,10 +1589,13 @@
   function boardCardView(item, now, opts) {
     item = item || {};
     opts = opts || {};
+    now = now instanceof Date ? now : new Date();
     var live = item.live || {};
     var veryStale = scheduleVeryStale(item);
     // TASK-180: очень устаревший сеанс — не «сеанс»: ни дня, ни времени, ни цены.
     var isSession = String(live.kind || '') === 'session' && !veryStale;
+    /* PDEC-005 / TASK-184: начавшийся сеанс не показываем как ближайший. */
+    if (isSession && MT.liveSessionStarted(live, now, item.timezone)) isSession = false;
     var off = !!opts.window && !inWindow(item, opts.window);
     var name = String(item.name || '');
     var currency = live.currency_code || item.currency_code || '';

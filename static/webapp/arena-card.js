@@ -6,6 +6,7 @@
 
   var RuText = global.RuText;
   var M = global.ArenaCardModel;
+  var MT = global.MinskTime;
   var root = document.getElementById('arenaRoot');
   var state = {
     ref: null,
@@ -32,11 +33,12 @@
   function todayIso(now) {
     now = now || new Date();
     var tz = state.card && state.card.timezone;
-    if (tz) return M.ymdInTimeZone(now, tz);
-    return M.ymd(now);
+    if (tz && M) return M.ymdInTimeZone(now, tz);
+    return MT ? MT.dateIso(now) : M.ymd(now);
   }
 
   function addDaysIso(iso, n) {
+    if (MT) return MT.addDaysIso(iso, n);
     var d = M.parseLocalDate(iso);
     d.setDate(d.getDate() + n);
     return M.ymd(d);

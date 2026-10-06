@@ -14,7 +14,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var MINSK_TZ = 'Europe/Minsk';
+  var MT =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./minsk-time.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.MinskTime
+        : null;
   var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
 
   function staleApi() {
@@ -31,34 +36,6 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
-  }
-
-  function pad2(n) {
-    return n < 10 ? '0' + n : String(n);
-  }
-
-  function minskDateIso(now) {
-    var parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: MINSK_TZ,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(now);
-    var y = '1970';
-    var m = '01';
-    var d = '01';
-    for (var i = 0; i < parts.length; i++) {
-      if (parts[i].type === 'year') y = parts[i].value;
-      if (parts[i].type === 'month') m = parts[i].value;
-      if (parts[i].type === 'day') d = parts[i].value;
-    }
-    return y + '-' + m + '-' + d;
-  }
-
-  function addDaysIso(iso, days) {
-    var bits = String(iso).split('-');
-    var dt = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]) + days));
-    return dt.getUTCFullYear() + '-' + pad2(dt.getUTCMonth() + 1) + '-' + pad2(dt.getUTCDate());
   }
 
   function hhmm(raw) {
@@ -87,18 +64,11 @@
     }
     var localDate = String(payload.local_date || '').slice(0, 10);
     var time = hhmm(payload.starts_at_local);
-    var today = minskDateIso(now);
+    var today = MT.dateIso(now);
     if (localDate === today) return 'сегодня в ' + time;
-    if (localDate === addDaysIso(today, 1)) return 'завтра в ' + time;
+    if (localDate === MT.addDaysIso(today, 1)) return 'завтра в ' + time;
     if (localDate) return localDate.slice(8, 10) + '.' + localDate.slice(5, 7) + ' в ' + time;
     return time ? 'в ' + time : '';
-  }
-
-  function formatDistanceKm(km) {
-    if (km == null || km === '' || isNaN(Number(km))) return '';
-    var n = Number(km);
-    var text = Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
-    return text + ' км';
   }
 
   function formatPrice(minor, currency) {
@@ -122,23 +92,46 @@
   }
 
   function slotHasStarted(payload, now) {
-    var startMs = Date.parse((payload && payload.starts_at_utc) || '');
-    if (isNaN(startMs)) return false;
-    return startMs <= now.getTime();
+    return MT.liveSessionStarted(payload, now);
+  }
+
+  /** TASK-184: после старта первого сеанса — следующий из payload.sessions. */
+  function resolveTeaserPayload(payload, now) {
+    if (!payload || typeof payload !== 'object') return null;
+    now = now instanceof Date ? now : new Date();
+    var sessions = payload.sessions;
+    if (Array.isArray(sessions) && sessions.length) {
+      for (var i = 0; i < sessions.length; i++) {
+        var slot = sessions[i];
+        if (slotHasStarted(slot, now)) continue;
+        var merged = {};
+        var k;
+        for (k in payload) {
+          if (Object.prototype.hasOwnProperty.call(payload, k) && k !== 'sessions') merged[k] = payload[k];
+        }
+        for (k in slot) {
+          if (Object.prototype.hasOwnProperty.call(slot, k)) merged[k] = slot[k];
+        }
+        merged.sessions = sessions;
+        return merged;
+      }
+      return null;
+    }
+    return slotHasStarted(payload, now) ? null : payload;
   }
 
   function formatIceTeaser(payload, now) {
-    if (!payload || typeof payload !== 'object') return hiddenView();
+    payload = resolveTeaserPayload(payload, now);
+    if (!payload) return hiddenView();
     var href = arenaHref(payload);
     var time = hhmm(payload.starts_at_local);
     if (!href || !time) return hiddenView();
     now = now instanceof Date ? now : new Date();
-    if (slotHasStarted(payload, now)) return hiddenView();
     var when = formatWhen(payload, now);
     var parts = [];
     var name = String(payload.arena_name || '').trim();
     if (name) parts.push(name);
-    var dist = formatDistanceKm(payload.distance_km);
+    var dist = MT.formatDistanceKm(payload.distance_km);
     if (dist) parts.push(dist);
     parts.push(kindLabel(payload.kind));
     var price = formatPrice(payload.price_adult_minor, payload.currency_code);
@@ -194,9 +187,9 @@
     }
     var localDate = String(payload.local_date || '').slice(0, 10);
     if (!localDate) return '';
-    var today = minskDateIso(now);
+    var today = MT.dateIso(now);
     if (localDate === today) return 'Сегодня';
-    if (localDate === addDaysIso(today, 1)) return 'Завтра';
+    if (localDate === MT.addDaysIso(today, 1)) return 'Завтра';
     return localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
   }
 
@@ -230,12 +223,12 @@
   }
 
   function formatIceCard(payload, now) {
-    if (!payload || typeof payload !== 'object') return hiddenCard();
+    payload = resolveTeaserPayload(payload, now);
+    if (!payload) return hiddenCard();
     var href = arenaHref(payload);
     var time = hhmm(payload.starts_at_local);
     if (!href || !time) return hiddenCard();
     now = now instanceof Date ? now : new Date();
-    if (slotHasStarted(payload, now)) return hiddenCard();
     var dist = payload.distance_km;
     var distanceSaysFar = dist != null && !isNaN(Number(dist)) && Number(dist) > FAR_DISTANCE_THRESHOLD_KM;
     // far_confirmed: IP-country (src/shared/ip_geo.py) already placed this visitor outside
@@ -334,6 +327,7 @@
     renderIceTeaserHtml: renderIceTeaserHtml,
     formatIceCard: formatIceCard,
     renderIceCardHtml: renderIceCardHtml,
+    resolveTeaserPayload: resolveTeaserPayload,
     arenaHref: arenaHref,
     FAR_DISTANCE_THRESHOLD_KM: FAR_DISTANCE_THRESHOLD_KM,
   };

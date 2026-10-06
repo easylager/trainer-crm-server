@@ -66,6 +66,8 @@
   var lastSearchQuery = '';
   /* TASK-182 (F4): запрос ленты в полёте — boot не дублирует его вторым loadList. */
   var pendingGen = 0;
+  var LIST_STALE_MS = 5 * 60 * 1000;
+  var listFetchedAt = 0;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -828,7 +830,7 @@
    * отдельными строками на поверхности карточки, где контраст измерим.
    */
   function renderArenaCard(item) {
-    var v = M.boardCardView(item, undefined, { window: state.window });
+    var v = M.boardCardView(item, new Date(), { window: state.window });
     /* TASK-148 (AC-2): нет фото — нет фото-блока. Плашка типа места: иконка
        с сервера (venue_icon), фолбэк — монограмма имени. */
     var photo = v.photo
@@ -1431,7 +1433,22 @@
     });
   }
 
+  function onAppVisible() {
+    repairCatalogChrome();
+    renderList();
+    if (
+      state.intent !== 'coach' &&
+      state.cityId &&
+      listFetchedAt &&
+      Date.now() - listFetchedAt > LIST_STALE_MS &&
+      !state.loading
+    ) {
+      loadList();
+    }
+  }
+
   function onListLoaded() {
+    listFetchedAt = Date.now();
     renderList();
     if (!mapCtl) return;
     if (state.intent === 'coach') {
@@ -2617,13 +2634,13 @@
 
     global.addEventListener('pagehide', persist);
     global.addEventListener('pageshow', function (ev) {
-      repairCatalogChrome();
+      onAppVisible();
       if (!ev.persisted) return;
       var saved = M.loadIceState(global.sessionStorage);
       if (saved && saved.scrollY) global.scrollTo(0, saved.scrollY);
     });
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') repairCatalogChrome();
+      if (document.visibilityState === 'visible') onAppVisible();
     });
   }
 

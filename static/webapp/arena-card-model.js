@@ -27,6 +27,12 @@
       : typeof globalThis !== 'undefined'
         ? globalThis.OpeningHours
         : null;
+  var MT =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./minsk-time.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.MinskTime
+        : null;
   var ruText = RuText;
 
   var AMENITY_ORDER = [
@@ -97,17 +103,7 @@
   }
 
   function ymd(d) {
-    var m = d.getMonth() + 1;
-    var day = d.getDate();
-    return (
-      d.getFullYear() +
-      '-' +
-      (m < 10 ? '0' : '') +
-      m +
-      '-' +
-      (day < 10 ? '0' : '') +
-      day
-    );
+    return MT.dateIso(d instanceof Date ? d : new Date());
   }
 
   var ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -124,10 +120,8 @@
   }
 
   function addDaysYmd(iso, n) {
-    var d = parseLocalDate(iso);
-    if (!d) return null;
-    d.setDate(d.getDate() + n);
-    return ymd(d);
+    if (!isoDate(iso)) return null;
+    return MT.addDaysIso(iso, n);
   }
 
   function dayTabFromIso(iso, todayIso) {
@@ -302,12 +296,11 @@
       var utc = new Date(session.starts_at_utc).getTime();
       if (!isNaN(utc)) return utc;
     }
-    var d = parseLocalDate(session.local_date);
+    var iso = String(session.local_date || '').slice(0, 10);
     var hm = hhmm(session.starts_at_local);
-    if (d && hm) {
-      var p = hm.split(':');
-      d.setHours(Number(p[0]), Number(p[1] || 0), 0, 0);
-      return d.getTime();
+    if (iso && hm) {
+      var ms = Date.parse(iso + 'T' + hm + ':00+03:00');
+      if (!isNaN(ms)) return ms;
     }
     return 0;
   }
@@ -318,11 +311,7 @@
 
   /** Календарный «сегодня» в часовом поясе арены (не устройства). */
   function ymdInTimeZone(date, timeZone) {
-    try {
-      return new Intl.DateTimeFormat('en-CA', { timeZone: timeZone }).format(date);
-    } catch (e) {
-      return ymd(date);
-    }
+    return MT.dateIso(date, timeZone);
   }
 
   function sessionNowState(session, now) {
@@ -441,8 +430,8 @@
     return rows;
   }
 
-  function countLessonsOnDate(groups, dateObj) {
-    var weekday = dateObj.getDay();
+  function countLessonsOnDate(groups, isoYmd) {
+    var weekday = MT.weekdaySun0FromIso(isoYmd);
     var n = 0;
     var gi;
     for (gi = 0; gi < (groups || []).length; gi++) {
@@ -469,9 +458,9 @@
 
   function buildWeekSummaries(opts) {
     opts = opts || {};
-    var start = parseLocalDate(opts.from);
-    var end = parseLocalDate(opts.to);
-    if (!start || !end) return [];
+    var fromIso = isoDate(opts.from);
+    var toIso = isoDate(opts.to);
+    if (!fromIso || !toIso) return [];
     var byDate = {};
     var sessionDays = opts.sessionDays || [];
     var i;
@@ -480,16 +469,17 @@
     }
     var groups = opts.groups || [];
     var out = [];
-    var cursor = new Date(start.getTime());
-    while (cursor.getTime() <= end.getTime()) {
-      var key = ymd(cursor);
+    var cursor = fromIso;
+    while (cursor <= toIso) {
+      var key = cursor;
       var sessions = byDate[key] || [];
-      var lessonN = countLessonsOnDate(groups, cursor);
+      var lessonN = countLessonsOnDate(groups, key);
       var iceN = sessions.length;
+      var wd = MT.weekdaySun0FromIso(key);
       if (!iceN && !lessonN) {
         out.push({
           localDate: key,
-          weekday: WEEKDAYS_SHORT[cursor.getDay()],
+          weekday: WEEKDAYS_SHORT[wd],
           empty: true,
           title: 'Данных нет',
           meta: 'расписание на неделю уточняется',
@@ -503,14 +493,14 @@
         if (lessonN) titleParts.push(lessonN + ' ' + lesWord);
         out.push({
           localDate: key,
-          weekday: WEEKDAYS_SHORT[cursor.getDay()],
+          weekday: WEEKDAYS_SHORT[wd],
           empty: false,
           title: titleParts.join(' · ') || 'Есть лёд',
           meta: sessionTimeRange(sessions),
           cta: 'Открыть',
         });
       }
-      cursor.setDate(cursor.getDate() + 1);
+      cursor = MT.addDaysIso(cursor, 1);
     }
     return out;
   }
@@ -753,14 +743,16 @@
   }
 
   /** «открыт до 20:00» — только если открыто сейчас; до открытия — «откроется в 10:00». */
-  function openUntilLabel(hours, now) {
-    now = now || new Date();
-    var weekday = (now.getDay() + 6) % 7;
+  function openUntilLabel(hours, now, timeZone) {
+    now = now instanceof Date ? now : new Date();
+    var tz = MT.resolveTimeZone(timeZone);
+    var weekday = MT.weekdayMon0(now, tz);
+    var nowMins = OH.toMinutes(MT.hhmm(now, tz));
     /* Вчерашний ночной хвост (пт 18:00–02:00 → сб 01:00) тоже «открыт». */
-    var open = OH.openIntervalAt(hours, weekday, now.getHours() * 60 + now.getMinutes());
+    var open = OH.openIntervalAt(hours, weekday, nowMins);
     if (open) return 'открыт до ' + open[1];
     var intervals = intervalsForWeekday(hours, weekday);
-    var hm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+    var hm = MT.hhmm(now, tz);
     for (var i = 0; i < intervals.length; i++) {
       if (hm < intervals[i][0]) return 'откроется в ' + intervals[i][0];
     }
@@ -786,13 +778,13 @@
     var out = [];
     for (var i = 0; i < (n || 7); i++) {
       var iso = addDaysYmd(todayIso, i);
-      var date = parseLocalDate(iso);
+      var wd = MT.weekdaySun0FromIso(iso);
       out.push({
         iso: iso,
-        top: i === 0 ? 'Сегодня' : i === 1 ? 'Завтра' : DAY_TOP[date.getDay()],
-        num: String(date.getDate()),
+        top: i === 0 ? 'Сегодня' : i === 1 ? 'Завтра' : DAY_TOP[wd],
+        num: iso.slice(8, 10),
         count: upcomingSessions(byDate[iso], now).length,
-        weekend: date.getDay() === 0 || date.getDay() === 6,
+        weekend: wd === 0 || wd === 6,
       });
     }
     return out;
@@ -929,7 +921,7 @@
     var hours = card.opening_hours;
     if (!hours || typeof hours !== 'object') return { enabled: false };
     var catalog = Array.isArray(hours.rental_catalog) ? hours.rental_catalog : [];
-    var week = weekHours(hours, new Date());
+    var week = weekHours(hours, new Date(), card.timezone);
     var enabled =
       catalog.length > 0 ||
       hours.free_entry === true ||
@@ -948,9 +940,10 @@
   }
 
   /** Часы по дням для списка «Часы работы»: сегодняшний день отмечен. */
-  function weekHours(hours, now) {
-    now = now || new Date();
-    var today = (now.getDay() + 6) % 7;
+  function weekHours(hours, now, timeZone) {
+    now = now instanceof Date ? now : new Date();
+    var tz = MT.resolveTimeZone(timeZone);
+    var today = MT.weekdayMon0(now, tz);
     var known = false;
     var rows = [];
     for (var d = 0; d < 7; d++) {
@@ -965,7 +958,12 @@
     }
     if (!known) return null;
     var uniform = rows.every(function (r) { return r.value === rows[0].value; });
-    return { uniform: uniform, rows: rows, todayValue: rows[today].value, status: openUntilLabel(hours, now) };
+    return {
+      uniform: uniform,
+      rows: rows,
+      todayValue: rows[today].value,
+      status: openUntilLabel(hours, now, tz),
+    };
   }
 
   function heroMetaLine(card) {
@@ -976,7 +974,7 @@
       var km = Number(card.distance_km);
       if (!isNaN(km)) bits.push(km.toFixed(1).replace('.', ',') + ' км');
     }
-    var until = openUntilLabel(card.opening_hours);
+    var until = openUntilLabel(card.opening_hours, undefined, card.timezone);
     if (until) bits.push(until);
     return bits.join(' · ');
   }
@@ -1010,16 +1008,16 @@
     days = days || [];
     var unlimited = limit === 0 || limit == null;
     if (!unlimited) limit = limit || 6;
-    var tomorrow = '';
-    try {
-      var t = parseLocalDate(todayIso);
-      t.setDate(t.getDate() + 1);
-      tomorrow = ymd(t);
-    } catch (e) { /* */ }
+    var tomorrow = isoDate(todayIso) ? MT.addDaysIso(todayIso, 1) : '';
     var out = [];
     for (var i = 0; i < days.length && (unlimited || out.length < limit); i++) {
       var iso = days[i].local_date;
-      var head = iso === todayIso ? 'Сегодня' : iso === tomorrow ? 'Завтра' : WEEKDAYS_SHORT[parseLocalDate(iso).getDay()];
+      var head =
+        iso === todayIso
+          ? 'Сегодня'
+          : iso === tomorrow
+            ? 'Завтра'
+            : WEEKDAYS_SHORT[MT.weekdaySun0FromIso(iso)];
       var list = days[i].sessions || [];
       for (var j = 0; j < list.length && (unlimited || out.length < limit); j++) {
         var hhmm = String(list[j].starts_at_local || '').slice(0, 5);
@@ -1033,17 +1031,16 @@
   /** TASK-158: список сеансов в share sheet — группы по дню. */
   function shareSlotsGrouped(days, todayIso) {
     days = days || [];
-    var tomorrow = '';
-    try {
-      var t = parseLocalDate(todayIso);
-      t.setDate(t.getDate() + 1);
-      tomorrow = ymd(t);
-    } catch (e) { /* */ }
+    var tomorrow = isoDate(todayIso) ? MT.addDaysIso(todayIso, 1) : '';
     var sections = [];
     for (var i = 0; i < days.length; i++) {
       var iso = days[i].local_date;
       var dayLabel =
-        iso === todayIso ? 'Сегодня' : iso === tomorrow ? 'Завтра' : WEEKDAYS_SHORT[parseLocalDate(iso).getDay()];
+        iso === todayIso
+          ? 'Сегодня'
+          : iso === tomorrow
+            ? 'Завтра'
+            : WEEKDAYS_SHORT[MT.weekdaySun0FromIso(iso)];
       var list = days[i].sessions || [];
       var rows = [];
       for (var j = 0; j < list.length; j++) {
@@ -1061,7 +1058,7 @@
         sections.push({
           dayLabel: dayLabel,
           localDate: iso,
-          dayNum: String(parseLocalDate(iso).getDate()),
+          dayNum: String(Number(iso.slice(8, 10))),
           rows: rows,
         });
       }

@@ -334,6 +334,7 @@ describe('TASK-182 AC-2: часы через полночь, одна реали
     for (const file of ['ice-tab-model.js', 'arena-card-model.js']) {
       const src = fs.readFileSync(path.join(webapp, file), 'utf8');
       assert.match(src, /require\('\.\/opening-hours\.js'\)/, file);
+      assert.match(src, /require\('\.\/minsk-time\.js'\)/, file);
       assert.doesNotMatch(src, /function (normHhmm|normalizeHhmm|parseDayIntervals|hhmmInInterval|hhmmToMinutes)\(/, file);
     }
   });
@@ -349,8 +350,11 @@ describe('TASK-182 AC-2: часы через полночь, одна реали
       if (!models.length) continue;
       checked += 1;
       const oh = html.indexOf('src="opening-hours.js');
+      const mt = html.indexOf('src="minsk-time.js');
       assert.ok(oh >= 0, page + ': нет opening-hours.js');
+      assert.ok(mt >= 0, page + ': нет minsk-time.js');
       assert.ok(oh < Math.min(...models), page + ': opening-hours.js после модели');
+      assert.ok(mt < Math.min(...models), page + ': minsk-time.js после модели');
     }
     assert.ok(checked >= 2);
   });
