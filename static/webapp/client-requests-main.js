@@ -369,8 +369,17 @@
         const city = (req.city_name || '').trim() || '—';
         const service = (req.service_name || '').trim() || '—';
         var base = city + ', ' + service;
+        var tname = (req.trainer_name || '').trim();
+        if (req.request_subtype === 'pass_product_order') {
+          return tname ? ('Абонемент · ' + tname) : 'Абонемент';
+        }
+        if (req.request_subtype === 'certificate_product_order') {
+          return tname ? ('Сертификат · ' + tname) : 'Сертификат';
+        }
+        if (req.request_subtype === 'collective_pass_product_order') {
+          return tname ? ('Абонемент центра · ' + tname) : 'Абонемент центра';
+        }
         if (req.is_personalized) {
-          var tname = (req.trainer_name || '').trim();
           return tname ? ('Персональная · ' + tname) : ('Персональная · ' + base);
         }
         return base;

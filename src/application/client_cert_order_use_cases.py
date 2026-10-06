@@ -20,6 +20,7 @@ from src.application.client_trainer_edge_use_cases import get_all_edges
 from src.application.client_trainer_primary_graph import compute_primary_edge_meta
 from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.application.certificate_use_cases import get_certificate_product, list_certificate_products
+from src.application.client_pass_order_use_cases import catalog_order_trainer_error
 from src.shared.byr_currency_display import BYR_SIGN
 
 CERT_ORDER_LINE_PREFIX = "__CERT_ORDER__:certificate_product_id="
@@ -239,9 +240,12 @@ async def submit_certificate_product_order_request(
     recipient_email: str,
     recipient_name: str,
     nominal_byn: float | None = None,
+    trainer_id: int | None = None,
 ) -> dict:
     """
-    Creates a personalized client_request for the primary trainer.
+    Creates a personalized client_request.
+
+    ``trainer_id`` set: the trainer on the catalog card. Omitted: the client's primary trainer.
     Returns {"ok": True, "request_id": int} or {"ok": False, "error": str}.
     """
     resolved = await resolve_acting_client_id(session, int(telegram_id), int(client_id))
@@ -252,38 +256,44 @@ async def submit_certificate_product_order_request(
         return {"ok": False, "error": "invalid_email"}
     rname = (recipient_name or "").strip()  # optional (TASK-142/AC-004)
 
-    edges = await get_all_edges(client_id, session)
-    sess_row = await read_client_bot_session(telegram_id, session)
-    session_tid = (
-        int(sess_row["selected_trainer_id"])
-        if sess_row and sess_row.get("selected_trainer_id")
-        else None
-    )
-    book_tid, book_svc = await client_latest_booking_primary_candidate(session, telegram_id)
-    primary_edge, _primary_src = compute_primary_edge_meta(
-        edges,
-        session_tid,
-        booking_primary_trainer_id=book_tid,
-        booking_primary_service_id=book_svc,
-    )
-    if not primary_edge:
-        return {"ok": False, "error": "no_primary_trainer"}
+    if trainer_id is not None:
+        unavailable = await catalog_order_trainer_error(session, int(trainer_id))
+        if unavailable:
+            return {"ok": False, "error": unavailable}
+        order_trainer_id = int(trainer_id)
+    else:
+        edges = await get_all_edges(client_id, session)
+        sess_row = await read_client_bot_session(telegram_id, session)
+        session_tid = (
+            int(sess_row["selected_trainer_id"])
+            if sess_row and sess_row.get("selected_trainer_id")
+            else None
+        )
+        book_tid, book_svc = await client_latest_booking_primary_candidate(session, telegram_id)
+        primary_edge, _primary_src = compute_primary_edge_meta(
+            edges,
+            session_tid,
+            booking_primary_trainer_id=book_tid,
+            booking_primary_service_id=book_svc,
+        )
+        if not primary_edge:
+            return {"ok": False, "error": "no_primary_trainer"}
+        order_trainer_id = int(primary_edge["trainer_id"])
 
-    trainer_id = int(primary_edge["trainer_id"])
-    prod = await get_certificate_product(session, certificate_product_id, trainer_id)
+    prod = await get_certificate_product(session, certificate_product_id, order_trainer_id)
     if not prod or not prod.get("is_active"):
         return {"ok": False, "error": "product_not_found"}
 
-    city_id, service_id = await _trainer_city_and_min_service(session, trainer_id)
+    city_id, service_id = await _trainer_city_and_min_service(session, order_trainer_id)
     if city_id is None:
         return {"ok": False, "error": "trainer_city_missing"}
     if service_id is None:
         return {"ok": False, "error": "trainer_service_missing"}
 
-    if await _pending_cert_order_exists(session, client_id, trainer_id, certificate_product_id):
+    if await _pending_cert_order_exists(session, client_id, order_trainer_id, certificate_product_id):
         return {"ok": False, "error": "duplicate_pending"}
 
-    if await _cert_order_sent_today_exists(session, client_id, trainer_id, certificate_product_id):
+    if await _cert_order_sent_today_exists(session, client_id, order_trainer_id, certificate_product_id):
         return {"ok": False, "error": "daily_limit"}
 
     pname = (prod["name"] or "").strip() or "Подарочный сертификат"
@@ -343,6 +353,6 @@ async def submit_certificate_product_order_request(
         city_id,
         service_id,
         comment=comment,
-        trainer_id=trainer_id,
+        trainer_id=order_trainer_id,
     )
     return {"ok": True, "request_id": request_id}

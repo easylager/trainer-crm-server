@@ -780,6 +780,10 @@ TRAINER_PASS_ORDER_NOTIFICATION = (
     "<b>Услуга</b> — {service_line}\n\n"
     "Напишите клиенту, обсудите оплату и выдайте абонемент."
 )
+TRAINER_PASS_ORDER_ALREADY_ACTIVE = (
+    "У клиента уже есть активный абонемент с оставшимися занятиями. "
+    "Заявка сохранена — обсудите, что делать дальше."
+)
 TRAINER_PASS_ORDER_BTN_WRITE = "✍️ Написать клиенту"
 # Same row as DM link: relay still works when trainer_app polling is up (optional second tap).
 TRAINER_ORDER_WRITE_VIA_BOT_BTN = "🤖 Через бота"

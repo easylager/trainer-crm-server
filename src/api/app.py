@@ -714,6 +714,19 @@ def webapp_client_buy_pass_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/client-buy-pass-order.js")
+def webapp_client_buy_pass_order_js(request: Request):
+    """Catalog-card pass/certificate order helpers. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-buy-pass-order.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/client-passes")
 def webapp_client_passes_page():
     """Serve the client 'My passes' Mini App (list of owned абонементы, redeem link)."""

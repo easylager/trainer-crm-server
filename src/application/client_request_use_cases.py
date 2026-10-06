@@ -716,6 +716,10 @@ async def archive_client_requests_fulfilled_by_bookings(
     If a booking was created without client_request_id (catalog flow), the linked request
     could stay status='new'. Archive when an active booking matches the same client+service
     and either a responding trainer or a personalized request trainer.
+
+    Pass and certificate orders are a purchase ask, not a request for that booking.
+    An existing lesson (or an already issued pass) must leave them status='new' so the
+    client still sees them and the trainer still gets the notification.
     """
     cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
     if cid is None:
@@ -726,6 +730,9 @@ async def archive_client_requests_fulfilled_by_bookings(
             SET status = 'archived'
             WHERE r.status = 'new'
               AND r.client_id = :cid
+              AND POSITION('__PASS_ORDER__:' IN COALESCE(r.comment, '')) <> 1
+              AND POSITION('__CERT_ORDER__:' IN COALESCE(r.comment, '')) <> 1
+              AND POSITION('__COLLECTIVE_PASS_ORDER__:' IN COALESCE(r.comment, '')) <> 1
               AND (
                 EXISTS (
                   SELECT 1 FROM bookings b

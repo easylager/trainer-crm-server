@@ -30,6 +30,22 @@ from src.shared.byr_currency_display import BYR_SIGN
 PASS_ORDER_LINE_PREFIX = "__PASS_ORDER__:pass_product_id="
 
 
+async def catalog_order_trainer_error(session: AsyncSession, trainer_id: int) -> str | None:
+    """None when this trainer can receive a catalog card order; otherwise an error code.
+
+    Card orders name the trainer explicitly. Deactivated or unknown trainers must not
+    get a client_request even if the caller knows a product id.
+    """
+    r = await session.execute(
+        text("SELECT status FROM trainers WHERE id = :tid LIMIT 1"),
+        {"tid": int(trainer_id)},
+    )
+    row = r.fetchone()
+    if row is None or str(row[0] or "") != "active":
+        return "trainer_not_found"
+    return None
+
+
 def split_pass_order_comment(comment: str | None) -> tuple[int | None, str]:
     """Returns (pass_product_id_or_none, human-visible body)."""
     if not comment or not str(comment).strip():
@@ -248,31 +264,40 @@ async def submit_pass_product_order_request(
     client_id: int,
     telegram_id: int,
     pass_product_id: int,
+    trainer_id: int | None = None,
 ) -> dict:
     """
-    Creates a personalized client_request for the primary trainer.
+    Creates a personalized client_request.
+
+    ``trainer_id`` set: the trainer on the catalog card (any active trainer who owns the product).
+    Omitted: the client's primary trainer, same as the «Абонементы» menu.
     Returns {"ok": True, "request_id": int} or {"ok": False, "error": str}.
     """
     resolved = await resolve_acting_client_id(session, int(telegram_id), int(client_id))
     if resolved is None or int(resolved) != int(client_id):
         return {"ok": False, "error": "client_mismatch"}
 
-    edges = await get_all_edges(client_id, session)
-    sess_row = await read_client_bot_session(telegram_id, session)
-    session_tid = int(sess_row["selected_trainer_id"]) if sess_row and sess_row.get("selected_trainer_id") else None
-    book_tid, book_svc = await client_latest_booking_primary_candidate(session, telegram_id)
-    primary_edge, primary_src = compute_primary_edge_meta(
-        edges,
-        session_tid,
-        booking_primary_trainer_id=book_tid,
-        booking_primary_service_id=book_svc,
-    )
-    if not primary_edge:
-        return {"ok": False, "error": "no_primary_trainer"}
+    if trainer_id is not None:
+        unavailable = await catalog_order_trainer_error(session, int(trainer_id))
+        if unavailable:
+            return {"ok": False, "error": unavailable}
+        order_trainer_id = int(trainer_id)
+    else:
+        edges = await get_all_edges(client_id, session)
+        sess_row = await read_client_bot_session(telegram_id, session)
+        session_tid = int(sess_row["selected_trainer_id"]) if sess_row and sess_row.get("selected_trainer_id") else None
+        book_tid, book_svc = await client_latest_booking_primary_candidate(session, telegram_id)
+        primary_edge, _primary_src = compute_primary_edge_meta(
+            edges,
+            session_tid,
+            booking_primary_trainer_id=book_tid,
+            booking_primary_service_id=book_svc,
+        )
+        if not primary_edge:
+            return {"ok": False, "error": "no_primary_trainer"}
+        order_trainer_id = int(primary_edge["trainer_id"])
 
-    trainer_id = int(primary_edge["trainer_id"])
-
-    prod = await get_pass_product(session, pass_product_id, trainer_id)
+    prod = await get_pass_product(session, pass_product_id, order_trainer_id)
     if not prod or not prod.get("is_active"):
         return {"ok": False, "error": "product_not_found"}
 
@@ -281,16 +306,18 @@ async def submit_pass_product_order_request(
     price_cents = int(prod["price_cents"] or 0)
     restricted = list(prod.get("service_ids") or [])
 
-    city_id, service_id = await _trainer_city_and_request_service_for_pass(session, trainer_id, restricted)
+    city_id, service_id = await _trainer_city_and_request_service_for_pass(
+        session, order_trainer_id, restricted
+    )
     if city_id is None:
         return {"ok": False, "error": "trainer_city_missing"}
     if service_id is None:
         return {"ok": False, "error": "trainer_service_missing"}
 
-    if await _pending_pass_order_exists(session, client_id, trainer_id, pass_product_id):
+    if await _pending_pass_order_exists(session, client_id, order_trainer_id, pass_product_id):
         return {"ok": False, "error": "duplicate_pending"}
 
-    if await _pass_order_sent_today_exists(session, client_id, trainer_id, pass_product_id):
+    if await _pass_order_sent_today_exists(session, client_id, order_trainer_id, pass_product_id):
         return {"ok": False, "error": "daily_limit"}
 
     price_txt = f"{(price_cents / 100):.2f}".rstrip("0").rstrip(".")
@@ -306,6 +333,6 @@ async def submit_pass_product_order_request(
         city_id,
         service_id,
         comment=comment,
-        trainer_id=trainer_id,
+        trainer_id=order_trainer_id,
     )
     return {"ok": True, "request_id": request_id}
