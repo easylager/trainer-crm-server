@@ -247,6 +247,10 @@ class Settings(BaseSettings):
     sentry_profiles_sample_rate: float = 0.0
     # Optional deploy label for admin /version (e.g. Railway: set to RAILWAY_GIT_COMMIT_SHA).
     app_deploy_version: str | None = None
+    # TASK-189: HMAC key for catalog actor pseudonyms (telegram id / IP+UA). >= 32 chars
+    # (`openssl rand -hex 32`). Unset/short → actor hashes are NOT recorded (fail closed);
+    # never derived from another secret. Rotating it resets weekly-unique continuity.
+    catalog_actor_hmac_secret: str | None = None
 
     # PRD E7: «Проблема с клиентом» — поэтапный rollout (Mini App + API).
     # off = выключено; pilot = только BOOKING_PROBLEM_PILOT_TRAINER_IDS; full = все тренеры.

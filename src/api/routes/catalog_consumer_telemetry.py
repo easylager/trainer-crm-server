@@ -1,8 +1,6 @@
 """Публичная телеметрия каталога: CTA-редирект и (опционально) health для метрик."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,11 +51,9 @@ async def open_telegram_from_public_page(
     surf = surface.strip().lower()
     if surf not in _ALLOWED_SURFACES:
         surf = "place_page"
-    day = datetime.now(timezone.utc).date()
     actor = public_actor_hash(
         client_ip=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
-        day=day,
     )
     await record_catalog_consumer_event(
         session,
