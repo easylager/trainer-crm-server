@@ -58,6 +58,7 @@ async def run_ice_ingest_tick() -> IceIngestTickResult:
                 publisher=SqlAlchemyIceSessionPublisher(session),
                 by_egress_proxy_url=get_settings().by_egress_proxy_url,
                 checkpoint=session.commit,
+                job_savepoint=session.begin_nested,
             )
             outcomes = await scheduler.run_due(datetime.now(timezone.utc))
             await session.commit()

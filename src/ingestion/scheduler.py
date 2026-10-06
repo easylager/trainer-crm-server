@@ -4,7 +4,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from contextlib import asynccontextmanager
+import time
+from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
@@ -45,6 +46,14 @@ CONFIG_JOB_TIMEOUT_S = "job_timeout_s"
 ERROR_CODE_INTERNAL = "internal_error"
 ERROR_CODE_TIMEOUT = "timeout"
 
+# TASK-188: тик держит advisory-лок ингеста; 20 заданий × 120 с — это ~40 минут. После
+# бюджета новые задания не стартуют: остальные просроченные догонит следующий тик.
+TICK_BUDGET_S = 300.0
+
+
+class ExtractDeadlineExceeded(IngestTimeoutError):
+    """Внешний дедлайн на extract целиком (job_timeout_s) истёк."""
+
 
 class IceIngestScheduler:
     def __init__(
@@ -60,6 +69,9 @@ class IceIngestScheduler:
         rng: random.Random | None = None,
         max_jobs_per_tick: int | None = MAX_JOBS_PER_TICK,
         checkpoint: Callable[[], Awaitable[None]] | None = None,
+        job_savepoint: Callable[[], AbstractAsyncContextManager] | None = None,
+        tick_budget_s: float | None = TICK_BUDGET_S,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._store = store
         self._recorder = recorder or LoggingScrapeRunRecorder()
@@ -78,6 +90,11 @@ class IceIngestScheduler:
         # Коммит после каждого задания: новое расписание видно пользователю сразу после
         # своего прогона, а не в конце тика, где до него может быть ещё 20 сайтов.
         self._checkpoint = checkpoint
+        # TASK-188: изоляция одного задания (обычно session.begin_nested): сбой его
+        # бухгалтерии откатывается до savepoint, и internal_error пишется в чистую сессию.
+        self._job_savepoint = job_savepoint
+        self._tick_budget_s = tick_budget_s
+        self._clock = clock
         # TASK-176: сколько заданий было просрочено на последнем тике (до потолка) — для heartbeat.
         self.last_due_count = 0
 
@@ -89,30 +106,26 @@ class IceIngestScheduler:
         self.last_due_count = len(due_jobs)
         if self._max_jobs_per_tick is not None:
             due_jobs = due_jobs[: self._max_jobs_per_tick]
-        for job in due_jobs:
+        tick_started = self._clock()
+        for index, job in enumerate(due_jobs):
+            elapsed = self._clock() - tick_started
+            if self._tick_budget_s is not None and outcomes and elapsed >= self._tick_budget_s:
+                logger.warning(
+                    "ice ingest tick budget %.0fs spent after %d job(s) (%.0fs); "
+                    "%d due job(s) deferred to next tick",
+                    self._tick_budget_s,
+                    len(outcomes),
+                    elapsed,
+                    len(due_jobs) - index,
+                )
+                break
             outcomes.append(await self._run_due_job(job, now))
         return outcomes
 
-    def _bound_session(self):
-        for holder in (self._store, self._recorder):
-            session = getattr(holder, "_session", None)
-            if session is not None:
-                return session
-        return None
-
-    @staticmethod
-    @asynccontextmanager
-    async def _job_savepoint(session):
-        if session is None:
-            yield
-            return
-        async with session.begin_nested():
-            yield
-
     async def _run_due_job(self, job: ParserJob, now: datetime) -> ScrapeRunRecord:
-        session = self._bound_session()
+        savepoint = self._job_savepoint() if self._job_savepoint is not None else nullcontext()
         try:
-            async with self._job_savepoint(session):
+            async with savepoint:
                 record = await self._execute_job_tick(job, now)
         except Exception as exc:  # noqa: BLE001 — isolate one job; siblings must run
             logger.exception(
@@ -252,7 +265,7 @@ class IceIngestScheduler:
         timeout_s = self._job_timeout_seconds(job.config)
         try:
             with egress_proxy(proxy):
-                extraction = await asyncio.wait_for(parser.extract(job), timeout=timeout_s)
+                extraction = await self._extract_with_deadline(parser, job, timeout_s)
             drafts, report = self._normalize(extraction, job, now)
             validated = self._validator.validate(drafts)
         except IceSessionValidationError as exc:
@@ -268,6 +281,8 @@ class IceIngestScheduler:
                 empty,
             )
         except IngestTimeoutError as exc:
+            # Наш дедлайн на extract или дедлайн CPU-шага (OCR/PDF): сообщение уже точное.
+            logger.warning("parser %s timed out for job %s: %s", job.parser_key, job.id, exc)
             return (
                 self._record(
                     job,
@@ -280,13 +295,15 @@ class IceIngestScheduler:
                 empty,
             )
         except TimeoutError as exc:
+            # Таймаут изнутри extract (aiohttp и пр.) — не наш дедлайн: реальное сообщение + traceback.
+            logger.exception("parser %s hit an inner timeout for job %s", job.parser_key, job.id)
             return (
                 self._record(
                     job,
                     status=RUN_STATUS_ERROR,
                     started_at=started,
                     finished_at=now,
-                    error_message=f"extract timed out after {timeout_s}s",
+                    error_message=_describe_exception(exc),
                     error_code=ERROR_CODE_TIMEOUT,
                 ),
                 empty,
@@ -340,6 +357,17 @@ class IceIngestScheduler:
         )
 
     @staticmethod
+    async def _extract_with_deadline(parser, job: ParserJob, timeout_s: float):
+        deadline = asyncio.timeout(timeout_s)
+        try:
+            async with deadline:
+                return await parser.extract(job)
+        except TimeoutError as exc:
+            if deadline.expired():
+                raise ExtractDeadlineExceeded(f"extract timed out after {timeout_s}s") from exc
+            raise
+
+    @staticmethod
     def _job_timeout_seconds(config: dict | None) -> float:
         raw = (config or {}).get(CONFIG_JOB_TIMEOUT_S)
         if raw is None or str(raw).strip() == "":
@@ -376,3 +404,9 @@ class IceIngestScheduler:
             snapshot=snapshot,
             error_code=error_code,
         )
+
+
+def _describe_exception(exc: BaseException) -> str:
+    text = str(exc)
+    name = type(exc).__name__
+    return f"{name}: {text}" if text else name

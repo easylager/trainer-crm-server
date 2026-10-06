@@ -133,3 +133,148 @@ async def test_ingest_timeout_error_maps_to_timeout_error_code() -> None:
     assert len(outcomes) == 1
     assert outcomes[0].error_code == "timeout"
     assert recorder.runs[0].error_code == "timeout"
+
+
+class _InnerFetchTimeoutParser(RecordingParser):
+    parser_key = "inner_fetch_timeout_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        raise TimeoutError("Connection timeout to host https://example.test")
+
+
+@pytest.mark.asyncio
+async def test_outer_deadline_message_names_job_timeout() -> None:
+    """Review: только наш дедлайн даёт «extract timed out after Ns»."""
+    hung = _HungParser()
+    job = _job(parser_key=hung.parser_key, config={"url": "https://example.test", "job_timeout_s": 0.05})
+    store = InMemoryParserJobStore([job])
+    recorder = InMemoryScrapeRunRecorder()
+    registry = ParserRegistry()
+    registry.register(hung)
+
+    outcomes = await IceIngestScheduler(store=store, recorder=recorder, registry=registry).run_due(_NOW)
+
+    assert outcomes[0].error_code == "timeout"
+    assert outcomes[0].error_message == "extract timed out after 0.05s"
+
+
+@pytest.mark.asyncio
+async def test_inner_fetch_timeout_keeps_real_message_and_traceback(caplog) -> None:
+    """Review: TimeoutError изнутри extract (aiohttp) — не «extract timed out», с traceback."""
+    parser = _InnerFetchTimeoutParser()
+    job = _job(parser_key=parser.parser_key)
+    store = InMemoryParserJobStore([job])
+    recorder = InMemoryScrapeRunRecorder()
+    registry = ParserRegistry()
+    registry.register(parser)
+
+    with caplog.at_level("ERROR", logger="src.ingestion.scheduler"):
+        outcomes = await IceIngestScheduler(store=store, recorder=recorder, registry=registry).run_due(_NOW)
+
+    assert outcomes[0].error_code == "timeout"
+    assert outcomes[0].error_message == "TimeoutError: Connection timeout to host https://example.test"
+    logged = [r for r in caplog.records if r.levelname == "ERROR" and r.exc_info]
+    assert logged, "inner timeout must be logged with traceback"
+
+
+class _Savepoint:
+    def __init__(self, log: list[str]) -> None:
+        self._log = log
+
+    async def __aenter__(self):
+        self._log.append("enter")
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self._log.append("rollback" if exc_type else "release")
+        return False
+
+
+@pytest.mark.asyncio
+async def test_job_savepoint_factory_is_explicit_and_wraps_each_job() -> None:
+    """Review: savepoint передаётся явно; сбой job откатывается до своего savepoint."""
+    recording = RecordingParser()
+    job_a = _job(id=1, arena_id=1, next_run_at=_NOW - timedelta(hours=1))
+    job_b = _job(id=2, arena_id=2, next_run_at=_NOW - timedelta(minutes=5))
+    store = InMemoryParserJobStore([job_a, job_b])
+    recorder = _FlakyRecorder(fail_job_ids={job_a.id})
+    registry = ParserRegistry()
+    registry.register(recording)
+    log: list[str] = []
+
+    sched = IceIngestScheduler(
+        store=store, recorder=recorder, registry=registry, job_savepoint=lambda: _Savepoint(log)
+    )
+    outcomes = await sched.run_due(_NOW)
+
+    assert outcomes[0].error_code == "internal_error"
+    assert log == ["enter", "rollback", "enter", "release"]
+
+
+class _ClockParser(RecordingParser):
+    """Каждый extract «длится» step секунд по фейковым часам."""
+
+    def __init__(self, clock: list[float], step: float) -> None:
+        super().__init__()
+        self._clock = clock
+        self._step = step
+        self.calls = 0
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        self.calls += 1
+        self._clock[0] += self._step
+        return await super().extract(job)
+
+
+@pytest.mark.asyncio
+async def test_tick_budget_defers_remaining_due_jobs_to_next_tick() -> None:
+    """Review: после бюджета тика новые job не стартуют; остальные остаются просроченными."""
+    clock = [0.0]
+    parser = _ClockParser(clock, step=120.0)
+    jobs = [_job(id=i, arena_id=i, next_run_at=_NOW - timedelta(minutes=60 - i)) for i in range(1, 6)]
+    store = InMemoryParserJobStore(jobs)
+    registry = ParserRegistry()
+    registry.register(parser)
+    sched = IceIngestScheduler(
+        store=store,
+        recorder=InMemoryScrapeRunRecorder(),
+        registry=registry,
+        tick_budget_s=300.0,
+        clock=lambda: clock[0],
+    )
+
+    outcomes = await sched.run_due(_NOW)
+
+    # 0 → 120 → 240 (< 300, третий стартует) → 360: стоп.
+    assert [o.job_id for o in outcomes] == [1, 2, 3]
+    assert parser.calls == 3
+    assert sched.last_due_count == 5
+    deferred = [store.get(i) for i in (4, 5)]
+    assert all(j.last_run_at is None and j.next_run_at < _NOW for j in deferred)
+
+    second = await sched.run_due(_NOW)
+    assert [o.job_id for o in second] == [4, 5]
+
+
+@pytest.mark.asyncio
+async def test_tick_budget_always_runs_at_least_one_job() -> None:
+    clock = [0.0]
+    parser = _ClockParser(clock, step=10.0)
+    store = InMemoryParserJobStore([_job()])
+    registry = ParserRegistry()
+    registry.register(parser)
+    sched = IceIngestScheduler(
+        store=store,
+        recorder=InMemoryScrapeRunRecorder(),
+        registry=registry,
+        tick_budget_s=0.0,
+        clock=lambda: clock[0],
+    )
+
+    assert len(await sched.run_due(_NOW)) == 1
+
+
+def test_default_tick_budget_is_five_minutes() -> None:
+    from src.ingestion.scheduler import TICK_BUDGET_S
+
+    assert TICK_BUDGET_S == 300.0

@@ -95,8 +95,11 @@ async def _run_once() -> None:
             registry=default_registry(),
             publisher=SqlAlchemyIceSessionPublisher(session),
             checkpoint=session.commit,
+            job_savepoint=session.begin_nested,
             by_egress_proxy_url=Settings().by_egress_proxy_url,
             max_jobs_per_tick=max_jobs_per_tick,
+            # Разовый ручной прогон: поднятые задания должны отработать все, бюджет тика не нужен.
+            tick_budget_s=None,
         )
 
     async def _bump_keys(session, keys: frozenset[str], *, enable_by: bool = False):
