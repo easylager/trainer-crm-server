@@ -985,7 +985,8 @@
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
           tierTxt.className = 'tier-radio-text';
-          tierTxt.textContent = catalogTierLabelRu(tier) + ' — ' + priceNum + ' BYN';
+          // Валюта тира — из полезной нагрузки (TASK-196): RU-город → ₽, иначе BYN.
+          tierTxt.textContent = catalogTierLabelRu(tier) + ' — ' + priceNum + ' ' + priceCurrencyLabel(tier.currency_code);
           lab.appendChild(tierTxt);
           inp.addEventListener('change', function() {
             state.catalogBookingPriceVariantId = parseInt(inp.value, 10);
@@ -1665,17 +1666,33 @@
         return n + ' мест';
       }
 
+      /* TASK-196: валюта цены — код из полезной нагрузки (как currency_code у
+         сеансов льда). Отображение — конвенция TASK-109 для цен тренера: RUB
+         знаком ₽, BYN буквами (глиф НБРБ Telegram не рисует). */
+      function priceCurrencyLabel(code) {
+        var c = String(code || '').trim().toUpperCase();
+        return c === 'RUB' ? '₽' : (c || 'BYN');
+      }
+
+      /* Валюта тарифов центра — из полезной нагрузки сеансов (TASK-196): владелец
+         из RU-города продаёт в RUB. Старые ответы без валюты читаются как BYN. */
+      function centerTariffCurrency(tariffs) {
+        var t = tariffs || {};
+        return priceCurrencyLabel(t.currency_code || t.currency);
+      }
+
       function buildCenterPriceBreakdown(mode, guestCount, tariffs) {
         var guest = Number((tariffs && tariffs.guest_surcharge_cents) != null ? tariffs.guest_surcharge_cents : 1500);
+        var cur = centerTariffCurrency(tariffs);
         var guests = Math.max(0, parseInt(guestCount, 10) || 0);
         var guestWord = guests === 1 ? 'гость' : (guests >= 2 && guests <= 4 ? 'гостя' : 'гостей');
         if (mode === 'lane_self') return 'Дорожка 1 ч';
         if (mode === 'lane_with_guest') {
-          return 'Дорожка + ' + guests + ' ' + guestWord + ' × ' + (guest / 100).toFixed(0) + ' BYN';
+          return 'Дорожка + ' + guests + ' ' + guestWord + ' × ' + (guest / 100).toFixed(0) + ' ' + cur;
         }
         if (mode === 'lane_own_coach') {
           if (guests > 0) {
-            return 'Дорожка + ' + guests + ' ' + guestWord + ' × ' + (guest / 100).toFixed(0) + ' BYN';
+            return 'Дорожка + ' + guests + ' ' + guestWord + ' × ' + (guest / 100).toFixed(0) + ' ' + cur;
           }
           return 'Дорожка 1 ч · свой тренер';
         }
@@ -1687,7 +1704,7 @@
       function formatCenterPriceByn(cents) {
         if (cents == null || isNaN(cents)) return '—';
         var v = Number(cents) / 100;
-        return (Math.round(v) === v ? v.toFixed(0) : v.toFixed(2)) + ' BYN';
+        return (Math.round(v) === v ? v.toFixed(0) : v.toFixed(2)) + ' ' + centerTariffCurrency(state.centerSessions && state.centerSessions.tariffs);
       }
 
       function computeCenterBookingPriceCents(mode, guestCount, tariffs) {
@@ -1995,14 +2012,16 @@
         panel.hidden = false;
         if (listRoot) listRoot.style.display = 'none';
         var tariffs = sessions.tariffs || {};
+        var cur = centerTariffCurrency(tariffs);
         var lanePrice = tariffs.lane_hour_cents != null ? (tariffs.lane_hour_cents / 100).toFixed(0) : '20';
+        var guestPrice = tariffs.guest_surcharge_cents != null ? (tariffs.guest_surcharge_cents / 100).toFixed(0) : '15';
         var items = sessions.sessions || [];
         var passProducts = (sessions.pass_products || []).filter(function(p) { return p.is_active !== false; });
         var html = '';
         if (items.length) {
           html += '<div class="catalog-collective-sessions-block">' +
             '<div class="catalog-collective-sessions-title">Запись в центр</div>' +
-            '<p class="catalog-collective-sessions-hint">Выберите окно и формат — дорожка от ' + lanePrice + ' BYN, гость +15 BYN</p>' +
+            '<p class="catalog-collective-sessions-hint">Выберите окно и формат — дорожка от ' + lanePrice + ' ' + cur + ', гость +' + guestPrice + ' ' + cur + '</p>' +
             items.map(function(s) {
               var coaches = (s.assigned_coaches || []).map(function(c) { return escapeHtml(c.display_name); }).join(', ');
               var coachLine = coaches
@@ -2186,9 +2205,12 @@
           }
           if (guestValueEl) guestValueEl.textContent = String(draft.guestCount);
           if (guestHintEl) {
+            // TASK-196: сумма и валюта доплаты — из тарифов центра, не «+15 BYN» наизусть.
+            var guestSurcharge = Number(tariffs.guest_surcharge_cents != null ? tariffs.guest_surcharge_cents : 1500) / 100;
+            var guestCur = centerTariffCurrency(tariffs);
             guestHintEl.textContent = modeDef.optionalGuests
-              ? '+15 BYN за каждого гостя на дорожке'
-              : '+15 BYN за каждого гостя сверх вас';
+              ? '+' + guestSurcharge + ' ' + guestCur + ' за каждого гостя на дорожке'
+              : '+' + guestSurcharge + ' ' + guestCur + ' за каждого гостя сверх вас';
           }
           var minG = modeDef.needsGuests ? (modeDef.minGuests || 1) : 0;
           if (guestMinus) {
@@ -5733,14 +5755,17 @@
       function formatCatalogServicePrice(s) {
         var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
         var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
+        // Валюта — из услуги (TASK-196): тренер из RU-города показывает цены в ₽.
+        // Старые полезные нагрузки без currency_code читаются как BYN.
+        var cur = escapeHtml(priceCurrencyLabel(s.currency_code));
         if (minV == null && s.price_byn == null) return escapeHtml('по запросу');
         if (minV != null && maxV != null && minV !== maxV) {
           var a = minV === Math.floor(minV) ? String(minV) : minV.toFixed(2);
-          return 'от ' + escapeHtml(a) + ' BYN';
+          return 'от ' + escapeHtml(a) + ' ' + cur;
         }
         var v = minV != null ? minV : s.price_byn;
         var numStr = v === Math.floor(v) ? String(v) : v.toFixed(2);
-        return escapeHtml(numStr) + ' BYN';
+        return escapeHtml(numStr) + ' ' + cur;
       }
 
       /** Rows while /trainers or /training-groups fetch — matches list card layout (photo + text + arrow). */

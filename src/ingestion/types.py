@@ -48,7 +48,12 @@ class SourceState:
 
 @dataclass
 class ParserJob:
-    """Schedule row the scheduler hands to a strategy. ``config`` is job.config jsonb."""
+    """Schedule row the scheduler hands to a strategy. ``config`` is job.config jsonb.
+
+    ``arena_timezone`` — arena_profiles.timezone (TASK-196): нормализатор берёт его,
+    если в конфиге задачи нет своей таймзоны. None (арена без профиля/таймзоны,
+    джоба, собранная руками в тесте) → дефолт Europe/Minsk.
+    """
 
     id: int
     arena_id: int
@@ -60,6 +65,7 @@ class ParserJob:
     config: dict[str, Any]
     notes: str | None = None
     state: SourceState = field(default_factory=SourceState)
+    arena_timezone: str | None = None
 
 
 @dataclass

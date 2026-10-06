@@ -6917,6 +6917,8 @@ async def get_trainer_my_services(
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    # TASK-196: тренер видит свои цены в валюте своего города (BY → BYN, RU → RUB).
+    trainer_currency = await resolve_trainer_currency(session, trainer_id)
     r = await session.execute(
         text("""
             SELECT s.id, s.name, ts.description, ts.ui_accent
@@ -6953,6 +6955,7 @@ async def get_trainer_my_services(
                     "tier_kind": tk,
                     "label": price_tier_label_ru(tk) or ((lab or "").strip() or "—"),
                     "price_byn": round(pc / 100, 2),
+                    "currency_code": trainer_currency,
                     "sort_order": so,
                 }
             )
@@ -6974,6 +6977,7 @@ async def get_trainer_my_services(
             "name": (row[1] or "").strip() or "—",
             "description": _service_row_description(row),
             "ui_accent": _service_row_ui_accent(row),
+            "currency_code": trainer_currency,
             "price_tiers": tiers_by_sid.get(int(row[0]), []),
         }
         for row in rows
@@ -10149,7 +10153,8 @@ async def get_trainer_collective_sessions(
     )
     return {
         "sessions": items,
-        "tariffs": center_tariff_catalog(),
+        # TASK-196: владелец видит тарифы своего центра в валюте своего города.
+        "tariffs": center_tariff_catalog(await resolve_trainer_currency(session, trainer_id)),
         "attendance_modes": list(ATTENDANCE_MODES),
     }
 

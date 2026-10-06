@@ -710,7 +710,7 @@
       { href: base + 'ice-tab.js?v=2026100698', as: 'script' },
       { href: base + 'opening-hours.js?v=2026100691', as: 'script' },
       { href: base + 'schedule-staleness-model.js?v=2026100698', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=2026100698', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=2026100699', as: 'script' },
       { href: base + 'ice-map-model.js?v=202610054', as: 'script' },
       { href: base + 'ice-map.js?v=2026100690', as: 'script' },
       { href: base + 'ice-tab.css?v=2026100691', as: 'style' },
@@ -728,7 +728,7 @@
   function prefetchCatalogAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'catalog-main.js?v=2026100697', as: 'script' },
+      { href: base + 'catalog-main.js?v=2026100699', as: 'script' },
       { href: base + 'mini-app-catalog.css?v=2026100697', as: 'style' },
       { href: base + 'mini-app-phone-field.js?v=202606281', as: 'script' },
     ];

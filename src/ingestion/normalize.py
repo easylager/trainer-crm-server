@@ -198,7 +198,10 @@ class IceSessionNormalizer:
         now: datetime,
     ) -> tuple[list[CanonicalSlotDraft], NormalizeReport]:
         config = job.config or {}
-        tz_name = str(config.get("timezone") or DEFAULT_ARENA_TZ)
+        # TASK-196: таймзона — из конфига задачи, иначе из арены (arena_profiles.timezone),
+        # иначе Минск. До бэкфилла 0221 у всех арен было NULL и работал только конфиг;
+        # для RU-арен (Europe/Moscow) конфиг больше не обязан повторять город.
+        tz_name = str(config.get("timezone") or job.arena_timezone or DEFAULT_ARENA_TZ)
         currency = str(config.get("currency_code") or "BYN")
         already_minor = _truthy_minor_flag(config)
         default_duration = int(config.get("default_duration_minutes") or 60)

@@ -57,6 +57,14 @@ def job_from_row(row: Any) -> ParserJob:
     config = row.config if isinstance(getattr(row, "config", None), dict) else {}
     if not config and isinstance(row, dict):
         config = row.get("config") or {}
+
+    def _arena_timezone() -> str | None:
+        # TASK-196: arena_profiles.timezone, если SELECT его принёс (см. list_due).
+        raw = getattr(row, "arena_timezone", None)
+        if raw is None and isinstance(row, dict):
+            raw = row.get("arena_timezone")
+        return str(raw).strip() or None if raw is not None else None
+
     return ParserJob(
         id=int(row.id),
         arena_id=int(row.arena_id),
@@ -68,6 +76,7 @@ def job_from_row(row: Any) -> ParserJob:
         config=dict(config or {}),
         notes=row.notes,
         state=state_from_row(row),
+        arena_timezone=_arena_timezone(),
     )
 
 
@@ -122,13 +131,15 @@ class SqlAlchemyParserJobStore:
         result = await self._session.execute(
             text(
                 """
-                SELECT id, arena_id, parser_key, is_enabled, cadence,
-                       next_run_at, last_run_at, config, notes,
-                       last_ok_at, last_ok_slot_count, failing_since, failure_streak,
-                       last_error_code, last_error_summary, alert_state, alert_sent_at
-                FROM ice_parser_jobs
-                WHERE is_enabled = true AND next_run_at <= :now
-                ORDER BY next_run_at, id
+                SELECT j.id, j.arena_id, j.parser_key, j.is_enabled, j.cadence,
+                       j.next_run_at, j.last_run_at, j.config, j.notes,
+                       j.last_ok_at, j.last_ok_slot_count, j.failing_since, j.failure_streak,
+                       j.last_error_code, j.last_error_summary, j.alert_state, j.alert_sent_at,
+                       ap.timezone AS arena_timezone
+                FROM ice_parser_jobs j
+                LEFT JOIN arena_profiles ap ON ap.arena_id = j.arena_id
+                WHERE j.is_enabled = true AND j.next_run_at <= :now
+                ORDER BY j.next_run_at, j.id
                 """
             ),
             {"now": now},
