@@ -49,6 +49,14 @@ from src.application.arena_profile import (
     opening_hours_schema_org,
 )
 from src.application.place_links import place_query
+from src.application.schedule_staleness import (
+    LEVEL_FRESH,
+    LEVEL_VERY_STALE,
+    load_arena_freshness,
+    stale_note,
+    staleness_level,
+    very_stale_note,
+)
 from src.shared.html_template import fill_placeholders, json_for_script, safe_external_url
 from src.shared.venue_types import has_public_skating
 
@@ -307,6 +315,8 @@ async def load_place_view(
     today = now.astimezone(tz).date()
 
     lookup_days: list[dict[str, Any]] = []
+    level = LEVEL_FRESH
+    schedule_note = ""
     if _skating(card):
         feed = await list_public_arena_sessions(
             session,
@@ -315,6 +325,20 @@ async def load_place_view(
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
         lookup_days = list((feed or {}).get("days") or [])
+        # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API).
+        fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
+        level = staleness_level(fresh)
+        if level == LEVEL_VERY_STALE:
+            # > 72 ч без удачного прогона: сеансы не выдаём за расписание вовсе.
+            lookup_days = []
+            schedule_note = very_stale_note(
+                fresh,
+                now=now,
+                has_phone=bool(str(card.get("phone") or "").strip()),
+                has_site=bool(str(card.get("tickets_url") or card.get("website_url") or "").strip()),
+            )
+        elif lookup_days:
+            schedule_note = stale_note(fresh, now=now)
 
     focus = None
     focus_missing = False
@@ -327,7 +351,8 @@ async def load_place_view(
                     focus = slot
         # Ссылку открыли позже, чем сеанс начался (или он за пределами недели) — это
         # нормальная жизнь пересланной ссылки, а не ошибка. Говорим как есть.
-        focus_missing = focus is None
+        # Расписание не подтверждено (> 72 ч) — не говорим «сеанс прошёл», говорим про расписание.
+        focus_missing = focus is None and level != LEVEL_VERY_STALE
 
     all_slots = [s for d in days for s in d.get("sessions") or []]
     next_slot = all_slots[0] if all_slots else None
@@ -338,6 +363,8 @@ async def load_place_view(
         "focus_missing": focus_missing,
         "next_slot": next_slot,
         "session_count": len(all_slots),
+        "schedule_level": level,
+        "schedule_note": schedule_note,
         "today": today,
         "now": now,
     }
@@ -517,6 +544,23 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     days = view.get("days") or []
     focus = view.get("focus")
     focus_id = int(focus["id"]) if focus is not None else None
+    note = str(view.get("schedule_note") or "").strip()
+    if view.get("schedule_level") == LEVEL_VERY_STALE:
+        # TASK-180: расписание > 72 ч не подтверждалось — вместо сеансов просьба уточнить.
+        phone = str(card.get("phone") or "").strip()
+        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+        links = []
+        if phone and tel:
+            links.append(f'<a href="tel:{_esc(tel)}">{_esc(phone)}</a>')
+        tickets = safe_external_url(card.get("tickets_url")) or safe_external_url(card.get("website_url"))
+        if tickets:
+            links.append(f'<a href="{_esc(tickets)}" rel="nofollow noopener" target="_blank">Сайт катка</a>')
+        return (
+            '<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>'
+            f'<p class="sched__stale">{_esc(note)}</p>'
+            + (f'<p class="sched__stale">{" · ".join(links)}</p>' if links else "")
+            + "</section>"
+        )
     if not days:
         phone = str(card.get("phone") or "").strip()
         hint = (
@@ -529,6 +573,9 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
             f'<p class="muted">{_esc(hint)}</p></section>'
         )
     parts = ['<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>']
+    if note:
+        # TASK-180: > 6 ч без удачного прогона — сеансы показываем, но честно.
+        parts.append(f'<p class="sched__stale">{_esc(note)}</p>')
     for day in days:
         d = _parse_iso_date(day.get("local_date"))
         if d is None:

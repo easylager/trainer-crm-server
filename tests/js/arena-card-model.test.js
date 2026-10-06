@@ -8,12 +8,15 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
+const stalePath = path.resolve(__dirname, '../../static/webapp/schedule-staleness-model.js');
 const modelPath = path.resolve(
   __dirname,
   '../../static/webapp/arena-card-model.js'
 );
 
 function loadModel() {
+  delete require.cache[require.resolve(stalePath)];
+  require(stalePath);
   const resolved = require.resolve(modelPath);
   delete require.cache[resolved];
   return require(modelPath);
@@ -843,12 +846,35 @@ describe('TASK-146: карточка открывается на дне и се�
   });
 });
 
-describe('TASK-146: устаревшее расписание', () => {
-  it('schedule_stale не показываем в UI — слоты как источник правды', () => {
-    const { staleScheduleNote, shouldWarnScheduleStale } = loadModel();
+describe('TASK-180: устаревшее расписание в карточке', () => {
+  it('schedule_stale — баннер, слоты остаются', () => {
+    const { staleScheduleNote, shouldWarnScheduleStale, iceFeedView } = loadModel();
     const now = new Date('2026-10-02T10:00:00Z');
-    assert.equal(staleScheduleNote({ schedule_stale: true, schedule_observed_at: '2026-10-01T11:00:00Z' }, now), null);
-    assert.equal(shouldWarnScheduleStale({ schedule_stale: true }, now), false);
+    const fresh = {
+      schedule_stale: true,
+      schedule_very_stale: false,
+      schedule_observed_at: '2026-10-01T11:00:00Z',
+    };
+    assert.equal(shouldWarnScheduleStale(fresh), true);
+    assert.match(staleScheduleNote(fresh, now), /могло измениться/);
+    const feed = iceFeedView({ card: { freshness: fresh, tier: 'A' }, hasSessions: true });
+    assert.equal(feed.mode, 'ribbon');
+  });
+
+  it('schedule_very_stale — не показываем ленту сеансов', () => {
+    const { iceFeedView } = loadModel();
+    const very = {
+      schedule_stale: true,
+      schedule_very_stale: true,
+      schedule_observed_at: '2026-09-28T10:00:00Z',
+    };
+    const feed = iceFeedView({
+      card: { freshness: very, tier: 'A', phone: '+375 17 1' },
+      hasSessions: true,
+      now: new Date('2026-10-02T10:00:00Z'),
+    });
+    assert.equal(feed.mode, 'unconfirmed');
+    assert.match(feed.banner, /не обновлялось/);
   });
 });
 

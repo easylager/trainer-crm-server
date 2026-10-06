@@ -1148,6 +1148,19 @@ def webapp_arena_card_model_js(request: Request):
     )
 
 
+@app.get("/webapp/schedule-staleness-model.js")
+def webapp_schedule_staleness_model_js(request: Request):
+    """TASK-180 schedule staleness copy/dates (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "schedule-staleness-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/arena-card.js")
 def webapp_arena_card_js(request: Request):
     """TASK-052 arena card page logic. Use ``?v=…`` for long cache."""

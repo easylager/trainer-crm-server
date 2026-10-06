@@ -49,6 +49,9 @@ BLOCKED_RETRY_MINUTES = 360
 # Расписание считается устаревшим, если источник не читался успешно дольше порога.
 # 6 часов днём — это ~8 неудачных попыток подряд, а не одна случайная.
 DEFAULT_STALE_AFTER_HOURS = 6
+# TASK-180: «очень устарело» — дольше трёх суток без удачного прогона. Такие сеансы
+# пользователю больше не показываем как расписание: «не обновлялось N дней — уточните».
+VERY_STALE_AFTER_HOURS = 72
 
 CONFIG_POLL_MINUTES = "poll_minutes"
 CONFIG_STALE_AFTER_HOURS = "stale_after_hours"
@@ -248,6 +251,25 @@ def stale_after(config: dict[str, Any] | None) -> timedelta:
     return timedelta(hours=hours if hours is not None else DEFAULT_STALE_AFTER_HOURS)
 
 
+def _staleness_anchor(
+    *,
+    last_ok_at: datetime | None,
+    created_at: datetime | None,
+    sessions_observed_at: datetime | None,
+) -> datetime | None:
+    anchor = last_ok_at or created_at
+    if sessions_observed_at is not None:
+        s = _as_utc(sessions_observed_at)
+        if anchor is None or s > _as_utc(anchor):
+            anchor = sessions_observed_at
+    return anchor
+
+
+def very_stale_after(config: dict[str, Any] | None) -> timedelta:
+    """Порог «не показывать как расписание»: 72 ч, но не раньше обычного порога источника."""
+    return max(timedelta(hours=VERY_STALE_AFTER_HOURS), stale_after(config))
+
+
 def is_schedule_stale(
     *,
     has_enabled_job: bool,
@@ -268,14 +290,35 @@ def is_schedule_stale(
     """
     if not has_enabled_job:
         return False
-    anchor = last_ok_at or created_at
-    if sessions_observed_at is not None:
-        s = _as_utc(sessions_observed_at)
-        if anchor is None or s > _as_utc(anchor):
-            anchor = sessions_observed_at
+    anchor = _staleness_anchor(
+        last_ok_at=last_ok_at, created_at=created_at, sessions_observed_at=sessions_observed_at
+    )
     if anchor is None:
         return True
     return _as_utc(now) - _as_utc(anchor) > stale_after(config)
+
+
+def is_schedule_very_stale(
+    *,
+    has_enabled_job: bool,
+    last_ok_at: datetime | None,
+    config: dict[str, Any] | None,
+    now: datetime,
+    created_at: datetime | None = None,
+    sessions_observed_at: datetime | None = None,
+) -> bool:
+    """TASK-180: тот же якорь, что у ``is_schedule_stale``, но порог ``very_stale_after``.
+
+    Без парсера — всегда False (ручные сеансы ведёт админ, их свежесть так не меряем).
+    """
+    if not has_enabled_job:
+        return False
+    anchor = _staleness_anchor(
+        last_ok_at=last_ok_at, created_at=created_at, sessions_observed_at=sessions_observed_at
+    )
+    if anchor is None:
+        return True
+    return _as_utc(now) - _as_utc(anchor) > very_stale_after(config)
 
 
 def schedule_freshness_fields(
@@ -302,10 +345,20 @@ def schedule_freshness_fields(
         now=now,
         created_at=created_at,
     )
+    very_stale = stale and is_schedule_very_stale(
+        has_enabled_job=has_enabled_job,
+        last_ok_at=last_ok_at,
+        sessions_observed_at=sessions_observed_at,
+        config=config,
+        now=now,
+        created_at=created_at,
+    )
     return {
         "schedule_observed_at": observed.isoformat() if observed else None,
         "schedule_auto": bool(has_enabled_job),
         "schedule_stale": stale,
+        # TASK-180: > 72 ч без удачного прогона — сеансы не выдаём за расписание.
+        "schedule_very_stale": very_stale,
     }
 
 
@@ -324,14 +377,17 @@ __all__ = [
     "MINSK_TZ",
     "NIGHT_POLL_MINUTES",
     "SourceState",
+    "VERY_STALE_AFTER_HOURS",
     "base_poll_interval",
     "config_flag",
     "failure_retry_interval",
     "is_run_failure",
     "is_schedule_stale",
+    "is_schedule_very_stale",
     "next_poll_at",
     "next_source_state",
     "replay_source_state",
     "schedule_freshness_fields",
     "stale_after",
+    "very_stale_after",
 ]

@@ -22,6 +22,11 @@
 
   var MINSK_TZ = 'Europe/Minsk';
   var MAX_ROWS = 3;
+  var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
+
+  function staleApi() {
+    return rootRef.ScheduleStalenessModel || null;
+  }
 
   function pad2(n) {
     return n < 10 ? '0' + n : String(n);
@@ -113,6 +118,8 @@
     if (word) place += ' · ' + word;
     var day = dayLabel(session && session.local_date, now);
     if (day && day !== 'Сегодня') place = day + ' · ' + place;
+    var S = staleApi();
+    if (S && S.scheduleStaleFlag(session)) place += ' · ' + S.STALE_SHORT;
     return {
       time: hhmm(session && session.starts_at_local),
       place: place,

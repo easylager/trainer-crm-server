@@ -46,6 +46,7 @@ async def test_freshness_flags_in_card_list_and_sessions(app_use_test_db, db_ses
     st = cards[stale]["freshness"]
     assert st["schedule_stale"] is True
     assert st["schedule_auto"] is True
+    assert st["schedule_very_stale"] is False  # TASK-180: 9 ч < 72 ч
     # Последнее подтверждение — успешный прогон 9 ч назад, а не observed_at сеанса суточной давности.
     observed = datetime.fromisoformat(st["schedule_observed_at"])
     assert abs((observed - (now - timedelta(hours=9))).total_seconds()) < 60
