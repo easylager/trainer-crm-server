@@ -17,6 +17,7 @@ from src.ingestion.adapters_minsk_by_egress import (
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
+from src.shared.schedule_basis import SCHEDULE_BASIS_PHOTO
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_CAPTION_FILE = "data/fixtures/minsk-junost/instagram-caption-latest.txt"
@@ -121,4 +122,5 @@ class JunostInstagramCaptionParser(IceParser):
                 "slots_parsed": len(slots),
             },
             slots=slots,
+            schedule_basis=SCHEDULE_BASIS_PHOTO if slots else None,
         )

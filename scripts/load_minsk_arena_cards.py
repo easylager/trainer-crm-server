@@ -1008,13 +1008,13 @@ async def apply_card(
                         starts_at_local, ends_at_local,
                         price_adult_minor, price_child_minor, price_rental_minor, price_minor,
                         currency_code, session_label, age_note, status, source_id,
-                        observed_at, valid_until, confidence
+                        observed_at, valid_until, confidence, schedule_basis
                     ) VALUES (
                         :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date,
                         :starts_at_local, :ends_at_local,
                         :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor,
                         :currency_code, :session_label, :age_note, 'active', :source_id,
-                        :observed_at, :valid_until, :confidence
+                        :observed_at, :valid_until, :confidence, 'manual'
                     )
                     """
                 ),

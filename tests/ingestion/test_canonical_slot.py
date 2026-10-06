@@ -63,6 +63,7 @@ _EXPECTED_FIELDS = frozenset(
         "capacity_note",
         "external_url",
         "source_id",
+        "schedule_basis",
         "parser_job_id",
         "scrape_run_id",
     }

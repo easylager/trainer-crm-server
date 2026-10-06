@@ -21,6 +21,7 @@ from src.ingestion.types import (
     Extraction,
     ParserJob,
 )
+from src.shared.schedule_basis import resolve_schedule_basis
 
 _AMOUNT = re.compile(r"(\d+(?:[.,]\d+)?)")
 _KOPECK = re.compile(r"коп", re.IGNORECASE)
@@ -171,6 +172,12 @@ class IceSessionNormalizer:
         currency = str(config.get("currency_code") or "BYN")
         already_minor = _truthy_minor_flag(config)
         default_duration = int(config.get("default_duration_minutes") or 60)
+        # TASK-179: основание одно на прогон — из Extraction, иначе из конфига/реестра парсера.
+        session_basis = resolve_schedule_basis(
+            parser_key=job.parser_key,
+            job_config=config,
+            extraction_basis=extraction.schedule_basis,
+        )
         observed = extraction.observed_at or now
         if observed.tzinfo is None:
             observed = observed.replace(tzinfo=timezone.utc)
@@ -264,6 +271,7 @@ class IceSessionNormalizer:
                     capacity_note=_clip_text(bucket["capacity_note"], _CAPACITY_NOTE_MAX_LEN),
                     external_url=_safe_external_url(bucket["external_url"]),
                     source_id=_safe_source_id(bucket["source_id"]),
+                    schedule_basis=session_basis,
                     parser_job_id=job.id,
                     scrape_run_id=None,
                 )
