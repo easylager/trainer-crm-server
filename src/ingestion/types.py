@@ -133,3 +133,7 @@ class ScrapeRunRecord:
     persisted_id: int | None = None
     http_status: int | None = None
     error_code: str | None = None
+    # TASK-187: окно публикации (только в памяти, в ice_scrape_runs не пишется).
+    # None → дефолты publish_horizon (14 дней, Europe/Minsk).
+    publish_horizon_days: int | None = None
+    publish_timezone: str | None = None

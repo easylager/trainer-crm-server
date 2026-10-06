@@ -4,13 +4,14 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Mapping
 
 from src.application.ice_session_use_cases import (
     DEFAULT_ARENA_TZ,
     STATUS_ACTIVE,
+    IceSessionValidationError,
     compute_session_datetimes,
     parse_hhmm,
 )
@@ -104,10 +105,27 @@ def _as_date(value: str | date) -> date:
     return date.fromisoformat(str(value)[:10])
 
 
+_MIDNIGHT_END = frozenset({"24:00", "24:00:00", "24.00"})
+
+
+def _is_2400(value: str | time | None) -> bool:
+    return isinstance(value, str) and value.strip() in _MIDNIGHT_END
+
+
 def _as_time(value: str | time) -> time:
+    """ЧЧ:ММ → time. ``24:00`` (конец дня на сайтах катков) → 00:00 (TASK-187)."""
     if isinstance(value, time):
         return time(value.hour, value.minute)
+    if _is_2400(value):
+        return time(0, 0)
     return parse_hhmm(str(value))
+
+
+def _as_start(local_date: date, value: str | time) -> tuple[date, time]:
+    """Начало сеанса. ``24:00`` как НАЧАЛО — это 00:00 следующего дня, а не этого."""
+    if _is_2400(value):
+        return local_date + timedelta(days=1), time(0, 0)
+    return local_date, _as_time(value)
 
 
 def _truthy_minor_flag(config: dict[str, Any]) -> bool:
@@ -123,7 +141,8 @@ class NormalizeReport:
 
     ``extracted`` — сколько слотов вернул адаптер; ``published`` — сколько черновиков
     дошло до валидации. Разница раскладывается по причинам: неизвестный вид сеанса,
-    дубль того же начала (слит с другим слотом) и сеанс, который уже закончился.
+    дубль того же начала (слит с другим слотом), сеанс, который уже закончился, и
+    строка с нечитаемой датой/временем (TASK-187: отбрасывается строка, не прогон).
     """
 
     extracted: int = 0
@@ -131,13 +150,18 @@ class NormalizeReport:
     merged_duplicates: int = 0
     past: int = 0
     published: int = 0
+    invalid_time: int = 0
 
     @property
     def dropped(self) -> int:
         return max(0, self.extracted - self.published)
 
-    def summary(self) -> str:
-        """«извлечено 16, опубликовано 0: в прошлом 16» — для error_summary и логов."""
+    def summary(self, *, published: int | None = None, extra: Mapping[str, int] | None = None) -> str:
+        """«извлечено 16, опубликовано 0: в прошлом 16» — для error_summary и логов.
+
+        TASK-187: планировщик дописывает потери после нормализации (окно публикации,
+        построчная валидация) через ``extra`` и итог через ``published``.
+        """
         reasons = []
         if self.past:
             reasons.append(f"в прошлом {self.past}")
@@ -145,7 +169,13 @@ class NormalizeReport:
             reasons.append(f"неизвестный вид {self.unknown_kind}")
         if self.merged_duplicates:
             reasons.append(f"дубли {self.merged_duplicates}")
-        head = f"извлечено {self.extracted}, опубликовано {self.published}"
+        if self.invalid_time:
+            reasons.append(f"кривые дата/время {self.invalid_time}")
+        for label, count in (extra or {}).items():
+            if count:
+                reasons.append(f"{label} {count}")
+        shown = self.published if published is None else published
+        head = f"извлечено {self.extracted}, опубликовано {shown}"
         return f"{head}: {', '.join(reasons)}" if reasons else head
 
 
@@ -186,13 +216,20 @@ class IceSessionNormalizer:
         unknown_kind = 0
         merged_duplicates = 0
         past = 0
+        invalid_time = 0
         for raw in extraction.slots:
             kind = map_parser_kind(raw.kind_raw)
             if kind is None:
                 unknown_kind += 1
                 continue
-            local_date = _as_date(raw.local_date)
-            starts_at_local = _as_time(raw.starts_at_local)
+            try:
+                local_date, starts_at_local = _as_start(_as_date(raw.local_date), raw.starts_at_local)
+                if raw.ends_at_local:
+                    _as_time(raw.ends_at_local)
+            except (IceSessionValidationError, ValueError, TypeError):
+                # TASK-187: одна нечитаемая строка — минус строка, а не весь прогон.
+                invalid_time += 1
+                continue
             key = (local_date, starts_at_local)
             if key in merged:
                 merged_duplicates += 1
@@ -234,6 +271,7 @@ class IceSessionNormalizer:
             duration = default_duration
             end_raw = bucket["ends_at_local"]
             if end_raw:
+                # 24:00 → 00:00: span ≤ 0 и ниже переносится на следующие сутки (22:30–24:00 = 90 мин).
                 end_local = _as_time(end_raw)
                 start_minutes = starts_at_local.hour * 60 + starts_at_local.minute
                 end_minutes = end_local.hour * 60 + end_local.minute
@@ -281,6 +319,7 @@ class IceSessionNormalizer:
             unknown_kind=unknown_kind,
             merged_duplicates=merged_duplicates,
             past=past,
+            invalid_time=invalid_time,
             published=len(drafts),
         )
         return drafts, report

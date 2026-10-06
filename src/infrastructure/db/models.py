@@ -375,6 +375,17 @@ class IceSession(Base):
             unique=True,
             postgresql_where=text("recurrence_key IS NOT NULL"),
         ),
+        # TASK-187 (migration 0219): одна строка парсера на (арена, начало, вид).
+        Index(
+            "uq_ice_sessions_parser_slot",
+            "arena_id",
+            "starts_at_utc",
+            "kind",
+            unique=True,
+            postgresql_where=text(
+                "source_id IS NOT NULL AND source_id <> 'admin' AND source_id NOT LIKE 'etalon_%'"
+            ),
+        ),
         CheckConstraint(
             "kind IN ('public_skate', 'open_ice', 'rental', 'school_group', 'event')",
             name="ck_ice_sessions_kind",
