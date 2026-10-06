@@ -21,6 +21,7 @@ from src.application.ice_city_day import (
 from src.application.ice_city_day_og import render_ice_city_day_og
 from src.application.ice_city_day_page import ice_city_day_paths, render_ice_city_day_page
 from src.application.catalog_consumer_events import record_public_page_view
+from src.application.png_render_cache import render_png_cached
 from src.application.place_links import catalog_start_param, public_telegram_cta_url
 from src.shared.config import Settings
 
@@ -96,5 +97,14 @@ async def ice_city_day_og(
 ) -> Response:
     """og:image для страницы выше. Рисуется на лету из той же выборки — кэша на диске нет."""
     city, day = await _load(session, city_ref)
-    png = render_ice_city_day_og(city_name=str(city["name"]), day=day)
+    # Рендер PIL — в threadpool и через LRU: параметры запроса картинку не меняют (query не читаем),
+    # ключ — город + сама выборка, так что обновление расписания сбрасывает кэш само.
+    png = await render_png_cached(
+        "ice_og",
+        {"city_id": int(city["id"]), "city": str(city["name"])},
+        day,
+        render_ice_city_day_og,
+        city_name=str(city["name"]),
+        day=day,
+    )
     return Response(content=png, media_type="image/png", headers=_OG_CACHE)

@@ -96,6 +96,18 @@ class Settings(BaseSettings):
     api_rate_limit_upload_window_sec: float = 60.0
     api_rate_limit_default_max_requests: int = 200
     api_rate_limit_default_window_sec: float = 60.0
+    # TASK-190: публичные страницы (/p /c /ice /r) и PNG (og/story), на IP за окно.
+    api_rate_limit_page_max_requests: int = 120
+    api_rate_limit_page_window_sec: float = 60.0
+    api_rate_limit_image_max_requests: int = 40
+    api_rate_limit_image_window_sec: float = 60.0
+    api_rate_limit_bot_max_requests: int = 600
+    api_rate_limit_bot_window_sec: float = 60.0
+    # leftmost (по умолчанию: Railway режет клиентский XFF, левая запись — реальный IP) |
+    # rightmost_hops (платформа дописывает справа). См. src/shared/client_ip.py, docs/ops.
+    client_ip_strategy: str = "leftmost"
+    # Только для rightmost_hops: сколько крайних справа записей XFF добавили наши прокси.
+    trusted_proxy_hops: int = 1
     # /go attribution accepts only provisioned campaign slugs; valid but unconfigured links still redirect.
     catalog_entry_source_keys: list[str] = ["insta", "flyer-olimpik", "direct", "other"]
     # Client self-booking anti-spam (per Telegram user + pending quotas).

@@ -43,6 +43,7 @@ from src.application.place_links import (
     parse_place_deep_link,
 )
 from src.shared.notification_hours import NOTIFICATION_TZ
+from src.shared.ua_class import classify_user_agent  # noqa: F401  (re-export for telemetry)
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +343,7 @@ async def get_catalog_wau(
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND actor_hash IS NOT NULL
                   AND kind IN (:pv, :mini)
+                  AND COALESCE(payload->>'ua_class', 'human') = 'human'
                 """
             ),
             {
@@ -376,12 +378,10 @@ async def record_public_page_view(
 
     if not isinstance(request, Request):
         return
-    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-    client_ip = forwarded[:64] if forwarded else (request.client.host if request.client else None)
-    actor = public_actor_hash(
-        client_ip=client_ip,
-        user_agent=request.headers.get("user-agent"),
-    )
+    from src.api.middleware.http_limits import client_ip_from_request
+
+    user_agent = request.headers.get("user-agent")
+    actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
     await record_catalog_consumer_event(
         session,
         kind=KIND_PUBLIC_PAGE_VIEW,
@@ -389,7 +389,7 @@ async def record_public_page_view(
         actor_hash=actor,
         city_id=city_id,
         arena_id=arena_id,
-        payload={"path": str(request.url.path)},
+        payload={"path": str(request.url.path), "ua_class": classify_user_agent(user_agent)},
     )
 
 
@@ -422,6 +422,7 @@ async def get_catalog_weekly_unique_by_city(
                 WHERE e.occurred_at >= :since AND e.occurred_at < :as_of
                   AND e.actor_hash IS NOT NULL
                   AND e.kind IN (:pv, :mini)
+                  AND COALESCE(e.payload->>'ua_class', 'human') = 'human'
                 GROUP BY 1, 2, 3
                 ORDER BY 1 DESC, 4 DESC
                 """
@@ -473,6 +474,7 @@ async def get_catalog_top_arenas_by_events(
                 WHERE e.occurred_at >= :since AND e.occurred_at < :as_of
                   AND e.arena_id IS NOT NULL
                   AND e.kind IN (:pv, :mini)
+                  AND COALESCE(e.payload->>'ua_class', 'human') = 'human'
                 GROUP BY e.arena_id, a.name, e.city_id
                 ORDER BY events DESC, e.arena_id
                 LIMIT :lim
@@ -550,6 +552,7 @@ async def get_catalog_virality_cb_metrics(
                 SELECT COUNT(*) FROM catalog_consumer_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND kind = :kind
+                  AND COALESCE(payload->>'ua_class', 'human') = 'human'
                 """
             ),
             {"since": since, "as_of": as_of_dt, "kind": KIND_PUBLIC_TELEGRAM_CTA},

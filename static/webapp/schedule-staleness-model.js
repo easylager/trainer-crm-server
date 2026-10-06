@@ -14,7 +14,12 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var MINSK_TZ = 'Europe/Minsk';
+  var MT =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./minsk-time.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.MinskTime
+        : null;
   var STALE_SHORT = 'могло измениться';
   var MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
@@ -24,60 +29,15 @@
     return isNaN(d.getTime()) ? null : d;
   }
 
-  function minskYmd(d) {
-    var parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: MINSK_TZ,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(d);
-    var y = '1970';
-    var m = '01';
-    var day = '01';
-    for (var i = 0; i < parts.length; i++) {
-      if (parts[i].type === 'year') y = parts[i].value;
-      if (parts[i].type === 'month') m = parts[i].value;
-      if (parts[i].type === 'day') day = parts[i].value;
-    }
-    return { y: Number(y), m: Number(m), d: Number(day) };
-  }
-
   function minskDaysBetween(earlier, now) {
-    var a = minskYmd(earlier);
-    var b = minskYmd(now);
-    var da = Date.UTC(a.y, a.m - 1, a.d);
-    var db = Date.UTC(b.y, b.m - 1, b.d);
-    return Math.round((db - da) / 86400000);
-  }
-
-  function pad2(n) {
-    return n < 10 ? '0' + n : String(n);
-  }
-
-  function minskLocalParts(d) {
-    var parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: MINSK_TZ,
-      hour: '2-digit',
-      minute: '2-digit',
-      day: 'numeric',
-      month: 'numeric',
-      hour12: false,
-    }).formatToParts(d);
-    var out = { hour: 0, minute: 0, day: 1, month: 1 };
-    for (var i = 0; i < parts.length; i++) {
-      if (parts[i].type === 'hour') out.hour = Number(parts[i].value);
-      if (parts[i].type === 'minute') out.minute = Number(parts[i].value);
-      if (parts[i].type === 'day') out.day = Number(parts[i].value);
-      if (parts[i].type === 'month') out.month = Number(parts[i].value);
-    }
-    return out;
+    return MT.daysBetweenCalendar(earlier, now);
   }
 
   function checkedAtLabel(observed, now) {
     var moment = parseDt(observed);
     if (!moment || !now) return '';
-    var local = minskLocalParts(moment);
-    var hhmm = pad2(local.hour) + ':' + pad2(local.minute);
+    var local = MT.localParts(moment);
+    var hhmm = MT.pad2(local.hour) + ':' + MT.pad2(local.minute);
     var days = minskDaysBetween(moment, now);
     if (days <= 0) return 'сегодня в ' + hhmm;
     if (days === 1) return 'вчера в ' + hhmm;

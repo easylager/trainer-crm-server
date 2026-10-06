@@ -1135,6 +1135,19 @@ def webapp_opening_hours_js(request: Request):
     )
 
 
+@app.get("/webapp/minsk-time.js")
+def webapp_minsk_time_js(request: Request):
+    """TASK-184: календарь и «сейчас» каталога (Europe/Minsk / TZ арены)."""
+    path = _WEBAPP_DIR / "minsk-time.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/arena-card-model.js")
 def webapp_arena_card_model_js(request: Request):
     """TASK-052 arena card view-model (pure). Use ``?v=…`` for long cache."""

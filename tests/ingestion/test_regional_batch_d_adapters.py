@@ -151,6 +151,32 @@ async def test_soligorsk_szk_matches_expected_fixture_and_handles_midnight_cross
 
 
 @pytest.mark.asyncio
+async def test_soligorsk_szk_multi_day_single_h3_layout_2026_10_06(tmp_path: Path) -> None:
+    """С октября 2026 szk.by держит все дни в одном <h3>, разделённых <br> (live-снимок 2026-10-06)."""
+    (tmp_path / "massovoe-katanie.html").write_bytes(
+        (_FIXTURES / "soligorsk-szk/massovoe-katanie-2026-10-06.html").read_bytes()
+    )
+    cfg = dict(SOLIGORSK_SZK_CONFIG)
+    cfg["fixture_dir"] = str(tmp_path)
+    cfg["run_date"] = "2026-10-06"
+    extraction = await SoligorskSzkParser().extract(
+        _job(arena_id=19, parser_key=PARSER_KEY_SOLIGORSK_SZK, config=cfg, job_id=104)
+    )
+    got = sorted((s.local_date, s.starts_at_local, s.ends_at_local) for s in extraction.slots)
+    assert got == [
+        ("2026-10-06", "21:00", "21:45"),
+        ("2026-10-07", "21:00", "21:45"),
+        ("2026-10-08", "21:00", "21:45"),
+        ("2026-10-09", "21:00", "21:45"),
+        ("2026-10-10", "16:00", "16:45"),
+        ("2026-10-10", "21:00", "21:45"),
+        ("2026-10-11", "15:00", "15:45"),
+        ("2026-10-11", "21:00", "21:45"),
+    ]
+    assert all(s.price_adult == 660 and s.price_child == 500 for s in extraction.slots)
+
+
+@pytest.mark.asyncio
 async def test_shklov_arena_ocr_matches_expected_fixture() -> None:
     skip_unless_tesseract_rus()
     expected = json.loads((_FIXTURES / "shklov-arena/expected.json").read_text(encoding="utf-8"))

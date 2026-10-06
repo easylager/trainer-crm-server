@@ -16,13 +16,13 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.concurrency import run_in_threadpool
 
 from src.api.deps import get_session
 from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
 from src.application.place_card_image import render_place_card, share_display_path
 from src.application.arena_public_use_cases import resolve_merged_arena_id
 from src.application.catalog_consumer_events import record_public_page_view
+from src.application.png_render_cache import render_png_cached
 from src.application.place_links import (
     place_image_url,
     place_page_url,
@@ -224,7 +224,14 @@ async def _image(
     if story:
         kwargs["share_url"] = page
         kwargs["display_path"] = share_display_path(page)
-    png = await run_in_threadpool(render_place_card, view, **kwargs)
+    png = await render_png_cached(
+        "place_story" if story else "place_og",
+        {"arena_id": arena_id, "session": focus_id, "invite": invite, "page": page},
+        view,
+        render_place_card,
+        view,
+        **kwargs,
+    )
     cache = _IMAGE_CACHE_SESSION if focus_id is not None else _IMAGE_CACHE
     return Response(content=png, media_type="image/png", headers=cache)
 
@@ -393,7 +400,14 @@ async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, 
     page = _base() + selection_path(city_name=str(city["name"]), venue=venue, when=when)
     view["share_url"] = page
     view["display_path"] = share_display_path(page)
-    png = await run_in_threadpool(render_selection_card, view, story=story)
+    png = await render_png_cached(
+        "selection_story" if story else "selection_og",
+        {"venue": venue, "when": when, "page": page},
+        view,
+        render_selection_card,
+        view,
+        story=story,
+    )
     return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
 
 
