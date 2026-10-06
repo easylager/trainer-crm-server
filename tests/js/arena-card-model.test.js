@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const stalePath = path.resolve(__dirname, '../../static/webapp/schedule-staleness-model.js');
+const modePath = path.resolve(__dirname, '../../static/webapp/arena-schedule-mode-model.js');
 const modelPath = path.resolve(
   __dirname,
   '../../static/webapp/arena-card-model.js'
@@ -17,6 +18,8 @@ const modelPath = path.resolve(
 function loadModel() {
   delete require.cache[require.resolve(stalePath)];
   require(stalePath);
+  delete require.cache[require.resolve(modePath)];
+  require(modePath);
   const resolved = require.resolve(modelPath);
   delete require.cache[resolved];
   return require(modelPath);
@@ -875,6 +878,36 @@ describe('TASK-180: устаревшее расписание в карточк�
     });
     assert.equal(feed.mode, 'unconfirmed');
     assert.match(feed.banner, /не обновлялось/);
+  });
+});
+
+describe('TASK-204 iceFeedView schedule_mode', () => {
+  it('phone mode shows call href', () => {
+    const { iceFeedView } = loadModel();
+    const feed = iceFeedView({
+      card: { schedule_mode: 'phone', phone: '+375291112233', tier: 'B' },
+      hasSessions: false,
+    });
+    assert.equal(feed.mode, 'phone');
+    assert.equal(feed.banner, 'Расписание по телефону');
+    assert.equal(feed.callHref, 'tel:+375291112233');
+  });
+
+  it('season_closed mode before calendar season banner', () => {
+    const { iceFeedView } = loadModel();
+    const feed = iceFeedView({
+      card: {
+        schedule_mode: 'season_closed',
+        schedule_reopen_date: '2026-11-01',
+        schedule_mode_note: 'ремонт',
+        in_season: false,
+        season_start_month: 11,
+      },
+      hasSessions: false,
+    });
+    assert.equal(feed.mode, 'closed');
+    assert.match(feed.banner, /Сезон закрыт/);
+    assert.match(feed.banner, /01\.11/);
   });
 });
 

@@ -8,6 +8,7 @@ expected to reconcile the two.
 from __future__ import annotations
 
 PARSER_KEY_BOBRUISK_ARENA = "bobruisk_arena_v1"
+PARSER_KEY_MOLODECHNO_SRC = "molodechno_src_v1"
 PARSER_KEY_SOLIGORSK_SZK = "soligorsk_szk_v1"
 PARSER_KEY_SHKLOV_ARENA = "shklov_arena_v1"
 PARSER_KEY_GOMEL_LDS = "gomel_lds_v1"
@@ -23,6 +24,15 @@ BOBRUISK_ARENA_CONFIG: dict = {
 
 SOLIGORSK_SZK_CONFIG: dict = {
     "url": "http://www.szk.by/uslugi/massovoe-katanie",
+    "timezone": "Europe/Minsk",
+    "kind": "public_skate",
+    "default_duration_minutes": 45,
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
+MOLODECHNO_SRC_CONFIG: dict = {
+    "url": "https://src.by/WDKL/%D0%BB%D0%B5%D0%B4%D0%BE%D0%B2%D0%B0%D1%8F-%D0%B0%D1%80%D0%B5%D0%BD%D0%B0",
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 45,

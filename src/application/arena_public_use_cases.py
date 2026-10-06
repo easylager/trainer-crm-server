@@ -42,6 +42,15 @@ from src.application.training_group_use_cases import (
     list_open_training_groups_catalog,
 )
 from src.application.trainer_use_cases import list_active_trainers_for_client
+from src.shared.arena_schedule_mode import (
+    PHONE_LINE,
+    SCHEDULE_MODE_PHONE,
+    SCHEDULE_MODE_SEASON_CLOSED,
+    arena_schedule_mode_sql,
+    normalize_schedule_mode,
+    schedule_mode_public_fields,
+    season_closed_user_line,
+)
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.currency import currency_for_country
 from src.shared.ice_discovery_scope import (
@@ -341,6 +350,23 @@ def _place_line(item: Mapping[str, Any]) -> str:
 
 def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     currency = item.get("currency_code") or "BYN"
+    mode = normalize_schedule_mode(item.get("schedule_mode"))
+    if intent == INTENT_SKATE and mode == SCHEDULE_MODE_PHONE:
+        if normalize_venue_type(item.get("venue_type")) in (VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR):
+            return {"kind": "phone", "text": PHONE_LINE, "currency_code": currency}
+    if intent == INTENT_SKATE and mode == SCHEDULE_MODE_SEASON_CLOSED:
+        if normalize_venue_type(item.get("venue_type")) in (VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR):
+            reopen = item.get("reopen_date")
+            if isinstance(reopen, datetime):
+                reopen = reopen.date()
+            return {
+                "kind": "season_closed",
+                "text": season_closed_user_line(
+                    reopen_date=reopen,
+                    note=item.get("schedule_mode_note"),
+                ),
+                "currency_code": currency,
+            }
     if intent == INTENT_SKATE and normalize_venue_type(item.get("venue_type")) not in (
         VENUE_TYPE_ICE,
         VENUE_TYPE_OUTDOOR,
@@ -485,6 +511,7 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         # TASK-180: у очень устаревшего расписания карточка просит «уточните по телефону» —
         # только если телефон действительно есть (он и так публичный в карточке места).
         "phone": item.get("phone"),
+        **schedule_mode_public_fields(item),
     }
     if venue_type == VENUE_TYPE_SHOP:
         payload["shop_services"] = [k for k in SHOP_SERVICE_KEYS if amenities.get(k) is True]
@@ -499,6 +526,7 @@ SELECT
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
     p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+    p.schedule_mode, p.reopen_date, p.schedule_mode_note,
     p.amenities, p.status, p.verified_at, p.updated_at AS profile_updated_at,
     c.country, c.name AS city_name,
     nxt.id AS next_session_id,
@@ -1003,6 +1031,7 @@ async def find_nearest_ice_now(
                 JOIN cities c ON c.id = a.city_id
                 WHERE {_CURRENT_SESSION_SQL}
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
+                  AND {arena_schedule_mode_sql()} <> 'season_closed'
                   AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                   AND s.local_date <= :horizon
                 ORDER BY s.starts_at_utc
@@ -1177,6 +1206,7 @@ JOIN cities c ON c.id = a.city_id
 WHERE {_CURRENT_SESSION_SQL}
   AND {PUBLIC_ARENA_VISIBLE_SQL}
   AND NOT (a.id = ANY(:unconfirmed_ids))
+  AND {arena_schedule_mode_sql()} <> 'season_closed'
 {city_filter}ORDER BY s.starts_at_utc, a.id
 LIMIT 4
 """
@@ -1415,6 +1445,7 @@ async def get_public_arena_card(
         "opening_hours": _as_mapping(row.get("opening_hours")),
         "season_start_month": season_start,
         "season_end_month": season_end,
+        **schedule_mode_public_fields(row),
         "in_season": is_in_season(season_start, season_end, _today_minsk().month),
         "amenities": _as_mapping(row.get("amenities")),
         "contacts": {
