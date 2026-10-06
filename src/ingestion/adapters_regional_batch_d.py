@@ -277,8 +277,10 @@ class SoligorskSzkParser(IceParser):
         end_idx = html.find("Продолжительность", start_idx) if start_idx >= 0 else -1
         region = html[start_idx:end_idx] if start_idx >= 0 and end_idx > start_idx else html
         slots: list[ExtractedSlot] = []
-        for block in _H3.finditer(region):
-            text = _detag_join(block.group(1))
+        # Одна строка расписания на <h3> (старая вёрстка) или несколько дней
+        # в одном <h3>, разделённых <br> (с октября 2026) — разбираем по строкам.
+        day_lines = [line for block in _H3.finditer(region) for line in _detag_lines(block.group(1))]
+        for text in day_lines:
             m = _DAY_LINE_DASH.match(text)
             if not m:
                 continue
@@ -288,7 +290,7 @@ class SoligorskSzkParser(IceParser):
             local_date = infer_date_from_day_month(int(m.group(1)), month, reference)
             if local_date is None:
                 continue
-            for seg in m.group(3).split(";"):
+            for seg in re.split(r"[;,]", m.group(3)):  # «16.00-16.45 , 21.00-21.45» — через запятую
                 tm = _TIME_RANGE_DOT.search(seg)
                 if not tm:
                     continue
