@@ -23,6 +23,12 @@ from src.ingestion.source_io import egress_proxy
 from src.ingestion.normalize import IceSessionNormalizer, NormalizeReport
 from src.ingestion.parsers import ParserRegistry, default_registry
 from src.ingestion.publish import IceSessionPublisher
+from src.ingestion.publish_horizon import (
+    clip_to_publish_window,
+    publish_horizon_days,
+    publish_timezone,
+    publish_window,
+)
 from src.ingestion.scrape_runs import IceScrapeRunRecorder, LoggingScrapeRunRecorder
 from src.ingestion.types import (
     RUN_STATUS_BLOCKED,
@@ -32,7 +38,7 @@ from src.ingestion.types import (
     ParserJob,
     ScrapeRunRecord,
 )
-from src.ingestion.validate import IceSessionValidator
+from src.ingestion.validate import IceSessionValidator, max_invalid_slot_ratio
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +273,12 @@ class IceIngestScheduler:
             with egress_proxy(proxy):
                 extraction = await self._extract_with_deadline(parser, job, timeout_s)
             drafts, report = self._normalize(extraction, job, now)
-            validated = self._validator.validate(drafts)
+            # TASK-187: вне окна показа — не публикуем; кривая строка — минус строка, не прогон.
+            drafts, beyond_horizon = clip_to_publish_window(drafts, self._publish_window(job, now))
+            outcome = self._validator.validate_outcome(
+                drafts, max_drop_ratio=max_invalid_slot_ratio(job.config)
+            )
+            validated = outcome.validated
         except IceSessionValidationError as exc:
             return (
                 self._record(
@@ -325,13 +336,20 @@ class IceIngestScheduler:
         dropped = max(0, len(extraction.slots) - len(validated))
         # TASK-178: пустой прогон говорит, где потерялись слоты. slots_found — опубликовано,
         # slots_dropped — отброшено; извлечено = found + dropped.
+        # TASK-187: отброшенное после нормализации (окно, построчная валидация) входит в тот же
+        # dropped (= извлечено − опубликовано, без двойного счёта), а причины — в summary.
         error_code = None
         error_message = None
+        if dropped:
+            extra = {"за горизонтом": beyond_horizon}
+            for reason, count in outcome.reason_counts().items():
+                extra[f"отбраковано ({reason})"] = count
+            error_message = report.summary(published=len(validated), extra=extra)
         if status == RUN_STATUS_EMPTY:
             error_code = (
                 ERROR_CODE_EMPTY_AFTER_FILTER if extraction.slots else ERROR_CODE_EMPTY_SOURCE
             )
-            error_message = report.summary()
+            error_message = error_message or report.summary()
         return (
             self._record(
                 job,
@@ -345,6 +363,14 @@ class IceIngestScheduler:
                 error_message=error_message,
             ),
             validated,
+        )
+
+    @staticmethod
+    def _publish_window(job: ParserJob, now: datetime):
+        return publish_window(
+            now=now,
+            timezone_name=publish_timezone(job.config),
+            horizon_days=publish_horizon_days(job.config),
         )
 
     def _normalize(self, extraction, job: ParserJob, now: datetime):
@@ -403,6 +429,8 @@ class IceIngestScheduler:
             finished_at=finished_at,
             snapshot=snapshot,
             error_code=error_code,
+            publish_horizon_days=publish_horizon_days(job.config),
+            publish_timezone=publish_timezone(job.config),
         )
 
 
