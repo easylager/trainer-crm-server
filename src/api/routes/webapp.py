@@ -4910,6 +4910,9 @@ async def post_admin_city(
     )
     row = r.fetchone()
     await session.commit()
+    from src.application.ice_city_day import invalidate_public_city_cache
+
+    invalidate_public_city_cache()
     return {"id": row[0], "name": row[1], "sort_order": row[2]}
 
 
@@ -4944,6 +4947,9 @@ async def patch_admin_city(
     if r.rowcount == 0:
         raise HTTPException(status_code=404, detail="City not found")
     await session.commit()
+    from src.application.ice_city_day import invalidate_public_city_cache
+
+    invalidate_public_city_cache()
     return {"ok": True}
 
 

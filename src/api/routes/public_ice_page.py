@@ -28,10 +28,9 @@ from src.shared.html_template import fill_placeholders
 
 router = APIRouter(tags=["public-ice-share"])
 
-# Страница живая: её открывают спустя часы после пересылки, и к этому моменту утренние
-# сеансы уже прошли. Короткий кэш достаточен, чтобы пережить всплеск от одного репоста,
-# и слишком короткий, чтобы показать вчерашнее расписание.
-_PAGE_CACHE = {"Cache-Control": "public, max-age=300"}
+# TASK-189 пишет просмотр на каждый заход. Публичный кэш страницы его проглатывает,
+# поэтому HTML не кэшируется. Картинка og по-прежнему живёт своим max-age.
+_PAGE_CACHE = {"Cache-Control": "private, no-store"}
 _OG_CACHE = {"Cache-Control": "public, max-age=900"}
 
 

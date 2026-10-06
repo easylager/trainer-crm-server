@@ -38,9 +38,9 @@ from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scop
 
 router = APIRouter(tags=["public-place"])
 
-# Страница живая (расписание), но переживает всплеск от одного репоста: 5 минут.
-# Картинка дороже в рендере и меняется реже — 15 минут, как у «Лёд сегодня».
-_PAGE_CACHE = {"Cache-Control": "public, max-age=300"}
+# TASK-189 считает просмотр на каждый заход на /p/ и /c/. Публичный кэш обошёл бы
+# origin и занизил счётчик. Картинки по-прежнему кэшируются: просмотр они не пишут.
+_PAGE_CACHE = {"Cache-Control": "private, no-store"}
 _IMAGE_CACHE = {"Cache-Control": "public, max-age=900"}
 _IMAGE_CACHE_SESSION = {"Cache-Control": "private, no-store, must-revalidate"}
 

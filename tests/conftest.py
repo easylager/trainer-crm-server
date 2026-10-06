@@ -21,6 +21,7 @@ would use a stale factory / wrong connection.
 HTTP handlers never open a second session on the same asyncpg connection (asyncpg is strictly
 single-flight per connection).
 """
+
 import os
 import uuid
 from collections.abc import AsyncGenerator
@@ -219,12 +220,16 @@ async def _reset_global_async_db_engines() -> AsyncGenerator[None, None]:
     hitting pool_pre_ping on a dead loop («Future attached to a different loop»).
     """
     from src.api.middleware.http_limits import reset_http_limiters_for_tests
+    from src.application.ice_city_day import invalidate_public_city_cache
 
     await _dispose_global_async_engines()
     reset_http_limiters_for_tests()
+    # Города в тесте живут внутри откатываемой транзакции. Кэш процесса этого не видит.
+    invalidate_public_city_cache()
     yield
     await _dispose_global_async_engines()
     reset_http_limiters_for_tests()
+    invalidate_public_city_cache()
 
 
 @pytest.fixture

@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_public_use_cases import (
     get_public_arena_card,
-    list_public_arena_sessions,
+    public_arena_session_days,
 )
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
@@ -336,13 +336,12 @@ async def load_place_view(
             note=card.get("schedule_mode_note"),
         )
     if _skating(card) and schedule_mode not in (SCHEDULE_MODE_PHONE, SCHEDULE_MODE_SEASON_CLOSED):
-        feed = await list_public_arena_sessions(
+        lookup_days = await public_arena_session_days(
             session,
-            str(card["id"]),
+            int(card["id"]),
             date_from=today,
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
-        lookup_days = list((feed or {}).get("days") or [])
         # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API).
         fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
         level = staleness_level(fresh)
