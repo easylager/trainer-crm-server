@@ -1217,7 +1217,8 @@ describe('TASK-146 (Q-006): окно времени', () => {
 
   it('whenBootFromSearch читает day= и when=', () => {
     const { whenBootFromSearch } = loadModel();
-    assert.deepEqual(whenBootFromSearch('?day=2026-10-08'), { when: 'day', whenDay: '2026-10-08' });
+    // Дата не «завтра» относительно minsk today — иначе модель нормализует в when=tomorrow.
+    assert.deepEqual(whenBootFromSearch('?day=2030-06-15'), { when: 'day', whenDay: '2030-06-15' });
     assert.deepEqual(whenBootFromSearch('?when=weekend'), { when: 'weekend', whenDay: '' });
   });
 
