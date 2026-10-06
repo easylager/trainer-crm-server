@@ -31,8 +31,8 @@
     shopWhen: 'any',
     shopUiPicker: false,
     shopMapFiltersOpen: false,
-    /* TASK-146 (Q-006): окно времени. auto — умный дефолт на сервере; window — что применено. */
-    when: 'auto',
+    /* TASK-146 (Q-006): окно времени. any — без фильтра (первое впечатление: больше слотов). */
+    when: 'any',
     whenDay: '',
     whenMenuExpanded: false,
     urlWhenHydrated: false,
@@ -137,6 +137,9 @@
       },
       global.sessionStorage
     );
+    if (M.whenSkateFilterContext(state.intent, state.venueTypes)) {
+      M.saveWhenPreference(state.when, state.whenDay, global.localStorage);
+    }
   }
 
   var mapCtl = null;
@@ -2688,17 +2691,20 @@
       /* TASK-149: ?when=<окно> из ссылки (хаб «Сегодня вечером»). Читаем ПОСЛЕ intent и
          venue: именно они решают, видны ли чипы окна. У «Тренеров» и у не-ледовых типов
          окна нет — параметр молча игнорируем. Без ?when=/ ?day= восстанавливаем окно из
-         sessionStorage (возврат с карточки арены); ссылка сильнее сохранённого. */
+         sessionStorage (возврат с карточки арены), иначе localStorage (Главная → Поиск);
+         ссылка сильнее сохранённого. */
       var urlWhenBoot = M.hydrateWhenFromUrl(global.location.search || '', state.intent, state.venueTypes);
       if (urlWhenBoot) {
         state.when = urlWhenBoot.when;
         state.whenDay = urlWhenBoot.whenDay || '';
         state.urlWhenHydrated = true;
-      } else if (saved) {
-        var savedWhenBoot = M.hydrateWhenFromSaved(saved, state.intent, state.venueTypes);
-        if (savedWhenBoot) {
-          state.when = savedWhenBoot.when;
-          state.whenDay = savedWhenBoot.whenDay || '';
+      } else {
+        var restoredWhen =
+          (saved && M.hydrateWhenFromSaved(saved, state.intent, state.venueTypes)) ||
+          M.hydrateWhenFromSaved(M.loadWhenPreference(global.localStorage), state.intent, state.venueTypes);
+        if (restoredWhen) {
+          state.when = restoredWhen.when;
+          state.whenDay = restoredWhen.whenDay || '';
         }
       }
       if (saved) {

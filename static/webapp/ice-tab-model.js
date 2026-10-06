@@ -30,6 +30,8 @@
         : null;
 
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
+  /** Окно «Когда» между визитами в каталог (localStorage); sessionStorage — полный снимок вкладки. */
+  var ICE_WHEN_PREF_KEY = 'tcb_ice_when_pref_v1';
   var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
   var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
 
@@ -1164,6 +1166,8 @@
     if (!saved || typeof saved !== 'object') return null;
     var when = String(saved.when || '').trim().toLowerCase();
     var whenDay = String(saved.whenDay || '').trim();
+    /* Раньше дефолтом был auto («Сегодня вечером» на сервере) — не путаем с явным выбором. */
+    if (when === 'auto') return { when: 'any', whenDay: '' };
     if (when === 'day') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(whenDay)) return null;
       return { when: 'day', whenDay: whenDay };
@@ -1897,7 +1901,7 @@
           shopDiscipline: String(state.shopDiscipline || ''),
           shopOpenNow: !!state.shopOpenNow,
           shopWhen: String(state.shopWhen || 'any'),
-          when: String(state.when || 'auto'),
+          when: String(state.when || 'any'),
           whenDay: String(state.whenDay || ''),
           scrollY: state.scrollY || 0,
           view: state.view || 'list',
@@ -1922,8 +1926,35 @@
     }
   }
 
+  function saveWhenPreference(when, whenDay, storage) {
+    if (!storage || typeof storage.setItem !== 'function') return;
+    try {
+      storage.setItem(
+        ICE_WHEN_PREF_KEY,
+        JSON.stringify({
+          when: String(when || 'any'),
+          whenDay: String(whenDay || ''),
+        })
+      );
+    } catch (e) {
+      /* quota / private mode */
+    }
+  }
+
+  function loadWhenPreference(storage) {
+    if (!storage || typeof storage.getItem !== 'function') return null;
+    try {
+      var raw = storage.getItem(ICE_WHEN_PREF_KEY);
+      if (!raw) return null;
+      return normalizeSavedWhen(JSON.parse(raw));
+    } catch (e) {
+      return null;
+    }
+  }
+
   return {
     ICE_STATE_KEY: ICE_STATE_KEY,
+    ICE_WHEN_PREF_KEY: ICE_WHEN_PREF_KEY,
     INTENTS: INTENTS,
     buildListUrl: buildListUrl,
     buildMapListUrl: buildMapListUrl,
@@ -2034,5 +2065,7 @@
     pickFallbackCity: pickFallbackCity,
     saveIceState: saveIceState,
     loadIceState: loadIceState,
+    saveWhenPreference: saveWhenPreference,
+    loadWhenPreference: loadWhenPreference,
   };
 });
