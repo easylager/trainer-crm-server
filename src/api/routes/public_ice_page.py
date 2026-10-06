@@ -61,7 +61,7 @@ _CITY_NOT_FOUND_HTML = """<!DOCTYPE html>
 margin:0;padding:48px 20px;text-align:center}a{color:#0f8f8a;font-weight:600}</style></head>
 <body><h1>Такого города нет в каталоге</h1>
 <p>Проверьте название или посмотрите, где покататься сегодня:</p>
-<p><a href="__HOME__">Открыть карту льда</a></p></body></html>"""
+<p><a href="__HOME__">Открыть каталог Glide</a></p></body></html>"""
 
 
 def _city_not_found(home: str) -> HTMLResponse:
@@ -88,7 +88,8 @@ async def ice_city_day_page(
     """Расписание массовых катаний города на день + og-теги для превью в Telegram."""
     city, day = await _load(session, city_ref)
     if city is None or day is None:
-        return _city_not_found(_public_base() + "/webapp/ice")
+        base = _public_base()
+        return _city_not_found(f"{base}/" if base else "/")
     city_name = str(city["name"])
 
     canonical_path, og_path = ice_city_day_paths(city_name)

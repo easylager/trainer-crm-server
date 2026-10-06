@@ -49,8 +49,8 @@ def _events(ld: dict) -> list[dict]:
 
 
 @pytest.mark.asyncio
-async def test_sitemap_drops_trainer_landing_and_carries_lastmod(app_use_test_db, db_session) -> None:
-    """«/» — лендинг тренера. lastmod места — более поздний из профиля и сеанса."""
+async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_use_test_db, db_session) -> None:
+    """«/» — каталог, «/trainers» — лендинг. lastmod места — более поздний из профиля и сеанса."""
     older = await _place(db_session, name=f"Старее {uuid.uuid4().hex[:4]}")
     newer = await _place(db_session, name=f"Новее {uuid.uuid4().hex[:4]}")
     await _add_future_session(db_session, older["arena_id"], days_ahead=3, starts_at_local="11:00")
@@ -91,8 +91,12 @@ async def test_sitemap_drops_trainer_landing_and_carries_lastmod(app_use_test_db
     assert sm.status_code == 200
     xml = sm.text
     base = Settings().webapp_base_url.rstrip("/")
-    assert f"<loc>{base}/</loc>" not in xml
-    assert "<loc>/</loc>" not in xml
+    assert f"<loc>{base}/</loc>" in xml
+    assert f"<loc>{base}/trainers</loc>" in xml
+    home_block = _url_block(xml, f"{base}/")
+    trainers_block = _url_block(xml, f"{base}/trainers")
+    assert "<lastmod>" in home_block
+    assert "<lastmod>" in trainers_block
     assert "?t=" not in xml and "?w=" not in xml
     assert hidden_path not in xml
 
@@ -125,7 +129,7 @@ async def test_unknown_ice_city_is_html_404_and_empty_day_is_noindex(app_use_tes
     assert "City not found" not in missing.text
     assert "Glide" in missing.text
     assert _meta(missing.text, "robots") == "noindex"
-    assert "Открыть карту льда" in missing.text
+    assert "Открыть каталог Glide" in missing.text
 
     assert empty.status_code == 200
     assert _meta(empty.text, "robots") == "noindex"

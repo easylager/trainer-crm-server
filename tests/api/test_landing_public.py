@@ -78,11 +78,11 @@ async def test_landing_config_public(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_landing_root_injects_config_script(monkeypatch):
+async def test_landing_trainers_injects_config_script(monkeypatch):
     s = _landing_settings(trainer_bot_username="IceProTestBot")
     monkeypatch.setattr("src.application.landing_manifest.Settings", lambda: s)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/")
+        resp = await client.get("/trainers")
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     body = resp.text
@@ -92,6 +92,7 @@ async def test_landing_root_injects_config_script(monkeypatch):
     assert 'id="hero"' in body
     assert "landing-live-link.css" in body
     assert 'rel="canonical"' in body
+    assert "/trainers" in body
 
 
 @pytest.mark.asyncio
