@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.public_list_cache import set_public_json_list_cache
 from src.api.middleware.http_limits import client_ip_from_request
 from src.application.brand_presentation import (
     brand_presentation_to_public_dict,
@@ -306,28 +307,36 @@ async def _batch_trainer_photos(session: AsyncSession, trainer_ids: list[int]) -
 
 
 @router.get("/cities")
-async def get_cities(session: AsyncSession = Depends(get_session)) -> dict[str, list]:
+async def get_cities(
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, list]:
     """List cities for filters (e.g. client bot city picker)."""
+    set_public_json_list_cache(response)
     items = await list_cities(session)
     return {"items": items}
 
 
 @router.get("/services")
 async def get_services(
+    response: Response,
     city_id: int | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list]:
     """List services for filters; city_id limits to services with catalog trainers in that city."""
+    set_public_json_list_cache(response)
     items = await list_services(session, city_id=city_id)
     return {"items": items}
 
 
 @router.get("/catalog-scenarios")
 async def get_catalog_scenarios(
+    response: Response,
     city_id: int | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list]:
     """Discovery goal chips for catalog; ice defaults when services lack scenario_tags."""
+    set_public_json_list_cache(response)
     items = await list_catalog_scenarios(session, city_id=city_id)
     return {"items": items}
 
@@ -379,6 +388,7 @@ async def trainer_start_from_landing(
 @router.get("/arenas")
 async def get_arenas(
     city_id: int,
+    response: Response,
     service_id: int | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list]:
@@ -388,6 +398,7 @@ async def get_arenas(
     With ``service_id``, each arena includes ``trainer_count``: trainers in this city who
     offer the service and work at that arena (same rules as catalog trainer list filter).
     """
+    set_public_json_list_cache(response)
     items = await list_arenas(session, city_id, service_id=service_id)
     return {"items": items}
 
@@ -429,6 +440,7 @@ async def get_public_collective(
 @router.get("/collectives/{slug}/sessions")
 async def get_public_collective_sessions(
     slug: str,
+    response: Response,
     from_date: date | None = None,
     to_date: date | None = None,
     session: AsyncSession = Depends(get_session),
@@ -451,6 +463,7 @@ async def get_public_collective_sessions(
         raise HTTPException(status_code=404, detail="Collective not found")
     if payload.get("error") == "not_studio_central":
         raise HTTPException(status_code=400, detail="Collective is not studio_central")
+    set_public_json_list_cache(response)
     return payload
 
 
@@ -498,8 +511,9 @@ async def list_active_trainers(
 
     arena_ids_filter, arena_ids_truncated, arena_ids_received = _parse_arena_ids_csv(arena_ids)
 
-    # Trainer names/photos change after moderation — must not be served from browser HTTP cache.
-    response.headers["Cache-Control"] = "no-store"
+    # Anonymous list: a minute of staleness after moderation is the catalog budget (TASK-197).
+    # The single trainer card stays no-store — opening it records a profile view.
+    set_public_json_list_cache(response)
 
     items, total = await list_active_trainers_for_client(
         session,
@@ -559,7 +573,7 @@ async def list_catalog_training_groups(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Open recruiting groups across trainers (catalog browse). Same group rules as per-trainer list."""
-    response.headers["Cache-Control"] = "no-store"
+    set_public_json_list_cache(response)
     days_filter: list[int] | None = None
     if filter_days:
         try:
@@ -709,17 +723,18 @@ async def list_trainer_training_groups_public(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Open cohorts with catalog_visible + recruiting (for client catalog)."""
-    response.headers["Cache-Control"] = "no-store"
     trainer = await get_trainer(session, trainer_id)
     if not trainer or not _trainer_public_catalog_exposed(trainer):
         raise HTTPException(status_code=404, detail="Trainer not found")
     groups = await list_open_training_groups_public(session, trainer_id)
+    set_public_json_list_cache(response)
     return {"groups": groups}
 
 
 @router.get("/trainers/{trainer_id:int}/reviews")
 async def get_trainer_reviews_public(
     trainer_id: int,
+    response: Response,
     limit: int = 50,
     offset: int = 0,
     session: AsyncSession = Depends(get_session),
@@ -731,12 +746,14 @@ async def get_trainer_reviews_public(
     if result is None:
         raise HTTPException(status_code=404, detail="Trainer not found")
     items, total = result
+    set_public_json_list_cache(response)
     return {"items": items, "total": total}
 
 
 @router.get("/trainers/{trainer_id:int}/education")
 async def get_trainer_education_public(
     trainer_id: int,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list]:
     """Public education list: same visibility as catalog (pending + approved snapshots; see repository predicate)."""
@@ -744,6 +761,7 @@ async def get_trainer_education_public(
     if not trainer or not _trainer_public_catalog_exposed(trainer):
         raise HTTPException(status_code=404, detail="Trainer not found")
     items = await list_trainer_education(session, trainer_id, public_only=True)
+    set_public_json_list_cache(response)
     return {"items": items or []}
 
 

@@ -51,6 +51,9 @@ _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "pla
 #: Сколько мест и сеансов на месте показывает страница. Подборка — не справочник.
 MAX_PLACES = 12
 MAX_SLOTS_PER_PLACE = 4
+# Без окна запрос раньше тянул все будущие сеансы. 64 на место хватает на чипы,
+# «ещё N» и счёт в подписи; плотный уикенд (сеанс в час) сюда помещается.
+_WINDOW_SLOTS_PER_ARENA = 64
 
 _TOPIC = {
     None: "Где покататься",
@@ -103,17 +106,33 @@ async def _window_slots(
             text(f"""
                 SELECT s.id, s.arena_id, s.local_date, s.starts_at_local, s.price_adult_minor,
                        s.price_minor, s.currency_code, s.schedule_basis
-                FROM ice_sessions s
-                WHERE s.arena_id = ANY(:ids)
-                  AND {_CURRENT_SESSION_SQL}
-                  AND s.starts_at_utc >= :start
-                  AND (CAST(:end AS timestamptz) IS NULL OR s.starts_at_utc < CAST(:end AS timestamptz))
-                ORDER BY s.starts_at_utc
+                FROM arenas a
+                JOIN LATERAL (
+                    SELECT s.id, s.arena_id, s.local_date, s.starts_at_local, s.price_adult_minor,
+                           s.price_minor, s.currency_code, s.schedule_basis, s.starts_at_utc
+                    FROM ice_sessions s
+                    WHERE s.arena_id = a.id
+                      AND {_CURRENT_SESSION_SQL}
+                      AND s.starts_at_utc >= :start
+                      AND (CAST(:end AS timestamptz) IS NULL OR s.starts_at_utc < CAST(:end AS timestamptz))
+                    ORDER BY s.starts_at_utc, s.id
+                    LIMIT :cap
+                ) s ON true
+                WHERE a.id = ANY(:ids)
+                ORDER BY s.starts_at_utc, s.id
                 """),
-            {"ids": arena_ids, "now": now, "start": start, "end": end, "st": STATUS_ACTIVE},
+            {
+                "ids": arena_ids,
+                "now": now,
+                "start": start,
+                "end": end,
+                "st": STATUS_ACTIVE,
+                "cap": _WINDOW_SLOTS_PER_ARENA,
+            },
         )
     ).mappings()
-    # Все сеансы окна (для честного счёта), показываем — первые MAX_SLOTS_PER_PLACE.
+    # До _WINDOW_SLOTS_PER_ARENA ближайших на место: чипы берут первые MAX_SLOTS_PER_PLACE,
+    # остальное — «ещё N» и счёт в подписи.
     out: dict[int, list[dict[str, Any]]] = {}
     for r in rows:
         out.setdefault(int(r["arena_id"]), []).append(dict(r))

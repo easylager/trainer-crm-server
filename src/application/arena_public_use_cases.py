@@ -637,6 +637,62 @@ LEFT JOIN (
 WHERE {PUBLIC_ARENA_VISIBLE_SQL}
 """
 
+# Одна карточка. Агрегаты списка (_LIST_SQL: все ice_sessions / slots / trainer_arenas)
+# здесь коррелированы с a.id — просмотр /p/ не пересчитывает каталог.
+# Видимость — тот же PUBLIC_ARENA_VISIBLE_SQL, без второй копии правила.
+_ONE_ARENA_SQL = f"""
+SELECT
+    a.id, a.city_id, a.name, a.address, a.latitude, a.longitude, a.venue_type,
+    p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
+    p.tickets_url,
+    p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+    p.schedule_mode, p.reopen_date, p.schedule_mode_note,
+    p.amenities, p.status, p.verified_at, p.updated_at AS profile_updated_at,
+    c.country, c.name AS city_name,
+    COALESCE((
+        SELECT COUNT(*)::int FROM ice_sessions s
+        WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+    ), 0) AS future_session_count,
+    (
+        SELECT MAX(s.observed_at) FROM ice_sessions s
+        WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+    ) AS sessions_observed_at,
+    (
+        SELECT MIN(s.valid_until) FROM ice_sessions s
+        WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+    ) AS sessions_valid_until,
+    COALESCE(ipj.is_enabled, false) AS ice_job_enabled,
+    ipj.last_ok_at AS ice_last_ok_at,
+    ipj.config AS ice_job_config,
+    ipj.created_at AS ice_job_created_at,
+    COALESCE((
+        SELECT COUNT(DISTINCT t.id)::int
+        FROM trainer_arenas ta
+        JOIN trainers t ON t.id = ta.trainer_id AND {CATALOG_LISTED_SQL}
+        WHERE ta.arena_id = a.id AND ta.is_public = true
+    ), 0) AS trainer_count,
+    EXISTS (
+        SELECT 1 FROM media m
+        WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+    ) AS has_media
+FROM arenas a
+LEFT JOIN arena_profiles p ON p.arena_id = a.id
+JOIN cities c ON c.id = a.city_id
+LEFT JOIN ice_parser_jobs ipj ON ipj.arena_id = a.id
+WHERE a.id = :arena_id
+  AND {PUBLIC_ARENA_VISIBLE_SQL}
+LIMIT 1
+"""
+
+_ARENA_IDS_BY_SLUG_SQL = f"""
+SELECT a.id
+FROM arenas a
+LEFT JOIN arena_profiles p ON p.arena_id = a.id
+JOIN cities c ON c.id = a.city_id
+WHERE {PUBLIC_ARENA_VISIBLE_SQL}
+  AND p.slug = :slug
+"""
+
 
 def _row_to_arena_dict(row: Mapping[str, Any]) -> dict[str, Any]:
     country = row.get("country")
@@ -1314,6 +1370,39 @@ async def resolve_merged_arena_id(session: AsyncSession, arena_id: int) -> int |
     return current if current != int(arena_id) else None
 
 
+def _one_arena_params(now: datetime, *, arena_id: int) -> dict[str, Any]:
+    return {
+        "now": now,
+        "st": STATUS_ACTIVE,
+        "arena_id": int(arena_id),
+        "ice_countries": list(ice_discovery_countries()),
+    }
+
+
+async def _visible_arena_ids_for_slug(
+    session: AsyncSession, slug: str, *, city_id: int | None
+) -> list[int]:
+    """Id публично видимых арен с этим slug. Не больше двух: «один» или «неоднозначно»."""
+    sql = _ARENA_IDS_BY_SLUG_SQL
+    params: dict[str, Any] = {
+        "slug": slug,
+        "ice_countries": list(ice_discovery_countries()),
+    }
+    if city_id is not None:
+        sql += " AND a.city_id = :slug_city_id"
+        params["slug_city_id"] = int(city_id)
+    sql += " ORDER BY a.id LIMIT 2"
+    result = await session.execute(text(sql), params)
+    return [int(row[0]) for row in result.fetchall()]
+
+
+async def _load_one_public_arena(session: AsyncSession, arena_id: int) -> dict[str, Any] | None:
+    now = datetime.now(timezone.utc)
+    result = await session.execute(text(_ONE_ARENA_SQL), _one_arena_params(now, arena_id=arena_id))
+    row = result.mappings().first()
+    return _row_to_arena_dict(row) if row is not None else None
+
+
 async def _load_arena_by_ref(
     session: AsyncSession, arena_ref: str, *, city_id: int | None = None
 ) -> dict[str, Any] | None:
@@ -1324,35 +1413,16 @@ async def _load_arena_by_ref(
     до TASK-146) → карточка, только если среди публично видимых арен
     (``PUBLIC_ARENA_VISIBLE_SQL``) он ровно один; 0 или >1 → ``None`` (404),
     а не «меньший id» — чужая карточка.
+
+    Тело карточки всегда читается ``_ONE_ARENA_SQL`` по одному id. Список каталога
+    (``_LIST_SQL``) сюда не подставляется: его агрегаты обходят все арены.
     """
-    now = datetime.now(timezone.utc)
-    params: dict[str, Any] = {
-        "now": now,
-        "now48": now + timedelta(hours=48),
-        "st": STATUS_ACTIVE,
-        "slot_tz": NOTIFICATION_TZ,
-        "tg_st": TG_RECRUITING,
-        "published": ARENA_PROFILE_STATUS_PUBLISHED,
-        "ice_countries": ice_discovery_countries(),
-        **_window_params(None, now),
-    }
-    sql = _LIST_SQL
     if arena_ref.isdigit():
-        sql += " AND a.id = :arena_id"
-        params["arena_id"] = int(arena_ref)
-    else:
-        sql += " AND p.slug = :slug"
-        params["slug"] = arena_ref.strip()
-        if city_id is not None:
-            sql += " AND a.city_id = :slug_city_id"
-            params["slug_city_id"] = int(city_id)
-    # LIMIT 2: для голого slug нужно отличить «один» от «неоднозначно».
-    sql += " ORDER BY a.id LIMIT 2"
-    result = await session.execute(text(sql), params)
-    rows = [_row_to_arena_dict(row) for row in result.mappings()]
-    if len(rows) > 1 and not arena_ref.isdigit() and city_id is None:
+        return await _load_one_public_arena(session, int(arena_ref))
+    ids = await _visible_arena_ids_for_slug(session, arena_ref.strip(), city_id=city_id)
+    if not ids or (len(ids) > 1 and city_id is None):
         return None
-    return rows[0] if rows else None
+    return await _load_one_public_arena(session, ids[0])
 
 
 def _schedule_freshness(
@@ -1406,17 +1476,6 @@ async def get_public_arena_card(
     if row is None:
         return None
     await attach_arena_media_payloads(session, [row])
-    observed = await session.execute(
-        text(
-            f"""
-            SELECT MAX(s.observed_at), MIN(s.valid_until)
-            FROM ice_sessions s
-            WHERE s.arena_id = :aid AND {_CURRENT_SESSION_SQL}
-            """
-        ),
-        {"aid": row["id"], "now": datetime.now(timezone.utc), "st": STATUS_ACTIVE},
-    )
-    obs_row = observed.fetchone()
     season_start = row.get("season_start_month")
     season_end = row.get("season_end_month")
     return {
@@ -1461,27 +1520,20 @@ async def get_public_arena_card(
         "trainer_count": int(row.get("trainer_count") or 0),
         "freshness": _freshness_payload(
             row,
-            observed_at=obs_row[0] if obs_row else None,
-            valid_until=obs_row[1] if obs_row else None,
+            observed_at=row.get("sessions_observed_at"),
+            valid_until=row.get("sessions_valid_until"),
         ),
     }
 
 
-async def list_public_arena_sessions(
+async def public_arena_session_days(
     session: AsyncSession,
-    arena_ref: str,
+    arena_id: int,
     *,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    city_id: int | None = None,
-) -> dict[str, Any] | None:
-    row = await _load_arena_by_ref(session, arena_ref, city_id=city_id)
-    if row is None:
-        return None
-    start = date_from or _today_minsk()
-    end = date_to or (start + timedelta(days=14))
-    if end < start:
-        start, end = end, start
+    date_from: date,
+    date_to: date,
+) -> list[dict[str, Any]]:
+    """Сеансы одной арены по дням. Арену заново не ищет — id уже известен."""
     now = datetime.now(timezone.utc)
     result = await session.execute(
         text(
@@ -1498,11 +1550,11 @@ async def list_public_arena_sessions(
             """
         ),
         {
-            "aid": row["id"],
+            "aid": int(arena_id),
             "st": STATUS_ACTIVE,
             "now": now,
-            "dfrom": start,
-            "dto": end,
+            "dfrom": date_from,
+            "dto": date_to,
         },
     )
     keys = [
@@ -1539,7 +1591,25 @@ async def list_public_arena_sessions(
         ser.pop("parser_key", None)
         day = ser["local_date"]
         by_date.setdefault(day, []).append(ser)
-    days = [{"local_date": d, "sessions": by_date[d]} for d in sorted(by_date)]
+    return [{"local_date": d, "sessions": by_date[d]} for d in sorted(by_date)]
+
+
+async def list_public_arena_sessions(
+    session: AsyncSession,
+    arena_ref: str,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    city_id: int | None = None,
+) -> dict[str, Any] | None:
+    row = await _load_arena_by_ref(session, arena_ref, city_id=city_id)
+    if row is None:
+        return None
+    start = date_from or _today_minsk()
+    end = date_to or (start + timedelta(days=14))
+    if end < start:
+        start, end = end, start
+    days = await public_arena_session_days(session, int(row["id"]), date_from=start, date_to=end)
     return {
         "arena_id": row["id"],
         "timezone": row.get("timezone") or "Europe/Minsk",

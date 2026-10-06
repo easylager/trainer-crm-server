@@ -14,6 +14,7 @@ kind ``public_skate|open_ice``, ещё не начавшиеся (``starts_at_ut
 
 from __future__ import annotations
 
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
@@ -33,6 +34,7 @@ from src.application.schedule_staleness import (
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.ice_discovery_scope import (
     PUBLIC_ARENA_VISIBLE_SQL,
+    ice_discovery_countries,
     public_city_scope_sql,
     public_scope_params,
 )
@@ -74,15 +76,25 @@ def city_slug(name: str) -> str:
     return slug.strip("-")
 
 
-async def resolve_city_by_ref(session: AsyncSession, city_ref: str) -> dict[str, Any] | None:
-    """Город по slug (``minsk``) или по числовому id. ``None`` — если такого города нет.
+# Публичных городов десятки, а читают их на каждый /p/ и /c/. Кэш на процесс.
+# Сброс — смена города в админке и конец TTL. Между тестами кэш чистит conftest:
+# откат транзакции сам строки не забывает.
+PUBLIC_CITY_CACHE_TTL_SEC = 120
 
-    Только публичные города (TASK-177): активный и в странах витрины. Город вне витрины
-    (RU при ``ICE_DISCOVERY_COUNTRIES=BY``) для ``/c/``, ``/ice/…`` и ``/p/`` не существует — 404.
-    """
-    ref = (city_ref or "").strip()
-    if not ref:
-        return None
+_public_cities_cache: dict[tuple[str, ...], tuple[float, list[dict[str, Any]]]] = {}
+
+
+def invalidate_public_city_cache() -> None:
+    """Сбросить кэш публичных городов. Зовётся после создания и правки города в админке."""
+    _public_cities_cache.clear()
+
+
+async def _public_cities(session: AsyncSession) -> list[dict[str, Any]]:
+    countries = ice_discovery_countries()
+    now = time.monotonic()
+    hit = _public_cities_cache.get(countries)
+    if hit is not None and hit[0] > now:
+        return hit[1]
     result = await session.execute(
         text(
             f"SELECT id, name, country FROM cities WHERE {public_city_scope_sql('cities')} "
@@ -90,7 +102,22 @@ async def resolve_city_by_ref(session: AsyncSession, city_ref: str) -> dict[str,
         ),
         public_scope_params(),
     )
-    rows = result.mappings().all()
+    rows = [dict(row) for row in result.mappings().all()]
+    _public_cities_cache[countries] = (now + PUBLIC_CITY_CACHE_TTL_SEC, rows)
+    return rows
+
+
+async def resolve_city_by_ref(session: AsyncSession, city_ref: str) -> dict[str, Any] | None:
+    """Город по slug (``minsk``) или по числовому id. ``None`` — если такого города нет.
+
+    Только публичные города (TASK-177): активный и в странах витрины. Город вне витрины
+    (RU при ``ICE_DISCOVERY_COUNTRIES=BY``) для ``/c/``, ``/ice/…`` и ``/p/`` не существует — 404.
+    Список городов берётся из памяти, пока не истечёт TTL и город не изменят в админке.
+    """
+    ref = (city_ref or "").strip()
+    if not ref:
+        return None
+    rows = await _public_cities(session)
     if ref.isdigit():
         wanted_id = int(ref)
         for row in rows:

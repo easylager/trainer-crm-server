@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.public_list_cache import set_public_json_list_cache
 from src.api.routes.public import _enrich_trainer_photo_urls
 from src.application.arena_public_use_cases import (
     DEFAULT_LIST_LIMIT,
@@ -84,7 +85,7 @@ async def get_ice_discovery_cities(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Cities for the Ice picker: only those with MK sessions and/or catalog trainers."""
-    response.headers["Cache-Control"] = "no-store"
+    set_public_json_list_cache(response)
     items = await list_ice_discovery_cities(session)
     return {"items": items}
 
@@ -118,7 +119,7 @@ async def get_public_ice_arenas(
     несёт ``venue_type_facets`` — типы, реально представленные в городе, чтобы
     клиент не рисовал чип, за которым пусто.
     """
-    response.headers["Cache-Control"] = "no-store"
+    set_public_json_list_cache(response)
     try:
         return await list_public_ice_arenas(
             session,
@@ -270,13 +271,13 @@ async def get_public_arena_sessions(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Canonical ice_sessions feed grouped by local_date. Expired slots are omitted."""
-    response.headers["Cache-Control"] = "no-store"
     scoped = await _slug_city_id(session, arena_ref, city_id, city)
     payload = await list_public_arena_sessions(
         session, arena_ref, date_from=date_from, date_to=date_to, city_id=scoped
     )
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
+    set_public_json_list_cache(response)
     return payload
 
 
@@ -289,13 +290,13 @@ async def get_public_arena_trainers(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Trainers on an arena with can_book from get_trainer_booking_availability."""
-    response.headers["Cache-Control"] = "no-store"
     scoped = await _slug_city_id(session, arena_ref, city_id, city)
     payload = await list_public_arena_trainers(session, arena_ref, city_id=scoped)
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
     for trainer in payload["items"]:
         _enrich_trainer_photo_urls(trainer)
+    set_public_json_list_cache(response)
     return payload
 
 
