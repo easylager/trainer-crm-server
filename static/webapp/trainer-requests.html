@@ -1538,6 +1538,10 @@
             passFlowHintEl.style.display = 'block';
             passFlowHintEl.textContent =
               'Примите оплату и выдайте абонемент в разделе «Абонементы». Кнопка «Написать клиенту» в уведомлении Telegram открывает переписку с клиентом через бота (сообщение уйдёт в чат клиента).';
+            if (req.client_has_active_pass) {
+              passFlowHintEl.textContent +=
+                ' У клиента уже есть активный абонемент с оставшимися занятиями. Заявка сохранена — обсудите, что делать дальше.';
+            }
           } else if (isCollectivePassOrder) {
             passFlowHintEl.className = 'detail-pass-flow-hint';
             passFlowHintEl.style.display = 'block';

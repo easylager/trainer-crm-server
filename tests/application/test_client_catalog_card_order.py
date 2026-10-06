@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.certificate_use_cases import create_certificate_product
 from src.application.client_cert_order_use_cases import submit_certificate_product_order_request
 from src.application.client_pass_order_use_cases import submit_pass_product_order_request
-from src.application.pass_product_use_cases import create_pass_product
+from src.application.client_request_use_cases import (
+    create_client_request,
+    list_my_requests_with_responses,
+)
+from src.application.pass_product_use_cases import create_pass_product, issue_pass_to_client
+from src.bot.notification_loops import _build_pass_order_notification
 
 
 async def _insert_trainer(
@@ -230,3 +235,144 @@ async def test_cert_order_from_card_goes_to_that_trainer(db_session: AsyncSessio
     assert int(row[0]) == card_id
     assert "gift@example.com" in row[1]
     assert f"__CERT_ORDER__:certificate_product_id={product_id}" in row[1]
+
+
+@pytest.mark.asyncio
+async def test_existing_booking_and_active_pass_keep_orders_visible(
+    db_session: AsyncSession,
+) -> None:
+    """A lesson already on the books must not hide a new pass or certificate ask."""
+    trainer_id = await _insert_trainer(db_session)
+    telegram_id, client_id = await _insert_client_with_primary(db_session, trainer_id)
+    scope = (
+        await db_session.execute(
+            text(
+                """
+                SELECT tp.city_id, ts.service_id
+                FROM trainer_profiles tp
+                JOIN trainer_services ts ON ts.trainer_id = tp.trainer_id
+                WHERE tp.trainer_id = :tid
+                """
+            ),
+            {"tid": trainer_id},
+        )
+    ).one()
+    city_id, service_id = int(scope[0]), int(scope[1])
+    slot_id = int(
+        (
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+                    VALUES (
+                        :tid,
+                        (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date,
+                        TIME '10:00', TIME '11:00', 'booked'
+                    )
+                    RETURNING id
+                    """
+                ),
+                {"tid": trainer_id},
+            )
+        ).scalar_one()
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    held_id = await create_pass_product(
+        db_session, trainer_id, name="Уже есть", sessions_total=5, price_cents=10000
+    )
+    await issue_pass_to_client(db_session, trainer_id, client_id, held_id)
+
+    asked_id = await create_pass_product(
+        db_session, trainer_id, name="Ещё один", sessions_total=8, price_cents=20000
+    )
+    pass_order = await submit_pass_product_order_request(
+        db_session,
+        client_id=client_id,
+        telegram_id=telegram_id,
+        pass_product_id=asked_id,
+        trainer_id=trainer_id,
+    )
+    assert pass_order["ok"] is True
+
+    cert_id = await create_certificate_product(
+        db_session, trainer_id, name="Подарок", amount_cents=15000
+    )
+    cert_order = await submit_certificate_product_order_request(
+        db_session,
+        client_id=client_id,
+        telegram_id=telegram_id,
+        certificate_product_id=cert_id,
+        recipient_email="gift@example.com",
+        recipient_name="",
+        trainer_id=trainer_id,
+    )
+    assert cert_order["ok"] is True
+
+    collective_id = await create_client_request(
+        db_session,
+        client_id,
+        city_id,
+        service_id,
+        comment="__COLLECTIVE_PASS_ORDER__:collective_pass_product_id=1\n\nХочу абонемент центра",
+        trainer_id=trainer_id,
+    )
+    plain_id = await create_client_request(
+        db_session,
+        client_id,
+        city_id,
+        service_id,
+        comment="Нужен тренер на эту услугу",
+        trainer_id=trainer_id,
+    )
+
+    listed = await list_my_requests_with_responses(db_session, telegram_id)
+    listed_ids = {int(item["id"]) for item in listed}
+    assert int(pass_order["request_id"]) in listed_ids
+    assert int(cert_order["request_id"]) in listed_ids
+    assert collective_id in listed_ids
+    assert plain_id not in listed_ids
+
+    statuses = (
+        await db_session.execute(
+            text("SELECT id, status FROM client_requests WHERE id = ANY(:ids)"),
+            {
+                "ids": [
+                    int(pass_order["request_id"]),
+                    int(cert_order["request_id"]),
+                    collective_id,
+                    plain_id,
+                ]
+            },
+        )
+    ).fetchall()
+    by_id = {int(row[0]): row[1] for row in statuses}
+    assert by_id[int(pass_order["request_id"])] == "new"
+    assert by_id[int(cert_order["request_id"])] == "new"
+    assert by_id[collective_id] == "new"
+    assert by_id[plain_id] == "archived"
+
+    note, _kb = await _build_pass_order_notification(
+        db_session,
+        p={
+            "trainer_id": trainer_id,
+            "client_id": client_id,
+            "client_first_name": "Максим",
+            "client_middle_name": "",
+            "client_last_name": "",
+            "service_name": "Услуга",
+            "request_id": int(pass_order["request_id"]),
+            "client_telegram_id": telegram_id,
+        },
+        pass_product_id=asked_id,
+    )
+    assert "уже есть активный абонемент" in note

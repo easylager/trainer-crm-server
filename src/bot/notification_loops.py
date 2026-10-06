@@ -83,7 +83,10 @@ from src.application.client_pass_order_use_cases import (
     split_pass_order_comment,
 )
 from src.application.client_cert_order_use_cases import split_cert_order_comment
-from src.application.pass_product_use_cases import get_pass_product
+from src.application.pass_product_use_cases import (
+    client_ids_with_active_pass,
+    get_pass_product,
+)
 from src.application.certificate_use_cases import (
     expire_certificates_past_expiry,
     get_certificate_product,
@@ -1190,6 +1193,12 @@ async def _build_pass_order_notification(
     )
 
     client_id = p.get("client_id")
+    if client_id is not None:
+        active = await client_ids_with_active_pass(
+            session, int(p["trainer_id"]), [int(client_id)]
+        )
+        if int(client_id) in active:
+            text += "\n\n" + msg.TRAINER_PASS_ORDER_ALREADY_ACTIVE
     rid = int(p["request_id"])
     rows: list[list[InlineKeyboardButton]] = []
 

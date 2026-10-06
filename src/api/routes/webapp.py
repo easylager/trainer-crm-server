@@ -8468,6 +8468,27 @@ async def _enrich_trainer_request_certificate_products(
             it["certificate_amount_label"] = "—"
 
 
+async def _enrich_trainer_pass_order_active_pass(
+    session: AsyncSession, trainer_id: int, items: list[dict],
+) -> None:
+    """Tell the trainer a pass order arrived while the client already has an active pass."""
+    from src.application.pass_product_use_cases import client_ids_with_active_pass
+
+    client_ids = [
+        int(it["client_id"])
+        for it in items
+        if it.get("request_subtype") == "pass_product_order" and it.get("client_id")
+    ]
+    if not client_ids:
+        return
+    active = await client_ids_with_active_pass(session, trainer_id, client_ids)
+    for it in items:
+        if it.get("request_subtype") != "pass_product_order":
+            continue
+        cid = it.get("client_id")
+        it["client_has_active_pass"] = cid is not None and int(cid) in active
+
+
 def _serialize_trainer_request(req: dict) -> dict:
     """Request dict to JSON-safe for trainer requests list/detail."""
     created_at = req.get("created_at")
@@ -9222,6 +9243,7 @@ async def get_trainer_requests(
     combined = new_list + in_progress_list
     serialized = [_serialize_trainer_request(r) for r in combined]
     await _enrich_trainer_request_certificate_products(session, trainer_id, serialized)
+    await _enrich_trainer_pass_order_active_pass(session, trainer_id, serialized)
     return {"items": serialized}
 
 

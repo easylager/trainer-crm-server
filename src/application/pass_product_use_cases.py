@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -845,6 +845,30 @@ async def _trainer_may_issue_pass_to_client(
     if not row[1]:
         return False, "Клиент не привязан к вашему кабинету"
     return True, None
+
+
+async def client_ids_with_active_pass(
+    session: AsyncSession,
+    trainer_id: int,
+    client_ids: list[int],
+) -> set[int]:
+    """Clients who already hold an active pass with remaining sessions from this trainer."""
+    uniq = sorted({int(cid) for cid in client_ids if cid is not None})
+    if not uniq:
+        return set()
+    stmt = text(
+        """
+        SELECT DISTINCT pi.client_id
+        FROM pass_instances pi
+        JOIN trainer_pass_products p ON p.id = pi.pass_product_id
+        WHERE p.trainer_id = :tid
+          AND pi.client_id IN :cids
+          AND pi.status = 'active'
+          AND pi.sessions_remaining > 0
+        """
+    ).bindparams(bindparam("cids", expanding=True))
+    r = await session.execute(stmt, {"tid": int(trainer_id), "cids": uniq})
+    return {int(row[0]) for row in r.fetchall()}
 
 
 async def _archive_fulfilled_pass_order_request(
