@@ -103,8 +103,10 @@ class Settings(BaseSettings):
     api_rate_limit_image_window_sec: float = 60.0
     api_rate_limit_bot_max_requests: int = 600
     api_rate_limit_bot_window_sec: float = 60.0
-    # Сколько крайних справа записей X-Forwarded-For добавили наши прокси (Railway edge = 1).
-    # 0 — прокси нет, заголовок игнорируется. См. src/shared/client_ip.py.
+    # leftmost (по умолчанию: Railway режет клиентский XFF, левая запись — реальный IP) |
+    # rightmost_hops (платформа дописывает справа). См. src/shared/client_ip.py, docs/ops.
+    client_ip_strategy: str = "leftmost"
+    # Только для rightmost_hops: сколько крайних справа записей XFF добавили наши прокси.
     trusted_proxy_hops: int = 1
     # /go attribution accepts only provisioned campaign slugs; valid but unconfigured links still redirect.
     catalog_entry_source_keys: list[str] = ["insta", "flyer-olimpik", "direct", "other"]

@@ -29,10 +29,11 @@ def reset_http_limiters_for_tests() -> None:
 
 
 def client_ip_from_request(request: Request) -> str:
-    """Trusted client IP (see :mod:`src.shared.client_ip`): never the client-controlled left XFF hop."""
+    """Client IP (see :mod:`src.shared.client_ip`): leftmost public XFF entry (Railway strips client XFF), X-Real-IP, socket."""
     ip = trusted_client_ip(
         request.headers,
         request.client.host if request.client else None,
+        strategy=Settings().client_ip_strategy,
         hops=Settings().trusted_proxy_hops,
     )
     return ip or "unknown"

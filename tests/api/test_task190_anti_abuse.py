@@ -180,30 +180,40 @@ async def test_top_arenas_excludes_bots(db_session) -> None:
 # --- AC-2: IP ---------------------------------------------------------------------------------
 
 
-def test_trusted_client_ip_rules() -> None:
+def test_trusted_client_ip_leftmost_public() -> None:
+    f = trusted_client_ip
+    assert f({"x-forwarded-for": "203.0.113.9, 7.7.7.7"}, "10.0.0.2") == "203.0.113.9"
+    # внутренние / CGNAT / loopback / мусор пропускаются
+    assert f({"x-forwarded-for": "100.64.0.5, 100.100.1.1, 10.1.1.1, 127.0.0.1, 198.51.100.7"}, "10.0.0.2") == "198.51.100.7"
+    assert f({"x-forwarded-for": "garbage, 192.168.1.1, 2001:db8::1"}, None) == "2001:db8::1"
+    # нет публичной записи в XFF -> X-Real-IP -> сокет
+    assert f({"x-forwarded-for": "100.64.0.5", "x-real-ip": "198.51.100.8"}, "10.0.0.2") == "198.51.100.8"
+    assert f({"x-forwarded-for": "garbage", "x-real-ip": "100.64.0.9"}, "172.16.0.3") == "172.16.0.3"
+    assert f({"x-forwarded-for": "garbage"}, "10.0.0.2") == "10.0.0.2"
+    assert f({}, "10.0.0.2") == "10.0.0.2"
+    assert f({}, None) is None
+
+
+def test_trusted_client_ip_rightmost_hops_fallback_strategy() -> None:
     h = {"x-forwarded-for": "6.6.6.6, 7.7.7.7, 203.0.113.9"}
-    assert trusted_client_ip(h, "10.0.0.2", hops=1) == "203.0.113.9"
-    assert trusted_client_ip(h, "10.0.0.2", hops=2) == "7.7.7.7"
-    assert trusted_client_ip(h, "10.0.0.2", hops=0) == "10.0.0.2"
-    assert trusted_client_ip({}, "10.0.0.2", hops=1) == "10.0.0.2"
-    assert trusted_client_ip({"x-forwarded-for": "garbage"}, "10.0.0.2", hops=1) == "10.0.0.2"
-    assert trusted_client_ip({"x-forwarded-for": "1.2.3.4"}, "10.0.0.2", hops=3) == "1.2.3.4"
-    assert trusted_client_ip({"x-forwarded-for": "2001:db8::1"}, None, hops=1) == "2001:db8::1"
+    kw = {"strategy": "rightmost_hops"}
+    assert trusted_client_ip(h, "10.0.0.2", hops=1, **kw) == "203.0.113.9"
+    assert trusted_client_ip(h, "10.0.0.2", hops=2, **kw) == "7.7.7.7"
+    assert trusted_client_ip(h, "10.0.0.2", hops=0, **kw) == "10.0.0.2"
+    assert trusted_client_ip({"x-forwarded-for": "garbage"}, "10.0.0.2", hops=1, **kw) == "10.0.0.2"
 
 
 @pytest.mark.asyncio
-async def test_spoofed_left_xff_is_one_actor_and_rate_limit_applies(
-    app_use_test_db, db_session, monkeypatch
-) -> None:
+async def test_same_real_ip_is_one_actor_and_rate_limit_applies(app_use_test_db, db_session, monkeypatch) -> None:
     monkeypatch.setenv("API_RATE_LIMIT_PAGE_MAX_REQUESTS", "30")
     reset_http_limiters_for_tests()
     city_id, _, name = await _city_arena(db_session)
     statuses = []
     async with _client() as client:
-        for n in range(100):
+        for _ in range(100):
             r = await client.get(
                 f"/ice/{city_slug(name)}/today",
-                headers={"user-agent": _HUMAN_UA, "x-forwarded-for": f"198.51.100.{n}, 203.0.113.50"},
+                headers={"user-agent": _HUMAN_UA, "x-forwarded-for": "203.0.113.50, 100.64.1.1"},
             )
             statuses.append(r.status_code)
     assert statuses.count(200) == 30
@@ -218,6 +228,23 @@ async def test_spoofed_left_xff_is_one_actor_and_rate_limit_applies(
         )
     ).scalar_one()
     assert actors == 1
+
+
+@pytest.mark.asyncio
+async def test_rightmost_strategy_ignores_spoofed_left_xff(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("CLIENT_IP_STRATEGY", "rightmost_hops")
+    monkeypatch.setenv("API_RATE_LIMIT_PAGE_MAX_REQUESTS", "30")
+    reset_http_limiters_for_tests()
+    city_id, _, name = await _city_arena(db_session)
+    statuses = []
+    async with _client() as client:
+        for n in range(60):
+            r = await client.get(
+                f"/ice/{city_slug(name)}/today",
+                headers={"user-agent": _HUMAN_UA, "x-forwarded-for": f"198.51.100.{n}, 203.0.113.50"},
+            )
+            statuses.append(r.status_code)
+    assert statuses.count(200) == 30 and statuses.count(429) == 30
 
 
 @pytest.mark.asyncio
