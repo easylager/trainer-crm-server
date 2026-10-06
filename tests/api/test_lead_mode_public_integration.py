@@ -341,3 +341,45 @@ async def test_redirect_to_telegram_dedup_same_day(app_use_test_db, db_session) 
             assert resp.status_code == 302
     after = await _count_demand_events(db_session, tid, DEMAND_EVENT_CONTACT_CLICK)
     assert after - before == 1
+
+
+@pytest.mark.asyncio
+async def test_catalog_contact_click_with_glide_hint_keeps_single_catalog_signal(
+    app_use_test_db, db_session
+) -> None:
+    """TASK-202 AC-4: the Glide hint is UI-only. The catalog CTA URL stays the plain
+    ``/r/tg/{id}`` (no ``?src=`` rewrite, no message prefill), a catalog tap is recorded once
+    as ``contact_click`` with source ``catalog``, repeat taps dedup, other kinds are untouched.
+    """
+    sid, cid, _aid = await _require_seed_ids(db_session)
+    catalog_headers = {
+        "User-Agent": "pytest-task202-catalog",
+        "Referer": "http://test/webapp/catalog.html",
+    }
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
+    ) as client:
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
+        await _set_telegram_username(db_session, tid, "glide_hint_trainer")
+        detail = await client.get(f"/api/public/trainers/{tid}", headers=catalog_headers)
+        assert detail.status_code == 200
+        cta = detail.json()["contact_telegram_url"]
+        assert cta == f"/r/tg/{tid}"
+        views_before = await _count_demand_events(db_session, tid, DEMAND_EVENT_PROFILE_VIEW)
+        clicks_before = await _count_demand_events(db_session, tid, DEMAND_EVENT_CONTACT_CLICK)
+        for _ in range(3):
+            resp = await client.get(cta, headers=catalog_headers)
+            assert resp.status_code == 302
+            location = resp.headers["location"]
+            assert location == "https://t.me/glide_hint_trainer?src=catalog"
+            assert "text=" not in location and "Glide" not in location
+    assert await _count_demand_events(db_session, tid, DEMAND_EVENT_CONTACT_CLICK) == clicks_before + 1
+    assert await _count_demand_events(db_session, tid, DEMAND_EVENT_PROFILE_VIEW) == views_before
+    r = await db_session.execute(
+        text(
+            "SELECT source FROM trainer_demand_events "
+            "WHERE trainer_id = :tid AND kind = :k ORDER BY id DESC LIMIT 1"
+        ),
+        {"tid": tid, "k": DEMAND_EVENT_CONTACT_CLICK},
+    )
+    assert r.scalar() == "catalog"

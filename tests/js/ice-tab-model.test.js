@@ -8,9 +8,15 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
+const stalePath = path.resolve(__dirname, '../../static/webapp/schedule-staleness-model.js');
+const modePath = path.resolve(__dirname, '../../static/webapp/arena-schedule-mode-model.js');
 const modelPath = path.resolve(__dirname, '../../static/webapp/ice-tab-model.js');
 
 function loadModel() {
+  delete require.cache[require.resolve(stalePath)];
+  require(stalePath);
+  delete require.cache[require.resolve(modePath)];
+  require(modePath);
   const resolved = require.resolve(modelPath);
   delete require.cache[resolved];
   return require(modelPath);
@@ -1279,13 +1285,114 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
   });
 });
 
-describe('TASK-146: устаревшее расписание в ленте', () => {
-  it('schedule_stale не меняет подпись карточки в ленте', () => {
+describe('TASK-180: устаревшее расписание в ленте', () => {
+  it('schedule_stale помечает карточку и подпись глубины', () => {
     const { boardCardView } = loadModel();
     const item = { id: 1, name: 'Каток', live: { kind: 'session', local_date: '2026-10-02', starts_at_local: '18:00', more_count: 5, session_id: 3 } };
     const now = new Date('2026-10-02T10:00:00Z');
-    const v = boardCardView({ ...item, freshness: { schedule_stale: true } }, now, {});
-    assert.equal(v.stale, false);
+    const v = boardCardView(
+      { ...item, freshness: { schedule_stale: true, schedule_very_stale: false } },
+      now,
+      {}
+    );
+    assert.equal(v.stale, true);
+    assert.match(v.depth, /могло измениться/);
     assert.match(v.depth, /сеанс/);
+  });
+});
+
+describe('TASK-180: очень устаревшее расписание в ленте (> 72 ч)', () => {
+  const now = new Date('2026-10-06T10:00:00Z');
+  const base = {
+    id: 1,
+    name: 'Каток',
+    tier: 'A',
+    phone: '+375 17 000-00-00',
+    live: {
+      kind: 'session',
+      session_id: 3,
+      local_date: '2026-10-06',
+      starts_at_local: '18:00',
+      price_adult_minor: 1000,
+      currency_code: 'BYN',
+      more_count: 5,
+    },
+    freshness: {
+      schedule_stale: true,
+      schedule_very_stale: true,
+      schedule_observed_at: '2026-10-02T09:00:00+00:00',
+    },
+  };
+
+  it('старый ответ API (kind=session) не показывает день, время и цену как текущие', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(base, now, {});
+    assert.equal(v.isSession, false);
+    assert.equal(v.veryStale, true);
+    assert.equal(v.day, '');
+    assert.equal(v.time, '');
+    assert.equal(v.prices, '');
+    assert.equal(v.sessionId, null);
+    assert.equal(v.status, 'Расписание не обновлялось 4 дня — уточните по телефону');
+    assert.doesNotMatch(v.depth, /сеанс/);
+  });
+
+  it('kind=unconfirmed от сервера — берём его строку', () => {
+    const { boardCardView, formatLiveLine } = loadModel();
+    const item = {
+      ...base,
+      live: { kind: 'unconfirmed', text: 'Расписание не обновлялось 5 дней — уточните по телефону' },
+    };
+    const v = boardCardView(item, now, {});
+    assert.equal(v.isSession, false);
+    assert.equal(v.status, 'Расписание не обновлялось 5 дней — уточните по телефону');
+    assert.equal(formatLiveLine(item, now), 'Расписание не обновлялось 5 дней — уточните по телефону');
+  });
+
+  it('не отвечает на выбранное окно и не помечается «могло измениться»', () => {
+    const { boardCardView, splitByWindow } = loadModel();
+    const parts = splitByWindow([base], 'today_evening');
+    assert.equal(parts.hits.length, 0);
+    assert.equal(parts.rest.length, 1);
+    const v = boardCardView(base, now, {});
+    assert.equal(v.stale, false);
+    assert.doesNotMatch(v.depth, /могло измениться/);
+  });
+
+  it('formatLiveLine для сеанса с very_stale — строка «не обновлялось», без времени', () => {
+    const { formatLiveLine } = loadModel();
+    const line = formatLiveLine(base, now);
+    assert.match(line, /не обновлялось 4 дня/);
+    assert.doesNotMatch(line, /18:00/);
+  });
+});
+
+describe('TASK-204 schedule_mode on board card', () => {
+  const now = new Date('2026-10-06T12:00:00Z');
+
+  it('phone — статус и кнопка звонка', () => {
+    const { boardCardView } = loadModel();
+    const item = {
+      id: 1,
+      name: 'Берёза',
+      phone: '+375291112233',
+      live: { kind: 'phone', text: 'Расписание по телефону' },
+    };
+    const v = boardCardView(item, now, {});
+    assert.equal(v.isSession, false);
+    assert.equal(v.status, 'Расписание по телефону');
+    assert.equal(v.callHref, 'tel:+375291112233');
+  });
+
+  it('season_closed — текст без сеанса', () => {
+    const { boardCardView } = loadModel();
+    const item = {
+      id: 2,
+      name: 'Жодино',
+      live: { kind: 'season_closed', text: 'Сезон закрыт · откроется 01.11 — ремонт' },
+    };
+    const v = boardCardView(item, now, {});
+    assert.equal(v.isSession, false);
+    assert.match(v.status, /Сезон закрыт/);
   });
 });

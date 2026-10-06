@@ -48,7 +48,12 @@ class SourceState:
 
 @dataclass
 class ParserJob:
-    """Schedule row the scheduler hands to a strategy. ``config`` is job.config jsonb."""
+    """Schedule row the scheduler hands to a strategy. ``config`` is job.config jsonb.
+
+    ``arena_timezone`` — arena_profiles.timezone (TASK-196): нормализатор берёт его,
+    если в конфиге задачи нет своей таймзоны. None (арена без профиля/таймзоны,
+    джоба, собранная руками в тесте) → дефолт Europe/Minsk.
+    """
 
     id: int
     arena_id: int
@@ -60,6 +65,7 @@ class ParserJob:
     config: dict[str, Any]
     notes: str | None = None
     state: SourceState = field(default_factory=SourceState)
+    arena_timezone: str | None = None
 
 
 @dataclass
@@ -87,6 +93,7 @@ class Extraction:
     snapshot: Any
     slots: list[ExtractedSlot] = field(default_factory=list)
     observed_at: datetime | None = None
+    schedule_basis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +119,7 @@ class CanonicalSlotDraft:
     capacity_note: str | None = None
     external_url: str | None = None
     source_id: str | None = None
+    schedule_basis: str = "live"
     parser_job_id: int | None = None
     scrape_run_id: int | None = None
 
@@ -131,3 +139,7 @@ class ScrapeRunRecord:
     persisted_id: int | None = None
     http_status: int | None = None
     error_code: str | None = None
+    # TASK-187: окно публикации (только в памяти, в ice_scrape_runs не пишется).
+    # None → дефолты publish_horizon (14 дней, Europe/Minsk).
+    publish_horizon_days: int | None = None
+    publish_timezone: str | None = None

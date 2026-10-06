@@ -400,6 +400,29 @@
     return escapePriceHtml(num) + ' BYN';
   }
 
+  /** Set on arena page before opening catalog — enables history.back() instead of a new arena load. */
+  var ARENA_CATALOG_STACK_KEY = 'tcb_catalog_arena_stack_v1';
+
+  function markArenaCatalogStack(arenaId) {
+    if (arenaId == null || arenaId === '') return;
+    try {
+      global.sessionStorage.setItem(ARENA_CATALOG_STACK_KEY, String(arenaId));
+    } catch (e) { /* private mode */ }
+  }
+
+  function tryHistoryBackToArena(arenaId) {
+    if (arenaId == null || arenaId === '') return false;
+    try {
+      if (global.sessionStorage.getItem(ARENA_CATALOG_STACK_KEY) !== String(arenaId)) return false;
+      global.sessionStorage.removeItem(ARENA_CATALOG_STACK_KEY);
+      if (global.history && global.history.length > 1) {
+        global.history.back();
+        return true;
+      }
+    } catch (e) { /* ignore */ }
+    return false;
+  }
+
   function resolveBookingReturn(from, ctx) {
     ctx = ctx || {};
     if (from === 'hub') return { type: 'hub', path: 'client-home' };
@@ -421,6 +444,10 @@
   }
 
   function navigateBookingReturn(from, ctx) {
+    ctx = ctx || {};
+    // Арена → каталог → «Назад» должно снять каталог со стека, а не открыть
+    // вторую копию арены (иначе «Назад» на арене снова ведёт на тренера).
+    if (from === 'arena' && tryHistoryBackToArena(ctx.arenaId)) return true;
     var target = resolveBookingReturn(from, ctx);
     if (target.type === 'hub' && typeof global.navigateClientHome === 'function') {
       global.navigateClientHome();
@@ -476,6 +503,8 @@
     formatPriceAmountHtml: formatPriceAmountHtml,
     resolveBookingReturn: resolveBookingReturn,
     navigateBookingReturn: navigateBookingReturn,
+    markArenaCatalogStack: markArenaCatalogStack,
+    ARENA_CATALOG_STACK_KEY: ARENA_CATALOG_STACK_KEY,
     hapticSuccess: hapticSuccess,
     emitBookingAnalytics: emitBookingAnalytics,
     mountFadeIn: mountFadeIn,

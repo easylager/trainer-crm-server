@@ -268,8 +268,179 @@ def test_shop_without_hours_rejects_the_file(tmp_path: Path) -> None:
         parse_shops_file(path)
 
 
+@pytest.mark.asyncio
+async def test_reimport_skips_archived_shop_and_preserves_admin_contacts(
+    db_session, tmp_path: Path
+) -> None:
+    """AC-1: архивный магазин не матчится — статус, is_active и контакты админа не трогаются."""
+    city_name = f"Архивград-{uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=city_name)
+    ins = await db_session.execute(
+        text(
+            """
+            INSERT INTO arenas (city_id, name, address, is_active, is_confirmed, venue_type)
+            VALUES (:c, 'Старая точилка', 'ул. Архивная, 1', false, true, 'shop')
+            RETURNING id
+            """
+        ),
+        {"c": city_id},
+    )
+    shop_id = int(ins.scalar_one())
+    from src.application.arena_profile import ARENA_PROFILE_STATUS_ARCHIVED, ensure_arena_profile
+
+    await ensure_arena_profile(db_session, shop_id, city_id=city_id, name="Старая точилка")
+    await db_session.execute(
+        text(
+            "UPDATE arena_profiles SET phone = :p, status = :st WHERE arena_id = :id"
+        ),
+        {"p": "+375 17 111-11-11", "st": ARENA_PROFILE_STATUS_ARCHIVED, "id": shop_id},
+    )
+    await db_session.commit()
+
+    payload = {
+        "city": city_name,
+        "shops": [
+            {
+                "name": "Старая точилка",
+                "address": "ул. Архивная, 1",
+                "services": ["skate_sharpening"],
+                "hours": {"mon": ["10:00", "19:00"]},
+            }
+        ],
+    }
+    path = tmp_path / "shops.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    city, records, rules = parse_shops_file(path)
+    plan = await build_plan(db_session, city_name=city, records=records, rink_rules=rules)
+    assert plan.updates == [] and plan.creates == []
+    assert any("архивная" in p for p in plan.rink_problems)
+
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT a.is_active, p.phone, p.status FROM arenas a "
+                "JOIN arena_profiles p ON p.arena_id = a.id WHERE a.id = :id"
+            ),
+            {"id": shop_id},
+        )
+    ).one()
+    assert row[0] is False
+    assert row[1] == "+375 17 111-11-11"
+    assert row[2] == ARENA_PROFILE_STATUS_ARCHIVED
+
+
 def test_address_variants_drop_what_nominatim_cannot_read() -> None:
     assert address_variants("ул. Карла Либкнехта, 127, офис 69")[-1] == "улица Карла Либкнехта, 127"
     assert "улица Цнянская, 2" in address_variants("ул. Цнянская, 2-1-39")
     assert "проспект Независимости, 58" in address_variants("пр-т Независимости, 58")
     assert address_variants("пр-т Победителей, 4А")[-1] == "проспект Победителей, 4"
+
+
+async def _archived_shop(db_session, city_id: int, name: str, *, phone: str) -> int:
+    from src.application.arena_profile import ARENA_PROFILE_STATUS_ARCHIVED, ensure_arena_profile
+
+    shop_id = int(
+        (
+            await db_session.execute(
+                text(
+                    "INSERT INTO arenas (city_id, name, address, is_active, is_confirmed, venue_type) "
+                    "VALUES (:c, :n, 'ул. Админская, 5', false, false, 'shop') RETURNING id"
+                ),
+                {"c": city_id, "n": name},
+            )
+        ).scalar_one()
+    )
+    await ensure_arena_profile(db_session, shop_id, city_id=city_id, name=name)
+    await db_session.execute(
+        text("UPDATE arena_profiles SET phone = :p, status = :st WHERE arena_id = :id"),
+        {"p": phone, "st": ARENA_PROFILE_STATUS_ARCHIVED, "id": shop_id},
+    )
+    return shop_id
+
+
+def _write(tmp_path: Path, payload: dict) -> Path:
+    path = tmp_path / "shops.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+@pytest.mark.asyncio
+async def test_archived_shop_matched_only_by_match_is_skipped_not_duplicated(db_session, tmp_path: Path) -> None:
+    """Архивная запись ищется по тем же правилам, что и активная (имя, потом match)."""
+    city_name = f"Матчархив-{uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=city_name)
+    shop_id = await _archived_shop(db_session, city_id, "ИП Точилкин (Хет-Трик)", phone="+375 17 222-22-22")
+    await db_session.commit()
+    path = _write(tmp_path, {"city": city_name, "shops": [
+        {"name": "Хет-Трик", "match": ["хет-трик"], "services": ["skate_sharpening"],
+         "hours": {"mon": ["10:00", "19:00"]}},
+    ]})
+    city, records, rules = parse_shops_file(path)
+    plan = await build_plan(db_session, city_name=city, records=records, rink_rules=rules)
+    assert plan.creates == [] and plan.updates == []
+    assert any(f"#{shop_id}" in p and "--revive" in p for p in plan.rink_problems)
+
+
+@pytest.mark.asyncio
+async def test_revive_reactivates_and_publishes_archived_shop_without_wiping(db_session, tmp_path: Path) -> None:
+    city_name = f"Воскрешинск-{uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=city_name)
+    shop_id = await _archived_shop(db_session, city_id, "ИП Точилкин (Хет-Трик)", phone="+375 17 222-22-22")
+    await db_session.commit()
+    path = _write(tmp_path, {"city": city_name, "shops": [
+        {"name": "Хет-Трик", "match": ["хет-трик"], "phones": ["+375 29 000-00-00"],
+         "website": "https://het.example", "services": ["skate_sharpening"],
+         "hours": {"mon": ["10:00", "19:00"]}},
+    ]})
+    city, records, rules = parse_shops_file(path)
+    plan = await build_plan(db_session, city_name=city, records=records, rink_rules=rules, revive=True)
+    assert [aid for aid, _ in plan.updates] == [shop_id] and plan.revives == {shop_id}
+    assert plan.creates == []
+    report = await apply_plan(db_session, plan)
+    await db_session.commit()
+    assert "архива" in report["updated"][0]
+    row = (
+        await db_session.execute(
+            text("SELECT a.is_active, a.is_confirmed, a.address, p.status, p.phone, p.website_url "
+                 "FROM arenas a JOIN arena_profiles p ON p.arena_id = a.id WHERE a.id = :id"),
+            {"id": shop_id},
+        )
+    ).one()
+    assert row[0] is True and row[1] is True
+    assert row[2] == "ул. Админская, 5"  # в файле адреса нет — админский остаётся
+    assert row[3] == "published"
+    assert row[4] == "+375 17 222-22-22"  # контакт админа не перезаписан
+    assert row[5] == "https://het.example"  # пустое поле дополнено из файла
+
+
+@pytest.mark.asyncio
+async def test_reimport_without_address_keeps_admin_address(db_session, tmp_path: Path) -> None:
+    city_name = f"Адресоград-{uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=city_name)
+    shop_id = int(
+        (
+            await db_session.execute(
+                text(
+                    "INSERT INTO arenas (city_id, name, address, latitude, longitude, is_active, is_confirmed, "
+                    "venue_type) VALUES (:c, 'Заточка', 'ул. Ручная, 3', 53.1, 27.1, true, true, 'shop') "
+                    "RETURNING id"
+                ),
+                {"c": city_id},
+            )
+        ).scalar_one()
+    )
+    await db_session.commit()
+    path = _write(tmp_path, {"city": city_name, "shops": [
+        {"name": "Заточка", "services": ["skate_sharpening"], "hours": {"mon": ["10:00", "19:00"]}},
+    ]})
+    city, records, rules = parse_shops_file(path)
+    plan = await build_plan(db_session, city_name=city, records=records, rink_rules=rules)
+    assert [aid for aid, _ in plan.updates] == [shop_id] and not plan.revives
+    await apply_plan(db_session, plan)
+    await db_session.commit()
+    row = (
+        await db_session.execute(
+            text("SELECT address, latitude, longitude, is_active FROM arenas WHERE id = :id"), {"id": shop_id}
+        )
+    ).one()
+    assert tuple(row) == ("ул. Ручная, 3", 53.1, 27.1, True)

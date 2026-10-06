@@ -1135,10 +1135,62 @@ def webapp_arena_card_css(request: Request):
     )
 
 
+@app.get("/webapp/opening-hours.js")
+def webapp_opening_hours_js(request: Request):
+    """TASK-182: часы работы (через полночь) — общие для ice-tab-model и arena-card-model."""
+    path = _WEBAPP_DIR / "opening-hours.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/minsk-time.js")
+def webapp_minsk_time_js(request: Request):
+    """TASK-184: календарь и «сейчас» каталога (Europe/Minsk / TZ арены)."""
+    path = _WEBAPP_DIR / "minsk-time.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/arena-card-model.js")
 def webapp_arena_card_model_js(request: Request):
     """TASK-052 arena card view-model (pure). Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "arena-card-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/schedule-staleness-model.js")
+def webapp_schedule_staleness_model_js(request: Request):
+    """TASK-180 schedule staleness copy/dates (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "schedule-staleness-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/arena-schedule-mode-model.js")
+def webapp_arena_schedule_mode_model_js(request: Request):
+    """TASK-204 arena schedule mode copy (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "arena-schedule-mode-model.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
@@ -1180,6 +1232,19 @@ def webapp_catalog_geo_model_js(request: Request):
     """Автоопределение города (catalog, Главная, «Поиск»). Раньше не отдавался по /webapp/ —
     catalog.html и client-home.html грузили его с 404, и геолокация молча не работала."""
     path = _WEBAPP_DIR / "catalog-geo-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/catalog-contact-attribution.js")
+def webapp_catalog_contact_attribution_js(request: Request):
+    """Подпись «упомяните Glide» под кнопкой «Написать тренеру» в каталоге (TASK-202)."""
+    path = _WEBAPP_DIR / "catalog-contact-attribution.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(

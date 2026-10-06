@@ -158,6 +158,7 @@
     var ClusterLayout = null;
     var ymaps = null;
     var bboxState = null;
+    var bboxFetchGen = 0;
     var boundsTimer = null;
     var ignoreBounds = false;
     var started = false;
@@ -795,12 +796,19 @@
       });
       if (!url) return;
       bboxState = plan;
-      fetchJson(url).then(function (data) {
-        var raw = (data && data.items) || [];
-        mapItems = mapItemsFromList(raw);
-        syncObjects();
-        defaultSheet();
-      });
+      bboxFetchGen += 1;
+      var gen = bboxFetchGen;
+      fetchJson(url)
+        .then(function (data) {
+          if (gen !== bboxFetchGen) return;
+          var raw = (data && data.items) || [];
+          mapItems = mapItemsFromList(raw);
+          syncObjects();
+          defaultSheet();
+        })
+        .catch(function () {
+          /* Оставляем предыдущие пины; шторку не ломаем. */
+        });
     }
 
     function applyCityCamera() {

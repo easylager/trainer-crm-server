@@ -20,36 +20,18 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var MINSK_TZ = 'Europe/Minsk';
+  var MT =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./minsk-time.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.MinskTime
+        : null;
+
   var MAX_ROWS = 3;
+  var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
 
-  function pad2(n) {
-    return n < 10 ? '0' + n : String(n);
-  }
-
-  function minskDateIso(now) {
-    var parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: MINSK_TZ,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(now);
-    var y = '1970';
-    var m = '01';
-    var d = '01';
-    for (var i = 0; i < parts.length; i++) {
-      if (parts[i].type === 'year') y = parts[i].value;
-      if (parts[i].type === 'month') m = parts[i].value;
-      if (parts[i].type === 'day') d = parts[i].value;
-    }
-    return y + '-' + m + '-' + d;
-  }
-
-  function addDaysIso(iso, days) {
-    var bits = String(iso).split('-');
-    if (bits.length < 3) return iso;
-    var dt = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]) + days));
-    return dt.getUTCFullYear() + '-' + pad2(dt.getUTCMonth() + 1) + '-' + pad2(dt.getUTCDate());
+  function staleApi() {
+    return rootRef.ScheduleStalenessModel || null;
   }
 
   function escapeHtml(s) {
@@ -68,9 +50,9 @@
   function dayLabel(localDate, now) {
     var iso = String(localDate || '').slice(0, 10);
     if (!iso) return '';
-    var today = minskDateIso(now);
+    var today = MT.dateIso(now);
     if (iso === today) return 'Сегодня';
-    if (iso === addDaysIso(today, 1)) return 'Завтра';
+    if (iso === MT.addDaysIso(today, 1)) return 'Завтра';
     return iso.slice(8, 10) + '.' + iso.slice(5, 7);
   }
 
@@ -89,8 +71,7 @@
   }
 
   function hasStarted(session, now) {
-    var startMs = Date.parse((session && session.starts_at_utc) || '');
-    return !isNaN(startMs) && startMs <= now.getTime();
+    return MT.liveSessionStarted(session, now);
   }
 
   /** Ссылка на карточку места с выделенным сеансом — конвенция IceTabModel.arenaHref. */
@@ -113,6 +94,8 @@
     if (word) place += ' · ' + word;
     var day = dayLabel(session && session.local_date, now);
     if (day && day !== 'Сегодня') place = day + ' · ' + place;
+    var S = staleApi();
+    if (S && S.scheduleStaleFlag(session)) place += ' · ' + S.STALE_SHORT;
     return {
       time: hhmm(session && session.starts_at_local),
       place: place,

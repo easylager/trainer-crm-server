@@ -42,9 +42,24 @@ from src.application.training_group_use_cases import (
     list_open_training_groups_catalog,
 )
 from src.application.trainer_use_cases import list_active_trainers_for_client
+from src.shared.arena_schedule_mode import (
+    PHONE_LINE,
+    SCHEDULE_MODE_PHONE,
+    SCHEDULE_MODE_SEASON_CLOSED,
+    arena_schedule_mode_sql,
+    normalize_schedule_mode,
+    schedule_mode_public_fields,
+    season_closed_user_line,
+)
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.currency import currency_for_country
-from src.shared.ice_discovery_scope import ice_discovery_countries
+from src.shared.ice_discovery_scope import (
+    PUBLIC_ARENA_VISIBLE_SQL,
+    PUBLIC_CITY_SCOPE_SQL,
+    ice_discovery_countries,
+    public_city_scope_sql,
+    public_scope_params,
+)
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import (
     DEFAULT_HIDDEN_VENUE_TYPES,
@@ -335,6 +350,23 @@ def _place_line(item: Mapping[str, Any]) -> str:
 
 def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     currency = item.get("currency_code") or "BYN"
+    mode = normalize_schedule_mode(item.get("schedule_mode"))
+    if intent == INTENT_SKATE and mode == SCHEDULE_MODE_PHONE:
+        if normalize_venue_type(item.get("venue_type")) in (VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR):
+            return {"kind": "phone", "text": PHONE_LINE, "currency_code": currency}
+    if intent == INTENT_SKATE and mode == SCHEDULE_MODE_SEASON_CLOSED:
+        if normalize_venue_type(item.get("venue_type")) in (VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR):
+            reopen = item.get("reopen_date")
+            if isinstance(reopen, datetime):
+                reopen = reopen.date()
+            return {
+                "kind": "season_closed",
+                "text": season_closed_user_line(
+                    reopen_date=reopen,
+                    note=item.get("schedule_mode_note"),
+                ),
+                "currency_code": currency,
+            }
     if intent == INTENT_SKATE and normalize_venue_type(item.get("venue_type")) not in (
         VENUE_TYPE_ICE,
         VENUE_TYPE_OUTDOOR,
@@ -387,6 +419,7 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
             "price_rental_minor": item.get("next_price_rental_minor"),
             "currency_code": session_currency,
             "more_count": more,
+            "schedule_basis": item.get("next_schedule_basis") or "live",
         }
     if intent == INTENT_COACH:
         trainers = int(item.get("trainer_count") or 0)
@@ -410,6 +443,27 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
     }
 
 
+def _unconfirmed_live_if_very_stale(
+    item: Mapping[str, Any], live: dict[str, Any], freshness: Mapping[str, Any]
+) -> dict[str, Any]:
+    """TASK-180: > 72 ч без удачного прогона — сеанс не выдаём за текущее расписание.
+
+    Ни дня, ни времени, ни цены: строка «Расписание не обновлялось N дней — уточните
+    по телефону», а сам каток остаётся в ленте (телефон и сайт — в карточке места).
+    """
+    from src.application.schedule_staleness import LEVEL_VERY_STALE, staleness_level, very_stale_note
+
+    if staleness_level(freshness) != LEVEL_VERY_STALE:
+        return live
+    note = very_stale_note(
+        freshness,
+        now=datetime.now(timezone.utc),
+        has_phone=bool(str(item.get("phone") or "").strip()),
+        has_site=bool(str(item.get("website_url") or "").strip()),
+    )
+    return {"kind": "unconfirmed", "text": note, "currency_code": live.get("currency_code")}
+
+
 def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     hero = item.get("hero")
     thumb = None
@@ -422,6 +476,9 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
             # на 390pt при DPR2 это мыло, поэтому список отдаёт ещё и card (800px).
             card = variants.get("card") or variants.get("hero") or thumb
     live = _build_live(item, intent=intent, today=today)
+    freshness = item.get("_freshness") or _schedule_freshness(item)
+    if live.get("kind") == "session":
+        live = _unconfirmed_live_if_very_stale(item, live, freshness)
     venue_type = normalize_venue_type(item.get("venue_type"))
     amenities = _as_mapping(item.get("amenities"))
     payload: dict[str, Any] = {
@@ -450,7 +507,11 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "live": live,
         "live_line": live.get("text"),
         # TASK-146: та же свежесть расписания, что в карточке (schedule_stale и др.).
-        "freshness": _schedule_freshness(item),
+        "freshness": freshness,
+        # TASK-180: у очень устаревшего расписания карточка просит «уточните по телефону» —
+        # только если телефон действительно есть (он и так публичный в карточке места).
+        "phone": item.get("phone"),
+        **schedule_mode_public_fields(item),
     }
     if venue_type == VENUE_TYPE_SHOP:
         payload["shop_services"] = [k for k in SHOP_SERVICE_KEYS if amenities.get(k) is True]
@@ -465,6 +526,7 @@ SELECT
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
     p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+    p.schedule_mode, p.reopen_date, p.schedule_mode_note,
     p.amenities, p.status, p.verified_at, p.updated_at AS profile_updated_at,
     c.country, c.name AS city_name,
     nxt.id AS next_session_id,
@@ -476,6 +538,7 @@ SELECT
     nxt.price_child_minor AS next_price_child_minor,
     nxt.price_rental_minor AS next_price_rental_minor,
     nxt.currency_code AS next_currency_code,
+    nxt.schedule_basis AS next_schedule_basis,
     nxw.id AS win_session_id,
     nxw.kind AS win_kind,
     nxw.starts_at_utc AS win_starts_at_utc,
@@ -485,6 +548,7 @@ SELECT
     nxw.price_child_minor AS win_price_child_minor,
     nxw.price_rental_minor AS win_price_rental_minor,
     nxw.currency_code AS win_currency_code,
+    nxw.schedule_basis AS win_schedule_basis,
     COALESCE(sa.future_count, 0) AS future_session_count,
     COALESCE(sa.sessions_48h, 0) AS sessions_48h,
     sa.max_observed_at AS sessions_observed_at,
@@ -504,7 +568,8 @@ LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 LEFT JOIN LATERAL (
     SELECT s.id, s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
-           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code
+           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code,
+           s.schedule_basis
     FROM ice_sessions s
     WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
     ORDER BY s.starts_at_utc
@@ -514,7 +579,8 @@ LEFT JOIN LATERAL (
 -- «выходные»). Без окна границы — «сейчас … +1 год», и nxw совпадает с nxt.
 LEFT JOIN LATERAL (
     SELECT s.id, s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
-           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code
+           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code,
+           s.schedule_basis
     FROM ice_sessions s
     WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
       AND s.starts_at_utc >= :win_from AND s.starts_at_utc < :win_to
@@ -565,19 +631,10 @@ LEFT JOIN (
       ) < tg.max_members
     GROUP BY tg.arena_id
 ) og ON og.arena_id = a.id
-WHERE a.is_active AND a.is_confirmed
-  AND c.country = ANY(:ice_countries)
-  AND (p.status IS NULL OR p.status = :published)
-  -- A bare name with no photo reads as an admin task-in-progress, not a place to
-  -- book: a trainer's new arena exists (and works in their own schedule) the moment
-  -- they create it, but stays out of client search until someone adds a photo.
-  -- Scoped to trainer-created arenas only — the seeded/imported catalog (Moscow
-  -- expansion and the like) went through its own curation and has no `media` rows
-  -- yet either; hiding it would be a much bigger regression than the bug being fixed.
-  AND (a.created_by_trainer_id IS NULL OR EXISTS (
-      SELECT 1 FROM media m
-      WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-  ))
+-- TASK-177: the one public visibility rule (active+confirmed arena, active city in
+-- the discovery countries, published profile, trainer-created arenas need a photo).
+-- Before, this list ignored cities.is_active: a deactivated city kept its cards.
+WHERE {PUBLIC_ARENA_VISIBLE_SQL}
 """
 
 
@@ -882,6 +939,10 @@ async def list_public_ice_arenas(
     )
     if window is not None:
         _apply_window(rows)
+    if intent_value == INTENT_SKATE:
+        # TASK-180: очень устаревший каток не попадает «в окно» — его сеанс мы не
+        # показываем как ответ на «Сегодня вечером», он уходит к остальным с честной строкой.
+        _mark_unconfirmed_schedules(rows)
     if near_pt is not None:
         nlat, nlon = near_pt
         for row in rows:
@@ -969,10 +1030,9 @@ async def find_nearest_ice_now(
                 LEFT JOIN arena_profiles p ON p.arena_id = a.id
                 JOIN cities c ON c.id = a.city_id
                 WHERE {_CURRENT_SESSION_SQL}
-                  AND a.is_active AND a.is_confirmed
+                  AND {PUBLIC_ARENA_VISIBLE_SQL}
+                  AND {arena_schedule_mode_sql()} <> 'season_closed'
                   AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
-                  AND (p.status IS NULL OR p.status = :published)
-                  AND c.country = ANY(:ice_countries)
                   AND s.local_date <= :horizon
                 ORDER BY s.starts_at_utc
                 """
@@ -1024,7 +1084,19 @@ _WINDOW_FIELDS = (
     ("win_price_child_minor", "next_price_child_minor"),
     ("win_price_rental_minor", "next_price_rental_minor"),
     ("win_currency_code", "next_currency_code"),
+    ("win_schedule_basis", "next_schedule_basis"),
 )
+
+
+def _mark_unconfirmed_schedules(rows: list[dict[str, Any]]) -> None:
+    from src.application.schedule_staleness import LEVEL_VERY_STALE, staleness_level
+
+    for row in rows:
+        fresh = _schedule_freshness(row)
+        row["_freshness"] = fresh
+        if staleness_level(fresh) == LEVEL_VERY_STALE and row.get("next_session_id") is not None:
+            row["window_hit"] = False
+            row["outside_window"] = False
 
 
 def _apply_window(rows: list[dict[str, Any]]) -> None:
@@ -1088,6 +1160,23 @@ async def get_hub_ice_teaser(
     if city_id is not None:
         params["city_id"] = int(city_id)
         city_filter = "  AND a.city_id = :city_id\n"
+    # TASK-180: арены, чей парсер не читал сайт успешно > 72 ч, на Главной не продаём —
+    # их сеансы больше не выдаём за расписание. > 6 ч — показываем с пометкой.
+    from src.application.schedule_staleness import (
+        LEVEL_STALE,
+        LEVEL_VERY_STALE,
+        load_arena_freshness,
+        staleness_level,
+    )
+
+    job_arena_ids = (
+        await session.execute(text("SELECT arena_id FROM ice_parser_jobs WHERE is_enabled"))
+    ).scalars().all()
+    job_fresh = await load_arena_freshness(session, job_arena_ids, now=now)
+    params["unconfirmed_ids"] = [
+        aid for aid, fr in job_fresh.items() if staleness_level(fr) == LEVEL_VERY_STALE
+    ]
+    stale_ids = {aid for aid, fr in job_fresh.items() if staleness_level(fr) == LEVEL_STALE}
     # TASK-148 (AC-4): «Сегодня на льду» — вместе с тизером отдаём до 4 ближайших
     # сеансов (тизер — первый), чтобы хаб рисовал блок без нового эндпоинта и без
     # второго раунд-трипа. Раньше был LATERAL LIMIT 1 по аренам + внешний LIMIT 1:
@@ -1115,14 +1204,10 @@ JOIN arenas a ON a.id = s.arena_id
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 WHERE {_CURRENT_SESSION_SQL}
-  AND a.is_active AND a.is_confirmed
-  AND c.country = ANY(:ice_countries)
-{city_filter}  AND (p.status IS NULL OR p.status = :published)
-  AND (a.created_by_trainer_id IS NULL OR EXISTS (
-      SELECT 1 FROM media m
-      WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-  ))
-ORDER BY s.starts_at_utc, a.id
+  AND {PUBLIC_ARENA_VISIBLE_SQL}
+  AND NOT (a.id = ANY(:unconfirmed_ids))
+  AND {arena_schedule_mode_sql()} <> 'season_closed'
+{city_filter}ORDER BY s.starts_at_utc, a.id
 LIMIT 4
 """
     rows = (await session.execute(text(sql), params)).mappings().all()
@@ -1168,6 +1253,8 @@ LIMIT 4
             "starts_at_local": _hhmm(r["starts_at_local"]),
             "price_adult_minor": r["price_adult_minor"],
             "currency_code": r["currency_code"],
+            # TASK-180: > 6 ч без удачного прогона — хаб помечает «могло измениться».
+            "schedule_stale": int(r["arena_id"]) in stale_ids,
         }
         for r in rows
     ]
@@ -1187,6 +1274,7 @@ LIMIT 4
         "thumb": thumb,
         "card": card,
         "distance_km": distance_km,
+        "schedule_stale": int(row["arena_id"]) in stale_ids,
         # TASK-148 (AC-4): id сеанса тизера + ближайшие сеансы (включая тизерный),
         # чтобы блок «Сегодня на льду» строил свои 2–3 строки из тех же live-данных.
         "session_id": int(row["session_id"]),
@@ -1202,7 +1290,41 @@ LIMIT 4
     }
 
 
-async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str, Any] | None:
+_MERGE_CHAIN_MAX_HOPS = 5
+
+
+async def resolve_merged_arena_id(session: AsyncSession, arena_id: int) -> int | None:
+    """Canonical arena a retired duplicate was merged into (TASK-177), or ``None``.
+
+    Follows ``arenas.merged_into_arena_id`` (a chain if a canonical was itself merged
+    later), bounded so a bad cycle in data can never hang a public request.
+    """
+    current = int(arena_id)
+    seen = {current}
+    for _ in range(_MERGE_CHAIN_MAX_HOPS):
+        nxt = (
+            await session.execute(
+                text("SELECT merged_into_arena_id FROM arenas WHERE id = :id"), {"id": current}
+            )
+        ).scalar()
+        if nxt is None or int(nxt) in seen:
+            break
+        current = int(nxt)
+        seen.add(current)
+    return current if current != int(arena_id) else None
+
+
+async def _load_arena_by_ref(
+    session: AsyncSession, arena_ref: str, *, city_id: int | None = None
+) -> dict[str, Any] | None:
+    """Карточка по id (уникален глобально) или по slug.
+
+    Slug уникален только внутри города: «Ледовая арена» встречается много раз.
+    slug + город → карточка этого города. Голый slug (старые ссылки ``arena_<slug>``
+    до TASK-146) → карточка, только если среди публично видимых арен
+    (``PUBLIC_ARENA_VISIBLE_SQL``) он ровно один; 0 или >1 → ``None`` (404),
+    а не «меньший id» — чужая карточка.
+    """
     now = datetime.now(timezone.utc)
     params: dict[str, Any] = {
         "now": now,
@@ -1221,9 +1343,15 @@ async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str,
     else:
         sql += " AND p.slug = :slug"
         params["slug"] = arena_ref.strip()
+        if city_id is not None:
+            sql += " AND a.city_id = :slug_city_id"
+            params["slug_city_id"] = int(city_id)
+    # LIMIT 2: для голого slug нужно отличить «один» от «неоднозначно».
     sql += " ORDER BY a.id LIMIT 2"
     result = await session.execute(text(sql), params)
     rows = [_row_to_arena_dict(row) for row in result.mappings()]
+    if len(rows) > 1 and not arena_ref.isdigit() and city_id is None:
+        return None
     return rows[0] if rows else None
 
 
@@ -1271,8 +1399,10 @@ def _freshness_payload(
     }
 
 
-async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[str, Any] | None:
-    row = await _load_arena_by_ref(session, arena_ref)
+async def get_public_arena_card(
+    session: AsyncSession, arena_ref: str, *, city_id: int | None = None
+) -> dict[str, Any] | None:
+    row = await _load_arena_by_ref(session, arena_ref, city_id=city_id)
     if row is None:
         return None
     await attach_arena_media_payloads(session, [row])
@@ -1315,6 +1445,7 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "opening_hours": _as_mapping(row.get("opening_hours")),
         "season_start_month": season_start,
         "season_end_month": season_end,
+        **schedule_mode_public_fields(row),
         "in_season": is_in_season(season_start, season_end, _today_minsk().month),
         "amenities": _as_mapping(row.get("amenities")),
         "contacts": {
@@ -1342,8 +1473,9 @@ async def list_public_arena_sessions(
     *,
     date_from: date | None = None,
     date_to: date | None = None,
+    city_id: int | None = None,
 ) -> dict[str, Any] | None:
-    row = await _load_arena_by_ref(session, arena_ref)
+    row = await _load_arena_by_ref(session, arena_ref, city_id=city_id)
     if row is None:
         return None
     start = date_from or _today_minsk()
@@ -1357,7 +1489,7 @@ async def list_public_arena_sessions(
             SELECT id, arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                    price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                    price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-                   source_id, observed_at, valid_until, confidence
+                   source_id, observed_at, valid_until, confidence, schedule_basis
             FROM ice_sessions s
             WHERE s.arena_id = :aid
               AND {_CURRENT_SESSION_SQL}
@@ -1398,6 +1530,7 @@ async def list_public_arena_sessions(
         "observed_at",
         "valid_until",
         "confidence",
+        "schedule_basis",
     ]
     by_date: dict[str, list[dict[str, Any]]] = {}
     for raw in result.fetchall():
@@ -1420,9 +1553,9 @@ async def list_public_arena_sessions(
 
 
 async def list_public_arena_trainers(
-    session: AsyncSession, arena_ref: str
+    session: AsyncSession, arena_ref: str, *, city_id: int | None = None
 ) -> dict[str, Any] | None:
-    row = await _load_arena_by_ref(session, arena_ref)
+    row = await _load_arena_by_ref(session, arena_ref, city_id=city_id)
     if row is None:
         return None
     items, total = await list_active_trainers_for_client(
@@ -1497,25 +1630,19 @@ async def search_public_ice(
     cap = max(1, min(int(limit or SEARCH_LIMIT), 20))
     like = f"%{query}%"
     use_trgm = await _pg_trgm_enabled(session)
-    arena_sql = """
+    arena_sql = f"""
         SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
-        WHERE a.is_active AND a.is_confirmed
-          AND c.country = ANY(:ice_countries)
-          AND (p.status IS NULL OR p.status = :published)
-          AND (a.created_by_trainer_id IS NULL OR EXISTS (
-              SELECT 1 FROM media m
-              WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-          ))
+        WHERE {PUBLIC_ARENA_VISIBLE_SQL}
           AND (
             to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
               @@ plainto_tsquery('simple', :q)
             OR a.name ILIKE :like
             OR coalesce(p.district, '') ILIKE :like
             OR EXISTS (
-                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{}'::jsonb)) am
+                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{{}}'::jsonb)) am
                 WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
             )
           )
@@ -1523,18 +1650,12 @@ async def search_public_ice(
         LIMIT :lim
     """
     if use_trgm:
-        arena_sql = """
+        arena_sql = f"""
             SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
             FROM arenas a
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
-            WHERE a.is_active AND a.is_confirmed
-              AND c.country = ANY(:ice_countries)
-              AND (p.status IS NULL OR p.status = :published)
-              AND (a.created_by_trainer_id IS NULL OR EXISTS (
-                  SELECT 1 FROM media m
-                  WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-              ))
+            WHERE {PUBLIC_ARENA_VISIBLE_SQL}
               AND (
                 to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
                   @@ plainto_tsquery('simple', :q)
@@ -1542,7 +1663,7 @@ async def search_public_ice(
                 OR coalesce(p.district, '') ILIKE :like
                 OR similarity(a.name, :q) > 0.2
                 OR EXISTS (
-                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{}'::jsonb)) am
+                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{{}}'::jsonb)) am
                 WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
             )
               )
@@ -1581,10 +1702,10 @@ async def search_public_ice(
     )
     cities = await session.execute(
         text(
-            """
+            f"""
             SELECT id, name
             FROM cities
-            WHERE is_active AND country = ANY(:ice_countries)
+            WHERE {public_city_scope_sql("cities")}
               AND (
                 to_tsvector('simple', coalesce(name, '')) @@ plainto_tsquery('simple', :q)
                 OR name ILIKE :like
@@ -1644,13 +1765,9 @@ LEFT JOIN (
   SELECT a.city_id, a.id, a.latitude, a.longitude
   FROM arenas a
   LEFT JOIN arena_profiles p ON p.arena_id = a.id
-  WHERE a.is_active AND a.is_confirmed
+  JOIN cities c ON c.id = a.city_id
+  WHERE {PUBLIC_ARENA_VISIBLE_SQL}
     AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
-    AND (p.status IS NULL OR p.status = :published)
-    AND (a.created_by_trainer_id IS NULL OR EXISTS (
-        SELECT 1 FROM media m
-        WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-    ))
 ) rink ON rink.city_id = c.id
 LEFT JOIN (
   SELECT tc.city_id, tc.trainer_id
@@ -1664,7 +1781,7 @@ LEFT JOIN (
     AND {CATALOG_LISTED_SQL}
   WHERE p.city_id IS NOT NULL
 ) coach ON coach.city_id = c.id
-WHERE c.is_active
+WHERE {PUBLIC_CITY_SCOPE_SQL}
 GROUP BY c.id, c.name, c.sort_order, c.country
 HAVING COUNT(DISTINCT rink.id) > 0 OR COUNT(DISTINCT coach.trainer_id) > 0
 ORDER BY c.sort_order, c.id
@@ -1674,7 +1791,7 @@ ORDER BY c.sort_order, c.id
 async def list_ice_cities(session: AsyncSession) -> dict[str, Any]:
     """Cities that belong on the Ice tab picker: a map rink and/or a catalog trainer."""
     result = await session.execute(
-        text(_ICE_CITIES_SQL), {"published": ARENA_PROFILE_STATUS_PUBLISHED}
+        text(_ICE_CITIES_SQL), public_scope_params()
     )
     items: list[dict[str, Any]] = []
     for row in result.mappings():

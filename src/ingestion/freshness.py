@@ -49,12 +49,19 @@ BLOCKED_RETRY_MINUTES = 360
 # Расписание считается устаревшим, если источник не читался успешно дольше порога.
 # 6 часов днём — это ~8 неудачных попыток подряд, а не одна случайная.
 DEFAULT_STALE_AFTER_HOURS = 6
+# TASK-180: «очень устарело» — дольше трёх суток без удачного прогона. Такие сеансы
+# пользователю больше не показываем как расписание: «не обновлялось N дней — уточните».
+VERY_STALE_AFTER_HOURS = 72
 
 CONFIG_POLL_MINUTES = "poll_minutes"
 CONFIG_STALE_AFTER_HOURS = "stale_after_hours"
 CONFIG_ALERTS_MUTED = "alerts_muted"
 
 ERROR_CODE_EMPTY_AFTER_SLOTS = "empty_after_slots"
+# TASK-178: почему прогон пустой. Источник не дал ни одного слота (вёрстка? межсезонье?)
+# или дал, но все отброшены нормализацией (обычно — все сеансы уже прошли).
+ERROR_CODE_EMPTY_SOURCE = "empty_source"
+ERROR_CODE_EMPTY_AFTER_FILTER = "empty_after_filter"
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -82,12 +89,16 @@ def config_flag(config: dict[str, Any] | None, key: str) -> bool:
 
 
 def is_run_failure(record: ScrapeRunRecord, *, shown_sessions: int) -> bool:
-    """Сбой — это когда пользователь может видеть неправду.
+    """Прогон, который удлиняет серию сбоев (и даёт быстрый 🔴 со второго подряд).
 
     error/blocked — всегда. empty — только если у арены ещё висят будущие сеансы
     из прошлых прогонов: empty их не удаляет (защита от сломанного парсера), значит
-    мы показываем то, чего источник больше не подтверждает. Пустой источник при
-    пустой витрине (межсезонье) — честное «нечего показывать», не сбой.
+    мы показываем то, чего источник больше не подтверждает.
+
+    Пустой прогон при пустой витрине — не сбой, но и **не выздоровление** (TASK-178):
+    серию он не обнуляет и ``last_ok_at`` не двигает. Иначе «вёрстка сломалась →
+    старые сеансы истекли» давало ложное ✅. Долгую пустоту ловит порог устаревания
+    в алертах (от последнего ok, независимо от витрины).
     """
     if record.status in (RUN_STATUS_ERROR, RUN_STATUS_BLOCKED):
         return True
@@ -96,13 +107,22 @@ def is_run_failure(record: ScrapeRunRecord, *, shown_sessions: int) -> bool:
     return False
 
 
+def _empty_code(record: ScrapeRunRecord) -> str:
+    if record.error_code in (ERROR_CODE_EMPTY_SOURCE, ERROR_CODE_EMPTY_AFTER_FILTER):
+        return record.error_code
+    return ERROR_CODE_EMPTY_AFTER_FILTER if record.slots_dropped > 0 else ERROR_CODE_EMPTY_SOURCE
+
+
 def next_source_state(
     prev: SourceState,
     record: ScrapeRunRecord,
     *,
     shown_sessions: int,
 ) -> SourceState:
-    """Новое состояние после прогона. Алертные поля не трогаем — их ведёт alerts."""
+    """Новое состояние после прогона. Алертные поля не трогаем — их ведёт alerts.
+
+    Серию сбоев обнуляет только ``ok`` — прогон, который реально опубликовал сеансы.
+    """
     finished = _as_utc(record.finished_at)
     if record.status == RUN_STATUS_OK:
         return replace(
@@ -115,18 +135,18 @@ def next_source_state(
             last_error_summary=None,
         )
     if not is_run_failure(record, shown_sessions=shown_sessions):
-        # empty при пустой витрине: источник прочитан, показывать нечего — серия сбоев
-        # закончилась, но last_ok_at не двигаем (расписания-то не было).
+        # empty при пустой витрине: показывать нечего. Серию не трогаем (ни +1, ни сброс),
+        # last_ok_at не двигаем, но запоминаем причину — её покажет алерт устаревания.
         return replace(
             prev,
-            failing_since=None,
-            failure_streak=0,
-            last_error_code=None,
-            last_error_summary=None,
+            last_error_code=_empty_code(record),
+            last_error_summary=(record.error_message or "")[:500] or None,
         )
     if record.status == RUN_STATUS_EMPTY:
         code = ERROR_CODE_EMPTY_AFTER_SLOTS
         summary = f"источник вернул 0 сеансов, а у нас показано {shown_sessions}"
+        if record.error_message:
+            summary = f"{summary} ({record.error_message})"
     else:
         code = record.error_code or record.status
         summary = record.error_message
@@ -137,6 +157,23 @@ def next_source_state(
         last_error_code=(code or "")[:64] or None,
         last_error_summary=(summary or "")[:500] or None,
     )
+
+
+def replay_source_state(
+    runs: list[ScrapeRunRecord],
+    *,
+    shown_sessions: int,
+    start: SourceState | None = None,
+) -> SourceState:
+    """Состояние источника, пересчитанное по истории прогонов (старые → новые).
+
+    Историческое число видимых сеансов не хранится, поэтому для empty берётся
+    ``shown_sessions`` — текущая витрина (то же приближение, что в backfill 0211).
+    """
+    state = start or SourceState()
+    for record in sorted(runs, key=lambda r: _as_utc(r.finished_at)):
+        state = next_source_state(state, record, shown_sessions=shown_sessions)
+    return state
 
 
 def _is_daytime(local: datetime) -> bool:
@@ -214,6 +251,25 @@ def stale_after(config: dict[str, Any] | None) -> timedelta:
     return timedelta(hours=hours if hours is not None else DEFAULT_STALE_AFTER_HOURS)
 
 
+def _staleness_anchor(
+    *,
+    last_ok_at: datetime | None,
+    created_at: datetime | None,
+    sessions_observed_at: datetime | None,
+) -> datetime | None:
+    anchor = last_ok_at or created_at
+    if sessions_observed_at is not None:
+        s = _as_utc(sessions_observed_at)
+        if anchor is None or s > _as_utc(anchor):
+            anchor = sessions_observed_at
+    return anchor
+
+
+def very_stale_after(config: dict[str, Any] | None) -> timedelta:
+    """Порог «не показывать как расписание»: 72 ч, но не раньше обычного порога источника."""
+    return max(timedelta(hours=VERY_STALE_AFTER_HOURS), stale_after(config))
+
+
 def is_schedule_stale(
     *,
     has_enabled_job: bool,
@@ -234,14 +290,35 @@ def is_schedule_stale(
     """
     if not has_enabled_job:
         return False
-    anchor = last_ok_at or created_at
-    if sessions_observed_at is not None:
-        s = _as_utc(sessions_observed_at)
-        if anchor is None or s > _as_utc(anchor):
-            anchor = sessions_observed_at
+    anchor = _staleness_anchor(
+        last_ok_at=last_ok_at, created_at=created_at, sessions_observed_at=sessions_observed_at
+    )
     if anchor is None:
         return True
     return _as_utc(now) - _as_utc(anchor) > stale_after(config)
+
+
+def is_schedule_very_stale(
+    *,
+    has_enabled_job: bool,
+    last_ok_at: datetime | None,
+    config: dict[str, Any] | None,
+    now: datetime,
+    created_at: datetime | None = None,
+    sessions_observed_at: datetime | None = None,
+) -> bool:
+    """TASK-180: тот же якорь, что у ``is_schedule_stale``, но порог ``very_stale_after``.
+
+    Без парсера — всегда False (ручные сеансы ведёт админ, их свежесть так не меряем).
+    """
+    if not has_enabled_job:
+        return False
+    anchor = _staleness_anchor(
+        last_ok_at=last_ok_at, created_at=created_at, sessions_observed_at=sessions_observed_at
+    )
+    if anchor is None:
+        return True
+    return _as_utc(now) - _as_utc(anchor) > very_stale_after(config)
 
 
 def schedule_freshness_fields(
@@ -268,10 +345,20 @@ def schedule_freshness_fields(
         now=now,
         created_at=created_at,
     )
+    very_stale = stale and is_schedule_very_stale(
+        has_enabled_job=has_enabled_job,
+        last_ok_at=last_ok_at,
+        sessions_observed_at=sessions_observed_at,
+        config=config,
+        now=now,
+        created_at=created_at,
+    )
     return {
         "schedule_observed_at": observed.isoformat() if observed else None,
         "schedule_auto": bool(has_enabled_job),
         "schedule_stale": stale,
+        # TASK-180: > 72 ч без удачного прогона — сеансы не выдаём за расписание.
+        "schedule_very_stale": very_stale,
     }
 
 
@@ -284,17 +371,23 @@ __all__ = [
     "CONFIG_STALE_AFTER_HOURS",
     "DAY_POLL_MINUTES",
     "DEFAULT_STALE_AFTER_HOURS",
+    "ERROR_CODE_EMPTY_AFTER_FILTER",
     "ERROR_CODE_EMPTY_AFTER_SLOTS",
+    "ERROR_CODE_EMPTY_SOURCE",
     "MINSK_TZ",
     "NIGHT_POLL_MINUTES",
     "SourceState",
+    "VERY_STALE_AFTER_HOURS",
     "base_poll_interval",
     "config_flag",
     "failure_retry_interval",
     "is_run_failure",
     "is_schedule_stale",
+    "is_schedule_very_stale",
     "next_poll_at",
     "next_source_state",
+    "replay_source_state",
     "schedule_freshness_fields",
     "stale_after",
+    "very_stale_after",
 ]

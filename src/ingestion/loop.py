@@ -10,10 +10,11 @@ from typing import Awaitable, Callable
 
 from src.ingestion.alerts import tick_ice_health_alerts, tick_ice_health_weekly_digest
 from src.ingestion.jobs import SqlAlchemyParserJobStore
+from src.ingestion.ops_alerts import try_alert_tick_lock
 from src.ingestion.parsers import default_registry
 from src.ingestion.scheduler import IceIngestScheduler
 from src.ingestion.scrape_runs import SqlAlchemyScrapeRunRecorder
-from src.ingestion.ttl import purge_ice_scrape_ttl
+from src.ingestion.ttl import IceTtlStats, purge_ice_scrape_ttl
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ ICE_HEALTH_DIGEST_INTERVAL_SEC = 3600
 ICE_SOURCE_ALERT_INTERVAL_SEC = 120
 # TASK-176: сторож «прогонов нет вообще» — тоже отдельным циклом, независимо от планировщика.
 ICE_SCHEDULER_WATCHDOG_INTERVAL_SEC = 300
+# TASK-178: каждый тик алертов — под транзакционным advisory-локом (ops_alerts): вторая
+# реплика notification_service пропускает тик, а не шлёт тот же пуш второй раз.
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,7 @@ async def run_ice_ingest_tick() -> IceIngestTickResult:
                 publisher=SqlAlchemyIceSessionPublisher(session),
                 by_egress_proxy_url=get_settings().by_egress_proxy_url,
                 checkpoint=session.commit,
+                job_savepoint=session.begin_nested,
             )
             outcomes = await scheduler.run_due(datetime.now(timezone.utc))
             await session.commit()
@@ -139,6 +143,8 @@ async def run_ice_scheduler_watchdog_loop() -> None:
         await asyncio.sleep(ICE_SCHEDULER_WATCHDOG_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "ice_scheduler_watchdog"):
+                    continue
                 kind = await tick_scheduler_watchdog(session, now=datetime.now(timezone.utc))
                 await session.commit()
                 if kind:
@@ -149,21 +155,32 @@ async def run_ice_scheduler_watchdog_loop() -> None:
             logger.exception("ice scheduler watchdog tick failed")
 
 
+async def run_ttl_tick(session, *, now: datetime) -> tuple[IceTtlStats, int]:
+    """One TTL pass: ice scrape runs/sessions + catalog consumer events older than 400 days (TASK-189)."""
+    from src.application.catalog_consumer_events import purge_old_catalog_consumer_events
+
+    stats = await purge_ice_scrape_ttl(session, now=now)
+    events_deleted = await purge_old_catalog_consumer_events(session, now=now)
+    return stats, events_deleted
+
+
 async def run_ice_scrape_ttl_loop() -> None:
-    """Purge scrape runs older than 90 days (keep last any + last ok) and stale slots."""
+    """Purge scrape runs older than 90 days (keep last any + last ok), stale slots and
+    catalog consumer events past retention."""
     from src.infrastructure.db import async_session_factory
 
     while True:
         await asyncio.sleep(ICE_TTL_LOOP_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
-                stats = await purge_ice_scrape_ttl(session, now=datetime.now(timezone.utc))
+                stats, events_deleted = await run_ttl_tick(session, now=datetime.now(timezone.utc))
                 await session.commit()
-                if stats.runs_deleted or stats.sessions_deleted:
+                if stats.runs_deleted or stats.sessions_deleted or events_deleted:
                     logger.info(
-                        "ice ttl deleted runs=%s sessions=%s",
+                        "ice ttl deleted runs=%s sessions=%s catalog_events=%s",
                         stats.runs_deleted,
                         stats.sessions_deleted,
+                        events_deleted,
                     )
         except asyncio.CancelledError:
             break
@@ -179,6 +196,8 @@ async def run_ice_health_alert_loop() -> None:
         await asyncio.sleep(ICE_HEALTH_ALERT_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "ice_health_alert"):
+                    continue
                 sent = await tick_ice_health_alerts(session, now=datetime.now(timezone.utc))
                 await session.commit()
                 if sent:
@@ -198,6 +217,8 @@ async def run_ice_source_alert_loop() -> None:
         await asyncio.sleep(ICE_SOURCE_ALERT_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "ice_source_alert"):
+                    continue
                 alerts = await tick_source_failure_alerts(session, now=datetime.now(timezone.utc))
                 await session.commit()
                 if alerts:
@@ -216,6 +237,8 @@ async def run_ice_health_weekly_digest_loop() -> None:
         await asyncio.sleep(ICE_HEALTH_DIGEST_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "ice_health_weekly_digest"):
+                    continue
                 sent = await tick_ice_health_weekly_digest(session, now=datetime.now(timezone.utc))
                 await session.commit()
                 if sent:

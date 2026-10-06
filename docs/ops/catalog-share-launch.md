@@ -59,3 +59,26 @@
 | `miniapp_catalog_entry` | POST `/api/webapp/client/catalog/presence` из мини-аппа (shell / Поиск / карточка места) |
 
 WAU каталога: `COUNT(DISTINCT actor_hash)` за 7 дней по `public_page_view` + `miniapp_catalog_entry`. C-B прокси: `get_catalog_virality_cb_metrics` (shares/WAU, share→deeplink-open по `start_param` arena_/catalog_). `client_share_events` по-прежнему только намерение отправить.
+
+### TASK-189: стабильный актёр, дедуп, отчёт по городам (migration 0220)
+
+**Обязательная переменная до выката:** `CATALOG_ACTOR_HMAC_SECRET` на сервисах `api-server`
+(пишет события) — ≥ 32 символов, `openssl rand -hex 32`. Ни из чего не выводится.
+
+* Не задана или короче 32 → `actor_hash` **не пишется** (fail closed, в любом окружении: в
+  `src/shared/config.py` нет признака «прод», поэтому правило одно), в лог одна ошибка
+  `CATALOG_ACTOR_HMAC_SECRET is unset…`. События пишутся без актёра и без дедупа — WAU и
+  недели × города их не видят. Никакого отката на `SECRET_KEY` или литерал.
+* Смена секрета = новые псевдонимы для всех: ряд «неделя к неделе» рвётся. Не ротировать без нужды.
+* `actor_hash` = HMAC(секрет, telegram id | IP+UA), без дня. Дедуп — уникальный `dedup_key`
+  (вид | поверхность (вход в мини-апп — одна группа) | актёр | сутки по Минску | город | арена).
+* Сопоставимый ряд начинается с первой строки нового формата (`dedup_key IS NOT NULL`) —
+  ставится сам в момент, когда выкат и секрет оба на месте. Ручная граница —
+  `CATALOG_METRICS_COMPARABLE_SINCE=YYYY-MM-DD` (полночь по Минску). История до этого не пересчитывается.
+* C-B share→open: только вход в мини-апп по диплинку места/подборки, **запущенный из чата**
+  (`chat_type` в подписанной initData). Голый `catalog` (`/go`) и переход с CTA публичной
+  страницы (браузер, чата нет) не считаются. Сейчас шеры уходят веб-ссылками на `/p/`, поэтому
+  эта цифра честно мала; веб-воронку смотреть по `public_telegram_cta_clicks`.
+* Ретеншн: TTL-цикл `ice_scrape_ttl` (notification_service, раз в час) удаляет события старше 400 дней.
+* Отчёт: `DATABASE_URL=… python scripts/report_catalog_gate_metrics.py` — WAU, C-B, недели × города, топ арен.
+

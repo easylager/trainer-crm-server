@@ -2,7 +2,9 @@
 Pass products: trainer-defined subscription products (e.g. 5 sessions for 200 BYN).
 Scopes: zero linked services = all trainer catalog services; non-empty junction = listed services only.
         zero linked tiers   = all price tier kinds;      non-empty junction = listed tier_kinds only.
-Both scope conditions are ANDed: a booking must satisfy both service and tier filters to deduct a session.
+Both scope conditions are ANDed for automatic redemption on a completed booking.
+Manual redemption on the trainer pass screen may debit any past session of the same client,
+including a different service or tariff — only after the trainer confirms that exception.
 Used by trainer Mini App, client catalog, redemption on completed bookings.
 """
 
@@ -21,6 +23,7 @@ from src.shared.price_tier_kind import (
     PRICE_TIER_LABEL_RU,
     PRICE_TIER_ORDER,
     normalize_price_tier_kind,
+    price_tier_label_ru,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,6 +93,34 @@ SQL_PASS_PRODUCT_COVERS_BOOKING_ROW = """(
 # Legacy alias — callers that only pass booking_service_id still work if they add booking_tier_kind=None.
 # All internal callers are updated to pass both params.
 SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = SQL_PASS_PRODUCT_COVERS_BOOKING
+
+# Why a booking sits in the manual "other sessions" list (bookings alias `b`, product alias `p`).
+SQL_PASS_SERVICE_MISMATCH_ROW = """(
+    EXISTS (
+        SELECT 1 FROM trainer_pass_product_services t_svc
+        WHERE t_svc.pass_product_id = p.id
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM trainer_pass_product_services t_svc
+        WHERE t_svc.pass_product_id = p.id
+          AND t_svc.service_id = b.service_id
+    )
+)"""
+
+SQL_PASS_TIER_MISMATCH_ROW = """(
+    EXISTS (
+        SELECT 1 FROM trainer_pass_product_tiers t_tier
+        WHERE t_tier.pass_product_id = p.id
+    )
+    AND (
+        b.price_tier_kind IS NULL
+        OR NOT EXISTS (
+            SELECT 1 FROM trainer_pass_product_tiers t_tier
+            WHERE t_tier.pass_product_id = p.id
+              AND t_tier.tier_kind = b.price_tier_kind
+        )
+    )
+)"""
 
 # Sale price frozen at issue time; COALESCE fallback for rows predating price_cents column.
 SQL_PASS_INSTANCE_SALE_PRICE_CENTS = "COALESCE(pi.price_cents, p.price_cents, 0)"
@@ -1105,6 +1136,28 @@ async def redeem_pass_session_for_booking(
     return True
 
 
+def _manual_redeem_scope_note(
+    *,
+    in_scope: bool,
+    service_mismatch: bool,
+    tier_mismatch: bool,
+    tier_kind: str | None,
+) -> str | None:
+    """Short reason shown when a trainer manually debits a session outside the pass."""
+    if in_scope:
+        return None
+    tier_label = price_tier_label_ru(normalize_price_tier_kind(tier_kind))
+    if service_mismatch and tier_mismatch:
+        if tier_label:
+            return f"Другая услуга, тариф «{tier_label}»"
+        return "Другая услуга, тариф занятия не указан"
+    if service_mismatch:
+        return "Другая услуга"
+    if tier_label:
+        return f"Тариф «{tier_label}» не входит в абонемент"
+    return "Тариф занятия не указан — абонемент ограничен тарифом"
+
+
 def _iso_dt(value: object | None) -> str | None:
     if value is None:
         return None
@@ -1145,7 +1198,15 @@ async def get_trainer_pass_instance_detail(
                     ''
                 ) AS scope_label,
                 TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
-                c.phone
+                c.phone,
+                COALESCE(
+                    (
+                        SELECT ARRAY_AGG(t.tier_kind)
+                        FROM trainer_pass_product_tiers t
+                        WHERE t.pass_product_id = p.id
+                    ),
+                    CAST(ARRAY[] AS TEXT[])
+                ) AS tier_kinds
             FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id AND p.trainer_id = :tid
             JOIN clients c ON c.id = pi.client_id
@@ -1160,6 +1221,8 @@ async def get_trainer_pass_instance_detail(
     scope = (row[10] or "").strip() or None
     client_name = (row[11] or "").strip()
     client_id = int(row[1])
+    tier_kinds = [k for k in PRICE_TIER_ORDER if k in set(row[13] or [])]
+    tiers_label = ", ".join(PRICE_TIER_LABEL_RU[k] for k in tier_kinds) or None
     return {
         "id": int(row[0]),
         "client_id": client_id,
@@ -1174,6 +1237,8 @@ async def get_trainer_pass_instance_detail(
         "product_name": (row[8] or "").strip() or "Абонемент",
         "price_cents": int(row[9] or 0),
         "service_scope": scope,
+        "tier_kinds": tier_kinds,
+        "tiers_label": tiers_label,
         "can_redeem": str(row[6]) == "active" and int(row[2] or 0) > 0,
     }
 
@@ -1235,7 +1300,11 @@ async def list_redeemable_bookings_for_pass_instance(
     limit: int = 30,
 ) -> dict:
     """
-    Sessions of the pass owner without pass/cert payment, matching product scope.
+    Past sessions of the pass owner without pass or certificate payment.
+
+    Matching sessions come first (``in_scope``). Sessions on another service or tariff
+    are included too, with ``scope_note``, so the trainer can debit them manually.
+    Automatic redemption still ignores those.
 
     Includes:
       - ``completed`` bookings (even if the trainer marked them done before slot end)
@@ -1259,7 +1328,10 @@ async def list_redeemable_bookings_for_pass_instance(
                 COALESCE(NULLIF(TRIM(srv.name), ''), 'Занятие') AS service_name,
                 b.price_tier_kind,
                 COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents, 0) AS price_cents,
-                b.status
+                b.status,
+                ({SQL_PASS_PRODUCT_COVERS_BOOKING_ROW}) AS in_scope,
+                {SQL_PASS_SERVICE_MISMATCH_ROW} AS service_mismatch,
+                {SQL_PASS_TIER_MISMATCH_ROW} AS tier_mismatch
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN pass_instances pi ON pi.id = :pid
@@ -1282,8 +1354,7 @@ async def list_redeemable_bookings_for_pass_instance(
               AND NOT EXISTS (
                   SELECT 1 FROM booking_problem_reports bpr WHERE bpr.booking_id = b.id
               )
-              AND {SQL_PASS_PRODUCT_COVERS_BOOKING_ROW}
-            ORDER BY s.slot_date DESC, s.start_time DESC
+            ORDER BY ({SQL_PASS_PRODUCT_COVERS_BOOKING_ROW}) DESC, s.slot_date DESC, s.start_time DESC
             LIMIT :lim
             """
         ),
@@ -1294,6 +1365,8 @@ async def list_redeemable_bookings_for_pass_instance(
         st = row[2]
         et = row[3]
         status = (row[7] or "").strip().lower()
+        in_scope = bool(row[8])
+        tier_kind = row[5] if row[5] else None
         items.append(
             {
                 "booking_id": int(row[0]),
@@ -1301,10 +1374,17 @@ async def list_redeemable_bookings_for_pass_instance(
                 "start_time": st.isoformat() if hasattr(st, "isoformat") else str(st),
                 "end_time": et.isoformat() if hasattr(et, "isoformat") else str(et),
                 "service_name": (row[4] or "").strip() or "Занятие",
-                "price_tier_kind": row[5],
+                "price_tier_kind": tier_kind,
                 "price_cents": int(row[6] or 0),
                 "booking_status": status,
                 "needs_complete": status in ("confirmed", "pending"),
+                "in_scope": in_scope,
+                "scope_note": _manual_redeem_scope_note(
+                    in_scope=in_scope,
+                    service_mismatch=bool(row[9]),
+                    tier_mismatch=bool(row[10]),
+                    tier_kind=tier_kind,
+                ),
             }
         )
     return {"pass": detail, "items": items}
@@ -1318,6 +1398,9 @@ async def manual_redeem_pass_for_booking(
 ) -> dict:
     """
     Trainer applies a specific pass to a session (retroactive debit).
+
+    Service and tariff scope are not checked: the trainer may debit any past session of this
+    client. Automatic redemption (``redeem_pass_session_for_booking``) still requires a match.
 
     Accepts ``completed`` bookings, and ``confirmed``/``pending`` whose slot has already ended
     (marks them completed first, then debits). Writes ``pass_redemptions`` so stats treat the
@@ -1420,31 +1503,8 @@ async def manual_redeem_pass_for_booking(
     if chk_cert.fetchone():
         raise ValueError("Занятие оплачено сертификатом — списание с абонемента невозможно")
 
-    service_id = int(booking[3]) if booking[3] is not None else None
-    tier_kind: str | None = booking[5] if booking[5] else None
-    if service_id is None:
+    if booking[3] is None:
         raise ValueError("У записи не указана услуга")
-
-    r_scope = await session.execute(
-        text(
-            f"""
-            SELECT 1
-            FROM pass_instances pi
-            JOIN trainer_pass_products p ON p.id = pi.pass_product_id
-            WHERE pi.id = :pid AND {SQL_PASS_PRODUCT_COVERS_BOOKING}
-            """
-        ),
-        {
-            "pid": int(pass_instance_id),
-            "booking_service_id": service_id,
-            "booking_tier_kind": tier_kind,
-        },
-    )
-    if r_scope.fetchone() is None:
-        raise ValueError(
-            "Абонемент не покрывает эту услугу или тариф. "
-            "Если абонемент ограничен тарифом (взрослый/детский), в записи должен быть тот же тариф."
-        )
 
     new_rem = rem - 1
     new_status = "used_up" if new_rem <= 0 else "active"

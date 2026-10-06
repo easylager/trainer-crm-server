@@ -12,12 +12,12 @@ logger = logging.getLogger(__name__)
 
 _ICE_INGEST_LOCK_ID = 0x494345494E474553
 
-# TASK-176: без PEP 695 (``def f[T]()``) — прод (runtime.txt) живёт на Python 3.11,
+# TASK-176: без PEP 695 (``def f[T]()``) — парсер ast в CI проверяет синтаксис под runtime.txt;
 # там такой синтаксис — SyntaxError при импорте, и цикл планировщика умирал молча.
 Result = TypeVar("Result")
 
 
-async def run_with_ice_ingest_lock(  # noqa: UP047 — прод на 3.11, см. выше
+async def run_with_ice_ingest_lock(  # noqa: UP047 — явный TypeVar, см. TASK-176
     engine: AsyncEngine,
     operation: Callable[[], Awaitable[Result]],
 ) -> tuple[bool, Result | None]:

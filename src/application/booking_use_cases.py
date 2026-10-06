@@ -27,6 +27,7 @@ from src.application.client_profile_use_cases import (
 from src.application.family_access_use_cases import list_family_access_telegram_ids_for_reminders
 from src.application.pass_product_use_cases import redeem_pass_session_for_booking
 from src.application.certificate_use_cases import redeem_certificate_balance_for_booking
+from src.shared.currency import resolve_trainer_currencies
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.price_tier_kind import (
     PRICE_TIER_ADULT,
@@ -3874,6 +3875,11 @@ async def list_bookings_for_client(
             "service_price_variant_id": int(row[24]) if row[24] is not None else None,
             "trainer_city_id": int(row[25]) if row[25] is not None else None,
         })
+    # TASK-196: валюта цены записи — из города её тренера (BY → BYN, RU → RUB),
+    # одним запросом на страницу («Мои записи» рисует по currency_code).
+    currency_by_tid = await resolve_trainer_currencies(session, {int(b["trainer_id"]) for b in out})
+    for b in out:
+        b["currency_code"] = currency_by_tid.get(int(b["trainer_id"]))
     from src.application.booking_payment_notice import enrich_booking_dicts_with_expected_payment_class
 
     await enrich_booking_dicts_with_expected_payment_class(session, out)
@@ -4005,6 +4011,11 @@ async def list_booking_history_for_client(
             "service_price_variant_id": int(row[24]) if row[24] is not None else None,
             "trainer_city_id": int(row[25]) if row[25] is not None else None,
         })
+    # TASK-196: валюта цены записи — из города её тренера (BY → BYN, RU → RUB),
+    # одним запросом на страницу (история записей рисует по currency_code).
+    currency_by_tid = await resolve_trainer_currencies(session, {int(b["trainer_id"]) for b in out})
+    for b in out:
+        b["currency_code"] = currency_by_tid.get(int(b["trainer_id"]))
     from src.application.booking_payment_notice import enrich_booking_dicts_with_expected_payment_class
 
     await enrich_booking_dicts_with_expected_payment_class(session, out)

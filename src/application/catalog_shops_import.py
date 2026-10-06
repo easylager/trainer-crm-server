@@ -108,6 +108,22 @@ class ImportPlan:
     updates: list[tuple[int, ShopRecord]] = field(default_factory=list)
     rink_updates: list[tuple[int, str]] = field(default_factory=list)
     rink_problems: list[str] = field(default_factory=list)
+    #: Архивные (``is_active=false``) записи, которые ``--revive`` возвращает в каталог.
+    revives: set[int] = field(default_factory=set)
+
+
+def _record_hits(rows: list[Any], rec: ShopRecord) -> list[Any]:
+    """Строки ``(id, name, venue_type, …)`` того же рода: точное имя, иначе подстроки ``match``."""
+    same_kind = [r for r in rows if (r[2] == "shop") == (rec.venue_type == "shop")]
+    exact = [r for r in same_kind if str(r[1]).strip().lower() == rec.name.lower()]
+    if exact or not rec.match:
+        return exact
+    return [r for r in same_kind if any(m in str(r[1]).lower() for m in rec.match)]
+
+
+def _ambiguous(rec: ShopRecord, hits: list[Any]) -> str:
+    names = ", ".join(f"#{r[0]} {r[1]}" for r in hits)
+    return f"{rec.name}: несколько совпадений ({names}) — уточните match в файле"
 
 
 def parse_shops_file(path: Path) -> tuple[str, list[ShopRecord], list[dict[str, Any]]]:
@@ -208,6 +224,7 @@ async def build_plan(
     records: list[ShopRecord],
     rink_rules: list[Mapping[str, Any]],
     speed_oval_arena_id: int | None = None,
+    revive: bool = False,
 ) -> ImportPlan:
     city = (
         await session.execute(
@@ -221,21 +238,35 @@ async def build_plan(
 
     city_rows = (
         await session.execute(
-            text("SELECT id, name, venue_type FROM arenas WHERE city_id = :c ORDER BY id"),
+            text("SELECT id, name, venue_type, is_active FROM arenas WHERE city_id = :c ORDER BY id"),
             {"c": plan.city_id},
         )
     ).fetchall()
+    active_rows = [r for r in city_rows if bool(r[3])]
+    archived_rows = [r for r in city_rows if not bool(r[3])]
     for rec in records:
-        same_kind = [r for r in city_rows if (r[2] == "shop") == (rec.venue_type == "shop")]
-        exact = [r for r in same_kind if str(r[1]).strip().lower() == rec.name.lower()]
-        hits = exact or [r for r in same_kind if rec.match and any(m in str(r[1]).lower() for m in rec.match)]
-        if len(hits) == 1:
+        hits = _record_hits(active_rows, rec)
+        if len(hits) > 1:
+            plan.rink_problems.append(_ambiguous(rec, hits))
+            continue
+        if hits:
             plan.updates.append((int(hits[0][0]), rec))
-        elif not hits:
+            continue
+        # Активного совпадения нет. Архивную запись ищем по тем же правилам (имя, потом
+        # ``match``), иначе архивный магазин, найденный только по ``match``, задвоился бы
+        # новой активной карточкой в обход решения модерации.
+        archived = _record_hits(archived_rows, rec)
+        if not archived:
             plan.creates.append(rec)
+        elif len(archived) > 1:
+            plan.rink_problems.append(_ambiguous(rec, archived))
+        elif revive:
+            plan.updates.append((int(archived[0][0]), rec))
+            plan.revives.add(int(archived[0][0]))
         else:
-            names = ", ".join(f"#{r[0]} {r[1]}" for r in hits)
-            plan.rink_problems.append(f"{rec.name}: несколько совпадений ({names}) — уточните match в файле")
+            plan.rink_problems.append(
+                f"{rec.name}: архивная запись #{archived[0][0]} {archived[0][1]} — пропущено (нужен --revive)"
+            )
 
     rinks = (
         await session.execute(
@@ -264,21 +295,29 @@ async def build_plan(
     return plan
 
 
-def _profile_fields(rec: ShopRecord) -> dict[str, Any]:
-    fields: dict[str, Any] = {
-        "phone": rec.phones[0] if rec.phones else None,
-        "website_url": rec.website,
-        "short_description": rec.short_description,
-        "social_urls": {"instagram": f"https://instagram.com/{rec.instagram}"} if rec.instagram else {},
-        "amenities": rec.amenities,
-        "status": "published",
-    }
+def _profile_fields_from_record(rec: ShopRecord) -> dict[str, Any]:
+    """Only fields explicitly present in the partner file — no NULL wipe on update."""
+    fields: dict[str, Any] = {"amenities": rec.amenities}
+    if rec.phones:
+        fields["phone"] = rec.phones[0]
+    if rec.website:
+        fields["website_url"] = rec.website
+    if rec.short_description:
+        fields["short_description"] = rec.short_description
+    if rec.instagram:
+        fields["social_urls"] = {"instagram": f"https://instagram.com/{rec.instagram}"}
     if rec.tickets_url:
         fields["tickets_url"] = rec.tickets_url
     if rec.season is not None:
         fields["season_start_month"], fields["season_end_month"] = rec.season
     if rec.hours is not None:
         fields["opening_hours"] = {"weekly": {d: rec.hours.get(d) for d in WEEKDAY_KEYS}}
+    return fields
+
+
+def _profile_fields_for_create(rec: ShopRecord) -> dict[str, Any]:
+    fields = _profile_fields_from_record(rec)
+    fields["status"] = "published"
     return fields
 
 
@@ -359,10 +398,10 @@ async def _enrich_existing_place(session: AsyncSession, arena_id: int, rec: Shop
             {"id": arena_id},
         )
     ).mappings().first() or {}
-    wanted = _profile_fields(rec)
+    wanted = _profile_fields_from_record(rec)
     patch: dict[str, Any] = {}
     for key in ("phone", "website_url", "short_description", "opening_hours", "tickets_url"):
-        if wanted.get(key) and not current.get(key):
+        if key in wanted and wanted.get(key) and not current.get(key):
             patch[key] = wanted[key]
     if rec.season is not None:
         patch["season_start_month"], patch["season_end_month"] = rec.season
@@ -427,30 +466,47 @@ async def apply_plan(
         ).scalar_one()
         arena_id = int(row)
         await ensure_arena_profile(session, arena_id, city_id=plan.city_id, name=rec.name)
-        await apply_admin_arena_profile_patch(session, arena_id, _profile_fields(rec))
+        await apply_admin_arena_profile_patch(session, arena_id, _profile_fields_for_create(rec))
         await photo(arena_id, rec)
         report["created"].append(f"#{arena_id} {rec.name}")
         if point is None:
             report["not_on_map"].append(rec.name)
 
     for arena_id, rec in plan.updates:
+        revived = arena_id in plan.revives
+        if revived:
+            # --revive: человек явно возвращает архивную запись — она становится такой же,
+            # как свежесозданная (активна, подтверждена, профиль опубликован ниже).
+            await session.execute(
+                text("UPDATE arenas SET is_active = true, is_confirmed = true WHERE id = :id"), {"id": arena_id}
+            )
+        suffix = " (возвращено из архива)" if revived else ""
         if rec.venue_type != "shop":
             # Каток уже есть (досье, админка): дополняем тем, что есть в файле, и ничего
             # не стираем — пустое поле в файле значит «не знаем», а не «удалить».
             await _enrich_existing_place(session, arena_id, rec)
+            if revived:
+                await apply_admin_arena_profile_patch(session, arena_id, {"status": "published"})
             await photo(arena_id, rec)
-            report["updated"].append(f"#{arena_id} {rec.name} (дополнено)")
+            report["updated"].append(f"#{arena_id} {rec.name} (дополнено){suffix}")
             continue
         point = await coords(rec)
-        sets = ["address = :a", "is_active = true"]
-        params: dict[str, Any] = {"id": arena_id, "a": rec.display_address}
+        # Только то, что есть в файле: нет адреса или координат — админские не трогаем.
+        sets: list[str] = []
+        params: dict[str, Any] = {"id": arena_id}
+        if rec.display_address:
+            sets.append("address = :a")
+            params["a"] = rec.display_address
         if point:
             sets += ["latitude = :lat", "longitude = :lon"]
             params.update(lat=point[0], lon=point[1])
-        await session.execute(text("UPDATE arenas SET " + ", ".join(sets) + " WHERE id = :id"), params)
-        await apply_admin_arena_profile_patch(session, arena_id, _profile_fields(rec))
+        if sets:
+            await session.execute(text("UPDATE arenas SET " + ", ".join(sets) + " WHERE id = :id"), params)
+        await _enrich_existing_place(session, arena_id, rec)
+        if revived:
+            await apply_admin_arena_profile_patch(session, arena_id, {"status": "published"})
         await photo(arena_id, rec)
-        report["updated"].append(f"#{arena_id} {rec.name}")
+        report["updated"].append(f"#{arena_id} {rec.name}{suffix}")
 
     for arena_id, note in plan.rink_updates:
         current = (

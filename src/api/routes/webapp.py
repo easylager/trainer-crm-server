@@ -392,8 +392,11 @@ from src.application.client_share_message import (
 )
 from src.application.catalog_consumer_events import (
     KIND_MINIAPP_CATALOG_ENTRY,
+    is_share_attributed_deeplink_open,
     record_catalog_consumer_event,
+    resolve_entry_scope,
     telegram_actor_hash,
+    telegram_launch_context,
 )
 from src.application.client_delight_metrics import record_client_share
 from src.application.place_links import is_valid_start_param
@@ -3162,29 +3165,40 @@ async def post_client_catalog_presence(
     response: Response,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
 ) -> dict:
     """
     Успешный вход в мини-апп каталога (вкладка Поиск, карточка места, startapp после шаринга).
-    Один раз на surface + день на пользователя (дедуп на сервере).
+    Одна строка на актёра × город × арену × сутки (Минск) — дедуп на сервере (TASK-189):
+    shell и карточка арены одного входа по диплинку дают одну строку.
     """
     response.headers["Cache-Control"] = "no-store"
     surface = (body.surface or "").strip().lower()
     if surface not in _MINIAPP_CATALOG_SURFACES:
         raise HTTPException(status_code=400, detail="Unknown catalog surface")
-    sp = (body.start_param or "").strip() or None
+    launch = telegram_launch_context(cred.raw) if principal.platform == MiniAppPlatform.TELEGRAM else {}
+    # Подписанный start_param из initData важнее присланного телом.
+    sp = (launch.get("start_param") or body.start_param or "").strip() or None
     if sp and not is_valid_start_param(sp):
         sp = None
-    day = datetime.now(timezone.utc).date()
-    actor = telegram_actor_hash(client_catalog_telegram_key(principal), day)
+    city_id, arena_id = await resolve_entry_scope(
+        session, start_param=sp, city_id=body.city_id, arena_id=body.arena_id
+    )
+    chat_type = launch.get("chat_type")
     inserted = await record_catalog_consumer_event(
         session,
         kind=KIND_MINIAPP_CATALOG_ENTRY,
         surface=surface,
-        actor_hash=actor,
-        city_id=body.city_id,
-        arena_id=body.arena_id,
+        actor_hash=telegram_actor_hash(client_catalog_telegram_key(principal)),
+        city_id=city_id,
+        arena_id=arena_id,
         start_param=sp,
-        payload={"ingress": "miniapp", "platform": principal.platform.value},
+        payload={
+            "ingress": "miniapp",
+            "platform": principal.platform.value,
+            "chat_type": chat_type,
+            "share_deeplink": is_share_attributed_deeplink_open(sp, chat_type=chat_type),
+        },
     )
     return {"ok": True, "recorded": inserted}
 
@@ -4972,6 +4986,16 @@ def _admin_venue_type(raw: str | None) -> str | None:
     return key
 
 
+def _reject_arena_markup(*, name: str | None, address: str | None) -> None:
+    """Название и адрес площадки — только текст: ``<``/``>`` в них — заготовка инъекции (TASK-181)."""
+    from src.shared.validation import has_markup_chars
+
+    if has_markup_chars(name):
+        raise HTTPException(status_code=400, detail="Name must not contain < or >")
+    if has_markup_chars(address):
+        raise HTTPException(status_code=400, detail="Address must not contain < or >")
+
+
 class AdminArenaPatchBody(BaseModel):
     city_id: int | None = None
     name: str | None = None
@@ -4991,6 +5015,9 @@ class AdminArenaPatchBody(BaseModel):
     opening_hours: dict[str, Any] | None = None
     season_start_month: int | None = None
     season_end_month: int | None = None
+    schedule_mode: str | None = None
+    reopen_date: date | None = None
+    schedule_mode_note: str | None = None
     amenities: dict[str, bool] | None = None
     status: str | None = None
 
@@ -5010,7 +5037,8 @@ async def get_admin_arenas(
     sql = """
         SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.sort_order, a.is_active,
                p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
-               p.tickets_url, p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+               p.tickets_url,                p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+               p.schedule_mode, p.reopen_date, p.schedule_mode_note,
                p.amenities, p.status, a.venue_type
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -5047,9 +5075,12 @@ async def get_admin_arenas(
             "opening_hours": row[15],
             "season_start_month": row[16],
             "season_end_month": row[17],
-            "amenities": row[18] or {},
-            "status": row[19] or "published",
-            "venue_type": row[20] or "ice",
+            "schedule_mode": row[18] or "auto",
+            "reopen_date": row[19].isoformat() if row[19] else None,
+            "schedule_mode_note": row[20],
+            "amenities": row[21] or {},
+            "status": row[22] or "published",
+            "venue_type": row[23] or "ice",
         }
         for row in rows
     ]
@@ -5071,6 +5102,7 @@ async def post_admin_arena(
     name = (body.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
+    _reject_arena_markup(name=name, address=body.address)
     # Ensure city exists
     r_chk = await session.execute(text("SELECT 1 FROM cities WHERE id = :cid"), {"cid": body.city_id})
     if not r_chk.fetchone():
@@ -5121,6 +5153,7 @@ async def patch_admin_arena(
     """Update arena fields. Admin only."""
     from sqlalchemy import text
 
+    _reject_arena_markup(name=body.name, address=body.address)
     updates = []
     params: dict[str, Any] = {"id": arena_id}
     if body.city_id is not None:
@@ -6905,6 +6938,8 @@ async def get_trainer_my_services(
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    # TASK-196: тренер видит свои цены в валюте своего города (BY → BYN, RU → RUB).
+    trainer_currency = await resolve_trainer_currency(session, trainer_id)
     r = await session.execute(
         text("""
             SELECT s.id, s.name, ts.description, ts.ui_accent
@@ -6941,6 +6976,7 @@ async def get_trainer_my_services(
                     "tier_kind": tk,
                     "label": price_tier_label_ru(tk) or ((lab or "").strip() or "—"),
                     "price_byn": round(pc / 100, 2),
+                    "currency_code": trainer_currency,
                     "sort_order": so,
                 }
             )
@@ -6962,6 +6998,7 @@ async def get_trainer_my_services(
             "name": (row[1] or "").strip() or "—",
             "description": _service_row_description(row),
             "ui_accent": _service_row_ui_accent(row),
+            "currency_code": trainer_currency,
             "price_tiers": tiers_by_sid.get(int(row[0]), []),
         }
         for row in rows
@@ -10159,7 +10196,8 @@ async def get_trainer_collective_sessions(
     )
     return {
         "sessions": items,
-        "tariffs": center_tariff_catalog(),
+        # TASK-196: владелец видит тарифы своего центра в валюте своего города.
+        "tariffs": center_tariff_catalog(await resolve_trainer_currency(session, trainer_id)),
         "attendance_modes": list(ATTENDANCE_MODES),
     }
 

@@ -22,6 +22,9 @@
     venueTypes: [],
     venueFacets: [],
     shopSourceItems: [],
+    /* Магазины: страница 2+ не догрузилась — показываем загруженное и «Догрузить». */
+    shopRestFailed: false,
+    shopRestLoading: false,
     shopService: '',
     shopDiscipline: '',
     shopOpenNow: false,
@@ -45,11 +48,26 @@
     cursor: null,
     loading: false,
     loadedIntent: null,
+    /* TASK-182: «Показать ещё» и все места города для карты. listQuery — параметры
+       текущей ленты (для следующей страницы), mapItems — все страницы для пинов. */
+    listQuery: null,
+    loadingMore: false,
+    mapItems: null,
+    mapLoading: false,
+    /* TASK-182 (F1): «Тренеры» включились сами (в городе нет льда), а не по выбору
+       человека. В sessionStorage такой переход не пишется. */
+    autoCoach: false,
     /* Открытое выпадающее меню шапки: place | when | false */
     uiPicker: false,
   };
   var searchTimer = null;
   var fetchGen = 0;
+  var searchGen = 0;
+  var lastSearchQuery = '';
+  /* TASK-182 (F4): запрос ленты в полёте — boot не дублирует его вторым loadList. */
+  var pendingGen = 0;
+  var LIST_STALE_MS = 5 * 60 * 1000;
+  var listFetchedAt = 0;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -103,7 +121,7 @@
   function persist() {
     M.saveIceState(
       {
-        intent: state.intent,
+        intent: state.autoCoach && state.intent === 'coach' ? 'skate' : state.intent,
         cityId: state.cityId,
         cityName: state.cityName,
         serviceIds: state.serviceIds,
@@ -297,10 +315,17 @@
     persist();
   }
 
+  /** Пины карты: все места города (mapItems), пока их нет — то, что в ленте. */
+  function mapSourceItems() {
+    if (M.catalogScope(state.intent, state.venueTypes) === 'shop') return state.items;
+    if (state.mapItems && state.mapItems.length >= state.items.length) return state.mapItems;
+    return state.items;
+  }
+
   function syncMapListItems() {
     if (!mapCtl || state.intent === 'coach') return;
     if (!mapViewActive()) return;
-    mapCtl.setListItems(state.items);
+    mapCtl.setListItems(mapSourceItems());
   }
 
   function syncShopListFromFilters() {
@@ -786,7 +811,8 @@
         },
       });
     }
-    mapCtl.setListItems(state.intent === 'coach' ? [] : state.items);
+    mapCtl.setListItems(state.intent === 'coach' ? [] : mapSourceItems());
+    ensureMapItems();
     mapCtl.start().then(function () {
       mapCtl.resize();
     });
@@ -804,7 +830,7 @@
    * отдельными строками на поверхности карточки, где контраст измерим.
    */
   function renderArenaCard(item) {
-    var v = M.boardCardView(item, undefined, { window: state.window });
+    var v = M.boardCardView(item, new Date(), { window: state.window });
     /* TASK-148 (AC-2): нет фото — нет фото-блока. Плашка типа места: иконка
        с сервера (venue_icon), фолбэк — монограмма имени. */
     var photo = v.photo
@@ -833,6 +859,10 @@
         ? '<span class="ice-board__prices">' + esc(v.prices) + '</span>'
         : ''
       : '<span class="ice-board__status">' + esc(v.status) + '</span>';
+    if (v.callHref) {
+      facts +=
+        '<a class="ice-board__call" href="' + esc(v.callHref) + '" data-action="external">Позвонить</a>';
+    }
     /* «Позвать» — поверх кадра, но вне ссылки карточки: вложенная кнопка в <a> ломает
        клик на iOS, а тап должен звать друга, а не открывать карточку. */
     var invite =
@@ -985,12 +1015,16 @@
           hasSkate: M.shouldShowSkateChip(state.skateCount),
         });
       }
-      renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
+      /* Фильтр мог отсечь первую страницу, а нужное — в несгруженном хвосте:
+         «ничего не нашли» тут было бы враньём, честнее предложить догрузку. */
+      var shopRestOnly = shopScope ? shopRestHtml() : '';
+      if (shopRestOnly) list.innerHTML = shopRestOnly;
+      else renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
       showActiveList();
       return;
     }
     if (state.intent === 'coach') {
-      list.innerHTML = state.items.map(renderTrainerCard).join('');
+      list.innerHTML = state.items.map(renderTrainerCard).join('') + loadMoreHtml();
       showActiveList();
       return;
     }
@@ -1006,7 +1040,8 @@
           '<span class="ice-window-break__pill"><b>' + esc(brk.title) + '</b> · ' + esc(brk.sub) + '</span>' +
           '</div>'
         : '') +
-      parts.rest.map(renderArenaCard).join('');
+      parts.rest.map(renderArenaCard).join('') +
+      loadMoreHtml();
     /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
        а приглушённые места без нужных сеансов идут уже после неё. */
     var brkEl = brk && list.querySelector('.ice-window-break');
@@ -1161,6 +1196,11 @@
         loadList();
       };
     }
+    if (kind === 'retry-search') {
+      return function () {
+        showSearch(lastSearchQuery);
+      };
+    }
     if (kind === 'ice-interest') {
       return function () {
         recordIceInterest();
@@ -1181,6 +1221,7 @@
       var next = kind.slice('intent:'.length);
       return function () {
         state.intent = M.coerceIntent(next);
+        state.autoCoach = false;
         renderList();
         setChips();
         setViewToggle();
@@ -1224,9 +1265,11 @@
     var scope = M.catalogScope(state.intent, state.venueTypes);
     if (scope === 'shop') {
       state.shopSourceItems = incoming.slice();
+      state.shopRestFailed = !!(data && data.rest_failed);
       syncShopListFromFilters();
     } else {
       state.shopSourceItems = [];
+      state.shopRestFailed = false;
       state.items = incoming.slice();
       state.total = data && data.total != null ? data.total : incoming.length;
     }
@@ -1394,7 +1437,22 @@
     });
   }
 
+  function onAppVisible() {
+    repairCatalogChrome();
+    renderList();
+    if (
+      state.intent !== 'coach' &&
+      state.cityId &&
+      listFetchedAt &&
+      Date.now() - listFetchedAt > LIST_STALE_MS &&
+      !state.loading
+    ) {
+      loadList();
+    }
+  }
+
   function onListLoaded() {
+    listFetchedAt = Date.now();
     renderList();
     if (!mapCtl) return;
     if (state.intent === 'coach') {
@@ -1402,8 +1460,11 @@
       if (state.view === 'map') mapCtl.start();
       return;
     }
-    mapCtl.setListItems(state.items);
-    if (state.view === 'map') mapCtl.refresh();
+    mapCtl.setListItems(mapSourceItems());
+    if (state.view === 'map') {
+      mapCtl.refresh();
+      ensureMapItems();
+    }
   }
 
   function loadFailed() {
@@ -1422,7 +1483,13 @@
   function beginListFetch(lens) {
     fetchGen += 1;
     var gen = fetchGen;
+    pendingGen = gen;
     state.loading = true;
+    state.loadingMore = false;
+    state.shopRestLoading = false;
+    state.mapItems = null;
+    state.mapLoading = false;
+    state.cursor = null;
     if (state.loadedIntent !== lens) {
       state.items = [];
       state.total = 0;
@@ -1433,6 +1500,7 @@
   }
 
   function isCurrentFetch(gen, lens) {
+    if (pendingGen === gen) pendingGen = 0;
     if (gen !== fetchGen) return false;
     if (lens === 'coach') return state.intent === 'coach';
     return state.intent !== 'coach';
@@ -1453,17 +1521,27 @@
     }
     var gen = beginListFetch('skate');
     var timeQ = whenQueryForApi();
-    var url = M.buildListUrl({
+    var query = {
       cityId: state.cityId,
       intent: state.intent,
       venueTypes: state.venueTypes,
-      limit: 50,
       when: timeQ.when,
       whenDay: timeQ.whenDay,
       // Знаем, где человек, — ближние места выше (сервер считает distance_km).
       near: state.near || '',
-    });
+    };
+    state.listQuery = query;
+    /* Магазины фильтруются на клиенте (услуга, «Открыто сейчас») — фильтру нужен
+       весь набор города, иначе подпись и пустое состояние врут про хвост за 50. */
+    var shopScope = M.catalogScope(state.intent, state.venueTypes) === 'shop';
+    var url = M.buildListUrl(
+      Object.assign({}, query, { limit: shopScope ? M.MAP_PAGE_LIMIT : M.LIST_PAGE_LIMIT })
+    );
     return fetchJson(url)
+      .then(function (data) {
+        if (!shopScope || !data || !data.next_cursor) return data;
+        return fetchRestPages(query, data, gen);
+      })
       .then(function (data) {
         if (!isCurrentFetch(gen, 'skate')) {
           if (state.loading && state.intent === 'coach') {
@@ -1475,8 +1553,10 @@
         state.loading = false;
         applyArenaPayload(data);
         state.loadedIntent = 'skate';
-        if (state.intent === 'skate' && !state.items.length) {
-          return maybeOpenTrainersWhenNoSkate();
+        /* TASK-182 (F1): только честное «в городе нет льда» от сервера. Не магазины
+           и не пустота после клиентских фильтров. */
+        if (M.noIceInCity(state.intent, state.venueTypes, data)) {
+          return maybeOpenTrainersWhenNoSkate(gen);
         }
         onListLoaded();
       })
@@ -1499,7 +1579,7 @@
     var url = M.buildTrainersUrl({
       cityId: state.cityId,
       serviceIds: state.serviceIds,
-      limit: 50,
+      limit: M.LIST_PAGE_LIMIT,
     });
     return fetchJson(url)
       .then(function (data) {
@@ -1514,6 +1594,154 @@
         state.loading = false;
         loadFailed();
       });
+  }
+
+  /**
+   * TASK-182 (F3): догрузить остальные страницы ленты (offset = next_cursor сервера,
+   * по MAP_PAGE_LIMIT — серверный максимум). Возвращает ответ с полным items и без
+   * next_cursor. Устаревший запрос (сменили город/вкладку) останавливается.
+   */
+  function fetchRestPages(query, first, gen) {
+    var items = ((first && first.items) || []).slice();
+    var cursor = first && first.next_cursor;
+    var pages = 0;
+    function step() {
+      if (!cursor || pages >= M.MAX_PAGES || gen !== fetchGen) {
+        return Promise.resolve(Object.assign({}, first, { items: items, next_cursor: cursor || null }));
+      }
+      pages += 1;
+      var url = M.buildListUrl(Object.assign({}, query, { limit: M.MAP_PAGE_LIMIT, cursor: cursor }));
+      /* Сбой страницы 2+ не стирает уже загруженное: отдаём то, что есть,
+         с cursor на несгруженный хвост и rest_failed — экран предложит догрузить. */
+      var partial = function () {
+        return Object.assign({}, first, { items: items, next_cursor: cursor, rest_failed: true });
+      };
+      return fetchJson(url).then(function (data) {
+        if (!data) return partial();
+        items = M.appendPage(items, data.items);
+        cursor = data.next_cursor || null;
+        return step();
+      }, partial);
+    }
+    return step();
+  }
+
+  /** Карта показывает все места города, а не первую страницу ленты. */
+  function ensureMapItems() {
+    if (state.intent === 'coach' || state.loading) return;
+    if (M.catalogScope(state.intent, state.venueTypes) === 'shop') return;
+    if (!state.cursor || !state.listQuery || state.mapItems || state.mapLoading) return;
+    var gen = fetchGen;
+    state.mapLoading = true;
+    fetchRestPages(state.listQuery, { items: state.items, next_cursor: state.cursor }, gen)
+      .then(function (data) {
+        if (gen !== fetchGen) return;
+        state.mapLoading = false;
+        state.mapItems = data.rest_failed ? null : data.items;
+        if (mapCtl && mapViewActive()) {
+          mapCtl.setListItems(mapSourceItems());
+          mapCtl.refresh();
+        }
+      })
+      .catch(function () {
+        if (gen !== fetchGen) return;
+        state.mapLoading = false;
+      });
+  }
+
+  /** «Показать ещё»: следующая страница ленты дописывается в конец. */
+  function loadMore() {
+    if (state.loading || state.loadingMore || !state.cityId) return Promise.resolve();
+    var coach = state.intent === 'coach';
+    var view = M.loadMoreView({
+      intent: state.intent,
+      venueTypes: state.venueTypes,
+      items: state.items,
+      total: state.total,
+      cursor: state.cursor,
+    });
+    if (!view) return Promise.resolve();
+    var gen = fetchGen;
+    var url = coach
+      ? M.buildTrainersUrl({
+          cityId: state.cityId,
+          serviceIds: state.serviceIds,
+          limit: M.LIST_PAGE_LIMIT,
+          offset: state.items.length,
+        })
+      : M.buildListUrl(
+          Object.assign({}, state.listQuery, { limit: M.LIST_PAGE_LIMIT, cursor: state.cursor })
+        );
+    state.loadingMore = true;
+    renderList();
+    return fetchJson(url)
+      .then(function (data) {
+        if (gen !== fetchGen) return;
+        state.loadingMore = false;
+        var incoming = (data && data.items) || [];
+        state.items = M.appendPage(state.items, incoming);
+        if (!coach) state.cursor = (data && data.next_cursor) || null;
+        if (data && data.total != null) state.total = data.total;
+        if (coach && !incoming.length) state.total = state.items.length;
+        onListLoaded();
+      })
+      .catch(function () {
+        if (gen !== fetchGen) return;
+        state.loadingMore = false;
+        renderList();
+      });
+  }
+
+  /** Магазины: догрузить хвост после сбоя страницы 2+ — загруженное остаётся на экране. */
+  function loadShopRest() {
+    if (!state.shopRestFailed || state.shopRestLoading || !state.cursor || !state.listQuery) {
+      return Promise.resolve();
+    }
+    var gen = fetchGen;
+    state.shopRestLoading = true;
+    renderList();
+    return fetchRestPages(
+      state.listQuery,
+      { items: state.shopSourceItems, next_cursor: state.cursor, venue_type_facets: state.venueFacets, window: state.window },
+      gen
+    ).then(function (data) {
+      if (gen !== fetchGen) return;
+      state.shopRestLoading = false;
+      if (M.catalogScope(state.intent, state.venueTypes) !== 'shop') return;
+      applyArenaPayload(data);
+      onListLoaded();
+    });
+  }
+
+  function shopRestHtml() {
+    if (M.catalogScope(state.intent, state.venueTypes) !== 'shop' || !state.shopRestFailed) return '';
+    return (
+      '<div class="ice-rest-failed" role="status">' +
+      '<p class="ice-rest-failed__note">Показали не все магазины — связь прервалась.</p>' +
+      '<button type="button" class="btn-neutral btn-block ice-more" data-ice-shop-rest="1"' +
+      (state.shopRestLoading ? ' disabled aria-busy="true">Загружаем…' : '>Догрузить остальные') +
+      '</button></div>'
+    );
+  }
+
+  function loadMoreHtml() {
+    var shopRest = shopRestHtml();
+    if (shopRest) return shopRest;
+    var view = M.loadMoreView({
+      intent: state.intent,
+      venueTypes: state.venueTypes,
+      items: state.items,
+      total: state.total,
+      cursor: state.cursor,
+      loading: state.loading,
+      loadingMore: state.loadingMore,
+    });
+    if (!view) return '';
+    return (
+      '<button type="button" class="btn-neutral btn-block ice-more" data-ice-more="1"' +
+      (view.busy ? ' disabled aria-busy="true"' : '') +
+      '>' + esc(view.label) + '</button>'
+    );
   }
 
   function loadList() {
@@ -1616,6 +1844,8 @@
 
   function switchToCoach() {
     state.intent = 'coach';
+    /* Автопереход, а не выбор: persist запишет прежнюю вкладку (TASK-182). */
+    state.autoCoach = true;
     state.view = 'list';
     renderList();
     setChips();
@@ -1624,7 +1854,7 @@
     return loadTrainers();
   }
 
-  function maybeOpenTrainersWhenNoSkate() {
+  function maybeOpenTrainersWhenNoSkate(gen) {
     var city = cityFromState(state.cityId);
     if (city && (Number(city.trainer_count) || 0) > 0) {
       return switchToCoach();
@@ -1633,11 +1863,20 @@
       onListLoaded();
       return Promise.resolve();
     }
-    return fetchJson(M.buildTrainersUrl({ cityId: state.cityId, limit: 1 })).then(function (data) {
-      var n = data && (data.total != null ? data.total : ((data.items || []).length));
-      if (n > 0) return switchToCoach();
-      onListLoaded();
-    });
+    return fetchJson(M.buildTrainersUrl({ cityId: state.cityId, limit: 1 })).then(
+      function (data) {
+        if (gen != null && gen !== fetchGen) return;
+        var n = data && (data.total != null ? data.total : ((data.items || []).length));
+        if (n > 0) return switchToCoach();
+        onListLoaded();
+      },
+      function () {
+        /* TASK-182 (F5): лента уже загружена — сбой подсчёта тренеров не превращает
+           её в «Не удалось загрузить список». */
+        if (gen != null && gen !== fetchGen) return;
+        onListLoaded();
+      }
+    );
   }
 
   function failCatalogBoot() {
@@ -1678,6 +1917,10 @@
 
     if (cityChanged) {
       var cityCatalog = M.catalogStateAfterCityChange(city, state);
+      if (cityCatalog.intent !== state.intent) {
+        /* Город сам выбрал вкладку — это не выбор человека (TASK-182). */
+        state.autoCoach = cityCatalog.intent === 'coach';
+      }
       state.intent = cityCatalog.intent;
       state.venueTypes = cityCatalog.venueTypes.slice();
       state.shopService = cityCatalog.shopService;
@@ -1685,6 +1928,7 @@
       state.shopOpenNow = cityCatalog.shopOpenNow;
       state.shopWhen = cityCatalog.shopWhen;
       state.shopSourceItems = [];
+      state.shopRestFailed = false;
       state.items = [];
       state.total = 0;
       state.venueFacets = [];
@@ -1695,8 +1939,11 @@
       var nextIntent =
         state.venueTypes && state.venueTypes.length
           ? state.intent
-          : M.pickCityIntent(city, state.intent);
-      if (nextIntent !== state.intent) state.intent = nextIntent;
+          : M.pickCityIntent(city, M.cityIntentBasis(state));
+      if (nextIntent !== state.intent) {
+        state.autoCoach = nextIntent === 'coach';
+        state.intent = nextIntent;
+      }
     }
     if (state.intent === 'coach') state.view = 'list';
     setCityLabel();
@@ -1943,6 +2190,9 @@
     var mapSec = $('iceMapSec');
     var query = String(q || '').trim();
     if (query.length < 2) {
+      searchGen += 1;
+      var clearedBox = $('iceSearchResults');
+      if (clearedBox) clearedBox.innerHTML = '';
       if (searchSec) searchSec.hidden = true;
       if (listSec) listSec.hidden = mapViewActive();
       if (mapSec) mapSec.hidden = !mapViewActive();
@@ -1950,55 +2200,78 @@
       if (mapViewActive() && mapCtl) mapCtl.resize();
       return;
     }
-    fetchJson(M.buildSearchUrl(query, 8)).then(function (data) {
-      var grouped = M.groupSearchResults(data || { groups: [] });
-      var box = $('iceSearchResults');
-      if (!box) return;
-      if (searchSec) searchSec.hidden = false;
-      if (listSec) listSec.hidden = true;
-      if (mapSec) mapSec.hidden = true;
-      if (document.body) document.body.classList.remove('ice-view-map');
-      var html = '';
-      grouped.forEach(function (g) {
-        if (!g.items.length) return;
-        html += '<p class="ice-results__label">' + esc(g.label) + '</p>';
-        g.items.forEach(function (it) {
-          var href = '';
-          var title = it.name || '';
-          var sub = '';
-          if (g.type === 'arena') {
-            href = M.arenaHref(it);
-            // Тип места, кроме льда: в выдаче по «заточке» мастерская не должна выглядеть катком.
-            var chip = it.venue_type && it.venue_type !== 'ice' ? it.venue_chip : '';
-            sub = [chip, it.district, it.city_name, it.address].filter(Boolean).join(' · ');
-          } else if (g.type === 'trainer') {
-            href = M.trainerHref(it);
-            title = it.name || [it.first_name, it.last_name].filter(Boolean).join(' ');
-          } else if (g.type === 'city') {
-            href = 'city:' + it.id;
-            title = it.name;
-          }
-          html +=
-            '<button type="button" class="ice-hit" data-href="' +
-            esc(href) +
-            '" data-city-id="' +
-            esc(it.id) +
-            '" data-city-name="' +
-            esc(it.name || '') +
-            '"><b>' +
-            esc(title) +
-            '</b><span>' +
-            esc(sub) +
-            '</span></button>';
+    searchGen += 1;
+    var gen = searchGen;
+    lastSearchQuery = query;
+    fetchJson(M.buildSearchUrl(query, 8))
+      .then(function (data) {
+        if (gen !== searchGen) return;
+        var grouped = M.groupSearchResults(data || { groups: [] });
+        var box = $('iceSearchResults');
+        if (!box) return;
+        if (searchSec) searchSec.hidden = false;
+        if (listSec) listSec.hidden = true;
+        if (mapSec) mapSec.hidden = true;
+        if (document.body) document.body.classList.remove('ice-view-map');
+        var html = '';
+        grouped.forEach(function (g) {
+          if (!g.items.length) return;
+          html += '<p class="ice-results__label">' + esc(g.label) + '</p>';
+          g.items.forEach(function (it) {
+            var href = '';
+            var title = it.name || '';
+            var sub = '';
+            if (g.type === 'arena') {
+              href = M.arenaHref(it);
+              // Тип места, кроме льда: в выдаче по «заточке» мастерская не должна выглядеть катком.
+              var chip = it.venue_type && it.venue_type !== 'ice' ? it.venue_chip : '';
+              sub = [chip, it.district, it.city_name, it.address].filter(Boolean).join(' · ');
+            } else if (g.type === 'trainer') {
+              href = M.trainerHref(it);
+              title = it.name || [it.first_name, it.last_name].filter(Boolean).join(' ');
+            } else if (g.type === 'city') {
+              href = 'city:' + it.id;
+              title = it.name;
+            }
+            html +=
+              '<button type="button" class="ice-hit" data-href="' +
+              esc(href) +
+              '" data-city-id="' +
+              esc(it.id) +
+              '" data-city-name="' +
+              esc(it.name || '') +
+              '"><b>' +
+              esc(title) +
+              '</b><span>' +
+              esc(sub) +
+              '</span></button>';
+          });
         });
+        if (html) {
+          box.innerHTML = html;
+          return;
+        }
+        // TASK-096 AC-002: «Ничего не найдено» was the one state in the app with no exit at all.
+        renderEmpty(box, M.formatEmptySearch(query), 'search');
+      })
+      .catch(function () {
+        if (gen !== searchGen) return;
+        var errBox = $('iceSearchResults');
+        if (!errBox) return;
+        if (searchSec) searchSec.hidden = false;
+        if (listSec) listSec.hidden = true;
+        if (mapSec) mapSec.hidden = true;
+        if (document.body) document.body.classList.remove('ice-view-map');
+        renderEmpty(
+          errBox,
+          {
+            title: 'Не удалось выполнить поиск',
+            body: 'Похоже, пропала связь. Повторите запрос по кнопке.',
+            action: { label: 'Повторить', kind: 'retry-search' },
+          },
+          'search'
+        );
       });
-      if (html) {
-        box.innerHTML = html;
-        return;
-      }
-      // TASK-096 AC-002: «Ничего не найдено» was the one state in the app with no exit at all.
-      renderEmpty(box, M.formatEmptySearch(query), 'search');
-    });
   }
 
   function catalogTodayIso() {
@@ -2059,6 +2332,16 @@
   }
 
   function onRootClick(ev) {
+    if (ev.target.closest('[data-ice-shop-rest]')) {
+      ev.preventDefault();
+      loadShopRest();
+      return;
+    }
+    if (ev.target.closest('[data-ice-more]')) {
+      ev.preventDefault();
+      loadMore();
+      return;
+    }
     var invite = ev.target.closest('[data-invite-arena]');
     if (invite && global.GlideShareSheet) {
       ev.preventDefault();
@@ -2122,6 +2405,7 @@
         var mode = btn.getAttribute('data-catalog-mode') || 'places';
         var patch = M.applyCatalogMode(mode);
         state.intent = M.coerceIntent(patch.intent);
+        state.autoCoach = false;
         state.venueTypes = patch.venueTypes.slice();
         closeUiPicker();
         if (mode === 'coach') state.view = 'list';
@@ -2354,13 +2638,13 @@
 
     global.addEventListener('pagehide', persist);
     global.addEventListener('pageshow', function (ev) {
-      repairCatalogChrome();
+      onAppVisible();
       if (!ev.persisted) return;
       var saved = M.loadIceState(global.sessionStorage);
       if (saved && saved.scrollY) global.scrollTo(0, saved.scrollY);
     });
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') repairCatalogChrome();
+      if (document.visibilityState === 'visible') onAppVisible();
     });
   }
 
@@ -2443,7 +2727,7 @@
       if (!state.cityId) {
         ensureProvisionalCity();
         if (!state.cityId && state.loading) failCatalogBoot();
-      } else if (state.loading && state.loadedIntent === null) {
+      } else if (state.loading && state.loadedIntent === null && !pendingGen) {
         loadList();
       }
     }, 3500);
@@ -2452,7 +2736,7 @@
         var fb = M.pickFallbackCity(state.cities);
         if (fb) applyCity(fb);
         else failCatalogBoot();
-      } else if (state.loading && state.loadedIntent === null) {
+      } else if (state.loading && state.loadedIntent === null && !pendingGen) {
         loadList();
       }
       if (saved && saved.scrollY) {

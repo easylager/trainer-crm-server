@@ -485,7 +485,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
 .ice-shop-filters__kicker {
   margin: 0;
   padding: 0 2px;
-  font-size: 10px;
+  font-size: var(--app-text-kicker);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--glide-hint);
@@ -505,12 +505,12 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
 
 .ice-chip--shop[aria-pressed='true'] {
   background: var(--glide-brand-wash, rgba(69, 185, 187, 0.13));
-  border-color: color-mix(in srgb, var(--app-venue-shop, #a48bff) 55%, transparent);
+  border-color: color-mix(in srgb, var(--app-venue-shop) 55%, transparent);
   color: var(--glide-ink-teal, var(--glide-ink-teal));
 }
 
 .ice-chip__n {
-  font-size: 11px;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
   color: var(--glide-hint);
   font-variant-numeric: tabular-nums;
@@ -537,28 +537,28 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   border: 1px solid var(--glide-line);
   background: var(--glide-surface);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--app-text-body);
   font-weight: var(--app-weight-semibold);
   color: inherit;
   cursor: pointer;
 }
 
 .ice-shop-toggle[aria-pressed='true'] {
-  border-color: color-mix(in srgb, var(--app-ok, #4fc98a) 50%, transparent);
-  background: color-mix(in srgb, var(--app-ok, #4fc98a) 12%, transparent);
-  color: var(--app-ok, #4fc98a);
+  border-color: color-mix(in srgb, var(--app-ok) 50%, transparent);
+  background: color-mix(in srgb, var(--app-ok) 12%, transparent);
+  color: var(--app-ok);
 }
 
 .ice-shop-toggle__dot {
   width: 8px;
   height: 8px;
-  border-radius: 99px;
+  border-radius: var(--app-radius-pill);
   background: var(--glide-hint);
 }
 
 .ice-shop-toggle[aria-pressed='true'] .ice-shop-toggle__dot {
-  background: var(--app-ok, #4fc98a);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ok, #4fc98a) 22%, transparent);
+  background: var(--app-ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ok) 22%, transparent);
 }
 
 .ice-shop-when {
@@ -590,7 +590,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   padding: 5px 9px;
   border-radius: var(--app-radius-pill, 999px);
   background: var(--glide-card, var(--glide-surface));
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
 }
 
@@ -598,7 +598,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   border: 0;
   background: none;
   padding: 0;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   line-height: 1;
   color: var(--glide-hint);
   cursor: pointer;
@@ -609,7 +609,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   background: none;
   padding: 4px 6px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
   color: var(--glide-hint);
   cursor: pointer;
@@ -1870,7 +1870,7 @@ html.client-mini-dark [class*="ground-pane"] {
 .ice-ypin--place.ice-ypin--compact .ice-ypin__body {
   height: 24px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: var(--app-text-caption);
   border-width: 1.5px;
 }
 
@@ -2033,6 +2033,18 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
 
 .ice-share[hidden] {
   display: none;
+}
+
+/* TASK-182: «Показать ещё» под лентой — та же вторичная .btn-neutral, только отступ. */
+.ice-more {
+  margin-top: var(--app-space-4);
+}
+
+/* Магазины: страница 2+ не догрузилась (TASK-182). */
+.ice-rest-failed__note {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-caption);
+  color: var(--tg-theme-hint-color);
 }
 
 .ice-share__icon {

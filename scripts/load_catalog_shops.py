@@ -79,7 +79,8 @@ def print_plan(plan) -> None:
         print(f"  + {rec.name} — {rec.display_address or 'без адреса'} [{services}]")
     print(f"Обновить: {len(plan.updates)}")
     for arena_id, rec in plan.updates:
-        print(f"  ~ #{arena_id} {rec.name}")
+        revived = " (вернуть из архива)" if arena_id in plan.revives else ""
+        print(f"  ~ #{arena_id} {rec.name}{revived}")
     pending = [rec for rec in plan.creates + [r for _, r in plan.updates] if rec.hours_pending]
     for rec in pending:
         print(f"  ! без часов: {rec.name} — {rec.hours_pending}")
@@ -95,6 +96,15 @@ async def main() -> int:
     parser.add_argument("--file", type=Path, default=DEFAULT_FILE)
     parser.add_argument("--apply", action="store_true", help="Записать в БД (иначе — только план).")
     parser.add_argument("--geocode", action="store_true", help="Координаты по адресу через Nominatim.")
+    parser.add_argument(
+        "--revive",
+        action="store_true",
+        help=(
+            "Вернуть из архива: если активной записи нет, а архивная (is_active=false) "
+            "совпала по имени или match — она становится активной и подтверждённой, профиль "
+            "публикуется, затем дополняется из файла. Без флага такие записи пропускаются."
+        ),
+    )
     parser.add_argument(
         "--allow-local-dev-db",
         action="store_true",
@@ -132,6 +142,7 @@ async def main() -> int:
                     records=records,
                     rink_rules=rink_rules,
                     speed_oval_arena_id=SPEED_OVAL_ARENA_ID,
+                    revive=args.revive,
                 )
             except ShopImportError as exc:
                 print(f"Не получится загрузить: {exc}", file=sys.stderr)

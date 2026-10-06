@@ -15,7 +15,6 @@ Telegram» ведёт в каталог с теми же фильтрами (``c
 from __future__ import annotations
 
 import html as html_lib
-import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -32,8 +31,18 @@ from src.application.arena_public_use_cases import (
 )
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
-from src.application.place_links import catalog_start_param, place_path, place_query
+from src.application.place_links import catalog_start_param, join_public_origin, place_path, place_query
+from src.shared.schedule_basis import public_basis_css_class
 from src.application.place_page import absolute_day_label
+from src.application.schedule_staleness import (
+    LEVEL_STALE,
+    LEVEL_VERY_STALE,
+    load_arena_freshness,
+    stale_note,
+    staleness_level,
+    very_stale_note,
+)
+from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import VENUE_TYPE_KEYS, has_public_skating
 
@@ -93,7 +102,7 @@ async def _window_slots(
         await session.execute(
             text(f"""
                 SELECT s.id, s.arena_id, s.local_date, s.starts_at_local, s.price_adult_minor,
-                       s.price_minor, s.currency_code
+                       s.price_minor, s.currency_code, s.schedule_basis
                 FROM ice_sessions s
                 WHERE s.arena_id = ANY(:ids)
                   AND {_CURRENT_SESSION_SQL}
@@ -132,6 +141,25 @@ async def load_selection_view(
     items = list(listing.get("items") or [])
     window = listing.get("window")
     slots = await _window_slots(session, [int(i["id"]) for i in items], window, now) if skating else {}
+    # TASK-180: свежесть расписания на момент ``now``. > 6 ч — строка «могло измениться»;
+    # > 72 ч — сеансы места не показываем и не считаем: «не обновлялось N дней — уточните».
+    stale_notes: dict[int, str] = {}
+    unconfirmed_notes: dict[int, str] = {}
+    if skating and items:
+        fresh = await load_arena_freshness(session, [int(i["id"]) for i in items], now=now)
+        for item in items:
+            aid = int(item["id"])
+            level = staleness_level(fresh.get(aid))
+            if level == LEVEL_STALE and slots.get(aid):
+                stale_notes[aid] = stale_note(fresh.get(aid), now=now)
+            elif level == LEVEL_VERY_STALE:
+                slots.pop(aid, None)
+                unconfirmed_notes[aid] = very_stale_note(
+                    fresh.get(aid),
+                    now=now,
+                    has_phone=bool(str(item.get("phone") or "").strip()),
+                    has_site=bool(str(item.get("tickets_url") or item.get("website_url") or "").strip()),
+                )
     # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
     hits = [i for i in items if slots.get(int(i["id"]))] if window else items
     shown = hits or items
@@ -143,6 +171,8 @@ async def load_selection_view(
         "window_empty": bool(window) and not hits,
         "items": shown[:MAX_PLACES],
         "slots": slots,
+        "stale_notes": stale_notes,
+        "unconfirmed_notes": unconfirmed_notes,
         "skating": skating,
         "session_count": sum(len(slots.get(int(i["id"]), [])) for i in shown[:MAX_PLACES]),
     }
@@ -242,7 +272,20 @@ def _place_photo_url(item: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _place_html(item: Mapping[str, Any], *, city_name: str, slots: list[dict[str, Any]]) -> str:
+def _phone_link(item: Mapping[str, Any]) -> str:
+    phone = str(item.get("phone") or "").strip()
+    tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+    return f' <a href="tel:{_esc(tel)}">{_esc(phone)}</a>' if phone and tel else ""
+
+
+def _place_html(
+    item: Mapping[str, Any],
+    *,
+    city_name: str,
+    slots: list[dict[str, Any]],
+    stale: str = "",
+    unconfirmed: str = "",
+) -> str:
     slug = str(item.get("slug") or "")
     href = place_path(city_name=city_name, slug=slug) if slug else f"/p/{item['id']}"
     where = " · ".join(x for x in (item.get("district"), item.get("address")) if x)
@@ -256,14 +299,21 @@ def _place_html(item: Mapping[str, Any], *, city_name: str, slots: list[dict[str
             s.get("price_adult_minor") if s.get("price_adult_minor") is not None else s.get("price_minor"),
             str(s.get("currency_code") or "BYN"),
         )
+        basis_cls = public_basis_css_class(str(s.get("schedule_basis") or "live"))
+        slot_cls = "slot" + (f" {basis_cls}" if basis_cls else "")
         chips += (
-            f'<a class="slot" href="{_esc(href + place_query(session_id=int(s["id"])))}">'
+            f'<a class="{_esc(slot_cls)}" href="{_esc(href + place_query(session_id=int(s["id"])))}">'
             f'<span class="slot__time">{_esc(hhmm)}</span>'
             f'<span class="slot__price">{_esc(day_text)}{(" · " + _esc(price)) if price else ""}</span></a>'
         )
     if rest > 0:
         chips += f'<a class="slot slot--more" href="{_esc(href)}#schedule">ещё {rest}</a>'
     line = "" if chips else f'<p class="muted">{_esc(item.get("live_line") or "")}</p>'
+    if unconfirmed:
+        # TASK-180: > 72 ч без подтверждения — не расписание, а просьба уточнить.
+        line = f'<p class="pick__stale">{_esc(unconfirmed)}{_phone_link(item)}</p>'
+    # TASK-180: > 6 ч — сеансы показываем, но над ними спокойная строка «могло измениться».
+    stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)
     icon = str(item.get("venue_icon") or "").strip()
     if photo:
@@ -282,7 +332,7 @@ def _place_html(item: Mapping[str, Any], *, city_name: str, slots: list[dict[str
         + f'<h2 class="pick__name"><a href="{_esc(href)}">{_esc(item.get("name"))}</a></h2>'
         + (f'<p class="pick__where">{_esc(where)}</p>' if where else "")
         + "</div></div>"
-        + (f'<div class="slots">{chips}</div>' if chips else line)
+        + (stale_html + f'<div class="slots">{chips}</div>' if chips else line)
         + "</section>"
     )
 
@@ -309,8 +359,17 @@ def render_selection_page(
         if view.get("window_empty")
         else ""
     )
+    stale_notes = view.get("stale_notes") or {}
+    unconfirmed_notes = view.get("unconfirmed_notes") or {}
     places = "".join(
-        _place_html(i, city_name=city_name, slots=view["slots"].get(int(i["id"]), [])) for i in view["items"]
+        _place_html(
+            i,
+            city_name=city_name,
+            slots=view["slots"].get(int(i["id"]), []),
+            stale=stale_notes.get(int(i["id"]), ""),
+            unconfirmed=unconfirmed_notes.get(int(i["id"]), ""),
+        )
+        for i in view["items"]
     )
     if not places:
         places = '<section class="sec"><p class="muted">В этой подборке пока пусто — загляните в каталог.</p></section>'
@@ -323,35 +382,50 @@ def render_selection_page(
     )
     dock = f'<div class="dock"><a class="cta" href="{_esc(cta_url)}">Открыть в Telegram</a></div>' if cta_url else ""
     body = hero + note + places + _share_html(share, venue_type="ice" if view.get("skating") else "shop") + dock
-    ld = json.dumps(
+    elements = []
+    for n, item in enumerate(view["items"]):
+        slug = str(item.get("slug") or "").strip()
+        path = place_path(city_name=city_name, slug=slug) if slug else f"/p/{int(item['id'])}"
+        elements.append(
+            {
+                "@type": "ListItem",
+                "position": n + 1,
+                "name": item.get("name"),
+                "url": join_public_origin(canonical_url, path),
+            }
+        )
+    ld = json_for_script(
         {
             "@context": "https://schema.org",
             "@type": "ItemList",
             "name": share_title,
-            "itemListElement": [
-                {"@type": "ListItem", "position": n + 1, "name": i.get("name")} for n, i in enumerate(view["items"])
-            ],
-        },
-        ensure_ascii=False,
-    ).replace("</", "<\\/")
+            "itemListElement": elements,
+        }
+    )
     page = _TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city_name)} сегодня</a>' if city_page_url else ""
-    for key, value in {
-        "__OG_TITLE__": _esc(share_title),
-        "__OG_DESCRIPTION__": _esc(share_description),
-        "__CANONICAL__": _esc(canonical_url),
-        "__OG_URL__": _esc(share["share_url"]),
-        "__OG_IMAGE__": _esc(og_image_url),
-        "__STORY_IMAGE__": _esc(story_image_url or og_image_url),
-        "__ROBOTS__": "index, follow",
-        "__JSONLD__": ld,
-        "__CITY__": _esc(city_name),
-        "__CITY_LINK__": city_link,
-        "__TRUST__": "<p>Расписание — с сайтов катков и от администраций; время и цену уточняйте на месте.</p>",
-        "__BODY__": body,
-    }.items():
-        page = page.replace(key, value)
-    return page
+    # ?t= и ?w= — та же подборка с фильтром. В индекс идёт только базовый /c/{город}.
+    variant = bool(view.get("venue") or view.get("when"))
+    lang, og_locale = html_lang_for_country(str(view["city"].get("country") or ""))
+    return fill_placeholders(
+        page,
+        {
+            "__OG_TITLE__": _esc(share_title),
+            "__OG_DESCRIPTION__": _esc(share_description),
+            "__CANONICAL__": _esc(canonical_url),
+            "__OG_URL__": _esc(share["share_url"]),
+            "__OG_IMAGE__": _esc(og_image_url),
+            "__STORY_IMAGE__": _esc(story_image_url or og_image_url),
+            "__LANG__": lang,
+            "__OG_LOCALE__": og_locale,
+            "__ROBOTS__": "noindex, follow" if variant else "index, follow",
+            "__JSONLD__": ld,
+            "__CITY__": _esc(city_name),
+            "__CITY_LINK__": city_link,
+            "__TRUST__": "<p>Расписание — с сайтов катков и от администраций; время и цену уточняйте на месте.</p>",
+            "__BODY__": body,
+        },
+    )
 
 
 def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[str, str]:

@@ -10,18 +10,23 @@ import pytest
 from src.ingestion.adapters_regional_batch_d import (
     BobruiskArenaParser,
     GomelLdsParser,
+    MolodechnoSrcParser,
     ShklovArenaParser,
     SoligorskSzkParser,
     _bobruisk_schedule_slots,
     _gomel_find_latest_post,
+    _molodechno_schedule_slots,
     _shklov_find_latest_post,
 )
+from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE
 from src.ingestion.normalize import IceSessionNormalizer
 from src.ingestion.seed_config_regional_batch_d import (
     BOBRUISK_ARENA_CONFIG,
     GOMEL_LDS_CONFIG,
+    MOLODECHNO_SRC_CONFIG,
     PARSER_KEY_BOBRUISK_ARENA,
     PARSER_KEY_GOMEL_LDS,
+    PARSER_KEY_MOLODECHNO_SRC,
     PARSER_KEY_SHKLOV_ARENA,
     PARSER_KEY_SOLIGORSK_SZK,
     SHKLOV_ARENA_CONFIG,
@@ -63,6 +68,14 @@ def _soligorsk_job() -> ParserJob:
     return _job(arena_id=19, parser_key=PARSER_KEY_SOLIGORSK_SZK, config=cfg, job_id=102)
 
 
+def _molodechno_job(**config_overrides) -> ParserJob:
+    cfg = dict(MOLODECHNO_SRC_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "molodechno-src")
+    cfg["run_date"] = "2026-10-06"
+    cfg.update(config_overrides)
+    return _job(arena_id=18, parser_key=PARSER_KEY_MOLODECHNO_SRC, config=cfg, job_id=105)
+
+
 def _shklov_job() -> ParserJob:
     cfg = dict(SHKLOV_ARENA_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "shklov-arena")
@@ -87,7 +100,7 @@ def test_gomel_find_latest_post_parses_four_digit_year_dates() -> None:
 
 def test_bobruisk_modern_schedule_page_extracts_public_skate_slots() -> None:
     html = (_FIXTURES / "bobruisk-arena/ice-rink-schedule.html").read_text(encoding="utf-8")
-    slots = _bobruisk_schedule_slots(html, year=2026)
+    slots = _bobruisk_schedule_slots(html, reference=date(2026, 7, 1))
     assert slots
     assert all("массовое катание" not in start for _, start, _ in slots)
     sun27 = [s for s in slots if s[0] == date(2026, 9, 27)]
@@ -123,6 +136,52 @@ async def test_bobruisk_arena_matches_expected_fixture() -> None:
 
 
 @pytest.mark.asyncio
+async def test_molodechno_src_matches_expected_fixture() -> None:
+    expected = json.loads((_FIXTURES / "molodechno-src/expected.json").read_text(encoding="utf-8"))
+    job = _molodechno_job()
+    extraction = await MolodechnoSrcParser().extract(job)
+    assert extraction.schedule_basis == SCHEDULE_BASIS_LIVE
+    slots = _validated(extraction, job)
+
+    assert len(slots) == len(expected["sessions"]) == 6
+    assert all(slot.kind == "public_skate" for slot in slots)
+    assert all(slot.schedule_basis == SCHEDULE_BASIS_LIVE for slot in slots)
+    assert all(slot.age_note == "детский до 14 лет" for slot in slots)
+
+    by_key = {(s.local_date, s.starts_at_local.strftime("%H:%M")): s for s in slots}
+    for gold in expected["sessions"]:
+        hit = by_key[(date.fromisoformat(gold["local_date"]), gold["starts_at_local"])]
+        assert hit.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert hit.price_adult_minor == gold["price_adult_minor"]
+        assert hit.price_child_minor == gold["price_child_minor"]
+        assert hit.price_rental_minor is None
+
+
+def test_molodechno_year_rollover_december_to_january() -> None:
+    html = """
+    <p><strong>Сеансы массового катания:</strong></p>
+    <p><strong>30.12. в 18:00</strong></p>
+    <p><strong>02.01. в 19:00</strong></p>
+    """
+    reference = date(2026, 12, 29)
+    got = _molodechno_schedule_slots(html, reference=reference, duration_minutes=45)
+    assert {d.isoformat() for d, _, _ in got} == {"2026-12-30", "2027-01-02"}
+
+
+@pytest.mark.asyncio
+async def test_molodechno_src_empty_when_no_schedule_lines(tmp_path: Path) -> None:
+    (tmp_path / "ledovaya-arena.html").write_text(
+        "<html><body><p>Сеансы массового катания:</p><p>Телефон для справок</p></body></html>",
+        encoding="utf-8",
+    )
+    cfg = dict(MOLODECHNO_SRC_CONFIG)
+    cfg["fixture_dir"] = str(tmp_path)
+    job = _job(arena_id=18, parser_key=PARSER_KEY_MOLODECHNO_SRC, config=cfg, job_id=106)
+    extraction = await MolodechnoSrcParser().extract(job)
+    assert extraction.slots == []
+
+
+@pytest.mark.asyncio
 async def test_soligorsk_szk_matches_expected_fixture_and_handles_midnight_crossing() -> None:
     expected = json.loads((_FIXTURES / "soligorsk-szk/expected.json").read_text(encoding="utf-8"))
     job = _soligorsk_job()
@@ -148,6 +207,32 @@ async def test_soligorsk_szk_matches_expected_fixture_and_handles_midnight_cross
     assert night.ends_at_local == time(0, 0)
     assert night.session_label == "Рок-хиты"
     assert (night.ends_at_utc - night.starts_at_utc).total_seconds() == 3600
+
+
+@pytest.mark.asyncio
+async def test_soligorsk_szk_multi_day_single_h3_layout_2026_10_06(tmp_path: Path) -> None:
+    """С октября 2026 szk.by держит все дни в одном <h3>, разделённых <br> (live-снимок 2026-10-06)."""
+    (tmp_path / "massovoe-katanie.html").write_bytes(
+        (_FIXTURES / "soligorsk-szk/massovoe-katanie-2026-10-06.html").read_bytes()
+    )
+    cfg = dict(SOLIGORSK_SZK_CONFIG)
+    cfg["fixture_dir"] = str(tmp_path)
+    cfg["run_date"] = "2026-10-06"
+    extraction = await SoligorskSzkParser().extract(
+        _job(arena_id=19, parser_key=PARSER_KEY_SOLIGORSK_SZK, config=cfg, job_id=104)
+    )
+    got = sorted((s.local_date, s.starts_at_local, s.ends_at_local) for s in extraction.slots)
+    assert got == [
+        ("2026-10-06", "21:00", "21:45"),
+        ("2026-10-07", "21:00", "21:45"),
+        ("2026-10-08", "21:00", "21:45"),
+        ("2026-10-09", "21:00", "21:45"),
+        ("2026-10-10", "16:00", "16:45"),
+        ("2026-10-10", "21:00", "21:45"),
+        ("2026-10-11", "15:00", "15:45"),
+        ("2026-10-11", "21:00", "21:45"),
+    ]
+    assert all(s.price_adult == 660 and s.price_child == 500 for s in extraction.slots)
 
 
 @pytest.mark.asyncio

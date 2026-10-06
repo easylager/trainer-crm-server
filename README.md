@@ -4,7 +4,7 @@ CRM-платформа для тренеров в Беларуси. Два Teleg
 
 ## Стек
 
-- Python 3.11+
+- Python 3.12 (версия в `runtime.txt` — та же, что на Railway/Nixpacks и в CI)
 - Telegram Bot (aiogram / python-telegram-bot)
 - PostgreSQL
 - SQLAlchemy 2.0 + Alembic

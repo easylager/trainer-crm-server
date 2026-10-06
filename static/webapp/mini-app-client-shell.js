@@ -706,11 +706,15 @@
   function prefetchIceAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'ice-tab.js?v=202610069', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=202610061', as: 'script' },
+      { href: base + 'minsk-time.js?v=2026100698', as: 'script' },
+      { href: base + 'ice-tab.js?v=2026100702', as: 'script' },
+      { href: base + 'opening-hours.js?v=2026100691', as: 'script' },
+      { href: base + 'schedule-staleness-model.js?v=2026100698', as: 'script' },
+      { href: base + 'arena-schedule-mode-model.js?v=2026100702', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=2026100702', as: 'script' },
       { href: base + 'ice-map-model.js?v=202610054', as: 'script' },
-      { href: base + 'ice-map.js?v=202610057', as: 'script' },
-      { href: base + 'ice-tab.css?v=202610069', as: 'style' },
+      { href: base + 'ice-map.js?v=2026100690', as: 'script' },
+      { href: base + 'ice-tab.css?v=2026100691', as: 'style' },
     ];
     assets.forEach(function (spec) {
       if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
@@ -725,8 +729,8 @@
   function prefetchCatalogAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'catalog-main.js?v=202605273', as: 'script' },
-      { href: base + 'mini-app-catalog.css?v=202605273', as: 'style' },
+      { href: base + 'catalog-main.js?v=2026100699', as: 'script' },
+      { href: base + 'mini-app-catalog.css?v=2026100697', as: 'style' },
       { href: base + 'mini-app-phone-field.js?v=202606281', as: 'script' },
     ];
     assets.forEach(function (spec) {

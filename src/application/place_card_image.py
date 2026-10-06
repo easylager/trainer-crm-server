@@ -180,7 +180,12 @@ def card_lines(view: Mapping[str, Any], *, invite: bool) -> dict[str, str]:
         "extra": " · ".join(
             line for line in (slot_price_lines(slot) if slot is not None else []) if not line.startswith("Взрослый")
         ),
-        "foot": "Расписание, цены и как добраться — по ссылке",
+        "foot": (
+            # TASK-180: расписание давно не подтверждалось — картинка не обещает лишнего.
+            "Расписание могло измениться — уточните по ссылке"
+            if skating and view.get("schedule_note")
+            else "Расписание, цены и как добраться — по ссылке"
+        ),
     }
 
 
@@ -384,7 +389,12 @@ def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> by
         "title": selection_share_title(view),
         "big": selection_share_description(view),
         "sub": " · ".join(n for n in names if n),
-        "foot": "Расписание, цены и адреса — по ссылке",
+        "foot": (
+            # TASK-180: часть расписания давно не подтверждалась — картинка не обещает лишнего.
+            "Часть расписания могла измениться — детали по ссылке"
+            if view.get("stale_notes")
+            else "Расписание, цены и адреса — по ссылке"
+        ),
     }
     fake_view = {"card": {"venue_type": view.get("venue") or "ice"}}
     if story:

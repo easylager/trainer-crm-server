@@ -12,16 +12,19 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.concurrency import run_in_threadpool
 
 from src.api.deps import get_session
 from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
 from src.application.place_card_image import render_place_card, share_display_path
+from src.application.arena_public_use_cases import resolve_merged_arena_id
 from src.application.catalog_consumer_events import record_public_page_view
+from src.application.png_render_cache import render_png_cached
 from src.application.place_links import (
     place_image_url,
     place_page_url,
@@ -31,6 +34,7 @@ from src.application.place_links import (
 )
 from src.application.place_page import load_place_view, render_place_page, share_payload
 from src.shared.config import Settings
+from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
 router = APIRouter(tags=["public-place"])
 
@@ -87,6 +91,24 @@ def _not_found(home: str) -> HTMLResponse:
     return HTMLResponse(_NOT_FOUND_HTML.replace("__HOME__", home), status_code=404)
 
 
+async def _merged_redirect(session: AsyncSession, arena_id: int, request: Request) -> RedirectResponse | None:
+    """301 from a retired duplicate (``arenas.merged_into_arena_id``) to the canonical page.
+
+    TASK-177: duplicates are retired into one canonical id; links to the old card that
+    already live in chats and search indexes keep working and pass their weight on.
+    """
+    target_id = await resolve_merged_arena_id(session, int(arena_id))
+    if target_id is None:
+        return None
+    view = await load_place_view(session, str(target_id))
+    if view is None or not view["card"].get("slug"):
+        return None
+    card = view["card"]
+    target = place_path(city_name=str(card.get("city_name") or ""), slug=str(card["slug"]))
+    q = request.url.query
+    return RedirectResponse(url=target + (f"?{q}" if q else ""), status_code=301)
+
+
 async def _resolve(session: AsyncSession, city_ref: str, slug: str):
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
@@ -100,7 +122,8 @@ async def place_by_id(arena_id: int, request: Request, session: AsyncSession = D
     """Короткая форма по id (бот, админка) → 301 на каноническую ``/p/{city}/{slug}``."""
     view = await load_place_view(session, str(arena_id))
     if view is None or not view["card"].get("slug"):
-        return _not_found(_base() + "/webapp/ice")
+        merged = await _merged_redirect(session, arena_id, request)
+        return merged or _not_found(_base() + "/webapp/ice")
     card = view["card"]
     target = place_path(city_name=str(card.get("city_name") or ""), slug=str(card["slug"]))
     q = request.url.query
@@ -124,7 +147,8 @@ async def place_page(
     invite = _flag(i)
     view = await load_place_view(session, str(arena_id), session_id=session_id)
     if view is None:
-        return _not_found(base + "/webapp/ice")
+        merged = await _merged_redirect(session, arena_id, request)
+        return merged or _not_found(base + "/webapp/ice")
     card = view["card"]
     city_name = str(card.get("city_name") or city["name"])
     if city_ref != city_slug(city_name) or slug != card.get("slug"):
@@ -168,6 +192,7 @@ async def place_page(
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
         share=share_payload(view, page_url=share_url, invite=False),
         invite=invite,
+        country=str(city.get("country") or ""),
     )
     await record_public_page_view(
         session,
@@ -202,7 +227,14 @@ async def _image(
     if story:
         kwargs["share_url"] = page
         kwargs["display_path"] = share_display_path(page)
-    png = await run_in_threadpool(render_place_card, view, **kwargs)
+    png = await render_png_cached(
+        "place_story" if story else "place_og",
+        {"arena_id": arena_id, "session": focus_id, "invite": invite, "page": page},
+        view,
+        render_place_card,
+        view,
+        **kwargs,
+    )
     cache = _IMAGE_CACHE_SESSION if focus_id is not None else _IMAGE_CACHE
     return Response(content=png, media_type="image/png", headers=cache)
 
@@ -242,44 +274,79 @@ async def place_story_image(
 # поиска — «массовое катание <город> расписание», «заточка коньков <район>».
 # ---------------------------------------------------------------------------
 
-_SITEMAP_SQL = text("""
-    SELECT c.name AS city_name, p.slug, a.venue_type
+# Видимость — тот же предикат, что у списка и карточки (TASK-177). Свой фильтр не копируем.
+# lastmod места — что новее: правка профиля или начало самого позднего сеанса.
+_SITEMAP_SQL = text(f"""
+    SELECT c.name AS city_name, p.slug, a.venue_type,
+           GREATEST(p.updated_at, sess.last_at) AS lastmod
     FROM arenas a
     JOIN arena_profiles p ON p.arena_id = a.id
     JOIN cities c ON c.id = a.city_id
-    WHERE a.is_active AND a.is_confirmed AND c.is_active
+    LEFT JOIN (
+        SELECT arena_id, MAX(starts_at_utc) AS last_at
+        FROM ice_sessions
+        GROUP BY arena_id
+    ) sess ON sess.arena_id = a.id
+    WHERE {PUBLIC_ARENA_VISIBLE_SQL}
       AND p.status = 'published' AND p.slug IS NOT NULL
-      AND c.country = ANY(:countries)
     ORDER BY c.sort_order, c.id, a.id
     """)
+
+
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _sitemap_lastmod(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return _aware(value).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _newer(left: datetime | None, right: datetime | None) -> datetime | None:
+    if left is None:
+        return right
+    if right is None:
+        return left
+    return left if _aware(left) >= _aware(right) else right
 
 
 @router.get("/sitemap.xml")
 async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
     from xml.sax.saxutils import escape
 
-    from src.shared.ice_discovery_scope import ice_discovery_countries
-
     base = _base()
-    rows = (await session.execute(_SITEMAP_SQL, {"countries": ice_discovery_countries()})).mappings().all()
-    urls: list[tuple[str, str]] = [(base + "/", "weekly")]
-    seen_cities: set[str] = set()
-    shop_cities: set[str] = set()
+    rows = (await session.execute(_SITEMAP_SQL, public_scope_params())).mappings().all()
+    # «/» — лендинг тренера, в поиске каталога ему не место. Варианты /c/?t= тоже
+    # не кладём: они noindex и канонизируются на базовый /c/{город}.
+    by_city: dict[str, list[tuple[str, str, datetime | None]]] = {}
+    city_stamp: dict[str, datetime | None] = {}
+    order: list[str] = []
     for row in rows:
         city_name = str(row["city_name"])
-        if city_name not in seen_cities:
-            seen_cities.add(city_name)
-            urls.append((ice_city_day_page_url(base_url=base, city_name=city_name), "daily"))
-            # Подборка города — ответ на «где покататься в <город>» (TASK-146).
-            urls.append((f"{base}/c/{city_slug(city_name)}", "daily"))
-        if row["venue_type"] == "shop" and city_name not in shop_cities:
-            shop_cities.add(city_name)
-            urls.append((f"{base}/c/{city_slug(city_name)}?t=shop", "weekly"))
+        if city_name not in by_city:
+            by_city[city_name] = []
+            order.append(city_name)
+            city_stamp[city_name] = None
+        stamp = row["lastmod"] if isinstance(row["lastmod"], datetime) else None
+        city_stamp[city_name] = _newer(city_stamp[city_name], stamp)
         freq = "daily" if row["venue_type"] == "ice" else "weekly"
-        urls.append((place_page_url(base_url=base, city_name=city_name, slug=str(row["slug"])), freq))
+        loc = place_page_url(base_url=base, city_name=city_name, slug=str(row["slug"]))
+        by_city[city_name].append((loc, freq, stamp))
+    urls: list[tuple[str, str, datetime | None]] = []
+    for city_name in order:
+        stamp = city_stamp[city_name]
+        urls.append((ice_city_day_page_url(base_url=base, city_name=city_name), "daily", stamp))
+        # Подборка города — ответ на «где покататься в <город>» (TASK-146).
+        urls.append((f"{base}/c/{city_slug(city_name)}", "daily", stamp))
+        urls.extend(by_city[city_name])
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-    for loc, freq in urls:
-        body.append(f"<url><loc>{escape(loc)}</loc><changefreq>{freq}</changefreq></url>")
+    for loc, freq, stamp in urls:
+        lastmod = _sitemap_lastmod(stamp)
+        extra = f"<lastmod>{escape(lastmod)}</lastmod>" if lastmod else ""
+        body.append(f"<url><loc>{escape(loc)}</loc>{extra}<changefreq>{freq}</changefreq></url>")
     body.append("</urlset>")
     return Response(
         content="\n".join(body),
@@ -338,9 +405,11 @@ async def selection_page(
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
     view = await load_selection_view(session, city=city, venue=venue, when=when)
+    # Любой ?t= / ?w= канонизируется на базовую подборку города, а не на самого себя.
+    canonical_path = selection_path(city_name=city_name, venue=None, when=None)
     html = render_selection_page(
         view,
-        canonical_url=base + path,
+        canonical_url=base + canonical_path,
         og_image_url=base + selection_image_path(city_name=city_name, venue=venue, when=when),
         cta_url=public_telegram_cta_url(
             base,
@@ -374,7 +443,14 @@ async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, 
     page = _base() + selection_path(city_name=str(city["name"]), venue=venue, when=when)
     view["share_url"] = page
     view["display_path"] = share_display_path(page)
-    png = await run_in_threadpool(render_selection_card, view, story=story)
+    png = await render_png_cached(
+        "selection_story" if story else "selection_og",
+        {"venue": venue, "when": when, "page": page},
+        view,
+        render_selection_card,
+        view,
+        story=story,
+    )
     return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
 
 

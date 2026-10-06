@@ -217,7 +217,7 @@
 
 | Компонент | Технология |
 |-----------|------------|
-| Язык | Python 3.11+ |
+| Язык | Python 3.12 (`runtime.txt`) |
 | Telegram | aiogram 3.x |
 | БД | PostgreSQL 15+ |
 | ORM | SQLAlchemy 2.0 + async |

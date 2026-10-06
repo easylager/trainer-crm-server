@@ -153,13 +153,21 @@ async def issue_trainer_join_redirect(
     return RedirectResponse(url=redirect_url, status_code=302)
 
 
-def _build_contact_telegram_url(trainer_id: int, telegram_username: str | None) -> str | None:
-    """Return the trackable redirect URL only when the trainer has a valid Telegram handle."""
+def _build_contact_telegram_url(trainer_id: int, telegram_username: str | None, *, listed: bool = True) -> str | None:
+    """
+    Telegram CTA for the trainer card, only when the trainer has a valid Telegram handle.
+
+    Listed trainers get the trackable ``/r/tg/{id}`` redirect. ``/r/tg`` answers 404 for anyone
+    outside the catalog (TASK-181), so a hidden card opened by a client with a relationship
+    gets a direct ``t.me`` link instead.
+    """
     if not telegram_username:
         return None
     candidate = telegram_username.strip().lstrip("@")
     if not _TELEGRAM_USERNAME_RE.fullmatch(candidate):
         return None
+    if not listed:
+        return f"https://t.me/{candidate}"
     return f"/r/tg/{trainer_id}"
 
 
@@ -181,6 +189,14 @@ def _trainer_public_catalog_exposed(trainer: dict | None) -> bool:
 # Hard cap on catalog multi-arena filter — defends DB from oversized IN-lists from rogue clients.
 # Ice Discovery cities can exceed 32 arenas; silent truncation is no longer acceptable (TASK-051 AC-005).
 _ARENA_IDS_FILTER_LIMIT = 256
+
+# Public list pages (trainers, training groups): one page holds at most this many rows.
+# Without a ceiling ?limit=100000 dumped the whole catalog in one request (TASK-181).
+PUBLIC_LIST_PAGE_LIMIT_MAX = 50
+
+
+def _clamp_page_limit(limit: int) -> int:
+    return min(max(1, limit), PUBLIC_LIST_PAGE_LIMIT_MAX)
 
 
 def _parse_arena_ids_csv(raw: str | None) -> tuple[list[int] | None, bool, int]:
@@ -487,8 +503,8 @@ async def list_active_trainers(
 
     items, total = await list_active_trainers_for_client(
         session,
-        limit=limit,
-        offset=offset,
+        limit=_clamp_page_limit(limit),
+        offset=max(0, offset),
         city_id=city_id,
         service_id=service_id,
         service_ids=_parse_int_csv(service_ids),
@@ -562,8 +578,8 @@ async def list_catalog_training_groups(
         arena_id=arena_id,
         arena_ids=arena_ids_filter,
         filter_days=days_filter,
-        limit=limit,
-        offset=offset,
+        limit=_clamp_page_limit(limit),
+        offset=max(0, offset),
     )
     tids = list({it["trainer_id"] for it in items})
     photos_by_tid = await _batch_trainer_photos(session, tids)
@@ -620,6 +636,7 @@ async def assemble_trainer_catalog_payload(
     )
     tg_row = r.fetchone()
     telegram_username = tg_row[0] if tg_row else None
+    listed = trainer_is_listed(trainer)
 
     trainer = sanitize_trainer_for_public_catalog(trainer)
     _enrich_trainer_photo_urls(trainer)
@@ -633,7 +650,7 @@ async def assemble_trainer_catalog_payload(
     trainer["lifecycle_stage"] = snap.stage.value
     trainer["is_lead_mode"] = snap.is_lead_mode
     # Trackable /r/tg/{id} redirect whenever the trainer has a valid @username — not only Lead Mode.
-    trainer["contact_telegram_url"] = _build_contact_telegram_url(trainer_id, telegram_username)
+    trainer["contact_telegram_url"] = _build_contact_telegram_url(trainer_id, telegram_username, listed=listed)
 
     edu = await list_trainer_education(session, trainer_id, public_only=True)
     trainer["education_entries"] = edu if edu is not None else []

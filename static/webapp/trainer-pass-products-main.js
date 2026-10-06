@@ -390,6 +390,7 @@
         rows.push({ label: 'Клиент', value: p.client_name || '—' });
         if (p.client_phone) rows.push({ label: 'Телефон', value: p.client_phone, isPhone: true });
         rows.push({ label: 'Услуги', value: p.service_scope || 'На все услуги' });
+        rows.push({ label: 'Тарифы', value: p.tiers_label || 'На все тарифы' });
         if (p.issued_at) rows.push({ label: 'Выдан', value: formatIssuedDate(p.issued_at) });
         if (p.expires_at) rows.push({ label: 'Срок', value: 'до ' + formatIssuedDate(p.expires_at) });
         var html = '';
@@ -439,6 +440,34 @@
           });
       }
 
+      function redeemBookingRowHtml(b) {
+        var outside = b.in_scope === false;
+        var html = '<button type="button" class="pp-redeem-booking-row' +
+          (outside ? ' pp-redeem-booking-row--outside' : '') +
+          '" data-booking-id="' + b.booking_id + '">';
+        html += '<span class="pp-redeem-booking-row__icon" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>' +
+          '</svg></span>';
+        html += '<span class="pp-redeem-booking-row__main">';
+        html += '<div class="pp-redeem-booking-row__date">' + escapeHtml(formatBookingSlotLabel(b)) + '</div>';
+        html += '<div class="pp-redeem-booking-row__meta">' +
+          escapeHtml(b.service_name || 'Занятие');
+        if (outside && b.scope_note) {
+          html += ' · ' + escapeHtml(b.scope_note);
+        } else {
+          html += ' · ' + escapeHtml(formatBookingPriceHint(b.price_cents));
+        }
+        if (b.needs_complete) {
+          html += ' · спишется и отметит проведённым';
+        }
+        html += '</div>';
+        html += '</span>';
+        html += '<span class="pp-redeem-booking-row__chip">−1</span>';
+        html += '</button>';
+        return html;
+      }
+
       function renderPassDetailScreen(opts) {
         opts = opts || {};
         var p = state.passDetail;
@@ -476,31 +505,41 @@
           redeemSection.hidden = true;
         } else {
           redeemSection.hidden = false;
+          var matching = state.passDetailRedeemable.filter(function(b) { return b.in_scope !== false; });
+          var outside = state.passDetailRedeemable.filter(function(b) { return b.in_scope === false; });
+          var callout = document.getElementById('passDetailRedeemCallout');
+          if (callout) {
+            var box = callout.closest('.pp-pass-detail-callout');
+            if (!state.passDetailRedeemable.length) {
+              if (box) box.hidden = true;
+            } else if (box) {
+              box.hidden = false;
+              if (outside.length && !matching.length) {
+                callout.textContent = 'Занятий, которые входят в абонемент, нет. Ниже — другие прошедшие занятия этого клиента. Спишутся только если подтвердите вручную.';
+              } else if (outside.length) {
+                callout.textContent = 'Сверху — занятия, которые входят в абонемент. Ниже — другие прошедшие занятия этого клиента. Их можно списать только вручную, после подтверждения.';
+              } else {
+                callout.textContent = 'Выберите прошедшее занятие, которое входит в абонемент. В статистике визит будет учтён как оплаченный абонементом.';
+              }
+            }
+          }
           if (!state.passDetailRedeemable.length) {
             redeemList.innerHTML =
               '<div class="pp-state pp-state--empty"><div class="pp-state-icon" aria-hidden="true">✓</div>' +
               '<p class="pp-state-title">Нечего списать</p>' +
-              '<p class="pp-state-text">Нет подходящих занятий: либо всё уже учтено, либо запись ещё не завершилась, ' +
-              'либо абонемент не покрывает услугу/тариф этой записи. Проверьте карточку клиента и расписание.</p></div>';
+              '<p class="pp-state-text">Нет прошедших занятий без абонемента: всё уже учтено или запись ещё не завершилась.</p></div>';
           } else {
-            var html = '<div class="bd-rows">';
-            state.passDetailRedeemable.forEach(function(b) {
-              html += '<button type="button" class="pp-redeem-booking-row" data-booking-id="' + b.booking_id + '">';
-              html += '<span class="pp-redeem-booking-row__icon" aria-hidden="true">🏋</span>';
-              html += '<span class="pp-redeem-booking-row__main">';
-              html += '<div class="pp-redeem-booking-row__date">' + escapeHtml(formatBookingSlotLabel(b)) + '</div>';
-              html += '<div class="pp-redeem-booking-row__meta">' +
-                escapeHtml(b.service_name || 'Занятие') + ' · ' +
-                escapeHtml(formatBookingPriceHint(b.price_cents));
-              if (b.needs_complete) {
-                html += ' · спишется и отметит проведённым';
-              }
+            var html = '';
+            if (matching.length) {
+              html += '<div class="bd-rows">' + matching.map(redeemBookingRowHtml).join('') + '</div>';
+            }
+            if (outside.length) {
+              html += '<div class="pp-redeem-outside">';
+              html += '<div class="bd-section-label">Другие занятия клиента</div>';
+              html += '<p class="pp-redeem-outside__note">Не входят в этот абонемент. Автоматически не спишутся — только если подтвердите вручную.</p>';
+              html += '<div class="bd-rows">' + outside.map(redeemBookingRowHtml).join('') + '</div>';
               html += '</div>';
-              html += '</span>';
-              html += '<span class="pp-redeem-booking-row__chip">−1</span>';
-              html += '</button>';
-            });
-            html += '</div>';
+            }
             redeemList.innerHTML = html;
             redeemList.querySelectorAll('.pp-redeem-booking-row').forEach(function(btn) {
               btn.onclick = function() {
@@ -508,13 +547,20 @@
                 if (!bid || !state.passDetailId || btn.disabled) return;
                 var booking = state.passDetailRedeemable.find(function(x) { return x.booking_id === bid; }) || {};
                 var label = formatBookingSlotLabel(booking);
+                var outsideScope = booking.in_scope === false;
                 var confirmExtra = booking.needs_complete
                   ? '\n\nЗапись ещё не отмечена проведённой — при списании отметим её как проведённую.'
                   : '';
+                var confirmText = outsideScope
+                  ? ('Списать занятие, которое не входит в абонемент?\n\n' + label +
+                    (booking.scope_note ? '\n' + booking.scope_note : '') +
+                    confirmExtra +
+                    '\n\nАвтоматически оно не спишется. В статистике визит будет учтён как оплаченный абонементом.')
+                  : ('Списать 1 занятие с абонемента?\n\n' + label + confirmExtra +
+                    '\n\nВ статистике визит будет учтён как оплаченный абонементом.');
                 showAppConfirm(
-                  'Списать 1 занятие с абонемента?\n\n' + label + confirmExtra +
-                    '\n\nВ статистике визит будет учтён как оплаченный абонементом.',
-                  { okText: 'Списать', cancelText: 'Отмена' }
+                  confirmText,
+                  { okText: outsideScope ? 'Списать всё равно' : 'Списать', cancelText: 'Отмена' }
                 ).then(function(ok) {
                   if (!ok) return;
                   redeemList.querySelectorAll('.pp-redeem-booking-row').forEach(function(b) { b.disabled = true; });

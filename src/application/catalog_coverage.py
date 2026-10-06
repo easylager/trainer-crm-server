@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -23,7 +24,7 @@ from typing import Any, Iterable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.arena_profile import ARENA_PROFILE_STATUS_PUBLISHED
+from src.shared.ice_discovery_scope import arena_publicly_visible_row
 from src.shared.venue_types import (
     VENUE_TYPE_SHOP,
     has_public_skating,
@@ -36,7 +37,8 @@ DATA_DIR = REPO_ROOT / "data"
 
 _ARENAS_SQL = """
 SELECT
-    a.id, a.name, a.address, a.city_id, c.name AS city_name, c.country,
+    a.id, a.name, a.address, a.city_id, c.name AS city_name, c.country AS city_country,
+    c.is_active AS city_is_active, a.created_by_trainer_id,
     a.venue_type, a.is_active, a.is_confirmed, a.latitude, a.longitude,
     p.status AS profile_status, p.phone, p.website_url, p.tickets_url,
     p.opening_hours, p.amenities,
@@ -51,6 +53,7 @@ SELECT
         WHERE s.arena_id = a.id AND s.status = 'active'
           AND s.kind IN ('public_skate', 'open_ice')
           AND s.starts_at_utc > :now
+          AND (s.valid_until IS NULL OR s.valid_until >= :now)
     ) AS future_sessions
 FROM arenas a
 JOIN cities c ON c.id = a.city_id
@@ -85,6 +88,8 @@ class ArenaRow:
     parser_state: str | None
     future_sessions: int
     amenities: dict[str, Any]
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass
@@ -98,6 +103,8 @@ class KnownRink:
     address: str | None
     country: str | None = None
     note: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass
@@ -208,10 +215,7 @@ def _parser_state(row: dict[str, Any], now: datetime) -> str | None:
 
 
 def _is_published(row: dict[str, Any]) -> bool:
-    status = row.get("profile_status")
-    return bool(row.get("is_active")) and bool(row.get("is_confirmed")) and (
-        status is None or status == ARENA_PROFILE_STATUS_PUBLISHED
-    )
+    return arena_publicly_visible_row(row)
 
 
 async def load_arenas(session: AsyncSession, *, now: datetime) -> list[ArenaRow]:
@@ -228,7 +232,7 @@ async def load_arenas(session: AsyncSession, *, now: datetime) -> list[ArenaRow]
                 address=data.get("address"),
                 city_id=int(data["city_id"]),
                 city_name=str(data["city_name"] or ""),
-                country=str(data.get("country") or ""),
+                country=str(data.get("city_country") or data.get("country") or ""),
                 venue_type=normalize_venue_type(data.get("venue_type")),
                 published=published,
                 gaps=arena_gaps(data),
@@ -238,6 +242,8 @@ async def load_arenas(session: AsyncSession, *, now: datetime) -> list[ArenaRow]
                 parser_state=_parser_state(data, now) if skating else None,
                 future_sessions=int(data.get("future_sessions") or 0),
                 amenities=_as_dict(data.get("amenities")),
+                latitude=_as_float(data.get("latitude")),
+                longitude=_as_float(data.get("longitude")),
             )
         )
     return rows
@@ -287,15 +293,33 @@ def load_known_rinks(paths: Iterable[Path]) -> list[KnownRink]:
                         address=address,
                         country=country or None,
                         note=verdict or None,
+                        latitude=_as_float(rec.get("latitude")),
+                        longitude=_as_float(rec.get("longitude")),
                     )
                 )
     # Файл источников знает arena_id, но не адрес; прод-выгрузка арен — наоборот.
     # Склеиваем по arena_id, чтобы один каток не выглядел двумя разными.
     address_by_id = {r.arena_id: r.address for r in rinks if r.arena_id is not None and r.address}
+    coords_by_id = {
+        r.arena_id: (r.latitude, r.longitude)
+        for r in rinks
+        if r.arena_id is not None and r.latitude is not None and r.longitude is not None
+    }
     for r in rinks:
         if r.address is None and r.arena_id in address_by_id:
             r.address = address_by_id[r.arena_id]
+        if r.latitude is None and r.arena_id in coords_by_id:
+            r.latitude, r.longitude = coords_by_id[r.arena_id]
     return rinks
+
+
+def _as_float(value: Any) -> float | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # Слова, которые есть в названии почти любого катка: по ним «Ледовая арена» в Берёзе
@@ -326,34 +350,94 @@ def address_key(value: str | None) -> tuple[str, str] | None:
     return (m.group(1), m.group(2)) if m else None
 
 
-def _names_match(a: str, b: str) -> bool:
+def _token_overlap_ratio(a: str, b: str) -> float:
+    ta, tb = name_tokens(a), name_tokens(b)
+    if not ta or not tb:
+        return 0.0
+    union = ta | tb
+    return len(ta & tb) / len(union)
+
+
+def _coords_within_meters(
+    lat_a: float | None,
+    lon_a: float | None,
+    lat_b: float | None,
+    lon_b: float | None,
+    *,
+    max_m: float = 150.0,
+) -> bool:
+    if lat_a is None or lon_a is None or lat_b is None or lon_b is None:
+        return False
+    r = 6_371_000.0
+    phi1, phi2 = math.radians(lat_a), math.radians(lat_b)
+    dphi = math.radians(lat_b - lat_a)
+    dlambda = math.radians(lon_b - lon_a)
+    x = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(x)) <= max_m
+
+
+def _names_match(
+    a: str,
+    b: str,
+    *,
+    lat_a: float | None = None,
+    lon_a: float | None = None,
+    lat_b: float | None = None,
+    lon_b: float | None = None,
+) -> bool:
     na, nb = normalize_name(a), normalize_name(b)
     if not na or not nb:
         return False
     if na == nb:
         return True
-    ta, tb = name_tokens(a), name_tokens(b)
-    return bool(ta and tb and ta & tb)
+    if _token_overlap_ratio(a, b) >= 0.5:
+        return True
+    return _coords_within_meters(lat_a, lon_a, lat_b, lon_b)
 
 
-def _same_place(name_a: str, addr_a: str | None, name_b: str, addr_b: str | None) -> bool:
-    if _names_match(name_a, name_b):
+def _same_place(
+    name_a: str,
+    addr_a: str | None,
+    name_b: str,
+    addr_b: str | None,
+    *,
+    lat_a: float | None = None,
+    lon_a: float | None = None,
+    lat_b: float | None = None,
+    lon_b: float | None = None,
+) -> bool:
+    if _names_match(name_a, name_b, lat_a=lat_a, lon_a=lon_a, lat_b=lat_b, lon_b=lon_b):
         return True
     ka, kb = address_key(addr_a), address_key(addr_b)
     return ka is not None and ka == kb
 
 
 def match_known_rink(rink: KnownRink, arenas: list[ArenaRow]) -> ArenaRow | None:
-    """Сначала по arena_id (если имя похоже), потом по имени/адресу в том же городе."""
+    """Сначала по arena_id, потом по имени/адресу/координатам в том же городе.
+
+    Связь по arena_id — явная: такой каток есть, даже если имя в файле написано иначе
+    (строгое сравнение имён не должно объявить его отсутствующим). Считаются только
+    места, видимые в выдаче.
+    """
+    visible = [a for a in arenas if a.published]
     if rink.arena_id is not None:
-        for arena in arenas:
-            if arena.id == rink.arena_id and _same_place(arena.name, arena.address, rink.name, rink.address):
+        for arena in visible:
+            if arena.id == rink.arena_id:
                 return arena
     city = normalize_name(rink.city_name) if rink.city_name else None
-    for arena in arenas:
+    for arena in visible:
         if city and normalize_name(arena.city_name) != city:
             continue
-        if _same_place(arena.name, arena.address, rink.name, rink.address):
+        if _same_place(
+            arena.name,
+            arena.address,
+            rink.name,
+            rink.address,
+            lat_a=arena.latitude,
+            lon_a=arena.longitude,
+            lat_b=rink.latitude,
+            lon_b=rink.longitude,
+        ):
             return arena
     return None
 

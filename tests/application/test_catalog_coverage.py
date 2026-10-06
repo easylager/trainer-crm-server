@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -12,7 +13,12 @@ from src.application.catalog_coverage import (
     address_key,
     build_coverage_report,
     format_coverage_report,
+    load_arenas,
+    match_known_rink,
     name_tokens,
+    KnownRink,
+    _names_match,
+    _token_overlap_ratio,
 )
 
 _NOW = datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc)
@@ -24,6 +30,8 @@ def test_name_and_address_normalization() -> None:
     assert name_tokens("Ледовая арена") == set()
     assert address_key("Минск, ул. Притыцкого, 27") == ("притыцкого", "27")
     assert address_key("ул. Притыцкого 27, Минск, Минская область") == ("притыцкого", "27")
+    assert _token_overlap_ratio("Ледовая арена Орша", "Ледовая арена Шклов") < 0.5
+    assert not _names_match("Ледовая арена Орша", "Ледовая арена Шклов")
 
 
 async def _arena(
@@ -208,3 +216,138 @@ async def test_coverage_report_lists_what_a_human_must_fill(db_session, tmp_path
     assert "Каток Новый, Покрытоград, ул. Новая, 7 [weekly] ← test-sources.csv" in body
     assert "Новая мастерская — в файле нет: адрес" in body
     print(body)  # pytest -s: живой пример отчёта
+
+
+@pytest.mark.asyncio
+async def test_trainer_arena_without_photo_not_counted_published(db_session) -> None:
+    """AC-2: арена тренера без фото скрыта из публичной выдачи — в отчёте не «опубликована»."""
+    from tests.api.test_public_arenas import _insert_bare_trainer, _insert_city
+
+    city_id = await _insert_city(db_session, name=f"Скрытоград-{uuid.uuid4().hex[:8]}")
+    trainer_id = await _insert_bare_trainer(db_session)
+    arena_id = int(
+        (
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO arenas (city_id, name, address, latitude, longitude, is_active,
+                                        is_confirmed, venue_type, created_by_trainer_id)
+                    VALUES (:c, 'Каток тренера', 'ул. Тайная, 1', 53.9, 27.5, true, true, 'ice', :tid)
+                    RETURNING id
+                    """
+                ),
+                {"c": city_id, "tid": trainer_id},
+            )
+        ).scalar_one()
+    )
+    await ensure_arena_profile(db_session, arena_id, city_id=city_id, name="Каток тренера")
+    await db_session.commit()
+
+    rows = await load_arenas(db_session, now=_NOW)
+    hidden = next(r for r in rows if r.id == arena_id)
+    assert hidden.published is False
+
+
+@pytest.mark.asyncio
+async def test_future_sessions_ignore_expired_valid_until(db_session) -> None:
+    city_id = int(
+        (
+            await db_session.execute(
+                text(
+                    "INSERT INTO cities (name, country, price_group, is_active, sort_order) "
+                    "VALUES ('Сеансград', 'BY', 'BY_BASE', true, 9900) RETURNING id"
+                )
+            )
+        ).scalar_one()
+    )
+    arena_id = await _arena(db_session, city_id, "Каток сеансов", photo=True, phone="+375", hours={"mon": ["10:00", "22:00"]})
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO ice_sessions (
+                arena_id, kind, local_date, starts_at_local, ends_at_local,
+                starts_at_utc, ends_at_utc, status, observed_at, valid_until, currency_code
+            ) VALUES (
+                :aid, 'public_skate', '2026-10-10', '18:00', '19:00',
+                :start, :end, 'active', :now, :vu, 'BYN'
+            )
+            """
+        ),
+        {
+            "aid": arena_id,
+            "start": _NOW + timedelta(days=2),
+            "end": _NOW + timedelta(days=2, hours=1),
+            "now": _NOW,
+            "vu": _NOW - timedelta(hours=1),
+        },
+    )
+    await db_session.commit()
+    rows = await load_arenas(db_session, now=_NOW)
+    row = next(r for r in rows if r.id == arena_id)
+    assert row.future_sessions == 0
+
+
+@pytest.mark.asyncio
+async def test_match_known_rink_ignores_unpublished_arena(db_session) -> None:
+    city_id = int(
+        (
+            await db_session.execute(
+                text(
+                    "INSERT INTO cities (name, country, price_group, is_active, sort_order) "
+                    "VALUES ('Матчград', 'BY', 'BY_BASE', true, 9910) RETURNING id"
+                )
+            )
+        ).scalar_one()
+    )
+    arena_id = await _arena(db_session, city_id, "Каток Скрытый", active=False)
+    await db_session.commit()
+    arenas = await load_arenas(db_session, now=_NOW)
+    rink = KnownRink(source_file="t.csv", name="Каток Скрытый", city_name="Матчград", arena_id=arena_id, address=None)
+    assert match_known_rink(rink, arenas) is None
+
+
+def _row(arena_id: int, name: str, *, lat: float | None = None, lon: float | None = None, published: bool = True):
+    from src.application.catalog_coverage import ArenaRow
+
+    return ArenaRow(
+        id=arena_id, name=name, address=None, city_id=1, city_name="Минск", country="BY",
+        venue_type="ice", published=published, gaps=[], job_id=None, job_enabled=False,
+        parser_key=None, parser_state=None, future_sessions=0, amenities={},
+        latitude=lat, longitude=lon,
+    )
+
+
+def test_rink_linked_by_arena_id_is_present_even_if_names_differ() -> None:
+    """Явная связь по arena_id сильнее строгого сравнения имён (<0.5 общих токенов)."""
+    arena = _row(7, "Минск-Арена (малая)")
+    rink = KnownRink(source_file="t.csv", name="Тренировочный каток Чижовка", city_name="Минск",
+                     arena_id=7, address=None)
+    assert _token_overlap_ratio(arena.name, rink.name) < 0.5
+    assert match_known_rink(rink, [arena]) is arena
+    # Связь по id на скрытое место не считается: в выдаче его нет.
+    assert match_known_rink(rink, [_row(7, "Минск-Арена (малая)", published=False)]) is None
+
+
+def test_rink_matches_by_coordinates_when_names_disagree() -> None:
+    arena = _row(8, "Дворец спорта «Уручье»", lat=53.9450, lon=27.6850)
+    near = KnownRink(source_file="t.csv", name="Каток Восточный", city_name="Минск", arena_id=None,
+                     address=None, latitude=53.9455, longitude=27.6853)
+    far = KnownRink(source_file="t.csv", name="Каток Восточный", city_name="Минск", arena_id=None,
+                    address=None, latitude=53.90, longitude=27.55)
+    assert match_known_rink(near, [arena]) is arena
+    assert match_known_rink(far, [arena]) is None
+
+
+def test_known_rinks_read_coordinates_from_csv(tmp_path) -> None:
+    from src.application.catalog_coverage import load_known_rinks
+
+    path = tmp_path / "by-arenas-prod.csv"
+    path.write_text(
+        "city_id,city_name,country,arena_id,arena_name,address,latitude,longitude,is_active,is_confirmed\n"
+        "1,Минск,BY,5,Каток,\"Минск, ул. Тест, 1\",53.9,27.5,true,true\n"
+        "1,Минск,BY,6,Без координат,,,,true,true\n",
+        encoding="utf-8",
+    )
+    rinks = {r.arena_id: r for r in load_known_rinks([path])}
+    assert (rinks[5].latitude, rinks[5].longitude) == (53.9, 27.5)
+    assert rinks[6].latitude is None
