@@ -108,6 +108,22 @@ class ImportPlan:
     updates: list[tuple[int, ShopRecord]] = field(default_factory=list)
     rink_updates: list[tuple[int, str]] = field(default_factory=list)
     rink_problems: list[str] = field(default_factory=list)
+    #: Архивные (``is_active=false``) записи, которые ``--revive`` возвращает в каталог.
+    revives: set[int] = field(default_factory=set)
+
+
+def _record_hits(rows: list[Any], rec: ShopRecord) -> list[Any]:
+    """Строки ``(id, name, venue_type, …)`` того же рода: точное имя, иначе подстроки ``match``."""
+    same_kind = [r for r in rows if (r[2] == "shop") == (rec.venue_type == "shop")]
+    exact = [r for r in same_kind if str(r[1]).strip().lower() == rec.name.lower()]
+    if exact or not rec.match:
+        return exact
+    return [r for r in same_kind if any(m in str(r[1]).lower() for m in rec.match)]
+
+
+def _ambiguous(rec: ShopRecord, hits: list[Any]) -> str:
+    names = ", ".join(f"#{r[0]} {r[1]}" for r in hits)
+    return f"{rec.name}: несколько совпадений ({names}) — уточните match в файле"
 
 
 def parse_shops_file(path: Path) -> tuple[str, list[ShopRecord], list[dict[str, Any]]]:
@@ -226,30 +242,31 @@ async def build_plan(
             {"c": plan.city_id},
         )
     ).fetchall()
-    matchable = [r for r in city_rows if bool(r[3]) or revive]
+    active_rows = [r for r in city_rows if bool(r[3])]
+    archived_rows = [r for r in city_rows if not bool(r[3])]
     for rec in records:
-        same_kind = [r for r in matchable if (r[2] == "shop") == (rec.venue_type == "shop")]
-        exact = [r for r in same_kind if str(r[1]).strip().lower() == rec.name.lower()]
-        hits = exact or [r for r in same_kind if rec.match and any(m in str(r[1]).lower() for m in rec.match)]
-        if len(hits) == 1:
+        hits = _record_hits(active_rows, rec)
+        if len(hits) > 1:
+            plan.rink_problems.append(_ambiguous(rec, hits))
+            continue
+        if hits:
             plan.updates.append((int(hits[0][0]), rec))
-        elif not hits:
-            inactive_exact = [
-                r
-                for r in city_rows
-                if not bool(r[3])
-                and (r[2] == "shop") == (rec.venue_type == "shop")
-                and str(r[1]).strip().lower() == rec.name.lower()
-            ]
-            if inactive_exact and not revive:
-                plan.rink_problems.append(
-                    f"{rec.name}: архивная запись #{inactive_exact[0][0]} — пропущено (нужен --revive)"
-                )
-            else:
-                plan.creates.append(rec)
+            continue
+        # Активного совпадения нет. Архивную запись ищем по тем же правилам (имя, потом
+        # ``match``), иначе архивный магазин, найденный только по ``match``, задвоился бы
+        # новой активной карточкой в обход решения модерации.
+        archived = _record_hits(archived_rows, rec)
+        if not archived:
+            plan.creates.append(rec)
+        elif len(archived) > 1:
+            plan.rink_problems.append(_ambiguous(rec, archived))
+        elif revive:
+            plan.updates.append((int(archived[0][0]), rec))
+            plan.revives.add(int(archived[0][0]))
         else:
-            names = ", ".join(f"#{r[0]} {r[1]}" for r in hits)
-            plan.rink_problems.append(f"{rec.name}: несколько совпадений ({names}) — уточните match в файле")
+            plan.rink_problems.append(
+                f"{rec.name}: архивная запись #{archived[0][0]} {archived[0][1]} — пропущено (нужен --revive)"
+            )
 
     rinks = (
         await session.execute(
@@ -456,23 +473,40 @@ async def apply_plan(
             report["not_on_map"].append(rec.name)
 
     for arena_id, rec in plan.updates:
+        revived = arena_id in plan.revives
+        if revived:
+            # --revive: человек явно возвращает архивную запись — она становится такой же,
+            # как свежесозданная (активна, подтверждена, профиль опубликован ниже).
+            await session.execute(
+                text("UPDATE arenas SET is_active = true, is_confirmed = true WHERE id = :id"), {"id": arena_id}
+            )
+        suffix = " (возвращено из архива)" if revived else ""
         if rec.venue_type != "shop":
             # Каток уже есть (досье, админка): дополняем тем, что есть в файле, и ничего
             # не стираем — пустое поле в файле значит «не знаем», а не «удалить».
             await _enrich_existing_place(session, arena_id, rec)
+            if revived:
+                await apply_admin_arena_profile_patch(session, arena_id, {"status": "published"})
             await photo(arena_id, rec)
-            report["updated"].append(f"#{arena_id} {rec.name} (дополнено)")
+            report["updated"].append(f"#{arena_id} {rec.name} (дополнено){suffix}")
             continue
         point = await coords(rec)
-        sets = ["address = :a"]
-        params: dict[str, Any] = {"id": arena_id, "a": rec.display_address}
+        # Только то, что есть в файле: нет адреса или координат — админские не трогаем.
+        sets: list[str] = []
+        params: dict[str, Any] = {"id": arena_id}
+        if rec.display_address:
+            sets.append("address = :a")
+            params["a"] = rec.display_address
         if point:
             sets += ["latitude = :lat", "longitude = :lon"]
             params.update(lat=point[0], lon=point[1])
-        await session.execute(text("UPDATE arenas SET " + ", ".join(sets) + " WHERE id = :id"), params)
+        if sets:
+            await session.execute(text("UPDATE arenas SET " + ", ".join(sets) + " WHERE id = :id"), params)
         await _enrich_existing_place(session, arena_id, rec)
+        if revived:
+            await apply_admin_arena_profile_patch(session, arena_id, {"status": "published"})
         await photo(arena_id, rec)
-        report["updated"].append(f"#{arena_id} {rec.name}")
+        report["updated"].append(f"#{arena_id} {rec.name}{suffix}")
 
     for arena_id, note in plan.rink_updates:
         current = (

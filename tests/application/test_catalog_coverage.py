@@ -304,3 +304,50 @@ async def test_match_known_rink_ignores_unpublished_arena(db_session) -> None:
     arenas = await load_arenas(db_session, now=_NOW)
     rink = KnownRink(source_file="t.csv", name="Каток Скрытый", city_name="Матчград", arena_id=arena_id, address=None)
     assert match_known_rink(rink, arenas) is None
+
+
+def _row(arena_id: int, name: str, *, lat: float | None = None, lon: float | None = None, published: bool = True):
+    from src.application.catalog_coverage import ArenaRow
+
+    return ArenaRow(
+        id=arena_id, name=name, address=None, city_id=1, city_name="Минск", country="BY",
+        venue_type="ice", published=published, gaps=[], job_id=None, job_enabled=False,
+        parser_key=None, parser_state=None, future_sessions=0, amenities={},
+        latitude=lat, longitude=lon,
+    )
+
+
+def test_rink_linked_by_arena_id_is_present_even_if_names_differ() -> None:
+    """Явная связь по arena_id сильнее строгого сравнения имён (<0.5 общих токенов)."""
+    arena = _row(7, "Минск-Арена (малая)")
+    rink = KnownRink(source_file="t.csv", name="Тренировочный каток Чижовка", city_name="Минск",
+                     arena_id=7, address=None)
+    assert _token_overlap_ratio(arena.name, rink.name) < 0.5
+    assert match_known_rink(rink, [arena]) is arena
+    # Связь по id на скрытое место не считается: в выдаче его нет.
+    assert match_known_rink(rink, [_row(7, "Минск-Арена (малая)", published=False)]) is None
+
+
+def test_rink_matches_by_coordinates_when_names_disagree() -> None:
+    arena = _row(8, "Дворец спорта «Уручье»", lat=53.9450, lon=27.6850)
+    near = KnownRink(source_file="t.csv", name="Каток Восточный", city_name="Минск", arena_id=None,
+                     address=None, latitude=53.9455, longitude=27.6853)
+    far = KnownRink(source_file="t.csv", name="Каток Восточный", city_name="Минск", arena_id=None,
+                    address=None, latitude=53.90, longitude=27.55)
+    assert match_known_rink(near, [arena]) is arena
+    assert match_known_rink(far, [arena]) is None
+
+
+def test_known_rinks_read_coordinates_from_csv(tmp_path) -> None:
+    from src.application.catalog_coverage import load_known_rinks
+
+    path = tmp_path / "by-arenas-prod.csv"
+    path.write_text(
+        "city_id,city_name,country,arena_id,arena_name,address,latitude,longitude,is_active,is_confirmed\n"
+        "1,Минск,BY,5,Каток,\"Минск, ул. Тест, 1\",53.9,27.5,true,true\n"
+        "1,Минск,BY,6,Без координат,,,,true,true\n",
+        encoding="utf-8",
+    )
+    rinks = {r.arena_id: r for r in load_known_rinks([path])}
+    assert (rinks[5].latitude, rinks[5].longitude) == (53.9, 27.5)
+    assert rinks[6].latitude is None

@@ -88,6 +88,8 @@ class ArenaRow:
     parser_state: str | None
     future_sessions: int
     amenities: dict[str, Any]
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass
@@ -101,6 +103,8 @@ class KnownRink:
     address: str | None
     country: str | None = None
     note: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass
@@ -238,6 +242,8 @@ async def load_arenas(session: AsyncSession, *, now: datetime) -> list[ArenaRow]
                 parser_state=_parser_state(data, now) if skating else None,
                 future_sessions=int(data.get("future_sessions") or 0),
                 amenities=_as_dict(data.get("amenities")),
+                latitude=_as_float(data.get("latitude")),
+                longitude=_as_float(data.get("longitude")),
             )
         )
     return rows
@@ -287,15 +293,33 @@ def load_known_rinks(paths: Iterable[Path]) -> list[KnownRink]:
                         address=address,
                         country=country or None,
                         note=verdict or None,
+                        latitude=_as_float(rec.get("latitude")),
+                        longitude=_as_float(rec.get("longitude")),
                     )
                 )
     # Файл источников знает arena_id, но не адрес; прод-выгрузка арен — наоборот.
     # Склеиваем по arena_id, чтобы один каток не выглядел двумя разными.
     address_by_id = {r.arena_id: r.address for r in rinks if r.arena_id is not None and r.address}
+    coords_by_id = {
+        r.arena_id: (r.latitude, r.longitude)
+        for r in rinks
+        if r.arena_id is not None and r.latitude is not None and r.longitude is not None
+    }
     for r in rinks:
         if r.address is None and r.arena_id in address_by_id:
             r.address = address_by_id[r.arena_id]
+        if r.latitude is None and r.arena_id in coords_by_id:
+            r.latitude, r.longitude = coords_by_id[r.arena_id]
     return rinks
+
+
+def _as_float(value: Any) -> float | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # Слова, которые есть в названии почти любого катка: по ним «Ледовая арена» в Берёзе
@@ -389,22 +413,31 @@ def _same_place(
 
 
 def match_known_rink(rink: KnownRink, arenas: list[ArenaRow]) -> ArenaRow | None:
-    """Сначала по arena_id (если имя похоже), потом по имени/адресу в том же городе."""
+    """Сначала по arena_id, потом по имени/адресу/координатам в том же городе.
+
+    Связь по arena_id — явная: такой каток есть, даже если имя в файле написано иначе
+    (строгое сравнение имён не должно объявить его отсутствующим). Считаются только
+    места, видимые в выдаче.
+    """
     visible = [a for a in arenas if a.published]
     if rink.arena_id is not None:
         for arena in visible:
-            if arena.id == rink.arena_id and _same_place(
-                arena.name,
-                arena.address,
-                rink.name,
-                rink.address,
-            ):
+            if arena.id == rink.arena_id:
                 return arena
     city = normalize_name(rink.city_name) if rink.city_name else None
     for arena in visible:
         if city and normalize_name(arena.city_name) != city:
             continue
-        if _same_place(arena.name, arena.address, rink.name, rink.address):
+        if _same_place(
+            arena.name,
+            arena.address,
+            rink.name,
+            rink.address,
+            lat_a=arena.latitude,
+            lon_a=arena.longitude,
+            lat_b=rink.latitude,
+            lon_b=rink.longitude,
+        ):
             return arena
     return None
 
