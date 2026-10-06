@@ -14,9 +14,9 @@
   <script src="mini-app-phone-field.js?v=2026100518"></script>
   <script src="mini-app-confirm.js?v=2026100518"></script>
 <link rel="stylesheet" href="theme.css?v=2026100518" />
-  <link rel="stylesheet" href="mini-app-components.css?v=2026100518" />
-  <link rel="preload" href="trainer-pass-products-main.js?v=2026100518" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=2026100518" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026100632" />
+  <link rel="preload" href="trainer-pass-products-main.js?v=2026100630" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=2026100630" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026100518" />
@@ -356,7 +356,7 @@
       <div class="bd-section-label">Списать за прошедшее занятие</div>
       <div class="pp-pass-detail-callout" role="note">
         <span class="pp-pass-detail-callout__icon" aria-hidden="true">💡</span>
-        <p class="pp-pass-detail-callout__text">Выберите проведённое занятие без абонемента — оно войдёт в этот абонемент, а в статистике будет учтено как визит по абонементу.</p>
+        <p class="pp-pass-detail-callout__text" id="passDetailRedeemCallout">Сверху — занятия, которые входят в абонемент. Ниже — другие прошедшие занятия этого клиента. Их можно списать только вручную, после подтверждения.</p>
       </div>
       <div id="passDetailRedeemableList" class="pp-pass-detail-redeem-list"></div>
     </div>
@@ -365,12 +365,12 @@
       <div class="bd-rows" id="passDetailRedemptionList"></div>
     </div>
     <div class="pp-pass-detail-footnote" id="passDetailFootnote" hidden>
-      Автоматическое списание происходит при отметке «Проведено» в расписании. Здесь — для занятий, которые прошли до выдачи абонемента.
+      Автоматическое списание при «Проведено» берёт только занятие, которое входит в абонемент. Другую услугу или тариф можно списать только здесь, вручную.
     </div>
   </div>
 
   <script src="mini-app-trainer-gate.js?v=2026100518"></script>
-  <script defer src="trainer-pass-products-main.js?v=2026100518"></script>
+  <script defer src="trainer-pass-products-main.js?v=2026100630"></script>
   <script defer src="mini-app-trainer-home.js?v=2026100518"></script>
 </body>
 </html>

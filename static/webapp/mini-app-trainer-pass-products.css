@@ -957,6 +957,21 @@
       opacity: 0.92;
     }
     .pp-pass-detail-redeem-list .bd-rows { margin-bottom: 0; }
+    .pp-redeem-outside {
+      margin-top: 18px;
+    }
+    .pp-redeem-outside__note {
+      margin: 0 0 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .pp-redeem-booking-row--outside .pp-redeem-booking-row__chip {
+      color: var(--tg-theme-text-color);
+      background: transparent;
+      border: 1px solid rgba(128, 128, 128, 0.45);
+      box-shadow: none;
+    }
     .pp-redeem-booking-row {
       display: flex;
       align-items: center;
@@ -989,9 +1004,14 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 17px;
+      color: var(--tg-theme-button-color, #45B9BB);
       background: color-mix(in srgb, var(--tg-theme-button-color) 16%, transparent);
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 24%, transparent);
+    }
+    .pp-redeem-booking-row__icon svg {
+      width: 18px;
+      height: 18px;
+      display: block;
     }
     @supports not (background: color-mix(in srgb, red, blue)) {
       .pp-redeem-booking-row__icon {

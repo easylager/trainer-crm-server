@@ -1035,6 +1035,7 @@ a.btn-secondary {
   margin: 0;
   font-size: var(--app-text-body);
   line-height: 1.45;
+  white-space: pre-line;
   color: var(--tg-theme-text-color);
 }
 .app-confirm-modal .app-confirm-title:not([hidden]) {
@@ -1046,12 +1047,18 @@ a.btn-secondary {
 }
 .app-confirm-modal .app-confirm-actions {
   display: flex;
+  align-items: stretch;
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 16px;
 }
 .app-confirm-modal .app-confirm-actions .btn-block {
-  flex: 1;
+  flex: 1 1 auto;
+  width: auto;
   min-width: 0;
+  padding: 10px 14px;
+  font-size: 15px;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 /*
  * Lock brand CTA on OK — Telegram themeParams often re-inject blue on .btn-primary.
