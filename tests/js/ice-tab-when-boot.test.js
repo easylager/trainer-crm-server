@@ -47,12 +47,16 @@ function stubElement() {
  * Запускает настоящий boot с заданным location.search и (опционально) состоянием,
  * сохранённым в sessionStorage. Возвращает URL всех запросов и содержимое storage.
  */
-async function bootWith(search, savedState) {
+async function bootWith(search, savedState, localWhenPref) {
   delete require.cache[require.resolve(modelPath)];
   const model = require(modelPath);
   const requests = [];
   const store = {};
   if (savedState) store[model.ICE_STATE_KEY] = JSON.stringify(savedState);
+  const localStore = {};
+  if (localWhenPref) {
+    localStore[model.ICE_WHEN_PREF_KEY] = JSON.stringify(localWhenPref);
+  }
 
   const fetchStub = (url) => {
     requests.push(String(url));
@@ -71,7 +75,12 @@ async function bootWith(search, savedState) {
         store[k] = String(v);
       },
     },
-    localStorage: { getItem: () => null, setItem() {} },
+    localStorage: {
+      getItem: (k) => (k in localStore ? localStore[k] : null),
+      setItem: (k, v) => {
+        localStore[k] = String(v);
+      },
+    },
     addEventListener() {},
     // Fire only zero-delay callbacks synchronously; real timers (e.g. the
     // 20 s fetchJson timeout) never fire inside the test.
@@ -125,16 +134,16 @@ describe('TASK-149: ?when= при открытии «Поиска»', () => {
     assert.ok(!requests.some((u) => u.includes('when=')), requests.join(' | '));
   });
 
-  it('?when=junk → остаётся auto, запрос идентичен запросу без параметра', async () => {
+  it('?when=junk → дефолт any, запрос идентичен запросу без параметра', async () => {
     const withJunk = await bootWith('?city_id=1&when=junk');
     const without = await bootWith('?city_id=1');
-    assert.match(arenasRequest(withJunk.requests), /[?&]when=auto(&|$)/);
+    assert.match(arenasRequest(withJunk.requests), /[?&]when=any(&|$)/);
     assert.equal(arenasRequest(withJunk.requests), arenasRequest(without.requests));
   });
 
-  it('без ?when= окно остаётся auto (поведение не изменилось)', async () => {
+  it('без ?when= по умолчанию «Любое время» (when=any)', async () => {
     const { requests } = await bootWith('?city_id=1');
-    assert.match(arenasRequest(requests), /[?&]when=auto(&|$)/);
+    assert.match(arenasRequest(requests), /[?&]when=any(&|$)/);
   });
 
   it('регистр не важен: ?when=WEEKEND', async () => {
@@ -181,6 +190,20 @@ describe('TASK-149: ?when= при открытии «Поиска»', () => {
       whenDay: '',
     });
     assert.match(arenasRequest(requests), /[?&]when=tomorrow(&|$)/);
+  });
+
+  it('без session, но с localStorage — восстанавливает окно', async () => {
+    const { requests } = await bootWith('?city_id=1', null, { when: 'weekend', whenDay: '' });
+    assert.match(arenasRequest(requests), /[?&]when=weekend(&|$)/);
+  });
+
+  it('sessionStorage с when=auto мигрирует в any', async () => {
+    const { requests } = await bootWith('?city_id=1', {
+      intent: 'skate',
+      cityId: 1,
+      when: 'auto',
+    });
+    assert.match(arenasRequest(requests), /[?&]when=any(&|$)/);
   });
 
   it('?when= в ссылке сильнее сохранённого окна', async () => {
