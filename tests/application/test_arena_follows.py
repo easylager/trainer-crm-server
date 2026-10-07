@@ -712,3 +712,45 @@ async def test_webapp_post_follow_is_idempotent(db_session, app_use_test_db) -> 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         bare = await client.post("/api/webapp/client/arena-follows", json={"arena_id": arena_id})
     assert bare.status_code == 401
+
+
+def _principal(user_id: int):
+    return lambda: MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=user_id)
+
+
+@pytest.mark.asyncio
+async def test_webapp_get_follow_status_is_per_user(db_session, app_use_test_db) -> None:
+    """Не подписан / подписан / отписан; чужой пользователь чужую подписку не видит."""
+    city_id = await _city(db_session)
+    arena_id = await _arena(db_session, city_id, "Чижовка-арена")
+    path = f"/api/webapp/client/arena-follows/{arena_id}"
+    app.dependency_overrides[get_client_miniapp_principal] = _principal(9001)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            absent = await client.get(path)
+            await client.post("/api/webapp/client/arena-follows", json={"arena_id": arena_id})
+            active = await client.get(path)
+            await db_session.execute(
+                text(
+                    """
+                    UPDATE arena_follows
+                    SET muted_at = now()
+                    WHERE telegram_id = 9001 AND arena_id = :aid
+                    """
+                ),
+                {"aid": arena_id},
+            )
+            muted = await client.get(path)
+            await client.delete(path)
+            gone = await client.get(path)
+            await client.post("/api/webapp/client/arena-follows", json={"arena_id": arena_id})
+            app.dependency_overrides[get_client_miniapp_principal] = _principal(9002)
+            stranger = await client.get(path)
+        assert absent.status_code == 200
+        assert absent.json() == {"arena_id": arena_id, "following": False, "muted": False}
+        assert active.json() == {"arena_id": arena_id, "following": True, "muted": False}
+        assert muted.json() == {"arena_id": arena_id, "following": True, "muted": True}
+        assert gone.json() == {"arena_id": arena_id, "following": False, "muted": False}
+        assert stranger.json() == {"arena_id": arena_id, "following": False, "muted": False}
+    finally:
+        app.dependency_overrides.pop(get_client_miniapp_principal, None)

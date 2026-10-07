@@ -1,4 +1,4 @@
-"""POST/DELETE /api/webapp/client/arena-follows — подписка из Mini App (initData)."""
+"""GET/POST/DELETE /api/webapp/client/arena-follows — подписка из Mini App (initData)."""
 
 from __future__ import annotations
 
@@ -8,13 +8,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
-from src.application.arena_follows import SOURCE_MINIAPP, follow_arena, unfollow_arena
+from src.application.arena_follows import SOURCE_MINIAPP, arena_follow_status, follow_arena, unfollow_arena
 
 router = APIRouter(tags=["webapp"])
 
 
 class ArenaFollowBody(BaseModel):
     arena_id: int = Field(gt=0)
+
+
+@router.get("/client/arena-follows/{arena_id}")
+async def get_client_arena_follow(
+    arena_id: int,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+) -> dict:
+    """Состояние «Вы следите» для страницы места. Кнопку рисует TASK-211."""
+    if arena_id <= 0:
+        raise HTTPException(status_code=404, detail="Не нашли такой каток.")
+    status = await arena_follow_status(
+        session,
+        telegram_id=client_catalog_telegram_key(principal),
+        arena_id=arena_id,
+    )
+    return {"arena_id": status.arena_id, "following": status.following, "muted": status.muted}
 
 
 @router.post("/client/arena-follows")

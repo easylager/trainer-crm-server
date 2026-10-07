@@ -50,6 +50,13 @@ class FollowButton:
 
 
 @dataclass(frozen=True)
+class FollowStatus:
+    arena_id: int
+    following: bool
+    muted: bool
+
+
+@dataclass(frozen=True)
 class FollowChatReply:
     text: str
     buttons: tuple[FollowButton, ...] = ()
@@ -144,6 +151,30 @@ async def _visible_arena(session: AsyncSession, arena_id: int):
 def _ready_text(name: str, *, season_closed: bool) -> str:
     extra = " или когда каток откроется" if season_closed else ""
     return f"Готово: следим за {html.escape(name)}. Напишем, если сеансы поменяются{extra}."
+
+
+async def arena_follow_status(
+    session: AsyncSession,
+    *,
+    telegram_id: int,
+    arena_id: int,
+) -> FollowStatus:
+    """Состояние подписки этого человека. Один запрос, чужие строки не видны."""
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT muted_at IS NOT NULL AS muted
+                FROM arena_follows
+                WHERE telegram_id = :tg AND arena_id = :arena
+                """
+            ),
+            {"tg": int(telegram_id), "arena": int(arena_id)},
+        )
+    ).first()
+    if row is None:
+        return FollowStatus(arena_id=int(arena_id), following=False, muted=False)
+    return FollowStatus(arena_id=int(arena_id), following=True, muted=bool(row[0]))
 
 
 async def follow_arena(
