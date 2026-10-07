@@ -279,13 +279,11 @@ def _rows_to_slots(rows: Iterable[Any]) -> dict[tuple[date, time, str], FollowSl
 async def arena_has_active_follows(session: AsyncSession, arena_id: int) -> bool:
     row = (
         await session.execute(
-            text(
-                """
+            text("""
                 SELECT 1 FROM arena_follows
                 WHERE arena_id = :arena AND muted_at IS NULL
                 LIMIT 1
-                """
-            ),
+                """),
             {"arena": int(arena_id)},
         )
     ).first()
@@ -301,8 +299,7 @@ async def load_follow_window(
 ) -> dict[tuple[date, time, str], FollowSlot]:
     until = today + timedelta(days=FOLLOW_HORIZON_DAYS)
     rows = await session.execute(
-        text(
-            f"""
+        text(f"""
             SELECT local_date, starts_at_local, ends_at_local, kind
             FROM ice_sessions
             WHERE arena_id = :arena
@@ -312,8 +309,7 @@ async def load_follow_window(
               AND ends_at_utc > :now
               AND local_date >= :today
               AND local_date < :until
-            """
-        ),
+            """),
         {"arena": int(arena_id), "now": _aware(now), "today": today, "until": until},
     )
     return _rows_to_slots(rows)
@@ -322,16 +318,14 @@ async def load_follow_window(
 async def load_last_past_end(session: AsyncSession, arena_id: int, *, now: datetime) -> datetime | None:
     value = (
         await session.execute(
-            text(
-                f"""
+            text(f"""
                 SELECT MAX(ends_at_utc) FROM ice_sessions
                 WHERE arena_id = :arena
                   AND kind IN {_KINDS_SQL}
                   AND schedule_basis IN {_BASIS_SQL}
                   AND status = 'active'
                   AND ends_at_utc <= :now
-                """
-            ),
+                """),
             {"arena": int(arena_id), "now": _aware(now)},
         )
     ).scalar()
@@ -340,14 +334,12 @@ async def load_last_past_end(session: AsyncSession, arena_id: int, *, now: datet
 
 async def _active_follows(session: AsyncSession, arena_id: int) -> list[tuple[int, int]]:
     rows = await session.execute(
-        text(
-            """
+        text("""
             SELECT id, telegram_id FROM arena_follows
             WHERE arena_id = :arena AND muted_at IS NULL
             ORDER BY id
             FOR UPDATE
-            """
-        ),
+            """),
         {"arena": int(arena_id)},
     )
     return [(int(row[0]), int(row[1])) for row in rows]
@@ -355,33 +347,37 @@ async def _active_follows(session: AsyncSession, arena_id: int) -> list[tuple[in
 
 async def _lock_follow(session: AsyncSession, follow_id: int):
     return (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT id, arena_id, telegram_id, muted_at
                 FROM arena_follows WHERE id = :fid FOR UPDATE
-                """
-            ),
-            {"fid": int(follow_id)},
+                """),
+                {"fid": int(follow_id)},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
 
 
 async def _arena_meta(session: AsyncSession, arena_id: int) -> dict[str, Any] | None:
     row = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT a.name, c.name AS city_name, p.timezone, p.slug
                 FROM arenas a
                 JOIN cities c ON c.id = a.city_id
                 LEFT JOIN arena_profiles p ON p.arena_id = a.id
                 WHERE a.id = :id
-                """
-            ),
-            {"id": int(arena_id)},
+                """),
+                {"id": int(arena_id)},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     return dict(row) if row is not None else None
 
 
@@ -394,12 +390,10 @@ def _place_name(meta: Mapping[str, Any] | None) -> str:
 async def _last_schedule_sent_at(session: AsyncSession, follow_id: int) -> datetime | None:
     value = (
         await session.execute(
-            text(
-                """
+            text("""
                 SELECT MAX(sent_at) FROM arena_follow_notifications
                 WHERE follow_id = :fid AND kind = :kind AND status = 'sent'
-                """
-            ),
+                """),
             {"fid": int(follow_id), "kind": KIND_SCHEDULE},
         )
     ).scalar()
@@ -408,18 +402,20 @@ async def _last_schedule_sent_at(session: AsyncSession, follow_id: int) -> datet
 
 async def _pending(session: AsyncSession, follow_id: int, kind: str):
     return (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT id, payload, created_at, not_before, attempts
                 FROM arena_follow_notifications
                 WHERE follow_id = :fid AND kind = :kind AND status = 'pending'
                 FOR UPDATE
-                """
-            ),
-            {"fid": int(follow_id), "kind": kind},
+                """),
+                {"fid": int(follow_id), "kind": kind},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
 
 
 async def _upsert_pending(
@@ -438,16 +434,14 @@ async def _upsert_pending(
     body = json.dumps(payload, ensure_ascii=False)
     inserted_id = (
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO arena_follow_notifications
                     (follow_id, kind, payload, not_before, status, created_at, attempts)
                 VALUES
                     (:fid, :kind, CAST(:payload AS jsonb), :not_before, 'pending', :created_at, :attempts)
                 ON CONFLICT (follow_id, kind) WHERE status = 'pending' DO NOTHING
                 RETURNING id
-                """
-            ),
+                """),
             {
                 "fid": int(follow_id),
                 "kind": kind,
@@ -485,16 +479,14 @@ async def _upsert_pending(
         return False
     merged_payload, merged_created_at, merged_attempts, merged_not_before = merged
     await session.execute(
-        text(
-            """
+        text("""
             UPDATE arena_follow_notifications
             SET payload = CAST(:payload AS jsonb),
                 created_at = :created_at,
                 attempts = :attempts,
                 not_before = :not_before
             WHERE id = :id AND status = 'pending'
-            """
-        ),
+            """),
         {
             "payload": json.dumps(merged_payload, ensure_ascii=False),
             "created_at": merged_created_at,
@@ -527,7 +519,8 @@ def _merge_notification_payload(
     incoming_not_before: datetime,
     place_name: str,
 ) -> tuple[dict[str, Any], datetime, int, datetime] | None:
-    created_at = max(_aware(existing_created_at), _aware(incoming_created_at))
+    # Anchor merge window to earliest change, not latest (prevents drift)
+    created_at = min(_aware(existing_created_at), _aware(incoming_created_at))
     latest = incoming_payload if _aware(incoming_created_at) >= _aware(existing_created_at) else existing_payload
     not_before = push_out_of_quiet(max(_aware(existing_not_before), _aware(incoming_not_before)))
     attempts = max(int(existing_attempts), int(incoming_attempts))
@@ -547,11 +540,8 @@ def _merge_notification_payload(
         }
         return payload, created_at, attempts, not_before
 
-    existing_slots = _payload_slots(existing_payload, "slots")
-    incoming_slots = _payload_slots(incoming_payload, "slots")
-    slots_by_key = {slot.key: slot for slot in existing_slots}
-    slots_by_key.update({slot.key: slot for slot in incoming_slots})
-    slots = sorted(slots_by_key.values(), key=lambda slot: (slot.local_date, _minute(slot.starts_at_local), slot.kind))
+    # For reopened, take slots from newer notification only (don't accumulate removed sessions)
+    slots = _payload_slots(latest, "slots")
     payload = {
         "slots": [slot_to_json(slot) for slot in slots],
         "keep": _payload_keep(existing_payload) or _payload_keep(incoming_payload),
@@ -755,52 +745,52 @@ async def _requeue_or_merge(
     if follow is None:
         return False
     source = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT id, follow_id, kind, payload, created_at, not_before, attempts, claimed_at, status
                 FROM arena_follow_notifications
                 WHERE id = :id AND follow_id = :fid
                 FOR UPDATE
-                """
-            ),
-            {"id": int(notification_id), "fid": int(reference[0])},
+                """),
+                {"id": int(notification_id), "fid": int(reference[0])},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if source is None or source["status"] != "sending":
         return False
     claimed_at = _aware(source["claimed_at"]) if isinstance(source["claimed_at"], datetime) else None
     expected = _aware(expected_claimed_at) if expected_claimed_at is not None else None
-    if check_claim and (
-        claimed_at != expected or int(source["attempts"] or 0) != expected_attempts
-    ):
+    if check_claim and (claimed_at != expected or int(source["attempts"] or 0) != expected_attempts):
         return False
     if stale_before is not None and claimed_at is not None and claimed_at >= _aware(stale_before):
         return False
 
     pending = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT id, payload, created_at, not_before, attempts
                 FROM arena_follow_notifications
                 WHERE follow_id = :fid AND kind = :kind AND status = 'pending'
                 FOR UPDATE
-                """
-            ),
-            {"fid": int(source["follow_id"]), "kind": str(source["kind"])},
+                """),
+                {"fid": int(source["follow_id"]), "kind": str(source["kind"])},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     due_at = push_out_of_quiet(max(_aware(not_before), _aware(source["not_before"])))
     if pending is None:
         result = await session.execute(
-            text(
-                """
+            text("""
                 UPDATE arena_follow_notifications
                 SET status = 'pending', not_before = :not_before, claimed_at = NULL
                 WHERE id = :id AND status = 'sending'
-                """
-            ),
+                """),
             {"id": int(notification_id), "not_before": due_at},
         )
         return result.rowcount == 1
@@ -826,16 +816,14 @@ async def _requeue_or_merge(
     else:
         payload, created_at, attempts, merged_not_before = merged
         await session.execute(
-            text(
-                """
+            text("""
                 UPDATE arena_follow_notifications
                 SET payload = CAST(:payload AS jsonb),
                     created_at = :created_at,
                     attempts = :attempts,
                     not_before = :not_before
                 WHERE id = :id AND status = 'pending'
-                """
-            ),
+                """),
             {
                 "payload": json.dumps(payload, ensure_ascii=False),
                 "created_at": created_at,
@@ -845,13 +833,11 @@ async def _requeue_or_merge(
             },
         )
     result = await session.execute(
-        text(
-            """
+        text("""
             UPDATE arena_follow_notifications
             SET status = 'merged', claimed_at = NULL
             WHERE id = :id AND status = 'sending'
-            """
-        ),
+            """),
         {"id": int(notification_id)},
     )
     return result.rowcount == 1
@@ -860,20 +846,22 @@ async def _requeue_or_merge(
 async def _recover_stale_sending(session: AsyncSession, moment: datetime) -> None:
     cutoff = _aware(moment) - timedelta(minutes=10)
     rows = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT id
                 FROM arena_follow_notifications
                 WHERE status = 'sending'
                   AND (claimed_at IS NULL OR claimed_at < :cutoff)
                 ORDER BY follow_id, id
                 LIMIT 300
-                """
-            ),
-            {"cutoff": cutoff},
+                """),
+                {"cutoff": cutoff},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     await session.commit()
     for notification_id in rows:
         try:
@@ -901,51 +889,58 @@ async def _claim_follow(
     if follow is None:
         return [], False
     pending = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT id
                 FROM arena_follow_notifications
                 WHERE follow_id = :fid AND status = 'pending' AND not_before <= :now
                 ORDER BY CASE WHEN kind = 'reopened' THEN 0 ELSE 1 END, id
                 LIMIT 30
                 FOR UPDATE
-                """
-            ),
-            {"fid": int(follow_id), "now": _aware(moment)},
+                """),
+                {"fid": int(follow_id), "now": _aware(moment)},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if not pending:
         return [], follow["muted_at"] is not None
+    # Use database NOW() for claimed_at (real wall-clock time prevents concurrent tick from stealing fresh claims)
     claimed_rows = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 UPDATE arena_follow_notifications
-                SET status = 'sending', attempts = attempts + 1, claimed_at = :now
+                SET status = 'sending', attempts = attempts + 1, claimed_at = NOW()
                 WHERE id = ANY(:ids) AND status = 'pending'
                 RETURNING id, follow_id, kind, payload, attempts, claimed_at
-                """
-            ),
-            {"ids": [int(row) for row in pending], "now": _aware(moment)},
+                """),
+                {"ids": [int(row) for row in pending]},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     if not claimed_rows:
         return [], follow["muted_at"] is not None
     meta = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT a.name, c.name AS city_name, p.slug
                 FROM arenas a
                 JOIN cities c ON c.id = a.city_id
                 LEFT JOIN arena_profiles p ON p.arena_id = a.id
                 WHERE a.id = :arena
-                """
-            ),
-            {"arena": int(follow["arena_id"])},
+                """),
+                {"arena": int(follow["arena_id"])},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     place = str((meta or {}).get("name") or "").strip() or "Каток"
     url = https_place_page_url(
         base_url=webapp_base_url,
@@ -981,16 +976,18 @@ async def _refresh_claim(
     if follow is None:
         return None
     current = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT status, claimed_at, attempts FROM arena_follow_notifications
                 WHERE id = :id FOR UPDATE
-                """
-            ),
-            {"id": item.notification_id},
+                """),
+                {"id": item.notification_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if (
         current is None
         or current["status"] != "sending"
@@ -999,26 +996,24 @@ async def _refresh_claim(
         or int(current["attempts"] or 0) != item.attempts
     ):
         return None
-    refreshed_at = max(
-        _aware(moment),
-        _aware(item.claimed_at) + timedelta(microseconds=1),
-    )
+    # Use database NOW() for lease extension (real wall-clock time)
     result = await session.execute(
-        text(
-            """
-            UPDATE arena_follow_notifications SET claimed_at = :now
+        text("""
+            UPDATE arena_follow_notifications SET claimed_at = NOW()
             WHERE id = :id AND status = 'sending'
               AND claimed_at = :expected AND attempts = :attempts
-            """
-        ),
+            RETURNING claimed_at
+            """),
         {
-            "now": refreshed_at,
             "id": item.notification_id,
             "expected": item.claimed_at,
             "attempts": item.attempts,
         },
     )
-    return replace(item, claimed_at=refreshed_at) if result.rowcount == 1 else None
+    row = result.first()
+    if row is None:
+        return None
+    return replace(item, claimed_at=_aware(row[0]))
 
 
 async def dispatch_due_follow_notifications(
@@ -1039,9 +1034,9 @@ async def dispatch_due_follow_notifications(
         return 0
 
     candidate_ids = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT f.id
                 FROM arena_follows f
                 WHERE f.muted_at IS NULL
@@ -1051,11 +1046,13 @@ async def dispatch_due_follow_notifications(
                   )
                 ORDER BY f.id
                 LIMIT 30
-                """
-            ),
-            {"now": moment},
+                """),
+                {"now": moment},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     await session.commit()
     sent = 0
     for follow_id in candidate_ids:
@@ -1178,13 +1175,11 @@ async def _mark_status(session: AsyncSession, item: FollowOutbound, status: str)
     if follow is None:
         return False
     result = await session.execute(
-        text(
-            """
+        text("""
             UPDATE arena_follow_notifications SET status = :status, claimed_at = NULL
             WHERE id = :id AND status = 'sending'
               AND claimed_at IS NOT DISTINCT FROM :claimed_at AND attempts = :attempts
-            """
-        ),
+            """),
         {
             "status": status,
             "id": item.notification_id,
@@ -1215,17 +1210,15 @@ async def _mute_follow(session: AsyncSession, follow_id: int, moment: datetime) 
 
 
 async def _mark_sent(session: AsyncSession, item: FollowOutbound, moment: datetime) -> None:
-    await _set_lock_timeout(session)
-    follow = await _lock_follow(session, item.follow_id)
+    # The sending → sent transition only needs to verify notification state, not acquire follow lock.
+    # This prevents lock timeout from causing double-send when message was already delivered.
     result = await session.execute(
-        text(
-            """
+        text("""
             UPDATE arena_follow_notifications
             SET status = 'sent', sent_at = :now, claimed_at = NULL
             WHERE id = :id AND status = 'sending'
               AND claimed_at IS NOT DISTINCT FROM :claimed_at AND attempts = :attempts
-            """
-        ),
+            """),
         {
             "now": moment,
             "id": item.notification_id,
@@ -1233,14 +1226,16 @@ async def _mark_sent(session: AsyncSession, item: FollowOutbound, moment: dateti
             "attempts": item.attempts,
         },
     )
-    claim_lost = follow is None or result.rowcount != 1
+    claim_lost = result.rowcount != 1
     if claim_lost:
         logger.warning("arena follow lost sending claim after send id=%s", item.notification_id)
-    if item.kind == KIND_REOPENED:
-        if follow is not None:
+
+    # Muting for reopened: separate operation with timeout, non-critical
+    if item.kind == KIND_REOPENED and not claim_lost:
+        try:
+            await _set_lock_timeout(session)
             await session.execute(
-                text(
-                    """
+                text("""
                     UPDATE arena_follows
                     SET muted_at = :now
                     WHERE id = :fid
@@ -1251,10 +1246,13 @@ async def _mark_sent(session: AsyncSession, item: FollowOutbound, moment: dateti
                             AND n.kind = 'reopened'
                             AND COALESCE(n.payload->>'keep', '') = 'true'
                       )
-                    """
-                ),
+                    """),
                 {"now": moment, "fid": item.follow_id},
             )
+        except Exception as exc:
+            # Muting failure is non-critical, already sent the notification
+            logger.warning("arena follow muting failed follow_id=%s: %s", item.follow_id, exc)
+
     await record_catalog_consumer_event(
         session,
         kind=KIND_FOLLOW_NOTIFIED,
