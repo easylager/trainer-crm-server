@@ -49,7 +49,7 @@ from src.application.arena_profile import (
     intervals_for_weekday,
     opening_hours_schema_org,
 )
-from src.application.place_links import place_query
+from src.application.place_links import join_public_origin, place_query
 from src.shared.arena_schedule_mode import (
     PHONE_LINE,
     SCHEDULE_MODE_PHONE,
@@ -1005,19 +1005,17 @@ def render_place_page(
     )
     description_text = str(card.get("short_description") or "").strip()
     about = f'<p class="about">{_esc(description_text)}</p>' if description_text else ""
-    cta = f'<a class="cta" href="{_esc(cta_url)}">Открыть в Telegram</a>' if cta_url else ""
-    maps = _maps_url(card)
-    route = (
-        f'<a class="cta cta--ghost" href="{_esc(maps)}" rel="noopener" target="_blank">Как добраться</a>'
-        if maps
-        else ""
+    from src.application.public_web_cta import render_place_primary_actions
+
+    base_url = join_public_origin(canonical_url, "/").rstrip("/") if canonical_url else ""
+    actions = render_place_primary_actions(
+        card,
+        base_url=base_url,
+        surface="place_page",
+        city_id=int(card.get("city_id") or 0) or None,
+        city_name=_city(card) or "",
+        telegram_url=cta_url,
     )
-    # Telegram — в закреплённой кнопке снизу (dock), сверху только маршрут: две одинаковые
-    # кнопки на одном экране выглядят как сбой, а не как настойчивость.
-    del cta
-    actions = f'<div class="actions actions--one">{route}</div>' if route else ""
-    # Главная кнопка всегда под пальцем: страницу читают с телефона, листая до конца.
-    sticky = f'<div class="dock"><a class="cta" href="{_esc(cta_url)}">Открыть в Telegram</a></div>' if cta_url else ""
     body = "".join(
         [
             hero,
@@ -1032,7 +1030,6 @@ def render_place_page(
             _trainers_html(card, cta_url=cta_url),
             _contacts_html(card),
             _share_html(share, venue_type=vt),
-            sticky,
         ]
     )
     city = _city(card)
@@ -1052,6 +1049,7 @@ def render_place_page(
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,
         "__ROBOTS__": robots,
+        "__HEAD_EXTRA__": "",
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
         "__CITY__": _esc(city or "Беларусь"),
         "__CITY_LINK__": city_link,

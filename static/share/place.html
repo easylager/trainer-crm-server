@@ -6,6 +6,7 @@
   <title>__OG_TITLE__</title>
   <meta name="description" content="__OG_DESCRIPTION__" />
   <link rel="canonical" href="__CANONICAL__" />
+  __HEAD_EXTRA__
   <meta name="robots" content="__ROBOTS__" />
 
   <meta property="og:type" content="place" />
@@ -195,7 +196,10 @@
     .pick__stale a, .sched__stale a { color: var(--accent); }
     .pick__note { margin: 0 0 12px; padding: 12px 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
     .for-whom { margin: 14px 0 8px !important; font-size: 13px; color: var(--muted); }
-    .chip { padding: 7px 12px; border-radius: 999px; background: var(--chip); font-size: 14px; }
+    .chip { padding: 7px 12px; border-radius: 999px; background: var(--chip); font-size: 14px; color: var(--ink); text-decoration: none; }
+    .chip--on { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
+    .pager { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; font-size: 15px; }
+    .cta--secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
     .row { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
     .row:first-of-type { border-top: 0; padding-top: 0; }
     .row span { color: var(--muted); }

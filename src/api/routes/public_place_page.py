@@ -424,9 +424,11 @@ async def selection_page(
     request: Request,
     t: str | None = Query(None, description="Тип места: ice|shop|gym|…"),
     w: str | None = Query(None, description="Окно: today_evening|today|tomorrow|weekend"),
+    page: int | None = Query(None, ge=1, description="Страница списка мест"),
     session: AsyncSession = Depends(get_session),
 ):
     from src.application.selection_page import (
+        clean_page,
         clean_venue,
         clean_when,
         compose_selection_share,
@@ -446,7 +448,9 @@ async def selection_page(
     path = selection_path(city_name=city_name, venue=venue, when=when)
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
-    view = await load_selection_view(session, city=city, venue=venue, when=when)
+    view = await load_selection_view(
+        session, city=city, venue=venue, when=when, page=clean_page(page)
+    )
     # Любой ?t= / ?w= канонизируется на базовую подборку города, а не на самого себя.
     canonical_path = selection_path(city_name=city_name, venue=None, when=None)
     html = render_selection_page(
@@ -463,6 +467,7 @@ async def selection_page(
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
         story_image_url=base
         + selection_image_path(city_name=city_name, venue=venue, when=when).replace("/og.png", "/story.png"),
+        base_url=base,
     )
     await record_public_page_view(
         session,

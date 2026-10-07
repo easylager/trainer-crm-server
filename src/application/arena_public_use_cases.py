@@ -64,9 +64,12 @@ from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import (
     DEFAULT_HIDDEN_VENUE_TYPES,
     has_public_skating,
+    VENUE_TYPE_CHOREO,
+    VENUE_TYPE_GYM,
     VENUE_TYPE_ICE,
     VENUE_TYPE_KEYS,
     VENUE_TYPE_OUTDOOR,
+    VENUE_TYPE_POOL,
     VENUE_TYPE_SHOP,
     normalize_venue_type,
     venue_card_cta,
@@ -731,6 +734,7 @@ async def _load_ice_arena_rows(
     intent: str,
     now: datetime,
     window: TimeWindow | None = None,
+    arena_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
         "now": now,
@@ -757,8 +761,119 @@ async def _load_ice_arena_rows(
     sql = _LIST_SQL
     if where:
         sql = sql + " AND " + " AND ".join(where)
+    if arena_ids:
+        sql = sql + " AND a.id = ANY(:arena_ids)"
+        params["arena_ids"] = [int(i) for i in arena_ids]
     result = await session.execute(text(sql), params)
     return [_row_to_arena_dict(row) for row in result.mappings()]
+
+
+CITY_SELECTION_PAGE_SIZE = 12
+
+_FILTER_GROUP_ICE = frozenset({VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR})
+_FILTER_GROUP_GYM = frozenset({VENUE_TYPE_GYM, VENUE_TYPE_CHOREO, VENUE_TYPE_POOL})
+
+
+def city_selection_venue_types(raw: str | None) -> set[str] | None:
+    """``t=ice|shop|gym`` → множество venue_type; без ``t`` — все типы (включая магазины)."""
+    value = (raw or "").strip().lower()
+    if not value:
+        return None
+    if value == "ice":
+        return set(_FILTER_GROUP_ICE)
+    if value == "gym":
+        return set(_FILTER_GROUP_GYM)
+    if value in VENUE_TYPE_KEYS:
+        return {value}
+    return None
+
+
+async def list_city_selection_places(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    venue_types: set[str] | None,
+    page: int,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Публичные места города одной страницей: фиксированное число SQL, не зависит от total."""
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+
+    now = now or datetime.now(timezone.utc)
+    page = max(1, int(page or 1))
+    offset = (page - 1) * CITY_SELECTION_PAGE_SIZE
+    scope = public_scope_params()
+    type_clause = ""
+    params: dict[str, Any] = {
+        "city_id": int(city_id),
+        "lim": CITY_SELECTION_PAGE_SIZE,
+        "off": offset,
+        **scope,
+    }
+    if venue_types:
+        type_clause = " AND COALESCE(a.venue_type, 'ice') = ANY(:venue_types)"
+        params["venue_types"] = sorted(venue_types)
+
+    count_sql = f"""
+        SELECT COUNT(*)::int
+        FROM arenas a
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        JOIN cities c ON c.id = a.city_id
+        WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{type_clause}
+    """
+    facet_sql = f"""
+        SELECT COALESCE(a.venue_type, 'ice') AS vt, COUNT(*)::int AS n
+        FROM arenas a
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        JOIN cities c ON c.id = a.city_id
+        WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}
+        GROUP BY 1
+    """
+    ids_sql = f"""
+        SELECT a.id
+        FROM arenas a
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        JOIN cities c ON c.id = a.city_id
+        WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{type_clause}
+        ORDER BY a.name, a.id
+        LIMIT :lim OFFSET :off
+    """
+    total = int((await session.execute(text(count_sql), params)).scalar_one())
+    facet_rows = (await session.execute(text(facet_sql), params)).mappings().all()
+    id_rows = (await session.execute(text(ids_sql), params)).scalars().all()
+    arena_ids = [int(i) for i in id_rows]
+    rows: list[dict[str, Any]] = []
+    if arena_ids:
+        loaded = await _load_ice_arena_rows(
+            session, city_id=int(city_id), bbox=None, intent=INTENT_SKATE, now=now, arena_ids=arena_ids
+        )
+        by_id = {int(r["id"]): r for r in loaded}
+        rows = [by_id[i] for i in arena_ids if i in by_id]
+        await attach_arena_media_payloads(session, rows)
+    today = _today_minsk()
+    items = [_public_list_item(row, intent=INTENT_SKATE, today=today) for row in rows]
+    facet_seed = [{"venue_type": r["vt"]} for r in facet_rows for _ in range(int(r["n"]))]
+    facets = _venue_type_facets(facet_seed)
+    filter_chips: list[dict[str, Any]] = []
+    ice_n = sum(int(r["n"]) for r in facet_rows if r["vt"] in _FILTER_GROUP_ICE)
+    shop_n = sum(int(r["n"]) for r in facet_rows if r["vt"] == VENUE_TYPE_SHOP)
+    gym_n = sum(int(r["n"]) for r in facet_rows if r["vt"] in _FILTER_GROUP_GYM)
+    if ice_n:
+        filter_chips.append({"key": "ice", "label": "Лёд", "count": ice_n})
+    if shop_n:
+        filter_chips.append({"key": "shop", "label": "Магазины", "count": shop_n})
+    if gym_n:
+        filter_chips.append({"key": "gym", "label": "Залы", "count": gym_n})
+    pages = max(1, (total + CITY_SELECTION_PAGE_SIZE - 1) // CITY_SELECTION_PAGE_SIZE)
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "pages": pages,
+        "page_size": CITY_SELECTION_PAGE_SIZE,
+        "filter_chips": filter_chips,
+        "venue_type_facets": facets,
+    }
 
 
 async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any]]:

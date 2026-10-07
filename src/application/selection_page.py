@@ -25,8 +25,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_public_use_cases import (
+    CITY_SELECTION_PAGE_SIZE,
     _CURRENT_SESSION_SQL,
     STATUS_ACTIVE,
+    city_selection_venue_types,
+    list_city_selection_places,
     list_public_ice_arenas,
 )
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
@@ -48,16 +51,16 @@ from src.shared.venue_types import VENUE_TYPE_KEYS, has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
 
-#: Сколько мест и сеансов на месте показывает страница. Подборка — не справочник.
-MAX_PLACES = 12
+#: Сколько мест на странице города (пагинация).
+MAX_PLACES = CITY_SELECTION_PAGE_SIZE
 MAX_SLOTS_PER_PLACE = 4
 # Без окна запрос раньше тянул все будущие сеансы. 64 на место хватает на чипы,
 # «ещё N» и счёт в подписи; плотный уикенд (сеанс в час) сюда помещается.
 _WINDOW_SLOTS_PER_ARENA = 64
 
 _TOPIC = {
-    None: "Где покататься",
-    "ice": "Где покататься",
+    None: "Все места",
+    "ice": "Лёд",
     "outdoor": "Уличный лёд",
     "shop": "Магазины и заточка",
     "gym": "Залы ОФП",
@@ -75,7 +78,17 @@ _NOUNS = {
 
 def clean_venue(raw: str | None) -> str | None:
     value = (raw or "").strip().lower()
+    if value in ("ice", "gym", "shop"):
+        return value
     return value if value in VENUE_TYPE_KEYS else None
+
+
+def clean_page(raw: str | int | None) -> int:
+    try:
+        page = int(str(raw or "1").strip())
+    except ValueError:
+        return 1
+    return page if page > 0 else 1
 
 
 def clean_when(raw: str | None) -> str | None:
@@ -83,8 +96,12 @@ def clean_when(raw: str | None) -> str | None:
     return value if value in WHEN_KEYS and value not in ("any", "auto") else None
 
 
-def selection_path(*, city_name: str, venue: str | None, when: str | None) -> str:
+def selection_path(
+    *, city_name: str, venue: str | None, when: str | None, page: int | None = None
+) -> str:
     params = {k: v for k, v in (("t", venue), ("w", when)) if v}
+    if page is not None and int(page) > 1:
+        params["page"] = str(int(page))
     return f"/c/{city_slug(city_name)}" + (("?" + urlencode(params)) if params else "")
 
 
@@ -145,20 +162,46 @@ async def load_selection_view(
     city: Mapping[str, Any],
     venue: str | None,
     when: str | None,
+    page: int = 1,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
-    skating = venue is None or has_public_skating(venue)
-    listing = await list_public_ice_arenas(
-        session,
-        city_id=int(city["id"]),
-        intent="skate",
-        venue_type=venue,
-        when=when if skating else None,
-        limit=MAX_PLACES,
-    )
-    items = list(listing.get("items") or [])
-    window = listing.get("window")
+    page = clean_page(page)
+    skating = venue is None or venue == "ice" or has_public_skating(venue)
+    window = None
+    filter_chips: list[dict[str, Any]] = []
+    total = 0
+    pages = 1
+    if when:
+        vtypes = city_selection_venue_types(venue)
+        venue_param = ",".join(sorted(vtypes)) if vtypes else venue
+        offset = (page - 1) * MAX_PLACES
+        listing = await list_public_ice_arenas(
+            session,
+            city_id=int(city["id"]),
+            intent="skate",
+            venue_type=venue_param,
+            when=when if skating else None,
+            limit=MAX_PLACES,
+            cursor=str(offset) if offset else None,
+        )
+        items = list(listing.get("items") or [])
+        window = listing.get("window")
+        total = int(listing.get("total") or len(items))
+        pages = max(1, (total + MAX_PLACES - 1) // MAX_PLACES)
+        filter_chips = []
+    else:
+        catalog = await list_city_selection_places(
+            session,
+            city_id=int(city["id"]),
+            venue_types=city_selection_venue_types(venue),
+            page=page,
+            now=now,
+        )
+        items = list(catalog.get("items") or [])
+        total = int(catalog.get("total") or 0)
+        pages = int(catalog.get("pages") or 1)
+        filter_chips = list(catalog.get("filter_chips") or [])
     slots = await _window_slots(session, [int(i["id"]) for i in items], window, now) if skating else {}
     # TASK-180: свежесть расписания на момент ``now``. > 6 ч — строка «могло измениться»;
     # > 72 ч — сеансы места не показываем и не считаем: «не обновлялось N дней — уточните».
@@ -182,18 +225,23 @@ async def load_selection_view(
     # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
     hits = [i for i in items if slots.get(int(i["id"]))] if window else items
     shown = hits or items
+    shown_page = shown[:MAX_PLACES]
     return {
         "city": dict(city),
         "venue": venue,
         "when": when,
+        "page": page,
+        "pages": pages,
+        "total": total,
+        "filter_chips": filter_chips,
         "window": window,
         "window_empty": bool(window) and not hits,
-        "items": shown[:MAX_PLACES],
+        "items": shown_page,
         "slots": slots,
         "stale_notes": stale_notes,
         "unconfirmed_notes": unconfirmed_notes,
         "skating": skating,
-        "session_count": sum(len(slots.get(int(i["id"]), [])) for i in shown[:MAX_PLACES]),
+        "session_count": sum(len(slots.get(int(i["id"]), [])) for i in shown_page),
     }
 
 
@@ -356,6 +404,60 @@ def _place_html(
     )
 
 
+def _filter_chips_html(view: Mapping[str, Any], *, city_name: str) -> str:
+    chips = list(view.get("filter_chips") or [])
+    if not chips or view.get("when"):
+        return ""
+    active = str(view.get("venue") or "")
+    parts = []
+    all_href = selection_path(city_name=city_name, venue=None, when=None, page=1)
+    all_cls = "chip" + (" chip--on" if not active else "")
+    parts.append(f'<a class="{all_cls}" href="{_esc(all_href)}">Все</a>')
+    for chip in chips:
+        key = str(chip.get("key") or "")
+        label = str(chip.get("label") or key)
+        href = selection_path(city_name=city_name, venue=key, when=None, page=1)
+        cls = "chip" + (" chip--on" if active == key else "")
+        parts.append(f'<a class="{cls}" href="{_esc(href)}">{_esc(label)}</a>')
+    return '<nav class="chips" aria-label="Тип места">' + "".join(parts) + "</nav>"
+
+
+def _pagination_html(view: Mapping[str, Any], *, city_name: str, canonical_base: str) -> str:
+    pages = int(view.get("pages") or 1)
+    page = int(view.get("page") or 1)
+    if pages <= 1:
+        return ""
+    venue, when = view.get("venue"), view.get("when")
+    prev_href = (
+        selection_path(city_name=city_name, venue=venue, when=when, page=page - 1) if page > 1 else None
+    )
+    next_href = (
+        selection_path(city_name=city_name, venue=venue, when=when, page=page + 1) if page < pages else None
+    )
+    bits = [f'<p class="muted">Страница {page} из {pages}</p>']
+    if prev_href:
+        bits.append(f'<a rel="prev" href="{_esc(prev_href)}">Назад</a>')
+    if next_href:
+        bits.append(f'<a rel="next" href="{_esc(next_href)}">Дальше</a>')
+    return '<nav class="pager" aria-label="Страницы">' + " · ".join(bits) + "</nav>"
+
+
+def _head_links_html(view: Mapping[str, Any], *, city_name: str, canonical_base: str) -> str:
+    pages = int(view.get("pages") or 1)
+    page = int(view.get("page") or 1)
+    if pages <= 1:
+        return ""
+    venue, when = view.get("venue"), view.get("when")
+    links = []
+    if page > 1:
+        prev = selection_path(city_name=city_name, venue=venue, when=when, page=page - 1)
+        links.append(f'<link rel="prev" href="{_esc(join_public_origin(canonical_base, prev))}" />')
+    if page < pages:
+        nxt = selection_path(city_name=city_name, venue=venue, when=when, page=page + 1)
+        links.append(f'<link rel="next" href="{_esc(join_public_origin(canonical_base, nxt))}" />')
+    return "".join(links)
+
+
 def render_selection_page(
     view: Mapping[str, Any],
     *,
@@ -365,8 +467,10 @@ def render_selection_page(
     share: Mapping[str, str],
     city_page_url: str | None,
     story_image_url: str | None = None,
+    base_url: str = "",
 ) -> str:
     from src.application.place_page import _share_html  # общий ряд «Поделиться»
+    from src.application.public_web_cta import render_generic_web_dock
 
     city_name = str(view["city"]["name"])
     title = selection_title(view)
@@ -399,8 +503,16 @@ def render_selection_page(
         f'<p class="hero__where">{_esc(description)}</p>'
         "</header>"
     )
-    dock = f'<div class="dock"><a class="cta" href="{_esc(cta_url)}">Открыть в Telegram</a></div>' if cta_url else ""
-    body = hero + note + places + _share_html(share, venue_type="ice" if view.get("skating") else "shop") + dock
+    chips = _filter_chips_html(view, city_name=city_name)
+    pager = _pagination_html(view, city_name=city_name, canonical_base=canonical_url)
+    dock = render_generic_web_dock(
+        base_url=base_url,
+        surface="selection_page",
+        city_id=int(view["city"]["id"]),
+        city_name=city_name,
+        telegram_url=cta_url,
+    )
+    body = hero + chips + note + places + pager + _share_html(share, venue_type="ice" if view.get("skating") else "shop") + dock
     elements = []
     for n, item in enumerate(view["items"]):
         slug = str(item.get("slug") or "").strip()
@@ -425,6 +537,7 @@ def render_selection_page(
     city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city_name)} сегодня</a>' if city_page_url else ""
     # ?t= и ?w= — та же подборка с фильтром. В индекс идёт только базовый /c/{город}.
     variant = bool(view.get("venue") or view.get("when"))
+    page_no = int(view.get("page") or 1)
     lang, og_locale = html_lang_for_country(str(view["city"].get("country") or ""))
     return fill_placeholders(
         page,
@@ -437,7 +550,8 @@ def render_selection_page(
             "__STORY_IMAGE__": _esc(story_image_url or og_image_url),
             "__LANG__": lang,
             "__OG_LOCALE__": og_locale,
-            "__ROBOTS__": "noindex, follow" if variant else "index, follow",
+            "__ROBOTS__": "noindex, follow" if (variant or page_no > 1) else "index, follow",
+            "__HEAD_EXTRA__": _head_links_html(view, city_name=city_name, canonical_base=canonical_url),
             "__JSONLD__": ld,
             "__CITY__": _esc(city_name),
             "__CITY_LINK__": city_link,
