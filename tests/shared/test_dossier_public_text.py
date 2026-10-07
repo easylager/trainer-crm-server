@@ -1,0 +1,20 @@
+from src.shared.dossier_public_text import (
+    public_payload_contains_dossier_leak,
+    sanitize_opening_hours_for_public,
+    scrub_dossier_leaks_from_public_text,
+)
+
+
+def test_scrub_removes_unknown_and_conflicts_refs() -> None:
+    raw = "комплекс: ежедневно 7:00–23:00. Кассы катания — см. Conflicts (не склеивать)"
+    assert scrub_dossier_leaks_from_public_text(raw) == "комплекс: ежедневно 7:00–23:00. Кассы катания"
+
+
+def test_sanitize_opening_hours_drops_note_when_daily_present() -> None:
+    hours = {
+        "daily": {"open": "07:00", "close": "23:00"},
+        "note": "см. Conflicts (не склеивать)",
+    }
+    out = sanitize_opening_hours_for_public(hours)
+    assert out == {"daily": {"open": "07:00", "close": "23:00"}}
+    assert public_payload_contains_dossier_leak(out or {}) == []
