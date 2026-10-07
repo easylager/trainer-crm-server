@@ -28,282 +28,285 @@
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=1" />
   <style>
     /*
-      TASK-146. Страница самодостаточная, как «Лёд сегодня»: один запрос, ноль своих
-      ассетов — её открывают из пересланного сообщения на чужом телефоне.
-
-      Холст светлый и спокойный (design/CREATIVE-DIRECTIONS-2026-08-24.md): тил — акцент,
-      не заливка. Тёмная драматичная подача живёт только в картинке для шеринга
-      (og.png / story.png) — это экспортируемый артефакт, а не среда.
-      Срез 45° у hero — та же «ribbon»-геометрия, что в мини-аппе.
-
-      TASK-209: палитра/шрифт — из общих токенов (glide-tokens.css); цвета вида
-      активности (--ice/--gym/--shop/--other) и живые статусы (--live/--warn) токенами
-      не покрыты, остаются своими.
+      TASK-211. Цвета, шрифт и радиусы — только var(--g-*) из glide-tokens.css.
+      Страница работает без JS: вкладки дней и «позвать» — обычные ссылки.
     */
-    :root {
-      color-scheme: light;
-      --bg: var(--g-bg);
-      --surface: var(--g-surface);
-      --ink: var(--g-ink);
-      --muted: var(--g-muted);
-      --line: var(--g-line);
-      --accent: var(--g-accent);
-      --accent-ink: #ffffff;
-      --accent-wash: var(--g-accent-wash);
-      --chip: #eef3f5;
-      --live: #12a150;
-      --warn: #b4690e;
-      --cut: 18px;
-      --ice: #2aa7c9;
-      --gym: #e08a1e;
-      --shop: #7a5af5;
-      --other: #5d7285;
-    }
+    :root { color-scheme: light; }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
-      background: var(--bg);
-      color: var(--ink);
+      background: var(--g-bg);
+      color: var(--g-ink);
       font-family: var(--g-font);
       font-size: 16px;
       line-height: 1.45;
       -webkit-font-smoothing: antialiased;
     }
-    a { color: var(--accent); }
-    .wrap { max-width: 640px; margin: 0 auto; padding: 16px 16px 112px; }
-    .top {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      margin: 0 0 14px; font-size: 14px; color: var(--muted);
+    a { color: var(--g-accent-ink); }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 0 0 40px; }
+    .chrome {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; background: var(--g-surface);
+      border-bottom: 1px solid var(--g-line);
     }
-    .top__brand { font-weight: 700; color: var(--ink); text-decoration: none; letter-spacing: -.01em; }
-    .top__brand span { color: var(--accent); }
-
-    .hero {
-      position: relative;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      padding: 20px 20px 18px 23px;
-      clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
-      margin-bottom: 12px;
+    .chrome__back {
+      width: var(--g-tap); height: var(--g-tap);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--g-ink); text-decoration: none;
     }
-    .hero::before {
-      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--other);
+    .chrome__city { font-size: 15px; color: var(--g-muted); }
+    .chrome__brand {
+      margin-left: auto; font-size: 18px; font-weight: 700;
+      color: var(--g-ink); text-decoration: none;
     }
-    .hero--ice::before { background: var(--ice); }
-    .hero--gym::before, .hero--choreo::before { background: var(--gym); }
-    .hero--shop::before { background: var(--shop); }
-    .hero--photo { padding-top: 0; }
-    .hero__photo {
-      display: block; width: calc(100% + 43px); max-width: none; margin: 0 -20px 16px -23px;
-      aspect-ratio: 16 / 9; object-fit: cover; background: var(--chip);
+    .photo { height: 190px; background: var(--g-line); overflow: hidden; }
+    .photo img { width: 100%; height: 190px; object-fit: cover; display: block; }
+    .photo--empty {
+      display: flex; align-items: flex-end; padding: 14px 16px;
+      color: var(--g-muted); font-size: 14px;
     }
-    .dock {
-      position: sticky; bottom: 0; margin: 16px -16px 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-      background: linear-gradient(180deg, transparent, var(--bg) 30%);
+    .intro {
+      padding: 16px; display: flex; flex-direction: column; gap: 10px;
+      background: var(--g-surface);
     }
-    .dock .cta { box-shadow: 0 8px 24px rgba(15, 143, 138, .28); }
-    .hero__type { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
-    .hero__title { margin: 0; font-size: clamp(26px, 7vw, 34px); line-height: 1.12; letter-spacing: -.02em; }
-    .hero__where { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
-    .badge {
-      display: inline-flex; align-items: center; gap: 8px; margin: 12px 0 0;
-      padding: 6px 12px; border-radius: 999px; background: var(--chip); font-size: 14px; font-weight: 600;
+    h1 { margin: 0; font-size: 28px; line-height: 1.15; font-weight: 700; }
+    .where { margin: 0; font-size: 15px; color: var(--g-muted); }
+    .status {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 14px; background: var(--g-accent-wash); border-radius: var(--g-r);
     }
-    .badge__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-    .badge--live .badge__dot, .badge--open .badge__dot { background: var(--live); box-shadow: 0 0 0 4px rgba(18,161,80,.15); }
-    .badge--soon .badge__dot { background: var(--accent); }
-    .badge--closed .badge__dot, .badge--shut .badge__dot { background: var(--warn); }
-    .about { margin: 0 0 12px; color: var(--muted); }
-
+    .status b { font-weight: 700; }
+    .status__dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--g-accent); flex: 0 0 auto;
+    }
+    .status__hint { display: block; font-weight: 400; color: var(--g-ink-2); }
+    .status--warn { background: var(--g-warn-wash); color: var(--g-warn-ink); }
+    .status--stack { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .acts { display: grid; gap: 8px; margin-top: 4px; }
+    .act {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      min-height: var(--g-tap); padding: 12px 6px;
+      border: 1px solid var(--g-line); border-radius: var(--g-r);
+      text-decoration: none; color: var(--g-ink); font-size: 14px; font-weight: 600;
+      background: var(--g-surface);
+    }
+    .act__icon { color: var(--g-accent-ink); display: flex; }
+    .follow, .follow--open, .call {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      min-height: 52px; padding: 8px 14px; border-radius: var(--g-r);
+      text-decoration: none; font-size: 16px; font-weight: 600; text-align: center;
+    }
+    .follow { background: var(--g-dark); color: var(--g-surface); }
+    .follow[aria-disabled="true"] { opacity: 0.55; }
+    .follow--open, .call { background: var(--g-accent); color: var(--g-surface); }
+    .follow-hint { margin: 0; font-size: 13px; color: var(--g-muted); text-align: center; }
+    .about { margin: 12px 16px; color: var(--g-muted); }
+    .place-grid { display: block; }
+    .block, .ohm, .mode-card, .open-card, .sec, .plan {
+      margin: 18px 16px 0;
+    }
+    .block h2, .ohm h2, .mode-card h2, .open-card h2, .sec__title, .place-side h2 {
+      margin: 0 0 10px; font-size: 21px; font-weight: 700;
+    }
+    .block__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .block__aside { font-size: 13px; color: var(--g-muted); text-align: right; }
+    .daytabs { display: flex; gap: 6px; overflow-x: auto; margin: 10px 0 12px; }
+    .daytab {
+      padding: 9px 14px; min-height: var(--g-tap); box-sizing: border-box;
+      border-radius: var(--g-r-pill); background: var(--g-surface);
+      border: 1px solid var(--g-line); color: var(--g-ink);
+      text-decoration: none; font-size: 14px; white-space: nowrap;
+    }
+    .daytab--on { background: var(--g-dark); color: var(--g-surface); border-color: var(--g-dark); font-weight: 600; }
+    .sess-list { display: flex; flex-direction: column; gap: 8px; }
+    .sess {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; background: var(--g-surface);
+      border: 1px solid var(--g-line); border-radius: var(--g-r-md);
+    }
+    .sess--projected { border-style: dashed; }
+    .sess__when { display: flex; flex-direction: column; gap: 2px; flex: 0 0 92px; }
+    .sess__time { font-size: 20px; font-weight: 700; }
+    .sess__until, .sess__sub, .sess__basis { font-size: 13px; color: var(--g-muted); }
+    .sess__meta { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+    .sess__price { font-size: 15px; font-weight: 600; }
+    .sess__invite {
+      flex: 0 0 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--g-r-sm); background: var(--g-accent-wash); color: var(--g-accent-ink);
+    }
+    .hint { margin: 10px 0 0; font-size: 13px; color: var(--g-muted); }
+    .ohm, .mode-card, .open-card {
+      padding: 16px; background: var(--g-surface);
+      border: 1px solid var(--g-line); border-radius: 18px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .open-card { border: 2px solid var(--g-accent); }
+    .ohm h2, .mode-card h2, .open-card h2 { font-size: 19px; margin: 0; }
+    .ohm__when { margin: 0; font-size: 15px; }
+    .ohm__note { margin: 0; font-size: 14px; color: var(--g-ink-2); }
+    .amenity {
+      margin: 0; padding: 0; list-style: none;
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+    }
+    .amenity li {
+      padding: 12px 14px; background: var(--g-surface);
+      border: 1px solid var(--g-line); border-radius: var(--g-r); font-size: 15px;
+    }
+    .amenity-hours .sec { margin: 10px 0 0; }
+    .call--block {
+      flex-direction: column; align-items: flex-start; gap: 4px;
+      padding: 16px; background: var(--g-surface); color: var(--g-ink);
+      border: 1px solid var(--g-line); margin: 0 16px;
+    }
+    .call--block span { font-size: 13px; font-weight: 400; color: var(--g-muted); }
+    .nearby {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      padding: 16px; background: var(--g-surface); border: 1px solid var(--g-line);
+      border-radius: var(--g-r-md); text-decoration: none; color: var(--g-ink);
+    }
+    .nearby b { font-size: 16px; }
+    .nearby__meta { display: block; font-size: 13px; color: var(--g-muted); font-weight: 400; }
+    .nearby__go { font-size: 15px; font-weight: 600; color: var(--g-accent-ink); }
     .plan {
-      background: var(--accent-wash);
-      border: 1px solid var(--accent);
-      border-radius: 18px;
-      padding: 18px 20px;
-      margin: 0 0 12px;
+      background: var(--g-accent-wash); border: 1px solid var(--g-accent);
+      border-radius: 18px; padding: 18px 20px;
     }
-    .plan__kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
-    .plan__day { margin: 8px 0 0; font-size: 16px; font-weight: 600; }
-    .plan__time { margin: 2px 0 0; font-size: 40px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-    .plan__label { margin: 4px 0 0; color: var(--muted); }
-    .plan__soon { margin: 8px 0 0; font-weight: 600; color: var(--live); }
-    .plan__prices { margin: 10px 0 0; padding: 0; list-style: none; font-size: 15px; }
-    .plan__prices li { padding: 2px 0; }
-    .plan__where { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
-    .plan--gone { background: var(--surface); border-color: var(--line); }
-    .plan--gone .plan__kicker { color: var(--warn); }
+    .plan__kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--g-accent); }
+    .plan__day { margin: 8px 0 0; font-weight: 600; }
+    .plan__time { margin: 2px 0 0; font-size: 40px; font-weight: 700; }
+    .plan__label, .plan__where { margin: 4px 0 0; color: var(--g-muted); }
+    .plan__soon { margin: 8px 0 0; font-weight: 600; color: var(--g-accent); }
+    .plan__prices { margin: 10px 0 0; padding: 0; list-style: none; }
+    .plan--gone { background: var(--g-surface); border-color: var(--g-line); }
+    .plan--gone .plan__kicker { color: var(--g-warn-ink); }
     .plan__note { margin: 6px 0 0; }
-
-    .actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0 0 12px; }
-    @media (min-width: 420px) { .actions { grid-template-columns: 1fr 1fr; } .actions--one { grid-template-columns: 1fr; } }
-    .cta {
-      display: block; padding: 14px 18px; border-radius: 14px;
-      background: var(--accent); color: var(--accent-ink);
-      font-size: 16px; font-weight: 600; text-align: center; text-decoration: none;
-    }
-    .cta--ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
-
-    .sec {
-      background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
-      padding: 16px 18px; margin: 0 0 12px;
-    }
-    .sec__title { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-    .sec p { margin: 0; }
-    .muted { color: var(--muted); }
-    .hint { margin: 10px 0 0 !important; color: var(--muted); font-size: 13px; }
-    .day + .day { margin-top: 14px; }
-    .day__label { margin: 0 0 8px !important; font-weight: 600; }
-    .slots { display: flex; flex-wrap: wrap; gap: 8px; }
-    .slot {
-      display: inline-flex; flex-direction: column; gap: 1px; min-width: 86px;
-      padding: 8px 12px; border-radius: 12px; background: var(--chip);
-      color: var(--ink); text-decoration: none; border: 1px solid transparent;
-    }
-    .slot--focus { border-color: var(--accent); background: var(--accent-wash); }
-    .slot--more { color: var(--muted); justify-content: center; }
-    .slot--basis-projected,
-    .slot--basis-photo,
-    .slot--basis-manual {
-      border-style: dashed;
-      border-color: rgba(15, 143, 138, 0.55);
-      background: var(--accent-wash);
-    }
-    .schedule-basis {
-      margin: 0 0 12px; font-size: 13px; line-height: 1.45; color: var(--muted);
-    }
-    .schedule-basis a { color: var(--accent); text-decoration: none; font-weight: 600; }
-    .slot__time { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .slot__price { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .sec { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 18px; padding: 16px 18px; }
+    .sec p, .sec .row { margin: 0; }
+    .row { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-top: 1px solid var(--g-line); }
+    .row span { color: var(--g-muted); }
+    .row b { font-weight: 600; text-align: right; }
     .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .tile { background: var(--chip); border-radius: 14px; padding: 12px; }
-    .tile__icon { font-size: 20px; }
-    .tile__title { margin: 6px 0 2px !important; font-weight: 700; }
-    .tile__sub { font-size: 13px; color: var(--muted); }
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .pick__head { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 12px; }
-    .pick__media {
-      display: block; flex: 0 0 88px; width: 88px; height: 72px;
-      border-radius: 12px; overflow: hidden; background: var(--chip);
-    }
-    .pick__photo { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .pick__icon {
-      flex: 0 0 44px; width: 44px; height: 44px; border-radius: 12px;
-      background: var(--accent-wash); display: flex; align-items: center; justify-content: center;
-      font-size: 20px;
-    }
-    .pick__titles { min-width: 0; flex: 1; }
-    .pick__name { margin: 0; font-size: 19px; line-height: 1.25; }
-    .pick__name a { color: var(--ink); text-decoration: none; }
-    .pick__name a::after { content: " ›"; color: var(--accent); }
-    .pick__where { margin: 4px 0 0 !important; color: var(--muted); font-size: 14px; }
-    /* TASK-180: расписание давно не подтверждалось — спокойная строка, а не тревога. */
-    .pick__stale, .sched__stale { margin: 0 0 10px; color: var(--warn); font-size: 13px; }
-    .pick__stale a, .sched__stale a { color: var(--accent); }
-    .pick__note { margin: 0 0 12px; padding: 12px 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
-    .for-whom { margin: 14px 0 8px !important; font-size: 13px; color: var(--muted); }
-    .chip { padding: 7px 12px; border-radius: 999px; background: var(--chip); font-size: 14px; color: var(--ink); text-decoration: none; }
-    .chip--on { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
-    .pager { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; font-size: 15px; }
-    .cta--secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-    .row { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
-    .row:first-of-type { border-top: 0; padding-top: 0; }
-    .row span { color: var(--muted); }
-    .row b { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
-
-    .share { margin: 18px 0 0; }
-    .share__title { margin: 0 0 8px; font-weight: 700; }
-    .share__row { display: flex; flex-wrap: wrap; gap: 8px; }
-    .share__btn {
-      flex: 1 1 auto; min-width: 96px; padding: 11px 14px; border-radius: 12px;
-      background: var(--surface); border: 1px solid var(--line); color: var(--ink);
-      font: inherit; font-size: 15px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer;
-    }
-    .share__btn--tg { background: #229ed9; border-color: #229ed9; color: #fff; }
-    .share__story { display: inline-block; margin-top: 10px; font-size: 14px; }
-    .trust { margin: 22px 0 0; color: var(--muted); font-size: 13px; }
+    .tile { background: var(--g-bg); border-radius: var(--g-r); padding: 12px; }
+    .tile__title { margin: 6px 0 2px; font-weight: 700; }
+    .tile__sub { font-size: 13px; color: var(--g-muted); }
+    .sched__stale { margin: 0 0 10px; color: var(--g-warn-ink); font-size: 13px; }
+    .trust { margin: 18px 16px 0; color: var(--g-muted); font-size: 13px; }
     .trust p { margin: 0 0 4px; }
-    footer { margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
-    footer a { color: inherit; }
-    .toast {
-      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-      padding: 10px 16px; border-radius: 12px; background: var(--ink); color: var(--bg);
-      font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none;
+    .foot {
+      padding: 22px 16px 8px; display: flex; flex-direction: column; gap: 8px;
+      font-size: 14px; color: var(--g-muted);
     }
-    .toast.show { opacity: 1; }
+    @media (min-width: 960px) {
+      .wrap { max-width: 1100px; }
+      .place-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.8fr);
+        gap: 8px 20px;
+        align-items: start;
+        padding-right: 16px;
+      }
+      .place-side .block, .place-side .sec { margin-right: 0; }
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
-    <nav class="top">
-      <a class="top__brand" href="/">Glide<span> · карта льда</span></a>
-      <span>__CITY__</span>
-    </nav>
     __BODY__
-    <a class="share__story" href="__STORY_IMAGE__" download>Картинка для истории (Instagram, VK)</a>
-    <div class="trust">__TRUST__</div>
-    <footer>__CITY_LINK__</footer>
   </main>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/static/webapp/place-follow.js?v=2"></script>
   <script>
-    /*
-      Единственный JS страницы — «Скопировать» и системное меню «Поделиться».
-      Без JS все остальные кнопки — обычные ссылки и работают и так.
-    */
     (function () {
-      var toast = document.getElementById('toast');
-      function say(text) {
-        toast.textContent = text;
-        toast.classList.add('show');
-        setTimeout(function () { toast.classList.remove('show'); }, 1800);
-      }
-      document.querySelectorAll('[data-copy]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var text = btn.getAttribute('data-copy') || '';
-          var done = function () { say('Скопировано — вставьте в любой чат'); };
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(done, function () { window.prompt('Скопируйте:', text); });
-          } else {
-            window.prompt('Скопируйте:', text);
-          }
-        });
-      });
-      function dropBrokenPhoto(img) {
-        var hero = img.closest('.hero');
-        if (hero) hero.classList.remove('hero--photo');
-        var media = img.closest('.pick__media');
-        if (media) {
-          var icon = media.getAttribute('data-icon') || '';
-          var head = media.parentNode;
-          media.remove();
-          if (icon && head && !head.querySelector('.pick__icon')) {
-            var plate = document.createElement('span');
-            plate.className = 'pick__icon';
-            plate.setAttribute('aria-hidden', 'true');
-            plate.textContent = icon;
-            head.insertBefore(plate, head.firstChild);
-          }
+      document.addEventListener('click', function (e) {
+        var share = e.target.closest('[data-glide-share]');
+        if (!share) return;
+        var url = share.getAttribute('data-glide-share') || share.href;
+        var text = share.getAttribute('data-glide-share-text') || '';
+        if (navigator.share) {
+          e.preventDefault();
+          navigator.share({ title: document.title, text: text, url: url }).catch(function () {});
           return;
         }
-        img.remove();
-      }
-      document.querySelectorAll('.hero__photo, .pick__photo').forEach(function (img) {
-        img.addEventListener('error', function () { dropBrokenPhoto(img); });
-        if (img.complete && img.naturalWidth === 0) dropBrokenPhoto(img);
-      });
-      if (navigator.share) {
-        var row = document.querySelector('.share__row');
-        var copy = document.querySelector('[data-copy]');
-        if (row && copy) {
-          var more = document.createElement('button');
-          more.type = 'button';
-          more.className = 'share__btn';
-          more.textContent = 'Ещё…';
-          more.addEventListener('click', function () {
-            navigator.share({ title: document.title, text: copy.getAttribute('data-copy') || '' }).catch(function () {});
-          });
-          row.appendChild(more);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          e.preventDefault();
+          navigator.clipboard.writeText(url).catch(function () {});
         }
+      });
+      function dropBrokenPhoto(img) {
+        var box = img.parentNode;
+        if (!box) return;
+        box.classList.add('photo--empty');
+        box.textContent = box.getAttribute('data-empty') || '';
       }
+      document.querySelectorAll('.photo img').forEach(function (img) {
+        img.addEventListener('error', function () { dropBrokenPhoto(img); });
+      });
+      var initData = '';
+      try {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        initData = tg && tg.initData ? tg.initData : '';
+      } catch (err) {
+        initData = '';
+      }
+      if (!initData || !window.PlaceFollow) return;
+      document.querySelectorAll('[data-arena-follow]').forEach(function (node) {
+        var id = node.getAttribute('data-arena-follow');
+        fetch('/api/webapp/client/arena-follows/' + id, {
+          headers: { 'X-Telegram-Init-Data': initData }
+        }).then(function (response) {
+          return response.ok ? response.json() : null;
+        }).then(function (status) {
+          var view = window.PlaceFollow.placeFollowState({
+            initData: initData,
+            status: status,
+            label: node.getAttribute('data-follow-on') || ''
+          });
+          if (view.mode !== 'unfollow') return;
+          var label = node.querySelector('[data-follow-label]');
+          node.setAttribute('data-follow-off', label ? label.textContent : '');
+          if (label) label.textContent = view.label;
+          node.setAttribute('data-following', '1');
+          node.setAttribute('data-unfollow-url', view.url);
+        }).catch(function () {});
+      });
+      document.addEventListener('click', function (e) {
+        var node = e.target.closest('[data-following="1"]');
+        if (!node || !window.PlaceFollow) return;
+        e.preventDefault();
+        var state = node._followState;
+        if (!state) {
+          var shown = node.querySelector('[data-follow-label]');
+          state = node._followState = {
+            pending: false,
+            disabled: false,
+            following: true,
+            url: node.getAttribute('data-unfollow-url') || '',
+            label: shown ? shown.textContent : '',
+            offLabel: node.getAttribute('data-follow-off') || '',
+            error: node.getAttribute('data-unfollow-error') || ''
+          };
+        }
+        state.url = node.getAttribute('data-unfollow-url') || state.url;
+        var request = window.PlaceFollow.runUnfollow(state, function (url) {
+          return fetch(url, {
+            method: 'DELETE',
+            headers: { 'X-Telegram-Init-Data': initData }
+          });
+        }, function (message) {
+          var webapp = window.Telegram && window.Telegram.WebApp;
+          if (webapp && typeof webapp.showAlert === 'function') webapp.showAlert(message);
+        });
+        if (state.disabled) node.setAttribute('aria-disabled', 'true');
+        request.then(function (result) {
+          if (state.disabled) node.setAttribute('aria-disabled', 'true');
+          else node.removeAttribute('aria-disabled');
+          if (!result || result.skipped || !result.ok) return;
+          var label = node.querySelector('[data-follow-label]');
+          if (label) label.textContent = state.label;
+          node.removeAttribute('data-following');
+          node._followState = null;
+        });
+      });
     })();
   </script>
 </body>

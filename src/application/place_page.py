@@ -336,12 +336,30 @@ async def load_place_view(
             reopen_date=reopen,
             note=card.get("schedule_mode_note"),
         )
+    ohm_sessions: list[dict[str, Any]] = []
+    nearby = None
+    if _skating(card) and schedule_mode == SCHEDULE_MODE_SEASON_CLOSED:
+        lat, lon = card.get("latitude"), card.get("longitude")
+        if lat is not None and lon is not None and card.get("city_id"):
+            from src.application.place_v2 import load_nearby_skating_city
+
+            nearby = await load_nearby_skating_city(
+                session,
+                city_id=int(card["city_id"]),
+                latitude=float(lat),
+                longitude=float(lon),
+                today=today,
+                now=now,
+            )
     if _skating(card) and schedule_mode not in (SCHEDULE_MODE_PHONE, SCHEDULE_MODE_SEASON_CLOSED):
         lookup_days = await public_arena_session_days(
             session,
             int(card["id"]),
-            date_from=today,
+            date_from=today - timedelta(days=1),
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
+            now=now,
+            kinds=("public_skate", "open_ice", "hockey_practice"),
+            include_in_progress=True,
         )
         # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API).
         fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
@@ -358,13 +376,48 @@ async def load_place_view(
         elif lookup_days:
             schedule_note = stale_note(fresh, now=now)
 
+    skate_days: list[dict[str, Any]] = []
+    for day in lookup_days:
+        skate_slots = [slot for slot in (day.get("sessions") or []) if slot.get("kind") != "hockey_practice"]
+        ohm_sessions.extend(slot for slot in (day.get("sessions") or []) if slot.get("kind") == "hockey_practice")
+        if skate_slots:
+            skate_days.append({"local_date": day.get("local_date"), "sessions": skate_slots})
+    lookup_days = skate_days
+
     focus = None
     focus_missing = False
     week_end = today + timedelta(days=SCHEDULE_DAYS - 1)
-    days = [d for d in lookup_days if (_parse_iso_date(d.get("local_date")) or today) <= week_end]
+    days = []
+    overnight: list[dict[str, Any]] = []
+    for day in lookup_days:
+        day_date = _parse_iso_date(day.get("local_date"))
+        if day_date is None or day_date > week_end:
+            continue
+        if day_date < today:
+            for slot in day.get("sessions") or []:
+                start = _parse_iso_dt(slot.get("starts_at_utc"))
+                end = _parse_iso_dt(slot.get("ends_at_utc"))
+                if start is not None and end is not None and start <= now < end:
+                    overnight.append(slot)
+            continue
+        days.append(day)
+    if overnight:
+        today_key = today.isoformat()
+        merged = False
+        for day in days:
+            if str(day.get("local_date") or "")[:10] == today_key:
+                day["sessions"] = overnight + list(day.get("sessions") or [])
+                merged = True
+                break
+        if not merged:
+            days.insert(0, {"local_date": today_key, "sessions": overnight})
     if session_id is not None:
         for day in lookup_days:
             for slot in day.get("sessions") or []:
+                if int(slot["id"]) == int(session_id):
+                    focus = slot
+        if focus is None:
+            for slot in ohm_sessions:
                 if int(slot["id"]) == int(session_id):
                     focus = slot
         # Ссылку открыли позже, чем сеанс начался (или он за пределами недели) — это
@@ -373,10 +426,17 @@ async def load_place_view(
         focus_missing = focus is None and level != LEVEL_VERY_STALE
 
     all_slots = [s for d in days for s in d.get("sessions") or []]
-    next_slot = all_slots[0] if all_slots else None
+    future_slots = []
+    for slot in all_slots:
+        start = _parse_iso_dt(slot.get("starts_at_utc"))
+        if start is None or start > now:
+            future_slots.append(slot)
+    next_slot = future_slots[0] if future_slots else (all_slots[0] if all_slots else None)
     return {
         "card": card,
         "days": days,
+        "ohm_sessions": ohm_sessions,
+        "nearby": nearby,
         "focus": focus,
         "focus_missing": focus_missing,
         "next_slot": next_slot,
@@ -408,11 +468,17 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
             if start:
                 return "closed", f"Сезон закрыт · откроется в {_MONTHS_PREP[int(start) - 1]}"
             return "closed", "Сезон закрыт"
-        nxt = view.get("next_slot")
-        if nxt is not None:
-            if _parse_iso_date(nxt.get("local_date")) == today:
-                return "live", "Сегодня есть лёд"
-            return "soon", f"Ближайший лёд: {slot_when(nxt, today=today)}"
+        from src.application.place_v2 import skate_status
+
+        slots = [slot for day in (view.get("days") or []) for slot in (day.get("sessions") or [])]
+        _kind, text = skate_status(slots, now=now, today=today)
+        if _kind == "now":
+            return "live", text
+        if _kind == "today":
+            return "live", text
+        if _kind == "later":
+            return "soon", text
+        return "none", text
     label = open_now_label(card, now=now)
     if label:
         return ("open" if label.startswith("Открыто") else "shut"), label
@@ -991,64 +1057,38 @@ def render_place_page(
     share: Mapping[str, str],
     invite: bool = False,
     country: str | None = None,
+    day: str | None = None,
 ) -> str:
+    from src.application.place_v2 import build_place_body, scrub_card
+    from src.application.public_web_cta import _PHONE_BEACON_SCRIPT
+
+    view = dict(view)
+    view["card"] = scrub_card(view["card"])
     card = view["card"]
     title = page_title(view, invite=invite)
-    badge = status_badge(view)
-    vt = str(card.get("venue_type") or "ice")
-    icon = {"ice": "❄️", "gym": "🏋️", "choreo": "🩰", "pool": "🏊", "outdoor": "🌳", "shop": "🧰"}.get(vt, "📍")
-    badge_html = (
-        f'<p class="badge badge--{_esc(badge[0])}"><span class="badge__dot"></span>{_esc(badge[1])}</p>'
-        if badge
-        else ""
-    )
-    where = _where(card)
-    photo = _hero_photo_url(card)
-    photo_html = (
-        f'<img class="hero__photo" src="{_esc(photo)}" alt="{_esc(card.get("name"))}" loading="eager" decoding="async" />'
-        if photo
-        else ""
-    )
-    hero = (
-        f'<header class="hero hero--{_esc(vt)}{" hero--photo" if photo else ""}">'
-        + photo_html
-        + f'<p class="hero__type">{icon} {_esc(card.get("venue_noun") or "")}</p>'
-        f'<h1 class="hero__title">{_esc(card.get("name"))}</h1>'
-        + (f'<p class="hero__where">{_esc(where)}</p>' if where else "")
-        + badge_html
-        + "</header>"
-    )
-    description_text = str(card.get("short_description") or "").strip()
-    about = f'<p class="about">{_esc(description_text)}</p>' if description_text else ""
-    from src.application.public_web_cta import render_place_primary_actions
-
+    # cta_url / city_page_url остаются в сигнатуре: глубокая ссылка арены — не эта кнопка
+    # (TASK-211 ведёт «Следить» на start=follow_), городской «назад» строится как /c/{slug}.
+    del cta_url, city_page_url
     base_url = join_public_origin(canonical_url, "/").rstrip("/") if canonical_url else ""
-    actions = render_place_primary_actions(
-        card,
+    body, beacon = build_place_body(
+        view,
+        base_path=base_path,
+        canonical_url=canonical_url,
         base_url=base_url,
-        surface="place_page",
-        city_id=int(card.get("city_id") or 0) or None,
-        city_name=_city(card) or "",
-        telegram_url=cta_url,
+        share_url=share["share_url"],
+        share_text=share.get("share_body") or share.get("share_text") or "",
+        day=day,
+        hours_html=_hours_html(card),
+        services_html=_services_html(card),
+        trainers_html=_trainers_html(card, cta_url=None),
+        contacts_html=_contacts_html(card),
+        focus_html=_focus_html(view, invite=invite),
+        trust_html=_trust_html(view),
     )
-    body = "".join(
-        [
-            hero,
-            _focus_html(view, invite=invite),
-            about,
-            actions,
-            _schedule_html(view, base_path=base_path, invite=invite),
-            _services_html(card),
-            _hours_html(card),
-            _rental_catalog_html(card),
-            _amenities_html(card),
-            _trainers_html(card, cta_url=cta_url),
-            _contacts_html(card),
-            _share_html(share, venue_type=vt),
-        ]
-    )
+    if beacon:
+        body += _PHONE_BEACON_SCRIPT
     city = _city(card)
-    city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city)} сегодня</a>' if city_page_url and city else ""
+    city_link = ""
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
     robots = "noindex, follow" if (view.get("focus") is not None or invite) else "index, follow"
 
