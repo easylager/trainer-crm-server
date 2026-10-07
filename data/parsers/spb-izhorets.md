@@ -1,6 +1,8 @@
 # Parser spec: СПб ГБУ СОК «Ижорец» — ФОК «Ижорец» (пос. Металлострой)
 
 - arena_id: 185
+- arena_slug: spb-izhorets
+- city: Санкт-Петербург
 - parser_key: izhorets_html_v1
 - cadence: daily
 - requires_by_egress: false

@@ -1,6 +1,7 @@
 # Parser spec (skip): РЦОП Раубичи
 
 - arena_id: 15
+- arena_slug: raubichi-rcop
 - city: Раубичи
 - parser_key: raubichi_html_v1
 - cadence: weekly

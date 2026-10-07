@@ -1,6 +1,7 @@
 # Parser spec: ЛДС Неман (Коммунальная 3а)
 
 - arena_id: 11
+- arena_slug: grodno-neman
 - city: Гродно
 - parser_key: neman_hockey_news_v1
 - cadence: weekly

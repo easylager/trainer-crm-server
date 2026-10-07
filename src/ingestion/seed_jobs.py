@@ -352,24 +352,32 @@ async def _resolve_arena_id_by_slug(
     arena_slug: str,
     city_name: str,
 ) -> int | None:
-    """Resolve arena_id from (city_name, arena_slug) using city_slug() function."""
+    """Resolve arena_id from (city_name, arena_slug) using city_slug() for stable Cyrillic matching.
+    
+    Handles е/ё Unicode equivalence via city_slug() transliteration.
+    """
     from src.application.ice_city_day import city_slug
     
-    slug = city_slug(city_name)
+    target_city_slug = city_slug(city_name)
+    
+    # Fetch all arenas with matching arena_slug, then filter by city_slug in Python
     result = await session.execute(
         text("""
-            SELECT a.id
+            SELECT a.id, c.name
             FROM arenas a
             JOIN arena_profiles ap ON ap.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
             WHERE ap.slug = :arena_slug
-              AND LOWER(c.name) = LOWER(:city_name)
-            LIMIT 1
         """),
-        {"arena_slug": arena_slug, "city_name": city_name}
+        {"arena_slug": arena_slug}
     )
-    row = result.scalar()
-    return int(row) if row is not None else None
+    
+    for row in result.fetchall():
+        arena_id, db_city_name = row
+        if city_slug(db_city_name) == target_city_slug:
+            return int(arena_id)
+    
+    return None
 
 
 async def upsert_ice_parser_jobs(
@@ -380,34 +388,61 @@ async def upsert_ice_parser_jobs(
 ) -> SeedReport:
     """Insert or update one ice_parser_jobs row per arena_id. Never duplicates.
     
-    Supports both arena_id (legacy) and arena_slug+city_name (stable key) for arena resolution.
-    If seed.arena_id is 0 or missing, attempts to resolve via arena_slug+city_name from config.
+    TASK-196: arena_slug + city_name is the primary stable key. arena_id is legacy.
+    If both are present, arena_slug takes precedence and arena_id is validated for consistency.
+    Raises ValueError with all missing (city, slug) pairs if any cannot be resolved.
     """
     clock = now or datetime.now(timezone.utc)
     if clock.tzinfo is None:
         clock = clock.replace(tzinfo=timezone.utc)
-    report = SeedReport()
+    
+    # First pass: resolve all arena_ids and collect missing pairs
+    resolved_seeds: list[tuple[JobSeed, int]] = []
+    missing_pairs: list[tuple[str, str, str]] = []  # (city_name, arena_slug, parser_key)
+    
     for seed in seeds:
-        # Resolve arena_id if using slug-based lookup
-        arena_id = seed.arena_id
-        if not arena_id or arena_id == 0:
-            arena_slug = seed.config.get("arena_slug")
-            city_name = seed.config.get("city_name")
-            if arena_slug and city_name:
-                arena_id = await _resolve_arena_id_by_slug(session, arena_slug, city_name)
-                if arena_id is None:
-                    report.skipped_missing_arena += 1
-                    continue
-            else:
-                report.skipped_missing_arena += 1
-                continue
+        arena_slug = seed.config.get("arena_slug")
+        city_name = seed.config.get("city_name")
         
-        exists_arena = (
-            await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
-        ).scalar()
-        if exists_arena is None:
-            report.skipped_missing_arena += 1
-            continue
+        # arena_slug takes precedence over arena_id
+        if arena_slug and city_name:
+            resolved_id = await _resolve_arena_id_by_slug(session, arena_slug, city_name)
+            if resolved_id is None:
+                missing_pairs.append((city_name, arena_slug, seed.parser_key))
+                continue
+            
+            # If seed also has arena_id, verify consistency
+            if seed.arena_id and seed.arena_id != 0 and seed.arena_id != resolved_id:
+                raise ValueError(
+                    f"Parser {seed.parser_key}: arena_id mismatch. "
+                    f"Spec has arena_id={seed.arena_id}, but ({city_name}, {arena_slug}) resolves to arena_id={resolved_id}. "
+                    f"arena_slug takes precedence. Remove arena_id from spec or fix the conflict."
+                )
+            
+            resolved_seeds.append((seed, resolved_id))
+        elif seed.arena_id and seed.arena_id != 0:
+            # Legacy: arena_id only (no slug)
+            exists_arena = (
+                await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": seed.arena_id})
+            ).scalar()
+            if exists_arena is None:
+                missing_pairs.append((city_name or "?", "?", seed.parser_key))
+                continue
+            resolved_seeds.append((seed, seed.arena_id))
+        else:
+            # Neither slug nor valid arena_id
+            missing_pairs.append((city_name or "?", arena_slug or "?", seed.parser_key))
+    
+    # Fail explicitly if any arena cannot be resolved
+    if missing_pairs:
+        lines = [f"  - {parser_key}: ({city}, {slug})" for city, slug, parser_key in missing_pairs]
+        raise ValueError(
+            f"Failed to resolve {len(missing_pairs)} parser(s) to arenas:\n" + "\n".join(lines)
+        )
+    
+    # Second pass: upsert jobs
+    report = SeedReport()
+    for seed, arena_id in resolved_seeds:
         existing = (
             await session.execute(
                 text("SELECT id FROM ice_parser_jobs WHERE arena_id = :id"),

@@ -1,6 +1,7 @@
 # Parser spec: Ледовый дворец спорта (Барановичи)
 
 - arena_id: 23
+- arena_slug: baranovichi-lds
 - city: Барановичи
 - parser_key: baranovichi_html_v1
 - cadence: weekly

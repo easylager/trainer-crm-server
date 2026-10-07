@@ -62,10 +62,12 @@ def _expected(slug: str) -> dict:
 async def test_vitebsk_ds_matches_expected_fixture() -> None:
     """AC: 7 slots, all public_skate, stale Apr/May 2026 grid preserved verbatim."""
     expected = _expected("vitebsk-ds")
+    vitebsk_config = dict(VITEBSK_DS_CONFIG)
+    vitebsk_config["run_date"] = str(expected["captured_at"])[:10]
     job = _job(
         arena_id=29,
         parser_key=PARSER_KEY_VITEBSK_DS,
-        config=VITEBSK_DS_CONFIG,
+        config=vitebsk_config,
         slug="vitebsk-ds",
         job_id=101,
     )
@@ -163,10 +165,12 @@ async def test_orsha_arena_ocr_matches_expected_fixture() -> None:
 async def test_gorki_lds_skips_cancelled_and_announcement_only_days() -> None:
     """AC: 4-5 Sep cancellation and 1 Sep bare announcement never become slots."""
     expected = _expected("gorki-lds")
+    gorki_config = dict(GORKI_LDS_CONFIG)
+    gorki_config["run_date"] = str(expected["captured_at"])[:10]
     job = _job(
         arena_id=32,
         parser_key=PARSER_KEY_GORKI_LDS,
-        config=GORKI_LDS_CONFIG,
+        config=gorki_config,
         slug="gorki-lds",
         job_id=104,
     )
@@ -192,10 +196,12 @@ async def test_gorki_lds_skips_cancelled_and_announcement_only_days() -> None:
 async def test_ostrovets_lds_skips_no_session_cells() -> None:
     """AC: 'нет катаний' cells never become slots; 10 gold slots across 2 weeks."""
     expected = _expected("ostrovets-lds")
+    ostrovets_config = dict(OSTROVETS_LDS_CONFIG)
+    ostrovets_config["run_date"] = str(expected["captured_at"])[:10]
     job = _job(
         arena_id=41,
         parser_key=PARSER_KEY_OSTROVETS_LDS,
-        config=OSTROVETS_LDS_CONFIG,
+        config=ostrovets_config,
         slug="ostrovets-lds",
         job_id=105,
     )

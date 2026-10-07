@@ -1,6 +1,7 @@
 # Parser spec: Орша Ледовая арена
 
 - arena_id: 31
+- arena_slug: orsha-arena
 - city: Орша
 - parser_key: orsha_ocr_photo_v1
 - cadence: weekly

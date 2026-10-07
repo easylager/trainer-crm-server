@@ -1,6 +1,7 @@
 # Parser spec: Бобруйск-арена
 
 - arena_id: 38
+- arena_slug: bobruisk-arena
 - city: Бобруйск
 - parser_key: bobruiskarena_html_v1
 - cadence: daily

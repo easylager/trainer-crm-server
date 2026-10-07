@@ -1,6 +1,8 @@
 # Parser spec: Каток ХК «Юность»
 
 - arena_id: 8
+- arena_slug: minsk-junost
+- city: Минск
 - parser_key: junost_instagram_caption_v1
 - cadence: weekly
 - requires_by_egress: false

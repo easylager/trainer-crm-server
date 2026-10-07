@@ -1,6 +1,7 @@
 # Parser spec: ЛД «Гранд Каньон Айс» (СПб)
 
 - arena_id: 99
+- arena_slug: spb-grand-canyon-ice
 - city: Санкт-Петербург
 - parser_key: grandice_json_v1
 - cadence: daily

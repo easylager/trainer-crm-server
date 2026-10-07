@@ -1,6 +1,7 @@
 # Parser spec: Ледовая арена «Озерки» (СПб)
 
 - arena_id: 101
+- arena_slug: spb-ozerki
 - city: Санкт-Петербург
 - parser_key: ozerki_gcal_v1
 - cadence: daily

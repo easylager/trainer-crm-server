@@ -1,6 +1,7 @@
 # Parser spec: Горки Ледовый дворец
 
 - arena_id: 32
+- arena_slug: gorki-lds
 - city: Горки
 - parser_key: gorki_home_html_v1
 - cadence: weekly

@@ -150,8 +150,8 @@ async def test_parser_seeds_resolve_via_slug_not_id(
 
 
 @pytest.mark.asyncio
-async def test_parser_seed_skips_missing_arena(db_session: AsyncSession, clean_db_with_arenas: None) -> None:
-    """Parser seed with non-existent arena_slug is skipped, not inserted."""
+async def test_parser_seed_raises_on_missing_arena(db_session: AsyncSession, clean_db_with_arenas: None) -> None:
+    """TASK-196: Parser seed with non-existent arena_slug raises ValueError with list of missing pairs."""
     seeds = [
         JobSeed(
             arena_id=0,
@@ -167,11 +167,8 @@ async def test_parser_seed_skips_missing_arena(db_session: AsyncSession, clean_d
         ),
     ]
     
-    report = await upsert_ice_parser_jobs(db_session, seeds)
-    await db_session.commit()
-    
-    assert report.inserted == 0
-    assert report.skipped_missing_arena == 1
+    with pytest.raises(ValueError, match="Failed to resolve 1 parser"):
+        await upsert_ice_parser_jobs(db_session, seeds)
     
     # Verify no job was created
     result = await db_session.execute(
