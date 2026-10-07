@@ -285,9 +285,10 @@ async def test_arena_card_level_b_payload_has_contacts_not_sessions(
     assert feed.json()["days"] == []
     js = (REPO_ROOT / "static/webapp/arena-card.js").read_text(encoding="utf-8")
     assert "Расписание уточняется" in js
-    # Позвонить и сайт — в ряду быстрых действий под обложкой, он есть при любом состоянии льда.
+    # С 8a00820f звонок — быстрое действие «Телефон» (copyPhone), сайт рядом в quick actions.
     model = (REPO_ROOT / "static/webapp/arena-card-model.js").read_text(encoding="utf-8")
-    # TASK-207: "Позвонить" кнопки больше нет в arena-card-model.js, проверка убрана
+    assert "label: 'Телефон'" in model
+    assert "id: 'copyPhone'" in model
     assert "label: 'Сайт'" in model
     assert "renderQuickActions()" in js
 
