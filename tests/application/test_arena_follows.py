@@ -330,6 +330,40 @@ async def test_publish_queues_one_change_per_follower_and_repeat_is_silent(db_se
 
 
 @pytest.mark.asyncio
+async def test_follow_diff_failure_does_not_roll_back_publish(db_session, monkeypatch) -> None:
+    """Сбой record_publish_follow_diff не откатывает сеансы и не оставляет уведомлений."""
+    city_id = await _city(db_session)
+    arena_id = await _arena(db_session, city_id, "Чижовка-арена")
+    await _follow(db_session, arena_id, 1001)
+    await _session_row(db_session, arena_id, _FRIDAY, time(19, 0), source_id="run:old:1900")
+
+    async def _boom(*_args, **_kwargs) -> None:
+        raise RuntimeError("follow diff failed")
+
+    monkeypatch.setattr(
+        "src.application.arena_follow_notify.record_publish_follow_diff",
+        _boom,
+    )
+    await _publish(db_session, arena_id, [_draft(arena_id, _FRIDAY, time(20, 30))])
+
+    starts = (
+        await db_session.execute(
+            text(
+                """
+                SELECT starts_at_local
+                FROM ice_sessions
+                WHERE arena_id = :aid AND status = 'active'
+                ORDER BY starts_at_local
+                """
+            ),
+            {"aid": arena_id},
+        )
+    ).scalars().all()
+    assert starts == [time(20, 30)]
+    assert await _notes(db_session, arena_id) == []
+
+
+@pytest.mark.asyncio
 async def test_projected_and_beyond_seven_days_do_not_notify(db_session) -> None:
     """AC-2: projected и сеанс за горизонтом 7 дней уведомления не дают."""
     city_id = await _city(db_session)

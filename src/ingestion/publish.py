@@ -7,6 +7,8 @@ TASK-187: окно — см. ``publish_horizon``. Удаляются все бу
 """
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +18,7 @@ from src.ingestion.scrape_runs import assert_can_replace_ice_sessions
 from src.ingestion.types import CanonicalSlotDraft, PARSER_KINDS, RUN_STATUS_OK, ScrapeRunRecord
 
 _PUBLISHABLE_KINDS_SQL = ", ".join(f"'{kind}'" for kind in PARSER_KINDS)
+logger = logging.getLogger(__name__)
 
 
 class IceSessionPublisher:
@@ -58,8 +61,9 @@ class SqlAlchemyIceSessionPublisher:
         # Savepoint: one bad draft (e.g. a still-oversized field) must roll back
         # only this job's DELETE+INSERTs, not the whole scheduler-tick session —
         # otherwise every other due job in the same tick loses its work too.
-        # Диф «следить за катком» пишется в тот же savepoint: откат публикации
-        # откатывает и уведомления (TASK-213).
+        # Диф «следить за катком» — во вложенном savepoint: его сбой не откатывает
+        # уже записанные сеансы (TASK-213). Откат внешнего savepoint по-прежнему
+        # забирает и уведомления, если публикация сама не удалась.
         from src.application.arena_follow_notify import (
             arena_has_active_follows,
             load_follow_window,
@@ -68,14 +72,25 @@ class SqlAlchemyIceSessionPublisher:
         )
 
         async with self._session.begin_nested():
-            followed = await arena_has_active_follows(self._session, run.arena_id)
+            followed = False
             before_slots: dict = {}
             past_ended = None
-            if followed:
-                before_slots = await load_follow_window(
-                    self._session, run.arena_id, now=window.now, today=window.today
+            try:
+                async with self._session.begin_nested():
+                    followed = await arena_has_active_follows(self._session, run.arena_id)
+                    if followed:
+                        before_slots = await load_follow_window(
+                            self._session, run.arena_id, now=window.now, today=window.today
+                        )
+                        past_ended = await load_last_past_end(
+                            self._session, run.arena_id, now=window.now
+                        )
+            except Exception:
+                logger.exception(
+                    "follow snapshot failed for arena %s; publishing sessions anyway",
+                    run.arena_id,
                 )
-                past_ended = await load_last_past_end(self._session, run.arena_id, now=window.now)
+                followed = False
             await self._session.execute(
                 text(
                     f"""
@@ -97,17 +112,24 @@ class SqlAlchemyIceSessionPublisher:
             for draft in drafts:
                 await self._insert(draft, scrape_run_id=run_id)
             if followed:
-                after_slots = await load_follow_window(
-                    self._session, run.arena_id, now=window.now, today=window.today
-                )
-                await record_publish_follow_diff(
-                    self._session,
-                    arena_id=run.arena_id,
-                    before=before_slots,
-                    after=after_slots,
-                    past_ended_at=past_ended,
-                    now=window.now,
-                )
+                try:
+                    async with self._session.begin_nested():
+                        after_slots = await load_follow_window(
+                            self._session, run.arena_id, now=window.now, today=window.today
+                        )
+                        await record_publish_follow_diff(
+                            self._session,
+                            arena_id=run.arena_id,
+                            before=before_slots,
+                            after=after_slots,
+                            past_ended_at=past_ended,
+                            now=window.now,
+                        )
+                except Exception:
+                    logger.exception(
+                        "follow diff failed for arena %s; published sessions stay",
+                        run.arena_id,
+                    )
         return len(drafts)
 
     async def _insert(self, draft: CanonicalSlotDraft, *, scrape_run_id: int | None) -> None:
