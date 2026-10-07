@@ -82,9 +82,8 @@ async def catalog_home_page(
             surface="catalog_home",
         ),
         trainers_url=f"{base}/trainers" if base else "/trainers",
+        robots=robots,
     )
-    # Подставляем __ROBOTS__
-    html = html.replace('content="index, follow"', f'content="{robots}"', 1)
 
     await record_public_page_view(
         session,

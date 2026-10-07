@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import html as html_lib
+import logging
 import re
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
@@ -14,57 +15,80 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_city_day import (
     ICE_CITY_DAY_FROM_SQL,
+    ICE_CITY_DAY_SESSION_WHERE_SQL,
     DEFAULT_TIMEZONE,
     city_slug,
     human_date,
     plural_ru,
 )
 from src.application.ice_session_use_cases import STATUS_ACTIVE
-from src.application.place_links import join_public_origin, place_path
+from src.application.ice_time_windows import home_picker_dates, resolve_home_window
+from src.application.place_links import (
+    catalog_start_param,
+    join_public_origin,
+    place_path,
+    public_telegram_cta_url,
+)
+from src.application.schedule_staleness import LEVEL_VERY_STALE, load_arena_freshness, staleness_level
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.copy_ru import t
 from src.shared.glide_city_cookie import normalize_glide_city_slug
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, ice_discovery_countries, public_scope_params
+from src.shared.schedule_basis import (
+    SCHEDULE_BASIS_LIVE,
+    SCHEDULE_BASIS_PHOTO,
+    SCHEDULE_BASIS_PROJECTED,
+    normalize_schedule_basis,
+)
 from src.shared.specialist_roles import specialist_role_display
 
-_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "catalog-home.html"
-_NATIONWIDE_SESSIONS = 3  # TASK-210: до 3 ближайших сеансов
+_log = logging.getLogger(__name__)
 
-# TASK-210: справочник «город → область» для всех публичных BY-городов (29+).
-_BY_REGIONS: dict[str, str] = {
-    "minsk": "Минская область",
-    "brest": "Брестская область",
-    "gomel": "Гомельская область",
-    "grodno": "Гродненская область",
-    "mogilev": "Могилёвская область",
-    "vitebsk": "Витебская область",
-    "baranovichi": "Брестская область",
-    "bereza": "Брестская область",
-    "bobruisk": "Могилёвская область",
-    "borisov": "Минская область",
-    "gorki": "Могилёвская область",
-    "zhodino": "Минская область",
-    "ivatsevichi": "Брестская область",
-    "kobrin": "Брестская область",
-    "lida": "Гродненская область",
-    "luninets": "Брестская область",
-    "molodechno": "Минская область",
-    "mozyr": "Гомельская область",
-    "novopolock": "Витебская область",
-    "orsha": "Витебская область",
-    "ostrovets": "Гродненская область",
-    "pinsk": "Брестская область",
-    "polotsk": "Витебская область",
-    "pruzhany": "Брестская область",
-    "raubichi": "Минская область",
-    "rechitsa": "Гомельская область",
-    "shklov": "Могилёвская область",
-    "silichi": "Минская область",
-    "slutsk": "Минская область",
-    "soligorsk": "Минская область",
-    "svetlogorsk": "Гомельская область",
+_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "catalog-home.html"
+
+# (русское имя, область, запасные широта/долгота). Ключ справочника — city_slug(имя),
+# не ручная транслитерация: у city_slug «ц» → c, «й» → y, поэтому «Бобруйск» = bobruysk.
+_BY_CITY_ROWS: tuple[tuple[str, str, float, float], ...] = (
+    ("Минск", "Минская область", 53.9023, 27.5619),
+    ("Борисов", "Минская область", 54.2279, 28.5050),
+    ("Жодино", "Минская область", 54.0942605, 28.3262757),
+    ("Молодечно", "Минская область", 54.3011204, 26.8650159),
+    ("Озерный", "Минская область", 53.8330, 27.9830),
+    ("Раубичи", "Минская область", 54.0628, 27.7354),
+    ("Силичи", "Минская область", 54.1565, 27.8349),
+    ("Слуцк", "Минская область", 53.0274, 27.5499),
+    ("Солигорск", "Минская область", 52.7909489, 27.5366473),
+    ("Брест", "Брестская область", 52.0926764, 23.7384897),
+    ("Барановичи", "Брестская область", 53.1493182, 26.0014462),
+    ("Береза", "Брестская область", 52.5299, 24.98099),
+    ("Ивацевичи", "Брестская область", 52.7211098, 25.3303487),
+    ("Кобрин", "Брестская область", 52.2136574, 24.3641108),
+    ("Лунинец", "Брестская область", 52.2600712, 26.7899673),
+    ("Пинск", "Брестская область", 52.1221795, 26.1277244),
+    ("Пружаны", "Брестская область", 52.5663378, 24.4743121),
+    ("Витебск", "Витебская область", 55.1692254, 30.2266233),
+    ("Новополоцк", "Витебская область", 55.5069684, 28.7024495),
+    ("Орша", "Витебская область", 54.5217761, 30.4381153),
+    ("Полоцк", "Витебская область", 55.4870, 28.7858),
+    ("Гомель", "Гомельская область", 52.4604315, 31.0219016),
+    ("Жлобин", "Гомельская область", 52.902213, 30.0582516),
+    ("Мозырь", "Гомельская область", 52.0490, 29.2456),
+    ("Речица", "Гомельская область", 52.3614, 30.3947),
+    ("Светлогорск", "Гомельская область", 52.6311832, 29.718548),
+    ("Гродно", "Гродненская область", 53.6690, 23.8290),
+    ("Лида", "Гродненская область", 53.8954462, 25.3237632),
+    ("Островец", "Гродненская область", 54.6101379, 25.9612152),
+    ("Могилёв", "Могилёвская область", 53.88464, 30.32903),
+    ("Бобруйск", "Могилёвская область", 53.1423013, 29.2469144),
+    ("Горки", "Могилёвская область", 54.2747969, 30.9993037),
+    ("Шклов", "Могилёвская область", 54.2044194, 30.3049466),
+)
+_BY_REGIONS: dict[str, str] = {city_slug(name): region for name, region, _lat, _lon in _BY_CITY_ROWS}
+_BY_CITY_COORDS: dict[str, tuple[float, float]] = {
+    city_slug(name): (lat, lon) for name, _region, lat, lon in _BY_CITY_ROWS
 }
+_OTHER_REGION = "Прочие"
 
 _OBLAST_CENTER_SLUGS = frozenset({"minsk", "brest", "vitebsk", "gomel", "grodno", "mogilev"})
 _MIN_PLACES_FOR_UPCOMING_BLOCK = 5
@@ -79,39 +103,34 @@ _MAP_COUNTRY_PATH = (
     "L130,413 L82,413 L37,439 L43,394 L14,377 L55,341 L55,297 L31,270 Z"
 )
 
+# Одна строка на арену: места считаем в Python, сеансы — тем же предикатом, что «лёд сегодня».
+# Окно (:starts_at…:ends_at) и горизонт блока «Ближайшие» (:horizon_end) режутся здесь,
+# very_stale отбрасывается после load_arena_freshness — как count_sessions_on_local_calendar_day_by_city.
 _CITY_STATS_SQL = text(
     f"""
     SELECT c.id,
            c.name,
            c.country,
            c.sort_order,
-           COUNT(DISTINCT a.id) AS place_count,
-           COUNT(DISTINCT a.id) FILTER (
-             WHERE COALESCE(a.venue_type, 'ice') IN ('ice', 'outdoor')
-           ) AS ice_place_count,
-           COUNT(DISTINCT a.id) FILTER (WHERE a.venue_type = 'shop') AS shop_count,
-           AVG(a.latitude) FILTER (
-             WHERE a.latitude IS NOT NULL AND a.longitude IS NOT NULL
-           ) AS avg_lat,
-           AVG(a.longitude) FILTER (
-             WHERE a.latitude IS NOT NULL AND a.longitude IS NOT NULL
-           ) AS avg_lon,
-           COUNT(DISTINCT s.id) AS session_count,
-           COUNT(DISTINCT a.id) FILTER (WHERE s.id IS NOT NULL) AS arenas_with_sessions,
-           CASE WHEN COUNT(DISTINCT a.id) = 1 THEN MAX(p.slug) ELSE NULL END AS sole_place_slug
+           a.id AS arena_id,
+           COALESCE(a.venue_type, 'ice') AS venue_type,
+           a.latitude,
+           a.longitude,
+           MAX(p.slug) AS place_slug,
+           COUNT(DISTINCT s.id) FILTER (
+             WHERE s.starts_at_utc >= :starts_at
+               AND s.starts_at_utc < :ends_at
+           ) AS window_sessions,
+           COUNT(DISTINCT s.id) AS horizon_sessions
     FROM cities c
     JOIN arenas a ON a.city_id = c.id
     LEFT JOIN arena_profiles p ON p.arena_id = a.id
     LEFT JOIN ice_sessions s ON s.arena_id = a.id
-      AND s.status = :st
-      AND s.kind IN ('public_skate', 'open_ice')
-      AND s.starts_at_utc >= :starts_at
-      AND s.starts_at_utc < :ends_at
-      AND (s.valid_until IS NULL OR s.valid_until >= :starts_at)
+      AND s.starts_at_utc < :horizon_end
+      {ICE_CITY_DAY_SESSION_WHERE_SQL}
     WHERE c.id = ANY(:city_ids)
       AND {PUBLIC_ARENA_VISIBLE_SQL}
-    GROUP BY c.id, c.name, c.country, c.sort_order
-    HAVING COUNT(DISTINCT a.id) > 0
+    GROUP BY c.id, c.name, c.country, c.sort_order, a.id, a.venue_type, a.latitude, a.longitude
     """
 )
 
@@ -164,91 +183,8 @@ _HOME_TRAINERS_SQL = text(
 _COUNTRY_SECTION_ORDER = ("BY", "RU")
 _COUNTRY_SECTION_LABEL = {"BY": "Беларусь", "RU": "Россия"}
 _MINSK_SLUG = "minsk"
-
-
-# TASK-210: выбор периода времени
-def _default_when_key(now: datetime) -> str:
-    """Умный дефолт: Пн-Пт до 15:00 — 'today'; Пт с 15:00, Сб, Вс — 'weekend'."""
-    tz = ZoneInfo(DEFAULT_TIMEZONE)  # Europe/Minsk
-    local = now.astimezone(tz)
-    weekday = local.weekday()  # 0 = Пн, 4 = Пт, 5 = Сб, 6 = Вс
-
-    # Пт с 15:00 до конца дня — weekend
-    if weekday == 4 and local.time() >= time(15, 0):
-        return "weekend"
-    # Сб весь день — weekend
-    if weekday == 5:
-        return "weekend"
-    # Вс до 18:00 — weekend; после 18:00 — следующие выходные
-    if weekday == 6:
-        if local.time() < time(18, 0):
-            return "weekend"
-        else:
-            return "weekend"  # следующие выходные, но всё равно ключ weekend
-    # Остальное — today
-    return "today"
-
-
-def _parse_when(when: str | None, now: datetime) -> tuple[str, datetime, datetime]:
-    """Возвращает (key, starts_at, ends_at) для фильтрации сеансов."""
-    tz = ZoneInfo(DEFAULT_TIMEZONE)
-    local = now.astimezone(tz)
-    today = local.date()
-
-    key = (when or "").strip().lower()
-    if key == "day":
-        tz = ZoneInfo(DEFAULT_TIMEZONE)
-        today = local.date()
-        starts_at = now
-        ends_at = datetime.combine(today + timedelta(days=1), time(0, 0), tzinfo=tz).astimezone(timezone.utc)
-        return "day", starts_at, ends_at
-    if not key or key not in ("today", "tomorrow", "weekend"):
-        key = _default_when_key(now)
-
-    # Сегодня: с now до конца дня
-    if key == "today":
-        starts_at = now
-        ends_at = datetime.combine(today + timedelta(days=1), time(0, 0), tzinfo=tz).astimezone(timezone.utc)
-        return "today", starts_at, ends_at
-
-    # Завтра: завтра весь день
-    if key == "tomorrow":
-        tomorrow = today + timedelta(days=1)
-        starts_at = datetime.combine(tomorrow, time(0, 0), tzinfo=tz).astimezone(timezone.utc)
-        ends_at = datetime.combine(tomorrow + timedelta(days=1), time(0, 0), tzinfo=tz).astimezone(timezone.utc)
-        return "tomorrow", starts_at, ends_at
-
-    # В выходные: Сб 00:00 - Пн 00:00 (или с текущего момента, если сейчас выходные)
-    if key == "weekend":
-        # Если сейчас Сб или Вс, начинаем с текущего момента
-        if today.weekday() in (5, 6):  # Сб или Вс
-            saturday = today - timedelta(days=today.weekday() - 5)
-        else:
-            # Ближайшая суббота
-            saturday = today + timedelta(days=(5 - today.weekday()) % 7)
-            if saturday == today and local.time() >= time(18, 0) and today.weekday() == 6:
-                # Вс после 18:00 — следующие выходные
-                saturday = today + timedelta(days=6)
-
-        monday = saturday + timedelta(days=2)
-        starts_at = max(now, datetime.combine(saturday, time(0, 0), tzinfo=tz).astimezone(timezone.utc))
-        ends_at = datetime.combine(monday, time(0, 0), tzinfo=tz).astimezone(timezone.utc)
-        return "weekend", starts_at, ends_at
-
-def _parse_day_date(d: str | None, now: datetime) -> date | None:
-    """Парсит ?d=YYYY-MM-DD, возвращает дату или None."""
-    if not d:
-        return None
-    try:
-        parsed = date.fromisoformat(d.strip())
-        tz = ZoneInfo(DEFAULT_TIMEZONE)
-        today = now.astimezone(tz).date()
-        # Проверяем, что дата в допустимом диапазоне (сегодня ... +7 дней)
-        if today <= parsed <= today + timedelta(days=7):
-            return parsed
-    except (ValueError, AttributeError):
-        pass
-    return None
+_UPCOMING_HORIZON_DAYS = 7
+_MINUTES_UNTIL_LIMIT = 120
 
 
 def _is_minsk_city(city: Mapping[str, Any]) -> bool:
@@ -279,21 +215,6 @@ def group_catalog_cities_by_country(cities: list[dict[str, Any]]) -> list[tuple[
     return groups
 
 
-def catalog_home_headline(countries: set[str]) -> tuple[str, str]:
-    """``(h1, document title)`` — не обещаем «только Беларусь», если в списке есть RU."""
-    codes = {c.strip().upper() for c in countries if c}
-    if codes == {"BY"} or (not codes):
-        h1 = "Катки Беларуси"
-        title = "Катки Беларуси — расписание и города | Glide"
-    elif codes <= {"BY", "RU"} and "RU" in codes:
-        h1 = "Катки — расписание по городам"
-        title = "Катки Беларуси и России — расписание и города | Glide"
-    else:
-        h1 = "Катки — расписание по городам"
-        title = "Катки — расписание и города | Glide"
-    return h1, title
-
-
 _USER_UPCOMING_SQL = text(
     f"""
 WITH city_clock AS (
@@ -315,16 +236,17 @@ SELECT c.name AS city_name,
        s.local_date,
        s.schedule_basis,
        s.starts_at_utc,
+       s.price_adult_minor,
+       s.price_rental_minor,
+       s.currency_code,
        cc.tz AS city_timezone
 {ICE_CITY_DAY_FROM_SQL}
 JOIN city_clock cc ON cc.city_id = a.city_id
 WHERE a.city_id = :user_city_id
-  AND {PUBLIC_ARENA_VISIBLE_SQL}
-  AND s.status = :st
-  AND s.kind IN ('public_skate', 'open_ice')
   AND s.starts_at_utc >= :starts_at
   AND s.starts_at_utc < :ends_at
-  AND (s.valid_until IS NULL OR s.valid_until >= :starts_at)
+  AND NOT (a.id = ANY(:very_stale_ids))
+  {ICE_CITY_DAY_SESSION_WHERE_SQL}
 ORDER BY s.starts_at_utc, s.id
 LIMIT :lim
 """
@@ -345,21 +267,6 @@ def _local_today(tz_name: str, now: datetime) -> date:
     except Exception:  # noqa: BLE001
         tz = ZoneInfo(DEFAULT_TIMEZONE)
     return now.astimezone(tz).date()
-
-
-def _sessions_block_title(sessions: list[Mapping[str, Any]], *, now: datetime) -> str:
-    if not sessions:
-        return "Лёд сегодня"
-    all_today = True
-    for row in sessions:
-        tz_name = str(row.get("city_timezone") or DEFAULT_TIMEZONE)
-        local_date = row.get("local_date")
-        if not isinstance(local_date, date):
-            continue
-        if local_date != _local_today(tz_name, now):
-            all_today = False
-            break
-    return "Лёд сегодня" if all_today else "Ближайший лёд"
 
 
 _WEEKDAYS_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
@@ -405,15 +312,79 @@ def _map_dot_radius(place_count: int) -> float:
 
 
 def _build_day_picker(now: datetime) -> list[dict[str, str]]:
-    tz = ZoneInfo(DEFAULT_TIMEZONE)
-    today = now.astimezone(tz).date()
     items: list[dict[str, str]] = []
-    for offset in range(7):
-        d = today + timedelta(days=offset)
+    for d in home_picker_dates(now):
         wd = _WEEKDAYS_SHORT[d.weekday()]
         label = f"{wd}, {d.day} {_MONTHS_SHORT[d.month - 1]}"
         items.append({"date": d.isoformat(), "label": label, "href": f"/?when=day&d={d.isoformat()}"})
     return items
+
+
+def _minsk_date(now: datetime) -> date:
+    return now.astimezone(ZoneInfo(DEFAULT_TIMEZONE)).date()
+
+
+def _aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _minutes_until(basis: str, starts: Any, now: datetime) -> int | None:
+    """Минуты до старта. Только живой сеанс и строго меньше двух часов; projected — всегда None."""
+    if basis != SCHEDULE_BASIS_LIVE:
+        return None
+    if not isinstance(starts, datetime):
+        return None
+    minutes = int((_aware_utc(starts) - _aware_utc(now)).total_seconds() // 60)
+    if minutes <= 0 or minutes >= _MINUTES_UNTIL_LIMIT:
+        return None
+    return minutes
+
+
+def _price_with_rental(row: Mapping[str, Any]) -> str | None:
+    adult = row.get("price_adult_minor")
+    rental = row.get("price_rental_minor")
+    if adult is None or rental is None:
+        return None
+    total = int(adult) + int(rental)
+    major = total / 100.0
+    total_text = str(int(major)) if major == int(major) else f"{major:.2f}"
+    currency = str(row.get("currency_code") or "BYN")
+    return t("price.with_rental", total=total_text, currency=currency)
+
+
+def _basis_fields(basis: str) -> tuple[str, str | None]:
+    if basis == SCHEDULE_BASIS_PROJECTED:
+        return t("basis.projected"), t("basis.projected_long")
+    if basis == SCHEDULE_BASIS_LIVE:
+        return t("basis.live"), None
+    if basis == SCHEDULE_BASIS_PHOTO:
+        return t("basis.photo"), None
+    return "", None
+
+
+def _session_card(row: Mapping[str, Any], *, now: datetime) -> dict[str, Any]:
+    basis = normalize_schedule_basis(None if row.get("schedule_basis") is None else str(row.get("schedule_basis")))
+    label, long = _basis_fields(basis)
+    card = dict(row)
+    card["schedule_basis"] = basis
+    card["minutes_until"] = _minutes_until(basis, row.get("starts_at_utc"), now)
+    card["price_with_rental"] = _price_with_rental(row)
+    card["basis_label"] = label
+    card["basis_long"] = long
+    return card
+
+
+def _trainer_card_href(city_id: int) -> str:
+    """До TASK-206 страницы тренера нет: тот же open-telegram, что у кнопки каталога."""
+    href = public_telegram_cta_url(
+        "",
+        start_param=catalog_start_param(int(city_id), intent="coach"),
+        surface="catalog_home",
+        city_id=int(city_id),
+    )
+    return href or ""
 
 
 def _period_when_phrase(when_key: str) -> str:
@@ -459,13 +430,24 @@ def _upcoming_block_title(city_name: str, when_key: str) -> str:
     return t("home.upcoming.city", city=city_name)
 
 
-def _upcoming_more_href(city: Mapping[str, Any], when_key: str) -> str:
+def _upcoming_more_href(
+    city: Mapping[str, Any],
+    when_key: str,
+    *,
+    selected_day: date | None,
+    today: date,
+) -> str | None:
+    """«Все →». ``w`` — как ``selection_page.clean_when``. Для дня есть только страница «сегодня»."""
     slug = str(city["slug"])
     if when_key == "weekend":
-        return f"/c/{slug}?when=weekend"
-    if when_key in ("today", "tomorrow"):
+        return f"/c/{slug}?w=weekend"
+    if when_key == "tomorrow":
+        return f"/c/{slug}?w=tomorrow"
+    if when_key == "today":
+        return f"/c/{slug}?w=today"
+    if when_key == "day" and selected_day == today:
         return f"/ice/{slug}/today"
-    return f"/c/{slug}?when={when_key}"
+    return None
 
 
 def build_city_layout(catalog_cities: list[dict[str, Any]]) -> dict[str, Any]:
@@ -473,9 +455,7 @@ def build_city_layout(catalog_cities: list[dict[str, Any]]) -> dict[str, Any]:
     ru_cities = [c for c in catalog_cities if str(c.get("country") or "").upper() == "RU"]
     minsk = next((c for c in by_cities if str(c.get("slug")) == _MINSK_SLUG), None)
     oblast_centers = [
-        c
-        for c in by_cities
-        if str(c.get("slug")) in _OBLAST_CENTER_SLUGS and str(c.get("slug")) != _MINSK_SLUG
+        c for c in by_cities if str(c.get("slug")) in _OBLAST_CENTER_SLUGS and str(c.get("slug")) != _MINSK_SLUG
     ]
     oblast_centers.sort(key=lambda c: (-int(c.get("session_count") or 0), str(c.get("name") or "")))
     used_slugs = {str(c.get("slug")) for c in ([minsk] if minsk else []) + oblast_centers}
@@ -486,7 +466,13 @@ def build_city_layout(catalog_cities: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         region = _BY_REGIONS.get(slug)
         if not region:
-            continue
+            region = _OTHER_REGION
+            _log.warning(
+                "BY city %s (%s) has no oblast in the home directory; grouped as %s",
+                city.get("name"),
+                slug,
+                _OTHER_REGION,
+            )
         region_buckets.setdefault(region, []).append(city)
     for _region, group in region_buckets.items():
         group.sort(key=lambda c: (-int(c.get("session_count") or 0), str(c.get("name") or "")))
@@ -541,7 +527,9 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
         )
     parts.append('<g fill="#0f8f8a">')
     for pt in points:
-        title = f'{pt["name"]} — {pt["session_count"]} {plural_ru(int(pt["session_count"]), "сеанс", "сеанса", "сеансов")}'
+        title = (
+            f"{pt['name']} — {pt['session_count']} {plural_ru(int(pt['session_count']), 'сеанс', 'сеанса', 'сеансов')}"
+        )
         parts.append(
             f'<a href="/c/{_esc(pt["slug"])}"><title>{_esc(title)}</title>'
             f'<circle cx="{float(pt["x"]):.1f}" cy="{float(pt["y"]):.1f}" r="{float(pt["r"]):.1f}"/></a>'
@@ -551,9 +539,87 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
     for pt in points:
         if not pt.get("is_oblast_center"):
             continue
-        parts.append(f'<text x="{float(pt["x"]):.1f}" y="{float(pt["y"]) - float(pt["r"]) - 6:.1f}">{_esc(pt["name"])}</text>')
+        parts.append(
+            f'<text x="{float(pt["x"]):.1f}" y="{float(pt["y"]) - float(pt["r"]) - 6:.1f}">{_esc(pt["name"])}</text>'
+        )
     parts.append("</g></svg>")
     return "".join(parts)
+
+
+def _fold_arena_rows(rows: list[Mapping[str, Any]], *, very_stale: set[int]) -> list[dict[str, Any]]:
+    buckets: dict[int, dict[str, Any]] = {}
+    order: list[int] = []
+    for row in rows:
+        cid = int(row["id"])
+        if cid not in buckets:
+            order.append(cid)
+            buckets[cid] = {
+                "id": cid,
+                "name": str(row["name"]),
+                "country": str(row["country"] or ""),
+                "slug": city_slug(str(row["name"])),
+                "place_count": 0,
+                "ice_place_count": 0,
+                "shop_count": 0,
+                "session_count": 0,
+                "arenas_with_sessions": 0,
+                "horizon_arenas_with_sessions": 0,
+                "_lat_sum": 0.0,
+                "_lon_sum": 0.0,
+                "_lat_n": 0,
+                "_slugs": [],
+            }
+        city = buckets[cid]
+        city["place_count"] += 1
+        venue = str(row.get("venue_type") or "ice")
+        if venue in ("ice", "outdoor"):
+            city["ice_place_count"] += 1
+        if venue == "shop":
+            city["shop_count"] += 1
+        lat, lon = row.get("latitude"), row.get("longitude")
+        if lat is not None and lon is not None:
+            city["_lat_sum"] += float(lat)
+            city["_lon_sum"] += float(lon)
+            city["_lat_n"] += 1
+        place_slug = str(row.get("place_slug") or "").strip()
+        if place_slug:
+            city["_slugs"].append(place_slug)
+        aid = int(row["arena_id"])
+        stale = aid in very_stale
+        window_n = 0 if stale else int(row.get("window_sessions") or 0)
+        horizon_n = 0 if stale else int(row.get("horizon_sessions") or 0)
+        city["session_count"] += window_n
+        if window_n > 0:
+            city["arenas_with_sessions"] += 1
+        if horizon_n > 0:
+            city["horizon_arenas_with_sessions"] += 1
+    cities: list[dict[str, Any]] = []
+    for cid in order:
+        city = buckets[cid]
+        if city["_lat_n"]:
+            city["avg_lat"] = city["_lat_sum"] / city["_lat_n"]
+            city["avg_lon"] = city["_lon_sum"] / city["_lat_n"]
+        else:
+            fallback = _BY_CITY_COORDS.get(str(city["slug"]))
+            if fallback:
+                city["avg_lat"], city["avg_lon"] = fallback
+            else:
+                city["avg_lat"] = None
+                city["avg_lon"] = None
+        city["sole_place_slug"] = city["_slugs"][0] if city["place_count"] == 1 and city["_slugs"] else None
+        for key in ("_lat_sum", "_lon_sum", "_lat_n", "_slugs"):
+            del city[key]
+        cities.append(city)
+    return cities
+
+
+def _selected_home_day(when_key: str, window_date: str | None, *, show_day_picker: bool, today: date) -> date | None:
+    """Календарный день для ``when=day``. Пикер без даты — None. Неверный ``d`` — сегодня."""
+    if when_key != "day" or show_day_picker:
+        return None
+    if window_date:
+        return date.fromisoformat(window_date)
+    return today
 
 
 async def load_catalog_home_view(
@@ -573,18 +639,12 @@ async def load_catalog_home_view(
     """
     from src.application.ice_city_day import _public_cities
 
-    now = now or _utc_now()
-    when_key, period_start, period_end = _parse_when(when, now)
-    tz = ZoneInfo(DEFAULT_TIMEZONE)
-    show_day_picker = False
-    if when_key == "day":
-        parsed_day = _parse_day_date(day_date, now)
-        raw_day = (day_date or "").strip()
-        if not raw_day:
-            show_day_picker = True
-        target_date = parsed_day or now.astimezone(tz).date()
-        period_start = datetime.combine(target_date, time(0, 0), tzinfo=tz).astimezone(timezone.utc)
-        period_end = datetime.combine(target_date + timedelta(days=1), time(0, 0), tzinfo=tz).astimezone(timezone.utc)
+    now = _aware_utc(now or _utc_now())
+    when_key, window, show_day_picker = resolve_home_window(when, day_date, now)
+    period_start, period_end = window.starts_at, window.ends_at
+    today = _minsk_date(now)
+    selected_day = _selected_home_day(when_key, window.local_date, show_day_picker=show_day_picker, today=today)
+    horizon_end = now + timedelta(days=_UPCOMING_HORIZON_DAYS)
 
     cities = await _public_cities(session)
     empty: dict[str, Any] = {
@@ -601,6 +661,7 @@ async def load_catalog_home_view(
         "when_key": when_key,
         "period_start": period_start,
         "period_end": period_end,
+        "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": None,
         "map_points": [],
         "map_svg": "",
@@ -613,36 +674,32 @@ async def load_catalog_home_view(
 
     city_ids = [int(c["id"]) for c in cities]
     stats_rows = (
-        await session.execute(
-            _CITY_STATS_SQL,
-            {
-                "city_ids": city_ids,
-                "starts_at": period_start,
-                "ends_at": period_end,
-                "st": STATUS_ACTIVE,
-                **public_scope_params(),
-            },
+        (
+            await session.execute(
+                _CITY_STATS_SQL,
+                {
+                    "city_ids": city_ids,
+                    "starts_at": period_start,
+                    "ends_at": period_end,
+                    "horizon_end": horizon_end,
+                    "now": now,
+                    "st": STATUS_ACTIVE,
+                    **public_scope_params(),
+                },
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
-    catalog_cities: list[dict[str, Any]] = []
-    for row in stats_rows:
-        catalog_cities.append(
-            {
-                "id": int(row["id"]),
-                "name": str(row["name"]),
-                "country": str(row["country"] or ""),
-                "slug": city_slug(str(row["name"])),
-                "place_count": int(row["place_count"] or 0),
-                "ice_place_count": int(row["ice_place_count"] or 0),
-                "shop_count": int(row["shop_count"] or 0),
-                "session_count": int(row["session_count"] or 0),
-                "arenas_with_sessions": int(row["arenas_with_sessions"] or 0),
-                "avg_lat": row.get("avg_lat"),
-                "avg_lon": row.get("avg_lon"),
-                "sole_place_slug": row.get("sole_place_slug"),
-            }
-        )
+    session_arena_ids = [
+        int(row["arena_id"])
+        for row in stats_rows
+        if int(row.get("window_sessions") or 0) > 0 or int(row.get("horizon_sessions") or 0) > 0
+    ]
+    fresh = await load_arena_freshness(session, session_arena_ids, now=now) if session_arena_ids else {}
+    very_stale = {aid for aid, item in fresh.items() if staleness_level(item) == LEVEL_VERY_STALE}
+    catalog_cities = _fold_arena_rows(list(stats_rows), very_stale=very_stale)
 
     city_groups = group_catalog_cities_by_country(catalog_cities)
     catalog_cities = [city for _, group in city_groups for city in group]
@@ -650,44 +707,56 @@ async def load_catalog_home_view(
     user_city = _resolve_user_city(catalog_cities, user_city_slug=user_city_slug, public_slug_set=public_slug_set)
     user_city_id = int(user_city["id"]) if user_city else None
     show_upcoming_block = bool(
-        user_city and int(user_city.get("arenas_with_sessions") or 0) >= _MIN_PLACES_FOR_UPCOMING_BLOCK
+        user_city and int(user_city.get("horizon_arenas_with_sessions") or 0) >= _MIN_PLACES_FOR_UPCOMING_BLOCK
     )
 
     sessions: list[dict[str, Any]] = []
     if show_upcoming_block and user_city_id is not None:
         upcoming = (
+            (
+                await session.execute(
+                    _USER_UPCOMING_SQL,
+                    {
+                        "user_city_id": user_city_id,
+                        "starts_at": period_start,
+                        "ends_at": period_end,
+                        "now": now,
+                        "st": STATUS_ACTIVE,
+                        "lim": _USER_UPCOMING_LIMIT,
+                        "very_stale_ids": sorted(very_stale) or [-1],
+                        **public_scope_params(),
+                    },
+                )
+            )
+            .mappings()
+            .all()
+        )
+        sessions = [_session_card(row, now=now) for row in upcoming]
+
+    hockey_row = (
+        (
             await session.execute(
-                _USER_UPCOMING_SQL,
+                _HOCKEY_FUTURE_SQL,
                 {
-                    "user_city_id": user_city_id,
-                    "starts_at": period_start,
-                    "ends_at": period_end,
+                    "now": now,
                     "st": STATUS_ACTIVE,
-                    "lim": _USER_UPCOMING_LIMIT,
+                    "ice_countries": list(ice_discovery_countries()),
                     **public_scope_params(),
                 },
             )
-        ).mappings().all()
-        sessions = [dict(r) for r in upcoming]
-
-    hockey_row = (
-        await session.execute(
-            _HOCKEY_FUTURE_SQL,
-            {"now": now, "st": STATUS_ACTIVE, "ice_countries": list(ice_discovery_countries()), **public_scope_params()},
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     has_hockey = bool(hockey_row and hockey_row.get("has_hockey"))
 
     trainers: list[dict[str, Any]] = []
     shop_count = 0
     if user_city_id is not None:
         shop_count = int(user_city.get("shop_count") or 0) if user_city else 0
-        trainer_rows = (
-            await session.execute(_HOME_TRAINERS_SQL, {"city_id": user_city_id})
-        ).mappings().all()
+        trainer_rows = (await session.execute(_HOME_TRAINERS_SQL, {"city_id": user_city_id})).mappings().all()
         for row in trainer_rows:
             role = specialist_role_display(str(row.get("specialist_role") or ""))
-            arena_slug = str(row.get("arena_slug") or "").strip()
             arena_name = str(row.get("arena_name") or "").strip()
             trainers.append(
                 {
@@ -695,9 +764,7 @@ async def load_catalog_home_view(
                     "name": str(row.get("full_name") or "").strip() or "Тренер",
                     "specialization": role,
                     "arena_name": arena_name,
-                    "href": f"/t/{city_slug(str(row.get('city_name') or ''))}/{int(row['id'])}"
-                    if arena_slug
-                    else f"/trainers",
+                    "href": _trainer_card_href(user_city_id),
                 }
             )
 
@@ -718,10 +785,11 @@ async def load_catalog_home_view(
             "place_count": int(user_city.get("place_count") or 0),
             "ice_place_count": int(user_city.get("ice_place_count") or 0),
             "arenas_with_sessions": int(user_city.get("arenas_with_sessions") or 0),
+            "horizon_arenas_with_sessions": int(user_city.get("horizon_arenas_with_sessions") or 0),
             "href": _user_city_button_href(user_city),
             "when_phrase": _period_when_phrase(when_key),
             "show_upcoming_block": show_upcoming_block,
-            "upcoming_more_href": _upcoming_more_href(user_city, when_key),
+            "upcoming_more_href": _upcoming_more_href(user_city, when_key, selected_day=selected_day, today=today),
         }
 
     return {
@@ -736,6 +804,7 @@ async def load_catalog_home_view(
         "day_picker": _build_day_picker(now) if show_day_picker else [],
         "country": country,
         "when_key": when_key,
+        "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": user_city_vm,
         "user_city_id": user_city_id,
         "user_city_slug": str(user_city["slug"]) if user_city else _MINSK_SLUG,
@@ -745,7 +814,8 @@ async def load_catalog_home_view(
             "hockey": has_hockey,
             "rollerski": False,
             "first_time_href": "/first-time",
-            "hockey_href": f"/c/{user_city_vm['slug']}?kind=ohm" if user_city_vm and has_hockey else None,
+            # /c/ не понимает kind=ohm — чип скрыт, пока фильтр не появится (Q-001 / спека).
+            "hockey_href": None,
         },
         "trainers": trainers,
         "shop_count": shop_count,
@@ -779,20 +849,16 @@ def _day_picker_html(items: list[Mapping[str, Any]]) -> str:
     if not items:
         return ""
     links = "".join(
-        f'<li><a href="{html_lib.escape(str(it.get("href") or ""), quote=True)}">'
-        f'{_esc(it.get("label"))}</a></li>'
+        f'<li><a href="{html_lib.escape(str(it.get("href") or ""), quote=True)}">{_esc(it.get("label"))}</a></li>'
         for it in items
     )
     return f'<nav class="day-picker"><ul>{links}</ul></nav>'
 
 
-def _chips_html(chips: Mapping[str, Any], *, user_city_slug: str) -> str:
+def _chips_html(chips: Mapping[str, Any]) -> str:
     parts = [f'<a class="chip chip--active" href="/">{_esc(t("chip.ice"))}</a>']
-    if chips.get("hockey") and chips.get("hockey_href"):
-        parts.append(f'<a class="chip" href="{_esc(chips["hockey_href"])}">{_esc(t("chip.hockey"))}</a>')
     parts.append(
-        f'<a class="chip" href="{_esc(chips.get("first_time_href") or "/first-time")}">'
-        f'{_esc(t("chip.first_time"))}</a>'
+        f'<a class="chip" href="{_esc(chips.get("first_time_href") or "/first-time")}">{_esc(t("chip.first_time"))}</a>'
     )
     return '<div class="chips">' + "".join(parts) + "</div>"
 
@@ -830,7 +896,7 @@ def _cities_html(city_groups: list[tuple[str, list[Mapping[str, Any]]]]) -> str:
 
 
 def _session_row(row: Mapping[str, Any], *, now: datetime) -> str:
-    """Рендеринг строки сеанса. TASK-210: projected сеансы — пунктир и метка 'обычно'."""
+    """Строка сеанса. «через N мин» берётся из view-model и у projected всегда пусто."""
     city_name = str(row["city_name"])
     slug = str(row.get("arena_slug") or "").strip()
     arena_name = str(row["arena_name"])
@@ -838,10 +904,8 @@ def _session_row(row: Mapping[str, Any], *, now: datetime) -> str:
     ends = str(row.get("ends_at_local") or "").strip()
     time_text = f"{starts}–{ends}" if starts and ends else (starts or ends or "—")
     day_label = _session_day_label(row, now=now)
-
-    # TASK-210: projected сеансы с меткой
-    schedule_basis = str(row.get("schedule_basis") or "live")
-    is_projected = schedule_basis == "projected"
+    basis = str(row.get("schedule_basis") or SCHEDULE_BASIS_LIVE)
+    is_projected = basis == SCHEDULE_BASIS_PROJECTED
 
     if slug:
         href = place_path(city_name=city_name, slug=slug)
@@ -852,22 +916,25 @@ def _session_row(row: Mapping[str, Any], *, now: datetime) -> str:
         name_html = _esc(arena_name)
 
     day_html = f'<span class="session__day">{_esc(day_label)}</span>' if day_label else ""
-
-    # TASK-210: для projected — пунктир и метка
-    session_class = "session"
-    if is_projected:
-        session_class += " session--projected"
-
-    basis_note = ""
-    if is_projected:
-        basis_note = f' <span class="session__basis">{_esc(t("basis.projected"))}</span>'
+    soon_html = ""
+    if row.get("minutes_until") is not None and not is_projected:
+        soon_html = f'<span class="session__soon">через {int(row["minutes_until"])} мин</span>'
+    session_class = "session session--projected" if is_projected else "session"
+    extras: list[str] = []
+    if row.get("basis_label"):
+        extras.append(f'<span class="session__basis">{_esc(row.get("basis_label"))}</span>')
+    if row.get("basis_long"):
+        extras.append(f'<span class="session__basis-long">{_esc(row.get("basis_long"))}</span>')
+    if row.get("price_with_rental"):
+        extras.append(f'<span class="session__price">{_esc(row.get("price_with_rental"))}</span>')
 
     return (
         f'<li class="{session_class}">'
         f'{day_html}<span class="session__time">{_esc(time_text)}</span>'
+        f"{soon_html}"
         f'<span class="session__place">{name_html}</span>'
         f'<span class="session__city">{_esc(city_name)}</span>'
-        f"{basis_note}"
+        f"{''.join(extras)}"
         "</li>"
     )
 
@@ -923,17 +990,6 @@ def _format_date_string(now: datetime) -> str:
     return f"{weekday.capitalize()}, {local.day} {months_gen[local.month - 1]}"
 
 
-def _when_label(key: str) -> str:
-    """Подпись для переключателя времени."""
-    labels = {
-        "today": t("when.today"),
-        "tomorrow": t("when.tomorrow"),
-        "weekend": t("when.weekend"),
-        "day": t("when.day"),
-    }
-    return labels.get(key, t("when.today"))
-
-
 def _counter_text(session_count: int, city_count: int, when_key: str) -> str:
     when_text = {
         "today": t("home.counter.when.today"),
@@ -958,6 +1014,7 @@ def render_catalog_home_page(
     og_image_url: str,
     cta_url: str | None,
     trainers_url: str,
+    robots: str = "index, follow",
 ) -> str:
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     cities = list(view.get("cities") or [])
@@ -974,7 +1031,6 @@ def render_catalog_home_page(
 
     when_key = str(view.get("when_key") or "today")
 
-    country_codes = {str(c.get("country") or "BY").upper() for c in cities}
     # TASK-210: нейтральный заголовок (PDEC-019)
     page_h1 = "Где покататься"
     title = "Где покататься в Беларуси — катки и расписание массовых катаний | Glide"
@@ -983,10 +1039,19 @@ def render_catalog_home_page(
     )
     cities_html = _cities_html(city_groups)
     show_upcoming = bool(view.get("show_upcoming_block"))
+    user_city = view.get("user_city") if isinstance(view.get("user_city"), Mapping) else None
+    more_href = str(user_city.get("upcoming_more_href") or "") if user_city else ""
+    more_html = (
+        f'<p class="sessions__more"><a href="{_esc(more_href)}">Все →</a></p>' if show_upcoming and more_href else ""
+    )
     if show_upcoming and sessions:
-        sessions_html = '<ul class="sessions">' + "".join(_session_row(s, now=now) for s in sessions) + "</ul>"
+        sessions_html = (
+            '<ul class="sessions">' + "".join(_session_row(s, now=now) for s in sessions) + "</ul>" + more_html
+        )
     elif show_upcoming:
-        sessions_html = '<p class="muted">Ближайших сеансов пока нет — загляните в расписание по городу.</p>'
+        sessions_html = (
+            '<p class="muted">Ближайших сеансов пока нет — загляните в расписание по городу.</p>' + more_html
+        )
     else:
         sessions_html = ""
         sessions_title = ""
@@ -1000,11 +1065,9 @@ def render_catalog_home_page(
     cities_with_sessions = len([c for c in by_cities if int(c.get("session_count") or 0) > 0])
     counter_text = _counter_text(total_sessions, cities_with_sessions, when_key)
 
-    user_city = view.get("user_city") if isinstance(view.get("user_city"), Mapping) else None
     chips = view.get("chips") if isinstance(view.get("chips"), Mapping) else {}
     day_picker = view.get("day_picker") if isinstance(view.get("day_picker"), list) else []
     map_svg = str(view.get("map_svg") or "")
-    user_city_slug = str(view.get("user_city_slug") or _MINSK_SLUG)
 
     values = {
         "__LANG__": lang,
@@ -1013,13 +1076,13 @@ def render_catalog_home_page(
         "__OG_DESCRIPTION__": _esc(description),
         "__CANONICAL__": _esc(canonical_url),
         "__OG_IMAGE__": _esc(og_image_url),
-        "__ROBOTS__": "index, follow",
+        "__ROBOTS__": _esc(robots),
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url),
         "__CITIES__": cities_html,
         "__MAP_SVG__": map_svg,
         "__DAY_PICKER__": _day_picker_html(day_picker),
         "__CITY_BUTTON__": _user_city_button_html(user_city),
-        "__CHIPS__": _chips_html(chips, user_city_slug=user_city_slug),
+        "__CHIPS__": _chips_html(chips),
         "__SESSIONS_TITLE__": _esc(sessions_title),
         "__SESSIONS__": sessions_html,
         "__TRAINERS_URL__": _esc(trainers_url),

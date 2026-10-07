@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -49,10 +49,11 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
 
     assert home.status_code == 200
     assert home.headers["content-type"].startswith("text/html")
-    assert "<script" not in home.text.lower() or 'type="application/ld+json"' in home.text
+    assert home.text.lower().count("<script") == 1
+    assert 'type="application/ld+json"' in home.text
     assert name in home.text
-    assert f'/c/{slug}' in home.text
-    assert f'/ice/{slug}/today' not in home.text
+    assert f"/c/{slug}" in home.text
+    assert f"/ice/{slug}/today" not in home.text
     assert "Для тренеров" in home.text
     assert _meta(home.text, "robots") == "index, follow"
 
@@ -85,7 +86,7 @@ async def test_catalog_home_hides_empty_and_inactive_cities(app_use_test_db, db_
 
 @pytest.mark.asyncio
 async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_session) -> None:
-    evil = '</script><img src=x onerror=alert(1)>'
+    evil = "</script><img src=x onerror=alert(1)>"
     name = f"Злой {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=evil)
     await _insert_arena(db_session, city_id, name="Каток")
@@ -131,13 +132,23 @@ async def test_catalog_home_records_public_page_view(app_use_test_db, db_session
 
 
 @pytest.mark.asyncio
-async def test_catalog_home_lists_upcoming_sessions_with_place_links(app_use_test_db, db_session) -> None:
+async def test_catalog_home_lists_upcoming_sessions_with_place_links(app_use_test_db, db_session, monkeypatch) -> None:
+    fixed = datetime(2026, 10, 7, 12, 0, tzinfo=ZoneInfo("Europe/Minsk")).astimezone(timezone.utc)
+    monkeypatch.setattr("src.application.catalog_home_page._utc_now", lambda: fixed)
     name = f"Сеансск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     arena_ids = []
     for i in range(5):
         arena_ids.append(await _insert_arena(db_session, city_id, name=f"Ледовый {i}"))
-        await _add_today_session(db_session, arena_ids[-1])
+        await create_ice_session(
+            db_session,
+            arena_ids[-1],
+            local_date=date(2026, 10, 7),
+            starts_at_local="18:00",
+            duration_minutes=60,
+            kind="public_skate",
+            price_adult_minor=500,
+        )
     await db_session.commit()
     invalidate_public_city_cache()
     slug = city_slug(name)
@@ -148,8 +159,8 @@ async def test_catalog_home_lists_upcoming_sessions_with_place_links(app_use_tes
     async with _client() as client:
         home = await client.get("/", cookies={"glide_city": slug})
     assert home.status_code == 200
-    assert f'/p/{slug}/{arena_slug}' in home.text
-    assert "Ближайшие" in home.text or name in home.text
+    assert f"/p/{slug}/{arena_slug}" in home.text
+    assert f"Ближайшие в {name}" in home.text
 
 
 def _count_sql(db_session):
@@ -178,7 +189,7 @@ async def test_catalog_home_session_counts_match_ice_today(app_use_test_db, db_s
     invalidate_public_city_cache()
 
     async with _client() as client:
-        home = await client.get("/")
+        home = await client.get("/?when=today")
     assert home.status_code == 200
 
     for city_id, name in city_specs:
@@ -251,8 +262,8 @@ async def test_catalog_home_evening_block_shows_tomorrow_label(app_use_test_db, 
     async with _client() as client:
         home = await client.get("/", cookies={"glide_city": slug})
     assert home.status_code == 200
-    assert "сб и вс" in home.text or "Ближайшие" in home.text
-    assert "суббота" in home.text or "завтра" in home.text
+    assert "сб и вс" in home.text
+    assert "завтра" in home.text
 
 
 @pytest.mark.asyncio
@@ -296,8 +307,8 @@ async def test_catalog_home_ice_today_link_only_with_sessions_today(app_use_test
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    assert f'/ice/{slug_with}/today' in home.text
-    assert f'/ice/{slug_without}/today' not in home.text
+    assert f"/ice/{slug_with}/today" in home.text
+    assert f"/ice/{slug_without}/today" not in home.text
 
 
 @pytest.mark.asyncio
@@ -324,4 +335,3 @@ async def test_catalog_home_country_groups_and_headline_when_ru_present(
     assert '<h3 class="country-group__title">Беларусь</h3>' in cities_block
     assert cities_block.index(by_name) < cities_block.index('<h3 class="country-group__title">Россия</h3>')
     assert cities_block.index('<h3 class="country-group__title">Россия</h3>') < cities_block.index(ru_name)
-
