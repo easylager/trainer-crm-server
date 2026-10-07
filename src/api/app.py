@@ -128,6 +128,7 @@ async def _db_unavailable_exception_handler(_request: Request, exc: Exception):
 _WEBAPP_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "webapp"
 _LANDING_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "landing"
 _LOGOS_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "logos"
+_SHARED_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "shared"
 
 # SEC-G2: discourage MIME sniffing on all Mini App responses using these header sets (HTML + JS/CSS).
 _WEBAPP_SNIFFING = {"X-Content-Type-Options": "nosniff"}
@@ -1848,6 +1849,32 @@ def webapp_mini_app_confirm_js():
         path,
         media_type="application/javascript",
         headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/glide-copy.js")
+def webapp_glide_copy_js(request: Request):
+    """TASK-209: словарь подписей (JS-зеркало src/shared/copy_ru.json). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "glide-copy.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/shared/glide-tokens.css")
+def shared_glide_tokens_css(request: Request):
+    """TASK-209: общие дизайн-токены для static/share/* и static/webapp/*. Use ``?v=…`` for long cache."""
+    path = _SHARED_DIR / "glide-tokens.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
     )
 
 
