@@ -1,6 +1,7 @@
 # Parser spec: Дворец спорта «Могилёв»
 
 - arena_id: 43
+- arena_slug: mogilev-ds
 - city: Могилев
 - parser_key: mogilev_hockey_html_v1
 - cadence: daily

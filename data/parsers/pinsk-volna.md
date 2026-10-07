@@ -1,6 +1,7 @@
 # Parser spec: УСК «Волна» / Ледовая арена ПолесГУ (Пинск)
 
 - arena_id: 24
+- arena_slug: pinsk-volna
 - city: Пинск
 - parser_key: pinsk_polessu_html_v1
 - cadence: weekly

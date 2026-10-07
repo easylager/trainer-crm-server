@@ -1,7 +1,8 @@
 # Parser spec: Ледовая арена «Магнит» (СПб, Магнитогорская ул. 51В)
 
 - arena_id: 187
-- city: Санкт-Петербург
+- arena_slug: ledovaya-arena-magnit
+- city: Санкт-Петербург/ЛО
 - parser_key: magnitarena_html_v1
 - cadence: weekly
 - timezone: Europe/Moscow
@@ -21,7 +22,6 @@
   "timezone": "Europe/Moscow",
   "currency_code": "RUB",
   "kind": "public_skate",
-  "run_year": 2026,
   "base_price_adult_minor": 60000,
   "rental_price_flat_minor": 30000,
   "prices_already_minor": true,

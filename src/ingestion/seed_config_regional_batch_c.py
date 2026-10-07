@@ -3,6 +3,7 @@
 New arenas: vitebsk-ds (29), mogilev-ds (43), orsha-arena (31), gorki-lds (32),
 ostrovets-lds (41). Extract only — no ice_sessions writes, no DB access.
 """
+
 from __future__ import annotations
 
 PARSER_KEY_VITEBSK_DS = "vitebsk_ds_v1"
@@ -19,7 +20,6 @@ VITEBSK_DS_CONFIG: dict = {
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 60,
-    "run_year": 2026,
     "adult_price_marker": "Стоимость билета",
     "typo_times": {"201:15": "20:15"},
     "age_note": (
@@ -40,7 +40,7 @@ MOGILEV_DS_CONFIG: dict = {
     "drop_label_substrings": [
         "СДЮШОР",
         "ХК «",
-        "ХК \"",
+        'ХК "',
         "технолог",
         "заливка",
         "игра п-ва",
@@ -79,7 +79,6 @@ GORKI_LDS_CONFIG: dict = {
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 45,
-    "run_year": 2026,
     "mk_heading": "МАССОВОЕ КАТАНИЕ",
     "age_note": "детский до 16 лет",
     "requires_by_egress": False,
@@ -93,7 +92,6 @@ OSTROVETS_LDS_CONFIG: dict = {
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 45,
-    "run_year": 2026,
     "empty_cell_marker": "нет катаний",
     "age_note": "дети до 14 лет",
     "requires_by_egress": False,

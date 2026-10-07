@@ -1,6 +1,7 @@
 # Parser spec: Ледовый дворец (Лида)
 
 - arena_id: 37
+- arena_slug: lida-lds
 - city: Лида
 - parser_key: lida_html_photo_v1
 - cadence: weekly

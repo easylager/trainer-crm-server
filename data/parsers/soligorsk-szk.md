@@ -1,6 +1,7 @@
 # Parser spec: СЗК Солигорск
 
 - arena_id: 19
+- arena_slug: soligorsk-szk
 - city: Солигорск
 - parser_key: soligorsk_szk_html_v1
 - cadence: weekly

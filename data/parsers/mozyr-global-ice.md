@@ -1,8 +1,8 @@
 # Global ICE Мозырь — projected weekly grid
 
-- slug: mozyr-global-ice
+- arena_slug: mozyr-global-ice
 - parser_key: weekly_grid_v1
-- city: Мозырь (BY, Europe/Minsk)
+- city: Мозырь
 
 ## Source
 

@@ -1,6 +1,7 @@
 # Parser spec: Ледовая площадка (Островец)
 
 - arena_id: 41
+- arena_slug: ostrovets-lds
 - city: Островец
 - parser_key: ostrovets_html_v1
 - cadence: weekly
