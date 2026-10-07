@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 
 from src.application.selection_page import selection_path
 from src.shared.html_template import safe_external_url
+from src.shared.phone_guard import is_valid_public_phone, tel_href
 
 CONTACT_ACTION_PHONE = "phone"
 CONTACT_ACTION_TICKETS = "tickets"
@@ -32,8 +33,9 @@ def _esc(value: Any) -> str:
 
 def _tel_href(phone: str) -> str | None:
     raw = str(phone or "").strip()
-    tel = "".join(ch for ch in raw if ch.isdigit() or ch == "+")
-    return f"tel:{tel}" if raw and tel else None
+    if not raw or not is_valid_public_phone(raw):
+        return None
+    return f"tel:{tel_href(raw)}"
 
 
 def _maps_href(lat: Any, lon: Any) -> str | None:

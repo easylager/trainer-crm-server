@@ -35,7 +35,6 @@ from src.application.arena_public_use_cases import (
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
 from src.application.place_links import catalog_start_param, join_public_origin, place_path, place_query
-from src.shared.schedule_basis import public_basis_css_class
 from src.application.place_page import absolute_day_label
 from src.application.schedule_staleness import (
     LEVEL_STALE,
@@ -47,6 +46,8 @@ from src.application.schedule_staleness import (
 )
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
+from src.shared.phone_guard import is_valid_public_phone, tel_href
+from src.shared.schedule_basis import public_basis_css_class
 from src.shared.venue_types import VENUE_TYPE_KEYS, has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
@@ -368,8 +369,9 @@ def _place_photo_url(item: Mapping[str, Any]) -> str | None:
 
 def _phone_link(item: Mapping[str, Any]) -> str:
     phone = str(item.get("phone") or "").strip()
-    tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-    return f' <a href="tel:{_esc(tel)}">{_esc(phone)}</a>' if phone and tel else ""
+    if phone and is_valid_public_phone(phone):
+        return f' <a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a>'
+    return ""
 
 
 def _place_html(

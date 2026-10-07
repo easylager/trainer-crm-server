@@ -38,6 +38,7 @@ from src.shared.ice_discovery_scope import (
     public_city_scope_sql,
     public_scope_params,
 )
+from src.shared.phone_guard import sanitize_public_phone
 
 DEFAULT_TIMEZONE = "Europe/Minsk"
 
@@ -403,15 +404,15 @@ async def _load_day_checked(
             shown.append(row)
             continue
         if aid not in unconfirmed:
-            phone = str(row["phone"] or "").strip()
+            sanitized_phone = sanitize_public_phone(row.get("phone"))
             site = str(row["tickets_url"] or row["website_url"] or "").strip()
             unconfirmed[aid] = {
                 "arena_id": aid,
                 "name": row["arena_name"],
                 "slug": row["arena_slug"],
-                "phone": phone or None,
+                "phone": sanitized_phone,
                 "note": very_stale_note(
-                    fresh.get(aid), now=now, has_phone=bool(phone), has_site=bool(site)
+                    fresh.get(aid), now=now, has_phone=bool(sanitized_phone), has_site=bool(site)
                 ),
             }
     return shown, list(unconfirmed.values()), fresh
