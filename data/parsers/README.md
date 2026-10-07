@@ -6,7 +6,7 @@
 Дорожки агентов: [`ICE-DISCOVERY-AGENT-LANES.md`](../ICE-DISCOVERY-AGENT-LANES.md).  
 Реестр спайка (не спека): [`data/minsk-parser-registry.yaml`](../data/minsk-parser-registry.yaml).
 
-Не писать сюда ОХМ, школу, аренду льда. Только массовое / свободное.
+Массовое / свободное — всегда. ОХМ (`hockey_practice`) — только где в спеке арены явно включён (TASK-201-A); школа и аренда льда по-прежнему out.
 
 Жёстко (канон [`DESIGN-INGESTION-PARSERS-V1.md`](../DESIGN-INGESTION-PARSERS-V1.md) §6): не выдумывать сетку при 403; `drop_past`; HTTPS TLS fail ≠ сайта нет (пробовать http); Instagram не V1; job без фикстуры не включать.
 

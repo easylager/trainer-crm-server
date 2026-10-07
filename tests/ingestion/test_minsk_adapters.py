@@ -105,6 +105,9 @@ def _chizhovka_job(arena_id: int = 6, job_id: int = 3) -> ParserJob:
             "run_year": 2026,
             "prices_already_minor": True,
             "fixture_dir": str(_FIXTURES / "minsk-chizhovka"),
+            "ohm_schedule_url": (
+                "https://chizhovka-arena.by/fizkultura-i-sport/otrabotka-hokkejnogo-masterstva"
+            ),
             "requires_by_egress": False,
         },
     )
@@ -138,7 +141,6 @@ def _diamond_job(arena_id: int = 7, job_id: int = 5) -> ParserJob:
             "kind": "public_skate",
             "keep_labels": ["МК"],
             "drop_labels": [
-                "ОХМ",
                 "ШРС",
                 "ТОРНАДО",
                 "Тех.обслуживание",
@@ -146,6 +148,8 @@ def _diamond_job(arena_id: int = 7, job_id: int = 5) -> ParserJob:
                 "МИР БЕЗ ГРАНИЦ",
                 "КФК",
             ],
+            "ohm_labels": ["ОХМ"],
+            "ohm_adult_minor": 1400,
             "disco_marker": "ДИСКОТЕКА",
             "default_duration_minutes": 45,
             "run_year": 2026,
@@ -242,12 +246,13 @@ async def test_zamok_and_chizhovka_html_adapters_match_expected() -> None:
     chiz_ok = IceSessionValidator().validate(
         IceSessionNormalizer().normalize(chiz_ext, chizhovka_job, now=chizhovka_now)
     )
+    chiz_mk = [slot for slot in chiz_ok if slot.kind == "public_skate"]
     chiz_expected = json.loads((_FIXTURES / "minsk-chizhovka/expected.json").read_text(encoding="utf-8"))
-    assert len(chiz_ok) == len(chiz_expected["sessions"])
+    assert len(chiz_mk) == len(chiz_expected["sessions"])
     gold = chiz_expected["sessions"][0]
     hit = next(
         slot
-        for slot in chiz_ok
+        for slot in chiz_mk
         if slot.local_date == date.fromisoformat(gold["local_date"])
         and slot.starts_at_local.strftime("%H:%M") == gold["starts_at_local"]
     )
@@ -264,7 +269,9 @@ async def test_ledby_html_adapter_matches_expected_sample() -> None:
     extraction = await LedByHtmlParser().extract(job)
     slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
     assert len(slots) >= 12
-    assert {slot.kind for slot in slots} == {"public_skate"}
+    kinds = {slot.kind for slot in slots}
+    assert "public_skate" in kinds
+    assert "hockey_practice" in kinds
     disco = next(
         slot for slot in slots if slot.local_date == date(2026, 9, 5) and slot.starts_at_local == time(20, 15)
     )
@@ -275,19 +282,20 @@ async def test_ledby_html_adapter_matches_expected_sample() -> None:
 
 
 @pytest.mark.asyncio
-async def test_diamond_drops_oxm_school_and_ice_rental() -> None:
-    """AC-003: ОХМ / school / ice rental never become ice_sessions kinds."""
+async def test_diamond_drops_school_and_ice_rental_but_keeps_ohm() -> None:
+    """ШРС / техобслуживание drop; ОХМ → hockey_practice (TASK-201-A)."""
     extraction = await DiamondHtmlParser().extract(_diamond_job())
     kind_raws = {slot.kind_raw.lower() for slot in extraction.slots}
-    assert any("мк" in raw or "массов" in raw for raw in kind_raws)
-    assert not any("охм" in raw for raw in kind_raws)
+    assert any("мк" in raw for raw in kind_raws)
+    assert any("охм" in raw for raw in kind_raws)
     assert not any("школ" in raw or "шрс" in raw for raw in kind_raws)
     now = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
     slots = IceSessionValidator().validate(
         IceSessionNormalizer().normalize(extraction, _diamond_job(), now=now)
     )
-    assert slots
-    assert all(slot.kind in {"public_skate", "open_ice"} for slot in slots)
+    kinds = {slot.kind for slot in slots}
+    assert "hockey_practice" in kinds
+    assert not any("шрс" in (slot.session_label or "").lower() for slot in slots)
 
 
 @pytest.mark.asyncio
@@ -323,13 +331,14 @@ async def test_diamond_extracts_all_gold_mk_slots() -> None:
         (row["local_date"], row["starts_at_local"], row.get("session_label"))
         for row in expected["sessions"]
     }
+    mk_slots = [slot for slot in slots if slot.kind == "public_skate"]
     got_keys = {
         (slot.local_date.isoformat(), slot.starts_at_local.strftime("%H:%M"), slot.session_label)
-        for slot in slots
+        for slot in mk_slots
     }
     assert len(expected["sessions"]) == 44
     assert got_keys == gold_keys
-    assert all(slot.kind == "public_skate" for slot in slots)
+    assert any(slot.kind == "hockey_practice" for slot in slots)
 
 
 @pytest.mark.asyncio
