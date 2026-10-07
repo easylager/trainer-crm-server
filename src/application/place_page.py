@@ -741,15 +741,29 @@ def _amenities_html(card: Mapping[str, Any]) -> str:
     )
 
 
+def _fixed_hours_row(label: str, block: Any) -> str:
+    if not isinstance(block, Mapping):
+        return ""
+    open_ = str(block.get("open") or "").strip()
+    close = str(block.get("close") or "").strip()
+    if not open_ or not close:
+        return ""
+    return f'<p class="row"><span>{_esc(label)}</span><b>{_esc(f"{open_}–{close}")}</b></p>'
+
+
 def _hours_html(card: Mapping[str, Any]) -> str:
     hours = card.get("opening_hours")
-    if not has_known_hours(hours):
+    if not isinstance(hours, Mapping):
         return ""
-    rows = "".join(
-        f'<p class="row"><span>{_esc(WEEKDAY_SHORT_RU[d])}</span>'
-        f'<b>{_esc(format_intervals_ru(intervals_for_weekday(hours, d)) if intervals_for_weekday(hours, d) else "выходной")}</b></p>'
-        for d in range(7)
-    )
+    rows = _fixed_hours_row("Комплекс", hours.get("complex")) + _fixed_hours_row("Касса", hours.get("kassa"))
+    if has_known_hours(hours):
+        rows += "".join(
+            f'<p class="row"><span>{_esc(WEEKDAY_SHORT_RU[d])}</span>'
+            f'<b>{_esc(format_intervals_ru(intervals_for_weekday(hours, d)) if intervals_for_weekday(hours, d) else "выходной")}</b></p>'
+            for d in range(7)
+        )
+    if not rows:
+        return ""
     return f'<section class="sec"><h2 class="sec__title">Когда можно приехать</h2>{rows}</section>'
 
 

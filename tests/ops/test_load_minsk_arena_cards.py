@@ -142,6 +142,21 @@ def test_unknown_amenities_stay_unset(cards) -> None:
     assert oval.website_url == "https://minskarena.by/page.html?slug=massovie-katania"
 
 
+def test_opening_hours_strip_dossier_markers(cards, loader) -> None:
+    """TASK-208: loader must not persist unknown / Conflicts refs in opening_hours."""
+    chizh = cards["chizhovka"].opening_hours
+    assert chizh["complex"] == {"open": "07:00", "close": "23:00"}
+    assert "daily" not in chizh
+    assert chizh.get("note") is None
+    vitebsk = cards["vitebsk-ds"].opening_hours
+    assert vitebsk["kassa"] == {"open": "11:00", "close": "21:00"}
+    assert "daily" not in vitebsk
+    assert vitebsk.get("note") == "касса МК без выходных"
+    arena = cards["minskarena"].opening_hours
+    assert arena.get("note") == "Администрация: Пн–Чт 9:00–18:00, Пт 9:00–16:45"
+    assert cards["vitebsk-ds"].district is None
+
+
 def test_photo_decisions_skip_google_social_and_403_not_grant(cards) -> None:
     diamond = cards["minsk-diamond"]
     by_ref = {p.url_or_file: p for p in diamond.photo_decisions}

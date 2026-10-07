@@ -43,6 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.shared.dossier_public_text import opening_hours_public_note
 from src.shared.minsk_speed_oval import (
     ADDRESS as SPEED_OVAL_ADDRESS,
     ARENA_ID as SPEED_OVAL_ARENA_ID,
@@ -102,6 +103,14 @@ SEASON_END_RE = re.compile(r"season_end_month\s*=\s*(\d{1,2})", re.I)
 YEAR_ROUND_RE = re.compile(r"круглый год", re.I)
 DAILY_HOURS_RE = re.compile(
     r"ежедневно\s+(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})",
+    re.I,
+)
+COMPLEX_HOURS_RE = re.compile(
+    r"комплекс:\s*ежедневно\s+(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})",
+    re.I,
+)
+KASSA_HOURS_RE = re.compile(
+    r"касса[^—–\n]*[—–-]\s*(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})",
     re.I,
 )
 AMENITY_PAIR_RE = re.compile(
@@ -333,21 +342,35 @@ def _norm_hhmm(raw: str) -> str:
     return f"{int(hours):02d}:{int(minutes):02d}"
 
 
+def _hours_interval(open_raw: str, close_raw: str) -> dict[str, str]:
+    return {"open": _norm_hhmm(open_raw), "close": _norm_hhmm(close_raw)}
+
+
 def parse_opening_hours(raw: str | None) -> dict[str, Any] | None:
     if is_unknown(raw):
         return None
     text = (raw or "").strip()
-    payload: dict[str, Any] = {"note": text}
-    daily = DAILY_HOURS_RE.search(text)
-    if daily:
-        payload["daily"] = {"open": _norm_hhmm(daily.group(1)), "close": _norm_hhmm(daily.group(2))}
-        return payload
+    payload: dict[str, Any] = {}
+    complex_m = COMPLEX_HOURS_RE.search(text)
+    if complex_m:
+        payload["complex"] = _hours_interval(complex_m.group(1), complex_m.group(2))
+    else:
+        daily = DAILY_HOURS_RE.search(text)
+        if daily:
+            payload["daily"] = _hours_interval(daily.group(1), daily.group(2))
+    kassa = KASSA_HOURS_RE.search(text)
+    if kassa:
+        payload["kassa"] = _hours_interval(kassa.group(1), kassa.group(2))
     # Lift a bare range only when it is the leading fact (DiaMond). Do not pick the
     # first weekday fragment out of a mixed admin/rink note (Минск-Арена).
-    leading = re.match(r"^(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})\b", text)
-    if leading:
-        payload["hours"] = {"open": _norm_hhmm(leading.group(1)), "close": _norm_hhmm(leading.group(2))}
-    return payload
+    if "daily" not in payload and "complex" not in payload:
+        leading = re.match(r"^(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})\b", text)
+        if leading:
+            payload["hours"] = _hours_interval(leading.group(1), leading.group(2))
+    note = opening_hours_public_note(text, payload)
+    if note:
+        payload["note"] = note
+    return payload if payload else None
 
 
 def _asset_path(value: str) -> str:
