@@ -425,6 +425,24 @@ async def test_slot_ten_days_ahead_is_not_called_past(app_use_test_db, db_sessio
     assert 'id="plan"' in resp.text and "12:00" in resp.text
 
 
+def test_hours_html_labels_complex_and_kassa() -> None:
+    from src.application.place_page import _hours_html
+
+    chizh = _hours_html(
+        {
+            "opening_hours": {
+                "complex": {"open": "07:00", "close": "23:00"},
+                "note": "комплекс: ежедневно 7:00–23:00. Кассы катания",
+            }
+        }
+    )
+    assert "Комплекс" in chizh and "07:00–23:00" in chizh
+    assert "Касса" not in chizh
+    vitebsk = _hours_html({"opening_hours": {"kassa": {"open": "11:00", "close": "21:00"}}})
+    assert "Касса" in vitebsk and "11:00–21:00" in vitebsk
+    assert "Комплекс" not in vitebsk
+
+
 def test_hours_without_leading_zero_are_not_compared_as_strings() -> None:
     from datetime import datetime, timezone
 

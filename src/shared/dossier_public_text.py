@@ -68,9 +68,6 @@ def sanitize_opening_hours_for_public(hours: Mapping[str, Any] | None) -> dict[s
     if not isinstance(hours, Mapping) or not hours:
         return None
     out: dict[str, Any] = dict(hours)
-    has_structure = any(k in out for k in ("daily", "weekly", "hours"))
-    if has_structure:
-        out.pop("note", None)
     for key in _OPENING_HOURS_STRING_KEYS:
         if key not in out:
             continue

@@ -8,6 +8,8 @@ Default: exit 0 when clean, 1 when any leak remains. Never writes.
 Usage:
   DATABASE_URL=postgresql+asyncpg://trainer_crm:…@localhost/trainer_crm_test_t208 \\
     PYTHONPATH=. python scripts/check_public_dossier_leaks.py
+  DATABASE_URL="$DATABASE_PUBLIC_URL" PYTHONPATH=. \\
+    python scripts/check_public_dossier_leaks.py --i-know-this-is-prod
 """
 from __future__ import annotations
 
@@ -26,13 +28,18 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.application.arena_public_use_cases import get_public_arena_card
 from src.shared.dossier_public_text import DOSSIER_LEAK_NEEDLES, public_payload_contains_dossier_leak
-from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL
-from src.shared.ops_db_guard import assert_database_url, async_database_url
+from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+from src.shared.ops_db_guard import (
+    add_i_know_this_is_prod_argument,
+    assert_database_url,
+    async_database_url,
+    warn_prod_ack,
+)
 
 
-async def _run() -> int:
+async def _run(*, allow_prod: bool) -> int:
     url = async_database_url(os.environ["DATABASE_URL"])
-    assert_database_url(url, allow_prod=False)
+    assert_database_url(url, apply=False, allow_prod=allow_prod)
     engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     failures: list[str] = []
@@ -48,7 +55,8 @@ async def _run() -> int:
                     WHERE {PUBLIC_ARENA_VISIBLE_SQL}
                     ORDER BY a.id
                     """
-                )
+                ),
+                public_scope_params(),
             )
         ).mappings().all()
         for row in rows:
@@ -72,10 +80,14 @@ async def _run() -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TASK-208: scan public arena cards for dossier leaks.")
-    parser.parse_args()
+    add_i_know_this_is_prod_argument(parser)
+    args = parser.parse_args()
     if not os.environ.get("DATABASE_URL"):
         raise SystemExit("DATABASE_URL is required")
-    raise SystemExit(asyncio.run(_run()))
+    allow_prod = bool(args.i_know_this_is_prod)
+    if allow_prod:
+        warn_prod_ack()
+    raise SystemExit(asyncio.run(_run(allow_prod=allow_prod)))
 
 
 if __name__ == "__main__":

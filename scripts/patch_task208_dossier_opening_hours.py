@@ -62,7 +62,7 @@ def _target_fields(path: Path) -> dict:
 
 async def run(*, apply: bool, allow_prod: bool) -> None:
     url = async_database_url(Settings().database_url)
-    assert_database_url(url, allow_prod=allow_prod)
+    assert_database_url(url, apply=apply, allow_prod=allow_prod)
     engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
@@ -125,7 +125,9 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true", help="Write changes (default: dry-run).")
     add_i_know_this_is_prod_argument(parser)
     args = parser.parse_args()
-    allow_prod = warn_prod_ack(args)
+    allow_prod = bool(args.i_know_this_is_prod)
+    if allow_prod:
+        warn_prod_ack()
     asyncio.run(run(apply=args.apply, allow_prod=allow_prod))
 
 

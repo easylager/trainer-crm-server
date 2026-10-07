@@ -145,9 +145,13 @@ def test_unknown_amenities_stay_unset(cards) -> None:
 def test_opening_hours_strip_dossier_markers(cards, loader) -> None:
     """TASK-208: loader must not persist unknown / Conflicts refs in opening_hours."""
     chizh = cards["chizhovka"].opening_hours
-    assert chizh == {"daily": {"open": "07:00", "close": "23:00"}}
+    assert chizh["complex"] == {"open": "07:00", "close": "23:00"}
+    assert "daily" not in chizh
+    assert chizh.get("note") and "conflicts" not in chizh["note"].casefold()
     vitebsk = cards["vitebsk-ds"].opening_hours
-    assert vitebsk == {"daily": {"open": "11:00", "close": "21:00"}}
+    assert vitebsk["kassa"] == {"open": "11:00", "close": "21:00"}
+    assert "daily" not in vitebsk
+    assert "unknown" not in json.dumps(vitebsk, ensure_ascii=False).casefold()
     arena = cards["minskarena"].opening_hours
     assert arena and "note" in arena
     note = arena["note"]
