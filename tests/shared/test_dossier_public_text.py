@@ -5,9 +5,9 @@ from src.shared.dossier_public_text import (
 )
 
 
-def test_scrub_removes_unknown_and_conflicts_refs() -> None:
+def test_scrub_drops_the_whole_clause_with_a_marker() -> None:
     raw = "комплекс: ежедневно 7:00–23:00. Кассы катания — см. Conflicts (не склеивать)"
-    assert scrub_dossier_leaks_from_public_text(raw) == "комплекс: ежедневно 7:00–23:00. Кассы катания"
+    assert scrub_dossier_leaks_from_public_text(raw) == "комплекс: ежедневно 7:00–23:00"
 
 
 def test_sanitize_opening_hours_scrubs_note_but_keeps_structure() -> None:

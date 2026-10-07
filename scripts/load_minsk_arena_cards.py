@@ -43,7 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.shared.dossier_public_text import scrub_dossier_leaks_from_public_text
+from src.shared.dossier_public_text import opening_hours_public_note
 from src.shared.minsk_speed_oval import (
     ADDRESS as SPEED_OVAL_ADDRESS,
     ARENA_ID as SPEED_OVAL_ARENA_ID,
@@ -367,7 +367,7 @@ def parse_opening_hours(raw: str | None) -> dict[str, Any] | None:
         leading = re.match(r"^(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})\b", text)
         if leading:
             payload["hours"] = _hours_interval(leading.group(1), leading.group(2))
-    note = scrub_dossier_leaks_from_public_text(text)
+    note = opening_hours_public_note(text, payload)
     if note:
         payload["note"] = note
     return payload if payload else None
