@@ -37,44 +37,51 @@ from src.shared.ops_db_guard import (
 )
 
 
+async def _scan(session) -> tuple[int, list[str], list[int]]:
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT a.id, p.slug, a.name
+                FROM arenas a
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE {PUBLIC_ARENA_VISIBLE_SQL}
+                ORDER BY a.id
+                """
+            ),
+            public_scope_params(),
+        )
+    ).mappings().all()
+    failures: list[str] = []
+    checked: list[int] = []
+    for row in rows:
+        aid = int(row["id"])
+        ref = str(row["slug"] or aid)
+        card = await get_public_arena_card(session, ref)
+        if card is None:
+            continue
+        checked.append(aid)
+        hits = public_payload_contains_dossier_leak(card)
+        if hits:
+            failures.append(f"arena_id={aid} slug={row['slug']}: " + "; ".join(hits))
+    return len(rows), failures, checked
+
+
 async def _run(*, allow_prod: bool) -> int:
     url = async_database_url(os.environ["DATABASE_URL"])
     assert_database_url(url, apply=False, allow_prod=allow_prod)
     engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    failures: list[str] = []
     async with factory() as session:
-        rows = (
-            await session.execute(
-                text(
-                    f"""
-                    SELECT a.id, p.slug, a.name
-                    FROM arenas a
-                    LEFT JOIN arena_profiles p ON p.arena_id = a.id
-                    JOIN cities c ON c.id = a.city_id
-                    WHERE {PUBLIC_ARENA_VISIBLE_SQL}
-                    ORDER BY a.id
-                    """
-                ),
-                public_scope_params(),
-            )
-        ).mappings().all()
-        for row in rows:
-            aid = int(row["id"])
-            ref = str(row["slug"] or aid)
-            card = await get_public_arena_card(session, ref)
-            if card is None:
-                continue
-            hits = public_payload_contains_dossier_leak(card)
-            if hits:
-                failures.append(f"arena_id={aid} slug={row['slug']}: " + "; ".join(hits))
+        scanned, failures, _checked = await _scan(session)
     await engine.dispose()
     if failures:
         print("Dossier leak markers found in public payloads:", ", ".join(DOSSIER_LEAK_NEEDLES))
         for line in failures:
             print(line)
         return 1
-    print(f"OK: {len(rows)} public arenas, no dossier leak markers in API card payloads.")
+    print(f"OK: {scanned} public arenas, no dossier leak markers in API card payloads.")
     return 0
 
 

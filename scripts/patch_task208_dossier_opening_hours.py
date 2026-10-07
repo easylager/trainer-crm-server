@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -22,8 +23,6 @@ if str(ROOT) not in sys.path:
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-import importlib.util
 
 from src.shared.ops_db_guard import (
     add_i_know_this_is_prod_argument,
@@ -41,6 +40,8 @@ def _loader():
     spec = importlib.util.spec_from_file_location("load_minsk_arena_cards", _LOADER)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
+    # dataclasses._is_type looks the class up in sys.modules during exec_module.
+    sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod
 
