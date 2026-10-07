@@ -1,6 +1,7 @@
 # Parser spec: Балтик Арена (СПб, Василеостровский намыв)
 
 - arena_id: 192
+- arena_slug: baltic-arena
 - city: Санкт-Петербург
 - parser_key: balticarena_html_v1
 - cadence: weekly
@@ -18,7 +19,6 @@
 ```json
 {
   "url": "https://baltic-arena.ru/mass-skating",
-  "run_year": 2026,
   "timezone": "Europe/Moscow",
   "currency_code": "RUB",
   "kind": "public_skate",

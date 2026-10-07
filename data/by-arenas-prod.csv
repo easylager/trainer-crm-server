@@ -1,3 +1,13 @@
+# DEPRECATED (TASK-196): This file is outdated and no longer reflects prod state.
+# 
+# Known issues:
+# - arena_id=115 is listed as "ЦСКА Москва" but was reassigned to "Конькобежный стадион Минск" 
+#   in migration 0202 (see src/application/minsk_speed_oval_identity.py).
+# - Parser specs and fixtures should NOT reference numeric arena_id directly due to reassignment risk.
+#   Use (city_name, arena_slug) instead (see src/ingestion/seed_jobs.py).
+#
+# This file is kept for historical reference only and should not be used for seeding prod data.
+# For current arena data, query the database directly.
 city_id,city_name,country,arena_id,arena_name,address,latitude,longitude,is_active,is_confirmed
 10,Барановичи,BY,23,Ледовый дворец спорта,"Советский проспект, 20",53.1493182,26.0014462,True,True
 13,Береза,BY,26,Ледовая арена,"ул. 17 Сентября, 39",52.5299,24.98099,True,True

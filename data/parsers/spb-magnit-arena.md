@@ -21,7 +21,6 @@
   "timezone": "Europe/Moscow",
   "currency_code": "RUB",
   "kind": "public_skate",
-  "run_year": 2026,
   "base_price_adult_minor": 60000,
   "rental_price_flat_minor": 30000,
   "prices_already_minor": true,

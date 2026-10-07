@@ -28,7 +28,7 @@ SKIP_STATUSES = frozenset({"skipped"})
 DISABLED_STATUSES = frozenset({"blocked", "unknown", "partial"})
 READY_STATUSES = frozenset({"ready", "ok"})
 
-_HEADER = re.compile(r"^-\s*(arena_id|parser_key|cadence|requires_by_egress):\s*(.+?)\s*$", re.M)
+_HEADER = re.compile(r"^-\s*(arena_id|arena_slug|city|city_name|parser_key|cadence|requires_by_egress):\s*(.+?)\s*$", re.M)
 _JSON_FENCE = re.compile(r"```json\s*(\{.*?\})\s*```", re.S)
 _SCALAR_TRUE = frozenset({"true", "yes", "1"})
 _SCALAR_FALSE = frozenset({"false", "no", "0"})
@@ -55,7 +55,9 @@ class SeedReport:
 @dataclass(frozen=True)
 class _SpecDraft:
     stem: str
-    arena_id: int
+    arena_id: int | None
+    arena_slug: str | None
+    city_name: str | None
     parser_key: str
     cadence: str
     requires_by_egress: bool
@@ -198,9 +200,19 @@ def _parse_spec(path: Path) -> _SpecDraft | None:
     if parser_key is not None and parser_key.strip().lower() in _SCALAR_NULL:
         # e.g. `- parser_key: null` — spec is research-only, no adapter built yet.
         parser_key = None
+    
+    # Support both arena_id (legacy) and arena_slug (new stable key)
     arena_raw = headers.get("arena_id")
-    if not parser_key or not arena_raw:
+    arena_slug = headers.get("arena_slug")
+    city_name = headers.get("city") or headers.get("city_name")
+    
+    # At least one arena identifier must be present
+    if not parser_key or (not arena_raw and not arena_slug):
         return None
+    
+    arena_id = int(arena_raw) if arena_raw and arena_raw.strip().lower() not in _SCALAR_NULL else None
+    arena_slug = arena_slug if arena_slug and arena_slug.strip().lower() not in _SCALAR_NULL else None
+    
     cadence = headers.get("cadence", "daily").strip()
     if cadence not in {"hourly", "daily", "weekly"}:
         cadence = "daily"
@@ -214,7 +226,9 @@ def _parse_spec(path: Path) -> _SpecDraft | None:
         config["requires_by_egress"] = requires_by
     return _SpecDraft(
         stem=path.stem,
-        arena_id=int(arena_raw),
+        arena_id=arena_id,
+        arena_slug=arena_slug,
+        city_name=city_name,
         parser_key=parser_key,
         cadence=cadence,
         requires_by_egress=requires_by,
@@ -290,11 +304,16 @@ def build_minsk_job_seeds(
     parsers_dir: Path | None = None,
     fixtures_dir: Path | None = None,
 ) -> list[JobSeed]:
+    """Build job seeds from parser specs. Supports both arena_id (legacy) and arena_slug (stable key)."""
     fixtures = fixtures_dir or DEFAULT_FIXTURES_DIR
     registry = {int(item["arena_id"]): item for item in load_minsk_parser_registry(registry_path) if "arena_id" in item}
     seeds: list[JobSeed] = []
     for spec in load_ice_parser_specs(parsers_dir):
-        entry = registry.get(spec.arena_id)
+        # Determine the arena_id for the seed
+        # Priority: spec.arena_id > fallback to arena lookup by slug (will be resolved during upsert)
+        arena_id = spec.arena_id
+        
+        entry = registry.get(arena_id) if arena_id else None
         if entry is not None:
             target = str(entry.get("target") or "")
             status = str(entry.get("parser_status") or "")
@@ -308,9 +327,16 @@ def build_minsk_job_seeds(
             merged.update(config)
             config = merged
         enabled = _job_enabled(spec, entry, fixture_ok=fixture_ok, fixtures_dir=fixtures)
+        
+        # Store arena_slug and city_name in config for later resolution
+        if spec.arena_slug:
+            config["arena_slug"] = spec.arena_slug
+        if spec.city_name:
+            config["city_name"] = spec.city_name
+        
         seeds.append(
             JobSeed(
-                arena_id=spec.arena_id,
+                arena_id=arena_id or 0,  # Placeholder, will be resolved during upsert
                 parser_key=spec.parser_key,
                 cadence=spec.cadence,
                 is_enabled=enabled,
@@ -321,20 +347,63 @@ def build_minsk_job_seeds(
     return seeds
 
 
+async def _resolve_arena_id_by_slug(
+    session: AsyncSession,
+    arena_slug: str,
+    city_name: str,
+) -> int | None:
+    """Resolve arena_id from (city_name, arena_slug) using city_slug() function."""
+    from src.application.ice_city_day import city_slug
+    
+    slug = city_slug(city_name)
+    result = await session.execute(
+        text("""
+            SELECT a.id
+            FROM arenas a
+            JOIN arena_profiles ap ON ap.arena_id = a.id
+            JOIN cities c ON c.id = a.city_id
+            WHERE ap.slug = :arena_slug
+              AND LOWER(c.name) = LOWER(:city_name)
+            LIMIT 1
+        """),
+        {"arena_slug": arena_slug, "city_name": city_name}
+    )
+    row = result.scalar()
+    return int(row) if row is not None else None
+
+
 async def upsert_ice_parser_jobs(
     session: AsyncSession,
     seeds: list[JobSeed],
     *,
     now: datetime | None = None,
 ) -> SeedReport:
-    """Insert or update one ice_parser_jobs row per arena_id. Never duplicates."""
+    """Insert or update one ice_parser_jobs row per arena_id. Never duplicates.
+    
+    Supports both arena_id (legacy) and arena_slug+city_name (stable key) for arena resolution.
+    If seed.arena_id is 0 or missing, attempts to resolve via arena_slug+city_name from config.
+    """
     clock = now or datetime.now(timezone.utc)
     if clock.tzinfo is None:
         clock = clock.replace(tzinfo=timezone.utc)
     report = SeedReport()
     for seed in seeds:
+        # Resolve arena_id if using slug-based lookup
+        arena_id = seed.arena_id
+        if not arena_id or arena_id == 0:
+            arena_slug = seed.config.get("arena_slug")
+            city_name = seed.config.get("city_name")
+            if arena_slug and city_name:
+                arena_id = await _resolve_arena_id_by_slug(session, arena_slug, city_name)
+                if arena_id is None:
+                    report.skipped_missing_arena += 1
+                    continue
+            else:
+                report.skipped_missing_arena += 1
+                continue
+        
         exists_arena = (
-            await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": seed.arena_id})
+            await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
         ).scalar()
         if exists_arena is None:
             report.skipped_missing_arena += 1
@@ -342,15 +411,19 @@ async def upsert_ice_parser_jobs(
         existing = (
             await session.execute(
                 text("SELECT id FROM ice_parser_jobs WHERE arena_id = :id"),
-                {"id": seed.arena_id},
+                {"id": arena_id},
             )
         ).scalar()
+        
+        # Clean up arena_slug/city_name from config before storing (they're metadata, not runtime config)
+        config_to_store = {k: v for k, v in seed.config.items() if k not in ("arena_slug", "city_name")}
+        
         payload = {
-            "arena_id": seed.arena_id,
+            "arena_id": arena_id,
             "parser_key": seed.parser_key,
             "is_enabled": seed.is_enabled,
             "cadence": seed.cadence,
-            "config": json.dumps(seed.config, ensure_ascii=False),
+            "config": json.dumps(config_to_store, ensure_ascii=False),
             "notes": seed.notes,
         }
         if existing is None:

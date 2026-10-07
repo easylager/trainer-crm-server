@@ -19,7 +19,7 @@ VITEBSK_DS_CONFIG: dict = {
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 60,
-    "run_year": 2026,
+    "run_year": 2026,  # Keep for test fixture compatibility (vitebsk-ds fixture has 2026 dates)
     "adult_price_marker": "Стоимость билета",
     "typo_times": {"201:15": "20:15"},
     "age_note": (
@@ -79,7 +79,7 @@ GORKI_LDS_CONFIG: dict = {
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 45,
-    "run_year": 2026,
+    "run_year": 2026,  # Keep for test fixture compatibility (gorki-lds/home.html snapshot has 2026 dates)
     "mk_heading": "МАССОВОЕ КАТАНИЕ",
     "age_note": "детский до 16 лет",
     "requires_by_egress": False,
@@ -93,7 +93,7 @@ OSTROVETS_LDS_CONFIG: dict = {
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 45,
-    "run_year": 2026,
+    "run_year": 2026,  # Keep for test fixture compatibility (ostrovets-lds fixture has 2026 dates)
     "empty_cell_marker": "нет катаний",
     "age_note": "дети до 14 лет",
     "requires_by_egress": False,
