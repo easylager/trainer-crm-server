@@ -28,6 +28,7 @@
     "basis.projected_long": "по обычной сетке катка — лучше уточнить",
     "basis.photo": "по фото афиши",
     "mode.phone": "Расписание — только по телефону",
+    "mode.phone_short": "Сеансы — по телефону",
     "mode.season_closed": "Сейчас закрыто",
     "mode.reopen": "Откроется {date}",
     "kind.public_skate": "Массовое катание",

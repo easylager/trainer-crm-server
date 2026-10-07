@@ -93,8 +93,8 @@
     .act__icon { color: var(--g-accent-ink); display: flex; }
     .follow, .follow--open, .call {
       display: flex; align-items: center; justify-content: center; gap: 10px;
-      min-height: 52px; border-radius: var(--g-r);
-      text-decoration: none; font-size: 16px; font-weight: 600;
+      min-height: 52px; padding: 8px 14px; border-radius: var(--g-r);
+      text-decoration: none; font-size: 16px; font-weight: 600; text-align: center;
     }
     .follow { background: var(--g-dark); color: var(--g-surface); }
     .follow--open, .call { background: var(--g-accent); color: var(--g-surface); }
@@ -212,6 +212,7 @@
   <main class="wrap">
     __BODY__
   </main>
+  <script src="/static/webapp/place-follow.js?v=1"></script>
   <script>
     (function () {
       document.addEventListener('click', function (e) {
@@ -237,6 +238,52 @@
       }
       document.querySelectorAll('.photo img').forEach(function (img) {
         img.addEventListener('error', function () { dropBrokenPhoto(img); });
+      });
+      var initData = '';
+      try {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        initData = tg && tg.initData ? tg.initData : '';
+      } catch (err) {
+        initData = '';
+      }
+      if (!initData || !window.PlaceFollow) return;
+      document.querySelectorAll('[data-arena-follow]').forEach(function (node) {
+        var id = node.getAttribute('data-arena-follow');
+        fetch('/api/webapp/client/arena-follows/' + id, {
+          headers: { 'X-Telegram-Init-Data': initData }
+        }).then(function (response) {
+          return response.ok ? response.json() : null;
+        }).then(function (status) {
+          var view = window.PlaceFollow.placeFollowState({
+            initData: initData,
+            status: status,
+            label: node.getAttribute('data-follow-on') || ''
+          });
+          if (view.mode !== 'unfollow') return;
+          var label = node.querySelector('[data-follow-label]');
+          node.setAttribute('data-follow-off', label ? label.textContent : '');
+          if (label) label.textContent = view.label;
+          node.setAttribute('data-following', '1');
+          node.setAttribute('data-unfollow-url', view.url);
+        }).catch(function () {});
+      });
+      document.addEventListener('click', function (e) {
+        var node = e.target.closest('[data-following="1"]');
+        if (!node) return;
+        e.preventDefault();
+        var url = node.getAttribute('data-unfollow-url');
+        if (!url) return;
+        fetch(url, {
+          method: 'DELETE',
+          headers: { 'X-Telegram-Init-Data': initData }
+        }).then(function (response) {
+          if (!response.ok) throw new Error('unfollow');
+          return response.json();
+        }).then(function () {
+          var label = node.querySelector('[data-follow-label]');
+          if (label) label.textContent = node.getAttribute('data-follow-off') || '';
+          node.removeAttribute('data-following');
+        }).catch(function () {});
       });
     })();
   </script>

@@ -231,9 +231,19 @@ def test_invite_link_is_session_query_not_a_new_page() -> None:
     assert 'aria-label="Позвать с собой на 15:00"' in html
 
 
-def test_phone_and_closed_modes() -> None:
+def test_outside_telegram_keeps_the_follow_link(monkeypatch) -> None:
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
+    html = _render({})
+    assert 'href="https://t.me/glide_bot?start=follow_1"' in html
+    assert 'data-follow-on="Вы следите за катком · отписаться"' in html
+    assert ">Следить за катком в Telegram</span>" in html
+
+
+def test_phone_and_closed_modes(monkeypatch) -> None:
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
     phone = _render({"schedule_mode": "phone", "phone": "+375 29 111-22-33"})
-    assert "Расписание — только по телефону" in phone
+    assert phone.count("Расписание — только по телефону") == 1
+    assert "Сеансы — по телефону" in phone
     assert "tel:+375291112233" in phone
     assert "Сеанс в … будет?" in phone
     assert "Массовое катание</h2>" not in phone
@@ -252,6 +262,8 @@ def test_phone_and_closed_modes() -> None:
         nearby={"name": "Минск", "rinks": 2, "today_sessions": 3, "km": 40},
     )
     assert "Сейчас закрыто — межсезонье" in closed
+    assert "Фото пока нет" in closed
+    assert "Минск · катки" in closed
     assert "Обычно открывается осенью" in closed
     assert "Сообщить об открытии" in closed or "Узнайте первым" in closed
     assert "Минск" in closed and "2 катка" in closed and "3 сеанса сегодня" in closed

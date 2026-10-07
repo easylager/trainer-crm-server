@@ -380,12 +380,12 @@ def _flat(days: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [slot for day in days for slot in (day.get("sessions") or [])]
 
 
-def _chrome(card: Mapping[str, Any], *, closed: bool) -> str:
+def _chrome(card: Mapping[str, Any]) -> str:
     from src.shared.venue_types import has_public_skating
 
     city = str(card.get("city_name") or "").strip()
     skating = bool(card["has_skating"]) if "has_skating" in card else has_public_skating(card.get("venue_type"))
-    if city and not closed and skating:
+    if city and skating:
         title = t("place.city_rinks", city=city)
     else:
         title = city
@@ -465,7 +465,7 @@ def _actions(card: Mapping[str, Any], *, base_url: str, share_url: str, share_te
 
 
 def _follow_button(arena_id: int, *, closed: bool) -> str:
-    """Кнопка подписки. Состояние «уже следите» — только после GET, его здесь нет."""
+    """Ссылка на бота. «Вы следите» подставляет Mini App после GET, не эта вёрстка."""
     url = follow_start_url(arena_id)
     if not url:
         return ""
@@ -475,9 +475,11 @@ def _follow_button(arena_id: int, *, closed: bool) -> str:
     else:
         label = t("cta.follow")
         css = "follow"
+    on = f"{t('cta.following')} · {t('cta.unfollow')}"
     return (
-        f'<a class="{css}" href="{_esc(url)}" data-arena-follow="{int(arena_id)}">'
-        f"{_ICON_BELL}{_esc(label)}</a>"
+        f'<a class="{css}" href="{_esc(url)}" data-arena-follow="{int(arena_id)}" '
+        f'data-follow-on="{_esc(on)}">'
+        f"{_ICON_BELL}<span data-follow-label>{_esc(label)}</span></a>"
     )
 
 
@@ -779,7 +781,7 @@ def build_place_body(
         badge = status_badge(view)
         kind, text = (badge[0], badge[1]) if badge else ("", "")
     elif phone_mode:
-        kind, text = "phone", t("mode.phone")
+        kind, text = "phone", t("mode.phone_short")
 
     phone = bool(_tel(str(card.get("phone") or "")))
     status = _status_html(kind, text, phone=phone) if text and not closed else ""
@@ -818,8 +820,8 @@ def build_place_body(
     intro_status = "" if closed else status
     body = "".join(
         [
-            _chrome(card, closed=closed),
-            _photo(card, show_empty=not closed),
+            _chrome(card),
+            _photo(card, show_empty=True),
             '<section class="intro">',
             f'<h1>{_esc(card.get("name"))}</h1>',
             (f'<p class="where">{_esc(where)}</p>' if where else ""),
