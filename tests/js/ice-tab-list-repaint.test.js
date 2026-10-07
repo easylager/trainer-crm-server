@@ -16,22 +16,38 @@ const tabSource = fs.readFileSync(path.join(webapp, 'ice-tab.js'), 'utf8');
 
 function makeElement(id) {
   const listeners = {};
-  return {
+  const el = {
     id,
     hidden: false,
     innerHTML: '',
     textContent: '',
     style: {},
     dataset: {},
+    parentNode: null,
+    children: [],
+    placedBefore: null,
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     querySelector(sel) {
-      if (sel === '.ice-board' && String(this.innerHTML).includes('ice-board')) return {};
+      if (sel === '.ice-board' && String(this.innerHTML).includes('ice-board')) {
+        return this._board || (this._board = { className: 'ice-board' });
+      }
+      if (sel === '.ice-window-break' && String(this.innerHTML).includes('ice-window-break')) {
+        return this._break || (this._break = { className: 'ice-window-break' });
+      }
       return null;
     },
     querySelectorAll: () => [],
     setAttribute() {},
     getAttribute: () => null,
-    insertBefore() {},
+    insertBefore(node, ref) {
+      if (node.parentNode && Array.isArray(node.parentNode.children)) {
+        const at = node.parentNode.children.indexOf(node);
+        if (at >= 0) node.parentNode.children.splice(at, 1);
+      }
+      node.parentNode = this;
+      node.placedBefore = ref || null;
+      if (!this.children.includes(node)) this.children.push(node);
+    },
     appendChild() {},
     addEventListener(type, fn) {
       (listeners[type] || (listeners[type] = [])).push(fn);
@@ -40,6 +56,22 @@ function makeElement(id) {
       (listeners[type] || []).forEach((fn) => fn(ev));
     },
   };
+  Object.defineProperty(el, 'nextSibling', {
+    get() {
+      const kids = this.parentNode && this.parentNode.children;
+      if (!kids) return null;
+      const at = kids.indexOf(this);
+      return at >= 0 ? kids[at + 1] || null : null;
+    },
+  });
+  return el;
+}
+
+function linkUnder(parent, kids) {
+  parent.children = kids.slice();
+  kids.forEach((child) => {
+    child.parentNode = parent;
+  });
 }
 
 const IDS = [
@@ -51,13 +83,20 @@ async function flush() {
   for (let i = 0; i < 80; i += 1) await Promise.resolve();
 }
 
-function boot(search, arenas) {
+function boot(search, arenas, opts) {
+  opts = opts || {};
   delete require.cache[require.resolve(modelPath)];
   const model = require(modelPath);
   const elements = {};
   IDS.forEach((id) => {
     elements[id] = makeElement(id);
   });
+  if (opts.linkShare) {
+    const sec = makeElement('iceListSec');
+    linkUnder(sec, [elements.iceList, elements.iceShareBtn]);
+    linkUnder(elements.iceList, [elements.iceListSkate, elements.iceListCoach]);
+  }
+  const docListeners = {};
   const fetchImpl = (url) => {
     const u = String(url);
     if (u.includes('/ice/cities')) {
@@ -73,6 +112,7 @@ function boot(search, arenas) {
   };
   const sandbox = {
     IceTabModel: model,
+    GlideShareSheet: opts.shareSheet ? { open() {} } : undefined,
     IceMap: { mount: () => ({ setListItems() {}, start: () => Promise.resolve(), refresh() {}, resize() {} }) },
     location: { search },
     sessionStorage: { getItem: () => null, setItem() {} },
@@ -96,7 +136,10 @@ function boot(search, arenas) {
       getElementById: (id) => elements[id] || null,
       querySelectorAll: () => [],
       querySelector: () => null,
-      addEventListener() {},
+      visibilityState: 'visible',
+      addEventListener(type, fn) {
+        (docListeners[type] || (docListeners[type] = [])).push(fn);
+      },
     },
     fetch: fetchImpl,
     URLSearchParams,
@@ -104,6 +147,9 @@ function boot(search, arenas) {
     console,
   });
   vm.runInContext(tabSource, ctx);
+  elements.fireVisible = () => {
+    (docListeners.visibilitychange || []).forEach((fn) => fn());
+  };
   return flush().then(() => elements);
 }
 
@@ -177,6 +223,92 @@ describe('ice list repaint', () => {
     await flush();
     assert.match(elements.iceListSkate.innerHTML, /19:45/);
     assert.doesNotMatch(elements.iceListSkate.innerHTML, /18:15/);
+  });
+
+  it('два renderList с теми же данными оставляют «Поделиться» перед разделителем', async () => {
+    const elements = await boot(
+      '?city_id=1',
+      () => ({
+        items: [
+          {
+            id: 3,
+            name: 'ТЦ Замок',
+            venue_type: 'ice',
+            card: '/photos/3_card.jpg',
+            thumb: '/photos/3_thumb.jpg',
+            live: { kind: 'session', local_date: '2026-10-07', starts_at_local: '18:00', session_id: 11 },
+          },
+          {
+            id: 4,
+            name: 'Чижовка',
+            venue_type: 'ice',
+            card: '/photos/4_card.jpg',
+            live: {
+              kind: 'session',
+              local_date: '2026-10-08',
+              starts_at_local: '10:00',
+              session_id: 12,
+              outside_window: true,
+            },
+          },
+        ],
+        total: 2,
+        window: { key: 'tomorrow', label: 'Завтра' },
+      }),
+      { linkShare: true }
+    );
+    assert.match(elements.iceListSkate.innerHTML, /ice-window-break/);
+    assert.equal(elements.iceShareBtn.parentNode, elements.iceListSkate);
+    assert.equal(elements.iceShareBtn.placedBefore.className, 'ice-window-break');
+    elements.fireVisible();
+    assert.equal(elements.iceShareBtn.parentNode, elements.iceListSkate);
+    assert.equal(elements.iceShareBtn.placedBefore.className, 'ice-window-break');
+  });
+
+  it('тот же текст карточки с другим sessionId обновляет data-invite-session', async () => {
+    let sessionId = 11;
+    const elements = await boot(
+      '?city_id=1',
+      () => ({
+        items: [
+          {
+            id: 3,
+            name: 'ТЦ Замок',
+            venue_type: 'ice',
+            card: '/photos/3_card.jpg',
+            thumb: '/photos/3_thumb.jpg',
+            live: {
+              kind: 'session',
+              local_date: '2026-10-08',
+              starts_at_local: '18:15',
+              session_id: sessionId,
+              more_count: 1,
+            },
+          },
+        ],
+        total: 1,
+        window: { key: 'any', label: '' },
+      }),
+      { shareSheet: true }
+    );
+    assert.match(elements.iceListSkate.innerHTML, /data-invite-session="11"/);
+    assert.match(elements.iceListSkate.innerHTML, /18:15/);
+    sessionId = 22;
+    elements.iceCatalogTools.dispatch('click', {
+      target: {
+        closest(sel) {
+          if (sel === '[data-place-type]') {
+            return { getAttribute: () => '', closest: () => true };
+          }
+          return null;
+        },
+      },
+    });
+    await flush();
+    assert.match(elements.iceListSkate.innerHTML, /data-invite-session="22"/);
+    assert.doesNotMatch(elements.iceListSkate.innerHTML, /data-invite-session="11"/);
+    assert.match(elements.iceListSkate.innerHTML, /18:15/);
+    assert.match(elements.iceListSkate.innerHTML, /ТЦ Замок/);
   });
 });
 

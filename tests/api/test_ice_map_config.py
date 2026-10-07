@@ -14,7 +14,7 @@ async def test_ice_map_config_returns_key_from_env(monkeypatch: pytest.MonkeyPat
         resp = await client.get("/api/public/ice/map-config")
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"yandex_maps_js_api_key": "unit-test-yandex-js-key"}
-    assert "Cache-Control" in resp.headers
+    assert resp.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.asyncio

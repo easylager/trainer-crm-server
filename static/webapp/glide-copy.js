@@ -44,6 +44,7 @@
     "footer.made_by": "Сделано теми, кто сам катается.",
     "ice.map.unavailable.title": "Карта временно недоступна",
     "ice.map.unavailable.body": "Попробуйте ещё раз или откройте список мест.",
+    "ice.map.unavailable.body_no_key": "Откройте список мест.",
     "ice.map.retry": "Повторить",
     "ice.map.show_list": "Показать списком"
   };

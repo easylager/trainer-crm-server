@@ -82,6 +82,13 @@ describe('resolveApiKey / map unavailable copy', () => {
       assert.ok(!DEV_LEAK.test(empty.listLabel));
       assert.ok(!/osm|leaflet|openstreet/i.test(empty.body));
     }
+    const noKey = mapUnavailableState('no-key');
+    assert.equal(noKey.retryLabel, '');
+    assert.doesNotMatch(noKey.body, /Попробуйте ещё раз/);
+    assert.match(noKey.body, /список мест/);
+    const retryable = mapUnavailableState('config-failed');
+    assert.match(retryable.body, /Попробуйте ещё раз/);
+    assert.match(retryable.retryLabel, /Повторить/);
     assert.match(scriptUrl('abc'), /api-maps\.yandex\.ru\/2\.1\//);
     assert.match(scriptUrl('abc'), /apikey=abc/);
     assert.equal(scriptUrl(''), '');

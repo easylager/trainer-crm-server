@@ -53,6 +53,7 @@
   var MAP_COPY_FALLBACK = {
     'ice.map.unavailable.title': 'Карта временно недоступна',
     'ice.map.unavailable.body': 'Попробуйте ещё раз или откройте список мест.',
+    'ice.map.unavailable.body_no_key': 'Откройте список мест.',
     'ice.map.retry': 'Повторить',
     'ice.map.show_list': 'Показать списком',
   };
@@ -67,13 +68,14 @@
 
   function mapUnavailableState(reason) {
     reason = reason || 'config-failed';
+    var noKey = reason === 'no-key';
     return {
       canRenderMap: false,
       fallback: 'none',
       reason: reason,
       title: mapCopy('ice.map.unavailable.title'),
-      body: mapCopy('ice.map.unavailable.body'),
-      retryLabel: mapCopy('ice.map.retry'),
+      body: mapCopy(noKey ? 'ice.map.unavailable.body_no_key' : 'ice.map.unavailable.body'),
+      retryLabel: noKey ? '' : mapCopy('ice.map.retry'),
       listLabel: mapCopy('ice.map.show_list'),
     };
   }

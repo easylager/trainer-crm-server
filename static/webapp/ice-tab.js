@@ -1040,7 +1040,6 @@
         window: state.window,
       });
     }
-    parkShareButton();
     setShareButton();
     if (!list) return;
     var paint = M.listPaintMode({
@@ -1052,12 +1051,14 @@
     if (paint === 'skeleton') {
       // TASK-095: вместо строки «Загрузка катков…» — коробки будущих карточек.
       // Текстовая строка обещала одну форму, а приходила совсем другая.
+      parkShareButton();
       lastArenaListSig = '';
       list.innerHTML = state.intent === 'coach' ? trainerSkeletons(3) : boardSkeletons(2);
       showActiveList();
       return;
     }
     if (paint === 'empty') {
+      parkShareButton();
       lastArenaListSig = '';
       var city = cityFromState(state.cityId) || {};
       var shopScope = M.catalogScope(state.intent, state.venueTypes) === 'shop';
@@ -1085,6 +1086,7 @@
       return;
     }
     if (state.intent === 'coach') {
+      parkShareButton();
       lastArenaListSig = '';
       list.innerHTML = state.items.map(renderTrainerCard).join('') + loadMoreHtml();
       showActiveList();
@@ -1099,6 +1101,18 @@
     function cardSig(it) {
       var v = M.boardCardView(it, now, { window: state.window });
       return [
+        v.href,
+        v.arenaId,
+        v.sessionId,
+        v.inviteLabel,
+        v.callHref,
+        v.stale ? '1' : '0',
+        v.venueType,
+        v.venueIcon,
+        v.initial,
+        v.offLabel,
+        v.isSession ? '1' : '0',
+        v.photoSrcset,
         v.time,
         v.day,
         v.prices,
@@ -1119,9 +1133,13 @@
       state.window ? String(state.window.key || '') + ':' + String(state.window.label || '') : '',
     ].join('\n');
     if (arenaSig === lastArenaListSig && list.querySelector && list.querySelector('.ice-board')) {
+      /* Ранний выход не должен оставлять #iceShareBtn припаркованной под #iceList:
+         на совпадении подписи кнопку снова ставим перед разделителем окна. */
+      placeShareBeforeBreak(list);
       showActiveList();
       return;
     }
+    parkShareButton();
     lastArenaListSig = arenaSig;
     list.innerHTML =
       parts.hits.map(renderArenaCard).join('') +
@@ -1134,10 +1152,14 @@
       loadMoreHtml();
     /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
        а приглушённые места без нужных сеансов идут уже после неё. */
-    var brkEl = brk && list.querySelector('.ice-window-break');
-    var shareBtn = $('iceShareBtn');
-    if (brkEl && shareBtn) list.insertBefore(shareBtn, brkEl);
+    placeShareBeforeBreak(list);
     showActiveList();
+  }
+
+  function placeShareBeforeBreak(list) {
+    var brkEl = list && list.querySelector ? list.querySelector('.ice-window-break') : null;
+    var shareBtn = $('iceShareBtn');
+    if (brkEl && shareBtn && list.insertBefore) list.insertBefore(shareBtn, brkEl);
   }
 
   /* innerHTML списка стирает всё внутри — возвращаем кнопку на её штатное место под #iceList. */
