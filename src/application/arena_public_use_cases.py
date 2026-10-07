@@ -62,6 +62,7 @@ from src.shared.ice_discovery_scope import (
     public_scope_params,
 )
 from src.shared.notification_hours import NOTIFICATION_TZ
+from src.shared.phone_guard import sanitize_public_phone
 from src.shared.venue_types import (
     DEFAULT_HIDDEN_VENUE_TYPES,
     has_public_skating,
@@ -129,7 +130,7 @@ def compute_data_tier(*, has_future_public_ice: bool, profile_complete: bool) ->
 
 
 def profile_is_complete(row: Mapping[str, Any]) -> bool:
-    phone = str(row.get("phone") or "").strip()
+    phone = sanitize_public_phone(row.get("phone"))
     website = str(row.get("website_url") or "").strip()
     hours = _as_mapping(row.get("opening_hours"))
     has_media = bool(row.get("has_media"))
@@ -352,7 +353,8 @@ def _place_line(item: Mapping[str, Any]) -> str:
     if amenities.get("skate_rental") is True and not rental_close:
         bits.append("прокат на месте")
     if not bits:
-        bits.append("часы работы уточняйте по телефону" if item.get("phone") else "часы работы уточняются")
+        phone_hint = "часы работы уточняйте по телефону" if sanitize_public_phone(item.get("phone")) else "часы работы уточняются"
+        bits.append(phone_hint)
     line = " · ".join(bits)
     return line[:1].upper() + line[1:]
 
@@ -467,7 +469,7 @@ def _unconfirmed_live_if_very_stale(
     note = very_stale_note(
         freshness,
         now=datetime.now(timezone.utc),
-        has_phone=bool(str(item.get("phone") or "").strip()),
+        has_phone=bool(sanitize_public_phone(item.get("phone"))),
         has_site=bool(str(item.get("website_url") or "").strip()),
     )
     return {"kind": "unconfirmed", "text": note, "currency_code": live.get("currency_code")}
@@ -524,7 +526,7 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "freshness": freshness,
         # TASK-180: у очень устаревшего расписания карточка просит «уточните по телефону» —
         # только если телефон действительно есть (он и так публичный в карточке места).
-        "phone": item.get("phone"),
+        "phone": sanitize_public_phone(item.get("phone")),
         **schedule_mode_public_fields(item),
     }
     if venue_type == VENUE_TYPE_SHOP:
@@ -1603,15 +1605,6 @@ def _freshness_payload(
     }
 
 
-def _sanitize_phone(phone: str | None) -> str | None:
-    """Return phone only if it contains at least 7 digits, else None."""
-    raw = str(phone or "").strip()
-    if not raw:
-        return None
-    digits = "".join(ch for ch in raw if ch.isdigit())
-    return raw if len(digits) >= 7 else None
-
-
 async def get_public_arena_card(
     session: AsyncSession, arena_ref: str, *, city_id: int | None = None
 ) -> dict[str, Any] | None:
@@ -1624,7 +1617,7 @@ async def get_public_arena_card(
     city_name = str(row.get("city_name") or "").strip()
     slug = str(row.get("slug") or "").strip()
     public_path = place_path(city_name=city_name, slug=slug) if city_name and slug else None
-    sanitized_phone = _sanitize_phone(row.get("phone"))
+    sanitized_phone = sanitize_public_phone(row.get("phone"))
     card: dict[str, Any] = {
         "id": row["id"],
         "slug": row.get("slug"),

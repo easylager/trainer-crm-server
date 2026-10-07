@@ -39,7 +39,6 @@ from src.application.arena_public_use_cases import (
 )
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
-from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 from src.application.arena_profile import (
     WEEKDAY_SHORT_RU,
     format_intervals_ru,
@@ -67,6 +66,8 @@ from src.application.schedule_staleness import (
 )
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
+from src.shared.phone_guard import is_valid_public_phone
+from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 from src.shared.venue_types import has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
@@ -569,15 +570,9 @@ def _slot_chip(slot: Mapping[str, Any], *, focused: bool, base_path: str, invite
     )
 
 
-def _has_valid_phone_digits(phone: str) -> bool:
-    """Check if phone string contains at least 7 digits (minimal valid phone number)."""
-    digits = "".join(ch for ch in phone if ch.isdigit())
-    return len(digits) >= 7
-
-
 def _schedule_mode_call_html(card: Mapping[str, Any]) -> str:
     phone = str(card.get("phone") or "").strip()
-    if phone and _has_valid_phone_digits(phone):
+    if phone and is_valid_public_phone(phone):
         tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
         return f'<p class="sched__mode"><a href="tel:{_esc(tel)}">{t("cta.call")}</a></p>'
     return ""
@@ -612,7 +607,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
         # TASK-180: расписание > 72 ч не подтверждалось — вместо сеансов просьба уточнить.
         phone = str(card.get("phone") or "").strip()
         links = []
-        if phone and _has_valid_phone_digits(phone):
+        if phone and is_valid_public_phone(phone):
             tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
             links.append(f'<a href="tel:{_esc(tel)}">{_esc(phone)}</a>')
         tickets = safe_external_url(card.get("tickets_url")) or safe_external_url(card.get("website_url"))
@@ -644,12 +639,12 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     non_live = [h for h in non_live if h]
     basis_note = ""
     if non_live:
-        tel = (
-            f' <a href="tel:{_esc("".join(ch for ch in phone if ch.isdigit() or ch == "+"))}">{t("cta.call")}</a>'
-            if phone and _has_valid_phone_digits(phone)
-            else ""
-        )
-        basis_note = f'<p class="schedule-basis">{_esc(non_live[0])}.{tel}</p>'
+        if phone and is_valid_public_phone(phone):
+            tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+            tel_link = f' <a href="tel:{_esc(tel)}">{t("cta.call")}</a>'
+        else:
+            tel_link = ""
+        basis_note = f'<p class="schedule-basis">{_esc(non_live[0])}.{tel_link}</p>'
     parts = [f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>']
     if note:
         # TASK-180: > 6 ч без удачного прогона — сеансы показываем, но честно.
@@ -853,7 +848,7 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
         )
         rows.append(f'<p class="row"><span>Адрес</span><b>{addr_html}</b></p>')
     phone = str(card.get("phone") or "").strip()
-    if phone and _has_valid_phone_digits(phone):
+    if phone and is_valid_public_phone(phone):
         tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
         rows.append(f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel)}">{_esc(phone)}</a></b></p>')
     site = safe_external_url(card.get("website_url"))

@@ -47,6 +47,8 @@ from src.application.schedule_staleness import (
 )
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
+from src.shared.phone_guard import is_valid_public_phone
+from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 from src.shared.venue_types import VENUE_TYPE_KEYS, has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
@@ -339,15 +341,9 @@ def _place_photo_url(item: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _has_valid_phone_digits(phone: str) -> bool:
-    """Check if phone string contains at least 7 digits (minimal valid phone number)."""
-    digits = "".join(ch for ch in phone if ch.isdigit())
-    return len(digits) >= 7
-
-
 def _phone_link(item: Mapping[str, Any]) -> str:
     phone = str(item.get("phone") or "").strip()
-    if phone and _has_valid_phone_digits(phone):
+    if phone and is_valid_public_phone(phone):
         tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
         return f' <a href="tel:{_esc(tel)}">{_esc(phone)}</a>'
     return ""

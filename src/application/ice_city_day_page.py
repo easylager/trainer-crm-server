@@ -26,6 +26,7 @@ from src.application.ice_city_day import (
 from src.application.place_links import join_public_origin, place_path
 from src.application.schedule_staleness import UNCONFIRMED_HEADING
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
+from src.shared.phone_guard import is_valid_public_phone
 from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
@@ -33,12 +34,6 @@ _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice
 
 def _esc(value: Any) -> str:
     return html_lib.escape(str(value or ""), quote=True)
-
-
-def _has_valid_phone_digits(phone: str) -> bool:
-    """Check if phone string contains at least 7 digits (minimal valid phone number)."""
-    digits = "".join(ch for ch in phone if ch.isdigit())
-    return len(digits) >= 7
 
 
 def _arena_where(arena: Mapping[str, Any]) -> str:
@@ -110,7 +105,7 @@ def _unconfirmed_html(items: list[Mapping[str, Any]], *, city_name: str) -> str:
             name = f'<a href="{_esc(place_path(city_name=city_name, slug=slug))}">{name}</a>'
         phone = str(item.get("phone") or "").strip()
         phone_html = ""
-        if phone and _has_valid_phone_digits(phone):
+        if phone and is_valid_public_phone(phone):
             tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
             phone_html = f' · <a href="tel:{_esc(tel)}">{_esc(phone)}</a>'
         rows.append(f"<li><b>{name}</b> — {_esc(item.get('note'))}{phone_html}</li>")
