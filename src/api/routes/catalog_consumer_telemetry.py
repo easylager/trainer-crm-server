@@ -24,6 +24,7 @@ _ALLOWED_SURFACES = frozenset(
         "place_page",
         "selection_page",
         "ice_city_day",
+        "catalog_home",
     }
 )
 

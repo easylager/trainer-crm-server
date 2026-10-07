@@ -13,7 +13,7 @@
   "seo": {
     "title": "Glide — CRM для тренера на льду",
     "description": "Glide — CRM для тренера на льду в Telegram. Живая ссылка на запись, расписание, клиенты и каталог. 14 дней бесплатно.",
-    "canonical_path": "/",
+    "canonical_path": "/trainers",
     "og_image": "/logos/02-horizontal-full/glide-horizontal-teal-icon-black-text-on-white.png"
   },
   "value_pillars": [

@@ -1850,9 +1850,8 @@ _LANDING_ASSET_MEDIA = {
 }
 
 
-@app.get("/")
-def landing_page():
-    """Glide marketing landing — vertical entry for trainers."""
+def _trainer_landing_html() -> str:
+    """Glide marketing landing — vertical entry for trainers (PDEC-017 ред. 2: ``/trainers``)."""
     path = _LANDING_DIR / "index.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Landing not found")
@@ -1861,7 +1860,12 @@ def landing_page():
         html = inject_landing_html(html)
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return HTMLResponse(content=html, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
+    return html
+
+
+@app.get("/trainers")
+def trainer_landing_page():
+    return HTMLResponse(content=_trainer_landing_html(), media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/join")

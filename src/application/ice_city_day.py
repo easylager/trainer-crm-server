@@ -159,6 +159,23 @@ def _local_today(tz_name: str, now: datetime | None = None) -> date:
     return (now or datetime.now(timezone.utc)).astimezone(tz).date()
 
 
+# Общий FROM/WHERE для «лёд сегодня» и главной каталога — не дублировать правила отбора.
+ICE_CITY_DAY_FROM_SQL = """
+FROM ice_sessions s
+JOIN arenas a ON a.id = s.arena_id
+LEFT JOIN arena_profiles p ON p.arena_id = a.id
+JOIN cities c ON c.id = a.city_id
+"""
+
+ICE_CITY_DAY_SESSION_WHERE_SQL = f"""
+  AND {PUBLIC_ARENA_VISIBLE_SQL}
+  AND {arena_schedule_mode_sql()} <> 'season_closed'
+  AND s.status = :st
+  AND s.kind IN ('public_skate', 'open_ice')
+  AND s.starts_at_utc > :now
+  AND (s.valid_until IS NULL OR s.valid_until >= :now)
+"""
+
 _DAY_SQL = f"""
 SELECT
     a.id            AS arena_id,
@@ -183,20 +200,76 @@ SELECT
     s.session_label,
     s.age_note,
     s.schedule_basis
-FROM ice_sessions s
-JOIN arenas a ON a.id = s.arena_id
-LEFT JOIN arena_profiles p ON p.arena_id = a.id
-JOIN cities c ON c.id = a.city_id
+{ICE_CITY_DAY_FROM_SQL}
 WHERE a.city_id = :cid
-  AND {PUBLIC_ARENA_VISIBLE_SQL}
-  AND {arena_schedule_mode_sql()} <> 'season_closed'
-  AND s.status = :st
-  AND s.kind IN ('public_skate', 'open_ice')
   AND s.local_date = :day
-  AND s.starts_at_utc > :now
-  AND (s.valid_until IS NULL OR s.valid_until >= :now)
+  {ICE_CITY_DAY_SESSION_WHERE_SQL}
 ORDER BY a.name, s.starts_at_local, s.id
 """
+
+_CITY_CLOCK_CTE = f"""
+WITH city_clock AS (
+    SELECT DISTINCT ON (a.city_id)
+           a.city_id,
+           COALESCE(p.timezone, '{DEFAULT_TIMEZONE}') AS tz
+    FROM arenas a
+    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+    WHERE a.city_id = ANY(:city_ids)
+    ORDER BY a.city_id, a.id
+)
+"""
+
+_SESSIONS_ON_LOCAL_DAY_BY_ARENA_SQL = text(
+    _CITY_CLOCK_CTE
+    + f"""
+SELECT a.city_id, a.id AS arena_id, COUNT(s.id) AS session_count
+{ICE_CITY_DAY_FROM_SQL}
+JOIN city_clock cc ON cc.city_id = a.city_id
+WHERE a.city_id = ANY(:city_ids)
+  AND s.local_date = (timezone(cc.tz, :now))::date
+  {ICE_CITY_DAY_SESSION_WHERE_SQL}
+GROUP BY a.city_id, a.id
+"""
+)
+
+
+async def count_sessions_on_local_calendar_day_by_city(
+    session: AsyncSession,
+    *,
+    city_ids: list[int],
+    now: datetime,
+) -> dict[int, int]:
+    """Сеансы на календарный «сегодня» города (как на /ice/{{city}}/today при ``is_today``).
+
+    Один запрос по аренам + один ``load_arena_freshness``; very_stale арены не считаем,
+    как ``_load_day_checked``.
+    """
+    if not city_ids:
+        return {}
+    rows = (
+        await session.execute(
+            _SESSIONS_ON_LOCAL_DAY_BY_ARENA_SQL,
+            {
+                "city_ids": city_ids,
+                "now": now,
+                "st": STATUS_ACTIVE,
+                **public_scope_params(),
+            },
+        )
+    ).mappings().all()
+    arena_ids = [int(r["arena_id"]) for r in rows if int(r["session_count"] or 0) > 0]
+    fresh = await load_arena_freshness(session, arena_ids, now=now) if arena_ids else {}
+    totals: dict[int, int] = {}
+    for row in rows:
+        aid = int(row["arena_id"])
+        cnt = int(row["session_count"] or 0)
+        if cnt <= 0:
+            continue
+        if staleness_level(fresh.get(aid)) == LEVEL_VERY_STALE:
+            continue
+        cid = int(row["city_id"])
+        totals[cid] = totals.get(cid, 0) + cnt
+    return totals
 
 
 def _iso_utc(value: Any) -> str | None:

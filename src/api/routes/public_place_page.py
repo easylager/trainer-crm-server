@@ -38,6 +38,39 @@ from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scop
 
 router = APIRouter(tags=["public-place"])
 
+
+@router.get("/", response_class=HTMLResponse)
+async def catalog_home_page(request: Request, session: AsyncSession = Depends(get_session)):
+    """Потребительская главная каталога Glide (TASK-191-A)."""
+    from src.application.catalog_home_page import (
+        catalog_home_og_image_url,
+        load_catalog_home_view,
+        render_catalog_home_page,
+    )
+    from src.application.place_links import CATALOG_START_ANY, public_telegram_cta_url
+
+    base = _base()
+    view = await load_catalog_home_view(session)
+    canonical = f"{base}/" if base else "/"
+    html = render_catalog_home_page(
+        view,
+        canonical_url=canonical,
+        og_image_url=catalog_home_og_image_url(base),
+        cta_url=public_telegram_cta_url(
+            base,
+            start_param=CATALOG_START_ANY,
+            surface="catalog_home",
+        ),
+        trainers_url=f"{base}/trainers" if base else "/trainers",
+    )
+    await record_public_page_view(
+        session,
+        request,
+        surface="catalog_home",
+        city_id=None,
+    )
+    return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+
 # TASK-189 считает просмотр на каждый заход на /p/ и /c/. Публичный кэш обошёл бы
 # origin и занизил счётчик. Картинки по-прежнему кэшируются: просмотр они не пишут.
 _PAGE_CACHE = {"Cache-Control": "private, no-store"}
@@ -83,7 +116,11 @@ _NOT_FOUND_HTML = """<!DOCTYPE html>
 margin:0;padding:48px 20px;text-align:center}a{color:#0f8f8a;font-weight:600}</style></head>
 <body><h1>Этого места больше нет в каталоге</h1>
 <p>Возможно, оно закрылось или переехало. Посмотрите, где покататься сегодня:</p>
-<p><a href="__HOME__">Открыть карту льда</a></p></body></html>"""
+<p><a href="__HOME__">Открыть каталог Glide</a></p></body></html>"""
+
+
+def _catalog_home(base: str) -> str:
+    return base + "/" if base else "/"
 
 
 def _not_found(home: str) -> HTMLResponse:
@@ -123,7 +160,7 @@ async def place_by_id(arena_id: int, request: Request, session: AsyncSession = D
     view = await load_place_view(session, str(arena_id))
     if view is None or not view["card"].get("slug"):
         merged = await _merged_redirect(session, arena_id, request)
-        return merged or _not_found(_base() + "/webapp/ice")
+        return merged or _not_found(_catalog_home(_base()))
     card = view["card"]
     target = place_path(city_name=str(card.get("city_name") or ""), slug=str(card["slug"]))
     q = request.url.query
@@ -142,13 +179,13 @@ async def place_page(
     base = _base()
     city, arena_id = await _resolve(session, city_ref, slug)
     if city is None or arena_id is None:
-        return _not_found(base + "/webapp/ice")
+        return _not_found(_catalog_home(base))
     session_id = _int_or_none(s)
     invite = _flag(i)
     view = await load_place_view(session, str(arena_id), session_id=session_id)
     if view is None:
         merged = await _merged_redirect(session, arena_id, request)
-        return merged or _not_found(base + "/webapp/ice")
+        return merged or _not_found(_catalog_home(base))
     card = view["card"]
     city_name = str(card.get("city_name") or city["name"])
     if city_ref != city_slug(city_name) or slug != card.get("slug"):
@@ -319,11 +356,12 @@ async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
 
     base = _base()
     rows = (await session.execute(_SITEMAP_SQL, public_scope_params())).mappings().all()
-    # «/» — лендинг тренера, в поиске каталога ему не место. Варианты /c/?t= тоже
-    # не кладём: они noindex и канонизируются на базовый /c/{город}.
+    # «/» — главная каталога; «/trainers» — лендинг тренера. Варианты /c/?t= не кладём:
+    # noindex и канон на базовый /c/{город}.
     by_city: dict[str, list[tuple[str, str, datetime | None]]] = {}
     city_stamp: dict[str, datetime | None] = {}
     order: list[str] = []
+    site_stamp: datetime | None = None
     for row in rows:
         city_name = str(row["city_name"])
         if city_name not in by_city:
@@ -332,10 +370,14 @@ async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
             city_stamp[city_name] = None
         stamp = row["lastmod"] if isinstance(row["lastmod"], datetime) else None
         city_stamp[city_name] = _newer(city_stamp[city_name], stamp)
+        site_stamp = _newer(site_stamp, stamp)
         freq = "daily" if row["venue_type"] == "ice" else "weekly"
         loc = place_page_url(base_url=base, city_name=city_name, slug=str(row["slug"]))
         by_city[city_name].append((loc, freq, stamp))
-    urls: list[tuple[str, str, datetime | None]] = []
+    urls: list[tuple[str, str, datetime | None]] = [
+        (f"{base}/", "daily", site_stamp),
+        (f"{base}/trainers", "weekly", site_stamp),
+    ]
     for city_name in order:
         stamp = city_stamp[city_name]
         urls.append((ice_city_day_page_url(base_url=base, city_name=city_name), "daily", stamp))
@@ -398,7 +440,7 @@ async def selection_page(
     base = _base()
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
-        return _not_found(base + "/webapp/ice")
+        return _not_found(_catalog_home(base))
     venue, when = clean_venue(t), clean_when(w)
     city_name = str(city["name"])
     path = selection_path(city_name=city_name, venue=venue, when=when)
