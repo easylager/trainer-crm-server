@@ -3,6 +3,7 @@
 One arena = one job. Enable only ready MK specs without a BY-egress blocker.
 TASK-071's Minsk Arena row is updated in place (unique arena_id).
 """
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,9 @@ SKIP_STATUSES = frozenset({"skipped"})
 DISABLED_STATUSES = frozenset({"blocked", "unknown", "partial"})
 READY_STATUSES = frozenset({"ready", "ok"})
 
-_HEADER = re.compile(r"^-\s*(arena_id|arena_slug|city|city_name|parser_key|cadence|requires_by_egress):\s*(.+?)\s*$", re.M)
+_HEADER = re.compile(
+    r"^-\s*(arena_id|arena_slug|city|city_name|parser_key|cadence|requires_by_egress):\s*(.+?)\s*$", re.M
+)
 _JSON_FENCE = re.compile(r"```json\s*(\{.*?\})\s*```", re.S)
 _SCALAR_TRUE = frozenset({"true", "yes", "1"})
 _SCALAR_FALSE = frozenset({"false", "no", "0"})
@@ -200,19 +203,19 @@ def _parse_spec(path: Path) -> _SpecDraft | None:
     if parser_key is not None and parser_key.strip().lower() in _SCALAR_NULL:
         # e.g. `- parser_key: null` — spec is research-only, no adapter built yet.
         parser_key = None
-    
+
     # Support both arena_id (legacy) and arena_slug (new stable key)
     arena_raw = headers.get("arena_id")
     arena_slug = headers.get("arena_slug")
     city_name = headers.get("city") or headers.get("city_name")
-    
+
     # At least one arena identifier must be present
     if not parser_key or (not arena_raw and not arena_slug):
         return None
-    
+
     arena_id = int(arena_raw) if arena_raw and arena_raw.strip().lower() not in _SCALAR_NULL else None
     arena_slug = arena_slug if arena_slug and arena_slug.strip().lower() not in _SCALAR_NULL else None
-    
+
     cadence = headers.get("cadence", "daily").strip()
     if cadence not in {"hourly", "daily", "weekly"}:
         cadence = "daily"
@@ -309,10 +312,8 @@ def build_minsk_job_seeds(
     registry = {int(item["arena_id"]): item for item in load_minsk_parser_registry(registry_path) if "arena_id" in item}
     seeds: list[JobSeed] = []
     for spec in load_ice_parser_specs(parsers_dir):
-        # Determine the arena_id for the seed
-        # Priority: spec.arena_id > fallback to arena lookup by slug (will be resolved during upsert)
         arena_id = spec.arena_id
-        
+
         entry = registry.get(arena_id) if arena_id else None
         if entry is not None:
             target = str(entry.get("target") or "")
@@ -327,13 +328,13 @@ def build_minsk_job_seeds(
             merged.update(config)
             config = merged
         enabled = _job_enabled(spec, entry, fixture_ok=fixture_ok, fixtures_dir=fixtures)
-        
+
         # Store arena_slug and city_name in config for later resolution
         if spec.arena_slug:
             config["arena_slug"] = spec.arena_slug
         if spec.city_name:
             config["city_name"] = spec.city_name
-        
+
         seeds.append(
             JobSeed(
                 arena_id=arena_id or 0,  # Placeholder, will be resolved during upsert
@@ -353,13 +354,13 @@ async def _resolve_arena_id_by_slug(
     city_name: str,
 ) -> int | None:
     """Resolve arena_id from (city_name, arena_slug) using city_slug() for stable Cyrillic matching.
-    
+
     Handles е/ё Unicode equivalence via city_slug() transliteration.
     """
     from src.application.ice_city_day import city_slug
-    
+
     target_city_slug = city_slug(city_name)
-    
+
     # Fetch all arenas with matching arena_slug, then filter by city_slug in Python
     result = await session.execute(
         text("""
@@ -369,14 +370,14 @@ async def _resolve_arena_id_by_slug(
             JOIN cities c ON c.id = a.city_id
             WHERE ap.slug = :arena_slug
         """),
-        {"arena_slug": arena_slug}
+        {"arena_slug": arena_slug},
     )
-    
+
     for row in result.fetchall():
         arena_id, db_city_name = row
         if city_slug(db_city_name) == target_city_slug:
             return int(arena_id)
-    
+
     return None
 
 
@@ -387,7 +388,7 @@ async def upsert_ice_parser_jobs(
     now: datetime | None = None,
 ) -> SeedReport:
     """Insert or update one ice_parser_jobs row per arena_id. Never duplicates.
-    
+
     TASK-196: arena_slug + city_name is the primary stable key. arena_id is legacy.
     If both are present, arena_slug takes precedence and arena_id is validated for consistency.
     Raises ValueError with all missing (city, slug) pairs if any cannot be resolved.
@@ -395,22 +396,22 @@ async def upsert_ice_parser_jobs(
     clock = now or datetime.now(timezone.utc)
     if clock.tzinfo is None:
         clock = clock.replace(tzinfo=timezone.utc)
-    
+
     # First pass: resolve all arena_ids and collect missing pairs
     resolved_seeds: list[tuple[JobSeed, int]] = []
     missing_pairs: list[tuple[str, str, str]] = []  # (city_name, arena_slug, parser_key)
-    
+
     for seed in seeds:
         arena_slug = seed.config.get("arena_slug")
         city_name = seed.config.get("city_name")
-        
+
         # arena_slug takes precedence over arena_id
         if arena_slug and city_name:
             resolved_id = await _resolve_arena_id_by_slug(session, arena_slug, city_name)
             if resolved_id is None:
                 missing_pairs.append((city_name, arena_slug, seed.parser_key))
                 continue
-            
+
             # If seed also has arena_id, verify consistency
             if seed.arena_id and seed.arena_id != 0 and seed.arena_id != resolved_id:
                 raise ValueError(
@@ -418,7 +419,7 @@ async def upsert_ice_parser_jobs(
                     f"Spec has arena_id={seed.arena_id}, but ({city_name}, {arena_slug}) resolves to arena_id={resolved_id}. "
                     f"arena_slug takes precedence. Remove arena_id from spec or fix the conflict."
                 )
-            
+
             resolved_seeds.append((seed, resolved_id))
         elif seed.arena_id and seed.arena_id != 0:
             # Legacy: arena_id only (no slug)
@@ -432,14 +433,12 @@ async def upsert_ice_parser_jobs(
         else:
             # Neither slug nor valid arena_id
             missing_pairs.append((city_name or "?", arena_slug or "?", seed.parser_key))
-    
+
     # Fail explicitly if any arena cannot be resolved
     if missing_pairs:
         lines = [f"  - {parser_key}: ({city}, {slug})" for city, slug, parser_key in missing_pairs]
-        raise ValueError(
-            f"Failed to resolve {len(missing_pairs)} parser(s) to arenas:\n" + "\n".join(lines)
-        )
-    
+        raise ValueError(f"Failed to resolve {len(missing_pairs)} parser(s) to arenas:\n" + "\n".join(lines))
+
     # Second pass: upsert jobs
     report = SeedReport()
     for seed, arena_id in resolved_seeds:
@@ -449,10 +448,10 @@ async def upsert_ice_parser_jobs(
                 {"id": arena_id},
             )
         ).scalar()
-        
+
         # Clean up arena_slug/city_name from config before storing (they're metadata, not runtime config)
         config_to_store = {k: v for k, v in seed.config.items() if k not in ("arena_slug", "city_name")}
-        
+
         payload = {
             "arena_id": arena_id,
             "parser_key": seed.parser_key,
@@ -463,23 +462,20 @@ async def upsert_ice_parser_jobs(
         }
         if existing is None:
             await session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO ice_parser_jobs (
                         arena_id, parser_key, is_enabled, cadence, next_run_at, config, notes
                     ) VALUES (
                         :arena_id, :parser_key, :is_enabled, :cadence, :next_run_at,
                         CAST(:config AS jsonb), :notes
                     )
-                    """
-                ),
+                    """),
                 {**payload, "next_run_at": clock},
             )
             report.inserted += 1
         else:
             await session.execute(
-                text(
-                    """
+                text("""
                     UPDATE ice_parser_jobs
                     SET parser_key = :parser_key,
                         is_enabled = :is_enabled,
@@ -487,8 +483,7 @@ async def upsert_ice_parser_jobs(
                         config = CAST(:config AS jsonb),
                         notes = :notes
                     WHERE arena_id = :arena_id
-                    """
-                ),
+                    """),
                 payload,
             )
             report.updated += 1

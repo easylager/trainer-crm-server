@@ -1,7 +1,7 @@
 # Parser spec: ТЦ DiaMond city
 
 - arena_id: 7
-- arena_slug: minsk-diamond
+- arena_slug: tts-diamond-city
 - city: Минск
 - parser_key: diamond_html_v1
 - cadence: weekly

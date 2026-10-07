@@ -1,8 +1,8 @@
 # Parser spec: СК «Юбилейный» (СПб, пр. Добролюбова 18)
 
 - arena_id: 97
-- arena_slug: spb-yubileyny
-- city: Санкт-Петербург
+- arena_slug: sk-yubileynyy
+- city: Санкт-Петербург/ЛО
 - parser_key: yubileyny_afisha_html_v1
 - cadence: event-driven (не daily/weekly сетка — кассовая афиша публикует единичные события по мере готовности)
 - timezone: Europe/Moscow

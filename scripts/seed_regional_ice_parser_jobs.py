@@ -1,4 +1,4 @@
-"""Seed ice_parser_jobs for the 17 regional (non-Minsk) BY rinks with a live MK source.
+"""Seed ice_parser_jobs for the regional (non-Minsk) BY rinks with a live MK source.
 
 Configs come straight from src/ingestion/seed_config_regional_batch_{a,b,c,d}.py
 (written by the batch subagents against real live URLs, verified 2026-09-07).
@@ -13,6 +13,7 @@ Usage:
   PYTHONPATH=. python scripts/seed_regional_ice_parser_jobs.py --apply
   PYTHONPATH=. python scripts/seed_regional_ice_parser_jobs.py --apply --i-know-this-is-prod
 """
+
 from __future__ import annotations
 
 import argparse
@@ -38,12 +39,9 @@ def _assert_local_database(url: str, *, apply: bool, allow_prod: bool = False) -
 
 
 def build_regional_job_seeds() -> list[JobSeed]:
-    """Build regional job seeds with slug-based arena lookup (TASK-196).
-    
-    Uses real arena slugs from seed_regional_arenas.ARENAS source of truth.
-    Maps (city_name, arena_slug) to arena_id during upsert_ice_parser_jobs.
-    """
-    from scripts.seed_regional_arenas import ARENAS
+    """Build regional job seeds. Slug and city come from ``regional_arenas.ARENAS``."""
+    from src.ingestion.arena_seed import arenas_by_parser_key
+    from src.ingestion.regional_arenas import ARENAS
     from src.ingestion.seed_config_regional_batch_a import (
         BARANOVICHI_LDS_CONFIG,
         BREST_LDS_CONFIG,
@@ -88,56 +86,50 @@ def build_regional_job_seeds() -> list[JobSeed]:
         SHKLOV_ARENA_CONFIG,
         SOLIGORSK_SZK_CONFIG,
     )
-    
-    # Build slug map from source of truth: (city_name, arena_slug) → arena_id
-    slug_map: dict[tuple[str, str], int] = {}
-    for arena_id, city_name, _name, *_rest, arena_slug, _has_parser in ARENAS:
-        slug_map[(city_name, arena_slug)] = arena_id
-    
-    # (city_name, arena_slug, parser_key, config, cadence)
-    rows: list[tuple[str, str, str, dict, str]] = [
-        ("Брест", "brest-lds", PARSER_KEY_BREST_LDS, BREST_LDS_CONFIG, "daily"),
-        ("Барановичи", "baranovichi-lds", PARSER_KEY_BARANOVICHI_LDS, BARANOVICHI_LDS_CONFIG, "daily"),
-        ("Кобрин", "kobrin-lds", PARSER_KEY_KOBRIN_LDS, KOBRIN_LDS_CONFIG, "daily"),
-        ("Пинск", "pinsk-volna", PARSER_KEY_PINSK_VOLNA, PINSK_VOLNA_CONFIG, "daily"),
-        ("Гродно", "grodno-triniti", PARSER_KEY_GRODNO_TRINITI, GRODNO_TRINITI_CONFIG, "daily"),
-        ("Гродно", "grodno-neman", PARSER_KEY_GRODNO_NEMAN, GRODNO_NEMAN_CONFIG, "daily"),
-        ("Лида", "lida-lds", PARSER_KEY_LIDA_LDS, LIDA_LDS_CONFIG, "daily"),
-        ("Новополоцк", "novopolotsk-lds", PARSER_KEY_NOVOPOLOTSK_LDS, NOVOPOLOTSK_LDS_CONFIG, "daily"),
-        ("Витебск", "vitebsk-ds", PARSER_KEY_VITEBSK_DS, VITEBSK_DS_CONFIG, "daily"),
-        ("Могилёв", "mogilev-ds", PARSER_KEY_MOGILEV_DS, MOGILEV_DS_CONFIG, "daily"),
-        ("Орша", "orsha-arena", PARSER_KEY_ORSHA_ARENA, ORSHA_ARENA_CONFIG, "daily"),
-        ("Горки", "gorki-lds", PARSER_KEY_GORKI_LDS, GORKI_LDS_CONFIG, "daily"),
-        ("Островец", "ostrovets-lds", PARSER_KEY_OSTROVETS_LDS, OSTROVETS_LDS_CONFIG, "daily"),
-        ("Бобруйск", "bobruisk-arena", PARSER_KEY_BOBRUISK_ARENA, BOBRUISK_ARENA_CONFIG, "daily"),
-        ("Молодечно", "molodechno-src", PARSER_KEY_MOLODECHNO_SRC, MOLODECHNO_SRC_CONFIG, "daily"),
-        ("Солигорск", "soligorsk-szk", PARSER_KEY_SOLIGORSK_SZK, SOLIGORSK_SZK_CONFIG, "daily"),
-        ("Шклов", "shklov-arena", PARSER_KEY_SHKLOV_ARENA, SHKLOV_ARENA_CONFIG, "daily"),
-        ("Гомель", "gomel-lds", PARSER_KEY_GOMEL_LDS, GOMEL_LDS_CONFIG, "daily"),
-    ]
-    
-    # Verify all (city, slug) pairs exist in source of truth
-    for city_name, arena_slug, parser_key, *_ in rows:
-        if (city_name, arena_slug) not in slug_map:
-            available = [f"{c}/{s}" for c, s in sorted(slug_map.keys())]
-            raise ValueError(
-                f"Parser {parser_key}: arena not found for ({city_name}, {arena_slug}). "
-                f"Available in seed_regional_arenas.ARENAS: {', '.join(available)}"
-            )
-    
+
+    configs: dict[str, dict] = {
+        PARSER_KEY_BREST_LDS: BREST_LDS_CONFIG,
+        PARSER_KEY_BARANOVICHI_LDS: BARANOVICHI_LDS_CONFIG,
+        PARSER_KEY_KOBRIN_LDS: KOBRIN_LDS_CONFIG,
+        PARSER_KEY_PINSK_VOLNA: PINSK_VOLNA_CONFIG,
+        PARSER_KEY_GRODNO_TRINITI: GRODNO_TRINITI_CONFIG,
+        PARSER_KEY_GRODNO_NEMAN: GRODNO_NEMAN_CONFIG,
+        PARSER_KEY_LIDA_LDS: LIDA_LDS_CONFIG,
+        PARSER_KEY_NOVOPOLOTSK_LDS: NOVOPOLOTSK_LDS_CONFIG,
+        PARSER_KEY_VITEBSK_DS: VITEBSK_DS_CONFIG,
+        PARSER_KEY_MOGILEV_DS: MOGILEV_DS_CONFIG,
+        PARSER_KEY_ORSHA_ARENA: ORSHA_ARENA_CONFIG,
+        PARSER_KEY_GORKI_LDS: GORKI_LDS_CONFIG,
+        PARSER_KEY_OSTROVETS_LDS: OSTROVETS_LDS_CONFIG,
+        PARSER_KEY_BOBRUISK_ARENA: BOBRUISK_ARENA_CONFIG,
+        PARSER_KEY_MOLODECHNO_SRC: MOLODECHNO_SRC_CONFIG,
+        PARSER_KEY_SOLIGORSK_SZK: SOLIGORSK_SZK_CONFIG,
+        PARSER_KEY_SHKLOV_ARENA: SHKLOV_ARENA_CONFIG,
+        PARSER_KEY_GOMEL_LDS: GOMEL_LDS_CONFIG,
+    }
+    by_key = arenas_by_parser_key(ARENAS)
+    missing = sorted(set(configs) - set(by_key))
+    extra = sorted(set(by_key) - set(configs))
+    if missing or extra:
+        raise ValueError(
+            "Regional parser_key mismatch between seed configs and ARENAS. "
+            f"missing_in_ARENAS={missing} extra_in_ARENAS={extra}"
+        )
+
     seeds: list[JobSeed] = []
-    for city_name, arena_slug, parser_key, base_config, cadence in rows:
+    for parser_key, base_config in configs.items():
+        arena = by_key[parser_key]
         config = dict(base_config)
-        config["arena_slug"] = arena_slug
-        config["city_name"] = city_name
+        config["arena_slug"] = arena.slug
+        config["city_name"] = arena.city_name
         seeds.append(
             JobSeed(
-                arena_id=0,  # Will be resolved via slug lookup
+                arena_id=0,  # Resolved via (city_name, arena_slug) during upsert
                 parser_key=parser_key,
-                cadence=cadence,
+                cadence="daily",
                 is_enabled=True,
                 config=config,
-                notes=f"regional seed: {parser_key} ({city_name}/{arena_slug})",
+                notes=f"regional seed: {parser_key} ({arena.city_name}/{arena.slug})",
             )
         )
     return seeds

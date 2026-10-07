@@ -1,7 +1,7 @@
 # Parser spec: Чижовка-арена
 
 - arena_id: 6
-- arena_slug: minsk-chizhovka
+- arena_slug: chizhovka-arena
 - city: Минск
 - parser_key: chizhovka_html_v1
 - cadence: weekly

@@ -1,8 +1,8 @@
 # Parser spec: Центр ледовых видов спорта «Парнас» (СПб)
 
 - arena_id: 174
-- arena_slug: parnas
-- city: Санкт-Петербург
+- arena_slug: tsentr-ledovykh-vidov-sporta-parnas
+- city: Санкт-Петербург/ЛО
 - parser_key: parnasarena_text_v1
 - cadence: weekly
 - timezone: Europe/Moscow

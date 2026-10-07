@@ -1,8 +1,8 @@
 # Parser spec: Шуваловский лёд
 
 - arena_id: 196
-- arena_slug: spb-shuvalovsky-led
-- city: Санкт-Петербург
+- arena_slug: shuvalovskiy-led
+- city: Санкт-Петербург/ЛО
 - parser_key: shuvalovskyled_html_v1
 - cadence: daily
 - requires_by_egress: false

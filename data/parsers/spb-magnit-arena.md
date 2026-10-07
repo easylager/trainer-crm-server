@@ -1,8 +1,8 @@
 # Parser spec: Ледовая арена «Магнит» (СПб, Магнитогорская ул. 51В)
 
 - arena_id: 187
-- arena_slug: spb-magnit-arena
-- city: Санкт-Петербург
+- arena_slug: ledovaya-arena-magnit
+- city: Санкт-Петербург/ЛО
 - parser_key: magnitarena_html_v1
 - cadence: weekly
 - timezone: Europe/Moscow

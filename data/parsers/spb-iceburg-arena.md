@@ -1,8 +1,8 @@
 # Parser spec: Айсбург Арена (СПб, Парашютная ул. 11)
 
 - arena_id: 193
-- arena_slug: spb-iceburg-arena
-- city: Санкт-Петербург
+- arena_slug: aysburg-arena
+- city: Санкт-Петербург/ЛО
 - parser_key: iceburgarena_yclients_v1
 - cadence: weekly
 - timezone: Europe/Moscow

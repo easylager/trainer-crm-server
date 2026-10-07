@@ -1,8 +1,8 @@
 # Parser spec: Ледовая арена «Бугры» (СПб)
 
 - arena_id: 111
-- arena_slug: spb-bugry-arena
-- city: Санкт-Петербург
+- arena_slug: ledovaya-arena-bugry
+- city: Санкт-Петербург/ЛО
 - parser_key: bugryarena_html_v1
 - cadence: weekly
 - timezone: Europe/Moscow

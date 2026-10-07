@@ -1,7 +1,7 @@
 # Parser spec: Минск Арена (главная арена)
 
 - arena_id: 2
-- arena_slug: minskarena
+- arena_slug: manezh
 - city: Минск
 - parser_key: minskarena_main_saleframe_v1
 - cadence: daily

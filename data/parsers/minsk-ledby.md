@@ -1,7 +1,7 @@
 # Parser spec: Ледовый дворец спорта Минской области (led.by)
 
 - arena_id: 5
-- arena_slug: minsk-ledby
+- arena_slug: ledovyy-dvorets-sporta-minskoy-oblasti
 - city: Минск
 - parser_key: ledby_html_v1
 - cadence: weekly

@@ -1,8 +1,8 @@
 # Parser spec: Ледовый комплекс «Шанс Арена» (СПб)
 
 - arena_id: 100
-- arena_slug: spb-shans-arena
-- city: Санкт-Петербург
+- arena_slug: ledovyy-kompleks-shans-arena
+- city: Санкт-Петербург/ЛО
 - parser_key: shansarena_html_v1
 - cadence: daily
 - timezone: Europe/Moscow

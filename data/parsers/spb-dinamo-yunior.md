@@ -1,8 +1,8 @@
 # Parser spec: Ледовая арена «Динамо-Юниор»
 
 - arena_id: 173
-- arena_slug: spb-dinamo-yunior
-- city: Санкт-Петербург
+- arena_slug: ledovaya-arena-dinamo-yunior
+- city: Санкт-Петербург/ЛО
 - parser_key: dinamoyunior_html_v1
 - cadence: daily
 - requires_by_egress: false

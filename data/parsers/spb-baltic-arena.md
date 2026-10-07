@@ -1,8 +1,8 @@
 # Parser spec: Балтик Арена (СПб, Василеостровский намыв)
 
 - arena_id: 192
-- arena_slug: baltic-arena
-- city: Санкт-Петербург
+- arena_slug: baltik-arena
+- city: Санкт-Петербург/ЛО
 - parser_key: balticarena_html_v1
 - cadence: weekly
 - timezone: Europe/Moscow
