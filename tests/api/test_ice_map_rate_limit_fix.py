@@ -75,3 +75,43 @@ async def test_serve_photo_does_not_block_event_loop(app_use_test_db) -> None:
     assert fast.status_code == 200
     assert slow_resp.status_code == 200
     assert fast_elapsed < 0.15, "fast request must not wait for slow S3 mock on another route"
+    assert "immutable" in (slow_resp.headers.get("cache-control") or "")
+    assert (slow_resp.headers.get("content-type") or "").startswith("image/jpeg")
+
+
+@pytest.mark.asyncio
+async def test_ymaps_meta_escapes_special_characters(monkeypatch, app_use_test_db) -> None:
+    monkeypatch.setenv("YANDEX_MAPS_JS_API_KEY", 'a"<>&b')
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/webapp/ice")
+    assert 'content="a&quot;&lt;&gt;&amp;b"' in resp.text
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_warning_masks_ip_and_does_not_flood(monkeypatch, app_use_test_db, caplog) -> None:
+    import logging
+
+    monkeypatch.setenv("API_RATE_LIMIT_PUBLIC_MAX_REQUESTS", "1")
+    monkeypatch.setenv("API_RATE_LIMIT_PUBLIC_WINDOW_SEC", "60")
+    reset_http_limiters_for_tests()
+    with caplog.at_level(logging.WARNING):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            assert (await client.get("/api/public/cities")).status_code == 200
+            assert (await client.get("/api/public/cities")).status_code == 429
+            assert (await client.get("/api/public/cities")).status_code == 429
+    hits = [r.getMessage() for r in caplog.records if "rate limit exceeded" in r.getMessage()]
+    assert len(hits) == 1
+    assert "ip=127.0.x.x" in hits[0]
+    assert "127.0.0.1" not in hits[0]
+
+
+@pytest.mark.asyncio
+async def test_map_config_warns_when_key_empty(monkeypatch, app_use_test_db, caplog) -> None:
+    import logging
+
+    monkeypatch.setenv("YANDEX_MAPS_JS_API_KEY", "")
+    with caplog.at_level(logging.WARNING):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/public/ice/map-config")
+    assert resp.status_code == 200
+    assert any("YANDEX_MAPS_JS_API_KEY is empty" in r.getMessage() for r in caplog.records)

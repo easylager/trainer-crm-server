@@ -129,6 +129,15 @@ describe('бесфотошная карточка: иконка типа на п
       card: 'https://img/1-card.jpg',
     });
     assert.equal(v.photo, 'https://img/1-card.jpg');
+    const both = boardCardView({
+      id: 3,
+      name: 'Каток',
+      card: 'https://img/3-card.jpg',
+      thumb: 'https://img/3-thumb.jpg',
+    });
+    assert.equal(both.photo, 'https://img/3-card.jpg');
+    assert.match(both.photoSrcset, /3-thumb.jpg 320w/);
+    assert.match(both.photoSrcset, /3-card.jpg 800w/);
     const v2 = boardCardView({ id: 2, name: 'Каток', thumb: 'https://img/2-thumb.jpg' });
     assert.equal(v2.photo, 'https://img/2-thumb.jpg');
   });

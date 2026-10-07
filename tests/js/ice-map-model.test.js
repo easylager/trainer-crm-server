@@ -126,6 +126,21 @@ describe('resolveApiKey / map unavailable copy', () => {
     assert.equal(fail.missingKey, false);
     assert.equal(fail.reason, 'config-failed');
   });
+
+  it('stops inside the budget and keeps the last real status', async () => {
+    const { fetchMapConfigKey } = loadModel();
+    const result = await fetchMapConfigKey(
+      () =>
+        Promise.resolve({
+          ok: false,
+          status: 503,
+          headers: { get: () => '30' },
+        }),
+      { budgetMs: 80, perFetchMs: 5000 }
+    );
+    assert.equal(result.status, 503);
+    assert.equal(result.missingKey, false);
+  });
 });
 
 describe('splitMapAndList (AC-006)', () => {

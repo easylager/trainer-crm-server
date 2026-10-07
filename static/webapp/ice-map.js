@@ -195,6 +195,7 @@
     var boundsTimer = null;
     var ignoreBounds = false;
     var started = false;
+    var starting = false;
     var missingKey = false;
     var keyResolved = '';
     var lastUnavailableReason = 'config-failed';
@@ -1088,7 +1089,8 @@
         if (!btn) return;
         var action = btn.getAttribute('data-map-unavail-action');
         if (action === 'retry') {
-          if (!missingKey) start();
+          if (starting || missingKey || btn.disabled) return;
+          start();
           return;
         }
         if (action === 'list' && typeof opts.onShowList === 'function') opts.onShowList();
@@ -1104,10 +1106,19 @@
       showStage(false);
       showSheet(false);
       bindUnavailableActions();
-      renderEmpty(emptyEl, MM.mapUnavailableState(reason));
+      var view = MM.mapUnavailableState(reason);
+      if (reason === 'no-key') view = Object.assign({}, view, { retryLabel: '' });
+      renderEmpty(emptyEl, view);
+    }
+
+    function setRetryDisabled(on) {
+      if (!emptyEl || !emptyEl.querySelector) return;
+      var retryBtn = emptyEl.querySelector('[data-map-unavail-action="retry"]');
+      if (retryBtn) retryBtn.disabled = !!on;
     }
 
     function start() {
+      if (starting) return Promise.resolve();
       if (getIntent() === 'coach') {
         showCoachEmpty();
         return Promise.resolve();
@@ -1154,6 +1165,8 @@
         return Promise.resolve();
       }
       var getKey = opts.getKey || defaultGetKey;
+      starting = true;
+      setRetryDisabled(true);
       var keyPromise = keyResolved
         ? Promise.resolve(MM.mapKeyResult(keyResolved, { reason: 'cached', status: 200, missingKey: false }))
         : Promise.resolve(getKey());
@@ -1217,6 +1230,13 @@
           }
           if (tag === 'no-key') missingKey = true;
           showUnavailable(tag);
+        })
+        .then(function () {
+          starting = false;
+          setRetryDisabled(false);
+        }, function () {
+          starting = false;
+          setRetryDisabled(false);
         });
     }
 

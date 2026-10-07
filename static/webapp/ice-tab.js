@@ -861,12 +861,25 @@
     });
   }
 
-  function listPhotoHtml(src) {
+  function listPhotoHtml(view) {
+    var src = '';
+    var srcset = '';
+    var sizes = '';
+    if (view && typeof view === 'object') {
+      src = view.photo || view.thumb || '';
+      srcset = view.photoSrcset || '';
+      sizes = view.photoSizes || '';
+    } else {
+      src = view || '';
+    }
     if (!src) return '';
     return (
       '<img class="ice-board__photo-img ice-acard__img" src="' +
       esc(src) +
-      '" alt="" loading="lazy" decoding="async" />'
+      '"' +
+      (srcset ? ' srcset="' + esc(srcset) + '"' : '') +
+      (sizes ? ' sizes="' + esc(sizes) + '"' : '') +
+      ' alt="" loading="lazy" decoding="async" />'
     );
   }
 
@@ -881,7 +894,7 @@
     /* TASK-148 (AC-2): нет фото — нет фото-блока. Плашка типа места: иконка
        с сервера (venue_icon), фолбэк — монограмма имени. */
     var photo = v.photo
-      ? '<span class="ice-board__photo">' + listPhotoHtml(v.photo)
+      ? '<span class="ice-board__photo">' + listPhotoHtml(v)
       : '<span class="ice-board__photo ice-board__photo--empty">' +
         '<span class="ice-board__initial" aria-hidden="true">' +
         esc(v.venueIcon || v.initial) +
@@ -950,7 +963,7 @@
       '<span class="ice-acard__ph' +
       (view.thumb ? '' : ' ice-acard__ph--empty') +
       '">' +
-      (view.thumb ? listPhotoHtml(view.thumb) : '') +
+      (view.thumb ? listPhotoHtml({ thumb: view.thumb, photo: view.thumb }) : '') +
       (view.thumb
         ? ''
         : '<span class="ice-acard__mono" aria-hidden="true">' + esc(view.initial || '?') + '</span>') +
@@ -1045,6 +1058,7 @@
       return;
     }
     if (paint === 'empty') {
+      lastArenaListSig = '';
       var city = cityFromState(state.cityId) || {};
       var shopScope = M.catalogScope(state.intent, state.venueTypes) === 'shop';
       var empty;
@@ -1071,6 +1085,7 @@
       return;
     }
     if (state.intent === 'coach') {
+      lastArenaListSig = '';
       list.innerHTML = state.items.map(renderTrainerCard).join('') + loadMoreHtml();
       showActiveList();
       return;
@@ -1080,21 +1095,30 @@
        забыть, что это уже не ответ на выбранный чип. */
     var parts = M.orderForFeed(state.items, state.window, state.nearOn);
     var brk = parts.hits.length ? M.windowBreakView(state.window, parts.rest, state.venueTypes) : null;
-    var arenaSig =
-      parts.hits
-        .map(function (it) {
-          return String(it.id) + ':' + String(it.thumb || it.card || '');
-        })
-        .join(',') +
-      '|' +
-      parts.rest
-        .map(function (it) {
-          return String(it.id) + ':' + String(it.thumb || it.card || '');
-        })
-        .join(',') +
-      '|' +
-      (brk ? '1' : '0');
-    if (arenaSig === lastArenaListSig && list.innerHTML) {
+    var now = new Date();
+    function cardSig(it) {
+      var v = M.boardCardView(it, now, { window: state.window });
+      return [
+        v.time,
+        v.day,
+        v.prices,
+        v.status,
+        v.depth,
+        v.name,
+        v.where,
+        v.photo,
+        v.offWindow ? '1' : '0',
+      ].join('\u001f');
+    }
+    var arenaSig = [
+      parts.hits.map(cardSig).join('|'),
+      parts.rest.map(cardSig).join('|'),
+      brk ? brk.title + '\u001f' + brk.sub : '',
+      loadMoreHtml(),
+      state.nearOn ? 'near' : '',
+      state.window ? String(state.window.key || '') + ':' + String(state.window.label || '') : '',
+    ].join('\n');
+    if (arenaSig === lastArenaListSig && list.querySelector && list.querySelector('.ice-board')) {
       showActiveList();
       return;
     }

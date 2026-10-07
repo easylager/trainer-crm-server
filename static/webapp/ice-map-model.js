@@ -84,7 +84,7 @@
     return {
       key: resolved,
       reason: opts.reason || (resolved ? 'ok' : 'no-key'),
-      status: opts.status != null ? opts.status : resolved ? 200 : 200,
+      status: opts.status != null ? opts.status : 0,
       missingKey: !!opts.missingKey,
     };
   }
@@ -100,9 +100,18 @@
     var perFetchMs = opts.perFetchMs != null ? Number(opts.perFetchMs) : 5000;
     var started = Date.now();
     var attempt = 0;
+    var lastStatus = 0;
 
     function elapsed() {
       return Date.now() - started;
+    }
+
+    function remaining() {
+      return budgetMs - elapsed();
+    }
+
+    function exhausted() {
+      return mapKeyResult('', { reason: 'config-failed', status: lastStatus, missingKey: false });
     }
 
     function backoffMs(resp, n) {
@@ -113,12 +122,10 @@
     }
 
     function tryFetch() {
-      if (elapsed() >= budgetMs) {
-        return Promise.resolve(
-          mapKeyResult('', { reason: 'config-failed', status: 429, missingKey: false })
-        );
-      }
+      var left = remaining();
+      if (left <= 0) return Promise.resolve(exhausted());
       attempt += 1;
+      var timeoutMs = Math.min(perFetchMs, left);
       var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
       var timer =
         ctrl &&
@@ -128,10 +135,11 @@
           } catch (e) {
             /* ignore */
           }
-        }, perFetchMs);
+        }, timeoutMs);
       return fetchFn('/api/public/ice/map-config', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
         .then(function (r) {
           if (timer) clearTimeout(timer);
+          lastStatus = r.status || 0;
           if (r.ok) {
             return r.json().then(function (data) {
               var k = resolveApiKey({
@@ -143,9 +151,11 @@
               return mapKeyResult(k, { reason: 'ok', status: 200, missingKey: false });
             });
           }
-          if ((r.status === 429 || r.status >= 500) && attempt < maxAttempts && elapsed() < budgetMs) {
+          if ((r.status === 429 || r.status >= 500) && attempt < maxAttempts && remaining() > 0) {
+            var wait = Math.min(backoffMs(r, attempt), remaining());
+            if (wait <= 0) return exhausted();
             return new Promise(function (resolve) {
-              setTimeout(resolve, backoffMs(r, attempt));
+              setTimeout(resolve, wait);
             }).then(tryFetch);
           }
           return mapKeyResult('', {
@@ -156,12 +166,15 @@
         })
         .catch(function () {
           if (timer) clearTimeout(timer);
-          if (attempt < maxAttempts && elapsed() < budgetMs) {
+          if (!lastStatus) lastStatus = 0;
+          if (attempt < maxAttempts && remaining() > 0) {
+            var wait = Math.min(backoffMs(null, attempt), remaining());
+            if (wait <= 0) return exhausted();
             return new Promise(function (resolve) {
-              setTimeout(resolve, backoffMs(null, attempt));
+              setTimeout(resolve, wait);
             }).then(tryFetch);
           }
-          return mapKeyResult('', { reason: 'config-failed', status: 0, missingKey: false });
+          return mapKeyResult('', { reason: 'config-failed', status: lastStatus, missingKey: false });
         });
     }
 

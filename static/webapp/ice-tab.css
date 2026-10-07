@@ -1020,6 +1020,8 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
 }
 
 .ice-acard__ph {
+  position: relative;
+  overflow: hidden;
   height: 74px;
   border-radius: var(--app-radius-sm);
   background: linear-gradient(150deg, var(--glide-line), var(--glide-paper));

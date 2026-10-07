@@ -7,6 +7,7 @@ Webhooks are excluded from rate limit; multipart uploads use a larger cap when C
 from __future__ import annotations
 
 import logging
+import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -33,13 +34,17 @@ def _mask_client_ip(ip: str) -> str:
         return ":".join(head[:3]) + ":…" if len(head) > 3 else ip
     return "?"
 
+
+
 _limiters: dict[str, RateLimiter] | None = None
+_rate_limit_warn_at: dict[tuple[str, str], float] = {}
 
 
 def reset_http_limiters_for_tests() -> None:
     """Clear cached limiters so the next request rebuilds from current env (tests only)."""
     global _limiters
     _limiters = None
+    _rate_limit_warn_at.clear()
 
 
 def client_ip_from_request(request: Request) -> str:
@@ -101,6 +106,18 @@ def _get_limiters() -> dict[str, RateLimiter]:
     return _limiters
 
 
+def _log_rate_limit_once(bucket: str, path: str, ip: str, window_sec: float) -> None:
+    """One warning per (bucket, masked IP) per limiter window — a burst of 429s must not flood logs."""
+    masked = _mask_client_ip(ip)
+    key = (bucket, masked)
+    now = time.monotonic()
+    last = _rate_limit_warn_at.get(key)
+    if last is not None and now - last < max(window_sec, 1.0):
+        return
+    _rate_limit_warn_at[key] = now
+    logger.warning("rate limit exceeded bucket=%s path=%s ip=%s", bucket, path, masked)
+
+
 class ApiRateLimitMiddleware(BaseHTTPMiddleware):
     """Sliding-window limit per IP for /api/* and /go (except /api/webhooks)."""
 
@@ -119,12 +136,7 @@ class ApiRateLimitMiddleware(BaseHTTPMiddleware):
             bucket = "bot"
         limiter = _get_limiters()[bucket]
         if not limiter.check_and_consume(ip):
-            logger.warning(
-                "rate limit exceeded bucket=%s path=%s ip=%s",
-                bucket,
-                path,
-                _mask_client_ip(ip),
-            )
+            _log_rate_limit_once(bucket, path, ip, float(limiter.window_sec))
             retry = max(1, int(limiter.window_sec))
             return JSONResponse(
                 status_code=429,
