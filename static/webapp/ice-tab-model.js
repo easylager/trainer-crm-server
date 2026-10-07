@@ -726,7 +726,7 @@
 
   function whenSelectionActive(when, whenDay, todayIso, row, resolvedKey) {
     todayIso = todayIso || minskDateIso(new Date());
-    var w = when || 'auto';
+    var w = when || 'any';
     var tomorrow = addDaysIso(todayIso, 1);
     if (row.kind === 'preset') {
       if (row.id === 'any') return w === 'any';
@@ -748,7 +748,7 @@
     opts = opts || {};
     var now = opts.now instanceof Date ? opts.now : new Date();
     var todayIso = minskDateIso(now);
-    var when = opts.when || 'auto';
+    var when = opts.when || 'any';
     var whenDay = String(opts.whenDay || '').trim();
     var resolvedKey = opts.resolvedKey || 'any';
     var expanded = !!opts.menuExpanded;
@@ -814,8 +814,9 @@
   }
 
   function whenPickerLabel(when, whenDay, resolvedKey) {
-    var w = when || 'auto';
+    var w = when || 'any';
     if (w === 'day' && whenDay) return formatWhenDayLabel(whenDay, minskDateIso(new Date()));
+    /* ``auto`` — legacy: подпись не должна подменяться серверным окном, если клиент уже на «any». */
     if (w === 'auto') return WHEN_PRESET_LABELS[resolvedKey] || 'Любое время';
     return WHEN_PRESET_LABELS[w] || 'Любое время';
   }
@@ -1920,6 +1921,11 @@
       var parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return null;
       if (parsed.venueTypes) parsed.venueTypes = normalizeVenueTypes(parsed.venueTypes);
+      var normWhen = normalizeSavedWhen(parsed);
+      if (normWhen) {
+        parsed.when = normWhen.when;
+        parsed.whenDay = normWhen.whenDay;
+      }
       return parsed;
     } catch (e) {
       return null;

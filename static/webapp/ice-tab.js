@@ -64,6 +64,7 @@
   var fetchGen = 0;
   var searchGen = 0;
   var lastSearchQuery = '';
+  var lastServerWhenSig = '';
   /* TASK-182 (F4): запрос ленты в полёте — boot не дублирует его вторым loadList. */
   var pendingGen = 0;
   var LIST_STALE_MS = 5 * 60 * 1000;
@@ -139,7 +140,37 @@
     );
     if (M.whenSkateFilterContext(state.intent, state.venueTypes)) {
       M.saveWhenPreference(state.when, state.whenDay, global.localStorage);
+      persistIceWhenServer();
     }
+  }
+
+  /** Серверная сессия: переживает закрытие Telegram (localStorage часто сбрасывается). */
+  function persistIceWhenServer() {
+    var token = initData();
+    if (!token) return;
+    var sig = String(state.when || 'any') + '|' + String(state.whenDay || '');
+    if (sig === lastServerWhenSig) return;
+    lastServerWhenSig = sig;
+    global.fetch('/api/webapp/client/session/catalog-filters', {
+      method: 'PATCH',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ ice_when: state.when || 'any', ice_when_day: state.whenDay || '' }),
+    }).catch(function () {});
+  }
+
+  function applyIceWhenFromClientSession(session) {
+    if (!session || state.urlWhenHydrated) return false;
+    if (session.ice_when == null && !session.ice_when_day) return false;
+    var restored = M.hydrateWhenFromSaved(
+      { when: session.ice_when || 'any', whenDay: session.ice_when_day || '' },
+      state.intent,
+      state.venueTypes
+    );
+    if (!restored) return false;
+    if (restored.when === state.when && (restored.whenDay || '') === (state.whenDay || '')) return false;
+    state.when = restored.when;
+    state.whenDay = restored.whenDay || '';
+    return true;
   }
 
   var mapCtl = null;
@@ -2099,8 +2130,12 @@
               if (session.city_name) {
                 fromSession = Object.assign({}, fromSession, { name: session.city_name });
               }
+              applyIceWhenFromClientSession(session);
               applyCityIfDifferent(fromSession);
               return;
+            }
+            if (applyIceWhenFromClientSession(session) && state.cityId) {
+              loadList();
             }
             return geolocateOrFallback(session);
           })

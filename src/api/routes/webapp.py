@@ -192,7 +192,9 @@ from src.application.client_session_use_cases import (
     clear_pending_referral,
     get_or_create_session as get_client_session,
     get_session as read_client_bot_session,
+    ice_tab_when_from_session_row,
     save_catalog_filters,
+    save_ice_tab_when_pref,
     set_arena,
     set_city,
     set_selected_trainer,
@@ -1978,6 +1980,7 @@ async def get_client_session_state(
     profile = await get_client_profile_basic(session, telegram_id)
     needs_profile_name = not bool(profile and (profile.get("first_name") or "").strip())
     row = await get_client_session(telegram_id, session)
+    ice_when_pref = ice_tab_when_from_session_row(row)
     client_phone = await get_client_phone_for_webapp(session, telegram_id)
     city_id = row.get("city_id")
     service_id = row.get("selected_service_id")
@@ -2103,6 +2106,8 @@ async def get_client_session_state(
         "client_first_name": cfn or None,
         "client_last_name": cln or None,
         "pending_referral": await _pending_referral_payload(telegram_id, session),
+        "ice_when": ice_when_pref.get("when") if ice_when_pref else None,
+        "ice_when_day": ice_when_pref.get("when_day") if ice_when_pref else None,
     }
     return JSONResponse(
         content=payload,
@@ -2145,6 +2150,8 @@ class ClientCatalogFiltersBody(BaseModel):
     service_id: int | None = None
     arena_id: int | None = None
     trainer_id: int | None = None
+    ice_when: str | None = None
+    ice_when_day: str | None = None
 
 
 @router.patch("/client/session/catalog-filters")
@@ -2160,16 +2167,31 @@ async def patch_client_catalog_filters(
         and body.service_id is None
         and body.arena_id is None
         and body.trainer_id is None
+        and body.ice_when is None
+        and body.ice_when_day is None
     ):
         return {"success": True}
-    await save_catalog_filters(
-        telegram_id,
-        session,
-        city_id=body.city_id,
-        service_id=body.service_id,
-        arena_id=body.arena_id,
-        trainer_id=body.trainer_id,
-    )
+    if body.ice_when is not None or body.ice_when_day is not None:
+        await save_ice_tab_when_pref(
+            telegram_id,
+            session,
+            when=body.ice_when or "any",
+            when_day=body.ice_when_day or "",
+        )
+    if (
+        body.city_id is not None
+        or body.service_id is not None
+        or body.arena_id is not None
+        or body.trainer_id is not None
+    ):
+        await save_catalog_filters(
+            telegram_id,
+            session,
+            city_id=body.city_id,
+            service_id=body.service_id,
+            arena_id=body.arena_id,
+            trainer_id=body.trainer_id,
+        )
     return {"success": True}
 
 

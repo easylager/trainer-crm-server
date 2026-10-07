@@ -1,11 +1,16 @@
 """
 Application layer: client bot session use cases. Get/update session state and choices.
 """
+import json
+import re
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.ice_time_windows import WHEN_KEYS
 from src.infrastructure.repositories import ClientSessionRepository
+
+_DAY_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 async def get_or_create_session(telegram_id: int, session: AsyncSession) -> dict[str, Any]:
@@ -73,6 +78,66 @@ async def set_selected_trainer(
         state="trainer_selected",
         selected_trainer_id=trainer_id,
     )
+    await session.commit()
+
+
+def _payload_dict(row: dict[str, Any] | None) -> dict[str, Any]:
+    if not row:
+        return {}
+    raw = row.get("payload") or {}
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    return {}
+
+
+def normalize_ice_tab_when_pref(when: str | None, when_day: str | None = None) -> tuple[str, str]:
+    """Persisted ice-tab window; ``auto`` → ``any`` (legacy smart default)."""
+    key = (when or "any").strip().lower()
+    day = (when_day or "").strip()
+    if key == "auto":
+        return "any", ""
+    if key == "day":
+        if not _DAY_ISO_RE.match(day):
+            return "any", ""
+        return "day", day
+    if key in WHEN_KEYS:
+        return key, ""
+    return "any", ""
+
+
+def ice_tab_when_from_session_row(row: dict[str, Any] | None) -> dict[str, str] | None:
+    payload = _payload_dict(row)
+    when = payload.get("ice_tab_when")
+    if when is None:
+        return None
+    norm_when, norm_day = normalize_ice_tab_when_pref(str(when), str(payload.get("ice_tab_when_day") or ""))
+    return {"when": norm_when, "when_day": norm_day}
+
+
+async def save_ice_tab_when_pref(
+    telegram_id: int,
+    session: AsyncSession,
+    *,
+    when: str,
+    when_day: str = "",
+) -> None:
+    """Ice catalog «Когда» — survives Telegram WebView storage wipes."""
+    norm_when, norm_day = normalize_ice_tab_when_pref(when, when_day)
+    repo = ClientSessionRepository(session)
+    row = await repo.get(telegram_id)
+    payload = _payload_dict(row)
+    payload["ice_tab_when"] = norm_when
+    payload["ice_tab_when_day"] = norm_day
+    if row:
+        await repo.upsert(telegram_id, payload=payload)
+    else:
+        await repo.upsert(telegram_id, state="idle", payload=payload)
     await session.commit()
 
 
