@@ -25,6 +25,8 @@ async def test_map_config_and_photos_survive_public_bucket_exhaustion(monkeypatc
     monkeypatch.setenv("API_RATE_LIMIT_PUBLIC_MAX_REQUESTS", "1")
     monkeypatch.setenv("API_RATE_LIMIT_PUBLIC_WINDOW_SEC", "60")
     monkeypatch.setenv("API_RATE_LIMIT_PHOTO_MAX_REQUESTS", "100")
+    # Storage-independent: CI has no S3/local storage; a missing object is get_photo() -> None -> 404.
+    monkeypatch.setattr("src.api.routes.public.s3.get_photo", lambda _key: None)
     reset_http_limiters_for_tests()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/api/public/cities")).status_code == 200
@@ -125,7 +127,8 @@ async def test_map_config_warns_when_key_empty(monkeypatch, app_use_test_db, cap
 
     import src.api.routes.public_arenas as public_arenas
 
-    public_arenas._map_config_empty_warned_at = 0.0
+    # -inf, not 0.0: time.monotonic() is time since boot, and a fresh CI runner can be up < 600s.
+    monkeypatch.setattr(public_arenas, "_map_config_empty_warned_at", float("-inf"))
     monkeypatch.setenv("YANDEX_MAPS_JS_API_KEY", "")
     with caplog.at_level(logging.WARNING):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
