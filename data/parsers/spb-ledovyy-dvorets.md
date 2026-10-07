@@ -1,7 +1,8 @@
 # Parser spec: Ледовый дворец (СПб, пр. Пятилеток 1)
 
 - arena_id: 105
-- city: Санкт-Петербург
+- arena_slug: ledovyy-dvorets
+- city: Санкт-Петербург/ЛО
 - parser_key: ledovyydvorets_html_v1
 - cadence: weekly
 - timezone: Europe/Moscow

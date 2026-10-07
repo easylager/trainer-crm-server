@@ -1,7 +1,8 @@
 # Parser spec: ВТБ Арена (каток «Академия спорта Динамо»)
 
 - arena_id: 53
-- city: Москва
+- arena_slug: vtb-arena
+- city: Москва/МО
 - parser_key: vtbarena_qtickets_v1
 - cadence: weekly
 - requires_by_egress: false

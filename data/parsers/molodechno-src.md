@@ -1,6 +1,7 @@
 # Parser spec: СРЦ Молодечно / Олимпик-2011
 
 - arena_id: 18
+- arena_slug: molodechno-src
 - city: Молодечно
 - parser_key: molodechno_src_v1
 - cadence: daily

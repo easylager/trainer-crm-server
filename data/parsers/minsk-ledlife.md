@@ -1,6 +1,7 @@
 # Parser spec: СДЮШОР по фигурному катанию (ledlife)
 
 - arena_id: 4
+- arena_slug: minsk-ledlife
 - city: Минск
 - parser_key: ledlife_origin_html_v1
 - cadence: weekly

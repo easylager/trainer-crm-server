@@ -1,6 +1,7 @@
 # Parser spec: Новополоцк Ледовый дворец (ХК «Химик»)
 
 - arena_id: 30
+- arena_slug: novopolotsk-lds
 - city: Новополоцк
 - parser_key: novopolotsk_himik_html_v1
 - cadence: daily

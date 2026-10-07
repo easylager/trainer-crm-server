@@ -1,15 +1,15 @@
-"""Regional (non-Minsk) BY ice arenas: cities + arenas + arena_profiles skeleton.
+"""Minsk, Moscow, and St. Petersburg arenas with the slugs parser jobs bind on.
 
-Arena rows live in ``src.ingestion.regional_arenas.ARENAS`` (shared with the parser-job seed).
-Source of facts: the prod census (names, addresses, coordinates only). This script writes
-to local dev/test Postgres after ``--apply``. Cloud/Railway needs ``--apply --i-know-this-is-prod``.
+Rows live in ``src.ingestion.capital_arenas.ARENAS``. A fresh database has none of
+these profiles, so ``build_minsk_job_seeds()`` cannot resolve (city, slug) until this
+seed (or an equivalent load) has run.
 
-Arena ids match the prod census and the parser specs. Default is dry-run.
+Default is dry-run. ``--apply`` writes to a local test/dev DB.
+Cloud/Railway requires ``--apply --i-know-this-is-prod``.
 
 Usage:
-  PYTHONPATH=. python scripts/seed_regional_arenas.py
-  PYTHONPATH=. python scripts/seed_regional_arenas.py --apply
-  PYTHONPATH=. python scripts/seed_regional_arenas.py --apply --i-know-this-is-prod
+  PYTHONPATH=. python scripts/seed_capital_arenas.py
+  PYTHONPATH=. python scripts/seed_capital_arenas.py --apply
 """
 
 from __future__ import annotations
@@ -25,17 +25,13 @@ if str(ROOT) not in sys.path:
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from src.ingestion.regional_arenas import ARENAS, NEW_CITIES, apply_regional_arenas  # noqa: E402
+from src.ingestion.capital_arenas import ARENAS, CAPITAL_CITIES, apply_capital_arenas  # noqa: E402
 from src.shared.config import Settings  # noqa: E402
 from src.shared.ops_db_guard import (  # noqa: E402
     add_i_know_this_is_prod_argument,
     assert_database_url,
     warn_prod_ack,
 )
-
-
-def _assert_local_database(url: str, *, apply: bool, allow_prod: bool = False) -> None:
-    assert_database_url(url, apply=apply, allow_prod=allow_prod)
 
 
 def _database_url() -> str:
@@ -47,17 +43,18 @@ def _database_url() -> str:
 
 
 def _print_plan() -> None:
-    print(f"Cities to ensure: {len(NEW_CITIES)}")
-    ready = sum(1 for arena in ARENAS if arena.has_parser)
-    print(f"Arenas to ensure: {len(ARENAS)} (parser-ready: {ready})")
+    print(f"Cities to ensure: {len(CAPITAL_CITIES)}")
+    print(f"Arenas to ensure: {len(ARENAS)}")
     for arena in ARENAS:
-        flag = "parser" if arena.has_parser else "profile-only"
-        print(f"  arena_id={arena.arena_id:>3} [{flag:12}] {arena.city_name} — {arena.name} " f"(slug={arena.slug})")
+        print(
+            f"  arena_id={arena.arena_id:>3} {arena.city_name} — {arena.name} "
+            f"(slug={arena.slug}, parser={arena.parser_key})"
+        )
 
 
 def run(*, apply: bool, allow_prod: bool = False) -> None:
     url = _database_url()
-    _assert_local_database(url, apply=apply, allow_prod=allow_prod)
+    assert_database_url(url, apply=apply, allow_prod=allow_prod)
     if allow_prod:
         warn_prod_ack()
     if not apply:
@@ -67,13 +64,13 @@ def run(*, apply: bool, allow_prod: bool = False) -> None:
 
     engine = create_engine(url)
     with Session(engine) as session:
-        apply_regional_arenas(session)
+        apply_capital_arenas(session)
         session.commit()
     print("\nDone.")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
     add_i_know_this_is_prod_argument(parser)
     args = parser.parse_args()

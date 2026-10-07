@@ -1,7 +1,8 @@
 # Parser spec: ЛД «Гранд Каньон Айс» (СПб)
 
 - arena_id: 99
-- city: Санкт-Петербург
+- arena_slug: ld-grand-kanon-ays
+- city: Санкт-Петербург/ЛО
 - parser_key: grandice_json_v1
 - cadence: daily
 - timezone: Europe/Moscow

@@ -123,7 +123,7 @@
 
 ## Остальное
 
-- `reviews/` — 18 аудитов подсистем (запись, платежи, боты, абонементы и т.д.), плюс [продуктовое ревью клиньев](reviews/notes/product_review_wedges_activation.md).
+- `reviews/` — 18 аудитов подсистем (запись, платежи, боты, абонементы и т.д.), плюс [продуктовое ревью клиньев](reviews/notes/product_review_wedges_activation.md) и [TASK-207 AC-3 Островец](reviews/2026-10-07-task-207-ostrovets-ac3.md).
 - `agents/` — системные промпты ревьюеров (backend, product, QA, refactor, security, UX) и агентов эпика (`prompt-*`).
 - `release-comms/` — сообщения релизов по аудиториям, есть [шаблон](release-comms/TEMPLATE.md).
 - `archive/` — [legacy-индекс задач](archive/legacy-tasks-index.md), [sprintq-backlog](archive/sprintq-backlog.md), [RFQ по локерам](archive/rfq-smart-sports-locker-v1.md).

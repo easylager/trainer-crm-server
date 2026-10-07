@@ -1,6 +1,7 @@
 # Parser spec: Гомельский ледовый дворец спорта
 
 - arena_id: 33
+- arena_slug: gomel-lds
 - city: Гомель
 - parser_key: gomel_hockey_news_v1
 - cadence: weekly

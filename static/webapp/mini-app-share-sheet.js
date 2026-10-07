@@ -295,18 +295,32 @@
     });
   }
 
+  /**
+   * Подборка города (есть endpoint): в Telegram уходит только ссылка.
+   * Превью карточки Telegram и так берёт из og-картинки, а вставленный текст
+   * дублирует её простынёй. Место и сеанс текст оставляют.
+   * «Ссылка» и «Другое» текст не теряют — там превью мессенджера нет.
+   */
+  function telegramShareHref(shareUrl, shareBody, linkOnly) {
+    var body = linkOnly ? '' : String(shareBody || '');
+    var href = 'https://t.me/share/url?url=' + encodeURIComponent(String(shareUrl || ''));
+    if (body) href += '&text=' + encodeURIComponent(body);
+    return href;
+  }
+
+  function telegramLinkOnly() {
+    return !!(state && state.endpoint);
+  }
+
   var CHANNELS = {
     telegram: function (p) {
+      var linkOnly = telegramLinkOnly();
+      var body = linkOnly ? '' : p.share_body;
       var opened = false;
       if (typeof global.openTelegramShareUrlFromMiniApp === 'function') {
-        opened = global.openTelegramShareUrlFromMiniApp({ shareUrl: p.share_url, shareBody: p.share_body });
+        opened = global.openTelegramShareUrlFromMiniApp({ shareUrl: p.share_url, shareBody: body });
       }
-      if (!opened) {
-        openUrl(
-          'https://t.me/share/url?url=' + encodeURIComponent(p.share_url) +
-          (p.share_body ? '&text=' + encodeURIComponent(p.share_body) : '')
-        );
-      }
+      if (!opened) openUrl(telegramShareHref(p.share_url, p.share_body, linkOnly));
     },
     copy: function (p) {
       var text = fullMessage(p);
@@ -811,5 +825,6 @@
     close: close,
     _openStoryShare: openStoryShare,
     _openImageSave: openImageSave,
+    _telegramShareHref: telegramShareHref,
   };
 })(window);

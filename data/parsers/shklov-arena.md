@@ -1,6 +1,7 @@
 # Parser spec: Шклов Ледовая арена
 
 - arena_id: 42
+- arena_slug: shklov-arena
 - city: Шклов
 - parser_key: shklov_ocr_photo_v1
 - cadence: weekly
