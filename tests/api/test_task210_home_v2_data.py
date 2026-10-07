@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html as html_lib
 import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -534,3 +535,95 @@ async def test_upcoming_cards_are_the_selected_window_without_stale_or_closed(
     assert "Пятничный каток" not in block
     assert "Старый каток" not in block
     assert "Закрытый каток" not in block
+
+
+_HREF_RE = re.compile(r'href="([^"]*)"')
+
+
+def _internal_hrefs(page: str) -> set[str]:
+    found: set[str] = set()
+    for raw in _HREF_RE.findall(page):
+        href = html_lib.unescape(raw).strip()
+        if not href.startswith("/") or href.startswith("//"):
+            continue
+        found.add(href)
+    return found
+
+
+@pytest.mark.asyncio
+async def test_home_does_not_link_first_time_until_the_page_exists(app_use_test_db, db_session, monkeypatch) -> None:
+    _freeze(monkeypatch, _utc(2026, 10, 7, 12))
+    name = f"Чипы {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Каток чипа")
+    await _session(db_session, arena_id, date(2026, 10, 7), "18:00")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        resp = await client.get("/")
+    assert resp.status_code == 200
+    assert 'href="/first-time"' not in resp.text
+    assert "Первый раз" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_home_internal_hrefs_resolve(app_use_test_db, db_session, monkeypatch) -> None:
+    _freeze(monkeypatch, _utc(2026, 10, 7, 12))
+    name = f"Ссылки {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    for i, start in enumerate(("14:00", "15:00", "16:00", "17:00", "18:00")):
+        arena_id = await _insert_arena(db_session, city_id, name=f"Каток ссылок {i}")
+        await _session(db_session, arena_id, date(2026, 10, 7), start)
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+    hrefs: set[str] = set()
+
+    async with _client() as client:
+        for when in ("today", "tomorrow", "weekend", "day"):
+            for cookies in ({"glide_city": slug}, None):
+                resp = await client.get(f"/?when={when}", cookies=cookies)
+                assert resp.status_code == 200, when
+                hrefs |= _internal_hrefs(resp.text)
+        assert hrefs, "home page has no internal hrefs"
+        assert "/first-time" not in hrefs
+        assert any(href.startswith("/c/") for href in hrefs)
+        assert any(href.startswith("/p/") for href in hrefs)
+        broken: list[str] = []
+        for href in sorted(hrefs):
+            followed = await client.get(href)
+            if followed.status_code not in range(200, 400):
+                broken.append(f"{followed.status_code} {href}")
+    assert not broken, broken
+
+
+@pytest.mark.asyncio
+async def test_upcoming_cards_stay_inside_today_window_not_the_seven_day_horizon(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    _freeze(monkeypatch, _utc(2026, 10, 7, 12))
+    name = f"Горизонт {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    today_early = await _insert_arena(db_session, city_id, name="Сегодня ранний")
+    today_late = await _insert_arena(db_session, city_id, name="Сегодня поздний")
+    tomorrow = await _insert_arena(db_session, city_id, name="Завтра за окном")
+    later = await _insert_arena(db_session, city_id, name="Пятница за окном")
+    filler = await _insert_arena(db_session, city_id, name="Суббота горизонта")
+    await _session(db_session, today_early, date(2026, 10, 7), "14:00")
+    await _session(db_session, today_late, date(2026, 10, 7), "18:00")
+    await _session(db_session, tomorrow, date(2026, 10, 8), "10:00")
+    await _session(db_session, later, date(2026, 10, 9), "12:00")
+    await _session(db_session, filler, date(2026, 10, 10), "12:00")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        resp = await client.get("/?when=today", cookies={"glide_city": city_slug(name)})
+    assert resp.status_code == 200
+    block = _sessions_ul(resp.text)
+    assert "Сегодня ранний" in block
+    assert "Сегодня поздний" in block
+    assert "Завтра за окном" not in block
+    assert "Пятница за окном" not in block
+    assert "Суббота горизонта" not in block

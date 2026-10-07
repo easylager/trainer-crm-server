@@ -670,7 +670,7 @@ async def load_catalog_home_view(
         "chips": {
             "hockey": False,
             "rollerski": False,
-            "first_time_href": "/first-time",
+            "first_time_href": None,
             "hockey_href": None,
         },
         "trainers": [],
@@ -820,7 +820,8 @@ async def load_catalog_home_view(
         "chips": {
             "hockey": has_hockey,
             "rollerski": False,
-            "first_time_href": "/first-time",
+            # /first-time появится в TASK-215. До тех пор чип не рисуем.
+            "first_time_href": None,
             # /c/ не понимает kind=ohm — чип скрыт, пока фильтр не появится (Q-001 / спека).
             "hockey_href": None,
         },
@@ -863,11 +864,17 @@ def _day_picker_html(items: list[Mapping[str, Any]]) -> str:
     return f'<nav class="day-picker"><ul>{links}</ul></nav>'
 
 
+def _chip_link(href: Any, label_key: str) -> str:
+    target = str(href or "").strip()
+    if not target:
+        return ""
+    return f'<a class="chip" href="{_esc(target)}">{_esc(t(label_key))}</a>'
+
+
 def _chips_html(chips: Mapping[str, Any]) -> str:
     parts = [f'<a class="chip chip--active" href="/">{_esc(t("chip.ice"))}</a>']
-    parts.append(
-        f'<a class="chip" href="{_esc(chips.get("first_time_href") or "/first-time")}">{_esc(t("chip.first_time"))}</a>'
-    )
+    parts.append(_chip_link(chips.get("hockey_href"), "chip.hockey"))
+    parts.append(_chip_link(chips.get("first_time_href"), "chip.first_time"))
     return '<div class="chips">' + "".join(parts) + "</div>"
 
 
