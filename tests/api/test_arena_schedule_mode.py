@@ -244,19 +244,3 @@ async def test_invalid_phone_not_shown_in_ssr_and_api(app_use_test_db, db_sessio
     assert valid_id in items_by_id
     assert items_by_id[valid_id]["phone"] == "+375291234567"
 
-
-"""TASK-207: HTTP tests for SSR city-day and selection phone guards."""
-
-
-@pytest.mark.asyncio
-async def test_public_arena_card_phone_guard(client, app_use_test_db, db_session) -> None:
-    """Public arena card GET /api/public/arenas/:id must sanitize invalid phones."""
-    cid = await _insert_city(db_session, name=f"Phone-{uuid.uuid4().hex[:6]}")
-    arena_id = await _insert_arena(db_session, cid, name="Broken Phone Arena", phone="123-45")
-    await db_session.commit()
-
-    resp = await client.get(f"/api/public/arenas/{arena_id}")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["phone"] is None
-

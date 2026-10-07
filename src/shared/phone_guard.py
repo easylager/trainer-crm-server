@@ -46,6 +46,6 @@ def tel_href(phone: str) -> str:
         >>> tel_href("+375 (29) 123-45-67")
         "+375291234567"
         >>> tel_href("8-029-123-45-67")
-        "8029123456"
+        "80291234567"
     """
     return "".join(ch for ch in phone if ch.isdigit() or ch == "+")

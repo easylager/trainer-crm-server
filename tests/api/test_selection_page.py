@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import io
+import re
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -15,7 +16,25 @@ from src.api.app import app
 from src.application.ice_city_day import city_slug
 from tests.api.test_catalog_shops import _admin_create_shop
 from tests.api.test_ice_windows_and_nearest import _session
-from tests.api.test_public_arenas import _insert_arena, _insert_city
+from tests.api.test_public_arenas import _add_future_session, _insert_arena, _insert_city
+from tests.api.test_schedule_staleness_surfaces import _job
+
+_PHONE_GUARD_UNKNOWN = "unknown (только email/соцсети)"
+_PHONE_GUARD_SHORT = "123-456"
+_PHONE_GUARD_VALID = "+375 29 123-45-67"
+
+
+def _selection_pick_block(html: str, arena_name: str) -> str:
+    for block in re.findall(r'<section class="sec pick">.*?</section>', html, re.DOTALL):
+        if arena_name in block:
+            return block
+    raise AssertionError(f"pick block for {arena_name!r} missing")
+
+
+def _assert_invalid_phone_ssr(fragment: str, raw_phone: str) -> None:
+    assert "tel:" not in fragment
+    assert raw_phone not in fragment
+    assert "уточните по телефону" not in fragment.lower()
 
 
 def _client() -> AsyncClient:
@@ -114,3 +133,32 @@ async def test_selection_preview_and_telegram_keep_the_window(
     assert f"startapp=catalog_{city_id}_skate_weekend" in page.text
     assert "/api/public/catalog/open-telegram" in page.text
     assert "В выходные" in page.text, "живая страница говорит ту же подпись, что и меню Mini App"
+
+
+@pytest.mark.asyncio
+async def test_selection_page_ssr_phone_guard(app_use_test_db, db_session) -> None:
+    """TASK-207: невалидные телефоны не попадают в SSR подборки (/c/)."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stale_at = now - timedelta(hours=80)
+    city_label = f"Телподбор{uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=city_label)
+    cases = (
+        ("Каток без связи", _PHONE_GUARD_UNKNOWN),
+        ("Каток короткий", _PHONE_GUARD_SHORT),
+        ("Каток валидный", _PHONE_GUARD_VALID),
+    )
+    for arena_name, phone in cases:
+        arena_id = await _insert_arena(db_session, city_id, name=arena_name, phone=phone)
+        await _add_future_session(db_session, arena_id, days_ahead=2, observed_at=stale_at)
+        await _job(db_session, arena_id, last_ok_at=stale_at)
+    await db_session.commit()
+
+    async with _client() as client:
+        page = await client.get(f"/c/{city_slug(city_label)}")
+    assert page.status_code == 200, page.text
+    html = page.text
+    _assert_invalid_phone_ssr(_selection_pick_block(html, "Каток без связи"), _PHONE_GUARD_UNKNOWN)
+    _assert_invalid_phone_ssr(_selection_pick_block(html, "Каток короткий"), _PHONE_GUARD_SHORT)
+    valid_block = _selection_pick_block(html, "Каток валидный")
+    assert 'href="tel:+375291234567"' in valid_block
+    assert "уточните по телефону" in valid_block.lower()
