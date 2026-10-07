@@ -44,6 +44,39 @@ async def test_selection_page_shows_places_sessions_and_keeps_filters(app_use_te
 
 
 @pytest.mark.asyncio
+async def test_unfiltered_selection_matches_feed_without_shops(app_use_test_db, db_session) -> None:
+    """TASK-217: «все места» — как лента. Магазин только по чипу, смесь не называется катками."""
+    name = f"Лентаград {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    await _insert_arena(db_session, city_id, name="Ледовый")
+    gym_id = await _insert_arena(db_session, city_id, name="Зал Силы")
+    await db_session.execute(
+        text("UPDATE arenas SET venue_type = 'gym' WHERE id = :id"),
+        {"id": gym_id},
+    )
+    await db_session.commit()
+    shop = f"CCMshop {uuid.uuid4().hex[:4]}"
+    await _admin_create_shop(city_id, shop)
+    slug = city_slug(name)
+    async with _client() as client:
+        page = await client.get(f"/c/{slug}")
+        share = await client.get(
+            "/api/public/ice/selection/share",
+            params={"city_id": city_id, "record": "false"},
+        )
+        shops = await client.get(f"/c/{slug}", params={"t": "shop"})
+    assert page.status_code == 200
+    assert "Ледовый" in page.text and "Зал Силы" in page.text
+    assert shop not in page.text
+    body = share.json()["share_body"]
+    assert "Ледовый" in body and "Зал Силы" in body
+    assert shop not in body
+    assert "2 места" in body
+    assert "каток" not in body.lower()
+    assert shop in shops.text
+
+
+@pytest.mark.asyncio
 async def test_shop_selection_and_share_api(app_use_test_db, db_session) -> None:
     name = f"Магазинск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)

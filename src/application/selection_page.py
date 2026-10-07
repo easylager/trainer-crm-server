@@ -284,11 +284,38 @@ def selection_share_title(view: Mapping[str, Any]) -> str:
     return f"{city} · {topic.lower()}"
 
 
+def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
+    """Слово при счётчике совпадает с тем, что реально в подборке.
+
+    Явный чип — его существительное. Без чипа смотрим места на странице:
+    одни катки — «катков», смесь катков и залов — «мест». Раньше «все места»
+    всегда говорили «катков», даже когда первыми в списке были магазины.
+    """
+    venue = view.get("venue")
+    if venue in ("ice", "outdoor"):
+        return ("каток", "катка", "катков")
+    if venue in _NOUNS:
+        return _NOUNS[venue]
+    if venue:
+        return ("место", "места", "мест")
+    nouns: list[tuple[str, str, str]] = []
+    for item in view.get("items") or []:
+        key = str(item.get("venue_type") or "ice")
+        if key in ("ice", "outdoor"):
+            nouns.append(("каток", "катка", "катков"))
+        else:
+            nouns.append(_NOUNS.get(key, ("место", "места", "мест")))
+    if not nouns:
+        return ("место", "места", "мест")
+    if all(noun[0] == nouns[0][0] for noun in nouns):
+        return nouns[0]
+    return ("место", "места", "мест")
+
+
 def selection_description(view: Mapping[str, Any]) -> str:
     items = view.get("items") or []
     n = len(items)
-    venue = view.get("venue")
-    noun = _NOUNS.get(venue or "", ("каток", "катка", "катков") if view.get("skating") else ("место", "места", "мест"))
+    noun = selection_count_noun(view)
     bits = [f"{n} {plural_ru(n, *noun)}"]
     sessions = int(view.get("session_count") or 0)
     if sessions:
