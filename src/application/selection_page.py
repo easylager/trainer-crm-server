@@ -339,10 +339,18 @@ def _place_photo_url(item: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _has_valid_phone_digits(phone: str) -> bool:
+    """Check if phone string contains at least 7 digits (minimal valid phone number)."""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    return len(digits) >= 7
+
+
 def _phone_link(item: Mapping[str, Any]) -> str:
     phone = str(item.get("phone") or "").strip()
-    tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-    return f' <a href="tel:{_esc(tel)}">{_esc(phone)}</a>' if phone and tel else ""
+    if phone and _has_valid_phone_digits(phone):
+        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+        return f' <a href="tel:{_esc(tel)}">{_esc(phone)}</a>'
+    return ""
 
 
 def _place_html(

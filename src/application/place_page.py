@@ -569,10 +569,16 @@ def _slot_chip(slot: Mapping[str, Any], *, focused: bool, base_path: str, invite
     )
 
 
+def _has_valid_phone_digits(phone: str) -> bool:
+    """Check if phone string contains at least 7 digits (minimal valid phone number)."""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    return len(digits) >= 7
+
+
 def _schedule_mode_call_html(card: Mapping[str, Any]) -> str:
     phone = str(card.get("phone") or "").strip()
-    tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-    if phone and tel:
+    if phone and _has_valid_phone_digits(phone):
+        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
         return f'<p class="sched__mode"><a href="tel:{_esc(tel)}">{t("cta.call")}</a></p>'
     return ""
 
@@ -605,9 +611,9 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     if view.get("schedule_level") == LEVEL_VERY_STALE:
         # TASK-180: расписание > 72 ч не подтверждалось — вместо сеансов просьба уточнить.
         phone = str(card.get("phone") or "").strip()
-        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
         links = []
-        if phone and tel:
+        if phone and _has_valid_phone_digits(phone):
+            tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
             links.append(f'<a href="tel:{_esc(tel)}">{_esc(phone)}</a>')
         tickets = safe_external_url(card.get("tickets_url")) or safe_external_url(card.get("website_url"))
         if tickets:
@@ -638,7 +644,11 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     non_live = [h for h in non_live if h]
     basis_note = ""
     if non_live:
-        tel = f' <a href="tel:{_esc(phone)}">{t("cta.call")}</a>' if phone else ""
+        tel = (
+            f' <a href="tel:{_esc("".join(ch for ch in phone if ch.isdigit() or ch == "+"))}">{t("cta.call")}</a>'
+            if phone and _has_valid_phone_digits(phone)
+            else ""
+        )
         basis_note = f'<p class="schedule-basis">{_esc(non_live[0])}.{tel}</p>'
     parts = [f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>']
     if note:
@@ -843,7 +853,7 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
         )
         rows.append(f'<p class="row"><span>Адрес</span><b>{addr_html}</b></p>')
     phone = str(card.get("phone") or "").strip()
-    if phone:
+    if phone and _has_valid_phone_digits(phone):
         tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
         rows.append(f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel)}">{_esc(phone)}</a></b></p>')
     site = safe_external_url(card.get("website_url"))

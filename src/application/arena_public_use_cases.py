@@ -1603,6 +1603,15 @@ def _freshness_payload(
     }
 
 
+def _sanitize_phone(phone: str | None) -> str | None:
+    """Return phone only if it contains at least 7 digits, else None."""
+    raw = str(phone or "").strip()
+    if not raw:
+        return None
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    return raw if len(digits) >= 7 else None
+
+
 async def get_public_arena_card(
     session: AsyncSession, arena_ref: str, *, city_id: int | None = None
 ) -> dict[str, Any] | None:
@@ -1615,6 +1624,7 @@ async def get_public_arena_card(
     city_name = str(row.get("city_name") or "").strip()
     slug = str(row.get("slug") or "").strip()
     public_path = place_path(city_name=city_name, slug=slug) if city_name and slug else None
+    sanitized_phone = _sanitize_phone(row.get("phone"))
     card: dict[str, Any] = {
         "id": row["id"],
         "slug": row.get("slug"),
@@ -1635,7 +1645,7 @@ async def get_public_arena_card(
         "longitude": row.get("longitude"),
         "timezone": row.get("timezone") or "Europe/Minsk",
         "short_description": row.get("short_description"),
-        "phone": row.get("phone"),
+        "phone": sanitized_phone,
         "website_url": row.get("website_url"),
         "tickets_url": public_http_url(row.get("tickets_url")),
         "social_urls": _as_mapping(row.get("social_urls")),
@@ -1646,7 +1656,7 @@ async def get_public_arena_card(
         "in_season": is_in_season(season_start, season_end, _today_minsk().month),
         "amenities": _as_mapping(row.get("amenities")),
         "contacts": {
-            "phone": row.get("phone"),
+            "phone": sanitized_phone,
             "website_url": row.get("website_url"),
             "social_urls": _as_mapping(row.get("social_urls")),
         },

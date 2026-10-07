@@ -103,8 +103,10 @@ def _unconfirmed_html(items: list[Mapping[str, Any]], *, city_name: str) -> str:
         if slug and city_name:
             name = f'<a href="{_esc(place_path(city_name=city_name, slug=slug))}">{name}</a>'
         phone = str(item.get("phone") or "").strip()
-        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-        phone_html = f' · <a href="tel:{_esc(tel)}">{_esc(phone)}</a>' if phone and tel else ""
+        phone_html = ""
+        if phone and _has_valid_phone_digits(phone):
+            tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+            phone_html = f' · <a href="tel:{_esc(tel)}">{_esc(phone)}</a>'
         rows.append(f"<li><b>{name}</b> — {_esc(item.get('note'))}{phone_html}</li>")
     return (
         '<section class="unconfirmed">'

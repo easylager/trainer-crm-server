@@ -149,3 +149,80 @@ async def test_admin_patch_schedule_mode(app_use_test_db, db_session) -> None:
     assert row[0] == "season_closed"
     assert str(row[1]) == reopen_iso
     assert row[2] == "тест"
+
+
+@pytest.mark.asyncio
+async def test_invalid_phone_not_shown_in_ssr_and_api(app_use_test_db, db_session, client) -> None:
+    """TASK-207: телефоны без минимум 7 цифр не показываются на SSR и в публичном API."""
+    from src.application.place_page import _contacts_html, _schedule_mode_call_html
+    from src.application.arena_public_use_cases import get_public_arena_card
+
+    cid = await _insert_city(db_session, name=f"Phone-{uuid.uuid4().hex[:6]}")
+
+    # Арена с невалидным телефоном (было на проде: "unknown (только email/соцсети)")
+    invalid_id = await _insert_arena(
+        db_session, cid, name="Без телефона", phone="unknown (только email/соцсети)"
+    )
+    await _set_mode(db_session, invalid_id, mode="phone")
+
+    # Арена с коротким телефоном (меньше 7 цифр)
+    short_id = await _insert_arena(db_session, cid, name="Короткий", phone="123-45")
+    await _set_mode(db_session, short_id, mode="phone")
+
+    # Арена с валидным телефоном
+    valid_id = await _insert_arena(db_session, cid, name="Валидный", phone="+375291234567")
+    await _set_mode(db_session, valid_id, mode="phone")
+
+    await db_session.commit()
+
+    # Проверяем SSR place_page для арены с невалидным телефоном
+    view_invalid = await load_place_view(db_session, str(invalid_id))
+    assert view_invalid is not None
+    contacts_html = _contacts_html(view_invalid["card"])
+    assert "tel:" not in contacts_html  # Не должно быть ссылки tel:
+    assert "unknown" not in contacts_html  # Не должен показываться невалидный телефон
+
+    call_html = _schedule_mode_call_html(view_invalid["card"])
+    assert call_html == ""  # Режим phone без валидного телефона — пустая кнопка "Позвонить"
+
+    # Проверяем SSR для арены с коротким телефоном
+    view_short = await load_place_view(db_session, str(short_id))
+    assert view_short is not None
+    contacts_short = _contacts_html(view_short["card"])
+    assert "tel:" not in contacts_short
+    call_short = _schedule_mode_call_html(view_short["card"])
+    assert call_short == ""
+
+    # Проверяем SSR для арены с валидным телефоном
+    view_valid = await load_place_view(db_session, str(valid_id))
+    assert view_valid is not None
+    contacts_valid = _contacts_html(view_valid["card"])
+    assert "tel:+375291234567" in contacts_valid
+    call_valid = _schedule_mode_call_html(view_valid["card"])
+    assert "tel:+375291234567" in call_valid
+    assert call_valid != ""
+
+    # Проверяем публичный API
+    card_invalid = await get_public_arena_card(db_session, str(invalid_id))
+    assert card_invalid is not None
+    assert card_invalid["phone"] is None  # Невалидный телефон не возвращается
+    assert card_invalid["contacts"]["phone"] is None
+
+    card_short = await get_public_arena_card(db_session, str(short_id))
+    assert card_short is not None
+    assert card_short["phone"] is None
+
+    card_valid = await get_public_arena_card(db_session, str(valid_id))
+    assert card_valid is not None
+    assert card_valid["phone"] == "+375291234567"
+    assert card_valid["contacts"]["phone"] == "+375291234567"
+
+    # Проверяем HTTP API /api/public/ice/arenas/{id}
+    r_invalid = await client.get(f"/api/public/ice/arenas/{invalid_id}")
+    assert r_invalid.status_code == 200
+    assert r_invalid.json()["phone"] is None
+
+    r_valid = await client.get(f"/api/public/ice/arenas/{valid_id}")
+    assert r_valid.status_code == 200
+    assert r_valid.json()["phone"] == "+375291234567"
+
