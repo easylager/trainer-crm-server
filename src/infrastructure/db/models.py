@@ -453,6 +453,73 @@ class IceSession(Base):
     schedule_basis: Mapped[str] = mapped_column(String(16), nullable=False, server_default="live")
 
 
+class ArenaFollow(Base):
+    """Подписка «следить за катком» (TASK-213). Один человек — одна строка на арену.
+
+    ``muted_at`` — бот заблокирован или после «открылся» человек не нажал «Следить дальше».
+    Явная отписка удаляет строку, а не ставит ``muted_at``.
+    """
+
+    __tablename__ = "arena_follows"
+    __table_args__ = (
+        UniqueConstraint("telegram_id", "arena_id", name="uq_arena_follows_telegram_arena"),
+        CheckConstraint(
+            "source IN ('bot_start', 'miniapp')",
+            name="ck_arena_follows_source",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    arena_id: Mapped[int] = mapped_column(
+        ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    muted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ArenaFollowNotification(Base):
+    """Очередь сообщений подписчику. Повторная та же публикация не создаёт вторую строку.
+
+    ``pending`` копится (30 мин / тихие часы / пауза 6 ч), ``sending`` — забрали в отправку,
+    ``sent`` — доставлено, ``muted`` — бот заблокирован, ``failed`` — исчерпаны попытки.
+    """
+
+    __tablename__ = "arena_follow_notifications"
+    __table_args__ = (
+        Index("ix_arena_follow_notifications_due", "status", "not_before"),
+        Index(
+            "uq_arena_follow_notifications_one_pending",
+            "follow_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+        CheckConstraint(
+            "kind IN ('schedule_changed', 'reopened')",
+            name="ck_arena_follow_notifications_kind",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'sending', 'sent', 'failed', 'muted', 'merged')",
+            name="ck_arena_follow_notifications_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    follow_id: Mapped[int] = mapped_column(
+        ForeignKey("arena_follows.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default=text("'{}'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    not_before: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
+
+
 class IceCityInterest(Base):
     """Client tap on Ice tab «скоро добавим катки» for a city without map rinks."""
 

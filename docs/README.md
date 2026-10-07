@@ -104,6 +104,8 @@
 | [2026-10-02-ice-map-fullscreen.md](plans/2026-10-02-ice-map-fullscreen.md) | TASK-147: карта мест на весь экран — план, AC, риски (дизайн в `design/ice-map-fullscreen.md`) |
 | [2026-10-03-catalog-hub-v4-design.md](plans/2026-10-03-catalog-hub-v4-design.md) | TASK-148: подборки из данных, чипы без нулей, бесфотошные карточки (макет в `design/client-hub-catalog-final-v2.html`) |
 | [2026-10-03-hub-composition-05-06.md](plans/2026-10-03-hub-composition-05-06.md) | TASK-149: хаб как экраны 05/06 — узкая композиция; 150 пакет не стартовать |
+| [2026-10-07-arena-follow-outbox-recovery-design.md](plans/2026-10-07-arena-follow-outbox-recovery-design.md) | Блокировки, аренда и восстановление outbox уведомлений подписки на каток |
+| [2026-10-07-arena-follow-outbox-recovery.md](plans/2026-10-07-arena-follow-outbox-recovery.md) | План реализации защиты очереди уведомлений подписки на каток |
 | [2026-09-25-search-places-label.md](plans/2026-09-25-search-places-label.md) | Поиск: «Покататься» → «Где заниматься» |
 
 ## ops — эксплуатация
