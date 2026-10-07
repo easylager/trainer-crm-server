@@ -1,7 +1,7 @@
 """Публичная телеметрия каталога: CTA-редирект и (опционально) health для метрик."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -86,6 +86,30 @@ async def open_telegram_from_public_page(
     return RedirectResponse(url=link, status_code=302, headers={"Cache-Control": "no-store"})
 
 
+@router.post("/contact-click")
+async def public_contact_click_beacon(
+    request: Request,
+    action: str = Query(..., min_length=1, max_length=20),
+    surface: str = Query(..., min_length=1, max_length=40),
+    city_id: int | None = Query(None),
+    arena_id: int | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Учёт клика «Позвонить» с SSR (``navigator.sendBeacon``); без JS клик не считается."""
+    act = action.strip().lower()
+    if act != CONTACT_ACTION_PHONE:
+        return Response(status_code=400)
+    await record_public_contact_click(
+        session,
+        request,
+        action=act,
+        surface=surface,
+        city_id=city_id,
+        arena_id=arena_id,
+    )
+    return Response(status_code=204)
+
+
 @router.get("/outbound")
 async def public_outbound_redirect(
     request: Request,
@@ -104,7 +128,7 @@ async def public_outbound_redirect(
     surf = surface.strip().lower()
     if surf not in _ALLOWED_SURFACES:
         surf = "place_page"
-    if act not in _CONTACT_ACTIONS:
+    if act not in _CONTACT_ACTIONS or act == CONTACT_ACTION_PHONE:
         return RedirectResponse(url=base, status_code=302, headers={"Cache-Control": "no-store"})
     target = base
     if arena_id is not None and int(arena_id) > 0:
@@ -125,12 +149,7 @@ async def public_outbound_redirect(
         if row:
             if city_id is None and row.get("city_id") is not None:
                 city_id = int(row["city_id"])
-            if act == CONTACT_ACTION_PHONE:
-                phone = str(row.get("phone") or "").strip()
-                tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-                if phone and tel:
-                    target = f"tel:{tel}"
-            elif act == CONTACT_ACTION_TICKETS:
+            if act == CONTACT_ACTION_TICKETS:
                 url = safe_external_url(row.get("tickets_url"))
                 if url:
                     target = url

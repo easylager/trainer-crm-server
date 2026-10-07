@@ -77,29 +77,25 @@ async def test_city_page_sql_budget_stable(app_use_test_db, db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_outbound_contact_click_records_event(app_use_test_db, db_session, monkeypatch) -> None:
+async def test_contact_click_beacon_records_phone(app_use_test_db, db_session, monkeypatch) -> None:
     from starlette.requests import Request
 
-    from src.api.routes.catalog_consumer_telemetry import public_outbound_redirect
+    from src.api.routes.catalog_consumer_telemetry import public_contact_click_beacon
 
     monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", "x" * 32)
     name = f"Кликск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     aid = await _insert_arena(db_session, city_id, name="С телефоном")
-    await db_session.execute(
-        text("UPDATE arena_profiles SET phone = '+375291234567' WHERE arena_id = :id"),
-        {"id": aid},
-    )
     await db_session.commit()
     scope = {
         "type": "http",
-        "method": "GET",
-        "path": "/api/public/catalog/outbound",
+        "method": "POST",
+        "path": "/api/public/catalog/contact-click",
         "headers": [(b"user-agent", b"Mozilla/5.0")],
         "query_string": b"",
     }
     request = Request(scope)
-    resp = await public_outbound_redirect(
+    resp = await public_contact_click_beacon(
         request,
         action="phone",
         surface="place_page",
@@ -107,8 +103,7 @@ async def test_outbound_contact_click_records_event(app_use_test_db, db_session,
         arena_id=aid,
         session=db_session,
     )
-    assert resp.status_code == 302
-    assert str(resp.headers.get("location") or "").startswith("tel:")
+    assert resp.status_code == 204
     row = (
         await db_session.execute(
             text(
@@ -119,3 +114,29 @@ async def test_outbound_contact_click_records_event(app_use_test_db, db_session,
         )
     ).first()
     assert row and row[0] == "public_contact_click" and row[1] == "phone"
+
+
+@pytest.mark.asyncio
+async def test_ice_arenas_public_path_opens_place_page(app_use_test_db, db_session) -> None:
+    from src.application.place_links import place_path
+
+    city_id = await _insert_city(db_session, name="Минск")
+    aid = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:6]}")
+    slug = (
+        await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": aid})
+    ).scalar_one()
+    await db_session.commit()
+    expected = place_path(city_name="Минск", slug=slug)
+
+    async with _client() as client:
+        api = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": city_id, "intent": "coach", "limit": 50},
+        )
+        assert api.status_code == 200
+        items = api.json().get("items") or []
+        match = next((it for it in items if int(it["id"]) == aid), None)
+        assert match is not None
+        assert match.get("public_path") == expected
+        page = await client.get(expected)
+    assert page.status_code == 200

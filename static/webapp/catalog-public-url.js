@@ -1,5 +1,6 @@
 /**
  * Публичный URL места для анонимного веб-каталога (TASK-191-B).
+ * Путь приходит с API как ``public_path`` (серверный place_path / city_slug).
  * В Telegram Mini App остаётся arena?ref=…
  */
 (function (root, factory) {
@@ -14,40 +15,34 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  function slugifyCity(name) {
-    return String(name || '')
-      .trim()
-      .toLowerCase()
-      .replace(/ё/g, 'е')
-      .replace(/[^a-z0-9а-я]+/gi, '-')
-      .replace(/^-+|-+$/g, '');
-  }
-
   function isTelegramMiniApp() {
     var g = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : null;
     var tg = g && g.Telegram && g.Telegram.WebApp;
-    return !!(tg && (tg.initData || tg.platform));
+    var initData = tg && tg.initData;
+    return !!(initData && String(initData).length > 0);
   }
 
-  function publicPlacePath(item, cityName) {
-    var slug = item && item.slug;
-    var city = cityName || (item && (item.city_name || item.city)) || '';
-    if (!slug || !city) return null;
-    return '/p/' + encodeURIComponent(slugifyCity(city)) + '/' + encodeURIComponent(String(slug));
+  function publicHrefFromItem(item) {
+    var path = item && item.public_path;
+    if (!path) return null;
+    var live = (item && item.live) || {};
+    if (String(live.kind || '') === 'session' && live.session_id != null) {
+      return path + '?s=' + encodeURIComponent(String(live.session_id));
+    }
+    return path;
   }
 
-  function arenaHref(item, cityName, miniAppHref) {
+  function arenaHref(item, miniAppHref) {
     if (isTelegramMiniApp()) {
       return miniAppHref;
     }
-    var pub = publicPlacePath(item, cityName);
+    var pub = publicHrefFromItem(item);
     return pub || miniAppHref;
   }
 
   return {
-    slugifyCity: slugifyCity,
     isTelegramMiniApp: isTelegramMiniApp,
-    publicPlacePath: publicPlacePath,
+    publicHrefFromItem: publicHrefFromItem,
     arenaHref: arenaHref,
   };
 });

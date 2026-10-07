@@ -30,6 +30,7 @@ from src.application.arena_profile import (
     public_http_url,
 )
 from src.application.ice_time_windows import TimeWindow, resolve_list_window
+from src.application.place_links import place_path
 from src.application.ice_session_use_cases import (
     CLIENT_ICE_SESSION_KINDS,
     STATUS_ACTIVE,
@@ -484,10 +485,15 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         live = _unconfirmed_live_if_very_stale(item, live, freshness)
     venue_type = normalize_venue_type(item.get("venue_type"))
     amenities = _as_mapping(item.get("amenities"))
+    city_name = str(item.get("city_name") or "").strip()
+    slug = str(item.get("slug") or "").strip()
+    public_path = place_path(city_name=city_name, slug=slug) if city_name and slug else None
     payload: dict[str, Any] = {
         "id": item["id"],
         "slug": item.get("slug"),
         "city_id": item["city_id"],
+        "city_name": city_name or None,
+        "public_path": public_path,
         "name": item["name"],
         "district": item.get("district"),
         "address": item.get("address"),
@@ -1593,11 +1599,15 @@ async def get_public_arena_card(
     await attach_arena_media_payloads(session, [row])
     season_start = row.get("season_start_month")
     season_end = row.get("season_end_month")
+    city_name = str(row.get("city_name") or "").strip()
+    slug = str(row.get("slug") or "").strip()
+    public_path = place_path(city_name=city_name, slug=slug) if city_name and slug else None
     return {
         "id": row["id"],
         "slug": row.get("slug"),
         "city_id": row["city_id"],
         "city_name": row.get("city_name"),
+        "public_path": public_path,
         "name": row["name"],
         "venue_type": normalize_venue_type(row.get("venue_type")),
         "venue_noun": venue_type_noun(row.get("venue_type")),

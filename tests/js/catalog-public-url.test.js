@@ -7,26 +7,52 @@ const require = createRequire(import.meta.url);
 const api = require(path.resolve(import.meta.dirname, '../../static/webapp/catalog-public-url.js'));
 
 describe('catalog-public-url', () => {
-  it('builds public place path from slug and city', () => {
-    const p = api.publicPlacePath({ slug: 'minsk-arena' }, 'Минск');
-    assert.match(p, /^\/p\/.+\/minsk-arena$/);
+  it('uses server public_path for Minsk', () => {
+    const href = api.arenaHref(
+      { id: 1, slug: 'minsk-arena', public_path: '/p/minsk/minsk-arena' },
+      'arena?ref=1',
+    );
+    assert.equal(href, '/p/minsk/minsk-arena');
   });
 
-  it('keeps mini-app href inside telegram', () => {
+  it('appends session id to public_path', () => {
+    const href = api.arenaHref(
+      {
+        public_path: '/p/minsk/led',
+        live: { kind: 'session', session_id: 42 },
+      },
+      'arena?ref=1',
+    );
+    assert.equal(href, '/p/minsk/led?s=42');
+  });
+
+  it('keeps mini-app href when initData is non-empty', () => {
     const g = globalThis;
     const prev = g.Telegram;
-    g.Telegram = { WebApp: { initData: 'x', platform: 'tdesktop' } };
-    const href = api.arenaHref({ id: 1, slug: 'x' }, 'Минск', 'arena?ref=1');
+    g.Telegram = { WebApp: { initData: 'signed-payload', platform: 'tdesktop' } };
+    const href = api.arenaHref({ public_path: '/p/minsk/x' }, 'arena?ref=1');
     assert.equal(href, 'arena?ref=1');
     g.Telegram = prev;
   });
 
-  it('uses public path on anonymous web', () => {
+  it('treats platform-only WebApp as anonymous web', () => {
     const g = globalThis;
     const prev = g.Telegram;
+    g.Telegram = { WebApp: { initData: '', platform: 'unknown' } };
+    const href = api.arenaHref({ public_path: '/p/minsk/x' }, 'arena?ref=1');
+    assert.equal(href, '/p/minsk/x');
+    g.Telegram = prev;
+  });
+
+  it('isTelegramMiniApp requires non-empty initData', () => {
+    const g = globalThis;
+    const prev = g.Telegram;
+    g.Telegram = { WebApp: { initData: 'x', platform: 'ios' } };
+    assert.equal(api.isTelegramMiniApp(), true);
+    g.Telegram = { WebApp: { initData: '', platform: 'unknown' } };
+    assert.equal(api.isTelegramMiniApp(), false);
     g.Telegram = undefined;
-    const href = api.arenaHref({ id: 1, slug: 'led' }, 'Минск', 'arena?ref=1');
-    assert.match(href, /^\/p\//);
+    assert.equal(api.isTelegramMiniApp(), false);
     g.Telegram = prev;
   });
 });

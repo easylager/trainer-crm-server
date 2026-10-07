@@ -6,7 +6,6 @@ import html as html_lib
 from typing import Any, Mapping
 from urllib.parse import urlencode
 
-from src.application.place_links import place_path
 from src.application.selection_page import selection_path
 from src.shared.html_template import safe_external_url
 
@@ -16,6 +15,14 @@ CONTACT_ACTION_DIRECTION = "direction"
 
 _ALLOWED_CONTACT_ACTIONS = frozenset(
     {CONTACT_ACTION_PHONE, CONTACT_ACTION_TICKETS, CONTACT_ACTION_DIRECTION}
+)
+
+_PHONE_BEACON_SCRIPT = (
+    '<script>(function(){document.addEventListener("click",function(e){'
+    'var a=e.target.closest("a[data-catalog-phone-beacon]");'
+    'if(!a||!navigator.sendBeacon)return;'
+    'navigator.sendBeacon(a.getAttribute("data-catalog-phone-beacon"));'
+    '},true);})();</script>'
 )
 
 
@@ -43,9 +50,9 @@ def public_outbound_url(
     city_id: int | None = None,
     arena_id: int | None = None,
 ) -> str | None:
-    """Прокси GET: пишем ``public_contact_click``, затем 302 на tel / билеты / карту."""
+    """Прокси GET: пишем ``public_contact_click``, затем 302 на билеты / карту (не tel)."""
     act = (action or "").strip().lower()
-    if act not in _ALLOWED_CONTACT_ACTIONS:
+    if act not in _ALLOWED_CONTACT_ACTIONS or act == CONTACT_ACTION_PHONE:
         return None
     surf = (surface or "").strip().lower() or "place_page"
     params: dict[str, str] = {"action": act, "surface": surf}
@@ -65,6 +72,25 @@ def public_outbound_url(
     return None
 
 
+def contact_click_beacon_url(
+    *,
+    action: str,
+    surface: str,
+    city_id: int | None = None,
+    arena_id: int | None = None,
+) -> str:
+    """Относительный URL для ``navigator.sendBeacon`` (POST) — учёт клика «Позвонить»."""
+    params: dict[str, str] = {
+        "action": (action or "").strip().lower(),
+        "surface": (surface or "place_page").strip().lower(),
+    }
+    if city_id is not None and int(city_id) > 0:
+        params["city_id"] = str(int(city_id))
+    if arena_id is not None and int(arena_id) > 0:
+        params["arena_id"] = str(int(arena_id))
+    return f"/api/public/catalog/contact-click?{urlencode(params)}"
+
+
 def render_place_primary_actions(
     card: Mapping[str, Any],
     *,
@@ -80,22 +106,26 @@ def render_place_primary_actions(
     tickets = safe_external_url(card.get("tickets_url"))
     maps = _maps_href(card.get("latitude"), card.get("longitude"))
     buttons: list[str] = []
-    if phone and public_outbound_url(
-        base_url, action=CONTACT_ACTION_PHONE, surface=surface, city_id=city_id, arena_id=arena_id
-    ):
-        url = public_outbound_url(
-            base_url, action=CONTACT_ACTION_PHONE, surface=surface, city_id=city_id, arena_id=arena_id
+    phone_beacon = False
+    tel = _tel_href(phone)
+    if tel:
+        beacon = contact_click_beacon_url(
+            action=CONTACT_ACTION_PHONE,
+            surface=surface,
+            city_id=city_id,
+            arena_id=arena_id,
         )
-        buttons.append(f'<a class="cta" href="{_esc(url)}">Позвонить</a>')
-    elif phone and _tel_href(phone):
-        buttons.append(f'<a class="cta" href="{_esc(_tel_href(phone))}">Позвонить</a>')
+        buttons.append(
+            f'<a class="cta" href="{_esc(tel)}" data-catalog-phone-beacon="{_esc(beacon)}">Позвонить</a>'
+        )
+        phone_beacon = True
     if tickets and public_outbound_url(
         base_url, action=CONTACT_ACTION_TICKETS, surface=surface, city_id=city_id, arena_id=arena_id
     ):
         url = public_outbound_url(
             base_url, action=CONTACT_ACTION_TICKETS, surface=surface, city_id=city_id, arena_id=arena_id
         )
-        buttons.append(f'<a class="cta cta--ghost" href="{_esc(url)}">Билеты</a>')
+        buttons.append(f'<a class="cta cta--ghost" href="{_esc(url)}" rel="nofollow">Билеты</a>')
     elif tickets:
         buttons.append(
             f'<a class="cta cta--ghost" href="{_esc(tickets)}" rel="noopener nofollow" target="_blank">Билеты</a>'
@@ -106,7 +136,7 @@ def render_place_primary_actions(
         url = public_outbound_url(
             base_url, action=CONTACT_ACTION_DIRECTION, surface=surface, city_id=city_id, arena_id=arena_id
         )
-        buttons.append(f'<a class="cta cta--ghost" href="{_esc(url)}">Как добраться</a>')
+        buttons.append(f'<a class="cta cta--ghost" href="{_esc(url)}" rel="nofollow">Как добраться</a>')
     elif maps:
         buttons.append(
             f'<a class="cta cta--ghost" href="{_esc(maps)}" rel="noopener nofollow" target="_blank">Как добраться</a>'
@@ -122,7 +152,8 @@ def render_place_primary_actions(
             f'<div class="dock"><a class="cta cta--secondary" href="{_esc(telegram_url)}">'
             "Открыть в Telegram</a></div>"
         )
-    return f'<div class="actions">{"".join(buttons)}</div>{dock}'
+    beacon_js = _PHONE_BEACON_SCRIPT if phone_beacon else ""
+    return f'<div class="actions">{"".join(buttons)}</div>{dock}{beacon_js}'
 
 
 def render_generic_web_dock(
@@ -158,10 +189,3 @@ def render_generic_web_dock(
         )
     actions = f'<div class="actions">{"".join(row)}</div>' if row else ""
     return actions + tg
-
-
-def arena_public_href(city_name: str, slug: str) -> str | None:
-    slug = str(slug or "").strip()
-    if not slug or not city_name:
-        return None
-    return place_path(city_name=city_name, slug=slug)
