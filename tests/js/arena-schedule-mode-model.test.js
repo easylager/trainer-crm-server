@@ -23,6 +23,21 @@ describe('arena schedule mode model', () => {
     );
   });
 
+  it('phoneToTelHref skips dot-times and keeps the real number', () => {
+    assert.equal(
+      M.phoneToTelHref('пн-пт 10.00-22.00; +375 29 123-45-67'),
+      'tel:+375291234567',
+    );
+    assert.equal(
+      M.phoneToTelHref('10.00-22.00; 8 017 222-22-22'),
+      'tel:80172222222',
+    );
+    assert.equal(
+      M.phoneToTelHref('Касса 10.00-22.00 тел 8 017 222-22-22'),
+      'tel:80172222222',
+    );
+  });
+
   it('phoneToTelHref strips extension and parenthetical notes', () => {
     assert.equal(
       M.phoneToTelHref('+375 29 123-45-67 доб. 12'),

@@ -8,24 +8,16 @@ from __future__ import annotations
 
 import re
 
-_MAX_PHONE_INPUT_LEN = 64
+_SCAN_LIMIT = 256
+_MATCH_START_LIMIT = 64
 
 _ASCII_DIGITS = frozenset("0123456789")
 _PHONE_LIKE = re.compile(r"\+?\d[\d\s().-]{5,}\d")
 _CLOCK_COLON = re.compile(r"\d{1,2}:\d{2}")
+_DOT_DATE = re.compile(r"\d{4}\.\d{2}\.\d{2}|\d{1,2}\.\d{2}\.\d{4}")
 _DOT_TIME = re.compile(r"(?<!\d)\d{1,2}\.\d{2}(?!\.\d)")
-_DAY_WORD = re.compile(r"\b(пн|вт|ср|чт|пт|сб|вс)\b", re.IGNORECASE)
 _EXT_TAIL = re.compile(r"(?:\s|,)*(?:доб\.?|ext\.?|вн\.?)\s*\d.*$", re.IGNORECASE)
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_SEGMENT_SPLIT = re.compile(r"[;,\n]|(?<!\d)/(?=\+?\d)")
-
-
-def _clip_phone_input(phone: str | None) -> str:
-    return str(phone or "").strip()[:_MAX_PHONE_INPUT_LEN]
-
-
-def _strip_colon_times(text: str) -> str:
-    return _CLOCK_COLON.sub(" ", text)
 
 
 def _ascii_digits(s: str) -> str:
@@ -82,70 +74,30 @@ def _href_from_phone_like(chunk: str) -> str:
     return f"+{digits}" if plus else digits
 
 
-def _any_phone_href_in(text: str) -> bool:
-    for chunk in _iter_phone_like_chunks(text):
-        for m in _PHONE_LIKE.finditer(_strip_colon_times(chunk)):
-            if _href_from_phone_like(m.group(0)):
-                return True
-    return False
+def _mask_dates_and_clocks(text: str) -> str:
+    """Blank dd.mm.yyyy / yyyy.mm.dd and HH:MM in place so indexes stay aligned."""
 
+    def blank(match: re.Match[str]) -> str:
+        return " " * len(match.group(0))
 
-def _is_hours_only_string(text: str) -> bool:
-    raw = str(text or "").strip()
-    if not raw:
-        return False
-    if _ISO_DATE.match(raw):
-        return True
-    colon_clocks = _CLOCK_COLON.findall(raw)
-    dot_clocks = _DOT_TIME.findall(raw)
-    if not colon_clocks and not dot_clocks:
-        return False
-    if _DAY_WORD.search(raw) and not _any_phone_href_in(raw):
-        return True
-    if re.search(r"ежедневно", raw, re.IGNORECASE) and _CLOCK_COLON.search(raw) and not _any_phone_href_in(raw):
-        return True
-    if len(dot_clocks) >= 2 and "+" not in raw and not _any_phone_href_in(raw):
-        return True
-    if len(colon_clocks) >= 2 and "+" not in raw and not _any_phone_href_in(raw):
-        return True
-    return False
-
-
-def _iter_phone_like_chunks(text: str) -> list[str]:
-    """Left-to-right chunks: explicit segments, then embedded phone-like spans."""
-    raw = str(text or "").strip()
-    if not raw:
-        return []
-    seen: set[str] = set()
-    ordered: list[str] = []
-
-    def add(chunk: str) -> None:
-        c = chunk.strip()
-        if c and c not in seen:
-            seen.add(c)
-            ordered.append(c)
-
-    for seg in _SEGMENT_SPLIT.split(raw):
-        add(seg)
-    prepared = _strip_colon_times(raw)
-    for m in _PHONE_LIKE.finditer(prepared):
-        add(m.group(0))
-    return ordered
+    return _CLOCK_COLON.sub(blank, _DOT_DATE.sub(blank, text))
 
 
 def _first_valid_href(text: str) -> str:
     raw = str(text or "").strip()
     if not raw:
         return ""
-    if _is_hours_only_string(raw):
-        return ""
-    for chunk in _iter_phone_like_chunks(raw):
-        if _is_hours_only_string(chunk):
+    window = raw[:_SCAN_LIMIT]
+    masked = _mask_dates_and_clocks(window)
+    clipped = len(raw) > _SCAN_LIMIT
+    for match in _PHONE_LIKE.finditer(masked):
+        if match.start() >= _MATCH_START_LIMIT:
+            break
+        if clipped and match.end() >= _SCAN_LIMIT:
             continue
-        for m in _PHONE_LIKE.finditer(_strip_colon_times(chunk)):
-            href = _href_from_phone_like(m.group(0))
-            if href:
-                return href
+        href = _href_from_phone_like(match.group(0))
+        if href:
+            return href
     return ""
 
 
@@ -153,19 +105,19 @@ def is_valid_public_phone(phone: str | None) -> bool:
     """True when the value contains a dialable phone (≥7 ASCII digits), not only hours."""
     if not phone:
         return False
-    return bool(_first_valid_href(_clip_phone_input(phone)))
+    return bool(_first_valid_href(phone))
 
 
 def sanitize_public_phone(phone: str | None) -> str | None:
     """Return phone only if it contains at least 7 ASCII digits, else None."""
     if not phone:
         return None
-    raw = _clip_phone_input(phone)
+    raw = str(phone).strip()
     if not raw or not is_valid_public_phone(raw):
         return None
-    return raw
+    return raw[:_SCAN_LIMIT]
 
 
 def tel_href(phone: str) -> str:
     """Digits (and leading +) for tel: URI — first valid phone-like span only."""
-    return _first_valid_href(_clip_phone_input(phone))
+    return _first_valid_href(phone)

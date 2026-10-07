@@ -1,5 +1,7 @@
 """TASK-207: phone_guard normalization and validation."""
 
+import time
+
 import pytest
 
 from src.shared.phone_guard import is_valid_public_phone, tel_href
@@ -74,19 +76,45 @@ def test_hours_then_phone_takes_valid_number_not_hours() -> None:
 
 
 @pytest.mark.parametrize(
-    "raw",
-    ["8.017.222.22.22", "+375.29.123.45.67"],
+    ("raw", "expected"),
+    [
+        ("8.017.222.22.22", "80172222222"),
+        ("+375.29.123.45.67", "+375291234567"),
+        ("8 017 222-22-22, с 01.11.2026", "80172222222"),
+    ],
 )
-def test_dot_separated_phones_are_valid(raw: str) -> None:
+def test_dot_separated_phones_stay_valid(raw: str, expected: str) -> None:
     assert is_valid_public_phone(raw)
-    assert tel_href(raw)
+    assert tel_href(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "2024.10.07",
+        "07.10.2026",
+        "1.01.2026",
+        "01.01.2026-31.12.2026",
+        "закрыто до 01.11.2026",
+    ],
+)
+def test_calendar_dates_are_not_phones(raw: str) -> None:
+    assert not is_valid_public_phone(raw)
+    assert tel_href(raw) == ""
 
 
 def test_phone_before_ezhednevno_hours() -> None:
     assert tel_href("8 017 222-22-22 ежедневно 10:00-22:00") == "80172222222"
 
 
+def test_clip_does_not_return_a_partial_number() -> None:
+    got = tel_href("x" * 50 + " +375 29 123-45-67")
+    assert got in ("", "+375291234567")
+
+
 def test_clipped_input_does_not_hang_on_long_strings() -> None:
     junk = "1" + " " * 10000 + "1"
+    started = time.perf_counter()
     assert not is_valid_public_phone(junk)
     assert tel_href(junk) == ""
+    assert time.perf_counter() - started < 0.05
