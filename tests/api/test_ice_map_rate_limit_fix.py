@@ -147,14 +147,16 @@ async def test_map_config_warns_when_key_empty(monkeypatch, app_use_test_db, cap
 @pytest.mark.asyncio
 async def test_map_config_warns_first_empty_immediately(monkeypatch, app_use_test_db, caplog) -> None:
     import logging
-    import time
 
     import src.api.routes.public_arenas as public_arenas
 
-    public_arenas._map_config_empty_warned_at = time.monotonic() - 300.0
+    public_arenas._map_config_empty_warned_at = float("-inf")
     monkeypatch.setenv("YANDEX_MAPS_JS_API_KEY", "")
     with caplog.at_level(logging.WARNING):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            await client.get("/api/public/ice/map-config")
+            first = await client.get("/api/public/ice/map-config")
+            second = await client.get("/api/public/ice/map-config")
+    assert first.status_code == 200
+    assert second.status_code == 200
     hits = [r for r in caplog.records if "YANDEX_MAPS_JS_API_KEY is empty" in r.getMessage()]
     assert len(hits) == 1
