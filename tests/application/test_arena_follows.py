@@ -95,9 +95,7 @@ def test_reopened_text_matches_the_mock() -> None:
         ],
     )
     assert _plain(text_html) == (
-        "Каток Ледовая площадка СДЮШОР открылся\n"
-        "Первые сеансы: суббота 15:00 и 18:00.\n"
-        + OPENING_TAIL
+        "Каток Ледовая площадка СДЮШОР открылся\n" "Первые сеансы: суббота 15:00 и 18:00.\n" + OPENING_TAIL
     )
 
 
@@ -105,13 +103,11 @@ async def _city(db_session) -> int:
     return int(
         (
             await db_session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO cities (name, country, is_active)
                     VALUES (:name, 'BY', true)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"name": f"Город-{uuid.uuid4().hex[:8]}"},
             )
         ).scalar_one()
@@ -122,24 +118,20 @@ async def _arena(db_session, city_id: int, name: str, *, mode: str = "auto") -> 
     arena_id = int(
         (
             await db_session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO arenas (city_id, name, address, is_active, is_confirmed)
                     VALUES (:cid, :name, 'ул. Тестовая, 1', true, true)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"cid": city_id, "name": name},
             )
         ).scalar_one()
     )
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO arena_profiles (arena_id, city_id, slug, status, schedule_mode, timezone)
             VALUES (:aid, :cid, :slug, 'published', :mode, 'Europe/Minsk')
-            """
-        ),
+            """),
         {"aid": arena_id, "cid": city_id, "slug": f"rink-{uuid.uuid4().hex[:8]}", "mode": mode},
     )
     await db_session.flush()
@@ -158,12 +150,10 @@ async def _follow(db_session, arena_id: int, telegram_id: int) -> int:
     return int(
         (
             await db_session.execute(
-                text(
-                    """
+                text("""
                     SELECT id FROM arena_follows
                     WHERE telegram_id = :tg AND arena_id = :arena
-                    """
-                ),
+                    """),
                 {"tg": telegram_id, "arena": arena_id},
             )
         ).scalar_one()
@@ -182,8 +172,7 @@ async def _session_row(
 ) -> None:
     starts = _at(day, start)
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO ice_sessions (
                 arena_id, kind, starts_at_utc, ends_at_utc, local_date,
                 starts_at_local, ends_at_local, currency_code, status,
@@ -192,8 +181,7 @@ async def _session_row(
                 :aid, 'public_skate', :s, :e, :d, :st, :et, 'BYN', 'active',
                 :src, :obs, :basis
             )
-            """
-        ),
+            """),
         {
             "aid": arena_id,
             "s": starts,
@@ -231,7 +219,9 @@ def _draft(arena_id: int, day: date, start: time, *, basis: str = "live", minute
     )
 
 
-async def _publish(db_session, arena_id: int, drafts: list[CanonicalSlotDraft], *, finished_at: datetime = _NOW) -> None:
+async def _publish(
+    db_session, arena_id: int, drafts: list[CanonicalSlotDraft], *, finished_at: datetime = _NOW
+) -> None:
     job_id = (
         await db_session.execute(
             text("SELECT id FROM ice_parser_jobs WHERE arena_id = :aid"),
@@ -241,14 +231,12 @@ async def _publish(db_session, arena_id: int, drafts: list[CanonicalSlotDraft], 
     if job_id is None:
         job_id = (
             await db_session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO ice_parser_jobs
                         (arena_id, parser_key, is_enabled, cadence, next_run_at, config)
                     VALUES (:aid, 'test_parser', true, 'daily', :next, CAST(:cfg AS jsonb))
                     RETURNING id
-                    """
-                ),
+                    """),
                 {
                     "aid": arena_id,
                     "next": finished_at - timedelta(minutes=1),
@@ -277,19 +265,21 @@ async def _publish(db_session, arena_id: int, drafts: list[CanonicalSlotDraft], 
 
 async def _notes(db_session, arena_id: int) -> list[dict]:
     rows = (
-        await db_session.execute(
-            text(
-                """
+        (
+            await db_session.execute(
+                text("""
                 SELECT n.kind, n.status, n.payload, n.not_before, f.telegram_id, f.muted_at
                 FROM arena_follow_notifications n
                 JOIN arena_follows f ON f.id = n.follow_id
                 WHERE f.arena_id = :arena
                 ORDER BY f.telegram_id, n.id
-                """
-            ),
-            {"arena": arena_id},
+                """),
+                {"arena": arena_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [dict(row) for row in rows]
 
 
@@ -306,37 +296,39 @@ async def committed_db():
         if city_ids:
             async with factory() as cleanup:
                 await cleanup.execute(
-                    text(
-                        """
+                    text("""
                         DELETE FROM catalog_consumer_events WHERE arena_id IN (
                             SELECT id FROM arenas WHERE city_id = ANY(:city_ids)
                         )
-                        """
-                    ),
+                        """),
                     {"city_ids": city_ids},
                 )
                 await cleanup.execute(
-                    text(
-                        """
+                    text("""
                         DELETE FROM arena_follow_notifications
                         WHERE follow_id IN (
                             SELECT f.id FROM arena_follows f JOIN arenas a ON a.id = f.arena_id
                             WHERE a.city_id = ANY(:city_ids)
                         )
-                        """
+                        """),
+                    {"city_ids": city_ids},
+                )
+                await cleanup.execute(
+                    text(
+                        "DELETE FROM arena_follows WHERE arena_id IN (SELECT id FROM arenas WHERE city_id = ANY(:city_ids))"
                     ),
                     {"city_ids": city_ids},
                 )
                 await cleanup.execute(
-                    text("DELETE FROM arena_follows WHERE arena_id IN (SELECT id FROM arenas WHERE city_id = ANY(:city_ids))"),
+                    text(
+                        "DELETE FROM ice_sessions WHERE arena_id IN (SELECT id FROM arenas WHERE city_id = ANY(:city_ids))"
+                    ),
                     {"city_ids": city_ids},
                 )
                 await cleanup.execute(
-                    text("DELETE FROM ice_sessions WHERE arena_id IN (SELECT id FROM arenas WHERE city_id = ANY(:city_ids))"),
-                    {"city_ids": city_ids},
-                )
-                await cleanup.execute(
-                    text("DELETE FROM arena_profiles WHERE arena_id IN (SELECT id FROM arenas WHERE city_id = ANY(:city_ids))"),
+                    text(
+                        "DELETE FROM arena_profiles WHERE arena_id IN (SELECT id FROM arenas WHERE city_id = ANY(:city_ids))"
+                    ),
                     {"city_ids": city_ids},
                 )
                 await cleanup.execute(text("DELETE FROM arenas WHERE city_id = ANY(:city_ids)"), {"city_ids": city_ids})
@@ -372,15 +364,13 @@ async def _insert_notification(
     return int(
         (
             await session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO arena_follow_notifications
                         (follow_id, kind, payload, not_before, created_at, status, attempts, claimed_at)
                     VALUES
                         (:fid, :kind, CAST(:payload AS jsonb), :not_before, :created_at, :status, :attempts, :claimed_at)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {
                     "fid": follow_id,
                     "kind": kind,
@@ -469,26 +459,26 @@ async def test_stale_sending_merges_pending_and_dispatches_other_follow(committe
         sent.append(item)
 
     async with committed_db() as session:
-        delivered = await dispatch_due_follow_notifications(
-            session, now=now, webapp_base_url=_BASE, send=send
-        )
+        delivered = await dispatch_due_follow_notifications(session, now=now, webapp_base_url=_BASE, send=send)
     assert delivered == 1
     assert [item.follow_id for item in sent] == [other_follow]
 
     async with committed_db() as session:
         rows = (
-            await session.execute(
-                text(
-                    """
+            (
+                await session.execute(
+                    text("""
                     SELECT id, follow_id, kind, status, payload, attempts
                     FROM arena_follow_notifications
                     WHERE follow_id = ANY(:fids)
                     ORDER BY id
-                    """
-                ),
-                {"fids": [first_follow, other_follow]},
+                    """),
+                    {"fids": [first_follow, other_follow]},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
     first_rows = [row for row in rows if row["follow_id"] == first_follow]
     assert len(first_rows) == 2
     old_row = next(row for row in first_rows if row["id"] == old_id)
@@ -535,22 +525,22 @@ async def test_failed_send_merges_schedule_published_while_sending(committed_db)
         raise RuntimeError("Telegram is temporarily unavailable")
 
     async with committed_db() as session:
-        assert await dispatch_due_follow_notifications(
-            session, now=now, webapp_base_url=_BASE, send=send
-        ) == 0
+        assert await dispatch_due_follow_notifications(session, now=now, webapp_base_url=_BASE, send=send) == 0
 
     async with committed_db() as session:
         rows = (
-            await session.execute(
-                text(
-                    """
+            (
+                await session.execute(
+                    text("""
                     SELECT id, status, payload, attempts, not_before
                     FROM arena_follow_notifications WHERE follow_id = :fid ORDER BY id
-                    """
-                ),
-                {"fid": follow_id},
+                    """),
+                    {"fid": follow_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
     assert len(rows) == 2
     old = next(row for row in rows if row["id"] == old_id)
     pending = next(row for row in rows if row["status"] == "pending")
@@ -567,9 +557,12 @@ async def test_failed_send_merges_schedule_published_while_sending(committed_db)
         sent.append(item)
 
     async with committed_db() as session:
-        assert await dispatch_due_follow_notifications(
-            session, now=now + timedelta(minutes=6), webapp_base_url=_BASE, send=succeed
-        ) == 1
+        assert (
+            await dispatch_due_follow_notifications(
+                session, now=now + timedelta(minutes=6), webapp_base_url=_BASE, send=succeed
+            )
+            == 1
+        )
     assert len(sent) == 1
     assert "16:00\u201317:00" in sent[0].text
 
@@ -586,10 +579,18 @@ async def test_successful_reopened_merges_returned_schedule_row(committed_db) ->
             session,
             follow_id=follow_id,
             kind="reopened",
-            payload={"slots": [
-                {"local_date": _SATURDAY.isoformat(), "starts_at_local": "15:00", "ends_at_local": "16:00",
-                 "kind": "public_skate"}
-            ], "keep": False, "text": "reopened"},
+            payload={
+                "slots": [
+                    {
+                        "local_date": _SATURDAY.isoformat(),
+                        "starts_at_local": "15:00",
+                        "ends_at_local": "16:00",
+                        "kind": "public_skate",
+                    }
+                ],
+                "keep": False,
+                "text": "reopened",
+            },
             now=now,
             not_before=now - timedelta(minutes=1),
         )
@@ -620,26 +621,24 @@ async def test_successful_reopened_merges_returned_schedule_row(committed_db) ->
             await publisher.commit()
 
     async with committed_db() as session:
-        assert await dispatch_due_follow_notifications(
-            session, now=now, webapp_base_url=_BASE, send=send
-        ) == 1
+        assert await dispatch_due_follow_notifications(session, now=now, webapp_base_url=_BASE, send=send) == 1
 
     async with committed_db() as session:
         rows = (
-            await session.execute(
-                text(
-                    """
+            (
+                await session.execute(
+                    text("""
                     SELECT id, kind, status, payload, attempts
                     FROM arena_follow_notifications WHERE follow_id = :fid ORDER BY id
-                    """
-                ),
-                {"fid": follow_id},
+                    """),
+                    {"fid": follow_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         muted_at = (
-            await session.execute(
-                text("SELECT muted_at FROM arena_follows WHERE id = :fid"), {"fid": follow_id}
-            )
+            await session.execute(text("SELECT muted_at FROM arena_follows WHERE id = :fid"), {"fid": follow_id})
         ).scalar_one()
     reopened = next(row for row in rows if row["id"] == reopened_id)
     old_schedule = next(row for row in rows if row["id"] == schedule_id)
@@ -685,20 +684,22 @@ async def test_upsert_pending_conflict_merges_slots_on_postgres(committed_db) ->
 
     async with committed_db() as session:
         rows = (
-            await session.execute(
-                text(
-                    """
+            (
+                await session.execute(
+                    text("""
                     SELECT status, payload, attempts, created_at
                     FROM arena_follow_notifications WHERE follow_id = :fid
-                    """
-                ),
-                {"fid": follow_id},
+                    """),
+                    {"fid": follow_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
     assert len(rows) == 1
     assert rows[0]["status"] == "pending"
     assert rows[0]["attempts"] == 5
-    assert rows[0]["created_at"] == now + timedelta(minutes=1)
+    assert rows[0]["created_at"] == now - timedelta(minutes=10)
     assert {slot["starts_at_local"] for slot in rows[0]["payload"]["removed"]} == {"19:00"}
     assert {slot["starts_at_local"] for slot in rows[0]["payload"]["added"]} == {"20:30", "16:00"}
     assert rows[0]["payload"]["hhmm"] == "14:45"
@@ -721,9 +722,7 @@ async def test_publisher_waits_for_follow_lock_then_merges(committed_db) -> None
         await session.commit()
 
     locker = committed_db()
-    await locker.execute(
-        text("SELECT id FROM arena_follows WHERE id = :fid FOR UPDATE"), {"fid": follow_id}
-    )
+    await locker.execute(text("SELECT id FROM arena_follows WHERE id = :fid FOR UPDATE"), {"fid": follow_id})
     publisher_finished = asyncio.Event()
 
     async def publish() -> None:
@@ -749,13 +748,15 @@ async def test_publisher_waits_for_follow_lock_then_merges(committed_db) -> None
 
     async with committed_db() as session:
         rows = (
-            await session.execute(
-                text(
-                    "SELECT status, payload FROM arena_follow_notifications WHERE follow_id = :fid"
-                ),
-                {"fid": follow_id},
+            (
+                await session.execute(
+                    text("SELECT status, payload FROM arena_follow_notifications WHERE follow_id = :fid"),
+                    {"fid": follow_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
     assert len(rows) == 1
     assert rows[0]["status"] == "pending"
     assert [slot["starts_at_local"] for slot in rows[0]["payload"]["removed"]] == ["19:00"]
@@ -763,9 +764,7 @@ async def test_publisher_waits_for_follow_lock_then_merges(committed_db) -> None
 
 
 @pytest.mark.asyncio
-async def test_publish_and_admin_reopen_serialize_and_preserve_both_slot_sets(
-    committed_db, monkeypatch
-) -> None:
+async def test_publish_and_admin_reopen_serialize_and_preserve_both_slot_sets(committed_db, monkeypatch) -> None:
     _city_id, arena_id, (follow_id,) = await _committed_arena(
         committed_db, mode="season_closed", telegram_ids=(10_007,)
     )
@@ -819,13 +818,15 @@ async def test_publish_and_admin_reopen_serialize_and_preserve_both_slot_sets(
 
     async with committed_db() as session:
         rows = (
-            await session.execute(
-                text(
-                    "SELECT kind, status, payload FROM arena_follow_notifications WHERE follow_id = :fid"
-                ),
-                {"fid": follow_id},
+            (
+                await session.execute(
+                    text("SELECT kind, status, payload FROM arena_follow_notifications WHERE follow_id = :fid"),
+                    {"fid": follow_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
     assert len(rows) == 1
     assert rows[0]["kind"] == "reopened"
     assert rows[0]["status"] == "pending"
@@ -837,9 +838,7 @@ async def test_publish_and_admin_reopen_serialize_and_preserve_both_slot_sets(
 
 
 @pytest.mark.asyncio
-async def test_unsubscribe_waits_for_publish_and_other_follower_is_queued(
-    committed_db, monkeypatch
-) -> None:
+async def test_unsubscribe_waits_for_publish_and_other_follower_is_queued(committed_db, monkeypatch) -> None:
     _city_id, arena_id, (unsubscribed_follow, other_follow) = await _committed_arena(
         committed_db, telegram_ids=(10_008, 10_009)
     )
@@ -875,9 +874,7 @@ async def test_unsubscribe_waits_for_publish_and_other_follower_is_queued(
 
     async def unsubscribe() -> None:
         async with committed_db() as session:
-            await session.execute(
-                text("DELETE FROM arena_follows WHERE id = :fid"), {"fid": unsubscribed_follow}
-            )
+            await session.execute(text("DELETE FROM arena_follows WHERE id = :fid"), {"fid": unsubscribed_follow})
             await session.commit()
 
     unsubscribe_task = asyncio.create_task(unsubscribe())
@@ -890,17 +887,17 @@ async def test_unsubscribe_waits_for_publish_and_other_follower_is_queued(
 
     async with committed_db() as session:
         queued = (
-            await session.execute(
-                text(
-                    "SELECT status FROM arena_follow_notifications WHERE follow_id = :fid"
-                ),
-                {"fid": other_follow},
+            (
+                await session.execute(
+                    text("SELECT status FROM arena_follow_notifications WHERE follow_id = :fid"),
+                    {"fid": other_follow},
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         gone = (
-            await session.execute(
-                text("SELECT 1 FROM arena_follows WHERE id = :fid"), {"fid": unsubscribed_follow}
-            )
+            await session.execute(text("SELECT 1 FROM arena_follows WHERE id = :fid"), {"fid": unsubscribed_follow})
         ).first()
     assert queued == ["pending"]
     assert gone is None
@@ -916,9 +913,7 @@ async def test_unsubscribe_waits_for_publish_and_other_follower_is_queued(
     ],
 )
 async def test_recovery_respects_claim_lease_age(committed_db, age, expected_status) -> None:
-    _city_id, _arena_id, (follow_id,) = await _committed_arena(
-        committed_db, telegram_ids=(_unique_telegram_id(),)
-    )
+    _city_id, _arena_id, (follow_id,) = await _committed_arena(committed_db, telegram_ids=(_unique_telegram_id(),))
     now = _NOW + timedelta(minutes=30)
     async with committed_db() as session:
         notification_id = await _insert_notification(
@@ -937,9 +932,7 @@ async def test_recovery_respects_claim_lease_age(committed_db, age, expected_sta
         raise AssertionError("future notification was sent during lease recovery")
 
     async with committed_db() as session:
-        await dispatch_due_follow_notifications(
-            session, now=now, webapp_base_url=_BASE, send=should_not_send
-        )
+        await dispatch_due_follow_notifications(session, now=now, webapp_base_url=_BASE, send=should_not_send)
     async with committed_db() as session:
         status = (
             await session.execute(
@@ -952,9 +945,7 @@ async def test_recovery_respects_claim_lease_age(committed_db, age, expected_sta
 
 @pytest.mark.asyncio
 async def test_recovered_reopened_loses_claim_without_duplicate_send(committed_db, caplog) -> None:
-    _city_id, arena_id, (follow_id,) = await _committed_arena(
-        committed_db, telegram_ids=(_unique_telegram_id(),)
-    )
+    _city_id, arena_id, (follow_id,) = await _committed_arena(committed_db, telegram_ids=(_unique_telegram_id(),))
     now = _NOW + timedelta(minutes=30)
     slot = _slot(_SATURDAY, time(15, 0), time(16, 0))
     async with committed_db() as session:
@@ -992,32 +983,28 @@ async def test_recovered_reopened_loses_claim_without_duplicate_send(committed_d
             ).scalar_one()
             assert claim_time is not None
             await takeover.execute(
-                text(
-                    """
+                text("""
                     UPDATE arena_follow_notifications
                     SET status = 'pending', claimed_at = NULL
                     WHERE id = :id AND status = 'sending'
-                    """
-                ),
+                    """),
                 {"id": notification_id},
             )
             await takeover.commit()
 
     async with committed_db() as session:
-        assert await dispatch_due_follow_notifications(
-            session, now=now, webapp_base_url=_BASE, send=take_over_claim
-        ) == 1
+        assert (
+            await dispatch_due_follow_notifications(session, now=now, webapp_base_url=_BASE, send=take_over_claim) == 1
+        )
     async with committed_db() as session:
         status, muted_at = (
             await session.execute(
-                text(
-                    """
+                text("""
                     SELECT n.status, f.muted_at
                     FROM arena_follow_notifications n
                     JOIN arena_follows f ON f.id = n.follow_id
                     WHERE n.id = :id
-                    """
-                ),
+                    """),
                 {"id": notification_id},
             )
         ).one()
@@ -1028,31 +1015,30 @@ async def test_recovered_reopened_loses_claim_without_duplicate_send(committed_d
     async with committed_db() as session:
         metric = (
             await session.execute(
-                text(
-                    """
+                text("""
                     SELECT payload FROM catalog_consumer_events
                     WHERE arena_id = :arena AND kind = 'follow_notified'
                       AND payload->>'notification_id' = :notification_id
                     ORDER BY id DESC LIMIT 1
-                    """
-                ),
+                    """),
                 {"arena": arena_id, "notification_id": str(notification_id)},
             )
         ).scalar_one()
     assert metric["claim_lost"] is True
 
     async with committed_db() as session:
-        assert await dispatch_due_follow_notifications(
-            session, now=now + timedelta(minutes=1), webapp_base_url=_BASE, send=take_over_claim
-        ) == 0
+        assert (
+            await dispatch_due_follow_notifications(
+                session, now=now + timedelta(minutes=1), webapp_base_url=_BASE, send=take_over_claim
+            )
+            == 0
+        )
     assert len(sent) == 1
 
 
 @pytest.mark.asyncio
 async def test_long_telegram_retry_after_requeues_without_sleeping(committed_db, monkeypatch) -> None:
-    _city_id, _arena_id, (follow_id,) = await _committed_arena(
-        committed_db, telegram_ids=(_unique_telegram_id(),)
-    )
+    _city_id, _arena_id, (follow_id,) = await _committed_arena(committed_db, telegram_ids=(_unique_telegram_id(),))
     now = _NOW + timedelta(minutes=30)
     slot = _slot(_FRIDAY, time(20, 30), time(21, 30))
     async with committed_db() as session:
@@ -1085,16 +1071,12 @@ async def test_long_telegram_retry_after_requeues_without_sleeping(committed_db,
         await arena_follow_loop._send(RetryBot(), item)
 
     async with committed_db() as session:
-        assert await dispatch_due_follow_notifications(
-            session, now=now, webapp_base_url=_BASE, send=send
-        ) == 0
+        assert await dispatch_due_follow_notifications(session, now=now, webapp_base_url=_BASE, send=send) == 0
     assert sleeps == []
     async with committed_db() as session:
         status, not_before = (
             await session.execute(
-                text(
-                    "SELECT status, not_before FROM arena_follow_notifications WHERE follow_id = :fid"
-                ),
+                text("SELECT status, not_before FROM arena_follow_notifications WHERE follow_id = :fid"),
                 {"fid": follow_id},
             )
         ).one()
@@ -1104,9 +1086,7 @@ async def test_long_telegram_retry_after_requeues_without_sleeping(committed_db,
 
 @pytest.mark.asyncio
 async def test_quiet_hours_recovery_merges_but_does_not_send(committed_db) -> None:
-    _city_id, _arena_id, (follow_id,) = await _committed_arena(
-        committed_db, telegram_ids=(_unique_telegram_id(),)
-    )
+    _city_id, _arena_id, (follow_id,) = await _committed_arena(committed_db, telegram_ids=(_unique_telegram_id(),))
     # 23:30 in Minsk.
     night = datetime(2026, 10, 9, 20, 30, tzinfo=timezone.utc)
     old_added = _slot(_SATURDAY, time(15, 0), time(16, 0))
@@ -1139,22 +1119,22 @@ async def test_quiet_hours_recovery_merges_but_does_not_send(committed_db) -> No
         sent.append(item)
 
     async with committed_db() as session:
-        assert await dispatch_due_follow_notifications(
-            session, now=night, webapp_base_url=_BASE, send=send
-        ) == 0
+        assert await dispatch_due_follow_notifications(session, now=night, webapp_base_url=_BASE, send=send) == 0
     assert sent == []
     async with committed_db() as session:
         rows = (
-            await session.execute(
-                text(
-                    """
+            (
+                await session.execute(
+                    text("""
                     SELECT id, status, payload, not_before
                     FROM arena_follow_notifications WHERE follow_id = :fid ORDER BY id
-                    """
-                ),
-                {"fid": follow_id},
+                    """),
+                    {"fid": follow_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
     old = next(row for row in rows if row["id"] == old_id)
     pending = next(row for row in rows if row["status"] == "pending")
     assert old["status"] == "merged"
@@ -1165,9 +1145,7 @@ async def test_quiet_hours_recovery_merges_but_does_not_send(committed_db) -> No
 
 @pytest.mark.asyncio
 async def test_parallel_upserts_merge_after_real_unique_conflict(committed_db) -> None:
-    _city_id, _arena_id, (follow_id,) = await _committed_arena(
-        committed_db, telegram_ids=(_unique_telegram_id(),)
-    )
+    _city_id, _arena_id, (follow_id,) = await _committed_arena(committed_db, telegram_ids=(_unique_telegram_id(),))
     now = _NOW
     old_added = _slot(_FRIDAY, time(20, 30), time(21, 30))
     new_added = _slot(_SATURDAY, time(16, 0), time(17, 0))
@@ -1202,13 +1180,15 @@ async def test_parallel_upserts_merge_after_real_unique_conflict(committed_db) -
 
     async with committed_db() as session:
         rows = (
-            await session.execute(
-                text(
-                    "SELECT status, payload FROM arena_follow_notifications WHERE follow_id = :fid"
-                ),
-                {"fid": follow_id},
+            (
+                await session.execute(
+                    text("SELECT status, payload FROM arena_follow_notifications WHERE follow_id = :fid"),
+                    {"fid": follow_id},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
     assert len(rows) == 1
     assert rows[0]["status"] == "pending"
     assert {slot["starts_at_local"] for slot in rows[0]["payload"]["added"]} == {"20:30", "16:00"}
@@ -1216,9 +1196,7 @@ async def test_parallel_upserts_merge_after_real_unique_conflict(committed_db) -
 
 @pytest.mark.asyncio
 async def test_merged_status_is_allowed_by_notification_constraint(committed_db) -> None:
-    _city_id, _arena_id, (follow_id,) = await _committed_arena(
-        committed_db, telegram_ids=(_unique_telegram_id(),)
-    )
+    _city_id, _arena_id, (follow_id,) = await _committed_arena(committed_db, telegram_ids=(_unique_telegram_id(),))
     async with committed_db() as session:
         row_id = await _insert_notification(
             session,
@@ -1300,14 +1278,12 @@ async def test_follow_diff_failure_does_not_roll_back_publish(db_session, monkey
         await original(session, *args, **kwargs)
         try:
             await session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO arena_follow_notifications
                         (follow_id, kind, payload, not_before, created_at, status)
                     SELECT id, 'schedule_changed', '{}'::jsonb, :now, :now, 'pending'
                     FROM arena_follows WHERE arena_id = :arena LIMIT 1
-                    """
-                ),
+                    """),
                 {"now": _NOW, "arena": arena_id},
             )
         except IntegrityError:
@@ -1322,18 +1298,20 @@ async def test_follow_diff_failure_does_not_roll_back_publish(db_session, monkey
     await _publish(db_session, arena_id, [_draft(arena_id, _FRIDAY, time(20, 30))])
 
     starts = (
-        await db_session.execute(
-            text(
-                """
+        (
+            await db_session.execute(
+                text("""
                 SELECT starts_at_local
                 FROM ice_sessions
                 WHERE arena_id = :aid AND status = 'active'
                 ORDER BY starts_at_local
-                """
-            ),
-            {"aid": arena_id},
+                """),
+                {"aid": arena_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert integrity_seen == [True]
     assert starts == [time(20, 30)]
     assert await _notes(db_session, arena_id) == []
@@ -1345,9 +1323,7 @@ async def test_projected_and_beyond_seven_days_do_not_notify(db_session) -> None
     city_id = await _city(db_session)
     arena_id = await _arena(db_session, city_id, "Чижовка-арена")
     await _follow(db_session, arena_id, 2001)
-    await _session_row(
-        db_session, arena_id, _FRIDAY, time(19, 0), basis="projected", source_id="run:old:proj"
-    )
+    await _session_row(db_session, arena_id, _FRIDAY, time(19, 0), basis="projected", source_id="run:old:proj")
     far = _FRIDAY + timedelta(days=11)
     await _session_row(db_session, arena_id, far, time(19, 0), source_id="run:old:far")
     await _publish(
@@ -1391,13 +1367,11 @@ async def test_quiet_hours_and_six_hour_gap(db_session) -> None:
     assert sent == []
 
     await db_session.execute(
-        text(
-            """
+        text("""
             UPDATE arena_follow_notifications
             SET status = 'sent', sent_at = :sent, not_before = :sent
             WHERE follow_id = :fid
-            """
-        ),
+            """),
         {"sent": datetime(2026, 10, 10, 6, 0, tzinfo=timezone.utc), "fid": follow_id},
     )
     day = datetime(2026, 10, 10, 7, 0, tzinfo=timezone.utc)  # 10:00 Минск, час после sent
@@ -1449,14 +1423,17 @@ async def test_changes_inside_thirty_minutes_merge(db_session) -> None:
     assert "20:30\u201321:30" in plain
     assert "21:00\u201322:00" in plain
     assert notes[0]["not_before"] >= _NOW + timedelta(minutes=30)
-    assert await record_publish_follow_diff(
-        db_session,
-        arena_id=arena_id,
-        before=empty,
-        after=empty,
-        past_ended_at=None,
-        now=_NOW,
-    ) == 0
+    assert (
+        await record_publish_follow_diff(
+            db_session,
+            arena_id=arena_id,
+            before=empty,
+            after=empty,
+            past_ended_at=None,
+            now=_NOW,
+        )
+        == 0
+    )
 
 
 @pytest.mark.asyncio
@@ -1499,9 +1476,7 @@ async def test_season_closed_to_auto_opens_and_mutes_without_keep(db_session) ->
     arena_id = await _arena(db_session, city_id, "Ледовая площадка СДЮШОР", mode="season_closed")
     await _follow(db_session, arena_id, 6001)
     tomorrow = datetime.now(timezone.utc).astimezone(_MINSK).date() + timedelta(days=1)
-    weekday = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")[
-        tomorrow.weekday()
-    ]
+    weekday = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")[tomorrow.weekday()]
     await _session_row(db_session, arena_id, tomorrow, time(15, 0), source_id="run:open:1500")
     await _session_row(db_session, arena_id, tomorrow, time(18, 0), source_id="run:open:1800")
     await apply_admin_arena_profile_patch(db_session, arena_id, {"schedule_mode": "auto"})
@@ -1520,9 +1495,7 @@ async def test_season_closed_to_auto_opens_and_mutes_without_keep(db_session) ->
         sent.append(item)
 
     due_at = notes[0]["not_before"]
-    assert await dispatch_due_follow_notifications(
-        db_session, now=due_at, webapp_base_url=_BASE, send=_send
-    ) == 1
+    assert await dispatch_due_follow_notifications(db_session, now=due_at, webapp_base_url=_BASE, send=_send) == 1
     assert [button.text for button in sent[0].buttons] == [BTN_SCHEDULE, BTN_KEEP]
     muted = (
         await db_session.execute(
@@ -1544,18 +1517,14 @@ async def test_keep_following_prevents_mute(db_session) -> None:
     await db_session.commit()
     from src.application.arena_follows import keep_following
 
-    reply = await keep_following(
-        db_session, telegram_id=6002, arena_id=arena_id, webapp_base_url=_BASE
-    )
+    reply = await keep_following(db_session, telegram_id=6002, arena_id=arena_id, webapp_base_url=_BASE)
     assert "Продолжаем следить" in reply.text
     notes = await _notes(db_session, arena_id)
 
     async def _send(_item) -> None:
         return None
 
-    await dispatch_due_follow_notifications(
-        db_session, now=notes[0]["not_before"], webapp_base_url=_BASE, send=_send
-    )
+    await dispatch_due_follow_notifications(db_session, now=notes[0]["not_before"], webapp_base_url=_BASE, send=_send)
     muted = (
         await db_session.execute(
             text("SELECT muted_at FROM arena_follows WHERE telegram_id = 6002 AND arena_id = :arena"),
@@ -1590,18 +1559,12 @@ async def test_blocked_bot_mutes_the_follow(db_session) -> None:
         )
         == 0
     )
-    row = (
-        await db_session.execute(
-            text(
-                """
+    row = (await db_session.execute(text("""
                 SELECT f.muted_at, n.status
                 FROM arena_follows f
                 JOIN arena_follow_notifications n ON n.follow_id = f.id
                 WHERE f.telegram_id = 7001
-                """
-            )
-        )
-    ).one()
+                """))).one()
     assert row[0] is not None
     assert row[1] == "muted"
 
@@ -1631,23 +1594,17 @@ async def test_follow_start_is_idempotent_and_invalid_is_polite(db_session) -> N
     assert int(count) == 1
     events = (
         await db_session.execute(
-            text(
-                """
+            text("""
                 SELECT count(*) FROM catalog_consumer_events
                 WHERE kind = 'follow_created' AND arena_id = :arena
-                """
-            ),
+                """),
             {"arena": arena_id},
         )
     ).scalar_one()
     assert int(events) == 1
 
-    missing = await open_follow_from_start(
-        db_session, telegram_id=8001, payload="follow_999999", webapp_base_url=_BASE
-    )
-    garbage = await open_follow_from_start(
-        db_session, telegram_id=8001, payload="follow_nope", webapp_base_url=_BASE
-    )
+    missing = await open_follow_from_start(db_session, telegram_id=8001, payload="follow_999999", webapp_base_url=_BASE)
+    garbage = await open_follow_from_start(db_session, telegram_id=8001, payload="follow_nope", webapp_base_url=_BASE)
     assert missing.text == FOLLOW_MISSING_TEXT
     assert garbage.text == FOLLOW_MISSING_TEXT
     assert missing.buttons == ()
@@ -1707,13 +1664,11 @@ async def test_webapp_get_follow_status_is_per_user(db_session, app_use_test_db)
             await client.post("/api/webapp/client/arena-follows", json={"arena_id": arena_id})
             active = await client.get(path)
             await db_session.execute(
-                text(
-                    """
+                text("""
                     UPDATE arena_follows
                     SET muted_at = now()
                     WHERE telegram_id = 9001 AND arena_id = :aid
-                    """
-                ),
+                    """),
                 {"aid": arena_id},
             )
             muted = await client.get(path)
