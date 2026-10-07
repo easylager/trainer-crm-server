@@ -115,7 +115,7 @@ async def test_ac2_projected_sessions_have_projected_marker(app_use_test_db, db_
     # Проверяем, что CSS-класс для projected сеансов определён в шаблоне
     from pathlib import Path
     
-    template_path = Path("/workspace/static/share/catalog-home.html")
+    template_path = Path(__file__).resolve().parents[2] / "static" / "share" / "catalog-home.html"
     assert template_path.exists(), "Шаблон не найден"
     
     template_content = template_path.read_text(encoding="utf-8")
@@ -248,6 +248,62 @@ async def test_by_regions_dictionary_covers_all_public_by_cities(app_use_test_db
             missing.append((city["name"], slug))
 
     assert not missing, f"BY города без области в _BY_REGIONS: {missing}"
+
+
+@pytest.mark.asyncio
+async def test_when_day_without_d_shows_seven_day_links(app_use_test_db, db_session) -> None:
+    city_id = await _insert_city(db_session, name=f"Дни {uuid.uuid4().hex[:6]}")
+    await _insert_arena(db_session, city_id, name="Каток")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        resp = await client.get("/?when=day")
+
+    assert resp.status_code == 200
+    assert 'class="day-picker"' in resp.text
+    assert resp.text.count("when=day&amp;d=") >= 7
+
+
+@pytest.mark.asyncio
+async def test_glide_city_cookie_set_on_city_page(app_use_test_db, db_session) -> None:
+    name = f"Куки {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    await _insert_arena(db_session, city_id, name="Каток")
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+
+    async with _client() as client:
+        resp = await client.get(f"/c/{slug}")
+
+    assert resp.status_code == 200
+    cookie = resp.headers.get("set-cookie", "")
+    assert "glide_city=" in cookie
+    assert f"glide_city={slug}" in cookie.lower()
+    assert "Max-Age=" in cookie
+    assert "Path=/" in cookie
+    assert "samesite=lax" in cookie.lower()
+
+
+@pytest.mark.asyncio
+async def test_map_contains_link_for_each_by_city(app_use_test_db, db_session) -> None:
+    name = f"Карта {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name, country="BY")
+    await _insert_arena(db_session, city_id, name="Каток")
+    await db_session.execute(
+        text("UPDATE arenas SET latitude = 53.9, longitude = 27.5 WHERE city_id = :cid"),
+        {"cid": city_id},
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+
+    async with _client() as client:
+        resp = await client.get("/")
+
+    assert resp.status_code == 200
+    assert f'<a href="/c/{slug}">' in resp.text
 
 
 @pytest.mark.asyncio

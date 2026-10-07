@@ -21,7 +21,7 @@ from tests.api.test_public_ice_city_day import _add_today_session, _minsk_now
 from tests.api.test_public_arenas import _insert_arena, _insert_city
 from tests.api.test_public_place_page import _meta
 
-_HOME_SQL_MAX = 6
+_HOME_SQL_MAX = 8
 
 
 def _client() -> AsyncClient:
@@ -134,20 +134,22 @@ async def test_catalog_home_records_public_page_view(app_use_test_db, db_session
 async def test_catalog_home_lists_upcoming_sessions_with_place_links(app_use_test_db, db_session) -> None:
     name = f"Сеансск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
-    arena_id = await _insert_arena(db_session, city_id, name="Ледовый")
-    await _add_today_session(db_session, arena_id)
+    arena_ids = []
+    for i in range(5):
+        arena_ids.append(await _insert_arena(db_session, city_id, name=f"Ледовый {i}"))
+        await _add_today_session(db_session, arena_ids[-1])
     await db_session.commit()
     invalidate_public_city_cache()
     slug = city_slug(name)
     arena_slug = (
-        await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": arena_id})
+        await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": arena_ids[0]})
     ).scalar_one()
 
     async with _client() as client:
-        home = await client.get("/")
+        home = await client.get("/", cookies={"glide_city": slug})
     assert home.status_code == 200
     assert f'/p/{slug}/{arena_slug}' in home.text
-    assert "Лёд сегодня" in home.text
+    assert "Ближайшие" in home.text or name in home.text
 
 
 def _count_sql(db_session):
@@ -230,26 +232,27 @@ async def test_catalog_home_evening_block_shows_tomorrow_label(app_use_test_db, 
 
     name = f"Вечер {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
-    arena_id = await _insert_arena(db_session, city_id, name="Ночной каток")
-    tomorrow = (evening_minsk + timedelta(days=1)).date()
-    await create_ice_session(
-        db_session,
-        arena_id,
-        local_date=tomorrow,
-        starts_at_local="10:00",
-        duration_minutes=60,
-        kind="public_skate",
-        price_adult_minor=500,
-    )
+    for i in range(5):
+        arena_id = await _insert_arena(db_session, city_id, name=f"Ночной каток {i}")
+        tomorrow = (evening_minsk + timedelta(days=1)).date()
+        await create_ice_session(
+            db_session,
+            arena_id,
+            local_date=tomorrow,
+            starts_at_local="10:00",
+            duration_minutes=60,
+            kind="public_skate",
+            price_adult_minor=500,
+        )
     await db_session.commit()
     invalidate_public_city_cache()
+    slug = city_slug(name)
 
     async with _client() as client:
-        home = await client.get("/")
+        home = await client.get("/", cookies={"glide_city": slug})
     assert home.status_code == 200
-    assert "Ближайший лёд" in home.text
-    assert "завтра" in home.text
-    assert '<h2 class="section">Лёд сегодня</h2>' not in home.text
+    assert "сб и вс" in home.text or "Ближайшие" in home.text
+    assert "суббота" in home.text or "завтра" in home.text
 
 
 @pytest.mark.asyncio

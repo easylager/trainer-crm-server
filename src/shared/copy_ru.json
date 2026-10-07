@@ -22,5 +22,22 @@
   "cta.share": "Поделиться",
   "cta.report": "Нашли ошибку? Напишите нам",
   "price.with_rental": "с прокатом {total} {currency}",
-  "footer.made_by": "Сделано теми, кто сам катается."
+  "footer.made_by": "Сделано теми, кто сам катается.",
+  "home.counter.when.today": "Сегодня",
+  "home.counter.when.tomorrow": "Завтра",
+  "home.counter.when.weekend": "В эти выходные",
+  "home.counter.when.day": "В этот день",
+  "home.counter": "{when} в Беларуси {sessions} {sessions_word} в {cities} {cities_word}",
+  "home.when_phrase.today": "сегодня",
+  "home.when_phrase.tomorrow": "завтра",
+  "home.when_phrase.weekend": "в выходные",
+  "home.when_phrase.day": "в этот день",
+  "home.city_button.caption": "Ваш город · сменить",
+  "home.city_button.title": "{city} — {sessions} {sessions_word} {when_phrase} →",
+  "home.upcoming.city": "Ближайшие в {city}",
+  "home.upcoming.weekend": "{city}, сб и вс",
+  "home.map.aria": "Карта Беларуси: города с местами для катания",
+  "chip.ice": "Лёд",
+  "chip.hockey": "Хоккей (ОХМ)",
+  "chip.first_time": "Первый раз"
 }

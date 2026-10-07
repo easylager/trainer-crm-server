@@ -34,6 +34,7 @@ from src.application.place_links import (
 )
 from src.application.place_page import load_place_view, render_place_page, share_payload
 from src.shared.config import Settings
+from src.shared.glide_city_cookie import apply_glide_city_cookie
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
 router = APIRouter(tags=["public-place"])
@@ -261,7 +262,9 @@ async def place_page(
         city_id=int(city["id"]),
         arena_id=int(card["id"]),
     )
-    return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    apply_glide_city_cookie(response, slug=city_slug(city_name))
+    return response
 
 
 async def _image(
@@ -496,7 +499,9 @@ async def selection_page(
         surface="selection_page",
         city_id=int(city["id"]),
     )
-    return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    apply_glide_city_cookie(response, slug=city_slug(city_name))
+    return response
 
 
 async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, w: str | None, *, story: bool):
