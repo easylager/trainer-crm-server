@@ -26,14 +26,19 @@ async def test_map_config_and_photos_survive_public_bucket_exhaustion(monkeypatc
     monkeypatch.setenv("API_RATE_LIMIT_PUBLIC_WINDOW_SEC", "60")
     monkeypatch.setenv("API_RATE_LIMIT_PHOTO_MAX_REQUESTS", "100")
     reset_http_limiters_for_tests()
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        assert (await client.get("/api/public/cities")).status_code == 200
-        assert (await client.get("/api/public/cities")).status_code == 429
-        map_cfg = await client.get("/api/public/ice/map-config")
-        assert map_cfg.status_code == 200
-        photo = await client.get("/api/public/photos/trainers/missing-file.jpg")
-        assert photo.status_code == 404
-        assert photo.status_code != 429
+
+    def mock_get_photo(_key: str):
+        return None
+
+    with patch("src.api.routes.public.s3.get_photo", mock_get_photo):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            assert (await client.get("/api/public/cities")).status_code == 200
+            assert (await client.get("/api/public/cities")).status_code == 429
+            map_cfg = await client.get("/api/public/ice/map-config")
+            assert map_cfg.status_code == 200
+            photo = await client.get("/api/public/photos/trainers/missing-file.jpg")
+            assert photo.status_code == 404
+            assert photo.status_code != 429
 
 
 @pytest.mark.asyncio
@@ -113,6 +118,8 @@ def test_mask_client_ip_uses_prefix_for_short_ipv6() -> None:
     assert _mask_client_ip("2a02::1") == "2a02::/48"
     assert _mask_client_ip("fe80::1") == "fe80::/48"
     assert _mask_client_ip("2a02::1") != "2a02::1"
+    assert _mask_client_ip("::ffff:1.2.3.4") == "1.2.0.0/16"
+    assert _mask_client_ip("::ffff:192.168.1.1") == "192.168.0.0/16"
     http_limits._rate_limit_warn_at.clear()
     http_limits._rate_limit_warn_at[("public", "stale")] = 0.0
     _prune_rate_limit_warns(601.0)
@@ -125,7 +132,7 @@ async def test_map_config_warns_when_key_empty(monkeypatch, app_use_test_db, cap
 
     import src.api.routes.public_arenas as public_arenas
 
-    public_arenas._map_config_empty_warned_at = 0.0
+    public_arenas._map_config_empty_warned_at = float("-inf")
     monkeypatch.setenv("YANDEX_MAPS_JS_API_KEY", "")
     with caplog.at_level(logging.WARNING):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -133,5 +140,21 @@ async def test_map_config_warns_when_key_empty(monkeypatch, app_use_test_db, cap
             second = await client.get("/api/public/ice/map-config")
     assert first.status_code == 200
     assert second.headers["cache-control"] == "no-store"
+    hits = [r for r in caplog.records if "YANDEX_MAPS_JS_API_KEY is empty" in r.getMessage()]
+    assert len(hits) == 1
+
+
+@pytest.mark.asyncio
+async def test_map_config_warns_first_empty_immediately(monkeypatch, app_use_test_db, caplog) -> None:
+    import logging
+    import time
+
+    import src.api.routes.public_arenas as public_arenas
+
+    public_arenas._map_config_empty_warned_at = time.monotonic() - 300.0
+    monkeypatch.setenv("YANDEX_MAPS_JS_API_KEY", "")
+    with caplog.at_level(logging.WARNING):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.get("/api/public/ice/map-config")
     hits = [r for r in caplog.records if "YANDEX_MAPS_JS_API_KEY is empty" in r.getMessage()]
     assert len(hits) == 1

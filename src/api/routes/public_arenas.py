@@ -47,7 +47,7 @@ from src.shared.ice_discovery_scope import public_city_scope_sql, public_scope_p
 
 logger = logging.getLogger(__name__)
 _MAP_CONFIG_EMPTY_WARN_SEC = 600.0
-_map_config_empty_warned_at = 0.0
+_map_config_empty_warned_at = float("-inf")
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
 

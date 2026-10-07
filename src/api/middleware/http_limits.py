@@ -30,6 +30,8 @@ def _mask_client_ip(ip: str) -> str:
         addr = ipaddress.ip_address(ip.strip())
     except ValueError:
         return "?"
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
     prefix = 16 if addr.version == 4 else 48
     net = ipaddress.ip_network(f"{addr}/{prefix}", strict=False)
     return f"{net.network_address}/{net.prefixlen}"
