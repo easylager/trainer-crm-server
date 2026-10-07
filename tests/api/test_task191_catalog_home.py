@@ -5,17 +5,23 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from src.api.app import app
 from src.application.catalog_consumer_events import KIND_PUBLIC_PAGE_VIEW
-from src.application.ice_city_day import city_slug, invalidate_public_city_cache
-from tests.api.test_public_ice_city_day import _add_today_session
+from src.application.catalog_home_page import parse_city_session_count_from_home
+from src.application.ice_city_day import city_slug, get_city_ice_day, invalidate_public_city_cache
+from src.application.ice_session_use_cases import create_ice_session
+from tests.api.test_public_ice_city_day import _add_today_session, _minsk_now
 from tests.api.test_public_arenas import _insert_arena, _insert_city
 from tests.api.test_public_place_page import _meta
+
+_HOME_SQL_MAX = 6
 
 
 def _client() -> AsyncClient:
@@ -142,3 +148,105 @@ async def test_catalog_home_lists_upcoming_sessions_with_place_links(app_use_tes
     assert home.status_code == 200
     assert f'/p/{slug}/{arena_slug}' in home.text
     assert "Лёд сегодня" in home.text
+
+
+def _count_sql(db_session):
+    bind = db_session.sync_session.get_bind()
+    counts = {"n": 0}
+
+    def _before(conn, cursor, statement, parameters, context, executemany):
+        head = (statement or "").lstrip().upper()
+        if head.startswith(("SELECT", "INSERT", "UPDATE", "DELETE", "WITH")):
+            counts["n"] += 1
+
+    event.listen(bind, "before_cursor_execute", _before)
+    return bind, counts, _before
+
+
+@pytest.mark.asyncio
+async def test_catalog_home_session_counts_match_ice_today(app_use_test_db, db_session) -> None:
+    city_specs: list[tuple[int, str]] = []
+    for _ in range(3):
+        name = f"Счёт {uuid.uuid4().hex[:6]}"
+        city_id = await _insert_city(db_session, name=name)
+        arena_id = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:4]}")
+        await _add_today_session(db_session, arena_id)
+        city_specs.append((city_id, name))
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        home = await client.get("/")
+    assert home.status_code == 200
+
+    for city_id, name in city_specs:
+        day = await get_city_ice_day(db_session, city_id=city_id)
+        on_home = parse_city_session_count_from_home(home.text, name)
+        assert on_home is not None
+        expected = int(day["session_count"] or 0) if day.get("is_today") else 0
+        assert on_home == expected, (name, day.get("is_today"), day.get("session_count"))
+
+
+@pytest.mark.asyncio
+async def test_catalog_home_sql_budget_is_flat_in_city_count(app_use_test_db, db_session) -> None:
+    invalidate_public_city_cache()
+    one_id = await _insert_city(db_session, name=f"Один {uuid.uuid4().hex[:6]}")
+    await _insert_arena(db_session, one_id, name="Арена")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    bind, counts, before = _count_sql(db_session)
+    try:
+        async with _client() as client:
+            resp_one = await client.get("/")
+        one_sql = counts["n"]
+    finally:
+        event.remove(bind, "before_cursor_execute", before)
+    assert resp_one.status_code == 200
+
+    for _ in range(4):
+        cid = await _insert_city(db_session, name=f"Пять {uuid.uuid4().hex[:6]}")
+        await _insert_arena(db_session, cid, name="Арена")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    bind, counts, before = _count_sql(db_session)
+    try:
+        async with _client() as client:
+            resp_five = await client.get("/")
+        five_sql = counts["n"]
+    finally:
+        event.remove(bind, "before_cursor_execute", before)
+    assert resp_five.status_code == 200
+    assert one_sql == five_sql
+    assert one_sql <= _HOME_SQL_MAX
+
+
+@pytest.mark.asyncio
+async def test_catalog_home_evening_block_shows_tomorrow_label(app_use_test_db, db_session, monkeypatch) -> None:
+    evening_minsk = datetime(2026, 10, 10, 22, 0, tzinfo=ZoneInfo("Europe/Minsk"))
+    fixed_now = evening_minsk.astimezone(timezone.utc)
+    monkeypatch.setattr("src.application.catalog_home_page._utc_now", lambda: fixed_now)
+
+    name = f"Вечер {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Ночной каток")
+    tomorrow = (evening_minsk + timedelta(days=1)).date()
+    await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=tomorrow,
+        starts_at_local="10:00",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=500,
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        home = await client.get("/")
+    assert home.status_code == 200
+    assert "Ближайший лёд" in home.text
+    assert "завтра" in home.text
+    assert '<h2 class="section">Лёд сегодня</h2>' not in home.text
