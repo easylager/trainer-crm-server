@@ -1,4 +1,4 @@
-"""Insert cities, arenas, and published arena_profiles for parser binding.
+"""Insert cities, arenas, and arena_profiles for parser binding.
 
 Caller owns the transaction. The CLI scripts commit; tests pass a session on a
 throwaway database and commit themselves.
@@ -32,6 +32,7 @@ class SeedArena:
     has_parser: bool = False
     parser_key: str | None = None
     timezone: str = "Europe/Minsk"
+    profile_status: str = "published"
 
 
 def arenas_by_parser_key(arenas: list[SeedArena]) -> dict[str, SeedArena]:
@@ -104,6 +105,8 @@ def apply_arena_seed(
             if verbose:
                 print(f"arena created: id={arena.arena_id} {arena.city_name} — {arena.name}")
 
+        if arena.profile_status not in {"draft", "published", "archived"}:
+            raise ValueError(f"arena {arena.arena_id}: unknown profile status {arena.profile_status!r}")
         profile_exists = session.execute(
             text("SELECT 1 FROM arena_profiles WHERE arena_id = :aid"),
             {"aid": arena.arena_id},
@@ -116,7 +119,7 @@ def apply_arena_seed(
             text(
                 "INSERT INTO arena_profiles (arena_id, city_id, slug, district, timezone, "
                 "status, amenities, social_urls) "
-                "VALUES (:aid, :city_id, :slug, :district, :tz, 'published', "
+                "VALUES (:aid, :city_id, :slug, :district, :tz, :status, "
                 "'{}'::jsonb, '{}'::jsonb)"
             ),
             {
@@ -125,6 +128,7 @@ def apply_arena_seed(
                 "slug": arena.slug,
                 "district": arena.city_name,
                 "tz": arena.timezone,
+                "status": arena.profile_status,
             },
         )
         if verbose:

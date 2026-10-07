@@ -3,6 +3,7 @@
 New arenas: vitebsk-ds (29), mogilev-ds (43), orsha-arena (31), gorki-lds (32),
 ostrovets-lds (41). Extract only — no ice_sessions writes, no DB access.
 """
+
 from __future__ import annotations
 
 PARSER_KEY_VITEBSK_DS = "vitebsk_ds_v1"
@@ -39,7 +40,7 @@ MOGILEV_DS_CONFIG: dict = {
     "drop_label_substrings": [
         "СДЮШОР",
         "ХК «",
-        "ХК \"",
+        'ХК "',
         "технолог",
         "заливка",
         "игра п-ва",

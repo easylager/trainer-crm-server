@@ -6,6 +6,7 @@ call parser.extract(job), assert against that fixture's expected.json.
 No DB access, no normalize/publish — extract-only per the ingestion
 contract (parsers never INSERT into ice_sessions).
 """
+
 from __future__ import annotations
 
 import json
@@ -228,9 +229,7 @@ async def test_ostrovets_lds_skips_no_session_cells() -> None:
 
     from src.ingestion.normalize import IceSessionNormalizer
 
-    drafts = IceSessionNormalizer().normalize(
-        extraction, job, now=datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
-    )
+    drafts = IceSessionNormalizer().normalize(extraction, job, now=datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc))
     assert drafts
     assert drafts[0].price_adult_minor == 600
     assert drafts[0].price_child_minor == 400

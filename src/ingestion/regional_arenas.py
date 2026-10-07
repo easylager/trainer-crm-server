@@ -24,7 +24,7 @@ NEW_CITIES: list[SeedCity] = [
     SeedCity("Кобрин", 19),
     SeedCity("Лида", 20),
     SeedCity("Лунинец", 21),
-    SeedCity("Могилёв", 22),
+    SeedCity("Могилев", 22),
     SeedCity("Молодечно", 23),
     SeedCity("Новополоцк", 24),
     SeedCity("Орша", 25),
@@ -135,7 +135,7 @@ ARENAS: list[SeedArena] = [
     SeedArena(40, "Лунинец", "СК Олимп-2011", "Красная улица 160Б", 52.2600712, 26.7899673, "luninets-olimp", False),
     SeedArena(
         43,
-        "Могилёв",
+        "Могилев",
         "Дворец спорта «Могилёв»",
         "ул. Гагарина 1",
         53.88464,

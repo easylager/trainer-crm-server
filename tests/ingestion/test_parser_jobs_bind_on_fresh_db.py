@@ -93,26 +93,79 @@ def _drop_database(admin_url: str) -> None:
         conn.execute(f'DROP DATABASE IF EXISTS "{BIND_DB}"')
 
 
-def _expected() -> dict[str, tuple[str, str]]:
-    expected: dict[str, tuple[str, str]] = {}
-    for arena in (*CAPITAL_ARENAS, *REGIONAL_ARENAS):
-        if not arena.parser_key:
-            continue
-        if arena.parser_key in expected:
-            raise AssertionError(f"duplicate parser_key {arena.parser_key}")
-        expected[arena.parser_key] = (arena.city_name, arena.slug)
+# Prod public identity. Literals on purpose: deriving this from ARENAS would not catch a wrong slug.
+# (parser_key, city, slug, arena_id)
+_PROD_BINDINGS: tuple[tuple[str, str, str, int], ...] = (
+    ("balticarena_html_v1", "Санкт-Петербург/ЛО", "baltik-arena", 192),
+    ("baranovichi_lds_v1", "Барановичи", "baranovichi-lds", 23),
+    ("bobruisk_arena_v1", "Бобруйск", "bobruisk-arena", 38),
+    ("brest_lds_v1", "Брест", "brest-lds", 22),
+    ("bugryarena_html_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-bugry", 111),
+    ("chizhovka_html_v1", "Минск", "chizhovka", 6),
+    ("diamond_html_v1", "Минск", "minsk-diamond", 7),
+    ("dinamoyunior_html_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-dinamo-yunior", 173),
+    ("gomel_lds_v1", "Гомель", "gomel-lds", 33),
+    ("gorki_lds_v1", "Горки", "gorki-lds", 32),
+    ("grandice_json_v1", "Санкт-Петербург/ЛО", "ld-grand-kanon-ays", 99),
+    ("grodno_neman_v1", "Гродно", "grodno-neman", 11),
+    ("grodno_triniti_v1", "Гродно", "grodno-triniti", 10),
+    ("iceburgarena_yclients_v1", "Санкт-Петербург/ЛО", "aysburg-arena", 193),
+    ("izhorets_html_v1", "Санкт-Петербург/ЛО", "izhorets", 185),
+    ("junost_instagram_caption_v1", "Минск", "minsk-junost", 8),
+    ("kobrin_lds_v1", "Кобрин", "kobrin-lds", 25),
+    ("kupchinoarena_html_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-kupchino", 110),
+    ("ldsokolniki_html_v1", "Москва/МО", "ledovyy-dvorets-sokolniki", 58),
+    ("ledby_html_v1", "Минск", "ledby", 5),
+    ("ledlife_origin_html_v1", "Минск", "minsk-ledlife", 4),
+    ("ledovyydvorets_html_v1", "Санкт-Петербург/ЛО", "ledovyy-dvorets", 105),
+    ("lida_lds_v1", "Лида", "lida-lds", 37),
+    ("magnitarena_html_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-magnit", 187),
+    ("minskarena_main_saleframe_v1", "Минск", "minskarena", 2),
+    ("minskarena_speed_oval_v1", "Минск", "konkobezhnaya-arena", 115),
+    ("mogilev_ds_v1", "Могилев", "mogilev-ds", 43),
+    ("molodechno_src_v1", "Молодечно", "molodechno-src", 18),
+    ("novopolotsk_lds_v1", "Новополоцк", "novopolotsk-lds", 30),
+    ("orsha_arena_v1", "Орша", "orsha-arena", 31),
+    ("ostrovets_lds_v1", "Островец", "ostrovets-lds", 41),
+    ("ozerki_gcal_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-ozerki", 101),
+    ("parnasarena_text_v1", "Санкт-Петербург/ЛО", "tsentr-ledovykh-vidov-sporta-parnas", 174),
+    ("pinsk_volna_v1", "Пинск", "pinsk-volna", 24),
+    ("shansarena_html_v1", "Санкт-Петербург/ЛО", "ledovyy-kompleks-shans-arena", 100),
+    ("shklov_arena_v1", "Шклов", "shklov-arena", 42),
+    ("shuvalovskyled_html_v1", "Санкт-Петербург/ЛО", "shuvalovskiy-led", 196),
+    ("soligorsk_szk_v1", "Солигорск", "soligorsk-szk", 19),
+    ("vitebsk_ds_v1", "Витебск", "vitebsk-ds", 29),
+    ("vtbarena_qtickets_v1", "Москва/МО", "vtb-arena", 53),
+    ("yubileyny_afisha_html_v1", "Санкт-Петербург/ЛО", "skk-yubileynyy", 97),
+    ("zamok_html_v1", "Минск", "zamok", 3),
+)
+
+
+def _expected() -> dict[str, tuple[str, str, int]]:
+    expected: dict[str, tuple[str, str, int]] = {}
+    for parser_key, city_name, slug, arena_id in _PROD_BINDINGS:
+        if parser_key in expected:
+            raise AssertionError(f"duplicate parser_key {parser_key}")
+        expected[parser_key] = (city_name, slug, arena_id)
     return expected
 
 
-def _assert_specs_match_capital_seed() -> None:
-    """Minsk / Moscow / SPb specs must carry the same (city, slug) as the capital seed."""
-    by_key = arenas_by_parser_key(CAPITAL_ARENAS)
-    seeds = build_minsk_job_seeds()
-    got = {seed.parser_key: (seed.config.get("city_name"), seed.config.get("arena_slug")) for seed in seeds}
-    assert got.keys() == by_key.keys()
-    for parser_key, arena in by_key.items():
-        assert got[parser_key] == (arena.city_name, arena.slug), parser_key
+def _assert_seed_lists_match_prod_table(expected: dict[str, tuple[str, str, int]]) -> None:
+    """Seed lists and Minsk/Moscow/SPb specs must match the literal prod table, not each other."""
+    seeded: dict[str, tuple[str, str, int]] = {}
+    for arena in (*CAPITAL_ARENAS, *REGIONAL_ARENAS):
+        if not arena.parser_key:
+            continue
+        seeded[arena.parser_key] = (arena.city_name, arena.slug, arena.arena_id)
         assert len(arena.name) <= 128
+    assert seeded == expected
+    minsk = build_minsk_job_seeds()
+    capital_keys = {key for key, *_rest in _PROD_BINDINGS if key in {a.parser_key for a in CAPITAL_ARENAS}}
+    got = {seed.parser_key: (seed.config.get("city_name"), seed.config.get("arena_slug")) for seed in minsk}
+    assert set(got) == capital_keys
+    for parser_key in capital_keys:
+        city_name, slug, _arena_id = expected[parser_key]
+        assert got[parser_key] == (city_name, slug), parser_key
 
 
 def _seed(sync_url: str) -> None:
@@ -126,7 +179,7 @@ def _seed(sync_url: str) -> None:
         engine.dispose()
 
 
-async def _bind(async_url: str, expected: dict[str, tuple[str, str]]) -> None:
+async def _bind(async_url: str, expected: dict[str, tuple[str, str, int]]) -> None:
     from scripts.seed_regional_ice_parser_jobs import build_regional_job_seeds
 
     minsk = build_minsk_job_seeds()
@@ -135,7 +188,7 @@ async def _bind(async_url: str, expected: dict[str, tuple[str, str]]) -> None:
     assert {seed.parser_key for seed in seeds} == set(expected)
     assert len(seeds) == 42
     for seed in seeds:
-        city_name, slug = expected[seed.parser_key]
+        city_name, slug, _arena_id = expected[seed.parser_key]
         assert seed.config["city_name"] == city_name
         assert seed.config["arena_slug"] == slug
 
@@ -149,15 +202,19 @@ async def _bind(async_url: str, expected: dict[str, tuple[str, str]]) -> None:
             assert report.updated == 0
             assert report.skipped_missing_arena == 0
             rows = (await session.execute(text("""
-                        SELECT ipj.parser_key, c.name, ap.slug
+                        SELECT ipj.parser_key, c.name, ap.slug, a.id, ap.status
                         FROM ice_parser_jobs ipj
                         JOIN arenas a ON a.id = ipj.arena_id
                         JOIN arena_profiles ap ON ap.arena_id = a.id
                         JOIN cities c ON c.id = a.city_id
                         ORDER BY ipj.parser_key
                         """))).fetchall()
-        bound = {parser_key: (city_name, slug) for parser_key, city_name, slug in rows}
+        bound = {
+            parser_key: (city_name, slug, int(arena_id)) for parser_key, city_name, slug, arena_id, _status in rows
+        }
         assert bound == expected
+        izhorets = next(row for row in rows if row[0] == "izhorets_html_v1")
+        assert izhorets[4] == "published"
     finally:
         await engine.dispose()
 
@@ -167,8 +224,8 @@ async def test_fresh_database_binds_every_parser_job() -> None:
     """AC: empty DB, migrations, real seeds, both job builders, one binding per parser_key."""
     if BIND_DB in {"trainer_crm", "trainer_crm_test"}:
         raise RuntimeError(BIND_DB)
-    _assert_specs_match_capital_seed()
     expected = _expected()
+    _assert_seed_lists_match_prod_table(expected)
     assert len(expected) == 42
     assert len(arenas_by_parser_key(CAPITAL_ARENAS)) == 24
     assert len(arenas_by_parser_key(REGIONAL_ARENAS)) == 18

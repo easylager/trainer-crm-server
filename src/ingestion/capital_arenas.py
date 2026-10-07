@@ -1,7 +1,7 @@
 """Minsk, Moscow, and St. Petersburg arenas that have a parser spec.
 
-Slugs and city names are ``arena_profiles.slug`` and ``cities.name`` from the dev
-database (read-only SELECT by the spec's arena_id), checked against the arena name.
+Slugs are the public ``/p/{city}/{slug}`` paths from production. City names are
+``cities.name`` on production. A local database must not rename them.
 A fresh database needs these rows before ``build_minsk_job_seeds()`` can bind.
 """
 
@@ -28,7 +28,7 @@ ARENAS: list[SeedArena] = [
         "Минск, пр-т Победителей, 111",
         53.9394,
         27.4685,
-        "manezh",
+        "minskarena",
         True,
         "minskarena_main_saleframe_v1",
         _MSK,
@@ -40,7 +40,7 @@ ARENAS: list[SeedArena] = [
         "Минск, пр-т Победителей, 65",
         53.9165,
         27.5478,
-        "tts-zamok",
+        "zamok",
         True,
         "zamok_html_v1",
         _MSK,
@@ -64,7 +64,7 @@ ARENAS: list[SeedArena] = [
         "Минск, ул. Притыцкого, 27",
         53.90757,
         27.48631,
-        "ledovyy-dvorets-sporta-minskoy-oblasti",
+        "ledby",
         True,
         "ledby_html_v1",
         _MSK,
@@ -76,7 +76,7 @@ ARENAS: list[SeedArena] = [
         "Минск, ул. Ташкентская, 19",
         53.844534,
         27.628657,
-        "chizhovka-arena",
+        "chizhovka",
         True,
         "chizhovka_html_v1",
         _MSK,
@@ -88,7 +88,7 @@ ARENAS: list[SeedArena] = [
         "Минск, ул. Лещинского, 8",
         53.84966,
         27.433552,
-        "tts-diamond-city",
+        "minsk-diamond",
         True,
         "diamond_html_v1",
         _MSK,
@@ -100,7 +100,7 @@ ARENAS: list[SeedArena] = [
         "Первомайская улица, 3, Минск, Минская область",
         53.90141,
         27.57375,
-        "katok-khk-yunost",
+        "minsk-junost",
         True,
         "junost_instagram_caption_v1",
         _MSK,
@@ -124,7 +124,7 @@ ARENAS: list[SeedArena] = [
         "ул. Юрия Никулина, 3",
         None,
         None,
-        "vtb-arena-akademiya-sporta-dinamo",
+        "vtb-arena",
         True,
         "vtbarena_qtickets_v1",
         _MOW,
@@ -148,7 +148,7 @@ ARENAS: list[SeedArena] = [
         "проспект Добролюбова, 18",
         59.9498865,
         30.2910466,
-        "sk-yubileynyy",
+        "skk-yubileynyy",
         True,
         "yubileyny_afisha_html_v1",
         _MOW,
@@ -260,6 +260,7 @@ ARENAS: list[SeedArena] = [
         True,
         "izhorets_html_v1",
         _MOW,
+        profile_status="published",
     ),
     SeedArena(
         187,

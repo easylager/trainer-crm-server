@@ -1,7 +1,7 @@
 # Parser spec: ТЦ Замок
 
 - arena_id: 3
-- arena_slug: tts-zamok
+- arena_slug: zamok
 - city: Минск
 - parser_key: zamok_html_v1
 - cadence: daily
