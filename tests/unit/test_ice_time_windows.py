@@ -53,8 +53,9 @@ def test_today_evening_starts_at_16_or_now() -> None:
 
 
 def test_weekend_window_is_saturday_and_sunday() -> None:
-    # Пятница вечером в «Выходные» не входит: иначе карточка «Сегодня 16:15» под этим чипом.
+    # Пятница вечером в «В выходные» не входит: иначе карточка «Сегодня 16:15» под этим чипом.
     fri = resolve_window("weekend", at(2026, 10, 2, 17))
+    assert fri.label == "В выходные"
     assert fri.starts_at == at(2026, 10, 3, 0) and fri.ends_at == at(2026, 10, 5, 0)
     mon = resolve_window("weekend", at(2026, 9, 28, 10))
     assert mon.starts_at == at(2026, 10, 3, 0) and mon.ends_at == at(2026, 10, 5, 0)

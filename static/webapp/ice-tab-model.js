@@ -28,6 +28,13 @@
       : typeof globalThis !== 'undefined'
         ? globalThis.MinskTime
         : null;
+  /* TASK-209: общий словарь подписей — сайт и Mini App говорят одними словами. */
+  var GC =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./glide-copy.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.GlideCopy
+        : null;
 
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   /** Окно «Когда» между визитами в каталог (localStorage); sessionStorage — полный снимок вкладки. */
@@ -406,9 +413,9 @@
 
   var SHOP_HOURS_WHEN = [
     { key: 'any', label: 'Любое время' },
-    { key: 'evening', label: 'Сегодня вечером' },
-    { key: 'tomorrow', label: 'Завтра' },
-    { key: 'weekend', label: 'В выходные' },
+    { key: 'evening', label: GC ? GC.t('when.evening') : 'Сегодня вечером' },
+    { key: 'tomorrow', label: GC ? GC.t('when.tomorrow') : 'Завтра' },
+    { key: 'weekend', label: GC ? GC.t('when.weekend') : 'В выходные' },
   ];
 
   function shopServicesOf(item) {
@@ -666,9 +673,9 @@
 
   var WHEN_HORIZON_DAYS = 14;
   var WHEN_PRESET_LABELS = {
-    today_evening: 'Сегодня вечером',
-    tomorrow: 'Завтра',
-    weekend: 'Выходные',
+    today_evening: GC ? GC.t('when.evening') : 'Сегодня вечером',
+    tomorrow: GC ? GC.t('when.tomorrow') : 'Завтра',
+    weekend: GC ? GC.t('when.weekend') : 'В выходные',
     any: 'Любое время',
   };
 
@@ -681,7 +688,7 @@
 
   function formatWhenDayLabel(iso, todayIso) {
     todayIso = todayIso || minskDateIso(new Date());
-    if (iso === addDaysIso(todayIso, 1)) return 'Завтра';
+    if (iso === addDaysIso(todayIso, 1)) return GC ? GC.t('when.tomorrow') : 'Завтра';
     var bits = String(iso).split('-');
     var wd = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]))).getUTCDay();
     return WEEKDAYS_SHORT_RU[wd] + ', ' + bits[2] + '.' + bits[1];
@@ -742,7 +749,7 @@
 
   /**
    * Меню «Когда»: вечер, завтра, один будний день, раскрытие остальных будней,
-   * выходные и любое время. Сб/вс — только «Выходные».
+   * выходные и любое время. Сб/вс — только «В выходные».
    */
   function whenMenuView(opts) {
     opts = opts || {};
@@ -760,14 +767,14 @@
     rows.push({
       kind: 'preset',
       id: 'today_evening',
-      label: 'Сегодня вечером',
+      label: GC ? GC.t('when.evening') : 'Сегодня вечером',
       sub: 'с 16:00',
       active: whenSelectionActive(when, whenDay, todayIso, { kind: 'preset', id: 'today_evening' }, resolvedKey),
     });
     rows.push({
       kind: 'day',
       date: tomorrow,
-      label: 'Завтра',
+      label: GC ? GC.t('when.tomorrow') : 'Завтра',
       active: whenSelectionActive(when, whenDay, todayIso, { kind: 'day', date: tomorrow }, resolvedKey),
     });
     rows.push({
@@ -799,7 +806,7 @@
       {
         kind: 'preset',
         id: 'weekend',
-        label: 'Выходные',
+        label: GC ? GC.t('when.weekend') : 'В выходные',
         sub: 'сб–вс',
         active: whenSelectionActive(when, whenDay, todayIso, { kind: 'preset', id: 'weekend' }, resolvedKey),
       },
@@ -1085,9 +1092,9 @@
   function whenChipsView(selected, resolvedKey) {
     var active = selected && selected !== 'auto' ? selected : resolvedKey || 'any';
     return [
-      ['today_evening', 'Сегодня вечером'],
-      ['tomorrow', 'Завтра'],
-      ['weekend', 'Выходные'],
+      ['today_evening', GC ? GC.t('when.evening') : 'Сегодня вечером'],
+      ['tomorrow', GC ? GC.t('when.tomorrow') : 'Завтра'],
+      ['weekend', GC ? GC.t('when.weekend') : 'В выходные'],
       ['any', 'Любое время'],
     ].map(function (c) {
       return { key: c[0], label: c[1], active: c[0] === active };
@@ -1458,9 +1465,9 @@
     var localDate = String(live.local_date || '').slice(0, 10);
     if (!localDate) return '';
     var today = minskDateIso(now instanceof Date ? now : new Date());
-    if (localDate === today) return 'Сегодня';
-    if (localDate === addDaysIso(today, 1)) return 'Завтра';
-    // День недели обязателен: под чипом «Выходные» голое «03.10» не говорит, суббота ли это.
+    if (localDate === today) return GC ? GC.t('when.today') : 'Сегодня';
+    if (localDate === addDaysIso(today, 1)) return GC ? GC.t('when.tomorrow') : 'Завтра';
+    // День недели обязателен: под чипом «В выходные» голое «03.10» не говорит, суббота ли это.
     var wd = MT.weekdaySun0FromIso(localDate);
     return WEEKDAYS_SHORT_RU[wd] + ', ' + localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
   }

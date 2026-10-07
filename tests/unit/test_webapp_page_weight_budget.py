@@ -11,7 +11,8 @@ import gzip
 import re
 from pathlib import Path
 
-_WEBAPP = Path(__file__).resolve().parents[2] / "static" / "webapp"
+_REPO = Path(__file__).resolve().parents[2]
+_WEBAPP = _REPO / "static" / "webapp"
 _ATTR = re.compile(r"""(?:src|href)=["']([^"']+)["']""", re.I)
 
 # Measured when the budget landed (TASK-197). Bytes, gzip level 9, mtime 0.
@@ -49,7 +50,8 @@ def page_gzip_bytes(html_name: str) -> int:
     html = html_path.read_bytes()
     total = _gzip_len(html)
     for rel in _local_assets(html.decode()):
-        asset = _WEBAPP / rel
+        # /static/shared/* отдаётся от корня репозитория, остальные css/js — из static/webapp.
+        asset = (_REPO / rel) if rel.startswith("static/") else (_WEBAPP / rel)
         assert asset.is_file(), f"{html_name} references missing {rel}"
         total += _gzip_len(asset.read_bytes())
     return total

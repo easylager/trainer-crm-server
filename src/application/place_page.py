@@ -65,6 +65,7 @@ from src.application.schedule_staleness import (
     staleness_level,
     very_stale_note,
 )
+from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
 from src.shared.venue_types import has_public_skating
 
@@ -572,7 +573,7 @@ def _schedule_mode_call_html(card: Mapping[str, Any]) -> str:
     phone = str(card.get("phone") or "").strip()
     tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
     if phone and tel:
-        return f'<p class="sched__mode"><a href="tel:{_esc(tel)}">Позвонить</a></p>'
+        return f'<p class="sched__mode"><a href="tel:{_esc(tel)}">{t("cta.call")}</a></p>'
     return ""
 
 
@@ -583,7 +584,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     mode = normalize_schedule_mode(card.get("schedule_mode"))
     if mode == SCHEDULE_MODE_PHONE:
         return (
-            '<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>'
+            f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
             f'<p class="sched__mode">{_esc(PHONE_LINE)}</p>'
             + _schedule_mode_call_html(card)
             + "</section>"
@@ -592,7 +593,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
         reopen = _parse_iso_date(card.get("schedule_reopen_date"))
         line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
         return (
-            '<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>'
+            f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
             f'<p class="sched__mode">{_esc(line)}</p></section>'
         )
     if card.get("in_season") is False:
@@ -612,7 +613,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
         if tickets:
             links.append(f'<a href="{_esc(tickets)}" rel="nofollow noopener" target="_blank">Сайт катка</a>')
         return (
-            '<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>'
+            f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
             f'<p class="sched__stale">{_esc(note)}</p>'
             + (f'<p class="sched__stale">{" · ".join(links)}</p>' if links else "")
             + "</section>"
@@ -625,7 +626,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
             else "Расписание этого катка мы пока не получаем автоматически."
         )
         return (
-            '<section class="sec"><h2 class="sec__title">Массовое катание</h2>'
+            f'<section class="sec"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
             f'<p class="muted">{_esc(hint)}</p></section>'
         )
     phone = str(card.get("phone") or "").strip()
@@ -637,9 +638,9 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     non_live = [h for h in non_live if h]
     basis_note = ""
     if non_live:
-        tel = f' <a href="tel:{_esc(phone)}">Позвонить</a>' if phone else ""
+        tel = f' <a href="tel:{_esc(phone)}">{t("cta.call")}</a>' if phone else ""
         basis_note = f'<p class="schedule-basis">{_esc(non_live[0])}.{tel}</p>'
-    parts = ['<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>']
+    parts = [f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>']
     if note:
         # TASK-180: > 6 ч без удачного прогона — сеансы показываем, но честно.
         parts.append(f'<p class="sched__stale">{_esc(note)}</p>')
@@ -740,15 +741,29 @@ def _amenities_html(card: Mapping[str, Any]) -> str:
     )
 
 
+def _fixed_hours_row(label: str, block: Any) -> str:
+    if not isinstance(block, Mapping):
+        return ""
+    open_ = str(block.get("open") or "").strip()
+    close = str(block.get("close") or "").strip()
+    if not open_ or not close:
+        return ""
+    return f'<p class="row"><span>{_esc(label)}</span><b>{_esc(f"{open_}–{close}")}</b></p>'
+
+
 def _hours_html(card: Mapping[str, Any]) -> str:
     hours = card.get("opening_hours")
-    if not has_known_hours(hours):
+    if not isinstance(hours, Mapping):
         return ""
-    rows = "".join(
-        f'<p class="row"><span>{_esc(WEEKDAY_SHORT_RU[d])}</span>'
-        f'<b>{_esc(format_intervals_ru(intervals_for_weekday(hours, d)) if intervals_for_weekday(hours, d) else "выходной")}</b></p>'
-        for d in range(7)
-    )
+    rows = _fixed_hours_row("Комплекс", hours.get("complex")) + _fixed_hours_row("Касса", hours.get("kassa"))
+    if has_known_hours(hours):
+        rows += "".join(
+            f'<p class="row"><span>{_esc(WEEKDAY_SHORT_RU[d])}</span>'
+            f'<b>{_esc(format_intervals_ru(intervals_for_weekday(hours, d)) if intervals_for_weekday(hours, d) else "выходной")}</b></p>'
+            for d in range(7)
+        )
+    if not rows:
+        return ""
     return f'<section class="sec"><h2 class="sec__title">Когда можно приехать</h2>{rows}</section>'
 
 
@@ -864,8 +879,8 @@ def _share_html(share: Mapping[str, str], *, venue_type: str = "ice") -> str:
     viber = f"viber://forward?text={quote(full, safe='')}"
     vk = f"https://vk.com/share.php?url={quote(url, safe='')}"
     return (
-        '<section class="share" aria-label="Поделиться">'
-        f'<p class="share__title">{"Позвать друзей" if venue_type == "ice" else "Поделиться"}</p>'
+        f'<section class="share" aria-label="{t("cta.share")}">'
+        f'<p class="share__title">{"Позвать друзей" if venue_type == "ice" else t("cta.share")}</p>'
         '<div class="share__row">'
         f'<a class="share__btn share__btn--tg" href="{_esc(tg)}" rel="noopener" target="_blank">Telegram</a>'
         f'<a class="share__btn" href="{_esc(viber)}">Viber</a>'
@@ -938,7 +953,7 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
         for slot in day.get("sessions") or []:
             event: dict[str, Any] = {
                 "@type": "Event",
-                "name": f"Массовое катание — {card.get('name')}",
+                "name": f"{t('kind.public_skate')} — {card.get('name')}",
                 "startDate": slot.get("starts_at_utc"),
                 "endDate": slot.get("ends_at_utc"),
                 "eventStatus": "https://schema.org/EventScheduled",

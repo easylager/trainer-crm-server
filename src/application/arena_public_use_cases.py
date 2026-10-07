@@ -79,6 +79,11 @@ from src.shared.venue_types import (
     venue_type_icon,
     venue_type_noun,
 )
+from src.shared.dossier_public_text import (
+    sanitize_opening_hours_for_public,
+    sanitize_public_district,
+    scrub_dossier_leaks_from_public_text,
+)
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
 INTENT_SKATE = "skate"
@@ -703,11 +708,19 @@ WHERE {PUBLIC_ARENA_VISIBLE_SQL}
 """
 
 
+def _sanitize_public_profile_fields(data: dict[str, Any]) -> None:
+    """In-place: strip dossier loader markers before any public Ice / API payload."""
+    data["district"] = sanitize_public_district(data.get("district"))
+    data["opening_hours"] = sanitize_opening_hours_for_public(_as_mapping(data.get("opening_hours")))
+    data["schedule_mode_note"] = scrub_dossier_leaks_from_public_text(str(data.get("schedule_mode_note") or ""))
+
+
 def _row_to_arena_dict(row: Mapping[str, Any]) -> dict[str, Any]:
     country = row.get("country")
     has_future = int(row.get("future_session_count") or 0) > 0
     data = dict(row)
     data["opening_hours"] = _as_mapping(row.get("opening_hours"))
+    _sanitize_public_profile_fields(data)
     data["social_urls"] = _as_mapping(row.get("social_urls"))
     data["amenities"] = _as_mapping(row.get("amenities"))
     data["currency_code"] = currency_for_country(country)
@@ -1602,7 +1615,7 @@ async def get_public_arena_card(
     city_name = str(row.get("city_name") or "").strip()
     slug = str(row.get("slug") or "").strip()
     public_path = place_path(city_name=city_name, slug=slug) if city_name and slug else None
-    return {
+    card: dict[str, Any] = {
         "id": row["id"],
         "slug": row.get("slug"),
         "city_id": row["city_id"],
@@ -1649,6 +1662,8 @@ async def get_public_arena_card(
             valid_until=row.get("sessions_valid_until"),
         ),
     }
+    _sanitize_public_profile_fields(card)
+    return card
 
 
 async def public_arena_session_days(
