@@ -314,9 +314,9 @@ async def test_catalog_home_country_groups_and_headline_when_ru_present(
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    assert "<h1>Катки — расписание по городам</h1>" in home.text
-    assert "Катки Беларуси и России" in home.text
-    assert "Катки Беларуси</h1>" not in home.text
+    # TASK-210: нейтральный заголовок согласно PDEC-019
+    assert "<h1>Где покататься</h1>" in home.text
+    assert "Где покататься в Беларуси" in home.text
     cities_block = home.text.split('<h2 class="section">Города</h2>', 1)[1].split('<h2 class="section">', 1)[0]
     assert '<h3 class="country-group__title">Беларусь</h3>' in cities_block
     assert cities_block.index(by_name) < cities_block.index('<h3 class="country-group__title">Россия</h3>')

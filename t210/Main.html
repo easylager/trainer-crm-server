@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Glide — главная, вариант A</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#f4f6f7}
+a{color:#0b6f6b}a:hover{color:#08524f}
+</style>
+</helmet>
+<div style="font-family: 'Golos Text', -apple-system, 'Segoe UI', sans-serif; color: #0d1b26; background: #f4f6f7; min-height: 100%">
+  <header style="background: #ffffff; border-bottom: 1px solid #e1e8ec">
+    <div style="max-width: 1120px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+      <a href="#top" style="font-size: 22px; font-weight: 700; color: #0d1b26; text-decoration: none">Glide</a>
+      <nav style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 15px">
+        <a href="#cities">Где покататься</a>
+        <a href="#trainers-block">Тренеры</a>
+        <a href="#shops">Магазины</a>
+        <a href="#trainers">Тренерам</a>
+      </nav>
+    </div>
+  </header>
+
+  <section style="max-width: 1120px; margin: 0 auto; padding: 40px 24px 24px; display: flex; flex-wrap: wrap; gap: 32px; align-items: center">
+    <div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+      <p style="margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #0b6f6b">Среда, 7 октября</p>
+      <h1 style="margin: 0; font-size: 46px; line-height: 1.08; font-weight: 700">Где покататься сегодня</h1>
+      <p style="margin: 0; font-size: 19px; line-height: 1.5; color: #4a5f71">Сегодня в Беларуси <strong style="color: #0d1b26">37 сеансов массового катания</strong> в 8 городах. Катки, роллердромы и трассы — расписание без установки приложения.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px" aria-label="Вид катания">
+        <a href="#ice" style="padding: 10px 16px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #0d1b26; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600">Лёд · 37 сегодня</a>
+        <a href="#roller" style="padding: 10px 16px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #c9d5dc; color: #0d1b26; text-decoration: none; font-size: 15px">Ролики</a>
+        <a href="#rollerski" style="padding: 10px 16px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #c9d5dc; color: #0d1b26; text-decoration: none; font-size: 15px">Лыжероллеры · 1 место</a>
+      </div>
+      <a href="#minsk" style="align-self: flex-start; display: flex; align-items: center; gap: 14px; padding: 16px 22px; border-radius: 16px; background: #0f8f8a; color: #ffffff; text-decoration: none; min-height: 44px">
+        <span style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 13px; opacity: 0.85">Вы, похоже, в Минске</span>
+          <span style="font-size: 19px; font-weight: 600">Минск — 21 сеанс сегодня</span>
+        </span>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <form style="display: flex; flex-wrap: wrap; gap: 8px; max-width: 460px" action="#">
+        <label for="q" style="position: absolute; left: -9999px">Найти место или город</label>
+        <input id="q" type="search" placeholder="Город или место: Гомель, Чижовка…" style="flex: 1 1 240px; min-width: 0; height: 48px; padding: 0 16px; border: 1px solid #c9d5dc; border-radius: 12px; font: inherit; font-size: 16px; background: #ffffff; color: #0d1b26">
+        <button type="submit" style="height: 48px; padding: 0 20px; border: 0; border-radius: 12px; background: #0d1b26; color: #ffffff; font: inherit; font-weight: 600; cursor: pointer">Найти</button>
+      </form>
+    </div>
+
+    <figure style="flex: 1 1 480px; min-width: 0; margin: 0; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 24px; padding: 16px">
+      <svg viewBox="0 0 600 520" style="width: 100%; height: auto; display: block" role="img" aria-label="Карта Беларуси: города с катками, размер точки — число мест">
+        <path d="M37,226 L82,222 L148,201 L166,147 L212,121 L224,90 L271,74 L307,45 L376,59 L423,63 L464,85 L464,128 L512,156 L489,212 L547,236 L572,288 L512,297 L541,324 L506,367 L518,394 L464,404 L447,440 L418,449 L371,457 L336,447 L283,439 L248,422 L189,422 L130,413 L82,413 L37,439 L43,394 L14,377 L55,341 L55,297 L31,270 Z" fill="#eaf3f3" stroke="#b9d3d2" stroke-width="2" stroke-linejoin="round"/>
+        <g fill="#0f8f8a" fill-opacity="0.18" stroke="#0f8f8a" stroke-width="2">
+          <circle cx="268" cy="207" r="34"/>
+        </g>
+        <g fill="#0f8f8a">
+          <circle cx="268" cy="207" r="9"/>
+          <circle cx="50" cy="226" r="7"/>
+          <circle cx="41" cy="363" r="6"/>
+          <circle cx="469" cy="333" r="6"/>
+          <circle cx="430" cy="207" r="6"/>
+          <circle cx="422" cy="95" r="6"/>
+          <circle cx="177" cy="281" r="5"/>
+          <circle cx="181" cy="364" r="5"/>
+          <circle cx="366" cy="280" r="5"/>
+          <circle cx="135" cy="208" r="5"/>
+          <circle cx="226" cy="173" r="5"/>
+          <circle cx="267" cy="297" r="5"/>
+          <circle cx="311" cy="190" r="4"/>
+          <circle cx="331" cy="69" r="4"/>
+          <circle cx="440" cy="140" r="5"/>
+          <circle cx="367" cy="372" r="5"/>
+          <circle cx="77" cy="355" r="4"/>
+          <circle cx="114" cy="328" r="4"/>
+          <circle cx="86" cy="326" r="4"/>
+          <circle cx="139" cy="314" r="4"/>
+          <circle cx="469" cy="166" r="4"/>
+          <circle cx="414" cy="285" r="4"/>
+          <circle cx="397" cy="307" r="4"/>
+          <circle cx="223" cy="359" r="4"/>
+          <circle cx="175" cy="135" r="4"/>
+          <circle cx="423" cy="183" r="4"/>
+        </g>
+        <g font-family="Golos Text, sans-serif" font-size="15" font-weight="600" fill="#0d1b26">
+          <text x="268" y="160" text-anchor="middle">Минск · 21</text>
+          <text x="62" y="214">Гродно · 10</text>
+          <text x="52" y="384">Брест</text>
+          <text x="480" y="352">Гомель</text>
+          <text x="442" y="225">Могилёв</text>
+          <text x="434" y="88">Витебск</text>
+          <text x="378" y="398">Мозырь</text>
+        </g>
+      </svg>
+      <figcaption style="font-size: 13px; color: #5d7285; padding: 8px 4px 0">Нажмите на точку — откроются все места города. Число — сеансы сегодня.</figcaption>
+    </figure>
+  </section>
+
+  <section id="today" style="max-width: 1120px; margin: 0 auto; padding: 16px 24px">
+    <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 14px">
+      <h2 style="margin: 0; font-size: 26px; font-weight: 700">Ближайшие сеансы в Минске</h2>
+      <a href="#minsk-today" style="font-size: 15px; font-weight: 600">Весь день в Минске →</a>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px">
+      <a href="#s1" style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 24px; font-weight: 700">18:00<span style="font-size: 15px; font-weight: 500; color: #5d7285"> – 19:30</span></span>
+        <span style="font-size: 16px; font-weight: 600">[Каток]</span>
+        <span style="font-size: 14px; color: #5d7285">сегодня · [цена] BYN</span>
+      </a>
+      <a href="#s2" style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 24px; font-weight: 700">19:00<span style="font-size: 15px; font-weight: 500; color: #5d7285"> – 20:00</span></span>
+        <span style="font-size: 16px; font-weight: 600">[Каток]</span>
+        <span style="font-size: 14px; color: #5d7285">сегодня · [цена] BYN</span>
+      </a>
+      <a href="#s3" style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 24px; font-weight: 700">19:30<span style="font-size: 15px; font-weight: 500; color: #5d7285"> – 21:00</span></span>
+        <span style="font-size: 16px; font-weight: 600">[Каток]</span>
+        <span style="font-size: 14px; color: #5d7285">сегодня · [цена] BYN</span>
+      </a>
+      <a href="#s4" style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 24px; font-weight: 700">20:30<span style="font-size: 15px; font-weight: 500; color: #5d7285"> – 22:00</span></span>
+        <span style="font-size: 16px; font-weight: 600">[Каток]</span>
+        <span style="font-size: 14px; color: #5d7285">сегодня · [цена] BYN</span>
+      </a>
+    </div>
+  </section>
+
+  <section id="cities" style="max-width: 1120px; margin: 0 auto; padding: 24px 24px 16px">
+    <h2 style="margin: 0 0 14px; font-size: 26px; font-weight: 700">Где покататься: города</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px">
+      <a href="#minsk" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #0d1b26; color: #ffffff; border-radius: 16px; text-decoration: none">
+        <span style="font-size: 20px; font-weight: 700">Минск</span>
+        <span style="font-size: 15px; color: #c3d2dc">23 места · 21 сеанс сегодня</span>
+      </a>
+      <a href="#grodno" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 20px; font-weight: 700">Гродно</span>
+        <span style="font-size: 15px; color: #5d7285">2 места · 10 сеансов сегодня</span>
+      </a>
+      <a href="#brest" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 20px; font-weight: 700">Брест</span>
+        <span style="font-size: 15px; color: #5d7285">1 место · 1 сеанс сегодня</span>
+      </a>
+      <a href="#gomel" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 20px; font-weight: 700">Гомель</span>
+        <span style="font-size: 15px; color: #5d7285">1 место</span>
+      </a>
+      <a href="#mogilev" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 20px; font-weight: 700">Могилёв</span>
+        <span style="font-size: 15px; color: #5d7285">1 место</span>
+      </a>
+      <a href="#vitebsk" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="font-size: 20px; font-weight: 700">Витебск</span>
+        <span style="font-size: 15px; color: #5d7285">1 место</span>
+      </a>
+    </div>
+    <p style="margin: 18px 0 8px; font-size: 15px; font-weight: 600; color: #5d7285">Другие города</p>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Солигорск · 1 сегодня</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Барановичи · 1 сегодня</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Пинск · 1 сегодня</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Орша · 1 сегодня</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Бобруйск · 1 сегодня</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Мозырь</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Лида</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Молодечно</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Новополоцк</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">Жодино</a>
+      <a href="#c" style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; border-radius: 999px; background: #ffffff; border: 1px solid #e1e8ec; color: #0d1b26; text-decoration: none; font-size: 15px">ещё 14 →</a>
+    </div>
+  </section>
+
+  <section id="trainers-block" style="max-width: 1120px; margin: 0 auto; padding: 24px 24px 8px">
+    <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 14px">
+      <h2 style="margin: 0; font-size: 26px; font-weight: 700">Тренеры в Минске</h2>
+      <a href="#all-trainers" style="font-size: 15px; font-weight: 600">Все тренеры →</a>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px">
+        <a href="#t1" style="display: flex; gap: 14px; align-items: center; padding: 14px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+          <span style="flex: 0 0 64px; height: 64px; border-radius: 50%; background: #dfe8ec; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #5d7285">[фото]</span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+            <span style="font-size: 17px; font-weight: 600">[Имя тренера]</span>
+            <span style="font-size: 14px; color: #5d7285">Фигурное катание · [каток]</span>
+            <span style="font-size: 14px; color: #0b6f6b; font-weight: 600">от [цена] BYN · Записаться</span>
+          </span>
+        </a>
+        <a href="#t2" style="display: flex; gap: 14px; align-items: center; padding: 14px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+          <span style="flex: 0 0 64px; height: 64px; border-radius: 50%; background: #dfe8ec; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #5d7285">[фото]</span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+            <span style="font-size: 17px; font-weight: 600">[Имя тренера]</span>
+            <span style="font-size: 14px; color: #5d7285">Хоккей · [каток]</span>
+            <span style="font-size: 14px; color: #0b6f6b; font-weight: 600">от [цена] BYN · Записаться</span>
+          </span>
+        </a>
+        <a href="#t3" style="display: flex; gap: 14px; align-items: center; padding: 14px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+          <span style="flex: 0 0 64px; height: 64px; border-radius: 50%; background: #dfe8ec; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #5d7285">[фото]</span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+            <span style="font-size: 17px; font-weight: 600">[Имя тренера]</span>
+            <span style="font-size: 14px; color: #5d7285">Катание для взрослых · [каток]</span>
+            <span style="font-size: 14px; color: #0b6f6b; font-weight: 600">от [цена] BYN · Записаться</span>
+          </span>
+        </a>
+    </div>
+  </section>
+
+  <section id="shops" style="max-width: 1120px; margin: 0 auto; padding: 24px 24px 8px">
+    <h2 style="margin: 0 0 14px; font-size: 26px; font-weight: 700">Магазины и сервис</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px">
+      <a href="#rent" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26"><span style="font-size: 18px; font-weight: 700">Прокат</span><span style="font-size: 14px; color: #5d7285">коньки, ролики, защита</span></a>
+      <a href="#sharpen" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26"><span style="font-size: 18px; font-weight: 700">Заточка</span><span style="font-size: 14px; color: #5d7285">где наточить коньки</span></a>
+      <a href="#gear" style="display: flex; flex-direction: column; gap: 4px; padding: 18px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26"><span style="font-size: 18px; font-weight: 700">Экипировка</span><span style="font-size: 14px; color: #5d7285">13 магазинов в каталоге</span></a>
+    </div>
+  </section>
+
+  <section style="max-width: 1120px; margin: 0 auto; padding: 16px 24px">
+    <div style="display: flex; flex-wrap: wrap; gap: 12px">
+      <a href="#ru" style="flex: 1 1 320px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 20px; background: #ffffff; border: 1px solid #e1e8ec; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #5d7285">Россия</span><span style="font-size: 18px; font-weight: 600">Санкт-Петербург и область</span></span>
+        <span style="font-size: 15px; font-weight: 600; color: #0b6f6b">Открыть →</span>
+      </a>
+      <a href="#trainers" id="trainers" style="flex: 1 1 320px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 20px; background: #e3f4f3; border-radius: 16px; text-decoration: none; color: #0d1b26">
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #0b6f6b">Для тренеров</span><span style="font-size: 18px; font-weight: 600">Ученики уже ищут лёд в Glide</span></span>
+        <span style="font-size: 15px; font-weight: 600; color: #0b6f6b">Подробнее →</span>
+      </a>
+    </div>
+  </section>
+
+  <footer style="max-width: 1120px; margin: 0 auto; padding: 24px 24px 48px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 14px; color: #5d7285">
+    <span>Расписание собирается с сайтов катков. Нашли ошибку — напишите нам.</span>
+    <a href="#tg">Открыть в Telegram</a>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":2100}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

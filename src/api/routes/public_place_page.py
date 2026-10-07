@@ -40,8 +40,13 @@ router = APIRouter(tags=["public-place"])
 
 
 @router.get("/", response_class=HTMLResponse)
-async def catalog_home_page(request: Request, session: AsyncSession = Depends(get_session)):
-    """Потребительская главная каталога Glide (TASK-191-A)."""
+async def catalog_home_page(
+    request: Request,
+    when: str | None = Query(None, description="Период: today|tomorrow|weekend|day"),
+    d: str | None = Query(None, description="Дата для when=day: YYYY-MM-DD"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Потребительская главная каталога Glide (TASK-191-A, TASK-210-A)."""
     from src.application.catalog_home_page import (
         catalog_home_og_image_url,
         load_catalog_home_view,
@@ -50,8 +55,22 @@ async def catalog_home_page(request: Request, session: AsyncSession = Depends(ge
     from src.application.place_links import CATALOG_START_ANY, public_telegram_cta_url
 
     base = _base()
-    view = await load_catalog_home_view(session)
+
+    # TASK-210: читаем cookie glide_city
+    user_city_slug = request.cookies.get("glide_city", "").strip().lower() or None
+
+    # TASK-210: варианты с ?when= — noindex, follow, canonical на /
+    robots = "index, follow"
     canonical = f"{base}/" if base else "/"
+    if when and when.strip().lower() in ("today", "tomorrow", "weekend", "day"):
+        robots = "noindex, follow"
+
+    view = await load_catalog_home_view(
+        session,
+        when=when,
+        day_date=d,
+        user_city_slug=user_city_slug,
+    )
     html = render_catalog_home_page(
         view,
         canonical_url=canonical,
@@ -63,6 +82,9 @@ async def catalog_home_page(request: Request, session: AsyncSession = Depends(ge
         ),
         trainers_url=f"{base}/trainers" if base else "/trainers",
     )
+    # Подставляем __ROBOTS__
+    html = html.replace('content="index, follow"', f'content="{robots}"', 1)
+
     await record_public_page_view(
         session,
         request,
@@ -70,6 +92,7 @@ async def catalog_home_page(request: Request, session: AsyncSession = Depends(ge
         city_id=None,
     )
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+
 
 # TASK-189 считает просмотр на каждый заход на /p/ и /c/. Публичный кэш обошёл бы
 # origin и занизил счётчик. Картинки по-прежнему кэшируются: просмотр они не пишут.
@@ -448,9 +471,7 @@ async def selection_page(
     path = selection_path(city_name=city_name, venue=venue, when=when)
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
-    view = await load_selection_view(
-        session, city=city, venue=venue, when=when, page=clean_page(page)
-    )
+    view = await load_selection_view(session, city=city, venue=venue, when=when, page=clean_page(page))
     # Любой ?t= / ?w= канонизируется на базовую подборку города, а не на самого себя.
     canonical_path = selection_path(city_name=city_name, venue=None, when=None)
     html = render_selection_page(
