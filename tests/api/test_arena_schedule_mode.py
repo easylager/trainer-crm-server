@@ -154,7 +154,6 @@ async def test_admin_patch_schedule_mode(app_use_test_db, db_session) -> None:
 @pytest.mark.asyncio
 async def test_invalid_phone_not_shown_in_ssr_and_api(app_use_test_db, db_session, client) -> None:
     """TASK-207: телефоны без минимум 7 цифр не показываются на SSR и в публичном API."""
-    from src.api.routes.public_place_page import _render_place_page
     from src.application.arena_public_use_cases import get_public_arena_card
 
     cid = await _insert_city(db_session, name=f"Phone-{uuid.uuid4().hex[:6]}")
@@ -216,28 +215,20 @@ async def test_invalid_phone_not_shown_in_ssr_and_api(app_use_test_db, db_sessio
     assert r_valid.status_code == 200
     assert r_valid.json()["phone"] == "+375291234567"
 
-    # Проверяем SSR страницы места через HTTP
-    from src.api.routes.public_place_page import place_page
-    from fastapi import Request
-    from unittest.mock import Mock
+    # Проверяем SSR страницы места через HTTP GET (используем public_path из card)
+    r_ssr_invalid = await client.get(card_invalid["public_path"] or f"/p/{invalid_id}")
+    assert r_ssr_invalid.status_code == 200
+    html_invalid = r_ssr_invalid.text
+    assert "tel:" not in html_invalid
+    assert "unknown" not in html_invalid.lower()
 
-    request = Mock(spec=Request)
-    request.url = Mock()
-    request.url.scheme = "https"
-    request.headers = {"host": "glide.by"}
+    r_ssr_short = await client.get(card_short["public_path"] or f"/p/{short_id}")
+    assert r_ssr_short.status_code == 200
+    assert "tel:" not in r_ssr_short.text
 
-    # Страница с невалидным телефоном не должна содержать tel: ссылок
-    html_invalid = await place_page(request, db_session, str(invalid_id), city=None, city_id=None)
-    assert "tel:" not in html_invalid.body.decode("utf-8")
-    assert "unknown" not in html_invalid.body.decode("utf-8").lower()
-
-    # Страница с коротким телефоном не должна содержать tel: ссылок
-    html_short = await place_page(request, db_session, str(short_id), city=None, city_id=None)
-    assert "tel:" not in html_short.body.decode("utf-8")
-
-    # Страница с валидным телефоном должна содержать tel: ссылку
-    html_valid = await place_page(request, db_session, str(valid_id), city=None, city_id=None)
-    assert "tel:+375291234567" in html_valid.body.decode("utf-8")
+    r_ssr_valid = await client.get(card_valid["public_path"] or f"/p/{valid_id}")
+    assert r_ssr_valid.status_code == 200
+    assert "tel:+375291234567" in r_ssr_valid.text
 
     # Проверяем списочный API /api/public/ice/arenas
     r_list = await client.get(f"/api/public/ice/arenas?city_id={cid}&intent=skate")
