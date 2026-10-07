@@ -35,7 +35,8 @@
   "prices_already_minor": false,
   "use_fallback_if_schedule_blocked": false,
   "blocked_http_statuses": [403],
-  "egress": "by_ip_required"
+  "egress": "by_ip_required",
+  "ohm_price_bands": {"day_60": 1400, "evening_60": 1700}
 }
 ```
 
@@ -43,7 +44,7 @@
 
 1. Fetch **только** origin с BY egress. Индексаторы видят HTML-таблицу сеансов; с не-BY IP — nginx/1.10.3 403.
 2. HTTP 403 / timeout без BY → прогон `blocked`, `sessions=[]`. Запрещено: шаблон сетки, Wayback, зеркала.
-3. Kind filter (после первого полного BY-снимка): только массовые катания. Drop школа `/raspisanie_shkoly/`, группы «Ф-Юниор».
+3. Kind filter: строки «МАССОВОЕ КАТАНИЕ» → `public_skate`; «ОТРАБОТКА ХОККЕЙНОГО МАСТЕРСТВА» → `hockey_practice` (цены day 14 / evening 17 BYN за час из `ohm_price_bands` в config, пока прейскурант ОХМ только в индексе). Drop школа `/raspisanie_shkoly/`, группы «Ф-Юниор».
 4. Times / prices: парсить фактическую таблицу origin. Не хардкодить.
 5. Пока нет полного origin-HTML с BY IP — и публичный Globalping его не даёт — golden = пустые слоты. Это терминал V1.
 

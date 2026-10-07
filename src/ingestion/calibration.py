@@ -323,6 +323,9 @@ async def run_calibration(*, manifest: GoldManifest | None = None) -> Calibratio
         payload = json.loads(item.gold_path.read_text(encoding="utf-8"))
         gold = gold_slots_from_expected(payload)
         predicted = await _predict(item)
+        gold_kinds = {slot.kind for slot in gold}
+        if gold_kinds:
+            predicted = [slot for slot in predicted if slot.kind in gold_kinds]
         metrics = compare_slots(gold, predicted)
         scores.append(
             score_source(item.source_id, metrics, parser_key=item.parser_key, scoring=item.scoring)

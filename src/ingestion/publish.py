@@ -15,7 +15,7 @@ from src.ingestion.publish_horizon import clip_to_publish_window, publish_window
 from src.ingestion.scrape_runs import assert_can_replace_ice_sessions
 from src.ingestion.types import CanonicalSlotDraft, PARSER_KINDS, RUN_STATUS_OK, ScrapeRunRecord
 
-_CLIENT_KINDS = tuple(PARSER_KINDS)
+_PUBLISHABLE_KINDS_SQL = ", ".join(f"'{kind}'" for kind in PARSER_KINDS)
 
 
 class IceSessionPublisher:
@@ -61,10 +61,10 @@ class SqlAlchemyIceSessionPublisher:
         async with self._session.begin_nested():
             await self._session.execute(
                 text(
-                    """
+                    f"""
                     DELETE FROM ice_sessions
                     WHERE arena_id = :arena_id
-                      AND kind IN ('public_skate', 'open_ice')
+                      AND kind IN ({_PUBLISHABLE_KINDS_SQL})
                       AND local_date >= :today
                       AND ends_at_utc > :now
                       AND (source_id IS NULL OR source_id NOT LIKE 'etalon_%')

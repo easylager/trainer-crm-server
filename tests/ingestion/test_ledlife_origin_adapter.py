@@ -56,12 +56,22 @@ async def test_ledlife_fixture_matches_golden() -> None:
     expected = json.loads((_FIXTURES / "expected.json").read_text(encoding="utf-8"))
     extraction = await LedlifeOriginHtmlParser().extract(_job())
     assert extraction.snapshot["blocked_without_by_egress"] is False
-    assert len(extraction.slots) == len(expected["sessions"])
     assert expected["blocked_without_by_egress"] is False
-    for slot, gold in zip(extraction.slots, expected["sessions"], strict=True):
+    mk_slots = [s for s in extraction.slots if s.kind_raw != "hockey_practice"]
+    gold_mk = [s for s in expected["sessions"] if s["kind"] == "public_skate"]
+    assert len(mk_slots) == len(gold_mk)
+    for slot, gold in zip(mk_slots, gold_mk, strict=True):
         assert slot.price_adult == gold["price_adult_minor"] / 100
         assert slot.price_child == gold["price_child_minor"] / 100
         assert slot.age_note == gold["age_note"]
+
+
+@pytest.mark.asyncio
+async def test_ledlife_fixture_includes_ohm_rows() -> None:
+    extraction = await LedlifeOriginHtmlParser().extract(_job())
+    ohm = [s for s in extraction.slots if s.kind_raw == "hockey_practice"]
+    assert len(ohm) == 9
+    assert all(s.price_adult is not None for s in ohm)
 
 
 def test_ledlife_stoimost_day_and_evening_bands() -> None:
@@ -92,12 +102,13 @@ async def test_ledlife_live_capture_has_future_mass_slots(tmp_path: Path) -> Non
     )
     extraction = await LedlifeOriginHtmlParser().extract(job)
     assert extraction.snapshot["blocked_without_by_egress"] is False
-    assert len(extraction.slots) >= 3
-    dates = {s.local_date for s in extraction.slots}
+    mk_slots = [s for s in extraction.slots if s.kind_raw != "hockey_practice"]
+    assert len(mk_slots) >= 3
+    dates = {s.local_date for s in mk_slots}
     assert "2026-10-04" in dates or "2026-10-10" in dates
-    assert all(s.price_adult is not None and s.price_child is not None for s in extraction.slots)
-    assert extraction.slots[0].price_adult == 11.0  # evening/weekend band, BYN with VAT
-    assert extraction.slots[0].price_rental == 7.0
+    assert all(s.price_adult is not None and s.price_child is not None for s in mk_slots)
+    assert mk_slots[0].price_adult == 11.0  # evening/weekend band, BYN with VAT
+    assert mk_slots[0].price_rental == 7.0
 
 
 def test_ledlife_preiskurant_page_uses_mk_bands() -> None:

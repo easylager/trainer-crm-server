@@ -30,12 +30,14 @@ KIND_OPEN_ICE = "open_ice"
 KIND_RENTAL = "rental"
 KIND_SCHOOL_GROUP = "school_group"
 KIND_EVENT = "event"
+KIND_HOCKEY_PRACTICE = "hockey_practice"
 ICE_SESSION_KINDS = (
     KIND_PUBLIC_SKATE,
     KIND_OPEN_ICE,
     KIND_RENTAL,
     KIND_SCHOOL_GROUP,
     KIND_EVENT,
+    KIND_HOCKEY_PRACTICE,
 )
 CLIENT_ICE_SESSION_KINDS = (KIND_PUBLIC_SKATE, KIND_OPEN_ICE)
 
@@ -117,7 +119,7 @@ def validate_kind(kind: str) -> str:
     value = (kind or "").strip()
     if value not in ICE_SESSION_KINDS:
         raise IceSessionValidationError(
-            "Тип сеанса: public_skate, open_ice, rental, school_group или event"
+            "Тип сеанса: public_skate, open_ice, rental, school_group, event или hockey_practice"
         )
     return value
 

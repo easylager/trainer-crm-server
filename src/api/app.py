@@ -1254,6 +1254,19 @@ def webapp_catalog_contact_attribution_js(request: Request):
     )
 
 
+@app.get("/webapp/catalog-public-url.js")
+def webapp_catalog_public_url_js(request: Request):
+    """Публичные /p/ ссылки для веб-каталога вне Telegram (TASK-191-B)."""
+    path = _WEBAPP_DIR / "catalog-public-url.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-share-sheet.js")
 def webapp_share_sheet_js(request: Request):
     """TASK-146 «Поделиться»: шит с превью карточки и каналами. Use ``?v=…`` for long cache."""

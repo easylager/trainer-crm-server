@@ -57,11 +57,13 @@ CATALOG_CONSUMER_EVENTS_RETENTION_DAYS = 400
 KIND_PUBLIC_PAGE_VIEW = "public_page_view"
 KIND_PUBLIC_TELEGRAM_CTA = "public_telegram_cta"
 KIND_MINIAPP_CATALOG_ENTRY = "miniapp_catalog_entry"
+KIND_PUBLIC_CONTACT_CLICK = "public_contact_click"
 
 CATALOG_CONSUMER_KINDS = (
     KIND_PUBLIC_PAGE_VIEW,
     KIND_PUBLIC_TELEGRAM_CTA,
     KIND_MINIAPP_CATALOG_ENTRY,
+    KIND_PUBLIC_CONTACT_CLICK,
 )
 
 SURFACE_PLACE_PAGE = "place_page"
@@ -363,6 +365,38 @@ async def get_catalog_wau(
         "comparable_since": comparable.isoformat() if comparable else None,
         "unique_actors": wau,
     }
+
+
+async def record_public_contact_click(
+    session: AsyncSession,
+    request: Any,
+    *,
+    action: str,
+    surface: str,
+    city_id: int | None = None,
+    arena_id: int | None = None,
+) -> None:
+    """Клик «позвонить / билеты / маршрут» с SSR — demand-событие TASK-189."""
+    from starlette.requests import Request
+
+    if not isinstance(request, Request):
+        return
+    from src.api.middleware.http_limits import client_ip_from_request
+
+    act = (action or "").strip().lower()
+    if act not in ("phone", "tickets", "direction"):
+        return
+    user_agent = request.headers.get("user-agent")
+    actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
+    await record_catalog_consumer_event(
+        session,
+        kind=KIND_PUBLIC_CONTACT_CLICK,
+        surface=(surface or "place_page").strip().lower()[:40],
+        actor_hash=actor,
+        city_id=city_id,
+        arena_id=arena_id,
+        payload={"action": act, "ua_class": classify_user_agent(user_agent)},
+    )
 
 
 async def record_public_page_view(

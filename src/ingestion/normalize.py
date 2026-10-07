@@ -16,6 +16,7 @@ from src.application.ice_session_use_cases import (
     parse_hhmm,
 )
 from src.ingestion.types import (
+    PARSER_KIND_HOCKEY_PRACTICE,
     PARSER_KIND_OPEN_ICE,
     PARSER_KIND_PUBLIC_SKATE,
     CanonicalSlotDraft,
@@ -88,6 +89,10 @@ def parse_price_to_minor(value: Any, *, already_minor: bool) -> int | None:
 
 def map_parser_kind(raw: str) -> str | None:
     key = (raw or "").strip().lower()
+    if key in {PARSER_KIND_HOCKEY_PRACTICE, "охм"}:
+        return PARSER_KIND_HOCKEY_PRACTICE
+    if "отработк" in key and "хоккей" in key:
+        return PARSER_KIND_HOCKEY_PRACTICE
     if key in {PARSER_KIND_PUBLIC_SKATE, "mk", "мк", "ма", "ба"}:
         return PARSER_KIND_PUBLIC_SKATE
     if key == PARSER_KIND_OPEN_ICE:
@@ -215,7 +220,7 @@ class IceSessionNormalizer:
         if observed.tzinfo is None:
             observed = observed.replace(tzinfo=timezone.utc)
 
-        merged: dict[tuple[date, time], dict[str, Any]] = {}
+        merged: dict[tuple[date, time, str], dict[str, Any]] = {}
         unknown_kind = 0
         merged_duplicates = 0
         past = 0
@@ -233,7 +238,7 @@ class IceSessionNormalizer:
                 # TASK-187: одна нечитаемая строка — минус строка, а не весь прогон.
                 invalid_time += 1
                 continue
-            key = (local_date, starts_at_local)
+            key = (local_date, starts_at_local, kind)
             if key in merged:
                 merged_duplicates += 1
             bucket = merged.setdefault(
@@ -270,7 +275,7 @@ class IceSessionNormalizer:
                 bucket["source_id"] = raw.source_id
 
         drafts: list[CanonicalSlotDraft] = []
-        for (local_date, starts_at_local), bucket in sorted(merged.items()):
+        for (local_date, starts_at_local, _), bucket in sorted(merged.items()):
             duration = default_duration
             end_raw = bucket["ends_at_local"]
             if end_raw:

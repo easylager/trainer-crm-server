@@ -1211,6 +1211,9 @@
       href += '&day=' + day;
       if (live.session_id != null) href += '&s=' + encodeURIComponent(String(live.session_id));
     }
+    if (typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.arenaHref) {
+      return CatalogPublicUrl.arenaHref(item, href);
+    }
     return href;
   }
 
