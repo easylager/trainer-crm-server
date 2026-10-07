@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     api_rate_limit_enabled: bool = True
     api_rate_limit_public_max_requests: int = 120
     api_rate_limit_public_window_sec: float = 60.0
+    # Public catalog photos (immutable URLs) — separate bucket so list thumbnails do not exhaust API budget.
+    api_rate_limit_photo_max_requests: int = 600
+    api_rate_limit_photo_window_sec: float = 60.0
     api_rate_limit_webapp_max_requests: int = 800
     api_rate_limit_webapp_window_sec: float = 60.0
     api_rate_limit_upload_max_requests: int = 60

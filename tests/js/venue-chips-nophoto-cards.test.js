@@ -129,6 +129,15 @@ describe('бесфотошная карточка: иконка типа на п
       card: 'https://img/1-card.jpg',
     });
     assert.equal(v.photo, 'https://img/1-card.jpg');
+    const both = boardCardView({
+      id: 3,
+      name: 'Каток',
+      card: 'https://img/3-card.jpg',
+      thumb: 'https://img/3-thumb.jpg',
+    });
+    assert.equal(both.photo, 'https://img/3-card.jpg');
+    assert.match(both.photoSrcset, /3-thumb.jpg 320w/);
+    assert.match(both.photoSrcset, /3-card.jpg 800w/);
     const v2 = boardCardView({ id: 2, name: 'Каток', thumb: 'https://img/2-thumb.jpg' });
     assert.equal(v2.photo, 'https://img/2-thumb.jpg');
   });
@@ -141,7 +150,7 @@ describe('бесфотошная карточка: иконка типа на п
     assert.ok(branch.length > 0, 'бесфотошная ветка существует');
     assert.match(branch, /v\.venueIcon \|\| v\.initial/, 'иконка типа, фолбэк — монограмма');
     assert.ok(!/<img/i.test(branch), 'в бесфотошном варианте нет тега img');
-    assert.ok(!/acardThumbStyle/.test(branch), 'фоновая картинка не встраивается');
+    assert.ok(!/listPhotoHtml/.test(branch), 'в бесфотошном варианте нет ленивого img');
   });
 
   it('карусель шторки карты: плашка типа с иконкой, класс типа на карточке', () => {

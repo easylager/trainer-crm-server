@@ -8,6 +8,7 @@
   'use strict';
 
   var M = global.IceTabModel;
+  var lastArenaListSig = '';
   var state = {
     intent: 'skate',
     view: 'list',
@@ -754,8 +755,13 @@
       if (loaderEl) loaderEl.hidden = true;
       if (emptyEl && global.IceMapModel) {
         emptyEl.hidden = false;
+        var st = global.IceMapModel.mapUnavailableState('sdk-failed');
         emptyEl.innerHTML =
-          '<strong>Карта не загрузилась</strong><p>Обновите страницу. Файл карты не подключился.</p>';
+          '<div class="ice-empty ice-map-unavail"><b>' +
+          esc(st.title) +
+          '</b><p>' +
+          esc(st.body) +
+          '</p></div>';
       }
       return;
     }
@@ -834,6 +840,9 @@
         onSheetFull: function () {
           setView('list');
         },
+        onShowList: function () {
+          setView('list');
+        },
         // Шапка шторки: «7 мест сегодня вечером …» — метка текущего окна.
         getWindow: function () {
           return state.window;
@@ -852,9 +861,26 @@
     });
   }
 
-  function acardThumbStyle(src) {
+  function listPhotoHtml(view) {
+    var src = '';
+    var srcset = '';
+    var sizes = '';
+    if (view && typeof view === 'object') {
+      src = view.photo || view.thumb || '';
+      srcset = view.photoSrcset || '';
+      sizes = view.photoSizes || '';
+    } else {
+      src = view || '';
+    }
     if (!src) return '';
-    return ' style="background-image:url(\'' + esc(src).replace(/'/g, '%27') + '\')"';
+    return (
+      '<img class="ice-board__photo-img ice-acard__img" src="' +
+      esc(src) +
+      '"' +
+      (srcset ? ' srcset="' + esc(srcset) + '"' : '') +
+      (sizes ? ' sizes="' + esc(sizes) + '"' : '') +
+      ' alt="" loading="lazy" decoding="async" />'
+    );
   }
 
   /**
@@ -868,7 +894,7 @@
     /* TASK-148 (AC-2): нет фото — нет фото-блока. Плашка типа места: иконка
        с сервера (venue_icon), фолбэк — монограмма имени. */
     var photo = v.photo
-      ? '<span class="ice-board__photo"' + acardThumbStyle(v.photo) + '>'
+      ? '<span class="ice-board__photo">' + listPhotoHtml(v)
       : '<span class="ice-board__photo ice-board__photo--empty">' +
         '<span class="ice-board__initial" aria-hidden="true">' +
         esc(v.venueIcon || v.initial) +
@@ -936,9 +962,8 @@
       '">' +
       '<span class="ice-acard__ph' +
       (view.thumb ? '' : ' ice-acard__ph--empty') +
-      '"' +
-      acardThumbStyle(view.thumb) +
-      '>' +
+      '">' +
+      (view.thumb ? listPhotoHtml({ thumb: view.thumb, photo: view.thumb }) : '') +
       (view.thumb
         ? ''
         : '<span class="ice-acard__mono" aria-hidden="true">' + esc(view.initial || '?') + '</span>') +
@@ -1015,7 +1040,6 @@
         window: state.window,
       });
     }
-    parkShareButton();
     setShareButton();
     if (!list) return;
     var paint = M.listPaintMode({
@@ -1027,11 +1051,15 @@
     if (paint === 'skeleton') {
       // TASK-095: вместо строки «Загрузка катков…» — коробки будущих карточек.
       // Текстовая строка обещала одну форму, а приходила совсем другая.
+      parkShareButton();
+      lastArenaListSig = '';
       list.innerHTML = state.intent === 'coach' ? trainerSkeletons(3) : boardSkeletons(2);
       showActiveList();
       return;
     }
     if (paint === 'empty') {
+      parkShareButton();
+      lastArenaListSig = '';
       var city = cityFromState(state.cityId) || {};
       var shopScope = M.catalogScope(state.intent, state.venueTypes) === 'shop';
       var empty;
@@ -1058,6 +1086,8 @@
       return;
     }
     if (state.intent === 'coach') {
+      parkShareButton();
+      lastArenaListSig = '';
       list.innerHTML = state.items.map(renderTrainerCard).join('') + loadMoreHtml();
       showActiveList();
       return;
@@ -1067,6 +1097,50 @@
        забыть, что это уже не ответ на выбранный чип. */
     var parts = M.orderForFeed(state.items, state.window, state.nearOn);
     var brk = parts.hits.length ? M.windowBreakView(state.window, parts.rest, state.venueTypes) : null;
+    var now = new Date();
+    function cardSig(it) {
+      var v = M.boardCardView(it, now, { window: state.window });
+      return [
+        v.href,
+        v.arenaId,
+        v.sessionId,
+        v.inviteLabel,
+        v.callHref,
+        v.stale ? '1' : '0',
+        v.venueType,
+        v.venueIcon,
+        v.initial,
+        v.offLabel,
+        v.isSession ? '1' : '0',
+        v.photoSrcset,
+        v.time,
+        v.day,
+        v.prices,
+        v.status,
+        v.depth,
+        v.name,
+        v.where,
+        v.photo,
+        v.offWindow ? '1' : '0',
+      ].join('\u001f');
+    }
+    var arenaSig = [
+      parts.hits.map(cardSig).join('|'),
+      parts.rest.map(cardSig).join('|'),
+      brk ? brk.title + '\u001f' + brk.sub : '',
+      loadMoreHtml(),
+      state.nearOn ? 'near' : '',
+      state.window ? String(state.window.key || '') + ':' + String(state.window.label || '') : '',
+    ].join('\n');
+    if (arenaSig === lastArenaListSig && list.querySelector && list.querySelector('.ice-board')) {
+      /* Ранний выход не должен оставлять #iceShareBtn припаркованной под #iceList:
+         на совпадении подписи кнопку снова ставим перед разделителем окна. */
+      placeShareBeforeBreak(list);
+      showActiveList();
+      return;
+    }
+    parkShareButton();
+    lastArenaListSig = arenaSig;
     list.innerHTML =
       parts.hits.map(renderArenaCard).join('') +
       (brk
@@ -1078,10 +1152,14 @@
       loadMoreHtml();
     /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
        а приглушённые места без нужных сеансов идут уже после неё. */
-    var brkEl = brk && list.querySelector('.ice-window-break');
-    var shareBtn = $('iceShareBtn');
-    if (brkEl && shareBtn) list.insertBefore(shareBtn, brkEl);
+    placeShareBeforeBreak(list);
     showActiveList();
+  }
+
+  function placeShareBeforeBreak(list) {
+    var brkEl = list && list.querySelector ? list.querySelector('.ice-window-break') : null;
+    var shareBtn = $('iceShareBtn');
+    if (brkEl && shareBtn && list.insertBefore) list.insertBefore(shareBtn, brkEl);
   }
 
   /* innerHTML списка стирает всё внутри — возвращаем кнопку на её штатное место под #iceList. */
