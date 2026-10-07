@@ -20,7 +20,9 @@
   var SEASON_CLOSED_LINE = 'Сезон закрыт';
   var SCAN_LIMIT = 256;
   var MATCH_START_LIMIT = 64;
+  var MAX_PHONE_DIGITS = 15;
   var PHONE_LIKE = /\+?\d[\d\s().-]{5,}\d/g;
+  var SEGMENT_SPLIT = /[;,\n]| {2,}/g;
   var CLOCK_COLON = /\d{1,2}:\d{2}/;
   var EXT_TAIL = /(?:\s|,)*(?:доб\.?|ext\.?|вн\.?)\s*\d.*$/i;
 
@@ -118,8 +120,52 @@
     if (!trimmed) return '';
     var plus = trimmed.charAt(0) === '+';
     var digits = asciiDigits(trimmed);
-    if (digits.length < 7) return '';
+    if (digits.length < 7 || digits.length > MAX_PHONE_DIGITS) return '';
     return plus ? '+' + digits : digits;
+  }
+
+  function startsNewNumber(token) {
+    if (token.charAt(0) === '+' || token === '8') return true;
+    if (looksLikeDotTimeRange(token)) return true;
+    var compact = asciiDigits(token).length >= 7 && !/[().-]/.test(token);
+    return compact;
+  }
+
+  function trimToFirstNumber(chunk) {
+    var trimmed = trimIncompleteParenTail(String(chunk || '').replace(EXT_TAIL, '').trim());
+    trimmed = stripTrailingParenNote(trimmed).trim();
+    if (!trimmed || looksLikeDotTimeRange(trimmed)) return '';
+    var tokens = [];
+    var found;
+    var tokenRe = /\S+/g;
+    while ((found = tokenRe.exec(trimmed))) {
+      tokens.push({ text: found[0], end: found.index + found[0].length });
+    }
+    var digits = 0;
+    var last = 0;
+    var i;
+    for (i = 0; i < tokens.length; i++) {
+      var count = asciiDigits(tokens[i].text).length;
+      if (digits >= 7 && startsNewNumber(tokens[i].text)) break;
+      if (digits + count > MAX_PHONE_DIGITS) break;
+      digits += count;
+      last = i + 1;
+    }
+    if (!last || digits < 7) return '';
+    return trimmed.slice(0, tokens[last - 1].end);
+  }
+
+  function segmentsOf(masked) {
+    var spans = [];
+    var start = 0;
+    var m;
+    SEGMENT_SPLIT.lastIndex = 0;
+    while ((m = SEGMENT_SPLIT.exec(masked))) {
+      spans.push({ start: start, text: masked.slice(start, m.index) });
+      start = m.index + m[0].length;
+    }
+    spans.push({ start: start, text: masked.slice(start) });
+    return spans;
   }
 
   function firstPhoneLikeHref(text) {
@@ -128,13 +174,21 @@
     var windowText = raw.slice(0, SCAN_LIMIT);
     var masked = maskDatesAndClocks(windowText);
     var clipped = raw.length > SCAN_LIMIT;
-    var m;
-    PHONE_LIKE.lastIndex = 0;
-    while ((m = PHONE_LIKE.exec(masked))) {
-      if (m.index >= MATCH_START_LIMIT) break;
-      if (clipped && m.index + m[0].length >= SCAN_LIMIT) continue;
-      var href = hrefFromPhoneLike(m[0]);
-      if (href) return href;
+    var spans = segmentsOf(masked);
+    var s;
+    for (s = 0; s < spans.length; s++) {
+      var span = spans[s];
+      if (span.start >= MATCH_START_LIMIT) break;
+      var m;
+      PHONE_LIKE.lastIndex = 0;
+      while ((m = PHONE_LIKE.exec(span.text))) {
+        var start = span.start + m.index;
+        var end = span.start + m.index + m[0].length;
+        if (start >= MATCH_START_LIMIT) break;
+        if (clipped && end >= SCAN_LIMIT) continue;
+        var href = hrefFromPhoneLike(trimToFirstNumber(m[0]));
+        if (href) return href;
+      }
     }
     return '';
   }

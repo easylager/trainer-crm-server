@@ -53,6 +53,25 @@ describe('arena schedule mode model', () => {
     );
   });
 
+  it('phoneToTelHref keeps only the first of adjacent numbers', () => {
+    assert.equal(M.phoneToTelHref('8 029 111-11-11 8 029 222-22-22'), 'tel:80291111111');
+    assert.equal(M.phoneToTelHref('8 017 222-22-22\n8 029 111 22 33'), 'tel:80172222222');
+    assert.equal(M.phoneToTelHref('80291111111 80292222222'), 'tel:80291111111');
+    assert.equal(M.phoneToTelHref('8 017 222-22-22 10.00-22.00'), 'tel:80172222222');
+  });
+
+  it('phoneToTelHref respects the 64/256 scan window', () => {
+    assert.equal(M.phoneToTelHref('x'.repeat(60) + '+375291234567'), 'tel:+375291234567');
+    assert.equal(M.phoneToTelHref('x'.repeat(70) + '+375291234567'), '');
+    assert.equal(M.phoneToTelHref('8' + ' '.repeat(50) + '1'.repeat(300)), '');
+  });
+
+  it('phoneToTelHref ignores calendar dates', () => {
+    assert.equal(M.phoneToTelHref('07.10.2026'), '');
+    assert.equal(M.phoneToTelHref('2026.10.07'), '');
+    assert.equal(M.phoneToTelHref('закрыто до 01.11.2026'), '');
+  });
+
   it('season closed with reopen date', () => {
     const line = M.seasonClosedLine({
       schedule_mode: 'season_closed',

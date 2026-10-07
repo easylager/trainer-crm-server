@@ -107,6 +107,26 @@ def test_phone_before_ezhednevno_hours() -> None:
     assert tel_href("8 017 222-22-22 ежедневно 10:00-22:00") == "80172222222"
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("8 029 111-11-11 8 029 222-22-22", "80291111111"),
+        ("8 017 222-22-22\n8 029 111 22 33", "80172222222"),
+        ("80291111111 80292222222", "80291111111"),
+        ("8 017 222-22-22 10.00-22.00", "80172222222"),
+    ],
+)
+def test_adjacent_numbers_keep_only_the_first(raw: str, expected: str) -> None:
+    assert tel_href(raw) == expected
+
+
+def test_scan_window_start_and_end() -> None:
+    assert tel_href("x" * 60 + "+375291234567") == "+375291234567"
+    assert tel_href("x" * 70 + "+375291234567") == ""
+    # Starts before char 64, but the digit run is cut by the 256-char scan.
+    assert tel_href("8" + (" " * 50) + ("1" * 300)) == ""
+
+
 def test_clip_does_not_return_a_partial_number() -> None:
     got = tel_href("x" * 50 + " +375 29 123-45-67")
     assert got in ("", "+375291234567")

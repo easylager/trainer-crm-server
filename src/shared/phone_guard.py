@@ -10,9 +10,11 @@ import re
 
 _SCAN_LIMIT = 256
 _MATCH_START_LIMIT = 64
+_MAX_PHONE_DIGITS = 15
 
 _ASCII_DIGITS = frozenset("0123456789")
 _PHONE_LIKE = re.compile(r"\+?\d[\d\s().-]{5,}\d")
+_SEGMENT_SPLIT = re.compile(r"[;,\n]| {2,}")
 _CLOCK_COLON = re.compile(r"\d{1,2}:\d{2}")
 _DOT_DATE = re.compile(r"\d{4}\.\d{2}\.\d{2}|\d{1,2}\.\d{2}\.\d{4}")
 _DOT_TIME = re.compile(r"(?<!\d)\d{1,2}\.\d{2}(?!\.\d)")
@@ -69,9 +71,41 @@ def _href_from_phone_like(chunk: str) -> str:
         return ""
     plus = trimmed.startswith("+")
     digits = _ascii_digits(trimmed)
-    if len(digits) < 7:
+    if not 7 <= len(digits) <= _MAX_PHONE_DIGITS:
         return ""
     return f"+{digits}" if plus else digits
+
+
+def _starts_new_number(token: str) -> bool:
+    if token.startswith("+") or token == "8":
+        return True
+    if _looks_like_dot_time_range(token):
+        return True
+    compact = len(_ascii_digits(token)) >= 7 and re.search(r"[().\-]", token) is None
+    return compact
+
+
+def _trim_to_first_number(chunk: str) -> str:
+    """Keep the first 7..15 digit phone; a later number or a dot-time is a new token."""
+    trimmed = _trim_incomplete_paren_tail(_EXT_TAIL.sub("", chunk.strip()))
+    trimmed = _strip_trailing_paren_note(trimmed).strip()
+    if not trimmed or _ISO_DATE.match(trimmed) or _looks_like_dot_time_range(trimmed):
+        return ""
+    tokens = list(re.finditer(r"\S+", trimmed))
+    digits = 0
+    last = 0
+    for index, token in enumerate(tokens):
+        text = token.group()
+        count = len(_ascii_digits(text))
+        if digits >= 7 and _starts_new_number(text):
+            break
+        if digits + count > _MAX_PHONE_DIGITS:
+            break
+        digits += count
+        last = index + 1
+    if last == 0 or digits < 7:
+        return ""
+    return trimmed[: tokens[last - 1].end()]
 
 
 def _mask_dates_and_clocks(text: str) -> str:
@@ -83,6 +117,16 @@ def _mask_dates_and_clocks(text: str) -> str:
     return _CLOCK_COLON.sub(blank, _DOT_DATE.sub(blank, text))
 
 
+def _segments(masked: str) -> list[tuple[int, str]]:
+    pieces: list[tuple[int, str]] = []
+    start = 0
+    for split in _SEGMENT_SPLIT.finditer(masked):
+        pieces.append((start, masked[start : split.start()]))
+        start = split.end()
+    pieces.append((start, masked[start:]))
+    return pieces
+
+
 def _first_valid_href(text: str) -> str:
     raw = str(text or "").strip()
     if not raw:
@@ -90,14 +134,19 @@ def _first_valid_href(text: str) -> str:
     window = raw[:_SCAN_LIMIT]
     masked = _mask_dates_and_clocks(window)
     clipped = len(raw) > _SCAN_LIMIT
-    for match in _PHONE_LIKE.finditer(masked):
-        if match.start() >= _MATCH_START_LIMIT:
+    for offset, segment in _segments(masked):
+        if offset >= _MATCH_START_LIMIT:
             break
-        if clipped and match.end() >= _SCAN_LIMIT:
-            continue
-        href = _href_from_phone_like(match.group(0))
-        if href:
-            return href
+        for match in _PHONE_LIKE.finditer(segment):
+            start = offset + match.start()
+            end = offset + match.end()
+            if start >= _MATCH_START_LIMIT:
+                break
+            if clipped and end >= _SCAN_LIMIT:
+                continue
+            href = _href_from_phone_like(_trim_to_first_number(match.group(0)))
+            if href:
+                return href
     return ""
 
 
