@@ -7,7 +7,7 @@ Apply sanitization at the data layer (row → card/item), not in each render.
 
 def is_valid_public_phone(phone: str | None) -> bool:
     """Check if phone string contains at least 7 digits (minimal valid phone number).
-    
+
     Examples:
         >>> is_valid_public_phone("+375291234567")
         True
@@ -31,7 +31,21 @@ def is_valid_public_phone(phone: str | None) -> bool:
 
 def sanitize_public_phone(phone: str | None) -> str | None:
     """Return phone only if it contains at least 7 digits, else None.
-    
+
     Use this at the data layer when building public API responses or SSR view models.
     """
     return str(phone).strip() if phone and is_valid_public_phone(phone) else None
+
+
+def tel_href(phone: str) -> str:
+    """Build tel: URI from phone string (removes all non-digit/non-+ chars).
+
+    Only call this after validating with is_valid_public_phone().
+
+    Examples:
+        >>> tel_href("+375 (29) 123-45-67")
+        "+375291234567"
+        >>> tel_href("8-029-123-45-67")
+        "8029123456"
+    """
+    return "".join(ch for ch in phone if ch.isdigit() or ch == "+")

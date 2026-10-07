@@ -66,7 +66,7 @@ from src.application.schedule_staleness import (
 )
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
-from src.shared.phone_guard import is_valid_public_phone
+from src.shared.phone_guard import is_valid_public_phone, tel_href
 from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 from src.shared.venue_types import has_public_skating
 
@@ -573,8 +573,7 @@ def _slot_chip(slot: Mapping[str, Any], *, focused: bool, base_path: str, invite
 def _schedule_mode_call_html(card: Mapping[str, Any]) -> str:
     phone = str(card.get("phone") or "").strip()
     if phone and is_valid_public_phone(phone):
-        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-        return f'<p class="sched__mode"><a href="tel:{_esc(tel)}">{t("cta.call")}</a></p>'
+        return f'<p class="sched__mode"><a href="tel:{_esc(tel_href(phone))}">{t("cta.call")}</a></p>'
     return ""
 
 
@@ -608,8 +607,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
         phone = str(card.get("phone") or "").strip()
         links = []
         if phone and is_valid_public_phone(phone):
-            tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-            links.append(f'<a href="tel:{_esc(tel)}">{_esc(phone)}</a>')
+            links.append(f'<a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a>')
         tickets = safe_external_url(card.get("tickets_url")) or safe_external_url(card.get("website_url"))
         if tickets:
             links.append(f'<a href="{_esc(tickets)}" rel="nofollow noopener" target="_blank">Сайт катка</a>')
@@ -640,8 +638,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     basis_note = ""
     if non_live:
         if phone and is_valid_public_phone(phone):
-            tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-            tel_link = f' <a href="tel:{_esc(tel)}">{t("cta.call")}</a>'
+            tel_link = f' <a href="tel:{_esc(tel_href(phone))}">{t("cta.call")}</a>'
         else:
             tel_link = ""
         basis_note = f'<p class="schedule-basis">{_esc(non_live[0])}.{tel_link}</p>'
@@ -849,8 +846,7 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
         rows.append(f'<p class="row"><span>Адрес</span><b>{addr_html}</b></p>')
     phone = str(card.get("phone") or "").strip()
     if phone and is_valid_public_phone(phone):
-        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-        rows.append(f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel)}">{_esc(phone)}</a></b></p>')
+        rows.append(f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a></b></p>')
     site = safe_external_url(card.get("website_url"))
     if site:
         label = str(card.get("venue_site_label") or "Сайт")

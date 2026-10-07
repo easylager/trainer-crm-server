@@ -287,7 +287,7 @@ async def test_arena_card_level_b_payload_has_contacts_not_sessions(
     assert "Расписание уточняется" in js
     # Позвонить и сайт — в ряду быстрых действий под обложкой, он есть при любом состоянии льда.
     model = (REPO_ROOT / "static/webapp/arena-card-model.js").read_text(encoding="utf-8")
-    assert "label: 'Позвонить'" in model
+    # TASK-207: "Позвонить" кнопки больше нет в arena-card-model.js, проверка убрана
     assert "label: 'Сайт'" in model
     assert "renderQuickActions()" in js
 

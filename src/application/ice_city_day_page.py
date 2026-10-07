@@ -26,7 +26,7 @@ from src.application.ice_city_day import (
 from src.application.place_links import join_public_origin, place_path
 from src.application.schedule_staleness import UNCONFIRMED_HEADING
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
-from src.shared.phone_guard import is_valid_public_phone
+from src.shared.phone_guard import is_valid_public_phone, tel_href
 from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
@@ -106,8 +106,7 @@ def _unconfirmed_html(items: list[Mapping[str, Any]], *, city_name: str) -> str:
         phone = str(item.get("phone") or "").strip()
         phone_html = ""
         if phone and is_valid_public_phone(phone):
-            tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-            phone_html = f' · <a href="tel:{_esc(tel)}">{_esc(phone)}</a>'
+            phone_html = f' · <a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a>'
         rows.append(f"<li><b>{name}</b> — {_esc(item.get('note'))}{phone_html}</li>")
     return (
         '<section class="unconfirmed">'
