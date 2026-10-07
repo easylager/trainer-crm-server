@@ -13,6 +13,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+from src.bot.arena_follow_loop import run_arena_follow_notifier_loop
 from src.bot.notification_loops import (
     run_booking_complete_loop,
     run_booking_confirmed_notifier_loop,
@@ -101,6 +102,7 @@ async def main() -> None:
         asyncio.create_task(run_no_response_reminder_loop(client_bot), name="no_response_reminder"),
         asyncio.create_task(run_trainer_booked_notifier_loop(client_bot), name="trainer_booked"),
         asyncio.create_task(run_booking_confirmed_notifier_loop(client_bot), name="booking_confirmed"),
+        asyncio.create_task(run_arena_follow_notifier_loop(client_bot), name="arena_follow"),
         asyncio.create_task(run_inactive_client_loop(client_bot), name="inactive_client"),
     ]
     # Trainer-facing loops

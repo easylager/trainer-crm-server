@@ -1666,15 +1666,43 @@ async def get_public_arena_card(
     return card
 
 
+_PLACE_SESSION_KINDS = frozenset({"public_skate", "open_ice", "hockey_practice"})
+
+
+def _session_day_where(*, kinds: tuple[str, ...] | None, include_in_progress: bool) -> str:
+    """Тот же предикат, что ``_CURRENT_SESSION_SQL``, пока вызывающий не просит иное.
+
+    Страница места включает уже начавшийся сеанс (``ends_at_utc > now``) и ОХМ.
+    Списки каталога этот аргумент не передают и остаются на публичном катании.
+    """
+    if kinds is None and not include_in_progress:
+        return _CURRENT_SESSION_SQL
+    chosen = kinds or ("public_skate", "open_ice")
+    if any(kind not in _PLACE_SESSION_KINDS for kind in chosen):
+        raise ValueError("session kind")
+    kind_sql = ", ".join(f"'{kind}'" for kind in chosen)
+    time_sql = "s.ends_at_utc > :now" if include_in_progress else "s.starts_at_utc > :now"
+    return (
+        "s.status = :st"
+        f" AND s.kind IN ({kind_sql})"
+        f" AND {time_sql}"
+        " AND (s.valid_until IS NULL OR s.valid_until >= :now)"
+    )
+
+
 async def public_arena_session_days(
     session: AsyncSession,
     arena_id: int,
     *,
     date_from: date,
     date_to: date,
+    now: datetime | None = None,
+    kinds: tuple[str, ...] | None = None,
+    include_in_progress: bool = False,
 ) -> list[dict[str, Any]]:
     """Сеансы одной арены по дням. Арену заново не ищет — id уже известен."""
-    now = datetime.now(timezone.utc)
+    moment = now if now is not None else datetime.now(timezone.utc)
+    where = _session_day_where(kinds=kinds, include_in_progress=include_in_progress)
     result = await session.execute(
         text(
             f"""
@@ -1684,7 +1712,7 @@ async def public_arena_session_days(
                    source_id, observed_at, valid_until, confidence, schedule_basis
             FROM ice_sessions s
             WHERE s.arena_id = :aid
-              AND {_CURRENT_SESSION_SQL}
+              AND {where}
               AND s.local_date >= :dfrom AND s.local_date <= :dto
             ORDER BY s.local_date, s.starts_at_local, s.id
             """
@@ -1692,7 +1720,7 @@ async def public_arena_session_days(
         {
             "aid": int(arena_id),
             "st": STATUS_ACTIVE,
-            "now": now,
+            "now": moment,
             "dfrom": date_from,
             "dto": date_to,
         },

@@ -15,6 +15,7 @@ from aiogram.enums import ParseMode
 from src.shared.config import Settings
 from src.shared.sentry_init import init_sentry
 from src.bot.client_menu_commands import sync_client_hub_menu_button
+from src.bot.handlers.arena_follow_handlers import router as arena_follow_router
 from src.bot.handlers.client_handlers import router as client_router
 from src.bot.middlewares.client_menu_sync_middleware import ClientMenuSyncMiddleware
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
@@ -53,6 +54,7 @@ async def main() -> None:
     dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
     dp.update.outer_middleware(ServiceUnavailableMiddleware())
     dp.update.outer_middleware(ClientMenuSyncMiddleware())
+    dp.include_router(arena_follow_router)
     dp.include_router(client_router)
     logger.info("Client bot polling started (notifications run in notification_service)")
     await dp.start_polling(bot)
