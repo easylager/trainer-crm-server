@@ -43,8 +43,18 @@
     return PHONE_LINE;
   }
 
+  function phoneNumbers(raw) {
+    return String(raw || '')
+      .split(/[;,\n]/)
+      .map(function (p) {
+        return p.trim();
+      })
+      .filter(Boolean);
+  }
+
   function phoneToTelHref(phone) {
-    var cleaned = String(phone || '').replace(/[^\d+]/g, '');
+    var first = phoneNumbers(phone)[0] || '';
+    var cleaned = String(first).replace(/[^\d+]/g, '');
     return cleaned ? 'tel:' + cleaned : '';
   }
 
@@ -67,6 +77,7 @@
     formatReopenSuffix: formatReopenSuffix,
     seasonClosedLine: seasonClosedLine,
     phoneLine: phoneLine,
+    phoneNumbers: phoneNumbers,
     phoneToTelHref: phoneToTelHref,
     isIceTodayEligible: isIceTodayEligible,
     liveKindForCard: liveKindForCard,

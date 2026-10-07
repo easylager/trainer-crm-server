@@ -16,6 +16,13 @@ describe('arena schedule mode model', () => {
     assert.equal(M.phoneToTelHref('+375 (29) 111-22-33'), 'tel:+375291112233');
   });
 
+  it('phoneToTelHref uses only the first semicolon-separated number', () => {
+    assert.equal(
+      M.phoneToTelHref('+375447885600; +375233435259'),
+      'tel:+375447885600',
+    );
+  });
+
   it('season closed with reopen date', () => {
     const line = M.seasonClosedLine({
       schedule_mode: 'season_closed',

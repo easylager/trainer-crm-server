@@ -10,14 +10,14 @@ def test_unconfirmed_html_omits_tel_for_invalid_phone() -> None:
             {
                 "name": "Каток",
                 "slug": "katok",
-                "phone": "unknown (только email/соцсети)",
+                "phone": "123-456",
                 "note": "Расписание не обновлялось 4 дня — уточните у катка",
             }
         ],
         city_name="Минск",
     )
     assert "tel:" not in html
-    assert "unknown" not in html.lower()
+    assert "123-456" not in html
 
 
 def test_unconfirmed_html_includes_tel_for_valid_phone() -> None:
