@@ -35,6 +35,12 @@ def _esc(value: Any) -> str:
     return html_lib.escape(str(value or ""), quote=True)
 
 
+def _has_valid_phone_digits(phone: str) -> bool:
+    """Check if phone string contains at least 7 digits (minimal valid phone number)."""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    return len(digits) >= 7
+
+
 def _arena_where(arena: Mapping[str, Any]) -> str:
     parts = [str(arena.get("district") or "").strip(), str(arena.get("address") or "").strip()]
     return " · ".join(p for p in parts if p)
