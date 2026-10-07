@@ -23,6 +23,21 @@ describe('arena schedule mode model', () => {
     );
   });
 
+  it('phoneToTelHref strips extension and parenthetical notes', () => {
+    assert.equal(
+      M.phoneToTelHref('+375 29 123-45-67 доб. 12'),
+      'tel:+375291234567',
+    );
+    assert.equal(
+      M.phoneToTelHref('8 017 222-22-22 (10:00-22:00)'),
+      'tel:80172222222',
+    );
+    assert.equal(
+      M.phoneToTelHref('+375 (29) 33 00 749 (+ Telegram)'),
+      'tel:+375293300749',
+    );
+  });
+
   it('season closed with reopen date', () => {
     const line = M.seasonClosedLine({
       schedule_mode: 'season_closed',

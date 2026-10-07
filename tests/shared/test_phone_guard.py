@@ -71,3 +71,22 @@ def test_phone_with_opening_hours_still_valid(raw: str) -> None:
 
 def test_hours_then_phone_takes_valid_number_not_hours() -> None:
     assert tel_href("Пн-Пт 09:00-18:00; +375 29 123-45-67") == "+375291234567"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["8.017.222.22.22", "+375.29.123.45.67"],
+)
+def test_dot_separated_phones_are_valid(raw: str) -> None:
+    assert is_valid_public_phone(raw)
+    assert tel_href(raw)
+
+
+def test_phone_before_ezhednevno_hours() -> None:
+    assert tel_href("8 017 222-22-22 ежедневно 10:00-22:00") == "80172222222"
+
+
+def test_clipped_input_does_not_hang_on_long_strings() -> None:
+    junk = "1" + " " * 10000 + "1"
+    assert not is_valid_public_phone(junk)
+    assert tel_href(junk) == ""
