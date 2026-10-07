@@ -97,6 +97,7 @@
       text-decoration: none; font-size: 16px; font-weight: 600; text-align: center;
     }
     .follow { background: var(--g-dark); color: var(--g-surface); }
+    .follow[aria-disabled="true"] { opacity: 0.55; }
     .follow--open, .call { background: var(--g-accent); color: var(--g-surface); }
     .follow-hint { margin: 0; font-size: 13px; color: var(--g-muted); text-align: center; }
     .about { margin: 12px 16px; color: var(--g-muted); }
@@ -212,7 +213,8 @@
   <main class="wrap">
     __BODY__
   </main>
-  <script src="/static/webapp/place-follow.js?v=1"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/static/webapp/place-follow.js?v=2"></script>
   <script>
     (function () {
       document.addEventListener('click', function (e) {
@@ -269,21 +271,41 @@
       });
       document.addEventListener('click', function (e) {
         var node = e.target.closest('[data-following="1"]');
-        if (!node) return;
+        if (!node || !window.PlaceFollow) return;
         e.preventDefault();
-        var url = node.getAttribute('data-unfollow-url');
-        if (!url) return;
-        fetch(url, {
-          method: 'DELETE',
-          headers: { 'X-Telegram-Init-Data': initData }
-        }).then(function (response) {
-          if (!response.ok) throw new Error('unfollow');
-          return response.json();
-        }).then(function () {
+        var state = node._followState;
+        if (!state) {
+          var shown = node.querySelector('[data-follow-label]');
+          state = node._followState = {
+            pending: false,
+            disabled: false,
+            following: true,
+            url: node.getAttribute('data-unfollow-url') || '',
+            label: shown ? shown.textContent : '',
+            offLabel: node.getAttribute('data-follow-off') || '',
+            error: node.getAttribute('data-unfollow-error') || ''
+          };
+        }
+        state.url = node.getAttribute('data-unfollow-url') || state.url;
+        var request = window.PlaceFollow.runUnfollow(state, function (url) {
+          return fetch(url, {
+            method: 'DELETE',
+            headers: { 'X-Telegram-Init-Data': initData }
+          });
+        }, function (message) {
+          var webapp = window.Telegram && window.Telegram.WebApp;
+          if (webapp && typeof webapp.showAlert === 'function') webapp.showAlert(message);
+        });
+        if (state.disabled) node.setAttribute('aria-disabled', 'true');
+        request.then(function (result) {
+          if (state.disabled) node.setAttribute('aria-disabled', 'true');
+          else node.removeAttribute('aria-disabled');
+          if (!result || result.skipped || !result.ok) return;
           var label = node.querySelector('[data-follow-label]');
-          if (label) label.textContent = node.getAttribute('data-follow-off') || '';
+          if (label) label.textContent = state.label;
           node.removeAttribute('data-following');
-        }).catch(function () {});
+          node._followState = null;
+        });
       });
     })();
   </script>

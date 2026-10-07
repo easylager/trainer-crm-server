@@ -232,6 +232,10 @@ def test_invite_link_is_session_query_not_a_new_page() -> None:
 
 
 def test_outside_telegram_keeps_the_follow_link(monkeypatch) -> None:
+    template = (Path(__file__).resolve().parents[2] / "static" / "share" / "place.html").read_text(encoding="utf-8")
+    sdk = template.index("https://telegram.org/js/telegram-web-app.js")
+    follow = template.index("/static/webapp/place-follow.js")
+    assert sdk < follow
     monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
     html = _render({})
     assert 'href="https://t.me/glide_bot?start=follow_1"' in html

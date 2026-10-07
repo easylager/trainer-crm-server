@@ -62,6 +62,7 @@
     "status.call": "Позвоните — на катке подскажут.",
     "follow.hint": "Напишем, если сеансы поменяются или каток закроется",
     "cta.unfollow": "отписаться",
+    "cta.unfollow_error": "Не удалось отписаться. Попробуйте ещё раз.",
     "session.until": "до {time}",
     "session.child": "дети {price}",
     "session.invite_aria": "Позвать с собой на {time}",

@@ -34,5 +34,30 @@
     };
   }
 
-  return { placeFollowState: placeFollowState };
+  function runUnfollow(button, fetchFn, alertFn) {
+    if (!button || button.pending) return Promise.resolve({ skipped: true });
+    button.pending = true;
+    button.disabled = true;
+    var url = button.url;
+    return Promise.resolve()
+      .then(function () { return fetchFn(url); })
+      .then(function (response) {
+        if (!response || response.ok === false) throw new Error('unfollow');
+        button.pending = false;
+        button.disabled = false;
+        button.following = false;
+        button.label = button.offLabel || '';
+        return { ok: true };
+      })
+      .catch(function () {
+        button.pending = false;
+        button.disabled = false;
+        button.following = true;
+        var message = String(button.error || '');
+        if (message && typeof alertFn === 'function') alertFn(message);
+        return { ok: false, message: message };
+      });
+  }
+
+  return { placeFollowState: placeFollowState, runUnfollow: runUnfollow };
 });

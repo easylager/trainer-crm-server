@@ -478,7 +478,7 @@ def _follow_button(arena_id: int, *, closed: bool) -> str:
     on = f"{t('cta.following')} · {t('cta.unfollow')}"
     return (
         f'<a class="{css}" href="{_esc(url)}" data-arena-follow="{int(arena_id)}" '
-        f'data-follow-on="{_esc(on)}">'
+        f'data-follow-on="{_esc(on)}" data-unfollow-error="{_esc(t("cta.unfollow_error"))}">'
         f"{_ICON_BELL}<span data-follow-label>{_esc(label)}</span></a>"
     )
 
