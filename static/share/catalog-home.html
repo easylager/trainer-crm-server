@@ -47,9 +47,13 @@
     .top__brand { font-weight: 700; color: var(--ink); text-decoration: none; }
     .top__brand span { color: var(--muted); font-weight: 500; }
     .top__trainers { font-size: 14px; font-weight: 600; color: var(--accent); text-decoration: none; }
-    .kicker { margin: 0 0 6px; font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
-    h1 { margin: 0 0 8px; font-size: clamp(28px, 7vw, 40px); font-weight: 700; letter-spacing: -.02em; }
-    .lede { margin: 0 0 28px; color: var(--muted); }
+    .date-string { margin: 0 0 16px; font-size: 14px; color: var(--muted); }
+    h1 { margin: 0 0 16px; font-size: clamp(28px, 7vw, 40px); font-weight: 700; letter-spacing: -.02em; }
+    .time-switcher { margin: 0 0 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .time-switcher__link { color: var(--ink); text-decoration: none; font-size: 16px; }
+    .time-switcher__link:hover { color: var(--accent); }
+    .time-switcher__sep { color: var(--muted); }
+    .counter { margin: 0 0 28px; font-size: 15px; color: var(--muted); }
     h2.section { margin: 32px 0 12px; font-size: 20px; }
     ul.cities, ul.sessions { list-style: none; margin: 0; padding: 0; }
     .city {
@@ -79,10 +83,15 @@
       margin-bottom: 8px;
       font-size: 15px;
     }
+    .session--projected {
+      border-style: dashed;
+      background: #f9fbfb;
+    }
     .session__day { color: var(--muted); font-size: 13px; }
     .session__time { font-weight: 600; }
     .session__place a { color: inherit; text-decoration: none; font-weight: 600; }
     .session__city { color: var(--muted); font-size: 13px; text-align: right; }
+    .session__basis { color: var(--muted); font-size: 12px; font-style: italic; }
     .muted { color: var(--muted); }
     .cta {
       display: block;
@@ -106,15 +115,31 @@
       <a class="top__brand" href="/">Glide<span> · каталог</span></a>
       <a class="top__trainers" href="__TRAINERS_URL__">Для тренеров →</a>
     </header>
-    <p class="kicker">Каталог</p>
+    <p class="date-string">__DATE_STRING__</p>
     <h1>__PAGE_H1__</h1>
-    <p class="lede">Расписание массовых катаний, все места по городам — без установки приложения.</p>
+    
+    <nav class="time-switcher">
+      <a href="/?when=today" class="time-switcher__link">__WHEN_TODAY__</a>
+      <span class="time-switcher__sep">·</span>
+      <a href="/?when=tomorrow" class="time-switcher__link">__WHEN_TOMORROW__</a>
+      <span class="time-switcher__sep">·</span>
+      <a href="/?when=weekend" class="time-switcher__link">__WHEN_WEEKEND__</a>
+      <span class="time-switcher__sep">·</span>
+      <a href="/?when=day" class="time-switcher__link">__WHEN_DAY__</a>
+    </nav>
+    
+    <p class="counter">__COUNTER_TEXT__</p>
+    __DAY_PICKER__
+    __CITY_BUTTON__
+    __CHIPS__
 
-    <h2 class="section">Города</h2>
-    <ul class="cities">__CITIES__</ul>
+    __MAP_SVG__
 
     <h2 class="section">__SESSIONS_TITLE__</h2>
     __SESSIONS__
+
+    <h2 class="section">Города</h2>
+    <ul class="cities">__CITIES__</ul>
 
     <a class="cta cta--secondary" href="__CTA_URL__">Открыть в Telegram</a>
     <footer>Данные с сайтов катков — время и цену уточняйте на месте.</footer>
