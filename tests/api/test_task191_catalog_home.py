@@ -52,7 +52,7 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
     assert "<script" not in home.text.lower() or 'type="application/ld+json"' in home.text
     assert name in home.text
     assert f'/c/{slug}' in home.text
-    assert f'/ice/{slug}/today' in home.text
+    assert f'/ice/{slug}/today' not in home.text
     assert "Для тренеров" in home.text
     assert _meta(home.text, "robots") == "index, follow"
 
@@ -250,3 +250,73 @@ async def test_catalog_home_evening_block_shows_tomorrow_label(app_use_test_db, 
     assert "Ближайший лёд" in home.text
     assert "завтра" in home.text
     assert '<h2 class="section">Лёд сегодня</h2>' not in home.text
+
+
+@pytest.mark.asyncio
+async def test_catalog_home_city_order_minsk_first_then_by_activity(app_use_test_db, db_session) -> None:
+    minsk_id = await _insert_city(db_session, name="Минск", country="BY")
+    quiet_name = f"Тихий {uuid.uuid4().hex[:4]}"
+    busy_name = f"Живой {uuid.uuid4().hex[:4]}"
+    quiet_id = await _insert_city(db_session, name=quiet_name, country="BY")
+    busy_id = await _insert_city(db_session, name=busy_name, country="BY")
+    await db_session.execute(text("UPDATE cities SET sort_order = 1 WHERE id = :id"), {"id": quiet_id})
+    await db_session.execute(text("UPDATE cities SET sort_order = 99 WHERE id = :id"), {"id": minsk_id})
+    await _insert_arena(db_session, minsk_id, name="Минск арена")
+    await _insert_arena(db_session, quiet_id, name="Тихая")
+    busy_arena = await _insert_arena(db_session, busy_id, name="Живая")
+    await _add_today_session(db_session, busy_arena)
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        home = await client.get("/")
+    assert home.status_code == 200
+    names = re.findall(r'<h2 class="city__name"><a href="[^"]+">([^<]+)</a></h2>', home.text)
+    assert names[0] == "Минск"
+    assert names.index(busy_name) < names.index(quiet_name)
+
+
+@pytest.mark.asyncio
+async def test_catalog_home_ice_today_link_only_with_sessions_today(app_use_test_db, db_session) -> None:
+    with_sessions = f"Сеансы {uuid.uuid4().hex[:6]}"
+    without = f"Без льда {uuid.uuid4().hex[:6]}"
+    cid1 = await _insert_city(db_session, name=with_sessions)
+    cid2 = await _insert_city(db_session, name=without)
+    a1 = await _insert_arena(db_session, cid1, name="Каток")
+    await _insert_arena(db_session, cid2, name="Пустой")
+    await _add_today_session(db_session, a1)
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug_with = city_slug(with_sessions)
+    slug_without = city_slug(without)
+
+    async with _client() as client:
+        home = await client.get("/")
+    assert home.status_code == 200
+    assert f'/ice/{slug_with}/today' in home.text
+    assert f'/ice/{slug_without}/today' not in home.text
+
+
+@pytest.mark.asyncio
+async def test_catalog_home_country_groups_and_headline_when_ru_present(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    monkeypatch.setenv("ICE_DISCOVERY_COUNTRIES", "BY,RU")
+    by_name = f"Брест {uuid.uuid4().hex[:4]}"
+    ru_name = f"Питер {uuid.uuid4().hex[:4]}"
+    by_id = await _insert_city(db_session, name=by_name, country="BY")
+    ru_id = await _insert_city(db_session, name=ru_name, country="RU")
+    await _insert_arena(db_session, by_id, name="BY арена")
+    await _insert_arena(db_session, ru_id, name="RU арена")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        home = await client.get("/")
+    assert home.status_code == 200
+    assert "<h1>Катки — расписание по городам</h1>" in home.text
+    assert "Катки Беларуси и России" in home.text
+    assert "Катки Беларуси</h1>" not in home.text
+    assert home.text.index("Беларусь") < home.text.index(by_name)
+    assert home.text.index(ru_name) > home.text.index("Россия")
+

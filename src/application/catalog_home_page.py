@@ -39,9 +39,55 @@ _PLACE_COUNT_SQL = text(
       AND {PUBLIC_ARENA_VISIBLE_SQL}
     GROUP BY c.id, c.name, c.country, c.sort_order
     HAVING COUNT(DISTINCT a.id) > 0
-    ORDER BY c.sort_order, c.id
     """
 )
+
+_COUNTRY_SECTION_ORDER = ("BY", "RU")
+_COUNTRY_SECTION_LABEL = {"BY": "Беларусь", "RU": "Россия"}
+_MINSK_SLUG = "minsk"
+
+
+def _is_minsk_city(city: Mapping[str, Any]) -> bool:
+    return str(city.get("slug") or "") == _MINSK_SLUG or str(city.get("name") or "").strip() == "Минск"
+
+
+def _city_rank_key(city: Mapping[str, Any]) -> tuple[Any, ...]:
+    """Минск первым в секции страны, далее по активности (сеансы сегодня, места, имя)."""
+    return (
+        0 if _is_minsk_city(city) else 1,
+        -int(city.get("session_count") or 0),
+        -int(city.get("place_count") or 0),
+        str(city.get("name") or ""),
+    )
+
+
+def group_catalog_cities_by_country(cities: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for city in cities:
+        code = str(city.get("country") or "BY").strip().upper() or "BY"
+        buckets.setdefault(code, []).append(city)
+    groups: list[tuple[str, list[dict[str, Any]]]] = []
+    for code in _COUNTRY_SECTION_ORDER:
+        if code in buckets:
+            groups.append((code, sorted(buckets.pop(code), key=_city_rank_key)))
+    for code in sorted(buckets):
+        groups.append((code, sorted(buckets[code], key=_city_rank_key)))
+    return groups
+
+
+def catalog_home_headline(countries: set[str]) -> tuple[str, str]:
+    """``(h1, document title)`` — не обещаем «только Беларусь», если в списке есть RU."""
+    codes = {c.strip().upper() for c in countries if c}
+    if codes == {"BY"} or (not codes):
+        h1 = "Катки Беларуси"
+        title = "Катки Беларуси — расписание и города | Glide"
+    elif codes <= {"BY", "RU"} and "RU" in codes:
+        h1 = "Катки — расписание по городам"
+        title = "Катки Беларуси и России — расписание и города | Glide"
+    else:
+        h1 = "Катки — расписание по городам"
+        title = "Катки — расписание и города | Glide"
+    return h1, title
 
 _UPCOMING_SQL = text(
     f"""
@@ -133,7 +179,14 @@ async def load_catalog_home_view(
     now = now or _utc_now()
     cities = await _public_cities(session)
     if not cities:
-        return {"cities": [], "sessions": [], "sessions_title": "Лёд сегодня", "country": "BY", "now": now}
+        return {
+            "cities": [],
+            "city_groups": [],
+            "sessions": [],
+            "sessions_title": "Лёд сегодня",
+            "country": "BY",
+            "now": now,
+        }
 
     city_ids = [int(c["id"]) for c in cities]
     place_rows = (
@@ -157,6 +210,8 @@ async def load_catalog_home_view(
                 "session_count": int(session_totals.get(cid, 0)),
             }
         )
+    city_groups = group_catalog_cities_by_country(catalog_cities)
+    catalog_cities = [city for _, group in city_groups for city in group]
 
     upcoming = (
         await session.execute(
@@ -170,6 +225,7 @@ async def load_catalog_home_view(
     country = "BY" if "BY" in countries else (next(iter(countries), "BY") if countries else "BY")
     return {
         "cities": catalog_cities,
+        "city_groups": city_groups,
         "sessions": sessions,
         "sessions_title": sessions_title,
         "country": country,
@@ -188,15 +244,30 @@ def _city_row(city: Mapping[str, Any]) -> str:
         stats = f"{places} {p_word} · {sessions} {s_word} сегодня"
     else:
         stats = f"{places} {p_word}"
+    links = f'<a href="/c/{_esc(slug)}">Все места</a>'
+    if sessions > 0:
+        links += f' · <a href="/ice/{_esc(slug)}/today">Лёд сегодня</a>'
     return (
         '<li class="city">'
         f'<h2 class="city__name"><a href="/c/{_esc(slug)}">{_esc(name)}</a></h2>'
         f'<p class="city__stats">{_esc(stats)}</p>'
-        f'<p class="city__links">'
-        f'<a href="/c/{_esc(slug)}">Все места</a>'
-        f' · <a href="/ice/{_esc(slug)}/today">Лёд сегодня</a>'
-        "</p></li>"
+        f'<p class="city__links">{links}</p>'
+        "</li>"
     )
+
+
+def _cities_html(city_groups: list[tuple[str, list[Mapping[str, Any]]]]) -> str:
+    if not city_groups:
+        return '<p class="muted">Пока нет опубликованных городов.</p>'
+    parts: list[str] = []
+    for code, group in city_groups:
+        label = _COUNTRY_SECTION_LABEL.get(code, code)
+        parts.append(
+            '<section class="country-group">'
+            f'<h3 class="country-group__title">{_esc(label)}</h3>'
+            '<ul class="cities">' + "".join(_city_row(c) for c in group) + "</ul></section>"
+        )
+    return "".join(parts)
 
 
 def _session_row(row: Mapping[str, Any], *, now: datetime) -> str:
@@ -262,18 +333,24 @@ def render_catalog_home_page(
 ) -> str:
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     cities = list(view.get("cities") or [])
+    raw_groups = view.get("city_groups")
+    if isinstance(raw_groups, list) and raw_groups:
+        city_groups = [(str(a), list(b)) for a, b in raw_groups]
+    else:
+        city_groups = group_catalog_cities_by_country(cities)
     sessions = list(view.get("sessions") or [])
     now = view.get("now") if isinstance(view.get("now"), datetime) else _utc_now()
     country = str(view.get("country") or "BY")
     sessions_title = str(view.get("sessions_title") or "Лёд сегодня")
     lang, og_locale = html_lang_for_country(country)
 
-    title = "Катки Беларуси — расписание и города | Glide"
+    country_codes = {str(c.get("country") or "BY").upper() for c in cities}
+    page_h1, title = catalog_home_headline(country_codes)
     description = (
         "Где покататься сегодня: города с катками, расписание массовых катаний "
         "и ссылки на все места в каталоге Glide."
     )
-    cities_html = "".join(_city_row(c) for c in cities) or '<p class="muted">Пока нет опубликованных городов.</p>'
+    cities_html = _cities_html(city_groups)
     if sessions:
         sessions_html = '<ul class="sessions">' + "".join(_session_row(s, now=now) for s in sessions) + "</ul>"
     else:
@@ -292,6 +369,7 @@ def render_catalog_home_page(
         "__SESSIONS_TITLE__": _esc(sessions_title),
         "__SESSIONS__": sessions_html,
         "__TRAINERS_URL__": _esc(trainers_url),
+        "__PAGE_H1__": _esc(page_h1),
     }
     html = fill_placeholders(template, values)
     if cta_url:
