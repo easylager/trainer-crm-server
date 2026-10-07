@@ -39,6 +39,19 @@ def _counter(html: str) -> str:
     return match.group(1)
 
 
+def _city_li(html: str, city_name: str) -> str:
+    for match in re.finditer(r'<li class="city">.*?</li>', html, re.S):
+        if city_name in match.group(0):
+            return match.group(0)
+    raise AssertionError(city_name)
+
+
+def _sessions_ul(html: str) -> str:
+    match = re.search(r'<ul class="sessions">.*?</ul>', html, re.S)
+    assert match, "sessions"
+    return match.group(0)
+
+
 def _session_li(html: str, arena_name: str) -> str:
     for match in re.finditer(r'<li class="session[^"]*">.*?</li>', html, re.S):
         if arena_name in match.group(0):
@@ -135,11 +148,13 @@ async def test_ac1_weekend_count_excludes_friday_and_sunday_evening_rolls_forwar
     late_arena = await _insert_arena(db_session, late_city, name="Воскресный")
     await _session(db_session, late_arena, date(2026, 10, 11), "20:00")
     await _session(db_session, late_arena, date(2026, 10, 17), "11:00")
+    await _session(db_session, late_arena, date(2026, 10, 17), "13:00")
     await db_session.commit()
     invalidate_public_city_cache()
     async with _client() as client:
         rolled = await client.get("/")
-    assert _counter(rolled.text) == "В эти выходные в Беларуси 1 сеанс в 1 городе"
+    # Без сдвига на следующие выходные в окне остаётся только вс 20:00 — это 1, а не 2.
+    assert _counter(rolled.text) == "В эти выходные в Беларуси 2 сеанса в 1 городе"
 
 
 @pytest.mark.asyncio
@@ -225,9 +240,16 @@ async def test_ac3_upcoming_block_follows_cookie_and_place_threshold(app_use_tes
 
 
 @pytest.mark.asyncio
-async def test_ac4_by_city_without_place_coordinates_stays_on_the_map(app_use_test_db, db_session) -> None:
-    city_id = await _insert_city(db_session, name="Брест", country="BY")
-    await _insert_arena(db_session, city_id, name="Без точки", latitude=None, longitude=None)
+async def test_ac4_by_cities_stay_on_the_map_and_ru_does_not(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("ICE_DISCOVERY_COUNTRIES", "BY,RU")
+    brest = await _insert_city(db_session, name="Брест", country="BY")
+    bobruysk = await _insert_city(db_session, name="Бобруйск", country="BY")
+    grodno = await _insert_city(db_session, name="Гродно", country="BY")
+    ru = await _insert_city(db_session, name="Тверь", country="RU")
+    await _insert_arena(db_session, brest, name="Брест без точки", latitude=None, longitude=None)
+    await _insert_arena(db_session, bobruysk, name="Бобруйск без точки", latitude=None, longitude=None)
+    await _insert_arena(db_session, grodno, name="Гродно с точкой", latitude=53.669, longitude=23.829)
+    await _insert_arena(db_session, ru, name="Тверь с точкой", latitude=56.86, longitude=35.91)
     await db_session.commit()
     invalidate_public_city_cache()
 
@@ -236,7 +258,11 @@ async def test_ac4_by_city_without_place_coordinates_stays_on_the_map(app_use_te
     assert resp.status_code == 200
     svg = re.search(r'<svg class="home-map".*?</svg>', resp.text, re.S)
     assert svg, "map"
-    assert 'href="/c/brest"' in svg.group(0)
+    body = svg.group(0)
+    assert 'href="/c/brest"' in body
+    assert 'href="/c/bobruysk"' in body
+    assert 'href="/c/grodno"' in body
+    assert 'href="/c/tver"' not in body
 
 
 @pytest.mark.asyncio
@@ -331,10 +357,12 @@ async def test_all_link_uses_selection_when_and_day_page_only_for_today(
     async with _client() as client:
         weekend = await client.get("/?when=weekend", cookies={"glide_city": slug})
         tomorrow = await client.get("/?when=tomorrow", cookies={"glide_city": slug})
+        today = await client.get("/?when=today", cookies={"glide_city": slug})
         day = await client.get("/?when=day&d=2026-10-13", cookies={"glide_city": slug})
         today_day = await client.get("/?when=day&d=2026-10-09", cookies={"glide_city": slug})
     assert f'href="/c/{slug}?w=weekend"' in weekend.text
     assert f'href="/c/{slug}?w=tomorrow"' in tomorrow.text
+    assert f'href="/c/{slug}?w=today"' in today.text
     assert "Все →" not in day.text
     assert f'href="/ice/{slug}/today"' in today_day.text
 
@@ -386,6 +414,7 @@ async def test_glide_city_cookie_set_on_city_and_place_pages(app_use_test_db, db
         assert "Max-Age=" in cookie
         assert "Path=/" in cookie
         assert "samesite=lax" in cookie.lower()
+        assert "httponly" in cookie.lower()
 
 
 @pytest.mark.asyncio
@@ -403,3 +432,105 @@ async def test_time_switcher_links_work_without_js(app_use_test_db, db_session) 
             assert 'href="/?when=today"' in resp.text
             assert 'href="/?when=tomorrow"' in resp.text
             assert 'href="/?when=weekend"' in resp.text
+
+
+@pytest.mark.asyncio
+async def test_friday_default_city_row_does_not_say_today(app_use_test_db, db_session, monkeypatch) -> None:
+    _freeze(monkeypatch, _utc(2026, 10, 9, 16))
+    name = f"Пятница {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Субботний")
+    await _session(db_session, arena_id, date(2026, 10, 10), "12:00")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        resp = await client.get("/")
+    assert resp.status_code == 200
+    row = _city_li(resp.text, name)
+    assert "сегодня" not in row
+    assert "в выходные" in row
+    assert "/ice/" not in row
+
+
+@pytest.mark.asyncio
+async def test_counter_ignores_ru_sessions(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("ICE_DISCOVERY_COUNTRIES", "BY,RU")
+    _freeze(monkeypatch, _utc(2026, 10, 7, 12))
+    by_name = f"Только BY {uuid.uuid4().hex[:6]}"
+    ru_name = f"Только RU {uuid.uuid4().hex[:6]}"
+    by_id = await _insert_city(db_session, name=by_name, country="BY")
+    ru_id = await _insert_city(db_session, name=ru_name, country="RU")
+    by_arena = await _insert_arena(db_session, by_id, name="Белорусский")
+    ru_arena = await _insert_arena(db_session, ru_id, name="Российский")
+    await _session(db_session, by_arena, date(2026, 10, 7), "18:00")
+    await _session(db_session, ru_arena, date(2026, 10, 7), "18:00")
+    await _session(db_session, ru_arena, date(2026, 10, 7), "19:00")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        resp = await client.get("/")
+    assert _counter(resp.text) == "Сегодня в Беларуси 1 сеанс в 1 городе"
+
+
+@pytest.mark.asyncio
+async def test_single_place_city_button_opens_the_place(app_use_test_db, db_session, monkeypatch) -> None:
+    _freeze(monkeypatch, _utc(2026, 10, 7, 12))
+    name = f"Одно место {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Единственный")
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+    arena_slug = (
+        await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": arena_id})
+    ).scalar_one()
+
+    async with _client() as client:
+        resp = await client.get("/", cookies={"glide_city": slug})
+    assert resp.status_code == 200
+    match = re.search(r'<a class="city-button"[^>]*href="([^"]+)"', resp.text)
+    assert match, "city button"
+    assert match.group(1) == f"/p/{slug}/{arena_slug}"
+
+
+@pytest.mark.asyncio
+async def test_upcoming_cards_are_the_selected_window_without_stale_or_closed(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    _freeze(monkeypatch, _utc(2026, 10, 9, 16))
+    name = f"Окно {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    friday = await _insert_arena(db_session, city_id, name="Пятничный каток")
+    stale = await _insert_arena(db_session, city_id, name="Старый каток")
+    closed = await _insert_arena(db_session, city_id, name="Закрытый каток")
+    early = await _insert_arena(db_session, city_id, name="Суббота ранняя")
+    for i, start in enumerate(("13:00", "14:00", "15:00", "16:00")):
+        arena_id = await _insert_arena(db_session, city_id, name=f"Суббота {i}")
+        await _session(db_session, arena_id, date(2026, 10, 10), start)
+    await _session(db_session, friday, date(2026, 10, 9), "18:00")
+    await _session(db_session, early, date(2026, 10, 10), "12:00")
+    stale_session = await _session(db_session, stale, date(2026, 10, 10), "08:00")
+    await _session(db_session, closed, date(2026, 10, 10), "09:00")
+    await _basis(db_session, stale_session, "live")
+    await _parser_job(db_session, stale, last_ok_at=datetime(2026, 10, 4, 12, tzinfo=timezone.utc))
+    await db_session.execute(
+        text("UPDATE ice_sessions SET observed_at = :observed WHERE arena_id = :id"),
+        {"observed": datetime(2026, 10, 4, 12, tzinfo=timezone.utc), "id": stale},
+    )
+    await db_session.execute(
+        text("UPDATE arena_profiles SET schedule_mode = 'season_closed' WHERE arena_id = :id"),
+        {"id": closed},
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        resp = await client.get("/?when=weekend", cookies={"glide_city": city_slug(name)})
+    assert resp.status_code == 200
+    block = _sessions_ul(resp.text)
+    assert "Суббота ранняя" in block
+    assert "Пятничный каток" not in block
+    assert "Старый каток" not in block
+    assert "Закрытый каток" not in block

@@ -31,4 +31,5 @@ def apply_glide_city_cookie(response: Response, *, slug: str) -> None:
         max_age=GLIDE_CITY_MAX_AGE_SEC,
         path="/",
         samesite="lax",
+        httponly=True,
     )

@@ -56,6 +56,12 @@
     "home.upcoming.city": "Ближайшие в {city}",
     "home.upcoming.weekend": "{city}, сб и вс",
     "home.map.aria": "Карта Беларуси: города с местами для катания",
+    "home.minutes_until": "через {n} мин",
+    "home.all_link": "Все →",
+    "home.all_places": "Все места",
+    "home.ice_today": "Лёд сегодня",
+    "home.cities_empty": "Пока нет опубликованных городов.",
+    "home.sessions_empty": "Ближайших сеансов пока нет — загляните в расписание по городу.",
     "chip.ice": "Лёд",
     "chip.hockey": "Хоккей (ОХМ)",
     "chip.first_time": "Первый раз"

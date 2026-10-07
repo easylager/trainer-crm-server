@@ -652,7 +652,7 @@ async def load_catalog_home_view(
         "city_groups": [],
         "city_layout": {"minsk": None, "oblast_centers": [], "regions": [], "ru_cities": []},
         "sessions": [],
-        "sessions_title": t("home.upcoming.city", city=""),
+        "sessions_title": "",
         "show_upcoming_block": False,
         "show_day_picker": show_day_picker,
         "day_picker": _build_day_picker(now) if show_day_picker else [],
@@ -663,9 +663,16 @@ async def load_catalog_home_view(
         "period_end": period_end,
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": None,
+        "user_city_id": None,
+        "user_city_slug": _MINSK_SLUG,
         "map_points": [],
         "map_svg": "",
-        "chips": {"hockey": False, "rollerski": False, "first_time_href": "/first-time"},
+        "chips": {
+            "hockey": False,
+            "rollerski": False,
+            "first_time_href": "/first-time",
+            "hockey_href": None,
+        },
         "trainers": [],
         "shop_count": 0,
     }
@@ -822,7 +829,7 @@ async def load_catalog_home_view(
     }
 
 
-def _city_row(city: Mapping[str, Any]) -> str:
+def _city_row(city: Mapping[str, Any], *, when_key: str) -> str:
     name = str(city["name"])
     slug = str(city["slug"])
     places = int(city["place_count"] or 0)
@@ -830,12 +837,13 @@ def _city_row(city: Mapping[str, Any]) -> str:
     p_word = plural_ru(places, "место", "места", "мест")
     if sessions:
         s_word = plural_ru(sessions, "сеанс", "сеанса", "сеансов")
-        stats = f"{places} {p_word} · {sessions} {s_word} сегодня"
+        phrase = _period_when_phrase(when_key)
+        stats = f"{places} {p_word} · {sessions} {s_word} {phrase}"
     else:
         stats = f"{places} {p_word}"
-    links = f'<a href="/c/{_esc(slug)}">Все места</a>'
-    if sessions > 0:
-        links += f' · <a href="/ice/{_esc(slug)}/today">Лёд сегодня</a>'
+    links = f'<a href="/c/{_esc(slug)}">{_esc(t("home.all_places"))}</a>'
+    if sessions > 0 and when_key == "today":
+        links += f' · <a href="/ice/{_esc(slug)}/today">{_esc(t("home.ice_today"))}</a>'
     return (
         '<li class="city">'
         f'<h2 class="city__name"><a href="/c/{_esc(slug)}">{_esc(name)}</a></h2>'
@@ -881,16 +889,16 @@ def _user_city_button_html(user_city: Mapping[str, Any] | None) -> str:
     )
 
 
-def _cities_html(city_groups: list[tuple[str, list[Mapping[str, Any]]]]) -> str:
+def _cities_html(city_groups: list[tuple[str, list[Mapping[str, Any]]]], *, when_key: str) -> str:
     if not city_groups:
-        return '<p class="muted">Пока нет опубликованных городов.</p>'
+        return f'<p class="muted">{_esc(t("home.cities_empty"))}</p>'
     parts: list[str] = []
     for code, group in city_groups:
         label = _COUNTRY_SECTION_LABEL.get(code, code)
         parts.append(
             '<section class="country-group">'
             f'<h3 class="country-group__title">{_esc(label)}</h3>'
-            '<ul class="cities">' + "".join(_city_row(c) for c in group) + "</ul></section>"
+            '<ul class="cities">' + "".join(_city_row(c, when_key=when_key) for c in group) + "</ul></section>"
         )
     return "".join(parts)
 
@@ -918,7 +926,7 @@ def _session_row(row: Mapping[str, Any], *, now: datetime) -> str:
     day_html = f'<span class="session__day">{_esc(day_label)}</span>' if day_label else ""
     soon_html = ""
     if row.get("minutes_until") is not None and not is_projected:
-        soon_html = f'<span class="session__soon">через {int(row["minutes_until"])} мин</span>'
+        soon_html = f'<span class="session__soon">{_esc(t("home.minutes_until", n=int(row["minutes_until"])))}</span>'
     session_class = "session session--projected" if is_projected else "session"
     extras: list[str] = []
     if row.get("basis_label"):
@@ -1037,21 +1045,21 @@ def render_catalog_home_page(
     description = (
         "Где покататься: города с катками, расписание массовых катаний и ссылки на все места в каталоге Glide."
     )
-    cities_html = _cities_html(city_groups)
+    cities_html = _cities_html(city_groups, when_key=when_key)
     show_upcoming = bool(view.get("show_upcoming_block"))
     user_city = view.get("user_city") if isinstance(view.get("user_city"), Mapping) else None
     more_href = str(user_city.get("upcoming_more_href") or "") if user_city else ""
     more_html = (
-        f'<p class="sessions__more"><a href="{_esc(more_href)}">Все →</a></p>' if show_upcoming and more_href else ""
+        f'<p class="sessions__more"><a href="{_esc(more_href)}">{_esc(t("home.all_link"))}</a></p>'
+        if show_upcoming and more_href
+        else ""
     )
     if show_upcoming and sessions:
         sessions_html = (
             '<ul class="sessions">' + "".join(_session_row(s, now=now) for s in sessions) + "</ul>" + more_html
         )
     elif show_upcoming:
-        sessions_html = (
-            '<p class="muted">Ближайших сеансов пока нет — загляните в расписание по городу.</p>' + more_html
-        )
+        sessions_html = f'<p class="muted">{_esc(t("home.sessions_empty"))}</p>' + more_html
     else:
         sessions_html = ""
         sessions_title = ""

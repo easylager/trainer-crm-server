@@ -100,6 +100,10 @@ def test_home_weekend_after_sunday_18_is_the_next_weekend() -> None:
     window = home_weekend_window(sun_late)
     assert window.starts_at == at(2026, 10, 17, 0)
     assert window.ends_at == at(2026, 10, 19, 0)
+    # Ровно 18:00 уже следующие выходные. Сдвиг порога 18:00 → 18:30 оставляет этот момент в текущих.
+    sun_exact = home_weekend_window(at(2026, 10, 11, 18, 0))
+    assert sun_exact.starts_at == at(2026, 10, 17, 0)
+    assert sun_exact.ends_at == at(2026, 10, 19, 0)
     sun_early = home_weekend_window(at(2026, 10, 11, 17, 59))
     assert sun_early.starts_at == at(2026, 10, 11, 17, 59)
     assert sun_early.ends_at == at(2026, 10, 12, 0)
@@ -108,6 +112,9 @@ def test_home_weekend_after_sunday_18_is_the_next_weekend() -> None:
 def test_home_default_when_and_picker_is_exactly_seven_dates() -> None:
     assert home_default_when_key(at(2026, 10, 9, 16)) == "weekend"
     assert home_default_when_key(at(2026, 10, 7, 12)) == "today"
+    # Пятница 14:59 ещё «сегодня», ровно 15:00 — выходные. Сдвиг порога 15:00 → 16:00 ломает 15:00.
+    assert home_default_when_key(at(2026, 10, 9, 14, 59)) == "today"
+    assert home_default_when_key(at(2026, 10, 9, 15, 0)) == "weekend"
     now = at(2026, 10, 7, 12)
     dates = home_picker_dates(now)
     assert len(dates) == 7

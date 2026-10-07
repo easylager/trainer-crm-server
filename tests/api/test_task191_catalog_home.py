@@ -305,7 +305,7 @@ async def test_catalog_home_ice_today_link_only_with_sessions_today(app_use_test
     slug_without = city_slug(without)
 
     async with _client() as client:
-        home = await client.get("/")
+        home = await client.get("/?when=today")
     assert home.status_code == 200
     assert f"/ice/{slug_with}/today" in home.text
     assert f"/ice/{slug_without}/today" not in home.text
