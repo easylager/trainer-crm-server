@@ -794,7 +794,12 @@ _FILTER_GROUP_GYM = frozenset({VENUE_TYPE_GYM, VENUE_TYPE_CHOREO, VENUE_TYPE_POO
 
 
 def city_selection_venue_types(raw: str | None) -> set[str] | None:
-    """``t=ice|shop|gym`` → множество venue_type; без ``t`` — все типы (включая магазины)."""
+    """``t=ice|shop|gym`` → множество venue_type; без ``t`` — ``None``.
+
+    ``None`` — «чип не выбран», не «включая магазины». Список мест сам прячет
+    ``DEFAULT_HIDDEN_VENUE_TYPES``, как лента каталога: магазин приходит
+    только по явному ``t=shop``.
+    """
     value = (raw or "").strip().lower()
     if not value:
         return None
@@ -832,6 +837,10 @@ async def list_city_selection_places(
     if venue_types:
         type_clause = " AND COALESCE(a.venue_type, 'ice') = ANY(:venue_types)"
         params["venue_types"] = sorted(venue_types)
+    else:
+        # TASK-217: подборка «все места» = лента без чипа. Магазин только по своему чипу.
+        type_clause = " AND COALESCE(a.venue_type, 'ice') <> ALL(:hidden_venue_types)"
+        params["hidden_venue_types"] = sorted(DEFAULT_HIDDEN_VENUE_TYPES)
 
     count_sql = f"""
         SELECT COUNT(*)::int

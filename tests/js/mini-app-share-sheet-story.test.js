@@ -120,3 +120,18 @@ describe('mini-app-share-sheet story channel (TASK-168)', () => {
     assert.equal(downloads[0].url, 'https://cdn.test/p/minsk/x/story.png');
   });
 });
+
+describe('mini-app-share-sheet telegram (TASK-217)', () => {
+  it('подборка уходит в Telegram только ссылкой, место — со текстом', () => {
+    const context = { window: {}, document: {}, navigator: {} };
+    context.window = context;
+    vm.runInNewContext(src, context);
+    const href = context.GlideShareSheet._telegramShareHref;
+    const selection = href('https://glide.test/c/minsk', 'Минск · все места\n12 катков\n• CCMshop', true);
+    assert.equal(selection, 'https://t.me/share/url?url=' + encodeURIComponent('https://glide.test/c/minsk'));
+    assert.equal(selection.includes('text='), false);
+    const place = href('https://glide.test/p/minsk/ledovy', 'Пт 20:30', false);
+    assert.match(place, /[?&]text=/);
+    assert.match(place, /20%3A30|20:30/);
+  });
+});

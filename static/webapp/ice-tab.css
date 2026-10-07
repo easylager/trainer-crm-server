@@ -2029,6 +2029,13 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
  */
 .ice-share {
   margin-top: var(--app-space-4);
+  /*
+   * TASK-217. «Карта» — fixed-пилюля над таб-баром (bottom: inset + 12px,
+   * высота около 44px, z-index 8400). Кнопка шеринга стоит в конце ленты и
+   * при доскролле оказывается под ней. Запас снизу поднимает кнопку над
+   * пилюлей и над скримом панели; safe-area уже внутри inset у самой «Карты».
+   */
+  margin-bottom: 72px;
 }
 
 .ice-share[hidden] {
