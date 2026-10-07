@@ -41,7 +41,10 @@ async def _send(bot: Bot, item: FollowOutbound) -> None:
     try:
         await _once()
     except TelegramRetryAfter as exc:
-        await asyncio.sleep(float(exc.retry_after or 1) + 0.5)
+        delay = float(exc.retry_after or 1)
+        if delay > 30:
+            raise
+        await asyncio.sleep(delay + 0.5)
         await _once()
     except TelegramForbiddenError as exc:
         raise FollowBotBlocked(str(exc)) from exc

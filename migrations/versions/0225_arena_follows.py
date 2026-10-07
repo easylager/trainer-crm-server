@@ -51,6 +51,7 @@ def upgrade() -> None:
         sa.Column("payload", JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("not_before", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("claimed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("status", sa.String(length=16), nullable=False, server_default="pending"),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
@@ -59,7 +60,7 @@ def upgrade() -> None:
             name="ck_arena_follow_notifications_kind",
         ),
         sa.CheckConstraint(
-            "status IN ('pending', 'sending', 'sent', 'failed', 'muted')",
+            "status IN ('pending', 'sending', 'sent', 'failed', 'muted', 'merged')",
             name="ck_arena_follow_notifications_status",
         ),
     )

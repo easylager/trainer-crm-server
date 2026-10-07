@@ -13,14 +13,16 @@
 from __future__ import annotations
 
 import html
+import asyncio
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from itertools import groupby
 from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from aiogram.exceptions import TelegramRetryAfter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,6 +87,7 @@ class FollowOutbound:
     text: str
     buttons: tuple[FollowButton, ...]
     attempts: int
+    claimed_at: datetime
 
 
 def _minute(value: time) -> time:
@@ -342,11 +345,26 @@ async def _active_follows(session: AsyncSession, arena_id: int) -> list[tuple[in
             SELECT id, telegram_id FROM arena_follows
             WHERE arena_id = :arena AND muted_at IS NULL
             ORDER BY id
+            FOR UPDATE
             """
         ),
         {"arena": int(arena_id)},
     )
     return [(int(row[0]), int(row[1])) for row in rows]
+
+
+async def _lock_follow(session: AsyncSession, follow_id: int):
+    return (
+        await session.execute(
+            text(
+                """
+                SELECT id, arena_id, telegram_id, muted_at
+                FROM arena_follows WHERE id = :fid FOR UPDATE
+                """
+            ),
+            {"fid": int(follow_id)},
+        )
+    ).mappings().first()
 
 
 async def _arena_meta(session: AsyncSession, arena_id: int) -> dict[str, Any] | None:
@@ -393,7 +411,7 @@ async def _pending(session: AsyncSession, follow_id: int, kind: str):
         await session.execute(
             text(
                 """
-                SELECT id, payload, created_at, not_before
+                SELECT id, payload, created_at, not_before, attempts
                 FROM arena_follow_notifications
                 WHERE follow_id = :fid AND kind = :kind AND status = 'pending'
                 FOR UPDATE
@@ -412,43 +430,134 @@ async def _upsert_pending(
     payload: dict[str, Any],
     not_before: datetime,
     created_at: datetime,
-) -> None:
-    existing = await _pending(session, follow_id, kind)
-    if existing is not None and kind == KIND_REOPENED:
-        old = _as_dict(existing["payload"])
-        if old.get("keep") is True or str(old.get("keep") or "").lower() == "true":
-            payload = {**payload, "keep": True}
+    attempts: int = 0,
+) -> bool:
+    follow = await _lock_follow(session, follow_id)
+    if follow is None:
+        return False
     body = json.dumps(payload, ensure_ascii=False)
-    if existing is None:
+    inserted_id = (
         await session.execute(
             text(
                 """
                 INSERT INTO arena_follow_notifications
-                    (follow_id, kind, payload, not_before, status, created_at)
+                    (follow_id, kind, payload, not_before, status, created_at, attempts)
                 VALUES
-                    (:fid, :kind, CAST(:payload AS jsonb), :not_before, 'pending', :created_at)
+                    (:fid, :kind, CAST(:payload AS jsonb), :not_before, 'pending', :created_at, :attempts)
+                ON CONFLICT (follow_id, kind) WHERE status = 'pending' DO NOTHING
+                RETURNING id
                 """
             ),
             {
                 "fid": int(follow_id),
                 "kind": kind,
                 "payload": body,
-                "not_before": _aware(not_before),
+                "not_before": push_out_of_quiet(_aware(not_before)),
                 "created_at": _aware(created_at),
+                "attempts": int(attempts),
             },
         )
-        return
+    ).scalar_one_or_none()
+    if inserted_id is not None:
+        return True
+
+    existing = await _pending(session, follow_id, kind)
+    if existing is None:
+        return False
+    meta = await _arena_meta(session, int(follow["arena_id"]))
+    merged = _merge_notification_payload(
+        kind=kind,
+        existing_payload=_as_dict(existing["payload"]),
+        existing_created_at=_aware(existing["created_at"]),
+        existing_attempts=int(existing["attempts"] or 0),
+        existing_not_before=_aware(existing["not_before"]),
+        incoming_payload=payload,
+        incoming_created_at=_aware(created_at),
+        incoming_attempts=int(attempts),
+        incoming_not_before=_aware(not_before),
+        place_name=_place_name(meta),
+    )
+    if merged is None:
+        await session.execute(
+            text("DELETE FROM arena_follow_notifications WHERE id = :id AND status = 'pending'"),
+            {"id": int(existing["id"])},
+        )
+        return False
+    merged_payload, merged_created_at, merged_attempts, merged_not_before = merged
     await session.execute(
         text(
             """
             UPDATE arena_follow_notifications
             SET payload = CAST(:payload AS jsonb),
+                created_at = :created_at,
+                attempts = :attempts,
                 not_before = :not_before
-            WHERE id = :id
+            WHERE id = :id AND status = 'pending'
             """
         ),
-        {"payload": body, "not_before": _aware(not_before), "id": int(existing["id"])},
+        {
+            "payload": json.dumps(merged_payload, ensure_ascii=False),
+            "created_at": merged_created_at,
+            "attempts": merged_attempts,
+            "not_before": merged_not_before,
+            "id": int(existing["id"]),
+        },
     )
+    return True
+
+
+def _payload_slots(payload: Mapping[str, Any], key: str) -> list[FollowSlot]:
+    return [slot_from_json(item) for item in payload.get(key) or []]
+
+
+def _payload_keep(payload: Mapping[str, Any]) -> bool:
+    return payload.get("keep") is True or str(payload.get("keep") or "").lower() == "true"
+
+
+def _merge_notification_payload(
+    *,
+    kind: str,
+    existing_payload: Mapping[str, Any],
+    existing_created_at: datetime,
+    existing_attempts: int,
+    existing_not_before: datetime,
+    incoming_payload: Mapping[str, Any],
+    incoming_created_at: datetime,
+    incoming_attempts: int,
+    incoming_not_before: datetime,
+    place_name: str,
+) -> tuple[dict[str, Any], datetime, int, datetime] | None:
+    created_at = max(_aware(existing_created_at), _aware(incoming_created_at))
+    latest = incoming_payload if _aware(incoming_created_at) >= _aware(existing_created_at) else existing_payload
+    not_before = push_out_of_quiet(max(_aware(existing_not_before), _aware(incoming_not_before)))
+    attempts = max(int(existing_attempts), int(incoming_attempts))
+    if kind == KIND_SCHEDULE:
+        removed, added = net_slots(
+            [*_payload_slots(existing_payload, "removed"), *_payload_slots(incoming_payload, "removed")],
+            [*_payload_slots(existing_payload, "added"), *_payload_slots(incoming_payload, "added")],
+        )
+        if not removed and not added:
+            return None
+        hhmm = str(latest.get("hhmm") or existing_payload.get("hhmm") or incoming_payload.get("hhmm") or "")
+        payload = {
+            "removed": [slot_to_json(slot) for slot in removed],
+            "added": [slot_to_json(slot) for slot in added],
+            "hhmm": hhmm,
+            "text": format_schedule_changed_html(place_name, removed, added, hhmm),
+        }
+        return payload, created_at, attempts, not_before
+
+    existing_slots = _payload_slots(existing_payload, "slots")
+    incoming_slots = _payload_slots(incoming_payload, "slots")
+    slots_by_key = {slot.key: slot for slot in existing_slots}
+    slots_by_key.update({slot.key: slot for slot in incoming_slots})
+    slots = sorted(slots_by_key.values(), key=lambda slot: (slot.local_date, _minute(slot.starts_at_local), slot.kind))
+    payload = {
+        "slots": [slot_to_json(slot) for slot in slots],
+        "keep": _payload_keep(existing_payload) or _payload_keep(incoming_payload),
+        "text": format_reopened_html(place_name, slots),
+    }
+    return payload, created_at, attempts, not_before
 
 
 async def _enqueue_schedule(
@@ -469,60 +578,23 @@ async def _enqueue_schedule(
     queued = 0
     for follow_id, _telegram_id in followers:
         existing = await _pending(session, follow_id, KIND_SCHEDULE)
-        if existing is not None:
-            old = _as_dict(existing["payload"])
-            old_removed = [slot_from_json(item) for item in old.get("removed") or []]
-            old_added = [slot_from_json(item) for item in old.get("added") or []]
-            merged_removed, merged_added = net_slots([*old_removed, *removed], [*old_added, *added])
-            if not merged_removed and not merged_added:
-                await session.execute(
-                    text("DELETE FROM arena_follow_notifications WHERE id = :id"),
-                    {"id": int(existing["id"])},
-                )
-                continue
-            batch_started = existing["created_at"]
-            last_sent = await _last_schedule_sent_at(session, follow_id)
-            not_before = schedule_not_before(
-                now=now, batch_started_at=_aware(batch_started), last_sent_at=last_sent
-            )
-            payload = {
-                "removed": [slot_to_json(slot) for slot in merged_removed],
-                "added": [slot_to_json(slot) for slot in merged_added],
-                "hhmm": hhmm,
-                "text": format_schedule_changed_html(name, merged_removed, merged_added, hhmm),
-            }
-            await session.execute(
-                text(
-                    """
-                    UPDATE arena_follow_notifications
-                    SET payload = CAST(:payload AS jsonb), not_before = :not_before
-                    WHERE id = :id
-                    """
-                ),
-                {
-                    "payload": json.dumps(payload, ensure_ascii=False),
-                    "not_before": not_before,
-                    "id": int(existing["id"]),
-                },
-            )
-        else:
-            last_sent = await _last_schedule_sent_at(session, follow_id)
-            not_before = schedule_not_before(now=now, batch_started_at=_aware(now), last_sent_at=last_sent)
-            payload = {
-                "removed": [slot_to_json(slot) for slot in removed],
-                "added": [slot_to_json(slot) for slot in added],
-                "hhmm": hhmm,
-                "text": format_schedule_changed_html(name, removed, added, hhmm),
-            }
-            await _upsert_pending(
-                session,
-                follow_id=follow_id,
-                kind=KIND_SCHEDULE,
-                payload=payload,
-                not_before=not_before,
-                created_at=_aware(now),
-            )
-        queued += 1
+        batch_started = _aware(existing["created_at"]) if existing is not None else _aware(now)
+        last_sent = await _last_schedule_sent_at(session, follow_id)
+        not_before = schedule_not_before(now=now, batch_started_at=batch_started, last_sent_at=last_sent)
+        payload = {
+            "removed": [slot_to_json(slot) for slot in removed],
+            "added": [slot_to_json(slot) for slot in added],
+            "hhmm": hhmm,
+            "text": format_schedule_changed_html(name, removed, added, hhmm),
+        }
+        queued += await _upsert_pending(
+            session,
+            follow_id=follow_id,
+            kind=KIND_SCHEDULE,
+            payload=payload,
+            not_before=not_before,
+            created_at=_aware(now),
+        )
     if queued:
         logger.info("arena follow schedule queued arena=%s follows=%s", arena_id, queued)
     return queued
@@ -549,7 +621,7 @@ async def _enqueue_reopened(
     not_before = opening_not_before(now=now)
     queued = 0
     for follow_id, _telegram_id in followers:
-        await _upsert_pending(
+        queued += await _upsert_pending(
             session,
             follow_id=follow_id,
             kind=KIND_REOPENED,
@@ -557,7 +629,6 @@ async def _enqueue_reopened(
             not_before=not_before,
             created_at=_aware(now),
         )
-        queued += 1
     if queued:
         logger.info("arena follow reopen queued arena=%s follows=%s", arena_id, queued)
     return queued
@@ -657,6 +728,299 @@ def _render_claimed(kind: str, payload: Mapping[str, Any], place_name: str) -> s
     return format_schedule_changed_html(place_name, removed, added, hhmm)
 
 
+async def _set_lock_timeout(session: AsyncSession) -> None:
+    await session.execute(text("SET LOCAL lock_timeout = '2s'"))
+
+
+async def _requeue_or_merge(
+    session: AsyncSession,
+    notification_id: int,
+    *,
+    not_before: datetime,
+    expected_claimed_at: datetime | None = None,
+    expected_attempts: int | None = None,
+    check_claim: bool = False,
+    stale_before: datetime | None = None,
+) -> bool:
+    reference = (
+        await session.execute(
+            text("SELECT follow_id FROM arena_follow_notifications WHERE id = :id"),
+            {"id": int(notification_id)},
+        )
+    ).first()
+    if reference is None:
+        return False
+    await _set_lock_timeout(session)
+    follow = await _lock_follow(session, int(reference[0]))
+    if follow is None:
+        return False
+    source = (
+        await session.execute(
+            text(
+                """
+                SELECT id, follow_id, kind, payload, created_at, not_before, attempts, claimed_at, status
+                FROM arena_follow_notifications
+                WHERE id = :id AND follow_id = :fid
+                FOR UPDATE
+                """
+            ),
+            {"id": int(notification_id), "fid": int(reference[0])},
+        )
+    ).mappings().first()
+    if source is None or source["status"] != "sending":
+        return False
+    claimed_at = _aware(source["claimed_at"]) if isinstance(source["claimed_at"], datetime) else None
+    expected = _aware(expected_claimed_at) if expected_claimed_at is not None else None
+    if check_claim and (
+        claimed_at != expected or int(source["attempts"] or 0) != expected_attempts
+    ):
+        return False
+    if stale_before is not None and claimed_at is not None and claimed_at >= _aware(stale_before):
+        return False
+
+    pending = (
+        await session.execute(
+            text(
+                """
+                SELECT id, payload, created_at, not_before, attempts
+                FROM arena_follow_notifications
+                WHERE follow_id = :fid AND kind = :kind AND status = 'pending'
+                FOR UPDATE
+                """
+            ),
+            {"fid": int(source["follow_id"]), "kind": str(source["kind"])},
+        )
+    ).mappings().first()
+    due_at = push_out_of_quiet(max(_aware(not_before), _aware(source["not_before"])))
+    if pending is None:
+        result = await session.execute(
+            text(
+                """
+                UPDATE arena_follow_notifications
+                SET status = 'pending', not_before = :not_before, claimed_at = NULL
+                WHERE id = :id AND status = 'sending'
+                """
+            ),
+            {"id": int(notification_id), "not_before": due_at},
+        )
+        return result.rowcount == 1
+
+    meta = await _arena_meta(session, int(follow["arena_id"]))
+    merged = _merge_notification_payload(
+        kind=str(source["kind"]),
+        existing_payload=_as_dict(pending["payload"]),
+        existing_created_at=_aware(pending["created_at"]),
+        existing_attempts=int(pending["attempts"] or 0),
+        existing_not_before=_aware(pending["not_before"]),
+        incoming_payload=_as_dict(source["payload"]),
+        incoming_created_at=_aware(source["created_at"]),
+        incoming_attempts=int(source["attempts"] or 0),
+        incoming_not_before=due_at,
+        place_name=_place_name(meta),
+    )
+    if merged is None:
+        await session.execute(
+            text("DELETE FROM arena_follow_notifications WHERE id = :id AND status = 'pending'"),
+            {"id": int(pending["id"])},
+        )
+    else:
+        payload, created_at, attempts, merged_not_before = merged
+        await session.execute(
+            text(
+                """
+                UPDATE arena_follow_notifications
+                SET payload = CAST(:payload AS jsonb),
+                    created_at = :created_at,
+                    attempts = :attempts,
+                    not_before = :not_before
+                WHERE id = :id AND status = 'pending'
+                """
+            ),
+            {
+                "payload": json.dumps(payload, ensure_ascii=False),
+                "created_at": created_at,
+                "attempts": attempts,
+                "not_before": merged_not_before,
+                "id": int(pending["id"]),
+            },
+        )
+    result = await session.execute(
+        text(
+            """
+            UPDATE arena_follow_notifications
+            SET status = 'merged', claimed_at = NULL
+            WHERE id = :id AND status = 'sending'
+            """
+        ),
+        {"id": int(notification_id)},
+    )
+    return result.rowcount == 1
+
+
+async def _recover_stale_sending(session: AsyncSession, moment: datetime) -> None:
+    cutoff = _aware(moment) - timedelta(minutes=10)
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT id
+                FROM arena_follow_notifications
+                WHERE status = 'sending'
+                  AND (claimed_at IS NULL OR claimed_at < :cutoff)
+                ORDER BY follow_id, id
+                LIMIT 300
+                """
+            ),
+            {"cutoff": cutoff},
+        )
+    ).scalars().all()
+    await session.commit()
+    for notification_id in rows:
+        try:
+            await _requeue_or_merge(
+                session,
+                int(notification_id),
+                not_before=moment,
+                stale_before=cutoff,
+            )
+            await session.commit()
+        except Exception:
+            logger.exception("arena follow stale-claim recovery failed id=%s", notification_id)
+            await session.rollback()
+
+
+async def _claim_follow(
+    session: AsyncSession,
+    follow_id: int,
+    *,
+    moment: datetime,
+    webapp_base_url: str,
+) -> tuple[list[FollowOutbound], bool]:
+    await _set_lock_timeout(session)
+    follow = await _lock_follow(session, follow_id)
+    if follow is None:
+        return [], False
+    pending = (
+        await session.execute(
+            text(
+                """
+                SELECT id
+                FROM arena_follow_notifications
+                WHERE follow_id = :fid AND status = 'pending' AND not_before <= :now
+                ORDER BY CASE WHEN kind = 'reopened' THEN 0 ELSE 1 END, id
+                LIMIT 30
+                FOR UPDATE
+                """
+            ),
+            {"fid": int(follow_id), "now": _aware(moment)},
+        )
+    ).scalars().all()
+    if not pending:
+        return [], follow["muted_at"] is not None
+    claimed_rows = (
+        await session.execute(
+            text(
+                """
+                UPDATE arena_follow_notifications
+                SET status = 'sending', attempts = attempts + 1, claimed_at = :now
+                WHERE id = ANY(:ids) AND status = 'pending'
+                RETURNING id, follow_id, kind, payload, attempts, claimed_at
+                """
+            ),
+            {"ids": [int(row) for row in pending], "now": _aware(moment)},
+        )
+    ).mappings().all()
+    if not claimed_rows:
+        return [], follow["muted_at"] is not None
+    meta = (
+        await session.execute(
+            text(
+                """
+                SELECT a.name, c.name AS city_name, p.slug
+                FROM arenas a
+                JOIN cities c ON c.id = a.city_id
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                WHERE a.id = :arena
+                """
+            ),
+            {"arena": int(follow["arena_id"])},
+        )
+    ).mappings().first()
+    place = str((meta or {}).get("name") or "").strip() or "Каток"
+    url = https_place_page_url(
+        base_url=webapp_base_url,
+        city_name=str((meta or {}).get("city_name") or ""),
+        slug=str(meta["slug"]) if meta and meta["slug"] else None,
+    )
+    items = [
+        FollowOutbound(
+            notification_id=int(row["id"]),
+            follow_id=int(follow["id"]),
+            telegram_id=int(follow["telegram_id"]),
+            arena_id=int(follow["arena_id"]),
+            kind=str(row["kind"]),
+            text=_render_claimed(str(row["kind"]), _as_dict(row["payload"]), place),
+            buttons=_buttons_for(str(row["kind"]), int(follow["arena_id"]), url),
+            attempts=int(row["attempts"] or 0),
+            claimed_at=_aware(row["claimed_at"]),
+        )
+        for row in claimed_rows
+    ]
+    items.sort(key=lambda item: (0 if item.kind == KIND_REOPENED else 1, item.notification_id))
+    return items, follow["muted_at"] is not None
+
+
+async def _refresh_claim(
+    session: AsyncSession,
+    item: FollowOutbound,
+    *,
+    moment: datetime,
+) -> FollowOutbound | None:
+    await _set_lock_timeout(session)
+    follow = await _lock_follow(session, item.follow_id)
+    if follow is None:
+        return None
+    current = (
+        await session.execute(
+            text(
+                """
+                SELECT status, claimed_at, attempts FROM arena_follow_notifications
+                WHERE id = :id FOR UPDATE
+                """
+            ),
+            {"id": item.notification_id},
+        )
+    ).mappings().first()
+    if (
+        current is None
+        or current["status"] != "sending"
+        or current["claimed_at"] is None
+        or _aware(current["claimed_at"]) != _aware(item.claimed_at)
+        or int(current["attempts"] or 0) != item.attempts
+    ):
+        return None
+    refreshed_at = max(
+        _aware(moment),
+        _aware(item.claimed_at) + timedelta(microseconds=1),
+    )
+    result = await session.execute(
+        text(
+            """
+            UPDATE arena_follow_notifications SET claimed_at = :now
+            WHERE id = :id AND status = 'sending'
+              AND claimed_at = :expected AND attempts = :attempts
+            """
+        ),
+        {
+            "now": refreshed_at,
+            "id": item.notification_id,
+            "expected": item.claimed_at,
+            "attempts": item.attempts,
+        },
+    )
+    return replace(item, claimed_at=refreshed_at) if result.rowcount == 1 else None
+
+
 async def dispatch_due_follow_notifications(
     session: AsyncSession,
     *,
@@ -669,173 +1033,181 @@ async def dispatch_due_follow_notifications(
     ``FollowBotBlocked`` глушит подписку. Прочая ошибка возвращает строку в очередь.
     """
     moment = _aware(now)
+    await session.commit()
+    await _recover_stale_sending(session, moment)
     if not within_follow_hours(moment):
         return 0
-    await session.execute(
-        text(
-            """
-            UPDATE arena_follow_notifications
-            SET status = 'pending'
-            WHERE status = 'sending'
-            """
-        )
-    )
-    id_rows = (
+
+    candidate_ids = (
         await session.execute(
             text(
                 """
-                SELECT n.id
-                FROM arena_follow_notifications n
-                JOIN arena_follows f ON f.id = n.follow_id
-                WHERE n.status = 'pending'
-                  AND n.not_before <= :now
-                  AND f.muted_at IS NULL
-                ORDER BY CASE WHEN n.kind = 'reopened' THEN 0 ELSE 1 END, n.id
+                SELECT f.id
+                FROM arena_follows f
+                WHERE f.muted_at IS NULL
+                  AND EXISTS (
+                      SELECT 1 FROM arena_follow_notifications n
+                      WHERE n.follow_id = f.id AND n.status = 'pending' AND n.not_before <= :now
+                  )
+                ORDER BY f.id
                 LIMIT 30
-                FOR UPDATE OF n SKIP LOCKED
                 """
             ),
             {"now": moment},
         )
     ).scalars().all()
-    if not id_rows:
-        await session.commit()
-        return 0
-    ids = [int(item) for item in id_rows]
-    await session.execute(
-        text(
-            """
-            UPDATE arena_follow_notifications
-            SET status = 'sending', attempts = attempts + 1
-            WHERE id = ANY(:ids)
-            """
-        ),
-        {"ids": ids},
-    )
-    claimed_rows = (
-        await session.execute(
-            text(
-                """
-                SELECT n.id, n.follow_id, n.kind, n.payload, n.attempts,
-                       f.telegram_id, f.arena_id, f.muted_at,
-                       a.name, c.name AS city_name, p.slug
-                FROM arena_follow_notifications n
-                JOIN arena_follows f ON f.id = n.follow_id
-                JOIN arenas a ON a.id = f.arena_id
-                JOIN cities c ON c.id = a.city_id
-                LEFT JOIN arena_profiles p ON p.arena_id = a.id
-                WHERE n.id = ANY(:ids)
-                """
-            ),
-            {"ids": ids},
-        )
-    ).mappings().all()
     await session.commit()
-
-    by_follow: dict[int, list[FollowOutbound]] = {}
-    order: list[int] = []
-    for row in claimed_rows:
-        payload = _as_dict(row["payload"])
-        place = str(row["name"] or "").strip() or "Каток"
-        url = https_place_page_url(
-            base_url=webapp_base_url,
-            city_name=str(row["city_name"] or ""),
-            slug=str(row["slug"]) if row["slug"] else None,
-        )
-        item = FollowOutbound(
-            notification_id=int(row["id"]),
-            follow_id=int(row["follow_id"]),
-            telegram_id=int(row["telegram_id"]),
-            arena_id=int(row["arena_id"]),
-            kind=str(row["kind"]),
-            text=_render_claimed(str(row["kind"]), payload, place),
-            buttons=_buttons_for(str(row["kind"]), int(row["arena_id"]), url),
-            attempts=int(row["attempts"] or 0),
-        )
-        if item.follow_id not in by_follow:
-            order.append(item.follow_id)
-        by_follow.setdefault(item.follow_id, []).append(item)
-
     sent = 0
-    for follow_id in order:
-        items = sorted(
-            by_follow[follow_id],
-            key=lambda item: (0 if item.kind == KIND_REOPENED else 1, item.notification_id),
-        )
-        primary, *rest = items
-        if primary.attempts > MAX_SEND_ATTEMPTS:
-            await _mark_failed(session, primary.notification_id)
-            for extra in rest:
-                await _release_sending(session, extra.notification_id, not_before=moment)
-            await session.commit()
-            continue
-        still = (
-            await session.execute(
-                text(
-                    """
-                    SELECT 1 FROM arena_follows
-                    WHERE id = :fid AND muted_at IS NULL
-                    """
-                ),
-                {"fid": follow_id},
-            )
-        ).first()
-        if still is None:
-            await _mark_status(session, primary.notification_id, "muted")
-            for extra in rest:
-                await _mark_status(session, extra.notification_id, "muted")
-            await session.commit()
-            continue
+    for follow_id in candidate_ids:
         try:
-            await send(primary)
-        except FollowBotBlocked:
-            await _mute_follow(session, follow_id, moment)
-            await _mark_status(session, primary.notification_id, "muted")
-            for extra in rest:
-                await _mark_status(session, extra.notification_id, "muted")
-        except Exception:
-            logger.exception("arena follow notify failed id=%s", primary.notification_id)
-            await _release_sending(
+            items, muted = await _claim_follow(
                 session,
-                primary.notification_id,
-                not_before=moment + timedelta(seconds=min(60 * primary.attempts, 900)),
+                int(follow_id),
+                moment=moment,
+                webapp_base_url=webapp_base_url,
             )
-            for extra in rest:
-                await _release_sending(session, extra.notification_id, not_before=moment)
-        else:
-            await _mark_sent(session, primary, moment)
-            for extra in rest:
-                await _release_sending(session, extra.notification_id, not_before=moment + MIN_GAP)
-            sent += 1
-        await session.commit()
+            await session.commit()
+            if not items:
+                continue
+            primary, *rest = items
+            if muted:
+                for item in items:
+                    await _mark_status(session, item, "muted")
+                await session.commit()
+                continue
+            if primary.attempts > MAX_SEND_ATTEMPTS:
+                await _mark_failed(session, primary)
+                for extra in rest:
+                    await _requeue_or_merge(
+                        session,
+                        extra.notification_id,
+                        not_before=moment,
+                        expected_claimed_at=extra.claimed_at,
+                        expected_attempts=extra.attempts,
+                        check_claim=True,
+                    )
+                await session.commit()
+                continue
+
+            refreshed = await _refresh_claim(session, primary, moment=moment)
+            await session.commit()
+            if refreshed is None:
+                logger.warning("arena follow lost sending claim before send id=%s", primary.notification_id)
+                for extra in rest:
+                    await _requeue_or_merge(
+                        session,
+                        extra.notification_id,
+                        not_before=moment,
+                        expected_claimed_at=extra.claimed_at,
+                        expected_attempts=extra.attempts,
+                        check_claim=True,
+                    )
+                await session.commit()
+                continue
+
+            try:
+                await asyncio.wait_for(send(refreshed), timeout=60)
+            except FollowBotBlocked:
+                await _mute_follow(session, int(follow_id), moment)
+                await _mark_status(session, refreshed, "muted")
+                for extra in rest:
+                    await _mark_status(session, extra, "muted")
+            except TelegramRetryAfter as exc:
+                delay = max(1.0, float(exc.retry_after or 1))
+                logger.info("arena follow retry_after id=%s seconds=%s", refreshed.notification_id, delay)
+                await _requeue_or_merge(
+                    session,
+                    refreshed.notification_id,
+                    not_before=moment + timedelta(seconds=delay),
+                    expected_claimed_at=refreshed.claimed_at,
+                    expected_attempts=refreshed.attempts,
+                    check_claim=True,
+                )
+                for extra in rest:
+                    await _requeue_or_merge(
+                        session,
+                        extra.notification_id,
+                        not_before=moment,
+                        expected_claimed_at=extra.claimed_at,
+                        expected_attempts=extra.attempts,
+                        check_claim=True,
+                    )
+            except Exception:
+                logger.exception("arena follow notify failed id=%s", refreshed.notification_id)
+                await _requeue_or_merge(
+                    session,
+                    refreshed.notification_id,
+                    not_before=moment + timedelta(seconds=min(60 * refreshed.attempts, 900)),
+                    expected_claimed_at=refreshed.claimed_at,
+                    expected_attempts=refreshed.attempts,
+                    check_claim=True,
+                )
+                for extra in rest:
+                    await _requeue_or_merge(
+                        session,
+                        extra.notification_id,
+                        not_before=moment,
+                        expected_claimed_at=extra.claimed_at,
+                        expected_attempts=extra.attempts,
+                        check_claim=True,
+                    )
+            else:
+                await _mark_sent(session, refreshed, moment)
+                for extra in rest:
+                    await _requeue_or_merge(
+                        session,
+                        extra.notification_id,
+                        not_before=moment + MIN_GAP,
+                        expected_claimed_at=extra.claimed_at,
+                        expected_attempts=extra.attempts,
+                        check_claim=True,
+                    )
+                sent += 1
+            await session.commit()
+        except Exception:
+            logger.exception("arena follow dispatch failed follow_id=%s", follow_id)
+            await session.rollback()
     return sent
 
 
-async def _mark_status(session: AsyncSession, notification_id: int, status: str) -> None:
-    await session.execute(
-        text("UPDATE arena_follow_notifications SET status = :status WHERE id = :id"),
-        {"status": status, "id": int(notification_id)},
-    )
-
-
-async def _mark_failed(session: AsyncSession, notification_id: int) -> None:
-    await _mark_status(session, notification_id, "failed")
-
-
-async def _release_sending(session: AsyncSession, notification_id: int, *, not_before: datetime) -> None:
-    await session.execute(
+async def _mark_status(session: AsyncSession, item: FollowOutbound, status: str) -> bool:
+    if status not in {"failed", "muted"}:
+        raise ValueError(f"Invalid terminal notification status: {status!r}")
+    await _set_lock_timeout(session)
+    follow = await _lock_follow(session, item.follow_id)
+    if follow is None:
+        return False
+    result = await session.execute(
         text(
             """
-            UPDATE arena_follow_notifications
-            SET status = 'pending', not_before = :not_before
+            UPDATE arena_follow_notifications SET status = :status, claimed_at = NULL
             WHERE id = :id AND status = 'sending'
+              AND claimed_at IS NOT DISTINCT FROM :claimed_at AND attempts = :attempts
             """
         ),
-        {"id": int(notification_id), "not_before": _aware(not_before)},
+        {
+            "status": status,
+            "id": item.notification_id,
+            "claimed_at": item.claimed_at,
+            "attempts": item.attempts,
+        },
     )
+    if result.rowcount != 1:
+        logger.warning(
+            "arena follow lost sending claim id=%s terminal_status=%s",
+            item.notification_id,
+            status,
+        )
+        return False
+    return True
+
+
+async def _mark_failed(session: AsyncSession, item: FollowOutbound) -> bool:
+    return await _mark_status(session, item, "failed")
 
 
 async def _mute_follow(session: AsyncSession, follow_id: int, moment: datetime) -> None:
+    await _set_lock_timeout(session)
     await session.execute(
         text("UPDATE arena_follows SET muted_at = :now WHERE id = :id AND muted_at IS NULL"),
         {"now": moment, "id": int(follow_id)},
@@ -843,40 +1215,56 @@ async def _mute_follow(session: AsyncSession, follow_id: int, moment: datetime) 
 
 
 async def _mark_sent(session: AsyncSession, item: FollowOutbound, moment: datetime) -> None:
-    await session.execute(
+    await _set_lock_timeout(session)
+    follow = await _lock_follow(session, item.follow_id)
+    result = await session.execute(
         text(
             """
             UPDATE arena_follow_notifications
-            SET status = 'sent', sent_at = :now
-            WHERE id = :id
+            SET status = 'sent', sent_at = :now, claimed_at = NULL
+            WHERE id = :id AND status = 'sending'
+              AND claimed_at IS NOT DISTINCT FROM :claimed_at AND attempts = :attempts
             """
         ),
-        {"now": moment, "id": item.notification_id},
+        {
+            "now": moment,
+            "id": item.notification_id,
+            "claimed_at": item.claimed_at,
+            "attempts": item.attempts,
+        },
     )
+    claim_lost = follow is None or result.rowcount != 1
+    if claim_lost:
+        logger.warning("arena follow lost sending claim after send id=%s", item.notification_id)
     if item.kind == KIND_REOPENED:
-        await session.execute(
-            text(
-                """
-                UPDATE arena_follows
-                SET muted_at = :now
-                WHERE id = :fid
-                  AND muted_at IS NULL
-                  AND NOT EXISTS (
-                      SELECT 1 FROM arena_follow_notifications n
-                      WHERE n.follow_id = arena_follows.id
-                        AND n.kind = 'reopened'
-                        AND COALESCE(n.payload->>'keep', '') = 'true'
-                  )
-                """
-            ),
-            {"now": moment, "fid": item.follow_id},
-        )
+        if follow is not None:
+            await session.execute(
+                text(
+                    """
+                    UPDATE arena_follows
+                    SET muted_at = :now
+                    WHERE id = :fid
+                      AND muted_at IS NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM arena_follow_notifications n
+                          WHERE n.follow_id = arena_follows.id
+                            AND n.kind = 'reopened'
+                            AND COALESCE(n.payload->>'keep', '') = 'true'
+                      )
+                    """
+                ),
+                {"now": moment, "fid": item.follow_id},
+            )
     await record_catalog_consumer_event(
         session,
         kind=KIND_FOLLOW_NOTIFIED,
         surface=SURFACE_ARENA_FOLLOW,
         actor_hash=telegram_actor_hash(item.telegram_id),
         arena_id=item.arena_id,
-        payload={"notification_kind": item.kind, "notification_id": item.notification_id},
+        payload={
+            "notification_kind": item.kind,
+            "notification_id": item.notification_id,
+            "claim_lost": claim_lost,
+        },
         dedup=False,
     )

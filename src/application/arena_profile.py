@@ -614,12 +614,16 @@ async def apply_admin_arena_profile_patch(
         elif "schedule_mode" in fields:
             assignments.append("reopen_date = NULL")
             assignments.append("schedule_mode_note = NULL")
-        if (
-            "schedule_mode" in fields
-            and previous_mode == SCHEDULE_MODE_SEASON_CLOSED
-            and mode == SCHEDULE_MODE_AUTO
-        ):
-            schedule_reopened = True
+    if (
+        "schedule_mode" in fields
+        and previous_mode == SCHEDULE_MODE_SEASON_CLOSED
+        and mode == SCHEDULE_MODE_AUTO
+    ):
+        schedule_reopened = True
+    if schedule_reopened:
+        from src.application.arena_follow_notify import enqueue_arena_reopened
+
+        await enqueue_arena_reopened(session, _arena_id)
     if not assignments:
         return
     assignments.append("updated_at = now()")
@@ -627,10 +631,6 @@ async def apply_admin_arena_profile_patch(
         text("UPDATE arena_profiles SET " + ", ".join(assignments) + " WHERE arena_id = :id"),
         params,
     )
-    if schedule_reopened:
-        from src.application.arena_follow_notify import enqueue_arena_reopened
-
-        await enqueue_arena_reopened(session, _arena_id)
 
 
 async def touch_arena_profile(session: AsyncSession, arena_id: int) -> None:

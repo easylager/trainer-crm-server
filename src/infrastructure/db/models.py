@@ -501,7 +501,7 @@ class ArenaFollowNotification(Base):
             name="ck_arena_follow_notifications_kind",
         ),
         CheckConstraint(
-            "status IN ('pending', 'sending', 'sent', 'failed', 'muted')",
+            "status IN ('pending', 'sending', 'sent', 'failed', 'muted', 'merged')",
             name="ck_arena_follow_notifications_status",
         ),
     )
@@ -514,6 +514,7 @@ class ArenaFollowNotification(Base):
     payload: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     not_before: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
     attempts: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
