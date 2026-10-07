@@ -7,11 +7,11 @@
 
 * до 21:00 — «Сегодня вечером» (с 16:00 или с текущего момента), в том числе в пятницу;
 * после 21:00 — «Завтра»;
-* с пятницы 21:00 до воскресенья 21:00 — «Выходные».
+* с пятницы 21:00 до воскресенья 21:00 — «В выходные».
 
-«Выходные» — суббота и воскресенье, без пятничного вечера. Пятница в окне давала
-карточку «Сегодня 16:15» под чипом «Выходные»: формально верно, а для человека —
-обман, он читает «Выходные» как субботу. Пятничный вечер честно живёт в «Сегодня вечером».
+«В выходные» — суббота и воскресенье, без пятничного вечера. Пятница в окне давала
+карточку «Сегодня 16:15» под этим чипом: формально верно, а для человека —
+обман, он читает чип как субботу. Пятничный вечер честно живёт в «Сегодня вечером».
 
 Окна считаются здесь, на сервере, а клиент получает уже готовые ключ и подпись:
 один источник правды, и подпись чипа всегда совпадает с тем, что реально отфильтровано.
@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from src.shared.copy_ru import t
 from src.shared.notification_hours import NOTIFICATION_TZ
 
 WHEN_KEYS = ("auto", "today_evening", "today", "tomorrow", "weekend", "any")
@@ -91,19 +92,28 @@ def resolve_window(raw: str | None, now: datetime | None = None) -> TimeWindow |
 
     end_of_today = at(today + timedelta(days=1), time(0, 0))
     if key == "today":
-        return TimeWindow("today", "Сегодня", now, end_of_today)
+        return TimeWindow("today", t("when.today"), now, end_of_today)
     if key == "today_evening":
-        return TimeWindow("today_evening", "Сегодня вечером", max(now, at(today, _EVENING_FROM)), end_of_today)
+        return TimeWindow(
+            "today_evening", t("when.evening"), max(now, at(today, _EVENING_FROM)), end_of_today
+        )
     if key == "tomorrow":
         tomorrow = today + timedelta(days=1)
-        return TimeWindow("tomorrow", "Завтра", at(tomorrow, time(0, 0)), at(tomorrow + timedelta(days=1), time(0, 0)))
+        return TimeWindow(
+            "tomorrow",
+            t("when.tomorrow"),
+            at(tomorrow, time(0, 0)),
+            at(tomorrow + timedelta(days=1), time(0, 0)),
+        )
     # weekend: суббота 00:00 — конец воскресенья; уже идут выходные — с текущего момента.
     if today.weekday() in (5, 6):
         saturday = today - timedelta(days=today.weekday() - 5)
     else:
         saturday = today + timedelta(days=5 - today.weekday())
     monday = saturday + timedelta(days=2)
-    return TimeWindow("weekend", "Выходные", max(now, at(saturday, time(0, 0))), at(monday, time(0, 0)))
+    return TimeWindow(
+        "weekend", t("when.weekend"), max(now, at(saturday, time(0, 0))), at(monday, time(0, 0))
+    )
 
 
 def _minsk_today(now: datetime) -> date:
@@ -112,7 +122,7 @@ def _minsk_today(now: datetime) -> date:
 
 def day_window_label(target: date, today: date) -> str:
     if target == today + timedelta(days=1):
-        return "Завтра"
+        return t("when.tomorrow")
     wd = _WEEKDAYS_SHORT_RU[target.weekday()]
     return f"{wd}, {target.day} {_MONTHS_SHORT_RU[target.month - 1]}"
 

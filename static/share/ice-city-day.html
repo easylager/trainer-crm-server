@@ -23,6 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=1" />
   <style>
     /*
       Страница самодостаточная: один запрос, ноль своих JS/CSS-ассетов. Её открывают из
@@ -32,11 +33,11 @@
     :root {
       color-scheme: light;
       --ic-bg: #f6f8fa;
-      --ic-surface: #ffffff;
-      --ic-ink: #0d1b26;
-      --ic-muted: #5d7285;
+      --ic-surface: var(--g-surface);
+      --ic-ink: var(--g-ink);
+      --ic-muted: var(--g-muted);
       --ic-line: #e3e9ee;
-      --ic-accent: #0f8f8a;
+      --ic-accent: var(--g-accent);
       --ic-accent-ink: #ffffff;
       --ic-chip: #eef4f6;
       --ic-warn: #a86411;
@@ -46,7 +47,7 @@
     body {
       background: var(--ic-bg);
       color: var(--ic-ink);
-      font-family: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--g-font);
       font-size: 16px;
       line-height: 1.45;
       -webkit-font-smoothing: antialiased;

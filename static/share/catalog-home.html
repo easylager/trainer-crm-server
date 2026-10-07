@@ -21,15 +21,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=1" />
   <style>
     :root {
       color-scheme: light;
       --bg: #f6f8fa;
-      --surface: #ffffff;
-      --ink: #0d1b26;
-      --muted: #5d7285;
+      --surface: var(--g-surface);
+      --ink: var(--g-ink);
+      --muted: var(--g-muted);
       --line: #e3e9ee;
-      --accent: #0f8f8a;
+      --accent: var(--g-accent);
       --accent-ink: #ffffff;
     }
     * { box-sizing: border-box; }
@@ -37,7 +38,7 @@
     body {
       background: var(--bg);
       color: var(--ink);
-      font-family: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--g-font);
       font-size: 16px;
       line-height: 1.45;
     }

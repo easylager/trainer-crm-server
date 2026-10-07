@@ -113,4 +113,4 @@ async def test_selection_preview_and_telegram_keep_the_window(
     assert _og(page.text, "og:image").startswith("http")
     assert f"startapp=catalog_{city_id}_skate_weekend" in page.text
     assert "/api/public/catalog/open-telegram" in page.text
-    assert "Выходные" in page.text, "живая страница может говорить «выходные»"
+    assert "В выходные" in page.text, "живая страница говорит ту же подпись, что и меню Mini App"
