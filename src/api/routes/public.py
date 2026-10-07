@@ -771,7 +771,9 @@ async def serve_photo(file_key: str) -> Response:
     Serve catalog trainer photos from S3 or local storage. Keys under `trainers/` or
     `collectives/` (studio brand kit); private prefixes like `legal/` are rejected.
     """
-    result = s3.get_photo(file_key)
+    from starlette.concurrency import run_in_threadpool
+
+    result = await run_in_threadpool(s3.get_photo, file_key)
     if not result:
         raise HTTPException(status_code=404, detail="Not found")
     body, content_type = result

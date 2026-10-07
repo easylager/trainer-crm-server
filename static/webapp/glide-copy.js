@@ -41,7 +41,11 @@
     "cta.share": "Поделиться",
     "cta.report": "Нашли ошибку? Напишите нам",
     "price.with_rental": "с прокатом {total} {currency}",
-    "footer.made_by": "Сделано теми, кто сам катается."
+    "footer.made_by": "Сделано теми, кто сам катается.",
+    "ice.map.unavailable.title": "Карта временно недоступна",
+    "ice.map.unavailable.body": "Попробуйте ещё раз или откройте список мест.",
+    "ice.map.retry": "Повторить",
+    "ice.map.show_list": "Показать списком"
   };
 
   function t(key, kw) {

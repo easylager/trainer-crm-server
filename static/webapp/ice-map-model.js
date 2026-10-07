@@ -35,7 +35,13 @@
     sources = sources || {};
     var query = sources.query || {};
     var env = sources.env || {};
-    var candidates = [sources.key, query.apikey, sources.windowKey, env.YANDEX_MAPS_JS_API_KEY];
+    var candidates = [
+      sources.metaKey,
+      sources.key,
+      query.apikey,
+      sources.windowKey,
+      env.YANDEX_MAPS_JS_API_KEY,
+    ];
     var i;
     for (i = 0; i < candidates.length; i++) {
       var v = trimStr(candidates[i]);
@@ -44,33 +50,141 @@
     return '';
   }
 
+  var MAP_COPY_FALLBACK = {
+    'ice.map.unavailable.title': 'Карта временно недоступна',
+    'ice.map.unavailable.body': 'Попробуйте ещё раз или откройте список мест.',
+    'ice.map.retry': 'Повторить',
+    'ice.map.show_list': 'Показать списком',
+  };
+
+  function mapCopy(key) {
+    var root = typeof globalThis !== 'undefined' ? globalThis : null;
+    if (root && root.GlideCopy && typeof root.GlideCopy.t === 'function') {
+      return root.GlideCopy.t(key);
+    }
+    return MAP_COPY_FALLBACK[key] || key;
+  }
+
+  function mapUnavailableState(reason) {
+    reason = reason || 'config-failed';
+    return {
+      canRenderMap: false,
+      fallback: 'none',
+      reason: reason,
+      title: mapCopy('ice.map.unavailable.title'),
+      body: mapCopy('ice.map.unavailable.body'),
+      retryLabel: mapCopy('ice.map.retry'),
+      listLabel: mapCopy('ice.map.show_list'),
+    };
+  }
+
+  function mapKeyResult(key, opts) {
+    opts = opts || {};
+    var resolved = resolveApiKey({ key: key });
+    return {
+      key: resolved,
+      reason: opts.reason || (resolved ? 'ok' : 'no-key'),
+      status: opts.status != null ? opts.status : resolved ? 200 : 200,
+      missingKey: !!opts.missingKey,
+    };
+  }
+
+  function fetchMapConfigKey(fetchImpl, opts) {
+    opts = opts || {};
+    var fetchFn = fetchImpl;
+    if (typeof fetchFn !== 'function') {
+      return Promise.resolve(mapKeyResult('', { reason: 'config-failed', status: 0, missingKey: false }));
+    }
+    var maxAttempts = 3;
+    var budgetMs = opts.budgetMs != null ? Number(opts.budgetMs) : 6000;
+    var perFetchMs = opts.perFetchMs != null ? Number(opts.perFetchMs) : 5000;
+    var started = Date.now();
+    var attempt = 0;
+
+    function elapsed() {
+      return Date.now() - started;
+    }
+
+    function backoffMs(resp, n) {
+      var hdr = resp && resp.headers && resp.headers.get ? resp.headers.get('Retry-After') : '';
+      var sec = Number(hdr);
+      if (isFinite(sec) && sec > 0) return Math.min(2000, sec * 1000);
+      return Math.min(800, 150 * Math.pow(2, n));
+    }
+
+    function tryFetch() {
+      if (elapsed() >= budgetMs) {
+        return Promise.resolve(
+          mapKeyResult('', { reason: 'config-failed', status: 429, missingKey: false })
+        );
+      }
+      attempt += 1;
+      var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timer =
+        ctrl &&
+        setTimeout(function () {
+          try {
+            ctrl.abort();
+          } catch (e) {
+            /* ignore */
+          }
+        }, perFetchMs);
+      return fetchFn('/api/public/ice/map-config', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+        .then(function (r) {
+          if (timer) clearTimeout(timer);
+          if (r.ok) {
+            return r.json().then(function (data) {
+              var k = resolveApiKey({
+                env: { YANDEX_MAPS_JS_API_KEY: data && data.yandex_maps_js_api_key },
+              });
+              if (!k) {
+                return mapKeyResult('', { reason: 'no-key', status: 200, missingKey: true });
+              }
+              return mapKeyResult(k, { reason: 'ok', status: 200, missingKey: false });
+            });
+          }
+          if ((r.status === 429 || r.status >= 500) && attempt < maxAttempts && elapsed() < budgetMs) {
+            return new Promise(function (resolve) {
+              setTimeout(resolve, backoffMs(r, attempt));
+            }).then(tryFetch);
+          }
+          return mapKeyResult('', {
+            reason: 'config-failed',
+            status: r.status,
+            missingKey: false,
+          });
+        })
+        .catch(function () {
+          if (timer) clearTimeout(timer);
+          if (attempt < maxAttempts && elapsed() < budgetMs) {
+            return new Promise(function (resolve) {
+              setTimeout(resolve, backoffMs(null, attempt));
+            }).then(tryFetch);
+          }
+          return mapKeyResult('', { reason: 'config-failed', status: 0, missingKey: false });
+        });
+    }
+
+    return tryFetch();
+  }
+
   function scriptUrl(apiKey) {
     var key = trimStr(apiKey);
     if (!key || key === PLACEHOLDER_API_KEY) return '';
     return YMAPS_SCRIPT + '?apikey=' + encodeURIComponent(key) + '&lang=ru_RU';
   }
 
-  function missingKeyState() {
-    return {
-      canRenderMap: false,
-      fallback: 'none',
-      title: 'Карта недоступна',
-      body:
-        'Нет ключа Yandex Maps JS API. Задайте переменную YANDEX_MAPS_JS_API_KEY ' +
-        'или откройте прототип с ?apikey=… Запасной карты нет.',
-    };
-  }
-
   function chooseMapProvider(sources) {
     var key = resolveApiKey(sources);
     if (!key) {
-      var empty = missingKeyState();
+      var empty = mapUnavailableState('no-key');
       return {
         provider: 'none',
         fallback: empty.fallback,
         canRenderMap: false,
         title: empty.title,
         body: empty.body,
+        reason: empty.reason,
       };
     }
     return { provider: 'yandex', fallback: 'none', canRenderMap: true };
@@ -95,11 +209,11 @@
     var provider = chooseMapProvider({ key: opts.key, query: opts.query, env: opts.env, windowKey: opts.windowKey });
     if (provider.provider !== 'yandex') {
       return {
-        kind: 'missing-key',
+        kind: 'unavailable',
         showMap: false,
         provider: 'none',
         fallback: 'none',
-        empty: missingKeyState(),
+        empty: mapUnavailableState(provider.reason || 'no-key'),
       };
     }
     if (trimStr(opts.intent) === 'coach') {
@@ -832,7 +946,10 @@
     nearMePolicy: nearMePolicy,
     resolveApiKey: resolveApiKey,
     scriptUrl: scriptUrl,
-    missingKeyState: missingKeyState,
+    mapUnavailableState: mapUnavailableState,
+    mapKeyResult: mapKeyResult,
+    fetchMapConfigKey: fetchMapConfigKey,
+    mapCopy: mapCopy,
     chooseMapProvider: chooseMapProvider,
     cityWithoutArenasState: cityWithoutArenasState,
     coachMapEmptyState: coachMapEmptyState,

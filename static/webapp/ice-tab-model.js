@@ -1666,7 +1666,7 @@
     return {
       stale: stale,
       href: arenaHref(item),
-      photo: item.card || item.thumb || '',
+      photo: item.thumb || item.card || '',
       initial: initialOf(name),
       // TASK-148: иконка типа с сервера — содержимое бесфотошной плашки.
       // Фолбэк на монограмму, если ответ старого API без venue_icon.

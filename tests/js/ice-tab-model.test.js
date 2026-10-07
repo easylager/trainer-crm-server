@@ -893,11 +893,11 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     assert.equal(v.isSession, true);
   });
 
-  it('AC-001: полноширинный кадр берёт card (800px), а не thumb (320px)', () => {
+  it('AC-001: в списке берём thumb, если он есть (меньше трафика)', () => {
     const { boardCardView } = loadModel();
-    assert.equal(boardCardView(sessionItem, now).photo, '/photos/3_card.jpg');
-    const noCard = Object.assign({}, sessionItem, { card: null });
-    assert.equal(boardCardView(noCard, now).photo, '/photos/3_thumb.jpg');
+    assert.equal(boardCardView(sessionItem, now).photo, '/photos/3_thumb.jpg');
+    const noThumb = Object.assign({}, sessionItem, { thumb: null });
+    assert.equal(boardCardView(noThumb, now).photo, '/photos/3_card.jpg');
   });
 
   it('AC-004: глубина предложения — свой слот, без обещания недельного окна', () => {

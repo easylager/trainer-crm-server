@@ -141,7 +141,7 @@ describe('бесфотошная карточка: иконка типа на п
     assert.ok(branch.length > 0, 'бесфотошная ветка существует');
     assert.match(branch, /v\.venueIcon \|\| v\.initial/, 'иконка типа, фолбэк — монограмма');
     assert.ok(!/<img/i.test(branch), 'в бесфотошном варианте нет тега img');
-    assert.ok(!/acardThumbStyle/.test(branch), 'фоновая картинка не встраивается');
+    assert.ok(!/listPhotoHtml/.test(branch), 'в бесфотошном варианте нет ленивого img');
   });
 
   it('карусель шторки карты: плашка типа с иконкой, класс типа на карточке', () => {

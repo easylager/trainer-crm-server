@@ -19,6 +19,20 @@ from src.shared.rate_limit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
+
+def _mask_client_ip(ip: str) -> str:
+    """Log-safe IP: keep network hint, hide host octet(s)."""
+    if not ip or ip == "unknown":
+        return ip
+    if "." in ip and ":" not in ip:
+        parts = ip.split(".")
+        if len(parts) == 4:
+            return f"{parts[0]}.{parts[1]}.x.x"
+    if ":" in ip:
+        head = ip.split(":")
+        return ":".join(head[:3]) + ":…" if len(head) > 3 else ip
+    return "?"
+
 _limiters: dict[str, RateLimiter] | None = None
 
 
@@ -55,6 +69,10 @@ def rate_limit_bucket_for_path(path: str) -> str:
         return "skip"
     if path.startswith("/api/webhooks"):
         return "skip"
+    if path == "/api/public/ice/map-config":
+        return "skip"
+    if path.startswith("/api/public/photos/"):
+        return "photo"
     if path.startswith("/api/public"):
         return "public"
     if path.startswith("/api/webapp"):
@@ -70,6 +88,7 @@ def _get_limiters() -> dict[str, RateLimiter]:
         s = Settings()
         _limiters = {
             "public": RateLimiter(s.api_rate_limit_public_max_requests, s.api_rate_limit_public_window_sec),
+            "photo": RateLimiter(s.api_rate_limit_photo_max_requests, s.api_rate_limit_photo_window_sec),
             "webapp": RateLimiter(s.api_rate_limit_webapp_max_requests, s.api_rate_limit_webapp_window_sec),
             "upload": RateLimiter(s.api_rate_limit_upload_max_requests, s.api_rate_limit_upload_window_sec),
             "default": RateLimiter(s.api_rate_limit_default_max_requests, s.api_rate_limit_default_window_sec),
@@ -100,6 +119,12 @@ class ApiRateLimitMiddleware(BaseHTTPMiddleware):
             bucket = "bot"
         limiter = _get_limiters()[bucket]
         if not limiter.check_and_consume(ip):
+            logger.warning(
+                "rate limit exceeded bucket=%s path=%s ip=%s",
+                bucket,
+                path,
+                _mask_client_ip(ip),
+            )
             retry = max(1, int(limiter.window_sec))
             return JSONResponse(
                 status_code=429,

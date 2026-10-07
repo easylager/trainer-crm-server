@@ -1,4 +1,5 @@
 """FastAPI app: health check and API routers. No business logic here."""
+import html
 import logging
 from pathlib import Path
 from typing import Optional
@@ -61,6 +62,9 @@ app = FastAPI(
     redoc_url="/redoc" if _api_docs_enabled else None,
     openapi_url="/openapi.json" if _api_docs_enabled else None,
 )
+
+if not (_settings_for_bench.yandex_maps_js_api_key or "").strip():
+    logger.error("YANDEX_MAPS_JS_API_KEY is not set — Ice tab Yandex map will stay unavailable")
 
 if _settings_for_bench.trainer_webapp_benchmark_log or _settings_for_bench.trainer_webapp_benchmark_slow_ms is not None:
     logger.info(
@@ -212,7 +216,19 @@ def webapp_ice_tab_page():
     path = _WEBAPP_DIR / "ice.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    page_html = path.read_text(encoding="utf-8")
+    key = (Settings().yandex_maps_js_api_key or "").strip()
+    if key:
+        meta = f'  <meta name="ymaps-key" content="{html.escape(key, quote=True)}">\n'
+        marker = "</head>"
+        if marker not in page_html:
+            raise HTTPException(status_code=500, detail="Invalid ice template")
+        page_html = page_html.replace(marker, meta + marker, 1)
+    return HTMLResponse(
+        content=page_html,
+        media_type="text/html",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
 
 
 @app.get("/webapp/trainer-bookings")

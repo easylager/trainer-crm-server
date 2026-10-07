@@ -8,6 +8,7 @@
   'use strict';
 
   var M = global.IceTabModel;
+  var lastArenaListSig = '';
   var state = {
     intent: 'skate',
     view: 'list',
@@ -754,8 +755,13 @@
       if (loaderEl) loaderEl.hidden = true;
       if (emptyEl && global.IceMapModel) {
         emptyEl.hidden = false;
+        var st = global.IceMapModel.mapUnavailableState('sdk-failed');
         emptyEl.innerHTML =
-          '<strong>Карта не загрузилась</strong><p>Обновите страницу. Файл карты не подключился.</p>';
+          '<div class="ice-empty ice-map-unavail"><b>' +
+          esc(st.title) +
+          '</b><p>' +
+          esc(st.body) +
+          '</p></div>';
       }
       return;
     }
@@ -834,6 +840,9 @@
         onSheetFull: function () {
           setView('list');
         },
+        onShowList: function () {
+          setView('list');
+        },
         // Шапка шторки: «7 мест сегодня вечером …» — метка текущего окна.
         getWindow: function () {
           return state.window;
@@ -852,9 +861,13 @@
     });
   }
 
-  function acardThumbStyle(src) {
+  function listPhotoHtml(src) {
     if (!src) return '';
-    return ' style="background-image:url(\'' + esc(src).replace(/'/g, '%27') + '\')"';
+    return (
+      '<img class="ice-board__photo-img ice-acard__img" src="' +
+      esc(src) +
+      '" alt="" loading="lazy" decoding="async" />'
+    );
   }
 
   /**
@@ -868,7 +881,7 @@
     /* TASK-148 (AC-2): нет фото — нет фото-блока. Плашка типа места: иконка
        с сервера (venue_icon), фолбэк — монограмма имени. */
     var photo = v.photo
-      ? '<span class="ice-board__photo"' + acardThumbStyle(v.photo) + '>'
+      ? '<span class="ice-board__photo">' + listPhotoHtml(v.photo)
       : '<span class="ice-board__photo ice-board__photo--empty">' +
         '<span class="ice-board__initial" aria-hidden="true">' +
         esc(v.venueIcon || v.initial) +
@@ -936,9 +949,8 @@
       '">' +
       '<span class="ice-acard__ph' +
       (view.thumb ? '' : ' ice-acard__ph--empty') +
-      '"' +
-      acardThumbStyle(view.thumb) +
-      '>' +
+      '">' +
+      (view.thumb ? listPhotoHtml(view.thumb) : '') +
       (view.thumb
         ? ''
         : '<span class="ice-acard__mono" aria-hidden="true">' + esc(view.initial || '?') + '</span>') +
@@ -1027,6 +1039,7 @@
     if (paint === 'skeleton') {
       // TASK-095: вместо строки «Загрузка катков…» — коробки будущих карточек.
       // Текстовая строка обещала одну форму, а приходила совсем другая.
+      lastArenaListSig = '';
       list.innerHTML = state.intent === 'coach' ? trainerSkeletons(3) : boardSkeletons(2);
       showActiveList();
       return;
@@ -1067,6 +1080,25 @@
        забыть, что это уже не ответ на выбранный чип. */
     var parts = M.orderForFeed(state.items, state.window, state.nearOn);
     var brk = parts.hits.length ? M.windowBreakView(state.window, parts.rest, state.venueTypes) : null;
+    var arenaSig =
+      parts.hits
+        .map(function (it) {
+          return String(it.id) + ':' + String(it.thumb || it.card || '');
+        })
+        .join(',') +
+      '|' +
+      parts.rest
+        .map(function (it) {
+          return String(it.id) + ':' + String(it.thumb || it.card || '');
+        })
+        .join(',') +
+      '|' +
+      (brk ? '1' : '0');
+    if (arenaSig === lastArenaListSig && list.innerHTML) {
+      showActiveList();
+      return;
+    }
+    lastArenaListSig = arenaSig;
     list.innerHTML =
       parts.hits.map(renderArenaCard).join('') +
       (brk
