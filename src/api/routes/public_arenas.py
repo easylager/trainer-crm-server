@@ -1,4 +1,5 @@
 """Public Ice Discovery read-only routes (TASK-051). New module — do not grow webapp.py."""
+
 from __future__ import annotations
 
 import logging
@@ -56,9 +57,7 @@ def _query_error(exc: IcePublicQueryError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
 
 
-async def _slug_city_id(
-    session: AsyncSession, arena_ref: str, city_id: int | None, city: str | None
-) -> int | None:
+async def _slug_city_id(session: AsyncSession, arena_ref: str, city_id: int | None, city: str | None) -> int | None:
     """Город для поиска по slug. Числовой id арены город не требует.
 
     Без города — ``None``: голый slug разрешается, только если он один среди публично
@@ -174,9 +173,7 @@ async def get_nearest_ice_now(
 async def get_ice_city_day_share(
     city_id: int,
     response: Response,
-    share_context: str | None = Query(
-        None, description="Где нажали «Поделиться»: ice_tab (вкладка «Лёд»)."
-    ),
+    share_context: str | None = Query(None, description="Где нажали «Поделиться»: ice_tab (вкладка «Лёд»)."),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -203,12 +200,8 @@ async def get_ice_city_day_share(
     city_name = str(row[1])
 
     day = await get_city_ice_day(session, city_id=int(city_id))
-    page_url = ice_city_day_page_url(
-        base_url=Settings().webapp_base_url, city_name=city_name
-    )
-    share_text = compose_ice_city_day_share_message(
-        city_name=city_name, day=day, page_url=page_url
-    )
+    page_url = ice_city_day_page_url(base_url=Settings().webapp_base_url, city_name=city_name)
+    share_text = compose_ice_city_day_share_message(city_name=city_name, day=day, page_url=page_url)
     share_body = share_body_for_native_share_dialog(share_text, page_url)
 
     ctx = (share_context or "").strip().lower() or "ice_tab"
@@ -253,9 +246,7 @@ async def post_ice_interest(
     """Record that a client asked for skating in a city that has trainers but no map rinks."""
     response.headers["Cache-Control"] = "no-store"
     try:
-        payload = await record_ice_city_interest(
-            session, city_id=body.city_id, intent=body.intent, source=body.source
-        )
+        payload = await record_ice_city_interest(session, city_id=body.city_id, intent=body.intent, source=body.source)
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
     if payload is None:
@@ -290,9 +281,7 @@ async def get_public_arena_sessions(
 ) -> dict:
     """Canonical ice_sessions feed grouped by local_date. Expired slots are omitted."""
     scoped = await _slug_city_id(session, arena_ref, city_id, city)
-    payload = await list_public_arena_sessions(
-        session, arena_ref, date_from=date_from, date_to=date_to, city_id=scoped
-    )
+    payload = await list_public_arena_sessions(session, arena_ref, date_from=date_from, date_to=date_to, city_id=scoped)
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
     set_public_json_list_cache(response)
@@ -348,8 +337,10 @@ async def get_public_selection_share(
 
     response.headers["Cache-Control"] = "no-store"
     row = (
-        await session.execute(text(f"SELECT id, name FROM cities WHERE id = :cid AND {public_city_scope_sql('cities')}"),
-            {"cid": int(city_id), **public_scope_params()},)
+        await session.execute(
+            text(f"SELECT id, name FROM cities WHERE id = :cid AND {public_city_scope_sql('cities')}"),
+            {"cid": int(city_id), **public_scope_params()},
+        )
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="City not found")

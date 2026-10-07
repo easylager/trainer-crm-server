@@ -4,6 +4,7 @@ The public per-IP bucket also covers the marketing redirect at /go. TASK-190: pu
 (/p/ /c/ /ice/ /r/) and PNG renders (og.png/story.png) have their own buckets.
 Webhooks are excluded from rate limit; multipart uploads use a larger cap when Content-Length is present.
 """
+
 from __future__ import annotations
 
 import ipaddress
