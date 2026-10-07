@@ -82,10 +82,9 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert "19:30" in html and "8.50 BYN" in html
     assert "сегодня" not in _meta(html, "og:description").lower()
     assert "завтра" not in _meta(html, "og:description").lower()
-    # Шеринг дальше — во все мессенджеры, без Telegram у получателя.
-    assert "https://t.me/share/url?url=" in html
-    assert "https://wa.me/?text=" in html
-    assert "viber://forward?text=" in html
+    # «Поделиться» без JS — ссылка на саму страницу; мессенджеры остаются на странице города.
+    assert 'data-glide-share="' in html
+    assert place["path"] in html
     ld = _json_ld(html)
     assert ld["@type"] == "IceRink"
     assert ld["telephone"] == "+375 29 111-22-33"
@@ -109,7 +108,8 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
     assert _meta(html, "og:title").endswith("20:30 · " + place["name"])
     assert "сегодня" not in _meta(html, "og:title").lower()
     assert "завтра" not in _meta(html, "og:description").lower()
-    assert f"startapp=arena_{place['arena_id']}_s_{sid}" in html
+    assert f"start=follow_{place['arena_id']}" in html
+    assert "startapp=arena_" not in html
     assert _meta(html, "robots") == "noindex, follow"
     assert f"/session/{sid}/og.png" in _meta(html, "og:image")
     assert f"?s={sid}" in _meta(html, "og:url")

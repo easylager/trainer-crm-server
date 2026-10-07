@@ -174,6 +174,7 @@ async def place_page(
     request: Request,
     s: str | None = Query(None, description="id сеанса, на который ведёт ссылка"),
     i: str | None = Query(None, description="1 — тон «Позвать с собой»"),
+    d: str | None = Query(None, description="день расписания YYYY-MM-DD, без JS"),
     session: AsyncSession = Depends(get_session),
 ):
     base = _base()
@@ -230,6 +231,7 @@ async def place_page(
         share=share_payload(view, page_url=share_url, invite=False),
         invite=invite,
         country=str(city.get("country") or ""),
+        day=d,
     )
     await record_public_page_view(
         session,
