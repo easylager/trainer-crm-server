@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.arena_schedule_mode import (
+    SCHEDULE_MODE_AUTO,
     SCHEDULE_MODE_SEASON_CLOSED,
     normalize_schedule_mode,
     validate_schedule_mode_patch,
@@ -576,6 +577,7 @@ async def apply_admin_arena_profile_patch(
             assignments.append("tickets_url = :tickets_url")
             params["tickets_url"] = url
     schedule_keys = {"schedule_mode", "reopen_date", "schedule_mode_note"}
+    schedule_reopened = False
     if schedule_keys & fields.keys():
         row = (
             await session.execute(
@@ -588,8 +590,9 @@ async def apply_admin_arena_profile_patch(
                 {"id": _arena_id},
             )
         ).mappings().first()
+        previous_mode = normalize_schedule_mode((row or {}).get("schedule_mode"))
         merged = {
-            "schedule_mode": normalize_schedule_mode((row or {}).get("schedule_mode")),
+            "schedule_mode": previous_mode,
             "reopen_date": (row or {}).get("reopen_date"),
             "schedule_mode_note": (row or {}).get("schedule_mode_note"),
         }
@@ -611,6 +614,12 @@ async def apply_admin_arena_profile_patch(
         elif "schedule_mode" in fields:
             assignments.append("reopen_date = NULL")
             assignments.append("schedule_mode_note = NULL")
+        if (
+            "schedule_mode" in fields
+            and previous_mode == SCHEDULE_MODE_SEASON_CLOSED
+            and mode == SCHEDULE_MODE_AUTO
+        ):
+            schedule_reopened = True
     if not assignments:
         return
     assignments.append("updated_at = now()")
@@ -618,6 +627,10 @@ async def apply_admin_arena_profile_patch(
         text("UPDATE arena_profiles SET " + ", ".join(assignments) + " WHERE arena_id = :id"),
         params,
     )
+    if schedule_reopened:
+        from src.application.arena_follow_notify import enqueue_arena_reopened
+
+        await enqueue_arena_reopened(session, _arena_id)
 
 
 async def touch_arena_profile(session: AsyncSession, arena_id: int) -> None:

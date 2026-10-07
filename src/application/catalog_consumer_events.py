@@ -58,12 +58,18 @@ KIND_PUBLIC_PAGE_VIEW = "public_page_view"
 KIND_PUBLIC_TELEGRAM_CTA = "public_telegram_cta"
 KIND_MINIAPP_CATALOG_ENTRY = "miniapp_catalog_entry"
 KIND_PUBLIC_CONTACT_CLICK = "public_contact_click"
+KIND_FOLLOW_CREATED = "follow_created"
+KIND_FOLLOW_NOTIFIED = "follow_notified"
+KIND_FOLLOW_REMOVED = "follow_removed"
 
 CATALOG_CONSUMER_KINDS = (
     KIND_PUBLIC_PAGE_VIEW,
     KIND_PUBLIC_TELEGRAM_CTA,
     KIND_MINIAPP_CATALOG_ENTRY,
     KIND_PUBLIC_CONTACT_CLICK,
+    KIND_FOLLOW_CREATED,
+    KIND_FOLLOW_NOTIFIED,
+    KIND_FOLLOW_REMOVED,
 )
 
 SURFACE_PLACE_PAGE = "place_page"
@@ -72,6 +78,7 @@ SURFACE_ICE_CITY_DAY = "ice_city_day"
 SURFACE_MINIAPP_ICE = "miniapp_ice"
 SURFACE_MINIAPP_ARENA = "miniapp_arena"
 SURFACE_MINIAPP_SHELL = "miniapp_shell"
+SURFACE_ARENA_FOLLOW = "arena_follow"
 
 _MINIAPP_DEDUP_GROUP = "miniapp"
 
