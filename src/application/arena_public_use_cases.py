@@ -906,6 +906,58 @@ async def list_city_selection_places(
     }
 
 
+async def city_selection_session_counts(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    venue_types: set[str] | None,
+    window: Mapping[str, Any] | None,
+    now: datetime,
+) -> dict[int, int]:
+    """Сеансы всей подборки одним запросом: ``{arena_id: сколько сеансов}``.
+
+    Подборка — не страница: превью в чате обещает «15 катков · 10 сеансов» по всему
+    городу, а на странице видно 12 карточек; окно ``?w=`` сужает счёт так же, как сам
+    список. Фильтр — тот же, что у ``list_city_selection_places``.
+
+    Возвращаем по местам, а не суммой: страница не показывает сеансы мест, чьё расписание
+    не подтверждалось больше 72 ч, и счёт обязан совпадать с тем, что человек видит.
+    """
+    params: dict[str, Any] = {
+        "city_id": int(city_id),
+        "now": now,
+        "st": STATUS_ACTIVE,
+        **public_scope_params(),
+    }
+    if venue_types:
+        type_clause = " AND COALESCE(a.venue_type, 'ice') = ANY(:venue_types)"
+        params["venue_types"] = sorted(venue_types)
+    else:
+        type_clause = " AND COALESCE(a.venue_type, 'ice') <> ALL(:hidden_venue_types)"
+        params["hidden_venue_types"] = sorted(DEFAULT_HIDDEN_VENUE_TYPES)
+    window_clause = ""
+    if window and window.get("from") and window.get("to"):
+        window_clause = " AND s.starts_at_utc >= :win_from AND s.starts_at_utc < :win_to"
+        params["win_from"] = datetime.fromisoformat(str(window["from"]))
+        params["win_to"] = datetime.fromisoformat(str(window["to"]))
+    rows = (
+        await session.execute(
+            text(f"""
+                SELECT s.arena_id, COUNT(*)::int AS n
+                FROM ice_sessions s
+                JOIN arenas a ON a.id = s.arena_id
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{type_clause}{window_clause}
+                  AND {_CURRENT_SESSION_SQL}
+                GROUP BY s.arena_id
+                """),
+            params,
+        )
+    ).mappings()
+    return {int(row["arena_id"]): int(row["n"] or 0) for row in rows}
+
+
 async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any]]:
     """Active cities that have public skate sessions and/or catalog trainers.
 

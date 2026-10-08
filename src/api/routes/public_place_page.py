@@ -435,6 +435,7 @@ async def selection_page(
         load_selection_view,
         render_selection_page,
         selection_image_path,
+        selection_image_version,
         selection_path,
         selection_start_param,
     )
@@ -453,10 +454,14 @@ async def selection_page(
     )
     # Любой ?t= / ?w= канонизируется на базовую подборку города, а не на самого себя.
     canonical_path = selection_path(city_name=city_name, venue=None, when=None)
+    # ?v= — хэш данных превью: без него Telegram держит старую og-картинку по URL.
+    og_image = base + selection_image_path(
+        city_name=city_name, venue=venue, when=when, version=selection_image_version(view)
+    )
     html = render_selection_page(
         view,
         canonical_url=base + canonical_path,
-        og_image_url=base + selection_image_path(city_name=city_name, venue=venue, when=when),
+        og_image_url=og_image,
         cta_url=public_telegram_cta_url(
             base,
             start_param=selection_start_param(city_id=int(city["id"]), venue=venue, when=when),
@@ -465,8 +470,7 @@ async def selection_page(
         ),
         share=compose_selection_share(view, page_url=base + path),
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
-        story_image_url=base
-        + selection_image_path(city_name=city_name, venue=venue, when=when).replace("/og.png", "/story.png"),
+        story_image_url=og_image.replace("/og.png", "/story.png"),
         base_url=base,
     )
     await record_public_page_view(

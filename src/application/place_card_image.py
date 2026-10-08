@@ -377,13 +377,15 @@ def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> by
     from src.application.selection_page import (
         absolute_window_phrase,
         selection_share_description,
+        selection_share_places,
         selection_share_title,
     )
 
     window = view.get("window")
     phrase = absolute_window_phrase(window) if window and view.get("skating") else ""
     kicker = f"Карта льда · {phrase}" if phrase else "Карта льда"
-    names = [str(i.get("name") or "") for i in (view.get("items") or [])[:3]]
+    # TASK-222: подпись — те же три места в том же порядке, что строки «Ссылка»/«Другое».
+    names = [str(item.get("name") or "") for item, _slots in selection_share_places(view)[:3]]
     lines = {
         "kicker": kicker.upper(),
         "title": selection_share_title(view),

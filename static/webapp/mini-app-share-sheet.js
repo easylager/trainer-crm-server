@@ -132,8 +132,8 @@
     var media = absoluteMediaUrl(p.story_image_url);
     if (!/^https:\/\//i.test(media)) return false;
     var params = {};
-    var caption = String(p.share_body || '').trim();
-    if (caption) params.text = caption.slice(0, 200);
+    // TASK-222: сторис — кадр плюс ссылка, без подписи. Своя подпись уже нарисована
+    // в самой картинке, а text попадал в редактор истории простынёй поверх неё.
     var link = String(p.share_url || '').trim();
     if (link) params.widget_link = { url: link, name: 'Карта льда' };
     try {
@@ -312,15 +312,23 @@
     return !!(state && state.endpoint);
   }
 
+  /**
+   * Telegram: подборка — только ссылка на обоих путях, место — со текстом.
+   * Тело обнуляем до вызова, а не внутри telegramShareHref: Mini App-путь уходит
+   * мимо этой функции, и раньше он оставался единственным, кто передавал текст.
+   */
+  function sendTelegramShare(p, linkOnly) {
+    var body = linkOnly ? '' : String((p && p.share_body) || '');
+    var opened = false;
+    if (typeof global.openTelegramShareUrlFromMiniApp === 'function') {
+      opened = !!global.openTelegramShareUrlFromMiniApp({ shareUrl: p.share_url, shareBody: body });
+    }
+    if (!opened) openUrl(telegramShareHref(p.share_url, body, linkOnly));
+  }
+
   var CHANNELS = {
     telegram: function (p) {
-      var linkOnly = telegramLinkOnly();
-      var body = linkOnly ? '' : p.share_body;
-      var opened = false;
-      if (typeof global.openTelegramShareUrlFromMiniApp === 'function') {
-        opened = global.openTelegramShareUrlFromMiniApp({ shareUrl: p.share_url, shareBody: body });
-      }
-      if (!opened) openUrl(telegramShareHref(p.share_url, p.share_body, linkOnly));
+      sendTelegramShare(p, telegramLinkOnly());
     },
     copy: function (p) {
       var text = fullMessage(p);
