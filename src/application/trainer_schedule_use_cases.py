@@ -58,16 +58,19 @@ async def trainer_offers_online_sessions(session: AsyncSession, trainer_id: int)
     """
     True when the trainer may create / sell venue-less online slots.
 
-    ``online_enabled`` — alongside arenas; ``arena_work_format='online'`` — online-only profile.
+    Derived from ≥1 ``trainer_services.is_online``, or exclusive ``arena_work_format='online'``.
+    Profile ``online_enabled`` is synced from services and is not the source of truth.
     """
     r = await session.execute(
         text(
             """
             SELECT
-              COALESCE(p.online_enabled, false),
+              EXISTS (
+                SELECT 1 FROM trainer_services ts
+                WHERE ts.trainer_id = :tid AND COALESCE(ts.is_online, false)
+              ),
               COALESCE(t.arena_work_format, '')
             FROM trainers t
-            LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
             WHERE t.id = :tid
             """
         ),

@@ -2564,7 +2564,7 @@
     .slot-pick-day-strip__day.is-on span,
     .slot-pick-day-strip__day.is-on b,
     .slot-pick-day-strip__day.is-on i {
-      color: var(--app-cta-text, var(--tg-theme-button-text-color, #fff));
+      color: var(--app-cta-text, var(--tg-theme-button-text-color));
       opacity: 1;
     }
     .slot-pick-day-strip__day:active { opacity: 0.92; }

@@ -298,10 +298,10 @@ async def test_empty_week_is_saved_not_rejected(app_use_test_db, db_session) -> 
                 headers={"X-Telegram-Init-Data": "mock"},
                 json={
                     "service_ids": [service_id],
+                    "services": [{"service_id": service_id, "is_online": True}],
                     "days": [],
                     "duration_minutes": 60,
                     "specialist_role": "Спортивный психолог",
-                    "online_enabled": True,
                 },
             )
 
@@ -322,7 +322,10 @@ async def test_empty_week_is_saved_not_rejected(app_use_test_db, db_session) -> 
 
     linked = (
         await db_session.execute(
-            text("SELECT COUNT(*) FROM trainer_services WHERE trainer_id = :t"),
+            text(
+                "SELECT COUNT(*) FROM trainer_services "
+                "WHERE trainer_id = :t AND COALESCE(is_online, false)"
+            ),
             {"t": trainer_id},
         )
     ).scalar()

@@ -1900,7 +1900,12 @@
           if (s.client_notice != null && String(s.client_notice).trim()) noticeOut = String(s.client_notice).trim();
           var gpOut = null;
           if (s.group_price_byn != null && !isNaN(Number(s.group_price_byn))) gpOut = Number(s.group_price_byn);
-          var row = { service_id: s.service_id, price_tiers: tiers, description: descOut };
+          var row = {
+            service_id: s.service_id,
+            price_tiers: tiers,
+            description: descOut,
+            is_online: !!s.is_online,
+          };
           if (noticeOut != null) row.client_notice = noticeOut;
           if (gpOut != null) row.group_price_byn = gpOut;
           if (s.ui_accent != null && String(s.ui_accent).trim()) {
@@ -1933,7 +1938,6 @@
             min_hours_before_booking: p.min_hours_before_booking != null ? Number(p.min_hours_before_booking) : null,
             group_classes_enabled: !!p.group_classes_enabled,
             specialist_roles: specialistRolesSnapshot(),
-            online_enabled: !!p.online_enabled,
           },
           services: svc,
           arena_ids: arena_ids,
@@ -1992,6 +1996,7 @@
         state.servicesCatalog.forEach(function(s) {
           var cb = document.getElementById('svc_' + s.id);
           if (cb && cb.checked) {
+            var isOnlineSvc = readServiceFormatOnline(s.id);
             var tiers = [];
             SERVICE_TIER_ORDER.forEach(function(code) {
               var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
@@ -2001,15 +2006,15 @@
                 if (!isNaN(p) && p >= 0) tiers.push({ tier_kind: code, price_byn: p });
               }
             });
-            var svcObj = { service_id: s.id, price_tiers: tiers };
+            var svcObj = { service_id: s.id, price_tiers: tiers, is_online: isOnlineSvc };
             var sdEl = document.getElementById('svc_desc_' + s.id);
             var sdRaw = sdEl ? sdEl.value.trim() : '';
             svcObj.description = sdRaw ? sdRaw : null;
             var cnEl = document.getElementById('svc_client_notice_' + s.id);
-            var cnRaw = cnEl ? cnEl.value.trim() : '';
+            var cnRaw = (!isOnlineSvc && cnEl) ? cnEl.value.trim() : '';
             svcObj.client_notice = cnRaw ? cnRaw : null;
             var gpel = document.getElementById('price_group_' + s.id);
-            if (gpel && gpel.value.trim() !== '') {
+            if (!isOnlineSvc && gpel && gpel.value.trim() !== '') {
               var gpg = Number(gpel.value);
               if (!isNaN(gpg) && gpg >= 0) svcObj.group_price_byn = gpg;
             }
@@ -2082,10 +2087,6 @@
               return !!(el && el.checked);
             })(),
             specialist_roles: specialistRolesSnapshot(),
-            online_enabled: (function() {
-              var el = document.getElementById('online_enabled');
-              return !!(el && el.checked);
-            })(),
           },
           services: services,
           arena_ids: arena_ids,
@@ -3943,6 +3944,7 @@
         state.selectedSpecialistRoles = specialistRolesFromProfile(p);
         closeSpecialistRoleAdd();
         bindSpecialistRolesEditor();
+        bindCustomServiceAdd();
         renderSpecialistRolesEditor();
         var rolesField = document.getElementById('specialistRolesField');
         if (rolesField) rolesField.hidden = false;
@@ -3954,22 +3956,6 @@
         setv('min_hours_before_booking', p.min_hours_before_booking);
         var gce = document.getElementById('group_classes_enabled');
         if (gce) gce.checked = !!p.group_classes_enabled;
-        var onlineEl = document.getElementById('online_enabled');
-        if (onlineEl) {
-          onlineEl.checked = !!p.online_enabled;
-          if (!onlineEl._onlineBound) {
-            onlineEl._onlineBound = true;
-            onlineEl.addEventListener('change', function() {
-              if (!state.trainer) state.trainer = {};
-              if (!state.trainer.profile || typeof state.trainer.profile !== 'object') {
-                state.trainer.profile = {};
-              }
-              state.trainer.profile.online_enabled = !!onlineEl.checked;
-              setDirty();
-              haptic('light');
-            });
-          }
-        }
         var citySel = document.getElementById('city_id');
         if (citySel) citySel.value = p.city_id != null ? String(p.city_id) : '';
         var eduSel = document.getElementById('education');
@@ -4781,6 +4767,89 @@
         return '';
       }
 
+      /** Online vs venue — XOR per trainer offering (trainer_services.is_online). */
+      function getServiceIsOnline(serviceId) {
+        var list = (state.trainer && state.trainer.services) ? state.trainer.services : [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (Number(list[i].service_id) === Number(serviceId)) {
+            return !!list[i].is_online;
+          }
+        }
+        return false;
+      }
+
+      function readServiceFormatOnline(serviceId) {
+        var btn = document.querySelector(
+          '#svc_format_' + serviceId + ' .svc-format-seg__btn[data-online="1"]'
+        );
+        if (btn) return btn.getAttribute('aria-pressed') === 'true';
+        return getServiceIsOnline(serviceId);
+      }
+
+      function setServiceFormatOnline(serviceId, isOnline) {
+        var wrap = document.getElementById('svc_format_' + serviceId);
+        if (!wrap) return;
+        wrap.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+          var on = b.getAttribute('data-online') === '1';
+          b.setAttribute('aria-pressed', (on === !!isOnline) ? 'true' : 'false');
+        });
+        var list = (state.trainer && state.trainer.services) ? state.trainer.services : [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (Number(list[i].service_id) === Number(serviceId)) {
+            list[i].is_online = !!isOnline;
+            break;
+          }
+        }
+        syncServiceOnlineDependentUi(serviceId, !!isOnline);
+      }
+
+      /**
+       * Online offer: keep tariffs/prices; hide venue logistics («не входит») and group seat price.
+       * Must run after the service block is in the document (getElementById).
+       */
+      function syncServiceOnlineDependentUi(serviceId, isOnline) {
+        var noticeWrap = document.getElementById('svc_client_notice_wrap_' + serviceId);
+        var groupWrap = document.getElementById('svc_group_price_wrap_' + serviceId);
+        if (noticeWrap) noticeWrap.hidden = !!isOnline;
+        if (groupWrap) groupWrap.hidden = !!isOnline;
+        if (!isOnline) {
+          var pgeBack = document.getElementById('price_group_' + serviceId);
+          if (pgeBack) pgeBack.disabled = false;
+          var sneBack = document.getElementById('svc_client_notice_' + serviceId);
+          if (sneBack) sneBack.disabled = false;
+          var spBarBack = document.getElementById('svc_notice_presets_' + serviceId);
+          if (spBarBack) {
+            spBarBack.querySelectorAll('button.svc-notice-preset-chip').forEach(function(b) {
+              b.disabled = false;
+            });
+          }
+          return;
+        }
+        var sne = document.getElementById('svc_client_notice_' + serviceId);
+        if (sne) sne.value = '';
+        var snc = document.getElementById('svc_client_notice_count_' + serviceId);
+        if (snc) snc.textContent = '0 / ' + MAX_SERVICE_CLIENT_NOTICE_CHARS;
+        var spBar = document.getElementById('svc_notice_presets_' + serviceId);
+        if (spBar) {
+          spBar.querySelectorAll('button.svc-notice-preset-chip').forEach(function(b) {
+            b.classList.remove('selected');
+          });
+        }
+        var pge = document.getElementById('price_group_' + serviceId);
+        if (pge) { pge.value = ''; pge.disabled = true; }
+        var list = (state.trainer && state.trainer.services) ? state.trainer.services : [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (Number(list[i].service_id) === Number(serviceId)) {
+            list[i].client_notice = null;
+            list[i].group_price_byn = null;
+            return;
+          }
+        }
+      }
+
       /** Optional logistics / not-included note (trainer_services.client_notice). */
       function getServiceClientNotice(serviceId) {
         var list = state.trainer.services || [];
@@ -4918,8 +4987,8 @@
           toggleBtn.id = 'svc_tier_toggle_' + id;
           toggleBtn.setAttribute('aria-expanded', 'false');
           toggleBtn.setAttribute('aria-controls', 'svc_tier_body_' + id);
-          toggleBtn.textContent = 'Тарифы ▾';
-          toggleBtn.title = 'Показать или скрыть список тарифов';
+          toggleBtn.textContent = 'Подробнее ▾';
+          toggleBtn.title = 'Показать или скрыть подробности услуги';
           toggleBtn.disabled = !isSelected;
 
           var tierBody = document.createElement('div');
@@ -4961,6 +5030,7 @@
 
           var noticeWrap = document.createElement('div');
           noticeWrap.className = 'svc-client-notice-wrap';
+          noticeWrap.id = 'svc_client_notice_wrap_' + id;
           var noticeKicker = document.createElement('div');
           noticeKicker.className = 'svc-client-notice-kicker';
           noticeKicker.textContent = 'Важно для клиента';
@@ -5098,6 +5168,7 @@
 
           var groupWrap = document.createElement('div');
           groupWrap.className = 'svc-group-price-wrap';
+          groupWrap.id = 'svc_group_price_wrap_' + id;
           var groupLab = document.createElement('label');
           groupLab.className = 'svc-desc-label';
           groupLab.setAttribute('for', 'price_group_' + id);
@@ -5140,6 +5211,12 @@
           gInp.addEventListener('input', setDirty);
           gInp.addEventListener('change', setDirty);
 
+          var onReq = document.createElement('p');
+          onReq.className = 'svc-on-request-hint';
+          onReq.id = 'svc_on_request_' + id;
+          onReq.textContent = 'Клиент видит: по запросу';
+          onReq.hidden = true;
+          tierBody.appendChild(onReq);
           tierBody.appendChild(descBlock);
           tierBody.appendChild(noticeWrap);
           tierBody.appendChild(tierWrap);
@@ -5156,18 +5233,26 @@
             tierBody.hidden = !tierBody.hidden;
             var open = !tierBody.hidden;
             toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-            toggleBtn.textContent = open ? 'Свернуть ▴' : 'Тарифы ▾';
+            toggleBtn.textContent = open ? 'Свернуть ▴' : 'Подробнее ▾';
           });
 
           chk.addEventListener('change', function() {
             row.classList.toggle('service-active', chk.checked);
             tierWrap.classList.toggle('is-disabled', !chk.checked);
             toggleBtn.disabled = !chk.checked;
+            var fmtEl = document.getElementById('svc_format_' + id);
+            if (fmtEl) {
+              fmtEl.hidden = !chk.checked;
+              fmtEl.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+                b.disabled = !chk.checked;
+              });
+            }
             if (!chk.checked) {
+              setServiceFormatOnline(id, false);
               tierBody.hidden = true;
               tierBody.classList.remove('svc-tier-body--error');
               toggleBtn.setAttribute('aria-expanded', 'false');
-              toggleBtn.textContent = 'Тарифы ▾';
+              toggleBtn.textContent = 'Подробнее ▾';
               tierWrap.classList.remove('svc-tier-grid--error');
               var sde = document.getElementById('svc_desc_' + id);
               if (sde) {
@@ -5222,25 +5307,233 @@
               primeNewServiceTiersFromPeers(id);
               ensureDefaultServiceTiers(id);
               openServiceTierBody(id);
+              syncServiceOnlineDependentUi(id, readServiceFormatOnline(id));
             }
             setDirty();
           });
 
           row.appendChild(head);
           row.appendChild(toggleBtn);
-          var onReq = document.createElement('p');
-          onReq.className = 'svc-on-request-hint';
-          onReq.id = 'svc_on_request_' + id;
-          onReq.textContent = 'Клиент видит: по запросу';
-          onReq.hidden = true;
+
+          var formatWrap = document.createElement('div');
+          formatWrap.className = 'svc-format-seg';
+          formatWrap.id = 'svc_format_' + id;
+          formatWrap.hidden = !isSelected;
+          var formatLabel = document.createElement('span');
+          formatLabel.className = 'svc-format-seg__label';
+          formatLabel.textContent = 'Формат занятия';
+          formatWrap.appendChild(formatLabel);
+          var initialOnline = isSelected ? getServiceIsOnline(id) : false;
+          var formatLocked = isSelected && isServiceFormatLocked(id);
+          [
+            { online: false, label: 'На площадке' },
+            { online: true, label: 'Онлайн' },
+          ].forEach(function(opt) {
+            var fb = document.createElement('button');
+            fb.type = 'button';
+            fb.className = 'svc-format-seg__btn';
+            fb.setAttribute('data-online', opt.online ? '1' : '0');
+            fb.setAttribute('aria-pressed', (opt.online === initialOnline) ? 'true' : 'false');
+            fb.textContent = opt.label;
+            fb.disabled = !isSelected || formatLocked;
+            fb.addEventListener('click', function() {
+              if (!chk.checked || isServiceFormatLocked(id)) return;
+              setServiceFormatOnline(id, opt.online);
+              setDirty();
+              haptic('light');
+            });
+            formatWrap.appendChild(fb);
+          });
+          if (formatLocked) {
+            var lockHint = document.createElement('p');
+            lockHint.className = 'hint svc-format-lock-hint';
+            lockHint.textContent =
+              'Формат нельзя менять: есть записи, слоты или группа с этой услугой.';
+            formatWrap.appendChild(lockHint);
+          }
+
           var block = document.createElement('div');
           block.className = 'service-block svc-pick__item';
           block.appendChild(row);
-          block.appendChild(onReq);
+          block.appendChild(formatWrap);
           block.appendChild(tierBody);
           wrap.appendChild(block);
+          /* After in-document: hide venue logistics/tariffs for online offers. */
+          if (isSelected) syncServiceOnlineDependentUi(id, initialOnline);
         });
         syncOnRequestHints();
+      }
+
+
+      var customServiceAddBound = false;
+      var newCustomServiceOnline = false;
+
+      function customServiceAddNote(text, isError) {
+        var el = document.getElementById('svcAddCustomStatus');
+        if (!el) return;
+        el.hidden = !text;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+      }
+
+      function closeCustomServiceAdd() {
+        var wrap = document.getElementById('svcAddCustomWrap');
+        var btn = document.getElementById('svcAddCustomBtn');
+        var inp = document.getElementById('svcAddCustomName');
+        if (wrap) wrap.hidden = true;
+        if (btn) btn.hidden = false;
+        if (inp) inp.value = '';
+        newCustomServiceOnline = false;
+        var fmt = document.getElementById('svcAddCustomFormat');
+        if (fmt) {
+          fmt.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+            var on = b.getAttribute('data-online') === '1';
+            b.setAttribute('aria-pressed', on ? 'false' : 'true');
+          });
+        }
+        customServiceAddNote('');
+      }
+
+      function openCustomServiceAdd() {
+        var wrap = document.getElementById('svcAddCustomWrap');
+        var btn = document.getElementById('svcAddCustomBtn');
+        var inp = document.getElementById('svcAddCustomName');
+        if (wrap) wrap.hidden = false;
+        if (btn) btn.hidden = true;
+        customServiceAddNote('');
+        if (inp) inp.focus();
+      }
+
+      function applyCustomServiceCreated(result) {
+        var sid = Number(result.service_id);
+        var name = result.name || ('Услуга #' + sid);
+        var online = !!result.is_online;
+        var found = false;
+        state.servicesCatalog.forEach(function(s) {
+          if (Number(s.id) === sid) found = true;
+        });
+        if (!found) {
+          state.servicesCatalog.push({
+            id: sid,
+            name: name,
+            is_public: !!result.is_public,
+          });
+        }
+        if (!state.trainer.services) state.trainer.services = [];
+        var linked = false;
+        state.trainer.services.forEach(function(s) {
+          if (Number(s.service_id) === sid) {
+            s.is_online = online;
+            linked = true;
+          }
+        });
+        if (!linked) {
+          state.trainer.services.push({
+            service_id: sid,
+            is_online: online,
+            price_tiers: [],
+          });
+        }
+        renderServices();
+        state.snapshot = normSnapshot();
+        setDirty();
+        var msg = result.created
+          ? 'Добавлено. У вас услуга уже работает; в общем каталоге появится после проверки.'
+          : (result.is_public
+            ? 'Такая услуга уже в каталоге — отметили её.'
+            : 'Услуга уже была у вас — обновили формат.');
+        customServiceAddNote(msg, false);
+      }
+
+      function submitCustomServiceAdd() {
+        var inp = document.getElementById('svcAddCustomName');
+        var raw = inp ? String(inp.value || '').trim() : '';
+        if (!raw) {
+          customServiceAddNote('Напишите название услуги.', true);
+          return;
+        }
+        if (raw.length > 128) {
+          customServiceAddNote('Название — не длиннее 128 символов.', true);
+          return;
+        }
+        var submitBtn = document.getElementById('svcAddCustomSubmit');
+        if (submitBtn) submitBtn.disabled = true;
+        customServiceAddNote('Сохраняем…');
+        fetch(apiUrl('/trainer/services/custom'), {
+          method: 'POST',
+          headers: headersJson(),
+          body: JSON.stringify({ name: raw, is_online: !!newCustomServiceOnline }),
+        })
+          .then(parseJsonResponse)
+          .then(function(o) {
+            if (submitBtn) submitBtn.disabled = false;
+            if (!o.ok) {
+              var detail = o.data && o.data.detail != null ? o.data.detail : 'Не удалось добавить.';
+              if (window.MiniAppErrorUi && MiniAppErrorUi.humanizeDetail) {
+                detail = MiniAppErrorUi.humanizeDetail(detail) || detail;
+              }
+              customServiceAddNote(String(detail), true);
+              return;
+            }
+            var wrap = document.getElementById('svcAddCustomWrap');
+            var btn = document.getElementById('svcAddCustomBtn');
+            var nameEl = document.getElementById('svcAddCustomName');
+            if (nameEl) nameEl.value = '';
+            newCustomServiceOnline = false;
+            var fmt = document.getElementById('svcAddCustomFormat');
+            if (fmt) {
+              fmt.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+                var on = b.getAttribute('data-online') === '1';
+                b.setAttribute('aria-pressed', on ? 'false' : 'true');
+              });
+            }
+            /* Keep panel open briefly so the status line is visible. */
+            if (wrap) wrap.hidden = false;
+            if (btn) btn.hidden = true;
+            applyCustomServiceCreated(o.data);
+            haptic('medium');
+          })
+          .catch(function() {
+            if (submitBtn) submitBtn.disabled = false;
+            customServiceAddNote('Ошибка сети. Попробуйте ещё раз.', true);
+          });
+      }
+
+      function bindCustomServiceAdd() {
+        if (customServiceAddBound) return;
+        customServiceAddBound = true;
+        var addBtn = document.getElementById('svcAddCustomBtn');
+        var submit = document.getElementById('svcAddCustomSubmit');
+        var cancel = document.getElementById('svcAddCustomCancel');
+        var inp = document.getElementById('svcAddCustomName');
+        var fmt = document.getElementById('svcAddCustomFormat');
+        if (addBtn) addBtn.addEventListener('click', openCustomServiceAdd);
+        if (cancel) cancel.addEventListener('click', closeCustomServiceAdd);
+        if (submit) submit.addEventListener('click', submitCustomServiceAdd);
+        if (fmt) {
+          fmt.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+            b.addEventListener('click', function() {
+              var online = b.getAttribute('data-online') === '1';
+              newCustomServiceOnline = online;
+              fmt.querySelectorAll('.svc-format-seg__btn').forEach(function(x) {
+                var on = x.getAttribute('data-online') === '1';
+                x.setAttribute('aria-pressed', (on === online) ? 'true' : 'false');
+              });
+              haptic('light');
+            });
+          });
+        }
+        if (inp) {
+          inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submitCustomServiceAdd();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              closeCustomServiceAdd();
+            }
+          });
+        }
       }
 
       function lockedArenaIds() {
@@ -5257,14 +5550,36 @@
         return !!lockedArenaIds()[Number(id)];
       }
 
-      /** Partial API trainer payloads often omit arena_ids_locked — never drop locks on assign. */
+      function formatLockedServiceIds() {
+        var raw = (state.trainer && state.trainer.service_ids_format_locked)
+          ? state.trainer.service_ids_format_locked
+          : [];
+        var out = {};
+        raw.forEach(function(id) {
+          var n = Number(id);
+          if (n) out[n] = true;
+        });
+        return out;
+      }
+
+      function isServiceFormatLocked(serviceId) {
+        return !!formatLockedServiceIds()[Number(serviceId)];
+      }
+
+      /** Partial API trainer payloads often omit lock arrays — never drop locks on assign. */
       function applyTrainerFromApi(trainer) {
         var prevLocked = (state.trainer && state.trainer.arena_ids_locked)
           ? state.trainer.arena_ids_locked.slice()
           : [];
+        var prevFmtLocked = (state.trainer && state.trainer.service_ids_format_locked)
+          ? state.trainer.service_ids_format_locked.slice()
+          : [];
         state.trainer = trainer || {};
         if (!Array.isArray(state.trainer.arena_ids_locked)) {
           state.trainer.arena_ids_locked = prevLocked;
+        }
+        if (!Array.isArray(state.trainer.service_ids_format_locked)) {
+          state.trainer.service_ids_format_locked = prevFmtLocked;
         }
       }
 
@@ -6230,7 +6545,7 @@
           submitArenaWorkFormat(
             'online',
             btnOnline,
-            'Работать только онлайн, без площадок в профиле? Если нужна и площадка, и онлайн — добавьте площадку и включите «Также провожу занятия онлайн».'
+            'Работать только онлайн, без площадок в профиле? Если нужна и площадка, и онлайн — добавьте площадку и отметьте услугу как «Онлайн» в блоке услуг.'
           );
         });
         box.appendChild(btnOnline);
@@ -6660,7 +6975,6 @@
             min_hours_before_booking: pr.min_hours_before_booking,
             group_classes_enabled: !!pr.group_classes_enabled,
             specialist_roles: Array.isArray(pr.specialist_roles) ? pr.specialist_roles : [],
-            online_enabled: !!pr.online_enabled,
           },
           services: parsed.services,
         };

@@ -91,6 +91,14 @@ class ServicePriceVariantRequired(Exception):
     """Trainer has multiple price tiers for this service; client must choose service_price_variant_id."""
 
 
+class ServiceOnlineFormatMismatch(Exception):
+    """Online slot requires an online service (and venue slot an offline service)."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
 async def _resolve_service_booking_price(
     session: AsyncSession,
     trainer_id: int,
@@ -680,13 +688,27 @@ async def create_booking(
             return (None, (False, False))
     r = await session.execute(
         text("""
-            SELECT 1 FROM trainer_services
+            SELECT COALESCE(is_online, false) FROM trainer_services
             WHERE trainer_id = :tid AND service_id = :sid
         """),
         {"tid": trainer_id, "sid": service_id},
     )
-    if not r.fetchone():
+    svc_row = r.fetchone()
+    if not svc_row:
         return (None, (False, False))
+    service_is_online = bool(svc_row[0])
+    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+    slot_is_online = slot_arena_id is None and await trainer_offers_online_sessions(
+        session, trainer_id
+    )
+    if slot_is_online != service_is_online:
+        # XOR: online slot ↔ online service only. Caller may map to 422.
+        raise ServiceOnlineFormatMismatch(
+            "online_slot_needs_online_service"
+            if slot_is_online
+            else "venue_slot_needs_offline_service"
+        )
     try:
         if capacity > 1:
             # Group slot: per-seat price from COALESCE(group_price_cents, anchor); catalog tiers do not apply.
@@ -707,7 +729,10 @@ async def create_booking(
         if service_price_variant_id is not None and variant_id_resolved is None:
             return (None, (False, False))
     # Group slots: venue is fixed on the slot (set when the trainer created the slot); ignore request arena/session.
-    if capacity > 1:
+    if slot_is_online:
+        # Venue-less online slot — never inherit primary arena onto the booking.
+        resolved_arena = None
+    elif capacity > 1:
         resolved_arena = slot_arena_id
         if resolved_arena is None:
             rpa = await session.execute(

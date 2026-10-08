@@ -2414,7 +2414,7 @@
         trainerServices: [],
         /** From GET /trainer/my-services: arenas for group slot venue picker. */
         trainerScheduleArenas: [],
-        /** From GET /trainer/my-services: profile.online_enabled (or exclusive online format). */
+        /** From GET /trainer/my-services: ≥1 online service (or exclusive online format). */
         onlineEnabled: false,
         /** Grid «Быстро» arena pick (calendar + template editor). May be SCHEDULE_ONLINE_VENUE. */
         scheduleGridArenaPickId: null,

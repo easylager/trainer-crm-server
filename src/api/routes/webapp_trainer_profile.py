@@ -55,6 +55,7 @@ from src.application.trainer_use_cases import (
     delete_trainer_education,
     get_trainer,
     list_trainer_arena_ids_locked_by_bookings,
+    list_trainer_service_ids_format_locked,
     list_trainer_education,
     register_photo,
     set_trainer_catalog_visibility,
@@ -121,10 +122,13 @@ async def trainer_schedule_settings_payload(session: AsyncSession, trainer_id: i
 
 
 async def _attach_arena_ids_locked(session: AsyncSession, trainer: dict | None, trainer_id: int) -> dict | None:
-    """Ensure Mini App trainer payloads keep venue-removal locks after partial updates."""
+    """Ensure Mini App trainer payloads keep venue-removal / format locks after partial updates."""
     if not trainer:
         return trainer
     trainer["arena_ids_locked"] = await list_trainer_arena_ids_locked_by_bookings(session, trainer_id)
+    trainer["service_ids_format_locked"] = await list_trainer_service_ids_format_locked(
+        session, trainer_id
+    )
     return trainer
 
 
@@ -314,6 +318,37 @@ async def post_trainer_arena_setup_for_webapp(
             await set_idempotency_response(session, idem_cache_key, response)
         return response
     raise HTTPException(status_code=422, detail="mode must be mobile, online, clear, or create")
+
+
+
+class TrainerCustomServiceBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    is_online: bool = False
+
+
+@router.post("/trainer/services/custom")
+async def post_trainer_custom_service_for_webapp(
+    body: TrainerCustomServiceBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+):
+    """Тренер вписывает услугу из профиля: сразу у себя, в общий каталог — после модерации."""
+    from src.application.trainer_custom_service_use_cases import (
+        CustomServiceError,
+        add_trainer_custom_service,
+    )
+
+    trainer_id = await _linked_trainer_id(session, principal)
+    try:
+        result = await add_trainer_custom_service(
+            session,
+            trainer_id,
+            body.name,
+            is_online=bool(body.is_online),
+        )
+    except CustomServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result
 
 
 @router.get("/trainer/profile/arenas")

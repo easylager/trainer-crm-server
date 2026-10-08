@@ -16,8 +16,8 @@
   <link rel="stylesheet" href="mini-app-components.css?v=2026100518" />
   <script src="mini-app-confirm.js?v=2026100518"></script>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
-  <link rel="preload" href="trainer-profile-main.js?v=2026100910" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=2026100910" />
+  <link rel="preload" href="trainer-profile-main.js?v=2026100919" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=2026100919" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026100518" />
@@ -155,8 +155,24 @@
           <span class="profile-collapse__title">Услуги и цены</span>
         </summary>
         <div class="card">
-          <p class="hint svc-pick-lead" style="margin: 0 0 14px;">Отметьте услуги. Цену можно указать сейчас или позже — пока клиент увидит «по запросу».</p>
+          <p class="hint svc-pick-lead" style="margin: 0 0 14px;">Отметьте услуги. У каждой выбранной — формат «На площадке» или «Онлайн». Цену можно указать позже — пока клиент увидит «по запросу».</p>
           <div id="servicesWrap"></div>
+          <button type="button" class="svc-add-cta" id="svcAddCustomBtn">Моей услуги нет в списке</button>
+          <div class="svc-add-box" id="svcAddCustomWrap" hidden>
+            <label class="svc-desc-label" for="svcAddCustomName">Название услуги</label>
+            <input id="svcAddCustomName" type="text" maxlength="128" autocomplete="off"
+                   placeholder="Спортивная психология" class="svc-add-input">
+            <p class="hint" style="margin:10px 0 6px;">Формат занятия</p>
+            <div class="svc-format-seg svc-format-seg--inline" id="svcAddCustomFormat" role="group" aria-label="Формат новой услуги">
+              <button type="button" class="svc-format-seg__btn" data-online="0" aria-pressed="true">На площадке</button>
+              <button type="button" class="svc-format-seg__btn" data-online="1" aria-pressed="false">Онлайн</button>
+            </div>
+            <div class="svc-add-actions">
+              <button type="button" class="svc-add-submit" id="svcAddCustomSubmit">Добавить</button>
+              <button type="button" class="svc-add-cancel" id="svcAddCustomCancel">Отмена</button>
+            </div>
+            <p id="svcAddCustomStatus" class="svc-add-status" hidden role="status"></p>
+          </div>
           <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
         </div>
       </details>
@@ -211,13 +227,8 @@
           <p class="field-error" id="err_arena_setup" role="status" hidden style="margin-top:8px;"></p>
           <div id="primaryArenaWrap" style="display:none; margin-top:12px;"></div>
           <p class="field-error" id="err_primary_arena" role="status" hidden style="margin-top:8px;"></p>
-          <!-- Независимо от площадок: зал + онлайн. Режим «только онлайн» — ниже в arenaEmptyActions. -->
-          <label class="profile-online-toggle" id="onlineEnabledField">
-            <input type="checkbox" id="online_enabled" />
-            <span>Также провожу занятия онлайн</span>
-          </label>
           <p class="field-hint" id="onlineEnabledHint">
-            Можно вести и на площадке, и онлайн — в расписании это разные слоты, клиент увидит где занятие.
+            Онлайн задаётся у услуги: отметьте формат «Онлайн» в блоке «Услуги и цены». В расписании появятся онлайн-слоты.
           </p>
         </div>
       </details>
@@ -555,7 +566,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=2026100910"></script>
+  <script defer src="trainer-profile-main.js?v=2026100919"></script>
   <script defer src="mini-app-trainer-home.js?v=2026100518"></script>
 </body>
 </html>

@@ -35,8 +35,8 @@ assert.match(
 );
 assert.match(
   src,
-  /Выберите площадку для этого слота/,
-  'multi-arena precise add requires a venue'
+  /Выберите площадку или «Онлайн» для этого слота/,
+  'multi-arena precise add requires a venue (or online)'
 );
 
 assert.match(

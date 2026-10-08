@@ -280,23 +280,49 @@
       line-height: 1.4;
       opacity: 0.8;
     }
-    .profile-online-toggle {
+    .svc-format-seg {
       display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      margin-top: 16px;
-      cursor: pointer;
-      font-size: 14.5px;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 12px 8px;
+      padding: 10px 12px;
+      align-items: center;
+      border-radius: 12px;
+      background: rgba(128, 128, 128, 0.08);
+      box-sizing: border-box;
+    }
+    .svc-format-seg[hidden] {
+      display: none !important;
+    }
+    .svc-format-seg__label {
+      font-size: 12px;
       font-weight: 600;
-      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      margin-right: 2px;
+      width: 100%;
     }
-    .profile-online-toggle input {
-      width: 18px;
-      height: 18px;
-      flex: 0 0 auto;
-      margin-top: 1px;
+    .svc-format-seg__btn {
+      appearance: none;
+      border: 1px solid rgba(128, 128, 128, 0.4);
+      background: var(--tg-theme-bg-color, transparent);
+      color: inherit;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+      min-height: 36px;
     }
-    .profile-online-toggle + .field-hint { margin-top: 6px; }
+    .svc-format-seg__btn[aria-pressed="true"] {
+      border-color: var(--tg-theme-button-color, #2481cc);
+      background: var(--tg-theme-button-color, #2481cc);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    .svc-format-seg__btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
 
     .profile-role-chips {
       display: flex;
@@ -443,7 +469,9 @@
     .service-block { margin-bottom: 14px; }
     .service-block:last-child { margin-bottom: 0; }
     .svc-on-request-hint {
-      margin: -4px 12px 8px;
+      /* Lives inside .svc-tier-body — same left edge as description / input. */
+      margin: 0 0 10px;
+      padding: 0;
       font-size: 12px;
       line-height: 1.35;
       color: var(--tg-theme-hint-color, #8a8a8a);
@@ -523,9 +551,10 @@
     }
     .svc-tier-body {
       width: 100%;
-      padding-left: 28px;
+      /* Same horizontal inset as .svc-format-seg margin — one column under the service. */
+      padding-left: 12px;
       padding-right: max(12px, env(safe-area-inset-right, 0px));
-      margin-top: 8px;
+      margin-top: 0;
       box-sizing: border-box;
     }
     .svc-tier-body[hidden] {
@@ -3334,3 +3363,89 @@
       color: #c0392b;
       vertical-align: middle;
     }
+
+
+/* Custom service from profile (pending catalog moderation).
+   Use Telegram theme tokens — --app-fg falls back to near-black and vanishes in dark UI. */
+.svc-add-cta {
+  display: block;
+  width: 100%;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px dashed rgba(var(--accent-rgb), 0.45);
+  border-radius: 12px;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-weight: 650;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.svc-add-cta:active { opacity: 0.85; }
+html.trainer-theme-dark .svc-add-cta {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--tg-theme-text-color, #f2f4f7);
+}
+.svc-add-box {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 128, 128, 0.28);
+  background: var(--tg-theme-secondary-bg-color, rgba(128, 128, 128, 0.08));
+  color: var(--tg-theme-text-color);
+}
+.svc-add-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 10px;
+  font: inherit;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, inherit);
+}
+.svc-add-box .svc-format-seg--inline {
+  margin: 0;
+}
+.svc-add-box .hint {
+  color: var(--tg-theme-hint-color);
+}
+.svc-add-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.svc-add-submit,
+.svc-add-cancel {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  background: var(--tg-theme-secondary-bg-color, #fff);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.svc-add-submit {
+  background: var(--tg-theme-button-color, #1a6b4a);
+  border-color: transparent;
+  color: var(--tg-theme-button-text-color, #fff);
+}
+.svc-add-status {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--tg-theme-hint-color, #8a8a8a);
+}
+.svc-add-status.is-error { color: var(--app-danger, #f97066); }
+
+/* Подробнее: keep accent readable on dark cards */
+html.trainer-theme-dark .svc-tier-toggle {
+  color: var(--tg-theme-link-color, var(--tg-theme-button-color, #6ec8b0));
+  border-color: rgba(128, 128, 128, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+}

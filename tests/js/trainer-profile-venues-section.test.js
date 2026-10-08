@@ -82,8 +82,8 @@ describe('профиль тренера: раздел «Где занимаюс�
     assert.match(css, /\.arena-combo__row/);
   });
 
-  it('online_enabled рядом с площадками; exclusive online — только без арен', () => {
-    assert.match(src, /Также провожу занятия онлайн|online_enabled/);
+  it('exclusive online — только без арен; гибрид онлайн через формат услуги', () => {
+    assert.doesNotMatch(src, /Также провожу занятия онлайн/);
     assert.doesNotMatch(src, /В «Лёд»/);
     assert.match(src, /mode: 'clear'|mode === 'clear'|"clear"|'clear'/);
     assert.match(src, /Убрать режим «только онлайн»/);
@@ -94,6 +94,6 @@ describe('профиль тренера: раздел «Где занимаюс�
     );
     assert.match(entry, /hasArenas/);
     assert.match(entry, /Только онлайн \(без площадки\)/);
-    assert.match(entry, /online_enabled/);
+    assert.match(entry, /отметьте услугу как «Онлайн»/);
   });
 });
