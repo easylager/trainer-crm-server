@@ -147,7 +147,10 @@ describe('пустой «Выберите время» больше не туп�
   it('кнопка «на других аренах» показывается только когда фильтр реально стоит', () => {
     const fn = src.slice(src.indexOf('function renderSlotPickEmptyState'));
     const body = fn.slice(0, fn.indexOf('\n      function renderSlotPickList'));
-    assert.match(body, /var filtered = \(state\.trainerSlotsArenaIds \|\| \[\]\)\.length > 0/);
+    assert.match(
+      body,
+      /var filtered = !onlineSvc && \(state\.trainerSlotsArenaIds \|\| \[\]\)\.length > 0/
+    );
     assert.match(body, /if \(filtered\) \{/);
   });
 
