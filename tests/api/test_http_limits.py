@@ -28,6 +28,8 @@ def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/gopher") == "skip"
     assert rate_limit_bucket_for_path("/api/webhooks/bepaid") == "skip"
     assert rate_limit_bucket_for_path("/api/public/cities") == "public"
+    assert rate_limit_bucket_for_path("/api/public/ice/map-config") == "skip"
+    assert rate_limit_bucket_for_path("/api/public/photos/trainers/x.jpg") == "photo"
     assert rate_limit_bucket_for_path("/api/webapp/schedule") == "webapp"
     assert rate_limit_bucket_for_path("/api/upload/photo") == "upload"
     assert rate_limit_bucket_for_path("/api/trainers") == "default"

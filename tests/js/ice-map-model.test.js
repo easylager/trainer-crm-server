@@ -52,10 +52,13 @@ function moscowGrid() {
   return items;
 }
 
-describe('resolveApiKey / missing-key empty state', () => {
-  it('reads YANDEX_MAPS_JS_API_KEY and ignores the documented placeholder', () => {
+const DEV_LEAK = /YANDEX_MAPS_JS_API_KEY|apikey|переменн|прототип/i;
+
+describe('resolveApiKey / map unavailable copy', () => {
+  it('reads meta, env, query, window and ignores the documented placeholder', () => {
     const { resolveApiKey, PLACEHOLDER_API_KEY } = loadModel();
     assert.equal(PLACEHOLDER_API_KEY, 'YOUR_YANDEX_MAPS_JS_API_KEY');
+    assert.equal(resolveApiKey({ metaKey: 'from-meta' }), 'from-meta');
     assert.equal(resolveApiKey({ env: { YANDEX_MAPS_JS_API_KEY: 'live-key-abc' } }), 'live-key-abc');
     assert.equal(resolveApiKey({ query: { apikey: 'from-query' } }), 'from-query');
     assert.equal(resolveApiKey({ windowKey: 'from-window' }), 'from-window');
@@ -64,17 +67,86 @@ describe('resolveApiKey / missing-key empty state', () => {
     assert.equal(resolveApiKey({}), '');
   });
 
-  it('does not invent an OSM fallback when the key is missing', () => {
-    const { missingKeyState, scriptUrl } = loadModel();
-    const empty = missingKeyState();
-    assert.equal(empty.canRenderMap, false);
-    assert.equal(empty.fallback, 'none');
-    assert.match(empty.title, /карт/i);
-    assert.match(empty.body, /YANDEX_MAPS_JS_API_KEY/);
-    assert.ok(!/osm|leaflet|openstreet/i.test(empty.body));
+  it('mapUnavailableState never exposes developer setup hints to the user', () => {
+    const { mapUnavailableState, scriptUrl } = loadModel();
+    const reasons = ['config-failed', 'no-key', 'sdk-failed', 'init-error'];
+    for (const reason of reasons) {
+      const empty = mapUnavailableState(reason);
+      assert.equal(empty.canRenderMap, false);
+      assert.equal(empty.fallback, 'none');
+      assert.equal(empty.reason, reason);
+      assert.match(empty.title, /временно недоступна/i);
+      assert.ok(!DEV_LEAK.test(empty.title));
+      assert.ok(!DEV_LEAK.test(empty.body));
+      assert.ok(!DEV_LEAK.test(empty.retryLabel));
+      assert.ok(!DEV_LEAK.test(empty.listLabel));
+      assert.ok(!/osm|leaflet|openstreet/i.test(empty.body));
+    }
+    const noKey = mapUnavailableState('no-key');
+    assert.equal(noKey.retryLabel, '');
+    assert.doesNotMatch(noKey.body, /Попробуйте ещё раз/);
+    assert.match(noKey.body, /список мест/);
+    const retryable = mapUnavailableState('config-failed');
+    assert.match(retryable.body, /Попробуйте ещё раз/);
+    assert.match(retryable.retryLabel, /Повторить/);
     assert.match(scriptUrl('abc'), /api-maps\.yandex\.ru\/2\.1\//);
     assert.match(scriptUrl('abc'), /apikey=abc/);
     assert.equal(scriptUrl(''), '');
+  });
+
+  it('fetchMapConfigKey retries 429 then returns a key', async () => {
+    const { fetchMapConfigKey } = loadModel();
+    let calls = 0;
+    const fetchImpl = () => {
+      calls += 1;
+      if (calls === 1) {
+        return Promise.resolve({
+          ok: false,
+          status: 429,
+          headers: { get: () => '0' },
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ yandex_maps_js_api_key: 'retry-key' }),
+      });
+    };
+    const result = await fetchMapConfigKey(fetchImpl, { budgetMs: 6000 });
+    assert.equal(result.key, 'retry-key');
+    assert.equal(result.missingKey, false);
+    assert.ok(calls >= 2);
+  });
+
+  it('fetchMapConfigKey: empty 200 sets missingKey, transport error does not', async () => {
+    const { fetchMapConfigKey } = loadModel();
+    const empty = await fetchMapConfigKey(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ yandex_maps_js_api_key: '' }),
+      })
+    );
+    assert.equal(empty.missingKey, true);
+    assert.equal(empty.reason, 'no-key');
+    const fail = await fetchMapConfigKey(() => Promise.reject(new Error('net')), { budgetMs: 200 });
+    assert.equal(fail.missingKey, false);
+    assert.equal(fail.reason, 'config-failed');
+  });
+
+  it('stops inside the budget and keeps the last real status', async () => {
+    const { fetchMapConfigKey } = loadModel();
+    const result = await fetchMapConfigKey(
+      () =>
+        Promise.resolve({
+          ok: false,
+          status: 503,
+          headers: { get: () => '30' },
+        }),
+      { budgetMs: 80, perFetchMs: 5000 }
+    );
+    assert.equal(result.status, 503);
+    assert.equal(result.missingKey, false);
   });
 });
 

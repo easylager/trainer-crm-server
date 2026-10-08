@@ -893,9 +893,12 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     assert.equal(v.isSession, true);
   });
 
-  it('AC-001: полноширинный кадр берёт card (800px), а не thumb (320px)', () => {
+  it('AC-001: полноширинный кадр — card, thumb только в srcset', () => {
     const { boardCardView } = loadModel();
-    assert.equal(boardCardView(sessionItem, now).photo, '/photos/3_card.jpg');
+    const v = boardCardView(sessionItem, now);
+    assert.equal(v.photo, '/photos/3_card.jpg');
+    assert.equal(v.photoSrcset, '/photos/3_thumb.jpg 320w, /photos/3_card.jpg 800w');
+    assert.equal(v.photoSizes, '(max-width:480px) 100vw, 480px');
     const noCard = Object.assign({}, sessionItem, { card: null });
     assert.equal(boardCardView(noCard, now).photo, '/photos/3_thumb.jpg');
   });

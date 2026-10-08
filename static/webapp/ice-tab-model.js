@@ -1663,10 +1663,18 @@
     if (liveKind === 'phone' && SM) {
       callHref = SM.phoneToTelHref(item.phone);
     }
+    var thumbUrl = String(item.thumb || '').trim();
+    var cardUrl = String(item.card || '').trim();
+    var srcsetParts = [];
+    if (thumbUrl) srcsetParts.push(thumbUrl + ' 320w');
+    if (cardUrl && cardUrl !== thumbUrl) srcsetParts.push(cardUrl + ' 800w');
     return {
       stale: stale,
       href: arenaHref(item),
-      photo: item.card || item.thumb || '',
+      // TASK-090: кадр на всю ширину — card 800px; thumb 320w только в srcset.
+      photo: cardUrl || thumbUrl,
+      photoSrcset: srcsetParts.join(', '),
+      photoSizes: srcsetParts.length ? '(max-width:480px) 100vw, 480px' : '',
       initial: initialOf(name),
       // TASK-148: иконка типа с сервера — содержимое бесфотошной плашки.
       // Фолбэк на монограмму, если ответ старого API без venue_icon.

@@ -1,6 +1,8 @@
 """Public Ice Discovery read-only routes (TASK-051). New module — do not grow webapp.py."""
 from __future__ import annotations
 
+import logging
+import time
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -43,6 +45,10 @@ from src.infrastructure.db.models import (
 from src.shared.config import Settings
 from src.shared.ice_discovery_scope import public_city_scope_sql, public_scope_params
 
+logger = logging.getLogger(__name__)
+_MAP_CONFIG_EMPTY_WARN_SEC = 600.0
+_map_config_empty_warned_at = 0.0
+
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
 
 
@@ -76,7 +82,19 @@ async def get_ice_map_config(response: Response) -> dict[str, str | None]:
     """Browser Yandex Maps JS API key. Empty → Ice tab shows a map empty state (no OSM)."""
     response.headers["Cache-Control"] = "no-store"
     key = (Settings().yandex_maps_js_api_key or "").strip() or None
+    if not key:
+        _warn_map_config_key_empty()
     return {"yandex_maps_js_api_key": key}
+
+
+def _warn_map_config_key_empty() -> None:
+    """The endpoint is not rate-limited, so an empty key must not warn on every hit."""
+    global _map_config_empty_warned_at
+    now = time.monotonic()
+    if now - _map_config_empty_warned_at < _MAP_CONFIG_EMPTY_WARN_SEC:
+        return
+    _map_config_empty_warned_at = now
+    logger.warning("ice map-config requested but YANDEX_MAPS_JS_API_KEY is empty")
 
 
 @router.get("/ice/cities")
