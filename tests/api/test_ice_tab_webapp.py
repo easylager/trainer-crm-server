@@ -68,7 +68,9 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     # Поле ищет по названию места. «Тренер» и «заточка» не обещаются плейсхолдером:
     # тренеры — отдельный чип, заточка находится, если её набрать.
     assert "Каток, зал или трасса" in body
-    assert 'id="iceNearestBtn"' in body and 'id="iceCatalogTools"' in body
+    assert 'id="iceShareHeadBtn"' in body and 'id="iceCatalogTools"' in body
+    assert 'id="iceShareBtn"' in body
+    assert 'id="iceNearestBtn"' not in body
     assert "icePlaceTabs" in body
     assert js.status_code == 200
     # Флаг MAP_ENABLED снят намеренно: он гасил случай «экран открылся картой без

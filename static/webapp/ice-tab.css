@@ -750,7 +750,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   min-width: 0;
 }
 
-.ice-listhead .ice-nearest {
+.ice-listhead .ice-share-head {
   align-self: center;
 }
 
@@ -2217,27 +2217,49 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
   font-weight: var(--app-weight-semibold);
 }
 
-/* «Ближе» — сортировка ленты. Выключена выглядит как текст, включена — как выбранный чип. */
 .ice-search input { min-width: 0; }
-.ice-nearest {
+
+/*
+ * TASK-222. Компактный шеринг у подписи ленты — тот же жест, что у нижней
+ * «Поделиться подборкой», но в слот бывшего «Ближе»: пилюля + иконка «отправить».
+ * Не CTA-заливка: вторичное действие рядом с eyebrow, не конкурирует с карточкой.
+ */
+.ice-share-head {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  padding: 6px 12px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
   border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-pill);
-  background: transparent;
-  color: var(--glide-hint);
+  background: var(--glide-surface);
+  color: var(--glide-text);
   font: inherit;
-  font-size: var(--app-text-body);
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.01em;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.ice-nearest:disabled { opacity: 0.6; }
-.ice-nearest[aria-pressed="true"] {
-  background: var(--app-cta-fill);
-  border-color: var(--app-cta-fill);
-  color: var(--app-cta-text);
+.ice-share-head[hidden] {
+  display: none;
+}
+.ice-share-head__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--app-cta-fill);
+}
+.ice-share-head__label {
+  white-space: nowrap;
+}
+.ice-share-head:active {
+  transform: scale(0.97);
+  opacity: 0.92;
+}
+.ice-share-head:disabled {
+  opacity: 0.6;
 }
 
 /* TASK-146: парсер давно не читал сайт катка — подпись предупреждает, а не зовёт «ещё N сеансов». */

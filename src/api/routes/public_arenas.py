@@ -343,6 +343,7 @@ async def get_public_selection_share(
         compose_selection_share,
         load_selection_view,
         selection_image_path,
+        selection_image_version,
         selection_path,
     )
 
@@ -373,7 +374,10 @@ async def get_public_selection_share(
             city_id=city["id"],
             payload={"venue_type": venue, "when": window_key, "channel": ch if ch in _SHARE_CHANNELS else None},
         )
-    image = base + selection_image_path(city_name=city["name"], venue=venue, when=window_key)
+    # ?v= — хэш данных превью (число мест, сеансов и день): Telegram кэширует og-картинку по URL.
+    image = base + selection_image_path(
+        city_name=city["name"], venue=venue, when=window_key, version=selection_image_version(view)
+    )
     story = image.replace("/og.png", "/story.png")
     return {**payload, "og_image_url": image, "story_image_url": story, "venue_type": venue, "when": window_key}
 

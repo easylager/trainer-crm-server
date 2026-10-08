@@ -914,6 +914,58 @@ async def list_city_selection_places(
     }
 
 
+async def city_selection_session_counts(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    venue_types: set[str] | None,
+    window: Mapping[str, Any] | None,
+    now: datetime,
+) -> dict[int, int]:
+    """Сеансы всей подборки одним запросом: ``{arena_id: сколько сеансов}``.
+
+    Подборка — не страница: превью в чате обещает «15 катков · 10 сеансов» по всему
+    городу, а на странице видно 12 карточек; окно ``?w=`` сужает счёт так же, как сам
+    список. Фильтр — тот же, что у ``list_city_selection_places``.
+
+    Возвращаем по местам, а не суммой: страница не показывает сеансы мест, чьё расписание
+    не подтверждалось больше 72 ч, и счёт обязан совпадать с тем, что человек видит.
+    """
+    params: dict[str, Any] = {
+        "city_id": int(city_id),
+        "now": now,
+        "st": STATUS_ACTIVE,
+        **public_scope_params(),
+    }
+    if venue_types:
+        type_clause = " AND COALESCE(a.venue_type, 'ice') = ANY(:venue_types)"
+        params["venue_types"] = sorted(venue_types)
+    else:
+        type_clause = " AND COALESCE(a.venue_type, 'ice') <> ALL(:hidden_venue_types)"
+        params["hidden_venue_types"] = sorted(DEFAULT_HIDDEN_VENUE_TYPES)
+    window_clause = ""
+    if window and window.get("from") and window.get("to"):
+        window_clause = " AND s.starts_at_utc >= :win_from AND s.starts_at_utc < :win_to"
+        params["win_from"] = datetime.fromisoformat(str(window["from"]))
+        params["win_to"] = datetime.fromisoformat(str(window["to"]))
+    rows = (
+        await session.execute(
+            text(f"""
+                SELECT s.arena_id, COUNT(*)::int AS n
+                FROM ice_sessions s
+                JOIN arenas a ON a.id = s.arena_id
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{type_clause}{window_clause}
+                  AND {_CURRENT_SESSION_SQL}
+                GROUP BY s.arena_id
+                """),
+            params,
+        )
+    ).mappings()
+    return {int(row["arena_id"]): int(row["n"] or 0) for row in rows}
+
+
 async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any]]:
     """Active cities that have public skate sessions and/or catalog trainers.
 
@@ -977,6 +1029,22 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                                    AND m.status = 'published'
                              ))
                        ) AS place_count,
+                       (
+                           -- Сегмент «Магазины» на вкладке «Тренеры» не получает
+                           -- venue_type_facets от arenas — клиенту нужен shop_count города.
+                           SELECT COUNT(*)::int
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND (p.status IS NULL OR p.status = :published)
+                             AND COALESCE(a.venue_type, 'ice') = :shop_venue
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
+                       ) AS shop_count,
                        (
                            SELECT AVG(a.latitude)
                            FROM arenas a
@@ -1071,6 +1139,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "st": STATUS_ACTIVE,
                 "now": now,
                 "ice_countries": ice_discovery_countries(),
+                "shop_venue": VENUE_TYPE_SHOP,
             },
         )
     ).mappings()
@@ -1080,6 +1149,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
         trainer_count = int(row["trainer_count"] or 0)
         map_rink_count = int(row["map_rink_count"] or 0)
         place_count = int(row["place_count"] or 0)
+        shop_count = int(row["shop_count"] or 0)
         if skate_count <= 0 and trainer_count <= 0 and map_rink_count <= 0 and place_count <= 0:
             continue
         lat = row["latitude"]
@@ -1106,6 +1176,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "trainer_count": trainer_count,
                 "map_rink_count": map_rink_count,
                 "place_count": place_count,
+                "shop_count": shop_count,
                 "latitude": float(lat) if lat is not None else None,
                 "longitude": float(lon) if lon is not None else None,
                 "bounds": bounds,

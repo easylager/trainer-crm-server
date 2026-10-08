@@ -57,6 +57,9 @@ async def test_selection_page_shows_places_sessions_and_keeps_filters(app_use_te
     assert page.status_code == 200
     assert "18:45" in page.text and "все места" in page.text.lower()
     assert f'href="/p/{slug}/' in page.text, "место в подборке ведёт на свою страницу"
+    # TASK-222: с сайта Telegram подборки — только url, без text= (превью из og).
+    tg = re.search(r'class="share__btn share__btn--tg" href="([^"]+)"', page.text)
+    assert tg and "t.me/share/url?url=" in tg.group(1) and "&amp;text=" not in tg.group(1)
     assert by_id.status_code == 301 and by_id.headers["location"] == f"/c/{slug}"
     assert Image.open(io.BytesIO(img.content)).size == (1200, 630)
     assert missing.status_code == 404
@@ -114,8 +117,11 @@ async def test_shop_selection_and_share_api(app_use_test_db, db_session) -> None
     body = share.json()
     assert body["share_url"].endswith(f"/c/{city_slug(name)}?t=shop")
     assert body["share_body"].startswith(f"{name} · магазины и заточка")
-    assert body["og_image_url"].endswith("/og.png?t=shop")
-    assert body["story_image_url"].endswith("/story.png?t=shop")
+    assert body["og_image_url"].split("?")[0].endswith("/og.png")
+    assert body["story_image_url"].split("?")[0].endswith("/story.png")
+    # TASK-222: ?v= — хэш данных превью, иначе Telegram держит старую картинку по URL.
+    assert "?t=shop" in body["og_image_url"] and "v=" in body["og_image_url"]
+    assert "?t=shop" in body["story_image_url"] and "v=" in body["story_image_url"]
     assert preview.json()["when"] in ("today_evening", "tomorrow", "weekend")
     assert "/story.png" in preview.json()["story_image_url"]
     rows = (
@@ -195,3 +201,76 @@ async def test_selection_page_ssr_phone_guard(app_use_test_db, db_session) -> No
     valid_block = _selection_pick_block(html, "Каток валидный")
     assert 'href="tel:+375291234567"' in valid_block
     assert "уточните по телефону" in valid_block.lower()
+
+
+@pytest.mark.asyncio
+async def test_selection_preview_counts_the_whole_selection_and_bumps_image_version(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """TASK-222: «15 катков · 10 сеансов» — на странице, на og.png, story.png и в строках шера."""
+    import src.application.selection_page as selection_page
+    from src.application import png_render_cache as pc
+
+    name = f"Счётск {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    total, with_sessions = 15, 10
+    for n in range(total):
+        arena_id = await _insert_arena(db_session, city_id, name=f"Каток {n:02d} {uuid.uuid4().hex[:4]}")
+        if n < with_sessions:
+            await _add_future_session(db_session, arena_id, days_ahead=1 + (n % 3), starts_at_local="13:00")
+    await db_session.commit()
+    slug = city_slug(name)
+
+    drawn: list[str] = []
+    original = selection_page.selection_share_description
+
+    def spy(view):
+        value = original(view)
+        drawn.append(value)
+        return value
+
+    monkeypatch.setattr(selection_page, "selection_share_description", spy)
+
+    async with _client() as client:
+        page = await client.get(f"/c/{slug}")
+        share = await client.get(
+            "/api/public/ice/selection/share", params={"city_id": city_id, "record": "false"}
+        )
+
+    assert page.status_code == 200 and share.status_code == 200
+    description = "15 катков · 10 сеансов"
+    # Страница показывает 12 карточек, но обещает всю подборку — и в HTML-превью, и в строках шера.
+    assert _og(page.text, "og:description") == description, _og(page.text, "og:description")
+    body = share.json()
+    assert description in body["share_body"]
+    assert description in body["share_text"]
+
+    # og.png и story.png рисуются из той же подписи: одна правда, а не два счёта.
+    pc.reset_png_cache_for_tests()
+    drawn.clear()
+    async with _client() as client:
+        og = await client.get(f"/c/{slug}/og.png")
+        story = await client.get(f"/c/{slug}/story.png")
+    assert og.status_code == 200 and story.status_code == 200
+    assert drawn == [description, description], drawn
+
+    # Лишние query-параметры внутренний кэш PNG не видит: ?v= — для Telegram, не для рендера.
+    async with _client() as client:
+        plain = await client.get(f"/c/{slug}/og.png")
+        with_param = await client.get(f"/c/{slug}/og.png", params={"v": "manual"})
+    assert plain.content == with_param.content
+    stats = pc.png_cache_stats()
+    assert stats["renders"] == 2, stats
+    assert stats["hits"] >= 2, stats
+
+    # Данные изменились — ?v= в og:image тоже: иначе Telegram оставит старую картинку.
+    image_url = _og(page.text, "og:image")
+    assert "v=" in image_url, image_url
+    first_version = image_url.split("v=")[1]
+    extra_id = await _insert_arena(db_session, city_id, name=f"Каток новый {uuid.uuid4().hex[:4]}")
+    await _add_future_session(db_session, extra_id, days_ahead=2, starts_at_local="09:00")
+    await db_session.commit()
+    async with _client() as client:
+        again = await client.get(f"/c/{slug}")
+    assert again.status_code == 200
+    assert _og(again.text, "og:image").split("v=")[1] != first_version

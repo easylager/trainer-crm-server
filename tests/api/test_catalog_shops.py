@@ -89,6 +89,22 @@ async def test_admin_rejects_unknown_venue_type_and_rink_retail(app_use_test_db,
 
 
 @pytest.mark.asyncio
+async def test_ice_cities_exposes_shop_count_for_catalog_modes(app_use_test_db, db_session) -> None:
+    """После вкладки «Тренеры» фасетов arenas нет — сегмент «Магазины» берёт shop_count города."""
+    city_id = await _insert_city(db_session, name=f"ШопСити {uuid.uuid4().hex[:6]}")
+    await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:6]}")
+    await db_session.commit()
+    await _admin_create_shop(city_id, f"Магазин {uuid.uuid4().hex[:6]}")
+
+    async with _client() as client:
+        resp = await client.get("/api/public/ice/cities")
+    assert resp.status_code == 200, resp.text
+    city = next(c for c in resp.json()["items"] if int(c["id"]) == city_id)
+    assert city["shop_count"] >= 1
+    assert city["place_count"] >= 2
+
+
+@pytest.mark.asyncio
 async def test_shop_hidden_from_default_list_but_reachable_by_chip(app_use_test_db, db_session) -> None:
     city_id = await _insert_city(db_session, name=f"Ленточный {uuid.uuid4().hex[:6]}")
     rink_id = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:6]}")

@@ -14,8 +14,9 @@ Telegram» ведёт в каталог с теми же фильтрами (``c
 
 from __future__ import annotations
 
+import hashlib
 import html as html_lib
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlencode
@@ -28,6 +29,7 @@ from src.application.arena_public_use_cases import (
     CITY_SELECTION_PAGE_SIZE,
     _CURRENT_SESSION_SQL,
     STATUS_ACTIVE,
+    city_selection_session_counts,
     city_selection_venue_types,
     list_city_selection_places,
     list_public_ice_arenas,
@@ -48,7 +50,7 @@ from src.shared.html_template import fill_placeholders, html_lang_for_country, j
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.phone_guard import is_valid_public_phone, tel_href
 from src.shared.schedule_basis import public_basis_css_class
-from src.shared.venue_types import VENUE_TYPE_KEYS, has_public_skating
+from src.shared.venue_types import DEFAULT_HIDDEN_VENUE_TYPES, VENUE_TYPE_KEYS, has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
 
@@ -106,8 +108,13 @@ def selection_path(
     return f"/c/{city_slug(city_name)}" + (("?" + urlencode(params)) if params else "")
 
 
-def selection_image_path(*, city_name: str, venue: str | None, when: str | None) -> str:
+def selection_image_path(
+    *, city_name: str, venue: str | None, when: str | None, version: str | None = None
+) -> str:
+    """Путь картинки подборки. ``version`` — хэш данных: Telegram держит превью по URL."""
     params = {k: v for k, v in (("t", venue), ("w", when)) if v}
+    if version:
+        params["v"] = version
     return f"/c/{city_slug(city_name)}/og.png" + (("?" + urlencode(params)) if params else "")
 
 
@@ -157,6 +164,29 @@ async def _window_slots(
     return out
 
 
+async def _selection_session_totals(
+    session: AsyncSession, counts: Mapping[int, int], *, now: datetime
+) -> tuple[int, int]:
+    """``(сеансов, мест с сеансами)`` по всей подборке — по местам, которые мы показываем.
+
+    Место со «сверхстарым» расписанием (>72 ч) сеансов на странице не имеет: «не обновлялось
+    N дней — уточните по телефону». В счёте его тоже нет — иначе превью обещает сеансы,
+    которых человек не увидит.
+    """
+    if not counts:
+        return 0, 0
+    fresh = await load_arena_freshness(session, list(counts), now=now)
+    sessions = 0
+    places = 0
+    for arena_id, n in counts.items():
+        if staleness_level(fresh.get(int(arena_id))) == LEVEL_VERY_STALE:
+            continue
+        sessions += int(n)
+        if int(n) > 0:
+            places += 1
+    return sessions, places
+
+
 async def load_selection_view(
     session: AsyncSession,
     *,
@@ -171,6 +201,7 @@ async def load_selection_view(
     skating = venue is None or venue == "ice" or has_public_skating(venue)
     window = None
     filter_chips: list[dict[str, Any]] = []
+    facets: list[dict[str, Any]] = []
     total = 0
     pages = 1
     if when:
@@ -191,6 +222,7 @@ async def load_selection_view(
         total = int(listing.get("total") or len(items))
         pages = max(1, (total + MAX_PLACES - 1) // MAX_PLACES)
         filter_chips = []
+        facets = list(listing.get("venue_type_facets") or [])
     else:
         catalog = await list_city_selection_places(
             session,
@@ -203,6 +235,7 @@ async def load_selection_view(
         total = int(catalog.get("total") or 0)
         pages = int(catalog.get("pages") or 1)
         filter_chips = list(catalog.get("filter_chips") or [])
+        facets = list(catalog.get("venue_type_facets") or [])
     slots = await _window_slots(session, [int(i["id"]) for i in items], window, now) if skating else {}
     # TASK-180: свежесть расписания на момент ``now``. > 6 ч — строка «могло измениться»;
     # > 72 ч — сеансы места не показываем и не считаем: «не обновлялось N дней — уточните».
@@ -227,6 +260,19 @@ async def load_selection_view(
     hits = [i for i in items if slots.get(int(i["id"]))] if window else items
     shown = hits or items
     shown_page = shown[:MAX_PLACES]
+    # Счёт для превью — по всей подборке, а не по странице: один агрегат вместо len(shown_page).
+    selection_counts = (
+        await city_selection_session_counts(
+            session,
+            city_id=int(city["id"]),
+            venue_types=city_selection_venue_types(venue),
+            window=window,
+            now=now,
+        )
+        if skating
+        else {}
+    )
+    session_total, window_places = await _selection_session_totals(session, selection_counts, now=now)
     return {
         "city": dict(city),
         "venue": venue,
@@ -242,7 +288,11 @@ async def load_selection_view(
         "stale_notes": stale_notes,
         "unconfirmed_notes": unconfirmed_notes,
         "skating": skating,
-        "session_count": sum(len(slots.get(int(i["id"]), [])) for i in shown_page),
+        "session_count": session_total,
+        # Места с сеансом в окне — по всей выборке: это число обещает заголовок.
+        "window_places": window_places,
+        # Фасеты всего города: по ним выбирается слово «катков»/«мест», а не по странице.
+        "venue_type_facets": facets,
     }
 
 
@@ -286,11 +336,11 @@ def selection_share_title(view: Mapping[str, Any]) -> str:
 
 
 def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
-    """Слово при счётчике совпадает с тем, что реально в подборке.
+    """Слово при счётчике — по всему городу, а не по странице.
 
-    Явный чип — его существительное. Без чипа смотрим места на странице:
-    одни катки — «катков», смесь катков и залов — «мест». Раньше «все места»
-    всегда говорили «катков», даже когда первыми в списке были магазины.
+    Явный чип — его существительное. Без чипа смотрим фасеты города: одни катки —
+    «катков», есть залы или места — «мест». Раньше слово считалось по 12 карточкам
+    страницы, и подборка «все места» называла катками город, где катков — половина.
     """
     venue = view.get("venue")
     if venue in ("ice", "outdoor"):
@@ -299,6 +349,12 @@ def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
         return _NOUNS[venue]
     if venue:
         return ("место", "места", "мест")
+    facet_keys = [str(facet.get("key") or "") for facet in view.get("venue_type_facets") or []]
+    if facet_keys:
+        # Магазины в подборку «все места» не входят — и слова не портят (TASK-217).
+        kinds = {"ice" if key in ("ice", "outdoor") else key for key in facet_keys if key}
+        kinds -= DEFAULT_HIDDEN_VENUE_TYPES
+        return ("каток", "катка", "катков") if kinds == {"ice"} else ("место", "места", "мест")
     nouns: list[tuple[str, str, str]] = []
     for item in view.get("items") or []:
         key = str(item.get("venue_type") or "ice")
@@ -313,9 +369,22 @@ def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
     return ("место", "места", "мест")
 
 
+def selection_place_count(view: Mapping[str, Any]) -> int:
+    """Сколько мест в подборке целиком — не страница.
+
+    Без окна — вся выборка города. С ``?w=`` — места, у которых в окне есть сеанс:
+    ровно то, что обещает заголовок. Пустое окно честно падает на всю выборку
+    («сеансов нет — ближайшие»), иначе в превью стоял бы ноль при непустом списке.
+    """
+    if view.get("when"):
+        in_window = int(view.get("window_places") or 0)
+        if in_window:
+            return in_window
+    return int(view.get("total") or 0)
+
+
 def selection_description(view: Mapping[str, Any]) -> str:
-    items = view.get("items") or []
-    n = len(items)
+    n = selection_place_count(view)
     noun = selection_count_noun(view)
     bits = [f"{n} {plural_ru(n, *noun)}"]
     sessions = int(view.get("session_count") or 0)
@@ -324,6 +393,64 @@ def selection_description(view: Mapping[str, Any]) -> str:
     if view.get("window_empty"):
         bits.append(f"{str(view['window']['label']).lower()} сеансов нет — ближайшие")
     return " · ".join(bits)
+
+
+def _minsk_day(now: datetime | None = None) -> date:
+    return (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
+
+
+def _view_slots(view: Mapping[str, Any], item: Mapping[str, Any]) -> list[Any]:
+    slots = view.get("slots") or {}
+    found = slots.get(int(item["id"]))
+    if found is None:
+        found = slots.get(str(item["id"]))
+    return list(found or [])
+
+
+def selection_share_places(
+    view: Mapping[str, Any], *, today: date | None = None
+) -> list[tuple[Mapping[str, Any], list[Any]]]:
+    """Порядок строк «Ссылка»/«Другое» и подписи og.png: сегодняшние сеансы — первыми.
+
+    Сначала места с сеансом на сегодня по Минску — по времени начала, потом остальные
+    по названию. В порядке страницы далёкий каток, случайно оказавшийся выше, забирал
+    одну из трёх строк у того, где есть лёд сегодня.
+    """
+    day = today or _minsk_day()
+    with_today: list[tuple[date, str, Mapping[str, Any], list[Any]]] = []
+    others: list[tuple[str, Mapping[str, Any], list[Any]]] = []
+    for item in view.get("items") or []:
+        slots = _view_slots(view, item)
+        first = slots[0] if slots else None
+        local_date = first.get("local_date") if isinstance(first, Mapping) else None
+        if isinstance(local_date, datetime):
+            local_date = local_date.date()
+        if first is not None and local_date == day:
+            hhmm = str(first.get("starts_at_local") or "")[:5]
+            with_today.append((local_date, hhmm, item, slots))
+        else:
+            others.append((str(item.get("name") or "").casefold(), item, slots))
+    with_today.sort(key=lambda row: (row[0], row[1]))
+    others.sort(key=lambda row: row[0])
+    return [(item, slots) for _day, _hhmm, item, slots in with_today] + [
+        (item, slots) for _name, item, slots in others
+    ]
+
+
+def selection_image_version(view: Mapping[str, Any]) -> str:
+    """Короткий хэш данных превью: Telegram держит старую картинку по URL.
+
+    В хэш входят ровно те числа, что человек видит на картинке, и день по Минску:
+    расписание меняется внутри дня, и превью обязано перечитаться.
+    """
+    raw = "|".join(
+        (
+            str(selection_place_count(view)),
+            str(int(view.get("session_count") or 0)),
+            _minsk_day().isoformat(),
+        )
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:10]
 
 
 def selection_share_description(view: Mapping[str, Any]) -> str:
@@ -541,7 +668,19 @@ def render_selection_page(
         city_name=city_name,
         telegram_url=cta_url,
     )
-    body = hero + chips + note + places + pager + _share_html(share, venue_type="ice" if view.get("skating") else "shop") + dock
+    body = (
+        hero
+        + chips
+        + note
+        + places
+        + pager
+        + _share_html(
+            share,
+            venue_type="ice" if view.get("skating") else "shop",
+            telegram_link_only=True,
+        )
+        + dock
+    )
     elements = []
     for n, item in enumerate(view["items"]):
         slug = str(item.get("slug") or "").strip()
@@ -594,8 +733,7 @@ def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[s
     from src.application.client_share_message import share_body_for_native_share_dialog
 
     lines = [selection_share_title(view), selection_share_description(view)]
-    for item in (view.get("items") or [])[:3]:
-        slots = view["slots"].get(int(item["id"])) or []
+    for item, slots in selection_share_places(view)[:3]:
         if slots:
             first = slots[0]
             lines.append(f"• {item.get('name')} — {str(first.get('starts_at_local') or '')[:5]}")

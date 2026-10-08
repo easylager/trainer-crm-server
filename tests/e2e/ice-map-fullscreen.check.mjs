@@ -269,9 +269,9 @@ try {
   check('AC-1: hero плавает над картой (fixed)', heroPos === 'fixed');
 
   const intentHidden = await page.$eval('.ice-intent-row', el => el.offsetParent === null);
-  const nearestHidden = await page.$eval('#iceNearestBtn', el => el.offsetParent === null);
+  const shareHeadHidden = await page.$eval('#iceShareHeadBtn', el => el.offsetParent === null);
   const cityInSearchVisible = await page.$eval('#iceCityChangeMap', el => getComputedStyle(el).display !== 'none');
-  check('AC-1: намерение и «Ближе» скрыты на карте', intentHidden && nearestHidden);
+  check('AC-1: намерение и шеринг в шапке ленты скрыты на карте', intentHidden && shareHeadHidden);
   check('AC-1: город внутри строки поиска в режиме карты', cityInSearchVisible);
 
   /* --- Шторка half: каркас + карусель + сводка --- */

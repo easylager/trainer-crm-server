@@ -132,8 +132,8 @@
     var media = absoluteMediaUrl(p.story_image_url);
     if (!/^https:\/\//i.test(media)) return false;
     var params = {};
-    var caption = String(p.share_body || '').trim();
-    if (caption) params.text = caption.slice(0, 200);
+    // TASK-222: сторис — кадр плюс ссылка, без подписи. Своя подпись уже нарисована
+    // в самой картинке, а text попадал в редактор истории простынёй поверх неё.
     var link = String(p.share_url || '').trim();
     if (link) params.widget_link = { url: link, name: 'Карта льда' };
     try {
@@ -312,15 +312,23 @@
     return !!(state && state.endpoint);
   }
 
+  /**
+   * Telegram: подборка — только ссылка на обоих путях, место — со текстом.
+   * Тело обнуляем до вызова, а не внутри telegramShareHref: Mini App-путь уходит
+   * мимо этой функции, и раньше он оставался единственным, кто передавал текст.
+   */
+  function sendTelegramShare(p, linkOnly) {
+    var body = linkOnly ? '' : String((p && p.share_body) || '');
+    var opened = false;
+    if (typeof global.openTelegramShareUrlFromMiniApp === 'function') {
+      opened = !!global.openTelegramShareUrlFromMiniApp({ shareUrl: p.share_url, shareBody: body });
+    }
+    if (!opened) openUrl(telegramShareHref(p.share_url, body, linkOnly));
+  }
+
   var CHANNELS = {
     telegram: function (p) {
-      var linkOnly = telegramLinkOnly();
-      var body = linkOnly ? '' : p.share_body;
-      var opened = false;
-      if (typeof global.openTelegramShareUrlFromMiniApp === 'function') {
-        opened = global.openTelegramShareUrlFromMiniApp({ shareUrl: p.share_url, shareBody: body });
-      }
-      if (!opened) openUrl(telegramShareHref(p.share_url, p.share_body, linkOnly));
+      sendTelegramShare(p, telegramLinkOnly());
     },
     copy: function (p) {
       var text = fullMessage(p);
@@ -635,13 +643,15 @@
   }
 
   function renderPreviewFigureHtml(p) {
-    return (
-      '<figure class="gss-preview">' +
-      renderPreview(p) +
-      '<figcaption>' +
-      esc(p ? p.share_body : 'Готовим карточку…') +
-      '</figcaption></figure>'
-    );
+    // Подборка: текст дублирует то, что уже нарисовано на og/story — только картинки.
+    var caption = '';
+    if (!state || !state.endpoint) {
+      caption =
+        '<figcaption>' +
+        esc(p ? p.share_body : 'Готовим карточку…') +
+        '</figcaption>';
+    }
+    return '<figure class="gss-preview">' + renderPreview(p) + caption + '</figure>';
   }
 
   function paintBody() {
@@ -654,7 +664,7 @@
       '<div class="gss-channels-host">' +
       renderChannelsHtml(state.payload) +
       '</div>' +
-      '<p class="gss-note">В чат — Telegram или Ссылка. «В галерею» — картинка для сторис (вертикаль, если есть). Ссылку для стикера копируем сами.</p>';
+      '<p class="gss-note">В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис. Ссылку для стикера скопируйте сами.</p>';
   }
 
   function paintSlotPicker() {
@@ -826,5 +836,16 @@
     _openStoryShare: openStoryShare,
     _openImageSave: openImageSave,
     _telegramShareHref: telegramShareHref,
+    _previewFigureHtml: function (payload, selection) {
+      var prev = state;
+      state = selection
+        ? { endpoint: '/api/public/ice/selection/share', venueType: 'ice', context: 'ice_list' }
+        : { endpoint: null, venueType: 'ice', context: 'arena_card' };
+      try {
+        return renderPreviewFigureHtml(payload);
+      } finally {
+        state = prev;
+      }
+    },
   };
 })(window);
