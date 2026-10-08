@@ -15,9 +15,10 @@ _REPO = Path(__file__).resolve().parents[2]
 _WEBAPP = _REPO / "static" / "webapp"
 _ATTR = re.compile(r"""(?:src|href)=["']([^"']+)["']""", re.I)
 
-# Measured when the budget landed (TASK-197). Bytes, gzip level 9, mtime 0.
+# Gzip level 9, mtime 0. Re-measure after intentional UI growth (TASK-197 → TASK-222:
+# share in list head + share-sheet). A page may shrink; growth past +5% fails CI.
 _BASELINE_GZIP = {
-    "ice.html": 189_847,
+    "ice.html": 199_458,
     "catalog.html": 200_158,
 }
 
