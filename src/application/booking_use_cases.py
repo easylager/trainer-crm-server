@@ -1131,7 +1131,8 @@ async def resolve_arena_for_client_self_booking(
     Self-booking venue is the slot's arena, not a silent primary override.
 
     - Slot with arena_id → that arena (must be linked to the trainer).
-    - Slot without arena → trainer schedule default (primary, else MIN(trainer_arenas)).
+    - Slot without arena + trainer offers online → online booking (``no_venue``).
+    - Slot without arena + no online offer → trainer schedule default (legacy).
     - origin_arena_id is the catalog/card arena the client came from. It never replaces the
       slot place; when it differs, the third flag is True so UI can warn before confirm.
 
@@ -1147,6 +1148,11 @@ async def resolve_arena_for_client_self_booking(
             return None, "invalid_arena", False
         resolved = int(slot_arena_id)
     else:
+        from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+        if await trainer_offers_online_sessions(session, trainer_id):
+            # Explicit online / venue-less slot — do not inherit primary arena.
+            return None, "no_venue", False
         resolved = await get_trainer_primary_arena_resolved(session, trainer_id)
         if resolved is None:
             return None, "no_venue", False
@@ -3807,7 +3813,12 @@ async def list_bookings_for_client(
                      AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP) AS hub_in_session,
                    (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
                    b.service_price_variant_id,
-                   p.city_id AS trainer_city_id
+                   p.city_id AS trainer_city_id,
+                   (SELECT COALESCE(NULLIF(TRIM(ph.file_key_list), ''), NULLIF(TRIM(ph.file_key), ''))
+                    FROM trainer_photos ph
+                    WHERE ph.trainer_id = b.trainer_id
+                    ORDER BY ph.sort_order NULLS LAST, ph.id ASC
+                    LIMIT 1) AS trainer_list_photo_key
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -3874,6 +3885,8 @@ async def list_bookings_for_client(
             "arena_id": int(row[23]) if row[23] is not None else None,
             "service_price_variant_id": int(row[24]) if row[24] is not None else None,
             "trainer_city_id": int(row[25]) if row[25] is not None else None,
+            # Хаб «Ваша запись»: мини-аватар тренера, если есть фото в каталоге.
+            "trainer_list_photo_key": (str(row[26]).strip() if row[26] else None) or None,
         })
     # TASK-196: валюта цены записи — из города её тренера (BY → BYN, RU → RUB),
     # одним запросом на страницу («Мои записи» рисует по currency_code).
@@ -3936,7 +3949,12 @@ async def list_booking_history_for_client(
                    false AS hub_in_session,
                    (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
                    b.service_price_variant_id,
-                   p.city_id AS trainer_city_id
+                   p.city_id AS trainer_city_id,
+                   (SELECT COALESCE(NULLIF(TRIM(ph.file_key_list), ''), NULLIF(TRIM(ph.file_key), ''))
+                    FROM trainer_photos ph
+                    WHERE ph.trainer_id = b.trainer_id
+                    ORDER BY ph.sort_order NULLS LAST, ph.id ASC
+                    LIMIT 1) AS trainer_list_photo_key
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -4010,6 +4028,7 @@ async def list_booking_history_for_client(
             "arena_id": int(row[23]) if row[23] is not None else None,
             "service_price_variant_id": int(row[24]) if row[24] is not None else None,
             "trainer_city_id": int(row[25]) if row[25] is not None else None,
+            "trainer_list_photo_key": (str(row[26]).strip() if row[26] else None) or None,
         })
     # TASK-196: валюта цены записи — из города её тренера (BY → BYN, RU → RUB),
     # одним запросом на страницу (история записей рисует по currency_code).

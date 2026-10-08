@@ -35,6 +35,8 @@ def test_profile_patch_rejects_blank_first_name() -> None:
 def test_profile_patch_birth_date_optional_iso_date() -> None:
     assert ProfilePatch(birth_date=None).birth_date is None
     assert ProfilePatch(birth_date="1990-05-20").birth_date.isoformat() == "1990-05-20"
+    assert ProfilePatch(online_enabled=True).online_enabled is True
+    assert ProfilePatch(online_enabled=False).online_enabled is False
     with pytest.raises(ValidationError):
         ProfilePatch(birth_date="20.05.1990")
 

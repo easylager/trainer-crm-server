@@ -65,6 +65,8 @@
         /** Per slot selection — POST /client/booking Idempotency-Key (retry after dropped response). */
         catalogBookingIdempotencyKey: null,
         slotsForTrainer: [],
+        /** Selected day (YYYY-MM-DD) on «Выберите время» day strip; null → first day with slots. */
+        slotPickSelectedDay: null,
         /** Subset of trainer arenas used as GET /client/slots arena_ids= (OR). Empty ⇒ all venues. */
         trainerSlotsArenaIds: [],
         slotsEmptyOnFilterHint: '',
@@ -6983,64 +6985,184 @@
         el.hidden = false;
       }
 
+      function slotPickTodayIso() {
+        var n = new Date();
+        return (
+          n.getFullYear() +
+          '-' +
+          String(n.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(n.getDate()).padStart(2, '0')
+        );
+      }
+
+      /** Подпись чипа: «Сегодня» / «Завтра» / «Пн» — как arena-strip / gss-day-strip. */
+      function slotPickDayChipTop(dateKey) {
+        var d = String(dateKey || '').split('-');
+        if (d.length !== 3) return '';
+        var dateObj = new Date(parseInt(d[0], 10), parseInt(d[1], 10) - 1, parseInt(d[2], 10));
+        if (isNaN(dateObj.getTime())) return '';
+        var today = slotPickTodayIso();
+        if (dateKey === today) return 'Сегодня';
+        var t = today.split('-');
+        var tomorrow = new Date(parseInt(t[0], 10), parseInt(t[1], 10) - 1, parseInt(t[2], 10) + 1);
+        var tomorrowIso =
+          tomorrow.getFullYear() +
+          '-' +
+          String(tomorrow.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(tomorrow.getDate()).padStart(2, '0');
+        if (dateKey === tomorrowIso) return 'Завтра';
+        return SLOT_DAYS[dateObj.getDay()] || '';
+      }
+
+      function hideSlotPickDayStrip() {
+        var strip = document.getElementById('slotPickDayStrip');
+        if (!strip) return;
+        strip.hidden = true;
+        strip.innerHTML = '';
+      }
+
+      function ensureSlotPickSelectedDay(days) {
+        if (!days.length) {
+          state.slotPickSelectedDay = null;
+          return null;
+        }
+        if (state.slotPickSelectedDay && days.indexOf(state.slotPickSelectedDay) >= 0) {
+          return state.slotPickSelectedDay;
+        }
+        state.slotPickSelectedDay = days[0];
+        return state.slotPickSelectedDay;
+      }
+
+      function paintSlotPickDayStrip(days, byDay) {
+        var strip = document.getElementById('slotPickDayStrip');
+        if (!strip) return;
+        if (!days.length) {
+          hideSlotPickDayStrip();
+          return;
+        }
+        var selected = ensureSlotPickSelectedDay(days);
+        var html = '';
+        days.forEach(function(dateKey) {
+          var d = String(dateKey || '').split('-');
+          var num = d.length === 3 ? String(parseInt(d[2], 10)) : '';
+          var top = slotPickDayChipTop(dateKey);
+          var count = (byDay[dateKey] || []).length;
+          var on = dateKey === selected;
+          var weekend = false;
+          if (d.length === 3) {
+            var dateObj = new Date(parseInt(d[0], 10), parseInt(d[1], 10) - 1, parseInt(d[2], 10));
+            var wd = dateObj.getDay();
+            weekend = wd === 0 || wd === 6;
+          }
+          html +=
+            '<button type="button" role="tab" class="slot-pick-day-strip__day' +
+            (on ? ' is-on' : '') +
+            (weekend ? ' slot-pick-day-strip__day--weekend' : '') +
+            '" data-slot-pick-day="' +
+            escapeHtml(dateKey) +
+            '" aria-pressed="' +
+            (on ? 'true' : 'false') +
+            '">' +
+            '<span>' +
+            escapeHtml(top) +
+            '</span><b>' +
+            escapeHtml(num) +
+            '</b><i>' +
+            escapeHtml(String(count)) +
+            '</i></button>';
+        });
+        strip.innerHTML = html;
+        strip.hidden = false;
+        strip.querySelectorAll('[data-slot-pick-day]').forEach(function(btn) {
+          btn.onclick = function() {
+            var iso = btn.getAttribute('data-slot-pick-day');
+            if (!iso || iso === state.slotPickSelectedDay) return;
+            state.slotPickSelectedDay = iso;
+            renderSlotPickList();
+            var onBtn = document.querySelector(
+              '#slotPickDayStrip [data-slot-pick-day="' + iso + '"]'
+            );
+            if (onBtn && typeof onBtn.scrollIntoView === 'function') {
+              try {
+                onBtn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+              } catch (eScroll) {
+                onBtn.scrollIntoView(false);
+              }
+            }
+          };
+        });
+        var selectedBtn = strip.querySelector(
+          '[data-slot-pick-day="' + String(selected || '') + '"]'
+        );
+        if (selectedBtn && typeof selectedBtn.scrollIntoView === 'function') {
+          try {
+            selectedBtn.scrollIntoView({ inline: 'center', block: 'nearest' });
+          } catch (eInit) { /* ignore */ }
+        }
+      }
+
       function renderSlotPickList() {
         var list = document.getElementById('slotPickList');
         var slots = state.slotsForTrainer || [];
         paintSlotPickContext();
 
         if (slots.length === 0) {
+          hideSlotPickDayStrip();
           renderSlotPickEmptyState(list);
           return;
         }
-        
+
         // Группируем слоты по дням
         var byDay = {};
         slots.forEach(function(s, i) {
           var date = s.slot_date || '';
+          if (!date) return;
           if (!byDay[date]) byDay[date] = [];
           byDay[date].push({ slot: s, index: i });
         });
-        
+
         var days = Object.keys(byDay).sort();
-        var html = '';
-        
-        days.forEach(function(dateKey) {
-          var daySlots = byDay[dateKey].sort(function(a, b) { 
-            return (a.slot.start_time || '').localeCompare(b.slot.start_time || ''); 
-          });
-          
-          // Форматируем заголовок дня
-          var d = dateKey.split('-');
-          if (d.length === 3) {
-            var day = parseInt(d[2], 10);
-            var month = parseInt(d[1], 10) - 1;
-            var dateObj = new Date(d[0], month, day);
-            var dayName = SLOT_DAYS[dateObj.getDay()];
-            var dateStr = day + '.' + String(month + 1).padStart(2, '0') + ' (' + dayName + ')';
-            html += '<div class="day-block"><div class="day-title">' + dateStr + '</div>';
-          }
-          
-          daySlots.forEach(function(item) {
-            var s = item.slot;
-            var i = item.index;
-            // Площадка на строке. «Показать слоты на других аренах» перемешивает
-            // арены в одном списке, и без подписи человек выбирал время, не зная,
-            // куда ему ехать. Тот же помощник, что и на карточке тренера.
-            var place =
-              window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
-                ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
-                : ((s.arena_name && String(s.arena_name).trim()) || '');
-            html += '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
-              '<span class="slot-card-body"><span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>' +
-              (place ? '<span class="slot-card-place">' + escapeHtml(place) + '</span>' : '') +
-              slotGroupSpotsPillHtml(s) + '</span><span>→</span></button>';
-          });
-          
-          html += '</div>';
+        if (!days.length) {
+          hideSlotPickDayStrip();
+          renderSlotPickEmptyState(list);
+          return;
+        }
+
+        var selected = ensureSlotPickSelectedDay(days);
+        paintSlotPickDayStrip(days, byDay);
+
+        var daySlots = (byDay[selected] || []).slice().sort(function(a, b) {
+          return (a.slot.start_time || '').localeCompare(b.slot.start_time || '');
         });
-        
+        var html = '';
+        daySlots.forEach(function(item) {
+          var s = item.slot;
+          var i = item.index;
+          // Площадка на строке. «Показать слоты на других аренах» перемешивает
+          // арены в одном списке, и без подписи человек выбирал время, не зная,
+          // куда ему ехать. Тот же помощник, что и на карточке тренера.
+          var place =
+            window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
+              ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
+              : ((s.arena_name && String(s.arena_name).trim()) || '');
+          html +=
+            '<button type="button" class="slot-card" data-slot-index="' +
+            i +
+            '">' +
+            '<span class="slot-card-body"><span class="slot-time">' +
+            (s.start_time || '') +
+            '–' +
+            (s.end_time || '') +
+            '</span>' +
+            (place ? '<span class="slot-card-place">' + escapeHtml(place) + '</span>' : '') +
+            slotGroupSpotsPillHtml(s) +
+            '</span><span>→</span></button>';
+        });
+
         list.innerHTML = html;
-        
+
         list.querySelectorAll('.slot-card').forEach(function(btn) {
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);

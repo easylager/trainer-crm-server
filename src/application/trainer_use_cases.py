@@ -38,6 +38,7 @@ from src.infrastructure.db.models import (
     TRAINER_STATUS_PENDING_PROFILE,
 )
 from src.infrastructure.repositories import TrainerRepository
+from src.shared.notification_hours import NOTIFICATION_TZ
 from src.application.trainer_catalog_state import (
     CATALOG_ACTOR_MODERATOR,
     CATALOG_ACTOR_SYSTEM,
@@ -353,6 +354,90 @@ async def _profile_city_id_for_arena_scope(
     return int(row[0])
 
 
+async def list_trainer_arena_ids_locked_by_bookings(
+    session: AsyncSession,
+    trainer_id: int,
+) -> list[int]:
+    """
+    Arenas the trainer must not unlink while they still have current/future activity there.
+
+    Locked when either:
+    - a pending/confirmed booking resolves to the arena (booking.arena_id, else slot.arena_id), or
+    - a non-cancelled slot on that arena has not ended yet (wall clock in NOTIFICATION_TZ).
+    """
+    r = await session.execute(
+        text(
+            f"""
+            SELECT DISTINCT arena_id FROM (
+              SELECT COALESCE(b.arena_id, s.arena_id) AS arena_id
+              FROM bookings b
+              JOIN slots s ON s.id = b.slot_id
+              WHERE b.trainer_id = :tid
+                AND b.status IN ('pending', 'confirmed')
+                AND COALESCE(b.arena_id, s.arena_id) IS NOT NULL
+                AND ((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                    > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
+              UNION
+              SELECT s2.arena_id AS arena_id
+              FROM slots s2
+              WHERE s2.trainer_id = :tid
+                AND s2.status <> 'cancelled'
+                AND s2.arena_id IS NOT NULL
+                AND ((s2.slot_date + s2.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                    > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
+            ) locked
+            WHERE arena_id IS NOT NULL
+            ORDER BY 1
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    return [int(row[0]) for row in r.fetchall() if row[0] is not None]
+
+
+async def ensure_trainer_arenas_replace_allowed(
+    session: AsyncSession,
+    trainer_id: int,
+    arena_ids: list[int],
+    *,
+    replace_city_ids: list[int] | None,
+) -> None:
+    """
+    Block unlinking a venue from the trainer profile while current/future occupying bookings
+    still resolve to that arena (booking.arena_id or slot.arena_id).
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT ta.arena_id, a.city_id
+            FROM trainer_arenas ta
+            JOIN arenas a ON a.id = ta.arena_id
+            WHERE ta.trainer_id = :tid
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    existing_rows = r.fetchall()
+    old_ids = {int(row[0]) for row in existing_rows}
+    incoming = {int(x) for x in arena_ids}
+    if replace_city_ids is None:
+        removed = old_ids - incoming
+    else:
+        scope = {int(cid) for cid in replace_city_ids}
+        in_scope = {int(aid) for aid, city_id in existing_rows if int(city_id) in scope}
+        removed = in_scope - incoming
+    if not removed:
+        return
+    locked = set(await list_trainer_arena_ids_locked_by_bookings(session, trainer_id))
+    blocked = removed & locked
+    if not blocked:
+        return
+    raise ValueError(
+        "Нельзя убрать площадку: есть записи или слоты сейчас или в будущем. "
+        "Сначала отмените записи или удалите слоты на этой площадке."
+    )
+
+
 async def _apply_trainer_arenas_update(
     repo: TrainerRepository,
     session: AsyncSession,
@@ -372,7 +457,11 @@ async def _apply_trainer_arenas_update(
             {"ids": [int(x) for x in arena_ids]},
         )
         scope.update(int(row[0]) for row in r.fetchall() if row[0] is not None)
-    await repo.set_trainer_arenas(trainer_id, arena_ids, replace_city_ids=list(scope))
+    scope_list = list(scope)
+    await ensure_trainer_arenas_replace_allowed(
+        session, trainer_id, arena_ids, replace_city_ids=scope_list
+    )
+    await repo.set_trainer_arenas(trainer_id, arena_ids, replace_city_ids=scope_list)
     await repo.reconcile_primary_arena(trainer_id)
     if arena_ids:
         await repo.clear_trainer_arena_setup_alternative(trainer_id)

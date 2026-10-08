@@ -243,6 +243,13 @@ class ProfilePatch(BaseModel):
         max_length=5,
         description="Кто я — до 5 ролей; пустой список сбрасывает поле.",
     )
+    online_enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Также провожу онлайн — независимо от площадок. "
+            "Не путать с trainers.arena_work_format='online' (режим «площадки нет вообще»)."
+        ),
+    )
 
     @field_validator("specialist_roles", mode="before")
     @classmethod

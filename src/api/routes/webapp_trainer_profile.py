@@ -44,6 +44,7 @@ from src.application.arena_schedule_preset import (
 )
 from src.application.trainer_notification_prefs import validate_push_notification_window
 from src.application.trainer_arena_setup_use_cases import (
+    clear_trainer_arena_work_format,
     set_trainer_arena_mobile,
     set_trainer_arena_online,
 )
@@ -53,6 +54,7 @@ from src.application.trainer_use_cases import (
     create_trainer_education,
     delete_trainer_education,
     get_trainer,
+    list_trainer_arena_ids_locked_by_bookings,
     list_trainer_education,
     register_photo,
     set_trainer_catalog_visibility,
@@ -68,6 +70,7 @@ from src.infrastructure import s3
 from src.shared.catalog_visibility import CATALOG_ACTOR_TRAINER
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.config import Settings
+from src.shared.specialist_roles import SUGGESTED_ROLES
 from src.shared.venue_types import venue_type_options
 
 logger = logging.getLogger(__name__)
@@ -117,6 +120,14 @@ async def trainer_schedule_settings_payload(session: AsyncSession, trainer_id: i
     }
 
 
+async def _attach_arena_ids_locked(session: AsyncSession, trainer: dict | None, trainer_id: int) -> dict | None:
+    """Ensure Mini App trainer payloads keep venue-removal locks after partial updates."""
+    if not trainer:
+        return trainer
+    trainer["arena_ids_locked"] = await list_trainer_arena_ids_locked_by_bookings(session, trainer_id)
+    return trainer
+
+
 async def build_trainer_profile_webapp_payload(session: AsyncSession, trainer_id: int) -> dict:
     """
     Same JSON shape as GET /trainer/profile.
@@ -154,6 +165,7 @@ async def build_trainer_profile_webapp_payload(session: AsyncSession, trainer_id
     if education_entries is None:
         education_entries = []
     schedule_settings = await trainer_schedule_settings_payload(session, trainer_id)
+    await _attach_arena_ids_locked(session, trainer_for_editor, trainer_id)
     return {
         "trainer": trainer_for_editor,
         "profile_catalog_published": pub,
@@ -221,10 +233,10 @@ async def post_trainer_arena_setup_for_webapp(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
-    Arena self-service (TASK-046): mobile or online format, or create a real arena directly.
+    Arena self-service (TASK-046): mobile or online format, clear that format, or create a real arena.
 
-    ``mode=online`` is client-visible (see ``set_trainer_arena_online``) — unlike ``mobile``,
-    which only satisfies the trainer's own onboarding gate.
+    ``mode=online`` / ``mobile`` are mutually exclusive with linked venues (422 if arenas
+    remain). ``mode=clear`` undoes mobile/online.
 
     ``mode=create`` writes a real ``arenas`` row (``is_confirmed=false``) and auto-attaches
     it to the trainer — no waiting on support/admin to use it (AC-002/AC-003). Superseded
@@ -241,11 +253,19 @@ async def post_trainer_arena_setup_for_webapp(
     """
     trainer_id = await _linked_trainer_id(session, principal)
     mode = (body.mode or "").strip().lower()
-    if mode in ("mobile", "online"):
-        setter = set_trainer_arena_mobile if mode == "mobile" else set_trainer_arena_online
-        trainer = await setter(session, trainer_id)
+    if mode in ("mobile", "online", "clear"):
+        try:
+            if mode == "mobile":
+                trainer = await set_trainer_arena_mobile(session, trainer_id)
+            elif mode == "online":
+                trainer = await set_trainer_arena_online(session, trainer_id)
+            else:
+                trainer = await clear_trainer_arena_work_format(session, trainer_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         if not trainer:
             raise HTTPException(status_code=404, detail="Trainer not found")
+        await _attach_arena_ids_locked(session, trainer, trainer_id)
         readiness = moderation_readiness_dict(
             trainer,
             trainer_status=(trainer.get("status") or "").strip() or None,
@@ -279,6 +299,7 @@ async def post_trainer_arena_setup_for_webapp(
         trainer = result.get("trainer")
         if not trainer:
             raise HTTPException(status_code=404, detail="Trainer not found")
+        await _attach_arena_ids_locked(session, trainer, trainer_id)
         readiness = moderation_readiness_dict(
             trainer,
             trainer_status=(trainer.get("status") or "").strip() or None,
@@ -292,7 +313,7 @@ async def post_trainer_arena_setup_for_webapp(
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, response)
         return response
-    raise HTTPException(status_code=422, detail="mode must be mobile, online, or create")
+    raise HTTPException(status_code=422, detail="mode must be mobile, online, clear, or create")
 
 
 @router.get("/trainer/profile/arenas")
@@ -314,6 +335,14 @@ async def get_trainer_profile_arenas_for_webapp(
     # Picker may show arenas for a city selected in the form before Save (draft city).
     # Authenticated trainer is allowed to browse any city they can pick in the dropdown.
     items = await list_arenas(session, city_id, include_unconfirmed=True)
+    # Same thumb enrichment as onboarding quick-setup — mini photos in the venue combobox.
+    from src.application.arena_media import attach_arena_media_payloads, public_arena_thumb_url
+
+    await attach_arena_media_payloads(session, items)
+    for row in items:
+        row["thumb_url"] = public_arena_thumb_url(row.get("hero"))
+        row.pop("hero", None)
+        row.pop("gallery", None)
     return {"items": items}
 
 
@@ -361,6 +390,7 @@ async def get_trainer_profile_page_bootstrap(
             "services": {"items": services},
             "education_options": {"items": list(TRAINER_EDUCATION_OPTIONS)},
             "venue_types": {"items": venue_type_options()},
+            "specialist_role_suggestions": {"items": list(SUGGESTED_ROLES)},
         },
     }
 

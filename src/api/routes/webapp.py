@@ -418,6 +418,7 @@ from src.application.trainer_hub_action_inbox import (
 from src.application.trainer_use_cases import (
     get_trainer,
     get_trainer_moderation_readiness,
+    list_trainer_arena_ids_locked_by_bookings,
     try_submit_trainer_for_moderation_review,
 )
 from src.bot import messages as msg
@@ -1149,6 +1150,10 @@ class SlotEntryBody(BaseModel):
         default=None,
         description="When capacity=1, optional venue for this start; omitted → trainer default slot arena",
     )
+    is_online: bool = Field(
+        default=False,
+        description="Online session (arena_id NULL). Independent of physical venues when online_enabled.",
+    )
 
 
 class ScheduleSlotsDayBody(BaseModel):
@@ -1163,6 +1168,13 @@ class ScheduleSlotsDayBody(BaseModel):
         description=(
             "Venue for new group slots (capacity > 1), uniform venue for start_times (individual grid), "
             "or default for slot_entries rows without per-entry arena_id"
+        ),
+    )
+    is_online: bool = Field(
+        default=False,
+        description=(
+            "Create venue-less online slots (arena_id NULL). Requires profile.online_enabled "
+            "or arena_work_format=online. Mutually exclusive with arena_id on the same request."
         ),
     )
     # Per-slot pairs: each entry carries its own duration and bypasses arena grid alignment check.
@@ -1236,6 +1248,10 @@ async def patch_trainer_arena_public(
         raise HTTPException(status_code=404, detail="Площадка не привязана к вашему профилю")
     await session.commit()
     trainer = await get_trainer(session, trainer_id)
+    if trainer is not None:
+        trainer["arena_ids_locked"] = await list_trainer_arena_ids_locked_by_bookings(
+            session, trainer_id
+        )
     return {
         "ok": True,
         "arena_id": int(arena_id),
@@ -1283,6 +1299,16 @@ async def post_schedule_slots(
             )
         if not await trainer_offers_service(session, trainer_id, int(body.group_service_id)):
             raise HTTPException(status_code=400, detail="Услуга не в вашем списке")
+    if body.is_online and body.arena_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Онлайн-слот нельзя привязать к площадке — уберите arena_id или is_online.",
+        )
+    if body.is_online and body.capacity != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Онлайн пока только для индивидуальных слотов.",
+        )
     if body.arena_id is not None:
         await _require_schedule_arena_link(session, trainer_id, int(body.arena_id))
     try:
@@ -1291,6 +1317,17 @@ async def post_schedule_slots(
         raise HTTPException(status_code=400, detail="Invalid slot_date")
 
     arena_arg = int(body.arena_id) if body.arena_id is not None else None
+    batch_online = bool(body.is_online)
+    if batch_online or (
+        body.slot_entries is not None and any(bool(e.is_online) for e in body.slot_entries)
+    ):
+        from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+        if not await trainer_offers_online_sessions(session, trainer_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Включите «Также провожу занятия онлайн» в профиле, чтобы создавать онлайн-слоты.",
+            )
 
     try:
         duty_intervals = _schedule_slot_intervals(body)
@@ -1307,7 +1344,7 @@ async def post_schedule_slots(
     if body.slot_entries is not None:
         # Per-slot precise mode: each entry carries its own start + duration, no grid validation.
         per_slot: dict[int, int] = {}
-        per_slot_arena: dict[int, int] = {}
+        per_slot_arena: dict[int, int | None] = {}
         for entry in body.slot_entries:
             try:
                 m_set = _hhmm_strings_to_minutes([entry.start_time])
@@ -1315,7 +1352,19 @@ async def post_schedule_slots(
                 raise HTTPException(status_code=400, detail=str(e)) from e
             start_m = next(iter(m_set))
             per_slot[start_m] = entry.duration_minutes
-            if entry.arena_id is not None:
+            if entry.is_online:
+                if entry.arena_id is not None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Онлайн-слот не может иметь площадку.",
+                    )
+                if body.capacity != 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Онлайн пока только для индивидуальных слотов.",
+                    )
+                per_slot_arena[start_m] = None
+            elif entry.arena_id is not None:
                 if body.capacity != 1:
                     raise HTTPException(
                         status_code=400,
@@ -1336,6 +1385,7 @@ async def post_schedule_slots(
                 slot_arena_id=arena_arg,
                 per_slot_duration=per_slot,
                 per_slot_arena_id=per_slot_arena if per_slot_arena else None,
+                force_null_arena=batch_online,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1364,6 +1414,7 @@ async def post_schedule_slots(
             capacity=body.capacity,
             group_service_id=body.group_service_id,
             slot_arena_id=arena_arg,
+            force_null_arena=batch_online,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1669,16 +1720,28 @@ async def get_client_slots(
         available = filtered
     else:
         available = [s for s in available if max(1, int(s.get("capacity") or 1)) == 1]
+    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
     default_arena_for_slot = await trainer_default_slot_arena_id(session, trainer_id)
+    offers_online = await trainer_offers_online_sessions(session, trainer_id)
     serialized_full: list[dict] = []
     for s in available:
         an = (s.get("arena_name") or "").strip() or None
         aa = (s.get("arena_address") or "").strip() or None
         acn = (s.get("arena_city_name") or "").strip() or None
         raw_slot_arena = s.get("arena_id")
-        eff_slot_arena = (
-            int(raw_slot_arena) if raw_slot_arena is not None else default_arena_for_slot
-        )
+        if raw_slot_arena is not None:
+            eff_slot_arena: int | None = int(raw_slot_arena)
+            is_online_slot = False
+        elif offers_online:
+            # Venue-less + trainer offers online → keep null; label for clients.
+            eff_slot_arena = None
+            is_online_slot = True
+            if not an:
+                an = "Онлайн"
+        else:
+            eff_slot_arena = default_arena_for_slot
+            is_online_slot = False
         serialized_full.append(
             {
                 "id": s["id"],
@@ -1701,6 +1764,7 @@ async def get_client_slots(
                 "arena_name": an,
                 "arena_address": aa,
                 "arena_city_name": acn,
+                "is_online": is_online_slot,
                 "map_link": _client_catalog_slot_map_link(s),
             }
         )
@@ -7056,7 +7120,14 @@ async def get_trainer_my_services(
         }
         for row in arena_rows
     ]
-    return {"services": services, "arenas": arenas}
+    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+    online_enabled = await trainer_offers_online_sessions(session, trainer_id)
+    return {
+        "services": services,
+        "arenas": arenas,
+        "online_enabled": online_enabled,
+    }
 
 
 @router.get("/trainer/clients")

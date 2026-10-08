@@ -50,16 +50,48 @@ async def _set_trainer_arena_work_format(
     return await repo.get_by_id(trainer_id)
 
 
+async def _refuse_work_format_if_has_arenas(
+    session: AsyncSession, trainer_id: int, *, label: str
+) -> None:
+    """Venue-linked slots and online/mobile formats are mutually exclusive."""
+    repo = TrainerRepository(session)
+    aids = await repo.list_trainer_arena_ids(trainer_id)
+    if aids:
+        raise ValueError(
+            f"{label} и площадки — разные режимы. Сначала уберите площадки из профиля."
+        )
+
+
 async def set_trainer_arena_mobile(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:
+    """Mobile / no fixed venue — mutually exclusive with linked arenas."""
+    repo = TrainerRepository(session)
+    if not await repo.exists(trainer_id):
+        return None
+    await _refuse_work_format_if_has_arenas(session, trainer_id, label="Выездной формат")
     return await _set_trainer_arena_work_format(session, trainer_id, ARENA_WORK_FORMAT_MOBILE)
 
 
 async def set_trainer_arena_online(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:
     """
-    Client-visible, unlike ``mobile``: ``arena_work_format='online'`` is read by the trainer
-    catalog query (``TrainerRepository.list_active_with_details``) and surfaced as an "Онлайн"
-    badge on the Ice ("Лёд") coach card in place of an arena name (``ice-tab-model.js``,
-    ``trainerCardView``) — a trainer with no physical arena is otherwise findable by city +
-    service in Ice's coach list but shows no location line at all.
+    Online-only work format: mutually exclusive with linked venues.
+
+    Slots are either online (no venue) or at a concrete arena — not both. Refuses if the
+    trainer already has arenas; adding arenas clears this format via profile save.
     """
+    repo = TrainerRepository(session)
+    if not await repo.exists(trainer_id):
+        return None
+    await _refuse_work_format_if_has_arenas(session, trainer_id, label="Онлайн")
     return await _set_trainer_arena_work_format(session, trainer_id, ARENA_WORK_FORMAT_ONLINE)
+
+
+async def clear_trainer_arena_work_format(
+    session: AsyncSession, trainer_id: int
+) -> dict[str, Any] | None:
+    """Clear mobile/online (or legacy pending_request) alternative — undo for the profile UI."""
+    repo = TrainerRepository(session)
+    if not await repo.exists(trainer_id):
+        return None
+    await repo.clear_trainer_arena_setup_alternative(trainer_id)
+    await session.commit()
+    return await repo.get_by_id(trainer_id)

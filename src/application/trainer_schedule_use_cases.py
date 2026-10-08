@@ -54,6 +54,33 @@ async def trainer_default_slot_arena_id(session: AsyncSession, trainer_id: int) 
     return int(v) if v is not None else None
 
 
+async def trainer_offers_online_sessions(session: AsyncSession, trainer_id: int) -> bool:
+    """
+    True when the trainer may create / sell venue-less online slots.
+
+    ``online_enabled`` — alongside arenas; ``arena_work_format='online'`` — online-only profile.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT
+              COALESCE(p.online_enabled, false),
+              COALESCE(t.arena_work_format, '')
+            FROM trainers t
+            LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
+            WHERE t.id = :tid
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return False
+    if bool(row[0]):
+        return True
+    return (row[1] or "").strip() == "online"
+
+
 async def list_templates(session: AsyncSession, trainer_id: int) -> list[dict]:
     """List schedule templates for the trainer. Sorted by day_of_week, start_time."""
     r = await session.execute(
@@ -559,7 +586,9 @@ async def replace_slots_for_day(
     group_service_id: int | None = None,
     slot_arena_id: int | None = None,
     per_slot_duration: dict[int, int] | None = None,
-    per_slot_arena_id: dict[int, int] | None = None,
+    per_slot_arena_id: dict[int, int | None] | None = None,
+    *,
+    force_null_arena: bool = False,
 ) -> None:
     """
     Set slots for one calendar day.
@@ -574,12 +603,17 @@ async def replace_slots_for_day(
     For ``capacity`` > 1, ``group_service_id`` must be set.
     ``per_slot_arena_id``: optional start_minute → arena_id overrides for newly inserted slots
     (e.g. precise-time entries on a secondary venue while grid stays on default arena).
+    A value of ``None`` in that map means an explicit online (venue-less) slot.
+    ``force_null_arena``: all new slots in this call are online (arena_id NULL), no default fill-in.
     """
     cap = max(1, min(int(capacity), 500))
     if cap > 1 and group_service_id is None:
         raise ValueError("Group slot requires group_service_id")
-    default_arena = await trainer_default_slot_arena_id(session, trainer_id)
-    arena_for_new_slots = slot_arena_id if slot_arena_id is not None else default_arena
+    if force_null_arena:
+        arena_for_new_slots: int | None = None
+    else:
+        default_arena = await trainer_default_slot_arena_id(session, trainer_id)
+        arena_for_new_slots = slot_arena_id if slot_arena_id is not None else default_arena
     minute_set = {int(m) for m in start_minutes if 0 <= int(m) <= 23 * 60 + 59}
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     # Skip grid-alignment check for precise off-grid entries (per_slot_duration path).
@@ -678,7 +712,8 @@ async def replace_slots_for_day(
         end_time = _time_end(start_time, slot_dur)
         svc = int(group_service_id) if cap > 1 else None
         insert_aid = arena_for_new_slots
-        if per_slot_arena_id and start_m in per_slot_arena_id:
+        if per_slot_arena_id is not None and start_m in per_slot_arena_id:
+            # Present key with None = explicit online; missing key keeps batch default.
             insert_aid = per_slot_arena_id[start_m]
         await session.execute(
             text("""
@@ -922,28 +957,37 @@ async def list_slots(
         {"tid": trainer_id, "from_d": from_date, "to_d": to_date},
     )
     rows = r.fetchall()
-    return [
-        {
-            "id": row[0],
-            "slot_date": row[1],
-            "start_time": row[2],
-            "end_time": row[3],
-            "status": row[4],
-            "capacity": max(1, int(row[5])),
-            "service_id": int(row[6]) if row[6] is not None else None,
-            "arena_id": int(row[7]) if row[7] is not None else None,
-            "training_group_id": int(row[8]) if row[8] is not None else None,
-            "training_group_name": (row[9] or "").strip() if row[8] is not None else None,
-            "service_name": (row[10] or "").strip() if row[10] else None,
-            "arena_name": (row[11] or "").strip() if row[11] else None,
-            "arena_address": (row[12] or "").strip() if row[12] else None,
-            "arena_latitude": (float(row[13]) if row[13] is not None else None),
-            "arena_longitude": (float(row[14]) if row[14] is not None else None),
-            "arena_city_name": (row[15] or "").strip() if row[15] else None,
-            "active_bookings": int(row[16] or 0),
-        }
-        for row in rows
-    ]
+    offers_online = await trainer_offers_online_sessions(session, trainer_id)
+    out: list[dict] = []
+    for row in rows:
+        aid = int(row[7]) if row[7] is not None else None
+        aname = (row[11] or "").strip() if row[11] else None
+        is_online = aid is None and offers_online
+        if is_online and not aname:
+            aname = "Онлайн"
+        out.append(
+            {
+                "id": row[0],
+                "slot_date": row[1],
+                "start_time": row[2],
+                "end_time": row[3],
+                "status": row[4],
+                "capacity": max(1, int(row[5])),
+                "service_id": int(row[6]) if row[6] is not None else None,
+                "arena_id": aid,
+                "is_online": is_online,
+                "training_group_id": int(row[8]) if row[8] is not None else None,
+                "training_group_name": (row[9] or "").strip() if row[8] is not None else None,
+                "service_name": (row[10] or "").strip() if row[10] else None,
+                "arena_name": aname,
+                "arena_address": (row[12] or "").strip() if row[12] else None,
+                "arena_latitude": (float(row[13]) if row[13] is not None else None),
+                "arena_longitude": (float(row[14]) if row[14] is not None else None),
+                "arena_city_name": (row[15] or "").strip() if row[15] else None,
+                "active_bookings": int(row[16] or 0),
+            }
+        )
+    return out
 
 
 async def delete_slot(

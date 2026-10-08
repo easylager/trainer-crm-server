@@ -16,8 +16,8 @@
   <link rel="stylesheet" href="mini-app-client-theme.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-components.css?v=2026100518" />
   <script src="mini-app-telegram-chrome.js?v=2026100518"></script>  <script src="client-profile-switcher.js?v=2026100518"></script>
-  <link rel="preload" href="catalog-main.js?v=2026100699" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=2026100697" />
+  <link rel="preload" href="catalog-main.js?v=2026100901" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=2026100901" />
   <link rel="stylesheet" href="booking-client.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=2026100518" />
@@ -268,6 +268,8 @@
     <div class="step-title">Выберите время</div>
     <!-- Чьи это слоты и где: без строки экран был списком голого времени. -->
     <p id="slotPickContext" class="slot-pick-context" hidden></p>
+    <!-- Полоса дней — тот же паттерн, что gss-day-strip / arena-strip: сверху день, снизу окна. -->
+    <div id="slotPickDayStrip" class="slot-pick-day-strip" role="tablist" aria-label="День" hidden></div>
     <div id="slotPickList" class="slot-pick-list"></div>
   </div>
   <div id="screenBookingForm" data-screen>
@@ -484,7 +486,7 @@
   <script src="catalog-geo-model.js?v=2026100518"></script>
   <script src="ru-person-name.js?v=2026100518"></script>
   <script src="ru-text.js?v=2026100518"></script>
-  <script defer src="catalog-main.js?v=2026100699"></script>
+  <script defer src="catalog-main.js?v=2026100901"></script>
   <script defer src="mini-app-client-home.js?v=2026100518"></script>
 </body>
 </html>

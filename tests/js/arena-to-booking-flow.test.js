@@ -329,3 +329,38 @@ describe('экран времени объясняет, чьи это слоты
     assert.match(body, /formatSlotPlaceCaption/);
   });
 });
+
+describe('выбор дня сверху на «Выберите время»', () => {
+  const src = read('catalog-main.js');
+  const html = read('catalog.html');
+
+  it('в разметке есть полоса дней над списком слотов', () => {
+    assert.match(html, /id="slotPickDayStrip"/);
+    assert.match(html, /class="slot-pick-day-strip"/);
+    assert.match(html, /aria-label="День"/);
+  });
+
+  it('renderSlotPickList рисует полосу и фильтрует слоты выбранным днём', () => {
+    assert.match(src, /function paintSlotPickDayStrip/);
+    assert.match(src, /function ensureSlotPickSelectedDay/);
+    const start = src.indexOf('function renderSlotPickList');
+    const body = src.slice(start, start + 2200);
+    assert.match(body, /paintSlotPickDayStrip\(days, byDay\)/);
+    assert.match(body, /byDay\[selected\]/);
+    assert.match(body, /hideSlotPickDayStrip\(\)/);
+  });
+
+  it('чип дня повторяет паттерн arena/gss: подпись, число, счётчик', () => {
+    const start = src.indexOf('function paintSlotPickDayStrip');
+    const body = src.slice(start, src.indexOf('function renderSlotPickList'));
+    assert.match(body, /slot-pick-day-strip__day/);
+    assert.match(body, /slotPickDayChipTop/);
+    assert.match(body, /data-slot-pick-day/);
+    const chip = src.slice(
+      src.indexOf('function slotPickDayChipTop'),
+      src.indexOf('function hideSlotPickDayStrip')
+    );
+    assert.match(chip, /'Сегодня'/);
+    assert.match(chip, /'Завтра'/);
+  });
+});
