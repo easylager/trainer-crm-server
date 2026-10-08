@@ -249,6 +249,8 @@ async def test_catalog_home_evening_block_shows_tomorrow_label(app_use_test_db, 
     assert home.status_code == 200
     assert "Ближайший лёд" in home.text
     assert "завтра" in home.text
+    assert "10:00–11:00" in home.text
+    assert "10:00:00" not in home.text
     assert '<h2 class="section">Лёд сегодня</h2>' not in home.text
 
 

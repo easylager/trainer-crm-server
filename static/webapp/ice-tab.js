@@ -45,6 +45,7 @@
     cities: [],
     items: [],
     skateCount: null,
+    shopCount: null,
     total: 0,
     cursor: null,
     loading: false,
@@ -193,6 +194,7 @@
       skateCount: city != null ? city.skate_count : state.skateCount,
       trainerCount: city != null ? city.trainer_count : 0,
       placeCountHint: city != null ? city.place_count : 0,
+      shopCount: city != null ? city.shop_count : state.shopCount,
     };
   }
 
@@ -467,6 +469,7 @@
       skateCount: counts.skateCount,
       trainerCount: counts.trainerCount,
       placeCountHint: counts.placeCountHint,
+      shopCount: counts.shopCount,
     });
     var modeSeg = $('iceModeSeg');
     if (modeSeg) {
@@ -1211,25 +1214,31 @@
   }
 
   function setShareButton() {
-    var btn = $('iceShareBtn');
-    if (!btn) return;
     var show = shareAvailable();
-    btn.hidden = !show;
-    if (!show) return;
-    var label = $('iceShareLabel');
-    if (label) {
-      label.textContent = global.GlideShareSheet
-        ? 'Поделиться подборкой'
-        : state.cityName
-          ? 'Поделиться расписанием — ' + state.cityName
-          : 'Поделиться расписанием';
+    var aria = state.cityName
+      ? 'Поделиться расписанием катков: ' + state.cityName
+      : 'Поделиться подборкой';
+    var btn = $('iceShareBtn');
+    if (btn) {
+      btn.hidden = !show;
+      if (show) {
+        var label = $('iceShareLabel');
+        if (label) {
+          label.textContent = global.GlideShareSheet
+            ? 'Поделиться подборкой'
+            : state.cityName
+              ? 'Поделиться расписанием — ' + state.cityName
+              : 'Поделиться расписанием';
+        }
+        btn.setAttribute('aria-label', aria);
+      }
     }
-    btn.setAttribute(
-      'aria-label',
-      state.cityName
-        ? 'Поделиться расписанием катков: ' + state.cityName
-        : 'Поделиться расписанием катков'
-    );
+    /* TASK-222: компактная кнопка в шапке ленты — тот же жест, что нижняя. */
+    var head = $('iceShareHeadBtn');
+    if (head) {
+      head.hidden = !show;
+      if (show) head.setAttribute('aria-label', aria);
+    }
   }
 
   function openIceShareDialog() {
@@ -1248,7 +1257,9 @@
       return;
     }
     var btn = $('iceShareBtn');
+    var head = $('iceShareHeadBtn');
     if (btn) btn.disabled = true;
+    if (head) head.disabled = true;
     fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab')
       .then(function (data) {
         if (!data) return;
@@ -1274,6 +1285,7 @@
       .catch(function () {})
       .then(function () {
         if (btn) btn.disabled = false;
+        if (head) head.disabled = false;
       });
   }
 
@@ -2026,6 +2038,7 @@
     state.cityId = city.id;
     state.cityName = city.name || '';
     state.skateCount = city.skate_count;
+    state.shopCount = city.shop_count;
 
     if (cityChanged) {
       var cityCatalog = M.catalogStateAfterCityChange(city, state);
@@ -2653,6 +2666,10 @@
     var shareBtn = $('iceShareBtn');
     if (shareBtn) {
       shareBtn.addEventListener('click', openIceShareDialog);
+    }
+    var shareHead = $('iceShareHeadBtn');
+    if (shareHead) {
+      shareHead.addEventListener('click', openIceShareDialog);
     }
 
     var search = $('iceSearchInput');

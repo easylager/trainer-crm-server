@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026100518" />
-  <link rel="stylesheet" href="ice-tab.css?v=2026100801" />
+  <link rel="stylesheet" href="ice-tab.css?v=2026100803" />
   <link rel="stylesheet" href="mini-app-share-sheet.css?v=2026100603" />
   <script src="mini-app-empty-state.js?v=2026100518"></script>
   <script src="mini-app-more-icons.js?v=2026100518"></script>
@@ -32,9 +32,9 @@
   <script src="arena-schedule-mode-model.js?v=2026100702"></script>
   <script src="catalog-public-url.js?v=2026100711"></script>
   <script src="glide-copy.js?v=2026100723"></script>
-  <script src="ice-tab-model.js?v=2026100722"></script>
+  <script src="ice-tab-model.js?v=2026100804"></script>
   <script src="arena-card-model.js?v=2026100702"></script>
-  <script src="mini-app-share-sheet.js?v=2026100801"></script>
+  <script src="mini-app-share-sheet.js?v=2026100803"></script>
   <script src="ice-map-model.js?v=2026100723"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
@@ -131,11 +131,18 @@
       <div class="ice-listhead">
         <p class="ice-eyebrow" id="iceCaption">Ищем катки…</p>
         <!--
-          «Ближе» сортирует уже открытую ленту по расстоянию. Это не поиск и не смена
-          города, поэтому кнопка стоит у результата, а не в поле. На карте секция
-          списка скрыта: камеру двигает «Где я».
+          TASK-222: вместо малоиспользуемого «Ближе» — шеринг подборки у результата.
+          Полная кнопка #iceShareBtn остаётся внизу ленты; здесь короткий вход,
+          пока человек ещё смотрит первую карточку. На карте секция списка скрыта.
         -->
-        <button type="button" class="ice-nearest" id="iceNearestBtn" aria-pressed="false" aria-label="Сначала ближайшие ко мне (нужна геолокация)">Ближе</button>
+        <button type="button" class="ice-share-head" id="iceShareHeadBtn" hidden aria-label="Поделиться подборкой">
+          <svg class="ice-share-head__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M12 3v10" stroke-linecap="round"/>
+            <path d="M8.5 6.5 12 3l3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M5 12v6.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V12" stroke-linecap="round"/>
+          </svg>
+          <span class="ice-share-head__label">Поделиться</span>
+        </button>
       </div>
       <div id="iceList">
         <div class="ice-list" id="iceListSkate"></div>
@@ -216,6 +223,6 @@
 
   <script src="ru-text.js?v=2026100518"></script>
   <script src="ice-map.js?v=2026100722"></script>
-  <script src="ice-tab.js?v=2026100723"></script>
+  <script src="ice-tab.js?v=2026100804"></script>
 </body>
 </html>

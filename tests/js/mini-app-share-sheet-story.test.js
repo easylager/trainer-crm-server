@@ -244,9 +244,72 @@ describe('mini-app-share-sheet telegram selection (TASK-222)', () => {
     assert.equal(sheet.calls.miniApp[0].shareBody, 'Пт 20:30');
     assert.match(sheet.calls.opened[0], /[?&]text=/);
   });
+
+  it('у подборки нет figcaption, у места он остаётся', () => {
+    const context = {
+      window: {},
+      document: {},
+      location: { href: 'https://app.test/webapp/ice' },
+    };
+    context.window = context;
+    vm.runInNewContext(src, context);
+    const selection = context.GlideShareSheet._previewFigureHtml(
+      {
+        share_body: 'простыня текста',
+        og_image_url: 'https://cdn.test/c/minsk/og.png',
+        story_image_url: 'https://cdn.test/c/minsk/story.png',
+      },
+      true,
+    );
+    assert.equal(selection.includes('figcaption'), false);
+    assert.match(selection, /gss-preview-duo/);
+    assert.match(selection, /c\/minsk\/og\.png/);
+    assert.match(selection, /c\/minsk\/story\.png/);
+    const place = context.GlideShareSheet._previewFigureHtml(
+      {
+        share_body: 'Пт 20:30',
+        og_image_url: 'https://cdn.test/p/minsk/x/og.png',
+      },
+      false,
+    );
+    assert.match(place, /<figcaption>Пт 20:30<\/figcaption>/);
+  });
 });
 
 describe('mini-app-share-sheet story without caption (TASK-222)', () => {
+  it('подборка: сторис уходит отрендеренным story.png без text', async () => {
+    const calls = [];
+    const context = {
+      window: {},
+      document: {},
+      location: { href: 'https://app.test/webapp/ice' },
+      fetch: () => Promise.reject(new Error('no fetch')),
+      Telegram: {
+        WebApp: {
+          isVersionAtLeast: () => true,
+          shareToStory: (url, params) => {
+            calls.push({ url, params });
+          },
+        },
+      },
+      navigator: {},
+      setTimeout: (fn) => fn(),
+      clearTimeout: () => {},
+    };
+    context.window = context;
+    vm.runInNewContext(src, context);
+    const channel = await context.GlideShareSheet._openStoryShare({
+      story_image_url: 'https://cdn.test/c/minsk/story.png?v=abc',
+      og_image_url: 'https://cdn.test/c/minsk/og.png?v=abc',
+      share_url: 'https://glide.test/c/minsk',
+      share_body: 'простыня',
+    });
+    assert.equal(channel, 'story_tg');
+    assert.equal(calls[0].url, 'https://cdn.test/c/minsk/story.png?v=abc');
+    assert.equal(Object.prototype.hasOwnProperty.call(calls[0].params, 'text'), false);
+    assert.equal(calls[0].params.widget_link.url, 'https://glide.test/c/minsk');
+  });
+
   it('фоллбэк Web Share отдаёт только файл', async () => {
     const shares = [];
     const context = {

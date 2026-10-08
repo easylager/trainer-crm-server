@@ -265,7 +265,11 @@
 
   /**
    * Верхний сегмент «Места · Тренеры · Магазины». До первого ответа arenas — подсказки
-   * из объекта города (skate_count, trainer_count, place_count).
+   * из объекта города (skate_count, trainer_count, place_count, shop_count).
+   *
+   * «Магазины» нельзя вешать только на venue_type_facets ответа arenas: вкладка
+   * «Тренеры» фасеты не привозит, и после возврата с карточки тренера сегмент
+   * пропадал, хотя в городе магазины есть.
    */
   function catalogModesView(opts) {
     opts = opts || {};
@@ -286,7 +290,9 @@
     if (trainers > 0) {
       modes.push({ id: 'coach', label: 'Тренеры', active: scope === 'coach' });
     }
-    if (facetCount(facets, 'shop') > 0) {
+    var shops = facetCount(facets, 'shop');
+    if (!(shops > 0)) shops = Number(opts.shopCount) || 0;
+    if (shops > 0) {
       modes.push({ id: 'shop', label: 'Магазины', active: scope === 'shop' });
     }
     return modes;

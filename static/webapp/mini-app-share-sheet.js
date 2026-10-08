@@ -643,13 +643,15 @@
   }
 
   function renderPreviewFigureHtml(p) {
-    return (
-      '<figure class="gss-preview">' +
-      renderPreview(p) +
-      '<figcaption>' +
-      esc(p ? p.share_body : 'Готовим карточку…') +
-      '</figcaption></figure>'
-    );
+    // Подборка: текст дублирует то, что уже нарисовано на og/story — только картинки.
+    var caption = '';
+    if (!state || !state.endpoint) {
+      caption =
+        '<figcaption>' +
+        esc(p ? p.share_body : 'Готовим карточку…') +
+        '</figcaption>';
+    }
+    return '<figure class="gss-preview">' + renderPreview(p) + caption + '</figure>';
   }
 
   function paintBody() {
@@ -662,7 +664,7 @@
       '<div class="gss-channels-host">' +
       renderChannelsHtml(state.payload) +
       '</div>' +
-      '<p class="gss-note">В чат — Telegram или Ссылка. «В галерею» — картинка для сторис (вертикаль, если есть). Ссылку для стикера копируем сами.</p>';
+      '<p class="gss-note">В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис. Ссылку для стикера скопируйте сами.</p>';
   }
 
   function paintSlotPicker() {
@@ -834,5 +836,16 @@
     _openStoryShare: openStoryShare,
     _openImageSave: openImageSave,
     _telegramShareHref: telegramShareHref,
+    _previewFigureHtml: function (payload, selection) {
+      var prev = state;
+      state = selection
+        ? { endpoint: '/api/public/ice/selection/share', venueType: 'ice', context: 'ice_list' }
+        : { endpoint: null, venueType: 'ice', context: 'arena_card' };
+      try {
+        return renderPreviewFigureHtml(payload);
+      } finally {
+        state = prev;
+      }
+    },
   };
 })(window);

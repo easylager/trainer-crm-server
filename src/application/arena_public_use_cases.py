@@ -1030,6 +1030,22 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              ))
                        ) AS place_count,
                        (
+                           -- Сегмент «Магазины» на вкладке «Тренеры» не получает
+                           -- venue_type_facets от arenas — клиенту нужен shop_count города.
+                           SELECT COUNT(*)::int
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND (p.status IS NULL OR p.status = :published)
+                             AND COALESCE(a.venue_type, 'ice') = :shop_venue
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
+                       ) AS shop_count,
+                       (
                            SELECT AVG(a.latitude)
                            FROM arenas a
                            LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -1123,6 +1139,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "st": STATUS_ACTIVE,
                 "now": now,
                 "ice_countries": ice_discovery_countries(),
+                "shop_venue": VENUE_TYPE_SHOP,
             },
         )
     ).mappings()
@@ -1132,6 +1149,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
         trainer_count = int(row["trainer_count"] or 0)
         map_rink_count = int(row["map_rink_count"] or 0)
         place_count = int(row["place_count"] or 0)
+        shop_count = int(row["shop_count"] or 0)
         if skate_count <= 0 and trainer_count <= 0 and map_rink_count <= 0 and place_count <= 0:
             continue
         lat = row["latitude"]
@@ -1158,6 +1176,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "trainer_count": trainer_count,
                 "map_rink_count": map_rink_count,
                 "place_count": place_count,
+                "shop_count": shop_count,
                 "latitude": float(lat) if lat is not None else None,
                 "longitude": float(lon) if lon is not None else None,
                 "bounds": bounds,

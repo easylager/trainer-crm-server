@@ -145,6 +145,34 @@ describe('catalog header (A′)', () => {
     assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [] });
   });
 
+  it('catalogModesView: «Магазины» из shop_count города, даже без venue_type_facets (после тренера)', () => {
+    const { catalogModesView } = loadModel();
+    const modes = catalogModesView({
+      facets: [],
+      intent: 'coach',
+      venueTypes: [],
+      skateCount: 4,
+      trainerCount: 2,
+      placeCountHint: 10,
+      shopCount: 3,
+    });
+    assert.deepEqual(
+      modes.map((m) => m.id),
+      ['places', 'coach', 'shop']
+    );
+    assert.equal(modes.find((m) => m.id === 'coach').active, true);
+    assert.equal(modes.find((m) => m.id === 'shop').active, false);
+    const noShops = catalogModesView({
+      facets: [],
+      intent: 'coach',
+      venueTypes: [],
+      skateCount: 1,
+      trainerCount: 1,
+      shopCount: 0,
+    });
+    assert.ok(!noShops.some((m) => m.id === 'shop'));
+  });
+
   it('catalogStateAfterCityChange сбрасывает магазинный сегмент и фильтры', () => {
     const { catalogStateAfterCityChange } = loadModel();
     const next = catalogStateAfterCityChange(

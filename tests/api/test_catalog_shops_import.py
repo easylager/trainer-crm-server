@@ -26,10 +26,14 @@ def test_real_partner_file_parses_and_names_only_stated_services() -> None:
     assert city == "Минск"
     assert len(records) == 13
     assert sum(1 for r in records if r.photo) == 13
-    # Часы у магазина обязательны; единственный долг — явный и с причиной.
-    assert [r.key for r in records if r.hours is None] == ["hockey-service"]
-    assert "228-57-70" in by_key_pending(records)["hockey-service"]
+    # Часы у магазина обязательны; долгов hours_pending быть не должно.
+    assert [r.key for r in records if r.hours is None] == []
+    assert by_key_pending(records) == {}
     by_key = {r.key: r for r in records}
+    assert by_key["hockey-service"].hours["mon"] == ["10:00", "19:00"]
+    assert by_key["hockey-service"].hours["sat"] == ["11:00", "16:00"]
+    assert by_key["hockey-service"].hours["sun"] is None
+    assert "предварительно позвонить" in (by_key["hockey-service"].short_description or "")
     # Фигурист.by — магазин; про заточку источник молчит → ключа нет (неизвестно), а не False.
     assert by_key["figurist"].amenities == {"retail": True, "discipline_figure": True}
     assert "skate_sharpening" not in by_key["figurist"].amenities

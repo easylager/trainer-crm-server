@@ -57,6 +57,9 @@ async def test_selection_page_shows_places_sessions_and_keeps_filters(app_use_te
     assert page.status_code == 200
     assert "18:45" in page.text and "все места" in page.text.lower()
     assert f'href="/p/{slug}/' in page.text, "место в подборке ведёт на свою страницу"
+    # TASK-222: с сайта Telegram подборки — только url, без text= (превью из og).
+    tg = re.search(r'class="share__btn share__btn--tg" href="([^"]+)"', page.text)
+    assert tg and "t.me/share/url?url=" in tg.group(1) and "&amp;text=" not in tg.group(1)
     assert by_id.status_code == 301 and by_id.headers["location"] == f"/c/{slug}"
     assert Image.open(io.BytesIO(img.content)).size == (1200, 630)
     assert missing.status_code == 404

@@ -871,11 +871,16 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
     return '<section class="sec"><h2 class="sec__title">Контакты</h2>' + "".join(rows) + "</section>"
 
 
-def _share_html(share: Mapping[str, str], *, venue_type: str = "ice") -> str:
+def _share_html(
+    share: Mapping[str, str], *, venue_type: str = "ice", telegram_link_only: bool = False
+) -> str:
+    """Ряд «Поделиться». Подборка в Telegram — только url (превью из og), без text=."""
     url = share["share_url"]
     body = share["share_body"]
     full = f"{body}\n{url}" if body else url
-    tg = f"https://t.me/share/url?url={quote(url, safe='')}&text={quote(body, safe='')}"
+    tg = f"https://t.me/share/url?url={quote(url, safe='')}"
+    if not telegram_link_only and body:
+        tg += f"&text={quote(body, safe='')}"
     wa = f"https://wa.me/?text={quote(full, safe='')}"
     viber = f"viber://forward?text={quote(full, safe='')}"
     vk = f"https://vk.com/share.php?url={quote(url, safe='')}"

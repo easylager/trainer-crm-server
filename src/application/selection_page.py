@@ -668,7 +668,19 @@ def render_selection_page(
         city_name=city_name,
         telegram_url=cta_url,
     )
-    body = hero + chips + note + places + pager + _share_html(share, venue_type="ice" if view.get("skating") else "shop") + dock
+    body = (
+        hero
+        + chips
+        + note
+        + places
+        + pager
+        + _share_html(
+            share,
+            venue_type="ice" if view.get("skating") else "shop",
+            telegram_link_only=True,
+        )
+        + dock
+    )
     elements = []
     for n, item in enumerate(view["items"]):
         slug = str(item.get("slug") or "").strip()
