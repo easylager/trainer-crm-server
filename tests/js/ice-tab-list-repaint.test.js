@@ -83,6 +83,20 @@ async function flush() {
   for (let i = 0; i < 80; i += 1) await Promise.resolve();
 }
 
+/** TASK-184 / PDEC-005: boardCardView смотрит wall clock — в тестах фиксируем Date. */
+function frozenDate(iso) {
+  const ms = new Date(iso).getTime();
+  return class FrozenDate extends Date {
+    constructor(...args) {
+      if (args.length === 0) super(ms);
+      else super(...args);
+    }
+    static now() {
+      return ms;
+    }
+  };
+}
+
 function boot(search, arenas, opts) {
   opts = opts || {};
   delete require.cache[require.resolve(modelPath)];
@@ -110,6 +124,7 @@ function boot(search, arenas, opts) {
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) });
   };
+  const DateImpl = opts.now ? frozenDate(opts.now) : Date;
   const sandbox = {
     IceTabModel: model,
     GlideShareSheet: opts.shareSheet ? { open() {} } : undefined,
@@ -127,6 +142,7 @@ function boot(search, arenas, opts) {
     scrollTo() {},
     scrollY: 0,
     navigator: {},
+    Date: DateImpl,
   };
   const ctx = vm.createContext({
     window: sandbox,
@@ -145,6 +161,7 @@ function boot(search, arenas, opts) {
     URLSearchParams,
     Promise,
     console,
+    Date: DateImpl,
   });
   vm.runInContext(tabSource, ctx);
   elements.fireVisible = () => {
@@ -289,7 +306,8 @@ describe('ice list repaint', () => {
         total: 1,
         window: { key: 'any', label: '' },
       }),
-      { shareSheet: true }
+      // 15:00 Минск — до старта 18:15, иначе liveSessionStarted снимает кнопку «Позвать».
+      { shareSheet: true, now: '2026-10-08T12:00:00Z' }
     );
     assert.match(elements.iceListSkate.innerHTML, /data-invite-session="11"/);
     assert.match(elements.iceListSkate.innerHTML, /18:15/);
