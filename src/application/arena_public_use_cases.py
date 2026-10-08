@@ -834,6 +834,8 @@ async def list_city_selection_places(
         "city_id": int(city_id),
         "lim": CITY_SELECTION_PAGE_SIZE,
         "off": offset,
+        "now": now,
+        "st": STATUS_ACTIVE,
         **scope,
     }
     if venue_types:
@@ -859,13 +861,19 @@ async def list_city_selection_places(
         WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}
         GROUP BY 1
     """
+    # Сначала места с будущими сеансами (ближайший — выше), потом остальные по алфавиту.
     ids_sql = f"""
         SELECT a.id
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
+        LEFT JOIN LATERAL (
+            SELECT MIN(s.starts_at_utc) AS next_at
+            FROM ice_sessions s
+            WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+        ) nx ON true
         WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{type_clause}
-        ORDER BY a.name, a.id
+        ORDER BY (nx.next_at IS NULL), nx.next_at, a.name, a.id
         LIMIT :lim OFFSET :off
     """
     total = int((await session.execute(text(count_sql), params)).scalar_one())
