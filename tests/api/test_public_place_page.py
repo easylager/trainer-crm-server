@@ -111,7 +111,7 @@ async def test_share_src_is_tracked_and_noindex_without_changing_canonical(
         await db_session.execute(
             text(
                 "SELECT payload FROM catalog_consumer_events "
-                "WHERE kind = 'public_page_view' AND arena_id = :aid ORDER BY id DESC LIMIT 1"
+                "WHERE kind = 'public_page_view' AND arena_id = :aid AND payload->>'src' IS NOT NULL ORDER BY id DESC LIMIT 1"
             ),
             {"aid": place["arena_id"]},
         )

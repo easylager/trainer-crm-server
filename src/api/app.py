@@ -1687,6 +1687,19 @@ def webapp_mini_app_client_shell_css(request: Request):
     )
 
 
+@app.get("/webapp/glide-deeplink.js")
+def webapp_glide_deeplink_js(request: Request):
+    """startapp-диплинк: ранний redirect из <head> стартовой страницы (TASK-223). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "glide-deeplink.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-shell.js")
 def webapp_mini_app_client_shell_js(request: Request):
     """Client shell — tab navigation, more sheet, navigate helpers. Use ``?v=…`` for long cache."""

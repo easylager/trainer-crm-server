@@ -76,7 +76,9 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert alias.status_code == 200
     shell = (REPO_ROOT / "static/webapp/mini-app-client-shell.js").read_text(encoding="utf-8")
     assert "maybeOpenArenaDeepLink" in shell
-    assert "arena?ref=" in shell
+    # Разбор диплинка живёт в glide-deeplink.js (TASK-223): шелл делегирует ему.
+    deeplink = (REPO_ROOT / "static/webapp/glide-deeplink.js").read_text(encoding="utf-8")
+    assert "arena?ref=" in deeplink
     assert "iceRowCta" in model.text
     assert "ticketCta" in model.text
     # Касса — в шапке расписания и на каждом времени, а не второй липкой панелью над навигацией.
