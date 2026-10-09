@@ -48,6 +48,30 @@
     python scripts/report_catalog_gate_metrics.py --days 7
     ```
 
+## Надёжный шаринг объекта (TASK-223)
+
+Проверки после выката ветки `feat/TASK-223-reliable-object-share`. План: `docs/plans/2026-10-09-reliable-object-share.md`.
+
+15. **Main Mini App у клиентского бота.** Без него `t.me/<bot>?startapp=arena_X_s_Y` не открывает карточку, и никто этого не замечает. Бот при старте спрашивает у Telegram `getMe` → `has_main_web_app` (Bot API 7.8) и пишет WARNING (и сообщение в Sentry), если `CLIENT_BOT_MAIN_MINI_APP=true`, а Telegram говорит «нет». В админ-боте `/version` есть строка `Main Mini App: ok` / `warn` / `unknown`. `warn` → BotFather → Main Mini App на тот же домен (или `CLIENT_BOT_MAIN_MINI_APP=false`, тогда ссылки идут через `/start`). `unknown` — Telegram не ответил за 5 с или токен не принят; не тревога, повторить `/version`. Поле `has_main_web_app` проверяет **наличие**, не совпадение URL: домен в BotFather глазами.
+16. **Стабильные id сеансов.** Публикация расписания больше не пересоздаёт строки: ссылка `?s=<id>` живёт, пока сеанс есть в расписании. Проверка на проде: выбрать одну арену, запомнить 5 id и дождаться следующего прогона парсера (днём до 45 минут).
+    ```sql
+    SELECT id, starts_at_utc, kind FROM ice_sessions
+    WHERE arena_id = :arena_id AND starts_at_utc > now()
+    ORDER BY starts_at_utc LIMIT 5;
+    ```
+    После прогона тот же запрос: те же `id` на тех же `starts_at_utc`. Другие id у тех же слотов — парсер снова пересоздаёт строки, откатывать.
+17. **Откуда пришли по шарингу (`src`).** Канал в ссылке: `tg`, `vb`, `wa`, `vk`, `copy`, `story`, `sys`, `img`. Открыть `/p/…?s=<id>&src=wa`, затем:
+    ```sql
+    SELECT payload->>'src', count(*)
+    FROM catalog_consumer_events
+    WHERE kind='public_page_view' AND payload ? 'src'
+      AND occurred_at > now() - interval '1 day'
+    GROUP BY 1;
+    ```
+    Своя открытая ссылка видна строкой `wa`. Значения вне списка в `payload` не попадают. Клик «Открыть в Telegram» несёт тот же `src` в `public_telegram_cta`.
+18. **Ранний диплинк (вручную, телефон с Telegram).** Из чата открыть `t.me/<bot>?startapp=arena_<id>_s_<session>` при холодном старте Mini App: карточка арены открывается сразу, без вспышки хаба. Повторить с `catalog_<id>_skate_weekend` — сразу лёд с чипом «Выходные».
+19. **Сеанс убрали из расписания.** Открыть ссылку с id, которого нет (`?s=999999999` на вебе, `arena_<id>_s_999999999` в мини-аппе): «Этого сеанса уже нет в расписании», рядом ближайшие сеансы; кнопка «Позвать на …» не подставляет другой слот молча.
+
 ## Метрики после выката (0212)
 
 Таблица `catalog_consumer_events`:

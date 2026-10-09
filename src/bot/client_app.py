@@ -16,6 +16,7 @@ from src.shared.config import Settings
 from src.shared.sentry_init import init_sentry
 from src.bot.client_menu_commands import sync_client_hub_menu_button
 from src.bot.handlers.client_handlers import router as client_router
+from src.bot.main_mini_app_check import warn_if_main_mini_app_missing
 from src.bot.middlewares.client_menu_sync_middleware import ClientMenuSyncMiddleware
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.bot.middlewares.service_unavailable_middleware import ServiceUnavailableMiddleware
@@ -45,6 +46,8 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     await setup_menu_and_commands(bot)
+    # TASK-223 / P1-5: best-effort, не бросает; без Main Mini App ссылки ?startapp= молча не открываются.
+    await warn_if_main_mini_app_missing(settings.telegram_bot_token_client, expected=settings.client_bot_main_mini_app)
     dp = Dispatcher()
     limiter = RateLimiter(
         max_requests=settings.rate_limit_requests,
