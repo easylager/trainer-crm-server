@@ -724,6 +724,143 @@ async def get_catalog_virality_cb_metrics(
     }
 
 
+async def get_catalog_demand_pulse(
+    session: AsyncSession,
+    *,
+    as_of: datetime | None = None,
+) -> dict[str, Any]:
+    """Пульс спроса каталога для админского «Сейчас».
+
+    Уникальные — актёры сопоставимого ряда (``dedup_key``), не люди: веб (HMAC от IP+UA)
+    и Telegram (HMAC от telegram id) не пересекаются, один человек в обоих каналах считается
+    дважды. «Сегодня» — календарный день по Минску, не скользящие 24 часа. Пока ряда нет,
+    уникальные — 0, а не сумма старых дневных хэшей.
+
+    Клик «билеты» — намерение на сайте, не продажа; превью и краулеры не входят.
+    «Поделиться» и открытие ссылки — число событий в том же окне, что и уникальные за 7 дней.
+    Открытие считается только у строк нового формата (``dedup_key``).
+    """
+    as_of_dt = _as_utc(as_of)
+    comparable = await metrics_comparable_since(session)
+    since_7d = as_of_dt - timedelta(days=7)
+    since_30d = as_of_dt - timedelta(days=30)
+    today_start = minsk_day_start_utc(catalog_event_day_minsk(as_of_dt))
+    if comparable is not None:
+        since_7d = max(since_7d, comparable)
+        since_30d = max(since_30d, comparable)
+        today_start = max(today_start, comparable)
+
+    dau = wau = mau = 0
+    web_actors_7d = telegram_actors_7d = 0
+    top_arenas_7d: list[dict[str, Any]] = []
+    if comparable is not None:
+        row = (
+            await session.execute(
+                text(
+                    """
+                    SELECT
+                        COUNT(DISTINCT actor_hash) FILTER (WHERE occurred_at >= :today) AS dau,
+                        COUNT(DISTINCT actor_hash) FILTER (WHERE occurred_at >= :since7) AS wau,
+                        COUNT(DISTINCT actor_hash) AS mau,
+                        COUNT(DISTINCT actor_hash) FILTER (
+                            WHERE occurred_at >= :since7 AND kind = :pv
+                        ) AS web_actors,
+                        COUNT(DISTINCT actor_hash) FILTER (
+                            WHERE occurred_at >= :since7 AND kind = :mini
+                        ) AS telegram_actors
+                    FROM catalog_consumer_events
+                    WHERE occurred_at >= :since30 AND occurred_at < :as_of
+                      AND actor_hash IS NOT NULL
+                      AND kind IN (:pv, :mini)
+                      AND COALESCE(payload->>'ua_class', 'human') = 'human'
+                    """
+                ),
+                {
+                    "today": today_start,
+                    "since7": since_7d,
+                    "since30": since_30d,
+                    "as_of": as_of_dt,
+                    "pv": KIND_PUBLIC_PAGE_VIEW,
+                    "mini": KIND_MINIAPP_CATALOG_ENTRY,
+                },
+            )
+        ).one()
+        dau = int(row.dau or 0)
+        wau = int(row.wau or 0)
+        mau = int(row.mau or 0)
+        web_actors_7d = int(row.web_actors or 0)
+        telegram_actors_7d = int(row.telegram_actors or 0)
+        top_arenas_7d = await get_catalog_top_arenas_by_events(session, days=7, as_of=as_of_dt, limit=5)
+
+    tickets_actors_7d = (
+        await session.execute(
+            text(
+                """
+                SELECT COUNT(DISTINCT actor_hash)
+                FROM catalog_consumer_events
+                WHERE occurred_at >= :since AND occurred_at < :as_of
+                  AND actor_hash IS NOT NULL
+                  AND kind = :kind
+                  AND payload->>'action' = 'tickets'
+                  AND COALESCE(payload->>'ua_class', 'human') = 'human'
+                """
+            ),
+            {"since": since_7d, "as_of": as_of_dt, "kind": KIND_PUBLIC_CONTACT_CLICK},
+        )
+    ).scalar_one()
+
+    share_tap_7d = (
+        await session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM client_share_events
+                WHERE occurred_at >= :since AND occurred_at < :as_of
+                  AND kind IN ('place', 'selection', 'ice_city_day')
+                """
+            ),
+            {"since": since_7d, "as_of": as_of_dt},
+        )
+    ).scalar_one()
+    share_open_7d = (
+        await session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM catalog_consumer_events
+                WHERE occurred_at >= :since AND occurred_at < :as_of
+                  AND kind = :kind
+                  AND dedup_key IS NOT NULL
+                  AND COALESCE((payload->>'share_deeplink')::boolean, false)
+                """
+            ),
+            {"since": since_7d, "as_of": as_of_dt, "kind": KIND_MINIAPP_CATALOG_ENTRY},
+        )
+    ).scalar_one()
+    taps = int(share_tap_7d or 0)
+    opens = int(share_open_7d or 0)
+
+    return {
+        "metric": "catalog_demand_pulse",
+        "as_of": as_of_dt.isoformat(),
+        "comparable_since": comparable.isoformat() if comparable else None,
+        "comparable_since_date": (
+            comparable.astimezone(ZoneInfo(NOTIFICATION_TZ)).date().isoformat() if comparable else None
+        ),
+        "window_since_7d": since_7d.isoformat(),
+        "dau": dau,
+        "wau": wau,
+        "mau": mau,
+        "web_actors_7d": web_actors_7d,
+        "telegram_actors_7d": telegram_actors_7d,
+        "tickets_intent_actors_7d": int(tickets_actors_7d or 0),
+        "top_arenas_7d": top_arenas_7d,
+        "share_tap_7d": taps,
+        "share_open_7d": opens,
+        "share_open_pct": round(100.0 * opens / taps, 1) if taps else None,
+    }
+
+
 async def purge_old_catalog_consumer_events(
     session: AsyncSession,
     *,

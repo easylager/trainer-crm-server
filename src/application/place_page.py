@@ -375,9 +375,27 @@ async def load_place_view(
 
     all_slots = [s for d in days for s in d.get("sessions") or []]
     next_slot = all_slots[0] if all_slots else None
+    ohm_days: list[dict[str, Any]] = []
+    if _skating(card) and level != LEVEL_VERY_STALE:
+        ohm_lookup = await public_arena_session_days(
+            session,
+            int(card["id"]),
+            date_from=today,
+            date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
+            kinds=("hockey_practice",),
+            include_in_progress=True,
+        )
+        ohm_days = [d for d in ohm_lookup if (_parse_iso_date(d.get("local_date")) or today) <= week_end]
+        if session_id is not None and focus is None:
+            for day in ohm_lookup:
+                for slot in day.get("sessions") or []:
+                    if int(slot["id"]) == int(session_id):
+                        focus = slot
+            focus_missing = focus is None and level != LEVEL_VERY_STALE
     return {
         "card": card,
         "days": days,
+        "ohm_days": ohm_days,
         "focus": focus,
         "focus_missing": focus_missing,
         "next_slot": next_slot,
@@ -665,6 +683,42 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
             f'<div class="slots">{chips}{more_html}</div></div>'
         )
     parts.append('<p class="hint">Нажмите на время, чтобы поделиться именно этим сеансом.</p></section>')
+    return "".join(parts)
+
+
+def _ohm_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
+    days = view.get("ohm_days") or []
+    slots = [s for day in days for s in (day.get("sessions") or [])]
+    if not slots:
+        return ""
+    focus = view.get("focus")
+    focus_id = int(focus["id"]) if focus is not None else None
+    notes: list[str] = []
+    for slot in slots:
+        for key in ("age_note", "capacity_note"):
+            note = str(slot.get(key) or "").strip()
+            if note and note not in notes:
+                notes.append(note)
+    parts = [f'<section class="sec" id="ohm"><h2 class="sec__title">{t("kind.hockey_practice")}</h2>']
+    for day in days:
+        d = _parse_iso_date(day.get("local_date"))
+        if d is None:
+            continue
+        day_slots = list(day.get("sessions") or [])
+        if not day_slots:
+            continue
+        chips = "".join(
+            _slot_chip(s, focused=(focus_id == int(s["id"])), base_path=base_path, invite=invite)
+            for s in day_slots[:_SLOTS_PER_DAY]
+        )
+        parts.append(
+            '<div class="day">'
+            f'<p class="day__label">{_esc(day_heading(d, today=view["today"]))}</p>'
+            f'<div class="slots">{chips}</div></div>'
+        )
+    if notes:
+        parts.append(f'<p class="hint">{_esc(" ".join(notes))}</p>')
+    parts.append("</section>")
     return "".join(parts)
 
 
@@ -1046,6 +1100,7 @@ def render_place_page(
             about,
             actions,
             _schedule_html(view, base_path=base_path, invite=invite),
+            _ohm_html(view, base_path=base_path, invite=invite),
             _services_html(card),
             _hours_html(card),
             _rental_catalog_html(card),

@@ -318,6 +318,7 @@
     var city = cityFromState(state.cityId);
     return {
       skateCount: city != null ? city.skate_count : state.skateCount,
+      ohmCount: city != null ? city.ohm_count : 0,
       trainerCount: city != null ? city.trainer_count : 0,
       placeCountHint: city != null ? city.place_count : 0,
       shopCount: city != null ? city.shop_count : state.shopCount,
@@ -593,6 +594,7 @@
       intent: state.intent,
       venueTypes: state.venueTypes,
       skateCount: counts.skateCount,
+      ohmCount: counts.ohmCount,
       trainerCount: counts.trainerCount,
       placeCountHint: counts.placeCountHint,
       shopCount: counts.shopCount,
@@ -2669,6 +2671,10 @@
         state.intent = M.coerceIntent(patch.intent);
         state.autoCoach = false;
         state.venueTypes = patch.venueTypes.slice();
+        if (mode === 'ohm') {
+          state.when = 'any';
+          state.whenDay = '';
+        }
         closeUiPicker();
         if (mode === 'coach') state.view = 'list';
         renderList();

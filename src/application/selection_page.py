@@ -28,12 +28,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.arena_public_use_cases import (
     CITY_SELECTION_PAGE_SIZE,
     _CURRENT_SESSION_SQL,
+    _OHM_SESSION_SQL,
     STATUS_ACTIVE,
     city_selection_session_counts,
     city_selection_venue_types,
+    list_city_ohm_places,
     list_city_selection_places,
     list_public_ice_arenas,
 )
+from src.shared.copy_ru import t
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
 from src.application.place_links import catalog_start_param, join_public_origin, place_path, place_query
@@ -70,7 +73,10 @@ _TOPIC = {
     "choreo": "Хореография",
     "pool": "Бассейны",
     "other": "Места для занятий",
+    "ohm": "Хоккей (ОХМ)",
 }
+
+KIND_OHM = "ohm"
 _NOUNS = {
     "shop": ("место", "места", "мест"),
     "gym": ("зал", "зала", "залов"),
@@ -99,10 +105,20 @@ def clean_when(raw: str | None) -> str | None:
     return value if value in WHEN_KEYS and value not in ("any", "auto") else None
 
 
+def clean_kind(raw: str | None) -> str | None:
+    value = (raw or "").strip().lower()
+    return KIND_OHM if value == KIND_OHM else None
+
+
 def selection_path(
-    *, city_name: str, venue: str | None, when: str | None, page: int | None = None
+    *,
+    city_name: str,
+    venue: str | None,
+    when: str | None,
+    page: int | None = None,
+    kind: str | None = None,
 ) -> str:
-    params = {k: v for k, v in (("t", venue), ("w", when)) if v}
+    params = {k: v for k, v in (("t", venue), ("w", when), ("kind", kind)) if v}
     if page is not None and int(page) > 1:
         params["page"] = str(int(page))
     return f"/c/{city_slug(city_name)}" + (("?" + urlencode(params)) if params else "")
@@ -119,7 +135,12 @@ def selection_image_path(
 
 
 async def _window_slots(
-    session: AsyncSession, arena_ids: list[int], window: Mapping[str, Any] | None, now: datetime
+    session: AsyncSession,
+    arena_ids: list[int],
+    window: Mapping[str, Any] | None,
+    now: datetime,
+    *,
+    session_sql: str = _CURRENT_SESSION_SQL,
 ) -> dict[int, list[dict[str, Any]]]:
     """Сеансы мест в окне (или ближайшие, если окна нет) одним запросом."""
     if not arena_ids:
@@ -137,7 +158,7 @@ async def _window_slots(
                            s.price_minor, s.currency_code, s.schedule_basis, s.starts_at_utc
                     FROM ice_sessions s
                     WHERE s.arena_id = a.id
-                      AND {_CURRENT_SESSION_SQL}
+                      AND {session_sql}
                       AND s.starts_at_utc >= :start
                       AND (CAST(:end AS timestamptz) IS NULL OR s.starts_at_utc < CAST(:end AS timestamptz))
                     ORDER BY s.starts_at_utc, s.id
@@ -194,17 +215,26 @@ async def load_selection_view(
     venue: str | None,
     when: str | None,
     page: int = 1,
+    kind: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     page = clean_page(page)
-    skating = venue is None or venue == "ice" or has_public_skating(venue)
+    kind = clean_kind(kind)
+    ohm = kind == KIND_OHM
+    skating = ohm or venue is None or venue == "ice" or has_public_skating(venue)
     window = None
     filter_chips: list[dict[str, Any]] = []
     facets: list[dict[str, Any]] = []
     total = 0
     pages = 1
-    if when:
+    if ohm:
+        catalog = await list_city_ohm_places(session, city_id=int(city["id"]), page=page, now=now)
+        items = list(catalog.get("items") or [])
+        total = int(catalog.get("total") or 0)
+        pages = int(catalog.get("pages") or 1)
+        venue = KIND_OHM
+    elif when:
         vtypes = city_selection_venue_types(venue)
         venue_param = ",".join(sorted(vtypes)) if vtypes else venue
         offset = (page - 1) * MAX_PLACES
@@ -236,7 +266,14 @@ async def load_selection_view(
         pages = int(catalog.get("pages") or 1)
         filter_chips = list(catalog.get("filter_chips") or [])
         facets = list(catalog.get("venue_type_facets") or [])
-    slots = await _window_slots(session, [int(i["id"]) for i in items], window, now) if skating else {}
+    session_sql = _OHM_SESSION_SQL if ohm else _CURRENT_SESSION_SQL
+    slots = (
+        await _window_slots(
+            session, [int(i["id"]) for i in items], window, now, session_sql=session_sql
+        )
+        if skating
+        else {}
+    )
     # TASK-180: свежесть расписания на момент ``now``. > 6 ч — строка «могло измениться»;
     # > 72 ч — сеансы места не показываем и не считаем: «не обновлялось N дней — уточните».
     stale_notes: dict[int, str] = {}
@@ -257,26 +294,35 @@ async def load_selection_view(
                     has_site=bool(str(item.get("tickets_url") or item.get("website_url") or "").strip()),
                 )
     # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
-    hits = [i for i in items if slots.get(int(i["id"]))] if window else items
-    shown = hits or items
+    if ohm:
+        hits = [i for i in items if slots.get(int(i["id"]))]
+        shown = hits
+    else:
+        hits = [i for i in items if slots.get(int(i["id"]))] if window else items
+        shown = hits or items
     shown_page = shown[:MAX_PLACES]
     # Счёт для превью — по всей подборке, а не по странице: один агрегат вместо len(shown_page).
-    selection_counts = (
-        await city_selection_session_counts(
-            session,
-            city_id=int(city["id"]),
-            venue_types=city_selection_venue_types(venue),
-            window=window,
-            now=now,
+    if ohm:
+        session_total = sum(len(slots.get(int(i["id"]), [])) for i in shown_page)
+        window_places = 0
+    else:
+        selection_counts = (
+            await city_selection_session_counts(
+                session,
+                city_id=int(city["id"]),
+                venue_types=city_selection_venue_types(venue),
+                window=window,
+                now=now,
+            )
+            if skating
+            else {}
         )
-        if skating
-        else {}
-    )
-    session_total, window_places = await _selection_session_totals(session, selection_counts, now=now)
+        session_total, window_places = await _selection_session_totals(session, selection_counts, now=now)
     return {
         "city": dict(city),
         "venue": venue,
         "when": when,
+        "kind": kind,
         "page": page,
         "pages": pages,
         "total": total,
@@ -298,6 +344,8 @@ async def load_selection_view(
 
 def selection_title(view: Mapping[str, Any]) -> str:
     city = str(view["city"]["name"])
+    if view.get("kind") == KIND_OHM:
+        return f"{city} · {t('chip.hockey')}"
     topic = _TOPIC.get(view.get("venue"), "Места")
     window = view.get("window")
     if window and view.get("skating"):
@@ -326,6 +374,8 @@ def absolute_window_phrase(window: Mapping[str, Any] | None) -> str:
 def selection_share_title(view: Mapping[str, Any]) -> str:
     """Заголовок для og и текста в чате: те же факты, что на странице, но даты абсолютные."""
     city = str(view["city"]["name"])
+    if view.get("kind") == KIND_OHM:
+        return f"{city} · {t('chip.hockey')}"
     topic = _TOPIC.get(view.get("venue"), "Места")
     window = view.get("window")
     if window and view.get("skating"):
@@ -342,6 +392,8 @@ def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
     «катков», есть залы или места — «мест». Раньше слово считалось по 12 карточкам
     страницы, и подборка «все места» называла катками город, где катков — половина.
     """
+    if view.get("kind") == KIND_OHM:
+        return ("каток", "катка", "катков")
     venue = view.get("venue")
     if venue in ("ice", "outdoor"):
         return ("каток", "катка", "катков")
@@ -508,6 +560,7 @@ def _place_html(
     slots: list[dict[str, Any]],
     stale: str = "",
     unconfirmed: str = "",
+    more_anchor: str = "schedule",
 ) -> str:
     slug = str(item.get("slug") or "")
     href = place_path(city_name=city_name, slug=slug) if slug else f"/p/{item['id']}"
@@ -530,7 +583,7 @@ def _place_html(
             f'<span class="slot__price">{_esc(day_text)}{(" · " + _esc(price)) if price else ""}</span></a>'
         )
     if rest > 0:
-        chips += f'<a class="slot slot--more" href="{_esc(href)}#schedule">ещё {rest}</a>'
+        chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
     line = "" if chips else f'<p class="muted">{_esc(item.get("live_line") or "")}</p>'
     if unconfirmed:
         # TASK-180: > 72 ч без подтверждения — не расписание, а просьба уточнить.
@@ -583,12 +636,17 @@ def _pagination_html(view: Mapping[str, Any], *, city_name: str, canonical_base:
     page = int(view.get("page") or 1)
     if pages <= 1:
         return ""
-    venue, when = view.get("venue"), view.get("when")
+    venue, when, kind = view.get("venue"), view.get("when"), view.get("kind")
+    path_venue = None if kind == KIND_OHM else venue
     prev_href = (
-        selection_path(city_name=city_name, venue=venue, when=when, page=page - 1) if page > 1 else None
+        selection_path(city_name=city_name, venue=path_venue, when=when, kind=kind, page=page - 1)
+        if page > 1
+        else None
     )
     next_href = (
-        selection_path(city_name=city_name, venue=venue, when=when, page=page + 1) if page < pages else None
+        selection_path(city_name=city_name, venue=path_venue, when=when, kind=kind, page=page + 1)
+        if page < pages
+        else None
     )
     bits = [f'<p class="muted">Страница {page} из {pages}</p>']
     if prev_href:
@@ -603,13 +661,14 @@ def _head_links_html(view: Mapping[str, Any], *, city_name: str, canonical_base:
     page = int(view.get("page") or 1)
     if pages <= 1:
         return ""
-    venue, when = view.get("venue"), view.get("when")
+    venue, when, kind = view.get("venue"), view.get("when"), view.get("kind")
+    path_venue = None if kind == KIND_OHM else venue
     links = []
     if page > 1:
-        prev = selection_path(city_name=city_name, venue=venue, when=when, page=page - 1)
+        prev = selection_path(city_name=city_name, venue=path_venue, when=when, kind=kind, page=page - 1)
         links.append(f'<link rel="prev" href="{_esc(join_public_origin(canonical_base, prev))}" />')
     if page < pages:
-        nxt = selection_path(city_name=city_name, venue=venue, when=when, page=page + 1)
+        nxt = selection_path(city_name=city_name, venue=path_venue, when=when, kind=kind, page=page + 1)
         links.append(f'<link rel="next" href="{_esc(join_public_origin(canonical_base, nxt))}" />')
     return "".join(links)
 
@@ -640,6 +699,7 @@ def render_selection_page(
     )
     stale_notes = view.get("stale_notes") or {}
     unconfirmed_notes = view.get("unconfirmed_notes") or {}
+    more_anchor = "ohm" if view.get("kind") == KIND_OHM else "schedule"
     places = "".join(
         _place_html(
             i,
@@ -647,14 +707,25 @@ def render_selection_page(
             slots=view["slots"].get(int(i["id"]), []),
             stale=stale_notes.get(int(i["id"]), ""),
             unconfirmed=unconfirmed_notes.get(int(i["id"]), ""),
+            more_anchor=more_anchor,
         )
         for i in view["items"]
     )
     if not places:
-        places = '<section class="sec"><p class="muted">В этой подборке пока пусто — загляните в каталог.</p></section>'
+        empty = (
+            "Пока нет сеансов ОХМ в этом городе."
+            if view.get("kind") == KIND_OHM
+            else "В этой подборке пока пусто — загляните в каталог."
+        )
+        places = f'<section class="sec"><p class="muted">{_esc(empty)}</p></section>'
+    hero_type = (
+        t("chip.hockey")
+        if view.get("kind") == KIND_OHM
+        else (view.get("window", {}) and view["window"]["label"] or "Подборка")
+    )
     hero = (
         '<header class="hero hero--ice">'
-        f'<p class="hero__type">{_esc(view.get("window", {}) and view["window"]["label"] or "Подборка")}</p>'
+        f'<p class="hero__type">{_esc(hero_type)}</p>'
         f'<h1 class="hero__title">{_esc(title)}</h1>'
         f'<p class="hero__where">{_esc(description)}</p>'
         "</header>"

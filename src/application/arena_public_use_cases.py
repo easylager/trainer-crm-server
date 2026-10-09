@@ -90,7 +90,8 @@ from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalo
 INTENT_SKATE = "skate"
 INTENT_COACH = "coach"
 INTENT_GROUP = "group"
-ICE_INTENTS = (INTENT_SKATE, INTENT_COACH, INTENT_GROUP)
+INTENT_OHM = "ohm"
+ICE_INTENTS = (INTENT_SKATE, INTENT_COACH, INTENT_GROUP, INTENT_OHM)
 
 TIER_A = "A"
 TIER_B = "B"
@@ -106,6 +107,13 @@ SEARCH_LIMIT = 8
 _CURRENT_SESSION_SQL = """
     s.status = :st
     AND s.kind IN ('public_skate', 'open_ice')
+    AND s.starts_at_utc > :now
+    AND (s.valid_until IS NULL OR s.valid_until >= :now)
+"""
+
+_OHM_SESSION_SQL = """
+    s.status = :st
+    AND s.kind = 'hockey_practice'
     AND s.starts_at_utc > :now
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
 """
@@ -178,7 +186,7 @@ def parse_near(raw: str | None) -> tuple[float, float] | None:
 def parse_intent(raw: str | None) -> str:
     value = (raw or INTENT_SKATE).strip().lower() or INTENT_SKATE
     if value not in ICE_INTENTS:
-        raise IcePublicQueryError("intent must be skate, coach or group")
+        raise IcePublicQueryError("intent must be skate, coach, group or ohm")
     return value
 
 
@@ -362,10 +370,12 @@ def _place_line(item: Mapping[str, Any]) -> str:
 def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     currency = item.get("currency_code") or "BYN"
     mode = normalize_schedule_mode(item.get("schedule_mode"))
-    if intent == INTENT_SKATE and mode == SCHEDULE_MODE_PHONE:
+    # intent=ohm: те же live-строки, что у МК, но next_* уже из hockey_practice.
+    skate_like = intent in (INTENT_SKATE, INTENT_OHM)
+    if skate_like and mode == SCHEDULE_MODE_PHONE:
         if normalize_venue_type(item.get("venue_type")) in (VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR):
             return {"kind": "phone", "text": PHONE_LINE, "currency_code": currency}
-    if intent == INTENT_SKATE and mode == SCHEDULE_MODE_SEASON_CLOSED:
+    if skate_like and mode == SCHEDULE_MODE_SEASON_CLOSED:
         if normalize_venue_type(item.get("venue_type")) in (VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR):
             reopen = item.get("reopen_date")
             if isinstance(reopen, datetime):
@@ -385,7 +395,7 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
         # TASK-146: у зала и магазина нет массового катания — у них «что и когда открыто».
         return {"kind": "place", "text": _place_line(item), "currency_code": currency}
     if (
-        intent == INTENT_SKATE
+        skate_like
         and not item.get("next_session_id")
         and not is_in_season(item.get("season_start_month"), item.get("season_end_month"), today.month)
     ):
@@ -396,7 +406,7 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
             f"Сезон закрыт · откроется в {_MONTHS_PREP_RU[int(start) - 1]}" if start else "Сезон закрыт"
         )
         return {"kind": "closed", "text": text, "currency_code": currency}
-    if intent == INTENT_SKATE:
+    if skate_like:
         if not item.get("next_session_id"):
             return {
                 "kind": "unknown",
@@ -536,7 +546,9 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
     return payload
 
 
-_LIST_SQL = f"""
+def _arena_list_sql(session_sql: str) -> str:
+    """Список арен: session_sql = МК (_CURRENT) или ОХМ (_OHM)."""
+    return f"""
 SELECT
     a.id, a.city_id, a.name, a.address, a.latitude, a.longitude, a.venue_type,
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
@@ -587,7 +599,7 @@ LEFT JOIN LATERAL (
            s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code,
            s.schedule_basis
     FROM ice_sessions s
-    WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+    WHERE s.arena_id = a.id AND {session_sql}
     ORDER BY s.starts_at_utc
     LIMIT 1
 ) nxt ON true
@@ -598,7 +610,7 @@ LEFT JOIN LATERAL (
            s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code,
            s.schedule_basis
     FROM ice_sessions s
-    WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+    WHERE s.arena_id = a.id AND {session_sql}
       AND s.starts_at_utc >= :win_from AND s.starts_at_utc < :win_to
     ORDER BY s.starts_at_utc
     LIMIT 1
@@ -609,7 +621,7 @@ LEFT JOIN (
            COUNT(*) FILTER (WHERE s.starts_at_utc <= :now48)::int AS sessions_48h,
            MAX(s.observed_at) AS max_observed_at
     FROM ice_sessions s
-    WHERE {_CURRENT_SESSION_SQL}
+    WHERE {session_sql}
     GROUP BY s.arena_id
 ) sa ON sa.arena_id = a.id
 -- TASK-146: источник расписания арены (одно задание на арену) — для честного
@@ -652,6 +664,10 @@ LEFT JOIN (
 -- Before, this list ignored cities.is_active: a deactivated city kept its cards.
 WHERE {PUBLIC_ARENA_VISIBLE_SQL}
 """
+
+
+_LIST_SQL = _arena_list_sql(_CURRENT_SESSION_SQL)
+_LIST_SQL_OHM = _arena_list_sql(_OHM_SESSION_SQL)
 
 # Одна карточка. Агрегаты списка (_LIST_SQL: все ice_sessions / slots / trainer_arenas)
 # здесь коррелированы с a.id — просмотр /p/ не пересчитывает каталог.
@@ -779,7 +795,7 @@ async def _load_ice_arena_rows(
             "AND a.longitude BETWEEN :min_lon AND :max_lon"
         )
         params.update(min_lat=min_lat, max_lat=max_lat, min_lon=min_lon, max_lon=max_lon)
-    sql = _LIST_SQL
+    sql = _LIST_SQL_OHM if intent == INTENT_OHM else _LIST_SQL
     if where:
         sql = sql + " AND " + " AND ".join(where)
     if arena_ids:
@@ -914,6 +930,68 @@ async def list_city_selection_places(
     }
 
 
+async def list_city_ohm_places(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    page: int = 1,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Катки города с будущим hockey_practice. Не расширяет intent=skate."""
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+
+    now = now or datetime.now(timezone.utc)
+    page = max(1, int(page or 1))
+    offset = (page - 1) * CITY_SELECTION_PAGE_SIZE
+    params: dict[str, Any] = {
+        "city_id": int(city_id),
+        "lim": CITY_SELECTION_PAGE_SIZE,
+        "off": offset,
+        "now": now,
+        "st": STATUS_ACTIVE,
+        **public_scope_params(),
+    }
+    visible = f"""
+        FROM arenas a
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        JOIN cities c ON c.id = a.city_id
+        WHERE a.city_id = :city_id
+          AND {PUBLIC_ARENA_VISIBLE_SQL}
+          AND EXISTS (
+              SELECT 1 FROM ice_sessions s
+              WHERE s.arena_id = a.id AND {_OHM_SESSION_SQL}
+          )
+    """
+    total = int((await session.execute(text(f"SELECT COUNT(*)::int {visible}"), params)).scalar_one())
+    id_rows = (
+        await session.execute(
+            text(f"SELECT a.id {visible} ORDER BY a.name, a.id LIMIT :lim OFFSET :off"),
+            params,
+        )
+    ).scalars().all()
+    arena_ids = [int(i) for i in id_rows]
+    rows: list[dict[str, Any]] = []
+    if arena_ids:
+        loaded = await _load_ice_arena_rows(
+            session, city_id=int(city_id), bbox=None, intent=INTENT_OHM, now=now, arena_ids=arena_ids
+        )
+        by_id = {int(r["id"]): r for r in loaded}
+        rows = [by_id[i] for i in arena_ids if i in by_id]
+        await attach_arena_media_payloads(session, rows)
+    today = _today_minsk()
+    items = [_public_list_item(row, intent=INTENT_OHM, today=today) for row in rows]
+    pages = max(1, (total + CITY_SELECTION_PAGE_SIZE - 1) // CITY_SELECTION_PAGE_SIZE)
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "pages": pages,
+        "page_size": CITY_SELECTION_PAGE_SIZE,
+        "filter_chips": [],
+        "venue_type_facets": {},
+    }
+
+
 async def city_selection_session_counts(
     session: AsyncSession,
     *,
@@ -990,6 +1068,19 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                                    AND {_CURRENT_SESSION_SQL}
                              )
                        ) AS skate_count,
+                       (
+                           SELECT COUNT(*)::int
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND (p.status IS NULL OR p.status = :published)
+                             AND EXISTS (
+                                 SELECT 1 FROM ice_sessions s
+                                 WHERE s.arena_id = a.id
+                                   AND {_OHM_SESSION_SQL}
+                             )
+                       ) AS ohm_count,
                        (
                            SELECT COUNT(*)::int
                            FROM trainers t
@@ -1146,6 +1237,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
     items = []
     for row in rows:
         skate_count = int(row["skate_count"] or 0)
+        ohm_count = int(row["ohm_count"] or 0)
         trainer_count = int(row["trainer_count"] or 0)
         map_rink_count = int(row["map_rink_count"] or 0)
         place_count = int(row["place_count"] or 0)
@@ -1173,6 +1265,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "sort_order": row["sort_order"],
                 "country": row["country"],
                 "skate_count": skate_count,
+                "ohm_count": ohm_count,
                 "trainer_count": trainer_count,
                 "map_rink_count": map_rink_count,
                 "place_count": place_count,
@@ -1213,6 +1306,7 @@ async def list_public_ice_arenas(
             raise IcePublicQueryError("cursor must be an integer offset") from exc
     now = datetime.now(timezone.utc)
     # Окно времени имеет смысл только для «где покататься»: у тренеров — слоты недели.
+    # ОХМ: без when-окна (как /c/?kind=ohm) — весь будущий hockey_practice.
     window = resolve_list_window(when, day, now) if intent_value == INTENT_SKATE else None
     rows = await _load_ice_arena_rows(
         session, city_id=city_id, bbox=bbox_box, intent=intent_value, now=now, window=window
@@ -1222,6 +1316,10 @@ async def list_public_ice_arenas(
     if intent_value == INTENT_SKATE:
         # TASK-180: очень устаревший каток не попадает «в окно» — его сеанс мы не
         # показываем как ответ на «Сегодня вечером», он уходит к остальным с честной строкой.
+        _mark_unconfirmed_schedules(rows)
+    if intent_value == INTENT_OHM:
+        # Только катки с будущим ОХМ; МК-лента (intent=skate) сюда не заходит.
+        rows = [r for r in rows if int(r.get("future_session_count") or 0) > 0]
         _mark_unconfirmed_schedules(rows)
     if near_pt is not None:
         nlat, nlon = near_pt
@@ -1757,15 +1855,43 @@ async def get_public_arena_card(
     return card
 
 
+_PLACE_SESSION_KINDS = frozenset({"public_skate", "open_ice", "hockey_practice"})
+
+
+def _session_day_where(*, kinds: tuple[str, ...] | None, include_in_progress: bool) -> str:
+    """Тот же предикат, что ``_CURRENT_SESSION_SQL``, пока вызывающий не просит иное.
+
+    Страница места включает уже начавшийся сеанс и ОХМ. Списки каталога этот
+    аргумент не передают и остаются на публичном катании.
+    """
+    if kinds is None and not include_in_progress:
+        return _CURRENT_SESSION_SQL
+    chosen = kinds or ("public_skate", "open_ice")
+    if any(kind not in _PLACE_SESSION_KINDS for kind in chosen):
+        raise ValueError("session kind")
+    kind_sql = ", ".join(f"'{kind}'" for kind in chosen)
+    time_sql = "s.ends_at_utc > :now" if include_in_progress else "s.starts_at_utc > :now"
+    return (
+        "s.status = :st"
+        f" AND s.kind IN ({kind_sql})"
+        f" AND {time_sql}"
+        " AND (s.valid_until IS NULL OR s.valid_until >= :now)"
+    )
+
+
 async def public_arena_session_days(
     session: AsyncSession,
     arena_id: int,
     *,
     date_from: date,
     date_to: date,
+    now: datetime | None = None,
+    kinds: tuple[str, ...] | None = None,
+    include_in_progress: bool = False,
 ) -> list[dict[str, Any]]:
     """Сеансы одной арены по дням. Арену заново не ищет — id уже известен."""
-    now = datetime.now(timezone.utc)
+    moment = now if now is not None else datetime.now(timezone.utc)
+    where = _session_day_where(kinds=kinds, include_in_progress=include_in_progress)
     result = await session.execute(
         text(
             f"""
@@ -1775,7 +1901,7 @@ async def public_arena_session_days(
                    source_id, observed_at, valid_until, confidence, schedule_basis
             FROM ice_sessions s
             WHERE s.arena_id = :aid
-              AND {_CURRENT_SESSION_SQL}
+              AND {where}
               AND s.local_date >= :dfrom AND s.local_date <= :dto
             ORDER BY s.local_date, s.starts_at_local, s.id
             """
@@ -1783,7 +1909,7 @@ async def public_arena_session_days(
         {
             "aid": int(arena_id),
             "st": STATUS_ACTIVE,
-            "now": now,
+            "now": moment,
             "dfrom": date_from,
             "dto": date_to,
         },
@@ -1841,12 +1967,21 @@ async def list_public_arena_sessions(
     if end < start:
         start, end = end, start
     days = await public_arena_session_days(session, int(row["id"]), date_from=start, date_to=end)
+    ohm_days = await public_arena_session_days(
+        session,
+        int(row["id"]),
+        date_from=start,
+        date_to=end,
+        kinds=("hockey_practice",),
+        include_in_progress=True,
+    )
     return {
         "arena_id": row["id"],
         "timezone": row.get("timezone") or "Europe/Minsk",
         "from": start.isoformat(),
         "to": end.isoformat(),
         "days": days,
+        "ohm_days": ohm_days,
         "kinds": list(CLIENT_ICE_SESSION_KINDS),
         # TASK-146: насколько свежо это расписание (schedule_stale и др.).
         "freshness": _schedule_freshness(row),

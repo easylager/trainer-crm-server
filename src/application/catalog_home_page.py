@@ -799,6 +799,8 @@ async def load_catalog_home_view(
             "upcoming_more_href": _upcoming_more_href(user_city, when_key, selected_day=selected_day, today=today),
         }
 
+    from src.application.selection_page import selection_path
+
     return {
         **empty,
         "cities": catalog_cities,
@@ -822,8 +824,11 @@ async def load_catalog_home_view(
             "rollerski": False,
             # /first-time появится в TASK-215. До тех пор чип не рисуем.
             "first_time_href": None,
-            # /c/ не понимает kind=ohm — чип скрыт, пока фильтр не появится (Q-001 / спека).
-            "hockey_href": None,
+            "hockey_href": (
+                selection_path(city_name=str(user_city["name"]), venue=None, when=None, kind="ohm")
+                if has_hockey and user_city
+                else None
+            ),
         },
         "trainers": trainers,
         "shop_count": shop_count,
@@ -872,9 +877,13 @@ def _chip_link(href: Any, label_key: str) -> str:
 
 
 def _chips_html(chips: Mapping[str, Any]) -> str:
-    parts = [f'<a class="chip chip--active" href="/">{_esc(t("chip.ice"))}</a>']
-    parts.append(_chip_link(chips.get("hockey_href"), "chip.hockey"))
-    parts.append(_chip_link(chips.get("first_time_href"), "chip.first_time"))
+    hockey = _chip_link(chips.get("hockey_href"), "chip.hockey")
+    if not hockey:
+        return ""
+    parts = [f'<a class="chip chip--active" href="/">{_esc(t("chip.ice"))}</a>', hockey]
+    first_time = _chip_link(chips.get("first_time_href"), "chip.first_time")
+    if first_time:
+        parts.append(first_time)
     return '<div class="chips">' + "".join(parts) + "</div>"
 
 
@@ -1034,8 +1043,8 @@ def render_catalog_home_page(
 ) -> str:
     """Рендер текущей оболочки главной поверх view-model 210-A.
 
-    Карта, time-switcher, чипы и кнопка города остаются в view-model для 210-B
-    и в HTML не выводятся — чтобы не ломать текущий интерфейс.
+    Чип «Хоккей (ОХМ)» выводится, когда в стране есть будущий hockey_practice.
+    Карта, time-switcher и кнопка города остаются в view-model.
     """
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     cities = list(view.get("cities") or [])
@@ -1104,6 +1113,7 @@ def render_catalog_home_page(
         "__TRAINERS_URL__": _esc(trainers_url),
         "__PAGE_H1__": _esc(page_h1),
         "__COUNTER_TEXT__": _esc(counter_text),
+        "__CHIPS__": _chips_html(view.get("chips") if isinstance(view.get("chips"), Mapping) else {}),
     }
     html = fill_placeholders(template, values)
     if cta_url:

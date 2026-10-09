@@ -461,6 +461,7 @@ async def selection_page(
     request: Request,
     t: str | None = Query(None, description="Тип места: ice|shop|gym|…"),
     w: str | None = Query(None, description="Окно: today_evening|today|tomorrow|weekend"),
+    kind: str | None = Query(None, description="Вид сеанса: ohm — Хоккей (ОХМ)"),
     page: int | None = Query(None, ge=1, description="Страница списка мест"),
     src: str | None = Query(None, description="канал шаринга: tg|vb|wa|vk|copy|story|sys|img"),
     session: AsyncSession = Depends(get_session),
@@ -468,6 +469,7 @@ async def selection_page(
     if request.method == "HEAD":
         return Response(status_code=200, headers=_PAGE_CACHE)
     from src.application.selection_page import (
+        clean_kind,
         clean_page,
         clean_venue,
         clean_when,
@@ -484,15 +486,19 @@ async def selection_page(
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
         return _not_found(_catalog_home(base))
-    venue, when = clean_venue(t), clean_when(w)
+    venue, when, kind_value = clean_venue(t), clean_when(w), clean_kind(kind)
     share_src = clean_share_src(src)
     city_name = str(city["name"])
-    path = selection_path(city_name=city_name, venue=venue, when=when)
+    path = selection_path(city_name=city_name, venue=venue, when=when, kind=kind_value)
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
-    view = await load_selection_view(session, city=city, venue=venue, when=when, page=clean_page(page))
-    # Любой ?t= / ?w= канонизируется на базовую подборку города, а не на самого себя.
-    canonical_path = selection_path(city_name=city_name, venue=None, when=None)
+    view = await load_selection_view(
+        session, city=city, venue=venue, when=when, page=clean_page(page), kind=kind_value
+    )
+    # Любой ?t= / ?w= канонизируется на базовую подборку города. ?kind=ohm — свой канон.
+    canonical_path = selection_path(
+        city_name=city_name, venue=None, when=None, kind=kind_value
+    )
     # ?v= — хэш данных превью: без него Telegram держит старую og-картинку по URL.
     og_image = base + selection_image_path(
         city_name=city_name, venue=venue, when=when, version=selection_image_version(view)

@@ -380,7 +380,7 @@ async def test_all_link_uses_selection_when_and_day_page_only_for_today(
 
 
 @pytest.mark.asyncio
-async def test_ohm_chip_stays_hidden_and_bad_day_falls_back_to_today(app_use_test_db, db_session, monkeypatch) -> None:
+async def test_ohm_chip_links_city_and_bad_day_falls_back_to_today(app_use_test_db, db_session, monkeypatch) -> None:
     _freeze(monkeypatch, _utc(2026, 10, 7, 12))
     name = f"День {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
@@ -394,8 +394,8 @@ async def test_ohm_chip_stays_hidden_and_bad_day_falls_back_to_today(app_use_tes
     async with _client() as client:
         bad = await client.get("/?when=day&d=2026-10-14")
         picker = await client.get("/?when=day")
-    assert "Хоккей (ОХМ)" not in bad.text
-    assert "kind=ohm" not in bad.text
+    assert "Хоккей (ОХМ)" in bad.text
+    assert "kind=ohm" in bad.text
     assert "лыжероллер" not in bad.text.lower()
     assert _counter(bad.text) == "Сегодня в Беларуси 1 сеанс в 1 городе"
     assert 'class="day-picker"' not in bad.text

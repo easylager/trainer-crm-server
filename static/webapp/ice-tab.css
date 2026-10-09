@@ -78,6 +78,19 @@ body.ar-pilot--ice .client-app-header {
   grid-template-columns: 1fr 1fr;
 }
 
+.ice-seg--3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.ice-seg--4 {
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+
+.ice-seg--4 button {
+  font-size: 11px;
+  padding: 0 2px;
+}
+
 .ice-seg button {
   border: 0;
   background: transparent;

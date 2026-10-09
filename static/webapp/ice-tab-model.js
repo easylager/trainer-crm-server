@@ -45,7 +45,7 @@
    * с scrollY=0 (страница ещё сверху) и стирает позицию до onListLoaded.
    */
   var ICE_SCROLL_KEY = 'tcb_ice_list_scroll_v1';
-  var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
+  var INTENTS = { skate: 'skate', coach: 'coach', group: 'group', ohm: 'ohm' };
   var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
 
   function staleApi() {
@@ -101,7 +101,12 @@
   function buildListUrl(opts) {
     opts = opts || {};
     var intent = opts.intent || INTENTS.skate;
-    if (intent !== INTENTS.skate && intent !== INTENTS.coach && intent !== INTENTS.group) {
+    if (
+      intent !== INTENTS.skate &&
+      intent !== INTENTS.coach &&
+      intent !== INTENTS.group &&
+      intent !== INTENTS.ohm
+    ) {
       intent = INTENTS.skate;
     }
     var params = ['intent=' + encodeURIComponent(intent)];
@@ -193,12 +198,21 @@
     return out;
   }
 
-  /** Род каталога в шапке: места (смешанная лента), тренеры или только магазины. */
+  /** Род каталога в шапке: места, ОХМ, тренеры или только магазины. */
   function catalogScope(intent, venueTypes) {
     if (coerceIntent(intent) === INTENTS.coach) return 'coach';
+    if (coerceIntent(intent) === INTENTS.ohm) return 'ohm';
     var v = venueTypes || [];
     if (v.length === 1 && v[0] === 'shop') return 'shop';
     return 'places';
+  }
+
+  function hockeyChipLabel() {
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t('chip.hockey');
+      if (label && label !== 'chip.hockey') return String(label);
+    }
+    return 'Хоккей (ОХМ)';
   }
 
   /**
@@ -291,6 +305,10 @@
     if (placesN > 0) {
       modes.push({ id: 'places', label: 'Места', active: scope === 'places' });
     }
+    var ohmN = Number(opts.ohmCount);
+    if (!isNaN(ohmN) && ohmN > 0) {
+      modes.push({ id: 'ohm', label: hockeyChipLabel(), active: scope === 'ohm' });
+    }
     var trainers = Number(opts.trainerCount);
     if (isNaN(trainers)) trainers = 0;
     if (trainers > 0) {
@@ -374,6 +392,7 @@
 
   function applyCatalogMode(mode) {
     if (mode === 'coach') return { intent: INTENTS.coach, venueTypes: [] };
+    if (mode === 'ohm') return { intent: INTENTS.ohm, venueTypes: [] };
     if (mode === 'shop') return { intent: INTENTS.skate, venueTypes: ['shop'] };
     return { intent: INTENTS.skate, venueTypes: [] };
   }
@@ -397,6 +416,7 @@
   function catalogSearchPlaceholder(scope) {
     if (scope === 'coach') return 'Имя тренера';
     if (scope === 'shop') return 'Магазин или заточка';
+    if (scope === 'ohm') return 'Каток с ОХМ';
     return 'Каток, зал или трасса';
   }
 
@@ -998,13 +1018,21 @@
 
   function pickCityIntent(city, currentIntent) {
     var skate = Number(city && city.skate_count);
+    var ohm = Number(city && city.ohm_count);
     var trainers = Number(city && city.trainer_count);
     var known = city && (city.skate_count != null || city.trainer_count != null);
-    if (!known) return currentIntent === INTENTS.coach ? INTENTS.coach : INTENTS.skate;
+    if (!known) {
+      if (currentIntent === INTENTS.coach) return INTENTS.coach;
+      if (currentIntent === INTENTS.ohm) return INTENTS.ohm;
+      return INTENTS.skate;
+    }
     if (currentIntent === INTENTS.coach && trainers > 0) return INTENTS.coach;
+    if (currentIntent === INTENTS.ohm && ohm > 0) return INTENTS.ohm;
     if (skate > 0) return INTENTS.skate;
     if (trainers > 0) return INTENTS.coach;
-    return currentIntent === INTENTS.coach ? INTENTS.coach : INTENTS.skate;
+    if (currentIntent === INTENTS.coach) return INTENTS.coach;
+    if (currentIntent === INTENTS.ohm) return INTENTS.ohm;
+    return INTENTS.skate;
   }
 
   function serviceChipLabel(name) {
@@ -1032,6 +1060,7 @@
 
   function coerceIntent(intent) {
     if (intent === INTENTS.coach) return INTENTS.coach;
+    if (intent === INTENTS.ohm) return INTENTS.ohm;
     return INTENTS.skate;
   }
 
@@ -1053,7 +1082,12 @@
       return null;
     }
     var intent = String(params.get('intent') || '').trim();
-    if (intent === INTENTS.skate || intent === INTENTS.coach || intent === INTENTS.group) {
+    if (
+      intent === INTENTS.skate ||
+      intent === INTENTS.coach ||
+      intent === INTENTS.group ||
+      intent === INTENTS.ohm
+    ) {
       return intent;
     }
     return null;
@@ -1716,6 +1750,14 @@
     opts = opts || {};
     var trainers = Number(opts.trainerCount) || 0;
     var rinks = Number(opts.mapRinkCount) || 0;
+    if (intent === INTENTS.ohm) {
+      return {
+        title: 'Сейчас нет ОХМ',
+        body: 'В этом городе нет будущих сеансов хоккея для любителей. Посмотрите массовое катание или смените город.',
+        action: { label: 'Показать места', kind: 'intent:skate' },
+        secondary: { label: 'Сменить город', kind: 'city' },
+      };
+    }
     if (intent === INTENTS.skate && trainers > 0 && rinks <= 0) {
       return {
         kind: 'coming-soon',
@@ -1818,7 +1860,9 @@
     // TASK-095: пока данных нет, «Пока нет катков» — не пустое состояние, а ложь
     // о результате запроса, которого ещё не было. Подпись ждёт вместе со списком.
     if ((opts.loading && !total) || wrongLens) {
-      return intent === INTENTS.coach ? 'Ищем тренеров…' : 'Ищем катки…';
+      if (intent === INTENTS.coach) return 'Ищем тренеров…';
+      if (intent === INTENTS.ohm) return 'Ищем ОХМ…';
+      return 'Ищем катки…';
     }
     // TASK-146 (Q-006): окно времени. Пусто в окне — не тупик, а «вот ближайшее».
     var win = opts.window;
@@ -1836,6 +1880,11 @@
       var svc = opts.serviceLabel ? ' · ' + opts.serviceLabel : '';
       if (total === 0) return 'Пока нет тренеров' + svc;
       return total + ' ' + coachWord + svc;
+    }
+    if (intent === INTENTS.ohm) {
+      var ohmWord = pluralRu(total, 'каток', 'катка', 'катков');
+      if (total === 0) return 'Пока нет ОХМ · смените город или чип';
+      return total + ' ' + ohmWord + ' · хоккей для любителей (ОХМ)';
     }
     var items = opts.items || [];
     var noun = venueNoun(items, opts.venueTypes);

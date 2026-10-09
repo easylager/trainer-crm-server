@@ -49,6 +49,14 @@
     .top__trainers { font-size: 14px; font-weight: 600; color: var(--accent); text-decoration: none; }
     h1 { margin: 0 0 8px; font-size: clamp(28px, 7vw, 40px); font-weight: 700; letter-spacing: -.02em; }
     .lede, .counter { margin: 0 0 28px; color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+    .chip {
+      display: inline-flex; align-items: center;
+      padding: 8px 14px; border-radius: 999px;
+      border: 1px solid var(--line); background: var(--surface);
+      color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none;
+    }
+    .chip--active { background: var(--ink); color: #fff; border-color: var(--ink); }
     .day-picker { margin: -12px 0 28px; }
     .day-picker ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 14px; }
     .day-picker a { color: var(--accent); font-weight: 600; text-decoration: none; font-size: 14px; }
@@ -118,6 +126,7 @@
     </header>
     <h1>__PAGE_H1__</h1>
     <p class="lede counter">__COUNTER_TEXT__</p>
+    __CHIPS__
     __DAY_PICKER__
 
     <h2 class="section">Города</h2>

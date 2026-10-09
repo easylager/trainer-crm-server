@@ -334,6 +334,14 @@
   function iceKindLabel(session) {
     session = session || {};
     if (session.session_label) return session.session_label;
+    if (session.kind === 'hockey_practice') {
+      var GC = rootRef.GlideCopy;
+      if (GC && typeof GC.t === 'function') {
+        var label = GC.t('kind.hockey_practice');
+        if (label && label !== 'kind.hockey_practice') return String(label);
+      }
+      return 'Хоккей для любителей (ОХМ)';
+    }
     if (session.kind === 'open_ice') return 'Свободный лёд';
     return 'Массовое катание';
   }

@@ -143,6 +143,7 @@ describe('catalog header (A′)', () => {
     assert.deepEqual(applyCatalogMode('shop'), { intent: 'skate', venueTypes: ['shop'] });
     assert.deepEqual(applyCatalogMode('coach'), { intent: 'coach', venueTypes: [] });
     assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [] });
+    assert.deepEqual(applyCatalogMode('ohm'), { intent: 'ohm', venueTypes: [] });
   });
 
   it('catalogModesView: «Магазины» из shop_count города, даже без venue_type_facets (после тренера)', () => {
@@ -723,6 +724,14 @@ describe('hrefs', () => {
     assert.equal(coerceIntent('group'), 'skate');
     assert.equal(coerceIntent('coach'), 'coach');
     assert.equal(coerceIntent('skate'), 'skate');
+    assert.equal(coerceIntent('ohm'), 'ohm');
+  });
+
+  it('buildListUrl passes intent=ohm; when filter stays skate-only', () => {
+    const { buildListUrl, whenSkateFilterContext, intentFromSearch } = loadModel();
+    assert.ok(buildListUrl({ cityId: 1, intent: 'ohm' }).includes('intent=ohm'));
+    assert.equal(whenSkateFilterContext('ohm', []), false);
+    assert.equal(intentFromSearch('?intent=ohm&city_id=1'), 'ohm');
   });
 
   it('map toggle stays on the Ice tab (TASK-054 in-place Yandex map)', () => {

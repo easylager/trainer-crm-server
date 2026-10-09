@@ -18,6 +18,8 @@
     focus: null,
     /* Сеанс для «Позвать» / «Поделиться»; тап по времени в сетке. */
     sharePickSessionId: null,
+    /* Выбранный день в секции ОХМ (независимо от МК). */
+    ohmDay: null,
     sessionsError: false,
     trainersError: false,
   };
@@ -358,7 +360,12 @@
   function shareInviteCtaLabel() {
     var sid = resolvedShareSessionId();
     if (!sid || !scheduleSlots().length) return 'Позвать с собой';
-    var when = M.shareSlotInviteLabel(scheduleDays(), todayIso(), sid, state.day || todayIso());
+    var when = M.shareSlotInviteLabel(
+      combinedScheduleDays(),
+      todayIso(),
+      sid,
+      state.day || state.ohmDay || todayIso()
+    );
     return when ? 'Позвать на ' + when : 'Позвать с собой';
   }
 
@@ -384,7 +391,8 @@
     var base = '/api/public/arenas/' + encodeURIComponent(String(state.card.id));
     return fetchJson(base + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to)).then(
       function (data) {
-        var days = (data && data.days) || [];
+        state.sessions = data || state.sessions || { days: [], ohm_days: [] };
+        var days = combinedScheduleDays();
         return {
           slots: M.shareSlots(days, today, 0),
           slotSections: M.shareSlotsGrouped(days, today),
@@ -631,13 +639,39 @@
     return (state.sessions && state.sessions.days) || [];
   }
 
+  function ohmScheduleDays() {
+    return (state.sessions && state.sessions.ohm_days) || [];
+  }
+
+  function combinedScheduleDays() {
+    var byDate = {};
+    var order = [];
+    function add(days) {
+      var i;
+      for (i = 0; i < (days || []).length; i++) {
+        var iso = String(days[i].local_date || '');
+        if (!iso) continue;
+        if (!byDate[iso]) {
+          byDate[iso] = [];
+          order.push(iso);
+        }
+        byDate[iso] = byDate[iso].concat(days[i].sessions || []);
+      }
+    }
+    add(scheduleDays());
+    add(ohmScheduleDays());
+    return order.map(function (iso) {
+      return { local_date: iso, sessions: byDate[iso] };
+    });
+  }
+
   function scheduleSlots() {
-    return skatingCard() ? M.shareSlots(scheduleDays(), todayIso(), 0) : [];
+    return skatingCard() ? M.shareSlots(combinedScheduleDays(), todayIso(), 0) : [];
   }
 
   function shareSheetPayload() {
     var today = todayIso();
-    var days = scheduleDays();
+    var days = combinedScheduleDays();
     return {
       slots: M.shareSlots(days, today, 0),
       slotSections: M.shareSlotsGrouped(days, today),
@@ -648,6 +682,32 @@
     if (sessionId == null) return false;
     var id = String(sessionId);
     return scheduleSlots().some(function (s) { return String(s.id) === id; });
+  }
+
+  function ohmChipTitle() {
+    var GC = global.GlideCopy;
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t('kind.hockey_practice');
+      if (label && label !== 'kind.hockey_practice') return String(label);
+    }
+    return 'Хоккей для любителей (ОХМ)';
+  }
+
+  function ohmConditionsNote() {
+    var days = ohmScheduleDays();
+    var notes = [];
+    var i;
+    var j;
+    for (i = 0; i < days.length; i++) {
+      var list = days[i].sessions || [];
+      for (j = 0; j < list.length; j++) {
+        ['age_note', 'capacity_note'].forEach(function (key) {
+          var note = String(list[j][key] || '').trim();
+          if (note && notes.indexOf(note) < 0) notes.push(note);
+        });
+      }
+    }
+    return notes.join(' ');
   }
 
   function strip() {
@@ -871,6 +931,157 @@
     );
   }
 
+  function hasOhmSessions() {
+    var days = ohmScheduleDays();
+    var i;
+    for (i = 0; i < days.length; i++) {
+      if ((days[i].sessions || []).length) return true;
+    }
+    return false;
+  }
+
+  function ohmStrip() {
+    return M.dayStrip(ohmScheduleDays(), todayIso(), new Date(), 7);
+  }
+
+  function renderOhmShowtimes() {
+    var iso = state.ohmDay || todayIso();
+    var byDate = {};
+    var days = ohmScheduleDays();
+    var i;
+    for (i = 0; i < days.length; i++) {
+      byDate[days[i].local_date] = days[i].sessions || [];
+    }
+    var view = M.showtimesForDay({
+      sessions: byDate[iso] || [],
+      now: new Date(),
+      ticketsUrl: state.card && state.card.tickets_url,
+      markNext: iso === todayIso(),
+      pickedId: sharePickedId(),
+    });
+    if (!view.count) {
+      var next = ohmStrip().filter(function (d) { return d.count && d.iso > iso; })[0];
+      return (
+        '<div class="arena-none"><b>' +
+        (iso === todayIso() ? 'Сегодня ОХМ больше нет' : 'В этот день ОХМ нет') +
+        '</b>' +
+        (next
+          ? '<button type="button" class="linkish" data-ohm-day-jump="' +
+            esc(next.iso) +
+            '">Ближайший — ' +
+            esc(next.top.toLowerCase() === 'завтра' ? 'завтра' : next.top + ' ' + next.num) +
+            ' →</button>'
+          : '') +
+        '</div>'
+      );
+    }
+    var html = '';
+    view.groups.forEach(function (g) {
+      html +=
+        '<div class="arena-show">' +
+        '<div class="arena-show__head"><b>' +
+        esc(g.title) +
+        '</b>' +
+        (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') +
+        '</div>' +
+        (g.prices.length
+          ? '<div class="arena-show__prices">' +
+            g.prices
+              .map(function (p) {
+                return '<span><small>' + esc(p.label) + '</small>' + esc(p.value) + '</span>';
+              })
+              .join('') +
+            '</div>'
+          : '') +
+        '<div class="arena-times">' +
+        g.times
+          .map(function (t) {
+            var slotCls = 'arena-slot';
+            if (t.picked) slotCls += ' arena-slot--picked';
+            if (!t.ticketHref) slotCls += ' arena-slot--no-buy';
+            var timeCls = 'arena-slot-time';
+            if (t.picked) timeCls += ' arena-time--picked';
+            else if (t.next) timeCls += ' arena-time--next';
+            var tag = t.capacity || (t.next ? 'Ближайший' : '');
+            var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
+            if (t.sessionId == null) {
+              return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span></div>';
+            }
+            return (
+              '<div class="' +
+              slotCls +
+              '">' +
+              '<button type="button" class="' +
+              timeCls +
+              '" data-action="pick-session" data-session-id="' +
+              esc(t.sessionId) +
+              '" aria-pressed="' +
+              (t.picked ? 'true' : 'false') +
+              '">' +
+              body +
+              '</button></div>'
+            );
+          })
+          .join('') +
+        '</div>' +
+        (g.note ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
+        '</div>';
+    });
+    return html;
+  }
+
+  function renderOhmSection() {
+    if (!skatingCard() || state.sessionsError || !hasOhmSessions()) return '';
+    var days = ohmStrip();
+    if (!state.ohmDay) {
+      var focusDay = state.focus && state.focus.day;
+      var inStrip = focusDay && days.some(function (d) { return d.iso === focusDay; });
+      var focusInOhm =
+        state.focus &&
+        state.focus.sessionId &&
+        M.dayForSession(ohmScheduleDays(), state.focus.sessionId);
+      state.ohmDay = focusInOhm || (inStrip ? focusDay : M.defaultScheduleDay(days));
+    }
+    var note = ohmConditionsNote();
+    return (
+      '<div class="arena-sec" id="arenaOhm">' +
+      '<div class="arena-h-row"><p class="arena-h">' +
+      esc(ohmChipTitle()) +
+      '</p></div>' +
+      '<div class="arena-strip" id="arenaOhmDayTabs" role="tablist" aria-label="' +
+      esc(ohmChipTitle()) +
+      '">' +
+      days
+        .map(function (d) {
+          return (
+            '<button type="button" role="tab" class="arena-strip__day' +
+            (d.count ? '' : ' arena-strip__day--empty') +
+            (d.weekend ? ' arena-strip__day--weekend' : '') +
+            '" data-ohm-day="' +
+            esc(d.iso) +
+            '" aria-pressed="' +
+            (state.ohmDay === d.iso ? 'true' : 'false') +
+            '">' +
+            '<span>' +
+            esc(d.top) +
+            '</span><b>' +
+            esc(d.num) +
+            '</b>' +
+            '<i>' +
+            (d.count ? esc(String(d.count)) : '—') +
+            '</i></button>'
+          );
+        })
+        .join('') +
+      '</div>' +
+      '<div id="arenaOhmRows">' +
+      renderOhmShowtimes() +
+      '</div>' +
+      (note ? '<p class="arena-schedule-hint">' + esc(note) + '</p>' : '') +
+      '</div>'
+    );
+  }
+
   function renderTrainers() {
     if (state.trainersError) {
       return (
@@ -1024,6 +1235,7 @@
       renderShareBar() +
       renderQuickActions() +
       renderIceSection() +
+      renderOhmSection() +
       renderAmenities() +
       renderMassAccess() +
       renderTrainers() +
@@ -1041,12 +1253,24 @@
   function paintRowsOnly() {
     var el = document.getElementById('arenaRows');
     if (el) el.innerHTML = renderShowtimes();
+    var ohmEl = document.getElementById('arenaOhmRows');
+    if (ohmEl) ohmEl.innerHTML = renderOhmShowtimes();
     paintShareBar();
     var tabs = document.getElementById('arenaDayTabs');
-    if (!tabs) return;
-    [].forEach.call(tabs.querySelectorAll('[data-day]'), function (b) {
-      b.setAttribute('aria-pressed', b.getAttribute('data-day') === state.day ? 'true' : 'false');
-    });
+    if (tabs) {
+      [].forEach.call(tabs.querySelectorAll('[data-day]'), function (b) {
+        b.setAttribute('aria-pressed', b.getAttribute('data-day') === state.day ? 'true' : 'false');
+      });
+    }
+    var ohmTabs = document.getElementById('arenaOhmDayTabs');
+    if (ohmTabs) {
+      [].forEach.call(ohmTabs.querySelectorAll('[data-ohm-day]'), function (b) {
+        b.setAttribute(
+          'aria-pressed',
+          b.getAttribute('data-ohm-day') === state.ohmDay ? 'true' : 'false'
+        );
+      });
+    }
   }
 
   function paintShareBar() {
@@ -1190,9 +1414,21 @@
       paintRowsOnly();
       return;
     }
+    var ohmDayBtn = ev.target.closest('[data-ohm-day]');
+    if (ohmDayBtn && ohmDayBtn.closest('#arenaOhmDayTabs')) {
+      state.ohmDay = ohmDayBtn.getAttribute('data-ohm-day');
+      paintRowsOnly();
+      return;
+    }
     var jump = ev.target.closest('[data-day-jump]');
     if (jump) {
       state.day = jump.getAttribute('data-day-jump');
+      paintRowsOnly();
+      return;
+    }
+    var ohmJump = ev.target.closest('[data-ohm-day-jump]');
+    if (ohmJump) {
+      state.ohmDay = ohmJump.getAttribute('data-ohm-day-jump');
       paintRowsOnly();
       return;
     }
@@ -1281,10 +1517,23 @@
     if (fs.kind === 'found') {
       if (fs.day) state.focus.day = fs.day;
       state.sharePickSessionId = String(fs.focusSessionId);
-      return;
-    }
-    if (state.focus && state.focus.sessionId && (fs.kind === 'gone' || fs.kind === 'unconfirmed')) {
+    } else if (state.focus && state.focus.sessionId && (fs.kind === 'gone' || fs.kind === 'unconfirmed')) {
       state.sharePickSessionId = null;
+    }
+    if (state.focus && state.focus.sessionId && state.sessions) {
+      if (!state.focus.day) {
+        var found =
+          M.dayForSession(state.sessions.days, state.focus.sessionId) ||
+          M.dayForSession(state.sessions.ohm_days, state.focus.sessionId);
+        if (found) state.focus.day = found;
+      }
+      var ohmDay = M.dayForSession(ohmScheduleDays(), state.focus.sessionId);
+      if (ohmDay) {
+        state.ohmDay = ohmDay;
+        if (sessionExistsInSchedule(state.focus.sessionId)) {
+          state.sharePickSessionId = String(state.focus.sessionId);
+        }
+      }
     }
   }
 

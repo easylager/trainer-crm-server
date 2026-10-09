@@ -114,7 +114,7 @@ async def get_public_ice_arenas(
     city_id: int | None = None,
     bbox: str | None = Query(None, description="min_lat,min_lon,max_lat,max_lon"),
     near: str | None = Query(None, description="lat,lon"),
-    intent: str = Query("skate", description="skate | coach | group"),
+    intent: str = Query("skate", description="skate | coach | group | ohm"),
     venue_type: str | None = Query(
         None,
         description="ice|gym|choreo|pool|outdoor|other, можно через запятую. Пусто — все типы.",
