@@ -1076,6 +1076,41 @@ button.arena-info__tel--copy {
   color: var(--glide-hint);
 }
 
+/* TASK-223: сеанс из шаринга пропал из ленты — без обвинения «уже прошёл». */
+.arena-focus-gone {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--glide-line);
+  border-left: 3px solid var(--glide-hint);
+  border-radius: var(--app-radius-sm);
+  background: var(--glide-surface, transparent);
+}
+.arena-focus-gone__title {
+  margin: 0 0 4px;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  color: var(--glide-text);
+}
+.arena-focus-gone__sub {
+  margin: 0 0 8px;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+.arena-focus-gone__pick {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--glide-line);
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  font: inherit;
+  font-size: var(--app-text-caption);
+  text-align: left;
+  color: var(--app-cta);
+  cursor: pointer;
+}
+
 /* Парсер давно не читал сайт катка: сеансы показываем, но честно говорим, от какого они числа. */
 .arena-stale {
   margin: 0;

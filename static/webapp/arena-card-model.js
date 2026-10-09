@@ -634,6 +634,9 @@
     return m ? m[1] : null;
   }
 
+  /** Окно ленты сеансов на карточке: сегодня … сегодня+13 (как reloadSessions). */
+  var ARENA_SESSION_WINDOW_DAYS = 14;
+
   /** День сеанса в ленте карточки, если ссылка принесла только id. */
   function dayForSession(days, sessionId) {
     var want = String(sessionId || '');
@@ -649,6 +652,74 @@
       }
     }
     return null;
+  }
+
+  /** Первый ещё не начавшийся сеанс в ленте — для «Ближайший: …» при пропавшем фокусе. */
+  function nearestScheduleSlot(days, todayIso, now) {
+    days = days || [];
+    now = now || new Date();
+    var tomorrow = isoDate(todayIso) ? MT.addDaysIso(todayIso, 1) : '';
+    var i;
+    for (i = 0; i < days.length; i++) {
+      var iso = String(days[i].local_date || '').slice(0, 10);
+      var upcoming = upcomingSessions(days[i].sessions || [], now).sort(compareSessionsByStart);
+      if (!upcoming.length) continue;
+      var s = upcoming[0];
+      if (s.id == null) continue;
+      var time = hhmm(s.starts_at_local);
+      if (!time) continue;
+      var head =
+        iso === todayIso
+          ? 'Сегодня'
+          : iso === tomorrow
+            ? 'Завтра'
+            : WEEKDAYS_SHORT[MT.weekdaySun0FromIso(iso)];
+      return {
+        id: s.id,
+        localDate: iso,
+        time: time,
+        label: head + ' ' + time,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * TASK-223: сеанс из шаринга в загруженной ленте — найден, пропал или расписание не подтверждено.
+   * «gone» только при успешной загрузке и отсутствии id; при very_stale — unconfirmed, не «прошёл».
+   */
+  function focusState(opts) {
+    opts = opts || {};
+    var want = opts.focusSessionId != null ? String(opts.focusSessionId).trim() : '';
+    if (!want) return { kind: 'none' };
+    if (opts.sessionsError) {
+      return { kind: 'none', focusSessionId: want };
+    }
+    if (!opts.sessionsLoaded) {
+      return { kind: 'none', focusSessionId: want };
+    }
+    var freshness = opts.freshness || {};
+    var S = staleApi();
+    var level = S
+      ? S.stalenessLevel(freshness)
+      : freshness.schedule_very_stale
+        ? 'very_stale'
+        : freshness.schedule_stale
+          ? 'stale'
+          : 'fresh';
+    if (level === 'very_stale') {
+      return { kind: 'unconfirmed', focusSessionId: want };
+    }
+    var days = opts.days || [];
+    var day = dayForSession(days, want);
+    if (day) {
+      return { kind: 'found', focusSessionId: want, day: day };
+    }
+    return {
+      kind: 'gone',
+      focusSessionId: want,
+      nearest: nearestScheduleSlot(days, opts.todayIso, opts.now),
+    };
   }
 
   function iceSectionMode(opts) {
@@ -1149,6 +1220,9 @@
     parseArenaRef: parseArenaRef,
     sessionIdFromStartParam: sessionIdFromStartParam,
     dayForSession: dayForSession,
+    ARENA_SESSION_WINDOW_DAYS: ARENA_SESSION_WINDOW_DAYS,
+    nearestScheduleSlot: nearestScheduleSlot,
+    focusState: focusState,
     iceSectionMode: iceSectionMode,
     iceFeedView: iceFeedView,
     seasonClosedBanner: seasonClosedBanner,

@@ -318,9 +318,31 @@
     return vt === 'ice' || vt === 'outdoor';
   }
 
+  function scheduleFreshness() {
+    var fromSessions = state.sessions && state.sessions.freshness;
+    var fromCard = state.card && state.card.freshness;
+    return fromSessions || fromCard || {};
+  }
+
+  function getFocusState() {
+    var focusId = state.focus && state.focus.sessionId;
+    return M.focusState({
+      focusSessionId: focusId,
+      days: scheduleDays(),
+      freshness: scheduleFreshness(),
+      sessionsError: state.sessionsError,
+      sessionsLoaded: state.sessions != null && !state.sessionsError,
+      todayIso: todayIso(),
+      now: new Date(),
+    });
+  }
+
   function sharePickedId() {
     if (state.sharePickSessionId) return String(state.sharePickSessionId);
-    if (state.focus && state.focus.sessionId) return String(state.focus.sessionId);
+    var fs = getFocusState();
+    if (fs.kind === 'found' && state.focus && state.focus.sessionId) {
+      return String(state.focus.sessionId);
+    }
     return null;
   }
 
@@ -328,6 +350,8 @@
     var slots = scheduleSlots();
     var picked = sharePickedId();
     if (picked && sessionExistsInSchedule(picked)) return picked;
+    var fs = getFocusState();
+    if (fs.kind === 'gone' || fs.kind === 'unconfirmed') return null;
     return slots.length ? String(slots[0].id) : null;
   }
 
@@ -630,6 +654,30 @@
     return M.dayStrip((state.sessions && state.sessions.days) || [], todayIso(), new Date(), 7);
   }
 
+  /** TASK-223: сеанс из ссылки не в ленте — честно, без «прошёл». */
+  function renderFocusGoneNotice(fs) {
+    if (!fs || fs.kind !== 'gone') return '';
+    // TODO(TASK-223-D): событие share_session_gone
+    var nearestBtn = '';
+    if (fs.nearest && fs.nearest.id != null) {
+      nearestBtn =
+        '<button type="button" class="arena-focus-gone__pick" data-action="pick-session" data-session-id="' +
+        esc(String(fs.nearest.id)) +
+        '" data-local-date="' +
+        esc(fs.nearest.localDate || '') +
+        '">Ближайший: ' +
+        esc(fs.nearest.label || '') +
+        '</button>';
+    }
+    return (
+      '<div class="arena-focus-gone">' +
+      '<p class="arena-focus-gone__title">Этого сеанса уже нет в расписании</p>' +
+      '<p class="arena-focus-gone__sub">Вот ближайшие.</p>' +
+      nearestBtn +
+      '</div>'
+    );
+  }
+
   function renderDayStrip(days) {
     return (
       '<div class="arena-strip" id="arenaDayTabs" role="tablist">' +
@@ -806,6 +854,7 @@
     var staleNote = M.shouldWarnScheduleStale(state.card.freshness)
       ? M.staleScheduleNote(state.card.freshness, new Date(), state.card)
       : '';
+    var focusGone = renderFocusGoneNotice(getFocusState());
     return (
       '<div class="arena-sec">' +
       '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
@@ -813,6 +862,7 @@
         ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
         : '') +
       '</div>' +
+      focusGone +
       (staleNote ? '<p class="arena-stale">' + esc(staleNote) + '</p>' : '') +
       '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
       renderDayStrip(days) +
@@ -1200,7 +1250,10 @@
       var sid = t.getAttribute('data-session-id');
       if (!sid) return;
       state.sharePickSessionId = sid;
-      paintRowsOnly();
+      var pickDay = t.getAttribute('data-local-date');
+      if (pickDay) state.day = pickDay;
+      if (pickDay) paint();
+      else paintRowsOnly();
       return;
     }
     if (action === 'share' || action === 'share-invite') {
@@ -1224,12 +1277,14 @@
   }
 
   function applyScheduleFocus() {
-    if (state.focus && state.focus.sessionId && !state.focus.day && state.sessions) {
-      var found = M.dayForSession(state.sessions.days, state.focus.sessionId);
-      if (found) state.focus.day = found;
+    var fs = getFocusState();
+    if (fs.kind === 'found') {
+      if (fs.day) state.focus.day = fs.day;
+      state.sharePickSessionId = String(fs.focusSessionId);
+      return;
     }
-    if (state.focus && state.focus.sessionId) {
-      state.sharePickSessionId = String(state.focus.sessionId);
+    if (state.focus && state.focus.sessionId && (fs.kind === 'gone' || fs.kind === 'unconfirmed')) {
+      state.sharePickSessionId = null;
     }
   }
 
