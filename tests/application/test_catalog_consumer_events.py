@@ -285,6 +285,39 @@ async def test_virality_metrics_empty(db_session) -> None:
     assert "share_to_deeplink_open_pct" in metrics
 
 
+async def test_virality_metrics_share_attribution_breakdown(db_session) -> None:
+    now = datetime.now(timezone.utc)
+    await _insert_event(
+        db_session,
+        kind=KIND_PUBLIC_PAGE_VIEW,
+        actor=telegram_actor_hash(71_001),
+        at=now,
+        payload='{"src": "tg", "s": "5"}',
+        dedup=False,
+    )
+    await _insert_event(
+        db_session,
+        kind=KIND_PUBLIC_PAGE_VIEW,
+        actor=telegram_actor_hash(71_002),
+        at=now,
+        payload='{"src": "wa"}',
+        dedup=False,
+    )
+    await _insert_event(
+        db_session,
+        kind=KIND_PUBLIC_TELEGRAM_CTA,
+        actor=None,
+        at=now,
+        payload='{"ingress": "public_cta", "src": "tg"}',
+        dedup=False,
+    )
+    metrics = await get_catalog_virality_cb_metrics(db_session, days=1, as_of=now + timedelta(minutes=1))
+    assert metrics["public_page_view_by_src"]["tg"] >= 1
+    assert metrics["public_page_view_by_src"]["wa"] >= 1
+    assert metrics["public_page_view_with_session"] >= 1
+    assert metrics["public_telegram_cta_clicks_by_src"]["tg"] >= 1
+
+
 async def test_cb_counts_only_share_attributed_opens(db_session) -> None:
     now = datetime.now(timezone.utc)
     before = (await get_catalog_virality_cb_metrics(db_session, days=1, as_of=now + timedelta(minutes=1)))

@@ -93,6 +93,33 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
 
 
 @pytest.mark.asyncio
+async def test_share_src_is_tracked_and_noindex_without_changing_canonical(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", "test-catalog-actor-secret-0123456789abcdef")
+    place = await _place(db_session)
+    await db_session.commit()
+    async with _client() as client:
+        resp = await client.get(place["path"], params={"src": "wa", "garbage": "x"})
+        bad = await client.get(place["path"], params={"src": "evil"})
+    assert _meta(resp.text, "robots") == "noindex, follow"
+    assert re.search(rf'<link rel="canonical" href="[^"]*{re.escape(place["path"])}"', resp.text)
+    assert "src=wa" in _meta(resp.text, "og:url")
+    assert "src=" not in _meta(resp.text, "og:image")
+    assert _meta(bad.text, "robots") == "index, follow"
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT payload FROM catalog_consumer_events "
+                "WHERE kind = 'public_page_view' AND arena_id = :aid ORDER BY id DESC LIMIT 1"
+            ),
+            {"aid": place["arena_id"]},
+        )
+    ).scalar_one()
+    assert row["src"] == "wa" and "s" not in row
+
+
+@pytest.mark.asyncio
 async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_db, db_session, monkeypatch) -> None:
     monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
     monkeypatch.setenv("CLIENT_MINI_APP_SHORT_NAME", "")
@@ -130,7 +157,8 @@ async def test_link_to_a_past_session_says_so_and_shows_whats_next(app_use_test_
     async with _client() as client:
         resp = await client.get(place["path"], params={"s": "999999999"})
     assert resp.status_code == 200
-    assert "Этот сеанс уже прошёл" in resp.text
+    assert "Этого сеанса уже нет в расписании" in resp.text
+    assert "расписание массового катания" in _meta(resp.text, "og:title")
     # «Сегодня/Завтра» считается по Минску, а фикстура — по дате контейнера; проверяем суть.
     assert re.search(r"Ближайший — [^<]*, 18:00", resp.text)
 
@@ -176,7 +204,8 @@ async def test_og_and_story_images_are_real_pngs(app_use_test_db, db_session) ->
     assert og.status_code == 200 and og.headers["content-type"] == "image/png"
     assert Image.open(io.BytesIO(og.content)).size == (1200, 630)
     assert Image.open(io.BytesIO(story.content)).size == (1080, 1920)
-    assert "no-store" in og.headers.get("cache-control", "")
+    assert "max-age=300" in og.headers.get("cache-control", "")
+    assert "no-store" not in og.headers.get("cache-control", "")
 
 
 @pytest.mark.asyncio
@@ -421,7 +450,7 @@ async def test_slot_ten_days_ahead_is_not_called_past(app_use_test_db, db_sessio
     await db_session.commit()
     async with _client() as client:
         resp = await client.get(place["path"], params={"s": sid})
-    assert "Этот сеанс уже прошёл" not in resp.text
+    assert "Этого сеанса уже нет в расписании" not in resp.text
     assert 'id="plan"' in resp.text and "12:00" in resp.text
 
 

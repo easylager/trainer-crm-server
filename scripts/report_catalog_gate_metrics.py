@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.application.catalog_consumer_events import (  # noqa: E402
+    format_share_attribution_report_lines,
     get_catalog_top_arenas_by_events,
     get_catalog_virality_cb_metrics,
     get_catalog_wau,
@@ -111,6 +112,12 @@ async def main() -> int:
         print(f"  miniapp share-opens (диплинк из чата):        {cb['miniapp_deeplink_entries']}")
         op = cb["share_to_deeplink_open_pct"]
         print(f"  deeplink_entries / share_events:                {f'{op}%' if op is not None else '—'}")
+        attr_lines = format_share_attribution_report_lines(cb)
+        if attr_lines:
+            print()
+            print("Атрибуция шаринга (src / ?s= в payload):")
+            for line in attr_lines:
+                print(line)
     print()
     if "error" in shares:
         print(f"Шеры (все kind): {shares['error']}")

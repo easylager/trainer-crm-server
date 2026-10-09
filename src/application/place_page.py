@@ -677,7 +677,8 @@ def _focus_html(view: Mapping[str, Any], *, invite: bool) -> str:
             tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
             return (
                 '<section class="plan plan--gone" id="plan">'
-                f'<p class="plan__kicker">Этот сеанс уже прошёл</p><p class="plan__note">Расписание ниже — актуальное.{tail}</p>'
+                f'<p class="plan__kicker">Этого сеанса уже нет в расписании</p>'
+                f'<p class="plan__note">Расписание ниже — актуальное.{tail}</p>'
                 "</section>"
             )
         return ""
@@ -996,6 +997,7 @@ def render_place_page(
     city_page_url: str | None,
     share: Mapping[str, str],
     invite: bool = False,
+    share_src: str | None = None,
     country: str | None = None,
 ) -> str:
     card = view["card"]
@@ -1056,7 +1058,11 @@ def render_place_page(
     city = _city(card)
     city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city)} сегодня</a>' if city_page_url and city else ""
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
-    robots = "noindex, follow" if (view.get("focus") is not None or invite) else "index, follow"
+    robots = (
+        "noindex, follow"
+        if (view.get("focus") is not None or invite or bool(share_src))
+        else "index, follow"
+    )
 
     html = _TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
@@ -1066,6 +1072,11 @@ def render_place_page(
         "__CANONICAL__": _esc(canonical_url),
         "__OG_URL__": _esc(share["share_url"]),
         "__OG_IMAGE__": _esc(og_image_url),
+        "__OG_IMAGE_ALT__": _esc(title),
+        "__OG_IMAGE_TYPE__": "image/png",
+        "__TWITTER_TITLE__": _esc(title),
+        "__TWITTER_DESCRIPTION__": _esc(og_description(view)),
+        "__TWITTER_IMAGE__": _esc(og_image_url),
         "__STORY_IMAGE__": _esc(story_image_url),
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,

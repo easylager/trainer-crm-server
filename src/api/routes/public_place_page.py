@@ -26,6 +26,7 @@ from src.application.arena_public_use_cases import resolve_merged_arena_id
 from src.application.catalog_consumer_events import record_public_page_view
 from src.application.png_render_cache import render_png_cached
 from src.application.place_links import (
+    clean_share_src,
     place_image_url,
     place_page_url,
     place_path,
@@ -100,7 +101,7 @@ async def catalog_home_page(
 # origin и занизил счётчик. Картинки по-прежнему кэшируются: просмотр они не пишут.
 _PAGE_CACHE = {"Cache-Control": "private, no-store"}
 _IMAGE_CACHE = {"Cache-Control": "public, max-age=900"}
-_IMAGE_CACHE_SESSION = {"Cache-Control": "private, no-store, must-revalidate"}
+_IMAGE_CACHE_SESSION = {"Cache-Control": "public, max-age=300, stale-while-revalidate=60"}
 
 
 def _base() -> str:
@@ -199,6 +200,7 @@ async def place_page(
     request: Request,
     s: str | None = Query(None, description="id сеанса, на который ведёт ссылка"),
     i: str | None = Query(None, description="1 — тон «Позвать с собой»"),
+    src: str | None = Query(None, description="канал шаринга: tg|vb|wa|vk|copy|story|sys|img"),
     session: AsyncSession = Depends(get_session),
 ):
     if request.method == "HEAD":
@@ -209,6 +211,7 @@ async def place_page(
         return _not_found(_catalog_home(base))
     session_id = _int_or_none(s)
     invite = _flag(i)
+    share_src = clean_share_src(src)
     view = await load_place_view(session, str(arena_id), session_id=session_id)
     if view is None:
         merged = await _merged_redirect(session, arena_id, request)
@@ -228,6 +231,7 @@ async def place_page(
         city_name=city_name,
         slug=str(card["slug"]),
         session_id=session_id if view.get("focus") is not None else None,
+        src=share_src,
     )
     image_kwargs = {
         "base_url": base,
@@ -252,10 +256,13 @@ async def place_page(
             surface="place_page",
             city_id=int(city["id"]),
             arena_id=int(card["id"]),
+            share_src=share_src,
+            session_id=session_id,
         ),
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
         share=share_payload(view, page_url=share_url, invite=False),
         invite=invite,
+        share_src=share_src,
         country=str(city.get("country") or ""),
     )
     await record_public_page_view(
@@ -264,6 +271,7 @@ async def place_page(
         surface="place_page",
         city_id=int(city["id"]),
         arena_id=int(card["id"]),
+        extra_payload={"s": session_id, "i": "1" if invite else None, "src": share_src},
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))
@@ -454,6 +462,7 @@ async def selection_page(
     t: str | None = Query(None, description="Тип места: ice|shop|gym|…"),
     w: str | None = Query(None, description="Окно: today_evening|today|tomorrow|weekend"),
     page: int | None = Query(None, ge=1, description="Страница списка мест"),
+    src: str | None = Query(None, description="канал шаринга: tg|vb|wa|vk|copy|story|sys|img"),
     session: AsyncSession = Depends(get_session),
 ):
     if request.method == "HEAD":
@@ -476,6 +485,7 @@ async def selection_page(
     if city is None:
         return _not_found(_catalog_home(base))
     venue, when = clean_venue(t), clean_when(w)
+    share_src = clean_share_src(src)
     city_name = str(city["name"])
     path = selection_path(city_name=city_name, venue=venue, when=when)
     if city_ref != city_slug(city_name):
@@ -507,6 +517,7 @@ async def selection_page(
         request,
         surface="selection_page",
         city_id=int(city["id"]),
+        extra_payload={"src": share_src},
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))

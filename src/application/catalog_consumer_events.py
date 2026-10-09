@@ -28,7 +28,7 @@ import json
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import parse_qsl
 from zoneinfo import ZoneInfo
 
@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.catalog_deep_links import is_catalog_deep_link
 from src.application.place_links import (
     CATALOG_START_ANY,
+    SHARE_SRC_VALUES,
     is_valid_start_param,
     parse_catalog_start_param,
     parse_place_deep_link,
@@ -76,6 +77,8 @@ SURFACE_MINIAPP_SHELL = "miniapp_shell"
 _MINIAPP_DEDUP_GROUP = "miniapp"
 
 _missing_secret_logged = False
+
+_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src"})
 
 
 def _actor_hmac_secret() -> bytes | None:
@@ -143,12 +146,20 @@ def event_dedup_hash(
     day: date,
     city_id: int | None = None,
     arena_id: int | None = None,
+    variant: str | None = None,
 ) -> str | None:
-    """Ключ дедупа. Вход в мини-апп — одна группа на все поверхности (shell / карточка / лёд)."""
+    """Ключ дедупа. Вход в мини-апп — одна группа на все поверхности (shell / карточка / лёд).
+
+    ``variant`` (канал шаринга ``src``) разводит просмотры одного актёра по разным каналам:
+    иначе первый органический заход за сутки съедал бы атрибуцию последующих открытий по ссылке.
+    Без ``variant`` ключ прежний — ряд метрик сопоставим.
+    """
     if not actor_hash:
         return None
     group = _MINIAPP_DEDUP_GROUP if kind == KIND_MINIAPP_CATALOG_ENTRY else surface
     raw = f"{kind}|{group}|{actor_hash}|{day.isoformat()}|{city_id or 0}|{arena_id or 0}"
+    if variant:
+        raw += f"|{variant}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -251,6 +262,7 @@ async def record_catalog_consumer_event(
             day=day,
             city_id=city_id,
             arena_id=arena_id,
+            variant=str(body["src"]) if body.get("src") in SHARE_SRC_VALUES else None,
         )
         if dedup
         else None
@@ -399,6 +411,50 @@ async def record_public_contact_click(
     )
 
 
+def public_page_view_attribution_payload(extra_payload: dict[str, Any] | None) -> dict[str, str]:
+    """Допустимые ключи шаринга в ``public_page_view``: ``s``, ``i``, ``src``."""
+    if not extra_payload:
+        return {}
+    out: dict[str, str] = {}
+    for key, value in extra_payload.items():
+        if key not in _PUBLIC_PAGE_VIEW_EXTRA_KEYS or value is None:
+            continue
+        if key == "src":
+            raw = str(value).strip().lower()
+            if raw not in SHARE_SRC_VALUES:
+                continue
+            out["src"] = raw
+        elif key == "s":
+            s = str(value).strip()
+            if s.isdigit() and 0 < int(s) < 2**31:
+                out["s"] = s
+        elif key == "i":
+            if str(value).strip().lower() in ("1", "true", "yes"):
+                out["i"] = "1"
+    return out
+
+
+def format_share_attribution_report_lines(cb: Mapping[str, Any]) -> list[str]:
+    """Строки отчёта по каналам шаринга (чистая форматировка, без БД)."""
+    lines: list[str] = []
+    by_src = cb.get("public_page_view_by_src") or {}
+    if by_src:
+        lines.append("  Просмотры публички с src:")
+        for key in SHARE_SRC_VALUES:
+            if int(by_src.get(key) or 0):
+                lines.append(f"    {key}: {by_src[key]}")
+    with_s = int(cb.get("public_page_view_with_session") or 0)
+    if with_s:
+        lines.append(f"  Просмотры с ?s= в payload: {with_s}")
+    cta_by_src = cb.get("public_telegram_cta_clicks_by_src") or {}
+    if cta_by_src:
+        lines.append("  Клики CTA «Telegram» с src:")
+        for key in SHARE_SRC_VALUES:
+            if int(cta_by_src.get(key) or 0):
+                lines.append(f"    {key}: {cta_by_src[key]}")
+    return lines
+
+
 async def record_public_page_view(
     session: AsyncSession,
     request: Any,
@@ -406,6 +462,7 @@ async def record_public_page_view(
     surface: str,
     city_id: int | None,
     arena_id: int | None = None,
+    extra_payload: dict[str, Any] | None = None,
 ) -> None:
     """GET /p/, /c/, ice today — один просмотр на actor × арена в сутки (Минск)."""
     from starlette.requests import Request
@@ -416,6 +473,8 @@ async def record_public_page_view(
 
     user_agent = request.headers.get("user-agent")
     actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
+    body: dict[str, Any] = {"path": str(request.url.path), "ua_class": classify_user_agent(user_agent)}
+    body.update(public_page_view_attribution_payload(extra_payload))
     await record_catalog_consumer_event(
         session,
         kind=KIND_PUBLIC_PAGE_VIEW,
@@ -423,7 +482,7 @@ async def record_public_page_view(
         actor_hash=actor,
         city_id=city_id,
         arena_id=arena_id,
-        payload={"path": str(request.url.path), "ua_class": classify_user_agent(user_agent)},
+        payload=body,
     )
 
 
@@ -593,6 +652,54 @@ async def get_catalog_virality_cb_metrics(
         )
     ).scalar_one()
 
+    page_view_by_src_rows = (
+        await session.execute(
+            text(
+                """
+                SELECT payload->>'src' AS src, COUNT(*) AS n
+                FROM catalog_consumer_events
+                WHERE occurred_at >= :since AND occurred_at < :as_of
+                  AND kind = :pv
+                  AND payload->>'src' IS NOT NULL
+                  AND payload->>'src' != ''
+                GROUP BY payload->>'src'
+                """
+            ),
+            {"since": since, "as_of": as_of_dt, "pv": KIND_PUBLIC_PAGE_VIEW},
+        )
+    ).mappings().all()
+    page_view_with_session = (
+        await session.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM catalog_consumer_events
+                WHERE occurred_at >= :since AND occurred_at < :as_of
+                  AND kind = :pv
+                  AND payload->>'s' IS NOT NULL
+                  AND payload->>'s' != ''
+                """
+            ),
+            {"since": since, "as_of": as_of_dt, "pv": KIND_PUBLIC_PAGE_VIEW},
+        )
+    ).scalar_one()
+    cta_by_src_rows = (
+        await session.execute(
+            text(
+                """
+                SELECT payload->>'src' AS src, COUNT(*) AS n
+                FROM catalog_consumer_events
+                WHERE occurred_at >= :since AND occurred_at < :as_of
+                  AND kind = :cta
+                  AND COALESCE(payload->>'ua_class', 'human') = 'human'
+                  AND payload->>'src' IS NOT NULL
+                  AND payload->>'src' != ''
+                GROUP BY payload->>'src'
+                """
+            ),
+            {"since": since, "as_of": as_of_dt, "cta": KIND_PUBLIC_TELEGRAM_CTA},
+        )
+    ).mappings().all()
+
     wau = await get_catalog_wau(session, days=days, as_of=as_of_dt)
     share_events = int(shares[0] or 0) if shares else 0
     sharers = int(shares[1] or 0) if shares else 0
@@ -611,6 +718,9 @@ async def get_catalog_virality_cb_metrics(
         "public_telegram_cta_clicks": int(cta_clicks or 0),
         "miniapp_deeplink_entries": open_events,
         "share_to_deeplink_open_pct": round(100.0 * open_events / share_events, 1) if share_events else None,
+        "public_page_view_by_src": {str(r["src"]): int(r["n"] or 0) for r in page_view_by_src_rows},
+        "public_page_view_with_session": int(page_view_with_session or 0),
+        "public_telegram_cta_clicks_by_src": {str(r["src"]): int(r["n"] or 0) for r in cta_by_src_rows},
     }
 
 

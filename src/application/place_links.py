@@ -46,18 +46,36 @@ CATALOG_LINK_TOKENS = (
 CATALOG_WHEN_TOKENS = ("today_evening", "today", "tomorrow", "weekend")
 _WHEN_WITH = frozenset({"skate", "ice", "outdoor"})
 
+#: Канал шаринга в query ``src`` (TASK-223). Неизвестное значение не попадает в URL и метрики.
+SHARE_SRC_VALUES = ("tg", "vb", "wa", "vk", "copy", "story", "sys", "img")
+_SHARE_SRC_SET = frozenset(SHARE_SRC_VALUES)
+
+
+def clean_share_src(raw: str | None) -> str | None:
+    """Нормализует ``src`` из ссылки; мусор и неизвестные токены → ``None``."""
+    value = (raw or "").strip().lower()
+    return value if value in _SHARE_SRC_SET else None
+
 
 def place_path(*, city_name: str, slug: str) -> str:
     """``/p/minsk/minsk-arena``."""
     return f"{PLACE_PATH_PREFIX}/{city_slug(city_name)}/{slug}"
 
 
-def place_query(*, session_id: int | None = None, invite: bool = False) -> str:
+def place_query(
+    *,
+    session_id: int | None = None,
+    invite: bool = False,
+    src: str | None = None,
+) -> str:
     params: dict[str, str] = {}
     if session_id is not None and int(session_id) > 0:
         params["s"] = str(int(session_id))
     if invite:
         params["i"] = "1"
+    cleaned_src = clean_share_src(src)
+    if cleaned_src:
+        params["src"] = cleaned_src
     return ("?" + urlencode(params)) if params else ""
 
 
@@ -82,9 +100,12 @@ def place_page_url(
     slug: str,
     session_id: int | None = None,
     invite: bool = False,
+    src: str | None = None,
 ) -> str:
     base = (base_url or "").strip().rstrip("/")
-    return base + place_path(city_name=city_name, slug=slug) + place_query(session_id=session_id, invite=invite)
+    return (
+        base + place_path(city_name=city_name, slug=slug) + place_query(session_id=session_id, invite=invite, src=src)
+    )
 
 
 def place_image_path(
@@ -214,6 +235,8 @@ def public_telegram_cta_url(
     surface: str,
     city_id: int | None = None,
     arena_id: int | None = None,
+    share_src: str | None = None,
+    session_id: int | None = None,
 ) -> str | None:
     """
     HTTPS-прокси перед ``t.me``: логируем клик «Открыть в Telegram», затем 302 в Telegram.
@@ -225,6 +248,11 @@ def public_telegram_cta_url(
         params["city_id"] = str(int(city_id))
     if arena_id is not None and int(arena_id) > 0:
         params["arena_id"] = str(int(arena_id))
+    cleaned_src = clean_share_src(share_src)
+    if cleaned_src:
+        params["src"] = cleaned_src
+    if session_id is not None and int(session_id) > 0:
+        params["s"] = str(int(session_id))
     path = f"/api/public/catalog/open-telegram?{urlencode(params)}"
     base = (base_url or "").strip().rstrip("/")
     if not base:

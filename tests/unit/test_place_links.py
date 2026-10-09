@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from src.application.place_links import (
+    SHARE_SRC_VALUES,
     catalog_start_param,
+    clean_share_src,
     is_valid_start_param,
     parse_catalog_start_param,
     parse_place_deep_link,
@@ -89,6 +91,33 @@ def test_open_link_prefers_startapp_and_falls_back_to_bot() -> None:
     assert telegram_open_link(client_bot_username="b", mini_app_short_name=None, start_param="bad param") is None
 
 
+def test_clean_share_src_and_place_query() -> None:
+    assert clean_share_src("TG") == "tg"
+    assert clean_share_src("evil") is None
+    assert clean_share_src("<script>") is None
+    assert set(SHARE_SRC_VALUES) == {"tg", "vb", "wa", "vk", "copy", "story", "sys", "img"}
+    url = place_page_url(
+        base_url="https://glide.by",
+        city_name="Минск",
+        slug="minsk-arena",
+        session_id=5,
+        src="wa",
+    )
+    assert url.endswith("?s=5&src=wa")
+    assert place_image_url(
+        base_url="https://glide.by",
+        city_name="Минск",
+        slug="minsk-arena",
+        session_id=5,
+    ).endswith("/session/5/og.png")
+    assert "src=" not in place_image_url(
+        base_url="https://glide.by",
+        city_name="Минск",
+        slug="minsk-arena",
+        session_id=5,
+    )
+
+
 def test_public_telegram_cta_proxy_url() -> None:
     url = public_telegram_cta_url(
         "https://glide.by",
@@ -101,3 +130,12 @@ def test_public_telegram_cta_proxy_url() -> None:
     assert url.startswith("https://glide.by/api/public/catalog/open-telegram?")
     assert "startapp=arena_9" in url
     assert "surface=place_page" in url
+    with_src = public_telegram_cta_url(
+        "https://glide.by",
+        start_param="arena_9",
+        surface="place_page",
+        share_src="copy",
+        session_id=42,
+    )
+    assert with_src is not None
+    assert "src=copy" in with_src and "s=42" in with_src
