@@ -10,8 +10,13 @@ from datetime import date
 
 from src.application.ice_time_windows import (
     auto_window_key,
+    home_default_when_key,
+    home_picker_dates,
+    home_weekend_window,
     parse_calendar_day,
+    parse_home_picker_day,
     resolve_day_window,
+    resolve_home_window,
     resolve_list_window,
     resolve_window,
 )
@@ -88,6 +93,38 @@ def test_day_param_tomorrow_aliases_when_tomorrow() -> None:
     w = resolve_list_window(None, "2026-10-05", now)
     assert w is not None
     assert w.key == "tomorrow"
+
+
+def test_home_weekend_after_sunday_18_is_the_next_weekend() -> None:
+    sun_late = at(2026, 10, 11, 19)
+    window = home_weekend_window(sun_late)
+    assert window.starts_at == at(2026, 10, 17, 0)
+    assert window.ends_at == at(2026, 10, 19, 0)
+    # Ровно 18:00 уже следующие выходные. Сдвиг порога 18:00 → 18:30 оставляет этот момент в текущих.
+    sun_exact = home_weekend_window(at(2026, 10, 11, 18, 0))
+    assert sun_exact.starts_at == at(2026, 10, 17, 0)
+    assert sun_exact.ends_at == at(2026, 10, 19, 0)
+    sun_early = home_weekend_window(at(2026, 10, 11, 17, 59))
+    assert sun_early.starts_at == at(2026, 10, 11, 17, 59)
+    assert sun_early.ends_at == at(2026, 10, 12, 0)
+
+
+def test_home_default_when_and_picker_is_exactly_seven_dates() -> None:
+    assert home_default_when_key(at(2026, 10, 9, 16)) == "weekend"
+    assert home_default_when_key(at(2026, 10, 7, 12)) == "today"
+    # Пятница 14:59 ещё «сегодня», ровно 15:00 — выходные. Сдвиг порога 15:00 → 16:00 ломает 15:00.
+    assert home_default_when_key(at(2026, 10, 9, 14, 59)) == "today"
+    assert home_default_when_key(at(2026, 10, 9, 15, 0)) == "weekend"
+    now = at(2026, 10, 7, 12)
+    dates = home_picker_dates(now)
+    assert len(dates) == 7
+    assert dates[0].isoformat() == "2026-10-07"
+    assert parse_home_picker_day(dates[-1].isoformat(), now) == dates[-1]
+    assert parse_home_picker_day((dates[-1] + timedelta(days=1)).isoformat(), now) is None
+    key, window, picker = resolve_home_window("day", None, now)
+    assert key == "day" and picker is True and window.starts_at == now
+    key, window, picker = resolve_home_window("day", "2026-10-20", now)
+    assert key == "today" and picker is False and window.starts_at == now
 
 
 def test_resolve_day_window_starts_now_on_today() -> None:
