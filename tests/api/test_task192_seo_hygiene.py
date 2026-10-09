@@ -181,7 +181,8 @@ async def test_ice_today_jsonld_is_an_item_list_of_events_and_survives_markup(
         page = await client.get(f"/ice/{slug}/today")
     assert page.status_code == 200, page.text
     assert _meta(page.text, "robots") == "index, follow"
-    assert page.text.count("</script>") == 1
+    # JSON-LD must be a single block; page may also load list-scroll / other scripts.
+    assert page.text.count('<script type="application/ld+json">') == 1
     assert "<img" not in page.text
     raw = re.search(r'<script type="application/ld\+json">(.*?)</script>', page.text, re.S)
     assert raw
