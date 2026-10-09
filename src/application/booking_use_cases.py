@@ -187,12 +187,24 @@ async def _resolve_trainer_group_slot_booking_price(
 
 
 BOOKING_ARENA_UNSPECIFIED_LABEL = "место уточняет тренер"
+BOOKING_ONLINE_PLACE_LABEL = "Онлайн"
 
-SQL_BOOKING_ARENA_DISPLAY = f"""COALESCE(
-    (SELECT a.name FROM arenas a WHERE a.id = b.arena_id),
-    (SELECT a.name FROM arenas a WHERE a.id = s.arena_id),
-    '{BOOKING_ARENA_UNSPECIFIED_LABEL}'
+# Online offering has no rink, even when the trainer also works at venues.
+SQL_BOOKING_SERVICE_IS_ONLINE = """EXISTS (
+    SELECT 1 FROM trainer_services ts_online
+    WHERE ts_online.trainer_id = b.trainer_id
+      AND ts_online.service_id = b.service_id
+      AND COALESCE(ts_online.is_online, false)
 )"""
+
+SQL_BOOKING_ARENA_DISPLAY = f"""CASE
+    WHEN {SQL_BOOKING_SERVICE_IS_ONLINE} THEN '{BOOKING_ONLINE_PLACE_LABEL}'
+    ELSE COALESCE(
+        (SELECT a.name FROM arenas a WHERE a.id = b.arena_id),
+        (SELECT a.name FROM arenas a WHERE a.id = s.arena_id),
+        '{BOOKING_ARENA_UNSPECIFIED_LABEL}'
+    )
+END"""
 
 # Single arena id for venue/map: booking override, then slot (fixed-venue / group), then trainer defaults.
 SQL_BOOKING_RESOLVED_ARENA_ID = """COALESCE(
@@ -201,6 +213,28 @@ SQL_BOOKING_RESOLVED_ARENA_ID = """COALESCE(
     (SELECT t.primary_arena_id FROM trainers t WHERE t.id = b.trainer_id),
     (SELECT MIN(ta.arena_id) FROM trainer_arenas ta WHERE ta.trainer_id = b.trainer_id)
 )"""
+
+# Client lists join ``trainer_services ts``. Online bookings must not inherit the primary rink.
+SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT = (
+    "CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE ("
+    + SQL_BOOKING_RESOLVED_ARENA_ID
+    + ") END"
+)
+
+
+def _client_booking_place(
+    arena_name: str,
+    arena_address: str,
+    map_link: str | None,
+    *,
+    online: bool,
+) -> tuple[str, str, str | None, str]:
+    """Place copy for client cards. Online never inherits a rink or a map pin."""
+    if online:
+        return BOOKING_ONLINE_PLACE_LABEL, "", None, BOOKING_ONLINE_PLACE_LABEL
+    if not arena_name:
+        return "", arena_address, map_link, "Уточните у тренера"
+    return arena_name, arena_address, map_link, f"Площадка: {arena_name}"
 
 
 def _normalize_trainer_arenas_display(raw: str | None) -> str | None:
@@ -857,6 +891,23 @@ async def create_booking(
     return (booking_id, mile_flags)
 
 
+async def _trainer_offering_is_online(
+    session: AsyncSession, trainer_id: int, service_id: int
+) -> bool:
+    """True when this trainer's offering is online (venue-less). Missing row → False."""
+    r = await session.execute(
+        text(
+            """
+            SELECT COALESCE(is_online, false) FROM trainer_services
+            WHERE trainer_id = :tid AND service_id = :sid
+            """
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    row = r.fetchone()
+    return bool(row[0]) if row else False
+
+
 async def create_trainer_quick_booking(
     session: AsyncSession,
     trainer_id: int,
@@ -881,7 +932,11 @@ async def create_trainer_quick_booking(
     """
     from src.application.trainer_schedule_use_cases import ensure_individual_slot_for_quick_book
 
-    if arena_id is not None:
+    # Online offering never takes a venue, even if the client still sent arena_id.
+    offering_online = await _trainer_offering_is_online(session, trainer_id, service_id)
+    if offering_online:
+        arena_id = None
+    elif arena_id is not None:
         err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
         if err:
             raise ValueError(err)
@@ -893,6 +948,7 @@ async def create_trainer_quick_booking(
         duration_minutes,
         allow_off_grid_interval=allow_off_grid_interval,
         arena_id=arena_id,
+        online=offering_online,
     )
     try:
         booking_id, mile = await create_booking(
@@ -1453,7 +1509,10 @@ async def fetch_reminder_session_cards_map(
             SELECT b.id, s.slot_date, s.start_time, s.end_time,
                    srv.name AS service_name,
                    COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
-                   a.name AS arena_name, a.address AS arena_address, a.latitude, a.longitude,
+                   CASE WHEN COALESCE(ts.is_online, false) THEN '""" + BOOKING_ONLINE_PLACE_LABEL + """' ELSE a.name END AS arena_name,
+                   CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.address END AS arena_address,
+                   CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.latitude END,
+                   CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.longitude END,
                    t.telegram_id AS trainer_telegram_id,
                    b.trainer_id,
                    """ + sql_client_booked_for_name("c") + """ AS booked_for_name
@@ -1561,8 +1620,10 @@ _TRAINER_BOOKED_NOTIFY_SELECT_SQL = """
            srv.name AS service_name,
            COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
            price_tier_kind,
-           a.name AS arena_name, a.address AS arena_address,
-           a.latitude, a.longitude,
+           CASE WHEN COALESCE(ts.is_online, false) THEN '""" + BOOKING_ONLINE_PLACE_LABEL + """' ELSE a.name END AS arena_name,
+           CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.address END AS arena_address,
+           CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.latitude END,
+           CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.longitude END,
            """ + sql_client_booked_for_name("c") + """ AS booked_for_name
     FROM bookings b
     JOIN clients c ON c.id = b.client_id
@@ -1682,8 +1743,10 @@ _PENDING_BOOKING_CONFIRMED_NOTIFY_SQL = """
            srv.name AS service_name,
            COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
            price_tier_kind,
-           a.name AS arena_name, a.address AS arena_address,
-           a.latitude, a.longitude,
+           CASE WHEN COALESCE(ts.is_online, false) THEN '""" + BOOKING_ONLINE_PLACE_LABEL + """' ELSE a.name END AS arena_name,
+           CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.address END AS arena_address,
+           CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.latitude END,
+           CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.longitude END,
            (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
     FROM bookings b
     JOIN clients c ON c.id = b.client_id
@@ -3836,14 +3899,15 @@ async def list_bookings_for_client(
                    NULLIF(TRIM(COALESCE(ts.client_notice, '')), '') AS service_client_notice,
                    (""" + _SQL_SLOT_START_TS + """ <= CURRENT_TIMESTAMP
                      AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP) AS hub_in_session,
-                   (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
+                   (""" + SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT + """) AS resolved_arena_id,
                    b.service_price_variant_id,
                    p.city_id AS trainer_city_id,
                    (SELECT COALESCE(NULLIF(TRIM(ph.file_key_list), ''), NULLIF(TRIM(ph.file_key), ''))
                     FROM trainer_photos ph
                     WHERE ph.trainer_id = b.trainer_id
                     ORDER BY ph.sort_order NULLS LAST, ph.id ASC
-                    LIMIT 1) AS trainer_list_photo_key
+                    LIMIT 1) AS trainer_list_photo_key,
+                   COALESCE(ts.is_online, false) AS service_is_online
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -3856,7 +3920,7 @@ async def list_bookings_for_client(
                 SELECT a2.name, a2.address, a2.latitude, a2.longitude
                 FROM arenas a2
                 WHERE a2.id = ("""
-            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT
             + """)
             ) a ON true
             WHERE b.client_id = :cid
@@ -3879,10 +3943,12 @@ async def list_bookings_for_client(
             map_link = f"https://yandex.ru/maps/?pt={lon},{lat}&z=16"
         else:
             map_link = None
-        if not arena_name:
-            place_display = "Уточните у тренера"
-        else:
-            place_display = f"Площадка: {arena_name}"
+        arena_name, arena_address, map_link, place_display = _client_booking_place(
+            arena_name,
+            arena_address,
+            map_link,
+            online=bool(row[27]) if len(row) > 27 else False,
+        )
         out.append({
             "id": row[0],
             "slot_id": row[1],
@@ -3972,14 +4038,15 @@ async def list_booking_history_for_client(
                    COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents,
                    NULLIF(TRIM(COALESCE(ts.client_notice, '')), '') AS service_client_notice,
                    false AS hub_in_session,
-                   (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
+                   (""" + SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT + """) AS resolved_arena_id,
                    b.service_price_variant_id,
                    p.city_id AS trainer_city_id,
                    (SELECT COALESCE(NULLIF(TRIM(ph.file_key_list), ''), NULLIF(TRIM(ph.file_key), ''))
                     FROM trainer_photos ph
                     WHERE ph.trainer_id = b.trainer_id
                     ORDER BY ph.sort_order NULLS LAST, ph.id ASC
-                    LIMIT 1) AS trainer_list_photo_key
+                    LIMIT 1) AS trainer_list_photo_key,
+                   COALESCE(ts.is_online, false) AS service_is_online
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -3992,7 +4059,7 @@ async def list_booking_history_for_client(
                 SELECT a2.name, a2.address, a2.latitude, a2.longitude
                 FROM arenas a2
                 WHERE a2.id = ("""
-            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT
             + """)
             ) a ON true
             WHERE b.client_id = :cid
@@ -4022,10 +4089,12 @@ async def list_booking_history_for_client(
             map_link = f"https://yandex.ru/maps/?pt={lon},{lat}&z=16"
         else:
             map_link = None
-        if not arena_name:
-            place_display = "Уточните у тренера"
-        else:
-            place_display = f"Площадка: {arena_name}"
+        arena_name, arena_address, map_link, place_display = _client_booking_place(
+            arena_name,
+            arena_address,
+            map_link,
+            online=bool(row[27]) if len(row) > 27 else False,
+        )
         out.append({
             "id": row[0],
             "slot_id": row[1],

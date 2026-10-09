@@ -2478,7 +2478,24 @@
         return list[0].id;
       }
 
+      function bookServiceIsOnline(serviceId) {
+        var sid = serviceId != null ? serviceId : state.bookServiceId;
+        if (sid == null) return false;
+        var svc = (state.bookServices || []).filter(function(s) {
+          return Number(s.id) === Number(sid);
+        })[0];
+        return !!(svc && svc.is_online);
+      }
+
       function fillTrainerArenasUI(preferredArenaId) {
+        if (bookServiceIsOnline()) {
+          state.bookArenaId = null;
+          var onlineW1 = document.getElementById('bookArenaWrap');
+          var onlineW2 = document.getElementById('bookArenaWrapNew');
+          if (onlineW1) onlineW1.style.display = 'none';
+          if (onlineW2) onlineW2.style.display = 'none';
+          return;
+        }
         if (state.bookSlotIsGroup) {
           var w1 = document.getElementById('bookArenaWrap');
           var w2 = document.getElementById('bookArenaWrapNew');
@@ -2570,7 +2587,12 @@
           var slotG = state.slots.find(function(s) { return s.id === state.bookSlotId; });
           var aidG = slotG && slotG.arena_id != null ? parseInt(String(slotG.arena_id), 10) : NaN;
           if (!isNaN(aidG)) o.arena_id = aidG;
-        } else if (state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
+        } else if (
+          !bookServiceIsOnline(serviceId) &&
+          state.trainerArenas &&
+          state.trainerArenas.length > 1 &&
+          state.bookArenaId != null
+        ) {
           o.arena_id = state.bookArenaId;
         }
         return o;
@@ -2584,7 +2606,12 @@
           client_id: clientId,
           service_id: serviceId
         };
-        if (state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
+        if (
+          !bookServiceIsOnline(serviceId) &&
+          state.trainerArenas &&
+          state.trainerArenas.length > 1 &&
+          state.bookArenaId != null
+        ) {
           o.arena_id = state.bookArenaId;
         }
         if (state.bookPriceVariantId != null) {
@@ -3064,6 +3091,7 @@
             sel.onchange = function() {
               state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
               syncBookPriceTierRadios('existing', null, null);
+              fillTrainerArenasUI();
             };
           }
           syncBookPriceTierRadios(
@@ -6708,12 +6736,18 @@
             sel.onchange = function() {
               state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
               syncQuickBookProfilePriceTierRadios(null, null);
+              var wrapOnline = document.getElementById('quickBookProfileArenaWrap');
+              if (wrapOnline) {
+                wrapOnline.style.display =
+                  bookServiceIsOnline() || (state.trainerArenas || []).length < 2 ? 'none' : 'block';
+              }
+              if (bookServiceIsOnline()) state.bookArenaId = null;
             };
 
             var wrapA = document.getElementById('quickBookProfileArenaWrap');
             var selA = document.getElementById('quickBookProfileArenaSelect');
             if (wrapA && selA) {
-              var showA = arenas.length > 1;
+              var showA = arenas.length > 1 && !bookServiceIsOnline();
               wrapA.style.display = showA ? 'block' : 'none';
               if (showA) {
                 selA.innerHTML = '';
@@ -7057,10 +7091,12 @@
             document.getElementById('bookServiceSelect').onchange = function() {
               state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
               syncAllBookPriceTierRadios();
+              fillTrainerArenasUI();
             };
             document.getElementById('bookServiceSelectNew').onchange = function() {
               state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
               syncAllBookPriceTierRadios();
+              fillTrainerArenasUI();
             };
             syncAllBookPriceTierRadios();
             applyBookModalGroupUi();

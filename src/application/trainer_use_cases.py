@@ -158,6 +158,40 @@ def _service_is_online_from_payload(s: dict[str, Any]) -> bool:
     return bool(s.get("is_online"))
 
 
+async def platform_service_ids(session: AsyncSession, service_ids: list[int]) -> set[int]:
+    """Services we author ourselves (``created_by_trainer_id`` is null). Venue-only."""
+    ids = sorted({int(x) for x in service_ids})
+    if not ids:
+        return set()
+    r = await session.execute(
+        text(
+            """
+            SELECT id FROM services
+            WHERE created_by_trainer_id IS NULL
+              AND id = ANY(:ids)
+            """
+        ),
+        {"ids": ids},
+    )
+    return {int(row[0]) for row in r.fetchall()}
+
+
+async def clear_online_on_platform_services(
+    session: AsyncSession, services: list[dict[str, Any]]
+) -> None:
+    """A catalog service we defined cannot be offered online. Trainer-authored ones can."""
+    if not services:
+        return
+    blocked = await platform_service_ids(
+        session, [int(s["service_id"]) for s in services if s.get("service_id") is not None]
+    )
+    if not blocked:
+        return
+    for item in services:
+        if int(item["service_id"]) in blocked:
+            item["is_online"] = False
+
+
 def _services_to_entries(
     services: list[dict[str, Any]],
 ) -> list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None, bool]]:
@@ -443,6 +477,7 @@ async def _apply_trainer_services_update(
     service_ids: list[int] | None,
 ) -> None:
     if services is not None:
+        await clear_online_on_platform_services(session, services)
         new_set = {int(s["service_id"]) for s in services}
         await ensure_trainer_services_replace_allowed(session, trainer_id, new_set)
         desired_online = {
@@ -468,6 +503,9 @@ async def _apply_trainer_services_update(
             {"tid": trainer_id},
         )
         online_map = {int(row[0]): bool(row[1]) for row in r.fetchall()}
+        blocked = await platform_service_ids(session, [int(x) for x in service_ids])
+        for sid in blocked:
+            online_map[int(sid)] = False
         await repo.set_trainer_services(
             trainer_id,
             [
@@ -620,6 +658,7 @@ async def create_trainer(
     if profile:
         await repo.create_profile(trainer_id, **_profile_to_kwargs(profile))
     if services is not None:
+        await clear_online_on_platform_services(session, services)
         await repo.set_trainer_services(trainer_id, _services_to_entries(services))
         await sync_trainer_online_enabled_from_services(session, trainer_id)
     elif service_ids:

@@ -782,6 +782,7 @@ async def ensure_individual_slot_for_quick_book(
     *,
     allow_off_grid_interval: bool = False,
     arena_id: int | None = None,
+    online: bool = False,
 ) -> int:
     """
     Returns slot_id for an individual slot at start_minutes (arena schedule grid, same rules as schedule editor).
@@ -805,7 +806,10 @@ async def ensure_individual_slot_for_quick_book(
     if start_minutes < 0 or start_minutes > 23 * 60 + 59:
         raise ValueError("Некорректное время начала")
     slot_arena_id: int | None
-    if arena_id is not None:
+    if online:
+        # Online session is venue-less. Do not fall back to the primary rink.
+        slot_arena_id = None
+    elif arena_id is not None:
         r_own = await session.execute(
             text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
             {"tid": trainer_id, "aid": int(arena_id)},
@@ -859,9 +863,13 @@ async def ensure_individual_slot_for_quick_book(
         em = int(row[2])
         cap = max(1, int(row[3] or 1))
         row_arena_id: int | None = int(row[4]) if row[4] is not None else None
-        row_effective_arena: int | None = (
-            row_arena_id if row_arena_id is not None else slot_arena_effective_default
-        )
+        if online:
+            # NULL arena is the online slot, not "inherits primary venue".
+            row_effective_arena = row_arena_id
+        else:
+            row_effective_arena = (
+                row_arena_id if row_arena_id is not None else slot_arena_effective_default
+            )
         active_cnt = int(row[5] or 0)
         if em < sm:
             em = sm + 24 * 60

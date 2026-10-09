@@ -1562,7 +1562,13 @@ def format_client_booking_reminder_text(
         if not pay_line:
             pay_line = "💳 <b>уточните у тренера</b>"
         arena = (arena_name or "").strip() or "уточните у тренера"
-        address = (arena_address or "").strip() or "см. «Мои записи»"
+        address = (arena_address or "").strip()
+        if address:
+            address_line = f"{html.escape(address)}\n"
+        elif arena == "Онлайн":
+            address_line = ""
+        else:
+            address_line = "см. «Мои записи»\n"
         return (
             f"{title}\n\n"
             f"{booked_block}"
@@ -1570,7 +1576,7 @@ def format_client_booking_reminder_text(
             f"🎯 <b>{html.escape(service)}</b>\n"
             f"{pay_line}\n"
             f"📍 <b>{html.escape(arena)}</b>\n"
-            f"{html.escape(address)}\n\n"
+            f"{address_line}\n"
             "Сначала напишите тренеру при вопросах — карта и полный адрес в <b>«Мои записях»</b>."
         )
 

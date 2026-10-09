@@ -23,39 +23,54 @@ from src.application.trainer_use_cases import (
 )
 
 
-async def _two_services(db_session) -> tuple[int, int]:
-    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 2"))
-    rows = r.fetchall()
-    if len(rows) < 2:
-        pytest.skip("need at least 2 services")
-    return int(rows[0][0]), int(rows[1][0])
-
-
-async def _seed_trainer(db_session, s1: int, s2: int) -> int:
+async def _seed_owned_pair(db_session) -> tuple[int, int, int]:
+    """Trainer plus two services he authored — only those may be marked online."""
+    seed = (
+        await db_session.execute(
+            text(
+                "SELECT id FROM services WHERE created_by_trainer_id IS NULL ORDER BY id LIMIT 1"
+            )
+        )
+    ).scalar()
+    if seed is None:
+        pytest.skip("need a platform service")
     tid = await create_trainer(
         db_session,
         profile={"first_name": "Fmt", "last_name": "Lock", "age": 31},
-        service_ids=[s1, s2],
+        service_ids=[int(seed)],
         arena_ids=[],
     )
+    inserted: list[int] = []
+    for label in ("A", "B"):
+        sid = (
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO services (name, sort_order, is_public, created_by_trainer_id)
+                    VALUES (:name, 100, false, :tid)
+                    RETURNING id
+                    """
+                ),
+                {"name": f"Своя {label} {tid}", "tid": tid},
+            )
+        ).scalar_one()
+        inserted.append(int(sid))
     await db_session.execute(
         text(
             """
-            UPDATE trainer_services
-            SET is_online = false
-            WHERE trainer_id = :tid AND service_id = :sid
+            INSERT INTO trainer_services (trainer_id, service_id, is_online)
+            VALUES (:tid, :s1, false), (:tid, :s2, false)
             """
         ),
-        {"tid": tid, "sid": s1},
+        {"tid": tid, "s1": inserted[0], "s2": inserted[1]},
     )
     await db_session.commit()
-    return tid
+    return tid, inserted[0], inserted[1]
 
 
 @pytest.mark.asyncio
 async def test_can_flip_format_when_service_unused(db_session) -> None:
-    s1, s2 = await _two_services(db_session)
-    tid = await _seed_trainer(db_session, s1, s2)
+    tid, s1, s2 = await _seed_owned_pair(db_session)
 
     assert await list_trainer_service_ids_format_locked(db_session, tid) == []
     await ensure_trainer_service_format_changes_allowed(db_session, tid, {s1: True})
@@ -83,8 +98,7 @@ async def test_can_flip_format_when_service_unused(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_cannot_flip_format_when_slot_references_service(db_session) -> None:
-    s1, s2 = await _two_services(db_session)
-    tid = await _seed_trainer(db_session, s1, s2)
+    tid, s1, s2 = await _seed_owned_pair(db_session)
     await db_session.execute(
         text(
             """
@@ -117,8 +131,7 @@ async def test_cannot_flip_format_when_slot_references_service(db_session) -> No
 
 @pytest.mark.asyncio
 async def test_cannot_flip_format_when_active_booking(db_session) -> None:
-    s1, s2 = await _two_services(db_session)
-    tid = await _seed_trainer(db_session, s1, s2)
+    tid, s1, s2 = await _seed_owned_pair(db_session)
 
     slot_id = (
         await db_session.execute(
@@ -170,8 +183,7 @@ async def test_cannot_flip_format_when_active_booking(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_cancelled_booking_does_not_lock_format(db_session) -> None:
-    s1, s2 = await _two_services(db_session)
-    tid = await _seed_trainer(db_session, s1, s2)
+    tid, s1, s2 = await _seed_owned_pair(db_session)
 
     slot_id = (
         await db_session.execute(
@@ -232,8 +244,7 @@ async def test_cancelled_booking_does_not_lock_format(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_can_edit_price_and_description_while_format_locked(db_session) -> None:
-    s1, s2 = await _two_services(db_session)
-    tid = await _seed_trainer(db_session, s1, s2)
+    tid, s1, s2 = await _seed_owned_pair(db_session)
     await db_session.execute(
         text(
             """
@@ -281,8 +292,7 @@ async def test_can_edit_price_and_description_while_format_locked(db_session) ->
 @pytest.mark.asyncio
 async def test_legacy_service_ids_update_preserves_is_online(db_session) -> None:
     """service_ids-only PATCH must not wipe online flags (short tuple defaulted to false)."""
-    s1, s2 = await _two_services(db_session)
-    tid = await _seed_trainer(db_session, s1, s2)
+    tid, s1, s2 = await _seed_owned_pair(db_session)
     await db_session.execute(
         text(
             "UPDATE trainer_services SET is_online = true "
@@ -307,8 +317,7 @@ async def test_legacy_service_ids_update_preserves_is_online(db_session) -> None
 
 @pytest.mark.asyncio
 async def test_same_format_noop_allowed_when_locked(db_session) -> None:
-    s1, s2 = await _two_services(db_session)
-    tid = await _seed_trainer(db_session, s1, s2)
+    tid, s1, s2 = await _seed_owned_pair(db_session)
     await db_session.execute(
         text(
             """
