@@ -711,7 +711,7 @@
       { href: base + 'opening-hours.js?v=2026100691', as: 'script' },
       { href: base + 'schedule-staleness-model.js?v=2026100698', as: 'script' },
       { href: base + 'arena-schedule-mode-model.js?v=2026100702', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=2026100722', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=2026100901', as: 'script' },
       { href: base + 'ice-map-model.js?v=2026100723', as: 'script' },
       { href: base + 'ice-map.js?v=2026100722', as: 'script' },
       { href: base + 'ice-tab.css?v=2026100722', as: 'style' },

@@ -1609,14 +1609,10 @@
   }
 
   /**
-   * TASK-179. Основание ближайшего сеанса: не-live (сетка, фото, вручную) клиент
-   * должен видеть текстом. Пустая строка — сеанс снят с сайта катка (live).
+   * Основание слота (projected/photo/manual) клиенту не показываем: откуда
+   * взяли время — внутренняя механика, не обещание. Пустая строка всегда.
    */
-  function scheduleBasisHint(live) {
-    var b = String((live && live.schedule_basis) || 'live');
-    if (b === 'projected') return 'Обычная сетка — уточните по телефону';
-    if (b === 'photo') return 'С фото — уточните по телефону';
-    if (b === 'manual') return 'Вручную — уточните по телефону';
+  function scheduleBasisHint(/* live */) {
     return '';
   }
 
@@ -1643,11 +1639,7 @@
     if (prices && currency) prices += ' ' + currency;
     var more = Number(live.more_count);
     var depth;
-    var basisLine = isSession ? scheduleBasisHint(live) : '';
-    if (basisLine) {
-      // TASK-179: «откуда расписание» важнее счётчика сеансов — у проекции он ничего не обещает.
-      depth = basisLine;
-    } else if (isSession && more > 0) {
+    if (isSession && more > 0) {
       // more_count — все будущие сеансы, а не «за неделю»: обещать окно нельзя.
       depth = 'Ещё ' + more + ' ' + pluralRu(more, 'сеанс', 'сеанса', 'сеансов') + ' в расписании';
     } else if (isSession) {
