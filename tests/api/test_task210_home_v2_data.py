@@ -196,6 +196,8 @@ async def test_ac2_minutes_until_is_in_html_only_for_live_under_two_hours(
     far = _session_li(resp.text, "Живой позже")
     assert "через 30 мин" in live
     assert "с прокатом 15 BYN" in live
+    assert "12:30–13:30" in live
+    assert "12:30:00" not in live
     assert "через" not in usual
     assert "обычно" in usual
     assert "по обычной сетке катка — лучше уточнить" in usual

@@ -915,8 +915,9 @@ def _session_row(row: Mapping[str, Any], *, now: datetime) -> str:
     city_name = str(row["city_name"])
     slug = str(row.get("arena_slug") or "").strip()
     arena_name = str(row["arena_name"])
-    starts = str(row.get("starts_at_local") or "").strip()
-    ends = str(row.get("ends_at_local") or "").strip()
+    # DB/driver часто отдаёт TIME как «22:15:00» — на главной достаточно ЧЧ:ММ.
+    starts = str(row.get("starts_at_local") or "").strip()[:5]
+    ends = str(row.get("ends_at_local") or "").strip()[:5]
     time_text = f"{starts}–{ends}" if starts and ends else (starts or ends or "—")
     day_label = _session_day_label(row, now=now)
     basis = str(row.get("schedule_basis") or SCHEDULE_BASIS_LIVE)
