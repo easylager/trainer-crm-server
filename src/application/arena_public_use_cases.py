@@ -21,6 +21,7 @@ from src.application.arena_profile import (
     ARENA_PROFILE_STATUS_PUBLISHED,
     hours_for_weekday,
     format_intervals_ru,
+    has_known_hours,
     hours_groups,
     intervals_for_weekday,
     normalize_hhmm,
@@ -29,7 +30,7 @@ from src.application.arena_profile import (
     is_in_season,
     public_http_url,
 )
-from src.application.ice_time_windows import TimeWindow, resolve_list_window
+from src.application.ice_time_windows import TimeWindow, resolve_list_window, resolve_window
 from src.application.place_links import place_path
 from src.application.ice_session_use_cases import (
     CLIENT_ICE_SESSION_KINDS,
@@ -86,6 +87,15 @@ from src.shared.dossier_public_text import (
     scrub_dossier_leaks_from_public_text,
 )
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
+
+#: «Заточка и прокат» — те же ключи, что плитка хаба города и ?svc=service на сайте.
+PLACE_SERVICE_KEYS: tuple[str, ...] = (
+    "skate_sharpening",
+    "skate_rental",
+    "repair",
+    "skate_molding",
+    "blade_profiling",
+)
 
 INTENT_SKATE = "skate"
 INTENT_COACH = "coach"
@@ -207,6 +217,16 @@ def parse_venue_type_filter(raw: str | None) -> set[str]:
             "venue_type must be one of: " + ", ".join(VENUE_TYPE_KEYS)
         )
     return keys
+
+
+def _amenity_on(value: Any) -> bool:
+    """JSONB true и строка ``true`` — одно и то же, как ``(amenities ->> k) = 'true'`` на сайте."""
+    return value is True or (isinstance(value, str) and value.strip().lower() == "true")
+
+
+def _row_has_any_amenity(row: Mapping[str, Any], keys: tuple[str, ...] | list[str]) -> bool:
+    amenities = _as_mapping(row.get("amenities"))
+    return any(_amenity_on(amenities.get(k)) for k in keys)
 
 
 def _venue_type_facets(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -806,9 +826,65 @@ async def _load_ice_arena_rows(
 
 
 CITY_SELECTION_PAGE_SIZE = 12
+_SERVICE_SELECTION_FETCH_CAP = 60
+
+_OPEN_STATE_ORDER = {"open": 0, "soon": 1, "closed": 2, "unknown": 3}
 
 _FILTER_GROUP_ICE = frozenset({VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR})
 _FILTER_GROUP_GYM = frozenset({VENUE_TYPE_GYM, VENUE_TYPE_CHOREO, VENUE_TYPE_POOL})
+
+
+def _hhmm_in_interval(hhmm: str, open_: str, close: str) -> bool:
+    if close > open_:
+        return open_ <= hhmm < close
+    return hhmm >= open_ or hhmm < close
+
+
+def _window_bounds(window: TimeWindow | Mapping[str, Any] | None) -> tuple[datetime | None, datetime | None]:
+    if window is None:
+        return None, None
+    if isinstance(window, TimeWindow):
+        return window.starts_at, window.ends_at
+    if window.get("from") and window.get("to"):
+        return datetime.fromisoformat(str(window["from"])), datetime.fromisoformat(str(window["to"]))
+    return None, None
+
+
+def compute_service_open_state(
+    opening_hours: Mapping[str, Any] | None,
+    *,
+    now: datetime,
+    timezone_name: str | None = None,
+) -> dict[str, str]:
+    """Статус «открыто сейчас» для подборки услуг (заточка/прокат)."""
+    tz = ZoneInfo(str(timezone_name or NOTIFICATION_TZ))
+    local = now.astimezone(tz)
+    if not has_known_hours(opening_hours):
+        return {"state": "unknown", "label": "часы уточняйте по телефону"}
+    intervals = intervals_for_weekday(opening_hours, local.weekday())
+    if not intervals:
+        tomorrow = intervals_for_weekday(opening_hours, (local.weekday() + 1) % 7)
+        if tomorrow:
+            return {"state": "closed", "label": f"откроется завтра в {tomorrow[0][0]}"}
+        return {"state": "closed", "label": "сегодня закрыто"}
+    hhmm = local.strftime("%H:%M")
+    for open_, close in intervals:
+        if _hhmm_in_interval(hhmm, open_, close):
+            close_t = datetime.strptime(close, "%H:%M").time()
+            close_dt = datetime.combine(local.date(), close_t, tzinfo=tz)
+            if close <= open_ and hhmm >= open_:
+                close_dt += timedelta(days=1)
+            minutes_left = int((close_dt - local).total_seconds() // 60)
+            if minutes_left <= 60:
+                return {"state": "soon", "label": f"до {close} · закрывается"}
+            return {"state": "open", "label": f"до {close}"}
+    for open_, _close in intervals:
+        if hhmm < open_:
+            return {"state": "closed", "label": "сегодня закрыто"}
+    tomorrow = intervals_for_weekday(opening_hours, (local.weekday() + 1) % 7)
+    if tomorrow:
+        return {"state": "closed", "label": f"откроется завтра в {tomorrow[0][0]}"}
+    return {"state": "closed", "label": "сегодня закрыто"}
 
 
 def city_selection_venue_types(raw: str | None) -> set[str] | None:
@@ -837,6 +913,7 @@ async def list_city_selection_places(
     venue_types: set[str] | None,
     page: int,
     now: datetime | None = None,
+    service_keys: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
     """Публичные места города одной страницей: фиксированное число SQL, не зависит от total."""
     from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
@@ -845,6 +922,76 @@ async def list_city_selection_places(
     page = max(1, int(page or 1))
     offset = (page - 1) * CITY_SELECTION_PAGE_SIZE
     scope = public_scope_params()
+    if service_keys:
+        keys = [str(k) for k in service_keys if k]
+        params: dict[str, Any] = {
+            "city_id": int(city_id),
+            "now": now,
+            "st": STATUS_ACTIVE,
+            "svc_keys": keys,
+            **scope,
+        }
+        svc_clause = """
+          AND EXISTS (
+              SELECT 1 FROM unnest(CAST(:svc_keys AS text[])) k
+              WHERE (p.amenities ->> k) = 'true'
+          )
+        """
+        visible = f"""
+            FROM arenas a
+            LEFT JOIN arena_profiles p ON p.arena_id = a.id
+            JOIN cities c ON c.id = a.city_id
+            WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{svc_clause}
+        """
+        total = int((await session.execute(text(f"SELECT COUNT(*)::int {visible}"), params)).scalar_one())
+        id_rows = (
+            await session.execute(
+                text(f"SELECT a.id {visible} ORDER BY a.name, a.id LIMIT {_SERVICE_SELECTION_FETCH_CAP}"),
+                params,
+            )
+        ).scalars().all()
+        arena_ids = [int(i) for i in id_rows]
+        rows: list[dict[str, Any]] = []
+        if arena_ids:
+            loaded = await _load_ice_arena_rows(
+                session, city_id=int(city_id), bbox=None, intent=INTENT_SKATE, now=now, arena_ids=arena_ids
+            )
+            by_id = {int(r["id"]): r for r in loaded}
+            rows = [by_id[i] for i in arena_ids if i in by_id]
+            await attach_arena_media_payloads(session, rows)
+        today = _today_minsk()
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            payload = _public_list_item(row, intent=INTENT_SKATE, today=today)
+            oh = sanitize_opening_hours_for_public(_as_mapping(row.get("opening_hours")))
+            amenities = _as_mapping(row.get("amenities"))
+            payload["opening_hours"] = oh
+            payload["amenity_keys"] = [k for k in SHOP_SERVICE_KEYS if amenities.get(k) is True]
+            payload["open_state"] = compute_service_open_state(
+                oh, now=now, timezone_name=str(row.get("timezone") or NOTIFICATION_TZ)
+            )
+            items.append(payload)
+        open_now_count = sum(1 for i in items if (i.get("open_state") or {}).get("state") in ("open", "soon"))
+        items.sort(
+            key=lambda i: (
+                _OPEN_STATE_ORDER.get(str((i.get("open_state") or {}).get("state") or "unknown"), 9),
+                str(i.get("name") or "").casefold(),
+            )
+        )
+        pages = max(1, (total + CITY_SELECTION_PAGE_SIZE - 1) // CITY_SELECTION_PAGE_SIZE)
+        start = (page - 1) * CITY_SELECTION_PAGE_SIZE
+        page_items = items[start : start + CITY_SELECTION_PAGE_SIZE]
+        return {
+            "items": page_items,
+            "total": total,
+            "page": page,
+            "pages": pages,
+            "page_size": CITY_SELECTION_PAGE_SIZE,
+            "filter_chips": [],
+            "venue_type_facets": {},
+            "open_now_count": open_now_count,
+        }
+
     type_clause = ""
     params: dict[str, Any] = {
         "city_id": int(city_id),
@@ -936,6 +1083,7 @@ async def list_city_ohm_places(
     city_id: int,
     page: int = 1,
     now: datetime | None = None,
+    window: TimeWindow | Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Катки города с будущим hockey_practice. Не расширяет intent=skate."""
     from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
@@ -943,6 +1091,8 @@ async def list_city_ohm_places(
     now = now or datetime.now(timezone.utc)
     page = max(1, int(page or 1))
     offset = (page - 1) * CITY_SELECTION_PAGE_SIZE
+    win_from, win_to = _window_bounds(window)
+    window_clause = ""
     params: dict[str, Any] = {
         "city_id": int(city_id),
         "lim": CITY_SELECTION_PAGE_SIZE,
@@ -951,6 +1101,10 @@ async def list_city_ohm_places(
         "st": STATUS_ACTIVE,
         **public_scope_params(),
     }
+    if win_from is not None and win_to is not None:
+        window_clause = " AND s.starts_at_utc >= :win_from AND s.starts_at_utc < :win_to"
+        params["win_from"] = win_from
+        params["win_to"] = win_to
     visible = f"""
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -959,13 +1113,22 @@ async def list_city_ohm_places(
           AND {PUBLIC_ARENA_VISIBLE_SQL}
           AND EXISTS (
               SELECT 1 FROM ice_sessions s
-              WHERE s.arena_id = a.id AND {_OHM_SESSION_SQL}
+              WHERE s.arena_id = a.id AND {_OHM_SESSION_SQL}{window_clause}
           )
+    """
+    order_by = f"""
+        (
+            SELECT MIN(s.starts_at_utc)
+            FROM ice_sessions s
+            WHERE s.arena_id = a.id AND {_OHM_SESSION_SQL}{window_clause}
+        ),
+        a.name,
+        a.id
     """
     total = int((await session.execute(text(f"SELECT COUNT(*)::int {visible}"), params)).scalar_one())
     id_rows = (
         await session.execute(
-            text(f"SELECT a.id {visible} ORDER BY a.name, a.id LIMIT :lim OFFSET :off"),
+            text(f"SELECT a.id {visible} ORDER BY {order_by} LIMIT :lim OFFSET :off"),
             params,
         )
     ).scalars().all()
@@ -989,6 +1152,68 @@ async def list_city_ohm_places(
         "page_size": CITY_SELECTION_PAGE_SIZE,
         "filter_chips": [],
         "venue_type_facets": {},
+    }
+
+
+async def city_ohm_window_counts(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Число будущих сеансов ОХМ по окнам today/tomorrow/weekend и всего."""
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+
+    now = now or datetime.now(timezone.utc)
+    tw_today = resolve_window("today", now)
+    tw_tomorrow = resolve_window("tomorrow", now)
+    tw_weekend = resolve_window("weekend", now)
+    params: dict[str, Any] = {
+        "city_id": int(city_id),
+        "now": now,
+        "st": STATUS_ACTIVE,
+        **public_scope_params(),
+    }
+    filters: list[str] = []
+    if tw_today:
+        params["today_from"] = tw_today.starts_at
+        params["today_to"] = tw_today.ends_at
+        filters.append("s.starts_at_utc >= :today_from AND s.starts_at_utc < :today_to")
+    if tw_tomorrow:
+        params["tomorrow_from"] = tw_tomorrow.starts_at
+        params["tomorrow_to"] = tw_tomorrow.ends_at
+        filters.append("s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to")
+    if tw_weekend:
+        params["weekend_from"] = tw_weekend.starts_at
+        params["weekend_to"] = tw_weekend.ends_at
+        filters.append("s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to")
+    today_filter = filters[0] if len(filters) > 0 else "false"
+    tomorrow_filter = filters[1] if len(filters) > 1 else "false"
+    weekend_filter = filters[2] if len(filters) > 2 else "false"
+    row = (
+        await session.execute(
+            text(f"""
+                SELECT
+                    COUNT(*) FILTER (WHERE {today_filter})::int AS today,
+                    COUNT(*) FILTER (WHERE {tomorrow_filter})::int AS tomorrow,
+                    COUNT(*) FILTER (WHERE {weekend_filter})::int AS weekend,
+                    COUNT(*)::int AS all
+                FROM ice_sessions s
+                JOIN arenas a ON a.id = s.arena_id
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE a.city_id = :city_id
+                  AND {PUBLIC_ARENA_VISIBLE_SQL}
+                  AND {_OHM_SESSION_SQL}
+                """),
+            params,
+        )
+    ).mappings().one()
+    return {
+        "today": int(row["today"] or 0),
+        "tomorrow": int(row["tomorrow"] or 0),
+        "weekend": int(row["weekend"] or 0),
+        "all": int(row["all"] or 0),
     }
 
 
@@ -1290,6 +1515,7 @@ async def list_public_ice_arenas(
     cursor: str | None = None,
     when: str | None = None,
     day: str | None = None,
+    service_keys: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
     intent_value = parse_intent(intent)
     venue_filter = parse_venue_type_filter(venue_type)
@@ -1345,6 +1571,10 @@ async def list_public_ice_arenas(
             for r in rows
             if normalize_venue_type(r.get("venue_type")) not in DEFAULT_HIDDEN_VENUE_TYPES
         ]
+    # Счёт чипа «Заточка и прокат» — до фильтра, иначе включённый чип не с чем сравнить.
+    service_count = sum(1 for r in rows if _row_has_any_amenity(r, PLACE_SERVICE_KEYS))
+    if service_keys:
+        rows = [r for r in rows if _row_has_any_amenity(r, service_keys)]
     if window is not None:
         # Сначала то, что есть в выбранном окне; остальное — ниже, с честной подписью.
         rows.sort(key=lambda r: (0 if r.get("window_hit") else 1, *_rank_tuple(r)))
@@ -1361,6 +1591,7 @@ async def list_public_ice_arenas(
         "intent": intent_value,
         "venue_type": sorted(venue_filter) if venue_filter else None,
         "venue_type_facets": facets,
+        "service_count": service_count,
         "next_cursor": next_cursor,
         # TASK-146 (Q-006): какое окно применено и сколько мест в нём реально есть.
         # hits == 0 — лента не пустая, а «в это время нет, вот ближайшее».

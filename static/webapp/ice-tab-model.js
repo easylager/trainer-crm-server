@@ -123,6 +123,9 @@
     var timeQ = whenListQuery(opts.when, opts.whenDay);
     if (timeQ.day) params.push('day=' + encodeURIComponent(timeQ.day));
     else if (timeQ.when) params.push('when=' + encodeURIComponent(timeQ.when));
+    if (opts.svc === 'service' || opts.svc === 'sharpening' || opts.svc === 'rental') {
+      params.push('svc=' + encodeURIComponent(opts.svc));
+    }
     return '/api/public/ice/arenas?' + params.join('&');
   }
 
@@ -207,12 +210,16 @@
     return 'places';
   }
 
-  function hockeyChipLabel() {
+  function copyLabel(key, fallback) {
     if (GC && typeof GC.t === 'function') {
-      var label = GC.t('chip.hockey');
-      if (label && label !== 'chip.hockey') return String(label);
+      var label = GC.t(key);
+      if (label && label !== key) return String(label);
     }
-    return 'Хоккей (ОХМ)';
+    return fallback;
+  }
+
+  function hockeyChipLabel() {
+    return copyLabel('chip.hockey', 'Хоккей');
   }
 
   /**
@@ -284,8 +291,8 @@
   }
 
   /**
-   * Верхний сегмент «Места · Тренеры · Магазины». До первого ответа arenas — подсказки
-   * из объекта города (skate_count, trainer_count, place_count, shop_count).
+   * Верхний сегмент — те же пять слов, что плитки города на сайте, в том же порядке:
+   * Покататься · Хоккей · Заточка · Магазины · Тренеры. Пустой раздел не показываем.
    *
    * «Магазины» нельзя вешать только на venue_type_facets ответа arenas: вкладка
    * «Тренеры» фасеты не привозит, и после возврата с карточки тренера сегмент
@@ -295,6 +302,7 @@
     opts = opts || {};
     var facets = opts.facets || [];
     var scope = catalogScope(opts.intent, opts.venueTypes);
+    var serviceOn = opts.placeService === 'service';
     var modes = [];
     var placesN = sumFacetCounts(facets, PLACE_MENU_KEYS);
     if (!facets.length) {
@@ -303,23 +311,58 @@
         (Number(opts.placeCountHint) || 0);
     }
     if (placesN > 0) {
-      modes.push({ id: 'places', label: 'Места', active: scope === 'places' });
+      modes.push({
+        id: 'places',
+        label: copyLabel('route.skate', 'Покататься'),
+        active: scope === 'places' && !serviceOn,
+      });
     }
     var ohmN = Number(opts.ohmCount);
     if (!isNaN(ohmN) && ohmN > 0) {
       modes.push({ id: 'ohm', label: hockeyChipLabel(), active: scope === 'ohm' });
     }
-    var trainers = Number(opts.trainerCount);
-    if (isNaN(trainers)) trainers = 0;
-    if (trainers > 0) {
-      modes.push({ id: 'coach', label: 'Тренеры', active: scope === 'coach' });
+    var serviceN = Math.max(0, Number(opts.serviceCount) || 0);
+    if (serviceN > 0 || serviceOn) {
+      modes.push({
+        id: 'service',
+        label: copyLabel('route.service', 'Заточка'),
+        active: serviceOn && scope === 'places',
+      });
     }
     var shops = facetCount(facets, 'shop');
     if (!(shops > 0)) shops = Number(opts.shopCount) || 0;
     if (shops > 0) {
-      modes.push({ id: 'shop', label: 'Магазины', active: scope === 'shop' });
+      modes.push({ id: 'shop', label: copyLabel('route.shops', 'Магазины'), active: scope === 'shop' });
+    }
+    var trainers = Number(opts.trainerCount);
+    if (isNaN(trainers)) trainers = 0;
+    if (trainers > 0) {
+      modes.push({ id: 'coach', label: copyLabel('route.trainers', 'Тренеры'), active: scope === 'coach' });
     }
     return modes;
+  }
+
+  /** Строка под разделом. На кнопке её нет: человек видит пояснение один раз, уже внутри. */
+  function sectionHint(scope, placeService) {
+    if (placeService === 'service') return copyLabel('route.service.hint', 'заточка и прокат');
+    if (scope === 'ohm') return copyLabel('route.hockey.hint', 'открытая тренировка, ОХМ');
+    if (scope === 'places') return copyLabel('route.skate.hint', 'каток, зал или трасса');
+    return '';
+  }
+
+  /**
+   * Счёт мест с заточкой или прокатом. В шапке это отдельный раздел, не чип под «Покататься».
+   * Ноль мест — раздела нет, пока его сами не включили.
+   */
+  function placeServiceChipView(count, active) {
+    var n = Math.max(0, Number(count) || 0);
+    if (n <= 0 && !active) return null;
+    return {
+      key: 'service',
+      label: copyLabel('route.service', 'Заточка'),
+      count: n,
+      active: !!active,
+    };
   }
 
   /** Хореография/бассейн — в меню, не в underline-ряду из трёх типов. */
@@ -391,10 +434,11 @@
   }
 
   function applyCatalogMode(mode) {
-    if (mode === 'coach') return { intent: INTENTS.coach, venueTypes: [] };
-    if (mode === 'ohm') return { intent: INTENTS.ohm, venueTypes: [] };
-    if (mode === 'shop') return { intent: INTENTS.skate, venueTypes: ['shop'] };
-    return { intent: INTENTS.skate, venueTypes: [] };
+    if (mode === 'coach') return { intent: INTENTS.coach, venueTypes: [], placeService: '' };
+    if (mode === 'ohm') return { intent: INTENTS.ohm, venueTypes: [], placeService: '' };
+    if (mode === 'shop') return { intent: INTENTS.skate, venueTypes: ['shop'], placeService: '' };
+    if (mode === 'service') return { intent: INTENTS.skate, venueTypes: [], placeService: 'service' };
+    return { intent: INTENTS.skate, venueTypes: [], placeService: '' };
   }
 
   /**
@@ -410,12 +454,14 @@
       shopDiscipline: '',
       shopOpenNow: false,
       shopWhen: 'any',
+      placeService: '',
     };
   }
 
-  function catalogSearchPlaceholder(scope) {
+  function catalogSearchPlaceholder(scope, placeService) {
+    if (placeService === 'service') return 'Заточка или прокат';
     if (scope === 'coach') return 'Имя тренера';
-    if (scope === 'shop') return 'Магазин или заточка';
+    if (scope === 'shop') return 'Магазин';
     if (scope === 'ohm') return 'Каток с ОХМ';
     return 'Каток, зал или трасса';
   }
@@ -1062,6 +1108,11 @@
     if (intent === INTENTS.coach) return INTENTS.coach;
     if (intent === INTENTS.ohm) return INTENTS.ohm;
     return INTENTS.skate;
+  }
+
+  /** Лента арен: ОХМ — отдельная линза, иначе скелетон «Ищем ОХМ…» не снимается. */
+  function arenaListLens(intent) {
+    return coerceIntent(intent) === INTENTS.ohm ? INTENTS.ohm : INTENTS.skate;
   }
 
   function catalogHref() {
@@ -1973,6 +2024,7 @@
           shopDiscipline: String(state.shopDiscipline || ''),
           shopOpenNow: !!state.shopOpenNow,
           shopWhen: String(state.shopWhen || 'any'),
+          placeService: state.placeService === 'service' ? 'service' : '',
           when: String(state.when || 'any'),
           whenDay: String(state.whenDay || ''),
           scrollY: state.scrollY || 0,
@@ -2103,6 +2155,8 @@
     facetCount: facetCount,
     catalogScope: catalogScope,
     catalogModesView: catalogModesView,
+    sectionHint: sectionHint,
+    placeServiceChipView: placeServiceChipView,
     placeMenuNeeded: placeMenuNeeded,
     placeTabsView: placeTabsView,
     placeMenuView: placeMenuView,
@@ -2164,6 +2218,7 @@
     serviceChipLabel: serviceChipLabel,
     cityCountryLabel: cityCountryLabel,
     coerceIntent: coerceIntent,
+    arenaListLens: arenaListLens,
     catalogHref: catalogHref,
     iceCoachHref: iceCoachHref,
     intentFromSearch: intentFromSearch,

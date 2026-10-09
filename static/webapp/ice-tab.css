@@ -58,6 +58,28 @@ body.ar-pilot--ice .client-app-header {
 .ice-intent-row .ice-seg {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  height: auto;
+  overflow: visible;
+}
+
+.ice-intent-row .ice-seg button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.ice-section-hint {
+  margin: -4px 2px 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--glide-hint);
+}
+
+.ice-section-hint[hidden] {
+  display: none;
 }
 
 .ice-seg {
@@ -626,6 +648,15 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   font-weight: var(--app-weight-semibold);
   color: var(--glide-hint);
   cursor: pointer;
+}
+
+.ice-chips--place-svc {
+  padding-top: 2px;
+}
+
+.ice-chips--place-svc .ice-chip__n {
+  font-weight: var(--app-weight-regular, 400);
+  opacity: 0.75;
 }
 
 .ice-chips--svc .ice-chip {
@@ -1457,7 +1488,8 @@ body.ice-view-map .ice-sec--hero .ice-shop-filters__map-bar {
 /* Над картой плавают только поиск (с городом внутри) и окно времени. */
 body.ice-view-map .ice-sec--hero .ice-intent-row,
 body.ice-view-map .ice-sec--hero #iceServiceChips,
-body.ice-view-map .ice-sec--hero #icePlaceTabs {
+body.ice-view-map .ice-sec--hero #icePlaceTabs,
+body.ice-view-map .ice-sec--hero #icePlaceService {
   display: none;
 }
 

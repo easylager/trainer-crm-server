@@ -44,6 +44,13 @@
   "home.cities_empty": "Пока нет опубликованных городов.",
   "home.sessions_empty": "Ближайших сеансов пока нет — загляните в расписание по городу.",
   "chip.ice": "Лёд",
-  "chip.hockey": "Хоккей (ОХМ)",
-  "chip.first_time": "Первый раз"
+  "chip.hockey": "Хоккей",
+  "chip.first_time": "Первый раз",
+  "route.skate": "Покататься",
+  "route.service": "Заточка",
+  "route.shops": "Магазины",
+  "route.trainers": "Тренеры",
+  "route.skate.hint": "каток, зал или трасса",
+  "route.hockey.hint": "открытая тренировка, ОХМ",
+  "route.service.hint": "заточка и прокат"
 }

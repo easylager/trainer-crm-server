@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, Mapping
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -462,6 +463,7 @@ async def selection_page(
     t: str | None = Query(None, description="Тип места: ice|shop|gym|…"),
     w: str | None = Query(None, description="Окно: today_evening|today|tomorrow|weekend"),
     kind: str | None = Query(None, description="Вид сеанса: ohm — Хоккей (ОХМ)"),
+    svc: str | None = Query(None, description="Услуга: sharpening|rental|service — заточка и прокат"),
     page: int | None = Query(None, ge=1, description="Страница списка мест"),
     src: str | None = Query(None, description="канал шаринга: tg|vb|wa|vk|copy|story|sys|img"),
     session: AsyncSession = Depends(get_session),
@@ -471,6 +473,7 @@ async def selection_page(
     from src.application.selection_page import (
         clean_kind,
         clean_page,
+        clean_svc,
         clean_venue,
         clean_when,
         compose_selection_share,
@@ -486,14 +489,17 @@ async def selection_page(
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
         return _not_found(_catalog_home(base))
-    venue, when, kind_value = clean_venue(t), clean_when(w), clean_kind(kind)
+    venue, when, kind_value, svc_value = clean_venue(t), clean_when(w), clean_kind(kind), clean_svc(svc)
     share_src = clean_share_src(src)
     city_name = str(city["name"])
-    path = selection_path(city_name=city_name, venue=venue, when=when, kind=kind_value)
+    # TASK-224: /c/{город} без параметров — маршрутизатор потребностей, не список.
+    if t is None and w is None and kind is None and svc is None and page is None:
+        return await _city_hub(session, request, city=city, city_ref=city_ref, base=base, share_src=share_src)
+    path = selection_path(city_name=city_name, venue=venue, when=when, kind=kind_value, svc=svc_value)
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
     view = await load_selection_view(
-        session, city=city, venue=venue, when=when, page=clean_page(page), kind=kind_value
+        session, city=city, venue=venue, when=when, page=clean_page(page), kind=kind_value, svc=svc_value
     )
     # Любой ?t= / ?w= канонизируется на базовую подборку города. ?kind=ohm — свой канон.
     canonical_path = selection_path(
@@ -527,6 +533,59 @@ async def selection_page(
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))
+    return response
+
+
+async def _city_hub(
+    session: AsyncSession,
+    request: Request,
+    *,
+    city: Mapping[str, Any],
+    city_ref: str,
+    base: str,
+    share_src: str | None,
+):
+    """Маршрутизатор города (TASK-224): плитки-потребности, ближайшее на льду, все места."""
+    from src.application.city_hub_page import (
+        city_hub_image_version,
+        compose_city_hub_share,
+        load_city_hub_view,
+        render_city_hub_page,
+    )
+    from src.application.selection_page import selection_image_path, selection_start_param
+
+    city_name = str(city["name"])
+    slug = city_slug(city_name)
+    if city_ref != slug:
+        return RedirectResponse(url=f"/c/{slug}", status_code=301)
+    view = await load_city_hub_view(session, city=city)
+    page_url = f"{base}/c/{slug}"
+    og_image = base + selection_image_path(
+        city_name=city_name, venue=None, when=None, version=city_hub_image_version(view)
+    )
+    html = render_city_hub_page(
+        view,
+        canonical_url=page_url,
+        og_image_url=og_image,
+        cta_url=public_telegram_cta_url(
+            base,
+            start_param=selection_start_param(city_id=int(city["id"]), venue=None, when=None),
+            surface="selection_page",
+            city_id=int(city["id"]),
+        ),
+        share=compose_city_hub_share(view, page_url=page_url),
+        story_image_url=og_image.replace("/og.png", "/story.png"),
+        base_url=base,
+    )
+    await record_public_page_view(
+        session,
+        request,
+        surface="selection_page",
+        city_id=int(city["id"]),
+        extra_payload={"src": share_src},
+    )
+    response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    apply_glide_city_cookie(response, slug=slug)
     return response
 
 

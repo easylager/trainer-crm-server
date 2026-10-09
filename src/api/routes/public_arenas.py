@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.public_list_cache import set_public_json_list_cache
 from src.api.routes.public import _enrich_trainer_photo_urls
+from src.application.selection_page import SERVICE_AMENITY_KEYS, clean_svc
 from src.application.arena_public_use_cases import (
     DEFAULT_LIST_LIMIT,
     MAX_LIST_LIMIT,
@@ -129,6 +130,10 @@ async def get_public_ice_arenas(
         None,
         description="Конкретный календарный день YYYY-MM-DD (Минск); приоритет над when, кроме совпадения с «завтра».",
     ),
+    svc: str | None = Query(
+        None,
+        description="Услуга места: sharpening | rental | service (заточка и прокат).",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
@@ -138,6 +143,7 @@ async def get_public_ice_arenas(
     клиент не рисовал чип, за которым пусто.
     """
     set_public_json_list_cache(response)
+    svc_value = clean_svc(svc)
     try:
         return await list_public_ice_arenas(
             session,
@@ -150,6 +156,7 @@ async def get_public_ice_arenas(
             cursor=cursor,
             when=when,
             day=day,
+            service_keys=SERVICE_AMENITY_KEYS[svc_value] if svc_value else None,
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc

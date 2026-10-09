@@ -30,6 +30,9 @@
     shopDiscipline: '',
     shopOpenNow: false,
     shopWhen: 'any',
+    /* «Заточка» — раздел сегмента, не чип. Пусто — раздел скрыт. */
+    placeService: '',
+    serviceCount: 0,
     shopUiPicker: false,
     shopMapFiltersOpen: false,
     /* TASK-146 (Q-006): окно времени. any — без фильтра (первое впечатление: больше слотов). */
@@ -258,6 +261,7 @@
         shopDiscipline: state.shopDiscipline,
         shopOpenNow: state.shopOpenNow,
         shopWhen: state.shopWhen,
+        placeService: state.placeService,
         when: state.when,
         whenDay: state.whenDay,
         scrollY: extra.scrollY != null ? Number(extra.scrollY) || 0 : readScrollY(),
@@ -311,7 +315,7 @@
     var input = $('iceSearchInput');
     if (!input) return;
     var scope = M.catalogScope(state.intent, state.venueTypes);
-    input.placeholder = M.catalogSearchPlaceholder(scope);
+    input.placeholder = M.catalogSearchPlaceholder(scope, state.placeService);
   }
 
   function cityCountsForModes() {
@@ -598,6 +602,8 @@
       trainerCount: counts.trainerCount,
       placeCountHint: counts.placeCountHint,
       shopCount: counts.shopCount,
+      serviceCount: state.serviceCount,
+      placeService: state.placeService,
     });
     var modeSeg = $('iceModeSeg');
     if (modeSeg) {
@@ -624,10 +630,18 @@
     }
 
     var scope = M.catalogScope(state.intent, state.venueTypes);
+    var inService = state.placeService === 'service' && scope === 'places';
     renderServiceChips();
 
+    var hintEl = $('iceSectionHint');
+    if (hintEl) {
+      var hint = M.sectionHint(scope, state.placeService);
+      hintEl.hidden = !hint;
+      hintEl.textContent = hint || '';
+    }
+
     var tabs = $('icePlaceTabs');
-    var tabItems = scope === 'places' ? M.placeTabsView(state.venueFacets, state.venueTypes) : [];
+    var tabItems = scope === 'places' && !inService ? M.placeTabsView(state.venueFacets, state.venueTypes) : [];
     if (tabs) {
       if (tabItems.length) {
         tabs.hidden = false;
@@ -649,6 +663,12 @@
         tabs.hidden = true;
         tabs.innerHTML = '';
       }
+    }
+
+    var placeSvc = $('icePlaceService');
+    if (placeSvc) {
+      placeSvc.hidden = true;
+      placeSvc.innerHTML = '';
     }
 
     var toolsHost = $('iceCatalogTools');
@@ -1529,6 +1549,7 @@
     }
     state.cursor = data && data.next_cursor;
     state.venueFacets = (data && data.venue_type_facets) || [];
+    if (data && data.service_count != null) state.serviceCount = Number(data.service_count) || 0;
     state.window = (data && data.window) || null;
     renderCatalogHeader();
   }
@@ -1777,7 +1798,8 @@
         state.urlWhenHydrated = true;
       }
     }
-    var gen = beginListFetch('skate');
+    var lens = M.arenaListLens(state.intent);
+    var gen = beginListFetch(lens);
     var timeQ = whenQueryForApi();
     var query = {
       cityId: state.cityId,
@@ -1788,10 +1810,12 @@
       // Знаем, где человек, — ближние места выше (сервер считает distance_km).
       near: state.near || '',
     };
-    state.listQuery = query;
     /* Магазины фильтруются на клиенте (услуга, «Открыто сейчас») — фильтру нужен
        весь набор города, иначе подпись и пустое состояние врут про хвост за 50. */
-    var shopScope = M.catalogScope(state.intent, state.venueTypes) === 'shop';
+    var scopeNow = M.catalogScope(state.intent, state.venueTypes);
+    var shopScope = scopeNow === 'shop';
+    if (scopeNow === 'places' && state.placeService === 'service') query.svc = 'service';
+    state.listQuery = query;
     var url = M.buildListUrl(
       Object.assign({}, query, { limit: shopScope ? M.MAP_PAGE_LIMIT : M.LIST_PAGE_LIMIT })
     );
@@ -1810,7 +1834,7 @@
         }
         state.loading = false;
         applyArenaPayload(data);
-        state.loadedIntent = 'skate';
+        state.loadedIntent = lens;
         /* TASK-182 (F1): только честное «в городе нет льда» от сервера. Не магазины
            и не пустота после клиентских фильтров. */
         if (M.noIceInCity(state.intent, state.venueTypes, data)) {
@@ -2186,6 +2210,8 @@
       state.shopDiscipline = cityCatalog.shopDiscipline;
       state.shopOpenNow = cityCatalog.shopOpenNow;
       state.shopWhen = cityCatalog.shopWhen;
+      state.placeService = cityCatalog.placeService || '';
+      state.serviceCount = 0;
       state.shopSourceItems = [];
       state.shopRestFailed = false;
       state.items = [];
@@ -2671,6 +2697,7 @@
         state.intent = M.coerceIntent(patch.intent);
         state.autoCoach = false;
         state.venueTypes = patch.venueTypes.slice();
+        state.placeService = patch.placeService || '';
         if (mode === 'ohm') {
           state.when = 'any';
           state.whenDay = '';
@@ -2682,6 +2709,19 @@
         setViewToggle();
         persist();
         loadList();
+      });
+    }
+
+    var placeSvcHost = $('icePlaceService');
+    if (placeSvcHost) {
+      placeSvcHost.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-place-service]');
+        if (!btn) return;
+        state.placeService = state.placeService === 'service' ? '' : 'service';
+        closeUiPicker();
+        renderCatalogHeader();
+        persist();
+        loadArenas();
       });
     }
 
@@ -2984,6 +3024,7 @@
         if (saved.shopDiscipline) state.shopDiscipline = String(saved.shopDiscipline);
         state.shopOpenNow = !!saved.shopOpenNow;
         if (saved.shopWhen) state.shopWhen = String(saved.shopWhen);
+        if (saved.placeService === 'service') state.placeService = 'service';
       }
       // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
       if (params.get('focus') === 'search') {

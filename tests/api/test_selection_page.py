@@ -55,8 +55,10 @@ async def test_selection_page_shows_places_sessions_and_keeps_filters(app_use_te
         img = await client.get(f"/c/{slug}/og.png")
         missing = await client.get("/c/nowhere-at-all")
     assert page.status_code == 200
-    assert "18:45" in page.text and "все места" in page.text.lower()
-    assert f'href="/p/{slug}/' in page.text, "место в подборке ведёт на свою страницу"
+    upcoming = re.search(r"<h2>Ближайшее на льду</h2>.*?</section>", page.text, re.S)
+    assert upcoming and "18:45" in upcoming.group(0)
+    assert "все места" in page.text.lower()
+    assert f'href="/p/{slug}/' in page.text, "место в хабе ведёт на свою страницу"
     # TASK-222: с сайта Telegram подборки — только url, без text= (превью из og).
     tg = re.search(r'class="share__btn share__btn--tg" href="([^"]+)"', page.text)
     assert tg and "t.me/share/url?url=" in tg.group(1) and "&amp;text=" not in tg.group(1)
@@ -67,7 +69,7 @@ async def test_selection_page_shows_places_sessions_and_keeps_filters(app_use_te
 
 @pytest.mark.asyncio
 async def test_unfiltered_selection_matches_feed_without_shops(app_use_test_db, db_session) -> None:
-    """TASK-217: «все места» — как лента. Магазин только по чипу, смесь не называется катками."""
+    """TASK-217: шара как лента (без магазина). Хаб /c/{город} показывает и каток, и зал, и магазин."""
     name = f"Лентаград {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     await _insert_arena(db_session, city_id, name="Ледовый")
@@ -89,7 +91,6 @@ async def test_unfiltered_selection_matches_feed_without_shops(app_use_test_db, 
         shops = await client.get(f"/c/{slug}", params={"t": "shop"})
     assert page.status_code == 200
     assert "Ледовый" in page.text and "Зал Силы" in page.text
-    assert shop not in page.text
     body = share.json()["share_body"]
     assert "Ледовый" in body and "Зал Силы" in body
     assert shop not in body
@@ -193,7 +194,7 @@ async def test_selection_page_ssr_phone_guard(app_use_test_db, db_session) -> No
     await db_session.commit()
 
     async with _client() as client:
-        page = await client.get(f"/c/{city_slug(city_label)}")
+        page = await client.get(f"/c/{city_slug(city_label)}", params={"t": "ice"})
     assert page.status_code == 200, page.text
     html = page.text
     _assert_invalid_phone_ssr(_selection_pick_block(html, "Каток без связи"), _PHONE_GUARD_UNKNOWN)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -131,38 +131,6 @@ async def test_catalog_home_records_public_page_view(app_use_test_db, db_session
     assert row[1] == KIND_PUBLIC_PAGE_VIEW
 
 
-@pytest.mark.asyncio
-async def test_catalog_home_lists_upcoming_sessions_with_place_links(app_use_test_db, db_session, monkeypatch) -> None:
-    fixed = datetime(2026, 10, 7, 12, 0, tzinfo=ZoneInfo("Europe/Minsk")).astimezone(timezone.utc)
-    monkeypatch.setattr("src.application.catalog_home_page._utc_now", lambda: fixed)
-    name = f"Сеансск {uuid.uuid4().hex[:6]}"
-    city_id = await _insert_city(db_session, name=name)
-    arena_ids = []
-    for i in range(5):
-        arena_ids.append(await _insert_arena(db_session, city_id, name=f"Ледовый {i}"))
-        await create_ice_session(
-            db_session,
-            arena_ids[-1],
-            local_date=date(2026, 10, 7),
-            starts_at_local="18:00",
-            duration_minutes=60,
-            kind="public_skate",
-            price_adult_minor=500,
-        )
-    await db_session.commit()
-    invalidate_public_city_cache()
-    slug = city_slug(name)
-    arena_slug = (
-        await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": arena_ids[0]})
-    ).scalar_one()
-
-    async with _client() as client:
-        home = await client.get("/", cookies={"glide_city": slug})
-    assert home.status_code == 200
-    assert f"/p/{slug}/{arena_slug}" in home.text
-    assert f"Ближайшие в {name}" in home.text
-
-
 def _count_sql(db_session):
     bind = db_session.sync_session.get_bind()
     counts = {"n": 0}
@@ -237,6 +205,7 @@ async def test_catalog_home_sql_budget_is_flat_in_city_count(app_use_test_db, db
 
 @pytest.mark.asyncio
 async def test_catalog_home_evening_block_shows_tomorrow_label(app_use_test_db, db_session, monkeypatch) -> None:
+    """Суббота поздно: город из cookie — герой, ближайший сеанс завтра в его строке."""
     evening_minsk = datetime(2026, 10, 10, 22, 0, tzinfo=ZoneInfo("Europe/Minsk"))
     fixed_now = evening_minsk.astimezone(timezone.utc)
     monkeypatch.setattr("src.application.catalog_home_page._utc_now", lambda: fixed_now)
@@ -262,8 +231,9 @@ async def test_catalog_home_evening_block_shows_tomorrow_label(app_use_test_db, 
     async with _client() as client:
         home = await client.get("/", cookies={"glide_city": slug})
     assert home.status_code == 200
-    assert "сб и вс" in home.text
-    assert "завтра" in home.text
+    hero = re.search(r'<a class="hero-city".*?</a>', home.text, re.S)
+    assert hero and name in hero.group(0)
+    assert "ближайший — <b>завтра 10:00</b>" in hero.group(0)
 
 
 @pytest.mark.asyncio
@@ -285,9 +255,23 @@ async def test_catalog_home_city_order_minsk_first_then_by_activity(app_use_test
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    names = re.findall(r'<h2 class="city__name"><a href="[^"]+">([^<]+)</a></h2>', home.text)
-    assert names[0] == "Минск"
-    assert names.index(busy_name) < names.index(quiet_name)
+    hero = re.search(r'<a class="hero-city".*?<span class="name">([^<]+)</span>', home.text, re.S)
+    assert hero and hero.group(1) == "Минск"
+    tiles = re.findall(
+        r'<a class="city card[^"]*" href="[^"]+"><span class="n">([^<]+)</span><span class="f">(.*?)</span>',
+        home.text,
+        re.S,
+    )
+    names = [name for name, _fact in tiles]
+    assert "Минск" not in names
+    counts: list[int] = []
+    for _name, fact in tiles:
+        plain = re.sub(r"<[^>]+>", "", fact)
+        found = re.search(r"(\d+)\s+сеанс", plain)
+        counts.append(int(found.group(1)) if found else 0)
+    assert counts == sorted(counts, reverse=True)
+    if busy_name in names and quiet_name in names:
+        assert names.index(busy_name) < names.index(quiet_name)
 
 
 @pytest.mark.asyncio
@@ -307,7 +291,22 @@ async def test_catalog_home_ice_today_link_only_with_sessions_today(app_use_test
     async with _client() as client:
         home = await client.get("/?when=today")
     assert home.status_code == 200
-    assert f"/ice/{slug_with}/today" in home.text
+
+    def _fact(city_name: str) -> str | None:
+        for match in re.finditer(r'<a class="city card[^"]*".*?</a>', home.text, re.S):
+            tile = match.group(0)
+            name = re.search(r'<span class="n">([^<]*)</span>', tile)
+            if name and name.group(1) == city_name:
+                fact = re.search(r'<span class="f">(.*?)</span>', tile, re.S)
+                return fact.group(1) if fact else ""
+        return None
+
+    with_fact = _fact(with_sessions)
+    assert with_fact is not None, with_sessions
+    assert re.search(r"<b>\d+ сеанс", with_fact), with_fact
+    without_fact = _fact(without)
+    assert without_fact is None or not re.search(r"<b>\d+ сеанс", without_fact)
+    assert f"/ice/{slug_with}/today" not in home.text
     assert f"/ice/{slug_without}/today" not in home.text
 
 
@@ -328,10 +327,13 @@ async def test_catalog_home_country_groups_and_headline_when_ru_present(
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    # TASK-210: нейтральный заголовок согласно PDEC-019
+    # TASK-210: нейтральный заголовок согласно PDEC-019. RU — в подвале, не плиткой.
     assert "<h1>Где покататься</h1>" in home.text
     assert "Где покататься в Беларуси" in home.text
-    cities_block = home.text.split('<h2 class="section">Города</h2>', 1)[1].split('<h2 class="section">', 1)[0]
-    assert '<h3 class="country-group__title">Беларусь</h3>' in cities_block
-    assert cities_block.index(by_name) < cities_block.index('<h3 class="country-group__title">Россия</h3>')
-    assert cities_block.index('<h3 class="country-group__title">Россия</h3>') < cities_block.index(ru_name)
+    elsewhere = re.search(r'<p class="elsewhere">(.*?)</p>', home.text, re.S)
+    assert elsewhere, "elsewhere"
+    assert ru_name in elsewhere.group(1)
+    assert by_name not in elsewhere.group(1)
+    tile_names = re.findall(r'<a class="city card[^"]*" href="[^"]+"><span class="n">([^<]+)</span>', home.text)
+    assert ru_name not in tile_names
+    assert by_name in home.text

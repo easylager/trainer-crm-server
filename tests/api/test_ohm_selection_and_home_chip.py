@@ -1,15 +1,17 @@
-"""TASK-201-B: /c/?kind=ohm и чип «Хоккей (ОХМ)» на главной."""
+"""TASK-201-B / TASK-224: /c/?kind=ohm и строка «Хоккей для любителей» на главной."""
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from src.api.app import app
-from src.application.ice_city_day import city_slug
+from src.application.ice_city_day import city_slug, invalidate_public_city_cache
 from src.application.ice_session_use_cases import create_ice_session
 from tests.api.test_public_arenas import _insert_arena, _insert_city
 
@@ -67,7 +69,8 @@ async def test_kind_ohm_lists_only_arenas_with_hockey_practice(app_use_test_db, 
         all_page = await client.get(f"/c/{slug}")
 
     assert ohm_page.status_code == 200
-    assert "Хоккей (ОХМ)" in ohm_page.text
+    assert "Минск · хоккей" in ohm_page.text or f"{name} · хоккей" in ohm_page.text
+    assert "открытая тренировка, ОХМ" in ohm_page.text
     assert "08:45" in ohm_page.text
     assert f"ОХМ-каток" in ohm_page.text or "ohm" in ohm_page.text.lower()
     assert "Только-МК" not in ohm_page.text
@@ -77,23 +80,51 @@ async def test_kind_ohm_lists_only_arenas_with_hockey_practice(app_use_test_db, 
     assert "08:45" not in all_page.text or "kind=ohm" in all_page.text
 
 
+def _city_surface(html: str, city_name: str) -> str:
+    """Карточка «ваш город» или плитка — то, где у города живёт пометка «ОХМ»."""
+    hero = re.search(r'<a class="hero-city".*?</a>', html, re.S)
+    if hero and city_name in hero.group(0):
+        return hero.group(0)
+    for match in re.finditer(r'<a class="city card[^"]*".*?</a>', html, re.S):
+        if city_name in match.group(0):
+            return match.group(0)
+    raise AssertionError(city_name)
+
+
 @pytest.mark.asyncio
-async def test_home_hockey_chip_appears_only_with_future_ohm(app_use_test_db, db_session) -> None:
+async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db, db_session) -> None:
+    """Строка «Хоккей для любителей» и «ОХМ» у города — только пока есть будущий ОХМ."""
     name = f"Чипинск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name, country="BY")
     rink = await _insert_arena(db_session, city_id, name=f"Чип-каток {uuid.uuid4().hex[:4]}")
     await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
 
     async with _client() as client:
-        before = await client.get("/")
+        before = await client.get("/", cookies={"glide_city": slug})
     assert before.status_code == 200
-    # Без ОХМ в этой стране чип может всё ещё быть, если в сид-городах есть ОХМ —
-    # проверяем появление ссылки на наш город после добавления сеанса.
-    await _ohm(db_session, rink, day=date.today() + timedelta(days=1), hhmm="11:00")
+    assert "ОХМ" not in _city_surface(before.text, name)
+    # В общей БД ОХМ уже может быть у других городов — тогда строка жива и до нашего сеанса.
+    world_was_clean = "sub--ohm" not in before.text
+
+    ohm_id = await _ohm(db_session, rink, day=date.today() + timedelta(days=1), hhmm="11:00")
     await db_session.commit()
+    invalidate_public_city_cache()
 
     async with _client() as client:
-        after = await client.get("/")
+        after = await client.get("/", cookies={"glide_city": slug})
     assert after.status_code == 200
-    assert "Хоккей (ОХМ)" in after.text
-    assert 'href="/c/minsk?kind=ohm"' in after.text or 'href="/c/' in after.text and "kind=ohm" in after.text
+    assert '<p class="sub sub--ohm">Хоккей для любителей — в' in after.text
+    assert "ОХМ" in _city_surface(after.text, name)
+
+    await db_session.execute(text("DELETE FROM ice_sessions WHERE id = :id"), {"id": ohm_id})
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        gone = await client.get("/", cookies={"glide_city": slug})
+    assert gone.status_code == 200
+    assert "ОХМ" not in _city_surface(gone.text, name)
+    if world_was_clean:
+        assert "sub--ohm" not in gone.text
