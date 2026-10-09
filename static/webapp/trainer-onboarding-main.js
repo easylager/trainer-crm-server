@@ -496,10 +496,17 @@
     return true;
   }
 
+  function serviceAllowsOnline(svc) {
+    return !!(svc && svc.allows_online);
+  }
+
   function markAllSelectedOffersOnline(isOnline) {
     var i;
     for (i = 0; i < state.selectedServices.length; i++) {
-      state.serviceOnlineById[state.selectedServices[i]] = !!isOnline;
+      var sid = state.selectedServices[i];
+      var svc = state.services.find(function (s) { return s.id === sid; });
+      if (isOnline && !serviceAllowsOnline(svc)) state.serviceOnlineById[sid] = false;
+      else state.serviceOnlineById[sid] = !!isOnline;
     }
     for (i = 0; i < state.customServiceNames.length; i++) {
       state.customServiceOnlineByName[state.customServiceNames[i]] = !!isOnline;
@@ -559,6 +566,7 @@
     var rows = [];
     state.selectedServices.forEach(function (sid) {
       var svc = state.services.find(function (s) { return s.id === sid; });
+      if (!serviceAllowsOnline(svc)) return;
       rows.push({
         key: 'id:' + sid,
         name: (svc && svc.name) || ('Услуга #' + sid),
@@ -2105,7 +2113,9 @@
         state.serviceOnlineById = {};
         (data.selected_services || []).forEach(function (item) {
           if (item && item.service_id != null) {
-            state.serviceOnlineById[Number(item.service_id)] = !!item.is_online;
+            var svc = state.services.find(function (s) { return s.id === item.service_id; });
+            var online = !!item.is_online && serviceAllowsOnline(svc);
+            state.serviceOnlineById[Number(item.service_id)] = online;
           }
         });
         state.selectedServices.forEach(function (sid) {
@@ -2280,7 +2290,10 @@
       body: JSON.stringify({
         service_ids: state.selectedServices,
         services: state.selectedServices.map(function (sid) {
-          return { service_id: sid, is_online: !!state.serviceOnlineById[sid] };
+          var svc = state.services.find(function (s) { return Number(s.id) === Number(sid); });
+          var online = !!state.serviceOnlineById[sid];
+          if (!serviceAllowsOnline(svc)) online = false;
+          return { service_id: sid, is_online: online };
         }),
         custom_services: state.customServiceNames.map(function (name) {
           return { name: name, is_online: !!state.customServiceOnlineByName[name] };

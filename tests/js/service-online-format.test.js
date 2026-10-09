@@ -21,7 +21,9 @@ describe('онлайн на уровне услуги', () => {
   it('профиль: нет галочки «Также онлайн», есть формат на услуге', () => {
     assert.doesNotMatch(profileHtml, /id="online_enabled"/);
     assert.doesNotMatch(profileHtml, /Также провожу занятия онлайн/);
-    assert.match(profileHtml, /формат «На площадке» или «Онлайн»/);
+    assert.match(profileHtml, /Формат «онлайн» — только у услуги, которую вы добавили сами/);
+    assert.match(profileJs, /function serviceAllowsOnline/);
+    assert.match(profileJs, /serviceAllowsOnline\(s\.id\) && readServiceFormatOnline/);
     assert.match(profileHtml, /svcAddCustomBtn/);
     assert.match(profileJs, /Подробнее ▾/);
     assert.match(profileJs, /\/trainer\/services\/custom/);
@@ -45,7 +47,9 @@ describe('онлайн на уровне услуги', () => {
     assert.match(onboardingHtml, /id="obServiceFormats"/);
     assert.match(onboardingJs, /function renderServiceFormats/);
     assert.match(onboardingJs, /custom_services:/);
-    assert.match(onboardingJs, /is_online: !!state\.serviceOnlineById/);
+    assert.match(onboardingJs, /function serviceAllowsOnline/);
+    assert.match(onboardingJs, /if \(!serviceAllowsOnline\(svc\)\) online = false/);
+    assert.match(onboardingHtml, /только своей услуге/);
     assert.doesNotMatch(onboardingJs, /online_enabled:\s*state\.onlineEnabled/);
     assert.match(onboardingJs, /function allSelectedOffersOnline/);
     assert.match(onboardingJs, /syncOnlineArenaWithServices/);

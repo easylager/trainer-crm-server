@@ -113,6 +113,7 @@ class CatalogRepository:
                 "scenario_tags": row[7],
                 "is_public": bool(row[8]),
                 "created_by_trainer_id": row[9],
+                "allows_online": row[9] is not None,
                 "trainer_count": row[10],
             }
             for row in r.fetchall()

@@ -73,7 +73,7 @@ async def add_trainer_custom_service(
     """Привязать к тренеру услугу с этим названием, создав её при необходимости.
 
     Возвращает ``{"service_id": int, "name": str, "created": bool, "is_public": bool,
-    "is_online": bool}``.
+    "is_online": bool, "allows_online": bool}``.
 
     Если название совпадает с уже существующей услугой (нашей общей или ранее
     созданной кем-то), новую строку не плодим — привязываем существующую. Тренер
@@ -91,7 +91,7 @@ async def add_trainer_custom_service(
         await session.execute(
             text(
                 """
-                SELECT id, name, is_public
+                SELECT id, name, is_public, created_by_trainer_id
                 FROM services
                 WHERE is_public OR created_by_trainer_id = :tid
                 ORDER BY is_public DESC, id
@@ -105,6 +105,11 @@ async def add_trainer_custom_service(
     if existing is not None:
         service_id, service_name, is_public = int(existing[0]), existing[1], bool(existing[2])
         created = False
+        # Совпадение с услугой из нашего списка — это не «своя» услуга. Онлайн у неё
+        # закрыт, даже если тренер отметил его в форме «моей услуги нет в списке».
+        allows_online = existing[3] is not None
+        if not allows_online:
+            online = False
     else:
         owned = (
             await session.execute(
@@ -139,6 +144,7 @@ async def add_trainer_custom_service(
             )
         ).scalar_one()
         service_name, is_public, created = name, False, True
+        allows_online = True
 
     from src.application.trainer_use_cases import (
         ensure_trainer_service_format_changes_allowed,
@@ -188,4 +194,5 @@ async def add_trainer_custom_service(
         "created": created,
         "is_public": is_public,
         "is_online": online,
+        "allows_online": allows_online,
     }

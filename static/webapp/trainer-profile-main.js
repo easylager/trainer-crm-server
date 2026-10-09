@@ -1996,7 +1996,7 @@
         state.servicesCatalog.forEach(function(s) {
           var cb = document.getElementById('svc_' + s.id);
           if (cb && cb.checked) {
-            var isOnlineSvc = readServiceFormatOnline(s.id);
+            var isOnlineSvc = serviceAllowsOnline(s.id) && readServiceFormatOnline(s.id);
             var tiers = [];
             SERVICE_TIER_ORDER.forEach(function(code) {
               var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
@@ -4767,6 +4767,16 @@
         return '';
       }
 
+      /** Platform catalog services are venue-only. Trainer-authored ones may be online. */
+      function serviceAllowsOnline(serviceId) {
+        var cat = state.servicesCatalog || [];
+        var i;
+        for (i = 0; i < cat.length; i++) {
+          if (Number(cat[i].id) === Number(serviceId)) return !!cat[i].allows_online;
+        }
+        return false;
+      }
+
       /** Online vs venue — XOR per trainer offering (trainer_services.is_online). */
       function getServiceIsOnline(serviceId) {
         var list = (state.trainer && state.trainer.services) ? state.trainer.services : [];
@@ -5307,7 +5317,7 @@
               primeNewServiceTiersFromPeers(id);
               ensureDefaultServiceTiers(id);
               openServiceTierBody(id);
-              syncServiceOnlineDependentUi(id, readServiceFormatOnline(id));
+              syncServiceOnlineDependentUi(id, serviceAllowsOnline(id) && readServiceFormatOnline(id));
             }
             setDirty();
           });
@@ -5315,7 +5325,11 @@
           row.appendChild(head);
           row.appendChild(toggleBtn);
 
-          var formatWrap = document.createElement('div');
+          var allowsOnline = serviceAllowsOnline(id);
+          var initialOnline = (isSelected && allowsOnline) ? getServiceIsOnline(id) : false;
+          var formatWrap = null;
+          if (allowsOnline) {
+          formatWrap = document.createElement('div');
           formatWrap.className = 'svc-format-seg';
           formatWrap.id = 'svc_format_' + id;
           formatWrap.hidden = !isSelected;
@@ -5323,7 +5337,6 @@
           formatLabel.className = 'svc-format-seg__label';
           formatLabel.textContent = 'Формат занятия';
           formatWrap.appendChild(formatLabel);
-          var initialOnline = isSelected ? getServiceIsOnline(id) : false;
           var formatLocked = isSelected && isServiceFormatLocked(id);
           [
             { online: false, label: 'На площадке' },
@@ -5351,11 +5364,12 @@
               'Формат нельзя менять: есть записи, слоты или группа с этой услугой.';
             formatWrap.appendChild(lockHint);
           }
+          }
 
           var block = document.createElement('div');
           block.className = 'service-block svc-pick__item';
           block.appendChild(row);
-          block.appendChild(formatWrap);
+          if (formatWrap) block.appendChild(formatWrap);
           block.appendChild(tierBody);
           wrap.appendChild(block);
           /* After in-document: hide venue logistics/tariffs for online offers. */
@@ -5410,13 +5424,17 @@
         var online = !!result.is_online;
         var found = false;
         state.servicesCatalog.forEach(function(s) {
-          if (Number(s.id) === sid) found = true;
+          if (Number(s.id) === sid) {
+            found = true;
+            s.allows_online = !!result.allows_online;
+          }
         });
         if (!found) {
           state.servicesCatalog.push({
             id: sid,
             name: name,
             is_public: !!result.is_public,
+            allows_online: !!result.allows_online,
           });
         }
         if (!state.trainer.services) state.trainer.services = [];

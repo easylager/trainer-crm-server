@@ -8878,7 +8878,7 @@ async def get_trainer_onboarding_quick_setup(
     r_svc = await session.execute(
         text(
             """
-            SELECT id, name, is_public
+            SELECT id, name, is_public, created_by_trainer_id
             FROM services
             WHERE is_public OR created_by_trainer_id = :tid
             ORDER BY sort_order, name
@@ -8887,7 +8887,12 @@ async def get_trainer_onboarding_quick_setup(
         {"tid": trainer_id},
     )
     services = [
-        {"id": int(row[0]), "name": row[1], "is_custom": not bool(row[2])}
+        {
+            "id": int(row[0]),
+            "name": row[1],
+            "is_custom": not bool(row[2]),
+            "allows_online": row[3] is not None,
+        }
         for row in r_svc.fetchall()
     ]
 
@@ -9258,6 +9263,14 @@ async def post_trainer_onboarding_quick_setup(
             city_id=int(body.city_id) if body.city_id is not None else None,
         )
         if online_by_service_id:
+            from src.application.trainer_use_cases import (
+                platform_service_ids,
+                sync_trainer_online_enabled_from_services,
+            )
+
+            blocked = await platform_service_ids(session, list(online_by_service_id))
+            for sid in blocked:
+                online_by_service_id[int(sid)] = False
             for sid, is_on in online_by_service_id.items():
                 await session.execute(
                     text(
@@ -9269,7 +9282,6 @@ async def post_trainer_onboarding_quick_setup(
                     ),
                     {"tid": trainer_id, "sid": int(sid), "is_online": bool(is_on)},
                 )
-            from src.application.trainer_use_cases import sync_trainer_online_enabled_from_services
 
             await sync_trainer_online_enabled_from_services(session, trainer_id)
             await session.commit()
