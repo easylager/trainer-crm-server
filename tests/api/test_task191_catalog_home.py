@@ -28,6 +28,14 @@ def _client() -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
+async def _hero_cookie(db_session) -> dict[str, str]:
+    """Пустой город в cookie: города из теста остаются плитками, а не героем «ваш город»."""
+    name = f"Герой {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    await _insert_arena(db_session, city_id, name="Пустой")
+    return {"glide_city": city_slug(name)}
+
+
 def _json_ld(html: str) -> dict:
     raw = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
     assert raw, "json-ld"
@@ -155,8 +163,12 @@ async def test_catalog_home_session_counts_match_ice_today(app_use_test_db, db_s
         city_specs.append((city_id, name))
     await db_session.commit()
     invalidate_public_city_cache()
+    cookies = await _hero_cookie(db_session)
+    await db_session.commit()
+    invalidate_public_city_cache()
 
     async with _client() as client:
+        client.cookies.set("glide_city", cookies["glide_city"])
         home = await client.get("/?when=today")
     assert home.status_code == 200
 
@@ -289,6 +301,7 @@ async def test_catalog_home_ice_today_link_only_with_sessions_today(app_use_test
     slug_without = city_slug(without)
 
     async with _client() as client:
+        client.cookies.set("glide_city", slug_without)
         home = await client.get("/?when=today")
     assert home.status_code == 200
 

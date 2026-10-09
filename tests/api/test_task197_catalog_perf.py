@@ -18,10 +18,11 @@ from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL
 from tests.api.test_public_arenas import _add_future_session, _insert_city
 from tests.api.test_public_place_page import _client, _place
 
-# Measured on origin/master (719760a7) with the same listener: a cold /p/ ran 9 statements,
-# two of them the catalog-wide _LIST_SQL. Warm city cache dropped the cities SELECT → 8.
-_PLACE_SQL_COLD = 7
-_PLACE_SQL_WARM = 6
+# Cold /p/: cities, slug, card, media, sessions, freshness for this arena,
+# the same window once more, then one catalog_consumer_events insert.
+# Warm drops only the cached city list.
+_PLACE_SQL_COLD = 8
+_PLACE_SQL_WARM = 7
 
 _CATALOG_WIDE_MARKERS = (
     "GROUP BY s.arena_id",

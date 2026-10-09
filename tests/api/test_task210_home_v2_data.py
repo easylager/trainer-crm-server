@@ -26,6 +26,14 @@ def _client() -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
+async def _hero_cookie(db_session) -> dict[str, str]:
+    """Пустой город в cookie: город из теста остаётся плиткой, а не героем «ваш город»."""
+    name = f"Герой {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    await _insert_arena(db_session, city_id, name="Пустой")
+    return {"glide_city": city_slug(name)}
+
+
 def _utc(y: int, m: int, d: int, hh: int, mm: int = 0) -> datetime:
     return datetime(y, m, d, hh, mm, tzinfo=_MINSK).astimezone(timezone.utc)
 
@@ -235,9 +243,13 @@ async def test_today_counter_matches_ice_page_without_closed_or_very_stale(app_u
     )
     await db_session.commit()
     invalidate_public_city_cache()
+    cookies = await _hero_cookie(db_session)
+    await db_session.commit()
+    invalidate_public_city_cache()
     slug = city_slug(name)
 
     async with _client() as client:
+        client.cookies.set("glide_city", cookies["glide_city"])
         home = await client.get("/?when=today")
         ice = await client.get(f"/ice/{slug}/today")
     assert home.status_code == 200
@@ -332,10 +344,12 @@ async def test_friday_default_city_row_does_not_say_today(app_use_test_db, db_se
     for day in (date(2026, 10, 10), date(2026, 10, 11)):
         for hour in range(8, 23):
             await _session(db_session, arena_id, day, f"{hour:02d}:10")
+    cookies = await _hero_cookie(db_session)
     await db_session.commit()
     invalidate_public_city_cache()
 
     async with _client() as client:
+        client.cookies.set("glide_city", cookies["glide_city"])
         resp = await client.get("/")
     assert resp.status_code == 200
     row = _city_tile(resp.text, name)

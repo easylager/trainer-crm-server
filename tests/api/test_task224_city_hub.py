@@ -53,14 +53,22 @@ def _route(html: str, name: str) -> str:
     return ""
 
 
+def _minsk_today() -> date:
+    return datetime.now(ZoneInfo("Europe/Minsk")).date()
+
+
 def _weekend_days_ahead() -> list[date]:
-    """Дни окна «Сб–Вс» списка (resolve_window), начиная с завтра: сегодняшние сеансы в тест не кладём."""
+    """Дни окна «Сб–Вс» списка (resolve_window), начиная с завтра по Минску.
+
+    Сегодняшние сеансы в тест не кладём. ``date.today()`` на раннере — UTC, и в
+    субботу по Минску субботний сеанс уже попадает в «Сегодня».
+    """
     tw = resolve_window("weekend", datetime.now(timezone.utc))
     assert tw is not None
     tz = ZoneInfo("Europe/Minsk")
     start = tw.starts_at.astimezone(tz).date()
     end = tw.ends_at.astimezone(tz).date()  # понедельник, не включительно
-    tomorrow = date.today() + timedelta(days=1)
+    tomorrow = _minsk_today() + timedelta(days=1)
     return [start + timedelta(days=i) for i in range((end - start).days) if start + timedelta(days=i) >= tomorrow]
 
 
@@ -113,7 +121,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     city_id = await _insert_city(db_session, name=name)
     rink = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:4]}")
     ohm_rink = await _insert_arena(db_session, city_id, name=f"Арена ОХМ {uuid.uuid4().hex[:4]}")
-    tomorrow = date.today() + timedelta(days=1)
+    tomorrow = _minsk_today() + timedelta(days=1)
     weekend = _weekend_days_ahead()
     await _session(db_session, rink, day=tomorrow, hhmm="12:00")
     skate_weekend = 1 if tomorrow in weekend else 0

@@ -37,7 +37,7 @@ async def test_city_page_puts_place_with_sessions_on_page_one(app_use_test_db, d
     slug = city_slug(name)
 
     async with _client() as client:
-        p1 = await client.get(f"/c/{slug}")
+        p1 = await client.get(f"/c/{slug}", params={"page": 1})
         p2 = await client.get(f"/c/{slug}", params={"page": 2})
 
     assert p1.status_code == 200
@@ -65,7 +65,7 @@ async def test_city_page_orders_places_by_nearest_session(app_use_test_db, db_se
     slug = city_slug(name)
 
     async with _client() as client:
-        page = await client.get(f"/c/{slug}")
+        page = await client.get(f"/c/{slug}", params={"page": 1})
 
     assert page.status_code == 200
     assert _names(page.text) == [early, late, no_sessions]

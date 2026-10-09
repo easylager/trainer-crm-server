@@ -220,7 +220,9 @@ async def test_invalid_phone_not_shown_in_ssr_and_api(app_use_test_db, db_sessio
     assert r_ssr_invalid.status_code == 200
     html_invalid = r_ssr_invalid.text
     assert "tel:" not in html_invalid
-    assert "unknown" not in html_invalid.lower()
+    # Сырой телефон «unknown (только email/…)» не должен попасть в HTML.
+    # Класс .pick__open--unknown — состояние часов, не этот телефон.
+    assert "только email/соцсети" not in html_invalid.lower()
 
     r_ssr_short = await client.get(card_short["public_path"] or f"/p/{short_id}")
     assert r_ssr_short.status_code == 200

@@ -114,10 +114,10 @@ async def test_shop_selection_and_share_api(app_use_test_db, db_session) -> None
         preview = await client.get(
             "/api/public/ice/selection/share", params={"city_id": city_id, "when": "auto", "record": "false"}
         )
-    assert "магазины и заточка" in page.text
+    assert f"{name} · магазины" in page.text
     body = share.json()
     assert body["share_url"].endswith(f"/c/{city_slug(name)}?t=shop")
-    assert body["share_body"].startswith(f"{name} · магазины и заточка")
+    assert body["share_body"].startswith(f"{name} · магазины")
     assert body["og_image_url"].split("?")[0].endswith("/og.png")
     assert body["story_image_url"].split("?")[0].endswith("/story.png")
     # TASK-222: ?v= — хэш данных превью, иначе Telegram держит старую картинку по URL.
