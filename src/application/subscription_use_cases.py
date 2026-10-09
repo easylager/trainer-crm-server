@@ -45,6 +45,9 @@ _TRIAL_MODULES_JSON = json.dumps({"online": True, "analytics": True, "groups": T
 _DEFAULT_PAID_MODULES_JSON = json.dumps(
     {"online": False, "analytics": False, "groups": False}, ensure_ascii=False
 )
+# Pending trial clock: entitlements need started_at <= now < expires_at, but countdown
+# must not burn until first real completed — use a far sentinel expires_at.
+TRIAL_CLOCK_PENDING_EXPIRES_AT = datetime(2099, 1, 1, tzinfo=timezone.utc)
 
 
 async def trainer_has_active_subscription(session: AsyncSession, trainer_id: int) -> bool:
@@ -70,7 +73,8 @@ async def get_active_subscription(session: AsyncSession, trainer_id: int) -> dic
     r = await session.execute(
         text("""
             SELECT ts.id, ts.trainer_id, ts.plan_id, ts.started_at, ts.expires_at, ts.status,
-                   sp.name AS plan_name, sp.price_cents, sp.period_days, sp.is_trial
+                   sp.name AS plan_name, sp.price_cents, sp.period_days, sp.is_trial,
+                   ts.trial_clock_started_at
             FROM trainer_subscriptions ts
             JOIN subscription_plans sp ON sp.id = ts.plan_id
             WHERE ts.trainer_id = :tid
@@ -84,17 +88,25 @@ async def get_active_subscription(session: AsyncSession, trainer_id: int) -> dic
     row = r.fetchone()
     if not row:
         return None
+    is_trial = bool(row[9])
+    clock_started = (not is_trial) or (row[10] is not None)
+    expires_raw = row[4]
     return {
         "id": row[0],
         "trainer_id": row[1],
         "plan_id": row[2],
         "started_at": row[3].isoformat() if hasattr(row[3], "isoformat") else str(row[3]),
-        "expires_at": row[4].isoformat() if hasattr(row[4], "isoformat") else str(row[4]),
+        "expires_at": (
+            expires_raw.isoformat()
+            if clock_started and expires_raw is not None and hasattr(expires_raw, "isoformat")
+            else (str(expires_raw) if clock_started and expires_raw is not None else None)
+        ),
         "status": row[5],
         "plan_name": row[6],
         "price_cents": row[7],
         "period_days": row[8],
-        "is_trial": row[9],
+        "is_trial": is_trial,
+        "trial_clock_started": clock_started,
     }
 
 
@@ -144,31 +156,26 @@ async def trainer_has_used_trial(session: AsyncSession, trainer_id: int) -> bool
 
 
 async def create_trial_subscription(session: AsyncSession, trainer_id: int) -> dict | None:
-    """Create a trial subscription for trainer if they have not used trial yet. Returns subscription info or None."""
+    """Create a pending welcome trial (full modules, clock not started) if trainer has not used trial yet.
+
+    Countdown starts on first real completed booking via ``maybe_start_trial_clock_on_completed_booking``.
+    """
     if await trainer_has_used_trial(session, trainer_id):
         return None
     plan_id = await get_trial_plan_id(session)
     if not plan_id:
         return None
-    r = await session.execute(
-        text("""
-            SELECT period_days FROM subscription_plans WHERE id = :pid
-        """),
-        {"pid": plan_id},
-    )
-    row = r.fetchone()
-    if not row:
-        return None
-    period_days = await resolve_trial_period_days(session, int(row[0]))
     now = datetime.now(timezone.utc)
     started_at = now
-    expires_at = now + timedelta(days=period_days)
+    expires_at = TRIAL_CLOCK_PENDING_EXPIRES_AT
     r = await session.execute(
         text("""
             INSERT INTO trainer_subscriptions
-                (trainer_id, plan_id, tier, modules, started_at, expires_at, status)
-            VALUES (:tid, :pid, :tier, CAST(:mods AS jsonb), :started_at, :expires_at, :status)
-            RETURNING id, started_at, expires_at
+                (trainer_id, plan_id, tier, modules, started_at, expires_at, status,
+                 trial_clock_started_at)
+            VALUES (:tid, :pid, :tier, CAST(:mods AS jsonb), :started_at, :expires_at, :status,
+                    NULL)
+            RETURNING id, started_at, expires_at, trial_clock_started_at
         """),
         {
             "tid": trainer_id,
@@ -189,12 +196,76 @@ async def create_trial_subscription(session: AsyncSession, trainer_id: int) -> d
         "started_at": row[1].isoformat() if hasattr(row[1], "isoformat") else str(row[1]),
         "expires_at": row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2]),
         "status": SUBSCRIPTION_STATUS_TRIAL,
+        "trial_clock_started": False,
     }
+
+
+async def maybe_start_trial_clock_on_completed_booking(
+    session: AsyncSession,
+    booking_id: int,
+) -> bool:
+    """
+    Start the N-day trial countdown after the first real (non-sandbox) completed booking.
+
+    Idempotent: no-op if booking is not completed / is sandbox, or clock already started,
+    or no pending trial row. Does not commit — caller owns the transaction.
+    Returns True when this call started the clock.
+    """
+    r = await session.execute(
+        text("""
+            SELECT b.trainer_id, b.status, COALESCE(b.is_sandbox, false)
+            FROM bookings b
+            WHERE b.id = :bid
+        """),
+        {"bid": booking_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return False
+    trainer_id, status, is_sandbox = int(row[0]), (row[1] or "").strip(), bool(row[2])
+    if status != "completed" or is_sandbox:
+        return False
+
+    plan_id = await get_trial_plan_id(session)
+    if not plan_id:
+        return False
+    r = await session.execute(
+        text("SELECT period_days FROM subscription_plans WHERE id = :pid"),
+        {"pid": plan_id},
+    )
+    plan_row = r.fetchone()
+    if not plan_row:
+        return False
+    period_days = await resolve_trial_period_days(session, int(plan_row[0]))
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=period_days)
+    r = await session.execute(
+        text("""
+            UPDATE trainer_subscriptions AS ts
+            SET trial_clock_started_at = :now,
+                started_at = :now,
+                expires_at = :expires_at
+            FROM subscription_plans sp
+            WHERE ts.trainer_id = :tid
+              AND ts.plan_id = sp.id
+              AND sp.is_trial = true
+              AND ts.status = :strial
+              AND ts.trial_clock_started_at IS NULL
+            RETURNING ts.id
+        """),
+        {
+            "tid": trainer_id,
+            "now": now,
+            "expires_at": expires_at,
+            "strial": SUBSCRIPTION_STATUS_TRIAL,
+        },
+    )
+    return r.fetchone() is not None
 
 
 async def ensure_trainer_welcome_trial(session: AsyncSession, trainer_id: int) -> None:
     """
-    After first Telegram link: create trial with full modules if missing.
+    After first Telegram link: create pending trial with full modules if missing (clock not started).
 
     If trial already exists, normalize row(s): canonical CRM tier + all modules (online, analytics, groups).
     Skips creating a trial when an active paid subscription already exists (e.g. prepaid welcome grant).

@@ -1473,6 +1473,10 @@ class TrainerSubscription(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # trial, active, past_due, cancelled
     payment_external_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # NULL = welcome trial granted but N-day countdown not started (waits for first real completed).
+    trial_clock_started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     trial_roi_recap_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

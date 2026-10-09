@@ -245,12 +245,40 @@
     <footer>__CITY_LINK__</footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/shared/list-scroll-restore.js?v=1"></script>
   <script>
     /*
-      Единственный JS страницы — «Скопировать» и системное меню «Поделиться».
-      Без JS все остальные кнопки — обычные ссылки и работают и так.
+      JS страницы: «Скопировать», «Поделиться» и восстановление скролла списка.
+      Cache-Control: no-store (учёт просмотров) отключает bfcache — без sessionStorage
+      возврат /c/ → /p/ → назад всегда открывал список сверху. Без JS ссылки работают.
     */
     (function () {
+      var Api = window.GlideListScrollRestore;
+      if (Api) {
+        var path = location.pathname;
+        var search = location.search;
+        function saveListScroll() {
+          Api.save(sessionStorage, path, search, window.scrollY || window.pageYOffset || 0);
+        }
+        function restoreListScroll() {
+          var y = Api.consume(sessionStorage, path, search);
+          if (!y) return;
+          var go = function () { window.scrollTo(0, y); };
+          go();
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(function () { requestAnimationFrame(go); });
+          } else {
+            setTimeout(go, 0);
+          }
+        }
+        window.addEventListener('pagehide', saveListScroll);
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'hidden') saveListScroll();
+        });
+        if (document.readyState === 'complete') restoreListScroll();
+        else window.addEventListener('load', restoreListScroll);
+      }
+
       var toast = document.getElementById('toast');
       function say(text) {
         toast.textContent = text;

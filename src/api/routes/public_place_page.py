@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +40,7 @@ from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scop
 router = APIRouter(tags=["public-place"])
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def catalog_home_page(
     request: Request,
     when: str | None = Query(None, description="Период: today|tomorrow|weekend|day"),
@@ -48,6 +48,8 @@ async def catalog_home_page(
     session: AsyncSession = Depends(get_session),
 ):
     """Потребительская главная каталога Glide (TASK-191-A, TASK-210-A)."""
+    if request.method == "HEAD":
+        return Response(status_code=200, headers=_PAGE_CACHE)
     from src.application.catalog_home_page import (
         catalog_home_og_image_url,
         load_catalog_home_view,
@@ -190,7 +192,7 @@ async def place_by_id(arena_id: int, request: Request, session: AsyncSession = D
     return RedirectResponse(url=target + (f"?{q}" if q else ""), status_code=301)
 
 
-@router.get("/p/{city_ref}/{slug}", response_class=HTMLResponse)
+@router.api_route("/p/{city_ref}/{slug}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def place_page(
     city_ref: str,
     slug: str,
@@ -199,6 +201,8 @@ async def place_page(
     i: str | None = Query(None, description="1 — тон «Позвать с собой»"),
     session: AsyncSession = Depends(get_session),
 ):
+    if request.method == "HEAD":
+        return Response(status_code=200, headers=_PAGE_CACHE)
     base = _base()
     city, arena_id = await _resolve(session, city_ref, slug)
     if city is None or arena_id is None:
@@ -443,7 +447,7 @@ async def robots() -> Response:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/c/{city_ref}", response_class=HTMLResponse)
+@router.api_route("/c/{city_ref}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def selection_page(
     city_ref: str,
     request: Request,
@@ -452,6 +456,8 @@ async def selection_page(
     page: int | None = Query(None, ge=1, description="Страница списка мест"),
     session: AsyncSession = Depends(get_session),
 ):
+    if request.method == "HEAD":
+        return Response(status_code=200, headers=_PAGE_CACHE)
     from src.application.selection_page import (
         clean_page,
         clean_venue,

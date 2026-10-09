@@ -1854,13 +1854,17 @@
         if (trialStripEl) {
           if (status && status.is_trial && currentTier && currentTier !== 'none') {
             var tn = (status.tier_name_ru || 'Полный доступ').replace(/</g, '&lt;');
+            var clockStarted = status.trial_clock_started !== false;
             var expRaw = status.expires_at ? String(status.expires_at).slice(0, 10) : '';
             var expRu = expRaw ? expRaw.split('-').reverse().join('.') : '—';
+            var untilLabel = clockStarted
+              ? (' · до ' + expRu)
+              : ' · отсчёт начнётся после первой проведённой записи';
             // If admin has already queued a paid plan to kick in after the trial,
             // show it explicitly so trainer knows their days won't be lost.
             var nextLine = '';
             var nxt = status.next_plan;
-            if (nxt && nxt.expires_at) {
+            if (clockStarted && nxt && nxt.expires_at) {
               var nxtExpRaw = String(nxt.expires_at).slice(0, 10);
               var nxtExpRu = nxtExpRaw ? nxtExpRaw.split('-').reverse().join('.') : '—';
               var nxtLabel = (nxt.tier_name_ru || 'Подписка').replace(/</g, '&lt;');
@@ -1872,7 +1876,7 @@
             trialStripEl.innerHTML =
               '<div class="trial-strip">' +
               '<p class="trial-strip-title">Пробный период</p>' +
-              '<p class="trial-strip-body">' + tn + ' · до ' + expRu + '</p>' +
+              '<p class="trial-strip-body">' + tn + untilLabel + '</p>' +
               '<p class="trial-strip-hint">Открыты все модули: CRM, онлайн-запись, аналитика и группы. После окончания соберите свой план ниже.</p>' +
               nextLine +
               '</div>';

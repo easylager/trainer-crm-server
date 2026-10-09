@@ -39,6 +39,12 @@
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   /** Окно «Когда» между визитами в каталог (localStorage); sessionStorage — полный снимок вкладки. */
   var ICE_WHEN_PREF_KEY = 'tcb_ice_when_pref_v1';
+  /**
+   * Скролл списка после возврата с карточки арены.
+   * Отдельный ключ: общий ``ICE_STATE_KEY`` при boot перезаписывается через persist()
+   * с scrollY=0 (страница ещё сверху) и стирает позицию до onListLoaded.
+   */
+  var ICE_SCROLL_KEY = 'tcb_ice_list_scroll_v1';
   var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
   var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
 
@@ -1921,11 +1927,71 @@
           when: String(state.when || 'any'),
           whenDay: String(state.whenDay || ''),
           scrollY: state.scrollY || 0,
+          scrollAnchor: state.scrollAnchor ? String(state.scrollAnchor) : '',
           view: state.view || 'list',
         })
       );
     } catch (e) {
       /* quota */
+    }
+  }
+
+  /**
+   * Позиция списка после возврата с карточки арены.
+   * Восстанавливать нужно ПОСЛЕ отрисовки ленты: иначе scrollTo на скелетоне
+   * (короткая страница) сбрасывается в 0, когда приходят карточки.
+   * ``scrollAnchor`` — id/slug карточки: scrollIntoView надёжнее абсолютного Y
+   * в WebView Telegram, где window.scrollY иногда врёт.
+   */
+  function scrollYFromSaved(saved) {
+    if (!saved) return 0;
+    var y = Number(saved.scrollY);
+    return y > 0 && isFinite(y) ? y : 0;
+  }
+
+  function scrollAnchorFromSaved(saved) {
+    if (!saved || saved.scrollAnchor == null) return '';
+    var a = String(saved.scrollAnchor).trim();
+    return a || '';
+  }
+
+  function saveListScroll(storage, payload) {
+    if (!storage || typeof storage.setItem !== 'function') return false;
+    var y = Number(payload && payload.scrollY);
+    var anchor = payload && payload.scrollAnchor != null ? String(payload.scrollAnchor).trim() : '';
+    if (!(y > 0) && !anchor) return false;
+    try {
+      storage.setItem(
+        ICE_SCROLL_KEY,
+        JSON.stringify({
+          scrollY: y > 0 && isFinite(y) ? Math.round(y) : 0,
+          scrollAnchor: anchor,
+        })
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Читает и сразу снимает ключ — один возврат = одно восстановление. */
+  function consumeListScroll(storage) {
+    if (!storage || typeof storage.getItem !== 'function') return { scrollY: 0, scrollAnchor: '' };
+    try {
+      var raw = storage.getItem(ICE_SCROLL_KEY);
+      if (!raw) return { scrollY: 0, scrollAnchor: '' };
+      storage.removeItem(ICE_SCROLL_KEY);
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return { scrollY: 0, scrollAnchor: '' };
+      return {
+        scrollY: scrollYFromSaved(parsed),
+        scrollAnchor: scrollAnchorFromSaved(parsed),
+      };
+    } catch (e) {
+      try {
+        storage.removeItem(ICE_SCROLL_KEY);
+      } catch (e2) { /* */ }
+      return { scrollY: 0, scrollAnchor: '' };
     }
   }
 
@@ -1977,6 +2043,7 @@
   return {
     ICE_STATE_KEY: ICE_STATE_KEY,
     ICE_WHEN_PREF_KEY: ICE_WHEN_PREF_KEY,
+    ICE_SCROLL_KEY: ICE_SCROLL_KEY,
     INTENTS: INTENTS,
     buildListUrl: buildListUrl,
     buildMapListUrl: buildMapListUrl,
@@ -2087,6 +2154,10 @@
     pickFallbackCity: pickFallbackCity,
     saveIceState: saveIceState,
     loadIceState: loadIceState,
+    scrollYFromSaved: scrollYFromSaved,
+    scrollAnchorFromSaved: scrollAnchorFromSaved,
+    saveListScroll: saveListScroll,
+    consumeListScroll: consumeListScroll,
     saveWhenPreference: saveWhenPreference,
     loadWhenPreference: loadWhenPreference,
   };
