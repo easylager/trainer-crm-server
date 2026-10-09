@@ -180,7 +180,8 @@ class TestGetTrainerSubscriptionStatus:
         mods = _mods(online=True)
         ent_rows_data = [(SUBSCRIPTION_TIER_CRM, mods)]
         current_rows_data = [(
-            123, SUBSCRIPTION_TIER_CRM, mods, expires_at, "active", started_at, 1,
+            # id, tier, modules, expires_at, status, started_at, billing_pm, trial_clock_started_at
+            123, SUBSCRIPTION_TIER_CRM, mods, expires_at, "active", started_at, 1, None,
         )]
         mock_session.execute.side_effect = [
             _ent_rows(ent_rows_data),     # effective tier
@@ -193,6 +194,7 @@ class TestGetTrainerSubscriptionStatus:
 
         assert status["is_active"] is True
         assert status["is_trial"] is False
+        assert status["trial_clock_started"] is True
         # Label comes from the composed helper, not a DB lookup.
         assert status["tier_name_ru"] == "CRM + Онлайн-запись"
         assert status["tier"] == SUBSCRIPTION_TIER_CRM
@@ -221,7 +223,16 @@ class TestGetTrainerSubscriptionStatus:
             (SUBSCRIPTION_TIER_CRM, full_mods),  # trial row covers now
         ]
         current_rows_data = [
-            (111, SUBSCRIPTION_TIER_CRM, full_mods, trial_expires, "trial", trial_started, None),
+            (
+                111,
+                SUBSCRIPTION_TIER_CRM,
+                full_mods,
+                trial_expires,
+                "trial",
+                trial_started,
+                None,
+                trial_started,  # clock already running
+            ),
         ]
         next_row_data = (
             222, SUBSCRIPTION_TIER_CRM, crm_only, paid_expires, "active", paid_started, 12,
@@ -240,6 +251,7 @@ class TestGetTrainerSubscriptionStatus:
 
         # Currently active window = trial with full access.
         assert status["is_trial"] is True
+        assert status["trial_clock_started"] is True
         assert status["tier_name_ru"] == "Полный доступ"
         assert status["unlocked_features"] == ["crm", "online", "analytics", "groups"]
         # Next plan surfaced for UI so trainer/admin see what kicks in after trial.
