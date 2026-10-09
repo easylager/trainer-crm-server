@@ -2245,6 +2245,83 @@ a.hub-ice-card {
   margin-top: 13px;
 }
 
+/* «Написать» + чип 🔔 в одном ряду (окон нет у основного тренера). */
+.me__do--pair {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.me__do--notify .me__notify {
+  width: 100%;
+  justify-content: center;
+}
+
+.me__notify {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: var(--app-radius-md);
+  border: 1.5px solid color-mix(in srgb, var(--glide-hint) 22%, transparent);
+  background: var(--glide-surface, var(--tg-theme-secondary-bg-color));
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.me__notify:active {
+  transform: scale(0.96);
+}
+
+.me__notify.is-active {
+  color: var(--glide-brand);
+  border-color: color-mix(in srgb, var(--glide-brand) 35%, transparent);
+  background: color-mix(in srgb, var(--glide-brand) 10%, var(--glide-surface, var(--tg-theme-secondary-bg-color)));
+}
+
+@keyframes me-notify-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--glide-brand) 0%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--glide-brand) 20%, transparent); }
+}
+
+.me__notify.wants-attention {
+  animation: me-notify-pulse 2.4s ease-in-out 0.6s 2;
+}
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) translateY(12px);
+  max-width: min(92vw, 360px);
+  padding: 10px 14px;
+  border-radius: var(--app-radius-md);
+  background: color-mix(in srgb, var(--glide-text) 92%, transparent);
+  color: var(--glide-surface, var(--tg-theme-bg-color));
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 80;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.app-toast.app-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 /* Полоса выбора времени: она и есть точка входа во ВСЕ окна тренера. */
 .me__pick {
   margin-top: 11px;

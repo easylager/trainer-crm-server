@@ -325,7 +325,7 @@ describe('S3: «тренер есть» — одна рамка на «окна 
   });
 
   it('полоса окон решает судьбу льда и нижнего FAB', () => {
-    const paint = fnBody('paintMeCardForTrainer');
+    const paint = fnBody('paintMeCardForTrainerSync');
     assert.match(paint, /hubOpenWindowShown = !!view\.pick/);
     assert.match(paint, /hubPersonalSlot = !!view\.pick/);
     assert.match(paint, /syncClientHubBookFab\(\)/);
@@ -334,7 +334,7 @@ describe('S3: «тренер есть» — одна рамка на «окна 
   });
 
   it('имени нет — карточки нет, но хаб остаётся живым', () => {
-    const paint = fnBody('paintMeCardForTrainer');
+    const paint = fnBody('paintMeCardForTrainerSync');
     assert.match(paint, /if \(!view\)/);
     assert.match(paint, /renderHubSecondaryFill\(hubMeta, \{/);
   });
@@ -433,6 +433,15 @@ describe('S3: переходы окон', () => {
     assert.match(wire, /action === 'all-trainers'/);
     const from = wire.indexOf("action === 'all-trainers'");
     assert.match(wire.slice(from, from + 220), /navigateTo\('catalog'\)/);
+  });
+
+  it('чип «Напомнить» (окон нет) зовёт тот же notify-slots API, что каталог', () => {
+    assert.match(wire, /action === 'notify-slots'/);
+    assert.match(wire, /toggleHubNotifySlots\(tid\)/);
+    const toggle = fnBody('toggleHubNotifySlots');
+    assert.match(toggle, /trainer-edges\/notify-slots/);
+    assert.match(fnBody('buildMeCardTrainerInput'), /notify_when_slots: !!notifyWhenSlots/);
+    assert.match(fnBody('paintMeCardForTrainer'), /resolveHubNotifyWhenSlots/);
   });
 
   it('id тренера для чипов берётся из контекста карточки', () => {
