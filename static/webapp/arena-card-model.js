@@ -338,11 +338,8 @@
     return 'Массовое катание';
   }
 
-  function scheduleBasisHint(session) {
-    var b = String((session && session.schedule_basis) || 'live');
-    if (b === 'projected') return 'Обычная сетка — уточните по телефону';
-    if (b === 'photo') return 'Расписание с фото — уточните по телефону';
-    if (b === 'manual') return 'Внесено вручную — уточните по телефону';
+  function scheduleBasisHint(/* session */) {
+    // Клиенту не важно, откуда слот (сайт / сетка / фото / вручную).
     return '';
   }
 

@@ -34,14 +34,20 @@ from src.application.place_links import (
 )
 from src.application.place_page import load_place_view, render_place_page, share_payload
 from src.shared.config import Settings
+from src.shared.glide_city_cookie import apply_glide_city_cookie
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
 router = APIRouter(tags=["public-place"])
 
 
 @router.get("/", response_class=HTMLResponse)
-async def catalog_home_page(request: Request, session: AsyncSession = Depends(get_session)):
-    """Потребительская главная каталога Glide (TASK-191-A)."""
+async def catalog_home_page(
+    request: Request,
+    when: str | None = Query(None, description="Период: today|tomorrow|weekend|day"),
+    d: str | None = Query(None, description="Дата для when=day: YYYY-MM-DD"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Потребительская главная каталога Glide (TASK-191-A, TASK-210-A)."""
     from src.application.catalog_home_page import (
         catalog_home_og_image_url,
         load_catalog_home_view,
@@ -50,8 +56,22 @@ async def catalog_home_page(request: Request, session: AsyncSession = Depends(ge
     from src.application.place_links import CATALOG_START_ANY, public_telegram_cta_url
 
     base = _base()
-    view = await load_catalog_home_view(session)
+
+    # TASK-210: читаем cookie glide_city
+    user_city_slug = request.cookies.get("glide_city", "").strip().lower() or None
+
+    # TASK-210: варианты с ?when= — noindex, follow, canonical на /
+    robots = "index, follow"
     canonical = f"{base}/" if base else "/"
+    if when and when.strip().lower() in ("today", "tomorrow", "weekend", "day"):
+        robots = "noindex, follow"
+
+    view = await load_catalog_home_view(
+        session,
+        when=when,
+        day_date=d,
+        user_city_slug=user_city_slug,
+    )
     html = render_catalog_home_page(
         view,
         canonical_url=canonical,
@@ -62,7 +82,9 @@ async def catalog_home_page(request: Request, session: AsyncSession = Depends(ge
             surface="catalog_home",
         ),
         trainers_url=f"{base}/trainers" if base else "/trainers",
+        robots=robots,
     )
+
     await record_public_page_view(
         session,
         request,
@@ -70,6 +92,7 @@ async def catalog_home_page(request: Request, session: AsyncSession = Depends(ge
         city_id=None,
     )
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+
 
 # TASK-189 считает просмотр на каждый заход на /p/ и /c/. Публичный кэш обошёл бы
 # origin и занизил счётчик. Картинки по-прежнему кэшируются: просмотр они не пишут.
@@ -238,7 +261,9 @@ async def place_page(
         city_id=int(city["id"]),
         arena_id=int(card["id"]),
     )
-    return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    apply_glide_city_cookie(response, slug=city_slug(city_name))
+    return response
 
 
 async def _image(
@@ -435,7 +460,6 @@ async def selection_page(
         load_selection_view,
         render_selection_page,
         selection_image_path,
-        selection_image_version,
         selection_path,
         selection_start_param,
     )
@@ -449,19 +473,13 @@ async def selection_page(
     path = selection_path(city_name=city_name, venue=venue, when=when)
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
-    view = await load_selection_view(
-        session, city=city, venue=venue, when=when, page=clean_page(page)
-    )
+    view = await load_selection_view(session, city=city, venue=venue, when=when, page=clean_page(page))
     # Любой ?t= / ?w= канонизируется на базовую подборку города, а не на самого себя.
     canonical_path = selection_path(city_name=city_name, venue=None, when=None)
-    # ?v= — хэш данных превью: без него Telegram держит старую og-картинку по URL.
-    og_image = base + selection_image_path(
-        city_name=city_name, venue=venue, when=when, version=selection_image_version(view)
-    )
     html = render_selection_page(
         view,
         canonical_url=base + canonical_path,
-        og_image_url=og_image,
+        og_image_url=base + selection_image_path(city_name=city_name, venue=venue, when=when),
         cta_url=public_telegram_cta_url(
             base,
             start_param=selection_start_param(city_id=int(city["id"]), venue=venue, when=when),
@@ -470,7 +488,8 @@ async def selection_page(
         ),
         share=compose_selection_share(view, page_url=base + path),
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
-        story_image_url=og_image.replace("/og.png", "/story.png"),
+        story_image_url=base
+        + selection_image_path(city_name=city_name, venue=venue, when=when).replace("/og.png", "/story.png"),
         base_url=base,
     )
     await record_public_page_view(
@@ -479,7 +498,9 @@ async def selection_page(
         surface="selection_page",
         city_id=int(city["id"]),
     )
-    return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    apply_glide_city_cookie(response, slug=city_slug(city_name))
+    return response
 
 
 async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, w: str | None, *, story: bool):
