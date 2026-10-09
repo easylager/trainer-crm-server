@@ -137,5 +137,33 @@
     <a class="cta" href="__CTA_URL__">Открыть в Glide</a>
     <footer>__FOOTER__</footer>
   </main>
+  <script src="/static/shared/list-scroll-restore.js?v=1"></script>
+  <script>
+    /* no-store убивает bfcache — возвращаем позицию списка после /p/. */
+    (function () {
+      var Api = window.GlideListScrollRestore;
+      if (!Api) return;
+      var path = location.pathname;
+      var search = location.search;
+      function save() {
+        Api.save(sessionStorage, path, search, window.scrollY || window.pageYOffset || 0);
+      }
+      function restore() {
+        var y = Api.consume(sessionStorage, path, search);
+        if (!y) return;
+        var go = function () { window.scrollTo(0, y); };
+        go();
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(function () { requestAnimationFrame(go); });
+        }
+      }
+      window.addEventListener('pagehide', save);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') save();
+      });
+      if (document.readyState === 'complete') restore();
+      else window.addEventListener('load', restore);
+    })();
+  </script>
 </body>
 </html>

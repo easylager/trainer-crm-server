@@ -889,6 +889,53 @@ describe('session restore', () => {
     assert.equal(loaded.view, 'map');
     assert.equal(loaded.scrollY, 420);
   });
+
+  it('scrollYFromSaved ignores empty/invalid and keeps positive offsets', () => {
+    const { scrollYFromSaved } = loadModel();
+    assert.equal(scrollYFromSaved(null), 0);
+    assert.equal(scrollYFromSaved({}), 0);
+    assert.equal(scrollYFromSaved({ scrollY: 0 }), 0);
+    assert.equal(scrollYFromSaved({ scrollY: -10 }), 0);
+    assert.equal(scrollYFromSaved({ scrollY: 'nope' }), 0);
+    assert.equal(scrollYFromSaved({ scrollY: 420 }), 420);
+    assert.equal(scrollYFromSaved({ scrollY: '880' }), 880);
+  });
+
+  it('scrollAnchorFromSaved round-trips with saveIceState', () => {
+    const { saveIceState, loadIceState, scrollAnchorFromSaved } = loadModel();
+    const mem = {};
+    const storage = {
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => {
+        mem[k] = String(v);
+      },
+    };
+    assert.equal(scrollAnchorFromSaved(null), '');
+    saveIceState({ intent: 'skate', scrollY: 100, scrollAnchor: '115' }, storage);
+    assert.equal(scrollAnchorFromSaved(loadIceState(storage)), '115');
+  });
+
+  it('list scroll key survives ice-state persist wipe (consume once)', () => {
+    const { saveListScroll, consumeListScroll, ICE_SCROLL_KEY } = loadModel();
+    const mem = {};
+    const storage = {
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => {
+        mem[k] = String(v);
+      },
+      removeItem: (k) => {
+        delete mem[k];
+      },
+    };
+    assert.equal(saveListScroll(storage, { scrollY: 640, scrollAnchor: '115' }), true);
+    assert.ok(mem[ICE_SCROLL_KEY]);
+    const first = consumeListScroll(storage);
+    assert.equal(first.scrollY, 640);
+    assert.equal(first.scrollAnchor, '115');
+    const second = consumeListScroll(storage);
+    assert.equal(second.scrollY, 0);
+    assert.equal(second.scrollAnchor, '');
+  });
 });
 
 describe('boardCardView (TASK-090: карточка-табло)', () => {

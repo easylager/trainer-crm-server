@@ -71,6 +71,124 @@
   var pendingGen = 0;
   var LIST_STALE_MS = 5 * 60 * 1000;
   var listFetchedAt = 0;
+  /* Скролл после возврата с карточки: применить только когда лента уже в DOM. */
+  var pendingScrollY = 0;
+  var pendingScrollAnchor = '';
+  var scrollRestoreTimer = 0;
+  /* Последний якорь карточки — shellNav зовёт persist() без аргументов и не должен его стереть. */
+  var lastScrollAnchor = '';
+
+  function readScrollY() {
+    var doc = global.document;
+    var el = doc && doc.documentElement;
+    var body = doc && doc.body;
+    var y = Math.max(
+      Number(global.scrollY) || 0,
+      Number(global.pageYOffset) || 0,
+      el ? Number(el.scrollTop) || 0 : 0,
+      body ? Number(body.scrollTop) || 0 : 0
+    );
+    return y > 0 && isFinite(y) ? y : 0;
+  }
+
+  function writeScrollY(y) {
+    if (!(y > 0)) return;
+    try {
+      global.scrollTo(0, y);
+    } catch (e1) { /* */ }
+    var doc = global.document;
+    if (doc && doc.documentElement) doc.documentElement.scrollTop = y;
+    if (doc && doc.body) doc.body.scrollTop = y;
+  }
+
+  function applyScrollAnchor(anchor) {
+    if (!anchor || !global.document) return false;
+    var needle = String(anchor);
+    var byRef = global.document.querySelector('[data-arena-ref="' + needle.replace(/"/g, '') + '"]');
+    var node = byRef;
+    if (!node) {
+      var nodes = global.document.querySelectorAll('[data-href]');
+      var i;
+      for (i = 0; i < nodes.length; i++) {
+        var href = nodes[i].getAttribute('data-href') || '';
+        if (
+          href.indexOf('ref=' + encodeURIComponent(needle)) >= 0 ||
+          href.indexOf('ref=' + needle) >= 0
+        ) {
+          node = nodes[i];
+          break;
+        }
+      }
+    }
+    if (!node) return false;
+    try {
+      node.scrollIntoView({ block: 'center', behavior: 'auto' });
+      return true;
+    } catch (e2) {
+      try {
+        node.scrollIntoView(true);
+        return true;
+      } catch (e3) {
+        return false;
+      }
+    }
+  }
+
+  function queuePendingScroll() {
+    var y = pendingScrollY;
+    var anchor = pendingScrollAnchor;
+    if (!(y > 0) && !anchor) return;
+    var apply = function () {
+      if (anchor && applyScrollAnchor(anchor)) return true;
+      if (y > 0) {
+        writeScrollY(y);
+        return true;
+      }
+      return false;
+    };
+    apply();
+    if (typeof global.requestAnimationFrame === 'function') {
+      global.requestAnimationFrame(function () {
+        global.requestAnimationFrame(apply);
+      });
+    }
+    /*
+     * Не очищаем pending, пока лента не пришла: иначе таймер сгорает на скелетоне,
+     * а onListLoaded уже видит pending=0. После listFetchedAt добиваем и снимаем.
+     */
+    if (!listFetchedAt) return;
+    if (scrollRestoreTimer) global.clearInterval(scrollRestoreTimer);
+    var left = 12;
+    scrollRestoreTimer = global.setInterval(function () {
+      apply();
+      left -= 1;
+      if (left <= 0) {
+        global.clearInterval(scrollRestoreTimer);
+        scrollRestoreTimer = 0;
+        pendingScrollY = 0;
+        pendingScrollAnchor = '';
+      }
+    }, 100);
+  }
+
+  function rememberListScroll(anchor) {
+    var y = readScrollY();
+    var a = anchor != null ? String(anchor) : lastScrollAnchor;
+    if (a) lastScrollAnchor = a;
+    if (M.saveListScroll) {
+      M.saveListScroll(global.sessionStorage, { scrollY: y, scrollAnchor: a || '' });
+    }
+  }
+
+  function takePendingListScroll() {
+    if (!M.consumeListScroll) return;
+    var got = M.consumeListScroll(global.sessionStorage);
+    if (got.scrollY > 0) pendingScrollY = got.scrollY;
+    if (got.scrollAnchor) {
+      pendingScrollAnchor = got.scrollAnchor;
+      lastScrollAnchor = got.scrollAnchor;
+    }
+  }
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -97,6 +215,11 @@
 
   function shellNav(path) {
     persist();
+    /* Уход на карточку арены — отдельный ключ скролла (persist при boot его не трёт). */
+    if (/^arena(\?|$)/.test(String(path || ''))) {
+      var mRef = /[?&]ref=([^&]+)/.exec(String(path));
+      rememberListScroll(mRef ? decodeURIComponent(mRef[1]) : lastScrollAnchor);
+    }
     if (global.ClientShell && typeof global.ClientShell.navigate === 'function') {
       global.ClientShell.navigate(path);
       return;
@@ -121,7 +244,9 @@
     } catch (e) { /* private mode */ }
   }
 
-  function persist() {
+  function persist(extra) {
+    extra = extra || {};
+    if (extra.scrollAnchor != null) lastScrollAnchor = String(extra.scrollAnchor || '');
     M.saveIceState(
       {
         intent: state.autoCoach && state.intent === 'coach' ? 'skate' : state.intent,
@@ -135,7 +260,8 @@
         shopWhen: state.shopWhen,
         when: state.when,
         whenDay: state.whenDay,
-        scrollY: global.scrollY || 0,
+        scrollY: extra.scrollY != null ? Number(extra.scrollY) || 0 : readScrollY(),
+        scrollAnchor: lastScrollAnchor,
         view: state.view,
       },
       global.sessionStorage
@@ -941,6 +1067,8 @@
       esc(v.href) +
       '" data-href="' +
       esc(v.href) +
+      '" data-arena-ref="' +
+      esc(v.arenaId) +
       '">' +
       photo +
       scrim +
@@ -1564,6 +1692,9 @@
   function onAppVisible() {
     repairCatalogChrome();
     renderList();
+    /* После возврата с арены visibility/pageshow часто перерисовывают ленту и
+       сбрасывают scroll — если ждём restore, ставим позицию снова. */
+    if (pendingScrollY > 0 || pendingScrollAnchor) queuePendingScroll();
     if (
       state.intent !== 'coach' &&
       state.cityId &&
@@ -1578,6 +1709,7 @@
   function onListLoaded() {
     listFetchedAt = Date.now();
     renderList();
+    queuePendingScroll();
     if (!mapCtl) return;
     if (state.intent === 'coach') {
       mapCtl.setListItems([]);
@@ -2505,6 +2637,7 @@
           })[0]
         : null;
       rememberArenaHero(item);
+      rememberListScroll(ref || '');
       shellNav(href);
     }
   }
@@ -2769,12 +2902,14 @@
       });
     }
 
-    global.addEventListener('pagehide', persist);
+    global.addEventListener('pagehide', function () {
+      persist();
+    });
     global.addEventListener('pageshow', function (ev) {
+      /* bfcache: consume уже мог снять ключ в boot — тогда pending ещё в памяти. */
+      if (!pendingScrollY && !pendingScrollAnchor) takePendingListScroll();
       onAppVisible();
-      if (!ev.persisted) return;
-      var saved = M.loadIceState(global.sessionStorage);
-      if (saved && saved.scrollY) global.scrollTo(0, saved.scrollY);
+      if (ev.persisted || listFetchedAt) queuePendingScroll();
     });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') onAppVisible();
@@ -2784,6 +2919,7 @@
   function boot() {
     bind();
     var saved = M.loadIceState(global.sessionStorage);
+    takePendingListScroll();
     if (saved && saved.intent) state.intent = M.coerceIntent(saved.intent);
     if (saved && saved.serviceIds && saved.serviceIds.length) {
       state.serviceIds = saved.serviceIds.map(Number).filter(function (n) { return n > 0; });
@@ -2875,11 +3011,7 @@
       } else if (state.loading && state.loadedIntent === null && !pendingGen) {
         loadList();
       }
-      if (saved && saved.scrollY) {
-        global.setTimeout(function () {
-          global.scrollTo(0, saved.scrollY);
-        }, 0);
-      }
+      /* Скролл — в onListLoaded после первой отрисовки ленты (pendingScrollY). */
       if (global.ClientShell && global.ClientShell.reportCatalogPresence && state.cityId) {
         global.ClientShell.reportCatalogPresence('miniapp_ice', null, { city_id: state.cityId });
       }
