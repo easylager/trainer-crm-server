@@ -87,6 +87,15 @@
   }
 
   function openUrl(url) {
+    var u = String(url || '');
+    if (/^viber:/i.test(u)) {
+      try {
+        global.location.href = u;
+      } catch (e) {
+        global.open(u, '_blank', 'noopener');
+      }
+      return;
+    }
     var t = tg();
     if (t && typeof t.openLink === 'function') {
       try {
@@ -95,6 +104,41 @@
       } catch (e) { /* */ }
     }
     global.open(url, '_blank', 'noopener');
+  }
+
+  /** src в ссылке шаринга (TASK-223): tg, vb, wa, copy, story, sys, img */
+  function withSrc(url, src) {
+    var raw = String(url || '');
+    var code = String(src || '').trim();
+    if (!raw || !code) return raw;
+    try {
+      var absolute = /^https?:\/\//i.test(raw);
+      var u = absolute ? new URL(raw) : new URL(raw, 'https://share.local/');
+      if (u.searchParams.has('src')) return raw;
+      u.searchParams.set('src', code);
+      if (absolute) return u.origin + u.pathname + u.search + (u.hash || '');
+      var rel = u.pathname;
+      if (rel.charAt(0) === '/') rel = rel.slice(1);
+      return rel + u.search + (u.hash || '');
+    } catch (e) {
+      return raw;
+    }
+  }
+
+  function payloadForSrc(p, src) {
+    if (!p || !src) return p;
+    return {
+      share_url: withSrc(p.share_url, src),
+      share_body: p.share_body,
+      story_image_url: p.story_image_url,
+      og_image_url: p.og_image_url,
+    };
+  }
+
+  function shareFullMessage(p) {
+    var url = String((p && p.share_url) || '').trim();
+    var body = String((p && p.share_body) || '').trim();
+    return body ? body + '\n' + url : url;
   }
 
   function absoluteMediaUrl(url) {
@@ -128,7 +172,7 @@
     var params = {};
     // TASK-222: сторис — кадр плюс ссылка, без подписи. Своя подпись уже нарисована
     // в самой картинке, а text попадал в редактор истории простынёй поверх неё.
-    var link = String(p.share_url || '').trim();
+    var link = String((p && p.share_url) || '').trim();
     if (link) params.widget_link = { url: link, name: 'Карта льда' };
     try {
       t.shareToStory(media, params);
@@ -322,11 +366,20 @@
 
   var CHANNELS = {
     telegram: function (p) {
-      sendTelegramShare(p, telegramLinkOnly());
+      sendTelegramShare(payloadForSrc(p, 'tg'), telegramLinkOnly());
+    },
+    viber: function (p) {
+      var ap = payloadForSrc(p, 'vb');
+      var href = 'viber://forward?text=' + encodeURIComponent(shareFullMessage(ap));
+      openUrl(href);
+    },
+    whatsapp: function (p) {
+      var ap = payloadForSrc(p, 'wa');
+      openUrl('https://wa.me/?text=' + encodeURIComponent(shareFullMessage(ap)));
     },
     copy: function (p) {
       // Только URL. Текст для чата — в Telegram / «Другое», не сюда.
-      var text = String(p.share_url || '').trim();
+      var text = String(withSrc(p.share_url, 'copy') || '').trim();
       var done = function () { toast('Ссылка скопирована'); };
       if (!text) {
         toast('Ссылка недоступна');
@@ -339,23 +392,24 @@
       }
     },
     story: function (p) {
-      openStoryShare(p).then(function (channel) {
+      openStoryShare(payloadForSrc(p, 'story')).then(function (channel) {
         track(channel);
       });
     },
     image: function (p) {
-      openImageSave(p).then(function (channel) {
+      openImageSave(payloadForSrc(p, 'img')).then(function (channel) {
         if (channel !== 'image_empty') track(channel);
       });
     },
     system: function (p) {
+      var ap = payloadForSrc(p, 'sys');
       if (global.navigator && typeof navigator.share === 'function') {
-        navigator.share({ text: p.share_body, url: p.share_url }).catch(function () {});
+        navigator.share({ text: ap.share_body, url: ap.share_url }).catch(function () {});
         return;
       }
       // Нет системного меню (Telegram Desktop и т.п.) — открываем страницу места:
       // на ней кнопки Viber, WhatsApp, VK и «Скопировать».
-      openUrl(p.share_url);
+      openUrl(ap.share_url);
     },
   };
 
@@ -626,6 +680,12 @@
       '<button type="button" class="gss-ch" data-ch="copy"' +
       (p ? '' : ' disabled') +
       '>Ссылка</button>' +
+      '<button type="button" class="gss-ch gss-ch--viber" data-ch="viber"' +
+      (p ? '' : ' disabled') +
+      '>Viber</button>' +
+      '<button type="button" class="gss-ch gss-ch--wa" data-ch="whatsapp"' +
+      (p ? '' : ' disabled') +
+      '>WhatsApp</button>' +
       '<button type="button" class="gss-ch' +
       (state.endpoint ? ' gss-ch--story' : '') +
       '" data-ch="story"' +
@@ -832,6 +892,9 @@
   global.GlideShareSheet = {
     open: open,
     close: close,
+    _withSrc: withSrc,
+    _shareFullMessage: shareFullMessage,
+    _payloadForSrc: payloadForSrc,
     _openStoryShare: openStoryShare,
     _openImageSave: openImageSave,
     _telegramShareHref: telegramShareHref,

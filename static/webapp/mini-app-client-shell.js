@@ -951,21 +951,13 @@
     TAB_ICONS: TAB_ICONS,
   };
 
+  var glideDeepLink = global.GlideDeepLink || {};
+
   function readStartParam() {
-    var tg = getTg();
-    var fromTg = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
-    if (fromTg) return String(fromTg);
-    try {
-      var hash = global.location.hash || '';
-      var m = /(?:^|[&#])tgWebAppStartParam=([^&]+)/.exec(hash);
-      if (m) return decodeURIComponent(m[1]);
-    } catch (e) { /* ignore */ }
-    try {
-      var qp = new URLSearchParams(global.location.search || '');
-      return qp.get('tgWebAppStartParam') || qp.get('startapp') || '';
-    } catch (e2) {
-      return '';
+    if (glideDeepLink.readStartParam) {
+      return glideDeepLink.readStartParam({ location: global.location, Telegram: global.Telegram });
     }
+    return '';
   }
 
   /**
@@ -977,7 +969,7 @@
    * Срабатывает один раз за сессию мини-аппа: start_param живёт всё время, пока
    * открыт WebView, и без защёлки «Назад» с карточки снова уводил бы на неё же.
    */
-  var DEEP_LINK_FLAG = 'glide_start_param_used_v1';
+  var DEEP_LINK_FLAG = glideDeepLink.DEEP_LINK_FLAG || 'glide_start_param_used_v1';
   var CATALOG_PRESENCE_PREFIX = 'glide_cat_presence_v1_';
 
   /**
@@ -1007,28 +999,7 @@
   }
 
   function deepLinkTarget(sp) {
-    sp = String(sp || '').trim();
-    var arena = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
-    if (arena) {
-      var arenaPath = 'arena?ref=' + arena[1];
-      if (arena[2]) arenaPath += '&s=' + arena[2];
-      return { key: 'arena', path: arenaPath };
-    }
-    // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
-    if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
-    var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);
-    if (catalog) {
-      var q = 'city_id=' + catalog[1];
-      var intent = (catalog[2] || '').toLowerCase();
-      var when = (catalog[3] || '').toLowerCase();
-      var venueToken = intent === 'shop' || intent === 'gym' || intent === 'ice' || intent === 'outdoor' ||
-        intent === 'choreo' || intent === 'pool' || intent === 'other';
-      if (venueToken) q += '&venue=' + intent;
-      else if (intent) q += '&intent=' + intent;
-      else if (when) q += '&intent=skate';
-      if (when) q += '&when=' + when;
-      return { key: 'ice', path: 'ice?' + q };
-    }
+    if (glideDeepLink.deepLinkTarget) return glideDeepLink.deepLinkTarget(sp);
     return null;
   }
 
@@ -1040,9 +1011,9 @@
       if (global.sessionStorage.getItem(DEEP_LINK_FLAG) === sp) return false;
       global.sessionStorage.setItem(DEEP_LINK_FLAG, sp);
     } catch (e) { /* без storage — как раньше, по ключу страницы */ }
-    var current = pathnameKey();
-    if (current === target.key && target.key === 'arena') return false;
-    if (current === target.key && global.location.search === '?' + target.path.split('?')[1]) return false;
+    if (glideDeepLink.isAlreadyOnTarget && glideDeepLink.isAlreadyOnTarget(global.location, target)) {
+      return false;
+    }
     navigate(target.path);
     return true;
   }

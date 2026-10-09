@@ -15,12 +15,9 @@ const path = require('node:path');
 const webapp = path.resolve(__dirname, '../../static/webapp');
 
 function loadDeepLinkTarget() {
-  const src = fs.readFileSync(path.join(webapp, 'mini-app-client-shell.js'), 'utf8');
-  const start = src.indexOf('function deepLinkTarget(sp) {');
-  assert.ok(start >= 0, 'deepLinkTarget must exist in the shell');
-  const end = src.indexOf('\n  }\n', start);
-  // eslint-disable-next-line no-new-func
-  return new Function(src.slice(start, end + 4) + '\nreturn deepLinkTarget;')();
+  const modPath = path.join(webapp, 'glide-deeplink.js');
+  delete require.cache[require.resolve(modPath)];
+  return require(modPath).deepLinkTarget;
 }
 
 function loadIceModel() {

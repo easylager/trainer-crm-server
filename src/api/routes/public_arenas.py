@@ -318,7 +318,20 @@ async def get_public_arena_trainers(
     return payload
 
 
-_SHARE_CHANNELS = ("telegram", "copy", "story", "story_tg", "story_os", "story_fallback", "system")
+_SHARE_CHANNELS = (
+    "telegram",
+    "copy",
+    "story",
+    "story_tg",
+    "story_os",
+    "story_fallback",
+    "system",
+    "viber",
+    "whatsapp",
+    "image_tg",
+    "image_os",
+    "image_fallback",
+)
 
 
 @router.get("/ice/selection/share")

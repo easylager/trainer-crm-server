@@ -279,7 +279,7 @@
 
 .gss-channels {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
 }
 .gss-ch {
@@ -307,6 +307,14 @@
 .gss-ch--image {
   border-color: var(--glide-line);
   color: var(--glide-ink-teal, var(--app-cta-fill));
+}
+.gss-ch--viber {
+  border-color: #7360f2;
+  color: #7360f2;
+}
+.gss-ch--wa {
+  border-color: #25d366;
+  color: #1a9f4a;
 }
 .gss-note { margin: 10px 0 0; font-size: var(--app-text-caption); color: var(--glide-hint); text-align: center; }
 
