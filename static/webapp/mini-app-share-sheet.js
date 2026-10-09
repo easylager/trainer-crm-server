@@ -86,12 +86,6 @@
     toast._t = global.setTimeout(function () { el.classList.remove('is-on'); }, 1800);
   }
 
-  function fullMessage(p) {
-    var body = String(p.share_body || '').trim();
-    var url = String(p.share_url || '').trim();
-    return body ? body + '\n' + url : url;
-  }
-
   function openUrl(url) {
     var t = tg();
     if (t && typeof t.openLink === 'function') {
@@ -331,8 +325,13 @@
       sendTelegramShare(p, telegramLinkOnly());
     },
     copy: function (p) {
-      var text = fullMessage(p);
-      var done = function () { toast('Скопировано — вставьте в Viber, WhatsApp или любой чат'); };
+      // Только URL. Текст для чата — в Telegram / «Другое», не сюда.
+      var text = String(p.share_url || '').trim();
+      var done = function () { toast('Ссылка скопирована'); };
+      if (!text) {
+        toast('Ссылка недоступна');
+        return;
+      }
       if (global.navigator && navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done, function () { global.prompt('Скопируйте:', text); });
       } else {

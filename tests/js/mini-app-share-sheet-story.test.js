@@ -37,6 +37,16 @@ describe('mini-app-share-sheet story channel (TASK-168)', () => {
     assert.match(src, /gss-preview__img--story/);
   });
 
+  it('канал «Ссылка» копирует только share_url, без share_body', () => {
+    const copyIdx = src.indexOf('copy: function (p)');
+    assert.ok(copyIdx > -1, 'copy channel');
+    const nextChannel = src.indexOf('story: function (p)', copyIdx);
+    const block = src.slice(copyIdx, nextChannel > -1 ? nextChannel : copyIdx + 500);
+    assert.match(block, /share_url/);
+    assert.doesNotMatch(block, /share_body|fullMessage/);
+    assert.match(block, /Ссылка скопирована/);
+  });
+
   it('openStoryShare вызывает shareToStory при наличии API', async () => {
     const calls = [];
     const context = {

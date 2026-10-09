@@ -5936,6 +5936,9 @@ async def mark_booking_completed_and_notify(
         """),
         {"bid": booking_id},
     )
+    from src.application.subscription_use_cases import maybe_start_trial_clock_on_completed_booking
+
+    await maybe_start_trial_clock_on_completed_booking(session, booking_id)
     await session.commit()
     await _refresh_client_trainer_edge_after_completion(session, booking_id)
     return pass_redeemed
@@ -5998,6 +6001,9 @@ async def mark_booking_completed_by_trainer(
         """),
         {"bid": booking_id},
     )
+    from src.application.subscription_use_cases import maybe_start_trial_clock_on_completed_booking
+
+    await maybe_start_trial_clock_on_completed_booking(session, booking_id)
     await session.commit()
     await _refresh_client_trainer_edge_after_completion(session, booking_id)
     return {"success": True, "pass_redeemed": pass_redeemed}
