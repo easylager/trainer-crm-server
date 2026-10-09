@@ -25,34 +25,39 @@ from src.shared.trainer_status import normalize_trainer_status_value
 # Legacy display; DB column `label` kept for compatibility; tier_kind is source of truth.
 TRAINER_SERVICE_DEFAULT_TIER_LABEL = "Основной"
 
-# set_trainer_services: (service_id, tiers) | +description | +group_price_cents | +client_notice | +ui_accent (optional).
+# set_trainer_services: (service_id, tiers) | +description | +group_price_cents | +client_notice
+# | +ui_accent | +is_online (optional trailing fields).
 TrainerServiceWriteEntry = (
     tuple[int, list[tuple[str, int]]]
     | tuple[int, list[tuple[str, int]], str | None]
     | tuple[int, list[tuple[str, int]], str | None, int | None]
     | tuple[int, list[tuple[str, int]], str | None, int | None, str | None]
     | tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]
+    | tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None, bool]
 )
 _UNSET = object()
 
 
 def _normalize_trainer_service_write_entry(
     entry: TrainerServiceWriteEntry,
-) -> tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]:
+) -> tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None, bool]:
     if len(entry) == 2:
         sid, tiers = entry
-        return sid, tiers, None, None, None, None
+        return sid, tiers, None, None, None, None, False
     if len(entry) == 3:
         sid, tiers, desc = entry
-        return sid, tiers, desc, None, None, None
+        return sid, tiers, desc, None, None, None, False
     if len(entry) == 4:
         sid, tiers, desc, gpc = entry
-        return sid, tiers, desc, gpc, None, None
+        return sid, tiers, desc, gpc, None, None, False
     if len(entry) == 5:
         sid, tiers, desc, gpc, notice = entry
-        return sid, tiers, desc, gpc, notice, None
-    sid, tiers, desc, gpc, notice, ui_accent = entry
-    return sid, tiers, desc, gpc, notice, ui_accent
+        return sid, tiers, desc, gpc, notice, None, False
+    if len(entry) == 6:
+        sid, tiers, desc, gpc, notice, ui_accent = entry
+        return sid, tiers, desc, gpc, notice, ui_accent, False
+    sid, tiers, desc, gpc, notice, ui_accent, is_online = entry
+    return sid, tiers, desc, gpc, notice, ui_accent, bool(is_online)
 
 
 def _legacy_service_prices_byn(
@@ -201,7 +206,7 @@ class TrainerRepository:
             return sorted_tiers[0][1]
 
         for raw in entries:
-            sid, tiers, svc_description, group_price_cents, client_notice, ui_accent = (
+            sid, tiers, svc_description, group_price_cents, client_notice, ui_accent, is_online = (
                 _normalize_trainer_service_write_entry(raw)
             )
             merged: dict[str, int] = {}
@@ -214,8 +219,14 @@ class TrainerRepository:
             anchor = _anchor_cents(clean_tiers)
             await self._session.execute(
                 text("""
-                    INSERT INTO trainer_services (trainer_id, service_id, price_cents, description, group_price_cents, client_notice, ui_accent)
-                    VALUES (:tid, :sid, :price_cents, :descr, :group_pc, :client_notice, :ui_accent)
+                    INSERT INTO trainer_services (
+                        trainer_id, service_id, price_cents, description,
+                        group_price_cents, client_notice, ui_accent, is_online
+                    )
+                    VALUES (
+                        :tid, :sid, :price_cents, :descr,
+                        :group_pc, :client_notice, :ui_accent, :is_online
+                    )
                 """),
                 {
                     "tid": trainer_id,
@@ -225,6 +236,7 @@ class TrainerRepository:
                     "group_pc": group_price_cents,
                     "client_notice": client_notice,
                     "ui_accent": ui_accent,
+                    "is_online": bool(is_online),
                 },
             )
             for order, (tk, pc) in enumerate(clean_tiers):
@@ -530,7 +542,8 @@ class TrainerRepository:
         out["photos"] = [{"file_key": r[0], "file_key_list": r[1], "sort_order": r[2]} for r in rph.fetchall()]
         rsv = await self._session.execute(
             text(
-                "SELECT service_id, price_cents, description, group_price_cents, client_notice, ui_accent FROM trainer_services WHERE trainer_id = :id ORDER BY service_id"
+                "SELECT service_id, price_cents, description, group_price_cents, client_notice, ui_accent, "
+                "COALESCE(is_online, false) FROM trainer_services WHERE trainer_id = :id ORDER BY service_id"
             ),
             {"id": trainer_id},
         )
@@ -601,6 +614,7 @@ class TrainerRepository:
                     ua = str(r[5]).strip().lower()
                     if ua:
                         ui_accent_out = ua
+                is_online_out = bool(r[6]) if len(r) > 6 and r[6] is not None else False
                 if tiers:
                     prices = [t["price_cents"] for t in tiers]
                     p_min, p_max = min(prices), max(prices)
@@ -624,6 +638,7 @@ class TrainerRepository:
                     "group_price_byn": round(gpc_row / 100, 2) if gpc_row is not None else None,
                     "client_notice": notice_out,
                     "ui_accent": ui_accent_out,
+                    "is_online": is_online_out,
                 }
                 out["services"].append(svc_dict)
         else:
@@ -1516,7 +1531,9 @@ class TrainerRepository:
             })
         rsv = await self._session.execute(
             text(
-                f"SELECT trainer_id, service_id, price_cents, description, group_price_cents, client_notice, ui_accent FROM trainer_services WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, service_id"
+                f"SELECT trainer_id, service_id, price_cents, description, group_price_cents, "
+                f"client_notice, ui_accent, COALESCE(is_online, false) "
+                f"FROM trainer_services WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, service_id"
             ),
             id_params,
         )
@@ -1586,6 +1603,7 @@ class TrainerRepository:
                 uas = str(row[6]).strip().lower()
                 if uas:
                     ui_accent_row = uas
+            is_online_row = bool(row[7]) if len(row) > 7 and row[7] is not None else False
             tiers = tiers_by_tid_sid.get((tid, sid), [])
             if tiers:
                 prices = [t["price_cents"] for t in tiers]
@@ -1611,6 +1629,7 @@ class TrainerRepository:
                     "group_price_byn": round(gpc_row / 100, 2) if gpc_row is not None else None,
                     "client_notice": notice_row,
                     "ui_accent": ui_accent_row,
+                    "is_online": is_online_row,
                 }
             )
         rar = await self._session.execute(
@@ -1683,9 +1702,12 @@ class TrainerRepository:
                 row[17] if len(row) > 17 else None,
                 row[18] if len(row) > 18 else None,
             )
-            # Онлайн — либо явный флаг анкеты, либо исторический fallback «площадки нет».
-            online_enabled = bool(row[19]) if len(row) > 19 and row[19] is not None else False
-            online_enabled = online_enabled or arena_work_format == "online"
+            # Онлайн для клиента: ≥1 онлайн-услуга или exclusive arena_work_format.
+            # profile.online_enabled синхронизируется с услугами, но бейдж читаем из офферов.
+            has_online_service = any(
+                bool(s.get("is_online")) for s in services_detail_by_id.get(tid, [])
+            )
+            online_enabled = has_online_service or arena_work_format == "online"
             primary_arena_name = (
                 (arena_names_by_id.get(primary_arena_id) or "").strip() or None
                 if primary_arena_id is not None

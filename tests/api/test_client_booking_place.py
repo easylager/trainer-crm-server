@@ -288,3 +288,81 @@ async def test_get_client_slots_empty_filter_explains_other_venues(app_use_test_
     assert body.get("empty_on_filter") is True
     hint = (body.get("empty_on_filter_hint") or "")
     assert "заявк" in hint.lower() or "площад" in hint.lower()
+
+
+
+@pytest.mark.asyncio
+async def test_get_client_slots_online_service_ignores_arena_filter(app_use_test_db, db_session) -> None:
+    """Online offering: arena_ids must not hide venue-less online slots."""
+    primary, secondary, city_id = await _two_arenas(db_session)
+    trainer_id, offline_sid = await _seed_online_trainer_two_arenas(
+        db_session, primary=primary, secondary=secondary, city_id=city_id
+    )
+    # Mark first service online + add a second offline service for contrast.
+    await db_session.execute(
+        text("UPDATE trainer_services SET is_online = true WHERE trainer_id = :tid AND service_id = :sid"),
+        {"tid": trainer_id, "sid": offline_sid},
+    )
+    online_sid = offline_sid
+    sid2 = (
+        await db_session.execute(
+            text("SELECT id FROM services WHERE id <> :sid ORDER BY id LIMIT 1"),
+            {"sid": online_sid},
+        )
+    ).scalar()
+    if sid2 is None:
+        pytest.skip("need two seed services")
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents, is_online) "
+            "VALUES (:tid, :sid, 4000, false)"
+        ),
+        {"tid": trainer_id, "sid": int(sid2)},
+    )
+    # Sync profile online flag from services (null-arena → is_online in payload).
+    from src.application.trainer_schedule_use_cases import sync_trainer_online_enabled_from_services
+
+    await sync_trainer_online_enabled_from_services(db_session, trainer_id)
+    await db_session.commit()
+
+    ref_day, ref_now = _monday_ref()
+    slot_day = ref_day + timedelta(days=2)
+    online_slot_id = await _insert_available_slot(db_session, trainer_id, slot_day, arena_id=None, hour=11)
+    await _insert_available_slot(db_session, trainer_id, slot_day, arena_id=primary, hour=15)
+    ctg = _fresh_tg()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            with (
+                patch("src.api.routes.webapp.get_slots_cached", return_value=None),
+                patch("src.api.routes.webapp.datetime") as mock_dt,
+                patch("src.api.routes.webapp.date") as mock_date,
+            ):
+                mock_date.today.return_value = ref_day
+                mock_dt.now.return_value = ref_now
+                mock_dt.combine = datetime.combine
+                resp = await client.get(
+                    f"/api/webapp/client/slots?trainer_id={trainer_id}&min_hours=0"
+                    f"&service_id={online_sid}&arena_ids={secondary}",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    slots = body.get("slots") or []
+    assert slots, "online slot must survive arena_ids when service is online"
+    assert all(bool(s.get("is_online")) for s in slots)
+    assert any(int(s["id"]) == online_slot_id for s in slots)
+    assert body.get("empty_on_filter") is not True
+
+
+def test_filter_client_slots_payload_by_online_unit() -> None:
+    from src.api.routes.webapp import _filter_client_slots_payload_by_online
+
+    rows = [
+        {"id": 1, "is_online": True},
+        {"id": 2, "is_online": False},
+        {"id": 3, "is_online": True},
+    ]
+    assert [r["id"] for r in _filter_client_slots_payload_by_online(rows, want_online=True)] == [1, 3]
+    assert [r["id"] for r in _filter_client_slots_payload_by_online(rows, want_online=False)] == [2]
+    assert _filter_client_slots_payload_by_online(rows, want_online=None) == rows

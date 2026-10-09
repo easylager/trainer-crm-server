@@ -834,3 +834,85 @@ def test_profile_focused_catalog_task_contract() -> None:
     assert "navigateToWithHash('trainer-profile'" not in js_home
     assert ".profile-block-tour-bar" not in css
 
+
+
+@pytest.mark.asyncio
+async def test_webapp_trainer_custom_service_from_profile(
+    app_use_test_db,
+    db_session,
+    monkeypatch,
+) -> None:
+    """Profile can create a private service immediately; public chips wait for is_public."""
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r.scalar()
+    if cid is None:
+        pytest.skip("need seed cities")
+
+    async def _noop_notify(**kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "src.application.admin_custom_service_notify.notify_admins_new_custom_service",
+        _noop_notify,
+    )
+    trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+    unique_name = f"Авторская методика {uuid.uuid4().hex[:8]}"
+
+    with patch(
+        "src.api.miniapp_auth.deps.verify_telegram_init_data_principal",
+        return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/services/custom",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"name": unique_name, "is_online": True},
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["created"] is True
+            assert body["is_public"] is False
+            assert body["is_online"] is True
+            service_id = int(body["service_id"])
+
+            boot = await client.get(
+                "/api/webapp/trainer/profile/page-bootstrap",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert boot.status_code == 200
+            body_boot = boot.json()
+            ref_ids = [int(s["id"]) for s in body_boot["refs"]["services"]["items"]]
+            assert service_id in ref_ids
+            assert "service_ids_format_locked" in body_boot["trainer"]
+            assert isinstance(body_boot["trainer"]["service_ids_format_locked"], list)
+
+    public = (
+        await db_session.execute(
+            text("SELECT id FROM services WHERE is_public = true AND id = :id"),
+            {"id": service_id},
+        )
+    ).scalar()
+    assert public is None
+
+    linked = (
+        await db_session.execute(
+            text(
+                "SELECT is_online FROM trainer_services "
+                "WHERE trainer_id = :tid AND service_id = :sid"
+            ),
+            {"tid": trainer_id, "sid": service_id},
+        )
+    ).scalar()
+    assert linked is True
+
+    await db_session.execute(
+        text("UPDATE services SET is_public = true WHERE id = :id"),
+        {"id": service_id},
+    )
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        pub_resp = await client.get("/api/public/services")
+    assert pub_resp.status_code == 200
+    pub_ids = [int(s["id"]) for s in pub_resp.json()["items"]]
+    assert service_id in pub_ids

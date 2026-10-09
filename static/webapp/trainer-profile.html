@@ -16,8 +16,8 @@
   <link rel="stylesheet" href="mini-app-components.css?v=2026100518" />
   <script src="mini-app-confirm.js?v=2026100518"></script>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
-  <link rel="preload" href="trainer-profile-main.js?v=2026100518" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=2026100518" />
+  <link rel="preload" href="trainer-profile-main.js?v=2026100919" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=2026100919" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026100518" />
@@ -78,7 +78,7 @@
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="anketaStart">Основное</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavContacts">Контакты</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileServicesCollapse">Услуги</button>
-      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavArenas">Арены</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavArenas">Где занимаюсь</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavAbout">О себе</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavExp">Опыт</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileEducationCollapse">Образование</button>
@@ -155,15 +155,31 @@
           <span class="profile-collapse__title">Услуги и цены</span>
         </summary>
         <div class="card">
-          <p class="hint svc-pick-lead" style="margin: 0 0 14px;">Отметьте услуги. Цену можно указать сейчас или позже — пока клиент увидит «по запросу».</p>
+          <p class="hint svc-pick-lead" style="margin: 0 0 14px;">Отметьте услуги. У каждой выбранной — формат «На площадке» или «Онлайн». Цену можно указать позже — пока клиент увидит «по запросу».</p>
           <div id="servicesWrap"></div>
+          <button type="button" class="svc-add-cta" id="svcAddCustomBtn">Моей услуги нет в списке</button>
+          <div class="svc-add-box" id="svcAddCustomWrap" hidden>
+            <label class="svc-desc-label" for="svcAddCustomName">Название услуги</label>
+            <input id="svcAddCustomName" type="text" maxlength="128" autocomplete="off"
+                   placeholder="Спортивная психология" class="svc-add-input">
+            <p class="hint" style="margin:10px 0 6px;">Формат занятия</p>
+            <div class="svc-format-seg svc-format-seg--inline" id="svcAddCustomFormat" role="group" aria-label="Формат новой услуги">
+              <button type="button" class="svc-format-seg__btn" data-online="0" aria-pressed="true">На площадке</button>
+              <button type="button" class="svc-format-seg__btn" data-online="1" aria-pressed="false">Онлайн</button>
+            </div>
+            <div class="svc-add-actions">
+              <button type="button" class="svc-add-submit" id="svcAddCustomSubmit">Добавить</button>
+              <button type="button" class="svc-add-cancel" id="svcAddCustomCancel">Отмена</button>
+            </div>
+            <p id="svcAddCustomStatus" class="svc-add-status" hidden role="status"></p>
+          </div>
           <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
         </div>
       </details>
 
       <details class="profile-collapse" id="profileNavArenas" open>
         <summary class="profile-collapse__summary">
-          <span class="profile-collapse__title">Арены</span>
+          <span class="profile-collapse__title">Где занимаюсь</span>
         </summary>
         <div class="card">
           <p class="hint" id="arenaHint">Выберите город — появится поиск площадок.</p>
@@ -171,21 +187,39 @@
             <div id="arenaChips" class="arena-chips" hidden></div>
             <p class="hint arena-chips-note" id="arenaChipsNote" hidden></p>
             <div id="arenaDefaultLine"></div>
-            <div class="arena-picker-search">
-              <input
-                type="search"
-                id="arenaSearchInput"
-                class="arena-picker-search__input"
-                placeholder="Название или адрес"
-                autocomplete="off"
-                enterkeyhint="search"
-                autocorrect="off"
-                autocapitalize="off"
-                spellcheck="false"
-                aria-controls="arenaResults"
-              />
+            <!-- Same combobox pattern as trainer onboarding: list visible immediately, search narrows. -->
+            <label class="arena-combo__label" for="arenaSearchInput">Площадка из списка</label>
+            <div class="arena-combo" id="arenaCombo">
+              <div class="arena-combo__trigger">
+                <input
+                  type="text"
+                  id="arenaSearchInput"
+                  class="arena-combo__input"
+                  placeholder="Поиск по названию или адресу"
+                  autocomplete="off"
+                  enterkeyhint="done"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded="false"
+                  aria-controls="arenaResults"
+                />
+                <button type="button" class="arena-combo__done" id="arenaComboDone" hidden>Готово</button>
+                <span class="arena-combo__chev" aria-hidden="true"></span>
+              </div>
+              <div class="arena-combo__panel">
+                <p class="arena-combo__browse-hint" id="arenaBrowseHint" hidden></p>
+                <div
+                  id="arenaResults"
+                  class="arena-combo__list"
+                  role="listbox"
+                  aria-label="Площадки города"
+                  aria-multiselectable="true"
+                ></div>
+              </div>
             </div>
-            <div id="arenaResults" class="arena-results" role="listbox" aria-label="Площадки города"></div>
           </div>
           <div id="arenasWrap"></div>
           <div id="arenaEmptyActions" class="arena-empty-actions" hidden></div>
@@ -193,6 +227,9 @@
           <p class="field-error" id="err_arena_setup" role="status" hidden style="margin-top:8px;"></p>
           <div id="primaryArenaWrap" style="display:none; margin-top:12px;"></div>
           <p class="field-error" id="err_primary_arena" role="status" hidden style="margin-top:8px;"></p>
+          <p class="field-hint" id="onlineEnabledHint">
+            Онлайн задаётся у услуги: отметьте формат «Онлайн» в блоке «Услуги и цены». В расписании появятся онлайн-слоты.
+          </p>
         </div>
       </details>
 
@@ -206,9 +243,31 @@
         </summary>
         <div class="card">
           <div class="field" id="specialistRolesField">
-            <label for="specialistRolesDisplay">Кто я</label>
-            <p class="profile-specialist-roles" id="specialistRolesDisplay" aria-live="polite">—</p>
-            <p class="field-hint">Как вас видят в каталоге — рядом с именем и площадкой.</p>
+            <label id="specialistRolesLabel">Кто я</label>
+            <div
+              class="profile-role-chips"
+              id="specialistRolesChips"
+              role="group"
+              aria-labelledby="specialistRolesLabel"
+            ></div>
+            <button type="button" class="profile-role-addcta" id="specialistRoleAddBtn">Своя роль</button>
+            <div class="profile-role-addbox" id="specialistRoleAddWrap" hidden>
+              <label class="profile-role-addbox__lab" for="specialistRoleCustom">Название роли</label>
+              <input
+                id="specialistRoleCustom"
+                class="input"
+                type="text"
+                maxlength="64"
+                autocomplete="off"
+                placeholder="Например, инструктор по растяжке"
+              />
+              <div class="profile-role-addbox__actions">
+                <button type="button" class="filter-btn active" id="specialistRoleAddSubmit">Добавить</button>
+                <button type="button" class="filter-btn" id="specialistRoleAddCancel">Отмена</button>
+              </div>
+              <p class="field-error" id="specialistRoleAddStatus" hidden role="status"></p>
+            </div>
+            <p class="field-hint">Как вас видят в каталоге — рядом с именем и площадкой. Можно несколько.</p>
           </div>
           <div class="field">
             <label for="description">Описание</label>
@@ -420,14 +479,14 @@
 
       <div class="section-title">Сетка расписания</div>
       <div id="scheduleGridArenaLockShell" class="card schedule-grid-arena-only" hidden>
-        <p class="schedule-grid-arena-only__title">Сетку задаёт ваша основная арена</p>
+        <p class="schedule-grid-arena-only__title">Сетку задаёт ваша основная площадка</p>
         <p class="schedule-grid-arena-only__text" id="scheduleGridArenaLockMainText"></p>
         <p class="hint schedule-grid-arena-only__sub" id="scheduleGridArenaLockSubText" style="margin: 0;"></p>
       </div>
       <div id="scheduleGridTrainerShell" class="card">
         <p class="hint" id="scheduleGridSettingsHint" style="margin: 0 0 14px;">
           Шаг сетки для выбора времени начала слотов в редакторе расписания. По умолчанию 15 минут.
-          Используется, только если у основной арены нет своего пресета расписания.
+          Используется, только если у основной площадки нет своего пресета расписания.
         </p>
         <div class="grid-step-chips" id="gridStepChips" role="group" aria-label="Шаг сетки"></div>
         <p class="field-error" id="err_schedule_grid" role="status" hidden style="margin: 10px 0 0;"></p>
@@ -507,7 +566,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=2026100518"></script>
+  <script defer src="trainer-profile-main.js?v=2026100919"></script>
   <script defer src="mini-app-trainer-home.js?v=2026100518"></script>
 </body>
 </html>

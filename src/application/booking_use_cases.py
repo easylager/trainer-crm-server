@@ -91,6 +91,14 @@ class ServicePriceVariantRequired(Exception):
     """Trainer has multiple price tiers for this service; client must choose service_price_variant_id."""
 
 
+class ServiceOnlineFormatMismatch(Exception):
+    """Online slot requires an online service (and venue slot an offline service)."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
 async def _resolve_service_booking_price(
     session: AsyncSession,
     trainer_id: int,
@@ -680,13 +688,27 @@ async def create_booking(
             return (None, (False, False))
     r = await session.execute(
         text("""
-            SELECT 1 FROM trainer_services
+            SELECT COALESCE(is_online, false) FROM trainer_services
             WHERE trainer_id = :tid AND service_id = :sid
         """),
         {"tid": trainer_id, "sid": service_id},
     )
-    if not r.fetchone():
+    svc_row = r.fetchone()
+    if not svc_row:
         return (None, (False, False))
+    service_is_online = bool(svc_row[0])
+    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+    slot_is_online = slot_arena_id is None and await trainer_offers_online_sessions(
+        session, trainer_id
+    )
+    if slot_is_online != service_is_online:
+        # XOR: online slot ↔ online service only. Caller may map to 422.
+        raise ServiceOnlineFormatMismatch(
+            "online_slot_needs_online_service"
+            if slot_is_online
+            else "venue_slot_needs_offline_service"
+        )
     try:
         if capacity > 1:
             # Group slot: per-seat price from COALESCE(group_price_cents, anchor); catalog tiers do not apply.
@@ -707,7 +729,10 @@ async def create_booking(
         if service_price_variant_id is not None and variant_id_resolved is None:
             return (None, (False, False))
     # Group slots: venue is fixed on the slot (set when the trainer created the slot); ignore request arena/session.
-    if capacity > 1:
+    if slot_is_online:
+        # Venue-less online slot — never inherit primary arena onto the booking.
+        resolved_arena = None
+    elif capacity > 1:
         resolved_arena = slot_arena_id
         if resolved_arena is None:
             rpa = await session.execute(
@@ -1131,7 +1156,8 @@ async def resolve_arena_for_client_self_booking(
     Self-booking venue is the slot's arena, not a silent primary override.
 
     - Slot with arena_id → that arena (must be linked to the trainer).
-    - Slot without arena → trainer schedule default (primary, else MIN(trainer_arenas)).
+    - Slot without arena + trainer offers online → online booking (``no_venue``).
+    - Slot without arena + no online offer → trainer schedule default (legacy).
     - origin_arena_id is the catalog/card arena the client came from. It never replaces the
       slot place; when it differs, the third flag is True so UI can warn before confirm.
 
@@ -1147,6 +1173,11 @@ async def resolve_arena_for_client_self_booking(
             return None, "invalid_arena", False
         resolved = int(slot_arena_id)
     else:
+        from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+        if await trainer_offers_online_sessions(session, trainer_id):
+            # Explicit online / venue-less slot — do not inherit primary arena.
+            return None, "no_venue", False
         resolved = await get_trainer_primary_arena_resolved(session, trainer_id)
         if resolved is None:
             return None, "no_venue", False
@@ -3807,7 +3838,12 @@ async def list_bookings_for_client(
                      AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP) AS hub_in_session,
                    (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
                    b.service_price_variant_id,
-                   p.city_id AS trainer_city_id
+                   p.city_id AS trainer_city_id,
+                   (SELECT COALESCE(NULLIF(TRIM(ph.file_key_list), ''), NULLIF(TRIM(ph.file_key), ''))
+                    FROM trainer_photos ph
+                    WHERE ph.trainer_id = b.trainer_id
+                    ORDER BY ph.sort_order NULLS LAST, ph.id ASC
+                    LIMIT 1) AS trainer_list_photo_key
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -3874,6 +3910,8 @@ async def list_bookings_for_client(
             "arena_id": int(row[23]) if row[23] is not None else None,
             "service_price_variant_id": int(row[24]) if row[24] is not None else None,
             "trainer_city_id": int(row[25]) if row[25] is not None else None,
+            # Хаб «Ваша запись»: мини-аватар тренера, если есть фото в каталоге.
+            "trainer_list_photo_key": (str(row[26]).strip() if row[26] else None) or None,
         })
     # TASK-196: валюта цены записи — из города её тренера (BY → BYN, RU → RUB),
     # одним запросом на страницу («Мои записи» рисует по currency_code).
@@ -3936,7 +3974,12 @@ async def list_booking_history_for_client(
                    false AS hub_in_session,
                    (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
                    b.service_price_variant_id,
-                   p.city_id AS trainer_city_id
+                   p.city_id AS trainer_city_id,
+                   (SELECT COALESCE(NULLIF(TRIM(ph.file_key_list), ''), NULLIF(TRIM(ph.file_key), ''))
+                    FROM trainer_photos ph
+                    WHERE ph.trainer_id = b.trainer_id
+                    ORDER BY ph.sort_order NULLS LAST, ph.id ASC
+                    LIMIT 1) AS trainer_list_photo_key
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -4010,6 +4053,7 @@ async def list_booking_history_for_client(
             "arena_id": int(row[23]) if row[23] is not None else None,
             "service_price_variant_id": int(row[24]) if row[24] is not None else None,
             "trainer_city_id": int(row[25]) if row[25] is not None else None,
+            "trainer_list_photo_key": (str(row[26]).strip() if row[26] else None) or None,
         })
     # TASK-196: валюта цены записи — из города её тренера (BY → BYN, RU → RUB),
     # одним запросом на страницу (история записей рисует по currency_code).

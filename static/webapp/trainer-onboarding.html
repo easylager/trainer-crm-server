@@ -120,8 +120,15 @@
       font-weight: 650;
     }
     .ob-chip:focus-visible { outline: 2px solid var(--app-cta-fill); outline-offset: 2px; }
-    .ob-online { display: flex; align-items: center; gap: 10px; margin-top: 12px; cursor: pointer; }
-    .ob-online input { width: 18px; height: 18px; flex: 0 0 auto; }
+    .ob-svc-formats { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .ob-svc-formats[hidden] { display: none; }
+    .ob-svc-format-row {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      font-size: 13px;
+    }
+    .ob-svc-format-row__name { font-weight: 650; margin-right: 4px; flex: 1 1 100%; }
+    .ob-svc-format-row .ob-chip { font-size: 13px; padding: 6px 10px; }
+    .ob-addbox-format { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
     .ob-optional {
       font-size: 12px;
       font-weight: 600;
@@ -847,6 +854,7 @@
       <h2 class="ob-step-title" id="obServicesTitle">Ваши услуги</h2>
       <p class="ob-step-hint">Отметьте всё, что проводите. Можно несколько.</p>
       <div class="ob-chips" id="obServices" role="group" aria-labelledby="obServicesTitle"></div>
+      <div class="ob-svc-formats" id="obServiceFormats" hidden aria-label="Формат выбранных услуг"></div>
       <!-- Свои услуги: наш список закрытый и весь про лёд, смежным дисциплинам
            в нём себя не найти. Вписанное работает сразу, в общий фильтр каталога
            попадает после модерации. -->
@@ -855,6 +863,11 @@
         <label for="obServiceAddInput">Название услуги</label>
         <input id="obServiceAddInput" type="text" maxlength="128" autocomplete="off"
                placeholder="Спортивная психология">
+        <p class="ob-step-hint" style="margin:8px 0 0;">Где проводится?</p>
+        <div class="ob-addbox-format" id="obServiceAddFormat" role="group" aria-label="Формат новой услуги">
+          <button type="button" class="ob-chip" data-online="0" aria-pressed="true">На площадке</button>
+          <button type="button" class="ob-chip" data-online="1" aria-pressed="false">Онлайн</button>
+        </div>
         <div class="ob-addbox__actions">
           <button type="button" class="ob-chip" id="obServiceAddSubmit">Добавить</button>
           <button type="button" class="ob-chip" id="obServiceAddCancel">Отмена</button>
@@ -898,13 +911,9 @@
       </div>
       <p class="ob-step-hint" id="obArenaNeedCity" hidden>Сначала выберите город — тогда появится поиск площадок.</p>
 
-      <!-- Онлайн независим от площадки: у консультанта может быть и зал, и онлайн.
-           Чип «Провожу онлайн» выше — это режим «физической площадки нет вообще»,
-           он остаётся для тех, у кого её правда нет. -->
-      <label class="ob-online">
-        <input type="checkbox" id="obOnlineEnabled">
-        <span>Также провожу занятия онлайн</span>
-      </label>
+      <p class="ob-step-hint">
+        Формат «Онлайн» задаётся у каждой услуги выше. Чип «Провожу онлайн» — если площадок нет вообще: все выбранные услуги станут онлайн.
+      </p>
 
       <!-- Одна площадка: комбобокс — список виден сразу, поиск сужает. -->
       <div id="obArenaSingleWrap" class="ob-arena-pick" hidden>

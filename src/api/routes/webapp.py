@@ -65,6 +65,7 @@ from src.application.client_booking_abuse_guard import (
     client_booking_quota_error,
 )
 from src.application.booking_use_cases import (
+    ServiceOnlineFormatMismatch,
     ServicePriceVariantRequired,
     active_booking_summaries_by_slot_for_trainer_range,
     cancel_booking,
@@ -418,6 +419,8 @@ from src.application.trainer_hub_action_inbox import (
 from src.application.trainer_use_cases import (
     get_trainer,
     get_trainer_moderation_readiness,
+    list_trainer_arena_ids_locked_by_bookings,
+    list_trainer_service_ids_format_locked,
     try_submit_trainer_for_moderation_review,
 )
 from src.bot import messages as msg
@@ -1149,6 +1152,10 @@ class SlotEntryBody(BaseModel):
         default=None,
         description="When capacity=1, optional venue for this start; omitted → trainer default slot arena",
     )
+    is_online: bool = Field(
+        default=False,
+        description="Online session (arena_id NULL). Independent of physical venues when online_enabled.",
+    )
 
 
 class ScheduleSlotsDayBody(BaseModel):
@@ -1163,6 +1170,13 @@ class ScheduleSlotsDayBody(BaseModel):
         description=(
             "Venue for new group slots (capacity > 1), uniform venue for start_times (individual grid), "
             "or default for slot_entries rows without per-entry arena_id"
+        ),
+    )
+    is_online: bool = Field(
+        default=False,
+        description=(
+            "Create venue-less online slots (arena_id NULL). Requires ≥1 online service "
+            "or arena_work_format=online. Mutually exclusive with arena_id on the same request."
         ),
     )
     # Per-slot pairs: each entry carries its own duration and bypasses arena grid alignment check.
@@ -1236,6 +1250,13 @@ async def patch_trainer_arena_public(
         raise HTTPException(status_code=404, detail="Площадка не привязана к вашему профилю")
     await session.commit()
     trainer = await get_trainer(session, trainer_id)
+    if trainer is not None:
+        trainer["arena_ids_locked"] = await list_trainer_arena_ids_locked_by_bookings(
+            session, trainer_id
+        )
+        trainer["service_ids_format_locked"] = await list_trainer_service_ids_format_locked(
+            session, trainer_id
+        )
     return {
         "ok": True,
         "arena_id": int(arena_id),
@@ -1283,6 +1304,16 @@ async def post_schedule_slots(
             )
         if not await trainer_offers_service(session, trainer_id, int(body.group_service_id)):
             raise HTTPException(status_code=400, detail="Услуга не в вашем списке")
+    if body.is_online and body.arena_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Онлайн-слот нельзя привязать к площадке — уберите arena_id или is_online.",
+        )
+    if body.is_online and body.capacity != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Онлайн пока только для индивидуальных слотов.",
+        )
     if body.arena_id is not None:
         await _require_schedule_arena_link(session, trainer_id, int(body.arena_id))
     try:
@@ -1291,6 +1322,17 @@ async def post_schedule_slots(
         raise HTTPException(status_code=400, detail="Invalid slot_date")
 
     arena_arg = int(body.arena_id) if body.arena_id is not None else None
+    batch_online = bool(body.is_online)
+    if batch_online or (
+        body.slot_entries is not None and any(bool(e.is_online) for e in body.slot_entries)
+    ):
+        from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+        if not await trainer_offers_online_sessions(session, trainer_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Отметьте хотя бы одну услугу как онлайн в профиле, чтобы создавать онлайн-слоты.",
+            )
 
     try:
         duty_intervals = _schedule_slot_intervals(body)
@@ -1307,7 +1349,7 @@ async def post_schedule_slots(
     if body.slot_entries is not None:
         # Per-slot precise mode: each entry carries its own start + duration, no grid validation.
         per_slot: dict[int, int] = {}
-        per_slot_arena: dict[int, int] = {}
+        per_slot_arena: dict[int, int | None] = {}
         for entry in body.slot_entries:
             try:
                 m_set = _hhmm_strings_to_minutes([entry.start_time])
@@ -1315,7 +1357,19 @@ async def post_schedule_slots(
                 raise HTTPException(status_code=400, detail=str(e)) from e
             start_m = next(iter(m_set))
             per_slot[start_m] = entry.duration_minutes
-            if entry.arena_id is not None:
+            if entry.is_online:
+                if entry.arena_id is not None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Онлайн-слот не может иметь площадку.",
+                    )
+                if body.capacity != 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Онлайн пока только для индивидуальных слотов.",
+                    )
+                per_slot_arena[start_m] = None
+            elif entry.arena_id is not None:
                 if body.capacity != 1:
                     raise HTTPException(
                         status_code=400,
@@ -1336,6 +1390,7 @@ async def post_schedule_slots(
                 slot_arena_id=arena_arg,
                 per_slot_duration=per_slot,
                 per_slot_arena_id=per_slot_arena if per_slot_arena else None,
+                force_null_arena=batch_online,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1364,6 +1419,7 @@ async def post_schedule_slots(
             capacity=body.capacity,
             group_service_id=body.group_service_id,
             slot_arena_id=arena_arg,
+            force_null_arena=batch_online,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1510,6 +1566,15 @@ def _filter_client_slots_payload_by_arenas(rows: list[dict], arena_ids: frozense
     return filtered
 
 
+def _filter_client_slots_payload_by_online(
+    rows: list[dict], *, want_online: bool | None
+) -> list[dict]:
+    """When catalog pins a service, keep only slots whose format matches that offering."""
+    if want_online is None:
+        return rows
+    return [row for row in rows if bool(row.get("is_online")) is bool(want_online)]
+
+
 def _client_catalog_slot_map_link(s: dict) -> str | None:
     """Map link for client booking UI: prefer coordinates, else Yandex search by venue line."""
     name = (s.get("arena_name") or "").strip()
@@ -1628,10 +1693,33 @@ async def get_client_slots(
 
     origin_arena_id = _client_slots_origin_arena_id(sess_row)
 
+    service_want_online: bool | None = None
+    if filter_service_id is not None:
+        online_row = (
+            await session.execute(
+                text(
+                    """
+                    SELECT COALESCE(is_online, false)
+                    FROM trainer_services
+                    WHERE trainer_id = :tid AND service_id = :sid
+                    """
+                ),
+                {"tid": trainer_id, "sid": int(filter_service_id)},
+            )
+        ).fetchone()
+        if online_row is not None:
+            service_want_online = bool(online_row[0])
+            # Online offering: venue chips must not hide venue-less slots.
+            if service_want_online:
+                arena_filter = None
+
     cached_slots = get_slots_cached(trainer_id, min_hours_val, filter_service_id)
     if cached_slots is not None:
         unfiltered_n = len(cached_slots)
         arena_slots = _filter_client_slots_payload_by_arenas(cached_slots, arena_filter)
+        arena_slots = _filter_client_slots_payload_by_online(
+            arena_slots, want_online=service_want_online
+        )
         filtered_slots, daypart = await _client_slots_after_self_book_window(
             session, trainer_id, client_telegram_id, arena_slots, requested_profile_id
         )
@@ -1669,16 +1757,28 @@ async def get_client_slots(
         available = filtered
     else:
         available = [s for s in available if max(1, int(s.get("capacity") or 1)) == 1]
+    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
     default_arena_for_slot = await trainer_default_slot_arena_id(session, trainer_id)
+    offers_online = await trainer_offers_online_sessions(session, trainer_id)
     serialized_full: list[dict] = []
     for s in available:
         an = (s.get("arena_name") or "").strip() or None
         aa = (s.get("arena_address") or "").strip() or None
         acn = (s.get("arena_city_name") or "").strip() or None
         raw_slot_arena = s.get("arena_id")
-        eff_slot_arena = (
-            int(raw_slot_arena) if raw_slot_arena is not None else default_arena_for_slot
-        )
+        if raw_slot_arena is not None:
+            eff_slot_arena: int | None = int(raw_slot_arena)
+            is_online_slot = False
+        elif offers_online:
+            # Venue-less + trainer offers online → keep null; label for clients.
+            eff_slot_arena = None
+            is_online_slot = True
+            if not an:
+                an = "Онлайн"
+        else:
+            eff_slot_arena = default_arena_for_slot
+            is_online_slot = False
         serialized_full.append(
             {
                 "id": s["id"],
@@ -1701,12 +1801,16 @@ async def get_client_slots(
                 "arena_name": an,
                 "arena_address": aa,
                 "arena_city_name": acn,
+                "is_online": is_online_slot,
                 "map_link": _client_catalog_slot_map_link(s),
             }
         )
     set_slots_cached(trainer_id, min_hours_val, serialized_full, filter_service_id)
     unfiltered_n = len(serialized_full)
     arena_slots = _filter_client_slots_payload_by_arenas(serialized_full, arena_filter)
+    arena_slots = _filter_client_slots_payload_by_online(
+        arena_slots, want_online=service_want_online
+    )
     filtered_slots, daypart = await _client_slots_after_self_book_window(
         session, trainer_id, client_telegram_id, arena_slots, requested_profile_id
     )
@@ -1864,13 +1968,34 @@ async def post_client_booking(
         service_id = body.service_id
 
     r_ts_offers = await session.execute(
-        text("SELECT 1 FROM trainer_services WHERE trainer_id = :tid AND service_id = :sid"),
+        text(
+            "SELECT COALESCE(is_online, false) FROM trainer_services "
+            "WHERE trainer_id = :tid AND service_id = :sid"
+        ),
         {"tid": trainer_id, "sid": service_id},
     )
-    if not r_ts_offers.fetchone():
+    ts_offer = r_ts_offers.fetchone()
+    if not ts_offer:
         raise HTTPException(
             status_code=400,
             detail="Эта услуга недоступна у выбранного тренера. Откройте карточку тренера и выберите услугу снова.",
+        )
+    service_is_online = bool(ts_offer[0])
+    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+    slot_arena_pre = slot.get("arena_id")
+    slot_is_online = (
+        slot_arena_pre is None and await trainer_offers_online_sessions(session, trainer_id)
+    )
+    if slot_is_online and not service_is_online:
+        raise HTTPException(
+            status_code=422,
+            detail="Это онлайн-слот — выберите онлайн-услугу тренера.",
+        )
+    if not slot_is_online and service_is_online:
+        raise HTTPException(
+            status_code=422,
+            detail="Эта услуга только онлайн — выберите онлайн-слот.",
         )
 
     client_id = await _ensure_client_for_webapp_miniapp(
@@ -1938,6 +2063,13 @@ async def post_client_booking(
             status_code=400,
             detail="Выберите категорию цены (тариф) для этой услуги.",
         ) from None
+    except ServiceOnlineFormatMismatch as e:
+        detail = (
+            "Это онлайн-слот — выберите онлайн-услугу тренера."
+            if e.code == "online_slot_needs_online_service"
+            else "Эта услуга только онлайн — выберите онлайн-слот."
+        )
+        raise HTTPException(status_code=422, detail=detail) from e
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
     out: dict[str, object] = {"success": True, "booking_id": booking_id}
@@ -6970,7 +7102,7 @@ async def get_trainer_my_services(
     trainer_currency = await resolve_trainer_currency(session, trainer_id)
     r = await session.execute(
         text("""
-            SELECT s.id, s.name, ts.description, ts.ui_accent
+            SELECT s.id, s.name, ts.description, ts.ui_accent, COALESCE(ts.is_online, false)
             FROM trainer_services ts
             JOIN services s ON s.id = ts.service_id
             WHERE ts.trainer_id = :tid
@@ -7026,6 +7158,7 @@ async def get_trainer_my_services(
             "name": (row[1] or "").strip() or "—",
             "description": _service_row_description(row),
             "ui_accent": _service_row_ui_accent(row),
+            "is_online": bool(row[4]) if len(row) > 4 else False,
             "currency_code": trainer_currency,
             "price_tiers": tiers_by_sid.get(int(row[0]), []),
         }
@@ -7056,7 +7189,14 @@ async def get_trainer_my_services(
         }
         for row in arena_rows
     ]
-    return {"services": services, "arenas": arenas}
+    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+
+    online_enabled = await trainer_offers_online_sessions(session, trainer_id)
+    return {
+        "services": services,
+        "arenas": arenas,
+        "online_enabled": online_enabled,
+    }
 
 
 @router.get("/trainer/clients")
@@ -8223,20 +8363,28 @@ async def post_trainer_booking(
     arena_id: int | None = body.arena_id
     if arena_id is not None:
         await _require_schedule_arena_link(session, booking_trainer_id, arena_id)
-    booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
-        session,
-        slot_id=body.slot_id,
-        trainer_id=booking_trainer_id,
-        client_id=body.client_id,
-        service_id=body.service_id,
-        client_comment=None,
-        client_request_id=None,
-        created_by_trainer=True,
-        arena_id=arena_id,
-        service_price_variant_id=body.service_price_variant_id,
-        strict_service_price_variant=False,
-        allow_overbook=allow_ob,
-    )
+    try:
+        booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
+            session,
+            slot_id=body.slot_id,
+            trainer_id=booking_trainer_id,
+            client_id=body.client_id,
+            service_id=body.service_id,
+            client_comment=None,
+            client_request_id=None,
+            created_by_trainer=True,
+            arena_id=arena_id,
+            service_price_variant_id=body.service_price_variant_id,
+            strict_service_price_variant=False,
+            allow_overbook=allow_ob,
+        )
+    except ServiceOnlineFormatMismatch as e:
+        detail = (
+            "Онлайн-слот — только с онлайн-услугой."
+            if e.code == "online_slot_needs_online_service"
+            else "Онлайн-услуга — только с онлайн-слотом."
+        )
+        raise HTTPException(status_code=422, detail=detail) from e
     if not booking_id:
         detail_ru = await explain_trainer_booking_failure(
             session, booking_trainer_id, body.slot_id, body.service_id
@@ -8361,6 +8509,14 @@ async def post_trainer_booking_quick(
             status_code=400,
             detail="Выберите категорию цены (тариф) для этой услуги.",
         ) from None
+    except ServiceOnlineFormatMismatch as e:
+        await session.rollback()
+        detail = (
+            "Онлайн-слот — только с онлайн-услугой."
+            if e.code == "online_slot_needs_online_service"
+            else "Онлайн-услуга — только с онлайн-слотом."
+        )
+        raise HTTPException(status_code=422, detail=detail) from e
     if result is None:
         raise HTTPException(status_code=400, detail="Не удалось создать запись")
     booking_id, slot_id, first_booking_milestone, share_catalog_tip = result
@@ -8736,10 +8892,17 @@ async def get_trainer_onboarding_quick_setup(
     ]
 
     r_mine = await session.execute(
-        text("SELECT service_id FROM trainer_services WHERE trainer_id = :tid"),
+        text(
+            "SELECT service_id, COALESCE(is_online, false) "
+            "FROM trainer_services WHERE trainer_id = :tid"
+        ),
         {"tid": trainer_id},
     )
-    selected = [int(row[0]) for row in r_mine.fetchall()]
+    selected_rows = r_mine.fetchall()
+    selected = [int(row[0]) for row in selected_rows]
+    selected_service_formats = [
+        {"service_id": int(row[0]), "is_online": bool(row[1])} for row in selected_rows
+    ]
 
     # capacity = 1: individual template rows only — quick-setup never writes group rows, and a
     # group row's hour bucket leaking into this grid would confuse the onboarding picker. Group
@@ -8867,6 +9030,7 @@ async def get_trainer_onboarding_quick_setup(
         "first_name": first_name,
         "services": services,
         "selected_service_ids": selected,
+        "selected_services": selected_service_formats,
         "week": (
             [
                 {
@@ -8929,10 +9093,24 @@ async def post_trainer_onboarding_city(
     return result
 
 
+class QuickSetupServiceFormatItem(BaseModel):
+    service_id: int = Field(..., ge=1)
+    is_online: bool = False
+
+
+class QuickSetupCustomServiceItem(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    is_online: bool = False
+
+
 class TrainerQuickSetupBody(BaseModel):
     """First-run payload: what the trainer coaches, where (optional city), and when."""
 
     service_ids: list[int] = Field(default_factory=list)
+    services: list[QuickSetupServiceFormatItem] = Field(
+        default_factory=list,
+        description="Selected catalog services with per-offer online/offline format.",
+    )
     days: list[dict[str, Any]] = Field(default_factory=list)
     duration_minutes: int = Field(default=60, ge=15, le=480)
     city_id: int | None = Field(default=None, ge=1)
@@ -8945,12 +9123,18 @@ class TrainerQuickSetupBody(BaseModel):
         description="Кем специалист себя называет (несколько чипов). Пустой список — сброс.",
     )
     online_enabled: bool | None = Field(
-        default=None, description="Работает ли онлайн. Пусто — не меняем сохранённое."
+        default=None,
+        description="Deprecated: online is derived from services.is_online; ignored on write.",
     )
     custom_service_names: list[str] = Field(
         default_factory=list,
         max_length=MAX_CUSTOM_SERVICES_PER_TRAINER,
-        description="Услуги, вписанные вручную, когда наш список не подошёл.",
+        description="Legacy: names only (offline). Prefer custom_services.",
+    )
+    custom_services: list[QuickSetupCustomServiceItem] = Field(
+        default_factory=list,
+        max_length=MAX_CUSTOM_SERVICES_PER_TRAINER,
+        description="Custom services with online/offline format.",
     )
 
 
@@ -8999,23 +9183,35 @@ async def post_trainer_onboarding_quick_setup(
     # набор service_ids, иначе тренер увидит «сохранено», а вписанная услуга
     # останется неприкреплённой и пропадёт с экрана при следующем открытии.
     custom_services: list[dict[str, Any]] = []
+    online_by_service_id: dict[int, bool] = {
+        int(item.service_id): bool(item.is_online) for item in body.services
+    }
     try:
-        for raw_name in body.custom_service_names:
+        for item in body.custom_services:
             custom_services.append(
-                await add_trainer_custom_service(session, trainer_id, raw_name)
+                await add_trainer_custom_service(
+                    session, trainer_id, item.name, is_online=bool(item.is_online)
+                )
+            )
+        # Legacy names-only list (offline). Skip names already covered by custom_services.
+        covered = {str(cs.get("name") or "").casefold() for cs in custom_services}
+        for raw_name in body.custom_service_names:
+            if str(raw_name or "").casefold() in covered:
+                continue
+            custom_services.append(
+                await add_trainer_custom_service(session, trainer_id, raw_name, is_online=False)
             )
     except CustomServiceError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     service_ids = [int(s) for s in body.service_ids]
+    service_ids.extend(int(item.service_id) for item in body.services)
     service_ids.extend(int(cs["service_id"]) for cs in custom_services)
+    for cs in custom_services:
+        online_by_service_id[int(cs["service_id"])] = bool(cs.get("is_online"))
 
     try:
-        if (
-            body.specialist_roles is not None
-            or body.specialist_role is not None
-            or body.online_enabled is not None
-        ):
+        if body.specialist_roles is not None or body.specialist_role is not None:
             roles: list[str] | None = None
             role_display: str | None = None
             if body.specialist_roles is not None:
@@ -9031,7 +9227,6 @@ async def post_trainer_onboarding_quick_setup(
                 trainer_id,
                 specialist_roles=roles if roles is not None else None,
                 specialist_role=role_display,
-                online_enabled=body.online_enabled,
             )
             await session.commit()
             if roles:
@@ -9062,6 +9257,22 @@ async def post_trainer_onboarding_quick_setup(
             duration_minutes=int(body.duration_minutes),
             city_id=int(body.city_id) if body.city_id is not None else None,
         )
+        if online_by_service_id:
+            for sid, is_on in online_by_service_id.items():
+                await session.execute(
+                    text(
+                        """
+                        UPDATE trainer_services
+                        SET is_online = :is_online
+                        WHERE trainer_id = :tid AND service_id = :sid
+                        """
+                    ),
+                    {"tid": trainer_id, "sid": int(sid), "is_online": bool(is_on)},
+                )
+            from src.application.trainer_use_cases import sync_trainer_online_enabled_from_services
+
+            await sync_trainer_online_enabled_from_services(session, trainer_id)
+            await session.commit()
     except QuickSetupError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except ValueError as e:
@@ -9425,18 +9636,26 @@ async def post_trainer_request_book(
     client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
     if not client_info:
         raise HTTPException(status_code=404, detail="Request not found or not responded")
-    booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
-        session,
-        slot_id=body.slot_id,
-        trainer_id=trainer_id,
-        client_id=client_info["client_id"],
-        service_id=client_info["service_id"],
-        client_comment=None,
-        client_request_id=request_id,
-        created_by_trainer=True,
-        service_price_variant_id=body.service_price_variant_id,
-        strict_service_price_variant=False,
-    )
+    try:
+        booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
+            session,
+            slot_id=body.slot_id,
+            trainer_id=trainer_id,
+            client_id=client_info["client_id"],
+            service_id=client_info["service_id"],
+            client_comment=None,
+            client_request_id=request_id,
+            created_by_trainer=True,
+            service_price_variant_id=body.service_price_variant_id,
+            strict_service_price_variant=False,
+        )
+    except ServiceOnlineFormatMismatch as e:
+        detail = (
+            "Онлайн-слот — только с онлайн-услугой."
+            if e.code == "online_slot_needs_online_service"
+            else "Онлайн-услуга — только с онлайн-слотом."
+        )
+        raise HTTPException(status_code=422, detail=detail) from e
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
     await clear_trainer_pending_request_booking(session, trainer_id, request_id)

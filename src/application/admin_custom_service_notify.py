@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 async def notify_admins_new_custom_service(
-    *, service_id: int, name: str, trainer_id: int
+    *, service_id: int, name: str, trainer_id: int, is_online: bool = False
 ) -> None:
     settings = Settings()
     token = settings.telegram_bot_token_admin
@@ -59,9 +59,11 @@ async def notify_admins_new_custom_service(
     if username:
         who += f" (@{html.escape(username)})"
 
+    format_label = "онлайн" if is_online else "на площадке"
     caption = (
         f"🆕 <b>Своя услуга #{service_id}</b>\n"
         f"Название: {html.escape(name)}\n"
+        f"Формат: {format_label}\n"
         f"Добавил: {who}\n\n"
         "Видна только на карточке автора. Чтобы пустить её в общий фильтр каталога — "
         f"<code>UPDATE services SET is_public = true WHERE id = {service_id};</code>"

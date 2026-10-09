@@ -46,6 +46,8 @@ def serialize_client_booking(b: dict) -> dict:
         "trainer_telegram_id": b.get("trainer_telegram_id"),
         "trainer_telegram_username": (b.get("trainer_telegram_username") or "").strip() or None,
         "trainer_phone": (b.get("trainer_phone") or "").strip() or None,
+        # Хаб рисует мини-аватар в «Ваша запись», если у тренера есть фото.
+        "trainer_list_photo_key": (str(b.get("trainer_list_photo_key") or "").strip() or None),
         "slot_date": slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date),
         "start_time": start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else str(start_time)[:5],
         "end_time": end_time.strftime("%H:%M") if hasattr(end_time, "strftime") else str(end_time)[:5],

@@ -1364,7 +1364,7 @@
       parts.push(String(item.primary_arena_name));
     }
     /* Онлайн — независимый флаг анкеты: он может стоять и рядом с залом,
-       а не только вместо площадки (см. trainer_profiles.online_enabled). */
+       а не только вместо площадки (online_enabled синхронизируется с онлайн-услугами). */
     if (p.online_enabled || item.arena_work_format === 'online') {
       parts.push('Онлайн');
     }

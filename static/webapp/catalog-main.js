@@ -65,6 +65,8 @@
         /** Per slot selection — POST /client/booking Idempotency-Key (retry after dropped response). */
         catalogBookingIdempotencyKey: null,
         slotsForTrainer: [],
+        /** Selected day (YYYY-MM-DD) on «Выберите время» day strip; null → first day with slots. */
+        slotPickSelectedDay: null,
         /** Subset of trainer arenas used as GET /client/slots arena_ids= (OR). Empty ⇒ all venues. */
         trainerSlotsArenaIds: [],
         slotsEmptyOnFilterHint: '',
@@ -879,6 +881,13 @@
         return false;
       }
 
+      function catalogServicesForSlot(services, slot) {
+        var list = Array.isArray(services) ? services : [];
+        if (!slot) return list;
+        var wantOnline = !!slot.is_online;
+        return list.filter(function(s) { return !!s.is_online === wantOnline; });
+      }
+
       /** Услуга из фильтра + выбор тарифа при нескольких ценах (строгий режим API). Групповые слоты — без выбора тира. */
       function updateBookingFormServiceAndTiers() {
         var svcBlock = document.getElementById('bookingFormServiceBlock');
@@ -890,23 +899,49 @@
         var effSid = catalogEffectiveServiceIdForBooking();
         var nm = effSid != null ? catalogServiceDisplayNameForId(effSid) : (state.serviceName || '').trim();
         var t = state.selectedTrainer;
-        var services = (t && t.services) ? t.services : [];
         var slot = state.selectedSlot;
+        var allServices = (t && t.services) ? t.services : [];
+        var services = catalogServicesForSlot(allServices, slot);
+        var formatMismatchEmpty = !!slot && services.length === 0 && allServices.length > 0;
+        var allowedIds = {};
+        services.forEach(function(s) {
+          var idn = s.service_id != null ? Number(s.service_id) : NaN;
+          if (!isNaN(idn) && idn > 0) allowedIds[idn] = true;
+        });
+        if (effSid != null && !allowedIds[Number(effSid)]) {
+          if (services.length === 1) {
+            effSid = Number(services[0].service_id);
+            state.serviceId = effSid;
+            state.serviceName = String(services[0].service_name || '').trim();
+          } else {
+            effSid = null;
+            state.serviceId = null;
+          }
+          nm = effSid != null ? catalogServiceDisplayNameForId(effSid) : '';
+        }
         var capRaw = slot && slot.capacity != null ? parseInt(slot.capacity, 10) : 1;
         var cap = isNaN(capRaw) ? 1 : capRaw;
         var isGroupSlot = cap > 1;
         if (svcBlock) {
           if (!services.length) {
-            svcBlock.style.display = 'none';
+            svcBlock.style.display = 'block';
             if (svcEl) {
-              svcEl.style.display = 'none';
-              svcEl.textContent = '';
+              svcEl.style.display = 'block';
+              svcEl.textContent = formatMismatchEmpty
+                ? (slot && slot.is_online
+                  ? 'У тренера нет онлайн-услуг для этого слота.'
+                  : 'Нет офлайн-услуг для этого слота.')
+                : 'Нет подходящих услуг для этого слота.';
             }
             if (svcSelect) {
               svcSelect.innerHTML = '';
               svcSelect.style.display = 'none';
             }
           } else if (services.length === 1) {
+            if (state.serviceId == null || Number(state.serviceId) !== Number(services[0].service_id)) {
+              state.serviceId = Number(services[0].service_id);
+              state.serviceName = String(services[0].service_name || '').trim();
+            }
             var lineNm = nm || String(services[0].service_name || '').trim();
             if (!lineNm) {
               svcBlock.style.display = 'none';
@@ -3592,7 +3627,8 @@
         var chip = document.getElementById('chipNotifySlots');
         if (!chip || parseInt(chip.dataset.trainerId, 10) !== trainerId) return;
         chip.querySelector('span').textContent = isNotify ? 'Подписан' : 'Напомнить';
-        chip.querySelector('.chip-icon').textContent = isNotify ? '🔔' : '🔕';
+        // Выкл — обычный колокол (приглашение включить); вкл — зачёркнутый (тап отключит).
+        chip.querySelector('.chip-icon').textContent = isNotify ? '🔕' : '🔔';
         chip.classList.toggle('is-active', isNotify);
         chip.classList.toggle('wants-attention', !isNotify);
 
@@ -3600,11 +3636,11 @@
         if (hint) {
           var noSlotsCtx = chip.dataset.noSlotsContext === '1';
           if (isNotify) {
-            hint.textContent = '🔔 Уведомим, когда появятся свободные окна';
+            hint.textContent = '🔕 Напоминания включены — нажмите, чтобы отключить';
           } else if (noSlotsCtx) {
-            hint.textContent = 'Нет слотов — нажмите 🔕, чтобы получить уведомление';
+            hint.textContent = 'Нет слотов — нажмите 🔔, чтобы получить уведомление';
           } else {
-            hint.textContent = 'Нажмите 🔕 — напомним о новых окнах в расписании';
+            hint.textContent = 'Нажмите 🔔 — напомним о новых окнах в расписании';
           }
         }
       }
@@ -3776,7 +3812,7 @@
 
       /**
        * Dual-chip row: [🔔 Напомнить] [❤️ Сохранить].
-       * Compact secondary actions — never obscure the primary CTA.
+       * Выкл = 🔔 (приглашение), вкл = 🔕 (тап отключит).
        * noSlots=true adds a subtle pulse to the notify chip to draw attention.
        */
       function appendTrainerActionChips(container, trainer, noSlots) {
@@ -3800,7 +3836,7 @@
           (!isNotify && noSlots ? ' wants-attention' : '');
         chipNotify.setAttribute('data-no-slots-context', noSlots ? '1' : '0');
         chipNotify.innerHTML =
-          '<span class="chip-icon">' + (isNotify ? '🔔' : '🔕') + '</span>' +
+          '<span class="chip-icon">' + (isNotify ? '🔕' : '🔔') + '</span>' +
           '<span>' + (isNotify ? 'Подписан' : 'Напомнить') + '</span>';
         chipNotify.onclick = function() { toggleNotifySlots(tid); };
 
@@ -3839,11 +3875,11 @@
         hint.className = 'chips-hint';
         hint.id = 'chipsContextHint';
         if (isNotify) {
-          hint.textContent = '🔔 Уведомим, когда появятся свободные окна';
+          hint.textContent = '🔕 Напоминания включены — нажмите, чтобы отключить';
         } else if (noSlots) {
-          hint.textContent = 'Нет слотов — нажмите 🔕, чтобы получить уведомление';
+          hint.textContent = 'Нет слотов — нажмите 🔔, чтобы получить уведомление';
         } else {
-          hint.textContent = 'Нажмите 🔕 — напомним о новых окнах в расписании';
+          hint.textContent = 'Нажмите 🔔 — напомним о новых окнах в расписании';
         }
         container.appendChild(hint);
       }
@@ -6299,7 +6335,8 @@
           if (tn) q += '&trainer_name=' + encodeURIComponent(tn);
         }
         if (state.serviceId != null) q += '&service_id=' + encodeURIComponent(state.serviceId);
-        if (state.trainerSlotsArenaIds && state.trainerSlotsArenaIds.length) {
+        var onlineSvc = catalogServiceIsOnline(trainerFromList || state.selectedTrainer, state.serviceId);
+        if (!onlineSvc && state.trainerSlotsArenaIds && state.trainerSlotsArenaIds.length) {
           q += '&arena_ids=' + encodeURIComponent(
             state.trainerSlotsArenaIds.slice().sort(function(a, b) { return a - b; }).join(',')
           );
@@ -6362,6 +6399,11 @@
 
       function initTrainerSlotsArenaFilter(trainer, opts) {
         opts = opts || {};
+        if (catalogServiceIsOnline(trainer, state.serviceId)) {
+          state.trainerSlotsArenaIds = [];
+          state.trainerSlotsArenaFilterExplicit = true;
+          return;
+        }
         var tarenas = (trainer && trainer.arena_ids ? trainer.arena_ids : []).map(Number).filter(function(n) { return !isNaN(n); });
         if (!tarenas.length) {
           state.trainerSlotsArenaIds = [];
@@ -6390,6 +6432,11 @@
       function loadTrainerDetailSlots(trainer) {
         return loadSlotsForTrainer(trainer.id, trainer).then(function(data) {
           var slots = (data && data.slots) || [];
+          // Online offering: never auto-pin a venue chip (venue-less slots).
+          if (catalogServiceIsOnline(trainer, state.serviceId)) {
+            state.trainerSlotsArenaIds = [];
+            return slots;
+          }
           if (!state.trainerSlotsArenaFilterExplicit) {
             var picked = pickDefaultTrainerSlotsArenaIds(trainer, slots);
             if (picked.length && !trainerSlotsArenaIdsEqual(picked, state.trainerSlotsArenaIds)) {
@@ -6414,6 +6461,11 @@
       function paintTrainerArenaSlotFilterBar(t) {
         var el = document.getElementById('trainerDetailArenaSlotFilter');
         if (!el) return;
+        if (catalogServiceIsOnline(t, state.serviceId)) {
+          el.innerHTML = '';
+          el.style.display = 'none';
+          return;
+        }
         var ids = (t && t.arena_ids) ? t.arena_ids : [];
         var names = (t && t.arena_names) ? t.arena_names : [];
         if (ids.length <= 1) {
@@ -6488,14 +6540,27 @@
       }
 
       function paintTrainerSlotsAndActionsSection(t, data) {
-        state.slotsForTrainer = (data && data.slots) || [];
+        var rawSlots = (data && data.slots) || [];
+        var wantOnline = catalogServiceIsOnline(t, state.serviceId);
+        if (state.serviceId != null) {
+          rawSlots = rawSlots.filter(function(s) { return !!s.is_online === wantOnline; });
+        }
+        state.slotsForTrainer = rawSlots;
         var slotsEl = document.getElementById('trainerDetailSlots');
         var actionsEl = document.getElementById('trainerDetailActions');
         var slots = state.slotsForTrainer;
-        var slotsHtml = '<div class="slots-title">Ближайшие слоты</div>';
+        var slotsHtml =
+          '<div class="slots-title">' +
+          (wantOnline ? 'Онлайн-слоты' : 'Ближайшие слоты') +
+          '</div>';
         if (slots.length === 0) {
-          var emptyHint = (data && data.empty_on_filter_hint) || state.slotsEmptyOnFilterHint || '';
-          slotsHtml += '<div class="slots-empty">Сейчас нет свободных слотов.</div>';
+          var emptyHint = wantOnline
+            ? ''
+            : ((data && data.empty_on_filter_hint) || state.slotsEmptyOnFilterHint || '');
+          slotsHtml +=
+            '<div class="slots-empty">' +
+            (wantOnline ? 'Сейчас нет свободных онлайн-слотов.' : 'Сейчас нет свободных слотов.') +
+            '</div>';
           slotsHtml +=
             '<div class="slots-empty slots-empty-hint">' +
             escapeHtml(emptyHint || 'Оставьте заявку — тренер предложит удобное время.') +
@@ -6504,10 +6569,11 @@
           var showCount = Math.min(slots.length, 6);
           for (var i = 0; i < showCount; i++) {
             var s = slots[i];
-            var place =
-              window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
+            var place = s.is_online
+              ? 'Онлайн'
+              : (window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
                 ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
-                : ((s.arena_name && String(s.arena_name).trim()) || '');
+                : ((s.arena_name && String(s.arena_name).trim()) || ''));
             slotsHtml +=
               '<button type="button" class="slot-row" data-slot-index="' +
               i +
@@ -6622,9 +6688,30 @@
           });
           html += '</div>';
         }
-        html += '<p class="trainer-detail-arena-hint">Запись доступна на те площадки, где у тренера есть свободные слоты. Ниже можно отфильтровать по арене.</p>';
+        if (!catalogSelectedServiceIsOnline()) {
+          html += '<p class="trainer-detail-arena-hint">Запись доступна на те площадки, где у тренера есть свободные слоты. Ниже можно отфильтровать по арене.</p>';
+        } else {
+          html += '<p class="trainer-detail-arena-hint">Для онлайн-услуги площадка не нужна — ниже только онлайн-слоты.</p>';
+        }
         html += '</div>';
         return html;
+      }
+
+
+      function catalogServiceIsOnline(trainer, serviceId) {
+        if (serviceId == null || !trainer) return false;
+        var sid = Number(serviceId);
+        if (isNaN(sid)) return false;
+        var services = trainer.services || [];
+        var i;
+        for (i = 0; i < services.length; i++) {
+          if (Number(services[i].service_id) === sid) return !!services[i].is_online;
+        }
+        return false;
+      }
+
+      function catalogSelectedServiceIsOnline() {
+        return catalogServiceIsOnline(state.selectedTrainer, state.serviceId);
       }
 
       window.selectTrainerService = function(serviceId) {
@@ -6633,15 +6720,26 @@
         if (isNaN(sid)) return;
         if (state.serviceId === sid) return;
         state.serviceId = sid;
-        
+
         var services = state.selectedTrainer.services || [];
+        var selectedOnline = false;
         for (var i = 0; i < services.length; i++) {
           if (Number(services[i].service_id) === sid) {
             state.serviceName = String(services[i].service_name || '').trim();
+            selectedOnline = !!services[i].is_online;
             break;
           }
         }
-        
+
+        // Online offering: drop venue chip filter so venue-less slots are not hidden.
+        if (selectedOnline) {
+          state.trainerSlotsArenaIds = [];
+          state.trainerSlotsArenaFilterExplicit = true;
+        } else {
+          state.trainerSlotsArenaFilterExplicit = false;
+          initTrainerSlotsArenaFilter(state.selectedTrainer, {});
+        }
+
         // Update URL to reflect the new service ID so if they reload it stays
         if (window.history && window.history.replaceState) {
           var url = new URL(window.location.href);
@@ -6766,33 +6864,40 @@
             html += '<div class="trainer-detail-service-callout-body">' + selectedServiceDescEscaped + '</div>';
             html += '</div>';
           }
-          html += '<div class="trainer-detail-services">';
-          html += '<div class="trainer-detail-services-title">Услуги и цены</div>';
-          services.forEach(function(s) {
-            var serviceName = s.service_name || '—';
-            var priceText = formatCatalogServicePrice(s);
-            var sid = s.service_id != null ? Number(s.service_id) : NaN;
-            var matchCatalog =
-              state.serviceId != null &&
-              !isNaN(sid) &&
-              Number(state.serviceId) === sid;
-            var isClickable = !isNaN(sid) && !matchCatalog;
-            /* Native <button>: iOS/WebView reliably delivers taps as click; DIV+inline onclick often does not. */
-            if (isClickable) {
-              html += '<button type="button" class="trainer-detail-service trainer-detail-service--clickable" data-catalog-service-select="' + sid + '">';
-            } else {
-              html +=
-                '<div class="trainer-detail-service' +
-                (matchCatalog ? ' trainer-detail-service--catalog-selected' : '') +
-                '">';
-            }
-            html += '<div class="trainer-detail-service-top">';
-            html += '<span class="trainer-detail-service-name">' + escapeHtml(serviceName) + '</span>';
-            html += '<span class="trainer-detail-service-price">' + priceText + '</span>';
-            html += '</div>';
-            html += isClickable ? '</button>' : '</div>';
-          });
-          html += '</div>';
+          function renderServiceSection(title, list) {
+            if (!list.length) return '';
+            var part = '<div class="trainer-detail-services">';
+            part += '<div class="trainer-detail-services-title">' + escapeHtml(title) + '</div>';
+            list.forEach(function(s) {
+              var serviceName = s.service_name || '—';
+              var priceText = formatCatalogServicePrice(s);
+              var sid = s.service_id != null ? Number(s.service_id) : NaN;
+              var matchCatalog =
+                state.serviceId != null &&
+                !isNaN(sid) &&
+                Number(state.serviceId) === sid;
+              var isClickable = !isNaN(sid) && !matchCatalog;
+              if (isClickable) {
+                part += '<button type="button" class="trainer-detail-service trainer-detail-service--clickable" data-catalog-service-select="' + sid + '">';
+              } else {
+                part +=
+                  '<div class="trainer-detail-service' +
+                  (matchCatalog ? ' trainer-detail-service--catalog-selected' : '') +
+                  '">';
+              }
+              part += '<div class="trainer-detail-service-top">';
+              part += '<span class="trainer-detail-service-name">' + escapeHtml(serviceName) + '</span>';
+              part += '<span class="trainer-detail-service-price">' + priceText + '</span>';
+              part += '</div>';
+              part += isClickable ? '</button>' : '</div>';
+            });
+            part += '</div>';
+            return part;
+          }
+          var offlineServices = services.filter(function(s) { return !s.is_online; });
+          var onlineServices = services.filter(function(s) { return !!s.is_online; });
+          html += renderServiceSection('Услуги и цены', offlineServices);
+          html += renderServiceSection('Онлайн', onlineServices);
         }
         var htmlTop = html;
         html = '';
@@ -6892,12 +6997,15 @@
        */
       function renderSlotPickEmptyState(list) {
         var t = state.selectedTrainer;
-        var filtered = (state.trainerSlotsArenaIds || []).length > 0;
+        var onlineSvc = catalogSelectedServiceIsOnline();
+        var filtered = !onlineSvc && (state.trainerSlotsArenaIds || []).length > 0;
         var hint = state.slotsEmptyOnFilterHint || '';
         if (!hint) {
-          hint = filtered
-            ? 'На выбранной площадке свободных слотов нет.'
-            : 'У тренера сейчас нет свободных слотов.';
+          hint = onlineSvc
+            ? 'Сейчас нет свободных онлайн-слотов.'
+            : (filtered
+              ? 'На выбранной площадке свободных слотов нет.'
+              : 'У тренера сейчас нет свободных слотов.');
         }
         var html =
           '<div class="slots-empty">' + escapeHtml(hint) + '</div>' +
@@ -6983,64 +7091,184 @@
         el.hidden = false;
       }
 
+      function slotPickTodayIso() {
+        var n = new Date();
+        return (
+          n.getFullYear() +
+          '-' +
+          String(n.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(n.getDate()).padStart(2, '0')
+        );
+      }
+
+      /** Подпись чипа: «Сегодня» / «Завтра» / «Пн» — как arena-strip / gss-day-strip. */
+      function slotPickDayChipTop(dateKey) {
+        var d = String(dateKey || '').split('-');
+        if (d.length !== 3) return '';
+        var dateObj = new Date(parseInt(d[0], 10), parseInt(d[1], 10) - 1, parseInt(d[2], 10));
+        if (isNaN(dateObj.getTime())) return '';
+        var today = slotPickTodayIso();
+        if (dateKey === today) return 'Сегодня';
+        var t = today.split('-');
+        var tomorrow = new Date(parseInt(t[0], 10), parseInt(t[1], 10) - 1, parseInt(t[2], 10) + 1);
+        var tomorrowIso =
+          tomorrow.getFullYear() +
+          '-' +
+          String(tomorrow.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(tomorrow.getDate()).padStart(2, '0');
+        if (dateKey === tomorrowIso) return 'Завтра';
+        return SLOT_DAYS[dateObj.getDay()] || '';
+      }
+
+      function hideSlotPickDayStrip() {
+        var strip = document.getElementById('slotPickDayStrip');
+        if (!strip) return;
+        strip.hidden = true;
+        strip.innerHTML = '';
+      }
+
+      function ensureSlotPickSelectedDay(days) {
+        if (!days.length) {
+          state.slotPickSelectedDay = null;
+          return null;
+        }
+        if (state.slotPickSelectedDay && days.indexOf(state.slotPickSelectedDay) >= 0) {
+          return state.slotPickSelectedDay;
+        }
+        state.slotPickSelectedDay = days[0];
+        return state.slotPickSelectedDay;
+      }
+
+      function paintSlotPickDayStrip(days, byDay) {
+        var strip = document.getElementById('slotPickDayStrip');
+        if (!strip) return;
+        if (!days.length) {
+          hideSlotPickDayStrip();
+          return;
+        }
+        var selected = ensureSlotPickSelectedDay(days);
+        var html = '';
+        days.forEach(function(dateKey) {
+          var d = String(dateKey || '').split('-');
+          var num = d.length === 3 ? String(parseInt(d[2], 10)) : '';
+          var top = slotPickDayChipTop(dateKey);
+          var count = (byDay[dateKey] || []).length;
+          var on = dateKey === selected;
+          var weekend = false;
+          if (d.length === 3) {
+            var dateObj = new Date(parseInt(d[0], 10), parseInt(d[1], 10) - 1, parseInt(d[2], 10));
+            var wd = dateObj.getDay();
+            weekend = wd === 0 || wd === 6;
+          }
+          html +=
+            '<button type="button" role="tab" class="slot-pick-day-strip__day' +
+            (on ? ' is-on' : '') +
+            (weekend ? ' slot-pick-day-strip__day--weekend' : '') +
+            '" data-slot-pick-day="' +
+            escapeHtml(dateKey) +
+            '" aria-pressed="' +
+            (on ? 'true' : 'false') +
+            '">' +
+            '<span>' +
+            escapeHtml(top) +
+            '</span><b>' +
+            escapeHtml(num) +
+            '</b><i>' +
+            escapeHtml(String(count)) +
+            '</i></button>';
+        });
+        strip.innerHTML = html;
+        strip.hidden = false;
+        strip.querySelectorAll('[data-slot-pick-day]').forEach(function(btn) {
+          btn.onclick = function() {
+            var iso = btn.getAttribute('data-slot-pick-day');
+            if (!iso || iso === state.slotPickSelectedDay) return;
+            state.slotPickSelectedDay = iso;
+            renderSlotPickList();
+            var onBtn = document.querySelector(
+              '#slotPickDayStrip [data-slot-pick-day="' + iso + '"]'
+            );
+            if (onBtn && typeof onBtn.scrollIntoView === 'function') {
+              try {
+                onBtn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+              } catch (eScroll) {
+                onBtn.scrollIntoView(false);
+              }
+            }
+          };
+        });
+        var selectedBtn = strip.querySelector(
+          '[data-slot-pick-day="' + String(selected || '') + '"]'
+        );
+        if (selectedBtn && typeof selectedBtn.scrollIntoView === 'function') {
+          try {
+            selectedBtn.scrollIntoView({ inline: 'center', block: 'nearest' });
+          } catch (eInit) { /* ignore */ }
+        }
+      }
+
       function renderSlotPickList() {
         var list = document.getElementById('slotPickList');
         var slots = state.slotsForTrainer || [];
         paintSlotPickContext();
 
         if (slots.length === 0) {
+          hideSlotPickDayStrip();
           renderSlotPickEmptyState(list);
           return;
         }
-        
+
         // Группируем слоты по дням
         var byDay = {};
         slots.forEach(function(s, i) {
           var date = s.slot_date || '';
+          if (!date) return;
           if (!byDay[date]) byDay[date] = [];
           byDay[date].push({ slot: s, index: i });
         });
-        
+
         var days = Object.keys(byDay).sort();
-        var html = '';
-        
-        days.forEach(function(dateKey) {
-          var daySlots = byDay[dateKey].sort(function(a, b) { 
-            return (a.slot.start_time || '').localeCompare(b.slot.start_time || ''); 
-          });
-          
-          // Форматируем заголовок дня
-          var d = dateKey.split('-');
-          if (d.length === 3) {
-            var day = parseInt(d[2], 10);
-            var month = parseInt(d[1], 10) - 1;
-            var dateObj = new Date(d[0], month, day);
-            var dayName = SLOT_DAYS[dateObj.getDay()];
-            var dateStr = day + '.' + String(month + 1).padStart(2, '0') + ' (' + dayName + ')';
-            html += '<div class="day-block"><div class="day-title">' + dateStr + '</div>';
-          }
-          
-          daySlots.forEach(function(item) {
-            var s = item.slot;
-            var i = item.index;
-            // Площадка на строке. «Показать слоты на других аренах» перемешивает
-            // арены в одном списке, и без подписи человек выбирал время, не зная,
-            // куда ему ехать. Тот же помощник, что и на карточке тренера.
-            var place =
-              window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
-                ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
-                : ((s.arena_name && String(s.arena_name).trim()) || '');
-            html += '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
-              '<span class="slot-card-body"><span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>' +
-              (place ? '<span class="slot-card-place">' + escapeHtml(place) + '</span>' : '') +
-              slotGroupSpotsPillHtml(s) + '</span><span>→</span></button>';
-          });
-          
-          html += '</div>';
+        if (!days.length) {
+          hideSlotPickDayStrip();
+          renderSlotPickEmptyState(list);
+          return;
+        }
+
+        var selected = ensureSlotPickSelectedDay(days);
+        paintSlotPickDayStrip(days, byDay);
+
+        var daySlots = (byDay[selected] || []).slice().sort(function(a, b) {
+          return (a.slot.start_time || '').localeCompare(b.slot.start_time || '');
         });
-        
+        var html = '';
+        daySlots.forEach(function(item) {
+          var s = item.slot;
+          var i = item.index;
+          // Площадка на строке. «Показать слоты на других аренах» перемешивает
+          // арены в одном списке, и без подписи человек выбирал время, не зная,
+          // куда ему ехать. Тот же помощник, что и на карточке тренера.
+          var place =
+            window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
+              ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
+              : ((s.arena_name && String(s.arena_name).trim()) || '');
+          html +=
+            '<button type="button" class="slot-card" data-slot-index="' +
+            i +
+            '">' +
+            '<span class="slot-card-body"><span class="slot-time">' +
+            (s.start_time || '') +
+            '–' +
+            (s.end_time || '') +
+            '</span>' +
+            (place ? '<span class="slot-card-place">' + escapeHtml(place) + '</span>' : '') +
+            slotGroupSpotsPillHtml(s) +
+            '</span><span>→</span></button>';
+        });
+
         list.innerHTML = html;
-        
+
         list.querySelectorAll('.slot-card').forEach(function(btn) {
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);

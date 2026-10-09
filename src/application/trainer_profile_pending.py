@@ -38,6 +38,7 @@ PROFILE_KEYS_FOR_PUBLISHED_UPDATE: frozenset[str] = frozenset(
         "group_classes_enabled",
         "specialist_role",
         "specialist_roles",
+        "online_enabled",
     }
 )
 
@@ -57,6 +58,7 @@ _TRAINER_PROFILE_REPO_KEYS: frozenset[str] = frozenset(
         "group_classes_enabled",
         "specialist_role",
         "specialist_roles",
+        "online_enabled",
     }
 )
 
