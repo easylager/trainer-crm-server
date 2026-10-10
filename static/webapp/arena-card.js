@@ -23,6 +23,7 @@
     sessionsError: false,
     trainersError: false,
     iceWatchKinds: {},
+    iceWatchIds: {},
   };
 
   function esc(s) {
@@ -89,28 +90,69 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         var kinds = {};
+        var ids = {};
         var aid = Number(state.card.id);
         (data && data.ice_watch_items || []).forEach(function (w) {
-          if (Number(w.arena_id) === aid) kinds[String(w.kind)] = true;
+          if (Number(w.arena_id) !== aid) return;
+          var k = String(w.kind);
+          kinds[k] = true;
+          if (w.id != null) ids[k] = Number(w.id);
         });
         state.iceWatchKinds = kinds;
+        state.iceWatchIds = ids;
       })
       .catch(function () {});
   }
 
-  function iceWatchCtaHtml() {
+  function iceWatchBtnHtml() {
     if (!initData()) return '';
     var stale = M.shouldWarnScheduleStale(state.card && state.card.freshness);
     var kind = stale ? 'schedule_fresh' : 'sessions';
     var on = state.iceWatchKinds && state.iceWatchKinds[kind];
-    var label = on ? '🔔 Подписаны — напомним' : stale ? '🔕 Напомнить, когда обновится' : '🔕 Напомнить о сеансах';
+    // Выкл — 🔔; вкл — 🔕. Текст только в подсказке, не отдельной полосой под заголовком.
+    var hint = on
+      ? 'Напоминание в Telegram включено. Нажмите, чтобы отключить'
+      : stale
+        ? 'Напомнить в Telegram, когда обновится расписание'
+        : 'Напомнить в Telegram о подходящих сеансах';
     return (
-      '<p class="arena-watch-row"><button type="button" class="arena-btn arena-btn--ghost" data-action="ice-watch" data-watch-kind="' +
+      '<button type="button" class="arena-watch-btn' +
+      (on ? ' arena-watch-btn--on' : '') +
+      '" data-action="ice-watch" data-watch-kind="' +
       esc(kind) +
-      '">' +
-      esc(label) +
-      '</button></p>'
+      '" aria-pressed="' +
+      (on ? 'true' : 'false') +
+      '" aria-label="' +
+      esc(hint) +
+      '" title="' +
+      esc(hint) +
+      '"><span class="arena-watch-btn__icon" aria-hidden="true">' +
+      (on ? '🔕' : '🔔') +
+      '</span></button>'
     );
+  }
+
+  function scheduleHeaderTools(tickets) {
+    var watch = iceWatchBtnHtml();
+    var ticket =
+      tickets
+        ? '<a class="arena-cta arena-cta--link" href="' +
+          esc(tickets.href) +
+          '" data-action="external" data-href="' +
+          esc(tickets.href) +
+          '">Билеты онлайн</a>'
+        : '';
+    if (!watch && !ticket) return '';
+    return '<div class="arena-h-row__tools">' + watch + ticket + '</div>';
+  }
+
+  function toggleIceWatch(kind) {
+    kind = kind || 'sessions';
+    if (state.iceWatchKinds && state.iceWatchKinds[kind]) {
+      unsubscribeIceWatch(kind);
+    } else {
+      subscribeIceWatch(kind);
+    }
   }
 
   function subscribeIceWatch(kind) {
@@ -120,21 +162,26 @@
       if (tg && tg.showAlert) tg.showAlert('Откройте карточку из клиентского бота Telegram.');
       return;
     }
+    kind = kind || 'sessions';
     fetch('/api/webapp/client/ice-watches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
       body: JSON.stringify({
         arena_id: state.card.id,
         city_id: state.card.city_id || null,
-        watch_kind: kind || 'sessions',
+        watch_kind: kind,
         when: 'any',
         intent: 'skate',
       }),
     })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-      .then(function () {
+      .then(function (body) {
         state.iceWatchKinds = state.iceWatchKinds || {};
-        state.iceWatchKinds[kind || 'sessions'] = true;
+        state.iceWatchIds = state.iceWatchIds || {};
+        state.iceWatchKinds[kind] = true;
+        if (body && body.watch && body.watch.id != null) {
+          state.iceWatchIds[kind] = Number(body.watch.id);
+        }
         paint();
         var tg = global.Telegram && global.Telegram.WebApp;
         if (tg && tg.showAlert) tg.showAlert('🔔 Уведомим в Telegram, когда появятся подходящие сеансы.');
@@ -143,6 +190,44 @@
         var tg = global.Telegram && global.Telegram.WebApp;
         if (tg && tg.showAlert) tg.showAlert('Не удалось оформить подписку. Завершите регистрацию в боте.');
       });
+  }
+
+  function unsubscribeIceWatch(kind) {
+    var id = initData();
+    if (!id || !state.card) return;
+    kind = kind || 'sessions';
+    var wid = state.iceWatchIds && state.iceWatchIds[kind];
+    function doDelete(watchId) {
+      fetch('/api/webapp/client/ice-watches/' + encodeURIComponent(String(watchId)), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
+      })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function () {
+          if (state.iceWatchKinds) delete state.iceWatchKinds[kind];
+          if (state.iceWatchIds) delete state.iceWatchIds[kind];
+          paint();
+          var tg = global.Telegram && global.Telegram.WebApp;
+          if (tg && tg.showAlert) tg.showAlert('Напоминание отключено.');
+        })
+        .catch(function () {
+          var tg = global.Telegram && global.Telegram.WebApp;
+          if (tg && tg.showAlert) tg.showAlert('Не удалось отключить напоминание.');
+        });
+    }
+    if (wid) {
+      doDelete(wid);
+      return;
+    }
+    syncIceWatches().then(function () {
+      var retry = state.iceWatchIds && state.iceWatchIds[kind];
+      if (retry) doDelete(retry);
+      else {
+        var tg = global.Telegram && global.Telegram.WebApp;
+        if (tg && tg.showAlert) tg.showAlert('Подписка уже отключена.');
+        paint();
+      }
+    });
   }
 
   function shellNav(path) {
@@ -714,8 +799,35 @@
     return (state.sessions && state.sessions.ohm_days) || [];
   }
 
+  /** MK + ОХМ в одной ленте; дублируем merge, если WebView держит старый arena-card-model.js. */
+  function combineSessionDayLists(days, ohmDays) {
+    if (M && typeof M.combineSessionDayLists === 'function') {
+      return M.combineSessionDayLists(days, ohmDays);
+    }
+    var order = [];
+    var byDate = {};
+    function add(list) {
+      list = list || [];
+      var i;
+      for (i = 0; i < list.length; i++) {
+        var iso = list[i].local_date;
+        if (!iso) continue;
+        if (!byDate[iso]) {
+          byDate[iso] = [];
+          order.push(iso);
+        }
+        byDate[iso] = byDate[iso].concat(list[i].sessions || []);
+      }
+    }
+    add(days);
+    add(ohmDays);
+    return order.map(function (iso) {
+      return { local_date: iso, sessions: byDate[iso] };
+    });
+  }
+
   function combinedScheduleDays() {
-    return M.combineSessionDayLists(scheduleDays(), ohmScheduleDays());
+    return combineSessionDayLists(scheduleDays(), ohmScheduleDays());
   }
 
   function scheduleSlots() {
@@ -916,7 +1028,9 @@
     if (feed.mode === 'pending') {
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Расписание</p>' +
+        '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
+        scheduleHeaderTools(null) +
+        '</div>' +
         '<div class="arena-empty">' +
         '<b>Расписание уточняется</b>' +
         '<p>Мы пока не получили расписание массового катания от этого катка. Не показываем то, за что не отвечаем — позвоните или загляните на сайт.</p>' +
@@ -927,7 +1041,9 @@
     if (feed.mode === 'unconfirmed') {
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Расписание</p>' +
+        '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
+        scheduleHeaderTools(null) +
+        '</div>' +
         '<p class="arena-stale">' + esc(feed.banner || '') + '</p>' +
         '</div>'
       );
@@ -953,13 +1069,10 @@
     return (
       '<div class="arena-sec">' +
       '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
-      (tickets
-        ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
-        : '') +
+      scheduleHeaderTools(tickets) +
       '</div>' +
       focusGone +
       (staleNote ? '<p class="arena-stale">' + esc(staleNote) + '</p>' : '') +
-      iceWatchCtaHtml() +
       '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
@@ -1272,19 +1385,27 @@
     var title = document.getElementById('headerTitle');
     // Имя места — на обложке; в шапке — что это за место, без дубля.
     if (title) title.textContent = capitalize(state.card.venue_noun) || 'Площадка';
-    root.innerHTML =
-      renderHero() +
-      renderShareBar() +
-      renderQuickActions() +
-      renderIceSection() +
-      renderOhmSection() +
-      renderAmenities() +
-      renderMassAccess() +
-      renderTrainers() +
-      renderGroups() +
-      renderInfo() +
-      renderFreshness();
-    bindHeroFallbacks(root);
+    try {
+      root.innerHTML =
+        renderHero() +
+        renderShareBar() +
+        renderQuickActions() +
+        renderIceSection() +
+        renderOhmSection() +
+        renderAmenities() +
+        renderMassAccess() +
+        renderTrainers() +
+        renderGroups() +
+        renderInfo() +
+        renderFreshness();
+      bindHeroFallbacks(root);
+    } catch (err) {
+      if (global.console && global.console.error) {
+        global.console.error('arena-card paint failed', err);
+      }
+      root.innerHTML =
+        '<div class="arena-state">Не удалось отрисовать карточку. Закройте и откройте снова или обновите мини-приложение.</div>';
+    }
   }
 
   function capitalize(text) {
@@ -1548,7 +1669,7 @@
       return;
     }
     if (action === 'ice-watch') {
-      subscribeIceWatch(t.getAttribute('data-watch-kind') || 'sessions');
+      toggleIceWatch(t.getAttribute('data-watch-kind') || 'sessions');
       return;
     }
   }
