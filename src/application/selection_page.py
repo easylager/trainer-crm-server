@@ -161,10 +161,16 @@ def selection_path(
 
 
 def selection_image_path(
-    *, city_name: str, venue: str | None, when: str | None, version: str | None = None
+    *,
+    city_name: str,
+    venue: str | None,
+    when: str | None,
+    version: str | None = None,
+    kind: str | None = None,
+    svc: str | None = None,
 ) -> str:
     """Путь картинки подборки. ``version`` — хэш данных: Telegram держит превью по URL."""
-    params = {k: v for k, v in (("t", venue), ("w", when)) if v}
+    params = {k: v for k, v in (("t", venue), ("w", when), ("kind", kind), ("svc", svc)) if v}
     if version:
         params["v"] = version
     return f"/c/{city_slug(city_name)}/og.png" + (("?" + urlencode(params)) if params else "")
@@ -242,6 +248,38 @@ async def _selection_session_totals(
         if int(n) > 0:
             places += 1
     return sessions, places
+
+
+async def _apply_schedule_freshness(
+    session: AsyncSession,
+    items: list[Mapping[str, Any]],
+    slots: dict[int, list[dict[str, Any]]],
+    now: datetime,
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Пометки свежести и снятие сеансов старше 72 часов — до подсчёта попаданий в окно.
+
+    TASK-180: > 6 ч — строка «могло измениться»; > 72 ч — сеансы места не показываем
+    и не считаем: «не обновлялось N дней — уточните».
+    """
+    stale_notes: dict[int, str] = {}
+    unconfirmed_notes: dict[int, str] = {}
+    if not items:
+        return stale_notes, unconfirmed_notes
+    fresh = await load_arena_freshness(session, [int(i["id"]) for i in items], now=now)
+    for item in items:
+        aid = int(item["id"])
+        level = staleness_level(fresh.get(aid))
+        if level == LEVEL_STALE and slots.get(aid):
+            stale_notes[aid] = stale_note(fresh.get(aid), now=now)
+        elif level == LEVEL_VERY_STALE:
+            slots.pop(aid, None)
+            unconfirmed_notes[aid] = very_stale_note(
+                fresh.get(aid),
+                now=now,
+                has_phone=bool(str(item.get("phone") or "").strip()),
+                has_site=bool(str(item.get("tickets_url") or item.get("website_url") or "").strip()),
+            )
+    return stale_notes, unconfirmed_notes
 
 
 async def load_selection_view(
@@ -342,25 +380,11 @@ async def load_selection_view(
         if skating
         else {}
     )
-    # TASK-180: свежесть расписания на момент ``now``. > 6 ч — строка «могло измениться»;
-    # > 72 ч — сеансы места не показываем и не считаем: «не обновлялось N дней — уточните».
+    # TASK-180: свежесть на момент ``now`` — см. ``_apply_schedule_freshness``.
     stale_notes: dict[int, str] = {}
     unconfirmed_notes: dict[int, str] = {}
     if skating and items:
-        fresh = await load_arena_freshness(session, [int(i["id"]) for i in items], now=now)
-        for item in items:
-            aid = int(item["id"])
-            level = staleness_level(fresh.get(aid))
-            if level == LEVEL_STALE and slots.get(aid):
-                stale_notes[aid] = stale_note(fresh.get(aid), now=now)
-            elif level == LEVEL_VERY_STALE:
-                slots.pop(aid, None)
-                unconfirmed_notes[aid] = very_stale_note(
-                    fresh.get(aid),
-                    now=now,
-                    has_phone=bool(str(item.get("phone") or "").strip()),
-                    has_site=bool(str(item.get("tickets_url") or item.get("website_url") or "").strip()),
-                )
+        stale_notes, unconfirmed_notes = await _apply_schedule_freshness(session, items, slots, now)
     # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
     window_empty = False
     if service_mode:
@@ -375,6 +399,7 @@ async def load_selection_view(
             )
             items = list(catalog.get("items") or [])
             total = int(catalog.get("total") or 0)  # иначе в описании «0 катков» при непустом списке
+            pages = int(catalog.get("pages") or 1)
             slots = await _window_slots(
                 session,
                 [int(i["id"]) for i in items],
@@ -382,6 +407,7 @@ async def load_selection_view(
                 now,
                 session_sql=session_sql,
             )
+            stale_notes, unconfirmed_notes = await _apply_schedule_freshness(session, items, slots, now)
             hits = [i for i in items if slots.get(int(i["id"]))]
         shown = hits or items
     else:
@@ -639,10 +665,21 @@ _LINK_VENUES = frozenset({"shop", "gym", "ice", "outdoor", "choreo", "pool", "ot
 _LINK_SKATING = frozenset({"skate", "ice", "outdoor"})
 
 
-def selection_start_param(*, city_id: int, venue: str | None, when: str | None) -> str:
+def selection_start_param(
+    *,
+    city_id: int,
+    venue: str | None,
+    when: str | None,
+    kind: str | None = None,
+    svc: str | None = None,
+) -> str:
     """startapp с тем же типом места и окном, что на странице подборки."""
+    if clean_svc(svc):
+        return catalog_start_param(int(city_id), "service", None)
+    if clean_kind(kind) == KIND_OHM:
+        return catalog_start_param(int(city_id), KIND_OHM, when)
     if venue == "service":
-        return catalog_start_param(int(city_id), "shop", None)
+        return catalog_start_param(int(city_id), "service", None)
     if venue in _LINK_VENUES:
         token: str | None = venue
     elif venue is None or has_public_skating(venue):

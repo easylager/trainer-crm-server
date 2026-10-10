@@ -686,18 +686,24 @@
     });
     var modeSeg = $('iceModeSeg');
     if (modeSeg) {
-      var folders = modes.filter(function (m) {
-        return m.id !== 'service';
-      });
-      if (folders.length < 2) {
+      if (modes.length < 2) {
         modeSeg.hidden = true;
         modeSeg.innerHTML = '';
       } else {
         modeSeg.hidden = false;
         modeSeg.className = 'hdr-folders';
-        modeSeg.innerHTML = folders
+        modeSeg.innerHTML = modes
           .map(function (m) {
-            var count = m.id === 'ohm' ? counts.ohmCount : m.id === 'shop' ? counts.shopCount : m.id === 'coach' ? counts.trainerCount : 0;
+            var count =
+              m.id === 'ohm'
+                ? counts.ohmCount
+                : m.id === 'shop'
+                  ? counts.shopCount
+                  : m.id === 'coach'
+                    ? counts.trainerCount
+                    : m.id === 'service'
+                      ? state.serviceCount
+                      : 0;
             var extra = count > 0 && m.id !== 'places' ? ' <small>' + esc(String(count)) + '</small>' : '';
             return (
               '<button type="button" class="hdr-folder" role="tab" data-catalog-mode="' +
@@ -3141,9 +3147,11 @@
     state.view = 'list';
     try {
       var params = new URLSearchParams(global.location.search || '');
-      var urlIntent = M.intentFromSearch(global.location.search || '');
+      var urlSearch = global.location.search || '';
+      var urlServiceBoot = M.placeServiceBootFromSearch(urlSearch);
+      var urlIntent = M.intentFromSearch(urlSearch);
       if (urlIntent) state.intent = M.coerceIntent(urlIntent);
-      var urlVenue = M.venueFromSearch(global.location.search || '');
+      var urlVenue = M.venueFromSearch(urlSearch);
       if (urlVenue) {
         state.intent = 'skate';
         state.venueTypes = [urlVenue];
@@ -3154,6 +3162,11 @@
         M.coerceIntent(state.intent) === M.INTENTS.skate
       ) {
         state.venueTypes = saved.venueTypes.slice();
+      }
+      if (urlServiceBoot) {
+        state.intent = urlServiceBoot.intent;
+        state.venueTypes = urlServiceBoot.venueTypes.slice();
+        state.placeService = urlServiceBoot.placeService;
       }
       /* TASK-149: ?when=<окно> из ссылки (хаб «Сегодня вечером»). Читаем ПОСЛЕ intent и
          venue: именно они решают, видны ли чипы окна. У «Тренеров» и у не-ледовых типов
@@ -3179,7 +3192,13 @@
         if (saved.shopDiscipline) state.shopDiscipline = String(saved.shopDiscipline);
         state.shopOpenNow = !!saved.shopOpenNow;
         if (saved.shopWhen) state.shopWhen = String(saved.shopWhen);
-        if (saved.placeService === 'service') state.placeService = 'service';
+        if (
+          saved.placeService === 'service' &&
+          !urlServiceBoot &&
+          !M.urlBlocksSavedPlaceService(urlSearch)
+        ) {
+          state.placeService = 'service';
+        }
       }
       // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
       if (params.get('focus') === 'search') {

@@ -41,6 +41,24 @@ function loadShareSheet() {
   return context.GlideShareSheet;
 }
 
+describe('GlideShareSheet resolveInitialSessionId (gone invite)', () => {
+  const G = loadShareSheet();
+
+  it('не подставляет slots[0], если сеанс из ссылки пропал', () => {
+    const slots = [{ id: 100, label: 'Пт 18:00' }, { id: 200, label: 'Пт 20:00' }];
+    assert.equal(G._resolveInitialSessionId({ slots: slots, sessionMissing: true }), null);
+    assert.equal(G._resolveInitialSessionId({ slots: slots, sessionMissing: false }), '100');
+    assert.equal(G._resolveInitialSessionId({ slots: slots }), '100');
+  });
+
+  it('явный sessionId важнее sessionMissing', () => {
+    assert.equal(
+      G._resolveInitialSessionId({ sessionId: '42', sessionMissing: true, slots: [{ id: 1, label: 'x' }] }),
+      '42'
+    );
+  });
+});
+
 describe('GlideShareSheet withSrc (TASK-223)', () => {
   const G = loadShareSheet();
 

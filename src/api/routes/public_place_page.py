@@ -507,7 +507,12 @@ async def selection_page(
     )
     # ?v= — хэш данных превью: без него Telegram держит старую og-картинку по URL.
     og_image = base + selection_image_path(
-        city_name=city_name, venue=venue, when=when, version=selection_image_version(view)
+        city_name=city_name,
+        venue=venue,
+        when=when,
+        version=selection_image_version(view),
+        kind=kind_value,
+        svc=svc_value,
     )
     html = render_selection_page(
         view,
@@ -515,7 +520,9 @@ async def selection_page(
         og_image_url=og_image,
         cta_url=public_telegram_cta_url(
             base,
-            start_param=selection_start_param(city_id=int(city["id"]), venue=venue, when=when),
+            start_param=selection_start_param(
+                city_id=int(city["id"]), venue=venue, when=when, kind=kind_value, svc=svc_value
+            ),
             surface="selection_page",
             city_id=int(city["id"]),
         ),
@@ -589,21 +596,42 @@ async def _city_hub(
     return response
 
 
-async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, w: str | None, *, story: bool):
+async def _selection_image(
+    session: AsyncSession,
+    city_ref: str,
+    t: str | None,
+    w: str | None,
+    *,
+    story: bool,
+    kind: str | None = None,
+    svc: str | None = None,
+):
     from src.application.place_card_image import render_selection_card
-    from src.application.selection_page import clean_venue, clean_when, load_selection_view, selection_path
+    from src.application.selection_page import (
+        clean_kind,
+        clean_svc,
+        clean_venue,
+        clean_when,
+        load_selection_view,
+        selection_path,
+    )
 
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
         return Response(status_code=404)
     venue, when = clean_venue(t), clean_when(w)
-    view = await load_selection_view(session, city=city, venue=venue, when=when)
-    page = _base() + selection_path(city_name=str(city["name"]), venue=venue, when=when)
+    kind_value, svc_value = clean_kind(kind), clean_svc(svc)
+    view = await load_selection_view(
+        session, city=city, venue=venue, when=when, kind=kind_value, svc=svc_value
+    )
+    page = _base() + selection_path(
+        city_name=str(city["name"]), venue=venue, when=when, kind=kind_value, svc=svc_value
+    )
     view["share_url"] = page
     view["display_path"] = share_display_path(page)
     png = await render_png_cached(
         "selection_story" if story else "selection_og",
-        {"venue": venue, "when": when, "page": page},
+        {"venue": venue, "when": when, "kind": kind_value, "svc": svc_value, "page": page},
         view,
         render_selection_card,
         view,
@@ -614,13 +642,23 @@ async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, 
 
 @router.get("/c/{city_ref}/og.png")
 async def selection_og_image(
-    city_ref: str, t: str | None = None, w: str | None = None, session: AsyncSession = Depends(get_session)
+    city_ref: str,
+    t: str | None = None,
+    w: str | None = None,
+    kind: str | None = None,
+    svc: str | None = None,
+    session: AsyncSession = Depends(get_session),
 ) -> Response:
-    return await _selection_image(session, city_ref, t, w, story=False)
+    return await _selection_image(session, city_ref, t, w, story=False, kind=kind, svc=svc)
 
 
 @router.get("/c/{city_ref}/story.png")
 async def selection_story_image(
-    city_ref: str, t: str | None = None, w: str | None = None, session: AsyncSession = Depends(get_session)
+    city_ref: str,
+    t: str | None = None,
+    w: str | None = None,
+    kind: str | None = None,
+    svc: str | None = None,
+    session: AsyncSession = Depends(get_session),
 ) -> Response:
-    return await _selection_image(session, city_ref, t, w, story=True)
+    return await _selection_image(session, city_ref, t, w, story=True, kind=kind, svc=svc)

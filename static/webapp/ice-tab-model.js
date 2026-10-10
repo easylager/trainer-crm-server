@@ -1233,6 +1233,33 @@
     }
   }
 
+  /**
+   * intent=service и svc=service — не линзы Ice; открываем раздел «Заточка» в каталоге мест.
+   */
+  function placeServiceBootFromSearch(search) {
+    var raw = String(search || '');
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    try {
+      var params = new URLSearchParams(raw);
+      var intent = String(params.get('intent') || '').trim().toLowerCase();
+      var svc = String(params.get('svc') || '').trim().toLowerCase();
+      if (intent === 'service' || svc === 'service') {
+        return { intent: INTENTS.skate, venueTypes: [], placeService: 'service' };
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
+  }
+
+  /** Ссылка на другой раздел каталога — не накладываем сохранённую «Заточку». */
+  function urlBlocksSavedPlaceService(search) {
+    var urlIntent = intentFromSearch(search);
+    if (urlIntent === INTENTS.coach || urlIntent === INTENTS.ohm) return true;
+    if (venueFromSearch(search) === 'shop') return true;
+    return false;
+  }
+
   function normalizeVenueTypes(list) {
     var out = [];
     var seen = {};
@@ -2283,6 +2310,8 @@
     catalogHref: catalogHref,
     iceCoachHref: iceCoachHref,
     intentFromSearch: intentFromSearch,
+    placeServiceBootFromSearch: placeServiceBootFromSearch,
+    urlBlocksSavedPlaceService: urlBlocksSavedPlaceService,
     cityIdFromSearch: cityIdFromSearch,
     whenChipsView: whenChipsView,
     whenChipsVisible: whenChipsVisible,

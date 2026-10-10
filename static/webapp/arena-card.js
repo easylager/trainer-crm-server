@@ -490,9 +490,7 @@
     };
     /* ОХМ лежит в ohm_days. Искать только массовое катание — и живой сеанс
        из ссылки объявляется пропавшим в блоке «Расписание». */
-    var combined = M.focusState(Object.assign({ days: combinedScheduleDays() }, opts));
-    if (combined.kind !== 'gone') return combined;
-    return M.focusState(Object.assign({ days: scheduleDays() }, opts));
+    return M.focusState(Object.assign({ days: combinedScheduleDays() }, opts));
   }
 
   function sharePickedId() {
@@ -547,7 +545,13 @@
     var base = '/api/public/arenas/' + encodeURIComponent(String(state.card.id));
     return fetchJson(base + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to)).then(
       function (data) {
-        state.sessions = data || state.sessions || { days: [], ohm_days: [] };
+        if (data) {
+          state.sessions = data;
+        } else if (state.sessions == null && state.focus && state.focus.sessionId) {
+          /* 404 при фокусе из ссылки — не помечаем расписание «загруженным пустым». */
+        } else if (state.sessions == null) {
+          state.sessions = { days: [], ohm_days: [] };
+        }
         var days = combinedScheduleDays();
         return {
           slots: M.shareSlots(days, today, 0),
@@ -567,11 +571,13 @@
             return fetchShareSlots();
           }
         : null;
+    var fs = getFocusState();
     global.GlideShareSheet.open({
       ref: state.card.id,
       slots: payload.slots,
       slotSections: payload.slotSections,
       sessionId: resolvedShareSessionId(),
+      sessionMissing: fs.kind === 'gone' || fs.kind === 'unconfirmed',
       invite: !!invite,
       venueType: skatingCard() ? 'ice' : state.card.venue_type,
       context: 'arena_card',
@@ -1780,7 +1786,6 @@
           return;
         }
         state.card = card;
-        state.sessions = { days: [] };
         state.trainers = { items: [], groups: [] };
         syncIceWatches().then(function () {
           paint();

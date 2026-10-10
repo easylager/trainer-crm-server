@@ -26,6 +26,18 @@ describe('GlideDeepLink.deepLinkTarget', () => {
       key: 'ice',
       path: 'ice?city_id=7&intent=skate&when=weekend',
     });
+    assert.deepEqual(G.deepLinkTarget('catalog_7_ohm'), {
+      key: 'ice',
+      path: 'ice?city_id=7&intent=ohm',
+    });
+    assert.deepEqual(G.deepLinkTarget('catalog_7_ohm_weekend'), {
+      key: 'ice',
+      path: 'ice?city_id=7&intent=ohm&when=weekend',
+    });
+    assert.deepEqual(G.deepLinkTarget('catalog_7_service'), {
+      key: 'ice',
+      path: 'ice?city_id=7&intent=service',
+    });
     assert.equal(G.deepLinkTarget('nope'), null);
   });
 });

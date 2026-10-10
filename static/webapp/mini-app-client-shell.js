@@ -1059,7 +1059,7 @@
     }
     // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
     if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
-    var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);
+    var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other|ohm|service))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);
     if (catalog) {
       var q = 'city_id=' + catalog[1];
       var intent = (catalog[2] || '').toLowerCase();

@@ -866,7 +866,9 @@
           state.slots = more.slots || [];
           state.slotSections = more.slotSections || null;
         }
-        if (!state.sessionId && state.slots[0]) state.sessionId = state.slots[0].id;
+        if (!state.sessionId && state.slots[0] && !state.sessionMissing) {
+          state.sessionId = state.slots[0].id;
+        }
         state.slotDay = null;
         reload();
       });
@@ -910,6 +912,7 @@
     if (opts.sessionId != null && String(opts.sessionId).trim() !== '') {
       return String(opts.sessionId).trim();
     }
+    if (opts.sessionMissing) return null;
     var slots = opts.slots || [];
     return slots[0] && slots[0].id != null ? String(slots[0].id) : null;
   }
@@ -926,6 +929,7 @@
       sessionId: resolveInitialSessionId(opts),
       slotDay: null,
       invite: !!opts.invite,
+      sessionMissing: !!opts.sessionMissing,
       context: opts.context || 'arena_card',
       venueType: opts.venueType || 'ice',
       loadSlots: opts.loadSlots || null,
@@ -952,6 +956,7 @@
     _openStoryShare: openStoryShare,
     _openImageSave: openImageSave,
     _telegramShareHref: telegramShareHref,
+    _resolveInitialSessionId: resolveInitialSessionId,
     _previewFigureHtml: function (payload, selection) {
       var prev = state;
       state = selection

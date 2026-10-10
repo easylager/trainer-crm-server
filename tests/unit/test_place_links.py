@@ -53,6 +53,8 @@ def test_start_params_fit_telegram_limits() -> None:
         assert is_valid_start_param(value)
     assert catalog_start_param(12, "sauna") == "catalog_12"
     assert catalog_start_param(12, "shop", "weekend") == "catalog_12_shop", "у магазина окна нет"
+    assert catalog_start_param(12, "ohm", "weekend") == "catalog_12_ohm_weekend"
+    assert catalog_start_param(12, "service", "weekend") == "catalog_12_service", "у услуг окна нет"
 
 
 def test_start_params_round_trip() -> None:
@@ -67,9 +69,26 @@ def test_start_params_round_trip() -> None:
     assert parse_catalog_start_param("catalog_12_skate_weekend") == (12, "skate", "weekend")
     assert parse_catalog_start_param("catalog_12_skate_today_evening") == (12, "skate", "today_evening")
     assert parse_catalog_start_param("catalog_12_outdoor_tomorrow") == (12, "outdoor", "tomorrow")
+    assert parse_catalog_start_param("catalog_12_ohm") == (12, "ohm", None)
+    assert parse_catalog_start_param("catalog_12_ohm_weekend") == (12, "ohm", "weekend")
+    assert parse_catalog_start_param("catalog_12_service") == (12, "service", None)
     assert parse_catalog_start_param("catalog_x") is None
     assert parse_catalog_start_param("catalog") == (None, None, None), "маркетинговый вход /go"
     assert parse_catalog_start_param("cert_ABC") is None
+
+
+def test_selection_start_param_ohm_and_service() -> None:
+    from src.application.selection_page import selection_start_param
+
+    assert selection_start_param(city_id=12, venue=None, when=None, kind="ohm") == "catalog_12_ohm"
+    assert (
+        selection_start_param(city_id=12, venue=None, when="weekend", kind="ohm") == "catalog_12_ohm_weekend"
+    )
+    for svc in ("sharpening", "rental", "service"):
+        assert selection_start_param(city_id=12, venue="ice", when="weekend", svc=svc) == "catalog_12_service"
+    assert selection_start_param(city_id=12, venue="service", when="today") == "catalog_12_service"
+    assert selection_start_param(city_id=12, venue="shop", when="weekend") == "catalog_12_shop"
+    assert selection_start_param(city_id=12, venue="gym", when=None) == "catalog_12_gym"
 
 
 def test_open_link_prefers_startapp_and_falls_back_to_bot() -> None:

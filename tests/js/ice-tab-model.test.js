@@ -427,6 +427,26 @@ describe('trainer catalog chip (TASK-076 AC-002)', () => {
     assert.equal(intentFromSearch('?intent=skate'), 'skate');
     assert.equal(intentFromSearch(''), null);
     assert.equal(intentFromSearch('?intent=nope'), null);
+    assert.equal(intentFromSearch('?intent=service'), null);
+  });
+
+  it('placeServiceBootFromSearch: intent=service and svc=service open Заточка', () => {
+    const { placeServiceBootFromSearch, urlBlocksSavedPlaceService } = loadModel();
+    assert.deepEqual(placeServiceBootFromSearch('?city_id=7&intent=service'), {
+      intent: 'skate',
+      venueTypes: [],
+      placeService: 'service',
+    });
+    assert.deepEqual(placeServiceBootFromSearch('?svc=service'), {
+      intent: 'skate',
+      venueTypes: [],
+      placeService: 'service',
+    });
+    assert.equal(placeServiceBootFromSearch('?intent=ohm'), null);
+    assert.equal(urlBlocksSavedPlaceService('?intent=ohm&city_id=1'), true);
+    assert.equal(urlBlocksSavedPlaceService('?venue=shop&city_id=1'), true);
+    assert.equal(urlBlocksSavedPlaceService('?intent=coach'), true);
+    assert.equal(urlBlocksSavedPlaceService('?intent=skate'), false);
   });
 
   it('exposes a hint that the trainers catalog moved to the chip', () => {

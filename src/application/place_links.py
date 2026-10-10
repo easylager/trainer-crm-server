@@ -30,7 +30,8 @@ CATALOG_START_PREFIX = "catalog_"
 # Ограничения Telegram на start/startapp: до 64 символов, только [A-Za-z0-9_-].
 _START_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
-#: Токены startapp. shop/gym/ice/… — фильтр типа места; skate/coach — интент вкладки.
+#: Токены startapp. shop/gym/ice/… — фильтр типа места; skate/coach — интент вкладки;
+#: ohm — любительский хоккей; service — заточка и прокат.
 CATALOG_LINK_TOKENS = (
     "skate",
     "coach",
@@ -41,10 +42,12 @@ CATALOG_LINK_TOKENS = (
     "choreo",
     "pool",
     "other",
+    "ohm",
+    "service",
 )
 #: Окно, которое умеет унести диплинк. ``any`` и ``auto`` в ссылку не кладём.
 CATALOG_WHEN_TOKENS = ("today_evening", "today", "tomorrow", "weekend")
-_WHEN_WITH = frozenset({"skate", "ice", "outdoor"})
+_WHEN_WITH = frozenset({"skate", "ice", "outdoor", "ohm"})
 
 #: Канал шаринга в query ``src`` (TASK-223). Неизвестное значение не попадает в URL и метрики.
 SHARE_SRC_VALUES = ("tg", "vb", "wa", "vk", "copy", "story", "sys", "img")
@@ -155,11 +158,12 @@ def place_start_param(arena_id: int, session_id: int | None = None) -> str:
 
 
 def catalog_start_param(city_id: int, intent: str | None = None, when: str | None = None) -> str:
-    """``catalog_12`` / ``catalog_12_coach`` / ``catalog_12_skate_weekend``.
+    """``catalog_12`` / ``catalog_12_coach`` / ``catalog_12_skate_weekend`` / ``catalog_12_ohm_weekend``.
 
-    Неизвестный токен не попадает в ссылку. Окно времени — только у льда
-    (``skate`` / ``ice`` / ``outdoor``): без ``intent=skate`` сохранённая вкладка
-    «Тренеры» съедает окно. У магазина и зала окна нет, ``when`` отбрасывается.
+    Неизвестный токен не попадает в ссылку. Окно времени остаётся у льда
+    (``skate`` / ``ice`` / ``outdoor``) и хоккея (``ohm``): без ``intent=skate``
+    сохранённая вкладка «Тренеры» съедает окно. У магазина, зала и услуг
+    (``service``) окна нет, ``when`` отбрасывается.
     """
     token = intent if intent in CATALOG_LINK_TOKENS else None
     when_ok = when if when in CATALOG_WHEN_TOKENS else None
