@@ -17,7 +17,7 @@ from src.application.catalog_consumer_events import (
 )
 from src.application.public_web_cta import CONTACT_ACTION_DIRECTION, CONTACT_ACTION_PHONE, CONTACT_ACTION_TICKETS
 from src.shared.html_template import safe_external_url
-from src.application.place_links import is_valid_start_param, telegram_open_link
+from src.application.place_links import clean_share_src, is_valid_start_param, telegram_open_link
 from src.shared.config import Settings
 
 router = APIRouter(prefix="/api/public/catalog", tags=["catalog-telemetry"])
@@ -41,6 +41,8 @@ async def open_telegram_from_public_page(
     surface: str = Query(..., min_length=1, max_length=40),
     city_id: int | None = Query(None),
     arena_id: int | None = Query(None),
+    src: str | None = Query(None, description="канал шаринга с публичной страницы"),
+    s: str | None = Query(None, description="id сеанса из ссылки ?s="),
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
     """Клик «Открыть в Telegram» с /p/, /c/, «Лёд сегодня» → учёт → редирект в Telegram."""
@@ -64,6 +66,17 @@ async def open_telegram_from_public_page(
         client_ip=client_ip_from_request(request),
         user_agent=user_agent,
     )
+    cta_payload: dict[str, str | bool] = {
+        "ingress": "public_cta",
+        "ua_class": classify_user_agent(user_agent),
+        "scope_mismatch": mismatch,
+    }
+    cleaned_src = clean_share_src(src)
+    if cleaned_src:
+        cta_payload["src"] = cleaned_src
+    session_raw = (s or "").strip()
+    if session_raw.isdigit() and 0 < int(session_raw) < 2**31:
+        cta_payload["s"] = session_raw
     await record_catalog_consumer_event(
         session,
         kind=KIND_PUBLIC_TELEGRAM_CTA,
@@ -72,7 +85,7 @@ async def open_telegram_from_public_page(
         city_id=scope_city,
         arena_id=scope_arena,
         start_param=startapp,
-        payload={"ingress": "public_cta", "ua_class": classify_user_agent(user_agent), "scope_mismatch": mismatch},
+        payload=cta_payload,
     )
     link = telegram_open_link(
         client_bot_username=settings.client_bot_username,

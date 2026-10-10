@@ -30,7 +30,7 @@ async def test_city_page_lists_all_venue_types_with_pagination(app_use_test_db, 
     await db_session.commit()
     slug = city_slug(name)
     async with _client() as client:
-        p1 = await client.get(f"/c/{slug}")
+        p1 = await client.get(f"/c/{slug}", params={"page": 1})
         p2 = await client.get(f"/c/{slug}", params={"page": 2})
         shops = await client.get(f"/c/{slug}", params={"t": "shop"})
     assert p1.status_code == 200

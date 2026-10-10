@@ -44,7 +44,7 @@
 | [growth_loop.md](product-knowledge/growth_loop.md) | Циклы роста под ICP |
 | [client-booking-url-contract.md](product-knowledge/client-booking-url-contract.md) | Контракт ссылок записи клиента |
 | [organization-role-surfaces.md](product-knowledge/organization-role-surfaces.md) | Организации: что видит каждая роль |
-| [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест и подборок, шеринг, /go, диплинки, окна времени, магазины |
+| [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест и подборок, главная «только города» и хаб города `/c/{город}`, шеринг, /go, диплинки, окна времени, магазины |
 | [catalog-search-header.md](product-knowledge/catalog-search-header.md) | Шапка «Поиск»: сегмент рода, фильтр типа площадки, окно времени, пустое состояние |
 
 ## strategy — куда идём
@@ -98,6 +98,7 @@
 | [organizations-completion-backlog.md](plans/organizations-completion-backlog.md) | Что осталось достроить в организациях |
 | [2026-09-04-epic3-arenas-sdd-release-plan.md](plans/2026-09-04-epic3-arenas-sdd-release-plan.md) · [r1](plans/2026-09-04-epic3-r1-foundation.md) | Релизный план EPIC3 для агентов |
 | [2026-09-09-merge-epics-to-master.md](plans/2026-09-09-merge-epics-to-master.md) | Кат двух эпиков (premium + региональные парсеры) в master/прод |
+| [2026-10-09-reliable-object-share.md](plans/2026-10-09-reliable-object-share.md) | Надёжный шаринг арены/сеанса (TASK-223): гэпы, потоки, контракты |
 | [2026-09-04-client-multi-profile-booking.md](plans/2026-09-04-client-multi-profile-booking.md) · [design](plans/2026-09-04-client-multi-profile-booking-design.md) | Запись ребёнка и раздельная статистика |
 | [2026-09-03-mobile-landing-hero-roadmap-design.md](plans/2026-09-03-mobile-landing-hero-roadmap-design.md) · [impl](plans/2026-09-03-mobile-landing-hero-roadmap-implementation.md) | Мобильный лендинг: hero и roadmap |
 | [2026-09-05-trainer-profile-s1-s2-data-guards.md](plans/2026-09-05-trainer-profile-s1-s2-data-guards.md) | Гарды данных профиля тренера |

@@ -78,6 +78,11 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert place["name"] in _meta(html, "og:title")
     assert "расписание массового катания" in _meta(html, "og:title")
     assert _meta(html, "og:image").endswith(place["path"] + "/og.png")
+    # Telegram предпочитает twitter:* и показывает незаполненный плейсхолдер вместо og:title.
+    assert _meta(html, "twitter:title") == _meta(html, "og:title")
+    assert _meta(html, "twitter:description") == _meta(html, "og:description")
+    assert _meta(html, "twitter:image") == _meta(html, "og:image")
+    assert "__TWITTER_" not in html and "__OG_IMAGE_ALT__" not in html
     assert _meta(html, "robots") == "index, follow"
     assert "19:30" in html and "8.50 BYN" in html
     assert "сегодня" not in _meta(html, "og:description").lower()
@@ -90,6 +95,33 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert ld["@type"] == "IceRink"
     assert ld["telephone"] == "+375 29 111-22-33"
     assert ld["event"][0]["offers"]["price"] == "8.50"
+
+
+@pytest.mark.asyncio
+async def test_share_src_is_tracked_and_noindex_without_changing_canonical(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", "test-catalog-actor-secret-0123456789abcdef")
+    place = await _place(db_session)
+    await db_session.commit()
+    async with _client() as client:
+        resp = await client.get(place["path"], params={"src": "wa", "garbage": "x"})
+        bad = await client.get(place["path"], params={"src": "evil"})
+    assert _meta(resp.text, "robots") == "noindex, follow"
+    assert re.search(rf'<link rel="canonical" href="[^"]*{re.escape(place["path"])}"', resp.text)
+    assert "src=wa" in _meta(resp.text, "og:url")
+    assert "src=" not in _meta(resp.text, "og:image")
+    assert _meta(bad.text, "robots") == "index, follow"
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT payload FROM catalog_consumer_events "
+                "WHERE kind = 'public_page_view' AND arena_id = :aid AND payload->>'src' IS NOT NULL ORDER BY id DESC LIMIT 1"
+            ),
+            {"aid": place["arena_id"]},
+        )
+    ).scalar_one()
+    assert row["src"] == "wa" and "s" not in row
 
 
 @pytest.mark.asyncio
@@ -130,7 +162,8 @@ async def test_link_to_a_past_session_says_so_and_shows_whats_next(app_use_test_
     async with _client() as client:
         resp = await client.get(place["path"], params={"s": "999999999"})
     assert resp.status_code == 200
-    assert "Этот сеанс уже прошёл" in resp.text
+    assert "Сеанса из ссылки уже нет в расписании" in resp.text
+    assert "расписание массового катания" in _meta(resp.text, "og:title")
     # «Сегодня/Завтра» считается по Минску, а фикстура — по дате контейнера; проверяем суть.
     assert re.search(r"Ближайший — [^<]*, 18:00", resp.text)
 
@@ -176,7 +209,8 @@ async def test_og_and_story_images_are_real_pngs(app_use_test_db, db_session) ->
     assert og.status_code == 200 and og.headers["content-type"] == "image/png"
     assert Image.open(io.BytesIO(og.content)).size == (1200, 630)
     assert Image.open(io.BytesIO(story.content)).size == (1080, 1920)
-    assert "no-store" in og.headers.get("cache-control", "")
+    assert "max-age=300" in og.headers.get("cache-control", "")
+    assert "no-store" not in og.headers.get("cache-control", "")
 
 
 @pytest.mark.asyncio
@@ -196,7 +230,8 @@ async def test_story_image_changes_with_session_not_next_slot(app_use_test_db, d
     assert generic.status_code == 200 and focused.status_code == 200
     assert generic.content != focused.content
     assert share.json()["story_image_url"].endswith(f"/session/{sid_late}/story.png?i=1")
-    assert "17:15" in share.json()["share_body"]
+    # invite=true: share_body — короткий вопрос; время сеанса — в place_share_text.
+    assert "17:15" in share.json()["place_share_text"]
 
 
 @pytest.mark.asyncio
@@ -319,8 +354,7 @@ async def test_share_api_points_at_the_page_and_counts_the_click(app_use_test_db
     assert body["share_url"].endswith(f"{place['path']}?s={sid}&i=1")
     assert body["place_share_url"].endswith(f"{place['path']}?s={sid}")
     assert body["share_text"].startswith(body["share_url"])
-    assert body["share_body"].startswith("Погнали кататься?")
-    assert re.search(r", 20:30 — " + re.escape(place["name"]) + r", 8\.50 BYN", body["share_body"])
+    assert body["share_body"] == "Погнали кататься?"
     assert body["place_share_body"].startswith(place["name"] + " — массовое катание")
     assert body["story_image_url"].endswith(f"/session/{sid}/story.png?i=1")
     assert missing.status_code == 404
@@ -421,7 +455,7 @@ async def test_slot_ten_days_ahead_is_not_called_past(app_use_test_db, db_sessio
     await db_session.commit()
     async with _client() as client:
         resp = await client.get(place["path"], params={"s": sid})
-    assert "Этот сеанс уже прошёл" not in resp.text
+    assert "Сеанса из ссылки уже нет в расписании" not in resp.text
     assert 'id="plan"' in resp.text and "12:00" in resp.text
 
 

@@ -1,4 +1,4 @@
-"""TASK-210-A: главная v2 — HTTP-проверки окон, счётчиков, блока и карты."""
+"""TASK-210 / TASK-224: главная — города, счётчик окна и карта. Сеансов и чипов на `/` нет."""
 
 from __future__ import annotations
 
@@ -26,6 +26,14 @@ def _client() -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
+async def _hero_cookie(db_session) -> dict[str, str]:
+    """Пустой город в cookie: город из теста остаётся плиткой, а не героем «ваш город»."""
+    name = f"Герой {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    await _insert_arena(db_session, city_id, name="Пустой")
+    return {"glide_city": city_slug(name)}
+
+
 def _utc(y: int, m: int, d: int, hh: int, mm: int = 0) -> datetime:
     return datetime(y, m, d, hh, mm, tzinfo=_MINSK).astimezone(timezone.utc)
 
@@ -40,24 +48,13 @@ def _counter(html: str) -> str:
     return match.group(1)
 
 
-def _city_li(html: str, city_name: str) -> str:
-    for match in re.finditer(r'<li class="city">.*?</li>', html, re.S):
-        if city_name in match.group(0):
-            return match.group(0)
+def _city_tile(html: str, city_name: str) -> str:
+    for match in re.finditer(r'<a class="city card[^"]*".*?</a>', html, re.S):
+        tile = match.group(0)
+        name = re.search(r'<span class="n">([^<]*)</span>', tile)
+        if name and html_lib.unescape(name.group(1)) == city_name:
+            return tile
     raise AssertionError(city_name)
-
-
-def _sessions_ul(html: str) -> str:
-    match = re.search(r'<ul class="sessions">.*?</ul>', html, re.S)
-    assert match, "sessions"
-    return match.group(0)
-
-
-def _session_li(html: str, arena_name: str) -> str:
-    for match in re.finditer(r'<li class="session[^"]*">.*?</li>', html, re.S):
-        if arena_name in match.group(0):
-            return match.group(0)
-    raise AssertionError(arena_name)
 
 
 def _count_sql(db_session):
@@ -85,13 +82,6 @@ async def _session(db_session, arena_id: int, day: date, starts: str, **kwargs) 
         price_rental_minor=kwargs.pop("price_rental_minor", None),
     )
     return int(created["id"])
-
-
-async def _basis(db_session, session_id: int, basis: str) -> None:
-    await db_session.execute(
-        text("UPDATE ice_sessions SET schedule_basis = :basis WHERE id = :id"),
-        {"basis": basis, "id": session_id},
-    )
 
 
 async def _parser_job(db_session, arena_id: int, *, last_ok_at: datetime) -> None:
@@ -159,92 +149,8 @@ async def test_ac1_weekend_count_excludes_friday_and_sunday_evening_rolls_forwar
 
 
 @pytest.mark.asyncio
-async def test_ac2_minutes_until_is_in_html_only_for_live_under_two_hours(
-    app_use_test_db, db_session, monkeypatch
-) -> None:
-    moment = _utc(2026, 10, 7, 12)
-    _freeze(monkeypatch, moment)
-    name = f"Минуты {uuid.uuid4().hex[:6]}"
-    city_id = await _insert_city(db_session, name=name)
-    soon_id = await _insert_arena(db_session, city_id, name="Живой скоро")
-    projected_id = await _insert_arena(db_session, city_id, name="Обычный каток")
-    later_id = await _insert_arena(db_session, city_id, name="Живой позже")
-    await _insert_arena(db_session, city_id, name="Запас один")
-    await _insert_arena(db_session, city_id, name="Запас два")
-    soon = await _session(
-        db_session, soon_id, date(2026, 10, 7), "12:30", price_adult_minor=1000, price_rental_minor=500
-    )
-    projected = await _session(db_session, projected_id, date(2026, 10, 7), "12:40")
-    later = await _session(db_session, later_id, date(2026, 10, 7), "15:00")
-    for arena_id, start in (
-        (await _arena_id(db_session, city_id, "Запас один"), "16:00"),
-        (await _arena_id(db_session, city_id, "Запас два"), "17:00"),
-    ):
-        await _session(db_session, arena_id, date(2026, 10, 7), start)
-    await _basis(db_session, soon, "live")
-    await _basis(db_session, projected, "projected")
-    await _basis(db_session, later, "live")
-    await db_session.commit()
-    invalidate_public_city_cache()
-    slug = city_slug(name)
-
-    async with _client() as client:
-        resp = await client.get("/", cookies={"glide_city": slug})
-    assert resp.status_code == 200
-    live = _session_li(resp.text, "Живой скоро")
-    usual = _session_li(resp.text, "Обычный каток")
-    far = _session_li(resp.text, "Живой позже")
-    assert "через 30 мин" in live
-    assert "с прокатом 15 BYN" in live
-    assert "12:30–13:30" in live
-    assert "12:30:00" not in live
-    assert "через" not in usual
-    assert "обычно" in usual
-    assert "по обычной сетке катка — лучше уточнить" in usual
-    assert "через" not in far
-
-
-async def _arena_id(db_session, city_id: int, name: str) -> int:
-    return int(
-        (
-            await db_session.execute(
-                text("SELECT id FROM arenas WHERE city_id = :cid AND name = :name"),
-                {"cid": city_id, "name": name},
-            )
-        ).scalar_one()
-    )
-
-
-@pytest.mark.asyncio
-async def test_ac3_upcoming_block_follows_cookie_and_place_threshold(app_use_test_db, db_session, monkeypatch) -> None:
-    _freeze(monkeypatch, _utc(2026, 10, 7, 12))
-    big = f"Большой {uuid.uuid4().hex[:6]}"
-    small = f"Малый {uuid.uuid4().hex[:6]}"
-    big_id = await _insert_city(db_session, name=big)
-    small_id = await _insert_city(db_session, name=small)
-    for i in range(5):
-        arena_id = await _insert_arena(db_session, big_id, name=f"Каток {i}")
-        await _session(db_session, arena_id, date(2026, 10, 7), "18:00")
-    small_arena = await _insert_arena(db_session, small_id, name="Один каток")
-    await _session(db_session, small_arena, date(2026, 10, 7), "18:00")
-    await db_session.commit()
-    invalidate_public_city_cache()
-
-    async with _client() as client:
-        shown = await client.get("/", cookies={"glide_city": city_slug(big)})
-        hidden = await client.get("/", cookies={"glide_city": city_slug(small)})
-    assert shown.status_code == 200
-    assert f"Ближайшие в {big}" in shown.text
-    assert 'class="sessions"' in shown.text
-    assert hidden.status_code == 200
-    assert f"Ближайшие в {small}" not in hidden.text
-    assert 'class="sessions"' not in hidden.text
-    assert small in hidden.text
-
-
-@pytest.mark.asyncio
 async def test_ac4_by_cities_stay_on_the_map_and_ru_does_not(app_use_test_db, db_session, monkeypatch) -> None:
-    """Карта в HTML ещё не рисуется (210-B); проверяем view-model SVG + ссылки в списке городов."""
+    """Карта в HTML: каждый город BY — якорь home-map__city, RU на карте нет."""
     from src.application.catalog_home_page import load_catalog_home_view
 
     monkeypatch.setenv("ICE_DISCOVERY_COUNTRIES", "BY,RU")
@@ -262,19 +168,19 @@ async def test_ac4_by_cities_stay_on_the_map_and_ru_does_not(app_use_test_db, db
     view = await load_catalog_home_view(db_session)
     svg = str(view.get("map_svg") or "")
     assert 'class="home-map"' in svg
-    assert 'href="/c/brest"' in svg
-    assert 'href="/c/bobruysk"' in svg
-    assert 'href="/c/grodno"' in svg
+    for slug in ("brest", "bobruysk", "grodno"):
+        assert f'href="/c/{slug}" class="home-map__city"' in svg
     assert 'href="/c/tver"' not in svg
 
     async with _client() as client:
         resp = await client.get("/")
     assert resp.status_code == 200
-    assert 'class="home-map"' not in resp.text
-    assert 'href="/c/brest"' in resp.text
-    assert 'href="/c/bobruysk"' in resp.text
-    assert 'href="/c/grodno"' in resp.text
-    assert 'href="/c/tver"' in resp.text
+    assert '<svg class="home-map"' in resp.text
+    for slug in ("brest", "bobruysk", "grodno"):
+        assert f'href="/c/{slug}" class="home-map__city"' in resp.text
+    assert 'href="/c/tver" class="home-map__city"' not in resp.text
+    elsewhere = re.search(r'<p class="elsewhere">.*?</p>', resp.text, re.S)
+    assert elsewhere and 'href="/c/tver"' in elsewhere.group(0)
 
 
 @pytest.mark.asyncio
@@ -297,7 +203,6 @@ async def test_ac5_sql_budget_on_upcoming_path_with_cookie(app_use_test_db, db_s
     finally:
         event.remove(bind, "before_cursor_execute", before)
     assert one.status_code == 200
-    assert 'class="sessions"' in one.text
 
     for i in range(4):
         extra = await _insert_city(db_session, name=f"Ещё {i} {uuid.uuid4().hex[:4]}")
@@ -338,9 +243,13 @@ async def test_today_counter_matches_ice_page_without_closed_or_very_stale(app_u
     )
     await db_session.commit()
     invalidate_public_city_cache()
+    cookies = await _hero_cookie(db_session)
+    await db_session.commit()
+    invalidate_public_city_cache()
     slug = city_slug(name)
 
     async with _client() as client:
+        client.cookies.set("glide_city", cookies["glide_city"])
         home = await client.get("/?when=today")
         ice = await client.get(f"/ice/{slug}/today")
     assert home.status_code == 200
@@ -352,35 +261,8 @@ async def test_today_counter_matches_ice_page_without_closed_or_very_stale(app_u
 
 
 @pytest.mark.asyncio
-async def test_all_link_uses_selection_when_and_day_page_only_for_today(
-    app_use_test_db, db_session, monkeypatch
-) -> None:
-    _freeze(monkeypatch, _utc(2026, 10, 9, 16))
-    name = f"Ссылки {uuid.uuid4().hex[:6]}"
-    city_id = await _insert_city(db_session, name=name)
-    arena_ids = [await _insert_arena(db_session, city_id, name=f"Лёд {i}") for i in range(5)]
-    for arena_id in arena_ids:
-        await _session(db_session, arena_id, date(2026, 10, 10), "12:00")
-        await _session(db_session, arena_id, date(2026, 10, 13), "12:00")
-    await db_session.commit()
-    invalidate_public_city_cache()
-    slug = city_slug(name)
-
-    async with _client() as client:
-        weekend = await client.get("/?when=weekend", cookies={"glide_city": slug})
-        tomorrow = await client.get("/?when=tomorrow", cookies={"glide_city": slug})
-        today = await client.get("/?when=today", cookies={"glide_city": slug})
-        day = await client.get("/?when=day&d=2026-10-13", cookies={"glide_city": slug})
-        today_day = await client.get("/?when=day&d=2026-10-09", cookies={"glide_city": slug})
-    assert f'href="/c/{slug}?w=weekend"' in weekend.text
-    assert f'href="/c/{slug}?w=tomorrow"' in tomorrow.text
-    assert f'href="/c/{slug}?w=today"' in today.text
-    assert "Все →" not in day.text
-    assert f'href="/ice/{slug}/today"' in today_day.text
-
-
-@pytest.mark.asyncio
-async def test_ohm_chip_stays_hidden_and_bad_day_falls_back_to_today(app_use_test_db, db_session, monkeypatch) -> None:
+async def test_bad_day_falls_back_to_today_without_picker(app_use_test_db, db_session, monkeypatch) -> None:
+    """``?when=day&d=`` вне пикера считает сегодня. Чипов и календаря на главной нет."""
     _freeze(monkeypatch, _utc(2026, 10, 7, 12))
     name = f"День {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
@@ -393,15 +275,12 @@ async def test_ohm_chip_stays_hidden_and_bad_day_falls_back_to_today(app_use_tes
 
     async with _client() as client:
         bad = await client.get("/?when=day&d=2026-10-14")
-        picker = await client.get("/?when=day")
-    assert "Хоккей (ОХМ)" not in bad.text
-    assert "kind=ohm" not in bad.text
-    assert "лыжероллер" not in bad.text.lower()
-    assert _counter(bad.text) == "Сегодня в Беларуси 1 сеанс в 1 городе"
+    assert bad.status_code == 200
     assert 'class="day-picker"' not in bad.text
-    assert bad.text.count("when=day&amp;d=") == 0
-    assert 'class="day-picker"' in picker.text
-    assert picker.text.count("when=day&amp;d=") >= 7
+    assert 'class="chips"' not in bad.text
+    assert "chip--active" not in bad.text
+    assert '<p class="sub sub--ohm">Хоккей для любителей — в' in bad.text
+    assert _counter(bad.text) == "Сегодня в Беларуси 1 сеанс в 1 городе"
 
 
 @pytest.mark.asyncio
@@ -431,19 +310,28 @@ async def test_glide_city_cookie_set_on_city_and_place_pages(app_use_test_db, db
 
 @pytest.mark.asyncio
 async def test_when_query_works_without_js_switcher(app_use_test_db, db_session) -> None:
-    """Свитчер в HTML — 210-B; здесь только что ``?when=`` принимается и ставит noindex."""
+    """``?when=`` меняет текст счётчика. Переключателя времени на главной больше нет."""
     name = f"Переключ {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     await _insert_arena(db_session, city_id, name="Каток")
     await db_session.commit()
     invalidate_public_city_cache()
+    prefixes = {
+        "today": "Сегодня в Беларуси",
+        "tomorrow": "Завтра в Беларуси",
+        "weekend": "В эти выходные в Беларуси",
+    }
 
     async with _client() as client:
-        for when in ("today", "tomorrow", "weekend"):
+        for when, prefix in prefixes.items():
             resp = await client.get(f"/?when={when}")
             assert resp.status_code == 200, when
+            assert _counter(resp.text).startswith(prefix), _counter(resp.text)
             assert 'name="robots" content="noindex, follow"' in resp.text
             assert 'rel="canonical"' in resp.text
+            assert 'class="day-picker"' not in resp.text
+            assert 'class="chips"' not in resp.text
+            assert "chip--active" not in resp.text
 
 
 @pytest.mark.asyncio
@@ -452,14 +340,19 @@ async def test_friday_default_city_row_does_not_say_today(app_use_test_db, db_se
     name = f"Пятница {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     arena_id = await _insert_arena(db_session, city_id, name="Субботний")
-    await _session(db_session, arena_id, date(2026, 10, 10), "12:00")
+    # Плиток на главной десять: город с одним сеансом уступает живым городам общей БД.
+    for day in (date(2026, 10, 10), date(2026, 10, 11)):
+        for hour in range(8, 23):
+            await _session(db_session, arena_id, day, f"{hour:02d}:10")
+    cookies = await _hero_cookie(db_session)
     await db_session.commit()
     invalidate_public_city_cache()
 
     async with _client() as client:
+        client.cookies.set("glide_city", cookies["glide_city"])
         resp = await client.get("/")
     assert resp.status_code == 200
-    row = _city_li(resp.text, name)
+    row = _city_tile(resp.text, name)
     assert "сегодня" not in row
     assert "в выходные" in row
     assert "/ice/" not in row
@@ -488,7 +381,7 @@ async def test_counter_ignores_ru_sessions(app_use_test_db, db_session, monkeypa
 
 @pytest.mark.asyncio
 async def test_single_place_city_button_opens_the_place(app_use_test_db, db_session, monkeypatch) -> None:
-    """Кнопка города в HTML — 210-B; проверяем href в view-model."""
+    """Город с одним местом: карточка «ваш город» ведёт сразу на страницу места."""
     from src.application.catalog_home_page import load_catalog_home_view
 
     _freeze(monkeypatch, _utc(2026, 10, 7, 12))
@@ -509,48 +402,8 @@ async def test_single_place_city_button_opens_the_place(app_use_test_db, db_sess
     async with _client() as client:
         resp = await client.get("/", cookies={"glide_city": slug})
     assert resp.status_code == 200
+    assert f'<a class="hero-city" href="/p/{slug}/{arena_slug}">' in resp.text
     assert 'class="city-button"' not in resp.text
-
-
-@pytest.mark.asyncio
-async def test_upcoming_cards_are_the_selected_window_without_stale_or_closed(
-    app_use_test_db, db_session, monkeypatch
-) -> None:
-    _freeze(monkeypatch, _utc(2026, 10, 9, 16))
-    name = f"Окно {uuid.uuid4().hex[:6]}"
-    city_id = await _insert_city(db_session, name=name)
-    friday = await _insert_arena(db_session, city_id, name="Пятничный каток")
-    stale = await _insert_arena(db_session, city_id, name="Старый каток")
-    closed = await _insert_arena(db_session, city_id, name="Закрытый каток")
-    early = await _insert_arena(db_session, city_id, name="Суббота ранняя")
-    for i, start in enumerate(("13:00", "14:00", "15:00", "16:00")):
-        arena_id = await _insert_arena(db_session, city_id, name=f"Суббота {i}")
-        await _session(db_session, arena_id, date(2026, 10, 10), start)
-    await _session(db_session, friday, date(2026, 10, 9), "18:00")
-    await _session(db_session, early, date(2026, 10, 10), "12:00")
-    stale_session = await _session(db_session, stale, date(2026, 10, 10), "08:00")
-    await _session(db_session, closed, date(2026, 10, 10), "09:00")
-    await _basis(db_session, stale_session, "live")
-    await _parser_job(db_session, stale, last_ok_at=datetime(2026, 10, 4, 12, tzinfo=timezone.utc))
-    await db_session.execute(
-        text("UPDATE ice_sessions SET observed_at = :observed WHERE arena_id = :id"),
-        {"observed": datetime(2026, 10, 4, 12, tzinfo=timezone.utc), "id": stale},
-    )
-    await db_session.execute(
-        text("UPDATE arena_profiles SET schedule_mode = 'season_closed' WHERE arena_id = :id"),
-        {"id": closed},
-    )
-    await db_session.commit()
-    invalidate_public_city_cache()
-
-    async with _client() as client:
-        resp = await client.get("/?when=weekend", cookies={"glide_city": city_slug(name)})
-    assert resp.status_code == 200
-    block = _sessions_ul(resp.text)
-    assert "Суббота ранняя" in block
-    assert "Пятничный каток" not in block
-    assert "Старый каток" not in block
-    assert "Закрытый каток" not in block
 
 
 _HREF_RE = re.compile(r'href="([^"]*)"')
@@ -591,14 +444,18 @@ async def test_home_internal_hrefs_resolve(app_use_test_db, db_session, monkeypa
     for i, start in enumerate(("14:00", "15:00", "16:00", "17:00", "18:00")):
         arena_id = await _insert_arena(db_session, city_id, name=f"Каток ссылок {i}")
         await _session(db_session, arena_id, date(2026, 10, 7), start)
+    solo_name = f"Одна ссылка {uuid.uuid4().hex[:6]}"
+    solo_id = await _insert_city(db_session, name=solo_name)
+    await _insert_arena(db_session, solo_id, name="Единственный каток")
     await db_session.commit()
     invalidate_public_city_cache()
     slug = city_slug(name)
+    solo_slug = city_slug(solo_name)
     hrefs: set[str] = set()
 
     async with _client() as client:
         for when in ("today", "tomorrow", "weekend", "day"):
-            for cookies in ({"glide_city": slug}, None):
+            for cookies in ({"glide_city": slug}, {"glide_city": solo_slug}, None):
                 resp = await client.get(f"/?when={when}", cookies=cookies)
                 assert resp.status_code == 200, when
                 hrefs |= _internal_hrefs(resp.text)
@@ -611,35 +468,4 @@ async def test_home_internal_hrefs_resolve(app_use_test_db, db_session, monkeypa
             followed = await client.get(href)
             if followed.status_code not in range(200, 400):
                 broken.append(f"{followed.status_code} {href}")
-    assert not broken, broken
-
-
-@pytest.mark.asyncio
-async def test_upcoming_cards_stay_inside_today_window_not_the_seven_day_horizon(
-    app_use_test_db, db_session, monkeypatch
-) -> None:
-    _freeze(monkeypatch, _utc(2026, 10, 7, 12))
-    name = f"Горизонт {uuid.uuid4().hex[:6]}"
-    city_id = await _insert_city(db_session, name=name)
-    today_early = await _insert_arena(db_session, city_id, name="Сегодня ранний")
-    today_late = await _insert_arena(db_session, city_id, name="Сегодня поздний")
-    tomorrow = await _insert_arena(db_session, city_id, name="Завтра за окном")
-    later = await _insert_arena(db_session, city_id, name="Пятница за окном")
-    filler = await _insert_arena(db_session, city_id, name="Суббота горизонта")
-    await _session(db_session, today_early, date(2026, 10, 7), "14:00")
-    await _session(db_session, today_late, date(2026, 10, 7), "18:00")
-    await _session(db_session, tomorrow, date(2026, 10, 8), "10:00")
-    await _session(db_session, later, date(2026, 10, 9), "12:00")
-    await _session(db_session, filler, date(2026, 10, 10), "12:00")
-    await db_session.commit()
-    invalidate_public_city_cache()
-
-    async with _client() as client:
-        resp = await client.get("/?when=today", cookies={"glide_city": city_slug(name)})
-    assert resp.status_code == 200
-    block = _sessions_ul(resp.text)
-    assert "Сегодня ранний" in block
-    assert "Сегодня поздний" in block
-    assert "Завтра за окном" not in block
-    assert "Пятница за окном" not in block
-    assert "Суббота горизонта" not in block
+        assert not broken, broken

@@ -140,9 +140,11 @@ describe('catalog header (A′)', () => {
 
   it('applyCatalogMode maps segments to intent and venueTypes', () => {
     const { applyCatalogMode } = loadModel();
-    assert.deepEqual(applyCatalogMode('shop'), { intent: 'skate', venueTypes: ['shop'] });
-    assert.deepEqual(applyCatalogMode('coach'), { intent: 'coach', venueTypes: [] });
-    assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [] });
+    assert.deepEqual(applyCatalogMode('shop'), { intent: 'skate', venueTypes: ['shop'], placeService: '' });
+    assert.deepEqual(applyCatalogMode('coach'), { intent: 'coach', venueTypes: [], placeService: '' });
+    assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [], placeService: '' });
+    assert.deepEqual(applyCatalogMode('ohm'), { intent: 'ohm', venueTypes: [], placeService: '' });
+    assert.deepEqual(applyCatalogMode('service'), { intent: 'skate', venueTypes: [], placeService: 'service' });
   });
 
   it('catalogModesView: «Магазины» из shop_count города, даже без venue_type_facets (после тренера)', () => {
@@ -158,7 +160,7 @@ describe('catalog header (A′)', () => {
     });
     assert.deepEqual(
       modes.map((m) => m.id),
-      ['places', 'coach', 'shop']
+      ['places', 'shop', 'coach']
     );
     assert.equal(modes.find((m) => m.id === 'coach').active, true);
     assert.equal(modes.find((m) => m.id === 'shop').active, false);
@@ -171,6 +173,50 @@ describe('catalog header (A′)', () => {
       shopCount: 0,
     });
     assert.ok(!noShops.some((m) => m.id === 'shop'));
+    assert.equal(modes.find((m) => m.id === 'places').label, 'Покататься');
+    assert.equal(modes.find((m) => m.id === 'shop').label, 'Магазины');
+    assert.equal(modes.find((m) => m.id === 'coach').label, 'Тренеры');
+  });
+
+  it('catalogModesView: Хоккей и Заточка — разделы в одном порядке с сайтом', () => {
+    const { catalogModesView, sectionHint } = loadModel();
+    const modes = catalogModesView({
+      facets: [{ key: 'ice', count: 4 }, { key: 'shop', count: 2 }],
+      intent: 'skate',
+      venueTypes: [],
+      placeService: 'service',
+      ohmCount: 3,
+      serviceCount: 9,
+      trainerCount: 1,
+      shopCount: 2,
+    });
+    assert.deepEqual(
+      modes.map((m) => m.id),
+      ['places', 'ohm', 'service', 'shop', 'coach']
+    );
+    assert.deepEqual(
+      modes.map((m) => m.label),
+      ['Покататься', 'Хоккей', 'Заточка', 'Магазины', 'Тренеры']
+    );
+    assert.equal(modes.find((m) => m.id === 'service').active, true);
+    assert.equal(modes.find((m) => m.id === 'places').active, false);
+    assert.equal(sectionHint('ohm', ''), 'открытая тренировка, ОХМ');
+    assert.equal(sectionHint('places', 'service'), 'заточка и прокат');
+    assert.equal(sectionHint('places', ''), 'каток, зал или трасса');
+    assert.equal(sectionHint('shop', ''), '');
+  });
+
+  it('placeServiceChipView: чип «Заточка» только когда в городе есть такие места', () => {
+    const { placeServiceChipView, buildListUrl } = loadModel();
+    assert.equal(placeServiceChipView(0, false), null);
+    const on = placeServiceChipView(4, true);
+    assert.equal(on.label, 'Заточка');
+    assert.equal(on.count, 4);
+    assert.equal(on.active, true);
+    assert.equal(placeServiceChipView(0, true).label, 'Заточка');
+    const url = buildListUrl({ cityId: 3, intent: 'skate', svc: 'service' });
+    assert.match(url, /svc=service/);
+    assert.ok(!buildListUrl({ cityId: 3, intent: 'skate' }).includes('svc='));
   });
 
   it('catalogStateAfterCityChange сбрасывает магазинный сегмент и фильтры', () => {
@@ -188,6 +234,7 @@ describe('catalog header (A′)', () => {
     assert.equal(next.intent, 'skate');
     assert.equal(next.shopService, '');
     assert.equal(next.shopOpenNow, false);
+    assert.equal(next.placeService, '');
     assert.equal(
       catalogStateAfterCityChange({ skate_count: 0, trainer_count: 3 }, { intent: 'skate', venueTypes: ['shop'] }).intent,
       'coach'
@@ -380,6 +427,26 @@ describe('trainer catalog chip (TASK-076 AC-002)', () => {
     assert.equal(intentFromSearch('?intent=skate'), 'skate');
     assert.equal(intentFromSearch(''), null);
     assert.equal(intentFromSearch('?intent=nope'), null);
+    assert.equal(intentFromSearch('?intent=service'), null);
+  });
+
+  it('placeServiceBootFromSearch: intent=service and svc=service open Заточка', () => {
+    const { placeServiceBootFromSearch, urlBlocksSavedPlaceService } = loadModel();
+    assert.deepEqual(placeServiceBootFromSearch('?city_id=7&intent=service'), {
+      intent: 'skate',
+      venueTypes: [],
+      placeService: 'service',
+    });
+    assert.deepEqual(placeServiceBootFromSearch('?svc=service'), {
+      intent: 'skate',
+      venueTypes: [],
+      placeService: 'service',
+    });
+    assert.equal(placeServiceBootFromSearch('?intent=ohm'), null);
+    assert.equal(urlBlocksSavedPlaceService('?intent=ohm&city_id=1'), true);
+    assert.equal(urlBlocksSavedPlaceService('?venue=shop&city_id=1'), true);
+    assert.equal(urlBlocksSavedPlaceService('?intent=coach'), true);
+    assert.equal(urlBlocksSavedPlaceService('?intent=skate'), false);
   });
 
   it('exposes a hint that the trainers catalog moved to the chip', () => {
@@ -557,6 +624,24 @@ describe('groupSearchResults (AC-004)', () => {
     assert.equal(grouped[2].label, 'Города');
     assert.equal(grouped[1].items[0].last_name, 'Иванова');
   });
+
+  it('uses the server group label when the open city is split out', () => {
+    const { groupSearchResults } = loadModel();
+    const grouped = groupSearchResults({
+      groups: [
+        { type: 'arena', label: 'Минск', items: [{ id: 1, name: 'Чижовка' }] },
+        { type: 'arena', label: 'Другие города', items: [{ id: 2, name: 'Неман' }] },
+      ],
+    });
+    assert.deepEqual(grouped.map((g) => g.label), ['Минск', 'Другие города']);
+  });
+
+  it('asks search for the open city and highlights the typed stem', () => {
+    const { buildSearchUrl, highlightSearch } = loadModel();
+    assert.ok(buildSearchUrl('заточка', 12, 2).includes('city_id=2'));
+    assert.equal(highlightSearch('Чижовка-арена', 'чижовки'), '<mark>Чижовк</mark>а-арена');
+    assert.equal(highlightSearch('A & B', 'нет'), 'A &amp; B');
+  });
 });
 
 describe('pickFallbackCity (EDGE-001)', () => {
@@ -723,6 +808,14 @@ describe('hrefs', () => {
     assert.equal(coerceIntent('group'), 'skate');
     assert.equal(coerceIntent('coach'), 'coach');
     assert.equal(coerceIntent('skate'), 'skate');
+    assert.equal(coerceIntent('ohm'), 'ohm');
+  });
+
+  it('buildListUrl passes intent=ohm; when filter stays skate-only', () => {
+    const { buildListUrl, whenSkateFilterContext, intentFromSearch } = loadModel();
+    assert.ok(buildListUrl({ cityId: 1, intent: 'ohm' }).includes('intent=ohm'));
+    assert.equal(whenSkateFilterContext('ohm', []), false);
+    assert.equal(intentFromSearch('?intent=ohm&city_id=1'), 'ohm');
   });
 
   it('map toggle stays on the Ice tab (TASK-054 in-place Yandex map)', () => {
@@ -1107,6 +1200,31 @@ describe('listPaintMode (lens switch must not re-skin leftover cards)', () => {
         items: [{ id: 3, name: 'ТЦ Замок', tier: 'A' }],
       }),
       'skeleton'
+    );
+  });
+
+  it('ohm is its own lens, so a finished ОХМ response is not painted as a skeleton', () => {
+    const { listPaintMode, arenaListLens, formatSortCaption } = loadModel();
+    assert.equal(arenaListLens('ohm'), 'ohm');
+    assert.equal(arenaListLens('skate'), 'skate');
+    assert.equal(
+      listPaintMode({
+        loading: false,
+        intent: 'ohm',
+        loadedIntent: arenaListLens('ohm'),
+        items: [{ id: 1, name: 'Чижовка' }],
+      }),
+      'items'
+    );
+    assert.match(
+      formatSortCaption({
+        total: 4,
+        items: [{ id: 1 }],
+        intent: 'ohm',
+        loadedIntent: 'ohm',
+        loading: false,
+      }),
+      /4 катка/
     );
   });
 

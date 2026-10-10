@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.public_list_cache import set_public_json_list_cache
 from src.api.routes.public import _enrich_trainer_photo_urls
+from src.application.selection_page import SERVICE_AMENITY_KEYS, clean_svc
 from src.application.arena_public_use_cases import (
     DEFAULT_LIST_LIMIT,
     MAX_LIST_LIMIT,
@@ -114,7 +115,7 @@ async def get_public_ice_arenas(
     city_id: int | None = None,
     bbox: str | None = Query(None, description="min_lat,min_lon,max_lat,max_lon"),
     near: str | None = Query(None, description="lat,lon"),
-    intent: str = Query("skate", description="skate | coach | group"),
+    intent: str = Query("skate", description="skate | coach | group | ohm"),
     venue_type: str | None = Query(
         None,
         description="ice|gym|choreo|pool|outdoor|other, можно через запятую. Пусто — все типы.",
@@ -129,6 +130,10 @@ async def get_public_ice_arenas(
         None,
         description="Конкретный календарный день YYYY-MM-DD (Минск); приоритет над when, кроме совпадения с «завтра».",
     ),
+    svc: str | None = Query(
+        None,
+        description="Услуга места: sharpening | rental | service (заточка и прокат).",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
@@ -138,6 +143,7 @@ async def get_public_ice_arenas(
     клиент не рисовал чип, за которым пусто.
     """
     set_public_json_list_cache(response)
+    svc_value = clean_svc(svc)
     try:
         return await list_public_ice_arenas(
             session,
@@ -150,6 +156,7 @@ async def get_public_ice_arenas(
             cursor=cursor,
             when=when,
             day=day,
+            service_keys=SERVICE_AMENITY_KEYS[svc_value] if svc_value else None,
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
@@ -267,13 +274,14 @@ async def post_ice_interest(
 async def get_public_search(
     response: Response,
     q: str = Query(..., min_length=1),
-    limit: int = Query(8, ge=1, le=20),
+    limit: int = Query(12, ge=1, le=20),
+    city_id: int | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """One search, three result groups: arena, trainer, city (tsvector + optional pg_trgm)."""
+    """Places, trainers, and cities. ``city_id`` lifts the open city above the rest."""
     response.headers["Cache-Control"] = "no-store"
     try:
-        return await search_public_ice(session, q, limit=limit)
+        return await search_public_ice(session, q, limit=limit, city_id=city_id)
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
 
@@ -318,7 +326,20 @@ async def get_public_arena_trainers(
     return payload
 
 
-_SHARE_CHANNELS = ("telegram", "copy", "story", "story_tg", "story_os", "story_fallback", "system")
+_SHARE_CHANNELS = (
+    "telegram",
+    "copy",
+    "story",
+    "story_tg",
+    "story_os",
+    "story_fallback",
+    "system",
+    "viber",
+    "whatsapp",
+    "image_tg",
+    "image_os",
+    "image_fallback",
+)
 
 
 @router.get("/ice/selection/share")

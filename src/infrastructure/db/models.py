@@ -773,6 +773,41 @@ class ClientTrainerEdge(Base):
     context_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
+ICE_WATCH_KIND_SESSIONS = "sessions"
+ICE_WATCH_KIND_SCHEDULE_FRESH = "schedule_fresh"
+ICE_WATCH_KINDS = (ICE_WATCH_KIND_SESSIONS, ICE_WATCH_KIND_SCHEDULE_FRESH)
+
+
+class ClientIceWatch(Base):
+    """Client subscription: ice sessions on an arena matching a filter, or schedule refresh."""
+
+    __tablename__ = "client_ice_watches"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "arena_id",
+            "watch_kind",
+            name="uq_client_ice_watch_client_arena_kind",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    telegram_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("client_sessions.telegram_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False, index=True)
+    city_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cities.id", ondelete="SET NULL"), nullable=True)
+    watch_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    filter_json: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ClientMerge(Base):
     """
     Audit trail for ``merge_clients_use_cases.merge_clients``: duplicate client

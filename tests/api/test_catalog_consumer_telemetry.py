@@ -31,6 +31,32 @@ async def test_open_telegram_cta_records_and_redirects(app_use_test_db, db_sessi
 
 
 @pytest.mark.asyncio
+async def test_open_telegram_cta_stores_share_src_and_session(app_use_test_db, db_session) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="https://test") as client:
+        await client.get(
+            "/api/public/catalog/open-telegram",
+            params={
+                "startapp": "arena_1",
+                "surface": "place_page",
+                "src": "tg",
+                "s": "9001",
+            },
+            follow_redirects=False,
+        )
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT payload FROM catalog_consumer_events "
+                "WHERE kind = 'public_telegram_cta' ORDER BY id DESC LIMIT 1"
+            )
+        )
+    ).scalar_one()
+    assert row["ingress"] == "public_cta"
+    assert row["src"] == "tg" and row["s"] == "9001"
+
+
+@pytest.mark.asyncio
 async def test_catalog_presence_requires_init_data(app_use_test_db) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="https://test") as client:

@@ -745,7 +745,45 @@ a.arena-row {
   justify-content: space-between;
   gap: 10px;
 }
+.arena-h-row .arena-h {
+  flex: 1;
+  min-width: 0;
+}
+.arena-h-row__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
 .arena-h-row .arena-cta { text-decoration: none; }
+
+/* Напоминание о сеансах — вторичное действие, не широкая кнопка под заголовком. */
+.arena-watch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-row-bot);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.arena-watch-btn__icon {
+  font-size: var(--app-icon-md);
+  line-height: 1;
+}
+.arena-watch-btn--on {
+  border-color: color-mix(in srgb, var(--app-cta-fill) 45%, var(--glide-line));
+  background: color-mix(in srgb, var(--app-cta-fill) 12%, var(--app-surface-row-bot));
+}
+.arena-watch-btn:active {
+  transform: scale(0.96);
+}
 .arena-h--sub {
   font-size: var(--app-text-body);
   margin-top: 6px;
@@ -1074,6 +1112,41 @@ button.arena-info__tel--copy {
   grid-column: 1 / -1;
   font-size: var(--app-text-caption);
   color: var(--glide-hint);
+}
+
+/* TASK-223: сеанс из шаринга пропал из ленты — без обвинения «уже прошёл». */
+.arena-focus-gone {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--glide-line);
+  border-left: 3px solid var(--glide-hint);
+  border-radius: var(--app-radius-sm);
+  background: var(--glide-surface, transparent);
+}
+.arena-focus-gone__title {
+  margin: 0 0 4px;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  color: var(--glide-text);
+}
+.arena-focus-gone__sub {
+  margin: 0 0 8px;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+.arena-focus-gone__pick {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--glide-line);
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  font: inherit;
+  font-size: var(--app-text-caption);
+  text-align: left;
+  color: var(--app-cta);
+  cursor: pointer;
 }
 
 /* Парсер давно не читал сайт катка: сеансы показываем, но честно говорим, от какого они числа. */

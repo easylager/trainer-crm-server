@@ -47,52 +47,57 @@
     .top__brand { font-weight: 700; color: var(--ink); text-decoration: none; }
     .top__brand span { color: var(--muted); font-weight: 500; }
     .top__trainers { font-size: 14px; font-weight: 600; color: var(--accent); text-decoration: none; }
-    h1 { margin: 0 0 8px; font-size: clamp(28px, 7vw, 40px); font-weight: 700; letter-spacing: -.02em; }
-    .lede, .counter { margin: 0 0 28px; color: var(--muted); }
-    .day-picker { margin: -12px 0 28px; }
-    .day-picker ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 14px; }
-    .day-picker a { color: var(--accent); font-weight: 600; text-decoration: none; font-size: 14px; }
-    h2.section { margin: 32px 0 12px; font-size: 20px; }
-    ul.cities, ul.sessions { list-style: none; margin: 0; padding: 0; }
+    .date { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+    h1 { margin: 6px 0 0; font-size: clamp(28px, 7vw, 40px); font-weight: 700; letter-spacing: -.02em; line-height: 1.08; }
+    .sub, .counter { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
+    .sub--ohm { margin-top: 2px; }
+    .small { font-size: 13px; }
+    .hero-city {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      margin: 16px 0 0; padding: 16px 18px; border-radius: 18px;
+      background: var(--accent); color: #fff; text-decoration: none;
+    }
+    .hero-city .cap { display: block; font-size: 12px; opacity: .85; }
+    .hero-city .name { display: block; margin-top: 2px; font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+    .hero-city .live { display: block; margin-top: 4px; font-size: 14px; opacity: .95; }
+    .hero-city .live b { font-weight: 700; }
+    .hero-city svg { flex-shrink: 0; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+    .map { margin: 20px 0 0; padding: 8px; }
+    .map svg { width: 100%; height: auto; display: block; }
+    .home-map__city { cursor: pointer; }
+    .home-map__city:hover circle:last-child, .home-map__city:focus-visible circle:last-child { fill: #0b6f6b; }
+    .home-map__city:focus-visible { outline: none; }
+    .home-map__city:focus-visible .home-map__tap { fill: rgba(15,143,138,.12); }
+    .hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+    .head { display: flex; align-items: baseline; justify-content: space-between; margin: 28px 0 10px; }
+    .head h2.section { margin: 0; }
+    h2.section { margin: 28px 0 12px; font-size: 20px; }
+    .cities { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (min-width: 560px) { .cities { grid-template-columns: 1fr 1fr 1fr; } }
     .city {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 16px 18px;
-      margin-bottom: 12px;
+      display: flex; flex-direction: column; gap: 4px; min-height: 96px;
+      padding: 14px 14px 12px; color: var(--ink); text-decoration: none;
     }
-    .city__name { margin: 0 0 4px; font-size: 20px; }
-    .city__name a { color: inherit; text-decoration: none; }
-    .city__name a::after { content: " ›"; color: var(--accent); }
-    .city__stats { margin: 0 0 8px; color: var(--muted); font-size: 14px; }
-    .city__links { margin: 0; font-size: 14px; }
-    .city__links a { color: var(--accent); font-weight: 600; text-decoration: none; }
-    .country-group { margin-bottom: 20px; }
-    .country-group__title { margin: 0 0 10px; font-size: 15px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-    .session {
-      display: grid;
-      grid-template-columns: 4.5rem 5.5rem 1fr auto;
-      gap: 8px 12px;
-      align-items: baseline;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 12px 14px;
-      margin-bottom: 8px;
-      font-size: 15px;
+    .city .n { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+    .city .n::after { content: " ›"; color: var(--accent); }
+    .city .f { font-size: 13px; color: #4a5f71; line-height: 1.35; }
+    .city .f b { color: var(--ink); font-weight: 600; }
+    .city .has { margin-top: auto; padding-top: 6px; font-size: 12px; color: var(--muted); }
+    .city--quiet .f { color: var(--muted); }
+    details.more { margin-top: 8px; padding: 2px 14px; }
+    details.more summary {
+      min-height: 44px; display: flex; align-items: center; justify-content: space-between;
+      font-size: 15px; font-weight: 600; cursor: pointer; list-style: none;
     }
-    .session--projected {
-      border-style: dashed;
-      background: #f9fbfb;
-    }
-    .session__day { color: var(--muted); font-size: 13px; }
-    .session__time { font-weight: 600; }
-    .session__place a { color: inherit; text-decoration: none; font-weight: 600; }
-    .session__city { color: var(--muted); font-size: 13px; text-align: right; }
-    .session__basis, .session__basis-long, .session__price, .session__soon { color: var(--muted); font-size: 12px; }
-    .session__basis { font-style: italic; }
-    .sessions__more { margin: 8px 0 0; font-size: 14px; }
-    .sessions__more a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    details.more summary::-webkit-details-marker { display: none; }
+    details.more summary::after { content: "\2304"; color: var(--muted); font-size: 18px; }
+    details.more[open] summary::after { content: "\2303"; }
+    details.more p { margin: 0 0 12px; font-size: 14px; line-height: 1.7; color: #4a5f71; }
+    details.more p b { color: var(--ink); }
+    details.more a { color: var(--accent); text-decoration: none; }
+    .elsewhere { margin: 20px 0 0; font-size: 14px; color: var(--muted); }
+    .elsewhere a { color: var(--accent); font-weight: 600; text-decoration: none; }
     .muted { color: var(--muted); }
     .cta {
       display: block;
@@ -116,14 +121,16 @@
       <a class="top__brand" href="/">Glide<span> · каталог</span></a>
       <a class="top__trainers" href="__TRAINERS_URL__">Для тренеров →</a>
     </header>
+    <p class="date">__DATE__</p>
     <h1>__PAGE_H1__</h1>
-    <p class="lede counter">__COUNTER_TEXT__</p>
-    __DAY_PICKER__
+    <p class="sub counter">__COUNTER_TEXT__</p>
+    __OHM_SUB__
+    __HERO_CITY__
+    __MAP__
 
-    <h2 class="section">Города</h2>
+    __CITIES_HEAD__
     __CITIES__
-
-    __SESSIONS_BLOCK__
+    __ELSEWHERE__
 
     <a class="cta cta--secondary" href="__CTA_URL__">Открыть в Telegram</a>
     <footer>Данные с сайтов катков — время и цену уточняйте на месте.</footer>

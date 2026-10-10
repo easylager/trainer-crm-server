@@ -20,6 +20,11 @@ async def test_get_platform_stats_includes_north_star_and_activation(db_session:
     for k in ACTIVATION_STAGE_ORDER:
         assert k in data["activation_stage_counts"]
     assert "live_trainers" in data
+    pulse = data["catalog_demand_pulse"]
+    assert pulse["metric"] == "catalog_demand_pulse"
+    for key in ("dau", "wau", "mau", "web_actors_7d", "telegram_actors_7d", "tickets_intent_actors_7d",
+                "share_tap_7d", "share_open_7d", "top_arenas_7d"):
+        assert key in pulse
     assert "sessions_7d" in data
     assert "trainers_live_7d" in data
     assert "mrr_cents" in data

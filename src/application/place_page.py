@@ -375,9 +375,27 @@ async def load_place_view(
 
     all_slots = [s for d in days for s in d.get("sessions") or []]
     next_slot = all_slots[0] if all_slots else None
+    ohm_days: list[dict[str, Any]] = []
+    if _skating(card) and level != LEVEL_VERY_STALE:
+        ohm_lookup = await public_arena_session_days(
+            session,
+            int(card["id"]),
+            date_from=today,
+            date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
+            kinds=("hockey_practice",),
+            include_in_progress=True,
+        )
+        ohm_days = [d for d in ohm_lookup if (_parse_iso_date(d.get("local_date")) or today) <= week_end]
+        if session_id is not None and focus is None:
+            for day in ohm_lookup:
+                for slot in day.get("sessions") or []:
+                    if int(slot["id"]) == int(session_id):
+                        focus = slot
+            focus_missing = focus is None and level != LEVEL_VERY_STALE
     return {
         "card": card,
         "days": days,
+        "ohm_days": ohm_days,
         "focus": focus,
         "focus_missing": focus_missing,
         "next_slot": next_slot,
@@ -436,6 +454,31 @@ def _where(card: Mapping[str, Any]) -> str:
 def _services(card: Mapping[str, Any]) -> list[str]:
     amenities = card.get("amenities") or {}
     return [title for key, _i, title, _s in _SHOP_SERVICES if amenities.get(key) is True]
+
+
+_SESSION_KIND_COPY_KEYS: dict[str, str] = {
+    "public_skate": "kind.public_skate",
+    "open_ice": "kind.public_skate",
+    "hockey_practice": "kind.hockey_practice",
+}
+
+
+def session_kind_label(slot: Mapping[str, Any] | None) -> str:
+    """Человекочитаемый тип сеанса для карточки шеринга и блока «выбранный сеанс»."""
+    if slot is None:
+        return ""
+    custom = str(slot.get("session_label") or "").strip()
+    if custom:
+        return custom
+    key = _SESSION_KIND_COPY_KEYS.get(str(slot.get("kind") or "").strip())
+    return t(key) if key else ""
+
+
+def invite_share_hook(view: Mapping[str, Any]) -> str:
+    """Короткий текст приглашения — без даты и цены (они на og/story-картинке)."""
+    if _skating(view["card"]):
+        return "Погнали кататься?"
+    return "Сходим сюда?"
 
 
 def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
@@ -501,29 +544,26 @@ def compose_place_share_message(view: Mapping[str, Any], *, page_url: str, invit
     ``openTelegramShareUrlFromMiniApp``.
 
     Тон «Позвать с собой» — вопрос, а не реклама: человек зовёт друга, а не
-    пересылает объявление. Поэтому без восклицаний и без «лучший каток города».
+    пересылает объявление. Дата, цена и адрес — на og/story-картинке, в
+    ``share_body`` при invite только короткий вопрос.
     """
     card = view["card"]
     today: date = view["today"]
     name = str(card.get("name") or "")
     slot = view.get("focus") or view.get("next_slot")
-    lines: list[str] = []
+    url = (page_url or "").strip()
     if invite:
-        lines.append("Погнали кататься? ⛸" if _skating(card) else "Сходим сюда?")
+        hook = invite_share_hook(view)
+        return f"{url}\n\n{hook}" if url else hook
+    lines: list[str] = []
+    if _skating(card):
+        lines.append(f"{name} — массовое катание")
     else:
-        if _skating(card):
-            lines.append(f"{name} — массовое катание")
-        else:
-            lines.append(f"{name} — {str(card.get('venue_noun') or '').lower()}".rstrip(" —"))
+        lines.append(f"{name} — {str(card.get('venue_noun') or '').lower()}".rstrip(" —"))
     if slot is not None and _skating(card):
         when = slot_when(slot, today=today, absolute=True)
         price = slot_price(slot)
-        line = f"{when}" + (f" · {price}" if price else "")
-        if invite:
-            line = f"{when} — {name}" + (f", {price}" if price else "")
-        lines.append(line)
-    elif invite:
-        lines.append(name)
+        lines.append(f"{when}" + (f" · {price}" if price else ""))
     services = _services(card) if card.get("venue_type") == "shop" else []
     if services:
         lines.append(" · ".join(services))
@@ -668,6 +708,42 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     return "".join(parts)
 
 
+def _ohm_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
+    days = view.get("ohm_days") or []
+    slots = [s for day in days for s in (day.get("sessions") or [])]
+    if not slots:
+        return ""
+    focus = view.get("focus")
+    focus_id = int(focus["id"]) if focus is not None else None
+    notes: list[str] = []
+    for slot in slots:
+        for key in ("age_note", "capacity_note"):
+            note = str(slot.get(key) or "").strip()
+            if note and note not in notes:
+                notes.append(note)
+    parts = [f'<section class="sec" id="ohm"><h2 class="sec__title">{t("kind.hockey_practice")}</h2>']
+    for day in days:
+        d = _parse_iso_date(day.get("local_date"))
+        if d is None:
+            continue
+        day_slots = list(day.get("sessions") or [])
+        if not day_slots:
+            continue
+        chips = "".join(
+            _slot_chip(s, focused=(focus_id == int(s["id"])), base_path=base_path, invite=invite)
+            for s in day_slots[:_SLOTS_PER_DAY]
+        )
+        parts.append(
+            '<div class="day">'
+            f'<p class="day__label">{_esc(day_heading(d, today=view["today"]))}</p>'
+            f'<div class="slots">{chips}</div></div>'
+        )
+    if notes:
+        parts.append(f'<p class="hint">{_esc(" ".join(notes))}</p>')
+    parts.append("</section>")
+    return "".join(parts)
+
+
 def _focus_html(view: Mapping[str, Any], *, invite: bool) -> str:
     card = view["card"]
     focus = view.get("focus")
@@ -677,7 +753,8 @@ def _focus_html(view: Mapping[str, Any], *, invite: bool) -> str:
             tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
             return (
                 '<section class="plan plan--gone" id="plan">'
-                f'<p class="plan__kicker">Этот сеанс уже прошёл</p><p class="plan__note">Расписание ниже — актуальное.{tail}</p>'
+                f'<p class="plan__kicker">Сеанса из ссылки уже нет в расписании</p>'
+                f'<p class="plan__note">Расписание ниже — актуальное.{tail}</p>'
                 "</section>"
             )
         return ""
@@ -689,7 +766,7 @@ def _focus_html(view: Mapping[str, Any], *, invite: bool) -> str:
     time_text = f"{start}–{end}" if start and end else start
     d = _parse_iso_date(focus.get("local_date"))
     day_text = day_heading(d, today=view["today"]) if d else ""
-    label = str(focus.get("session_label") or "").strip()
+    label = session_kind_label(focus)
     return (
         '<section class="plan" id="plan">'
         f'<p class="plan__kicker">{_esc(kicker)}</p>'
@@ -996,6 +1073,7 @@ def render_place_page(
     city_page_url: str | None,
     share: Mapping[str, str],
     invite: bool = False,
+    share_src: str | None = None,
     country: str | None = None,
 ) -> str:
     card = view["card"]
@@ -1044,6 +1122,7 @@ def render_place_page(
             about,
             actions,
             _schedule_html(view, base_path=base_path, invite=invite),
+            _ohm_html(view, base_path=base_path, invite=invite),
             _services_html(card),
             _hours_html(card),
             _rental_catalog_html(card),
@@ -1056,7 +1135,11 @@ def render_place_page(
     city = _city(card)
     city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city)} сегодня</a>' if city_page_url and city else ""
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
-    robots = "noindex, follow" if (view.get("focus") is not None or invite) else "index, follow"
+    robots = (
+        "noindex, follow"
+        if (view.get("focus") is not None or invite or bool(share_src))
+        else "index, follow"
+    )
 
     html = _TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))

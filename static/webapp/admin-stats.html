@@ -14,6 +14,47 @@
     .pulse-ok { font-size: 13px; color: var(--tg-theme-hint-color); padding: 8px 0 4px; }
     .plan-paid { color: #86efac; }
     .plan-trial { color: #fde68a; }
+    .cat-demand { margin-bottom: 22px; }
+    .cat-card { padding: 14px 14px 12px; }
+    .cat-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      text-align: center;
+    }
+    .cat-strip > div { padding: 2px 6px 0; min-width: 0; }
+    .cat-strip > div + div { border-left: 1px solid rgba(255,255,255,0.08); }
+    .cat-strip .adm-kpi-value { font-size: 26px; font-variant-numeric: tabular-nums; }
+    .cat-mini {
+      margin-top: 2px;
+      font-size: 11px;
+      line-height: 1.3;
+      color: var(--tg-theme-hint-color);
+      min-height: 14px;
+    }
+    .cat-foot {
+      margin: 12px 0 0;
+      font-size: 12px;
+      line-height: 1.35;
+      text-align: center;
+      color: var(--tg-theme-hint-color);
+    }
+    .cat-divider {
+      height: 1px;
+      margin: 12px 0;
+      background: rgba(255,255,255,0.08);
+    }
+    .cat-rows { display: flex; flex-direction: column; gap: 10px; }
+    .cat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      font-size: 14px;
+    }
+    .cat-row b { font-size: 16px; font-variant-numeric: tabular-nums; }
+    .cat-quiet { display: block; margin-top: 1px; font-size: 11px; color: var(--tg-theme-hint-color); }
+    .cat-arena { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: 13px; }
+    .cat-arena + .cat-arena { margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -46,8 +87,63 @@
         return '—';
       }
 
+      function renderCatalogDemand(pulse) {
+        if (!pulse) return '';
+        var openHint = pulse.share_open_pct != null
+          ? pulse.share_open_pct + '% от нажатий'
+          : 'приглашённые';
+        var html = '<div class="cat-demand">';
+        html += '<div class="adm-section-title">Каталог · спрос</div>';
+        html += '<div class="adm-card cat-card">';
+        html += '<div class="cat-strip">';
+        html += '<div><div class="adm-kpi-label">Сегодня</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(pulse.dau) + '</div>' +
+          '<div class="cat-mini">Минск</div></div>';
+        html += '<div><div class="adm-kpi-label">7 дней</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(pulse.wau) + '</div>' +
+          '<div class="cat-mini">веб ' + A.formatNum(pulse.web_actors_7d) +
+          ' · TG ' + A.formatNum(pulse.telegram_actors_7d) + '</div></div>';
+        html += '<div><div class="adm-kpi-label">30 дней</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(pulse.mau) + '</div>' +
+          '<div class="cat-mini">акторы</div></div>';
+        html += '</div>';
+        html += '<div class="cat-foot">Акторы, не люди. Один человек в вебе и в Telegram считается дважды.</div>';
+        html += '<div class="cat-divider"></div>';
+        html += '<div class="cat-rows">';
+        html += '<div class="cat-row"><span>Билеты на сайте<span class="cat-quiet">не продажа</span></span>' +
+          '<b>' + A.formatNum(pulse.tickets_intent_actors_7d) + '</b></div>';
+        html += '<div class="cat-row"><span>Поделиться<span class="cat-quiet">нажатий за 7 дней</span></span>' +
+          '<b>' + A.formatNum(pulse.share_tap_7d) + '</b></div>';
+        html += '<div class="cat-row"><span>Открыли ссылку<span class="cat-quiet">' + openHint + '</span></span>' +
+          '<b>' + A.formatNum(pulse.share_open_7d) + '</b></div>';
+        html += '</div>';
+
+        var arenas = pulse.top_arenas_7d || [];
+        if (arenas.length) {
+          html += '<div class="cat-divider"></div>';
+          html += '<div class="adm-kpi-label">Арены за 7 дней</div>';
+          html += arenas.map(function (a) {
+            return '<div class="cat-arena"><span>' + A.escapeHtml(a.arena_name || ('#' + a.arena_id)) +
+              '</span><span class="adm-list-meta">' + A.formatNum(a.unique_actors) + ' уник.</span></div>';
+          }).join('');
+        }
+
+        if (!pulse.comparable_since) {
+          html += '<div class="cat-foot">Уникальные появятся после первых заходов нового формата.</div>';
+        } else {
+          var started = new Date(pulse.comparable_since);
+          var ageDays = (Date.now() - started.getTime()) / 86400000;
+          if (!isNaN(started.getTime()) && ageDays >= 0 && ageDays < 30) {
+            html += '<div class="cat-foot">Ряд с ' + A.formatDate(pulse.comparable_since_date) +
+              '. Окна 7 и 30 дней пока короче.</div>';
+          }
+        }
+        html += '</div></div>';
+        return html;
+      }
+
       function render(d) {
-        var html = '';
+        var html = renderCatalogDemand(d.catalog_demand_pulse);
         var actionCount = d.action_count || 0;
         html += '<div class="adm-kpi-grid">';
         html += '<div class="adm-kpi"><div class="adm-kpi-label">Занятия сегодня</div>' +

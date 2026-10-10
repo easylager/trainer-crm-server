@@ -20,15 +20,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_public_use_cases import get_public_arena_card
 from src.application.place_links import parse_catalog_start_param, parse_place_deep_link
+from src.shared.copy_ru import t
 from src.shared.venue_types import venue_card_cta
 
 _CATALOG_BUTTONS = {
     None: "Открыть каталог",
-    "skate": "Где покататься",
-    "coach": "Тренеры города",
-    "shop": "Магазины и заточка",
+    "skate": t("route.skate"),
+    "coach": t("route.trainers"),
+    "shop": t("route.shops"),
     "gym": "Залы ОФП",
-    "ice": "Где покататься",
+    "ice": t("route.skate"),
     "outdoor": "Уличный лёд",
 }
 _VENUE_FILTERS = frozenset({"shop", "gym", "ice", "outdoor", "choreo", "pool", "other"})

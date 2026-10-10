@@ -14,9 +14,11 @@ from sqlalchemy.pool import NullPool
 from src.application import catalog_consumer_events as cce
 from src.application.catalog_consumer_events import (
     KIND_MINIAPP_CATALOG_ENTRY,
+    KIND_PUBLIC_CONTACT_CLICK,
     KIND_PUBLIC_PAGE_VIEW,
     KIND_PUBLIC_TELEGRAM_CTA,
     event_dedup_hash,
+    get_catalog_demand_pulse,
     get_catalog_top_arenas_by_events,
     get_catalog_virality_cb_metrics,
     get_catalog_wau,
@@ -285,6 +287,39 @@ async def test_virality_metrics_empty(db_session) -> None:
     assert "share_to_deeplink_open_pct" in metrics
 
 
+async def test_virality_metrics_share_attribution_breakdown(db_session) -> None:
+    now = datetime.now(timezone.utc)
+    await _insert_event(
+        db_session,
+        kind=KIND_PUBLIC_PAGE_VIEW,
+        actor=telegram_actor_hash(71_001),
+        at=now,
+        payload='{"src": "tg", "s": "5"}',
+        dedup=False,
+    )
+    await _insert_event(
+        db_session,
+        kind=KIND_PUBLIC_PAGE_VIEW,
+        actor=telegram_actor_hash(71_002),
+        at=now,
+        payload='{"src": "wa"}',
+        dedup=False,
+    )
+    await _insert_event(
+        db_session,
+        kind=KIND_PUBLIC_TELEGRAM_CTA,
+        actor=None,
+        at=now,
+        payload='{"ingress": "public_cta", "src": "tg"}',
+        dedup=False,
+    )
+    metrics = await get_catalog_virality_cb_metrics(db_session, days=1, as_of=now + timedelta(minutes=1))
+    assert metrics["public_page_view_by_src"]["tg"] >= 1
+    assert metrics["public_page_view_by_src"]["wa"] >= 1
+    assert metrics["public_page_view_with_session"] >= 1
+    assert metrics["public_telegram_cta_clicks_by_src"]["tg"] >= 1
+
+
 async def test_cb_counts_only_share_attributed_opens(db_session) -> None:
     now = datetime.now(timezone.utc)
     before = (await get_catalog_virality_cb_metrics(db_session, days=1, as_of=now + timedelta(minutes=1)))
@@ -332,6 +367,63 @@ async def test_comparable_since_is_first_new_format_row_or_env(db_session, monke
     monkeypatch.setenv("CATALOG_METRICS_COMPARABLE_SINCE", "2026-10-07")
     since = await metrics_comparable_since(db_session)
     assert since == datetime(2026, 10, 6, 21, 0, tzinfo=timezone.utc)  # полночь по Минску
+
+
+async def test_demand_pulse_minsk_day_excludes_bots_and_splits_channels(db_session) -> None:
+    """«Сегодня» — календарный день Минска; превью не актор; билет бота не намерение."""
+    now = datetime.now(timezone.utc)
+    as_of = now + timedelta(minutes=1)
+    web_today = public_actor_hash(client_ip="203.0.113.10", user_agent="pulse-human")
+    web_earlier = public_actor_hash(client_ip="203.0.113.12", user_agent="pulse-earlier")
+    tg = telegram_actor_hash(424242)
+    bot = public_actor_hash(client_ip="203.0.113.11", user_agent="pulse-bot")
+    before = await get_catalog_demand_pulse(db_session, as_of=as_of)
+
+    await _insert_event(
+        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=web_today, at=now,
+        payload='{"ua_class": "human"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_MINIAPP_CATALOG_ENTRY, actor=tg, at=now, surface="miniapp_ice",
+        payload='{"share_deeplink": true}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=bot, at=now,
+        payload='{"ua_class": "preview"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=web_earlier, at=now - timedelta(days=2),
+        payload='{"ua_class": "human"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_PUBLIC_CONTACT_CLICK, actor=web_today, at=now,
+        payload='{"action": "tickets", "ua_class": "human"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_PUBLIC_CONTACT_CLICK, actor=bot, at=now,
+        payload='{"action": "tickets", "ua_class": "preview"}',
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_share_events (kind, occurred_at, payload)
+            VALUES ('place', :at, '{}'::jsonb)
+            """
+        ),
+        {"at": now},
+    )
+    await db_session.flush()
+
+    after = await get_catalog_demand_pulse(db_session, as_of=as_of)
+    assert after["dau"] - before["dau"] == 2
+    assert after["wau"] - before["wau"] == 3
+    assert after["mau"] - before["mau"] == 3
+    assert after["web_actors_7d"] - before["web_actors_7d"] == 2
+    assert after["telegram_actors_7d"] - before["telegram_actors_7d"] == 1
+    assert after["tickets_intent_actors_7d"] - before["tickets_intent_actors_7d"] == 1
+    assert after["share_tap_7d"] - before["share_tap_7d"] == 1
+    assert after["share_open_7d"] - before["share_open_7d"] == 1
+    assert after["web_actors_7d"] + after["telegram_actors_7d"] == after["wau"]
 
 
 # --- ретеншн ------------------------------------------------------------------------------------

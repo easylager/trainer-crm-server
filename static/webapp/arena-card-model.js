@@ -334,6 +334,14 @@
   function iceKindLabel(session) {
     session = session || {};
     if (session.session_label) return session.session_label;
+    if (session.kind === 'hockey_practice') {
+      var GC = rootRef.GlideCopy;
+      if (GC && typeof GC.t === 'function') {
+        var label = GC.t('kind.hockey_practice');
+        if (label && label !== 'kind.hockey_practice') return String(label);
+      }
+      return 'Хоккей для любителей (ОХМ)';
+    }
     if (session.kind === 'open_ice') return 'Свободный лёд';
     return 'Массовое катание';
   }
@@ -634,6 +642,9 @@
     return m ? m[1] : null;
   }
 
+  /** Окно ленты сеансов на карточке: сегодня … сегодня+13 (как reloadSessions). */
+  var ARENA_SESSION_WINDOW_DAYS = 14;
+
   /** День сеанса в ленте карточки, если ссылка принесла только id. */
   function dayForSession(days, sessionId) {
     var want = String(sessionId || '');
@@ -649,6 +660,74 @@
       }
     }
     return null;
+  }
+
+  /** Первый ещё не начавшийся сеанс в ленте — для «Ближайший: …» при пропавшем фокусе. */
+  function nearestScheduleSlot(days, todayIso, now) {
+    days = days || [];
+    now = now || new Date();
+    var tomorrow = isoDate(todayIso) ? MT.addDaysIso(todayIso, 1) : '';
+    var i;
+    for (i = 0; i < days.length; i++) {
+      var iso = String(days[i].local_date || '').slice(0, 10);
+      var upcoming = upcomingSessions(days[i].sessions || [], now).sort(compareSessionsByStart);
+      if (!upcoming.length) continue;
+      var s = upcoming[0];
+      if (s.id == null) continue;
+      var time = hhmm(s.starts_at_local);
+      if (!time) continue;
+      var head =
+        iso === todayIso
+          ? 'Сегодня'
+          : iso === tomorrow
+            ? 'Завтра'
+            : WEEKDAYS_SHORT[MT.weekdaySun0FromIso(iso)];
+      return {
+        id: s.id,
+        localDate: iso,
+        time: time,
+        label: head + ' ' + time,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * TASK-223: сеанс из шаринга в загруженной ленте — найден, пропал или расписание не подтверждено.
+   * «gone» только при успешной загрузке и отсутствии id; при very_stale — unconfirmed, не «прошёл».
+   */
+  function focusState(opts) {
+    opts = opts || {};
+    var want = opts.focusSessionId != null ? String(opts.focusSessionId).trim() : '';
+    if (!want) return { kind: 'none' };
+    if (opts.sessionsError) {
+      return { kind: 'none', focusSessionId: want };
+    }
+    if (!opts.sessionsLoaded) {
+      return { kind: 'none', focusSessionId: want };
+    }
+    var freshness = opts.freshness || {};
+    var S = staleApi();
+    var level = S
+      ? S.stalenessLevel(freshness)
+      : freshness.schedule_very_stale
+        ? 'very_stale'
+        : freshness.schedule_stale
+          ? 'stale'
+          : 'fresh';
+    if (level === 'very_stale') {
+      return { kind: 'unconfirmed', focusSessionId: want };
+    }
+    var days = opts.days || [];
+    var day = dayForSession(days, want);
+    if (day) {
+      return { kind: 'found', focusSessionId: want, day: day };
+    }
+    return {
+      kind: 'gone',
+      focusSessionId: want,
+      nearest: nearestScheduleSlot(days, opts.todayIso, opts.now),
+    };
   }
 
   function iceSectionMode(opts) {
@@ -1028,6 +1107,47 @@
   }
 
   /**
+   * Массовое катание (days) и ОХМ (ohm_days) — в одном списке для share sheet.
+   * Без merge каталог на вкладке «Хоккей» подставлял первый сеанс МК вместо ОХМ.
+   */
+  function combineSessionDayLists(days, ohmDays) {
+    var order = [];
+    var byDate = {};
+    function add(list) {
+      list = list || [];
+      for (var i = 0; i < list.length; i++) {
+        var iso = list[i].local_date;
+        if (!iso) continue;
+        if (!byDate[iso]) {
+          byDate[iso] = [];
+          order.push(iso);
+        }
+        byDate[iso] = byDate[iso].concat(list[i].sessions || []);
+      }
+    }
+    add(days);
+    add(ohmDays);
+    return order.map(function (iso) {
+      return { local_date: iso, sessions: byDate[iso] };
+    });
+  }
+
+  function shareSlotKindNote(session) {
+    var kind = session && session.kind;
+    if (kind === 'hockey_practice') {
+      var GC = global.GlideCopy;
+      if (GC && typeof GC.t === 'function') {
+        var full = String(GC.t('kind.hockey_practice') || '');
+        if (full && full !== 'kind.hockey_practice') {
+          return full.indexOf('ОХМ') >= 0 ? 'ОХМ' : full;
+        }
+      }
+      return 'ОХМ';
+    }
+    return '';
+  }
+
+  /**
    * TASK-146: ближайшие сеансы для шита «Поделиться» — делятся конкретным временем.
    * «Сегодня 19:00» / «Завтра 11:00» / «Сб 18:30». Порядок — как в ленте.
    */
@@ -1075,10 +1195,14 @@
         var time = String(s.starts_at_local || '').slice(0, 5);
         if (s.id == null || !time) continue;
         var price = formatMinor(s.price_adult_minor, s.currency_code || 'BYN');
+        var metaBits = [];
+        if (price && price.withCurrency) metaBits.push(price.withCurrency);
+        var kindNote = shareSlotKindNote(s);
+        if (kindNote) metaBits.push(kindNote);
         rows.push({
           id: s.id,
           time: time,
-          meta: price ? price.withCurrency : '',
+          meta: metaBits.join(' · '),
         });
       }
       if (rows.length) {
@@ -1110,7 +1234,7 @@
     if (hasTicketLinks) {
       return 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.';
     }
-    return 'Нажмите время — оно попадёт в приглашение. Покупка онлайн здесь не нужна.';
+    return 'Выберите слот — он попадёт в приглашение. Покупка онлайн здесь не нужна.';
   }
 
   function startParamFromLocation(loc) {
@@ -1149,6 +1273,9 @@
     parseArenaRef: parseArenaRef,
     sessionIdFromStartParam: sessionIdFromStartParam,
     dayForSession: dayForSession,
+    ARENA_SESSION_WINDOW_DAYS: ARENA_SESSION_WINDOW_DAYS,
+    nearestScheduleSlot: nearestScheduleSlot,
+    focusState: focusState,
     iceSectionMode: iceSectionMode,
     iceFeedView: iceFeedView,
     seasonClosedBanner: seasonClosedBanner,
@@ -1164,6 +1291,7 @@
     ribbonIsoForDay: ribbonIsoForDay,
     practiceContacts: practiceContacts,
     startParamFromLocation: startParamFromLocation,
+    combineSessionDayLists: combineSessionDayLists,
     shareSlots: shareSlots,
     shareSlotsGrouped: shareSlotsGrouped,
     shareSlotInviteLabel: shareSlotInviteLabel,

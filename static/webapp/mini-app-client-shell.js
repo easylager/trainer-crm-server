@@ -25,7 +25,7 @@
       path: 'client-saved-trainers',
       label: 'Сохранённые',
       iconId: 'client-saved',
-      hint: 'Тренеры из каталога — вернуться к записи в один тап',
+      hint: 'Тренеры, катки и активные напоминания',
     },
     {
       path: 'client-stats',
@@ -70,6 +70,7 @@
     tabBarVisible: true,
     moreOpen: false,
     forcedTab: null,
+    watchesActiveCount: 0,
   };
 
   function getTg() {
@@ -274,8 +275,15 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'client-more-sheet__link';
+      var badge =
+        item.path === 'client-saved-trainers' && state.watchesActiveCount > 0
+          ? '<span class="client-more-sheet__badge" aria-hidden="true">' +
+            String(state.watchesActiveCount) +
+            '</span>'
+          : '';
       btn.innerHTML =
         moreItemPlate(item.iconId) +
+        badge +
         '<span class="client-more-sheet__body"><span class="client-more-sheet__label">' +
         item.label +
         '</span><span class="client-more-sheet__hint">' +
@@ -520,6 +528,7 @@
   }
 
   function openMoreSheet() {
+    refreshWatchesSummary();
     state.moreOpen = true;
     var overlay = document.getElementById('clientMoreOverlay');
     if (!overlay) return;
@@ -665,6 +674,44 @@
   }
 
   /** Warm session + trainer edges while user stays on hub — catalog opens with data already in memory. */
+  function patchMoreSheetWatchesBadge() {
+    var sheet = document.getElementById('clientMoreSheet');
+    if (!sheet) return;
+    var link = sheet.querySelector('.client-more-sheet__link');
+    if (!link) return;
+    var existing = link.querySelector('.client-more-sheet__badge');
+    var n = state.watchesActiveCount;
+    if (n <= 0) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (!existing) {
+      existing = document.createElement('span');
+      existing.className = 'client-more-sheet__badge';
+      existing.setAttribute('aria-hidden', 'true');
+      var plate = link.querySelector('.glide-more-plate');
+      if (plate) plate.insertAdjacentElement('afterend', existing);
+      else link.insertBefore(existing, link.firstChild);
+    }
+    existing.textContent = String(n);
+  }
+
+  function refreshWatchesSummary() {
+    var initData = getInitData();
+    if (!initData) return Promise.resolve();
+    var headers = { 'X-Telegram-Init-Data': initData };
+    return fetch('/api/webapp/client/watches/summary', { headers: headers, cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (data) {
+        if (!data) return;
+        state.watchesActiveCount = Number(data.active_count) || 0;
+        patchMoreSheetWatchesBadge();
+      })
+      .catch(function () {});
+  }
+
   function prefetchCatalogWarmCache() {
     var initData = getInitData();
     if (!initData) return Promise.resolve();
@@ -706,15 +753,11 @@
   function prefetchIceAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'minsk-time.js?v=2026100698', as: 'script' },
-      { href: base + 'ice-tab.js?v=2026100723', as: 'script' },
-      { href: base + 'opening-hours.js?v=2026100691', as: 'script' },
-      { href: base + 'schedule-staleness-model.js?v=2026100698', as: 'script' },
-      { href: base + 'arena-schedule-mode-model.js?v=2026100702', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=2026100901', as: 'script' },
-      { href: base + 'ice-map-model.js?v=2026100723', as: 'script' },
-      { href: base + 'ice-map.js?v=2026100722', as: 'script' },
-      { href: base + 'ice-tab.css?v=2026100722', as: 'style' },
+      { href: base + 'ice-tab.js?v=2026100590', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=202610061', as: 'script' },
+      { href: base + 'ice-map-model.js?v=202610054', as: 'script' },
+      { href: base + 'ice-map.js?v=2026100590', as: 'script' },
+      { href: base + 'ice-tab.css?v=2026100590', as: 'style' },
     ];
     assets.forEach(function (spec) {
       if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
@@ -729,8 +772,8 @@
   function prefetchCatalogAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'catalog-main.js?v=2026100699', as: 'script' },
-      { href: base + 'mini-app-catalog.css?v=2026100697', as: 'style' },
+      { href: base + 'catalog-main.js?v=2026100590', as: 'script' },
+      { href: base + 'mini-app-catalog.css?v=202605273', as: 'style' },
       { href: base + 'mini-app-phone-field.js?v=202606281', as: 'script' },
     ];
     assets.forEach(function (spec) {
@@ -1016,7 +1059,7 @@
     }
     // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
     if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
-    var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);
+    var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other|ohm|service))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);
     if (catalog) {
       var q = 'city_id=' + catalog[1];
       var intent = (catalog[2] || '').toLowerCase();
@@ -1049,6 +1092,7 @@
 
   function boot() {
     init();
+    refreshWatchesSummary();
     reportCatalogPresence('miniapp_shell', readStartParam());
     if (maybeOpenArenaDeepLink()) return;
     if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {
