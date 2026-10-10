@@ -405,6 +405,14 @@ def _price_bits(card: Mapping[str, Any]) -> str:
     return " · ".join(bits)
 
 
+def _nearest_live(when: str, place: str, price: str) -> str:
+    """Время и место — цветом текста, цена — тише, в хвосте."""
+    fact = f'<span class="fact">ближайший <b>{_esc(when)} · {_esc(place)}</b></span>'
+    if not price:
+        return fact
+    return fact + f' · <span class="price">{_esc(price)}</span>'
+
+
 def _skate_route(view: Mapping[str, Any]) -> str:
     slug = str(view["slug"])
     counts = view["skate_counts"]
@@ -417,7 +425,7 @@ def _skate_route(view: Mapping[str, Any]) -> str:
         hhmm, day = _session_when(first, today=view["today"])
         when = f"{day} {hhmm}".strip() if day != "сегодня" else hhmm
         price = _price_bits(first)
-        live = f"ближайший <b>{_esc(when)} · {_esc(first.get('arena_name'))}</b>" + (f" · {_esc(price)}" if price else "")
+        live = _nearest_live(when, str(first.get("arena_name") or ""), price)
     quick = _quick_html(slug, counts, hot=view.get("hot_skate"), all_count=None, t="ice")
     return _route_html(href=_list_href(slug, t="ice"), name=t("route.skate"), count=count, live=live, dot_off=not upcoming, quick=quick)
 
@@ -435,7 +443,7 @@ def _ohm_route(view: Mapping[str, Any]) -> str:
         hhmm, day = _session_when(nxt, today=view["today"])
         when = f"{day} {hhmm}".strip() if day != "сегодня" else hhmm
         price = format_price_minor(nxt.get("price_adult_minor"), str(nxt.get("currency_code") or "BYN"))
-        live = f"ближайший <b>{_esc(when)} · {_esc(nxt.get('arena_name'))}</b>" + (f" · {_esc(price)}" if price else "")
+        live = _nearest_live(when, str(nxt.get("arena_name") or ""), price)
     quick = _quick_html(slug, counts, hot=view.get("hot_ohm"), all_count=int(counts.get("all") or 0), kind="ohm")
     return _route_html(href=_list_href(slug, kind="ohm"), name=t("chip.hockey"), count=count, live=live, quick=quick)
 

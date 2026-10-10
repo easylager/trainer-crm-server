@@ -1,8 +1,10 @@
 /* TASK-224: страница города — маршрутизатор потребностей. Встраивается в place.html через __HEAD_EXTRA__. */
 .hub-back { color: var(--ink); text-decoration: none; font-weight: 600; }
+.hub-hero .hero__type { font-weight: 500; }
+.hub-hero .hero__title { font-weight: 600; letter-spacing: -.01em; }
 .hub-hero .hero__where b { color: var(--ink); font-weight: 600; }
 .hub-sec { margin: 0 0 16px; }
-.hub-sec h2 { margin: 0 0 10px; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.hub-sec h2 { margin: 0 0 10px; font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
 .hub-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
 .hub-head h2 { margin: 0; }
 .hub-head a { font-size: 14px; font-weight: 600; color: var(--accent); text-decoration: none; }
@@ -10,32 +12,35 @@
 .router { display: flex; flex-direction: column; gap: 8px; }
 .route { display: block; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
 .route .t { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--ink); text-decoration: none; }
-.route .t .name { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+.route .t .name { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 .route .t .cnt { font-size: 13px; color: var(--muted); white-space: nowrap; }
-.route .t .cnt::after { content: " ›"; color: var(--accent); font-weight: 700; }
+.route .t .cnt::after { content: " ›"; color: var(--accent); font-weight: 600; }
 .route .live { margin-top: 4px; font-size: 14px; color: #4a5f71; line-height: 1.4; }
+.route .live .fact { color: var(--ink); }
+.route .live .fact b { color: inherit; font-weight: 600; }
+.route .live .price { color: inherit; font-weight: 400; }
 .route .live b { color: var(--ink); font-weight: 600; }
 .route .live .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
 .route .live .dot--off { background: #c9d5dc; }
 .quick { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
-.quick a, .quick span { padding: 7px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--chip); color: var(--ink); text-decoration: none; }
+.quick a, .quick span { padding: 7px 11px; border-radius: 999px; font-size: 14px; font-weight: 500; background: var(--chip); color: var(--ink); text-decoration: none; }
 .quick span { color: #9aacb8; font-weight: 500; }
-.quick a.hot { background: var(--ink); color: #fff; }
+.quick a.hot { background: var(--ink); color: #fff; font-weight: 600; }
 .quick a small, .quick span small { font-weight: 500; color: inherit; opacity: .75; margin-left: 3px; font-size: 12px; }
 .quick a.hot small { opacity: .8; }
 .next { display: flex; flex-direction: column; gap: 8px; }
 .next__item { display: flex; gap: 14px; align-items: center; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; color: var(--ink); text-decoration: none; }
-.next .time { flex: 0 0 58px; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.next .time { flex: 0 0 58px; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
 .next .time small { display: block; font-size: 12px; font-weight: 600; color: var(--accent); }
 .next .what { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.next .what b { font-size: 15px; font-weight: 600; }
+.next .what b { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 .next .what span { font-size: 13px; color: var(--muted); }
 .hub-sec--places details.places { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 2px 16px; }
-.hub-sec--places summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; cursor: pointer; list-style: none; }
+.hub-sec--places summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 600; letter-spacing: -.01em; cursor: pointer; list-style: none; }
 .hub-sec--places summary::-webkit-details-marker { display: none; }
 .hub-sec--places summary::after { content: "\2304"; color: var(--muted); font-size: 18px; }
 .hub-sec--places details[open] summary::after { content: "\2303"; }
-.places__title { margin: 6px 0 4px; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.places__list { margin: 0 0 12px; padding: 0; list-style: none; font-size: 15px; line-height: 1.9; }
+.places__title { margin: 6px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.places__list { margin: 0 0 12px; padding: 0; list-style: none; font-size: 16px; line-height: 1.9; }
 .places__list a { color: var(--ink); text-decoration: none; }
 .places__list a::after { content: " ›"; color: var(--accent); }

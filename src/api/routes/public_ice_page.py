@@ -57,8 +57,9 @@ _CITY_NOT_FOUND_HTML = """<!DOCTYPE html>
 <title>Город не найден — Glide</title>
 <meta property="og:title" content="Glide — карта льда" />
 <meta property="og:description" content="Где покататься сегодня: катки, расписание и цены." />
-<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
-margin:0;padding:48px 20px;text-align:center}a{color:#0f8f8a;font-weight:600}</style></head>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+<style>body{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
+margin:0;padding:48px 20px;text-align:center}h1{font-weight:600;letter-spacing:-.01em}a{color:#0f8f8a;font-weight:600}</style></head>
 <body><h1>Такого города нет в каталоге</h1>
 <p>Проверьте название или посмотрите, где покататься сегодня:</p>
 <p><a href="__HOME__">Открыть каталог Glide</a></p></body></html>"""

@@ -41,15 +41,16 @@
       font-family: var(--g-font);
       font-size: 16px;
       line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
     }
     .wrap { max-width: 720px; margin: 0 auto; padding: 28px 20px 96px; }
     .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
     .top__brand { font-weight: 700; color: var(--ink); text-decoration: none; }
     .top__brand span { color: var(--muted); font-weight: 500; }
     .top__trainers { font-size: 14px; font-weight: 600; color: var(--accent); text-decoration: none; }
-    .date { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
-    h1 { margin: 6px 0 0; font-size: clamp(28px, 7vw, 40px); font-weight: 700; letter-spacing: -.02em; line-height: 1.08; }
-    .sub, .counter { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
+    .date { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+    h1 { margin: 6px 0 0; font-size: clamp(26px, 7vw, 34px); font-weight: 600; letter-spacing: -.01em; line-height: 1.12; }
+    .sub, .counter { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
     .sub--ohm { margin-top: 2px; }
     .small { font-size: 13px; }
     .hero-city {
@@ -58,9 +59,9 @@
       background: var(--accent); color: #fff; text-decoration: none;
     }
     .hero-city .cap { display: block; font-size: 12px; opacity: .85; }
-    .hero-city .name { display: block; margin-top: 2px; font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+    .hero-city .name { display: block; margin-top: 2px; font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
     .hero-city .live { display: block; margin-top: 4px; font-size: 14px; opacity: .95; }
-    .hero-city .live b { font-weight: 700; }
+    .hero-city .live b { font-weight: 600; }
     .hero-city svg { flex-shrink: 0; }
     .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
     .map { margin: 20px 0 0; padding: 8px; }
@@ -72,23 +73,23 @@
     .hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
     .head { display: flex; align-items: baseline; justify-content: space-between; margin: 28px 0 10px; }
     .head h2.section { margin: 0; }
-    h2.section { margin: 28px 0 12px; font-size: 20px; }
+    h2.section { margin: 28px 0 12px; font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
     .cities { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     @media (min-width: 560px) { .cities { grid-template-columns: 1fr 1fr 1fr; } }
     .city {
       display: flex; flex-direction: column; gap: 4px; min-height: 96px;
       padding: 14px 14px 12px; color: var(--ink); text-decoration: none;
     }
-    .city .n { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+    .city .n { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
     .city .n::after { content: " ›"; color: var(--accent); }
-    .city .f { font-size: 13px; color: #4a5f71; line-height: 1.35; }
+    .city .f { font-size: 14px; color: #4a5f71; line-height: 1.35; }
     .city .f b { color: var(--ink); font-weight: 600; }
     .city .has { margin-top: auto; padding-top: 6px; font-size: 12px; color: var(--muted); }
     .city--quiet .f { color: var(--muted); }
     details.more { margin-top: 8px; padding: 2px 14px; }
     details.more summary {
       min-height: 44px; display: flex; align-items: center; justify-content: space-between;
-      font-size: 15px; font-weight: 600; cursor: pointer; list-style: none;
+      font-size: 17px; font-weight: 600; letter-spacing: -.01em; cursor: pointer; list-style: none;
     }
     details.more summary::-webkit-details-marker { display: none; }
     details.more summary::after { content: "\2304"; color: var(--muted); font-size: 18px; }
