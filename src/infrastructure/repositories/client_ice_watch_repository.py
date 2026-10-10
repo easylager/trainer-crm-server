@@ -128,6 +128,35 @@ class ClientIceWatchRepository:
         )
         return int(r.scalar() or 0)
 
+    async def list_active_by_kind(self, watch_kind: str) -> list[dict[str, Any]]:
+        r = await self._s.execute(
+            text(
+                """
+                SELECT
+                    id, client_id, telegram_id, arena_id, city_id, watch_kind,
+                    filter_json, active, created_at, last_notified_at
+                FROM client_ice_watches
+                WHERE active = true AND watch_kind = :kind
+                ORDER BY arena_id, id
+                """
+            ),
+            {"kind": watch_kind},
+        )
+        return [_row_to_dict(row) for row in r.fetchall()]
+
+    async def deactivate_active_for_arena_kind(self, arena_id: int, watch_kind: str) -> int:
+        r = await self._s.execute(
+            text(
+                """
+                UPDATE client_ice_watches
+                SET active = false
+                WHERE arena_id = :aid AND watch_kind = :kind AND active = true
+                """
+            ),
+            {"aid": arena_id, "kind": watch_kind},
+        )
+        return int(r.rowcount or 0)
+
     async def list_active_for_arena(self, arena_id: int, watch_kind: str | None = None) -> list[dict[str, Any]]:
         params: dict[str, Any] = {"aid": arena_id}
         kind_sql = ""

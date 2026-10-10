@@ -81,6 +81,22 @@
     return { tiles: tiles, disciplines: disciplines };
   }
 
+  var MONTHS_IN = [
+    '',
+    'январе',
+    'феврале',
+    'марте',
+    'апреле',
+    'мае',
+    'июне',
+    'июле',
+    'августе',
+    'сентябре',
+    'октябре',
+    'ноябре',
+    'декабре',
+  ];
+
   var MONTHS_PREP = [
     '',
     'января',
@@ -780,6 +796,42 @@
     return 'Закрыт на сезон';
   }
 
+  /** TASK-226: напоминание о календарном старте сезона (не schedule_mode season_closed). */
+  function seasonRemindView(card, opts) {
+    card = card || {};
+    opts = opts || {};
+    var SM = scheduleModeApi();
+    if (SM && SM.normalizeMode(card.schedule_mode) === 'season_closed') {
+      return { show: false };
+    }
+    if (card.in_season !== false) return { show: false };
+    var start = Number(card.season_start_month);
+    if (!start || start < 1 || start > 12) return { show: false };
+    var monthPrep = MONTHS_IN[start] || '';
+    var subscribed = !!opts.subscribed;
+    var hint = monthPrep
+      ? 'В ' + monthPrep + ' напишем один раз. Лёд заливают по погоде — перед поездкой лучше уточнить.'
+      : 'Напишем один раз, когда начнётся сезон. Лёд заливают по погоде — перед поездкой лучше уточнить.';
+    if (subscribed) {
+      hint = 'Одно сообщение, потом напоминание само выключится.';
+    }
+    return {
+      show: true,
+      subscribed: subscribed,
+      watchKind: 'season_open',
+      monthPrep: monthPrep,
+      labelOff: 'Напомнить, когда начнётся сезон',
+      labelOn: monthPrep ? 'Напомним в ' + monthPrep : 'Напоминание включено',
+      hint: hint,
+    };
+  }
+
+  function closedSeasonHoursLabel(card) {
+    card = card || {};
+    if (card.in_season === false && card.season_start_month) return 'Часы прошлого сезона';
+    return 'Часы работы';
+  }
+
   function amenityChips(amenities) {
     amenities = amenities || {};
     var chips = [];
@@ -1067,8 +1119,10 @@
       var km = Number(card.distance_km);
       if (!isNaN(km)) bits.push(km.toFixed(1).replace('.', ',') + ' км');
     }
-    var until = openUntilLabel(card.opening_hours, undefined, card.timezone);
-    if (until) bits.push(until);
+    if (card.in_season !== false) {
+      var until = openUntilLabel(card.opening_hours, undefined, card.timezone);
+      if (until) bits.push(until);
+    }
     return bits.join(' · ');
   }
 
@@ -1279,6 +1333,8 @@
     iceSectionMode: iceSectionMode,
     iceFeedView: iceFeedView,
     seasonClosedBanner: seasonClosedBanner,
+    seasonRemindView: seasonRemindView,
+    closedSeasonHoursLabel: closedSeasonHoursLabel,
     amenityChips: amenityChips,
     formatOpeningHours: formatOpeningHours,
     openUntilLabel: openUntilLabel,

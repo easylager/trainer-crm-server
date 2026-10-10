@@ -607,6 +607,35 @@ describe('seasonClosedBanner', () => {
   });
 });
 
+describe('seasonRemindView', () => {
+  it('offers season reminder on a closed-season card with a start month', () => {
+    const { seasonRemindView } = loadModel();
+    const view = seasonRemindView(
+      { in_season: false, season_start_month: 12, season_end_month: 3 },
+      { subscribed: false }
+    );
+    assert.equal(view.show, true);
+    assert.match(view.labelOff, /Напомнить, когда начнётся сезон/);
+    assert.match(view.labelOn, /декабре/);
+    assert.match(view.hint, /В декабре напишем один раз/);
+    assert.match(view.hint, /по погоде/);
+    assert.doesNotMatch(view.hint, /каток открыт/);
+  });
+
+  it('hides while in season', () => {
+    const { seasonRemindView } = loadModel();
+    assert.equal(seasonRemindView({ in_season: true, season_start_month: 12 }).show, false);
+  });
+});
+
+describe('closedSeasonHoursLabel', () => {
+  it('labels hours as last season when closed', () => {
+    const { closedSeasonHoursLabel } = loadModel();
+    assert.equal(closedSeasonHoursLabel({ in_season: false, season_start_month: 12 }), 'Часы прошлого сезона');
+    assert.equal(closedSeasonHoursLabel({ in_season: true }), 'Часы работы');
+  });
+});
+
 describe('iceFeedView', () => {
   it('shows закрыт до above the feed and hides the ribbon even when sessions exist', () => {
     const { iceFeedView } = loadModel();

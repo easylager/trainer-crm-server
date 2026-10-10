@@ -7,7 +7,8 @@ import random
 import time
 from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Awaitable, Callable
 
 from src.application.ice_session_use_cases import IceSessionValidationError
@@ -103,6 +104,8 @@ class IceIngestScheduler:
         self._clock = clock
         # TASK-176: сколько заданий было просрочено на последнем тике (до потолка) — для heartbeat.
         self.last_due_count = 0
+        # TASK-226: season_open reminders — at most once per calendar day (Europe/Minsk) per worker.
+        self._season_open_check_date: date | None = None
 
     async def run_due(self, now: datetime) -> list[ScrapeRunRecord]:
         if now.tzinfo is None:
@@ -126,7 +129,22 @@ class IceIngestScheduler:
                 )
                 break
             outcomes.append(await self._run_due_job(job, now))
+        await self._maybe_run_season_open_watches(now)
         return outcomes
+
+    async def _maybe_run_season_open_watches(self, now: datetime) -> None:
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        local_date = now.astimezone(ZoneInfo("Europe/Minsk")).date()
+        if self._season_open_check_date == local_date:
+            return
+        self._season_open_check_date = local_date
+        from src.application.client_ice_watch_use_cases import run_season_open_watch_notifications
+
+        try:
+            await run_season_open_watch_notifications()
+        except Exception:
+            logger.exception("season_open watch notify failed after ingest tick")
 
     async def _run_due_job(self, job: ParserJob, now: datetime) -> ScrapeRunRecord:
         savepoint = self._job_savepoint() if self._job_savepoint is not None else nullcontext()

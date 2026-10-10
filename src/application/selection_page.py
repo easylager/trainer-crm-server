@@ -938,7 +938,7 @@ def _hero_kicker(view: Mapping[str, Any]) -> str:
     if view.get("svc"):
         return t("route.service.hint")
     if view.get("venue") == "ice":
-        return t("route.skate.hint")
+        return t("selection.ice.hint")
     window = view.get("window") or {}
     return str(window.get("label") or "") or "Подборка"
 

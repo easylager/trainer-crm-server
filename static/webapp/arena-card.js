@@ -104,8 +104,42 @@
       .catch(function () {});
   }
 
+  function seasonRemindActive() {
+    if (typeof M.seasonRemindView !== 'function') return false;
+    var v = M.seasonRemindView(state.card || {}, { subscribed: false });
+    return v.show;
+  }
+
+  function renderSeasonRemindBlock() {
+    if (!initData() || typeof M.seasonRemindView !== 'function') return '';
+    var on = !!(state.iceWatchKinds && state.iceWatchKinds.season_open);
+    var v = M.seasonRemindView(state.card || {}, { subscribed: on });
+    if (!v.show) return '';
+    var mainLabel = on ? v.labelOn : v.labelOff;
+    var btnClass = on ? 'arena-btn' : 'arena-btn arena-btn--pri';
+    var offBtn =
+      on
+        ? '<button type="button" class="linkish" data-action="ice-watch" data-watch-kind="season_open">Выключить</button>'
+        : '';
+    return (
+      '<div class="arena-season-remind">' +
+      '<button type="button" class="' +
+      btnClass +
+      '" data-action="ice-watch" data-watch-kind="season_open" aria-pressed="' +
+      (on ? 'true' : 'false') +
+      '">' +
+      esc(mainLabel) +
+      '</button>' +
+      offBtn +
+      '<p class="arena-sub">' +
+      esc(v.hint) +
+      '</p></div>'
+    );
+  }
+
   function iceWatchBtnHtml() {
     if (!initData()) return '';
+    if (seasonRemindActive()) return '';
     var stale = M.shouldWarnScheduleStale(state.card && state.card.freshness);
     var kind = stale ? 'schedule_fresh' : 'sessions';
     var on = state.iceWatchKinds && state.iceWatchKinds[kind];
@@ -1012,6 +1046,7 @@
         '<div class="arena-sec">' +
         '<p class="arena-h">Расписание</p>' +
         '<div class="arena-closed">' + esc(feed.banner) + '</div>' +
+        renderSeasonRemindBlock() +
         '</div>'
       );
     }
@@ -1330,12 +1365,17 @@
     var mass = M.massAccessView(card);
     var week = mass.enabled ? null : M.weekHours(card.opening_hours, new Date());
     if (week) {
-      var status = week.status ? '<em class="arena-info__open">' + esc(week.status) + '</em>' : '';
+      var hoursLabel =
+        typeof M.closedSeasonHoursLabel === 'function'
+          ? M.closedSeasonHoursLabel(card)
+          : 'Часы работы';
+      var showLiveStatus = card.in_season !== false;
+      var status = showLiveStatus && week.status ? '<em class="arena-info__open">' + esc(week.status) + '</em>' : '';
       if (week.uniform) {
-        rows += '<div class="arena-info"><small>Часы работы</small><b>Ежедневно ' + esc(week.rows[0].value) + '</b>' + status + '</div>';
+        rows += '<div class="arena-info"><small>' + esc(hoursLabel) + '</small><b>Ежедневно ' + esc(week.rows[0].value) + '</b>' + status + '</div>';
       } else {
         rows +=
-          '<div class="arena-info"><small>Часы работы</small>' + status +
+          '<div class="arena-info"><small>' + esc(hoursLabel) + '</small>' + status +
           '<ul class="arena-week">' +
           week.rows.map(function (r) {
             return '<li class="' + (r.today ? 'is-today' : '') + (r.closed ? ' is-closed' : '') + '"><span>' + esc(r.label) + '</span><span>' + esc(r.value) + '</span></li>';

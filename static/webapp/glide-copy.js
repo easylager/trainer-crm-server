@@ -70,6 +70,7 @@
     "route.shops": "Магазины",
     "route.trainers": "Тренеры",
     "route.skate.hint": "каток, зал или трасса",
+    "selection.ice.hint": "катки",
     "route.hockey.hint": "открытая тренировка, ОХМ",
     "route.service.hint": "заточка и прокат"
   };

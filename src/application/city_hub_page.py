@@ -351,6 +351,10 @@ def _list_href(slug: str, **params: str | None) -> str:
     return f"/c/{slug}" + (("?" + urlencode(clean)) if clean else "")
 
 
+def _window_total(counts: Mapping[str, int]) -> int:
+    return sum(int(counts.get(key) or 0) for key in _WINDOW_KEYS)
+
+
 def _quick_html(slug: str, counts: Mapping[str, int], *, hot: str | None, all_count: int | None, **base: str) -> str:
     parts: list[str] = []
     for key in _WINDOW_KEYS:
@@ -405,6 +409,14 @@ def _price_bits(card: Mapping[str, Any]) -> str:
     return " · ".join(bits)
 
 
+def _nearest_live(when: str, place: str, price: str) -> str:
+    """Время и место — цветом текста, цена — тише, в хвосте."""
+    fact = f'<span class="fact">ближайший <b>{_esc(when)} · {_esc(place)}</b></span>'
+    if not price:
+        return fact
+    return fact + f' · <span class="price">{_esc(price)}</span>'
+
+
 def _skate_route(view: Mapping[str, Any]) -> str:
     slug = str(view["slug"])
     counts = view["skate_counts"]
@@ -412,13 +424,16 @@ def _skate_route(view: Mapping[str, Any]) -> str:
     count = f"{rinks} {plural_ru(rinks, 'каток', 'катка', 'катков')}"
     live = ""
     upcoming = list(view.get("upcoming") or [])
+    window_n = _window_total(counts)
     if upcoming:
         first = upcoming[0]
         hhmm, day = _session_when(first, today=view["today"])
         when = f"{day} {hhmm}".strip() if day != "сегодня" else hhmm
         price = _price_bits(first)
-        live = f"ближайший <b>{_esc(when)} · {_esc(first.get('arena_name'))}</b>" + (f" · {_esc(price)}" if price else "")
-    quick = _quick_html(slug, counts, hot=view.get("hot_skate"), all_count=None, t="ice")
+        live = _nearest_live(when, str(first.get("arena_name") or ""), price)
+    elif window_n == 0:
+        live = "ближайших сеансов нет"
+    quick = "" if window_n == 0 else _quick_html(slug, counts, hot=view.get("hot_skate"), all_count=None, t="ice")
     return _route_html(href=_list_href(slug, t="ice"), name=t("route.skate"), count=count, live=live, dot_off=not upcoming, quick=quick)
 
 
@@ -435,7 +450,7 @@ def _ohm_route(view: Mapping[str, Any]) -> str:
         hhmm, day = _session_when(nxt, today=view["today"])
         when = f"{day} {hhmm}".strip() if day != "сегодня" else hhmm
         price = format_price_minor(nxt.get("price_adult_minor"), str(nxt.get("currency_code") or "BYN"))
-        live = f"ближайший <b>{_esc(when)} · {_esc(nxt.get('arena_name'))}</b>" + (f" · {_esc(price)}" if price else "")
+        live = _nearest_live(when, str(nxt.get("arena_name") or ""), price)
     quick = _quick_html(slug, counts, hot=view.get("hot_ohm"), all_count=int(counts.get("all") or 0), kind="ohm")
     return _route_html(href=_list_href(slug, kind="ohm"), name=t("chip.hockey"), count=count, live=live, quick=quick)
 
@@ -539,6 +554,20 @@ def _places_html(view: Mapping[str, Any]) -> str:
     return '<section class="hub-sec hub-sec--places"><details class="places"><summary>Все места города</summary>' + "".join(parts) + "</details></section>"
 
 
+def city_hub_document_title(view: Mapping[str, Any]) -> str:
+    """Вкладка и og: только те разделы, которые на странице есть плиткой."""
+    city_name = str(view["city"]["name"])
+    bits: list[str] = []
+    if int(view.get("rink_count") or 0):
+        bits.append("где покататься")
+    if int(view.get("service_count") or 0):
+        bits.append("заточка")
+    if int((view.get("ohm_counts") or {}).get("all") or 0):
+        bits.append("хоккей")
+    tail = ", ".join(bits) if bits else "места"
+    return f"{city_name} · {tail} | Glide"
+
+
 def city_hub_description(view: Mapping[str, Any]) -> str:
     """og:description хаба — та же фраза, что рисует /c/{город}/og.png и отдаёт share API подборки:
     «15 катков · 10 сеансов». Магазины в счёт «все места» не входят (TASK-217), слово —
@@ -619,7 +648,7 @@ def render_city_hub_page(
     city_name = str(city["name"])
     city_id = int(city["id"])
     local_now = view["local_now"]
-    title = f"{city_name} · где покататься, заточка, хоккей | Glide"
+    title = city_hub_document_title(view)
     description = city_hub_description(view)
     hero = (
         '<header class="hero hero--ice hub-hero">'

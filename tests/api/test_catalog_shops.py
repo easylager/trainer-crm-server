@@ -184,7 +184,9 @@ async def test_shop_row_says_what_it_offers_not_schedule_tbd(app_use_test_db, db
 
 
 @pytest.mark.asyncio
-async def test_out_of_season_rink_stays_listed_and_says_when_it_opens(app_use_test_db, db_session) -> None:
+async def test_out_of_season_rink_hidden_from_default_list_shown_under_winter(
+    app_use_test_db, db_session
+) -> None:
     from datetime import date
 
     city_id = await _insert_city(db_session, name=f"Сезонск {uuid.uuid4().hex[:6]}")
@@ -196,8 +198,15 @@ async def test_out_of_season_rink_stays_listed_and_says_when_it_opens(app_use_te
     )
     await db_session.commit()
     async with _client() as client:
-        resp = await client.get("/api/public/ice/arenas", params={"city_id": city_id})
-    item = next(i for i in resp.json()["items"] if i["id"] == rink_id)
+        default = await client.get("/api/public/ice/arenas", params={"city_id": city_id})
+        winter = await client.get(
+            "/api/public/ice/arenas", params={"city_id": city_id, "season": "winter"}
+        )
+    assert default.status_code == 200, default.text
+    assert rink_id not in {i["id"] for i in default.json()["items"]}
+    assert default.json()["season_facet"] == {"key": "winter", "count": 1}
+    assert winter.status_code == 200, winter.text
+    item = next(i for i in winter.json()["items"] if i["id"] == rink_id)
     assert item["live"]["kind"] == "closed"
     assert item["live_line"].startswith("Сезон закрыт · откроется в ")
 

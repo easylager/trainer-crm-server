@@ -201,6 +201,24 @@ def parse_intent(raw: str | None) -> str:
     return value
 
 
+def parse_season_filter(raw: str | None) -> str | None:
+    """``season=winter`` — только катки закрытого сезона; пусто — обычная лента."""
+    value = (raw or "").strip().lower()
+    if not value:
+        return None
+    if value != "winter":
+        raise IcePublicQueryError("season must be winter")
+    return "winter"
+
+
+def _is_closed_season_row(row: Mapping[str, Any], *, month: int) -> bool:
+    start = row.get("season_start_month")
+    end = row.get("season_end_month")
+    if start is None or end is None:
+        return False
+    return not is_in_season(start, end, month)
+
+
 def parse_venue_type_filter(raw: str | None) -> set[str]:
     """``"gym"`` или ``"ice,gym"`` → множество ключей; пусто → без фильтра.
 
@@ -1512,6 +1530,7 @@ async def list_public_ice_arenas(
     near: str | None = None,
     intent: str | None = None,
     venue_type: str | None = None,
+    season: str | None = None,
     limit: int = DEFAULT_LIST_LIMIT,
     cursor: str | None = None,
     when: str | None = None,
@@ -1519,6 +1538,7 @@ async def list_public_ice_arenas(
     service_keys: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
     intent_value = parse_intent(intent)
+    season_filter = parse_season_filter(season)
     venue_filter = parse_venue_type_filter(venue_type)
     bbox_box = parse_bbox(bbox)
     near_pt = parse_near(near)
@@ -1563,31 +1583,43 @@ async def list_public_ice_arenas(
     else:
         for row in rows:
             row["distance_km"] = None
-    # Фасеты считаем до фильтра: чип «Зал» должен быть виден и тогда, когда
-    # сейчас выбран «Лёд», иначе из выбранного фильтра некуда выйти.
-    facets = _venue_type_facets(rows)
+    # Фасеты считаем до фильтра типа, но без закрытого сезона: «Все места» и «Лёд»
+    # — только то, чем можно пользоваться сейчас. «Зимой» — отдельный счётчик.
+    today = _today_minsk()
+    month = today.month
+    season_facet_count = sum(1 for r in rows if _is_closed_season_row(r, month=month))
+    usable_rows = [r for r in rows if not _is_closed_season_row(r, month=month)]
+    facets = _venue_type_facets(usable_rows)
+    # Шапка (Заточка, типы мест) считает места, которыми можно пользоваться сейчас.
+    # Фильтр «Зимой» меняет только ленту, не эти числа.
+    header_rows = usable_rows
     if venue_filter:
-        rows = [r for r in rows if normalize_venue_type(r.get("venue_type")) in venue_filter]
+        header_rows = [
+            r for r in header_rows if normalize_venue_type(r.get("venue_type")) in venue_filter
+        ]
     else:
-        # TASK-146: «все типы» — это все места, где занимаются. Магазин приходит
-        # только по своему чипу: в ленте «где покататься» он шум, а не находка.
-        rows = [
+        header_rows = [
             r
-            for r in rows
+            for r in header_rows
             if normalize_venue_type(r.get("venue_type")) not in DEFAULT_HIDDEN_VENUE_TYPES
         ]
-    # Счёт чипа «Заточка и прокат» — до фильтра, иначе включённый чип не с чем сравнить.
-    service_count = sum(1 for r in rows if _row_has_any_amenity(r, PLACE_SERVICE_KEYS))
+    service_count = sum(1 for r in header_rows if _row_has_any_amenity(r, PLACE_SERVICE_KEYS))
+    if season_filter == "winter":
+        rows = [r for r in rows if _is_closed_season_row(r, month=month)]
+        if venue_filter:
+            rows = [r for r in rows if normalize_venue_type(r.get("venue_type")) in venue_filter]
+    else:
+        rows = header_rows
     if service_keys:
         rows = [r for r in rows if _row_has_any_amenity(r, service_keys)]
-    if window is not None:
+    if window is not None and season_filter != "winter":
         # Сначала то, что есть в выбранном окне; остальное — ниже, с честной подписью.
+        # Закрытый сезон в это окно не ставим: сеанса у него нет.
         rows.sort(key=lambda r: (0 if r.get("window_hit") else 1, *_rank_tuple(r)))
     else:
         rows.sort(key=_rank_tuple)
     page = rows[offset : offset + cap]
     await attach_arena_media_payloads(session, page)
-    today = _today_minsk()
     items = [_public_list_item(row, intent=intent_value, today=today) for row in page]
     next_cursor = str(offset + cap) if offset + cap < len(rows) else None
     return {
@@ -1596,6 +1628,7 @@ async def list_public_ice_arenas(
         "intent": intent_value,
         "venue_type": sorted(venue_filter) if venue_filter else None,
         "venue_type_facets": facets,
+        "season_facet": {"key": "winter", "count": season_facet_count},
         "service_count": service_count,
         "next_cursor": next_cursor,
         # TASK-146 (Q-006): какое окно применено и сколько мест в нём реально есть.

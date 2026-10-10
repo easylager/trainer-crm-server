@@ -134,13 +134,17 @@ async def get_public_ice_arenas(
         None,
         description="Услуга места: sharpening | rental | service (заточка и прокат).",
     ),
+    season: str | None = Query(
+        None,
+        description="winter — только катки закрытого сезона; без параметра они скрыты из основной ленты.",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
 
     ``venue_type`` фильтрует площадки по типу (лёд/зал/хореография/…). Ответ всегда
     несёт ``venue_type_facets`` — типы, реально представленные в городе, чтобы
-    клиент не рисовал чип, за которым пусто.
+    клиент не рисовал чип, за которым пусто. ``season_facet`` — счётчик «Зимой».
     """
     set_public_json_list_cache(response)
     svc_value = clean_svc(svc)
@@ -156,6 +160,7 @@ async def get_public_ice_arenas(
             cursor=cursor,
             when=when,
             day=day,
+            season=season,
             service_keys=SERVICE_AMENITY_KEYS[svc_value] if svc_value else None,
         )
     except IcePublicQueryError as exc:
