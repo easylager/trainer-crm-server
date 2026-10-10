@@ -22,6 +22,7 @@
     ohmDay: null,
     sessionsError: false,
     trainersError: false,
+    iceWatchKinds: {},
   };
 
   function esc(s) {
@@ -76,6 +77,72 @@
   function initData() {
     var tg = global.Telegram && global.Telegram.WebApp;
     return (tg && tg.initData) || '';
+  }
+
+  function syncIceWatches() {
+    var id = initData();
+    if (!id || !state.card || state.card.id == null) return Promise.resolve();
+    return fetch('/api/webapp/client/watches', {
+      headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
+      cache: 'no-store',
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        var kinds = {};
+        var aid = Number(state.card.id);
+        (data && data.ice_watch_items || []).forEach(function (w) {
+          if (Number(w.arena_id) === aid) kinds[String(w.kind)] = true;
+        });
+        state.iceWatchKinds = kinds;
+      })
+      .catch(function () {});
+  }
+
+  function iceWatchCtaHtml() {
+    if (!initData()) return '';
+    var stale = M.shouldWarnScheduleStale(state.card && state.card.freshness);
+    var kind = stale ? 'schedule_fresh' : 'sessions';
+    var on = state.iceWatchKinds && state.iceWatchKinds[kind];
+    var label = on ? '🔔 Подписаны — напомним' : stale ? '🔕 Напомнить, когда обновится' : '🔕 Напомнить о сеансах';
+    return (
+      '<p class="arena-watch-row"><button type="button" class="arena-btn arena-btn--ghost" data-action="ice-watch" data-watch-kind="' +
+      esc(kind) +
+      '">' +
+      esc(label) +
+      '</button></p>'
+    );
+  }
+
+  function subscribeIceWatch(kind) {
+    var id = initData();
+    if (!id || !state.card) {
+      var tg = global.Telegram && global.Telegram.WebApp;
+      if (tg && tg.showAlert) tg.showAlert('Откройте карточку из клиентского бота Telegram.');
+      return;
+    }
+    fetch('/api/webapp/client/ice-watches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
+      body: JSON.stringify({
+        arena_id: state.card.id,
+        city_id: state.card.city_id || null,
+        watch_kind: kind || 'sessions',
+        when: 'any',
+        intent: 'skate',
+      }),
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function () {
+        state.iceWatchKinds = state.iceWatchKinds || {};
+        state.iceWatchKinds[kind || 'sessions'] = true;
+        paint();
+        var tg = global.Telegram && global.Telegram.WebApp;
+        if (tg && tg.showAlert) tg.showAlert('🔔 Уведомим в Telegram, когда появятся подходящие сеансы.');
+      })
+      .catch(function () {
+        var tg = global.Telegram && global.Telegram.WebApp;
+        if (tg && tg.showAlert) tg.showAlert('Не удалось оформить подписку. Завершите регистрацию в боте.');
+      });
   }
 
   function shellNav(path) {
@@ -892,6 +959,7 @@
       '</div>' +
       focusGone +
       (staleNote ? '<p class="arena-stale">' + esc(staleNote) + '</p>' : '') +
+      iceWatchCtaHtml() +
       '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
@@ -1479,6 +1547,10 @@
       reloadSessions();
       return;
     }
+    if (action === 'ice-watch') {
+      subscribeIceWatch(t.getAttribute('data-watch-kind') || 'sessions');
+      return;
+    }
   }
 
   function arenaApiBase() {
@@ -1589,7 +1661,9 @@
         state.card = card;
         state.sessions = { days: [] };
         state.trainers = { items: [], groups: [] };
-        paint();
+        syncIceWatches().then(function () {
+          paint();
+        });
         reloadSessions();
         reloadTrainers();
         if (global.ClientShell && global.ClientShell.reportCatalogPresence) {

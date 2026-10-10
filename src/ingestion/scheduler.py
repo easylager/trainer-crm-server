@@ -156,7 +156,19 @@ class IceIngestScheduler:
             and run_id is not None
         ):
             try:
-                await self._publisher.publish(record, drafts, run_id=run_id)
+                published = await self._publisher.publish(record, drafts, run_id=run_id)
+                if published and published > 0:
+                    from src.application.client_ice_watch_use_cases import (
+                        run_ice_watch_notifications_for_arena,
+                    )
+
+                    try:
+                        await run_ice_watch_notifications_for_arena(int(job.arena_id))
+                    except Exception:
+                        logger.exception(
+                            "ice watch notify failed arena_id=%s after publish",
+                            job.arena_id,
+                        )
             except Exception as exc:  # noqa: BLE001 — one job's publish must not sink the tick
                 logger.exception(
                     "publish failed for job %s (arena %s); leaving ice_sessions untouched",
