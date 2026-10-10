@@ -774,12 +774,12 @@ a.arena-row {
   flex-shrink: 0;
 }
 .arena-watch-btn__icon {
-  font-size: 1.15rem;
+  font-size: var(--app-icon-md);
   line-height: 1;
 }
 .arena-watch-btn--on {
-  border-color: color-mix(in srgb, var(--app-cta-fill, #45b9bb) 45%, var(--glide-line));
-  background: color-mix(in srgb, var(--app-cta-fill, #45b9bb) 12%, var(--app-surface-row-bot));
+  border-color: color-mix(in srgb, var(--app-cta-fill) 45%, var(--glide-line));
+  background: color-mix(in srgb, var(--app-cta-fill) 12%, var(--app-surface-row-bot));
 }
 .arena-watch-btn:active {
   transform: scale(0.96);

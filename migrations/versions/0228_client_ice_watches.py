@@ -6,8 +6,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0227_client_ice_watches"
-down_revision = "0226_trial_clock_started_at"
+revision = "0228_client_ice_watches"
+down_revision = "0227_platform_services_venue"
 branch_labels = None
 depends_on = None
 
