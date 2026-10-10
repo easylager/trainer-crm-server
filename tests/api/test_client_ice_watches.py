@@ -19,6 +19,21 @@ def _fresh_client_telegram_id() -> int:
     return 7_800_000_000 + (uuid.uuid4().int % 2_000_000_000)
 
 
+async def _insert_city(db_session) -> int:
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO cities (name, country, price_group, is_active, sort_order)
+            VALUES ('Watch Test City', 'BY', 'default', true, 0)
+            RETURNING id
+            """
+        )
+    )
+    city_id = int(r.scalar_one())
+    await db_session.flush()
+    return city_id
+
+
 async def _insert_client(db_session, *, telegram_id: int) -> int:
     await db_session.execute(
         text(
@@ -49,7 +64,7 @@ async def _insert_client(db_session, *, telegram_id: int) -> int:
 async def test_ice_watch_subscribe_list_unsubscribe(app_use_test_db, db_session) -> None:
     tid = _fresh_client_telegram_id()
     await _insert_client(db_session, telegram_id=tid)
-    city_id = int((await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))).scalar_one())
+    city_id = await _insert_city(db_session)
     arena = (
         await db_session.execute(
             text(

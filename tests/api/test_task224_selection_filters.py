@@ -75,11 +75,11 @@ async def _profile(
         )
 
 
-def _next_saturday(from_day: date) -> date:
-    days = (5 - from_day.weekday()) % 7
-    if days == 0:
-        days = 7
-    return from_day + timedelta(days=days)
+def _weekend_saturday(from_day: date) -> date:
+    """Суббота окна «Сб–Вс» — как в ice_time_windows.resolve_window('weekend')."""
+    if from_day.weekday() in (5, 6):
+        return from_day - timedelta(days=from_day.weekday() - 5)
+    return from_day + timedelta(days=5 - from_day.weekday())
 
 
 @pytest.mark.asyncio
@@ -88,9 +88,11 @@ async def test_ohm_weekend_window_and_seg_counts(app_use_test_db, db_session) ->
     city_id = await _insert_city(db_session, name=name)
     rink = await _insert_arena(db_session, city_id, name=f"ОХМ-уик {uuid.uuid4().hex[:4]}")
     today = date.today()
-    saturday = _next_saturday(today)
+    saturday = _weekend_saturday(today)
+    sunday = saturday + timedelta(days=1)
     monday = saturday + timedelta(days=2)
-    await _ohm(db_session, rink, day=saturday, hhmm="10:30")
+    # Воскресенье внутри окна «Сб–Вс»; понедельник 18:00 — уже за пределами.
+    await _ohm(db_session, rink, day=sunday, hhmm="10:30")
     await _ohm(db_session, rink, day=monday, hhmm="18:00")
     await db_session.commit()
     slug = city_slug(name)

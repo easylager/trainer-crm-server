@@ -230,7 +230,8 @@ async def test_story_image_changes_with_session_not_next_slot(app_use_test_db, d
     assert generic.status_code == 200 and focused.status_code == 200
     assert generic.content != focused.content
     assert share.json()["story_image_url"].endswith(f"/session/{sid_late}/story.png?i=1")
-    assert "17:15" in share.json()["share_body"]
+    # invite=true: share_body — короткий вопрос; время сеанса — в place_share_text.
+    assert "17:15" in share.json()["place_share_text"]
 
 
 @pytest.mark.asyncio
