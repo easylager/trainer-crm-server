@@ -456,6 +456,31 @@ def _services(card: Mapping[str, Any]) -> list[str]:
     return [title for key, _i, title, _s in _SHOP_SERVICES if amenities.get(key) is True]
 
 
+_SESSION_KIND_COPY_KEYS: dict[str, str] = {
+    "public_skate": "kind.public_skate",
+    "open_ice": "kind.public_skate",
+    "hockey_practice": "kind.hockey_practice",
+}
+
+
+def session_kind_label(slot: Mapping[str, Any] | None) -> str:
+    """Человекочитаемый тип сеанса для карточки шеринга и блока «выбранный сеанс»."""
+    if slot is None:
+        return ""
+    custom = str(slot.get("session_label") or "").strip()
+    if custom:
+        return custom
+    key = _SESSION_KIND_COPY_KEYS.get(str(slot.get("kind") or "").strip())
+    return t(key) if key else ""
+
+
+def invite_share_hook(view: Mapping[str, Any]) -> str:
+    """Короткий текст приглашения — без даты и цены (они на og/story-картинке)."""
+    if _skating(view["card"]):
+        return "Погнали кататься?"
+    return "Сходим сюда?"
+
+
 def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
     card = view["card"]
     name = str(card.get("name") or "")
@@ -519,29 +544,26 @@ def compose_place_share_message(view: Mapping[str, Any], *, page_url: str, invit
     ``openTelegramShareUrlFromMiniApp``.
 
     Тон «Позвать с собой» — вопрос, а не реклама: человек зовёт друга, а не
-    пересылает объявление. Поэтому без восклицаний и без «лучший каток города».
+    пересылает объявление. Дата, цена и адрес — на og/story-картинке, в
+    ``share_body`` при invite только короткий вопрос.
     """
     card = view["card"]
     today: date = view["today"]
     name = str(card.get("name") or "")
     slot = view.get("focus") or view.get("next_slot")
-    lines: list[str] = []
+    url = (page_url or "").strip()
     if invite:
-        lines.append("Погнали кататься? ⛸" if _skating(card) else "Сходим сюда?")
+        hook = invite_share_hook(view)
+        return f"{url}\n\n{hook}" if url else hook
+    lines: list[str] = []
+    if _skating(card):
+        lines.append(f"{name} — массовое катание")
     else:
-        if _skating(card):
-            lines.append(f"{name} — массовое катание")
-        else:
-            lines.append(f"{name} — {str(card.get('venue_noun') or '').lower()}".rstrip(" —"))
+        lines.append(f"{name} — {str(card.get('venue_noun') or '').lower()}".rstrip(" —"))
     if slot is not None and _skating(card):
         when = slot_when(slot, today=today, absolute=True)
         price = slot_price(slot)
-        line = f"{when}" + (f" · {price}" if price else "")
-        if invite:
-            line = f"{when} — {name}" + (f", {price}" if price else "")
-        lines.append(line)
-    elif invite:
-        lines.append(name)
+        lines.append(f"{when}" + (f" · {price}" if price else ""))
     services = _services(card) if card.get("venue_type") == "shop" else []
     if services:
         lines.append(" · ".join(services))
@@ -731,7 +753,7 @@ def _focus_html(view: Mapping[str, Any], *, invite: bool) -> str:
             tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
             return (
                 '<section class="plan plan--gone" id="plan">'
-                f'<p class="plan__kicker">Этого сеанса уже нет в расписании</p>'
+                f'<p class="plan__kicker">Сеанса из ссылки уже нет в расписании</p>'
                 f'<p class="plan__note">Расписание ниже — актуальное.{tail}</p>'
                 "</section>"
             )
@@ -744,7 +766,7 @@ def _focus_html(view: Mapping[str, Any], *, invite: bool) -> str:
     time_text = f"{start}–{end}" if start and end else start
     d = _parse_iso_date(focus.get("local_date"))
     day_text = day_heading(d, today=view["today"]) if d else ""
-    label = str(focus.get("session_label") or "").strip()
+    label = session_kind_label(focus)
     return (
         '<section class="plan" id="plan">'
         f'<p class="plan__kicker">{_esc(kicker)}</p>'

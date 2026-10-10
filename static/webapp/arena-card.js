@@ -328,15 +328,19 @@
 
   function getFocusState() {
     var focusId = state.focus && state.focus.sessionId;
-    return M.focusState({
+    var opts = {
       focusSessionId: focusId,
-      days: scheduleDays(),
       freshness: scheduleFreshness(),
       sessionsError: state.sessionsError,
       sessionsLoaded: state.sessions != null && !state.sessionsError,
       todayIso: todayIso(),
       now: new Date(),
-    });
+    };
+    /* ОХМ лежит в ohm_days. Искать только массовое катание — и живой сеанс
+       из ссылки объявляется пропавшим в блоке «Расписание». */
+    var combined = M.focusState(Object.assign({ days: combinedScheduleDays() }, opts));
+    if (combined.kind !== 'gone') return combined;
+    return M.focusState(Object.assign({ days: scheduleDays() }, opts));
   }
 
   function sharePickedId() {
@@ -644,25 +648,7 @@
   }
 
   function combinedScheduleDays() {
-    var byDate = {};
-    var order = [];
-    function add(days) {
-      var i;
-      for (i = 0; i < (days || []).length; i++) {
-        var iso = String(days[i].local_date || '');
-        if (!iso) continue;
-        if (!byDate[iso]) {
-          byDate[iso] = [];
-          order.push(iso);
-        }
-        byDate[iso] = byDate[iso].concat(days[i].sessions || []);
-      }
-    }
-    add(scheduleDays());
-    add(ohmScheduleDays());
-    return order.map(function (iso) {
-      return { local_date: iso, sessions: byDate[iso] };
-    });
+    return M.combineSessionDayLists(scheduleDays(), ohmScheduleDays());
   }
 
   function scheduleSlots() {
@@ -693,23 +679,6 @@
     return 'Хоккей для любителей (ОХМ)';
   }
 
-  function ohmConditionsNote() {
-    var days = ohmScheduleDays();
-    var notes = [];
-    var i;
-    var j;
-    for (i = 0; i < days.length; i++) {
-      var list = days[i].sessions || [];
-      for (j = 0; j < list.length; j++) {
-        ['age_note', 'capacity_note'].forEach(function (key) {
-          var note = String(list[j][key] || '').trim();
-          if (note && notes.indexOf(note) < 0) notes.push(note);
-        });
-      }
-    }
-    return notes.join(' ');
-  }
-
   function strip() {
     return M.dayStrip((state.sessions && state.sessions.days) || [], todayIso(), new Date(), 7);
   }
@@ -731,8 +700,7 @@
     }
     return (
       '<div class="arena-focus-gone">' +
-      '<p class="arena-focus-gone__title">Этого сеанса уже нет в расписании</p>' +
-      '<p class="arena-focus-gone__sub">Вот ближайшие.</p>' +
+      '<p class="arena-focus-gone__title">Сеанса из ссылки уже нет в расписании</p>' +
       nearestBtn +
       '</div>'
     );
@@ -976,14 +944,22 @@
       );
     }
     var html = '';
+    var sectionTitle = ohmChipTitle();
     view.groups.forEach(function (g) {
+      /* Заголовок раздела уже говорит «ОХМ». Повторять его на карточке без
+         своего имени (площадки, дискотеки) нечего: это тот же сеанс. */
+      var ownTitle = g.title && g.title !== sectionTitle ? g.title : '';
+      var head = '';
+      if (ownTitle || g.duration) {
+        head =
+          '<div class="arena-show__head">' +
+          (ownTitle ? '<b>' + esc(ownTitle) + '</b>' : '') +
+          (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') +
+          '</div>';
+      }
       html +=
         '<div class="arena-show">' +
-        '<div class="arena-show__head"><b>' +
-        esc(g.title) +
-        '</b>' +
-        (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') +
-        '</div>' +
+        head +
         (g.prices.length
           ? '<div class="arena-show__prices">' +
             g.prices
@@ -1042,7 +1018,6 @@
         M.dayForSession(ohmScheduleDays(), state.focus.sessionId);
       state.ohmDay = focusInOhm || (inStrip ? focusDay : M.defaultScheduleDay(days));
     }
-    var note = ohmConditionsNote();
     return (
       '<div class="arena-sec" id="arenaOhm">' +
       '<div class="arena-h-row"><p class="arena-h">' +
@@ -1077,7 +1052,6 @@
       '<div id="arenaOhmRows">' +
       renderOhmShowtimes() +
       '</div>' +
-      (note ? '<p class="arena-schedule-hint">' + esc(note) + '</p>' : '') +
       '</div>'
     );
   }

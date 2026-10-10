@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026100518" />
-  <link rel="stylesheet" href="ice-tab.css?v=2026100927" />
+  <link rel="stylesheet" href="ice-tab.css?v=2026101011" />
   <link rel="stylesheet" href="mini-app-share-sheet.css?v=2026100923" />
   <script src="mini-app-empty-state.js?v=2026100518"></script>
   <script src="mini-app-more-icons.js?v=2026100518"></script>
@@ -71,20 +71,23 @@
           <span class="ice-citypill__name">Город</span>
         </button>
       </div>
-      <div class="ice-intent-row">
-        <div class="ice-seg" id="iceModeSeg" role="tablist" aria-label="Раздел каталога" hidden></div>
-        <button type="button" class="ice-citypill" id="iceCityChange">
+      <div class="ice-header-chrome">
+      <div class="hdr-top" id="iceWhenRow">
+        <div class="hdr-scroll" id="iceWhenChips" hidden role="group" aria-label="Когда"></div>
+        <button type="button" class="ice-citypill hdr-city" id="iceCityChange">
           <span class="ice-citypill__name" id="iceCityName">Город</span>
         </button>
+        <div class="ice-menu hdr-date-menu" id="iceWhenMenu" hidden></div>
       </div>
+      <nav class="hdr-folders" id="iceModeSeg" aria-label="Раздел каталога" hidden></nav>
       <p class="ice-section-hint" id="iceSectionHint" hidden></p>
-      <div class="ice-chips ice-chips--svc" id="iceServiceChips" hidden role="group" aria-label="Услуга"></div>
-      <div class="ice-seg ice-seg--quiet" id="icePlaceTabs" role="tablist" aria-label="Вид площадки" hidden></div>
+      <div class="ice-filter-band" id="iceFilterBand">
+      <div class="ice-chips" id="iceServiceChips" hidden role="group" aria-label="Услуга"></div>
+      <div class="ice-chips" id="icePlaceTabs" role="tablist" aria-label="Вид площадки" hidden></div>
       <div class="ice-chips ice-chips--place-svc" id="icePlaceService" hidden role="group" aria-label="Заточка"></div>
       <div class="ice-catalog-tools" id="iceCatalogTools" hidden>
-        <div class="ice-tools" id="iceToolsRow"></div>
+        <div class="ice-chips ice-tools" id="iceToolsRow"></div>
         <div class="ice-menu" id="icePlaceMenu" hidden></div>
-        <div class="ice-menu" id="iceWhenMenu" hidden></div>
       </div>
       <div class="ice-shop-filters" id="iceShopFilters" hidden>
         <div class="ice-shop-filters__map-bar" id="iceShopMapBar" hidden>
@@ -99,11 +102,11 @@
         </div>
         <div class="ice-shop-filters__block">
           <p class="ice-shop-filters__kicker">Когда удобно</p>
-          <div class="ice-shop-filters__time">
-            <button type="button" class="ice-shop-toggle" id="iceShopOpenNow" aria-pressed="false">
+          <div class="ice-chips ice-shop-filters__time">
+            <button type="button" class="ice-chip ice-shop-toggle" id="iceShopOpenNow" aria-pressed="false">
               <span class="ice-shop-toggle__dot" aria-hidden="true"></span>Открыто сейчас
             </button>
-            <button type="button" class="ice-tool ice-shop-when" id="iceShopWhenBtn" aria-expanded="false">
+            <button type="button" class="ice-chip ice-tool ice-shop-when" id="iceShopWhenBtn" aria-expanded="false">
               <span>Любое время</span>
             </button>
           </div>
@@ -115,6 +118,8 @@
         </div>
         <div class="ice-shop-active" id="iceShopActiveFilters" hidden></div>
         </div>
+      </div>
+      </div>
       </div>
       <!--
         TASK-147 (макет 02): легенда типов мест под чипами окна. Живёт только в режиме карты
@@ -225,6 +230,6 @@
 
   <script src="ru-text.js?v=2026100518"></script>
   <script src="ice-map.js?v=2026100722"></script>
-  <script src="ice-tab.js?v=2026100925"></script>
+  <script src="ice-tab.js?v=2026101008"></script>
 </body>
 </html>

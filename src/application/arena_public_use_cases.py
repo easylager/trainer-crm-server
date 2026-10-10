@@ -1531,9 +1531,13 @@ async def list_public_ice_arenas(
         except ValueError as exc:
             raise IcePublicQueryError("cursor must be an integer offset") from exc
     now = datetime.now(timezone.utc)
-    # Окно времени имеет смысл только для «где покататься»: у тренеров — слоты недели.
-    # ОХМ: без when-окна (как /c/?kind=ohm) — весь будущий hockey_practice.
-    window = resolve_list_window(when, day, now) if intent_value == INTENT_SKATE else None
+    # Окно времени — для сеансов льда: «где покататься» и ОХМ. У тренеров его нет.
+    # Без when/day окно пустое: весь будущий hockey_practice, как на /c/?kind=ohm.
+    window = (
+        resolve_list_window(when, day, now)
+        if intent_value in (INTENT_SKATE, INTENT_OHM)
+        else None
+    )
     rows = await _load_ice_arena_rows(
         session, city_id=city_id, bbox=bbox_box, intent=intent_value, now=now, window=window
     )

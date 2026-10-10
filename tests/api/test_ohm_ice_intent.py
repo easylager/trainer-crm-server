@@ -92,6 +92,36 @@ async def test_intent_ohm_lists_only_arenas_with_hockey_practice(app_use_test_db
 
 
 @pytest.mark.asyncio
+async def test_ohm_when_puts_that_day_first(app_use_test_db, db_session) -> None:
+    """Чип «Завтра» на ОХМ — сеанс завтра сверху, более поздний не притворяется ответом."""
+    name = f"OhmWhen {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    later = await _insert_arena(db_session, city_id, name=f"Later {uuid.uuid4().hex[:4]}")
+    tomorrow_rink = await _insert_arena(db_session, city_id, name=f"Tomorrow {uuid.uuid4().hex[:4]}")
+    tomorrow = date.today() + timedelta(days=1)
+    later_day = date.today() + timedelta(days=3)
+    await _ohm(db_session, later, day=later_day, hhmm="13:00")
+    await _ohm(db_session, tomorrow_rink, day=tomorrow, hhmm="10:00")
+    await db_session.commit()
+
+    async with _client() as client:
+        res = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": city_id, "intent": "ohm", "when": "tomorrow", "limit": 50},
+        )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert (body.get("window") or {}).get("key") == "tomorrow"
+    items = body["items"]
+    assert [int(i["id"]) for i in items][:1] == [tomorrow_rink]
+    assert "10:00" in str((items[0].get("live") or {}).get("text") or "")
+    assert (items[0].get("live") or {}).get("outside_window") is False
+    later_item = next(i for i in items if int(i["id"]) == later)
+    assert (later_item.get("live") or {}).get("outside_window") is True
+
+
+@pytest.mark.asyncio
 async def test_arena_sessions_include_ohm_days(app_use_test_db, db_session) -> None:
     name = f"OhmSess {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)

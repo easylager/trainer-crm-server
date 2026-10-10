@@ -27,6 +27,7 @@ from src.application.place_page import (
     _services,
     _where,
     absolute_day_label,
+    session_kind_label,
     slot_price,
     slot_price_lines,
     slot_when,
@@ -169,9 +170,11 @@ def card_lines(view: Mapping[str, Any], *, invite: bool) -> dict[str, str]:
         sub_bits.append(district)
     elif _where(card):
         sub_bits.append(_where(card))
+    kind_line = session_kind_label(slot) if slot is not None else ""
     return {
         "kicker": kicker.upper(),
         "title": str(card.get("name") or ""),
+        "kind": kind_line,
         "big": big,
         "day": day,
         "time": time,
@@ -217,6 +220,12 @@ def _render_og(view: Mapping[str, Any], lines: Mapping[str, str]) -> Image.Image
         draw.text((pad, y), line, font=f_title, fill=_INK)
         y += 84
     y += 18
+    if lines.get("kind"):
+        f_kind = _font("Inter-SemiBold.ttf", 36)
+        for line in _wrap(draw, lines["kind"], f_kind, inner, 2):
+            draw.text((pad, y), line, font=f_kind, fill=_MUTED)
+            y += 48
+        y += 8
     for line in _wrap(draw, lines["big"], f_big, inner, 2):
         draw.text((pad, y), line, font=f_big, fill=_ACCENT)
         y += 76
@@ -286,7 +295,15 @@ def _render_story(
     for line in _wrap(draw, lines["title"], f_title, inner, 3):
         draw.text((x, y), line, font=f_title, fill=_INK)
         y += 92
-    y += 40
+    y += 24
+    if lines.get("kind"):
+        f_kind = _font("Inter-SemiBold.ttf", 44)
+        for line in _wrap(draw, lines["kind"], f_kind, inner, 2):
+            draw.text((x, y), line, font=f_kind, fill=_ACCENT)
+            y += 58
+        y += 16
+    else:
+        y += 16
     if lines["time"]:
         draw.text((x, y), lines["day"], font=f_day, fill=_MUTED)
         y += 70

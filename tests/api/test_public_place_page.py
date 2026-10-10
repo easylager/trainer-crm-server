@@ -157,7 +157,7 @@ async def test_link_to_a_past_session_says_so_and_shows_whats_next(app_use_test_
     async with _client() as client:
         resp = await client.get(place["path"], params={"s": "999999999"})
     assert resp.status_code == 200
-    assert "Этого сеанса уже нет в расписании" in resp.text
+    assert "Сеанса из ссылки уже нет в расписании" in resp.text
     assert "расписание массового катания" in _meta(resp.text, "og:title")
     # «Сегодня/Завтра» считается по Минску, а фикстура — по дате контейнера; проверяем суть.
     assert re.search(r"Ближайший — [^<]*, 18:00", resp.text)
@@ -348,8 +348,7 @@ async def test_share_api_points_at_the_page_and_counts_the_click(app_use_test_db
     assert body["share_url"].endswith(f"{place['path']}?s={sid}&i=1")
     assert body["place_share_url"].endswith(f"{place['path']}?s={sid}")
     assert body["share_text"].startswith(body["share_url"])
-    assert body["share_body"].startswith("Погнали кататься?")
-    assert re.search(r", 20:30 — " + re.escape(place["name"]) + r", 8\.50 BYN", body["share_body"])
+    assert body["share_body"] == "Погнали кататься?"
     assert body["place_share_body"].startswith(place["name"] + " — массовое катание")
     assert body["story_image_url"].endswith(f"/session/{sid}/story.png?i=1")
     assert missing.status_code == 404
@@ -450,7 +449,7 @@ async def test_slot_ten_days_ahead_is_not_called_past(app_use_test_db, db_sessio
     await db_session.commit()
     async with _client() as client:
         resp = await client.get(place["path"], params={"s": sid})
-    assert "Этого сеанса уже нет в расписании" not in resp.text
+    assert "Сеанса из ссылки уже нет в расписании" not in resp.text
     assert 'id="plan"' in resp.text and "12:00" in resp.text
 
 

@@ -86,12 +86,48 @@
     toast._t = global.setTimeout(function () { el.classList.remove('is-on'); }, 1800);
   }
 
-  function openUrl(url) {
-    var u = String(url || '');
-    if (/^viber:/i.test(u)) {
+  /**
+   * Кастомные схемы (viber://) из мини-аппа: сначала WebApp.openLink — иначе WebView
+   * глотает location.href и Viber не открывается.
+   */
+  function openDeepLink(url) {
+    var u = String(url || '').trim();
+    if (!u) return false;
+    var t = tg();
+    if (t && typeof t.openLink === 'function') {
       try {
-        global.location.href = u;
-      } catch (e) {
+        t.openLink(u, { try_instant_view: false });
+        return true;
+      } catch (e1) {
+        try {
+          t.openLink(u);
+          return true;
+        } catch (e2) { /* */ }
+      }
+    }
+    try {
+      var a = document.createElement('a');
+      a.href = u;
+      a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:auto;';
+      (document.body || document.documentElement).appendChild(a);
+      a.click();
+      global.setTimeout(function () {
+        if (a.parentNode) a.parentNode.removeChild(a);
+      }, 0);
+      return true;
+    } catch (e3) { /* */ }
+    try {
+      global.location.href = u;
+      return true;
+    } catch (e4) { /* */ }
+    return false;
+  }
+
+  function openUrl(url) {
+    var u = String(url || '').trim();
+    if (!u) return;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(u) && !/^https?:\/\//i.test(u)) {
+      if (!openDeepLink(u)) {
         global.open(u, '_blank', 'noopener');
       }
       return;
@@ -99,11 +135,16 @@
     var t = tg();
     if (t && typeof t.openLink === 'function') {
       try {
-        t.openLink(url);
+        t.openLink(u, { try_instant_view: false });
         return;
-      } catch (e) { /* */ }
+      } catch (e) {
+        try {
+          t.openLink(u);
+          return;
+        } catch (e2) { /* */ }
+      }
     }
-    global.open(url, '_blank', 'noopener');
+    global.open(u, '_blank', 'noopener');
   }
 
   /** src в ссылке шаринга (TASK-223): tg, vb, wa, copy, story, sys, img */
@@ -370,8 +411,13 @@
     },
     viber: function (p) {
       var ap = payloadForSrc(p, 'vb');
-      var href = 'viber://forward?text=' + encodeURIComponent(shareFullMessage(ap));
-      openUrl(href);
+      var msg = shareFullMessage(ap);
+      var href = 'viber://forward?text=' + encodeURIComponent(msg);
+      if (!openDeepLink(href)) {
+        copyText(msg, function () {
+          toast('Текст скопирован — вставьте в Viber');
+        });
+      }
     },
     whatsapp: function (p) {
       var ap = payloadForSrc(p, 'wa');
@@ -860,6 +906,14 @@
     return root;
   }
 
+  function resolveInitialSessionId(opts) {
+    if (opts.sessionId != null && String(opts.sessionId).trim() !== '') {
+      return String(opts.sessionId).trim();
+    }
+    var slots = opts.slots || [];
+    return slots[0] && slots[0].id != null ? String(slots[0].id) : null;
+  }
+
   function open(opts) {
     opts = opts || {};
     if ((opts.ref == null || opts.ref === '') && !opts.endpoint) return;
@@ -869,7 +923,7 @@
       endpoint: opts.endpoint || null,
       slots: opts.slots || [],
       slotSections: opts.slotSections || null,
-      sessionId: opts.sessionId || (opts.slots && opts.slots[0] && opts.slots[0].id) || null,
+      sessionId: resolveInitialSessionId(opts),
       slotDay: null,
       invite: !!opts.invite,
       context: opts.context || 'arena_card',

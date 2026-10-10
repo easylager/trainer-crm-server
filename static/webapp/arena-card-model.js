@@ -1107,6 +1107,47 @@
   }
 
   /**
+   * Массовое катание (days) и ОХМ (ohm_days) — в одном списке для share sheet.
+   * Без merge каталог на вкладке «Хоккей» подставлял первый сеанс МК вместо ОХМ.
+   */
+  function combineSessionDayLists(days, ohmDays) {
+    var order = [];
+    var byDate = {};
+    function add(list) {
+      list = list || [];
+      for (var i = 0; i < list.length; i++) {
+        var iso = list[i].local_date;
+        if (!iso) continue;
+        if (!byDate[iso]) {
+          byDate[iso] = [];
+          order.push(iso);
+        }
+        byDate[iso] = byDate[iso].concat(list[i].sessions || []);
+      }
+    }
+    add(days);
+    add(ohmDays);
+    return order.map(function (iso) {
+      return { local_date: iso, sessions: byDate[iso] };
+    });
+  }
+
+  function shareSlotKindNote(session) {
+    var kind = session && session.kind;
+    if (kind === 'hockey_practice') {
+      var GC = global.GlideCopy;
+      if (GC && typeof GC.t === 'function') {
+        var full = String(GC.t('kind.hockey_practice') || '');
+        if (full && full !== 'kind.hockey_practice') {
+          return full.indexOf('ОХМ') >= 0 ? 'ОХМ' : full;
+        }
+      }
+      return 'ОХМ';
+    }
+    return '';
+  }
+
+  /**
    * TASK-146: ближайшие сеансы для шита «Поделиться» — делятся конкретным временем.
    * «Сегодня 19:00» / «Завтра 11:00» / «Сб 18:30». Порядок — как в ленте.
    */
@@ -1154,10 +1195,14 @@
         var time = String(s.starts_at_local || '').slice(0, 5);
         if (s.id == null || !time) continue;
         var price = formatMinor(s.price_adult_minor, s.currency_code || 'BYN');
+        var metaBits = [];
+        if (price && price.withCurrency) metaBits.push(price.withCurrency);
+        var kindNote = shareSlotKindNote(s);
+        if (kindNote) metaBits.push(kindNote);
         rows.push({
           id: s.id,
           time: time,
-          meta: price ? price.withCurrency : '',
+          meta: metaBits.join(' · '),
         });
       }
       if (rows.length) {
@@ -1246,6 +1291,7 @@
     ribbonIsoForDay: ribbonIsoForDay,
     practiceContacts: practiceContacts,
     startParamFromLocation: startParamFromLocation,
+    combineSessionDayLists: combineSessionDayLists,
     shareSlots: shareSlots,
     shareSlotsGrouped: shareSlotsGrouped,
     shareSlotInviteLabel: shareSlotInviteLabel,

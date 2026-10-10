@@ -67,6 +67,9 @@ describe('GlideShareSheet Viber / WhatsApp href', () => {
     assert.match(src, /data-ch="viber"/);
     assert.match(src, /data-ch="whatsapp"/);
     assert.match(src, /shareFullMessage/);
+    assert.match(src, /function openDeepLink/);
+    assert.match(src, /openLink\(u, \{ try_instant_view: false \}\)/);
+    assert.doesNotMatch(src, /if \(\/^viber:\/i\.test\(u\)\)[\s\S]*?location\.href = u/);
   });
 
   it('копирование ссылки добавляет src=copy, без share_body', () => {

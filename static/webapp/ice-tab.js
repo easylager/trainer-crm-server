@@ -407,11 +407,69 @@
     }
   }
 
+  function sessionWhenActive() {
+    if (state.intent === 'ohm') return true;
+    return M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets, {
+      activeWindow: !!(state.window && state.window.key),
+    });
+  }
+
   function whenQueryForApi() {
-    if (!M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) {
-      return { when: '', whenDay: '' };
-    }
+    if (!sessionWhenActive()) return { when: '', whenDay: '' };
     return { when: state.when, whenDay: state.whenDay };
+  }
+
+  function placeFolderLine() {
+    var nav = $('iceModeSeg');
+    var line = $('iceFolderLine');
+    if (!nav || !line) return;
+    var on = nav.querySelector('.hdr-folder[aria-pressed="true"]');
+    if (!on) {
+      line.style.width = '0px';
+      return;
+    }
+    line.style.width = on.offsetWidth + 'px';
+    line.style.transform = 'translateX(' + on.offsetLeft + 'px)';
+  }
+
+  function renderWhenChips() {
+    var host = $('iceWhenChips');
+    if (!host) return;
+    var scope = M.catalogScope(state.intent, state.venueTypes);
+    var show = sessionWhenActive() && scope !== 'shop' && scope !== 'coach' && state.placeService !== 'service';
+    host.hidden = !show;
+    if (!show) {
+      host.innerHTML = '';
+      return;
+    }
+    var w = state.when || 'any';
+    function chip(key, label) {
+      var on = w === key;
+      return (
+        '<button type="button" class="ice-chip" data-when-chip="' +
+        esc(key) +
+        '" aria-pressed="' +
+        (on ? 'true' : 'false') +
+        '">' +
+        esc(label) +
+        '</button>'
+      );
+    }
+    var dateOn = w === 'day' || w === 'today_evening';
+    var dateLabel = 'Дата';
+    if (dateOn) dateLabel = M.whenPickerLabel(w, state.whenDay, state.window ? state.window.key : 'any');
+    var dateOpen = state.uiPicker === 'date';
+    host.innerHTML =
+      chip('today', 'Сегодня') +
+      chip('tomorrow', 'Завтра') +
+      chip('weekend', 'Сб–Вс') +
+      '<button type="button" class="ice-chip" data-when-chip="date" aria-pressed="' +
+      (dateOn ? 'true' : 'false') +
+      '" aria-expanded="' +
+      (dateOpen ? 'true' : 'false') +
+      '">' +
+      esc(dateLabel) +
+      '</button>';
   }
 
   function renderWhenMenuRow(row) {
@@ -443,6 +501,27 @@
       sub +
       '</span></button>'
     );
+  }
+
+  function renderDateMenuHtml() {
+    var resolved = state.window ? state.window.key : 'any';
+    var view = M.whenMenuView({
+      when: state.when,
+      whenDay: state.whenDay,
+      resolvedKey: resolved,
+      menuExpanded: state.whenMenuExpanded,
+    });
+    var rows = view.rows.filter(function (row) {
+      return !(row.kind === 'preset' && (row.id === 'tomorrow' || row.id === 'weekend'));
+    });
+    var anchors = view.anchors.filter(function (row) {
+      return row.id !== 'weekend' && row.id !== 'tomorrow';
+    });
+    var html = rows.map(renderWhenMenuRow).join('');
+    html += '<div class="ice-menu-anchors">';
+    html += anchors.map(renderWhenMenuRow).join('');
+    html += '</div>';
+    return html;
   }
 
   function renderWhenMenuHtml() {
@@ -543,7 +622,7 @@
       serviceBox.innerHTML = serviceChips
         .map(function (c) {
           return (
-            '<button type="button" class="ice-chip ice-chip--shop" data-shop-service="' +
+            '<button type="button" class="ice-chip" data-shop-service="' +
             esc(c.key) +
             '" aria-pressed="' +
             (c.active ? 'true' : 'false') +
@@ -607,27 +686,36 @@
     });
     var modeSeg = $('iceModeSeg');
     if (modeSeg) {
-      if (modes.length < 2) {
+      var folders = modes.filter(function (m) {
+        return m.id !== 'service';
+      });
+      if (folders.length < 2) {
         modeSeg.hidden = true;
         modeSeg.innerHTML = '';
       } else {
         modeSeg.hidden = false;
-        modeSeg.className = 'ice-seg ice-seg--' + modes.length;
-        modeSeg.innerHTML = modes
+        modeSeg.className = 'hdr-folders';
+        modeSeg.innerHTML = folders
           .map(function (m) {
+            var count = m.id === 'ohm' ? counts.ohmCount : m.id === 'shop' ? counts.shopCount : m.id === 'coach' ? counts.trainerCount : 0;
+            var extra = count > 0 && m.id !== 'places' ? ' <small>' + esc(String(count)) + '</small>' : '';
             return (
-              '<button type="button" role="tab" data-catalog-mode="' +
+              '<button type="button" class="hdr-folder" role="tab" data-catalog-mode="' +
               esc(m.id) +
               '" aria-pressed="' +
               (m.active ? 'true' : 'false') +
               '">' +
               esc(m.label) +
+              extra +
               '</button>'
             );
           })
-          .join('');
+          .join('') + '<span class="hdr-underline" id="iceFolderLine" aria-hidden="true"></span>';
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(placeFolderLine);
+        else placeFolderLine();
       }
     }
+    renderWhenChips();
 
     var scope = M.catalogScope(state.intent, state.venueTypes);
     var inService = state.placeService === 'service' && scope === 'places';
@@ -635,9 +723,8 @@
 
     var hintEl = $('iceSectionHint');
     if (hintEl) {
-      var hint = M.sectionHint(scope, state.placeService);
-      hintEl.hidden = !hint;
-      hintEl.textContent = hint || '';
+      hintEl.hidden = true;
+      hintEl.textContent = '';
     }
 
     var tabs = $('icePlaceTabs');
@@ -645,11 +732,11 @@
     if (tabs) {
       if (tabItems.length) {
         tabs.hidden = false;
-        tabs.className = 'ice-seg ice-seg--quiet ice-seg--n' + tabItems.length;
+        tabs.className = 'ice-chips';
         tabs.innerHTML = tabItems
           .map(function (c) {
             return (
-              '<button type="button" role="tab" data-place-type="' +
+              '<button type="button" class="ice-chip" role="tab" data-place-type="' +
               esc(c.key) +
               '" aria-pressed="' +
               (c.active ? 'true' : 'false') +
@@ -676,24 +763,20 @@
     var placeMenu = $('icePlaceMenu');
     var whenMenu = $('iceWhenMenu');
     var needPlaceTool = scope === 'places' && M.placeMenuNeeded(state.venueFacets);
-    var needWhen = M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets, {
-      activeWindow: !!(state.window && state.window.key),
-    });
+    var needWhen = false;
 
     if (toolsHost && toolsRow) {
-    if (!needPlaceTool && !needWhen) {
+    if (!needPlaceTool) {
       toolsHost.hidden = true;
       toolsRow.innerHTML = '';
       if (placeMenu) placeMenu.hidden = true;
-      if (whenMenu) whenMenu.hidden = true;
-      if (state.uiPicker) closeUiPicker();
     } else {
     toolsHost.hidden = false;
     var toolHtml = '';
     if (needPlaceTool) {
       var placeOpen = state.uiPicker === 'place';
       toolHtml +=
-        '<button type="button" class="ice-tool" data-ui-picker="place" aria-expanded="' +
+        '<button type="button" class="ice-chip ice-tool" data-ui-picker="place" aria-expanded="' +
         (placeOpen ? 'true' : 'false') +
         '"><span>' +
         esc(M.placeMenuLabel(state.venueFacets, state.venueTypes)) +
@@ -722,29 +805,17 @@
       placeMenu.innerHTML = '';
     }
 
-    if (needWhen) {
-      var resolved = state.window ? state.window.key : 'any';
-      var whenOpen = state.uiPicker === 'when';
-      toolHtml +=
-        '<button type="button" class="ice-tool" data-ui-picker="when" aria-expanded="' +
-        (whenOpen ? 'true' : 'false') +
-        '"><span>' +
-        esc(M.whenPickerLabel(state.when, state.whenDay, resolved)) +
-        '</span></button>';
-      if (whenMenu) {
-        whenMenu.hidden = !whenOpen;
-        whenMenu.innerHTML = renderWhenMenuHtml();
-      }
-    } else if (whenMenu) {
-      whenMenu.hidden = true;
-      whenMenu.innerHTML = '';
-      if (state.uiPicker === 'when') closeUiPicker();
-    }
-
     var toolCount = (needPlaceTool ? 1 : 0) + (needWhen ? 1 : 0);
-    toolsRow.className = 'ice-tools' + (toolCount === 1 ? ' ice-tools--one' : '');
+    toolsRow.className = 'ice-chips ice-tools' + (toolCount === 1 ? ' ice-tools--one' : '');
     toolsRow.innerHTML = toolHtml;
     }
+    }
+
+    if (whenMenu) {
+      var dateOpen = state.uiPicker === 'date' && sessionWhenActive() && scope !== 'shop' && scope !== 'coach';
+      whenMenu.hidden = !dateOpen;
+      whenMenu.innerHTML = dateOpen ? renderDateMenuHtml() : '';
+      if (state.uiPicker === 'when') state.uiPicker = false;
     }
 
     renderShopFilters(scope === 'shop');
@@ -1551,10 +1622,6 @@
     state.venueFacets = (data && data.venue_type_facets) || [];
     if (data && data.service_count != null) state.serviceCount = Number(data.service_count) || 0;
     state.window = (data && data.window) || null;
-    renderCatalogHeader();
-  }
-
-  function renderWhenChips() {
     renderCatalogHeader();
   }
 
@@ -2582,11 +2649,13 @@
 
   function openCatalogInvite(ref, sessionId, label) {
     if (!global.GlideShareSheet || !ref) return;
+    var picked =
+      sessionId != null && String(sessionId).trim() !== '' ? String(sessionId).trim() : null;
     var fallback = function () {
       global.GlideShareSheet.open({
         ref: ref,
-        sessionId: sessionId,
-        slots: sessionId ? [{ id: sessionId, label: label || '' }] : [],
+        sessionId: picked,
+        slots: picked ? [{ id: picked, label: label || '' }] : [],
         invite: true,
         context: 'ice_list',
       });
@@ -2600,14 +2669,17 @@
     var to = catalogAddDaysIso(today, 13);
     fetchJson('/api/public/arenas/' + encodeURIComponent(String(ref)) + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to))
       .then(function (data) {
-        var days = (data && data.days) || [];
+        var days =
+          ACM.combineSessionDayLists && typeof ACM.combineSessionDayLists === 'function'
+            ? ACM.combineSessionDayLists((data && data.days) || [], (data && data.ohm_days) || [])
+            : (data && data.days) || [];
         var slots = ACM.shareSlots(days, today, 0);
         var slotSections = ACM.shareSlotsGrouped ? ACM.shareSlotsGrouped(days, today) : null;
-        var sid = sessionId;
+        var sid = picked;
         if (sid && !slots.some(function (s) { return String(s.id) === String(sid); })) {
-          slots.unshift({ id: sessionId, label: label || '' });
+          slots.unshift({ id: sid, label: label || '' });
         }
-        if (!sid && slots.length) sid = slots[0].id;
+        if (!sid && slots.length) sid = String(slots[0].id);
         global.GlideShareSheet.open({
           ref: ref,
           sessionId: sid,
@@ -2688,6 +2760,10 @@
 
   function bind() {
     var modeSeg = $('iceModeSeg');
+    if (modeSeg && modeSeg.dataset.scrollWired !== '1') {
+      modeSeg.dataset.scrollWired = '1';
+      modeSeg.addEventListener('scroll', placeFolderLine);
+    }
     if (modeSeg) {
       modeSeg.addEventListener('click', function (ev) {
         var btn = ev.target.closest('[data-catalog-mode]');
@@ -2698,10 +2774,6 @@
         state.autoCoach = false;
         state.venueTypes = patch.venueTypes.slice();
         state.placeService = patch.placeService || '';
-        if (mode === 'ohm') {
-          state.when = 'any';
-          state.whenDay = '';
-        }
         closeUiPicker();
         if (mode === 'coach') state.view = 'list';
         renderList();
@@ -2709,6 +2781,67 @@
         setViewToggle();
         persist();
         loadList();
+      });
+    }
+
+    var whenRow = $('iceWhenRow');
+    if (whenRow && whenRow.dataset.clickWired !== '1') {
+      whenRow.dataset.clickWired = '1';
+      whenRow.addEventListener('click', function (ev) {
+        var chip = ev.target.closest('[data-when-chip]');
+        if (chip) {
+          var key = chip.getAttribute('data-when-chip') || '';
+          if (key === 'date') {
+            state.uiPicker = state.uiPicker === 'date' ? false : 'date';
+            renderCatalogHeader();
+            return;
+          }
+          if (state.when === key && !state.whenDay) {
+            state.when = 'any';
+            state.whenDay = '';
+          } else {
+            state.when = key;
+            state.whenDay = '';
+          }
+          closeUiPicker();
+          renderCatalogHeader();
+          persist();
+          loadArenas();
+          return;
+        }
+        var whenToggle = ev.target.closest('[data-when-toggle]');
+        if (whenToggle) {
+          state.whenMenuExpanded = !state.whenMenuExpanded;
+          renderCatalogHeader();
+          return;
+        }
+        var whenPreset = ev.target.closest('[data-when-preset]');
+        if (whenPreset) {
+          var pick = M.applyWhenMenuPick(state.when, state.whenDay, {
+            kind: 'preset',
+            id: whenPreset.getAttribute('data-when-preset') || 'any',
+          });
+          state.when = pick.when;
+          state.whenDay = pick.whenDay;
+          closeUiPicker();
+          renderCatalogHeader();
+          persist();
+          loadArenas();
+          return;
+        }
+        var whenDayBtn = ev.target.closest('[data-when-day]');
+        if (whenDayBtn) {
+          var dayPick = M.applyWhenMenuPick(state.when, state.whenDay, {
+            kind: 'day',
+            date: whenDayBtn.getAttribute('data-when-day') || '',
+          });
+          state.when = dayPick.when;
+          state.whenDay = dayPick.whenDay;
+          closeUiPicker();
+          renderCatalogHeader();
+          persist();
+          loadArenas();
+        }
       });
     }
 
@@ -2747,6 +2880,21 @@
         state.shopMapFiltersOpen = !state.shopMapFiltersOpen;
         renderCatalogHeader();
       });
+    }
+
+    /* Панель фильтров на карте магазинов — дропдаун: тап по карте её закрывает. */
+    var mapSec = $('iceMapSec');
+    if (mapSec && mapSec.dataset.shopFiltersDismiss !== '1') {
+      mapSec.dataset.shopFiltersDismiss = '1';
+      mapSec.addEventListener(
+        'pointerdown',
+        function () {
+          if (!state.shopMapFiltersOpen && !state.shopUiPicker) return;
+          closeShopMapFiltersPanel();
+          renderCatalogHeader();
+        },
+        true
+      );
     }
 
     var shopFilters = $('iceShopFilters');
