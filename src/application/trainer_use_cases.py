@@ -38,6 +38,7 @@ from src.infrastructure.db.models import (
     TRAINER_STATUS_PENDING_PROFILE,
 )
 from src.infrastructure.repositories import TrainerRepository
+from src.shared.notification_hours import NOTIFICATION_TZ
 from src.application.trainer_catalog_state import (
     CATALOG_ACTOR_MODERATOR,
     CATALOG_ACTOR_SYSTEM,
@@ -153,13 +154,51 @@ def _group_price_cents_from_service_payload(s: dict[str, Any]) -> int | None:
     return int(round(float(raw) * 100))
 
 
+def _service_is_online_from_payload(s: dict[str, Any]) -> bool:
+    return bool(s.get("is_online"))
+
+
+async def platform_service_ids(session: AsyncSession, service_ids: list[int]) -> set[int]:
+    """Services we author ourselves (``created_by_trainer_id`` is null). Venue-only."""
+    ids = sorted({int(x) for x in service_ids})
+    if not ids:
+        return set()
+    r = await session.execute(
+        text(
+            """
+            SELECT id FROM services
+            WHERE created_by_trainer_id IS NULL
+              AND id = ANY(:ids)
+            """
+        ),
+        {"ids": ids},
+    )
+    return {int(row[0]) for row in r.fetchall()}
+
+
+async def clear_online_on_platform_services(
+    session: AsyncSession, services: list[dict[str, Any]]
+) -> None:
+    """A catalog service we defined cannot be offered online. Trainer-authored ones can."""
+    if not services:
+        return
+    blocked = await platform_service_ids(
+        session, [int(s["service_id"]) for s in services if s.get("service_id") is not None]
+    )
+    if not blocked:
+        return
+    for item in services:
+        if int(item["service_id"]) in blocked:
+            item["is_online"] = False
+
+
 def _services_to_entries(
     services: list[dict[str, Any]],
-) -> list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]]:
+) -> list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None, bool]]:
     """
     Convert API services to repo entries:
     (service_id, [(tier_kind, price_cents), ...], description, group_price_cents|None, client_notice|None,
-    ui_accent|None).
+    ui_accent|None, is_online).
     """
     from src.shared.price_tier_kind import (
         PRICE_TIER_ADULT,
@@ -168,13 +207,16 @@ def _services_to_entries(
         price_tier_sort_key,
     )
 
-    result: list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]] = []
+    result: list[
+        tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None, bool]
+    ] = []
     for s in services:
         sid = int(s["service_id"])
         desc = _service_description_from_payload(s)
         group_pc = _group_price_cents_from_service_payload(s)
         notice = _service_client_notice_from_payload(s)
         ui_accent = normalize_service_ui_accent(s.get("ui_accent"))
+        is_online = _service_is_online_from_payload(s)
         tiers_raw = s.get("price_tiers")
         if isinstance(tiers_raw, list) and len(tiers_raw) > 0:
             merged: dict[str, int] = {}
@@ -190,7 +232,7 @@ def _services_to_entries(
                     continue
                 merged[tk] = cents
             ordered = sorted(merged.items(), key=lambda x: price_tier_sort_key(x[0]))
-            result.append((sid, ordered, desc, group_pc, notice, ui_accent))
+            result.append((sid, ordered, desc, group_pc, notice, ui_accent, is_online))
             continue
         price_byn = s.get("price_byn")
         child_byn = s.get("price_child_byn")
@@ -200,8 +242,29 @@ def _services_to_entries(
         if child_byn is not None:
             tiers.append((PRICE_TIER_CHILD, int(round(float(child_byn) * 100))))
         tiers.sort(key=lambda x: price_tier_sort_key(x[0]))
-        result.append((sid, tiers, desc, group_pc, notice, ui_accent))
+        result.append((sid, tiers, desc, group_pc, notice, ui_accent, is_online))
     return result
+
+
+async def sync_trainer_online_enabled_from_services(
+    session: AsyncSession, trainer_id: int
+) -> None:
+    """Keep profile.online_enabled in step with ≥1 online trainer_services row."""
+    r = await session.execute(
+        text(
+            """
+            SELECT EXISTS (
+              SELECT 1 FROM trainer_services
+              WHERE trainer_id = :tid AND COALESCE(is_online, false)
+            )
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    has_online = bool(r.scalar())
+    repo = TrainerRepository(session)
+    await repo.ensure_trainer_profile_row(trainer_id)
+    await repo.update_profile(trainer_id, online_enabled=has_online)
 
 
 async def reconcile_catalog_state_for_card(session: AsyncSession, trainer_id: int) -> bool:
@@ -321,6 +384,91 @@ async def ensure_trainer_services_replace_allowed(
         )
 
 
+async def list_trainer_service_ids_format_locked(
+    session: AsyncSession,
+    trainer_id: int,
+) -> list[int]:
+    """
+    Services whose ``is_online`` must not flip while still referenced by live schedule data.
+
+    Same reference set as removal: non-cancelled slots, active bookings, weekly templates,
+    training groups. Prices/description stay editable; only the online↔venue bit is locked.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT DISTINCT service_id FROM (
+              SELECT s.service_id AS service_id
+              FROM slots s
+              WHERE s.trainer_id = :tid
+                AND s.status <> 'cancelled'
+                AND s.service_id IS NOT NULL
+              UNION
+              SELECT b.service_id AS service_id
+              FROM bookings b
+              WHERE b.trainer_id = :tid
+                AND b.status IN ('pending', 'confirmed')
+                AND b.service_id IS NOT NULL
+              UNION
+              SELECT t.service_id AS service_id
+              FROM trainer_schedule_templates t
+              WHERE t.trainer_id = :tid AND t.service_id IS NOT NULL
+              UNION
+              SELECT g.service_id AS service_id
+              FROM training_groups g
+              WHERE g.trainer_id = :tid AND g.service_id IS NOT NULL
+            ) locked
+            WHERE service_id IS NOT NULL
+            ORDER BY 1
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    return [int(row[0]) for row in r.fetchall() if row[0] is not None]
+
+
+async def ensure_trainer_service_format_changes_allowed(
+    session: AsyncSession,
+    trainer_id: int,
+    desired_online_by_service_id: dict[int, bool],
+) -> None:
+    """
+    Block flipping ``trainer_services.is_online`` while the offering is still in use.
+
+    Allowed without restriction: description, prices, client_notice, adding services.
+    Format change is OK when the service has no live slots/bookings/templates/groups
+    (cancelled/past bookings alone do not lock).
+    """
+    if not desired_online_by_service_id:
+        return
+    r = await session.execute(
+        text(
+            """
+            SELECT service_id, COALESCE(is_online, false)
+            FROM trainer_services
+            WHERE trainer_id = :tid
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    current = {int(row[0]): bool(row[1]) for row in r.fetchall()}
+    flipping = {
+        int(sid)
+        for sid, online in desired_online_by_service_id.items()
+        if int(sid) in current and current[int(sid)] != bool(online)
+    }
+    if not flipping:
+        return
+    locked = set(await list_trainer_service_ids_format_locked(session, trainer_id))
+    if not (flipping & locked):
+        return
+    raise ValueError(
+        "Нельзя сменить формат услуги (онлайн / на площадке): есть активные записи, "
+        "слоты в расписании, шаблон или группа с этой услугой. "
+        "Сначала отмените или перенесите их — либо снимите услугу со слотов."
+    )
+
+
 async def _apply_trainer_services_update(
     repo: TrainerRepository,
     session: AsyncSession,
@@ -329,13 +477,43 @@ async def _apply_trainer_services_update(
     service_ids: list[int] | None,
 ) -> None:
     if services is not None:
+        await clear_online_on_platform_services(session, services)
         new_set = {int(s["service_id"]) for s in services}
         await ensure_trainer_services_replace_allowed(session, trainer_id, new_set)
+        desired_online = {
+            int(s["service_id"]): bool(s.get("is_online")) for s in services
+        }
+        await ensure_trainer_service_format_changes_allowed(
+            session, trainer_id, desired_online
+        )
         await repo.set_trainer_services(trainer_id, _services_to_entries(services))
+        await sync_trainer_online_enabled_from_services(session, trainer_id)
     elif service_ids is not None:
         new_set = {int(x) for x in service_ids}
         await ensure_trainer_services_replace_allowed(session, trainer_id, new_set)
-        await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
+        # Legacy id-list update must not wipe is_online (defaults to false in short tuples).
+        r = await session.execute(
+            text(
+                """
+                SELECT service_id, COALESCE(is_online, false)
+                FROM trainer_services
+                WHERE trainer_id = :tid
+                """
+            ),
+            {"tid": trainer_id},
+        )
+        online_map = {int(row[0]): bool(row[1]) for row in r.fetchall()}
+        blocked = await platform_service_ids(session, [int(x) for x in service_ids])
+        for sid in blocked:
+            online_map[int(sid)] = False
+        await repo.set_trainer_services(
+            trainer_id,
+            [
+                (sid, [], None, None, None, None, online_map.get(int(sid), False))
+                for sid in service_ids
+            ],
+        )
+        await sync_trainer_online_enabled_from_services(session, trainer_id)
 
 
 async def _profile_city_id_for_arena_scope(
@@ -351,6 +529,90 @@ async def _profile_city_id_for_arena_scope(
     if row is None or row[0] is None:
         return None
     return int(row[0])
+
+
+async def list_trainer_arena_ids_locked_by_bookings(
+    session: AsyncSession,
+    trainer_id: int,
+) -> list[int]:
+    """
+    Arenas the trainer must not unlink while they still have current/future activity there.
+
+    Locked when either:
+    - a pending/confirmed booking resolves to the arena (booking.arena_id, else slot.arena_id), or
+    - a non-cancelled slot on that arena has not ended yet (wall clock in NOTIFICATION_TZ).
+    """
+    r = await session.execute(
+        text(
+            f"""
+            SELECT DISTINCT arena_id FROM (
+              SELECT COALESCE(b.arena_id, s.arena_id) AS arena_id
+              FROM bookings b
+              JOIN slots s ON s.id = b.slot_id
+              WHERE b.trainer_id = :tid
+                AND b.status IN ('pending', 'confirmed')
+                AND COALESCE(b.arena_id, s.arena_id) IS NOT NULL
+                AND ((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                    > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
+              UNION
+              SELECT s2.arena_id AS arena_id
+              FROM slots s2
+              WHERE s2.trainer_id = :tid
+                AND s2.status <> 'cancelled'
+                AND s2.arena_id IS NOT NULL
+                AND ((s2.slot_date + s2.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                    > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
+            ) locked
+            WHERE arena_id IS NOT NULL
+            ORDER BY 1
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    return [int(row[0]) for row in r.fetchall() if row[0] is not None]
+
+
+async def ensure_trainer_arenas_replace_allowed(
+    session: AsyncSession,
+    trainer_id: int,
+    arena_ids: list[int],
+    *,
+    replace_city_ids: list[int] | None,
+) -> None:
+    """
+    Block unlinking a venue from the trainer profile while current/future occupying bookings
+    still resolve to that arena (booking.arena_id or slot.arena_id).
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT ta.arena_id, a.city_id
+            FROM trainer_arenas ta
+            JOIN arenas a ON a.id = ta.arena_id
+            WHERE ta.trainer_id = :tid
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    existing_rows = r.fetchall()
+    old_ids = {int(row[0]) for row in existing_rows}
+    incoming = {int(x) for x in arena_ids}
+    if replace_city_ids is None:
+        removed = old_ids - incoming
+    else:
+        scope = {int(cid) for cid in replace_city_ids}
+        in_scope = {int(aid) for aid, city_id in existing_rows if int(city_id) in scope}
+        removed = in_scope - incoming
+    if not removed:
+        return
+    locked = set(await list_trainer_arena_ids_locked_by_bookings(session, trainer_id))
+    blocked = removed & locked
+    if not blocked:
+        return
+    raise ValueError(
+        "Нельзя убрать площадку: есть записи или слоты сейчас или в будущем. "
+        "Сначала отмените записи или удалите слоты на этой площадке."
+    )
 
 
 async def _apply_trainer_arenas_update(
@@ -372,7 +634,11 @@ async def _apply_trainer_arenas_update(
             {"ids": [int(x) for x in arena_ids]},
         )
         scope.update(int(row[0]) for row in r.fetchall() if row[0] is not None)
-    await repo.set_trainer_arenas(trainer_id, arena_ids, replace_city_ids=list(scope))
+    scope_list = list(scope)
+    await ensure_trainer_arenas_replace_allowed(
+        session, trainer_id, arena_ids, replace_city_ids=scope_list
+    )
+    await repo.set_trainer_arenas(trainer_id, arena_ids, replace_city_ids=scope_list)
     await repo.reconcile_primary_arena(trainer_id)
     if arena_ids:
         await repo.clear_trainer_arena_setup_alternative(trainer_id)
@@ -392,9 +658,12 @@ async def create_trainer(
     if profile:
         await repo.create_profile(trainer_id, **_profile_to_kwargs(profile))
     if services is not None:
+        await clear_online_on_platform_services(session, services)
         await repo.set_trainer_services(trainer_id, _services_to_entries(services))
+        await sync_trainer_online_enabled_from_services(session, trainer_id)
     elif service_ids:
         await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
+        await sync_trainer_online_enabled_from_services(session, trainer_id)
     if arena_ids:
         await repo.set_trainer_arenas(trainer_id, arena_ids)
         await repo.reconcile_primary_arena(trainer_id)

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -26,7 +26,42 @@ from sqlalchemy import text
 from src.api.app import app
 from src.application.ice_city_day import city_slug, summary_line
 from tests.api.test_public_arenas import _insert_arena, _insert_city
+from tests.api.test_schedule_staleness_surfaces import _job
 from src.application.ice_session_use_cases import create_ice_session
+
+_PHONE_GUARD_UNKNOWN = "unknown (только email/соцсети)"
+_PHONE_GUARD_SHORT = "123-456"
+_PHONE_GUARD_VALID = "+375 29 123-45-67"
+
+
+def _ice_day_unconfirmed_row(html: str, arena_name: str) -> str:
+    m = re.search(
+        rf"<li><b>(?:<a[^>]*>)?{re.escape(arena_name)}(?:</a>)?</b>.*?</li>",
+        html,
+        re.DOTALL,
+    )
+    assert m, f"unconfirmed row for {arena_name!r} missing"
+    return m.group(0)
+
+
+def _assert_invalid_phone_ssr(fragment: str, raw_phone: str) -> None:
+    assert "tel:" not in fragment
+    assert raw_phone not in fragment
+    assert "уточните по телефону" not in fragment.lower()
+
+
+async def _very_stale_today_session(
+    db_session,
+    arena_id: int,
+    *,
+    observed_at: datetime,
+) -> None:
+    session_id, _ = await _add_today_session(db_session, arena_id)
+    await db_session.execute(
+        text("UPDATE ice_sessions SET observed_at = :obs WHERE id = :id"),
+        {"id": session_id, "obs": observed_at},
+    )
+    await _job(db_session, arena_id, last_ok_at=observed_at)
 
 
 def _minsk_now() -> datetime:
@@ -182,7 +217,12 @@ async def test_city_day_page_hides_in_progress_slots(app_use_test_db, db_session
     async with _client() as client:
         page = await client.get(f"/ice/{city_slug(name)}/today")
     assert page.status_code == 200, page.text
-    assert started_hhmm not in page.text
+    # Время ищем в разметке слота, не во всём HTML: в JSON-LD есть UTC-суффиксы
+    # вида ``+00:00``, и при старте «идущего» сеанса ровно в полночь (``00:00``)
+    # сырой ``not in page.text`` даёт ложный fail.
+    assert f'<span class="slot__time">{started_hhmm}' not in page.text
+    if upcoming.date() == now_minsk.date():
+        assert f'<span class="slot__time">{upcoming_hhmm}' in page.text
 
 
 @pytest.mark.asyncio
@@ -351,3 +391,31 @@ async def test_ice_today_og_is_absolute_and_the_page_stays_light(
     assert f"startapp=catalog_{cid}_skate_today" in page.text
     assert "/api/public/catalog/open-telegram" in page.text
     assert "Лёд · " in page.text
+
+
+@pytest.mark.asyncio
+async def test_ice_city_day_ssr_phone_guard(app_use_test_db, db_session) -> None:
+    """TASK-207: невалидные телефоны не попадают в SSR «лёд сегодня» (блок не подтверждено)."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stale_at = now - timedelta(hours=80)
+    city_label = f"Телдень{uuid.uuid4().hex[:6]}"
+    cid = await _insert_city(db_session, name=city_label)
+    cases = (
+        ("Каток без связи", _PHONE_GUARD_UNKNOWN),
+        ("Каток короткий", _PHONE_GUARD_SHORT),
+        ("Каток валидный", _PHONE_GUARD_VALID),
+    )
+    for arena_name, phone in cases:
+        arena_id = await _insert_arena(db_session, cid, name=arena_name, phone=phone)
+        await _very_stale_today_session(db_session, arena_id, observed_at=stale_at)
+    await db_session.commit()
+
+    async with _client() as client:
+        page = await client.get(f"/ice/{city_slug(city_label)}/today")
+    assert page.status_code == 200, page.text
+    html = page.text
+    _assert_invalid_phone_ssr(_ice_day_unconfirmed_row(html, "Каток без связи"), _PHONE_GUARD_UNKNOWN)
+    _assert_invalid_phone_ssr(_ice_day_unconfirmed_row(html, "Каток короткий"), _PHONE_GUARD_SHORT)
+    valid_row = _ice_day_unconfirmed_row(html, "Каток валидный")
+    assert 'href="tel:+375291234567"' in valid_row
+    assert "уточните по телефону" in valid_row.lower()

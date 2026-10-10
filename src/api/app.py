@@ -1,4 +1,5 @@
 """FastAPI app: health check and API routers. No business logic here."""
+import html
 import logging
 from pathlib import Path
 from typing import Optional
@@ -61,6 +62,9 @@ app = FastAPI(
     redoc_url="/redoc" if _api_docs_enabled else None,
     openapi_url="/openapi.json" if _api_docs_enabled else None,
 )
+
+if not (_settings_for_bench.yandex_maps_js_api_key or "").strip():
+    logger.error("YANDEX_MAPS_JS_API_KEY is not set — Ice tab Yandex map will stay unavailable")
 
 if _settings_for_bench.trainer_webapp_benchmark_log or _settings_for_bench.trainer_webapp_benchmark_slow_ms is not None:
     logger.info(
@@ -128,6 +132,7 @@ async def _db_unavailable_exception_handler(_request: Request, exc: Exception):
 _WEBAPP_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "webapp"
 _LANDING_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "landing"
 _LOGOS_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "logos"
+_SHARED_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "shared"
 
 # SEC-G2: discourage MIME sniffing on all Mini App responses using these header sets (HTML + JS/CSS).
 _WEBAPP_SNIFFING = {"X-Content-Type-Options": "nosniff"}
@@ -211,7 +216,19 @@ def webapp_ice_tab_page():
     path = _WEBAPP_DIR / "ice.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    page_html = path.read_text(encoding="utf-8")
+    key = (Settings().yandex_maps_js_api_key or "").strip()
+    if key:
+        meta = f'  <meta name="ymaps-key" content="{html.escape(key, quote=True)}">\n'
+        marker = "</head>"
+        if marker not in page_html:
+            raise HTTPException(status_code=500, detail="Invalid ice template")
+        page_html = page_html.replace(marker, meta + marker, 1)
+    return HTMLResponse(
+        content=page_html,
+        media_type="text/html",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
 
 
 @app.get("/webapp/trainer-bookings")
@@ -714,6 +731,19 @@ def webapp_client_buy_pass_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/client-buy-pass-order.js")
+def webapp_client_buy_pass_order_js(request: Request):
+    """Catalog-card pass/certificate order helpers. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-buy-pass-order.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/client-passes")
 def webapp_client_passes_page():
     """Serve the client 'My passes' Mini App (list of owned абонементы, redeem link)."""
@@ -1122,10 +1152,62 @@ def webapp_arena_card_css(request: Request):
     )
 
 
+@app.get("/webapp/opening-hours.js")
+def webapp_opening_hours_js(request: Request):
+    """TASK-182: часы работы (через полночь) — общие для ice-tab-model и arena-card-model."""
+    path = _WEBAPP_DIR / "opening-hours.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/minsk-time.js")
+def webapp_minsk_time_js(request: Request):
+    """TASK-184: календарь и «сейчас» каталога (Europe/Minsk / TZ арены)."""
+    path = _WEBAPP_DIR / "minsk-time.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/arena-card-model.js")
 def webapp_arena_card_model_js(request: Request):
     """TASK-052 arena card view-model (pure). Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "arena-card-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/schedule-staleness-model.js")
+def webapp_schedule_staleness_model_js(request: Request):
+    """TASK-180 schedule staleness copy/dates (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "schedule-staleness-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/arena-schedule-mode-model.js")
+def webapp_arena_schedule_mode_model_js(request: Request):
+    """TASK-204 arena schedule mode copy (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "arena-schedule-mode-model.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
@@ -1167,6 +1249,32 @@ def webapp_catalog_geo_model_js(request: Request):
     """Автоопределение города (catalog, Главная, «Поиск»). Раньше не отдавался по /webapp/ —
     catalog.html и client-home.html грузили его с 404, и геолокация молча не работала."""
     path = _WEBAPP_DIR / "catalog-geo-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/catalog-contact-attribution.js")
+def webapp_catalog_contact_attribution_js(request: Request):
+    """Подпись «упомяните Glide» под кнопкой «Написать тренеру» в каталоге (TASK-202)."""
+    path = _WEBAPP_DIR / "catalog-contact-attribution.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/catalog-public-url.js")
+def webapp_catalog_public_url_js(request: Request):
+    """Публичные /p/ ссылки для веб-каталога вне Telegram (TASK-191-B)."""
+    path = _WEBAPP_DIR / "catalog-public-url.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
@@ -1579,6 +1687,19 @@ def webapp_mini_app_client_shell_css(request: Request):
     )
 
 
+@app.get("/webapp/glide-deeplink.js")
+def webapp_glide_deeplink_js(request: Request):
+    """startapp-диплинк: ранний redirect из <head> стартовой страницы (TASK-223). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "glide-deeplink.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-shell.js")
 def webapp_mini_app_client_shell_js(request: Request):
     """Client shell — tab navigation, more sheet, navigate helpers. Use ``?v=…`` for long cache."""
@@ -1760,6 +1881,45 @@ def webapp_mini_app_confirm_js():
     )
 
 
+@app.get("/webapp/glide-copy.js")
+def webapp_glide_copy_js(request: Request):
+    """TASK-209: словарь подписей (JS-зеркало src/shared/copy_ru.json). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "glide-copy.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/shared/glide-tokens.css")
+def shared_glide_tokens_css(request: Request):
+    """TASK-209: общие дизайн-токены для static/share/* и static/webapp/*. Use ``?v=…`` for long cache."""
+    path = _SHARED_DIR / "glide-tokens.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/shared/list-scroll-restore.js")
+def shared_list_scroll_restore_js(request: Request):
+    """Скролл списка /c/ и «Лёд сегодня» после возврата с /p/ (no-store убивает bfcache)."""
+    path = _SHARED_DIR / "list-scroll-restore.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 _LANDING_ASSET_MEDIA = {
     ".css": "text/css",
     ".js": "application/javascript",
@@ -1772,9 +1932,8 @@ _LANDING_ASSET_MEDIA = {
 }
 
 
-@app.get("/")
-def landing_page():
-    """Glide marketing landing — vertical entry for trainers."""
+def _trainer_landing_html() -> str:
+    """Glide marketing landing — vertical entry for trainers (PDEC-017 ред. 2: ``/trainers``)."""
     path = _LANDING_DIR / "index.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Landing not found")
@@ -1783,7 +1942,12 @@ def landing_page():
         html = inject_landing_html(html)
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return HTMLResponse(content=html, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
+    return html
+
+
+@app.get("/trainers")
+def trainer_landing_page():
+    return HTMLResponse(content=_trainer_landing_html(), media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/join")

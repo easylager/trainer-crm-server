@@ -280,6 +280,110 @@
       line-height: 1.4;
       opacity: 0.8;
     }
+    .svc-format-seg {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 12px 8px;
+      padding: 10px 12px;
+      align-items: center;
+      border-radius: 12px;
+      background: rgba(128, 128, 128, 0.08);
+      box-sizing: border-box;
+    }
+    .svc-format-seg[hidden] {
+      display: none !important;
+    }
+    .svc-format-seg__label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-right: 2px;
+      width: 100%;
+    }
+    .svc-format-seg__btn {
+      appearance: none;
+      border: 1px solid rgba(128, 128, 128, 0.4);
+      background: var(--tg-theme-bg-color, transparent);
+      color: inherit;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+      min-height: 36px;
+    }
+    .svc-format-seg__btn[aria-pressed="true"] {
+      border-color: var(--tg-theme-button-color, #2481cc);
+      background: var(--tg-theme-button-color, #2481cc);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    .svc-format-seg__btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .profile-role-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 8px;
+    }
+    .profile-role-chip {
+      appearance: none;
+      border: 1px solid rgba(128, 128, 128, 0.32);
+      background: var(--tg-theme-bg-color, transparent);
+      color: inherit;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+    .profile-role-chip:active { transform: scale(0.97); }
+    .profile-role-chip[aria-pressed="true"] {
+      border-color: rgb(var(--accent-rgb));
+      background: rgba(var(--accent-rgb), 0.12);
+      color: rgb(var(--accent-rgb));
+    }
+    .profile-role-addcta {
+      appearance: none;
+      border: 0;
+      background: none;
+      padding: 0;
+      margin: 0 0 4px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      color: rgb(var(--accent-rgb));
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .profile-role-addcta[hidden] { display: none; }
+    .profile-role-addbox {
+      margin: 8px 0 6px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.28);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .profile-role-addbox[hidden] { display: none; }
+    .profile-role-addbox__lab {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+    }
+    .profile-role-addbox__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
     .profile-specialist-roles {
       margin: 4px 0 0;
       font-size: 15px;
@@ -365,7 +469,9 @@
     .service-block { margin-bottom: 14px; }
     .service-block:last-child { margin-bottom: 0; }
     .svc-on-request-hint {
-      margin: -4px 12px 8px;
+      /* Lives inside .svc-tier-body — same left edge as description / input. */
+      margin: 0 0 10px;
+      padding: 0;
       font-size: 12px;
       line-height: 1.35;
       color: var(--tg-theme-hint-color, #8a8a8a);
@@ -445,9 +551,10 @@
     }
     .svc-tier-body {
       width: 100%;
-      padding-left: 28px;
+      /* Same horizontal inset as .svc-format-seg margin — one column under the service. */
+      padding-left: 12px;
       padding-right: max(12px, env(safe-area-inset-right, 0px));
-      margin-top: 8px;
+      margin-top: 0;
       box-sizing: border-box;
     }
     .svc-tier-body[hidden] {
@@ -678,6 +785,7 @@
     }
     .arena-picker {
       margin: 0 0 8px;
+      scroll-margin-top: 12px;
     }
     .arena-chips {
       display: flex;
@@ -685,27 +793,16 @@
       gap: 7px;
       margin: 0 0 10px;
     }
-    .arena-row {
-      border: 1px solid rgba(128, 128, 128, 0.28);
-      border-radius: 13px;
-      background: var(--tg-theme-bg-color, transparent);
-      overflow: hidden;
-    }
-    .arena-row--hidden {
-      border-style: dashed;
-    }
-    .arena-row--open {
-      border-color: rgb(var(--accent-rgb));
-    }
-    .arena-row__top {
+    .arena-chips .arena-row {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 11px 8px 11px 13px;
-      cursor: pointer;
-      user-select: none;
+      border: 1px solid rgba(128, 128, 128, 0.28);
+      border-radius: 13px;
+      background: var(--tg-theme-bg-color, transparent);
     }
-    .arena-row__name {
+    .arena-chips .arena-row__name {
       flex: 1;
       min-width: 0;
       font-size: 14px;
@@ -713,16 +810,7 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .arena-row__chev {
-      flex-shrink: 0;
-      font-size: 11px;
-      color: var(--tg-theme-hint-color);
-      transition: transform 0.18s ease;
-    }
-    .arena-row--open .arena-row__chev {
-      transform: rotate(180deg);
-    }
-    .arena-row__remove {
+    .arena-chips .arena-row__remove {
       flex-shrink: 0;
       width: 28px;
       height: 28px;
@@ -735,95 +823,39 @@
       line-height: 1;
       cursor: pointer;
     }
-    .arena-row__tag {
-      display: block;
-      font-size: 11.5px;
-      color: #c0392b;
-      padding: 0 13px 11px;
+    .arena-chips .arena-row__remove:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
-    .arena-row__panel {
-      display: none;
-      border-top: 1px solid rgba(128, 128, 128, 0.2);
-      padding: 12px 13px 13px;
-    }
-    .arena-row--open .arena-row__panel {
-      display: block;
-    }
-    .arena-opt {
+    /* Default venue: plain field stack — no accent box fighting the venue cards above. */
+    .arena-default-field {
+      margin: 2px 0 14px;
       display: flex;
-      align-items: center;
-      gap: 10px;
+      flex-direction: column;
+      gap: 6px;
     }
-    .arena-opt__txt {
-      flex: 1;
-    }
-    .arena-opt__t {
-      display: block;
+    .arena-default-field__label {
       font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
     }
-    .arena-opt__d {
-      display: block;
-      font-size: 11.5px;
-      color: var(--tg-theme-hint-color);
-      margin-top: 3px;
-      line-height: 1.4;
-    }
-    .arena-sw {
-      flex-shrink: 0;
-      width: 40px;
-      height: 24px;
-      border-radius: 999px;
-      border: 1px solid rgba(128, 128, 128, 0.32);
-      background: var(--tg-theme-bg-color, transparent);
-      position: relative;
-      padding: 0;
-      cursor: pointer;
-      transition: background 0.15s ease, border-color 0.15s ease;
-    }
-    .arena-sw::after {
-      content: "";
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--tg-theme-hint-color);
-      transition: left 0.15s ease, background 0.15s ease;
-    }
-    .arena-sw[aria-checked="true"] {
-      background: rgb(var(--accent-rgb));
-      border-color: rgb(var(--accent-rgb));
-    }
-    .arena-sw[aria-checked="true"]::after {
-      left: 18px;
-      background: var(--tg-theme-bg-color, #fff);
-    }
-    .arena-default-line {
-      margin: 2px 0 12px;
-      padding: 11px 12px;
+    .arena-default-field__select {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 44px;
+      padding: 10px 12px;
       border-radius: 12px;
-      background: rgba(var(--accent-rgb), 0.08);
-      border: 1px solid rgba(var(--accent-rgb), 0.25);
-      font-size: 12.5px;
-      line-height: 1.6;
-    }
-    .arena-default-line select {
-      font: inherit;
-      font-size: 12.5px;
-      color: inherit;
+      border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color, transparent);
-      border: 1px solid rgb(var(--accent-rgb));
-      border-radius: 8px;
-      padding: 2px 6px;
-      margin: 0 2px;
-      max-width: 100%;
+      color: inherit;
+      font: inherit;
+      font-size: 15px;
     }
-    .arena-default-line__foot {
-      display: block;
+    .arena-default-field__hint {
+      margin: 0;
+      font-size: 12.5px;
+      line-height: 1.4;
       color: var(--tg-theme-hint-color);
-      font-size: 11.5px;
-      margin-top: 5px;
     }
     .arena-chips-note {
       margin: 0 0 12px;
@@ -832,62 +864,205 @@
     .arena-chips-note--flash {
       color: rgb(var(--accent-rgb));
     }
-    .arena-picker-search__input {
-      width: 100%;
-      box-sizing: border-box;
-      min-height: 44px;
-      padding: 10px 12px;
-      border-radius: 12px;
+    /* Combobox — same pattern as trainer onboarding (visible list + thumbs). */
+    .arena-combo__label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 6px;
+    }
+    .arena-combo {
       border: 1px solid rgba(128, 128, 128, 0.28);
-      background: var(--tg-theme-bg-color);
+      border-radius: 12px;
+      background: var(--tg-theme-bg-color, transparent);
+      overflow: hidden;
+    }
+    .arena-combo__trigger {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px 0 12px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.22);
+    }
+    .arena-combo__input {
+      appearance: none;
+      flex: 1;
+      min-width: 0;
+      box-sizing: border-box;
+      border: 0;
+      background: transparent;
       color: inherit;
+      caret-color: rgb(var(--accent-rgb));
+      padding: 10px 0;
       font: inherit;
       font-size: 15px;
     }
-    .arena-results {
-      min-height: 112px;
-      margin-top: 10px;
+    .arena-combo__input::placeholder {
+      color: var(--tg-theme-hint-color);
+      opacity: 0.85;
     }
-    .arena-result {
-      display: block;
+    .arena-combo__input:focus { outline: none; }
+    .arena-combo:focus-within {
+      outline: 2px solid rgb(var(--accent-rgb));
+      outline-offset: 1px;
+    }
+    .arena-combo__chev {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      opacity: 0.5;
+      background: currentColor;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E") center / contain no-repeat;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E") center / contain no-repeat;
+      pointer-events: none;
+    }
+    .arena-combo__done {
+      flex-shrink: 0;
+      appearance: none;
+      border: 0;
+      background: none;
+      padding: 6px 2px 6px 8px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 650;
+      color: rgb(var(--accent-rgb));
+      cursor: pointer;
+    }
+    .arena-combo__done[hidden] { display: none; }
+    .arena-combo--focused .arena-combo__list {
+      max-height: 168px;
+    }
+    .arena-combo__panel {
+      padding: 8px;
+    }
+    .arena-combo__browse-hint {
+      margin: 0 2px 8px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .arena-combo__browse-hint[hidden] { display: none; }
+    .arena-combo__list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .arena-combo__row {
+      appearance: none;
       width: 100%;
       text-align: left;
-      padding: 10px 12px;
-      margin-bottom: 6px;
-      border: 0;
-      border-radius: 10px;
-      background: var(--tg-theme-bg-color);
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 11px;
+      align-items: start;
+      border: 1px solid rgba(128, 128, 128, 0.28);
+      background: var(--tg-theme-bg-color, transparent);
       color: inherit;
+      border-radius: 12px;
+      padding: 7px 10px 7px 7px;
+      min-height: 86px;
+      box-sizing: border-box;
+      line-height: 1.25;
       font: inherit;
       cursor: pointer;
     }
-    .arena-result:last-child { margin-bottom: 0; }
-    .arena-result.is-selected {
-      background: rgba(var(--accent-rgb), 0.08);
+    .arena-combo__row.is-on {
+      border-color: rgb(var(--accent-rgb));
+      box-shadow: 0 0 0 1px rgb(var(--accent-rgb));
     }
-    .arena-result__name {
-      display: block;
-      font-size: 15px;
-    }
-    .arena-result__addr {
-      display: block;
-      margin-top: 2px;
-      font-size: 12px;
-      line-height: 1.35;
-      color: var(--tg-theme-hint-color);
-    }
-    .arena-results-idle,
-    .arena-results-empty {
+    .arena-combo__thumb {
+      width: 72px;
+      height: 72px;
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      background: rgba(128, 128, 128, 0.14);
+      flex-shrink: 0;
       margin: 0;
-      padding: 16px 4px;
+    }
+    .arena-combo__thumb img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+    .arena-combo__thumb::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.22) 100%);
+      pointer-events: none;
+    }
+    .arena-combo__thumb--ph {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      line-height: 1;
+    }
+    .arena-combo__thumb--ph::after { display: none; }
+    .arena-combo__thumb-check {
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgb(var(--accent-rgb));
+      color: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      z-index: 2;
+    }
+    .arena-combo__row.is-on .arena-combo__thumb-check { display: flex; }
+    .arena-combo__body {
+      min-width: 0;
+      min-height: 72px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 1px 0;
+    }
+    .arena-combo__name { font-size: 15px; font-weight: 600; line-height: 1.25; }
+    .arena-combo__meta {
+      font-size: 12.5px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .arena-combo__empty {
+      margin: 0;
+      padding: 14px 4px;
       font-size: 13px;
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
-    .arena-results-more {
-      margin: 8px 0 0;
-      font-size: 12px;
-      color: var(--tg-theme-hint-color);
+    .arena-combo__create {
+      appearance: none;
+      width: 100%;
+      text-align: left;
+      border: 1px dashed rgba(128, 128, 128, 0.4);
+      background: transparent;
+      color: rgb(var(--accent-rgb));
+      border-radius: 12px;
+      padding: 12px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
     }
     .hint {
       font-size: 13px;
@@ -3188,3 +3363,89 @@
       color: #c0392b;
       vertical-align: middle;
     }
+
+
+/* Custom service from profile (pending catalog moderation).
+   Use Telegram theme tokens — --app-fg falls back to near-black and vanishes in dark UI. */
+.svc-add-cta {
+  display: block;
+  width: 100%;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px dashed rgba(var(--accent-rgb), 0.45);
+  border-radius: 12px;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-weight: 650;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.svc-add-cta:active { opacity: 0.85; }
+html.trainer-theme-dark .svc-add-cta {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--tg-theme-text-color, #f2f4f7);
+}
+.svc-add-box {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 128, 128, 0.28);
+  background: var(--tg-theme-secondary-bg-color, rgba(128, 128, 128, 0.08));
+  color: var(--tg-theme-text-color);
+}
+.svc-add-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 10px;
+  font: inherit;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, inherit);
+}
+.svc-add-box .svc-format-seg--inline {
+  margin: 0;
+}
+.svc-add-box .hint {
+  color: var(--tg-theme-hint-color);
+}
+.svc-add-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.svc-add-submit,
+.svc-add-cancel {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  background: var(--tg-theme-secondary-bg-color, #fff);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.svc-add-submit {
+  background: var(--tg-theme-button-color, #1a6b4a);
+  border-color: transparent;
+  color: var(--tg-theme-button-text-color, #fff);
+}
+.svc-add-status {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--tg-theme-hint-color, #8a8a8a);
+}
+.svc-add-status.is-error { color: var(--app-danger, #f97066); }
+
+/* Подробнее: keep accent readable on dark cards */
+html.trainer-theme-dark .svc-tier-toggle {
+  color: var(--tg-theme-link-color, var(--tg-theme-button-color, #6ec8b0));
+  border-color: rgba(128, 128, 128, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+}

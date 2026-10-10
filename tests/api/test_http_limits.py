@@ -28,12 +28,24 @@ def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/gopher") == "skip"
     assert rate_limit_bucket_for_path("/api/webhooks/bepaid") == "skip"
     assert rate_limit_bucket_for_path("/api/public/cities") == "public"
+    assert rate_limit_bucket_for_path("/api/public/ice/map-config") == "skip"
+    assert rate_limit_bucket_for_path("/api/public/photos/trainers/x.jpg") == "photo"
     assert rate_limit_bucket_for_path("/api/webapp/schedule") == "webapp"
     assert rate_limit_bucket_for_path("/api/upload/photo") == "upload"
     assert rate_limit_bucket_for_path("/api/trainers") == "default"
+    # TASK-190: публичные страницы и PNG больше не "skip"
+    assert rate_limit_bucket_for_path("/p/minsk/olimp") == "page"
+    assert rate_limit_bucket_for_path("/c/minsk") == "page"
+    assert rate_limit_bucket_for_path("/ice/minsk/today") == "page"
+    assert rate_limit_bucket_for_path("/r/tg/5") == "page"
+    assert rate_limit_bucket_for_path("/p/minsk/olimp/og.png") == "image"
+    assert rate_limit_bucket_for_path("/p/minsk/olimp/session/3/story.png") == "image"
+    assert rate_limit_bucket_for_path("/c/minsk/og.png") == "image"
+    assert rate_limit_bucket_for_path("/ice/minsk/today/og.png") == "image"
+    assert rate_limit_bucket_for_path("/cabinet") == "skip"
 
 
-def test_client_ip_from_x_forwarded_for():
+def test_client_ip_from_x_forwarded_for_is_rightmost_trusted_hop():
     scope = {
         "type": "http",
         "asgi": {"version": "3.0"},
@@ -41,7 +53,7 @@ def test_client_ip_from_x_forwarded_for():
         "path": "/",
         "raw_path": b"/",
         "query_string": b"",
-        "headers": [(b"x-forwarded-for", b"203.0.113.1, 10.0.0.1")],
+        "headers": [(b"x-forwarded-for", b"10.0.0.1, 203.0.113.1")],
         "client": ("127.0.0.1", 12345),
         "scheme": "http",
         "server": ("test", 80),

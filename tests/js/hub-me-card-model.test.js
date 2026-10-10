@@ -870,13 +870,28 @@ describe('happy path: trainer', () => {
     assert.ok(!out.includes('btn-fill'), 'выбор времени и есть действие — заливки тут нет');
   });
 
-  it('окон нет: честный текст и единственный глагол «написать»', () => {
+  it('окон нет: честный текст, «написать» и чип 🔔 «Напомнить»', () => {
     const out = html({ kind: 'trainer', trainer: trainer(), slots: [] });
     assert.ok(!out.includes('me--accent'));
     assert.ok(out.includes('Свободных окон в расписании нет.'));
+    assert.ok(out.includes('Нажмите 🔔'));
     assert.ok(out.includes('btn-fill'));
     assert.ok(out.includes('Написать тренеру'));
+    assert.ok(out.includes('me__do--pair'));
+    assert.ok(out.includes('data-me-action="notify-slots"'));
+    assert.ok(out.includes('me__notify wants-attention'));
+    assert.ok(out.includes('🔔'));
+    assert.ok(out.includes('Напомнить'));
     assert.ok(out.includes('Все тренеры'));
+  });
+
+  it('окон нет + подписка: чип 🔕 «Подписан», без pulse', () => {
+    const out = html({ kind: 'trainer', trainer: trainer(), slots: [], notify_when_slots: true });
+    assert.ok(out.includes('Напоминания включены'));
+    assert.ok(out.includes('me__notify is-active'));
+    assert.ok(out.includes('🔕'));
+    assert.ok(out.includes('Подписан'));
+    assert.ok(!out.includes('wants-attention'));
   });
 });
 

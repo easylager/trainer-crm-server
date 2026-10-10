@@ -5,6 +5,7 @@ import re
 from datetime import date
 from pathlib import Path
 
+from src.ingestion.dates import minsk_today
 from src.ingestion.adapters_minsk_by_egress import (
     _JUNOST_MONTHS,
     _JUNOST_TIME_RANGE,
@@ -16,6 +17,7 @@ from src.ingestion.adapters_minsk_by_egress import (
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
+from src.shared.schedule_basis import SCHEDULE_BASIS_PHOTO
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_CAPTION_FILE = "data/fixtures/minsk-junost/instagram-caption-latest.txt"
@@ -57,7 +59,7 @@ def parse_junost_instagram_caption(
     pivot_year: int | None = None,
 ) -> list[ExtractedSlot]:
     """Parse @junost.by post caption (copy-paste). Returns slots without prices set."""
-    anchor = pivot_year or date.today().year
+    anchor = pivot_year or minsk_today().year
     plain = re.sub(r"\s+", " ", text.replace("\u00a0", " ")).strip()
     day_match = _CAPTION_DATE.search(plain)
     if not day_match:
@@ -120,4 +122,5 @@ class JunostInstagramCaptionParser(IceParser):
                 "slots_parsed": len(slots),
             },
             slots=slots,
+            schedule_basis=SCHEDULE_BASIS_PHOTO if slots else None,
         )

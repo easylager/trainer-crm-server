@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
+from src.ingestion.dates import infer_date_from_day_month, parser_reference_date
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -296,7 +297,7 @@ class ZamokHtmlParser(IceParser):
         duration = int(job.config.get("duration_minutes") or 45)
         suffix = str(job.config.get("slot_start_suffix") or ":15")
         horizon = int(job.config.get("horizon_days") or 7)
-        run_date = date.fromisoformat(str(job.config.get("run_date") or date.today().isoformat()))
+        run_date = parser_reference_date(job.config)
         prices = _zamok_price_map(html)
         tickets_url = _zamok_tickets_url(html)
         weekday_adult = prices.get("weekday_adult")
@@ -341,10 +342,18 @@ class ZamokHtmlParser(IceParser):
         korona_html = await load_korona_rink_html(job)
         if korona_html:
             enrich_zamok_slots(slots, korona_html)
-        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+        from src.shared.schedule_basis import SCHEDULE_BASIS_PROJECTED
+
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=html,
+            slots=slots,
+            schedule_basis=SCHEDULE_BASIS_PROJECTED,
+        )
 
 
-def _price_from_named_row(html: str, needle: str) -> int | None:
+def _price_from_named_row(html: str, needle: str, *, allow_ohm: bool = False) -> int | None:
     needle_u = needle.upper()
     for table in parse_tables(html):
         for row in table:
@@ -353,7 +362,10 @@ def _price_from_named_row(html: str, needle: str) -> int | None:
             joined = " ".join(row).upper()
             if needle_u not in joined:
                 continue
-            if any(skip in joined for skip in ("ПИНГВИН", "ТРИБУН", "ЗАТОЧКА", "ОХМ", "ОФМ")):
+            skip_tokens = ("ПИНГВИН", "ТРИБУН", "ЗАТОЧКА", "ОФМ")
+            if not allow_ohm:
+                skip_tokens = (*skip_tokens, "ОХМ")
+            if any(skip in joined for skip in skip_tokens):
                 continue
             last: int | None = None
             for cell in row:
@@ -411,64 +423,208 @@ def _zamok_price_map(html: str) -> dict[str, int | None]:
     return found
 
 
+def _chizhovka_table_slots(
+    schedule: str,
+    *,
+    reference: date,
+    duration_minutes: int,
+    keep_rink_labels: set[str],
+    kind_raw: str,
+    price_adult: int | None,
+    price_child: int | None,
+    price_rental: int | None,
+    age_note: str | None,
+    capacity_note: str | None = None,
+) -> list[ExtractedSlot]:
+    slots: list[ExtractedSlot] = []
+    for table in parse_tables(schedule):
+        if len(table) < 2 or len(table[0]) < 5:
+            continue
+        header_dates: list[date | None] = []
+        for cell in table[0]:
+            match = _CHIZ_HEADER.search(cell)
+            if not match:
+                header_dates.append(None)
+                continue
+            month = _MONTHS[match.group(2).lower()]
+            header_dates.append(
+                infer_date_from_day_month(int(match.group(1)), month, reference)
+            )
+        if not any(header_dates):
+            continue
+        for row in table[1:]:
+            for idx, cell in enumerate(row):
+                if idx >= len(header_dates) or header_dates[idx] is None:
+                    continue
+                if "билеты проданы" in cell.lower():
+                    continue
+                for hit in _CHIZ_CELL.finditer(cell):
+                    label = hit.group(3).upper()
+                    if label not in keep_rink_labels:
+                        continue
+                    start = _fmt(int(hit.group(1)), int(hit.group(2)))
+                    hour, minute = (int(part) for part in start.split(":"))
+                    end_dt = datetime(2000, 1, 1, hour, minute) + timedelta(minutes=duration_minutes)
+                    slots.append(
+                        ExtractedSlot(
+                            local_date=header_dates[idx].isoformat(),
+                            starts_at_local=start,
+                            ends_at_local=_fmt(end_dt.hour, end_dt.minute),
+                            kind_raw=kind_raw,
+                            price_adult=price_adult,
+                            price_child=price_child,
+                            price_rental=price_rental,
+                            session_label=_CHIZ_RINK_LABELS.get(label, label),
+                            age_note=age_note,
+                            capacity_note=capacity_note,
+                        )
+                    )
+    return slots
+
+
 class ChizhovkaHtmlParser(IceParser):
     parser_key = "chizhovka_html_v1"
 
     async def extract(self, job: ParserJob) -> Extraction:
         schedule = await load_source_text(job, filename="schedule.html", url_keys=("schedule_url",))
         prices = await load_source_text(job, filename="prices.html", url_keys=("prices_url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        reference = parser_reference_date(job.config)
         duration = int(job.config.get("default_duration_minutes") or 60)
         keep = {label.upper() for label in job.config.get("keep_rink_labels") or ["МА", "БА"]}
         adult = _price_from_named_row(prices, "ВЗРОСЛЫЙ БИЛЕТ")
         child = _price_from_named_row(prices, "ДЕТСКИЙ БИЛЕТ")
         rental = _price_from_named_row(prices, "ОДНА ПАРА КОНЬКОВ")
-        slots: list[ExtractedSlot] = []
-        for table in parse_tables(schedule):
-            if len(table) < 2 or len(table[0]) < 5:
-                continue
-            header_dates: list[date | None] = []
-            for cell in table[0]:
-                match = _CHIZ_HEADER.search(cell)
-                if not match:
-                    header_dates.append(None)
-                    continue
-                month = _MONTHS[match.group(2).lower()]
-                header_dates.append(date(year, month, int(match.group(1))))
-            if not any(header_dates):
-                continue
-            for row in table[1:]:
-                for idx, cell in enumerate(row):
-                    if idx >= len(header_dates) or header_dates[idx] is None:
-                        continue
-                    if "билеты проданы" in cell.lower():
-                        continue
-                    for hit in _CHIZ_CELL.finditer(cell):
-                        label = hit.group(3).upper()
-                        if label not in keep:
-                            continue
-                        start = _fmt(int(hit.group(1)), int(hit.group(2)))
-                        hour, minute = (int(part) for part in start.split(":"))
-                        end_dt = datetime(2000, 1, 1, hour, minute) + timedelta(minutes=duration)
-                        slots.append(
-                            ExtractedSlot(
-                                local_date=header_dates[idx].isoformat(),
-                                starts_at_local=start,
-                                ends_at_local=_fmt(end_dt.hour, end_dt.minute),
-                                kind_raw="Массовое катание",
-                                price_adult=adult,
-                                price_child=child,
-                                price_rental=rental,
-                                session_label=_CHIZ_RINK_LABELS.get(label, label),
-                                age_note="детский до 16 лет",
-                            )
-                        )
+        slots = _chizhovka_table_slots(
+            schedule,
+            reference=reference,
+            duration_minutes=duration,
+            keep_rink_labels=keep,
+            kind_raw="Массовое катание",
+            price_adult=adult,
+            price_child=child,
+            price_rental=rental,
+            age_note="детский до 16 лет",
+        )
+        ohm_schedule: str | None = None
+        if job.config.get("ohm_schedule_url"):
+            ohm_schedule = await load_source_text(
+                job, filename="ohm_schedule.html", url_keys=("ohm_schedule_url",)
+            )
+            ohm_adult = _price_from_named_row(prices, "ОХМ", allow_ohm=True)
+            ohm_duration = int(job.config.get("ohm_duration_minutes") or duration)
+            ohm_keep = {
+                label.upper() for label in job.config.get("ohm_keep_rink_labels") or ["МА", "БА"]
+            }
+            slots.extend(
+                _chizhovka_table_slots(
+                    ohm_schedule,
+                    reference=reference,
+                    duration_minutes=ohm_duration,
+                    keep_rink_labels=ohm_keep,
+                    kind_raw="hockey_practice",
+                    price_adult=ohm_adult,
+                    price_child=None,
+                    price_rental=None,
+                    age_note=str(
+                        job.config.get("ohm_age_note")
+                        or "полная хоккейная экипировка; дети 4–14 лет только с инструктором"
+                    ),
+                    capacity_note=str(job.config.get("ohm_capacity_note") or "до 30 билетов"),
+                )
+            )
+        snapshot: dict[str, Any] = {"schedule": schedule, "prices": prices}
+        if ohm_schedule is not None:
+            snapshot["ohm_schedule"] = ohm_schedule
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,
-            snapshot={"schedule": schedule, "prices": prices},
+            snapshot=snapshot,
             slots=slots,
         )
+
+
+def _ledby_ohm_price_bands(job: ParserJob) -> dict[int, dict[str, int]]:
+    """Adult minor units per duration and weekday/weekend (from led.by/ohm/, not child tiers)."""
+    raw = job.config.get("ohm_price_bands")
+    if isinstance(raw, dict) and raw:
+        out: dict[int, dict[str, int]] = {}
+        for key, band in raw.items():
+            try:
+                duration = int(key)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(band, dict):
+                continue
+            row: dict[str, int] = {}
+            for day_key in ("weekday", "weekend"):
+                value = band.get(day_key)
+                if value is not None:
+                    row[day_key] = int(value)
+            if row:
+                out[duration] = row
+        if out:
+            return out
+    return {
+        45: {"weekday": 1050, "weekend": 1350},
+        60: {"weekday": 1400, "weekend": 1800},
+    }
+
+
+def _ledby_column_slots(
+    table: list[list[str]],
+    col_idx: int,
+    *,
+    kind_raw: str,
+    price_book: dict[int, dict[str, Any]],
+    age_note: str | None,
+    capacity_note: str | None = None,
+    ohm_adult_only: bool = False,
+) -> list[ExtractedSlot]:
+    slots: list[ExtractedSlot] = []
+    for row in table[1:]:
+        if not row:
+            continue
+        day_match = _DAY_DATE.search(row[0])
+        if not day_match:
+            continue
+        local_date = date(int(day_match.group(3)), int(day_match.group(2)), int(day_match.group(1)))
+        cell = row[col_idx] if col_idx < len(row) else ""
+        disco = "*" in cell
+        time_match = _LED_TIME.search(cell)
+        if not time_match:
+            continue
+        start = _norm_hhmm(time_match.group(1))
+        hours = int(time_match.group(2))
+        duration = hours * 60
+        hour, minute = (int(part) for part in start.split(":"))
+        end_dt = datetime(2000, 1, 1, hour, minute) + timedelta(minutes=duration)
+        weekend = local_date.weekday() >= 5
+        band = price_book.get(duration) or price_book.get(60) or {}
+        day_key = "weekend" if weekend else "weekday"
+        if ohm_adult_only:
+            adult = band.get(day_key)
+            child = None
+            rental = None
+        else:
+            prices = band.get(day_key) or {}
+            adult = prices.get("adult")
+            child = prices.get("child")
+            rental = band.get("rental")
+        slots.append(
+            ExtractedSlot(
+                local_date=local_date.isoformat(),
+                starts_at_local=start,
+                ends_at_local=_fmt(end_dt.hour, end_dt.minute),
+                kind_raw=kind_raw,
+                price_adult=adult,
+                price_child=child,
+                price_rental=rental,
+                session_label="дискотека" if disco and not ohm_adult_only else None,
+                age_note=age_note,
+                capacity_note=capacity_note,
+            )
+        )
+    return slots
 
 
 class LedByHtmlParser(IceParser):
@@ -478,46 +634,46 @@ class LedByHtmlParser(IceParser):
         timetable = await load_source_text(job, filename="timetable.html", url_keys=("schedule_url",))
         prices_html = await load_source_text(job, filename="mass_skating.html", url_keys=("prices_url",))
         price_book = _ledby_prices(prices_html)
+        ohm_price_book = _ledby_ohm_price_bands(job)
         slots: list[ExtractedSlot] = []
         for table in parse_tables(timetable):
             if not table:
                 continue
             header = [cell.upper() for cell in table[0]]
             mk_idx = next((i for i, cell in enumerate(header) if "МАССОВОЕ КАТАНИЕ" in cell), None)
-            if mk_idx is None:
+            ohm_idx = next(
+                (
+                    i
+                    for i, cell in enumerate(header)
+                    if "ОТРАБОТКА" in cell and "ХОККЕЙ" in cell
+                ),
+                None,
+            )
+            if mk_idx is None and ohm_idx is None:
                 continue
-            for row in table[1:]:
-                if not row:
-                    continue
-                day_match = _DAY_DATE.search(row[0])
-                if not day_match:
-                    continue
-                local_date = date(int(day_match.group(3)), int(day_match.group(2)), int(day_match.group(1)))
-                cell = row[mk_idx] if mk_idx < len(row) else ""
-                disco = "*" in cell
-                time_match = _LED_TIME.search(cell)
-                if not time_match:
-                    continue
-                start = _norm_hhmm(time_match.group(1))
-                hours = int(time_match.group(2))
-                duration = hours * 60
-                hour, minute = (int(part) for part in start.split(":"))
-                end_dt = datetime(2000, 1, 1, hour, minute) + timedelta(minutes=duration)
-                weekend = local_date.weekday() >= 5
-                band = price_book.get(duration) or price_book.get(60) or {}
-                key = "weekend" if weekend else "weekday"
-                prices = band.get(key) or {}
-                slots.append(
-                    ExtractedSlot(
-                        local_date=local_date.isoformat(),
-                        starts_at_local=start,
-                        ends_at_local=_fmt(end_dt.hour, end_dt.minute),
+            if mk_idx is not None:
+                slots.extend(
+                    _ledby_column_slots(
+                        table,
+                        mk_idx,
                         kind_raw="Массовое катание",
-                        price_adult=prices.get("adult"),
-                        price_child=prices.get("child"),
-                        price_rental=band.get("rental"),
-                        session_label="дискотека" if disco else None,
+                        price_book=price_book,
                         age_note="детский с 3 до 14 лет",
+                    )
+                )
+            if ohm_idx is not None:
+                slots.extend(
+                    _ledby_column_slots(
+                        table,
+                        ohm_idx,
+                        kind_raw="hockey_practice",
+                        price_book=ohm_price_book,
+                        age_note=str(
+                            job.config.get("ohm_age_note")
+                            or "только в хоккейной экипировке; дети до 14 лет — шлем с маской"
+                        ),
+                        capacity_note=str(job.config.get("ohm_capacity_note") or "30–35 человек"),
+                        ohm_adult_only=True,
                     )
                 )
         return Extraction(
@@ -600,9 +756,11 @@ class DiamondHtmlParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         html = await load_source_text(job, filename="ledovaya-arena.html", url_keys=("schedule_url", "url"))
-        year = int(job.config.get("run_year") or date.today().year)
+        reference = parser_reference_date(job.config)
         drop = [label.lower() for label in job.config.get("drop_labels") or []]
         keep = [label.lower() for label in job.config.get("keep_labels") or ["мк"]]
+        ohm_labels = [label.lower() for label in job.config.get("ohm_labels") or ["охм"]]
+        ohm_adult_minor = int(job.config.get("ohm_adult_minor") or 1400)
         disco_marker = str(job.config.get("disco_marker") or "ДИСКОТЕКА").lower()
         slots: list[ExtractedSlot] = []
         for title, items in _parse_diamond_columns(html):
@@ -610,18 +768,27 @@ class DiamondHtmlParser(IceParser):
             if not title_match:
                 continue
             month = _MONTHS[title_match.group(3).lower()]
-            local_date = date(year, month, int(title_match.group(2)))
+            local_date = infer_date_from_day_month(int(title_match.group(2)), month, reference)
+            if local_date is None:
+                continue
             weekend = local_date.weekday() >= 5
             adult = 1200 if weekend else 1100
             child = 900 if weekend else 800
             rental = 1000
             for item in items:
                 lower = item.lower()
-                if any(token.lower() in lower for token in drop):
+                is_ohm = any(token in lower for token in ohm_labels)
+                if any(token.lower() in lower for token in drop if token.lower() not in ohm_labels):
                     continue
-                if not any(token in lower for token in keep):
+                is_mk = any(token in lower for token in keep)
+                if not is_mk and not is_ohm:
                     continue
-                label = "дискотека" if disco_marker in lower else None
+                label = "дискотека" if disco_marker in lower and is_mk else None
+                kind_raw = "ОХМ" if is_ohm else "МК"
+                slot_adult = ohm_adult_minor if is_ohm else adult
+                slot_child = None if is_ohm else child
+                slot_rental = None if is_ohm else rental
+                slot_age = None if is_ohm else "дети 3–14 лет включительно"
                 for match in _TIME_RANGE.finditer(item.replace("--", "-")):
                     start = _norm_hhmm(match.group(1))
                     end = _norm_hhmm(match.group(2))
@@ -630,12 +797,12 @@ class DiamondHtmlParser(IceParser):
                             local_date=local_date.isoformat(),
                             starts_at_local=start,
                             ends_at_local=end,
-                            kind_raw="МК",
-                            price_adult=adult,
-                            price_child=child,
-                            price_rental=rental,
+                            kind_raw=kind_raw,
+                            price_adult=slot_adult,
+                            price_child=slot_child,
+                            price_rental=slot_rental,
                             session_label=label,
-                            age_note="дети 3–14 лет включительно",
+                            age_note=slot_age,
                         )
                     )
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)

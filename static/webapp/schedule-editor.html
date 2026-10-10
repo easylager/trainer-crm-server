@@ -16,10 +16,10 @@
   <link rel="stylesheet" href="mini-app-components.css?v=2026100518" />
   <script src="mini-app-confirm.js?v=2026100518"></script>
   <script src="mini-app-trainer-gate.js?v=2026100518"></script>
-<link rel="preload" href="schedule-editor-main.js?v=2026100518" as="script" />
+<link rel="preload" href="schedule-editor-main.js?v=2026101002" as="script" />
   <link rel="preload" href="mini-app-trainer-shell.js?v=2026100518" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=2026100518" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=2026100518" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=2026100902" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026100518" />
   <link rel="stylesheet" href="mini-app-trainer-shell.css?v=2026100518" />
@@ -146,8 +146,14 @@
       </div>
     </section>
   </div>
-  <nav id="scheduleWeekDayStrip" class="schedule-week-day-strip" aria-label="Выбор дня и переключение недели" hidden></nav>
   </div>
+
+  <!--
+    Outside #screenMain on purpose: on iOS/Telegram WebView a position:fixed bar inside
+    display:none never reliably comes back after booking detail — strip vanished on «Назад».
+    Visibility is still owned by syncScheduleWeekDayStripVisibility().
+  -->
+  <nav id="scheduleWeekDayStrip" class="schedule-week-day-strip" aria-label="Выбор дня и переключение недели" hidden></nav>
 
   <div id="screenBookingDetail" data-screen>
     <div class="header booking-detail-screen-header">
@@ -875,7 +881,7 @@
   <script src="trainer-client-relay-ui.js?v=2026100518"></script>
   <script src="trainer-relay-helpers.js?v=2026100518"></script>
   <script src="mini-app-trainer-pending-inbox.js?v=2026100518"></script>
-  <script defer src="schedule-editor-main.js?v=2026100518"></script>
+  <script defer src="schedule-editor-main.js?v=2026101002"></script>
   <script src="mini-app-more-icons.js?v=2026100518"></script>
   <script src="mini-app-trainer-shell.js?v=2026100518"></script>
 </body>

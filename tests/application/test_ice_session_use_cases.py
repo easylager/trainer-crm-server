@@ -187,7 +187,7 @@ def test_byn_and_rub_sessions_are_not_summed_together() -> None:
 
 
 def test_kind_allowlist() -> None:
-    for kind in ("public_skate", "open_ice", "rental", "school_group", "event"):
+    for kind in ("public_skate", "open_ice", "rental", "school_group", "event", "hockey_practice"):
         validate_kind(kind)
     with pytest.raises(IceSessionValidationError):
         validate_kind("hockey_game")

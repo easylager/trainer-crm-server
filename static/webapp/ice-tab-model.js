@@ -14,20 +14,79 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var ICE_STATE_KEY = 'tcb_ice_tab_v1';
-  var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
-  var MINSK_TZ = 'Europe/Minsk';
+  /* TASK-182: часы работы — общий модуль с карточкой места (opening-hours.js). */
+  var OH =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./opening-hours.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.OpeningHours
+        : null;
+  /* TASK-184: календарь и «сейчас» — Europe/Minsk (или TZ арены). */
+  var MT =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./minsk-time.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.MinskTime
+        : null;
+  /* TASK-209: общий словарь подписей — сайт и Mini App говорят одними словами. */
+  var GC =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./glide-copy.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.GlideCopy
+        : null;
 
-  function ymdInMinsk(d) {
-    try {
-      return new Intl.DateTimeFormat('en-CA', { timeZone: MINSK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-    } catch (e) {
-      return '';
-    }
+  var ICE_STATE_KEY = 'tcb_ice_tab_v1';
+  /** Окно «Когда» между визитами в каталог (localStorage); sessionStorage — полный снимок вкладки. */
+  var ICE_WHEN_PREF_KEY = 'tcb_ice_when_pref_v1';
+  /**
+   * Скролл списка после возврата с карточки арены.
+   * Отдельный ключ: общий ``ICE_STATE_KEY`` при boot перезаписывается через persist()
+   * с scrollY=0 (страница ещё сверху) и стирает позицию до onListLoaded.
+   */
+  var ICE_SCROLL_KEY = 'tcb_ice_list_scroll_v1';
+  var INTENTS = { skate: 'skate', coach: 'coach', group: 'group', ohm: 'ohm' };
+  var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
+
+  function staleApi() {
+    return rootRef.ScheduleStalenessModel || null;
   }
 
-  function scheduleStaleWarn() {
-    return false;
+  function scheduleModeApi() {
+    return rootRef.ArenaScheduleModeModel || null;
+  }
+
+  function ymdInMinsk(d) {
+    return MT ? MT.dateIso(d) : '';
+  }
+
+  function scheduleStaleWarn(freshness) {
+    var S = staleApi();
+    if (S) return S.shouldWarnScheduleStale(freshness);
+    return !!(freshness && freshness.schedule_stale && !freshness.schedule_very_stale);
+  }
+
+  /** TASK-180: > 72 ч без удачного прогона — сеансы не показываем как текущее расписание. */
+  function scheduleVeryStale(item) {
+    item = item || {};
+    if (String((item.live || {}).kind || '') === 'unconfirmed') return true;
+    var freshness = item.freshness || {};
+    var S = staleApi();
+    if (S) return S.stalenessLevel(freshness) === 'very_stale';
+    return !!(freshness.schedule_stale && freshness.schedule_very_stale);
+  }
+
+  function unconfirmedLine(item, now) {
+    item = item || {};
+    var live = item.live || {};
+    if (String(live.kind || '') === 'unconfirmed' && live.text) return String(live.text).trim();
+    var S = staleApi();
+    var opts = {
+      hasPhone: !!String(item.phone || '').trim(),
+      hasSite: !!String(item.website_url || '').trim(),
+    };
+    var line = S ? S.veryStaleNote(item.freshness || {}, now || new Date(), opts) : '';
+    return line || 'Расписание не подтверждено — уточните у катка';
   }
 
   function pluralRu(n, one, few, many) {
@@ -42,7 +101,12 @@
   function buildListUrl(opts) {
     opts = opts || {};
     var intent = opts.intent || INTENTS.skate;
-    if (intent !== INTENTS.skate && intent !== INTENTS.coach && intent !== INTENTS.group) {
+    if (
+      intent !== INTENTS.skate &&
+      intent !== INTENTS.coach &&
+      intent !== INTENTS.group &&
+      intent !== INTENTS.ohm
+    ) {
       intent = INTENTS.skate;
     }
     var params = ['intent=' + encodeURIComponent(intent)];
@@ -59,6 +123,9 @@
     var timeQ = whenListQuery(opts.when, opts.whenDay);
     if (timeQ.day) params.push('day=' + encodeURIComponent(timeQ.day));
     else if (timeQ.when) params.push('when=' + encodeURIComponent(timeQ.when));
+    if (opts.svc === 'service' || opts.svc === 'sharpening' || opts.svc === 'rental') {
+      params.push('svc=' + encodeURIComponent(opts.svc));
+    }
     return '/api/public/ice/arenas?' + params.join('&');
   }
 
@@ -134,12 +201,87 @@
     return out;
   }
 
-  /** Род каталога в шапке: места (смешанная лента), тренеры или только магазины. */
+  /** Род каталога в шапке: места, ОХМ, тренеры или только магазины. */
   function catalogScope(intent, venueTypes) {
     if (coerceIntent(intent) === INTENTS.coach) return 'coach';
+    if (coerceIntent(intent) === INTENTS.ohm) return 'ohm';
     var v = venueTypes || [];
     if (v.length === 1 && v[0] === 'shop') return 'shop';
     return 'places';
+  }
+
+  function copyLabel(key, fallback) {
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t(key);
+      if (label && label !== key) return String(label);
+    }
+    return fallback;
+  }
+
+  function hockeyChipLabel() {
+    return copyLabel('chip.hockey', 'Хоккей');
+  }
+
+  /**
+   * TASK-182 (F1). Автопереход на «Тренеров» — только когда сервер честно сказал
+   * «в городе нет льда»: лента мест (не магазины), без чипа другого типа, total = 0
+   * в ответе сервера. Пустота после клиентских фильтров (магазины + «Открыто сейчас»
+   * в 23:30) — это пустой результат фильтра, а не повод менять выбор человека.
+   */
+  function noIceInCity(intent, venueTypes, data) {
+    if (coerceIntent(intent) !== INTENTS.skate) return false;
+    if (catalogScope(intent, venueTypes) !== 'places') return false;
+    var v = venueTypes || [];
+    if (v.length && !(v.length === 1 && v[0] === 'ice')) return false;
+    if (!data || typeof data !== 'object') return false;
+    var total = data.total != null ? Number(data.total) : (data.items || []).length;
+    return total === 0 && !(data.items || []).length;
+  }
+
+  /** Страница списка от сервера: лимит первой страницы и страниц для карты. */
+  var LIST_PAGE_LIMIT = 50;
+  /* Сервер режет limit до MAX_LIST_LIMIT = 100 (arena_public_use_cases.py). */
+  var MAP_PAGE_LIMIT = 100;
+  /* Страховка от бесконечной догрузки: 20 × 100 мест на город — с запасом. */
+  var MAX_PAGES = 20;
+
+  /** Дописать страницу к списку без дублей по id (страницы считаются по offset). */
+  function appendPage(items, more) {
+    var out = (items || []).slice();
+    var seen = {};
+    for (var i = 0; i < out.length; i++) {
+      if (out[i] && out[i].id != null) seen[String(out[i].id)] = true;
+    }
+    (more || []).forEach(function (it) {
+      if (it && it.id != null) {
+        if (seen[String(it.id)]) return;
+        seen[String(it.id)] = true;
+      }
+      out.push(it);
+    });
+    return out;
+  }
+
+  /**
+   * «Показать ещё» под лентой: есть ли следующая страница. Места — по next_cursor
+   * сервера; тренеры — по total и offset (= уже показанным).
+   */
+  function loadMoreView(opts) {
+    opts = opts || {};
+    var shown = (opts.items || []).length;
+    var intent = coerceIntent(opts.intent);
+    if (opts.loading || !shown) return null;
+    if (catalogScope(intent, opts.venueTypes) === 'shop') return null;
+    var more = false;
+    if (intent === INTENTS.coach) more = Number(opts.total) > shown;
+    else more = !!opts.cursor;
+    if (!more) return null;
+    var left = Math.max(0, Number(opts.total) - shown);
+    return {
+      label: opts.loadingMore ? 'Загружаем…' : 'Показать ещё',
+      busy: !!opts.loadingMore,
+      left: left,
+    };
   }
 
   function sumFacetCounts(facets, keys) {
@@ -149,13 +291,18 @@
   }
 
   /**
-   * Верхний сегмент «Места · Тренеры · Магазины». До первого ответа arenas — подсказки
-   * из объекта города (skate_count, trainer_count, place_count).
+   * Верхний сегмент — те же пять слов, что плитки города на сайте, в том же порядке:
+   * Покататься · Хоккей · Заточка · Магазины · Тренеры. Пустой раздел не показываем.
+   *
+   * «Магазины» нельзя вешать только на venue_type_facets ответа arenas: вкладка
+   * «Тренеры» фасеты не привозит, и после возврата с карточки тренера сегмент
+   * пропадал, хотя в городе магазины есть.
    */
   function catalogModesView(opts) {
     opts = opts || {};
     var facets = opts.facets || [];
     var scope = catalogScope(opts.intent, opts.venueTypes);
+    var serviceOn = opts.placeService === 'service';
     var modes = [];
     var placesN = sumFacetCounts(facets, PLACE_MENU_KEYS);
     if (!facets.length) {
@@ -164,17 +311,58 @@
         (Number(opts.placeCountHint) || 0);
     }
     if (placesN > 0) {
-      modes.push({ id: 'places', label: 'Места', active: scope === 'places' });
+      modes.push({
+        id: 'places',
+        label: copyLabel('route.skate', 'Покататься'),
+        active: scope === 'places' && !serviceOn,
+      });
+    }
+    var ohmN = Number(opts.ohmCount);
+    if (!isNaN(ohmN) && ohmN > 0) {
+      modes.push({ id: 'ohm', label: hockeyChipLabel(), active: scope === 'ohm' });
+    }
+    var serviceN = Math.max(0, Number(opts.serviceCount) || 0);
+    if (serviceN > 0 || serviceOn) {
+      modes.push({
+        id: 'service',
+        label: copyLabel('route.service', 'Заточка'),
+        active: serviceOn && scope === 'places',
+      });
+    }
+    var shops = facetCount(facets, 'shop');
+    if (!(shops > 0)) shops = Number(opts.shopCount) || 0;
+    if (shops > 0) {
+      modes.push({ id: 'shop', label: copyLabel('route.shops', 'Магазины'), active: scope === 'shop' });
     }
     var trainers = Number(opts.trainerCount);
     if (isNaN(trainers)) trainers = 0;
     if (trainers > 0) {
-      modes.push({ id: 'coach', label: 'Тренеры', active: scope === 'coach' });
-    }
-    if (facetCount(facets, 'shop') > 0) {
-      modes.push({ id: 'shop', label: 'Магазины', active: scope === 'shop' });
+      modes.push({ id: 'coach', label: copyLabel('route.trainers', 'Тренеры'), active: scope === 'coach' });
     }
     return modes;
+  }
+
+  /** Строка под разделом. На кнопке её нет: человек видит пояснение один раз, уже внутри. */
+  function sectionHint(scope, placeService) {
+    if (placeService === 'service') return copyLabel('route.service.hint', 'заточка и прокат');
+    if (scope === 'ohm') return copyLabel('route.hockey.hint', 'открытая тренировка, ОХМ');
+    if (scope === 'places') return copyLabel('route.skate.hint', 'каток, зал или трасса');
+    return '';
+  }
+
+  /**
+   * Счёт мест с заточкой или прокатом. В шапке это отдельный раздел, не чип под «Покататься».
+   * Ноль мест — раздела нет, пока его сами не включили.
+   */
+  function placeServiceChipView(count, active) {
+    var n = Math.max(0, Number(count) || 0);
+    if (n <= 0 && !active) return null;
+    return {
+      key: 'service',
+      label: copyLabel('route.service', 'Заточка'),
+      count: n,
+      active: !!active,
+    };
   }
 
   /** Хореография/бассейн — в меню, не в underline-ряду из трёх типов. */
@@ -246,9 +434,11 @@
   }
 
   function applyCatalogMode(mode) {
-    if (mode === 'coach') return { intent: INTENTS.coach, venueTypes: [] };
-    if (mode === 'shop') return { intent: INTENTS.skate, venueTypes: ['shop'] };
-    return { intent: INTENTS.skate, venueTypes: [] };
+    if (mode === 'coach') return { intent: INTENTS.coach, venueTypes: [], placeService: '' };
+    if (mode === 'ohm') return { intent: INTENTS.ohm, venueTypes: [], placeService: '' };
+    if (mode === 'shop') return { intent: INTENTS.skate, venueTypes: ['shop'], placeService: '' };
+    if (mode === 'service') return { intent: INTENTS.skate, venueTypes: [], placeService: 'service' };
+    return { intent: INTENTS.skate, venueTypes: [], placeService: '' };
   }
 
   /**
@@ -258,18 +448,21 @@
   function catalogStateAfterCityChange(city, current) {
     current = current || {};
     return {
-      intent: pickCityIntent(city, current.intent),
+      intent: pickCityIntent(city, cityIntentBasis(current)),
       venueTypes: [],
       shopService: '',
       shopDiscipline: '',
       shopOpenNow: false,
       shopWhen: 'any',
+      placeService: '',
     };
   }
 
-  function catalogSearchPlaceholder(scope) {
+  function catalogSearchPlaceholder(scope, placeService) {
+    if (placeService === 'service') return 'Заточка или прокат';
     if (scope === 'coach') return 'Имя тренера';
-    if (scope === 'shop') return 'Магазин или заточка';
+    if (scope === 'shop') return 'Магазин';
+    if (scope === 'ohm') return 'Каток с ОХМ';
     return 'Каток, зал или трасса';
   }
 
@@ -298,12 +491,10 @@
 
   var SHOP_HOURS_WHEN = [
     { key: 'any', label: 'Любое время' },
-    { key: 'evening', label: 'Сегодня вечером' },
-    { key: 'tomorrow', label: 'Завтра' },
-    { key: 'weekend', label: 'В выходные' },
+    { key: 'evening', label: GC ? GC.t('when.evening') : 'Сегодня вечером' },
+    { key: 'tomorrow', label: GC ? GC.t('when.tomorrow') : 'Завтра' },
+    { key: 'weekend', label: GC ? GC.t('when.weekend') : 'В выходные' },
   ];
-
-  var WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
   function shopServicesOf(item) {
     return (item && item.shop_services) || [];
@@ -332,114 +523,35 @@
     );
   }
 
-  function normalizeHhmm(raw) {
-    var text = String(raw || '').trim().replace('.', ':');
-    if (!text) return '';
-    var parts = text.split(':');
-    var h = parseInt(parts[0], 10);
-    var m = parseInt(parts[1] || '0', 10);
-    if (isNaN(h) || isNaN(m) || h < 0 || h > 24 || m < 0 || m > 59) return '';
-    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
-  }
-
-  function hhmmToMinutes(hhmm) {
-    var n = normalizeHhmm(hhmm);
-    if (!n) return null;
-    var p = n.split(':');
-    return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
-  }
-
-  function parseDayIntervals(raw) {
-    if (!raw) return [];
-    if (raw.length && raw[0] && raw[0].length === 2 && typeof raw[0][0] === 'string') {
-      var out = [];
-      for (var i = 0; i < raw.length; i++) {
-        var o = normalizeHhmm(raw[i][0]);
-        var c = normalizeHhmm(raw[i][1]);
-        if (o && c) out.push([o, c]);
-      }
-      return out;
-    }
-    if (raw.length === 2) {
-      var o = normalizeHhmm(raw[0]);
-      var c = normalizeHhmm(raw[1]);
-      return o && c ? [[o, c]] : [];
-    }
-    return [];
-  }
-
   function intervalsForWeekday(openingHours, weekday) {
-    var hours = openingHours && typeof openingHours === 'object' ? openingHours : {};
-    var weekly = hours.weekly;
-    if (weekly && typeof weekly === 'object') {
-      return parseDayIntervals(weekly[WEEKDAY_KEYS[weekday % 7]]);
-    }
-    var daily = hours.daily;
-    if (daily && typeof daily === 'object') {
-      var o = normalizeHhmm(daily.open);
-      var c = normalizeHhmm(daily.close);
-      return o && c ? [[o, c]] : [];
-    }
-    return [];
+    return OH.intervalsForWeekday(openingHours, weekday);
   }
 
   function weekdayMinsk(now) {
-    now = now instanceof Date ? now : new Date();
-    try {
-      var wd = new Intl.DateTimeFormat('en-US', { timeZone: MINSK_TZ, weekday: 'short' }).format(now);
-      var map = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
-      return map[wd] != null ? map[wd] : 0;
-    } catch (e) {
-      return (now.getDay() + 6) % 7;
-    }
+    return MT.weekdayMon0(now);
   }
 
   function hhmmMinsk(now) {
-    now = now instanceof Date ? now : new Date();
-    try {
-      return new Intl.DateTimeFormat('en-GB', {
-        timeZone: MINSK_TZ,
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-      }).format(now);
-    } catch (e) {
-      return normalizeHhmm(now.getHours() + ':' + now.getMinutes());
-    }
+    return OH.normHhmm(MT.hhmm(now));
   }
 
   function shopOpenAtMinutes(item, weekday, nowMins) {
-    var intervals = intervalsForWeekday(item.opening_hours, weekday);
-    for (var i = 0; i < intervals.length; i++) {
-      var open = hhmmToMinutes(intervals[i][0]);
-      var close = hhmmToMinutes(intervals[i][1]);
-      if (open == null || close == null) continue;
-      if (nowMins >= open && nowMins < close) return true;
-    }
-    return false;
+    return OH.isOpenAt(item.opening_hours, weekday, nowMins);
   }
 
   function shopOpenOnWeekday(item, weekday) {
-    return intervalsForWeekday(item.opening_hours, weekday).length > 0;
+    return OH.opensOnWeekday(item.opening_hours, weekday);
   }
 
   function shopOpenEveningToday(item, weekday, nowMins) {
-    var intervals = intervalsForWeekday(item.opening_hours, weekday);
-    var evening = 18 * 60;
-    for (var i = 0; i < intervals.length; i++) {
-      var open = hhmmToMinutes(intervals[i][0]);
-      var close = hhmmToMinutes(intervals[i][1]);
-      if (open == null || close == null) continue;
-      if (close > evening && open < close && nowMins < close) return true;
-    }
-    return false;
+    return OH.openAfterToday(item.opening_hours, weekday, nowMins, 18 * 60);
   }
 
   function shopMatchesHours(item, filters, now) {
     filters = filters || {};
     now = now instanceof Date ? now : new Date();
     var today = weekdayMinsk(now);
-    var nowMins = hhmmToMinutes(hhmmMinsk(now));
+    var nowMins = OH.toMinutes(hhmmMinsk(now));
     if (filters.shopOpenNow) {
       if (!item.opening_hours) return false;
       return shopOpenAtMinutes(item, today, nowMins != null ? nowMins : 0);
@@ -639,9 +751,9 @@
 
   var WHEN_HORIZON_DAYS = 14;
   var WHEN_PRESET_LABELS = {
-    today_evening: 'Сегодня вечером',
-    tomorrow: 'Завтра',
-    weekend: 'Выходные',
+    today_evening: GC ? GC.t('when.evening') : 'Сегодня вечером',
+    tomorrow: GC ? GC.t('when.tomorrow') : 'Завтра',
+    weekend: GC ? GC.t('when.weekend') : 'В выходные',
     any: 'Любое время',
   };
 
@@ -654,7 +766,7 @@
 
   function formatWhenDayLabel(iso, todayIso) {
     todayIso = todayIso || minskDateIso(new Date());
-    if (iso === addDaysIso(todayIso, 1)) return 'Завтра';
+    if (iso === addDaysIso(todayIso, 1)) return GC ? GC.t('when.tomorrow') : 'Завтра';
     var bits = String(iso).split('-');
     var wd = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]))).getUTCDay();
     return WEEKDAYS_SHORT_RU[wd] + ', ' + bits[2] + '.' + bits[1];
@@ -699,7 +811,7 @@
 
   function whenSelectionActive(when, whenDay, todayIso, row, resolvedKey) {
     todayIso = todayIso || minskDateIso(new Date());
-    var w = when || 'auto';
+    var w = when || 'any';
     var tomorrow = addDaysIso(todayIso, 1);
     if (row.kind === 'preset') {
       if (row.id === 'any') return w === 'any';
@@ -715,13 +827,13 @@
 
   /**
    * Меню «Когда»: вечер, завтра, один будний день, раскрытие остальных будней,
-   * выходные и любое время. Сб/вс — только «Выходные».
+   * выходные и любое время. Сб/вс — только «В выходные».
    */
   function whenMenuView(opts) {
     opts = opts || {};
     var now = opts.now instanceof Date ? opts.now : new Date();
     var todayIso = minskDateIso(now);
-    var when = opts.when || 'auto';
+    var when = opts.when || 'any';
     var whenDay = String(opts.whenDay || '').trim();
     var resolvedKey = opts.resolvedKey || 'any';
     var expanded = !!opts.menuExpanded;
@@ -733,14 +845,14 @@
     rows.push({
       kind: 'preset',
       id: 'today_evening',
-      label: 'Сегодня вечером',
+      label: GC ? GC.t('when.evening') : 'Сегодня вечером',
       sub: 'с 16:00',
       active: whenSelectionActive(when, whenDay, todayIso, { kind: 'preset', id: 'today_evening' }, resolvedKey),
     });
     rows.push({
       kind: 'day',
       date: tomorrow,
-      label: 'Завтра',
+      label: GC ? GC.t('when.tomorrow') : 'Завтра',
       active: whenSelectionActive(when, whenDay, todayIso, { kind: 'day', date: tomorrow }, resolvedKey),
     });
     rows.push({
@@ -772,7 +884,7 @@
       {
         kind: 'preset',
         id: 'weekend',
-        label: 'Выходные',
+        label: GC ? GC.t('when.weekend') : 'В выходные',
         sub: 'сб–вс',
         active: whenSelectionActive(when, whenDay, todayIso, { kind: 'preset', id: 'weekend' }, resolvedKey),
       },
@@ -787,8 +899,9 @@
   }
 
   function whenPickerLabel(when, whenDay, resolvedKey) {
-    var w = when || 'auto';
+    var w = when || 'any';
     if (w === 'day' && whenDay) return formatWhenDayLabel(whenDay, minskDateIso(new Date()));
+    /* ``auto`` — legacy: подпись не должна подменяться серверным окном, если клиент уже на «any». */
     if (w === 'auto') return WHEN_PRESET_LABELS[resolvedKey] || 'Любое время';
     return WHEN_PRESET_LABELS[w] || 'Любое время';
   }
@@ -826,10 +939,70 @@
     };
   }
 
-  function buildSearchUrl(q, limit) {
+  function buildSearchUrl(q, limit, cityId) {
     var params = ['q=' + encodeURIComponent(String(q || '').trim())];
     if (limit) params.push('limit=' + encodeURIComponent(String(limit)));
+    if (cityId != null && cityId !== '') params.push('city_id=' + encodeURIComponent(String(cityId)));
     return '/api/public/search?' + params.join('&');
+  }
+
+  function foldSearch(value) {
+    return String(value || '').toLowerCase().replace(/ё/g, 'е');
+  }
+
+  function escapeSearchHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Bold the typed piece inside a hit. Matching is on the folded string, so
+   * «чижовки» highlights «Чижов» inside «Чижовка».
+   */
+  function highlightSearch(text, query) {
+    var raw = String(text || '');
+    if (!raw) return '';
+    var words = foldSearch(query).split(/[^0-9a-zа-я]+/).filter(function (w) { return w.length >= 2; });
+    if (!words.length) return escapeSearchHtml(raw);
+    var folded = foldSearch(raw);
+    var ranges = [];
+    words.forEach(function (word) {
+      var needles = [word];
+      if (word.length >= 5) needles.push(word.slice(0, word.length - 1));
+      if (word.length >= 6) needles.push(word.slice(0, word.length - 2));
+      var placed = false;
+      needles.forEach(function (needle) {
+        if (placed || needle.length < 4 && needle !== word) return;
+        var from = 0;
+        while (from < folded.length) {
+          var at = folded.indexOf(needle, from);
+          if (at < 0) break;
+          ranges.push([at, at + needle.length]);
+          from = at + needle.length;
+          placed = true;
+        }
+      });
+    });
+    if (!ranges.length) return escapeSearchHtml(raw);
+    ranges.sort(function (a, b) { return a[0] - b[0] || b[1] - a[1]; });
+    var merged = [];
+    ranges.forEach(function (range) {
+      var last = merged[merged.length - 1];
+      if (!last || range[0] > last[1]) merged.push(range.slice());
+      else if (range[1] > last[1]) last[1] = range[1];
+    });
+    var html = '';
+    var cursor = 0;
+    merged.forEach(function (range) {
+      html += escapeSearchHtml(raw.slice(cursor, range[0]));
+      html += '<mark>' + escapeSearchHtml(raw.slice(range[0], range[1])) + '</mark>';
+      cursor = range[1];
+    });
+    html += escapeSearchHtml(raw.slice(cursor));
+    return html;
   }
 
   function buildTrainersUrl(opts) {
@@ -938,15 +1111,34 @@
     return list.slice(0, cap);
   }
 
+  /**
+   * Чей выбор вкладки уважать при смене города. Автопереход на тренеров
+   * (autoCoach) — решение прошлого города, не человека: для нового города
+   * исходим из «Катания», иначе город с катками откроется на тренерах.
+   */
+  function cityIntentBasis(current) {
+    current = current || {};
+    if (current.autoCoach && current.intent === INTENTS.coach) return INTENTS.skate;
+    return current.intent;
+  }
+
   function pickCityIntent(city, currentIntent) {
     var skate = Number(city && city.skate_count);
+    var ohm = Number(city && city.ohm_count);
     var trainers = Number(city && city.trainer_count);
     var known = city && (city.skate_count != null || city.trainer_count != null);
-    if (!known) return currentIntent === INTENTS.coach ? INTENTS.coach : INTENTS.skate;
+    if (!known) {
+      if (currentIntent === INTENTS.coach) return INTENTS.coach;
+      if (currentIntent === INTENTS.ohm) return INTENTS.ohm;
+      return INTENTS.skate;
+    }
     if (currentIntent === INTENTS.coach && trainers > 0) return INTENTS.coach;
+    if (currentIntent === INTENTS.ohm && ohm > 0) return INTENTS.ohm;
     if (skate > 0) return INTENTS.skate;
     if (trainers > 0) return INTENTS.coach;
-    return currentIntent === INTENTS.coach ? INTENTS.coach : INTENTS.skate;
+    if (currentIntent === INTENTS.coach) return INTENTS.coach;
+    if (currentIntent === INTENTS.ohm) return INTENTS.ohm;
+    return INTENTS.skate;
   }
 
   function serviceChipLabel(name) {
@@ -974,7 +1166,13 @@
 
   function coerceIntent(intent) {
     if (intent === INTENTS.coach) return INTENTS.coach;
+    if (intent === INTENTS.ohm) return INTENTS.ohm;
     return INTENTS.skate;
+  }
+
+  /** Лента арен: ОХМ — отдельная линза, иначе скелетон «Ищем ОХМ…» не снимается. */
+  function arenaListLens(intent) {
+    return coerceIntent(intent) === INTENTS.ohm ? INTENTS.ohm : INTENTS.skate;
   }
 
   function catalogHref() {
@@ -995,7 +1193,12 @@
       return null;
     }
     var intent = String(params.get('intent') || '').trim();
-    if (intent === INTENTS.skate || intent === INTENTS.coach || intent === INTENTS.group) {
+    if (
+      intent === INTENTS.skate ||
+      intent === INTENTS.coach ||
+      intent === INTENTS.group ||
+      intent === INTENTS.ohm
+    ) {
       return intent;
     }
     return null;
@@ -1030,6 +1233,33 @@
     }
   }
 
+  /**
+   * intent=service и svc=service — не линзы Ice; открываем раздел «Заточка» в каталоге мест.
+   */
+  function placeServiceBootFromSearch(search) {
+    var raw = String(search || '');
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    try {
+      var params = new URLSearchParams(raw);
+      var intent = String(params.get('intent') || '').trim().toLowerCase();
+      var svc = String(params.get('svc') || '').trim().toLowerCase();
+      if (intent === 'service' || svc === 'service') {
+        return { intent: INTENTS.skate, venueTypes: [], placeService: 'service' };
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
+  }
+
+  /** Ссылка на другой раздел каталога — не накладываем сохранённую «Заточку». */
+  function urlBlocksSavedPlaceService(search) {
+    var urlIntent = intentFromSearch(search);
+    if (urlIntent === INTENTS.coach || urlIntent === INTENTS.ohm) return true;
+    if (venueFromSearch(search) === 'shop') return true;
+    return false;
+  }
+
   function normalizeVenueTypes(list) {
     var out = [];
     var seen = {};
@@ -1046,9 +1276,9 @@
   function whenChipsView(selected, resolvedKey) {
     var active = selected && selected !== 'auto' ? selected : resolvedKey || 'any';
     return [
-      ['today_evening', 'Сегодня вечером'],
-      ['tomorrow', 'Завтра'],
-      ['weekend', 'Выходные'],
+      ['today_evening', GC ? GC.t('when.evening') : 'Сегодня вечером'],
+      ['tomorrow', GC ? GC.t('when.tomorrow') : 'Завтра'],
+      ['weekend', GC ? GC.t('when.weekend') : 'В выходные'],
       ['any', 'Любое время'],
     ].map(function (c) {
       return { key: c[0], label: c[1], active: c[0] === active };
@@ -1128,6 +1358,8 @@
     if (!saved || typeof saved !== 'object') return null;
     var when = String(saved.when || '').trim().toLowerCase();
     var whenDay = String(saved.whenDay || '').trim();
+    /* Раньше дефолтом был auto («Сегодня вечером» на сервере) — не путаем с явным выбором. */
+    if (when === 'auto') return { when: 'any', whenDay: '' };
     if (when === 'day') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(whenDay)) return null;
       return { when: 'day', whenDay: whenDay };
@@ -1169,6 +1401,9 @@
     if (String(live.kind || '') === 'session' && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
       href += '&day=' + day;
       if (live.session_id != null) href += '&s=' + encodeURIComponent(String(live.session_id));
+    }
+    if (typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.arenaHref) {
+      return CatalogPublicUrl.arenaHref(item, href);
     }
     return href;
   }
@@ -1253,23 +1488,34 @@
     return s;
   }
 
+  /* TASK-196: валюта услуги — код из полезной нагрузки (как currency_code у
+     сеансов льда). Отображение — конвенция TASK-109 для цен тренера: RUB
+     знаком ₽, BYN буквами (глиф НБРБ Telegram не рисует). */
+  function priceCurrencyLabel(code) {
+    var c = String(code || '').trim().toUpperCase();
+    return c === 'RUB' ? '₽' : (c || 'BYN');
+  }
+
   function formatTrainerPriceFrom(item) {
     var services = (item && item.services) || [];
     var min = null;
+    var minCur = '';
     for (var i = 0; i < services.length; i++) {
       var s = services[i] || {};
       var v = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
       if (v == null) continue;
       var n = Number(v);
       if (isNaN(n)) continue;
-      if (min == null || n < min) min = n;
+      if (min == null || n < min) {
+        min = n;
+        // Валюта берётся у услуги с минимальной ценой (TASK-196): у тренера
+        // из RU-города цены в RUB, у минского — в BYN.
+        minCur = String(s.currency_code || '');
+      }
     }
     if (min == null) return '';
     var num = min === Math.floor(min) ? String(min) : min.toFixed(2);
-    // «BYN» захардкожен так же, как в каталоге (formatCatalogServicePrice):
-    // валюты в услуге нет, и расходиться с каталогом на одном и том же товаре
-    // хуже, чем разделить с ним известное ограничение по Москве.
-    return 'от ' + num + ' BYN';
+    return 'от ' + num + ' ' + priceCurrencyLabel(minCur);
   }
 
   function formatTrainerExperience(profile) {
@@ -1296,7 +1542,7 @@
       parts.push(String(item.primary_arena_name));
     }
     /* Онлайн — независимый флаг анкеты: он может стоять и рядом с залом,
-       а не только вместо площадки (см. trainer_profiles.online_enabled). */
+       а не только вместо площадки (online_enabled синхронизируется с онлайн-услугами). */
     if (p.online_enabled || item.arena_work_format === 'online') {
       parts.push('Онлайн');
     }
@@ -1351,10 +1597,7 @@
   }
 
   function formatDistanceKm(km) {
-    if (km == null || km === '' || isNaN(Number(km))) return '';
-    var n = Number(km);
-    var text = Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
-    return text + ' км';
+    return MT.formatDistanceKm(km);
   }
 
   function formatMeta(item) {
@@ -1375,34 +1618,12 @@
     return 'c';
   }
 
-  function pad2(n) {
-    return n < 10 ? '0' + n : String(n);
-  }
-
   function minskDateIso(now) {
-    var parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: MINSK_TZ,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(now);
-    var y = '1970';
-    var m = '01';
-    var d = '01';
-    var i;
-    for (i = 0; i < parts.length; i++) {
-      if (parts[i].type === 'year') y = parts[i].value;
-      if (parts[i].type === 'month') m = parts[i].value;
-      if (parts[i].type === 'day') d = parts[i].value;
-    }
-    return y + '-' + m + '-' + d;
+    return MT.dateIso(now);
   }
 
   function addDaysIso(iso, days) {
-    var bits = String(iso).split('-');
-    if (bits.length < 3) return iso;
-    var dt = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]) + days));
-    return dt.getUTCFullYear() + '-' + pad2(dt.getUTCMonth() + 1) + '-' + pad2(dt.getUTCDate());
+    return MT.addDaysIso(iso, days);
   }
 
   function formatMinorAmount(minor) {
@@ -1428,11 +1649,10 @@
     var localDate = String(live.local_date || '').slice(0, 10);
     if (!localDate) return '';
     var today = minskDateIso(now instanceof Date ? now : new Date());
-    if (localDate === today) return 'Сегодня';
-    if (localDate === addDaysIso(today, 1)) return 'Завтра';
-    // День недели обязателен: под чипом «Выходные» голое «03.10» не говорит, суббота ли это.
-    var bits = localDate.split('-');
-    var wd = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]))).getUTCDay();
+    if (localDate === today) return GC ? GC.t('when.today') : 'Сегодня';
+    if (localDate === addDaysIso(today, 1)) return GC ? GC.t('when.tomorrow') : 'Завтра';
+    // День недели обязателен: под чипом «В выходные» голое «03.10» не говорит, суббота ли это.
+    var wd = MT.weekdaySun0FromIso(localDate);
     return WEEKDAYS_SHORT_RU[wd] + ', ' + localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
   }
 
@@ -1449,7 +1669,11 @@
     var kind = String(live.kind || '');
     /* Окно — про сеансы льда. Улица без расписания, магазин, «уточняется» — не
        ответ на чип «Сегодня вечером»; на «Все» они остаются в основной ленте. */
+    // TASK-180: неподтверждённое (очень устаревшее) расписание — не ответ на окно.
+    if (kind === 'unconfirmed') return false;
+    if (kind === 'phone' || kind === 'season_closed') return false;
     if (kind !== 'session') return true;
+    if (scheduleVeryStale(item)) return false;
     return !live.outside_window;
   }
 
@@ -1535,6 +1759,9 @@
     if (kind === 'trainers' || kind === 'groups') {
       return String(live.text || '').trim();
     }
+    if (kind === 'unconfirmed' || (kind === 'session' && scheduleVeryStale(item))) {
+      return unconfirmedLine(item, now);
+    }
     if (kind === 'session') {
       var parts = [];
       var when = sessionWhenLabel(live, now);
@@ -1550,11 +1777,21 @@
       return parts.join(' · ');
     }
     // TASK-146: магазин и зал — без сеансов; сервер уже сказал, что там есть и когда открыто.
-    if (kind === 'place' || kind === 'closed') return String(live.text || '').trim();
+    if (kind === 'place' || kind === 'closed' || kind === 'phone' || kind === 'season_closed') {
+      return String(live.text || '').trim();
+    }
     var tier = String(item.tier || '').toUpperCase();
     if (tier === 'C') return 'Есть в справочнике · данных пока нет';
     if (tier === 'B') return 'Расписание уточняется · есть телефон и сайт';
     return String(live.text || item.live_line || 'Расписание уточняется').trim();
+  }
+
+  /**
+   * Основание слота (projected/photo/manual) клиенту не показываем: откуда
+   * взяли время — внутренняя механика, не обещание. Пустая строка всегда.
+   */
+  function scheduleBasisHint(/* live */) {
+    return '';
   }
 
   /**
@@ -1565,8 +1802,14 @@
   function boardCardView(item, now, opts) {
     item = item || {};
     opts = opts || {};
+    now = now instanceof Date ? now : new Date();
     var live = item.live || {};
-    var isSession = String(live.kind || '') === 'session';
+    var liveKind = String(live.kind || '');
+    var veryStale = scheduleVeryStale(item);
+    // TASK-180: очень устаревший сеанс — не «сеанс»: ни дня, ни времени, ни цены.
+    var isSession = liveKind === 'session' && !veryStale;
+    /* PDEC-005 / TASK-184: начавшийся сеанс не показываем как ближайший. */
+    if (isSession && MT.liveSessionStarted(live, now, item.timezone)) isSession = false;
     var off = !!opts.window && !inWindow(item, opts.window);
     var name = String(item.name || '');
     var currency = live.currency_code || item.currency_code || '';
@@ -1585,11 +1828,29 @@
          площадке. Фолбэк — для ответов старого API без поля. */
       depth = String(item.venue_cta || '').trim() || 'Открыть карточку места';
     }
-    var stale = false;
+    var freshness = item.freshness || {};
+    var stale = scheduleStaleWarn(freshness);
+    var S = staleApi();
+    if (stale && isSession && S && S.STALE_SHORT) {
+      depth = 'Расписание ' + S.STALE_SHORT + ' · ' + depth;
+    }
+    var SM = scheduleModeApi();
+    var callHref = '';
+    if (liveKind === 'phone' && SM) {
+      callHref = SM.phoneToTelHref(item.phone);
+    }
+    var thumbUrl = String(item.thumb || '').trim();
+    var cardUrl = String(item.card || '').trim();
+    var srcsetParts = [];
+    if (thumbUrl) srcsetParts.push(thumbUrl + ' 320w');
+    if (cardUrl && cardUrl !== thumbUrl) srcsetParts.push(cardUrl + ' 800w');
     return {
       stale: stale,
       href: arenaHref(item),
-      photo: item.card || item.thumb || '',
+      // TASK-090: кадр на всю ширину — card 800px; thumb 320w только в srcset.
+      photo: cardUrl || thumbUrl,
+      photoSrcset: srcsetParts.join(', '),
+      photoSizes: srcsetParts.length ? '(max-width:480px) 100vw, 480px' : '',
       initial: initialOf(name),
       // TASK-148: иконка типа с сервера — содержимое бесфотошной плашки.
       // Фолбэк на монограмму, если ответ старого API без venue_icon.
@@ -1600,7 +1861,8 @@
       name: name,
       where: formatMeta(item),
       prices: prices,
-      status: isSession ? '' : formatLiveLine(item, now),
+      status: isSession ? '' : veryStale ? unconfirmedLine(item, now) : formatLiveLine(item, now),
+      veryStale: veryStale,
       depth: depth,
       tone: liveTone(item),
       // TASK-146: тип места — цветная рейка карточки (DEC-006: своя семантика,
@@ -1612,6 +1874,7 @@
       // TASK-146: карточка вне окна — приглушённая, время не герой, и прямо сказано почему.
       offWindow: off,
       offLabel: off ? windowMissLabel(opts.window) + (isSession ? ' · ближайший' : '') : '',
+      callHref: callHref,
     };
   }
 
@@ -1625,6 +1888,14 @@
     opts = opts || {};
     var trainers = Number(opts.trainerCount) || 0;
     var rinks = Number(opts.mapRinkCount) || 0;
+    if (intent === INTENTS.ohm) {
+      return {
+        title: 'Сейчас нет ОХМ',
+        body: 'В этом городе нет будущих сеансов хоккея для любителей. Посмотрите массовое катание или смените город.',
+        action: { label: 'Показать места', kind: 'intent:skate' },
+        secondary: { label: 'Сменить город', kind: 'city' },
+      };
+    }
     if (intent === INTENTS.skate && trainers > 0 && rinks <= 0) {
       return {
         kind: 'coming-soon',
@@ -1687,7 +1958,7 @@
     var q = String(query || '').trim();
     return {
       title: q ? 'По запросу «' + q + '» ничего нет' : 'Ничего не найдено',
-      body: 'Поиск ищет по каткам, тренерам и городам. Можно открыть весь лёд города списком.',
+      body: 'Можно искать название, улицу или услугу — заточка, прокат, ОХМ. Или открыть весь лёд города.',
       action: { label: 'Показать весь лёд города', kind: 'clear-search' },
     };
   }
@@ -1727,7 +1998,9 @@
     // TASK-095: пока данных нет, «Пока нет катков» — не пустое состояние, а ложь
     // о результате запроса, которого ещё не было. Подпись ждёт вместе со списком.
     if ((opts.loading && !total) || wrongLens) {
-      return intent === INTENTS.coach ? 'Ищем тренеров…' : 'Ищем катки…';
+      if (intent === INTENTS.coach) return 'Ищем тренеров…';
+      if (intent === INTENTS.ohm) return 'Ищем ОХМ…';
+      return 'Ищем катки…';
     }
     // TASK-146 (Q-006): окно времени. Пусто в окне — не тупик, а «вот ближайшее».
     var win = opts.window;
@@ -1745,6 +2018,11 @@
       var svc = opts.serviceLabel ? ' · ' + opts.serviceLabel : '';
       if (total === 0) return 'Пока нет тренеров' + svc;
       return total + ' ' + coachWord + svc;
+    }
+    if (intent === INTENTS.ohm) {
+      var ohmWord = pluralRu(total, 'каток', 'катка', 'катков');
+      if (total === 0) return 'Пока нет ОХМ · смените город или чип';
+      return total + ' ' + ohmWord + ' · хоккей для любителей (ОХМ)';
     }
     var items = opts.items || [];
     var noun = venueNoun(items, opts.venueTypes);
@@ -1800,7 +2078,7 @@
     return groups.map(function (g) {
       return {
         type: g.type,
-        label: SEARCH_LABELS[g.type] || g.type,
+        label: g.label || SEARCH_LABELS[g.type] || g.type,
         items: g.items || [],
       };
     });
@@ -1833,14 +2111,75 @@
           shopDiscipline: String(state.shopDiscipline || ''),
           shopOpenNow: !!state.shopOpenNow,
           shopWhen: String(state.shopWhen || 'any'),
-          when: String(state.when || 'auto'),
+          placeService: state.placeService === 'service' ? 'service' : '',
+          when: String(state.when || 'any'),
           whenDay: String(state.whenDay || ''),
           scrollY: state.scrollY || 0,
+          scrollAnchor: state.scrollAnchor ? String(state.scrollAnchor) : '',
           view: state.view || 'list',
         })
       );
     } catch (e) {
       /* quota */
+    }
+  }
+
+  /**
+   * Позиция списка после возврата с карточки арены.
+   * Восстанавливать нужно ПОСЛЕ отрисовки ленты: иначе scrollTo на скелетоне
+   * (короткая страница) сбрасывается в 0, когда приходят карточки.
+   * ``scrollAnchor`` — id/slug карточки: scrollIntoView надёжнее абсолютного Y
+   * в WebView Telegram, где window.scrollY иногда врёт.
+   */
+  function scrollYFromSaved(saved) {
+    if (!saved) return 0;
+    var y = Number(saved.scrollY);
+    return y > 0 && isFinite(y) ? y : 0;
+  }
+
+  function scrollAnchorFromSaved(saved) {
+    if (!saved || saved.scrollAnchor == null) return '';
+    var a = String(saved.scrollAnchor).trim();
+    return a || '';
+  }
+
+  function saveListScroll(storage, payload) {
+    if (!storage || typeof storage.setItem !== 'function') return false;
+    var y = Number(payload && payload.scrollY);
+    var anchor = payload && payload.scrollAnchor != null ? String(payload.scrollAnchor).trim() : '';
+    if (!(y > 0) && !anchor) return false;
+    try {
+      storage.setItem(
+        ICE_SCROLL_KEY,
+        JSON.stringify({
+          scrollY: y > 0 && isFinite(y) ? Math.round(y) : 0,
+          scrollAnchor: anchor,
+        })
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Читает и сразу снимает ключ — один возврат = одно восстановление. */
+  function consumeListScroll(storage) {
+    if (!storage || typeof storage.getItem !== 'function') return { scrollY: 0, scrollAnchor: '' };
+    try {
+      var raw = storage.getItem(ICE_SCROLL_KEY);
+      if (!raw) return { scrollY: 0, scrollAnchor: '' };
+      storage.removeItem(ICE_SCROLL_KEY);
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return { scrollY: 0, scrollAnchor: '' };
+      return {
+        scrollY: scrollYFromSaved(parsed),
+        scrollAnchor: scrollAnchorFromSaved(parsed),
+      };
+    } catch (e) {
+      try {
+        storage.removeItem(ICE_SCROLL_KEY);
+      } catch (e2) { /* */ }
+      return { scrollY: 0, scrollAnchor: '' };
     }
   }
 
@@ -1852,7 +2191,38 @@
       var parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return null;
       if (parsed.venueTypes) parsed.venueTypes = normalizeVenueTypes(parsed.venueTypes);
+      var normWhen = normalizeSavedWhen(parsed);
+      if (normWhen) {
+        parsed.when = normWhen.when;
+        parsed.whenDay = normWhen.whenDay;
+      }
       return parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveWhenPreference(when, whenDay, storage) {
+    if (!storage || typeof storage.setItem !== 'function') return;
+    try {
+      storage.setItem(
+        ICE_WHEN_PREF_KEY,
+        JSON.stringify({
+          when: String(when || 'any'),
+          whenDay: String(whenDay || ''),
+        })
+      );
+    } catch (e) {
+      /* quota / private mode */
+    }
+  }
+
+  function loadWhenPreference(storage) {
+    if (!storage || typeof storage.getItem !== 'function') return null;
+    try {
+      var raw = storage.getItem(ICE_WHEN_PREF_KEY);
+      if (!raw) return null;
+      return normalizeSavedWhen(JSON.parse(raw));
     } catch (e) {
       return null;
     }
@@ -1860,6 +2230,8 @@
 
   return {
     ICE_STATE_KEY: ICE_STATE_KEY,
+    ICE_WHEN_PREF_KEY: ICE_WHEN_PREF_KEY,
+    ICE_SCROLL_KEY: ICE_SCROLL_KEY,
     INTENTS: INTENTS,
     buildListUrl: buildListUrl,
     buildMapListUrl: buildMapListUrl,
@@ -1870,6 +2242,8 @@
     facetCount: facetCount,
     catalogScope: catalogScope,
     catalogModesView: catalogModesView,
+    sectionHint: sectionHint,
+    placeServiceChipView: placeServiceChipView,
     placeMenuNeeded: placeMenuNeeded,
     placeTabsView: placeTabsView,
     placeMenuView: placeMenuView,
@@ -1890,6 +2264,13 @@
     hasActiveShopFilters: hasActiveShopFilters,
     formatEmptyShopFilters: formatEmptyShopFilters,
     intervalsForWeekday: intervalsForWeekday,
+    shopOpenAtMinutes: shopOpenAtMinutes,
+    noIceInCity: noIceInCity,
+    appendPage: appendPage,
+    loadMoreView: loadMoreView,
+    LIST_PAGE_LIMIT: LIST_PAGE_LIMIT,
+    MAP_PAGE_LIMIT: MAP_PAGE_LIMIT,
+    MAX_PAGES: MAX_PAGES,
     shopMatchesHours: shopMatchesHours,
     formatNearGeoBlockedMessage: formatNearGeoBlockedMessage,
     whenPickerVisible: whenPickerVisible,
@@ -1908,6 +2289,7 @@
     mapShowsArenas: mapShowsArenas,
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
+    highlightSearch: highlightSearch,
     buildTrainersUrl: buildTrainersUrl,
     buildServicesUrl: buildServicesUrl,
     buildIceCitiesUrl: buildIceCitiesUrl,
@@ -1920,12 +2302,16 @@
     shouldShowSkateChip: shouldShowSkateChip,
     sanitizeIntent: sanitizeIntent,
     pickCityIntent: pickCityIntent,
+    cityIntentBasis: cityIntentBasis,
     serviceChipLabel: serviceChipLabel,
     cityCountryLabel: cityCountryLabel,
     coerceIntent: coerceIntent,
+    arenaListLens: arenaListLens,
     catalogHref: catalogHref,
     iceCoachHref: iceCoachHref,
     intentFromSearch: intentFromSearch,
+    placeServiceBootFromSearch: placeServiceBootFromSearch,
+    urlBlocksSavedPlaceService: urlBlocksSavedPlaceService,
     cityIdFromSearch: cityIdFromSearch,
     whenChipsView: whenChipsView,
     whenChipsVisible: whenChipsVisible,
@@ -1952,6 +2338,7 @@
     sortByDistance: sortByDistance,
     orderForFeed: orderForFeed,
     boardCardView: boardCardView,
+    scheduleVeryStale: scheduleVeryStale,
     formatEmptyList: formatEmptyList,
     formatEmptySearch: formatEmptySearch,
     formatSortCaption: formatSortCaption,
@@ -1961,5 +2348,11 @@
     pickFallbackCity: pickFallbackCity,
     saveIceState: saveIceState,
     loadIceState: loadIceState,
+    scrollYFromSaved: scrollYFromSaved,
+    scrollAnchorFromSaved: scrollAnchorFromSaved,
+    saveListScroll: saveListScroll,
+    consumeListScroll: consumeListScroll,
+    saveWhenPreference: saveWhenPreference,
+    loadWhenPreference: loadWhenPreference,
   };
 });

@@ -64,19 +64,25 @@ def _dedupe_key(name: str) -> str:
 
 
 async def add_trainer_custom_service(
-    session: AsyncSession, trainer_id: int, raw_name: str
+    session: AsyncSession,
+    trainer_id: int,
+    raw_name: str,
+    *,
+    is_online: bool = False,
 ) -> dict[str, Any]:
     """Привязать к тренеру услугу с этим названием, создав её при необходимости.
 
-    Возвращает ``{"service_id": int, "name": str, "created": bool, "is_public": bool}``.
+    Возвращает ``{"service_id": int, "name": str, "created": bool, "is_public": bool,
+    "is_online": bool, "allows_online": bool}``.
 
     Если название совпадает с уже существующей услугой (нашей общей или ранее
     созданной кем-то), новую строку не плодим — привязываем существующую. Тренер
     видит ровно то, что написал, и при этом попадает в общий фильтр каталога,
-    если такая услуга там уже есть.
+    если такая услуга там уже есть. ``is_online`` — формат оффера этого тренера.
     """
     name = normalize_service_name(raw_name)
     key = _dedupe_key(name)
+    online = bool(is_online)
 
     # Сравниваем в Python, а не в SQL: таблица услуг — десятки строк, а
     # воспроизводить ``_dedupe_key`` регэкспами PostgreSQL (с юникодными
@@ -85,7 +91,7 @@ async def add_trainer_custom_service(
         await session.execute(
             text(
                 """
-                SELECT id, name, is_public
+                SELECT id, name, is_public, created_by_trainer_id
                 FROM services
                 WHERE is_public OR created_by_trainer_id = :tid
                 ORDER BY is_public DESC, id
@@ -99,6 +105,11 @@ async def add_trainer_custom_service(
     if existing is not None:
         service_id, service_name, is_public = int(existing[0]), existing[1], bool(existing[2])
         created = False
+        # Совпадение с услугой из нашего списка — это не «своя» услуга. Онлайн у неё
+        # закрыт, даже если тренер отметил его в форме «моей услуги нет в списке».
+        allows_online = existing[3] is not None
+        if not allows_online:
+            online = False
     else:
         owned = (
             await session.execute(
@@ -133,17 +144,32 @@ async def add_trainer_custom_service(
             )
         ).scalar_one()
         service_name, is_public, created = name, False, True
+        allows_online = True
 
+    from src.application.trainer_use_cases import (
+        ensure_trainer_service_format_changes_allowed,
+        sync_trainer_online_enabled_from_services,
+    )
+
+    try:
+        await ensure_trainer_service_format_changes_allowed(
+            session, trainer_id, {int(service_id): online}
+        )
+    except ValueError as exc:
+        raise CustomServiceError(str(exc)) from exc
     await session.execute(
         text(
             """
-            INSERT INTO trainer_services (trainer_id, service_id)
-            VALUES (:tid, :sid)
-            ON CONFLICT (trainer_id, service_id) DO NOTHING
+            INSERT INTO trainer_services (trainer_id, service_id, is_online)
+            VALUES (:tid, :sid, :is_online)
+            ON CONFLICT (trainer_id, service_id) DO UPDATE
+            SET is_online = EXCLUDED.is_online
             """
         ),
-        {"tid": trainer_id, "sid": service_id},
+        {"tid": trainer_id, "sid": service_id, "is_online": online},
     )
+
+    await sync_trainer_online_enabled_from_services(session, trainer_id)
     await session.commit()
 
     if created:
@@ -153,7 +179,10 @@ async def add_trainer_custom_service(
 
         try:
             await notify_admins_new_custom_service(
-                service_id=int(service_id), name=service_name, trainer_id=trainer_id
+                service_id=int(service_id),
+                name=service_name,
+                trainer_id=trainer_id,
+                is_online=online,
             )
         except Exception:  # noqa: BLE001
             # Тренер уже работает с услугой — уведомление админу не повод ронять запрос.
@@ -164,4 +193,6 @@ async def add_trainer_custom_service(
         "name": service_name,
         "created": created,
         "is_public": is_public,
+        "is_online": online,
+        "allows_online": allows_online,
     }

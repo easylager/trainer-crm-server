@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from src.application.place_links import (
+    SHARE_SRC_VALUES,
     catalog_start_param,
+    clean_share_src,
     is_valid_start_param,
     parse_catalog_start_param,
     parse_place_deep_link,
@@ -51,6 +53,8 @@ def test_start_params_fit_telegram_limits() -> None:
         assert is_valid_start_param(value)
     assert catalog_start_param(12, "sauna") == "catalog_12"
     assert catalog_start_param(12, "shop", "weekend") == "catalog_12_shop", "у магазина окна нет"
+    assert catalog_start_param(12, "ohm", "weekend") == "catalog_12_ohm_weekend"
+    assert catalog_start_param(12, "service", "weekend") == "catalog_12_service", "у услуг окна нет"
 
 
 def test_start_params_round_trip() -> None:
@@ -65,9 +69,26 @@ def test_start_params_round_trip() -> None:
     assert parse_catalog_start_param("catalog_12_skate_weekend") == (12, "skate", "weekend")
     assert parse_catalog_start_param("catalog_12_skate_today_evening") == (12, "skate", "today_evening")
     assert parse_catalog_start_param("catalog_12_outdoor_tomorrow") == (12, "outdoor", "tomorrow")
+    assert parse_catalog_start_param("catalog_12_ohm") == (12, "ohm", None)
+    assert parse_catalog_start_param("catalog_12_ohm_weekend") == (12, "ohm", "weekend")
+    assert parse_catalog_start_param("catalog_12_service") == (12, "service", None)
     assert parse_catalog_start_param("catalog_x") is None
     assert parse_catalog_start_param("catalog") == (None, None, None), "маркетинговый вход /go"
     assert parse_catalog_start_param("cert_ABC") is None
+
+
+def test_selection_start_param_ohm_and_service() -> None:
+    from src.application.selection_page import selection_start_param
+
+    assert selection_start_param(city_id=12, venue=None, when=None, kind="ohm") == "catalog_12_ohm"
+    assert (
+        selection_start_param(city_id=12, venue=None, when="weekend", kind="ohm") == "catalog_12_ohm_weekend"
+    )
+    for svc in ("sharpening", "rental", "service"):
+        assert selection_start_param(city_id=12, venue="ice", when="weekend", svc=svc) == "catalog_12_service"
+    assert selection_start_param(city_id=12, venue="service", when="today") == "catalog_12_service"
+    assert selection_start_param(city_id=12, venue="shop", when="weekend") == "catalog_12_shop"
+    assert selection_start_param(city_id=12, venue="gym", when=None) == "catalog_12_gym"
 
 
 def test_open_link_prefers_startapp_and_falls_back_to_bot() -> None:
@@ -89,6 +110,33 @@ def test_open_link_prefers_startapp_and_falls_back_to_bot() -> None:
     assert telegram_open_link(client_bot_username="b", mini_app_short_name=None, start_param="bad param") is None
 
 
+def test_clean_share_src_and_place_query() -> None:
+    assert clean_share_src("TG") == "tg"
+    assert clean_share_src("evil") is None
+    assert clean_share_src("<script>") is None
+    assert set(SHARE_SRC_VALUES) == {"tg", "vb", "wa", "vk", "copy", "story", "sys", "img"}
+    url = place_page_url(
+        base_url="https://glide.by",
+        city_name="Минск",
+        slug="minsk-arena",
+        session_id=5,
+        src="wa",
+    )
+    assert url.endswith("?s=5&src=wa")
+    assert place_image_url(
+        base_url="https://glide.by",
+        city_name="Минск",
+        slug="minsk-arena",
+        session_id=5,
+    ).endswith("/session/5/og.png")
+    assert "src=" not in place_image_url(
+        base_url="https://glide.by",
+        city_name="Минск",
+        slug="minsk-arena",
+        session_id=5,
+    )
+
+
 def test_public_telegram_cta_proxy_url() -> None:
     url = public_telegram_cta_url(
         "https://glide.by",
@@ -101,3 +149,12 @@ def test_public_telegram_cta_proxy_url() -> None:
     assert url.startswith("https://glide.by/api/public/catalog/open-telegram?")
     assert "startapp=arena_9" in url
     assert "surface=place_page" in url
+    with_src = public_telegram_cta_url(
+        "https://glide.by",
+        start_param="arena_9",
+        surface="place_page",
+        share_src="copy",
+        session_id=42,
+    )
+    assert with_src is not None
+    assert "src=copy" in with_src and "s=42" in with_src

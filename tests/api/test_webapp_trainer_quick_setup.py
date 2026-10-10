@@ -289,7 +289,16 @@ async def test_empty_week_is_saved_not_rejected(app_use_test_db, db_session) -> 
     """
     tg = _fresh_trainer_telegram_id()
     trainer_id = await _bare_linked_trainer(db_session, tg)
-    service_id = await _any_service_id(db_session)
+    platform = (
+        await db_session.execute(
+            text(
+                "SELECT id FROM services WHERE created_by_trainer_id IS NULL ORDER BY id LIMIT 1"
+            )
+        )
+    ).scalar()
+    if platform is None:
+        pytest.skip("need a platform service")
+    service_id = int(platform)
 
     with patch_trainer_webapp_init(tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -298,10 +307,10 @@ async def test_empty_week_is_saved_not_rejected(app_use_test_db, db_session) -> 
                 headers={"X-Telegram-Init-Data": "mock"},
                 json={
                     "service_ids": [service_id],
+                    "services": [{"service_id": service_id, "is_online": True}],
                     "days": [],
                     "duration_minutes": 60,
                     "specialist_role": "Спортивный психолог",
-                    "online_enabled": True,
                 },
             )
 
@@ -318,15 +327,60 @@ async def test_empty_week_is_saved_not_rejected(app_use_test_db, db_session) -> 
         )
     ).fetchone()
     assert row[0] == "Спортивный психолог"
-    assert bool(row[1]) is True
+    # Услуга из нашего списка не становится онлайн, даже если клиент прислал is_online.
+    assert bool(row[1]) is False
 
     linked = (
         await db_session.execute(
-            text("SELECT COUNT(*) FROM trainer_services WHERE trainer_id = :t"),
+            text(
+                "SELECT COUNT(*) FROM trainer_services "
+                "WHERE trainer_id = :t AND COALESCE(is_online, false)"
+            ),
             {"t": trainer_id},
         )
     ).scalar()
-    assert int(linked) == 1
+    assert int(linked) == 0
+
+
+@pytest.mark.asyncio
+async def test_quick_setup_custom_service_can_be_online(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "custom_services": [
+                        {"name": f"Консультация {trainer_id}", "is_online": True}
+                    ],
+                    "days": [],
+                    "duration_minutes": 60,
+                },
+            )
+
+    assert resp.status_code == 200, resp.text
+    row = (
+        await db_session.execute(
+            text(
+                """
+                SELECT s.created_by_trainer_id, COALESCE(ts.is_online, false),
+                       COALESCE(p.online_enabled, false)
+                FROM trainer_services ts
+                JOIN services s ON s.id = ts.service_id
+                JOIN trainer_profiles p ON p.trainer_id = ts.trainer_id
+                WHERE ts.trainer_id = :t
+                """
+            ),
+            {"t": trainer_id},
+        )
+    ).fetchone()
+    assert row is not None
+    assert int(row[0]) == trainer_id
+    assert bool(row[1]) is True
+    assert bool(row[2]) is True
 
 
 @pytest.mark.asyncio

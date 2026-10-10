@@ -48,6 +48,30 @@
     python scripts/report_catalog_gate_metrics.py --days 7
     ```
 
+## Надёжный шаринг объекта (TASK-223)
+
+Проверки после выката ветки `feat/TASK-223-reliable-object-share`. План: `docs/plans/2026-10-09-reliable-object-share.md`.
+
+15. **Main Mini App у клиентского бота.** Без него `t.me/<bot>?startapp=arena_X_s_Y` не открывает карточку, и никто этого не замечает. Бот при старте спрашивает у Telegram `getMe` → `has_main_web_app` (Bot API 7.8) и пишет WARNING (и сообщение в Sentry), если `CLIENT_BOT_MAIN_MINI_APP=true`, а Telegram говорит «нет». В админ-боте `/version` есть строка `Main Mini App: ok` / `warn` / `unknown`. `warn` → BotFather → Main Mini App на тот же домен (или `CLIENT_BOT_MAIN_MINI_APP=false`, тогда ссылки идут через `/start`). `unknown` — Telegram не ответил за 5 с или токен не принят; не тревога, повторить `/version`. Поле `has_main_web_app` проверяет **наличие**, не совпадение URL: домен в BotFather глазами.
+16. **Стабильные id сеансов.** Публикация расписания больше не пересоздаёт строки: ссылка `?s=<id>` живёт, пока сеанс есть в расписании. Проверка на проде: выбрать одну арену, запомнить 5 id и дождаться следующего прогона парсера (днём до 45 минут).
+    ```sql
+    SELECT id, starts_at_utc, kind FROM ice_sessions
+    WHERE arena_id = :arena_id AND starts_at_utc > now()
+    ORDER BY starts_at_utc LIMIT 5;
+    ```
+    После прогона тот же запрос: те же `id` на тех же `starts_at_utc`. Другие id у тех же слотов — парсер снова пересоздаёт строки, откатывать.
+17. **Откуда пришли по шарингу (`src`).** Канал в ссылке: `tg`, `vb`, `wa`, `vk`, `copy`, `story`, `sys`, `img`. Открыть `/p/…?s=<id>&src=wa`, затем:
+    ```sql
+    SELECT payload->>'src', count(*)
+    FROM catalog_consumer_events
+    WHERE kind='public_page_view' AND payload ? 'src'
+      AND occurred_at > now() - interval '1 day'
+    GROUP BY 1;
+    ```
+    Своя открытая ссылка видна строкой `wa`. Значения вне списка в `payload` не попадают. Клик «Открыть в Telegram» несёт тот же `src` в `public_telegram_cta`.
+18. **Ранний диплинк (вручную, телефон с Telegram).** Из чата открыть `t.me/<bot>?startapp=arena_<id>_s_<session>` при холодном старте Mini App: карточка арены открывается сразу, без вспышки хаба. Повторить с `catalog_<id>_skate_weekend` — сразу лёд с чипом «Выходные».
+19. **Сеанс убрали из расписания.** Открыть ссылку с id, которого нет (`?s=999999999` на вебе, `arena_<id>_s_999999999` в мини-аппе): «Этого сеанса уже нет в расписании», рядом ближайшие сеансы; кнопка «Позвать на …» не подставляет другой слот молча.
+
 ## Метрики после выката (0212)
 
 Таблица `catalog_consumer_events`:
@@ -59,3 +83,26 @@
 | `miniapp_catalog_entry` | POST `/api/webapp/client/catalog/presence` из мини-аппа (shell / Поиск / карточка места) |
 
 WAU каталога: `COUNT(DISTINCT actor_hash)` за 7 дней по `public_page_view` + `miniapp_catalog_entry`. C-B прокси: `get_catalog_virality_cb_metrics` (shares/WAU, share→deeplink-open по `start_param` arena_/catalog_). `client_share_events` по-прежнему только намерение отправить.
+
+### TASK-189: стабильный актёр, дедуп, отчёт по городам (migration 0220)
+
+**Обязательная переменная до выката:** `CATALOG_ACTOR_HMAC_SECRET` на сервисах `api-server`
+(пишет события) — ≥ 32 символов, `openssl rand -hex 32`. Ни из чего не выводится.
+
+* Не задана или короче 32 → `actor_hash` **не пишется** (fail closed, в любом окружении: в
+  `src/shared/config.py` нет признака «прод», поэтому правило одно), в лог одна ошибка
+  `CATALOG_ACTOR_HMAC_SECRET is unset…`. События пишутся без актёра и без дедупа — WAU и
+  недели × города их не видят. Никакого отката на `SECRET_KEY` или литерал.
+* Смена секрета = новые псевдонимы для всех: ряд «неделя к неделе» рвётся. Не ротировать без нужды.
+* `actor_hash` = HMAC(секрет, telegram id | IP+UA), без дня. Дедуп — уникальный `dedup_key`
+  (вид | поверхность (вход в мини-апп — одна группа) | актёр | сутки по Минску | город | арена).
+* Сопоставимый ряд начинается с первой строки нового формата (`dedup_key IS NOT NULL`) —
+  ставится сам в момент, когда выкат и секрет оба на месте. Ручная граница —
+  `CATALOG_METRICS_COMPARABLE_SINCE=YYYY-MM-DD` (полночь по Минску). История до этого не пересчитывается.
+* C-B share→open: только вход в мини-апп по диплинку места/подборки, **запущенный из чата**
+  (`chat_type` в подписанной initData). Голый `catalog` (`/go`) и переход с CTA публичной
+  страницы (браузер, чата нет) не считаются. Сейчас шеры уходят веб-ссылками на `/p/`, поэтому
+  эта цифра честно мала; веб-воронку смотреть по `public_telegram_cta_clicks`.
+* Ретеншн: TTL-цикл `ice_scrape_ttl` (notification_service, раз в час) удаляет события старше 400 дней.
+* Отчёт: `DATABASE_URL=… python scripts/report_catalog_gate_metrics.py` — WAU, C-B, недели × города, топ арен.
+

@@ -244,6 +244,136 @@
     .bp-cert-nominal { font-size: 14px; font-weight: 600; margin: 0 0 6px; color: var(--tg-theme-text-color); }
     .bp-cert-desc { font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.45; margin: 0 0 8px; }
     .bp-cert-meta { font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.45; margin: 0; }
+    .bp-scope {
+      margin: 0 16px 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .bp-cert-card .bp-scope { margin: 8px 0 0; }
+    .bp-order-row { padding: 0 16px 16px; }
+    .bp-cert-card .bp-order-row { padding: 14px 0 0; }
+    .bp-order-note {
+      margin: 8px 0 0;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .bp-order-note--ok { color: var(--app-success); }
+    .bp-order-btn--done {
+      background: transparent;
+      color: var(--app-success);
+      box-shadow: none;
+      border: 1px solid color-mix(in srgb, var(--app-success) 40%, transparent);
+      cursor: default;
+    }
+    .bp-order-btn--done:hover,
+    .bp-order-btn--done:active { transform: none; opacity: 1; }
+    @supports not (border-color: color-mix(in srgb, red, blue)) {
+      .bp-order-btn--done { border-color: rgba(52, 199, 89, 0.45); }
+    }
+    /* Та же схема, что у модалки заказа в «Абонементах»: лист прокручивается под клавиатурой. */
+    .pass-order-modal-root[hidden] { display: none !important; }
+    .pass-order-modal-root:not([hidden]) {
+      position: fixed;
+      inset: 0;
+      height: 100dvh;
+      z-index: 10000;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .pass-order-modal-root:not([hidden]) > .pass-order-modal-sheet { margin: auto; }
+    .pass-order-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.52);
+      border: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+    }
+    .pass-order-modal-sheet {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 400px;
+      flex: 0 0 auto;
+      padding: 22px 20px 18px;
+      border-radius: 20px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.18);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+    }
+    .pass-order-modal-sheet h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .pass-order-modal-text {
+      margin: 0 0 20px;
+      font-size: 15px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .pass-order-modal-text strong { color: var(--tg-theme-text-color); font-weight: 600; }
+    .pass-order-modal-actions { display: flex; gap: 10px; }
+    .pass-order-modal-actions .pass-order-modal-btn {
+      flex: 1;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+    }
+    .pass-order-modal-btn.secondary {
+      background: rgba(128, 128, 128, 0.16);
+      color: var(--tg-theme-text-color);
+    }
+    .pass-order-modal-btn.primary {
+      background: var(--app-cta-fill, #45B9BB);
+      color: var(--app-cta-text, #04262A);
+    }
+    .pass-order-modal-btn:disabled { opacity: 0.55; cursor: default; }
+    .cert-order-field { margin-bottom: 14px; }
+    .cert-order-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .cert-order-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      font: inherit;
+      font-size: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .cert-order-input.is-invalid { border-color: var(--app-danger); }
+    .cert-order-field-hint,
+    .bp-field-error {
+      margin: 6px 0 0;
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .bp-field-error { color: var(--app-danger); }
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
   </style>
@@ -272,12 +402,12 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       </div>
       <div class="bp-intro-body">
-        <p class="bp-intro-title">Как это устроено</p>
-        <p class="bp-intro-text">Абонемент — пакет занятий за фиксированную цену. Сертификат — номинал на сумму. Здесь только справочно; как оформить и оплатить — по договорённости с тренером.</p>
+        <p class="bp-intro-title">Заявка, не оплата</p>
+        <p class="bp-intro-text">Абонемент — пакет занятий. Сертификат — сумма на занятия. Кнопка отправляет заявку этому тренеру: он напишет, как оплатить, и оформит сам. Деньги здесь не списываются.</p>
       </div>
     </div>
 
-    <p class="bp-nudge" id="bpNudge">Если что-то заинтересовало — напишите тренеру или обсудите на занятии: так обычно удобнее всего договориться о покупке.</p>
+    <p class="bp-nudge" id="bpNudge">Повторно на тот же продукт заявка уйдёт после ответа тренера и не чаще одного раза в день.</p>
 
     <div id="passSection" class="bp-section" style="display:none;">
       <div class="bd-section-label">Абонементы</div>
@@ -291,6 +421,48 @@
          разметка молчит, чтобы «пока нет» не мелькнуло до загрузки. -->
     <div id="emptyAll" style="display:none;"></div>
   </div>
+
+  <div id="pass-orderConfirmModal" class="pass-order-modal-root" hidden>
+    <button type="button" class="pass-order-modal-backdrop" id="pass-orderConfirmBackdrop" aria-label="Закрыть"></button>
+    <div class="pass-order-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="pass-orderConfirmTitle">
+      <h3 id="pass-orderConfirmTitle">Заявка на абонемент</h3>
+      <p class="pass-order-modal-text" id="pass-orderConfirmText"></p>
+      <div class="pass-order-modal-actions">
+        <button type="button" class="pass-order-modal-btn secondary" id="pass-orderConfirmCancel">Отмена</button>
+        <button type="button" class="pass-order-modal-btn primary" id="pass-orderConfirmSend">Отправить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cert-orderModal" class="pass-order-modal-root" hidden>
+    <button type="button" class="pass-order-modal-backdrop" id="cert-orderBackdrop" aria-label="Закрыть"></button>
+    <div class="pass-order-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="cert-orderTitle">
+      <h3 id="cert-orderTitle">Заявка на сертификат</h3>
+      <p class="pass-order-modal-text" id="cert-orderProductText"></p>
+      <div class="cert-order-field">
+        <label for="cert-orderEmail">Email для PDF</label>
+        <input type="email" id="cert-orderEmail" class="cert-order-input" placeholder="name@example.com" autocomplete="email" inputmode="email">
+        <p class="bp-field-error" id="cert-orderEmailError" hidden></p>
+      </div>
+      <div class="cert-order-field">
+        <label for="cert-orderName">Имя получателя</label>
+        <input type="text" id="cert-orderName" class="cert-order-input" placeholder="Необязательно" autocomplete="name" maxlength="200">
+        <p class="bp-field-error" id="cert-orderNameError" hidden></p>
+      </div>
+      <div class="cert-order-field" id="cert-orderAmountWrap" hidden>
+        <label for="cert-orderAmount">Сумма, BYN</label>
+        <input type="text" id="cert-orderAmount" class="cert-order-input" inputmode="decimal" placeholder="Например, 50" autocomplete="transaction-amount">
+        <p class="cert-order-field-hint">Минимум 1 BYN. Тренер увидит сумму в заявке.</p>
+        <p class="bp-field-error" id="cert-orderAmountError" hidden></p>
+      </div>
+      <div class="pass-order-modal-actions">
+        <button type="button" class="pass-order-modal-btn secondary" id="cert-orderCancel">Отмена</button>
+        <button type="button" class="pass-order-modal-btn primary" id="cert-orderSend">Отправить тренеру</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="client-buy-pass-order.js?v=2026100617"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -349,6 +521,73 @@
         if (c.amount_cents == null) return escapeHtml('Любая сумма');
         return escapeHtml(String(c.amount_cents / 100)) + ' BYN';
       }
+      function escapeAttr(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;');
+      }
+      function orderApi() {
+        return window.ClientBuyPassOrder || null;
+      }
+      function readFetch(r) {
+        return r.json().then(function(d) {
+          return { ok: r.ok, status: r.status, data: d || {} };
+        }).catch(function() {
+          return { ok: false, status: r.status, data: {} };
+        });
+      }
+      function orderRowHtml(kind, id, label, anyAmount) {
+        var any = anyAmount ? ' data-any-amount="1"' : '';
+        return (
+          '<div class="bp-order-row">' +
+          '<button type="button" class="btn-primary btn-block bp-order-btn" data-order="' + kind +
+          '" data-product-id="' + escapeHtml(String(id)) +
+          '" data-product-label="' + escapeAttr(label) + '"' + any +
+          '>Заказать у тренера</button>' +
+          '<p class="bp-order-note" hidden></p></div>'
+        );
+      }
+      function setCardNote(btn, text, ok) {
+        var row = btn && btn.closest ? btn.closest('.bp-order-row') : null;
+        var note = row && row.querySelector('.bp-order-note');
+        if (!note) return;
+        if (!text) {
+          note.hidden = true;
+          note.textContent = '';
+          note.classList.remove('bp-order-note--ok');
+          return;
+        }
+        note.hidden = false;
+        note.textContent = text;
+        note.classList.toggle('bp-order-note--ok', !!ok);
+      }
+      function lockCard(btn, label, note, ok) {
+        if (!btn) return;
+        btn.disabled = true;
+        btn.textContent = label;
+        btn.classList.add('bp-order-btn--done');
+        setCardNote(btn, note, ok);
+      }
+      function showNotice(title, message) {
+        try {
+          if (tg && typeof tg.showPopup === 'function') {
+            tg.showPopup({ title: title, message: message, buttons: [{ type: 'ok' }] });
+          }
+        } catch (e) {
+          /* Вне Telegram showPopup есть, но кидает WebAppMethodUnsupported.
+             Текст ошибки остаётся на карточке. */
+        }
+      }
+      var scrollLock = '';
+      function setModalOpen(open) {
+        if (open) {
+          scrollLock = document.documentElement.style.overflow;
+          document.documentElement.style.overflow = 'hidden';
+        } else {
+          document.documentElement.style.overflow = scrollLock;
+        }
+      }
       var ICON_PASS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.7 11.4l2.5 2.5c.4.4 1 .4 1.4 0l7.6-7.6"/><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7"/><circle cx="16" cy="8" r="2"/><path d="M12 18h.01"/></svg>';
       var ICON_CERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>';
       function loadProducts() {
@@ -363,7 +602,7 @@
         var nudgeEl = document.getElementById('bpNudge');
         if (nudgeEl) nudgeEl.style.display = '';
         document.getElementById('heroTrainerName').textContent = state.trainerName;
-        document.getElementById('trainerLabel').textContent = 'Справочные цены · оформление у тренера';
+        document.getElementById('trainerLabel').textContent = 'Заявка этому тренеру';
         document.getElementById('listContent').innerHTML = '<div class="loading">Загрузка…</div>';
         document.getElementById('certListContent').innerHTML = '';
         document.getElementById('passSection').style.display = 'block';
@@ -371,11 +610,22 @@
         document.getElementById('emptyAll').style.display = 'none';
         var base = '?trainer_id=' + state.trainerId + (initData() ? '&init_data=' + encodeURIComponent(initData()) : '');
         Promise.all([
-          fetch('/api/webapp/client/pass-products' + base, { headers: headers() }).then(function(r) { return r.json(); }),
-          fetch('/api/webapp/client/certificate-products' + base, { headers: headers() }).then(function(r) { return r.json(); })
+          fetch('/api/webapp/client/pass-products' + base, { headers: headers() }).then(readFetch),
+          fetch('/api/webapp/client/certificate-products' + base, { headers: headers() }).then(readFetch)
         ]).then(function(results) {
-          state.items = (results[0].items || []);
-          state.certItems = (results[1].items || []);
+          var passRes = results[0];
+          var certRes = results[1];
+          var unauth = function(res) { return res.status === 401 || res.status === 403; };
+          if (unauth(passRes) && unauth(certRes)) {
+            document.getElementById('passSection').style.display = 'block';
+            document.getElementById('certSection').style.display = 'none';
+            document.getElementById('listContent').innerHTML =
+              '<div class="error">Откройте страницу из бота, чтобы увидеть цены и оставить заявку.</div>';
+            if (nudgeEl) nudgeEl.style.display = 'none';
+            return;
+          }
+          state.items = (passRes.ok && passRes.data.items) ? passRes.data.items : [];
+          state.certItems = (certRes.ok && certRes.data.items) ? certRes.data.items : [];
           var hasPasses = state.items.length > 0;
           var hasCerts = state.certItems.length > 0;
           document.getElementById('passSection').style.display = hasPasses ? 'block' : 'none';
@@ -448,6 +698,12 @@
               html += '</div>' + bestTag;
               html += '</div>';
               html += savingsHtml;
+              var scopeText = (p.service_name && String(p.service_name).trim())
+                ? 'На услугу: ' + escapeHtml(String(p.service_name).trim())
+                : 'На все услуги этого тренера';
+              if (p.tiers_label) scopeText += ' · ' + escapeHtml(String(p.tiers_label));
+              html += '<p class="bp-scope">' + scopeText + '</p>';
+              html += orderRowHtml('pass', p.id, p.name || 'Абонемент', false);
               html += '</article>';
             });
             document.getElementById('listContent').innerHTML = html;
@@ -479,15 +735,232 @@
                 certHtml += '<p class="bp-cert-nominal">Номинал: ' + certNom + '</p>';
               }
               certHtml += certDesc;
-              certHtml += '<p class="bp-cert-meta">Как приобрести — по договорённости с тренером.</p>';
-              certHtml += '</div></div></div>';
+              var certLabel = (c.name && String(c.name).trim()) ? String(c.name).trim() : 'Подарочный сертификат';
+              var anyAmount = c.amount_cents == null || c.amount_cents === undefined;
+              certHtml += '</div></div>';
+              certHtml += orderRowHtml('cert', c.id, certLabel, anyAmount);
+              certHtml += '</div>';
             });
             document.getElementById('certListContent').innerHTML = certHtml;
           }
         }).catch(function() {
+          document.getElementById('passSection').style.display = 'block';
           document.getElementById('listContent').innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
         });
       }
+
+      var passConfirm = { productId: null, label: '', button: null };
+      var certConfirm = { productId: null, label: '', button: null, anyAmount: false };
+
+      function closePassConfirm() {
+        var el = document.getElementById('pass-orderConfirmModal');
+        if (el) el.hidden = true;
+        passConfirm.productId = null;
+        passConfirm.button = null;
+        setModalOpen(false);
+      }
+      function closeCertConfirm() {
+        var el = document.getElementById('cert-orderModal');
+        if (el) el.hidden = true;
+        certConfirm.productId = null;
+        certConfirm.button = null;
+        certConfirm.anyAmount = false;
+        setModalOpen(false);
+      }
+      function clearCertFieldErrors() {
+        ['cert-orderEmail', 'cert-orderName', 'cert-orderAmount'].forEach(function(id) {
+          var input = document.getElementById(id);
+          if (input) input.classList.remove('is-invalid');
+        });
+        ['cert-orderEmailError', 'cert-orderNameError', 'cert-orderAmountError'].forEach(function(id) {
+          var err = document.getElementById(id);
+          if (err) { err.hidden = true; err.textContent = ''; }
+        });
+      }
+      function showCertFieldError(field, message) {
+        clearCertFieldErrors();
+        var inputId = field === 'email' ? 'cert-orderEmail' : (field === 'name' ? 'cert-orderName' : 'cert-orderAmount');
+        var errId = field === 'email' ? 'cert-orderEmailError' : (field === 'name' ? 'cert-orderNameError' : 'cert-orderAmountError');
+        var input = document.getElementById(inputId);
+        var err = document.getElementById(errId);
+        if (input) {
+          input.classList.add('is-invalid');
+          input.focus();
+        }
+        if (err) {
+          err.hidden = false;
+          err.textContent = message;
+        }
+      }
+      function openPassConfirm(productId, label, button) {
+        if (!button || button.disabled) return;
+        passConfirm.productId = productId;
+        passConfirm.label = label;
+        passConfirm.button = button;
+        var text = document.getElementById('pass-orderConfirmText');
+        if (text) {
+          text.innerHTML =
+            'Отправим заявку на <strong>' + escapeHtml(label) +
+            '</strong> этому тренеру. Он напишет вам про оплату и оформит абонемент сам.';
+        }
+        var modal = document.getElementById('pass-orderConfirmModal');
+        if (modal) modal.hidden = false;
+        setModalOpen(true);
+        var send = document.getElementById('pass-orderConfirmSend');
+        if (send) send.focus();
+      }
+      function openCertConfirm(productId, label, button, anyAmount) {
+        if (!button || button.disabled) return;
+        certConfirm.productId = productId;
+        certConfirm.label = label;
+        certConfirm.button = button;
+        certConfirm.anyAmount = !!anyAmount;
+        clearCertFieldErrors();
+        var text = document.getElementById('cert-orderProductText');
+        if (text) {
+          var lines = [
+            'Заявка на <strong>' + escapeHtml(label) + '</strong> уйдёт этому тренеру.'
+          ];
+          if (certConfirm.anyAmount) {
+            lines.push('Номинал не фиксирован — укажите сумму в BYN.');
+          }
+          lines.push('Email нужен, чтобы тренер отправил PDF. Имя получателя можно не указывать.');
+          text.innerHTML = lines.join('<br>');
+        }
+        var email = document.getElementById('cert-orderEmail');
+        var name = document.getElementById('cert-orderName');
+        var amount = document.getElementById('cert-orderAmount');
+        var wrap = document.getElementById('cert-orderAmountWrap');
+        if (email) email.value = '';
+        if (name) name.value = '';
+        if (amount) amount.value = '';
+        if (wrap) wrap.hidden = !certConfirm.anyAmount;
+        var modal = document.getElementById('cert-orderModal');
+        if (modal) modal.hidden = false;
+        setModalOpen(true);
+        if (email) email.focus();
+      }
+      function postOrder(url, body, button, idempotencyKey) {
+        var prev = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Отправка…';
+        setCardNote(button, '', false);
+        var reqHeaders = headers();
+        if (idempotencyKey) reqHeaders['Idempotency-Key'] = idempotencyKey;
+        var q = initData() ? '?init_data=' + encodeURIComponent(initData()) : '';
+        fetch(url + q, { method: 'POST', headers: reqHeaders, body: JSON.stringify(body) })
+          .then(readFetch)
+          .then(function(res) {
+            if (res.ok && res.data && res.data.success) {
+              lockCard(button, 'Заявка отправлена', 'Тренер напишет вам, чтобы договориться об оплате.', true);
+              showNotice('Готово', 'Заявка отправлена. Тренер напишет вам про оплату.');
+              return;
+            }
+            var api = orderApi();
+            var classified = api
+              ? api.classifyOrderFailure(res.status, res.data)
+              : { message: 'Не удалось отправить заявку.', lockCard: false };
+            if (classified.lockCard) {
+              lockCard(button, 'Уже отправлено', classified.message, false);
+              return;
+            }
+            button.disabled = false;
+            button.textContent = prev;
+            button.classList.remove('bp-order-btn--done');
+            setCardNote(button, classified.message, false);
+            showNotice('Не получилось', classified.message);
+          })
+          .catch(function() {
+            button.disabled = false;
+            button.textContent = prev;
+            setCardNote(button, 'Нет сети. Проверьте соединение и попробуйте ещё раз.', false);
+          });
+      }
+      function newIdempotencyKey(prefix, productId) {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+        return prefix + '-' + String(productId) + '-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+      }
+      function submitPass(productId, button) {
+        var api = orderApi();
+        if (!api || !state.trainerId) {
+          showNotice('Не получилось', 'Не удалось подготовить заявку. Обновите страницу.');
+          return;
+        }
+        postOrder(
+          '/api/webapp/client/pass-order/request',
+          api.passRequestBody(state.trainerId, productId),
+          button,
+          newIdempotencyKey('pop', productId)
+        );
+      }
+      function submitCert(productId, button, email, recipientName, nominalByn) {
+        var api = orderApi();
+        if (!api || !state.trainerId) {
+          showNotice('Не получилось', 'Не удалось подготовить заявку. Обновите страницу.');
+          return;
+        }
+        postOrder(
+          '/api/webapp/client/cert-order/request',
+          api.certRequestBody(state.trainerId, productId, email, recipientName, nominalByn),
+          button,
+          newIdempotencyKey('coc', productId)
+        );
+      }
+
+      document.getElementById('screenChoose').addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-order]');
+        if (!btn || btn.disabled) return;
+        var productId = parseInt(btn.getAttribute('data-product-id'), 10);
+        if (!productId) return;
+        var label = btn.getAttribute('data-product-label') || '';
+        if (btn.getAttribute('data-order') === 'cert') {
+          openCertConfirm(productId, label, btn, btn.getAttribute('data-any-amount') === '1');
+          return;
+        }
+        openPassConfirm(productId, label, btn);
+      });
+
+      document.getElementById('pass-orderConfirmCancel').onclick = closePassConfirm;
+      document.getElementById('pass-orderConfirmBackdrop').onclick = closePassConfirm;
+      document.getElementById('pass-orderConfirmSend').onclick = function() {
+        var pid = passConfirm.productId;
+        var btn = passConfirm.button;
+        var send = document.getElementById('pass-orderConfirmSend');
+        if (!pid || !btn) return;
+        if (send) send.disabled = true;
+        closePassConfirm();
+        if (send) send.disabled = false;
+        submitPass(pid, btn);
+      };
+      document.getElementById('cert-orderCancel').onclick = closeCertConfirm;
+      document.getElementById('cert-orderBackdrop').onclick = closeCertConfirm;
+      document.getElementById('cert-orderSend').onclick = function() {
+        var api = orderApi();
+        if (!api) return;
+        var parsed = api.validateCertOrder({
+          email: document.getElementById('cert-orderEmail').value,
+          recipientName: document.getElementById('cert-orderName').value,
+          anyAmount: certConfirm.anyAmount,
+          amountRaw: document.getElementById('cert-orderAmount').value
+        });
+        if (!parsed.ok) {
+          showCertFieldError(parsed.field, parsed.message);
+          return;
+        }
+        var pid = certConfirm.productId;
+        var btn = certConfirm.button;
+        if (!pid || !btn) return;
+        closeCertConfirm();
+        submitCert(pid, btn, parsed.email, parsed.recipientName, parsed.nominalByn);
+      };
+      document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        var passModal = document.getElementById('pass-orderConfirmModal');
+        var certModal = document.getElementById('cert-orderModal');
+        if (certModal && !certModal.hidden) closeCertConfirm();
+        else if (passModal && !passModal.hidden) closePassConfirm();
+      });
+
       getTrainerFromUrl();
       loadProducts();
     })();

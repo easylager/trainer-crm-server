@@ -1,6 +1,7 @@
 # Parser spec: ТЦ «Тринити» (Гродно)
 
 - arena_id: 10
+- arena_slug: grodno-triniti
 - city: Гродно
 - parser_key: triniti_ice_api_v1
 - cadence: daily

@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сохранённые + подписки на уведомления — прототип 2026-10-10</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #45b9bb;
+    --brand-2: #57d0d2;
+    --brand-dim: rgba(69, 185, 187, 0.14);
+    --studio: #050607;
+    --studio-text: #eceae4;
+    --studio-hint: #9a968c;
+    --font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --paper: #0b0c0e;
+    --surface: #141618;
+    --card: #1a1d20;
+    --line: #262a2e;
+    --text: #e6e9ea;
+    --hint: #868d93;
+    --ok: #4fc98a;
+    --warn: #e0a15a;
+    --ice: #6eb5ff;
+    --danger: #f07178;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    font-family: var(--font);
+    background: var(--studio);
+    color: var(--studio-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+  a { color: inherit; text-decoration: none; }
+
+  .layout {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+    display: grid;
+    grid-template-columns: minmax(300px, 420px) 1fr;
+    gap: 36px;
+    align-items: start;
+  }
+  @media (max-width: 1000px) {
+    .layout { grid-template-columns: 1fr; justify-items: center; }
+  }
+
+  .thesis { max-width: 420px; }
+  .kicker {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--brand-2);
+  }
+  h1 { margin: 10px 0 0; font-size: 24px; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; }
+  h1 em { font-style: normal; color: var(--brand-2); }
+  .lede { margin: 12px 0 0; font-size: 14px; line-height: 1.55; color: var(--studio-hint); }
+
+  .map-table {
+    width: 100%;
+    margin-top: 16px;
+    border-collapse: collapse;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .map-table th, .map-table td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    vertical-align: top;
+  }
+  .map-table th { color: var(--studio-hint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .map-table td b { color: var(--studio-text); font-weight: 600; }
+  .tag {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-right: 4px;
+    margin-top: 2px;
+  }
+  .tag--ship { background: rgba(79,201,138,.18); color: #9ee8c0; }
+  .tag--new { background: var(--brand-dim); color: #dff6f6; }
+  .tag--txn { background: rgba(255,255,255,.06); color: var(--studio-hint); }
+
+  .box {
+    margin: 16px 0 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--studio-hint);
+  }
+  .box b, .box strong { color: var(--studio-text); font-weight: 600; }
+  .box ul { margin: 8px 0 0; padding-left: 18px; }
+  .box li { margin-bottom: 6px; }
+
+  .scene-pick {
+    margin-top: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .scene-pick button {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.04);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--studio-hint);
+  }
+  .scene-pick button.is-on {
+    border-color: rgba(69,185,187,.55);
+    background: var(--brand-dim);
+    color: #dff6f6;
+  }
+
+  .log {
+    margin-top: 12px;
+    min-height: 2.8em;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--studio-hint);
+  }
+  .log b { color: var(--studio-text); }
+
+  .stage-wrap { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .scene-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--studio-hint);
+    text-align: center;
+    max-width: 420px;
+    line-height: 1.45;
+  }
+  .scene-label b { color: var(--studio-text); }
+
+  .phones-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .phone {
+    width: 390px;
+    max-width: calc(100vw - 32px);
+    height: 844px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 44px;
+    box-shadow: 0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0,0,0,.85);
+    background: var(--paper);
+    color: var(--text);
+    flex-shrink: 0;
+  }
+  .phone--tg { height: 780px; background: #0e1621; }
+  .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 118px; height: 30px; background: #000; border-radius: 16px; z-index: 40; pointer-events: none;
+  }
+  .status {
+    position: absolute; top: 14px; left: 28px; right: 28px; z-index: 30;
+    display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; pointer-events: none;
+  }
+  .app {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 54px 0 0;
+  }
+  .scroll { flex: 1; overflow: auto; padding: 0 0 72px; }
+  .scroll::-webkit-scrollbar { width: 0; }
+
+  /* ── Bottom tab bar (client shell) ── */
+  .tabbar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 64px;
+    display: flex;
+    align-items: stretch;
+    border-top: 1px solid var(--line);
+    background: rgba(11,12,14,.96);
+    backdrop-filter: blur(12px);
+    z-index: 20;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .tabbar button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--hint);
+  }
+  .tabbar button.is-on { color: var(--brand-2); }
+  .tabbar svg { width: 22px; height: 22px; opacity: .85; }
+  .tabbar button.is-on svg { opacity: 1; }
+
+  /* ── More sheet ── */
+  .sheet-backdrop {
+    position: absolute; inset: 0; background: rgba(0,0,0,.55); z-index: 25;
+    display: flex; align-items: flex-end;
+  }
+  .sheet {
+    width: 100%;
+    max-height: 72%;
+    background: var(--paper);
+    border-radius: 22px 22px 0 0;
+    border-top: 1px solid var(--line);
+    padding: 8px 0 20px;
+    overflow: auto;
+  }
+  .sheet-handle {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: var(--line); margin: 8px auto 12px;
+  }
+  .sheet h2 {
+    margin: 0 16px 4px;
+    font-size: 20px; font-weight: 700; letter-spacing: -.02em;
+  }
+  .sheet .sheet-sub {
+    margin: 0 16px 14px;
+    font-size: 13px; color: var(--hint); line-height: 1.4;
+  }
+  .more-row {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; text-align: left;
+    padding: 12px 16px;
+    border: 0; background: transparent;
+  }
+  .more-row:active { background: rgba(255,255,255,.04); }
+  .more-plate {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line);
+    display: grid; place-items: center; font-size: 20px;
+  }
+  .more-plate.has-badge { position: relative; }
+  .more-plate .badge-dot {
+    position: absolute; top: -2px; right: -2px;
+    min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 999px;
+    background: var(--brand);
+    color: #062223;
+    font-size: 10px; font-weight: 800;
+    display: grid; place-items: center;
+    border: 2px solid var(--paper);
+  }
+  .more-text { flex: 1; min-width: 0; }
+  .more-text b { display: block; font-size: 15px; font-weight: 650; }
+  .more-text small { display: block; margin-top: 2px; font-size: 12px; color: var(--hint); line-height: 1.35; }
+  .more-chev { color: var(--hint); font-size: 18px; }
+
+  /* ── Saved hub (st-* inspired) ── */
+  .st-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; padding: 6px 16px 0;
+  }
+  .st-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.03em; }
+  .st-sub { margin: 4px 0 0; font-size: 13px; color: var(--hint); line-height: 1.35; }
+  .st-pills {
+    display: flex; gap: 8px; padding: 14px 16px 6px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .st-pills::-webkit-scrollbar { display: none; }
+  .pill {
+    flex-shrink: 0;
+    padding: 8px 14px; border-radius: 999px;
+    border: 1.5px solid rgba(134,141,147,.35);
+    background: transparent;
+    font-size: 13px; font-weight: 600; color: var(--hint);
+  }
+  .pill.is-on {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: #062223;
+    box-shadow: 0 2px 12px rgba(69,185,187,.35);
+  }
+  .pill .pill-count {
+    display: inline-block; margin-left: 5px;
+    padding: 1px 6px; border-radius: 999px;
+    font-size: 11px; font-weight: 800;
+    background: rgba(0,0,0,.2);
+  }
+  .pill.is-on .pill-count { background: rgba(0,0,0,.15); }
+
+  .sec { margin: 18px 16px 0; }
+  .sec-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 10px; padding: 0 2px;
+  }
+  .sec-label {
+    font-size: 11px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--hint);
+  }
+  .sec-count {
+    font-size: 11px; font-weight: 600; color: var(--hint);
+    background: rgba(134,141,147,.12);
+    padding: 3px 8px; border-radius: 999px;
+  }
+
+  /* Watch list rows */
+  .watch-list { display: flex; flex-direction: column; gap: 8px; }
+  .watch-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 12px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    text-align: left;
+    width: 100%;
+  }
+  .watch-row:active { transform: scale(.995); }
+  .watch-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: grid; place-items: center; font-size: 18px; flex-shrink: 0;
+  }
+  .watch-icon--coach { background: var(--brand-dim); }
+  .watch-icon--ice { background: rgba(110,181,255,.15); }
+  .watch-icon--fresh { background: rgba(224,161,90,.15); }
+  .watch-body { flex: 1; min-width: 0; }
+  .watch-title { font-size: 15px; font-weight: 650; line-height: 1.25; }
+  .watch-filter {
+    margin-top: 3px; font-size: 12px; color: var(--hint); line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .watch-status {
+    margin-top: 6px;
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: .02em;
+    color: var(--brand-2);
+  }
+  .watch-status--warn { color: var(--warn); }
+  .watch-toggle {
+    flex-shrink: 0;
+    width: 40px; height: 40px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line);
+    font-size: 18px;
+  }
+
+  /* Primary + saved cards (compact) */
+  .hero {
+    border-radius: 20px; overflow: hidden;
+    border: 1.5px solid rgba(69,185,187,.4);
+    background: var(--card);
+  }
+  .hero-photo {
+    height: 120px; background: linear-gradient(135deg, #1a2830, #0f1418);
+    position: relative;
+  }
+  .hero-badge {
+    position: absolute; top: 10px; left: 10px;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--brand); color: #062223;
+    font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .hero-name {
+    position: absolute; left: 12px; right: 12px; bottom: 10px;
+    font-size: 18px; font-weight: 700;
+  }
+  .hero-foot {
+    padding: 10px 12px 12px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .hero-foot span { flex: 1; font-size: 12px; font-weight: 600; color: var(--brand-2); }
+  .btn-sm {
+    padding: 8px 12px; border-radius: 10px;
+    font-size: 12px; font-weight: 700;
+    background: transparent;
+    border: 1.5px solid rgba(69,185,187,.4);
+    color: var(--brand-2);
+  }
+
+  .saved-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .saved-card {
+    border-radius: 16px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--line);
+    text-align: left;
+  }
+  .saved-thumb {
+    height: 88px; background: #222;
+    position: relative;
+  }
+  .saved-bell {
+    position: absolute; top: 8px; right: 8px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(0,0,0,.55);
+    display: grid; place-items: center; font-size: 13px;
+    border: 1px solid rgba(255,255,255,.12);
+  }
+  .saved-bell.is-on { background: var(--brand-dim); border-color: rgba(69,185,187,.5); }
+  .saved-body { padding: 8px 10px 10px; }
+  .saved-name { font-size: 13px; font-weight: 650; }
+  .saved-meta { margin-top: 2px; font-size: 11px; color: var(--hint); }
+
+  .ice-watch-card {
+    border-radius: 16px; padding: 12px;
+    background: linear-gradient(180deg, rgba(110,181,255,.08), var(--card));
+    border: 1px solid rgba(110,181,255,.25);
+  }
+  .ice-watch-card .watch-title { font-size: 14px; }
+
+  /* Catalog / Ice entry chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 12px; border-radius: 999px;
+    border: 1.5px solid rgba(134,141,147,.35);
+    font-size: 13px; font-weight: 600; color: var(--hint);
+  }
+  .chip.is-on {
+    border-color: var(--brand);
+    background: var(--brand-dim);
+    color: #dff6f6;
+  }
+  .chip.wants-attn {
+    border-color: rgba(224,161,90,.55);
+    box-shadow: 0 0 0 1px rgba(224,161,90,.15) inset;
+  }
+  .chip-hint {
+    margin: 10px 16px 0;
+    font-size: 12px; color: var(--hint); line-height: 1.45;
+  }
+
+  .catalog-hero {
+    margin: 12px 16px;
+    padding: 14px;
+    border-radius: 18px;
+    background: var(--card);
+    border: 1px solid var(--line);
+  }
+  .catalog-hero h3 { margin: 0; font-size: 17px; font-weight: 700; }
+  .catalog-hero p { margin: 6px 0 0; font-size: 13px; color: var(--hint); }
+
+  .empty-ice {
+    margin: 16px;
+    padding: 28px 20px;
+    text-align: center;
+    border-radius: 18px;
+    border: 1.5px dashed rgba(134,141,147,.35);
+    color: var(--hint);
+    font-size: 13px; line-height: 1.5;
+  }
+  .empty-ice .big { font-size: 32px; margin-bottom: 8px; }
+  .cta {
+    margin-top: 14px;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 11px 16px; border-radius: 12px;
+    background: var(--brand); color: #062223;
+    font-size: 14px; font-weight: 700;
+  }
+
+  /* Telegram */
+  .tg-header {
+    padding: 8px 16px 12px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .tg-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--brand), #2a8a8c);
+    display: grid; place-items: center; font-weight: 800; font-size: 14px; color: #062223;
+  }
+  .tg-bubble {
+    margin: 12px 16px;
+    max-width: 92%;
+    padding: 12px 14px;
+    border-radius: 14px 14px 14px 4px;
+    background: #182533;
+    font-size: 14px; line-height: 1.45;
+  }
+  .tg-bubble b { font-weight: 650; }
+  .tg-bubble .meta { margin-top: 8px; font-size: 12px; color: #7d8b99; }
+  .tg-btn {
+    display: block; margin-top: 10px;
+    padding: 10px; border-radius: 10px;
+    background: rgba(69,185,187,.2);
+    color: #9ee8e9;
+    font-size: 14px; font-weight: 650;
+    text-align: center;
+  }
+
+  /* Detail sheet inside phone */
+  .detail-sheet {
+    position: absolute; inset: 0; z-index: 30;
+    background: rgba(0,0,0,.5);
+    display: flex; align-items: flex-end;
+  }
+  .detail-card {
+    width: 100%;
+    background: var(--paper);
+    border-radius: 22px 22px 0 0;
+    padding: 20px 16px 28px;
+    border-top: 1px solid var(--line);
+  }
+  .detail-card h3 { margin: 0; font-size: 18px; font-weight: 700; }
+  .detail-card .dl { margin-top: 14px; font-size: 13px; color: var(--hint); }
+  .detail-card .dl dt { font-weight: 650; color: var(--text); margin-top: 10px; }
+  .detail-card .dl dd { margin: 4px 0 0; }
+  .detail-actions { margin-top: 18px; display: flex; gap: 10px; }
+  .detail-actions button {
+    flex: 1; padding: 13px; border-radius: 14px; font-size: 15px; font-weight: 650;
+  }
+  .btn-ghost { background: var(--surface); border: 1px solid var(--line); }
+  .btn-danger { background: rgba(240,113,120,.15); color: #ffb4b8; border: 1px solid rgba(240,113,120,.35); }
+
+  .scene { display: none; }
+  .scene.is-visible { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+
+  .legend-arrow {
+    font-size: 11px; color: var(--studio-hint);
+    text-align: center; max-width: 200px; line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="thesis">
+    <p class="kicker">Ещё → Сохранённые · v0 прототип</p>
+    <h1><em>Хаб</em> закладок и подписок</h1>
+    <p class="lede">
+      Не отдельный пункт «Уведомления» в меню — расширяем существующий экран
+      <b>«Сохранённые»</b>: тренеры остаются как сейчас, сверху появляется слой
+      <b>активных watch</b>, снизу — катки. Включение подписки по-прежнему с карточки в каталоге / льду.
+    </p>
+
+    <table class="map-table" aria-label="Карта подписок">
+      <thead>
+        <tr>
+          <th>Тип</th>
+          <th>Где включают</th>
+          <th>Где живёт в хабе</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="tag tag--ship">есть</span><b>Слоты тренера</b><br>one-shot</td>
+          <td>Каталог → чип 🔕 «Напомнить»</td>
+          <td>Секция <b>Уведомления</b> + бейдж 🔔 на сохранённой карточке</td>
+        </tr>
+        <tr>
+          <td><span class="tag tag--new">v1</span><b>Сеансы на катке</b><br>фильтр + арена</td>
+          <td>Лёд → пустая выдача / карточка арены</td>
+          <td>Секция <b>Катки</b></td>
+        </tr>
+        <tr>
+          <td><span class="tag tag--new">v1</span><b>Расписание снова свежее</b></td>
+          <td>Карточка со <code>schedule_stale</code></td>
+          <td>Там же, тип «ожидаем обновление»</td>
+        </tr>
+        <tr>
+          <td><span class="tag tag--new">позже</span><b>Место в группе</b></td>
+          <td>Коллектив / группа</td>
+          <td>Уведомления</td>
+        </tr>
+        <tr>
+          <td><span class="tag tag--txn">не сюда</span><b>Запись, отмена, напоминание</b></td>
+          <td>Автоматически</td>
+          <td>«Мои записи», не этот экран</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="box">
+      <b>Фильтры экрана</b> (пилюли, не ломаем текущие «услуги тренеров»):
+      <ul>
+        <li><b>Все</b> — уведомления сверху, затем мой тренер / избранное / катки / «были раньше».</li>
+        <li><b>Тренеры</b> — только relationship-слои (как сейчас).</li>
+        <li><b>Уведомления</b> — только активные watch (управление и отмена).</li>
+        <li><b>Катки</b> — только ice-watch.</li>
+      </ul>
+    </div>
+
+    <div class="box">
+      <b>Единый движок</b> — один outbound через клиентский бот; producers разные (слот создан, diff ingest).
+      Пуш всегда с кнопкой WebApp в контекст подписки.
+    </div>
+
+    <div class="scene-pick" role="tablist" aria-label="Сцены прототипа">
+      <button type="button" class="is-on" data-scene="hub">Хаб «Сохранённые»</button>
+      <button type="button" data-scene="more">Ещё + badge</button>
+      <button type="button" data-scene="entry">Точки входа</button>
+      <button type="button" data-scene="push">Пуш в Telegram</button>
+      <button type="button" data-scene="detail">Деталь watch</button>
+    </div>
+    <p class="log" id="log"><b>Сцена:</b> полный хаб с секциями и пилюлями.</p>
+  </aside>
+
+  <div class="stage-wrap">
+
+    <!-- SCENE: Hub -->
+    <div class="scene is-visible" id="scene-hub">
+      <p class="scene-label"><b>Сохранённые</b> — подзаголовок расширен; пилюля «Уведомления (3)» ведёт в срез только watch.</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>17:22</span><span>5G</span></div>
+        <div class="app">
+          <div class="scroll">
+            <header class="st-header">
+              <div>
+                <h1 class="st-title">Сохранённые</h1>
+                <p class="st-sub">Тренеры, катки и напоминания</p>
+              </div>
+            </header>
+            <div class="st-pills">
+              <button type="button" class="pill is-on">Все</button>
+              <button type="button" class="pill">Тренеры</button>
+              <button type="button" class="pill">Уведомления <span class="pill-count">3</span></button>
+              <button type="button" class="pill">Катки</button>
+            </div>
+
+            <section class="sec">
+              <div class="sec-head">
+                <span class="sec-label">Уведомления</span>
+                <span class="sec-count">3 активных</span>
+              </div>
+              <div class="watch-list">
+                <button type="button" class="watch-row">
+                  <span class="watch-icon watch-icon--coach" aria-hidden="true">🔔</span>
+                  <span class="watch-body">
+                    <span class="watch-title">Анна Коваль</span>
+                    <span class="watch-filter">Свободные окна · фигурное катание</span>
+                    <span class="watch-status">● Ждём новые слоты · разовое</span>
+                  </span>
+                  <span class="watch-toggle" title="Отписаться">🔕</span>
+                </button>
+                <button type="button" class="watch-row">
+                  <span class="watch-icon watch-icon--ice" aria-hidden="true">🧊</span>
+                  <span class="watch-body">
+                    <span class="watch-title">Минск-Арена</span>
+                    <span class="watch-filter">Массовый каток · сб–вс · после 17:00</span>
+                    <span class="watch-status">● Сообщим о сеансах</span>
+                  </span>
+                  <span class="watch-toggle">🔕</span>
+                </button>
+                <button type="button" class="watch-row">
+                  <span class="watch-icon watch-icon--fresh" aria-hidden="true">↻</span>
+                  <span class="watch-body">
+                    <span class="watch-title">Ледовый дворец (ТРИНИТИ)</span>
+                    <span class="watch-filter">Любой публичный каток</span>
+                    <span class="watch-status watch-status--warn">● Расписание устарело — напомним, когда обновится</span>
+                  </span>
+                  <span class="watch-toggle">🔕</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="sec">
+              <div class="sec-head">
+                <span class="sec-label">Мой тренер</span>
+              </div>
+              <div class="hero">
+                <div class="hero-photo">
+                  <span class="hero-badge">★ основной</span>
+                  <span class="hero-name">Дмитрий Орлов</span>
+                </div>
+                <div class="hero-foot">
+                  <span>Следующая запись · завтра 18:30</span>
+                  <button type="button" class="btn-sm">Запись</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="sec">
+              <div class="sec-head">
+                <span class="sec-label">Избранные тренеры</span>
+                <span class="sec-count">2</span>
+              </div>
+              <div class="saved-grid">
+                <div class="saved-card">
+                  <div class="saved-thumb">
+                    <span class="saved-bell is-on" title="Подписка на слоты">🔔</span>
+                  </div>
+                  <div class="saved-body">
+                    <div class="saved-name">Анна Коваль</div>
+                    <div class="saved-meta">от 45 BYN · Чижовка</div>
+                  </div>
+                </div>
+                <div class="saved-card">
+                  <div class="saved-thumb">
+                    <span class="saved-bell" title="Без подписки">🤍</span>
+                  </div>
+                  <div class="saved-body">
+                    <div class="saved-name">Мария Л.</div>
+                    <div class="saved-meta">Слоты есть сейчас</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="sec">
+              <div class="sec-head">
+                <span class="sec-label">Катки</span>
+                <span class="sec-count">2</span>
+              </div>
+              <div class="watch-list">
+                <div class="ice-watch-card">
+                  <div class="watch-title">Минск-Арена</div>
+                  <div class="watch-filter">Массовый · выходные · вечер</div>
+                  <div class="watch-status" style="margin-top:8px">🔔 Подписка активна</div>
+                </div>
+                <div class="ice-watch-card" style="opacity:.85;border-style:dashed">
+                  <div class="watch-title" style="color:var(--hint)">+ Следить за катком</div>
+                  <div class="watch-filter">Добавляется из вкладки «Поиск» на карточке арены</div>
+                </div>
+              </div>
+            </section>
+
+            <section class="sec">
+              <div class="sec-head">
+                <span class="sec-label">Были раньше</span>
+              </div>
+              <p style="margin:0 16px;font-size:12px;color:var(--hint)">Горизонтальная полоска аватаров — без изменений.</p>
+            </section>
+          </div>
+          <nav class="tabbar" aria-label="Навигация">
+            <button type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>Главная</button>
+            <button type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>Поиск</button>
+            <button type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Записи</button>
+            <button type="button" class="is-on"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>Ещё</button>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE: More -->
+    <div class="scene" id="scene-more">
+      <p class="scene-label">В <b>Ещё</b> текст пункта не меняем; badge на иконке = число активных watch (не число сохранённых тренеров).</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>17:22</span><span>5G</span></div>
+        <div class="app" style="padding-top:120px;background:#0a0b0d">
+          <div class="sheet-backdrop">
+            <div class="sheet">
+              <div class="sheet-handle"></div>
+              <h2>Ещё</h2>
+              <p class="sheet-sub">Профиль, семья, абонементы и сохранённое</p>
+              <button type="button" class="more-row">
+                <span class="more-plate has-badge">❤️<span class="badge-dot">3</span></span>
+                <span class="more-text">
+                  <b>Сохранённые</b>
+                  <small>Тренеры, катки и активные напоминания</small>
+                </span>
+                <span class="more-chev">›</span>
+              </button>
+              <button type="button" class="more-row">
+                <span class="more-plate">📈</span>
+                <span class="more-text"><b>Ваша активность</b><small>Серия и статистика сезона</small></span>
+                <span class="more-chev">›</span>
+              </button>
+              <button type="button" class="more-row">
+                <span class="more-plate">🎫</span>
+                <span class="more-text"><b>Абонементы</b><small>Остаток занятий и сертификаты</small></span>
+                <span class="more-chev">›</span>
+              </button>
+            </div>
+          </div>
+          <nav class="tabbar">
+            <button type="button" class="is-on" style="flex:1">…</button>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE: Entry points (two phones) -->
+    <div class="scene" id="scene-entry">
+      <p class="scene-label">Подписка включается <b>на месте</b>; хаб только собирает и даёт отписаться.</p>
+      <div class="phones-row">
+        <div>
+          <p class="legend-arrow">Каталог · тренер</p>
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="status"><span>17:22</span><span>5G</span></div>
+            <div class="app">
+              <div class="scroll">
+                <div class="catalog-hero">
+                  <h3>Анна Коваль</h3>
+                  <p>Фигурное катание · нет свободных окон</p>
+                </div>
+                <div class="chips" style="margin-top:12px">
+                  <span class="chip">🤍 Сохранить</span>
+                  <span class="chip wants-attn is-on">🔔 Подписан</span>
+                  <span class="chip">Поделиться</span>
+                </div>
+                <p class="chip-hint">🔔 Уведомим, когда появятся свободные окна</p>
+                <p class="chip-hint" style="margin-top:6px;color:var(--brand-2)">После пуша подписка снимается · повторить можно снова</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <p class="legend-arrow">Поиск · лёд · пусто</p>
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="status"><span>17:22</span><span>5G</span></div>
+            <div class="app">
+              <div class="scroll">
+                <div style="padding:12px 16px 0">
+                  <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--hint)">Минск-Арена</div>
+                  <div style="font-size:22px;font-weight:700;margin-top:4px">Массовый каток</div>
+                </div>
+                <div class="empty-ice">
+                  <div class="big">🧊</div>
+                  <div>Нет сеансов по фильтру<br>на ближайшие дни</div>
+                  <button type="button" class="cta">🔕 Напомнить о сеансах</button>
+                </div>
+                <p class="chip-hint">Фильтр сохранится: <b>массовый · сб–вс · после 17:00</b></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE: Telegram -->
+    <div class="scene" id="scene-push">
+      <p class="scene-label">Один стиль сообщений; разный заголовок по <b>kind</b> подписки.</p>
+      <div class="phones-row">
+        <div class="phone phone--tg">
+          <div class="notch"></div>
+          <div class="app" style="padding-top:48px">
+            <div class="tg-header">
+              <div class="tg-avatar">IC</div>
+              <div>
+                <div style="font-weight:650">ICING</div>
+                <div style="font-size:12px;color:#7d8b99">бот</div>
+              </div>
+            </div>
+            <div class="tg-bubble">
+              <b>🎯 Новые слоты у тренера</b><br><br>
+              Вы просили напомнить, когда у <b>Анны Коваль</b> появятся свободные окна.
+              <div class="meta">Разовое уведомление</div>
+              <span class="tg-btn">Открыть расписание</span>
+            </div>
+            <div class="tg-bubble" style="margin-top:8px">
+              <b>🧊 Появились сеансы</b><br><br>
+              <b>Минск-Арена</b> · массовый каток<br>
+              Сб 18:00–20:00 и ещё 2 сеанса по вашему фильтру.
+              <span class="tg-btn">Смотреть в ICING</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE: Detail -->
+    <div class="scene" id="scene-detail">
+      <p class="scene-label">Тап по строке в «Уведомления» → шторка: что именно отслеживаем, как отписаться.</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>17:22</span><span>5G</span></div>
+        <div class="app">
+          <div class="scroll" style="filter:blur(1px);opacity:.5">
+            <header class="st-header"><h1 class="st-title">Сохранённые</h1></header>
+          </div>
+          <div class="detail-sheet">
+            <div class="detail-card">
+              <h3>Минск-Арена</h3>
+              <dl class="dl">
+                <dt>Тип</dt>
+                <dd>Новые сеансы по фильтру</dd>
+                <dt>Фильтр</dt>
+                <dd>Массовый каток · суббота и воскресенье · после 17:00</dd>
+                <dt>Поведение</dt>
+                <dd>До 1 сообщения в сутки · пока подписка активна</dd>
+                <dt>Город</dt>
+                <dd>Минск</dd>
+              </dl>
+              <div class="detail-actions">
+                <button type="button" class="btn-ghost">Открыть арену</button>
+                <button type="button" class="btn-danger">Отписаться</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  var scenes = {
+    hub: { el: document.getElementById('scene-hub'), log: 'полный хаб с секциями и пилюлями.' },
+    more: { el: document.getElementById('scene-more'), log: 'лист «Ещё»: badge на «Сохранённые» = активные watch.' },
+    entry: { el: document.getElementById('scene-entry'), log: 'включение подписки в каталоге (тренер) и на льду (арена).' },
+    push: { el: document.getElementById('scene-push'), log: 'пуши в Telegram для coach-slots и ice-sessions.' },
+    detail: { el: document.getElementById('scene-detail'), log: 'шторка детали ice-watch: фильтр и отписка.' },
+  };
+  var logEl = document.getElementById('log');
+  function show(key) {
+    Object.keys(scenes).forEach(function (k) {
+      scenes[k].el.classList.toggle('is-visible', k === key);
+    });
+    document.querySelectorAll('.scene-pick button').forEach(function (btn) {
+      btn.classList.toggle('is-on', btn.getAttribute('data-scene') === key);
+    });
+    logEl.innerHTML = '<b>Сцена:</b> ' + scenes[key].log;
+  }
+  document.querySelectorAll('.scene-pick button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      show(btn.getAttribute('data-scene'));
+    });
+  });
+})();
+</script>
+</body>
+</html>

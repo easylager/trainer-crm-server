@@ -49,6 +49,7 @@
       "source_files": ["schedule.html", "prices.html"],
       "job_config": {
         "schedule_url": "https://chizhovka-arena.by/fizkultura-i-sport/katanie-na-konkah",
+        "ohm_schedule_url": "https://chizhovka-arena.by/fizkultura-i-sport/otrabotka-hokkejnogo-masterstva",
         "prices_url": "https://chizhovka-arena.by/czeny/katanie-na-konkah",
         "default_duration_minutes": 60,
         "keep_rink_labels": ["МА", "БА"],
@@ -80,7 +81,6 @@
         "schedule_url": "https://diamondcity.by/ledovaya-arena",
         "keep_labels": ["МК"],
         "drop_labels": [
-          "ОХМ",
           "ШРС",
           "ТОРНАДО",
           "Тех.обслуживание",
@@ -88,6 +88,8 @@
           "МИР БЕЗ ГРАНИЦ",
           "КФК"
         ],
+        "ohm_labels": ["ОХМ"],
+        "ohm_adult_minor": 1400,
         "disco_marker": "ДИСКОТЕКА",
         "default_duration_minutes": 45,
         "run_year": 2026

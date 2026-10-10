@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="__LANG__">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>__OG_TITLE__</title>
+  <meta name="description" content="__OG_DESCRIPTION__" />
+  <link rel="canonical" href="__CANONICAL__" />
+  <meta name="robots" content="__ROBOTS__" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="__OG_LOCALE__" />
+  <meta property="og:site_name" content="Glide" />
+  <meta property="og:title" content="__OG_TITLE__" />
+  <meta property="og:description" content="__OG_DESCRIPTION__" />
+  <meta property="og:url" content="__CANONICAL__" />
+  <meta property="og:image" content="__OG_IMAGE__" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <script type="application/ld+json">__JSONLD__</script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=1" />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fa;
+      --surface: var(--g-surface);
+      --ink: var(--g-ink);
+      --muted: var(--g-muted);
+      --line: #e3e9ee;
+      --accent: var(--g-accent);
+      --accent-ink: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--g-font);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 28px 20px 96px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .top__brand { font-weight: 700; color: var(--ink); text-decoration: none; }
+    .top__brand span { color: var(--muted); font-weight: 500; }
+    .top__trainers { font-size: 14px; font-weight: 600; color: var(--accent); text-decoration: none; }
+    .date { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+    h1 { margin: 6px 0 0; font-size: clamp(28px, 7vw, 40px); font-weight: 700; letter-spacing: -.02em; line-height: 1.08; }
+    .sub, .counter { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
+    .sub--ohm { margin-top: 2px; }
+    .small { font-size: 13px; }
+    .hero-city {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      margin: 16px 0 0; padding: 16px 18px; border-radius: 18px;
+      background: var(--accent); color: #fff; text-decoration: none;
+    }
+    .hero-city .cap { display: block; font-size: 12px; opacity: .85; }
+    .hero-city .name { display: block; margin-top: 2px; font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+    .hero-city .live { display: block; margin-top: 4px; font-size: 14px; opacity: .95; }
+    .hero-city .live b { font-weight: 700; }
+    .hero-city svg { flex-shrink: 0; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+    .map { margin: 20px 0 0; padding: 8px; }
+    .map svg { width: 100%; height: auto; display: block; }
+    .home-map__city { cursor: pointer; }
+    .home-map__city:hover circle:last-child, .home-map__city:focus-visible circle:last-child { fill: #0b6f6b; }
+    .home-map__city:focus-visible { outline: none; }
+    .home-map__city:focus-visible .home-map__tap { fill: rgba(15,143,138,.12); }
+    .hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+    .head { display: flex; align-items: baseline; justify-content: space-between; margin: 28px 0 10px; }
+    .head h2.section { margin: 0; }
+    h2.section { margin: 28px 0 12px; font-size: 20px; }
+    .cities { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (min-width: 560px) { .cities { grid-template-columns: 1fr 1fr 1fr; } }
+    .city {
+      display: flex; flex-direction: column; gap: 4px; min-height: 96px;
+      padding: 14px 14px 12px; color: var(--ink); text-decoration: none;
+    }
+    .city .n { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+    .city .n::after { content: " ›"; color: var(--accent); }
+    .city .f { font-size: 13px; color: #4a5f71; line-height: 1.35; }
+    .city .f b { color: var(--ink); font-weight: 600; }
+    .city .has { margin-top: auto; padding-top: 6px; font-size: 12px; color: var(--muted); }
+    .city--quiet .f { color: var(--muted); }
+    details.more { margin-top: 8px; padding: 2px 14px; }
+    details.more summary {
+      min-height: 44px; display: flex; align-items: center; justify-content: space-between;
+      font-size: 15px; font-weight: 600; cursor: pointer; list-style: none;
+    }
+    details.more summary::-webkit-details-marker { display: none; }
+    details.more summary::after { content: "\2304"; color: var(--muted); font-size: 18px; }
+    details.more[open] summary::after { content: "\2303"; }
+    details.more p { margin: 0 0 12px; font-size: 14px; line-height: 1.7; color: #4a5f71; }
+    details.more p b { color: var(--ink); }
+    details.more a { color: var(--accent); text-decoration: none; }
+    .elsewhere { margin: 20px 0 0; font-size: 14px; color: var(--muted); }
+    .elsewhere a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    .muted { color: var(--muted); }
+    .cta {
+      display: block;
+      margin: 28px 0 0;
+      padding: 15px 20px;
+      border-radius: 16px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-size: 16px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+    }
+    .cta--secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); margin-top: 12px; }
+    footer { margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <a class="top__brand" href="/">Glide<span> · каталог</span></a>
+      <a class="top__trainers" href="__TRAINERS_URL__">Для тренеров →</a>
+    </header>
+    <p class="date">__DATE__</p>
+    <h1>__PAGE_H1__</h1>
+    <p class="sub counter">__COUNTER_TEXT__</p>
+    __OHM_SUB__
+    __HERO_CITY__
+    __MAP__
+
+    __CITIES_HEAD__
+    __CITIES__
+    __ELSEWHERE__
+
+    <a class="cta cta--secondary" href="__CTA_URL__">Открыть в Telegram</a>
+    <footer>Данные с сайтов катков — время и цену уточняйте на месте.</footer>
+  </main>
+</body>
+</html>

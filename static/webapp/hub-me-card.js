@@ -452,6 +452,8 @@
       line: '',
       pick: null,
       actions: [],
+      /** Чип 🔔/🔕 — только когда окон нет (см. buildTrainer). */
+      notifyChip: null,
       cities: null,
       moreCities: false,
       geo: false,
@@ -527,6 +529,7 @@
   /**
    * Мой тренер. Крупного времени нет намеренно: чужое окно — ещё не моя запись.
    * Выбор времени и есть действие, поэтому заливки при живых окнах тоже нет.
+   * Окон нет — чип «Напомнить» (тот же 🔔→🔕, что в каталоге): подписка на окна.
    */
   function buildTrainer(input, now) {
     var t = obj(input.trainer);
@@ -535,9 +538,9 @@
     var dm = contact(t.username, t.telegramId);
     var canBook = t.canBook !== false;
     var pick = canBook ? buildPick(input.slots, 'Когда вам удобно', 'Все окна →', 'all-slots', now) : null;
-    var fn = firstName(name);
     var forms = declined(input);
     var trainerId = idOrNull(t.id);
+    var isNotify = !!input.notify_when_slots;
 
     var view = emptyView(pick ? 'accent' : '', 'Ваш тренер');
     view.who = buildWho(name, t.photo, joinDot([t.arena_name, t.city_name]), trainerId, {
@@ -550,14 +553,17 @@
       view.actions.push({ style: 'ghost', label: allSlotsLabel(forms), action: 'all-slots', trainerId: trainerId });
       return view;
     }
-    // Окон нет — честный короткий ответ на «а когда?» вместо пустого места.
-    if (dm) {
-      view.line = 'Свободных окон в расписании нет. ' + (fn || 'Тренер') +
-        ' ставит время сам — напишите, и он предложит ближайшее.';
-      view.actions.push({ style: 'fill', label: writeLabel(forms), action: 'dm', dm: dm });
+    // Окон нет — честный ответ + колокольчик (выкл 🔔 / вкл 🔕), как в каталоге.
+    if (trainerId) {
+      view.notifyChip = { trainerId: trainerId, active: isNotify };
+    }
+    if (isNotify) {
+      view.line = '🔕 Напоминания включены — сообщим, когда появятся свободные окна.';
     } else {
-      // Ни окон, ни контакта: предложить нечего, и врать об этом нельзя.
-      view.line = 'Свободных окон в расписании нет, и способа написать тренеру у нас тоже нет.';
+      view.line = 'Свободных окон в расписании нет. Нажмите 🔔 — напомним, когда появятся.';
+    }
+    if (dm) {
+      view.actions.push({ style: 'fill', label: writeLabel(forms), action: 'dm', dm: dm });
     }
     view.actions.push({ style: 'ghost', label: 'Все тренеры', action: 'all-trainers' });
     return view;
@@ -828,15 +834,52 @@
       '<span aria-hidden="true">⌖</span>Определить по геопозиции</button>';
   }
 
-  function actionsHtml(actions) {
+  function actionButtonHtml(a) {
+    return '<button type="button" class="' +
+      (a.style === 'fill' ? 'btn-fill' : 'btn-ghost') + '" data-me-action="' + esc(a.action) + '"' +
+      (a.dm ? dmAttrs(a.dm) : '') +
+      attr('data-me-trainer-id', a.trainerId) +
+      attr('data-me-arena-id', a.arenaId) + '>' +
+      esc(a.label) + '</button>';
+  }
+
+  /**
+   * Чип напоминания: выкл = 🔔 «Напомнить», вкл = 🔕 «Подписан»
+   * (та же семантика, что у catalog-main appendTrainerActionChips).
+   */
+  function notifyChipHtml(chip) {
+    if (!chip || !chip.trainerId) return '';
+    var active = !!chip.active;
+    var icon = active ? '🔕' : '🔔';
+    var label = active ? 'Подписан' : 'Напомнить';
+    return '<button type="button" class="me__notify' +
+      (active ? ' is-active' : ' wants-attention') +
+      '" data-me-action="notify-slots"' +
+      attr('data-me-trainer-id', chip.trainerId) +
+      ' aria-pressed="' + (active ? 'true' : 'false') + '">' +
+      '<span class="me__notify-ic" aria-hidden="true">' + icon + '</span>' +
+      '<span>' + esc(label) + '</span></button>';
+  }
+
+  function actionsHtml(actions, notifyChip) {
+    var list = actions || [];
+    var write = null;
+    var rest = [];
+    list.forEach(function (a) {
+      if (!write && a && a.action === 'dm' && a.style === 'fill') write = a;
+      else rest.push(a);
+    });
     var html = '';
-    (actions || []).forEach(function (a) {
-      html += '<div class="me__do"><button type="button" class="' +
-        (a.style === 'fill' ? 'btn-fill' : 'btn-ghost') + '" data-me-action="' + esc(a.action) + '"' +
-        (a.dm ? dmAttrs(a.dm) : '') +
-        attr('data-me-trainer-id', a.trainerId) +
-        attr('data-me-arena-id', a.arenaId) + '>' +
-        esc(a.label) + '</button></div>';
+    var chip = notifyChipHtml(notifyChip);
+    if (write && chip) {
+      html += '<div class="me__do me__do--pair">' + actionButtonHtml(write) + chip + '</div>';
+    } else if (write) {
+      html += '<div class="me__do">' + actionButtonHtml(write) + '</div>';
+    } else if (chip) {
+      html += '<div class="me__do me__do--notify">' + chip + '</div>';
+    }
+    rest.forEach(function (a) {
+      html += '<div class="me__do">' + actionButtonHtml(a) + '</div>';
     });
     return html;
   }
@@ -879,7 +922,7 @@
       pickHtml(view.pick) +
       citiesHtml(view.cities, view.moreCities) +
       geoHtml(view.geo) +
-      actionsHtml(view.actions);
+      actionsHtml(view.actions, view.notifyChip);
     return '<div class="me' + (str(view.mod) ? ' me--' + esc(view.mod) : '') + '"' +
       attr('data-me-kind', view.kind) + '>' +
       '<div class="me__pad">' + pad + '</div>' +

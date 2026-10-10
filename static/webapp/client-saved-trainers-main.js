@@ -63,6 +63,10 @@
     goTo('catalog?trainer_id=' + encodeURIComponent(String(trainerId)));
   }
 
+  function goToArena(arenaId) {
+    goTo('arena?arena_id=' + encodeURIComponent(String(arenaId)));
+  }
+
   function esc(s) {
     if (s == null) return '';
     return String(s)
@@ -83,10 +87,15 @@
     return count + ' ' + pluralRu(count, 'занятие', 'занятия', 'занятий');
   }
 
-  function priceByn(cents) {
+  function priceCurrencyLabel(code) {
+    var c = String(code || '').trim().toUpperCase();
+    return c === 'RUB' ? '₽' : (c || 'BYN');
+  }
+
+  function priceByn(cents, currency) {
     if (cents == null) return null;
     var byn = Math.round(cents / 100);
-    return 'от ' + esc(String(byn)) + ' BYN';
+    return 'от ' + esc(String(byn)) + ' ' + esc(priceCurrencyLabel(currency));
   }
 
   /** "12 мая" / "сегодня" / "завтра" — concise upcoming/past date label. */
@@ -113,6 +122,10 @@
     saved: [],
     past: [],
     filter: 'all',
+    hubFilter: 'all',
+    trainerNotifications: [],
+    iceWatchItems: [],
+    watchesActiveCount: 0,
   };
 
   /* ── nav wiring ──────────────────────────────────────────────── */
@@ -184,6 +197,106 @@
       : '<span class="' + phClass + '" aria-hidden="true">' + phEmoji + '</span>';
   }
 
+  function activeNotificationCount() {
+    return (state.trainerNotifications || []).length + (state.iceWatchItems || []).length;
+  }
+
+  function renderHubPills() {
+    var wrap = document.getElementById('hubPills');
+    if (!wrap) return;
+    var n = activeNotificationCount();
+    var pills = [
+      { key: 'all', label: 'Все' },
+      { key: 'trainers', label: 'Тренеры' },
+      { key: 'notifications', label: 'Уведомления', count: n },
+      { key: 'ice', label: 'Катки' },
+    ];
+    wrap.innerHTML = pills
+      .map(function (p) {
+        var active = state.hubFilter === p.key;
+        var countHtml = p.count ? '<span class="st-hub-pill-count">' + p.count + '</span>' : '';
+        return (
+          '<button type="button" class="st-hub-pill' + (active ? ' active' : '') + '" data-hub="' + esc(p.key) + '">' +
+          esc(p.label) + countHtml + '</button>'
+        );
+      })
+      .join('');
+    wrap.style.display = '';
+    wrap.querySelectorAll('.st-hub-pill').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.hubFilter = btn.getAttribute('data-hub') || 'all';
+        wrap.querySelectorAll('.st-hub-pill').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+        rerender();
+      });
+    });
+  }
+
+  function renderNotificationsSection() {
+    var rows = [];
+    (state.trainerNotifications || []).forEach(function (n) {
+      rows.push(
+        '<div class="st-watch-row" data-trainer-notify="' + esc(String(n.trainer_id)) + '">' +
+          '<span class="st-watch-icon st-watch-icon--coach" aria-hidden="true">🔔</span>' +
+          '<span class="st-watch-body">' +
+            '<span class="st-watch-title">' + esc(n.title || 'Тренер') + '</span>' +
+            '<span class="st-watch-filter">' + esc(n.filter_label || '') + '</span>' +
+            '<span class="st-watch-status">' + esc(n.status_label || '') + '</span>' +
+          '</span>' +
+          '<button type="button" class="st-watch-off" data-off-trainer="' + esc(String(n.trainer_id)) + '" aria-label="Отписаться">🔕</button>' +
+        '</div>'
+      );
+    });
+    (state.iceWatchItems || []).forEach(function (w) {
+      var icon = w.kind === 'schedule_fresh' ? '↻' : '🧊';
+      rows.push(
+        '<div class="st-watch-row" data-ice-watch="' + esc(String(w.id)) + '">' +
+          '<span class="st-watch-icon st-watch-icon--ice" aria-hidden="true">' + icon + '</span>' +
+          '<span class="st-watch-body">' +
+            '<span class="st-watch-title">' + esc(w.arena_name || 'Каток') + '</span>' +
+            '<span class="st-watch-filter">' + esc(w.filter_label || '') + '</span>' +
+            '<span class="st-watch-status">' + esc(w.status_label || '') + '</span>' +
+          '</span>' +
+          '<button type="button" class="st-watch-off" data-off-ice="' + esc(String(w.id)) + '" aria-label="Отписаться">🔕</button>' +
+        '</div>'
+      );
+    });
+    if (!rows.length) return '';
+    return (
+      '<section class="st-section">' +
+        '<div class="st-section-head"><span class="st-section-label">Уведомления</span>' +
+        '<span class="st-section-count">' + rows.length + '</span></div>' +
+        '<div class="st-watch-list">' + rows.join('') + '</div>' +
+      '</section>'
+    );
+  }
+
+  function renderIceWatchesSection() {
+    var items = state.iceWatchItems || [];
+    if (!items.length) return '';
+    if (state.hubFilter === 'notifications') return '';
+    var cards = items.map(function (w) {
+      return (
+        '<div class="st-watch-row" data-ice-watch="' + esc(String(w.id)) + '">' +
+          '<span class="st-watch-icon st-watch-icon--ice">🧊</span>' +
+          '<span class="st-watch-body">' +
+            '<span class="st-watch-title">' + esc(w.arena_name || '') + '</span>' +
+            '<span class="st-watch-filter">' + esc(w.filter_label || '') + '</span>' +
+          '</span>' +
+          '<button type="button" class="st-watch-off" data-off-ice="' + esc(String(w.id)) + '">🔕</button>' +
+        '</div>'
+      );
+    }).join('');
+    return (
+      '<section class="st-section">' +
+        '<div class="st-section-head"><span class="st-section-label">Катки</span>' +
+        '<span class="st-section-count">' + items.length + '</span></div>' +
+        '<div class="st-watch-list">' + cards + '</div>' +
+      '</section>'
+    );
+  }
+
   /* ── PRIMARY card ───────────────────────────────────────────── */
 
   function renderPrimary(edge) {
@@ -232,7 +345,7 @@
         chips.push('<span class="st-stat-chip"><span class="st-stat-chip-icon">◉</span>' + esc(edge.primary_arena_name) + '</span>');
       }
         if (edge.min_price_cents != null) {
-        var p = priceByn(edge.min_price_cents);
+        var p = priceByn(edge.min_price_cents, edge.currency_code);
         if (p) chips.push('<span class="st-stat-chip st-stat-chip-plain">' + esc(p) + '</span>');
       }
       if (chips.length) {
@@ -280,7 +393,7 @@
       if (d && t) return { icon: '⏱', text: 'Запись ' + d + ' в ' + t, kind: 'booking' };
     }
     if (edge.min_price_cents != null) {
-      var p = priceByn(edge.min_price_cents);
+      var p = priceByn(edge.min_price_cents, edge.currency_code);
       if (p) return { icon: null, text: p, kind: 'price' };
     }
     if (edge.primary_arena_name) {
@@ -308,10 +421,15 @@
           '</div>'
         : '';
 
+      var notifyBell = edge.notify_when_slots
+        ? '<span class="st-saved-bell is-on" title="Подписка на слоты">🔔</span>'
+        : '';
+
       return (
         '<div class="st-saved-card" data-card-tid="' + esc(String(tid)) + '">' +
           '<button type="button" class="st-heart" data-unsave-tid="' + esc(String(tid)) + '" aria-label="Убрать из сохранённых">♥</button>' +
           '<div class="st-saved-photo-wrap">' +
+            notifyBell +
             imgOr(edge.trainer_list_photo_key, 'st-saved-photo-ph', '🏋') +
             '<div class="st-saved-photo-overlay">' +
               '<div class="st-saved-photo-name">' + name + '</div>' +
@@ -420,6 +538,55 @@
     });
     container.querySelectorAll('img').forEach(function (img) {
       img.onerror = function () { img.style.display = 'none'; };
+    });
+    container.querySelectorAll('[data-off-trainer]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var tid = btn.getAttribute('data-off-trainer');
+        fetch(apiUrl('/client/watches/trainer-slots/' + tid), { method: 'DELETE', headers: headersJson() })
+          .then(function (r) { if (!r.ok) throw new Error(); })
+          .then(function () {
+            state.trainerNotifications = (state.trainerNotifications || []).filter(function (x) {
+              return String(x.trainer_id) !== String(tid);
+            });
+            renderHubPills();
+            rerender();
+            toast('Подписка отменена');
+          })
+          .catch(function () { toast('Не удалось отписаться'); });
+      });
+    });
+    container.querySelectorAll('[data-off-ice]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var wid = btn.getAttribute('data-off-ice');
+        fetch(apiUrl('/client/ice-watches/' + wid), { method: 'DELETE', headers: headersJson() })
+          .then(function (r) { if (!r.ok) throw new Error(); })
+          .then(function () {
+            state.iceWatchItems = (state.iceWatchItems || []).filter(function (x) {
+              return String(x.id) !== String(wid);
+            });
+            renderHubPills();
+            rerender();
+            toast('Подписка отменена');
+          })
+          .catch(function () { toast('Не удалось отписаться'); });
+      });
+    });
+    container.querySelectorAll('[data-ice-watch]').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('[data-off-ice]')) return;
+        var wid = row.getAttribute('data-ice-watch');
+        var item = (state.iceWatchItems || []).find(function (x) { return String(x.id) === String(wid); });
+        if (item && item.arena_id) goToArena(item.arena_id);
+      });
+    });
+    container.querySelectorAll('[data-trainer-notify]').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('[data-off-trainer]')) return;
+        var tid = row.getAttribute('data-trainer-notify');
+        goToTrainerProfile(tid);
+      });
     });
   }
 
@@ -530,16 +697,35 @@
     var savedFiltered = applyFilter(state.saved);
     var pastFiltered = applyFilter(state.past);
 
-    var totalAll = (state.primary ? 1 : 0) + state.saved.length + state.past.length;
-    if (totalAll === 0) { renderEmpty(mount); return; }
+    var hasTrainers = (state.primary ? 1 : 0) + state.saved.length + state.past.length;
+    var hasWatches = activeNotificationCount() > 0;
+    if (!hasTrainers && !hasWatches) { renderEmpty(mount); return; }
 
-    var totalVisible = (primary ? 1 : 0) + savedFiltered.length + pastFiltered.length;
-    if (totalVisible === 0) { renderEmptyFilter(mount); return; }
-
+    var hf = state.hubFilter;
     var html = '';
-    if (primary) html += renderPrimary(primary);
-    if (savedFiltered.length) html += renderSavedGrid(savedFiltered);
-    if (pastFiltered.length) html += renderPastStrip(pastFiltered);
+    if (hf === 'all' || hf === 'notifications') {
+      if (hasWatches) html += renderNotificationsSection();
+    }
+    if (hf === 'all' || hf === 'trainers') {
+      var totalVisible = (primary ? 1 : 0) + savedFiltered.length + pastFiltered.length;
+      if (hasTrainers && totalVisible === 0 && state.filter !== 'all') {
+        renderEmptyFilter(mount);
+        return;
+      }
+      if (primary) html += renderPrimary(primary);
+      if (savedFiltered.length) html += renderSavedGrid(savedFiltered);
+      if (pastFiltered.length) html += renderPastStrip(pastFiltered);
+    }
+    if (hf === 'ice') {
+      html += renderIceWatchesSection();
+    }
+    if (!html && hf === 'notifications') {
+      mount.innerHTML =
+        '<div class="st-empty-block"><div class="st-empty-title">Нет активных напоминаний</div>' +
+        '<div class="st-empty-desc">Включите 🔔 в каталоге тренера или на карточке катка.</div></div>';
+      return;
+    }
+    if (!html) { renderEmpty(mount); return; }
     mount.innerHTML = html;
     wireMount(mount);
   }
@@ -559,12 +745,24 @@
     return;
   }
 
-  fetch(apiUrl('/client/trainer-edges'), { headers: headersJson() })
-    .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(String(r.status))); })
-    .then(function (data) {
+  Promise.all([
+    fetch(apiUrl('/client/trainer-edges'), { headers: headersJson() }).then(function (r) {
+      return r.ok ? r.json() : Promise.reject(new Error(String(r.status)));
+    }),
+    fetch(apiUrl('/client/watches'), { headers: headersJson() }).then(function (r) {
+      return r.ok ? r.json() : { trainer_notifications: [], ice_watch_items: [] };
+    }),
+  ])
+    .then(function (results) {
+      var data = results[0];
+      var watches = results[1] || {};
       state.primary = data.primary || null;
       state.saved = Array.isArray(data.saved) ? data.saved : [];
       state.past = Array.isArray(data.past) ? data.past : [];
+      state.trainerNotifications = watches.trainer_notifications || [];
+      state.iceWatchItems = watches.ice_watch_items || [];
+      state.watchesActiveCount = Number(watches.active_count) || activeNotificationCount();
+      renderHubPills();
       renderFilterPills();
       rerender();
     })

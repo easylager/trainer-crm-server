@@ -331,6 +331,25 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   background: var(--glide-line, color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent));
 }
 
+.client-more-sheet__badge {
+  position: absolute;
+  left: 36px;
+  top: 10px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--tg-theme-button-color);
+  color: var(--tg-theme-button-text-color);
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
+  line-height: 18px;
+  text-align: center;
+  border: 2px solid var(--tg-theme-bg-color);
+  z-index: 2;
+  box-sizing: border-box;
+}
+
 .client-more-sheet__body {
   flex: 1;
   min-width: 0;

@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="__LANG__">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>__OG_TITLE__</title>
   <meta name="description" content="__OG_DESCRIPTION__" />
   <link rel="canonical" href="__CANONICAL__" />
-  <meta name="robots" content="index, follow" />
+  <meta name="robots" content="__ROBOTS__" />
 
   <meta property="og:type" content="website" />
-  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:locale" content="__OG_LOCALE__" />
   <meta property="og:site_name" content="Glide" />
   <meta property="og:title" content="__OG_TITLE__" />
   <meta property="og:description" content="__OG_DESCRIPTION__" />
@@ -18,10 +18,12 @@
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
+  <script type="application/ld+json">__JSONLD__</script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=1" />
   <style>
     /*
       Страница самодостаточная: один запрос, ноль своих JS/CSS-ассетов. Её открывают из
@@ -31,20 +33,21 @@
     :root {
       color-scheme: light;
       --ic-bg: #f6f8fa;
-      --ic-surface: #ffffff;
-      --ic-ink: #0d1b26;
-      --ic-muted: #5d7285;
+      --ic-surface: var(--g-surface);
+      --ic-ink: var(--g-ink);
+      --ic-muted: var(--g-muted);
       --ic-line: #e3e9ee;
-      --ic-accent: #0f8f8a;
+      --ic-accent: var(--g-accent);
       --ic-accent-ink: #ffffff;
       --ic-chip: #eef4f6;
+      --ic-warn: #a86411;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
       background: var(--ic-bg);
       color: var(--ic-ink);
-      font-family: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--g-font);
       font-size: 16px;
       line-height: 1.45;
       -webkit-font-smoothing: antialiased;
@@ -71,6 +74,15 @@
     .arena__name a { color: inherit; text-decoration: none; }
     .arena__name a::after { content: " ›"; color: var(--ic-accent); }
     .arena__where { margin: 2px 0 12px; color: var(--ic-muted); font-size: 14px; }
+    /* TASK-180: расписание арены давно не подтверждалось — спокойно, но заметно. */
+    .arena__stale { margin: -6px 0 12px; color: var(--ic-warn); font-size: 13px; }
+    .unconfirmed { margin: 20px 0 0; padding: 14px 18px; border: 1px dashed var(--ic-line); border-radius: 18px; }
+    .unconfirmed__title { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+    .unconfirmed ul { margin: 0; padding: 0; list-style: none; }
+    .unconfirmed li { margin: 0 0 6px; font-size: 14px; color: var(--ic-muted); }
+    .unconfirmed li b { color: var(--ic-ink); font-weight: 600; }
+    .unconfirmed a { color: var(--ic-accent); }
+    .arena__basis { margin: 10px 0 0; color: var(--ic-muted); font-size: 13px; line-height: 1.4; }
     .slots { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
     .slot {
       display: flex;
@@ -83,6 +95,12 @@
     }
     .slot__time { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .slot__price { font-size: 13px; color: var(--ic-muted); font-variant-numeric: tabular-nums; }
+    .slot--basis-projected,
+    .slot--basis-photo,
+    .slot--basis-manual {
+      border: 1px dashed rgba(15, 143, 138, 0.55);
+      background: rgba(15, 143, 138, 0.08);
+    }
     .empty {
       background: var(--ic-surface);
       border: 1px solid var(--ic-line);
@@ -119,5 +137,33 @@
     <a class="cta" href="__CTA_URL__">Открыть в Glide</a>
     <footer>__FOOTER__</footer>
   </main>
+  <script src="/static/shared/list-scroll-restore.js?v=1"></script>
+  <script>
+    /* no-store убивает bfcache — возвращаем позицию списка после /p/. */
+    (function () {
+      var Api = window.GlideListScrollRestore;
+      if (!Api) return;
+      var path = location.pathname;
+      var search = location.search;
+      function save() {
+        Api.save(sessionStorage, path, search, window.scrollY || window.pageYOffset || 0);
+      }
+      function restore() {
+        var y = Api.consume(sessionStorage, path, search);
+        if (!y) return;
+        var go = function () { window.scrollTo(0, y); };
+        go();
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(function () { requestAnimationFrame(go); });
+        }
+      }
+      window.addEventListener('pagehide', save);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') save();
+      });
+      if (document.readyState === 'complete') restore();
+      else window.addEventListener('load', restore);
+    })();
+  </script>
 </body>
 </html>

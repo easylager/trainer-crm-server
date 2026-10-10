@@ -145,8 +145,12 @@
     /* Услуги, вписанные вручную на этом экране. Уходят отдельным полем: id у них
        появится только на сервере, после дедупа. */
     customServiceNames: [],
-    /* Независимо от площадки: у консультанта может быть и зал, и онлайн. */
-    onlineEnabled: false,
+    /* service_id → bool; default false (venue). */
+    serviceOnlineById: {},
+    /* custom name → bool. */
+    customServiceOnlineByName: {},
+    /* Draft format while adding a custom service. */
+    newCustomServiceOnline: false,
     /* Типы площадок для формы создания (ice|gym|choreo|…). */
     venueTypes: [],
     newArenaVenueType: 'ice',
@@ -208,7 +212,7 @@
       'obRoleAddBtn', 'obRoleAddSubmit', 'obRoleAddCancel', 'obRoleAddStatus',
       'obServiceAddBtn', 'obServiceAddWrap', 'obServiceAddInput',
       'obServiceAddSubmit', 'obServiceAddCancel', 'obServiceAddStatus',
-      'obOnlineEnabled', 'obArenaCreateType',
+      'obServiceFormats', 'obServiceAddFormat', 'obArenaCreateType',
     ].forEach(function (id) { el[id] = byId(id); });
   }
 
@@ -389,6 +393,12 @@
   /* ── Свои услуги ── */
 
   function openServiceAdd() {
+    state.newCustomServiceOnline = false;
+    if (el.obServiceAddFormat) {
+      bindFormatPair(el.obServiceAddFormat, false, function (online) {
+        state.newCustomServiceOnline = !!online;
+      });
+    }
     if (el.obServiceAddWrap) el.obServiceAddWrap.hidden = false;
     if (el.obServiceAddBtn) el.obServiceAddBtn.hidden = true;
     if (el.obServiceAddInput) el.obServiceAddInput.focus();
@@ -398,6 +408,7 @@
     if (el.obServiceAddWrap) el.obServiceAddWrap.hidden = true;
     if (el.obServiceAddBtn) el.obServiceAddBtn.hidden = false;
     if (el.obServiceAddInput) el.obServiceAddInput.value = '';
+    state.newCustomServiceOnline = false;
     serviceAddNote('');
   }
 
@@ -441,10 +452,169 @@
       return;
     }
     state.customServiceNames.push(raw);
+    state.customServiceOnlineByName[raw] = !!state.newCustomServiceOnline;
     closeServiceAdd();
     renderServices();
+    syncOnlineArenaWithServices({ fromFormat: true });
     syncCta();
     haptic('light');
+  }
+
+  function bindFormatPair(container, isOnline, onChange) {
+    if (!container) return;
+    container.querySelectorAll('[data-online]').forEach(function (btn) {
+      var online = btn.getAttribute('data-online') === '1';
+      btn.setAttribute('aria-pressed', (online === !!isOnline) ? 'true' : 'false');
+      btn.onclick = function () {
+        onChange(online);
+        container.querySelectorAll('[data-online]').forEach(function (b) {
+          b.setAttribute(
+            'aria-pressed',
+            (b.getAttribute('data-online') === '1') === !!online ? 'true' : 'false'
+          );
+        });
+        haptic('light');
+      };
+    });
+  }
+
+
+  function selectedOfferCount() {
+    return state.selectedServices.length + state.customServiceNames.length;
+  }
+
+  /** Every selected/custom offer is online (and at least one exists). */
+  function allSelectedOffersOnline() {
+    if (!selectedOfferCount()) return false;
+    var i;
+    for (i = 0; i < state.selectedServices.length; i++) {
+      if (!state.serviceOnlineById[state.selectedServices[i]]) return false;
+    }
+    for (i = 0; i < state.customServiceNames.length; i++) {
+      if (!state.customServiceOnlineByName[state.customServiceNames[i]]) return false;
+    }
+    return true;
+  }
+
+  function serviceAllowsOnline(svc) {
+    return !!(svc && svc.allows_online);
+  }
+
+  function markAllSelectedOffersOnline(isOnline) {
+    var i;
+    for (i = 0; i < state.selectedServices.length; i++) {
+      var sid = state.selectedServices[i];
+      var svc = state.services.find(function (s) { return s.id === sid; });
+      if (isOnline && !serviceAllowsOnline(svc)) state.serviceOnlineById[sid] = false;
+      else state.serviceOnlineById[sid] = !!isOnline;
+    }
+    for (i = 0; i < state.customServiceNames.length; i++) {
+      state.customServiceOnlineByName[state.customServiceNames[i]] = !!isOnline;
+    }
+  }
+
+  /**
+   * Service-level online ↔ arena mode «Провожу онлайн».
+   * Exclusive online = no venues; also marks every selected offer as online.
+   */
+  function syncOnlineArenaWithServices(opts) {
+    opts = opts || {};
+    var fromFormat = !!opts.fromFormat;
+    if (allSelectedOffersOnline()) {
+      /* Exclusive «Провожу онлайн» only when not already picking venues (hybrid OK). */
+      if (state.arenaMode === 'none') {
+        state.arenaMode = 'online';
+        state.singleArenaId = null;
+        state.multiArenaIds = [];
+        state.activeArenaTab = null;
+        Object.keys(state.week).forEach(function (dow) {
+          var d = state.week[dow];
+          if (!d) return;
+          var hrs = Object.keys(d.arenaByHour).map(Number);
+          if (!hrs.length) { delete state.week[dow]; return; }
+          var next = {};
+          hrs.forEach(function (h) { next[h] = null; });
+          d.arenaByHour = next;
+        });
+        renderArenaMode();
+        renderArenaSingleList();
+        renderArenaMultiList();
+        renderArenaTabs();
+        syncDurationLock();
+        renderGrid();
+        submitArenaOnlineFormat();
+      }
+    } else if (state.arenaMode === 'online' && fromFormat) {
+      state.arenaMode = 'none';
+      renderArenaMode();
+      renderArenaTabs();
+      syncDurationLock();
+      renderGrid();
+      fetch(apiUrl('/trainer/profile/arena-setup'), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({ mode: 'clear' }),
+      }).catch(function () { /* non-blocking */ });
+    }
+    syncCta();
+  }
+
+  function renderServiceFormats() {
+    var box = el.obServiceFormats;
+    if (!box) return;
+    box.innerHTML = '';
+    var rows = [];
+    state.selectedServices.forEach(function (sid) {
+      var svc = state.services.find(function (s) { return s.id === sid; });
+      if (!serviceAllowsOnline(svc)) return;
+      rows.push({
+        key: 'id:' + sid,
+        name: (svc && svc.name) || ('Услуга #' + sid),
+        online: !!state.serviceOnlineById[sid],
+        setOnline: function (v) { state.serviceOnlineById[sid] = !!v; },
+      });
+    });
+    state.customServiceNames.forEach(function (name) {
+      rows.push({
+        key: 'custom:' + name,
+        name: name,
+        online: !!state.customServiceOnlineByName[name],
+        setOnline: function (v) { state.customServiceOnlineByName[name] = !!v; },
+      });
+    });
+    box.hidden = rows.length === 0;
+    rows.forEach(function (row) {
+      var wrap = document.createElement('div');
+      wrap.className = 'ob-svc-format-row';
+      var nm = document.createElement('span');
+      nm.className = 'ob-svc-format-row__name';
+      nm.textContent = row.name;
+      wrap.appendChild(nm);
+      [
+        { online: false, label: 'На площадке' },
+        { online: true, label: 'Онлайн' },
+      ].forEach(function (opt) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ob-chip';
+        b.setAttribute('data-online', opt.online ? '1' : '0');
+        b.setAttribute('aria-pressed', (opt.online === row.online) ? 'true' : 'false');
+        b.textContent = opt.label;
+        b.onclick = function () {
+          row.setOnline(opt.online);
+          wrap.querySelectorAll('[data-online]').forEach(function (x) {
+            x.setAttribute(
+              'aria-pressed',
+              (x.getAttribute('data-online') === '1') === !!opt.online ? 'true' : 'false'
+            );
+          });
+          syncOnlineArenaWithServices({ fromFormat: true });
+          haptic('light');
+        };
+        wrap.appendChild(b);
+      });
+      box.appendChild(wrap);
+    });
   }
 
   /* ── Услуги ── */
@@ -460,10 +630,17 @@
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
       b.onclick = function () {
         var i = state.selectedServices.indexOf(svc.id);
-        if (i >= 0) state.selectedServices.splice(i, 1);
-        else state.selectedServices.push(svc.id);
+        if (i >= 0) {
+          state.selectedServices.splice(i, 1);
+          delete state.serviceOnlineById[svc.id];
+        } else {
+          state.selectedServices.push(svc.id);
+          if (state.serviceOnlineById[svc.id] == null) state.serviceOnlineById[svc.id] = false;
+        }
         b.setAttribute('aria-pressed', state.selectedServices.indexOf(svc.id) >= 0 ? 'true' : 'false');
         haptic('light');
+        renderServiceFormats();
+        syncOnlineArenaWithServices({ fromFormat: true });
         syncCta();
       };
       el.obServices.appendChild(b);
@@ -479,13 +656,15 @@
       b.title = 'Убрать «' + name + '»';
       b.setAttribute('aria-pressed', 'true');
       b.onclick = function () {
-        state.customServiceNames.splice(idx, 1);
+        var removed = state.customServiceNames.splice(idx, 1)[0];
+        if (removed) delete state.customServiceOnlineByName[removed];
         renderServices();
         syncCta();
         haptic('light');
       };
       el.obServices.appendChild(b);
     });
+    renderServiceFormats();
   }
 
   /* ── Длительность ── */
@@ -1477,6 +1656,7 @@
 
   function setArenaMode(mode) {
     if (state.arenaMode === mode) return;
+    state._prevArenaMode = state.arenaMode;
     state.arenaMode = mode;
     if (mode === 'multi') {
       state.singleArenaId = null;
@@ -1508,7 +1688,18 @@
     syncDurationLock();
     renderGrid();
     syncCta();
-    if (mode === 'online') submitArenaOnlineFormat();
+    if (mode === 'online') {
+      markAllSelectedOffersOnline(true);
+      renderServiceFormats();
+      submitArenaOnlineFormat();
+    } else if (state._prevArenaMode === 'online') {
+      /* Leaving exclusive online — do not force services offline (hybrid allowed). */
+      fetch(apiUrl('/trainer/profile/arena-setup'), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({ mode: 'clear' }),
+      }).catch(function () { /* non-blocking */ });
+    }
   }
 
   /* «Онлайн» takes effect immediately (like arena create) rather than waiting for the final
@@ -1873,7 +2064,7 @@
   }
 
   function arenaStepValid() {
-    if (state.arenaMode === 'none') return true;
+    if (state.arenaMode === 'none' || state.arenaMode === 'online') return true;
     if (state.cityId == null) return false;
     if (state.arenaMode === 'single') return state.singleArenaId != null;
     if (state.arenaMode === 'multi') return state.multiArenaIds.length > 0;
@@ -1919,6 +2110,17 @@
       .then(function (data) {
         state.services = data.services || [];
         state.selectedServices = (data.selected_service_ids || []).slice();
+        state.serviceOnlineById = {};
+        (data.selected_services || []).forEach(function (item) {
+          if (item && item.service_id != null) {
+            var svc = state.services.find(function (s) { return s.id === item.service_id; });
+            var online = !!item.is_online && serviceAllowsOnline(svc);
+            state.serviceOnlineById[Number(item.service_id)] = online;
+          }
+        });
+        state.selectedServices.forEach(function (sid) {
+          if (state.serviceOnlineById[sid] == null) state.serviceOnlineById[sid] = false;
+        });
         state.cities = data.cities || [];
         state.cityId = data.city_id != null ? Number(data.city_id) : null;
         state.arenas = data.arenas || [];
@@ -2021,9 +2223,7 @@
           state.selectedRoles = [];
         }
         syncRoleIsCustomFlag();
-        state.onlineEnabled = !!data.online_enabled;
         state.venueTypes = data.venue_types || [];
-        if (el.obOnlineEnabled) el.obOnlineEnabled.checked = state.onlineEnabled;
 
         if (el.obLoading) el.obLoading.style.display = 'none';
         if (el.obSetup) el.obSetup.hidden = false;
@@ -2089,10 +2289,17 @@
       headers: apiHeaders(),
       body: JSON.stringify({
         service_ids: state.selectedServices,
-        custom_service_names: state.customServiceNames,
+        services: state.selectedServices.map(function (sid) {
+          var svc = state.services.find(function (s) { return Number(s.id) === Number(sid); });
+          var online = !!state.serviceOnlineById[sid];
+          if (!serviceAllowsOnline(svc)) online = false;
+          return { service_id: sid, is_online: online };
+        }),
+        custom_services: state.customServiceNames.map(function (name) {
+          return { name: name, is_online: !!state.customServiceOnlineByName[name] };
+        }),
         /* Пустой список не шлём — иначе каждое сохранение сбрасывало бы роли в БД. */
         specialist_roles: state.selectedRoles.length ? currentRolesPayload() : undefined,
-        online_enabled: state.onlineEnabled,
         days: days,
         duration_minutes: state.durationMinutes,
         city_id: state.cityId,
@@ -2353,10 +2560,9 @@
         }
       });
     }
-    if (el.obOnlineEnabled) {
-      el.obOnlineEnabled.addEventListener('change', function () {
-        state.onlineEnabled = !!el.obOnlineEnabled.checked;
-        haptic('light');
+    if (el.obServiceAddFormat) {
+      bindFormatPair(el.obServiceAddFormat, false, function (online) {
+        state.newCustomServiceOnline = !!online;
       });
     }
   }

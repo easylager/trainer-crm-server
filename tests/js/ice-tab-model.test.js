@@ -8,9 +8,15 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
+const stalePath = path.resolve(__dirname, '../../static/webapp/schedule-staleness-model.js');
+const modePath = path.resolve(__dirname, '../../static/webapp/arena-schedule-mode-model.js');
 const modelPath = path.resolve(__dirname, '../../static/webapp/ice-tab-model.js');
 
 function loadModel() {
+  delete require.cache[require.resolve(stalePath)];
+  require(stalePath);
+  delete require.cache[require.resolve(modePath)];
+  require(modePath);
   const resolved = require.resolve(modelPath);
   delete require.cache[resolved];
   return require(modelPath);
@@ -134,9 +140,83 @@ describe('catalog header (A′)', () => {
 
   it('applyCatalogMode maps segments to intent and venueTypes', () => {
     const { applyCatalogMode } = loadModel();
-    assert.deepEqual(applyCatalogMode('shop'), { intent: 'skate', venueTypes: ['shop'] });
-    assert.deepEqual(applyCatalogMode('coach'), { intent: 'coach', venueTypes: [] });
-    assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [] });
+    assert.deepEqual(applyCatalogMode('shop'), { intent: 'skate', venueTypes: ['shop'], placeService: '' });
+    assert.deepEqual(applyCatalogMode('coach'), { intent: 'coach', venueTypes: [], placeService: '' });
+    assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [], placeService: '' });
+    assert.deepEqual(applyCatalogMode('ohm'), { intent: 'ohm', venueTypes: [], placeService: '' });
+    assert.deepEqual(applyCatalogMode('service'), { intent: 'skate', venueTypes: [], placeService: 'service' });
+  });
+
+  it('catalogModesView: «Магазины» из shop_count города, даже без venue_type_facets (после тренера)', () => {
+    const { catalogModesView } = loadModel();
+    const modes = catalogModesView({
+      facets: [],
+      intent: 'coach',
+      venueTypes: [],
+      skateCount: 4,
+      trainerCount: 2,
+      placeCountHint: 10,
+      shopCount: 3,
+    });
+    assert.deepEqual(
+      modes.map((m) => m.id),
+      ['places', 'shop', 'coach']
+    );
+    assert.equal(modes.find((m) => m.id === 'coach').active, true);
+    assert.equal(modes.find((m) => m.id === 'shop').active, false);
+    const noShops = catalogModesView({
+      facets: [],
+      intent: 'coach',
+      venueTypes: [],
+      skateCount: 1,
+      trainerCount: 1,
+      shopCount: 0,
+    });
+    assert.ok(!noShops.some((m) => m.id === 'shop'));
+    assert.equal(modes.find((m) => m.id === 'places').label, 'Покататься');
+    assert.equal(modes.find((m) => m.id === 'shop').label, 'Магазины');
+    assert.equal(modes.find((m) => m.id === 'coach').label, 'Тренеры');
+  });
+
+  it('catalogModesView: Хоккей и Заточка — разделы в одном порядке с сайтом', () => {
+    const { catalogModesView, sectionHint } = loadModel();
+    const modes = catalogModesView({
+      facets: [{ key: 'ice', count: 4 }, { key: 'shop', count: 2 }],
+      intent: 'skate',
+      venueTypes: [],
+      placeService: 'service',
+      ohmCount: 3,
+      serviceCount: 9,
+      trainerCount: 1,
+      shopCount: 2,
+    });
+    assert.deepEqual(
+      modes.map((m) => m.id),
+      ['places', 'ohm', 'service', 'shop', 'coach']
+    );
+    assert.deepEqual(
+      modes.map((m) => m.label),
+      ['Покататься', 'Хоккей', 'Заточка', 'Магазины', 'Тренеры']
+    );
+    assert.equal(modes.find((m) => m.id === 'service').active, true);
+    assert.equal(modes.find((m) => m.id === 'places').active, false);
+    assert.equal(sectionHint('ohm', ''), 'открытая тренировка, ОХМ');
+    assert.equal(sectionHint('places', 'service'), 'заточка и прокат');
+    assert.equal(sectionHint('places', ''), 'каток, зал или трасса');
+    assert.equal(sectionHint('shop', ''), '');
+  });
+
+  it('placeServiceChipView: чип «Заточка» только когда в городе есть такие места', () => {
+    const { placeServiceChipView, buildListUrl } = loadModel();
+    assert.equal(placeServiceChipView(0, false), null);
+    const on = placeServiceChipView(4, true);
+    assert.equal(on.label, 'Заточка');
+    assert.equal(on.count, 4);
+    assert.equal(on.active, true);
+    assert.equal(placeServiceChipView(0, true).label, 'Заточка');
+    const url = buildListUrl({ cityId: 3, intent: 'skate', svc: 'service' });
+    assert.match(url, /svc=service/);
+    assert.ok(!buildListUrl({ cityId: 3, intent: 'skate' }).includes('svc='));
   });
 
   it('catalogStateAfterCityChange сбрасывает магазинный сегмент и фильтры', () => {
@@ -154,6 +234,7 @@ describe('catalog header (A′)', () => {
     assert.equal(next.intent, 'skate');
     assert.equal(next.shopService, '');
     assert.equal(next.shopOpenNow, false);
+    assert.equal(next.placeService, '');
     assert.equal(
       catalogStateAfterCityChange({ skate_count: 0, trainer_count: 3 }, { intent: 'skate', venueTypes: ['shop'] }).intent,
       'coach'
@@ -346,6 +427,26 @@ describe('trainer catalog chip (TASK-076 AC-002)', () => {
     assert.equal(intentFromSearch('?intent=skate'), 'skate');
     assert.equal(intentFromSearch(''), null);
     assert.equal(intentFromSearch('?intent=nope'), null);
+    assert.equal(intentFromSearch('?intent=service'), null);
+  });
+
+  it('placeServiceBootFromSearch: intent=service and svc=service open Заточка', () => {
+    const { placeServiceBootFromSearch, urlBlocksSavedPlaceService } = loadModel();
+    assert.deepEqual(placeServiceBootFromSearch('?city_id=7&intent=service'), {
+      intent: 'skate',
+      venueTypes: [],
+      placeService: 'service',
+    });
+    assert.deepEqual(placeServiceBootFromSearch('?svc=service'), {
+      intent: 'skate',
+      venueTypes: [],
+      placeService: 'service',
+    });
+    assert.equal(placeServiceBootFromSearch('?intent=ohm'), null);
+    assert.equal(urlBlocksSavedPlaceService('?intent=ohm&city_id=1'), true);
+    assert.equal(urlBlocksSavedPlaceService('?venue=shop&city_id=1'), true);
+    assert.equal(urlBlocksSavedPlaceService('?intent=coach'), true);
+    assert.equal(urlBlocksSavedPlaceService('?intent=skate'), false);
   });
 
   it('exposes a hint that the trainers catalog moved to the chip', () => {
@@ -523,6 +624,24 @@ describe('groupSearchResults (AC-004)', () => {
     assert.equal(grouped[2].label, 'Города');
     assert.equal(grouped[1].items[0].last_name, 'Иванова');
   });
+
+  it('uses the server group label when the open city is split out', () => {
+    const { groupSearchResults } = loadModel();
+    const grouped = groupSearchResults({
+      groups: [
+        { type: 'arena', label: 'Минск', items: [{ id: 1, name: 'Чижовка' }] },
+        { type: 'arena', label: 'Другие города', items: [{ id: 2, name: 'Неман' }] },
+      ],
+    });
+    assert.deepEqual(grouped.map((g) => g.label), ['Минск', 'Другие города']);
+  });
+
+  it('asks search for the open city and highlights the typed stem', () => {
+    const { buildSearchUrl, highlightSearch } = loadModel();
+    assert.ok(buildSearchUrl('заточка', 12, 2).includes('city_id=2'));
+    assert.equal(highlightSearch('Чижовка-арена', 'чижовки'), '<mark>Чижовк</mark>а-арена');
+    assert.equal(highlightSearch('A & B', 'нет'), 'A &amp; B');
+  });
 });
 
 describe('pickFallbackCity (EDGE-001)', () => {
@@ -689,6 +808,14 @@ describe('hrefs', () => {
     assert.equal(coerceIntent('group'), 'skate');
     assert.equal(coerceIntent('coach'), 'coach');
     assert.equal(coerceIntent('skate'), 'skate');
+    assert.equal(coerceIntent('ohm'), 'ohm');
+  });
+
+  it('buildListUrl passes intent=ohm; when filter stays skate-only', () => {
+    const { buildListUrl, whenSkateFilterContext, intentFromSearch } = loadModel();
+    assert.ok(buildListUrl({ cityId: 1, intent: 'ohm' }).includes('intent=ohm'));
+    assert.equal(whenSkateFilterContext('ohm', []), false);
+    assert.equal(intentFromSearch('?intent=ohm&city_id=1'), 'ohm');
   });
 
   it('map toggle stays on the Ice tab (TASK-054 in-place Yandex map)', () => {
@@ -855,6 +982,53 @@ describe('session restore', () => {
     assert.equal(loaded.view, 'map');
     assert.equal(loaded.scrollY, 420);
   });
+
+  it('scrollYFromSaved ignores empty/invalid and keeps positive offsets', () => {
+    const { scrollYFromSaved } = loadModel();
+    assert.equal(scrollYFromSaved(null), 0);
+    assert.equal(scrollYFromSaved({}), 0);
+    assert.equal(scrollYFromSaved({ scrollY: 0 }), 0);
+    assert.equal(scrollYFromSaved({ scrollY: -10 }), 0);
+    assert.equal(scrollYFromSaved({ scrollY: 'nope' }), 0);
+    assert.equal(scrollYFromSaved({ scrollY: 420 }), 420);
+    assert.equal(scrollYFromSaved({ scrollY: '880' }), 880);
+  });
+
+  it('scrollAnchorFromSaved round-trips with saveIceState', () => {
+    const { saveIceState, loadIceState, scrollAnchorFromSaved } = loadModel();
+    const mem = {};
+    const storage = {
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => {
+        mem[k] = String(v);
+      },
+    };
+    assert.equal(scrollAnchorFromSaved(null), '');
+    saveIceState({ intent: 'skate', scrollY: 100, scrollAnchor: '115' }, storage);
+    assert.equal(scrollAnchorFromSaved(loadIceState(storage)), '115');
+  });
+
+  it('list scroll key survives ice-state persist wipe (consume once)', () => {
+    const { saveListScroll, consumeListScroll, ICE_SCROLL_KEY } = loadModel();
+    const mem = {};
+    const storage = {
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => {
+        mem[k] = String(v);
+      },
+      removeItem: (k) => {
+        delete mem[k];
+      },
+    };
+    assert.equal(saveListScroll(storage, { scrollY: 640, scrollAnchor: '115' }), true);
+    assert.ok(mem[ICE_SCROLL_KEY]);
+    const first = consumeListScroll(storage);
+    assert.equal(first.scrollY, 640);
+    assert.equal(first.scrollAnchor, '115');
+    const second = consumeListScroll(storage);
+    assert.equal(second.scrollY, 0);
+    assert.equal(second.scrollAnchor, '');
+  });
 });
 
 describe('boardCardView (TASK-090: карточка-табло)', () => {
@@ -887,9 +1061,12 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     assert.equal(v.isSession, true);
   });
 
-  it('AC-001: полноширинный кадр берёт card (800px), а не thumb (320px)', () => {
+  it('AC-001: полноширинный кадр — card, thumb только в srcset', () => {
     const { boardCardView } = loadModel();
-    assert.equal(boardCardView(sessionItem, now).photo, '/photos/3_card.jpg');
+    const v = boardCardView(sessionItem, now);
+    assert.equal(v.photo, '/photos/3_card.jpg');
+    assert.equal(v.photoSrcset, '/photos/3_thumb.jpg 320w, /photos/3_card.jpg 800w');
+    assert.equal(v.photoSizes, '(max-width:480px) 100vw, 480px');
     const noCard = Object.assign({}, sessionItem, { card: null });
     assert.equal(boardCardView(noCard, now).photo, '/photos/3_thumb.jpg');
   });
@@ -1023,6 +1200,31 @@ describe('listPaintMode (lens switch must not re-skin leftover cards)', () => {
         items: [{ id: 3, name: 'ТЦ Замок', tier: 'A' }],
       }),
       'skeleton'
+    );
+  });
+
+  it('ohm is its own lens, so a finished ОХМ response is not painted as a skeleton', () => {
+    const { listPaintMode, arenaListLens, formatSortCaption } = loadModel();
+    assert.equal(arenaListLens('ohm'), 'ohm');
+    assert.equal(arenaListLens('skate'), 'skate');
+    assert.equal(
+      listPaintMode({
+        loading: false,
+        intent: 'ohm',
+        loadedIntent: arenaListLens('ohm'),
+        items: [{ id: 1, name: 'Чижовка' }],
+      }),
+      'items'
+    );
+    assert.match(
+      formatSortCaption({
+        total: 4,
+        items: [{ id: 1 }],
+        intent: 'ohm',
+        loadedIntent: 'ohm',
+        loading: false,
+      }),
+      /4 катка/
     );
   });
 
@@ -1211,7 +1413,8 @@ describe('TASK-146 (Q-006): окно времени', () => {
 
   it('whenBootFromSearch читает day= и when=', () => {
     const { whenBootFromSearch } = loadModel();
-    assert.deepEqual(whenBootFromSearch('?day=2026-10-08'), { when: 'day', whenDay: '2026-10-08' });
+    // Дата не «завтра» относительно minsk today — иначе модель нормализует в when=tomorrow.
+    assert.deepEqual(whenBootFromSearch('?day=2030-06-15'), { when: 'day', whenDay: '2030-06-15' });
     assert.deepEqual(whenBootFromSearch('?when=weekend'), { when: 'weekend', whenDay: '' });
   });
 
@@ -1279,13 +1482,114 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
   });
 });
 
-describe('TASK-146: устаревшее расписание в ленте', () => {
-  it('schedule_stale не меняет подпись карточки в ленте', () => {
+describe('TASK-180: устаревшее расписание в ленте', () => {
+  it('schedule_stale помечает карточку и подпись глубины', () => {
     const { boardCardView } = loadModel();
     const item = { id: 1, name: 'Каток', live: { kind: 'session', local_date: '2026-10-02', starts_at_local: '18:00', more_count: 5, session_id: 3 } };
     const now = new Date('2026-10-02T10:00:00Z');
-    const v = boardCardView({ ...item, freshness: { schedule_stale: true } }, now, {});
-    assert.equal(v.stale, false);
+    const v = boardCardView(
+      { ...item, freshness: { schedule_stale: true, schedule_very_stale: false } },
+      now,
+      {}
+    );
+    assert.equal(v.stale, true);
+    assert.match(v.depth, /могло измениться/);
     assert.match(v.depth, /сеанс/);
+  });
+});
+
+describe('TASK-180: очень устаревшее расписание в ленте (> 72 ч)', () => {
+  const now = new Date('2026-10-06T10:00:00Z');
+  const base = {
+    id: 1,
+    name: 'Каток',
+    tier: 'A',
+    phone: '+375 17 000-00-00',
+    live: {
+      kind: 'session',
+      session_id: 3,
+      local_date: '2026-10-06',
+      starts_at_local: '18:00',
+      price_adult_minor: 1000,
+      currency_code: 'BYN',
+      more_count: 5,
+    },
+    freshness: {
+      schedule_stale: true,
+      schedule_very_stale: true,
+      schedule_observed_at: '2026-10-02T09:00:00+00:00',
+    },
+  };
+
+  it('старый ответ API (kind=session) не показывает день, время и цену как текущие', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(base, now, {});
+    assert.equal(v.isSession, false);
+    assert.equal(v.veryStale, true);
+    assert.equal(v.day, '');
+    assert.equal(v.time, '');
+    assert.equal(v.prices, '');
+    assert.equal(v.sessionId, null);
+    assert.equal(v.status, 'Расписание не обновлялось 4 дня — уточните по телефону');
+    assert.doesNotMatch(v.depth, /сеанс/);
+  });
+
+  it('kind=unconfirmed от сервера — берём его строку', () => {
+    const { boardCardView, formatLiveLine } = loadModel();
+    const item = {
+      ...base,
+      live: { kind: 'unconfirmed', text: 'Расписание не обновлялось 5 дней — уточните по телефону' },
+    };
+    const v = boardCardView(item, now, {});
+    assert.equal(v.isSession, false);
+    assert.equal(v.status, 'Расписание не обновлялось 5 дней — уточните по телефону');
+    assert.equal(formatLiveLine(item, now), 'Расписание не обновлялось 5 дней — уточните по телефону');
+  });
+
+  it('не отвечает на выбранное окно и не помечается «могло измениться»', () => {
+    const { boardCardView, splitByWindow } = loadModel();
+    const parts = splitByWindow([base], 'today_evening');
+    assert.equal(parts.hits.length, 0);
+    assert.equal(parts.rest.length, 1);
+    const v = boardCardView(base, now, {});
+    assert.equal(v.stale, false);
+    assert.doesNotMatch(v.depth, /могло измениться/);
+  });
+
+  it('formatLiveLine для сеанса с very_stale — строка «не обновлялось», без времени', () => {
+    const { formatLiveLine } = loadModel();
+    const line = formatLiveLine(base, now);
+    assert.match(line, /не обновлялось 4 дня/);
+    assert.doesNotMatch(line, /18:00/);
+  });
+});
+
+describe('TASK-204 schedule_mode on board card', () => {
+  const now = new Date('2026-10-06T12:00:00Z');
+
+  it('phone — статус и кнопка звонка', () => {
+    const { boardCardView } = loadModel();
+    const item = {
+      id: 1,
+      name: 'Берёза',
+      phone: '+375291112233',
+      live: { kind: 'phone', text: 'Расписание по телефону' },
+    };
+    const v = boardCardView(item, now, {});
+    assert.equal(v.isSession, false);
+    assert.equal(v.status, 'Расписание по телефону');
+    assert.equal(v.callHref, 'tel:+375291112233');
+  });
+
+  it('season_closed — текст без сеанса', () => {
+    const { boardCardView } = loadModel();
+    const item = {
+      id: 2,
+      name: 'Жодино',
+      live: { kind: 'season_closed', text: 'Сезон закрыт · откроется 01.11 — ремонт' },
+    };
+    const v = boardCardView(item, now, {});
+    assert.equal(v.isSession, false);
+    assert.match(v.status, /Сезон закрыт/);
   });
 });

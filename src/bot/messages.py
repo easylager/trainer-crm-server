@@ -780,6 +780,10 @@ TRAINER_PASS_ORDER_NOTIFICATION = (
     "<b>Услуга</b> — {service_line}\n\n"
     "Напишите клиенту, обсудите оплату и выдайте абонемент."
 )
+TRAINER_PASS_ORDER_ALREADY_ACTIVE = (
+    "У клиента уже есть активный абонемент с оставшимися занятиями. "
+    "Заявка сохранена — обсудите, что делать дальше."
+)
 TRAINER_PASS_ORDER_BTN_WRITE = "✍️ Написать клиенту"
 # Same row as DM link: relay still works when trainer_app polling is up (optional second tap).
 TRAINER_ORDER_WRITE_VIA_BOT_BTN = "🤖 Через бота"
@@ -1558,7 +1562,13 @@ def format_client_booking_reminder_text(
         if not pay_line:
             pay_line = "💳 <b>уточните у тренера</b>"
         arena = (arena_name or "").strip() or "уточните у тренера"
-        address = (arena_address or "").strip() or "см. «Мои записи»"
+        address = (arena_address or "").strip()
+        if address:
+            address_line = f"{html.escape(address)}\n"
+        elif arena == "Онлайн":
+            address_line = ""
+        else:
+            address_line = "см. «Мои записи»\n"
         return (
             f"{title}\n\n"
             f"{booked_block}"
@@ -1566,7 +1576,7 @@ def format_client_booking_reminder_text(
             f"🎯 <b>{html.escape(service)}</b>\n"
             f"{pay_line}\n"
             f"📍 <b>{html.escape(arena)}</b>\n"
-            f"{html.escape(address)}\n\n"
+            f"{address_line}\n"
             "Сначала напишите тренеру при вопросах — карта и полный адрес в <b>«Мои записях»</b>."
         )
 

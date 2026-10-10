@@ -6,6 +6,7 @@
 
   var RuText = global.RuText;
   var M = global.ArenaCardModel;
+  var MT = global.MinskTime;
   var root = document.getElementById('arenaRoot');
   var state = {
     ref: null,
@@ -17,8 +18,12 @@
     focus: null,
     /* Сеанс для «Позвать» / «Поделиться»; тап по времени в сетке. */
     sharePickSessionId: null,
+    /* Выбранный день в секции ОХМ (независимо от МК). */
+    ohmDay: null,
     sessionsError: false,
     trainersError: false,
+    iceWatchKinds: {},
+    iceWatchIds: {},
   };
 
   function esc(s) {
@@ -32,11 +37,12 @@
   function todayIso(now) {
     now = now || new Date();
     var tz = state.card && state.card.timezone;
-    if (tz) return M.ymdInTimeZone(now, tz);
-    return M.ymd(now);
+    if (tz && M) return M.ymdInTimeZone(now, tz);
+    return MT ? MT.dateIso(now) : M.ymd(now);
   }
 
   function addDaysIso(iso, n) {
+    if (MT) return MT.addDaysIso(iso, n);
     var d = M.parseLocalDate(iso);
     d.setDate(d.getDate() + n);
     return M.ymd(d);
@@ -72,6 +78,156 @@
   function initData() {
     var tg = global.Telegram && global.Telegram.WebApp;
     return (tg && tg.initData) || '';
+  }
+
+  function syncIceWatches() {
+    var id = initData();
+    if (!id || !state.card || state.card.id == null) return Promise.resolve();
+    return fetch('/api/webapp/client/watches', {
+      headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
+      cache: 'no-store',
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        var kinds = {};
+        var ids = {};
+        var aid = Number(state.card.id);
+        (data && data.ice_watch_items || []).forEach(function (w) {
+          if (Number(w.arena_id) !== aid) return;
+          var k = String(w.kind);
+          kinds[k] = true;
+          if (w.id != null) ids[k] = Number(w.id);
+        });
+        state.iceWatchKinds = kinds;
+        state.iceWatchIds = ids;
+      })
+      .catch(function () {});
+  }
+
+  function iceWatchBtnHtml() {
+    if (!initData()) return '';
+    var stale = M.shouldWarnScheduleStale(state.card && state.card.freshness);
+    var kind = stale ? 'schedule_fresh' : 'sessions';
+    var on = state.iceWatchKinds && state.iceWatchKinds[kind];
+    // Выкл — 🔔; вкл — 🔕. Текст только в подсказке, не отдельной полосой под заголовком.
+    var hint = on
+      ? 'Напоминание в Telegram включено. Нажмите, чтобы отключить'
+      : stale
+        ? 'Напомнить в Telegram, когда обновится расписание'
+        : 'Напомнить в Telegram о подходящих сеансах';
+    return (
+      '<button type="button" class="arena-watch-btn' +
+      (on ? ' arena-watch-btn--on' : '') +
+      '" data-action="ice-watch" data-watch-kind="' +
+      esc(kind) +
+      '" aria-pressed="' +
+      (on ? 'true' : 'false') +
+      '" aria-label="' +
+      esc(hint) +
+      '" title="' +
+      esc(hint) +
+      '"><span class="arena-watch-btn__icon" aria-hidden="true">' +
+      (on ? '🔕' : '🔔') +
+      '</span></button>'
+    );
+  }
+
+  function scheduleHeaderTools(tickets) {
+    var watch = iceWatchBtnHtml();
+    var ticket =
+      tickets
+        ? '<a class="arena-cta arena-cta--link" href="' +
+          esc(tickets.href) +
+          '" data-action="external" data-href="' +
+          esc(tickets.href) +
+          '">Билеты онлайн</a>'
+        : '';
+    if (!watch && !ticket) return '';
+    return '<div class="arena-h-row__tools">' + watch + ticket + '</div>';
+  }
+
+  function toggleIceWatch(kind) {
+    kind = kind || 'sessions';
+    if (state.iceWatchKinds && state.iceWatchKinds[kind]) {
+      unsubscribeIceWatch(kind);
+    } else {
+      subscribeIceWatch(kind);
+    }
+  }
+
+  function subscribeIceWatch(kind) {
+    var id = initData();
+    if (!id || !state.card) {
+      var tg = global.Telegram && global.Telegram.WebApp;
+      if (tg && tg.showAlert) tg.showAlert('Откройте карточку из клиентского бота Telegram.');
+      return;
+    }
+    kind = kind || 'sessions';
+    fetch('/api/webapp/client/ice-watches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
+      body: JSON.stringify({
+        arena_id: state.card.id,
+        city_id: state.card.city_id || null,
+        watch_kind: kind,
+        when: 'any',
+        intent: 'skate',
+      }),
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (body) {
+        state.iceWatchKinds = state.iceWatchKinds || {};
+        state.iceWatchIds = state.iceWatchIds || {};
+        state.iceWatchKinds[kind] = true;
+        if (body && body.watch && body.watch.id != null) {
+          state.iceWatchIds[kind] = Number(body.watch.id);
+        }
+        paint();
+        var tg = global.Telegram && global.Telegram.WebApp;
+        if (tg && tg.showAlert) tg.showAlert('🔔 Уведомим в Telegram, когда появятся подходящие сеансы.');
+      })
+      .catch(function () {
+        var tg = global.Telegram && global.Telegram.WebApp;
+        if (tg && tg.showAlert) tg.showAlert('Не удалось оформить подписку. Завершите регистрацию в боте.');
+      });
+  }
+
+  function unsubscribeIceWatch(kind) {
+    var id = initData();
+    if (!id || !state.card) return;
+    kind = kind || 'sessions';
+    var wid = state.iceWatchIds && state.iceWatchIds[kind];
+    function doDelete(watchId) {
+      fetch('/api/webapp/client/ice-watches/' + encodeURIComponent(String(watchId)), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
+      })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function () {
+          if (state.iceWatchKinds) delete state.iceWatchKinds[kind];
+          if (state.iceWatchIds) delete state.iceWatchIds[kind];
+          paint();
+          var tg = global.Telegram && global.Telegram.WebApp;
+          if (tg && tg.showAlert) tg.showAlert('Напоминание отключено.');
+        })
+        .catch(function () {
+          var tg = global.Telegram && global.Telegram.WebApp;
+          if (tg && tg.showAlert) tg.showAlert('Не удалось отключить напоминание.');
+        });
+    }
+    if (wid) {
+      doDelete(wid);
+      return;
+    }
+    syncIceWatches().then(function () {
+      var retry = state.iceWatchIds && state.iceWatchIds[kind];
+      if (retry) doDelete(retry);
+      else {
+        var tg = global.Telegram && global.Telegram.WebApp;
+        if (tg && tg.showAlert) tg.showAlert('Подписка уже отключена.');
+        paint();
+      }
+    });
   }
 
   function shellNav(path) {
@@ -316,9 +472,33 @@
     return vt === 'ice' || vt === 'outdoor';
   }
 
+  function scheduleFreshness() {
+    var fromSessions = state.sessions && state.sessions.freshness;
+    var fromCard = state.card && state.card.freshness;
+    return fromSessions || fromCard || {};
+  }
+
+  function getFocusState() {
+    var focusId = state.focus && state.focus.sessionId;
+    var opts = {
+      focusSessionId: focusId,
+      freshness: scheduleFreshness(),
+      sessionsError: state.sessionsError,
+      sessionsLoaded: state.sessions != null && !state.sessionsError,
+      todayIso: todayIso(),
+      now: new Date(),
+    };
+    /* ОХМ лежит в ohm_days. Искать только массовое катание — и живой сеанс
+       из ссылки объявляется пропавшим в блоке «Расписание». */
+    return M.focusState(Object.assign({ days: combinedScheduleDays() }, opts));
+  }
+
   function sharePickedId() {
     if (state.sharePickSessionId) return String(state.sharePickSessionId);
-    if (state.focus && state.focus.sessionId) return String(state.focus.sessionId);
+    var fs = getFocusState();
+    if (fs.kind === 'found' && state.focus && state.focus.sessionId) {
+      return String(state.focus.sessionId);
+    }
     return null;
   }
 
@@ -326,13 +506,20 @@
     var slots = scheduleSlots();
     var picked = sharePickedId();
     if (picked && sessionExistsInSchedule(picked)) return picked;
+    var fs = getFocusState();
+    if (fs.kind === 'gone' || fs.kind === 'unconfirmed') return null;
     return slots.length ? String(slots[0].id) : null;
   }
 
   function shareInviteCtaLabel() {
     var sid = resolvedShareSessionId();
     if (!sid || !scheduleSlots().length) return 'Позвать с собой';
-    var when = M.shareSlotInviteLabel(scheduleDays(), todayIso(), sid, state.day || todayIso());
+    var when = M.shareSlotInviteLabel(
+      combinedScheduleDays(),
+      todayIso(),
+      sid,
+      state.day || state.ohmDay || todayIso()
+    );
     return when ? 'Позвать на ' + when : 'Позвать с собой';
   }
 
@@ -358,7 +545,14 @@
     var base = '/api/public/arenas/' + encodeURIComponent(String(state.card.id));
     return fetchJson(base + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to)).then(
       function (data) {
-        var days = (data && data.days) || [];
+        if (data) {
+          state.sessions = data;
+        } else if (state.sessions == null && state.focus && state.focus.sessionId) {
+          /* 404 при фокусе из ссылки — не помечаем расписание «загруженным пустым». */
+        } else if (state.sessions == null) {
+          state.sessions = { days: [], ohm_days: [] };
+        }
+        var days = combinedScheduleDays();
         return {
           slots: M.shareSlots(days, today, 0),
           slotSections: M.shareSlotsGrouped(days, today),
@@ -377,11 +571,13 @@
             return fetchShareSlots();
           }
         : null;
+    var fs = getFocusState();
     global.GlideShareSheet.open({
       ref: state.card.id,
       slots: payload.slots,
       slotSections: payload.slotSections,
       sessionId: resolvedShareSessionId(),
+      sessionMissing: fs.kind === 'gone' || fs.kind === 'unconfirmed',
       invite: !!invite,
       venueType: skatingCard() ? 'ice' : state.card.venue_type,
       context: 'arena_card',
@@ -605,13 +801,48 @@
     return (state.sessions && state.sessions.days) || [];
   }
 
+  function ohmScheduleDays() {
+    return (state.sessions && state.sessions.ohm_days) || [];
+  }
+
+  /** MK + ОХМ в одной ленте; дублируем merge, если WebView держит старый arena-card-model.js. */
+  function combineSessionDayLists(days, ohmDays) {
+    if (M && typeof M.combineSessionDayLists === 'function') {
+      return M.combineSessionDayLists(days, ohmDays);
+    }
+    var order = [];
+    var byDate = {};
+    function add(list) {
+      list = list || [];
+      var i;
+      for (i = 0; i < list.length; i++) {
+        var iso = list[i].local_date;
+        if (!iso) continue;
+        if (!byDate[iso]) {
+          byDate[iso] = [];
+          order.push(iso);
+        }
+        byDate[iso] = byDate[iso].concat(list[i].sessions || []);
+      }
+    }
+    add(days);
+    add(ohmDays);
+    return order.map(function (iso) {
+      return { local_date: iso, sessions: byDate[iso] };
+    });
+  }
+
+  function combinedScheduleDays() {
+    return combineSessionDayLists(scheduleDays(), ohmScheduleDays());
+  }
+
   function scheduleSlots() {
-    return skatingCard() ? M.shareSlots(scheduleDays(), todayIso(), 0) : [];
+    return skatingCard() ? M.shareSlots(combinedScheduleDays(), todayIso(), 0) : [];
   }
 
   function shareSheetPayload() {
     var today = todayIso();
-    var days = scheduleDays();
+    var days = combinedScheduleDays();
     return {
       slots: M.shareSlots(days, today, 0),
       slotSections: M.shareSlotsGrouped(days, today),
@@ -624,8 +855,40 @@
     return scheduleSlots().some(function (s) { return String(s.id) === id; });
   }
 
+  function ohmChipTitle() {
+    var GC = global.GlideCopy;
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t('kind.hockey_practice');
+      if (label && label !== 'kind.hockey_practice') return String(label);
+    }
+    return 'Хоккей для любителей (ОХМ)';
+  }
+
   function strip() {
     return M.dayStrip((state.sessions && state.sessions.days) || [], todayIso(), new Date(), 7);
+  }
+
+  /** TASK-223: сеанс из ссылки не в ленте — честно, без «прошёл». */
+  function renderFocusGoneNotice(fs) {
+    if (!fs || fs.kind !== 'gone') return '';
+    // TODO(TASK-223-D): событие share_session_gone
+    var nearestBtn = '';
+    if (fs.nearest && fs.nearest.id != null) {
+      nearestBtn =
+        '<button type="button" class="arena-focus-gone__pick" data-action="pick-session" data-session-id="' +
+        esc(String(fs.nearest.id)) +
+        '" data-local-date="' +
+        esc(fs.nearest.localDate || '') +
+        '">Ближайший: ' +
+        esc(fs.nearest.label || '') +
+        '</button>';
+    }
+    return (
+      '<div class="arena-focus-gone">' +
+      '<p class="arena-focus-gone__title">Сеанса из ссылки уже нет в расписании</p>' +
+      nearestBtn +
+      '</div>'
+    );
   }
 
   function renderDayStrip(days) {
@@ -752,13 +1015,28 @@
         '</div>'
       );
     }
+    if (feed.mode === 'phone') {
+      var call =
+        feed.callHref
+          ? '<a class="arena-btn arena-btn--call" href="' + esc(feed.callHref) + '">Позвонить</a>'
+          : '';
+      return (
+        '<div class="arena-sec">' +
+        '<p class="arena-h">Расписание</p>' +
+        '<div class="arena-closed">' + esc(feed.banner) + '</div>' +
+        call +
+        '</div>'
+      );
+    }
     if (feed.mode === 'none') {
       return '';
     }
     if (feed.mode === 'pending') {
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Расписание</p>' +
+        '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
+        scheduleHeaderTools(null) +
+        '</div>' +
         '<div class="arena-empty">' +
         '<b>Расписание уточняется</b>' +
         '<p>Мы пока не получили расписание массового катания от этого катка. Не показываем то, за что не отвечаем — позвоните или загляните на сайт.</p>' +
@@ -769,7 +1047,9 @@
     if (feed.mode === 'unconfirmed') {
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Расписание</p>' +
+        '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
+        scheduleHeaderTools(null) +
+        '</div>' +
         '<p class="arena-stale">' + esc(feed.banner || '') + '</p>' +
         '</div>'
       );
@@ -791,17 +1071,174 @@
     var staleNote = M.shouldWarnScheduleStale(state.card.freshness)
       ? M.staleScheduleNote(state.card.freshness, new Date(), state.card)
       : '';
+    var focusGone = renderFocusGoneNotice(getFocusState());
     return (
       '<div class="arena-sec">' +
       '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
-      (tickets
-        ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
-        : '') +
+      scheduleHeaderTools(tickets) +
       '</div>' +
+      focusGone +
       (staleNote ? '<p class="arena-stale">' + esc(staleNote) + '</p>' : '') +
       '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
+      '</div>'
+    );
+  }
+
+  function hasOhmSessions() {
+    var days = ohmScheduleDays();
+    var i;
+    for (i = 0; i < days.length; i++) {
+      if ((days[i].sessions || []).length) return true;
+    }
+    return false;
+  }
+
+  function ohmStrip() {
+    return M.dayStrip(ohmScheduleDays(), todayIso(), new Date(), 7);
+  }
+
+  function renderOhmShowtimes() {
+    var iso = state.ohmDay || todayIso();
+    var byDate = {};
+    var days = ohmScheduleDays();
+    var i;
+    for (i = 0; i < days.length; i++) {
+      byDate[days[i].local_date] = days[i].sessions || [];
+    }
+    var view = M.showtimesForDay({
+      sessions: byDate[iso] || [],
+      now: new Date(),
+      ticketsUrl: state.card && state.card.tickets_url,
+      markNext: iso === todayIso(),
+      pickedId: sharePickedId(),
+    });
+    if (!view.count) {
+      var next = ohmStrip().filter(function (d) { return d.count && d.iso > iso; })[0];
+      return (
+        '<div class="arena-none"><b>' +
+        (iso === todayIso() ? 'Сегодня ОХМ больше нет' : 'В этот день ОХМ нет') +
+        '</b>' +
+        (next
+          ? '<button type="button" class="linkish" data-ohm-day-jump="' +
+            esc(next.iso) +
+            '">Ближайший — ' +
+            esc(next.top.toLowerCase() === 'завтра' ? 'завтра' : next.top + ' ' + next.num) +
+            ' →</button>'
+          : '') +
+        '</div>'
+      );
+    }
+    var html = '';
+    var sectionTitle = ohmChipTitle();
+    view.groups.forEach(function (g) {
+      /* Заголовок раздела уже говорит «ОХМ». Повторять его на карточке без
+         своего имени (площадки, дискотеки) нечего: это тот же сеанс. */
+      var ownTitle = g.title && g.title !== sectionTitle ? g.title : '';
+      var head = '';
+      if (ownTitle || g.duration) {
+        head =
+          '<div class="arena-show__head">' +
+          (ownTitle ? '<b>' + esc(ownTitle) + '</b>' : '') +
+          (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') +
+          '</div>';
+      }
+      html +=
+        '<div class="arena-show">' +
+        head +
+        (g.prices.length
+          ? '<div class="arena-show__prices">' +
+            g.prices
+              .map(function (p) {
+                return '<span><small>' + esc(p.label) + '</small>' + esc(p.value) + '</span>';
+              })
+              .join('') +
+            '</div>'
+          : '') +
+        '<div class="arena-times">' +
+        g.times
+          .map(function (t) {
+            var slotCls = 'arena-slot';
+            if (t.picked) slotCls += ' arena-slot--picked';
+            if (!t.ticketHref) slotCls += ' arena-slot--no-buy';
+            var timeCls = 'arena-slot-time';
+            if (t.picked) timeCls += ' arena-time--picked';
+            else if (t.next) timeCls += ' arena-time--next';
+            var tag = t.capacity || (t.next ? 'Ближайший' : '');
+            var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
+            if (t.sessionId == null) {
+              return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span></div>';
+            }
+            return (
+              '<div class="' +
+              slotCls +
+              '">' +
+              '<button type="button" class="' +
+              timeCls +
+              '" data-action="pick-session" data-session-id="' +
+              esc(t.sessionId) +
+              '" aria-pressed="' +
+              (t.picked ? 'true' : 'false') +
+              '">' +
+              body +
+              '</button></div>'
+            );
+          })
+          .join('') +
+        '</div>' +
+        (g.note ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
+        '</div>';
+    });
+    return html;
+  }
+
+  function renderOhmSection() {
+    if (!skatingCard() || state.sessionsError || !hasOhmSessions()) return '';
+    var days = ohmStrip();
+    if (!state.ohmDay) {
+      var focusDay = state.focus && state.focus.day;
+      var inStrip = focusDay && days.some(function (d) { return d.iso === focusDay; });
+      var focusInOhm =
+        state.focus &&
+        state.focus.sessionId &&
+        M.dayForSession(ohmScheduleDays(), state.focus.sessionId);
+      state.ohmDay = focusInOhm || (inStrip ? focusDay : M.defaultScheduleDay(days));
+    }
+    return (
+      '<div class="arena-sec" id="arenaOhm">' +
+      '<div class="arena-h-row"><p class="arena-h">' +
+      esc(ohmChipTitle()) +
+      '</p></div>' +
+      '<div class="arena-strip" id="arenaOhmDayTabs" role="tablist" aria-label="' +
+      esc(ohmChipTitle()) +
+      '">' +
+      days
+        .map(function (d) {
+          return (
+            '<button type="button" role="tab" class="arena-strip__day' +
+            (d.count ? '' : ' arena-strip__day--empty') +
+            (d.weekend ? ' arena-strip__day--weekend' : '') +
+            '" data-ohm-day="' +
+            esc(d.iso) +
+            '" aria-pressed="' +
+            (state.ohmDay === d.iso ? 'true' : 'false') +
+            '">' +
+            '<span>' +
+            esc(d.top) +
+            '</span><b>' +
+            esc(d.num) +
+            '</b>' +
+            '<i>' +
+            (d.count ? esc(String(d.count)) : '—') +
+            '</i></button>'
+          );
+        })
+        .join('') +
+      '</div>' +
+      '<div id="arenaOhmRows">' +
+      renderOhmShowtimes() +
+      '</div>' +
       '</div>'
     );
   }
@@ -954,18 +1391,27 @@
     var title = document.getElementById('headerTitle');
     // Имя места — на обложке; в шапке — что это за место, без дубля.
     if (title) title.textContent = capitalize(state.card.venue_noun) || 'Площадка';
-    root.innerHTML =
-      renderHero() +
-      renderShareBar() +
-      renderQuickActions() +
-      renderIceSection() +
-      renderAmenities() +
-      renderMassAccess() +
-      renderTrainers() +
-      renderGroups() +
-      renderInfo() +
-      renderFreshness();
-    bindHeroFallbacks(root);
+    try {
+      root.innerHTML =
+        renderHero() +
+        renderShareBar() +
+        renderQuickActions() +
+        renderIceSection() +
+        renderOhmSection() +
+        renderAmenities() +
+        renderMassAccess() +
+        renderTrainers() +
+        renderGroups() +
+        renderInfo() +
+        renderFreshness();
+      bindHeroFallbacks(root);
+    } catch (err) {
+      if (global.console && global.console.error) {
+        global.console.error('arena-card paint failed', err);
+      }
+      root.innerHTML =
+        '<div class="arena-state">Не удалось отрисовать карточку. Закройте и откройте снова или обновите мини-приложение.</div>';
+    }
   }
 
   function capitalize(text) {
@@ -976,12 +1422,24 @@
   function paintRowsOnly() {
     var el = document.getElementById('arenaRows');
     if (el) el.innerHTML = renderShowtimes();
+    var ohmEl = document.getElementById('arenaOhmRows');
+    if (ohmEl) ohmEl.innerHTML = renderOhmShowtimes();
     paintShareBar();
     var tabs = document.getElementById('arenaDayTabs');
-    if (!tabs) return;
-    [].forEach.call(tabs.querySelectorAll('[data-day]'), function (b) {
-      b.setAttribute('aria-pressed', b.getAttribute('data-day') === state.day ? 'true' : 'false');
-    });
+    if (tabs) {
+      [].forEach.call(tabs.querySelectorAll('[data-day]'), function (b) {
+        b.setAttribute('aria-pressed', b.getAttribute('data-day') === state.day ? 'true' : 'false');
+      });
+    }
+    var ohmTabs = document.getElementById('arenaOhmDayTabs');
+    if (ohmTabs) {
+      [].forEach.call(ohmTabs.querySelectorAll('[data-ohm-day]'), function (b) {
+        b.setAttribute(
+          'aria-pressed',
+          b.getAttribute('data-ohm-day') === state.ohmDay ? 'true' : 'false'
+        );
+      });
+    }
   }
 
   function paintShareBar() {
@@ -1125,9 +1583,21 @@
       paintRowsOnly();
       return;
     }
+    var ohmDayBtn = ev.target.closest('[data-ohm-day]');
+    if (ohmDayBtn && ohmDayBtn.closest('#arenaOhmDayTabs')) {
+      state.ohmDay = ohmDayBtn.getAttribute('data-ohm-day');
+      paintRowsOnly();
+      return;
+    }
     var jump = ev.target.closest('[data-day-jump]');
     if (jump) {
       state.day = jump.getAttribute('data-day-jump');
+      paintRowsOnly();
+      return;
+    }
+    var ohmJump = ev.target.closest('[data-ohm-day-jump]');
+    if (ohmJump) {
+      state.ohmDay = ohmJump.getAttribute('data-ohm-day-jump');
       paintRowsOnly();
       return;
     }
@@ -1185,7 +1655,10 @@
       var sid = t.getAttribute('data-session-id');
       if (!sid) return;
       state.sharePickSessionId = sid;
-      paintRowsOnly();
+      var pickDay = t.getAttribute('data-local-date');
+      if (pickDay) state.day = pickDay;
+      if (pickDay) paint();
+      else paintRowsOnly();
       return;
     }
     if (action === 'share' || action === 'share-invite') {
@@ -1201,6 +1674,10 @@
       reloadSessions();
       return;
     }
+    if (action === 'ice-watch') {
+      toggleIceWatch(t.getAttribute('data-watch-kind') || 'sessions');
+      return;
+    }
   }
 
   function arenaApiBase() {
@@ -1209,12 +1686,27 @@
   }
 
   function applyScheduleFocus() {
-    if (state.focus && state.focus.sessionId && !state.focus.day && state.sessions) {
-      var found = M.dayForSession(state.sessions.days, state.focus.sessionId);
-      if (found) state.focus.day = found;
+    var fs = getFocusState();
+    if (fs.kind === 'found') {
+      if (fs.day) state.focus.day = fs.day;
+      state.sharePickSessionId = String(fs.focusSessionId);
+    } else if (state.focus && state.focus.sessionId && (fs.kind === 'gone' || fs.kind === 'unconfirmed')) {
+      state.sharePickSessionId = null;
     }
-    if (state.focus && state.focus.sessionId) {
-      state.sharePickSessionId = String(state.focus.sessionId);
+    if (state.focus && state.focus.sessionId && state.sessions) {
+      if (!state.focus.day) {
+        var found =
+          M.dayForSession(state.sessions.days, state.focus.sessionId) ||
+          M.dayForSession(state.sessions.ohm_days, state.focus.sessionId);
+        if (found) state.focus.day = found;
+      }
+      var ohmDay = M.dayForSession(ohmScheduleDays(), state.focus.sessionId);
+      if (ohmDay) {
+        state.ohmDay = ohmDay;
+        if (sessionExistsInSchedule(state.focus.sessionId)) {
+          state.sharePickSessionId = String(state.focus.sessionId);
+        }
+      }
     }
   }
 
@@ -1294,9 +1786,10 @@
           return;
         }
         state.card = card;
-        state.sessions = { days: [] };
         state.trainers = { items: [], groups: [] };
-        paint();
+        syncIceWatches().then(function () {
+          paint();
+        });
         reloadSessions();
         reloadTrainers();
         if (global.ClientShell && global.ClientShell.reportCatalogPresence) {

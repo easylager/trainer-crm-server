@@ -1,25 +1,28 @@
-"""Regional batch D IceParser strategies (arenas 38/19/42/33). Extract only — no DB writes.
+"""Regional batch D IceParser strategies (arenas 38/18/19/42/33). Extract only — no DB writes.
 
 Follows the style of ``src/ingestion/adapters.py``. Sources and gotchas: ``.ai/parsers/*.md``.
 """
 from __future__ import annotations
 
-import asyncio
 import re
 import subprocess
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
+from src.ingestion.dates import infer_date_from_day_month, minsk_today, parser_reference_date
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
 from src.ingestion.seed_config_regional_batch_d import (
     PARSER_KEY_BOBRUISK_ARENA,
     PARSER_KEY_GOMEL_LDS,
+    PARSER_KEY_MOLODECHNO_SRC,
     PARSER_KEY_SHKLOV_ARENA,
     PARSER_KEY_SOLIGORSK_SZK,
 )
+from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE
+from src.ingestion.cpu_work import run_cpu_bound
 from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -110,7 +113,7 @@ _DAY_HEADER = re.compile(
 )
 
 
-def _bobruisk_schedule_slots_modern(html: str, *, year: int) -> list[tuple[date, str, str]]:
+def _bobruisk_schedule_slots_modern(html: str, *, reference: date) -> list[tuple[date, str, str]]:
     """WordPress block layout (2026 site relaunch): day header in its own <p>, slots in the next."""
     results: list[tuple[date, str, str]] = []
     current_date: date | None = None
@@ -122,7 +125,7 @@ def _bobruisk_schedule_slots_modern(html: str, *, year: int) -> list[tuple[date,
         header = _DAY_HEADER.match(header_text)
         if header:
             month = _MONTHS[header.group(2).lower()]
-            current_date = date(year, month, int(header.group(1)))
+            current_date = infer_date_from_day_month(int(header.group(1)), month, reference)
             continue
         if current_date is None:
             continue
@@ -138,9 +141,9 @@ def _bobruisk_schedule_slots_modern(html: str, *, year: int) -> list[tuple[date,
     return results
 
 
-def _bobruisk_schedule_slots(html: str, *, year: int) -> list[tuple[date, str, str]]:
+def _bobruisk_schedule_slots(html: str, *, reference: date) -> list[tuple[date, str, str]]:
     if not _bobruisk_is_legacy_schedule(html):
-        return _bobruisk_schedule_slots_modern(html, year=year)
+        return _bobruisk_schedule_slots_modern(html, reference=reference)
     fragment = _bobruisk_lang_ru_fragment(html)
     paragraphs = [_detag_join(m.group(1)) for m in _P.finditer(fragment)]
 
@@ -163,7 +166,9 @@ def _bobruisk_schedule_slots(html: str, *, year: int) -> list[tuple[date, str, s
         date_match = _DATE_IN_TEXT.search(first)
         if date_match and not _TIME_RANGE_DOT.search(first):
             month = _MONTHS[date_match.group(2).lower()]
-            current_date = date(year, month, int(date_match.group(1)))
+            current_date = infer_date_from_day_month(int(date_match.group(1)), month, reference)
+            if current_date is None:
+                continue  # header outside the inference window — skip the day, never emit date=None
             lines = block[1:]
         else:
             # No header paragraph: closed day rolled into the next calendar day (SPEC gotcha).
@@ -210,10 +215,10 @@ class BobruiskArenaParser(IceParser):
     async def extract(self, job: ParserJob) -> Extraction:
         schedule_html = await load_source_text(job, filename="raspisanie.html", url_keys=("schedule_url",))
         prices_html = await load_source_text(job, filename="massovye-kataniya.html", url_keys=("prices_url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        reference = parser_reference_date(job.config)
         weekday_adult, weekend_adult, weekday_rental, weekend_rental = _bobruisk_prices(prices_html)
         slots: list[ExtractedSlot] = []
-        for local_date, start, end in _bobruisk_schedule_slots(schedule_html, year=year):
+        for local_date, start, end in _bobruisk_schedule_slots(schedule_html, reference=reference):
             weekend = local_date.weekday() >= 5
             slots.append(
                 ExtractedSlot(
@@ -268,22 +273,26 @@ class SoligorskSzkParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         html = await load_source_text(job, filename="massovoe-katanie.html", url_keys=("url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        reference = parser_reference_date(job.config)
         adult, child, rental = _soligorsk_prices(html)
         start_idx = html.upper().find("РАСПИСАНИЕ МАССОВЫХ КАТАНИЙ")
         end_idx = html.find("Продолжительность", start_idx) if start_idx >= 0 else -1
         region = html[start_idx:end_idx] if start_idx >= 0 and end_idx > start_idx else html
         slots: list[ExtractedSlot] = []
-        for block in _H3.finditer(region):
-            text = _detag_join(block.group(1))
+        # Одна строка расписания на <h3> (старая вёрстка) или несколько дней
+        # в одном <h3>, разделённых <br> (с октября 2026) — разбираем по строкам.
+        day_lines = [line for block in _H3.finditer(region) for line in _detag_lines(block.group(1))]
+        for text in day_lines:
             m = _DAY_LINE_DASH.match(text)
             if not m:
                 continue
             month = _MONTHS.get(m.group(2).lower())
             if month is None:
                 continue
-            local_date = date(year, month, int(m.group(1)))
-            for seg in m.group(3).split(";"):
+            local_date = infer_date_from_day_month(int(m.group(1)), month, reference)
+            if local_date is None:
+                continue
+            for seg in re.split(r"[;,]", m.group(3)):  # «16.00-16.45 , 21.00-21.45» — через запятую
                 tm = _TIME_RANGE_DOT.search(seg)
                 if not tm:
                     continue
@@ -304,6 +313,99 @@ class SoligorskSzkParser(IceParser):
                     )
                 )
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+
+
+# --------------------------------------------------------------------------
+# СРЦ Молодечно (arena_id 18)
+# --------------------------------------------------------------------------
+
+_MOLODECHNO_DAY_LINE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.\s*в\s*(.+)$", re.I)
+_TIME_HM = re.compile(r"(\d{1,2}):(\d{2})")
+_MOLODECHNO_AGE_NOTE = "детский до 14 лет"
+
+
+def _molodechno_end_time(start_h: int, start_m: int, duration_minutes: int) -> str:
+    end = datetime(2000, 1, 1, start_h, start_m) + timedelta(minutes=duration_minutes)
+    return _fmt(end.hour, end.minute)
+
+
+def _molodechno_prices(html: str) -> tuple[int | None, int | None]:
+    adult = child = None
+    for table in parse_tables(html):
+        for row in table:
+            if len(row) < 3:
+                continue
+            label = row[0].lower()
+            unit = row[2].lower()
+            if "сеанс свободного катания" not in label:
+                continue
+            if "45" not in unit:
+                continue
+            price = parse_price_to_minor(row[1], already_minor=False)
+            if "до 14" in label:
+                child = price
+            elif "взросл" in label:
+                adult = price
+    return adult, child
+
+
+def _molodechno_schedule_slots(
+    html: str,
+    *,
+    reference: date,
+    duration_minutes: int,
+) -> list[tuple[date, str, str]]:
+    marker = html.lower().find("сеансы массового катания")
+    region = html[marker : marker + 4000] if marker >= 0 else html
+    results: list[tuple[date, str, str]] = []
+    for line in _detag_lines(region):
+        m = _MOLODECHNO_DAY_LINE.match(line)
+        if not m:
+            continue
+        local_date = infer_date_from_day_month(int(m.group(1)), int(m.group(2)), reference)
+        if local_date is None:
+            continue
+        for seg in re.split(r",", m.group(3)):
+            tm = _TIME_HM.search(seg)
+            if not tm:
+                continue
+            start = _fmt(int(tm.group(1)), int(tm.group(2)))
+            end = _molodechno_end_time(int(tm.group(1)), int(tm.group(2)), duration_minutes)
+            results.append((local_date, start, end))
+    return results
+
+
+class MolodechnoSrcParser(IceParser):
+    parser_key = PARSER_KEY_MOLODECHNO_SRC
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        html = await load_source_text(job, filename="ledovaya-arena.html", url_keys=("url",))
+        reference = parser_reference_date(job.config)
+        duration = int(job.config.get("default_duration_minutes") or 45)
+        adult, child = _molodechno_prices(html)
+        slots: list[ExtractedSlot] = []
+        for local_date, start, end in _molodechno_schedule_slots(
+            html, reference=reference, duration_minutes=duration
+        ):
+            slots.append(
+                ExtractedSlot(
+                    local_date=local_date.isoformat(),
+                    starts_at_local=start,
+                    ends_at_local=end,
+                    kind_raw="Массовое катание",
+                    price_adult=adult,
+                    price_child=child,
+                    price_rental=None,
+                    age_note=_MOLODECHNO_AGE_NOTE,
+                )
+            )
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=html,
+            slots=slots,
+            schedule_basis=SCHEDULE_BASIS_LIVE,
+        )
 
 
 # --------------------------------------------------------------------------
@@ -364,7 +466,7 @@ async def _load_shklov_photo(job: ParserJob) -> tuple[bytes, str] | None:
 def _shklov_month_year(filename: str) -> tuple[int, int]:
     m = _WEEK_FILENAME.search(filename)
     if not m:
-        today = date.today()
+        today = minsk_today()
         return today.month, today.year
     end_month = int(m.group(4))
     year = int(m.group(5))
@@ -382,7 +484,7 @@ def _run_tesseract_tsv(image_bytes: bytes) -> str:
 
 
 async def _ocr_tsv(image_bytes: bytes) -> str:
-    return await asyncio.to_thread(_run_tesseract_tsv, image_bytes)
+    return await run_cpu_bound(_run_tesseract_tsv, image_bytes)
 
 
 def _shklov_parse_grid(tsv_text: str) -> list[tuple[int, str, str]]:
@@ -604,7 +706,7 @@ class GomelLdsParser(IceParser):
         html = await _load_gomel_post_html(job)
         if html is None:
             return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot="", slots=[])
-        year = _gomel_publish_year(html) or int(job.config.get("run_year") or date.today().year)
+        year = _gomel_publish_year(html) or parser_reference_date(job.config).year
         lines = _gomel_schedule_region_lines(html)
         weekday_adult, weekend_adult, rental = _gomel_prices(lines)
         age_note = "детям до 10 лет вход после 21:00 запрещен"

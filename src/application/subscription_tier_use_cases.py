@@ -444,7 +444,7 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
     current_rows_result = await session.execute(
         text("""
             SELECT ts.id, ts.tier, ts.modules, ts.expires_at, ts.status, ts.started_at,
-                   ts.billing_period_months
+                   ts.billing_period_months, ts.trial_clock_started_at
             FROM trainer_subscriptions ts
             WHERE ts.trainer_id = :tid
               AND ts.started_at <= :now
@@ -518,10 +518,20 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
         sub_status = primary[4]
         started_at = primary[5]
         stored_pm = primary[6]
+        trial_clock_started_at = primary[7]
         billing_pm: int | None = int(stored_pm) if stored_pm is not None else None
-        if billing_pm is None and row_tier and expires_at and started_at:
-            billing_pm = await _infer_billing_period_months(session, row_tier, started_at, expires_at)
         is_trial = sub_status == SUBSCRIPTION_STATUS_TRIAL
+        trial_clock_started = (not is_trial) or (trial_clock_started_at is not None)
+        if (
+            billing_pm is None
+            and trial_clock_started
+            and row_tier
+            and expires_at
+            and started_at
+        ):
+            billing_pm = await _infer_billing_period_months(session, row_tier, started_at, expires_at)
+        # Pending trial: do not expose sentinel expires_at (2099) as a countdown.
+        display_expires_at = expires_at if trial_clock_started else None
         # Unified entitlements across ALL rows covering now — the trainer's effective access.
         # Label is composed from this union so we never downgrade during an overlap.
         tier_name_ru: str = format_subscription_label(
@@ -536,9 +546,10 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
             "effective_tier": tier,
             # Modules reported to clients are the UNION — the trainer's real access today.
             "modules": ent.modules,
-            "expires_at": expires_at.isoformat() if expires_at else None,
+            "expires_at": display_expires_at.isoformat() if display_expires_at else None,
             "status": sub_status,
             "is_trial": is_trial,
+            "trial_clock_started": trial_clock_started,
             "tier_name_ru": tier_name_ru,
             "started_at": started_at.isoformat() if started_at else None,
             "billing_period_months": billing_pm,
@@ -555,6 +566,7 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
         "expires_at": None,
         "status": None,
         "is_trial": False,
+        "trial_clock_started": False,
         "tier_name_ru": None,
         "started_at": None,
         "billing_period_months": None,

@@ -184,7 +184,11 @@ def _trial_welcome_labels(sub_st: dict) -> tuple[str, str] | None:
     ):
         return None
     tier_label = (sub_st.get("tier_name_ru") or "Полный доступ").strip() or "Полный доступ"
-    exp_fmt = _format_expires_ru_from_iso(sub_st.get("expires_at"))
+    # Pending clock: countdown starts after first real completed — don't show sentinel date.
+    if sub_st.get("trial_clock_started") is False:
+        exp_fmt = "после первой проведённой записи"
+    else:
+        exp_fmt = _format_expires_ru_from_iso(sub_st.get("expires_at"))
     return tier_label, exp_fmt
 
 

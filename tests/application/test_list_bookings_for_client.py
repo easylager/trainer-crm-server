@@ -139,3 +139,66 @@ async def test_client_list_hub_in_session_flag(db_session) -> None:
     rows = await list_bookings_for_client(db_session, tg, limit=50)
     assert len(rows) == 1
     assert rows[0]["hub_in_session"] is True
+
+
+@pytest.mark.asyncio
+async def test_client_list_includes_trainer_list_photo_when_present(db_session) -> None:
+    """Хаб «Ваша запись» показывает мини-фото тренера, если оно есть в trainer_photos."""
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(tg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'C', 'L', :phone, :pn) RETURNING id
+            """
+        ),
+        {"tg": tg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_photos (trainer_id, file_key, file_key_list, sort_order)
+            VALUES (:tid, 'trainers/main.jpg', 'trainers/main_list.jpg', 0)
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    r_slot = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (
+                :tid,
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date + 1,
+                TIME '18:00',
+                TIME '19:00',
+                'booked'
+            )
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    (slot_id,) = r_slot.fetchone()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    rows = await list_bookings_for_client(db_session, tg, limit=50)
+    assert len(rows) == 1
+    assert rows[0]["trainer_list_photo_key"] == "trainers/main_list.jpg"
+
+    from src.api.routes.webapp_client_payloads import serialize_client_booking
+
+    payload = serialize_client_booking(rows[0])
+    assert payload["trainer_list_photo_key"] == "trainers/main_list.jpg"

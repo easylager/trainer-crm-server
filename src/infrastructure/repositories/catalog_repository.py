@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
+from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
 # Same eligibility as GET /public/trainers (city + service + arena), without slot/time filters.
 # This one used to read COALESCE(is_catalog_visible, true) — a missing flag counted as visible
@@ -112,6 +113,7 @@ class CatalogRepository:
                 "scenario_tags": row[7],
                 "is_public": bool(row[8]),
                 "created_by_trainer_id": row[9],
+                "allows_online": row[9] is not None,
                 "trainer_count": row[10],
             }
             for row in r.fetchall()
@@ -249,13 +251,17 @@ class CatalogRepository:
                     (SELECT COUNT(*) FROM trainers t WHERE {_CATALOG_TRAINER_WHERE})::int AS trainers_total,
                     (SELECT COUNT(*) FROM cities WHERE is_active)::int AS cities_count,
                     (
+                        -- TASK-177: «катков» на лендинге — только лёд и только то, что
+                        -- публичный каталог реально показывает (магазины и RU не в счёт).
                         SELECT COUNT(*) FROM arenas a
+                        JOIN cities c ON c.id = a.city_id
                         LEFT JOIN arena_profiles p ON p.arena_id = a.id
-                        WHERE a.is_active AND a.is_confirmed
-                          AND (p.status IS NULL OR p.status = 'published')
+                        WHERE {PUBLIC_ARENA_VISIBLE_SQL}
+                          AND a.venue_type = 'ice'
                     )::int AS arenas_count
                 """
-            )
+            ),
+            public_scope_params(),
         )
         row = r.fetchone()
         if row is None:

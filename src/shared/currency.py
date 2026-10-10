@@ -9,6 +9,8 @@ TASK-045 (BY small-city discount) for the groups beyond the ``BY_BASE`` default.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,6 +73,30 @@ async def get_trainer_currency_info(session: AsyncSession, trainer_id: int) -> t
 async def resolve_trainer_currency(session: AsyncSession, trainer_id: int) -> str:
     currency, _price_group = await get_trainer_currency_info(session, trainer_id)
     return currency
+
+
+async def resolve_trainer_currencies(session: AsyncSession, trainer_ids: Sequence[int]) -> dict[int, str]:
+    """trainer_id → currency, одним запросом (TASK-196: цены услуг тренера в валюте его города).
+
+    Тренеры без профиля/города получают BYN — как и ``get_trainer_currency_info``.
+    """
+    ids = sorted({int(t) for t in trainer_ids if t is not None})
+    if not ids:
+        return {}
+    placeholders = ", ".join(f":tid{i}" for i in range(len(ids)))
+    result = await session.execute(
+        text(f"""
+            SELECT tp.trainer_id, c.country
+            FROM trainer_profiles tp
+            LEFT JOIN cities c ON c.id = tp.city_id
+            WHERE tp.trainer_id IN ({placeholders})
+        """),
+        {f"tid{i}": tid for i, tid in enumerate(ids)},
+    )
+    out: dict[int, str] = {tid: DEFAULT_CURRENCY for tid in ids}
+    for row in result.fetchall():
+        out[int(row[0])] = currency_for_country(row[1])
+    return out
 
 
 async def resolve_trainer_price_group(session: AsyncSession, trainer_id: int) -> str:

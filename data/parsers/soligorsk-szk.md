@@ -1,6 +1,7 @@
 # Parser spec: СЗК Солигорск
 
 - arena_id: 19
+- arena_slug: soligorsk-szk
 - city: Солигорск
 - parser_key: soligorsk_szk_html_v1
 - cadence: weekly
@@ -59,3 +60,4 @@
 
 - Geo-блока нет. Сайт на http. Каденс weekly («в расписании возможны изменения»).
 - Не брать июльский репринт esoligorsk.by как SoT.
+- 2026-10-06: вёрстка сменилась — все дни недели в одном `<h3>` через `<br>`, несколько сеансов дня через запятую (`10 октября - 16.00-16.45 , 21.00-21.45`). Адаптер разбирает по строкам и делит сеансы по `;`/`,`. Снимок: `massovoe-katanie-2026-10-06.html` (тест `test_soligorsk_szk_multi_day_single_h3_layout_2026_10_06`).

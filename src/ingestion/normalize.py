@@ -3,23 +3,27 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import date, datetime, time, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Mapping
 
 from src.application.ice_session_use_cases import (
     DEFAULT_ARENA_TZ,
     STATUS_ACTIVE,
+    IceSessionValidationError,
     compute_session_datetimes,
     parse_hhmm,
 )
 from src.ingestion.types import (
+    PARSER_KIND_HOCKEY_PRACTICE,
     PARSER_KIND_OPEN_ICE,
     PARSER_KIND_PUBLIC_SKATE,
     CanonicalSlotDraft,
     Extraction,
     ParserJob,
 )
+from src.shared.schedule_basis import resolve_schedule_basis
 
 _AMOUNT = re.compile(r"(\d+(?:[.,]\d+)?)")
 _KOPECK = re.compile(r"коп", re.IGNORECASE)
@@ -85,6 +89,10 @@ def parse_price_to_minor(value: Any, *, already_minor: bool) -> int | None:
 
 def map_parser_kind(raw: str) -> str | None:
     key = (raw or "").strip().lower()
+    if key in {PARSER_KIND_HOCKEY_PRACTICE, "охм"}:
+        return PARSER_KIND_HOCKEY_PRACTICE
+    if "отработк" in key and "хоккей" in key:
+        return PARSER_KIND_HOCKEY_PRACTICE
     if key in {PARSER_KIND_PUBLIC_SKATE, "mk", "мк", "ма", "ба"}:
         return PARSER_KIND_PUBLIC_SKATE
     if key == PARSER_KIND_OPEN_ICE:
@@ -102,10 +110,27 @@ def _as_date(value: str | date) -> date:
     return date.fromisoformat(str(value)[:10])
 
 
+_MIDNIGHT_END = frozenset({"24:00", "24:00:00", "24.00"})
+
+
+def _is_2400(value: str | time | None) -> bool:
+    return isinstance(value, str) and value.strip() in _MIDNIGHT_END
+
+
 def _as_time(value: str | time) -> time:
+    """ЧЧ:ММ → time. ``24:00`` (конец дня на сайтах катков) → 00:00 (TASK-187)."""
     if isinstance(value, time):
         return time(value.hour, value.minute)
+    if _is_2400(value):
+        return time(0, 0)
     return parse_hhmm(str(value))
+
+
+def _as_start(local_date: date, value: str | time) -> tuple[date, time]:
+    """Начало сеанса. ``24:00`` как НАЧАЛО — это 00:00 следующего дня, а не этого."""
+    if _is_2400(value):
+        return local_date + timedelta(days=1), time(0, 0)
+    return local_date, _as_time(value)
 
 
 def _truthy_minor_flag(config: dict[str, Any]) -> bool:
@@ -113,6 +138,50 @@ def _truthy_minor_flag(config: dict[str, Any]) -> bool:
     if isinstance(raw, str):
         return raw.strip().lower() in {"1", "true", "yes"}
     return bool(raw)
+
+
+@dataclass(frozen=True)
+class NormalizeReport:
+    """Куда делись слоты между extract() и публикацией (TASK-178).
+
+    ``extracted`` — сколько слотов вернул адаптер; ``published`` — сколько черновиков
+    дошло до валидации. Разница раскладывается по причинам: неизвестный вид сеанса,
+    дубль того же начала (слит с другим слотом), сеанс, который уже закончился, и
+    строка с нечитаемой датой/временем (TASK-187: отбрасывается строка, не прогон).
+    """
+
+    extracted: int = 0
+    unknown_kind: int = 0
+    merged_duplicates: int = 0
+    past: int = 0
+    published: int = 0
+    invalid_time: int = 0
+
+    @property
+    def dropped(self) -> int:
+        return max(0, self.extracted - self.published)
+
+    def summary(self, *, published: int | None = None, extra: Mapping[str, int] | None = None) -> str:
+        """«извлечено 16, опубликовано 0: в прошлом 16» — для error_summary и логов.
+
+        TASK-187: планировщик дописывает потери после нормализации (окно публикации,
+        построчная валидация) через ``extra`` и итог через ``published``.
+        """
+        reasons = []
+        if self.past:
+            reasons.append(f"в прошлом {self.past}")
+        if self.unknown_kind:
+            reasons.append(f"неизвестный вид {self.unknown_kind}")
+        if self.merged_duplicates:
+            reasons.append(f"дубли {self.merged_duplicates}")
+        if self.invalid_time:
+            reasons.append(f"кривые дата/время {self.invalid_time}")
+        for label, count in (extra or {}).items():
+            if count:
+                reasons.append(f"{label} {count}")
+        shown = self.published if published is None else published
+        head = f"извлечено {self.extracted}, опубликовано {shown}"
+        return f"{head}: {', '.join(reasons)}" if reasons else head
 
 
 class IceSessionNormalizer:
@@ -123,23 +192,55 @@ class IceSessionNormalizer:
         *,
         now: datetime,
     ) -> list[CanonicalSlotDraft]:
+        drafts, _report = self.normalize_with_report(extraction, job, now=now)
+        return drafts
+
+    def normalize_with_report(
+        self,
+        extraction: Extraction,
+        job: ParserJob,
+        *,
+        now: datetime,
+    ) -> tuple[list[CanonicalSlotDraft], NormalizeReport]:
         config = job.config or {}
-        tz_name = str(config.get("timezone") or DEFAULT_ARENA_TZ)
+        # TASK-196: таймзона — из конфига задачи, иначе из арены (arena_profiles.timezone),
+        # иначе Минск. До бэкфилла 0221 у всех арен было NULL и работал только конфиг;
+        # для RU-арен (Europe/Moscow) конфиг больше не обязан повторять город.
+        tz_name = str(config.get("timezone") or job.arena_timezone or DEFAULT_ARENA_TZ)
         currency = str(config.get("currency_code") or "BYN")
         already_minor = _truthy_minor_flag(config)
         default_duration = int(config.get("default_duration_minutes") or 60)
+        # TASK-179: основание одно на прогон — из Extraction, иначе из конфига/реестра парсера.
+        session_basis = resolve_schedule_basis(
+            parser_key=job.parser_key,
+            job_config=config,
+            extraction_basis=extraction.schedule_basis,
+        )
         observed = extraction.observed_at or now
         if observed.tzinfo is None:
             observed = observed.replace(tzinfo=timezone.utc)
 
-        merged: dict[tuple[date, time], dict[str, Any]] = {}
+        merged: dict[tuple[date, time, str], dict[str, Any]] = {}
+        unknown_kind = 0
+        merged_duplicates = 0
+        past = 0
+        invalid_time = 0
         for raw in extraction.slots:
             kind = map_parser_kind(raw.kind_raw)
             if kind is None:
+                unknown_kind += 1
                 continue
-            local_date = _as_date(raw.local_date)
-            starts_at_local = _as_time(raw.starts_at_local)
-            key = (local_date, starts_at_local)
+            try:
+                local_date, starts_at_local = _as_start(_as_date(raw.local_date), raw.starts_at_local)
+                if raw.ends_at_local:
+                    _as_time(raw.ends_at_local)
+            except (IceSessionValidationError, ValueError, TypeError):
+                # TASK-187: одна нечитаемая строка — минус строка, а не весь прогон.
+                invalid_time += 1
+                continue
+            key = (local_date, starts_at_local, kind)
+            if key in merged:
+                merged_duplicates += 1
             bucket = merged.setdefault(
                 key,
                 {
@@ -174,10 +275,11 @@ class IceSessionNormalizer:
                 bucket["source_id"] = raw.source_id
 
         drafts: list[CanonicalSlotDraft] = []
-        for (local_date, starts_at_local), bucket in sorted(merged.items()):
+        for (local_date, starts_at_local, _), bucket in sorted(merged.items()):
             duration = default_duration
             end_raw = bucket["ends_at_local"]
             if end_raw:
+                # 24:00 → 00:00: span ≤ 0 и ниже переносится на следующие сутки (22:30–24:00 = 90 мин).
                 end_local = _as_time(end_raw)
                 start_minutes = starts_at_local.hour * 60 + starts_at_local.minute
                 end_minutes = end_local.hour * 60 + end_local.minute
@@ -192,6 +294,7 @@ class IceSessionNormalizer:
                 tz_name=tz_name,
             )
             if parts.ends_at_utc <= now:
+                past += 1
                 continue
             drafts.append(
                 CanonicalSlotDraft(
@@ -214,8 +317,17 @@ class IceSessionNormalizer:
                     capacity_note=_clip_text(bucket["capacity_note"], _CAPACITY_NOTE_MAX_LEN),
                     external_url=_safe_external_url(bucket["external_url"]),
                     source_id=_safe_source_id(bucket["source_id"]),
+                    schedule_basis=session_basis,
                     parser_job_id=job.id,
                     scrape_run_id=None,
                 )
             )
-        return drafts
+        report = NormalizeReport(
+            extracted=len(extraction.slots),
+            unknown_kind=unknown_kind,
+            merged_duplicates=merged_duplicates,
+            past=past,
+            invalid_time=invalid_time,
+            published=len(drafts),
+        )
+        return drafts, report

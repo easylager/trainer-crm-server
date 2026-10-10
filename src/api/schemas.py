@@ -146,6 +146,13 @@ class TrainerServiceItem(BaseModel):
         max_length=LEN_TRAINER_SERVICE_UI_ACCENT,
         description="Preset border accent for hub/schedule rows (slug, e.g. sky).",
     )
+    is_online: bool = Field(
+        default=False,
+        description=(
+            "This trainer offering is online-only (XOR with venue). "
+            "Online slots accept only online services; venue slots accept only offline."
+        ),
+    )
 
     @field_validator("ui_accent", mode="before")
     @classmethod
@@ -242,6 +249,14 @@ class ProfilePatch(BaseModel):
         default=None,
         max_length=5,
         description="Кто я — до 5 ролей; пустой список сбрасывает поле.",
+    )
+    online_enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Deprecated write: synced from trainer_services.is_online. "
+            "Prefer setting is_online on each service. "
+            "Не путать с trainers.arena_work_format='online' (режим «площадки нет вообще»)."
+        ),
     )
 
     @field_validator("specialist_roles", mode="before")

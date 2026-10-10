@@ -44,7 +44,7 @@
 | [growth_loop.md](product-knowledge/growth_loop.md) | Циклы роста под ICP |
 | [client-booking-url-contract.md](product-knowledge/client-booking-url-contract.md) | Контракт ссылок записи клиента |
 | [organization-role-surfaces.md](product-knowledge/organization-role-surfaces.md) | Организации: что видит каждая роль |
-| [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест и подборок, шеринг, /go, диплинки, окна времени, магазины |
+| [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест и подборок, главная «только города» и хаб города `/c/{город}`, шеринг, /go, диплинки, окна времени, магазины |
 | [catalog-search-header.md](product-knowledge/catalog-search-header.md) | Шапка «Поиск»: сегмент рода, фильтр типа площадки, окно времени, пустое состояние |
 
 ## strategy — куда идём
@@ -98,6 +98,7 @@
 | [organizations-completion-backlog.md](plans/organizations-completion-backlog.md) | Что осталось достроить в организациях |
 | [2026-09-04-epic3-arenas-sdd-release-plan.md](plans/2026-09-04-epic3-arenas-sdd-release-plan.md) · [r1](plans/2026-09-04-epic3-r1-foundation.md) | Релизный план EPIC3 для агентов |
 | [2026-09-09-merge-epics-to-master.md](plans/2026-09-09-merge-epics-to-master.md) | Кат двух эпиков (premium + региональные парсеры) в master/прод |
+| [2026-10-09-reliable-object-share.md](plans/2026-10-09-reliable-object-share.md) | Надёжный шаринг арены/сеанса (TASK-223): гэпы, потоки, контракты |
 | [2026-09-04-client-multi-profile-booking.md](plans/2026-09-04-client-multi-profile-booking.md) · [design](plans/2026-09-04-client-multi-profile-booking-design.md) | Запись ребёнка и раздельная статистика |
 | [2026-09-03-mobile-landing-hero-roadmap-design.md](plans/2026-09-03-mobile-landing-hero-roadmap-design.md) · [impl](plans/2026-09-03-mobile-landing-hero-roadmap-implementation.md) | Мобильный лендинг: hero и roadmap |
 | [2026-09-05-trainer-profile-s1-s2-data-guards.md](plans/2026-09-05-trainer-profile-s1-s2-data-guards.md) | Гарды данных профиля тренера |
@@ -117,12 +118,13 @@
 | [ice-ingest-prod-from-local.md](instructions/ice-ingest-prod-from-local.md) | Ingest льда в прод с Mac: `run_ice_ingest_prod_local.sh`, public Postgres URL, почему не `railway.internal` |
 | [ice-ingest-by-egress.md](instructions/ice-ingest-by-egress.md) | Ingest СДЮШОР (ledlife) с ноутбука в РБ: tinyproxy, Railway `DATABASE_URL` |
 | [ice-ingest-junost-instagram.md](instructions/ice-ingest-junost-instagram.md) | Юность: копипаст подписи IG → прод (`ingest_junost_from_caption.py`) |
+| [junost-caption-update.md](ops/junost-caption-update.md) | Юность: обновить подпись расписания через `set_junost_caption.py` (dry-run / `--apply`) |
 | [catalog-share-launch.md](ops/catalog-share-launch.md) | Чеклист выката шаринга каталога: env, фото, магазины, og, телеметрия 0212, 20 минут руками |
 | [platform-processes-for-legal-by-v1.md](ops/platform-processes-for-legal-by-v1.md) | Описание процессов платформы для юристов (BY) |
 
 ## Остальное
 
-- `reviews/` — 18 аудитов подсистем (запись, платежи, боты, абонементы и т.д.), плюс [продуктовое ревью клиньев](reviews/notes/product_review_wedges_activation.md).
+- `reviews/` — 18 аудитов подсистем (запись, платежи, боты, абонементы и т.д.), плюс [продуктовое ревью клиньев](reviews/notes/product_review_wedges_activation.md) и [TASK-207 AC-3 Островец](reviews/2026-10-07-task-207-ostrovets-ac3.md).
 - `agents/` — системные промпты ревьюеров (backend, product, QA, refactor, security, UX) и агентов эпика (`prompt-*`).
 - `release-comms/` — сообщения релизов по аудиториям, есть [шаблон](release-comms/TEMPLATE.md).
 - `archive/` — [legacy-индекс задач](archive/legacy-tasks-index.md), [sprintq-backlog](archive/sprintq-backlog.md), [RFQ по локерам](archive/rfq-smart-sports-locker-v1.md).

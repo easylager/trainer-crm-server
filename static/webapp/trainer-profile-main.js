@@ -7,7 +7,22 @@
         setTimeout(function() { if (typeof tg.expand === 'function') tg.expand(); }, 100);
       }
 
-      function initData() { return (tg && tg.initData) ? tg.initData : ''; }
+      /**
+       * Never cache at parse time — some WebViews fill Telegram.initData after the first tick.
+       * Fall back to URL: hub navigation keeps init_data in the query (local debug + in-app links).
+       */
+      function initDataFromUrl() {
+        try {
+          var qs = new URLSearchParams(window.location.search || '');
+          return qs.get('init_data') || qs.get('initData') || '';
+        } catch (e) {
+          return '';
+        }
+      }
+      function initData() {
+        var raw = (tg && tg.initData) || initDataFromUrl();
+        return raw ? String(raw) : '';
+      }
       function headersJson() {
         var h = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
         if (initData()) h['X-Telegram-Init-Data'] = initData();
@@ -126,6 +141,16 @@
         }, 3200);
       }
 
+      var DEFAULT_ROLE_SUGGESTIONS = [
+        'Тренер',
+        'ОФП-тренер',
+        'Хореограф',
+        'Спортивный психолог',
+        'Реабилитолог',
+        'Нутрициолог',
+      ];
+      var MAX_SPECIALIST_ROLES = 5;
+
       var state = {
         trainer: null,
         moderation_readiness: null,
@@ -136,6 +161,8 @@
         arenaSearchQuery: '',
         arenaCreateOpen: false,
         arenaSearchTimer: null,
+        roleSuggestions: DEFAULT_ROLE_SUGGESTIONS.slice(),
+        selectedSpecialistRoles: [],
         snapshot: null,
         scheduleSettings: null,
         scheduleGridSelectedStep: 15,
@@ -182,9 +209,10 @@
        * Серверные tt_minimal_missing_fields больше не содержат эти поля — порядок должен совпадать с продуктом.
        */
       var PROFILE_TT_MINIMAL_WIZARD_ORDER = ['anketa_main', 'phone', 'services', 'arenas'];
-      var ARENA_PICKER_MAX_RESULTS = 20;
+      var ARENA_BROWSE_CAP = 15;
       var ARENA_PICKER_SEARCH_DEBOUNCE_MS = 120;
       var arenaPickerBound = false;
+      var arenaComboFocusScrollT = null;
       /** Stable RU labels by tour step key (do not depend on server array ordering). */
       var PROFILE_TT_BLOCK_LABELS_RU = {
         anketa_main: 'Основное',
@@ -193,7 +221,7 @@
         session_duration_minutes: 'длительность занятия',
         min_hours_before_booking: 'окно записи',
         services: 'услуги',
-        arenas: 'арены',
+        arenas: 'площадки',
       };
 
       /**
@@ -468,12 +496,12 @@
             if (mainEl) {
               if (arenaName) {
                 mainEl.textContent =
-                  'Сетка начала слотов задаётся пресетом основной арены «' +
+                  'Сетка начала слотов задаётся пресетом основной площадки «' +
                   arenaName +
                   '». Выбор шага 10–60 минут здесь не используется — так вы не путаете «свой» шаг с правилами площадки.';
               } else {
                 mainEl.textContent =
-                  'Сетка начала слотов задаётся пресетом вашей основной арены. Персональный шаг сетки на этом экране не применяется.';
+                  'Сетка начала слотов задаётся пресетом вашей основной площадки. Персональный шаг сетки на этом экране не применяется.';
               }
             }
             if (subEl) {
@@ -1872,7 +1900,12 @@
           if (s.client_notice != null && String(s.client_notice).trim()) noticeOut = String(s.client_notice).trim();
           var gpOut = null;
           if (s.group_price_byn != null && !isNaN(Number(s.group_price_byn))) gpOut = Number(s.group_price_byn);
-          var row = { service_id: s.service_id, price_tiers: tiers, description: descOut };
+          var row = {
+            service_id: s.service_id,
+            price_tiers: tiers,
+            description: descOut,
+            is_online: !!s.is_online,
+          };
           if (noticeOut != null) row.client_notice = noticeOut;
           if (gpOut != null) row.group_price_byn = gpOut;
           if (s.ui_accent != null && String(s.ui_accent).trim()) {
@@ -1904,6 +1937,7 @@
             session_duration_minutes: p.session_duration_minutes != null ? Number(p.session_duration_minutes) : null,
             min_hours_before_booking: p.min_hours_before_booking != null ? Number(p.min_hours_before_booking) : null,
             group_classes_enabled: !!p.group_classes_enabled,
+            specialist_roles: specialistRolesSnapshot(),
           },
           services: svc,
           arena_ids: arena_ids,
@@ -1962,6 +1996,7 @@
         state.servicesCatalog.forEach(function(s) {
           var cb = document.getElementById('svc_' + s.id);
           if (cb && cb.checked) {
+            var isOnlineSvc = serviceAllowsOnline(s.id) && readServiceFormatOnline(s.id);
             var tiers = [];
             SERVICE_TIER_ORDER.forEach(function(code) {
               var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
@@ -1971,15 +2006,15 @@
                 if (!isNaN(p) && p >= 0) tiers.push({ tier_kind: code, price_byn: p });
               }
             });
-            var svcObj = { service_id: s.id, price_tiers: tiers };
+            var svcObj = { service_id: s.id, price_tiers: tiers, is_online: isOnlineSvc };
             var sdEl = document.getElementById('svc_desc_' + s.id);
             var sdRaw = sdEl ? sdEl.value.trim() : '';
             svcObj.description = sdRaw ? sdRaw : null;
             var cnEl = document.getElementById('svc_client_notice_' + s.id);
-            var cnRaw = cnEl ? cnEl.value.trim() : '';
+            var cnRaw = (!isOnlineSvc && cnEl) ? cnEl.value.trim() : '';
             svcObj.client_notice = cnRaw ? cnRaw : null;
             var gpel = document.getElementById('price_group_' + s.id);
-            if (gpel && gpel.value.trim() !== '') {
+            if (!isOnlineSvc && gpel && gpel.value.trim() !== '') {
               var gpg = Number(gpel.value);
               if (!isNaN(gpg) && gpg >= 0) svcObj.group_price_byn = gpg;
             }
@@ -2051,6 +2086,7 @@
               var el = document.getElementById('group_classes_enabled');
               return !!(el && el.checked);
             })(),
+            specialist_roles: specialistRolesSnapshot(),
           },
           services: services,
           arena_ids: arena_ids,
@@ -2573,7 +2609,7 @@
           containerId: 'profileNavArenas',
           tabId: 'form',
           title: 'Где вы тренируете',
-          subtitle: 'Выберите арены из списка или укажите, если вашей площадки там нет.',
+          subtitle: 'Выберите площадки из списка или укажите, если вашей площадки там нет.',
         },
         photo: {
           containerId: 'profileNavPhoto',
@@ -3192,7 +3228,7 @@
           .then(function(o) {
             if (!o.ok) return Promise.reject(new Error('bootstrap'));
             state.moderation_readiness = o.data.moderation_readiness;
-            state.trainer = o.data.trainer;
+            applyTrainerFromApi(o.data.trainer);
             state.scheduleSettings = o.data.schedule_settings || null;
             renderScheduleSettingsPanel();
             return fillFormFromTrainer().then(function() {
@@ -3701,14 +3737,177 @@
         }
       })();
 
-      function specialistRolesLabel(profile) {
+      function specialistRolesFromProfile(profile) {
         var p = profile || {};
         var roles = p.specialist_roles;
         if (roles && roles.length) {
-          return roles.map(function (r) { return String(r || '').trim(); }).filter(Boolean).join(' · ');
+          return roles.map(function(r) { return String(r || '').trim(); }).filter(Boolean);
         }
         var single = p.specialist_role != null ? String(p.specialist_role).trim() : '';
-        return single || '';
+        return single ? [single] : [];
+      }
+
+      function specialistRolesSnapshot() {
+        return (state.selectedSpecialistRoles || []).slice().sort(function(a, b) {
+          return String(a).localeCompare(String(b), 'ru');
+        });
+      }
+
+      function syncSelectedRolesToTrainerProfile() {
+        if (!state.trainer) state.trainer = {};
+        if (!state.trainer.profile || typeof state.trainer.profile !== 'object') {
+          state.trainer.profile = {};
+        }
+        state.trainer.profile.specialist_roles = (state.selectedSpecialistRoles || []).slice();
+        state.trainer.profile.specialist_role = state.selectedSpecialistRoles.length
+          ? state.selectedSpecialistRoles.join(' · ')
+          : null;
+      }
+
+      function canAddMoreSpecialistRoles() {
+        return (state.selectedSpecialistRoles || []).length < MAX_SPECIALIST_ROLES;
+      }
+
+      function specialistRoleAddNote(text) {
+        var el = document.getElementById('specialistRoleAddStatus');
+        if (!el) return;
+        el.hidden = !text;
+        el.textContent = text || '';
+      }
+
+      function closeSpecialistRoleAdd() {
+        var wrap = document.getElementById('specialistRoleAddWrap');
+        var inp = document.getElementById('specialistRoleCustom');
+        if (wrap) wrap.hidden = true;
+        if (inp) inp.value = '';
+        specialistRoleAddNote('');
+        renderSpecialistRolesEditor();
+      }
+
+      function openSpecialistRoleAdd() {
+        if (!canAddMoreSpecialistRoles()) {
+          specialistRoleAddNote('Не больше ' + MAX_SPECIALIST_ROLES + ' специальностей.');
+          var wrapOpen = document.getElementById('specialistRoleAddWrap');
+          if (wrapOpen) wrapOpen.hidden = false;
+          return;
+        }
+        var wrap = document.getElementById('specialistRoleAddWrap');
+        var btn = document.getElementById('specialistRoleAddBtn');
+        var inp = document.getElementById('specialistRoleCustom');
+        if (wrap) wrap.hidden = false;
+        if (btn) btn.hidden = true;
+        specialistRoleAddNote('');
+        if (inp) inp.focus();
+      }
+
+      function trySelectSpecialistRole(label) {
+        var roles = state.selectedSpecialistRoles || [];
+        if (roles.indexOf(label) >= 0) return true;
+        if (!canAddMoreSpecialistRoles()) {
+          specialistRoleAddNote('Не больше ' + MAX_SPECIALIST_ROLES + ' специальностей.');
+          return false;
+        }
+        roles.push(label);
+        state.selectedSpecialistRoles = roles;
+        return true;
+      }
+
+      function addCustomSpecialistRole() {
+        var inp = document.getElementById('specialistRoleCustom');
+        var raw = inp ? String(inp.value || '').trim() : '';
+        if (!raw) {
+          specialistRoleAddNote('Напишите, кем вы себя называете.');
+          return;
+        }
+        if (raw.length > 64) {
+          specialistRoleAddNote('Не длиннее 64 символов.');
+          return;
+        }
+        var match = (state.roleSuggestions || []).filter(function(r) {
+          return String(r).toLowerCase() === raw.toLowerCase();
+        })[0];
+        if (match) {
+          if (!trySelectSpecialistRole(match)) return;
+        } else if ((state.selectedSpecialistRoles || []).indexOf(raw) < 0) {
+          if (!trySelectSpecialistRole(raw)) return;
+        }
+        syncSelectedRolesToTrainerProfile();
+        closeSpecialistRoleAdd();
+        setDirty();
+        haptic('light');
+      }
+
+      function renderSpecialistRolesEditor() {
+        var host = document.getElementById('specialistRolesChips');
+        if (!host) return;
+        host.innerHTML = '';
+        var suggestions = state.roleSuggestions || DEFAULT_ROLE_SUGGESTIONS;
+        var selected = state.selectedSpecialistRoles || [];
+        function makeChip(label, isCustom) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'profile-role-chip';
+          b.textContent = isCustom ? (label + ' ×') : label;
+          var on = selected.indexOf(label) >= 0;
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+          if (isCustom) b.title = 'Убрать «' + label + '»';
+          b.addEventListener('click', function() {
+            if (isCustom) {
+              state.selectedSpecialistRoles = (state.selectedSpecialistRoles || []).filter(
+                function(r) { return r !== label; }
+              );
+            } else {
+              var i = state.selectedSpecialistRoles.indexOf(label);
+              if (i >= 0) {
+                state.selectedSpecialistRoles.splice(i, 1);
+                specialistRoleAddNote('');
+              } else if (!trySelectSpecialistRole(label)) {
+                return;
+              } else {
+                specialistRoleAddNote('');
+              }
+            }
+            syncSelectedRolesToTrainerProfile();
+            renderSpecialistRolesEditor();
+            setDirty();
+            haptic('light');
+          });
+          return b;
+        }
+        suggestions.forEach(function(label) {
+          host.appendChild(makeChip(label, false));
+        });
+        selected.forEach(function(label) {
+          if (suggestions.indexOf(label) < 0) host.appendChild(makeChip(label, true));
+        });
+        var addBtn = document.getElementById('specialistRoleAddBtn');
+        var addWrap = document.getElementById('specialistRoleAddWrap');
+        var panelOpen = addWrap && !addWrap.hidden;
+        if (addBtn) addBtn.hidden = !!panelOpen || !canAddMoreSpecialistRoles();
+      }
+
+      var specialistRolesEditorBound = false;
+      function bindSpecialistRolesEditor() {
+        if (specialistRolesEditorBound) return;
+        specialistRolesEditorBound = true;
+        var addBtn = document.getElementById('specialistRoleAddBtn');
+        var submit = document.getElementById('specialistRoleAddSubmit');
+        var cancel = document.getElementById('specialistRoleAddCancel');
+        var inp = document.getElementById('specialistRoleCustom');
+        if (addBtn) addBtn.addEventListener('click', openSpecialistRoleAdd);
+        if (cancel) cancel.addEventListener('click', closeSpecialistRoleAdd);
+        if (submit) submit.addEventListener('click', addCustomSpecialistRole);
+        if (inp) {
+          inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addCustomSpecialistRole();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              closeSpecialistRoleAdd();
+            }
+          });
+        }
       }
 
       function fillFormFromTrainer() {
@@ -3742,12 +3941,12 @@
         setv('contacts', p.contacts);
         setv('description', p.description);
         updateDescriptionMeta();
-        var rolesEl = document.getElementById('specialistRolesDisplay');
+        state.selectedSpecialistRoles = specialistRolesFromProfile(p);
+        closeSpecialistRoleAdd();
+        bindSpecialistRolesEditor();
+        bindCustomServiceAdd();
+        renderSpecialistRolesEditor();
         var rolesField = document.getElementById('specialistRolesField');
-        if (rolesEl) {
-          var rolesText = specialistRolesLabel(p);
-          rolesEl.textContent = rolesText || 'Не указано — задаётся при первом запуске';
-        }
         if (rolesField) rolesField.hidden = false;
         setv('experience_years', p.experience_years);
         setv(
@@ -3889,7 +4088,7 @@
 
           var stat2 = document.createElement('div');
           stat2.className = 'hero-stat';
-          stat2.textContent = 'Арены: ' + arenasCount;
+          stat2.textContent = 'Площадки: ' + arenasCount;
           heroStats.appendChild(stat2);
 
           var chipExtra = moderationHeroChipText(st, d);
@@ -4568,6 +4767,99 @@
         return '';
       }
 
+      /** Platform catalog services are venue-only. Trainer-authored ones may be online. */
+      function serviceAllowsOnline(serviceId) {
+        var cat = state.servicesCatalog || [];
+        var i;
+        for (i = 0; i < cat.length; i++) {
+          if (Number(cat[i].id) === Number(serviceId)) return !!cat[i].allows_online;
+        }
+        return false;
+      }
+
+      /** Online vs venue — XOR per trainer offering (trainer_services.is_online). */
+      function getServiceIsOnline(serviceId) {
+        var list = (state.trainer && state.trainer.services) ? state.trainer.services : [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (Number(list[i].service_id) === Number(serviceId)) {
+            return !!list[i].is_online;
+          }
+        }
+        return false;
+      }
+
+      function readServiceFormatOnline(serviceId) {
+        var btn = document.querySelector(
+          '#svc_format_' + serviceId + ' .svc-format-seg__btn[data-online="1"]'
+        );
+        if (btn) return btn.getAttribute('aria-pressed') === 'true';
+        return getServiceIsOnline(serviceId);
+      }
+
+      function setServiceFormatOnline(serviceId, isOnline) {
+        var wrap = document.getElementById('svc_format_' + serviceId);
+        if (!wrap) return;
+        wrap.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+          var on = b.getAttribute('data-online') === '1';
+          b.setAttribute('aria-pressed', (on === !!isOnline) ? 'true' : 'false');
+        });
+        var list = (state.trainer && state.trainer.services) ? state.trainer.services : [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (Number(list[i].service_id) === Number(serviceId)) {
+            list[i].is_online = !!isOnline;
+            break;
+          }
+        }
+        syncServiceOnlineDependentUi(serviceId, !!isOnline);
+      }
+
+      /**
+       * Online offer: keep tariffs/prices; hide venue logistics («не входит») and group seat price.
+       * Must run after the service block is in the document (getElementById).
+       */
+      function syncServiceOnlineDependentUi(serviceId, isOnline) {
+        var noticeWrap = document.getElementById('svc_client_notice_wrap_' + serviceId);
+        var groupWrap = document.getElementById('svc_group_price_wrap_' + serviceId);
+        if (noticeWrap) noticeWrap.hidden = !!isOnline;
+        if (groupWrap) groupWrap.hidden = !!isOnline;
+        if (!isOnline) {
+          var pgeBack = document.getElementById('price_group_' + serviceId);
+          if (pgeBack) pgeBack.disabled = false;
+          var sneBack = document.getElementById('svc_client_notice_' + serviceId);
+          if (sneBack) sneBack.disabled = false;
+          var spBarBack = document.getElementById('svc_notice_presets_' + serviceId);
+          if (spBarBack) {
+            spBarBack.querySelectorAll('button.svc-notice-preset-chip').forEach(function(b) {
+              b.disabled = false;
+            });
+          }
+          return;
+        }
+        var sne = document.getElementById('svc_client_notice_' + serviceId);
+        if (sne) sne.value = '';
+        var snc = document.getElementById('svc_client_notice_count_' + serviceId);
+        if (snc) snc.textContent = '0 / ' + MAX_SERVICE_CLIENT_NOTICE_CHARS;
+        var spBar = document.getElementById('svc_notice_presets_' + serviceId);
+        if (spBar) {
+          spBar.querySelectorAll('button.svc-notice-preset-chip').forEach(function(b) {
+            b.classList.remove('selected');
+          });
+        }
+        var pge = document.getElementById('price_group_' + serviceId);
+        if (pge) { pge.value = ''; pge.disabled = true; }
+        var list = (state.trainer && state.trainer.services) ? state.trainer.services : [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (Number(list[i].service_id) === Number(serviceId)) {
+            list[i].client_notice = null;
+            list[i].group_price_byn = null;
+            return;
+          }
+        }
+      }
+
       /** Optional logistics / not-included note (trainer_services.client_notice). */
       function getServiceClientNotice(serviceId) {
         var list = state.trainer.services || [];
@@ -4705,8 +4997,8 @@
           toggleBtn.id = 'svc_tier_toggle_' + id;
           toggleBtn.setAttribute('aria-expanded', 'false');
           toggleBtn.setAttribute('aria-controls', 'svc_tier_body_' + id);
-          toggleBtn.textContent = 'Тарифы ▾';
-          toggleBtn.title = 'Показать или скрыть список тарифов';
+          toggleBtn.textContent = 'Подробнее ▾';
+          toggleBtn.title = 'Показать или скрыть подробности услуги';
           toggleBtn.disabled = !isSelected;
 
           var tierBody = document.createElement('div');
@@ -4748,6 +5040,7 @@
 
           var noticeWrap = document.createElement('div');
           noticeWrap.className = 'svc-client-notice-wrap';
+          noticeWrap.id = 'svc_client_notice_wrap_' + id;
           var noticeKicker = document.createElement('div');
           noticeKicker.className = 'svc-client-notice-kicker';
           noticeKicker.textContent = 'Важно для клиента';
@@ -4885,6 +5178,7 @@
 
           var groupWrap = document.createElement('div');
           groupWrap.className = 'svc-group-price-wrap';
+          groupWrap.id = 'svc_group_price_wrap_' + id;
           var groupLab = document.createElement('label');
           groupLab.className = 'svc-desc-label';
           groupLab.setAttribute('for', 'price_group_' + id);
@@ -4927,6 +5221,12 @@
           gInp.addEventListener('input', setDirty);
           gInp.addEventListener('change', setDirty);
 
+          var onReq = document.createElement('p');
+          onReq.className = 'svc-on-request-hint';
+          onReq.id = 'svc_on_request_' + id;
+          onReq.textContent = 'Клиент видит: по запросу';
+          onReq.hidden = true;
+          tierBody.appendChild(onReq);
           tierBody.appendChild(descBlock);
           tierBody.appendChild(noticeWrap);
           tierBody.appendChild(tierWrap);
@@ -4943,18 +5243,26 @@
             tierBody.hidden = !tierBody.hidden;
             var open = !tierBody.hidden;
             toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-            toggleBtn.textContent = open ? 'Свернуть ▴' : 'Тарифы ▾';
+            toggleBtn.textContent = open ? 'Свернуть ▴' : 'Подробнее ▾';
           });
 
           chk.addEventListener('change', function() {
             row.classList.toggle('service-active', chk.checked);
             tierWrap.classList.toggle('is-disabled', !chk.checked);
             toggleBtn.disabled = !chk.checked;
+            var fmtEl = document.getElementById('svc_format_' + id);
+            if (fmtEl) {
+              fmtEl.hidden = !chk.checked;
+              fmtEl.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+                b.disabled = !chk.checked;
+              });
+            }
             if (!chk.checked) {
+              setServiceFormatOnline(id, false);
               tierBody.hidden = true;
               tierBody.classList.remove('svc-tier-body--error');
               toggleBtn.setAttribute('aria-expanded', 'false');
-              toggleBtn.textContent = 'Тарифы ▾';
+              toggleBtn.textContent = 'Подробнее ▾';
               tierWrap.classList.remove('svc-tier-grid--error');
               var sde = document.getElementById('svc_desc_' + id);
               if (sde) {
@@ -5009,35 +5317,319 @@
               primeNewServiceTiersFromPeers(id);
               ensureDefaultServiceTiers(id);
               openServiceTierBody(id);
+              syncServiceOnlineDependentUi(id, serviceAllowsOnline(id) && readServiceFormatOnline(id));
             }
             setDirty();
           });
 
           row.appendChild(head);
           row.appendChild(toggleBtn);
-          var onReq = document.createElement('p');
-          onReq.className = 'svc-on-request-hint';
-          onReq.id = 'svc_on_request_' + id;
-          onReq.textContent = 'Клиент видит: по запросу';
-          onReq.hidden = true;
+
+          var allowsOnline = serviceAllowsOnline(id);
+          var initialOnline = (isSelected && allowsOnline) ? getServiceIsOnline(id) : false;
+          var formatWrap = null;
+          if (allowsOnline) {
+          formatWrap = document.createElement('div');
+          formatWrap.className = 'svc-format-seg';
+          formatWrap.id = 'svc_format_' + id;
+          formatWrap.hidden = !isSelected;
+          var formatLabel = document.createElement('span');
+          formatLabel.className = 'svc-format-seg__label';
+          formatLabel.textContent = 'Формат занятия';
+          formatWrap.appendChild(formatLabel);
+          var formatLocked = isSelected && isServiceFormatLocked(id);
+          [
+            { online: false, label: 'На площадке' },
+            { online: true, label: 'Онлайн' },
+          ].forEach(function(opt) {
+            var fb = document.createElement('button');
+            fb.type = 'button';
+            fb.className = 'svc-format-seg__btn';
+            fb.setAttribute('data-online', opt.online ? '1' : '0');
+            fb.setAttribute('aria-pressed', (opt.online === initialOnline) ? 'true' : 'false');
+            fb.textContent = opt.label;
+            fb.disabled = !isSelected || formatLocked;
+            fb.addEventListener('click', function() {
+              if (!chk.checked || isServiceFormatLocked(id)) return;
+              setServiceFormatOnline(id, opt.online);
+              setDirty();
+              haptic('light');
+            });
+            formatWrap.appendChild(fb);
+          });
+          if (formatLocked) {
+            var lockHint = document.createElement('p');
+            lockHint.className = 'hint svc-format-lock-hint';
+            lockHint.textContent =
+              'Формат нельзя менять: есть записи, слоты или группа с этой услугой.';
+            formatWrap.appendChild(lockHint);
+          }
+          }
+
           var block = document.createElement('div');
           block.className = 'service-block svc-pick__item';
           block.appendChild(row);
-          block.appendChild(onReq);
+          if (formatWrap) block.appendChild(formatWrap);
           block.appendChild(tierBody);
           wrap.appendChild(block);
+          /* After in-document: hide venue logistics/tariffs for online offers. */
+          if (isSelected) syncServiceOnlineDependentUi(id, initialOnline);
         });
         syncOnRequestHints();
+      }
+
+
+      var customServiceAddBound = false;
+      var newCustomServiceOnline = false;
+
+      function customServiceAddNote(text, isError) {
+        var el = document.getElementById('svcAddCustomStatus');
+        if (!el) return;
+        el.hidden = !text;
+        el.textContent = text || '';
+        el.classList.toggle('is-error', !!isError);
+      }
+
+      function closeCustomServiceAdd() {
+        var wrap = document.getElementById('svcAddCustomWrap');
+        var btn = document.getElementById('svcAddCustomBtn');
+        var inp = document.getElementById('svcAddCustomName');
+        if (wrap) wrap.hidden = true;
+        if (btn) btn.hidden = false;
+        if (inp) inp.value = '';
+        newCustomServiceOnline = false;
+        var fmt = document.getElementById('svcAddCustomFormat');
+        if (fmt) {
+          fmt.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+            var on = b.getAttribute('data-online') === '1';
+            b.setAttribute('aria-pressed', on ? 'false' : 'true');
+          });
+        }
+        customServiceAddNote('');
+      }
+
+      function openCustomServiceAdd() {
+        var wrap = document.getElementById('svcAddCustomWrap');
+        var btn = document.getElementById('svcAddCustomBtn');
+        var inp = document.getElementById('svcAddCustomName');
+        if (wrap) wrap.hidden = false;
+        if (btn) btn.hidden = true;
+        customServiceAddNote('');
+        if (inp) inp.focus();
+      }
+
+      function applyCustomServiceCreated(result) {
+        var sid = Number(result.service_id);
+        var name = result.name || ('Услуга #' + sid);
+        var online = !!result.is_online;
+        var found = false;
+        state.servicesCatalog.forEach(function(s) {
+          if (Number(s.id) === sid) {
+            found = true;
+            s.allows_online = !!result.allows_online;
+          }
+        });
+        if (!found) {
+          state.servicesCatalog.push({
+            id: sid,
+            name: name,
+            is_public: !!result.is_public,
+            allows_online: !!result.allows_online,
+          });
+        }
+        if (!state.trainer.services) state.trainer.services = [];
+        var linked = false;
+        state.trainer.services.forEach(function(s) {
+          if (Number(s.service_id) === sid) {
+            s.is_online = online;
+            linked = true;
+          }
+        });
+        if (!linked) {
+          state.trainer.services.push({
+            service_id: sid,
+            is_online: online,
+            price_tiers: [],
+          });
+        }
+        renderServices();
+        state.snapshot = normSnapshot();
+        setDirty();
+        var msg = result.created
+          ? 'Добавлено. У вас услуга уже работает; в общем каталоге появится после проверки.'
+          : (result.is_public
+            ? 'Такая услуга уже в каталоге — отметили её.'
+            : 'Услуга уже была у вас — обновили формат.');
+        customServiceAddNote(msg, false);
+      }
+
+      function submitCustomServiceAdd() {
+        var inp = document.getElementById('svcAddCustomName');
+        var raw = inp ? String(inp.value || '').trim() : '';
+        if (!raw) {
+          customServiceAddNote('Напишите название услуги.', true);
+          return;
+        }
+        if (raw.length > 128) {
+          customServiceAddNote('Название — не длиннее 128 символов.', true);
+          return;
+        }
+        var submitBtn = document.getElementById('svcAddCustomSubmit');
+        if (submitBtn) submitBtn.disabled = true;
+        customServiceAddNote('Сохраняем…');
+        fetch(apiUrl('/trainer/services/custom'), {
+          method: 'POST',
+          headers: headersJson(),
+          body: JSON.stringify({ name: raw, is_online: !!newCustomServiceOnline }),
+        })
+          .then(parseJsonResponse)
+          .then(function(o) {
+            if (submitBtn) submitBtn.disabled = false;
+            if (!o.ok) {
+              var detail = o.data && o.data.detail != null ? o.data.detail : 'Не удалось добавить.';
+              if (window.MiniAppErrorUi && MiniAppErrorUi.humanizeDetail) {
+                detail = MiniAppErrorUi.humanizeDetail(detail) || detail;
+              }
+              customServiceAddNote(String(detail), true);
+              return;
+            }
+            var wrap = document.getElementById('svcAddCustomWrap');
+            var btn = document.getElementById('svcAddCustomBtn');
+            var nameEl = document.getElementById('svcAddCustomName');
+            if (nameEl) nameEl.value = '';
+            newCustomServiceOnline = false;
+            var fmt = document.getElementById('svcAddCustomFormat');
+            if (fmt) {
+              fmt.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+                var on = b.getAttribute('data-online') === '1';
+                b.setAttribute('aria-pressed', on ? 'false' : 'true');
+              });
+            }
+            /* Keep panel open briefly so the status line is visible. */
+            if (wrap) wrap.hidden = false;
+            if (btn) btn.hidden = true;
+            applyCustomServiceCreated(o.data);
+            haptic('medium');
+          })
+          .catch(function() {
+            if (submitBtn) submitBtn.disabled = false;
+            customServiceAddNote('Ошибка сети. Попробуйте ещё раз.', true);
+          });
+      }
+
+      function bindCustomServiceAdd() {
+        if (customServiceAddBound) return;
+        customServiceAddBound = true;
+        var addBtn = document.getElementById('svcAddCustomBtn');
+        var submit = document.getElementById('svcAddCustomSubmit');
+        var cancel = document.getElementById('svcAddCustomCancel');
+        var inp = document.getElementById('svcAddCustomName');
+        var fmt = document.getElementById('svcAddCustomFormat');
+        if (addBtn) addBtn.addEventListener('click', openCustomServiceAdd);
+        if (cancel) cancel.addEventListener('click', closeCustomServiceAdd);
+        if (submit) submit.addEventListener('click', submitCustomServiceAdd);
+        if (fmt) {
+          fmt.querySelectorAll('.svc-format-seg__btn').forEach(function(b) {
+            b.addEventListener('click', function() {
+              var online = b.getAttribute('data-online') === '1';
+              newCustomServiceOnline = online;
+              fmt.querySelectorAll('.svc-format-seg__btn').forEach(function(x) {
+                var on = x.getAttribute('data-online') === '1';
+                x.setAttribute('aria-pressed', (on === online) ? 'true' : 'false');
+              });
+              haptic('light');
+            });
+          });
+        }
+        if (inp) {
+          inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submitCustomServiceAdd();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              closeCustomServiceAdd();
+            }
+          });
+        }
+      }
+
+      function lockedArenaIds() {
+        var raw = (state.trainer && state.trainer.arena_ids_locked) ? state.trainer.arena_ids_locked : [];
+        var out = {};
+        raw.forEach(function(id) {
+          var n = Number(id);
+          if (n) out[n] = true;
+        });
+        return out;
+      }
+
+      function isArenaLockedByBookings(id) {
+        return !!lockedArenaIds()[Number(id)];
+      }
+
+      function formatLockedServiceIds() {
+        var raw = (state.trainer && state.trainer.service_ids_format_locked)
+          ? state.trainer.service_ids_format_locked
+          : [];
+        var out = {};
+        raw.forEach(function(id) {
+          var n = Number(id);
+          if (n) out[n] = true;
+        });
+        return out;
+      }
+
+      function isServiceFormatLocked(serviceId) {
+        return !!formatLockedServiceIds()[Number(serviceId)];
+      }
+
+      /** Partial API trainer payloads often omit lock arrays — never drop locks on assign. */
+      function applyTrainerFromApi(trainer) {
+        var prevLocked = (state.trainer && state.trainer.arena_ids_locked)
+          ? state.trainer.arena_ids_locked.slice()
+          : [];
+        var prevFmtLocked = (state.trainer && state.trainer.service_ids_format_locked)
+          ? state.trainer.service_ids_format_locked.slice()
+          : [];
+        state.trainer = trainer || {};
+        if (!Array.isArray(state.trainer.arena_ids_locked)) {
+          state.trainer.arena_ids_locked = prevLocked;
+        }
+        if (!Array.isArray(state.trainer.service_ids_format_locked)) {
+          state.trainer.service_ids_format_locked = prevFmtLocked;
+        }
       }
 
       function toggleCanonicalArena(id, on) {
         var ids = canonicalArenaIds();
         var n = Number(id);
         var i = ids.indexOf(n);
+        if (!on && i >= 0 && isArenaLockedByBookings(n)) {
+          var aLocked = findArenaById(n);
+          var nameLocked = (aLocked && aLocked.name) ? aLocked.name : ('Площадка #' + n);
+          flashArenaChipsNote(
+            '«' + nameLocked + '» нельзя убрать: есть записи или слоты сейчас или в будущем.'
+          );
+          return;
+        }
         if (on && i < 0) ids.push(n);
         if (!on && i >= 0) ids.splice(i, 1);
         setCanonicalArenaIds(ids);
         ensurePrimaryArena();
+        /* Exclusive online/mobile format drops when a venue is linked; online_enabled stays. */
+        if (on && state.trainer) {
+          var fmtDrop = trainerArenaSetupFormat();
+          if (fmtDrop === 'online' || fmtDrop === 'mobile') {
+            state.trainer.arena_work_format = null;
+            if (!state._arenaFormatClearQueued) {
+              state._arenaFormatClearQueued = true;
+              submitArenaWorkFormat('clear', null, null).finally(function() {
+                state._arenaFormatClearQueued = false;
+              });
+            }
+          }
+        }
         if (profileArenaPickerEnabled()) updateArenaPickerUi();
         updatePrimaryArenaUi();
         setDirty();
@@ -5080,13 +5672,49 @@
             updateArenaResults();
           }, ARENA_PICKER_SEARCH_DEBOUNCE_MS);
         });
-        inp.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter') e.preventDefault();
+        inp.addEventListener('focus', function() {
+          setArenaComboFocused(true);
+          scheduleArenaComboScrollOnce(inp);
         });
+        inp.addEventListener('blur', function() {
+          if (arenaComboFocusScrollT) {
+            clearTimeout(arenaComboFocusScrollT);
+            arenaComboFocusScrollT = null;
+          }
+          window.setTimeout(function() {
+            if (document.activeElement === inp) return;
+            setArenaComboFocused(false);
+          }, 100);
+        });
+        inp.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === 'Escape') {
+            e.preventDefault();
+            dismissArenaComboKeyboard();
+          }
+        });
+        var doneBtn = document.getElementById('arenaComboDone');
+        if (doneBtn && !doneBtn._arenaComboDoneBound) {
+          doneBtn._arenaComboDoneBound = true;
+          doneBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            dismissArenaComboKeyboard();
+          });
+        }
+        if (!document._arenaComboDismissBound) {
+          document._arenaComboDismissBound = true;
+          document.addEventListener(
+            'touchstart',
+            function(e) {
+              var t = e.target;
+              if (t && t.closest && t.closest('#arenaPicker')) return;
+              dismissArenaComboKeyboard();
+            },
+            { passive: true, capture: true }
+          );
+        }
       }
 
       var arenaChipsNoteTimer = null;
-      var arenaRowOpenId = null;
 
       function hideArenaChipsNote() {
         var note = document.getElementById('arenaChipsNote');
@@ -5100,9 +5728,7 @@
         note.textContent = '';
       }
 
-      /* Brief confirmation after toggling visibility (e.g. "«ТЦ Замок» скрыта из каталога"),
-         then hides itself — the row panel's own description already explains the switch at
-         rest, this is just closure that the tap actually took effect. */
+      /* Brief confirmation after toggling visibility — rows are flat (no expand panel). */
       function flashArenaChipsNote(text) {
         var note = document.getElementById('arenaChipsNote');
         if (!note) return;
@@ -5131,14 +5757,19 @@
         if (cur == null || ids.indexOf(cur) < 0) cur = ids[0];
         var opts = ids.map(function(id) {
           var a = findArenaById(id);
-          var name = (a && a.name) ? a.name : ('Арена #' + id);
+          var name = (a && a.name) ? a.name : ('Площадка #' + id);
           return '<option value="' + id + '"' + (id === cur ? ' selected' : '') + '>' + escapeArenaHtml(name) + '</option>';
         }).join('');
         host.innerHTML =
-          '<p class="hint arena-default-line">Если при создании слота не выбрать площадку — подставится '
-          + '<select id="arenaDefaultSelect" aria-label="Площадка по умолчанию">' + opts + '</select>'
-          + '<span class="arena-default-line__foot">В расписании и в «Точном времени» площадку можно '
-          + 'выбрать любую — эта просто стоит заранее.</span></p>';
+          '<div class="arena-default-field">' +
+          '<label class="arena-default-field__label" for="arenaDefaultSelect">Площадка по умолчанию</label>' +
+          '<select id="arenaDefaultSelect" class="arena-default-field__select" aria-describedby="arenaDefaultHint">' +
+          opts +
+          '</select>' +
+          '<p class="arena-default-field__hint" id="arenaDefaultHint">' +
+          'Подставится, если при создании слота площадку не выбрать.' +
+          '</p>' +
+          '</div>';
         var sel = document.getElementById('arenaDefaultSelect');
         if (sel) {
           sel.addEventListener('change', function() {
@@ -5159,105 +5790,191 @@
           return;
         }
         chips.hidden = false;
+        /* Selected venues: name + remove only (no per-row vitrine switches). */
         var html = '';
         ids.forEach(function(id) {
           var a = findArenaById(id);
-          var name = (a && a.name) ? a.name : ('Арена #' + id);
-          var pub = arenaIsPublic(id);
-          var isOpen = arenaRowOpenId === id;
-          html += '<div class="arena-row' + (pub ? '' : ' arena-row--hidden') + (isOpen ? ' arena-row--open' : '') + '">';
-          html += '<div class="arena-row__top" data-arena-toggle="' + id + '">';
+          var name = (a && a.name) ? a.name : ('Площадка #' + id);
+          var locked = isArenaLockedByBookings(id);
+          html += '<div class="arena-row' + (locked ? ' arena-row--locked' : '') + '">';
           html += '<span class="arena-row__name">' + escapeArenaHtml(name) + '</span>';
-          html += '<span class="arena-row__chev" aria-hidden="true">▾</span>';
-          html += '<button type="button" class="arena-row__remove" data-arena-remove="' + id + '" aria-label="Убрать площадку">×</button>';
-          html += '</div>';
-          if (!pub) {
-            html += '<span class="arena-row__tag">Скрыта от клиентов на странице арены</span>';
+          if (locked) {
+            html +=
+              '<button type="button" class="arena-row__remove" data-arena-remove="' +
+              id +
+              '" disabled aria-disabled="true" aria-label="Нельзя убрать: есть записи или слоты" ' +
+              'title="Есть записи или слоты сейчас или в будущем — площадку нельзя убрать">×</button>';
+          } else {
+            html +=
+              '<button type="button" class="arena-row__remove" data-arena-remove="' +
+              id +
+              '" aria-label="Убрать площадку">×</button>';
           }
-          html += '<div class="arena-row__panel">';
-          html += '<div class="arena-opt">';
-          html += '<div class="arena-opt__txt">';
-          html += '<span class="arena-opt__t">Показывать меня на странице арены</span>';
-          html += '<span class="arena-opt__d">Клиент открывает «Лёд» → ' + escapeArenaHtml(name)
-            + ' и видит вас в блоке «Тренеры на этой арене».</span>';
-          html += '</div>';
-          html += '<button type="button" class="arena-sw" role="switch" data-arena-public="' + id + '"'
-            + ' aria-checked="' + (pub ? 'true' : 'false') + '" aria-label="Показывать на странице арены"></button>';
-          html += '</div>';
-          html += '</div>';
           html += '</div>';
         });
         chips.innerHTML = html;
         renderArenaDefaultLine(ids);
 
-        chips.querySelectorAll('[data-arena-toggle]').forEach(function(el) {
-          el.addEventListener('click', function(e) {
-            if (e.target.closest('[data-arena-remove]')) return;
-            var id = Number(el.getAttribute('data-arena-toggle'));
-            arenaRowOpenId = (arenaRowOpenId === id) ? null : id;
-            updateArenaChips();
-          });
-        });
-        chips.querySelectorAll('[data-arena-public]').forEach(function(btn) {
-          btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            var aid = Number(btn.getAttribute('data-arena-public'));
-            if (!aid) return;
-            var next = !arenaIsPublic(aid);
-            setArenaIsPublicLocal(aid, next);
-            updateArenaChips();
-            var a = findArenaById(aid);
-            var name = (a && a.name) ? a.name : ('Арена #' + aid);
-            flashArenaChipsNote(
-              next
-                ? '«' + name + '» теперь видна клиентам на странице арены.'
-                : '«' + name + '» скрыта — клиенты её на странице арены не увидят.'
-            );
-            fetch(apiUrl('/trainer/arenas/' + aid + '/public'), {
-              method: 'PATCH',
-              headers: headersJson(),
-              body: JSON.stringify({ is_public: next }),
-            }).then(function(r) {
-              return r.json().then(function(data) {
-                return { ok: r.ok, data: data };
-              });
-            }).then(function(o) {
-              if (o.ok && o.data && o.data.trainer) {
-                state.trainer = o.data.trainer;
-                updateArenaChips();
-                return;
-              }
-              if (!o.ok) {
-                setArenaIsPublicLocal(aid, !next);
-                updateArenaChips();
-              }
-            }).catch(function() {
-              setArenaIsPublicLocal(aid, !next);
-              updateArenaChips();
-            });
-          });
-        });
         chips.querySelectorAll('[data-arena-remove]').forEach(function(btn) {
           btn.addEventListener('click', function(e) {
             e.stopPropagation();
+            if (btn.disabled) {
+              var lockedId = Number(btn.getAttribute('data-arena-remove'));
+              if (lockedId) toggleCanonicalArena(lockedId, false);
+              return;
+            }
             var id = Number(btn.getAttribute('data-arena-remove'));
-            if (arenaRowOpenId === id) arenaRowOpenId = null;
             toggleCanonicalArena(id, false);
           });
         });
       }
 
+      function arenaThumbUrl(arena) {
+        var u = arena && arena.thumb_url;
+        return u && String(u).trim() ? String(u).trim() : '';
+      }
+
+      function buildArenaComboThumb(arena) {
+        var wrap = document.createElement('div');
+        wrap.className = 'arena-combo__thumb';
+        var url = arenaThumbUrl(arena);
+        if (url) {
+          var img = document.createElement('img');
+          img.src = url;
+          img.alt = '';
+          img.loading = 'lazy';
+          img.decoding = 'async';
+          wrap.appendChild(img);
+        } else {
+          wrap.classList.add('arena-combo__thumb--ph');
+          wrap.setAttribute('aria-hidden', 'true');
+          wrap.textContent = (arena && arena.venue_chip) ? arena.venue_chip : '🏟';
+        }
+        var check = document.createElement('span');
+        check.className = 'arena-combo__thumb-check';
+        check.setAttribute('aria-hidden', 'true');
+        check.textContent = '✓';
+        wrap.appendChild(check);
+        return wrap;
+      }
+
+      function arenaMetaLabel(arena) {
+        if (!arena) return '';
+        if (arena.address) return String(arena.address);
+        if (arena.district) return String(arena.district);
+        return '';
+      }
+
+      function sortArenasByName(list) {
+        return list.slice().sort(function(a, b) {
+          return (a.name || '').localeCompare(b.name || '', 'ru');
+        });
+      }
+
+      function arenasForProfilePicker(query, selectedMap) {
+        var pool = sortArenasByName(state.arenasList || []);
+        var q = (query || '').trim();
+        if (q) {
+          var filtered = pool.filter(function(a) { return arenaMatchesQuery(a, q); });
+          return { items: filtered, total: pool.length, shown: filtered.length, truncated: false };
+        }
+        var picked = [];
+        var rest = [];
+        pool.forEach(function(a) {
+          if (selectedMap[a.id]) picked.push(a);
+          else rest.push(a);
+        });
+        var seen = {};
+        var items = [];
+        picked.forEach(function(a) {
+          if (seen[a.id]) return;
+          seen[a.id] = true;
+          items.push(a);
+        });
+        rest.forEach(function(a) {
+          if (items.length >= ARENA_BROWSE_CAP) return;
+          if (seen[a.id]) return;
+          seen[a.id] = true;
+          items.push(a);
+        });
+        return {
+          items: items,
+          total: pool.length,
+          shown: items.length,
+          truncated: pool.length > items.length,
+        };
+      }
+
+      function syncArenaBrowseHint(meta, q) {
+        var hintEl = document.getElementById('arenaBrowseHint');
+        if (!hintEl) return;
+        if (q) {
+          hintEl.hidden = true;
+          hintEl.textContent = '';
+          return;
+        }
+        if (!meta.total) {
+          hintEl.textContent = 'В каталоге этого города пока нет площадок.';
+          hintEl.hidden = false;
+          return;
+        }
+        hintEl.textContent = meta.truncated
+          ? ('Показано ' + meta.shown + ' из ' + meta.total +
+            '. Введите название или адрес, чтобы найти остальные.')
+          : 'Выберите из списка ниже.';
+        hintEl.hidden = false;
+      }
+
       function appendArenaCreateCta(results, query) {
         var createBtn = document.createElement('button');
         createBtn.type = 'button';
-        createBtn.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+        createBtn.className = 'arena-combo__create';
         createBtn.textContent = query
           ? ('Добавить «' + query + '»')
-          : 'Нет в списке — добавить площадку';
+          : 'Моей площадки нет в списке';
         createBtn.addEventListener('click', function() {
           openArenaCreateForm(query || '');
         });
         results.appendChild(createBtn);
+      }
+
+      function setArenaComboFocused(on) {
+        var combo = document.getElementById('arenaCombo');
+        var inp = document.getElementById('arenaSearchInput');
+        var doneBtn = document.getElementById('arenaComboDone');
+        if (combo) combo.classList.toggle('arena-combo--focused', !!on);
+        if (doneBtn) doneBtn.hidden = !on;
+        if (inp) inp.setAttribute('aria-expanded', on ? 'true' : 'false');
+      }
+
+      function scheduleArenaComboScrollOnce(inp) {
+        if (!inp) return;
+        if (arenaComboFocusScrollT) clearTimeout(arenaComboFocusScrollT);
+        arenaComboFocusScrollT = setTimeout(function() {
+          arenaComboFocusScrollT = null;
+          if (document.activeElement !== inp) return;
+          var wrap = document.getElementById('arenaPicker');
+          if (!wrap) return;
+          try {
+            wrap.scrollIntoView({ block: 'start', behavior: 'auto', inline: 'nearest' });
+          } catch (eS) { /* */ }
+        }, 420);
+      }
+
+      function dismissArenaComboKeyboard() {
+        if (arenaComboFocusScrollT) {
+          clearTimeout(arenaComboFocusScrollT);
+          arenaComboFocusScrollT = null;
+        }
+        var inp = document.getElementById('arenaSearchInput');
+        if (inp) {
+          setArenaComboFocused(false);
+          try { inp.blur(); } catch (eB) { /* */ }
+        }
+        try {
+          var tg = window.Telegram && window.Telegram.WebApp;
+          if (tg && typeof tg.hideKeyboard === 'function') tg.hideKeyboard();
+        } catch (eTg) { /* */ }
       }
 
       function updateArenaResults() {
@@ -5266,53 +5983,46 @@
         var hasCity = !!(state.trainer && state.trainer.profile && state.trainer.profile.city_id);
         if (!hasCity) {
           results.innerHTML = '';
+          var hintEl = document.getElementById('arenaBrowseHint');
+          if (hintEl) {
+            hintEl.hidden = true;
+            hintEl.textContent = '';
+          }
           return;
         }
         var inp = document.getElementById('arenaSearchInput');
         var query = inp ? inp.value : (state.arenaSearchQuery || '');
         state.arenaSearchQuery = query;
-        var qNorm = normalizeArenaSearch(query);
+        var q = (query || '').trim();
         var selected = {};
         canonicalArenaIds().forEach(function(id) { selected[id] = true; });
-
-        if (!qNorm) {
-          results.innerHTML = '';
-          var idle = document.createElement('p');
-          idle.className = 'arena-results-idle';
-          var n = (state.arenasList || []).length;
-          idle.textContent = n
-            ? ('Начните вводить название или адрес — в городе ' + n + ' площадок.')
-            : 'В этом городе пока нет площадок в справочнике.';
-          results.appendChild(idle);
-          if (!state.arenaCreateOpen) appendArenaCreateCta(results, '');
-          return;
-        }
-
-        var matches = [];
-        (state.arenasList || []).forEach(function(a) {
-          if (arenaMatchesQuery(a, query)) matches.push(a);
-        });
-
+        var meta = arenasForProfilePicker(query, selected);
+        syncArenaBrowseHint(meta, q);
         results.innerHTML = '';
-        if (!matches.length) {
+        if (!meta.items.length) {
           var empty = document.createElement('p');
-          empty.className = 'arena-results-empty';
-          empty.textContent = 'Ничего не нашлось.';
+          empty.className = 'arena-combo__empty';
+          empty.textContent = q
+            ? 'Площадок не найдено.'
+            : 'В каталоге этого города пока нет площадок.';
           results.appendChild(empty);
-          if (!state.arenaCreateOpen) appendArenaCreateCta(results, query.trim());
+          if (!state.arenaCreateOpen) appendArenaCreateCta(results, q);
           return;
         }
-
-        var shown = matches.slice(0, ARENA_PICKER_MAX_RESULTS);
-        shown.forEach(function(a) {
+        meta.items.forEach(function(a) {
+          var on = !!selected[a.id];
           var btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'arena-result' + (selected[a.id] ? ' is-selected' : '');
+          btn.className = 'arena-combo__row' + (on ? ' is-on' : '');
           btn.setAttribute('role', 'option');
-          btn.setAttribute('aria-selected', selected[a.id] ? 'true' : 'false');
+          btn.setAttribute('aria-selected', on ? 'true' : 'false');
+          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+          btn.appendChild(buildArenaComboThumb(a));
+          var body = document.createElement('div');
+          body.className = 'arena-combo__body';
           var nameEl = document.createElement('span');
-          nameEl.className = 'arena-result__name';
-          nameEl.textContent = a.name || ('Арена #' + a.id);
+          nameEl.className = 'arena-combo__name';
+          nameEl.textContent = a.name || ('Площадка #' + a.id);
           if (a.is_confirmed === false) {
             nameEl.appendChild(document.createTextNode(' '));
             var badge = document.createElement('span');
@@ -5320,24 +6030,21 @@
             badge.textContent = 'на проверке';
             nameEl.appendChild(badge);
           }
-          btn.appendChild(nameEl);
-          if (a.address) {
-            var addrEl = document.createElement('span');
-            addrEl.className = 'arena-result__addr';
-            addrEl.textContent = a.address;
-            btn.appendChild(addrEl);
+          body.appendChild(nameEl);
+          var metaLabel = arenaMetaLabel(a);
+          if (metaLabel) {
+            var metaEl = document.createElement('span');
+            metaEl.className = 'arena-combo__meta';
+            metaEl.textContent = metaLabel;
+            body.appendChild(metaEl);
           }
+          btn.appendChild(body);
           btn.addEventListener('click', function() {
-            toggleCanonicalArena(a.id, !selected[a.id]);
+            toggleCanonicalArena(a.id, !on);
           });
           results.appendChild(btn);
         });
-        if (matches.length > ARENA_PICKER_MAX_RESULTS) {
-          var more = document.createElement('p');
-          more.className = 'arena-results-more';
-          more.textContent = 'Ещё ' + (matches.length - ARENA_PICKER_MAX_RESULTS) + ' — уточните запрос.';
-          results.appendChild(more);
-        }
+        if (!state.arenaCreateOpen) appendArenaCreateCta(results, q);
       }
 
       function updateArenaPickerUi() {
@@ -5370,12 +6077,12 @@
         if (!cur || selIds.indexOf(cur) < 0) {
           cur = selected[0].id;
         }
-        var html = '<p class="hint" style="margin:0 0 10px;">Основная площадка для онлайн-записи, когда клиент выбирает «Любая арена» в каталоге</p>';
+        var html = '<p class="hint" style="margin:0 0 10px;">Основная площадка для онлайн-записи, когда клиент выбирает «Любая площадка» в каталоге</p>';
         selected.forEach(function(a) {
           var id = 'primary_arena_' + a.id;
           html += '<div class="arena-row arena-active" style="margin-bottom:8px;"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;">';
           html += '<input type="radio" name="primary_arena" id="' + id + '" value="' + a.id + '"' + (a.id === cur ? ' checked' : '') + ' />';
-          html += '<span>' + (a.name || ('Арена #' + a.id)) + '</span></label></div>';
+          html += '<span>' + (a.name || ('Площадка #' + a.id)) + '</span></label></div>';
         });
         wrap.innerHTML = html;
         wrap.querySelectorAll('input[name="primary_arena"]').forEach(function(inp) {
@@ -5395,7 +6102,7 @@
         var t = state.trainer || {};
         if ((t.arena_ids || []).length) return true;
         var fmt = trainerArenaSetupFormat();
-        if (fmt === 'mobile') return true;
+        if (fmt === 'mobile' || fmt === 'online') return true;
         if (fmt === 'pending_request' && (t.arena_request_text || '').trim()) return true;
         return false;
       }
@@ -5447,7 +6154,7 @@
       }
 
       function afterArenaSetupSuccess(data) {
-        if (data && data.trainer) state.trainer = data.trainer;
+        if (data && data.trainer) applyTrainerFromApi(data.trainer);
         if (data && data.moderation_readiness) state.moderation_readiness = data.moderation_readiness;
         state.arenaCreateOpen = false;
         resetArenaSearch();
@@ -5550,7 +6257,7 @@
           useBtn.type = 'button';
           useBtn.className = 'filter-btn arena-empty-btn';
           useBtn.style.marginBottom = '6px';
-          useBtn.textContent = 'Выбрать «' + (d.name || ('Арена #' + d.arena_id)) + '»';
+          useBtn.textContent = 'Выбрать «' + (d.name || ('Площадка #' + d.arena_id)) + '»';
           useBtn.addEventListener('click', function() {
             selectExistingArenaCheckbox(d.arena_id);
           });
@@ -5738,31 +6445,31 @@
         box.appendChild(actions);
       }
 
+      function appendArenaWorkFormatClearButton(box, label) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'filter-btn arena-empty-btn';
+        btn.textContent = label || 'Убрать этот формат';
+        btn.addEventListener('click', function() {
+          submitArenaWorkFormat('clear', btn, null);
+        });
+        box.appendChild(btn);
+      }
+
       function renderArenaAddEntryPoint(hasCity) {
         var box = document.getElementById('arenaEmptyActions');
         if (!box) return;
         if (state.arenaCreateOpen) return;
         box.innerHTML = '';
+        clearArenaSetupMessages();
         if (!hasCity) {
           box.hidden = true;
           return;
         }
         box.hidden = false;
         var fmt = trainerArenaSetupFormat();
-        if (fmt === 'mobile') {
-          showArenaSetupStatus(
-            'Вы указали выездной формат без постоянной площадки. Сетку расписания задаёте в «Настройках».',
-            'ok'
-          );
-          return;
-        }
-        if (fmt === 'online') {
-          showArenaSetupStatus(
-            'Вы указали формат «Онлайн» — клиенты видят пометку «Онлайн» вместо площадки. Сетку расписания задаёте в «Настройках».',
-            'ok'
-          );
-          return;
-        }
+        var hasArenas = !!(state.trainer && (state.trainer.arena_ids || []).length);
+
         if (fmt === 'pending_request') {
           var txt = (state.trainer.arena_request_text || '').trim();
           showArenaSetupStatus(
@@ -5773,11 +6480,55 @@
           );
         }
 
+        /* Exclusive online/mobile (arena_work_format) ≠ «Также онлайн» (online_enabled).
+           With venues linked, exclusive formats clear; the online_enabled checkbox stays. */
+        if (hasArenas) {
+          if ((fmt === 'online' || fmt === 'mobile') && !state._arenaFormatClearQueued) {
+            state._arenaFormatClearQueued = true;
+            submitArenaWorkFormat('clear', null, null).finally(function() {
+              state._arenaFormatClearQueued = false;
+            });
+          }
+          if (!profileArenaPickerEnabled()) {
+            var leadHas = document.createElement('p');
+            leadHas.className = 'hint arena-empty-lead';
+            leadHas.textContent = 'Не нашли нужную площадку в списке?';
+            box.appendChild(leadHas);
+            var btnCreateHas = document.createElement('button');
+            btnCreateHas.type = 'button';
+            btnCreateHas.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+            btnCreateHas.textContent = 'Моей площадки нет в списке';
+            btnCreateHas.addEventListener('click', function() {
+              openArenaCreateForm('');
+            });
+            box.appendChild(btnCreateHas);
+            renderArenaSupportBlock(box);
+          } else {
+            box.hidden = true;
+          }
+          return;
+        }
+
+        if (fmt === 'mobile') {
+          showArenaSetupStatus(
+            'Выездной формат: слоты без площадки из списка. Сетку задаёте в «Настройках». Чтобы вести занятия на площадке — добавьте её (выездной формат снимется).',
+            'ok'
+          );
+          appendArenaWorkFormatClearButton(box, 'Убрать выездной формат');
+          return;
+        }
+        if (fmt === 'online') {
+          showArenaSetupStatus(
+            'Только онлайн — площадок в профиле нет. Чтобы добавить зал, выберите площадку выше; онлайн как доп. формат останется галочкой «Также онлайн».',
+            'ok'
+          );
+          appendArenaWorkFormatClearButton(box, 'Убрать режим «только онлайн»');
+          return;
+        }
+
         var lead = document.createElement('p');
         lead.className = 'hint arena-empty-lead';
-        lead.textContent = (state.trainer.arena_ids || []).length
-          ? 'Не нашли нужную площадку в списке?'
-          : 'Если вашей площадки нет в списке — выберите, как продолжить:';
+        lead.textContent = 'Если вашей площадки нет в списке — выберите, как продолжить:';
         if (!profileArenaPickerEnabled()) box.appendChild(lead);
 
         if (!profileArenaPickerEnabled()) {
@@ -5799,7 +6550,7 @@
           submitArenaWorkFormat(
             'mobile',
             btnMobile,
-            'Выездной формат без привязки к арене из справочника. Продолжить?'
+            'Сохранить выездной формат? Слоты будут без площадки из списка. Позже можно добавить площадку или убрать формат.'
           );
         });
         box.appendChild(btnMobile);
@@ -5807,28 +6558,31 @@
         var btnOnline = document.createElement('button');
         btnOnline.type = 'button';
         btnOnline.className = 'filter-btn arena-empty-btn';
-        btnOnline.textContent = 'Провожу занятия онлайн';
+        btnOnline.textContent = 'Только онлайн (без площадки)';
         btnOnline.addEventListener('click', function() {
           submitArenaWorkFormat(
             'online',
             btnOnline,
-            'Без привязки к арене — в «Лёд» клиенты увидят у вас пометку «Онлайн» вместо площадки. Продолжить?'
+            'Работать только онлайн, без площадок в профиле? Если нужна и площадка, и онлайн — добавьте площадку и отметьте услугу как «Онлайн» в блоке услуг.'
           );
         });
         box.appendChild(btnOnline);
         if (!profileArenaPickerEnabled()) renderArenaSupportBlock(box);
       }
 
-      /* Shared by "Занимаюсь выездом" / "Провожу занятия онлайн" — same request shape
-         (POST /trainer/profile/arena-setup, mode = work format), same success/error handling. */
+      /* POST /trainer/profile/arena-setup — mode mobile | online | clear. */
       function submitArenaWorkFormat(mode, btn, confirmText) {
-        if (!window.confirm(confirmText)) return;
+        if (confirmText && !window.confirm(confirmText)) {
+          if (btn && btn.type === 'checkbox') btn.checked = !btn.checked;
+          return Promise.resolve();
+        }
         var er = document.getElementById('err_arena_setup');
-        btn.disabled = true;
-        postArenaSetup({ mode: mode })
+        if (btn) btn.disabled = true;
+        return postArenaSetup({ mode: mode })
           .then(function(o) {
-            btn.disabled = false;
+            if (btn) btn.disabled = false;
             if (!o.ok) {
+              if (btn && btn.type === 'checkbox') btn.checked = !btn.checked;
               if (er) {
                 er.textContent = arenaSetupErrorDetail(o.data, o.status);
                 er.hidden = false;
@@ -5838,7 +6592,8 @@
             afterArenaSetupSuccess(o.data);
           })
           .catch(function() {
-            btn.disabled = false;
+            if (btn) btn.disabled = false;
+            if (btn && btn.type === 'checkbox') btn.checked = !btn.checked;
             if (er) {
               er.textContent = 'Не удалось сохранить. Проверьте соединение.';
               er.hidden = false;
@@ -5928,7 +6683,7 @@
 
             var lab = document.createElement('label');
             lab.htmlFor = 'arena_' + a.id;
-            lab.textContent = a.name || ('Арена #' + a.id);
+            lab.textContent = a.name || ('Площадка #' + a.id);
             if (a.is_confirmed === false) {
               lab.appendChild(document.createTextNode(' '));
               var badge = document.createElement('span');
@@ -6018,9 +6773,13 @@
             state.cities = (refs.cities && refs.cities.items) ? refs.cities.items : [];
             state.servicesCatalog = (refs.services && refs.services.items) ? refs.services.items : [];
             state.venueTypes = (refs.venue_types && refs.venue_types.items) ? refs.venue_types.items : [];
+            state.roleSuggestions =
+              refs.specialist_role_suggestions && refs.specialist_role_suggestions.items
+                ? refs.specialist_role_suggestions.items.slice()
+                : DEFAULT_ROLE_SUGGESTIONS.slice();
             var eduOpts = (refs.education_options && refs.education_options.items) ? refs.education_options.items : [];
             applyRefsToDom(eduOpts);
-            state.trainer = data.trainer;
+            applyTrainerFromApi(data.trainer);
             state.scheduleSettings = data.schedule_settings || null;
             state.scheduleGridSelectedStep =
               state.scheduleSettings && state.scheduleSettings.schedule_grid_step_minutes != null
@@ -6052,8 +6811,12 @@
               }
             });
           })
-          .catch(function() {
-            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">Ошибка сети. Проверьте подключение.</p>';
+          .catch(function(err) {
+            try { console.error('trainer-profile loadInitial', err); } catch (e) {}
+            var tip = (!initData())
+              ? 'Нет авторизации Telegram. Откройте профиль из бота или с init_data в адресе.'
+              : 'Ошибка сети. Проверьте подключение.';
+            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
             return Promise.resolve();
           });
       }
@@ -6072,7 +6835,7 @@
                 detailShow2 + '</p>';
               return Promise.resolve();
             }
-            state.trainer = o.data.trainer;
+            applyTrainerFromApi(o.data.trainer);
             state.scheduleSettings = o.data.schedule_settings || null;
             state.scheduleGridSelectedStep =
               state.scheduleSettings && state.scheduleSettings.schedule_grid_step_minutes != null
@@ -6104,8 +6867,12 @@
               }
             });
           })
-          .catch(function() {
-            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">Ошибка сети. Проверьте подключение.</p>';
+          .catch(function(err) {
+            try { console.error('trainer-profile loadProfile', err); } catch (e) {}
+            var tip = (!initData())
+              ? 'Нет авторизации Telegram. Откройте профиль из бота или с init_data в адресе.'
+              : 'Ошибка сети. Проверьте подключение.';
+            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
             return Promise.resolve();
           });
       }
@@ -6225,6 +6992,7 @@
             session_duration_minutes: pr.session_duration_minutes,
             min_hours_before_booking: pr.min_hours_before_booking,
             group_classes_enabled: !!pr.group_classes_enabled,
+            specialist_roles: Array.isArray(pr.specialist_roles) ? pr.specialist_roles : [],
           },
           services: parsed.services,
         };

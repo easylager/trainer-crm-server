@@ -57,6 +57,16 @@ def _fit(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max
     return (cut.rstrip() + ellipsis) if cut else ellipsis
 
 
+def og_footer(day: Mapping[str, object]) -> str:
+    """Нижняя строка картинки. Отдельно от рисования — чтобы проверять тестом."""
+    if not int(day.get("session_count") or 0):
+        return "Загляните — расписание обновляется"
+    if int(day.get("stale_arena_count") or 0):
+        # TASK-180: часть расписания давно не подтверждалась — картинка не обещает лишнего.
+        return "Часть расписания могла измениться — детали на странице"
+    return "Время и цены каждого сеанса — на странице"
+
+
 def render_ice_city_day_og(*, city_name: str, day: Mapping[str, object]) -> bytes:
     """PNG 1200×630 для og:image. Возвращает готовые байты, на диск ничего не пишет."""
     img = Image.new("RGB", (OG_WIDTH, OG_HEIGHT), _BG)
@@ -95,10 +105,9 @@ def render_ice_city_day_og(*, city_name: str, day: Mapping[str, object]) -> byte
                 int(draw.textlength(value_text, font=f_stat)),
                 int(draw.textlength(caption, font=f_stat_label)),
             ) + 90
-        footer = "Время и цены каждого сеанса — на странице"
     else:
         draw.text((pad, 330), "Расписание на этот день пустое", font=f_stat_label, fill=_MUTED)
-        footer = "Загляните — расписание обновляется"
+    footer = og_footer(day)
 
     draw.line([(pad, OG_HEIGHT - 132), (OG_WIDTH - pad, OG_HEIGHT - 132)], fill=(30, 48, 62), width=2)
     draw.text((pad, OG_HEIGHT - 100), _fit(draw, footer, f_foot, inner - 120), font=f_foot, fill=_MUTED)

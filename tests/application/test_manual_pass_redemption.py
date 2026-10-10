@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.pass_product_use_cases import (
+    get_trainer_pass_instance_detail,
     issue_pass_to_client,
     list_redeemable_bookings_for_pass_instance,
     manual_redeem_pass_for_booking,
@@ -113,6 +114,13 @@ async def test_list_redeemable_bookings_after_pass_issue(db_session: AsyncSessio
     assert "error" not in result
     ids = [int(x["booking_id"]) for x in result["items"]]
     assert booking_id in ids
+    listed = next(x for x in result["items"] if int(x["booking_id"]) == booking_id)
+    assert listed["in_scope"] is True
+    assert listed["scope_note"] is None
+    detail = await get_trainer_pass_instance_detail(db_session, trainer_id, pass_instance_id)
+    assert detail is not None
+    assert detail["tiers_label"] is None
+    assert detail["tier_kinds"] == []
 
 
 @pytest.mark.asyncio
@@ -223,3 +231,130 @@ async def test_redeem_pass_session_idempotent_no_double_debit(db_session: AsyncS
         )
     ).scalar()
     assert int(rem2) == 9
+
+
+@pytest.mark.asyncio
+async def test_manual_redeem_allows_session_outside_pass_scope(db_session: AsyncSession) -> None:
+    """Wrong tariff or service can be debited by hand; automatic redemption still skips it."""
+    from src.application.pass_product_use_cases import redeem_pass_session_for_booking
+
+    yesterday = date.today() - timedelta(days=2)
+    trainer_id, client_id, adult_booking_id, pass_product_id = await _seed_completed_booking_without_pass(
+        db_session, slot_date=yesterday
+    )
+    service_id = (
+        await db_session.execute(
+            text("SELECT service_id FROM bookings WHERE id = :bid"),
+            {"bid": adult_booking_id},
+        )
+    ).scalar()
+    await db_session.execute(
+        text("UPDATE bookings SET price_tier_kind = 'adult' WHERE id = :bid"),
+        {"bid": adult_booking_id},
+    )
+    other_service_id = (
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO services (name, is_public)
+                VALUES ('Manual redeem other service', FALSE)
+                RETURNING id
+                """
+            )
+        )
+    ).scalar()
+    other_slot_id = (
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity)
+                VALUES (:tid, :d, :start, :end, 'booked', 1)
+                RETURNING id
+                """
+            ),
+            {
+                "tid": trainer_id,
+                "d": yesterday,
+                "start": time(12, 0),
+                "end": time(13, 0),
+            },
+        )
+    ).scalar()
+    other_booking_id = (
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO bookings (
+                    slot_id, trainer_id, client_id, service_id, status,
+                    booking_price_cents, price_tier_kind
+                )
+                VALUES (:sid, :tid, :cid, :svc, 'completed', 5000, 'child')
+                RETURNING id
+                """
+            ),
+            {
+                "sid": other_slot_id,
+                "tid": trainer_id,
+                "cid": client_id,
+                "svc": other_service_id,
+            },
+        )
+    ).scalar()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_pass_product_services (pass_product_id, service_id)
+            VALUES (:pid, :sid)
+            """
+        ),
+        {"pid": pass_product_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_pass_product_tiers (pass_product_id, tier_kind)
+            VALUES (:pid, 'child')
+            """
+        ),
+        {"pid": pass_product_id},
+    )
+    await db_session.commit()
+
+    issued = await issue_pass_to_client(db_session, trainer_id, client_id, pass_product_id)
+    pass_instance_id = int(issued["id"])
+    detail = await get_trainer_pass_instance_detail(db_session, trainer_id, pass_instance_id)
+    assert detail is not None
+    assert detail["tier_kinds"] == ["child"]
+    assert detail["tiers_label"] == "Детский"
+
+    listed = await list_redeemable_bookings_for_pass_instance(
+        db_session, trainer_id, pass_instance_id
+    )
+    by_id = {int(x["booking_id"]): x for x in listed["items"]}
+    assert by_id[adult_booking_id]["in_scope"] is False
+    assert "Взрослый" in (by_id[adult_booking_id]["scope_note"] or "")
+    assert by_id[int(other_booking_id)]["in_scope"] is False
+    assert by_id[int(other_booking_id)]["scope_note"] == "Другая услуга"
+    assert [int(x["booking_id"]) for x in listed["items"]].index(adult_booking_id) >= 0
+
+    assert await redeem_pass_session_for_booking(db_session, adult_booking_id) is False
+    await db_session.commit()
+    remaining = (
+        await db_session.execute(
+            text("SELECT sessions_remaining FROM pass_instances WHERE id = :id"),
+            {"id": pass_instance_id},
+        )
+    ).scalar()
+    assert int(remaining) == 10
+
+    out = await manual_redeem_pass_for_booking(
+        db_session, trainer_id, pass_instance_id, adult_booking_id
+    )
+    assert out["already_redeemed"] is False
+    assert out["pass"]["sessions_remaining"] == 9
+
+    again = await list_redeemable_bookings_for_pass_instance(
+        db_session, trainer_id, pass_instance_id
+    )
+    assert adult_booking_id not in [int(x["booking_id"]) for x in again["items"]]
+    assert int(other_booking_id) in [int(x["booking_id"]) for x in again["items"]]

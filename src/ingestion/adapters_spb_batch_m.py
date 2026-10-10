@@ -51,6 +51,7 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
+from src.ingestion.dates import parser_reference_date
 from src.ingestion.htmlutil import strip_tags
 from src.ingestion.parsers import IceParser
 from src.ingestion.source_io import load_source_text
@@ -151,7 +152,11 @@ class DinamoYuniorHtmlParser(IceParser):
         adult = _price_after_label(text, "входного билета")
         rental = _price_after_label(text, "проката коньков")
 
-        week_start = date.fromisoformat(str(job.config.get("week_start") or date.today().isoformat()))
+        week_start = (
+            date.fromisoformat(str(job.config["week_start"]))
+            if job.config.get("week_start")
+            else parser_reference_date(job.config)
+        )
         horizon = int(job.config.get("horizon_days") or 7)
 
         slots: list[ExtractedSlot] = []

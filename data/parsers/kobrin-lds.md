@@ -1,6 +1,7 @@
 # Parser spec: Ледовая арена (Кобрин)
 
 - arena_id: 25
+- arena_slug: kobrin-lds
 - city: Кобрин
 - parser_key: kobrin_html_v1
 - cadence: weekly

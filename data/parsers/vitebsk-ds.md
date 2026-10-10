@@ -1,6 +1,7 @@
 # Parser spec: Витебск Дворец спорта
 
 - arena_id: 29
+- arena_slug: vitebsk-ds
 - city: Витебск
 - parser_key: vitebsk_hockey_html_v1
 - cadence: daily

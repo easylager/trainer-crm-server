@@ -1,6 +1,7 @@
 # Parser spec: Брестский ЛДС
 
 - arena_id: 22
+- arena_slug: brest-lds
 - city: Брест
 - parser_key: brest_ocr_photo_v1
 - cadence: weekly

@@ -865,15 +865,28 @@
           }
           qb.bookServiceId = picked;
           sel.value = picked != null ? String(picked) : '';
+          function tcServiceIsOnline(serviceId) {
+            var sid = serviceId != null ? serviceId : qb.bookServiceId;
+            var svc = (qb.bookServices || []).filter(function(s) {
+              return Number(s.id) === Number(sid);
+            })[0];
+            return !!(svc && svc.is_online);
+          }
           sel.onchange = function() {
             qb.bookServiceId = this.value ? parseInt(this.value, 10) : null;
             syncPriceTierRadios(null, null);
+            var wrapOnline = document.getElementById('tcQbProfileArenaWrap');
+            if (wrapOnline) {
+              wrapOnline.style.display =
+                tcServiceIsOnline() || (qb.trainerArenas || []).length < 2 ? 'none' : 'block';
+            }
+            if (tcServiceIsOnline()) qb.bookArenaId = null;
           };
 
           var wrapA = document.getElementById('tcQbProfileArenaWrap');
           var selA = document.getElementById('tcQbProfileArenaSelect');
           if (wrapA && selA) {
-            var showA = arenas.length > 1;
+            var showA = arenas.length > 1 && !tcServiceIsOnline();
             wrapA.style.display = showA ? 'block' : 'none';
             if (showA) {
               selA.innerHTML = '';
@@ -944,6 +957,13 @@
           qb.awaitingConfirm = true;
         }
       
+        function tcBookedServiceIsOnline() {
+          var svc = (qb.bookServices || []).filter(function(s) {
+            return Number(s.id) === Number(qb.bookServiceId);
+          })[0];
+          return !!(svc && svc.is_online);
+        }
+
         function postQuickBooking() {
           var clientId = qb.lockedClientId;
           var serviceId = qb.bookServiceId;
@@ -955,7 +975,12 @@
             client_id: clientId,
             service_id: serviceId,
           };
-          if (qb.trainerArenas && qb.trainerArenas.length > 1 && qb.bookArenaId != null) {
+          if (
+            !tcBookedServiceIsOnline() &&
+            qb.trainerArenas &&
+            qb.trainerArenas.length > 1 &&
+            qb.bookArenaId != null
+          ) {
             payload.arena_id = qb.bookArenaId;
           }
           if (qb.bookPriceVariantId != null) {

@@ -43,6 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.shared.dossier_public_text import opening_hours_public_note
 from src.shared.minsk_speed_oval import (
     ADDRESS as SPEED_OVAL_ADDRESS,
     ARENA_ID as SPEED_OVAL_ARENA_ID,
@@ -104,6 +105,14 @@ DAILY_HOURS_RE = re.compile(
     r"ежедневно\s+(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})",
     re.I,
 )
+COMPLEX_HOURS_RE = re.compile(
+    r"комплекс:\s*ежедневно\s+(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})",
+    re.I,
+)
+KASSA_HOURS_RE = re.compile(
+    r"касса[^—–\n]*[—–-]\s*(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})",
+    re.I,
+)
 AMENITY_PAIR_RE = re.compile(
     r"(skate_rental|skate_sharpening|parking|locker_rooms|cafe|accessibility)"
     r"\s*[:=]\s*(true|false|unknown)",
@@ -163,7 +172,7 @@ class SessionPlan:
 @dataclass
 class ArenaCard:
     path: Path
-    arena_id: int
+    arena_id: int | None
     slug: str
     verified_at: date | None
     venue_type: str
@@ -333,21 +342,35 @@ def _norm_hhmm(raw: str) -> str:
     return f"{int(hours):02d}:{int(minutes):02d}"
 
 
+def _hours_interval(open_raw: str, close_raw: str) -> dict[str, str]:
+    return {"open": _norm_hhmm(open_raw), "close": _norm_hhmm(close_raw)}
+
+
 def parse_opening_hours(raw: str | None) -> dict[str, Any] | None:
     if is_unknown(raw):
         return None
     text = (raw or "").strip()
-    payload: dict[str, Any] = {"note": text}
-    daily = DAILY_HOURS_RE.search(text)
-    if daily:
-        payload["daily"] = {"open": _norm_hhmm(daily.group(1)), "close": _norm_hhmm(daily.group(2))}
-        return payload
+    payload: dict[str, Any] = {}
+    complex_m = COMPLEX_HOURS_RE.search(text)
+    if complex_m:
+        payload["complex"] = _hours_interval(complex_m.group(1), complex_m.group(2))
+    else:
+        daily = DAILY_HOURS_RE.search(text)
+        if daily:
+            payload["daily"] = _hours_interval(daily.group(1), daily.group(2))
+    kassa = KASSA_HOURS_RE.search(text)
+    if kassa:
+        payload["kassa"] = _hours_interval(kassa.group(1), kassa.group(2))
     # Lift a bare range only when it is the leading fact (DiaMond). Do not pick the
     # first weekday fragment out of a mixed admin/rink note (Минск-Арена).
-    leading = re.match(r"^(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})\b", text)
-    if leading:
-        payload["hours"] = {"open": _norm_hhmm(leading.group(1)), "close": _norm_hhmm(leading.group(2))}
-    return payload
+    if "daily" not in payload and "complex" not in payload:
+        leading = re.match(r"^(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})\b", text)
+        if leading:
+            payload["hours"] = _hours_interval(leading.group(1), leading.group(2))
+    note = opening_hours_public_note(text, payload)
+    if note:
+        payload["note"] = note
+    return payload if payload else None
 
 
 def _asset_path(value: str) -> str:
@@ -471,12 +494,10 @@ def parse_dossier(path: Path) -> ArenaCard:
     md = path.read_text(encoding="utf-8")
     id_match = HEADER_ARENA_ID_RE.search(md)
     slug_match = HEADER_SLUG_RE.search(md)
-    if not id_match:
-        raise ValueError(f"{path.name}: missing arena_id — refuse to invent")
     if not slug_match:
         raise ValueError(f"{path.name}: missing slug")
-    arena_id = int(id_match.group(1))
     slug = slug_match.group(1).strip()
+    arena_id = int(id_match.group(1)) if id_match else None
     verified_raw = HEADER_VERIFIED_RE.search(md)
     verified_at = None
     if verified_raw:
@@ -559,6 +580,28 @@ def discover_dossiers(cards_dir: Path) -> list[Path]:
             continue
         paths.append(path)
     return paths
+
+
+def parse_only_slugs(raw: str | None) -> frozenset[str] | None:
+    """Comma-separated dossier slugs (slug-only cards, resolved in DB on --apply)."""
+    if raw is None:
+        return None
+    text = raw.strip()
+    if not text:
+        return frozenset()
+    return frozenset(chunk.strip() for chunk in text.split(",") if chunk.strip())
+
+
+async def resolve_arena_id_for_slug(session: Any, slug: str) -> int | None:
+    from sqlalchemy import text
+
+    row = (
+        await session.execute(
+            text("SELECT arena_id FROM arena_profiles WHERE slug = :slug LIMIT 1"),
+            {"slug": slug},
+        )
+    ).fetchone()
+    return int(row[0]) if row else None
 
 
 def parse_only_arena_ids(raw: str | None) -> frozenset[int] | None:
@@ -673,6 +716,16 @@ def assert_local_database_url(
     names = {"trainer_crm_test"}
     if allow_local_dev:
         names.add("trainer_crm")
+    if os.environ.get("PYTEST_RELAX_DATABASE_NAME", "").strip() == "1":
+        env_url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_URL_SYNC") or ""
+        parsed_db = urlparse(
+            env_url.replace("postgresql+asyncpg://", "postgresql://", 1).replace(
+                "postgresql+psycopg://", "postgresql://", 1
+            )
+        )
+        relaxed = (parsed_db.path or "").lstrip("/").split("?")[0]
+        if relaxed and relaxed not in names:
+            names.add(relaxed)
     assert_database_url(
         url,
         apply=apply,
@@ -1008,13 +1061,13 @@ async def apply_card(
                         starts_at_local, ends_at_local,
                         price_adult_minor, price_child_minor, price_rental_minor, price_minor,
                         currency_code, session_label, age_note, status, source_id,
-                        observed_at, valid_until, confidence
+                        observed_at, valid_until, confidence, schedule_basis
                     ) VALUES (
                         :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date,
                         :starts_at_local, :ends_at_local,
                         :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor,
                         :currency_code, :session_label, :age_note, 'active', :source_id,
-                        :observed_at, :valid_until, :confidence
+                        :observed_at, :valid_until, :confidence, 'manual'
                     )
                     """
                 ),
@@ -1144,22 +1197,31 @@ async def run_load(
     report_path: Path | None,
     allow_local_dev: bool = False,
     only_arena_ids: frozenset[int] | None = None,
+    only_slugs: frozenset[str] | None = None,
 ) -> list[ArenaLoadResult]:
     started = time.perf_counter()
+    if only_arena_ids is not None and only_slugs is not None:
+        raise SystemExit("use only one of --only-arena-ids or --only-slugs")
     dossiers = discover_dossiers(cards_dir)
     if not dossiers:
         raise SystemExit(f"no minsk-*.md dossiers in {cards_dir}")
     cards = [parse_dossier(path) for path in dossiers]
-    missing_ids = [c.arena_id for c in cards if c.arena_id not in TARGET_ARENA_IDS]
-    if missing_ids:
-        raise SystemExit(f"unexpected arena_id values (refusing to invent/remap): {missing_ids}")
-    if only_arena_ids is not None:
-        unknown = sorted(only_arena_ids - set(TARGET_ARENA_IDS))
-        if unknown:
-            raise SystemExit(f"unknown --only-arena-ids (not in TARGET_ARENA_IDS): {unknown}")
-        cards = [c for c in cards if c.arena_id in only_arena_ids]
+    if only_slugs is not None:
+        cards = [c for c in cards if c.slug in only_slugs]
         if not cards:
-            raise SystemExit("no dossiers left after --only-arena-ids filter")
+            raise SystemExit("no dossiers left after --only-slugs filter")
+    else:
+        cards = [c for c in cards if c.arena_id is not None]
+        missing_ids = [c.arena_id for c in cards if c.arena_id not in TARGET_ARENA_IDS]
+        if missing_ids:
+            raise SystemExit(f"unexpected arena_id values (refusing to invent/remap): {missing_ids}")
+        if only_arena_ids is not None:
+            unknown = sorted(only_arena_ids - set(TARGET_ARENA_IDS))
+            if unknown:
+                raise SystemExit(f"unknown --only-arena-ids (not in TARGET_ARENA_IDS): {unknown}")
+            cards = [c for c in cards if c.arena_id in only_arena_ids]
+            if not cards:
+                raise SystemExit("no dossiers left after --only-arena-ids filter")
 
     results: list[ArenaLoadResult] = []
     if apply:
@@ -1172,12 +1234,26 @@ async def run_load(
         try:
             async with factory() as session:
                 for card in cards:
+                    if only_slugs is not None:
+                        target_id = await resolve_arena_id_for_slug(session, card.slug)
+                    else:
+                        target_id = card.arena_id
+                    if target_id is None:
+                            results.append(
+                                ArenaLoadResult(
+                                    card,
+                                    profile="skipped (slug not in DB)",
+                                    error=f"no arena_profiles.slug={card.slug}",
+                                )
+                            )
+                            continue
                     results.append(
                         await apply_card(
                             session,
                             card,
                             fixtures_dir=fixtures_dir,
                             seed_sessions=seed_sessions,
+                            arena_id=target_id,
                         )
                     )
                 await session.commit()
@@ -1191,7 +1267,8 @@ async def run_load(
             results.append(
                 ArenaLoadResult(
                     card,
-                    profile=f"dry-run {card.status} arena_id={card.arena_id}",
+                    profile=f"dry-run {card.status} slug={card.slug}"
+                    + (f" arena_id={card.arena_id}" if card.arena_id is not None else " (slug-only)"),
                     sessions_reason=plan_reason,
                     photo_summary="; ".join(p.reason for p in card.photo_decisions[:2]) or "none",
                 )
@@ -1248,6 +1325,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Comma-separated arena_ids to load (skip others). Local DB may not match prod CSV ids.",
     )
+    parser.add_argument(
+        "--only-slugs",
+        default=None,
+        help="Comma-separated dossier slugs (slug-only cards; arena resolved from arena_profiles on --apply).",
+    )
     return parser
 
 
@@ -1273,6 +1355,7 @@ def main(argv: list[str] | None = None) -> int:
             report_path=report_path,
             allow_local_dev=args.allow_local_dev_db,
             only_arena_ids=parse_only_arena_ids(args.only_arena_ids),
+            only_slugs=parse_only_slugs(args.only_slugs),
         )
     )
     return 0

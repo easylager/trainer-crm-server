@@ -1,6 +1,8 @@
 """Public Ice Discovery read-only routes (TASK-051). New module — do not grow webapp.py."""
 from __future__ import annotations
 
+import logging
+import time
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -9,7 +11,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.public_list_cache import set_public_json_list_cache
 from src.api.routes.public import _enrich_trainer_photo_urls
+from src.application.selection_page import SERVICE_AMENITY_KEYS, clean_svc
 from src.application.arena_public_use_cases import (
     DEFAULT_LIST_LIMIT,
     MAX_LIST_LIMIT,
@@ -29,6 +33,7 @@ from src.application.ice_city_day import (
     compose_ice_city_day_share_message,
     get_city_ice_day,
     ice_city_day_page_url,
+    resolve_city_by_ref,
     summary_line,
 )
 from src.application.place_links import place_image_url, place_page_url
@@ -39,6 +44,11 @@ from src.infrastructure.db.models import (
     CLIENT_SHARE_KIND_SELECTION,
 )
 from src.shared.config import Settings
+from src.shared.ice_discovery_scope import public_city_scope_sql, public_scope_params
+
+logger = logging.getLogger(__name__)
+_MAP_CONFIG_EMPTY_WARN_SEC = 600.0
+_map_config_empty_warned_at = 0.0
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
 
@@ -47,12 +57,45 @@ def _query_error(exc: IcePublicQueryError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
 
 
+async def _slug_city_id(
+    session: AsyncSession, arena_ref: str, city_id: int | None, city: str | None
+) -> int | None:
+    """Город для поиска по slug. Числовой id арены город не требует.
+
+    Без города — ``None``: голый slug разрешается, только если он один среди публично
+    видимых арен (``_load_arena_by_ref``), иначе 404. Явно указанный, но неизвестный
+    город — сразу 404.
+    """
+    if str(arena_ref).strip().isdigit():
+        return None
+    resolved = int(city_id) if city_id is not None else None
+    raw = (city or "").strip()
+    if resolved is None and raw:
+        found = await resolve_city_by_ref(session, raw)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Arena not found")
+        resolved = int(found["id"])
+    return resolved
+
+
 @router.get("/ice/map-config")
 async def get_ice_map_config(response: Response) -> dict[str, str | None]:
     """Browser Yandex Maps JS API key. Empty → Ice tab shows a map empty state (no OSM)."""
     response.headers["Cache-Control"] = "no-store"
     key = (Settings().yandex_maps_js_api_key or "").strip() or None
+    if not key:
+        _warn_map_config_key_empty()
     return {"yandex_maps_js_api_key": key}
+
+
+def _warn_map_config_key_empty() -> None:
+    """The endpoint is not rate-limited, so an empty key must not warn on every hit."""
+    global _map_config_empty_warned_at
+    now = time.monotonic()
+    if now - _map_config_empty_warned_at < _MAP_CONFIG_EMPTY_WARN_SEC:
+        return
+    _map_config_empty_warned_at = now
+    logger.warning("ice map-config requested but YANDEX_MAPS_JS_API_KEY is empty")
 
 
 @router.get("/ice/cities")
@@ -61,7 +104,7 @@ async def get_ice_discovery_cities(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Cities for the Ice picker: only those with MK sessions and/or catalog trainers."""
-    response.headers["Cache-Control"] = "no-store"
+    set_public_json_list_cache(response)
     items = await list_ice_discovery_cities(session)
     return {"items": items}
 
@@ -72,7 +115,7 @@ async def get_public_ice_arenas(
     city_id: int | None = None,
     bbox: str | None = Query(None, description="min_lat,min_lon,max_lat,max_lon"),
     near: str | None = Query(None, description="lat,lon"),
-    intent: str = Query("skate", description="skate | coach | group"),
+    intent: str = Query("skate", description="skate | coach | group | ohm"),
     venue_type: str | None = Query(
         None,
         description="ice|gym|choreo|pool|outdoor|other, можно через запятую. Пусто — все типы.",
@@ -87,6 +130,10 @@ async def get_public_ice_arenas(
         None,
         description="Конкретный календарный день YYYY-MM-DD (Минск); приоритет над when, кроме совпадения с «завтра».",
     ),
+    svc: str | None = Query(
+        None,
+        description="Услуга места: sharpening | rental | service (заточка и прокат).",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
@@ -95,7 +142,8 @@ async def get_public_ice_arenas(
     несёт ``venue_type_facets`` — типы, реально представленные в городе, чтобы
     клиент не рисовал чип, за которым пусто.
     """
-    response.headers["Cache-Control"] = "no-store"
+    set_public_json_list_cache(response)
+    svc_value = clean_svc(svc)
     try:
         return await list_public_ice_arenas(
             session,
@@ -108,6 +156,7 @@ async def get_public_ice_arenas(
             cursor=cursor,
             when=when,
             day=day,
+            service_keys=SERVICE_AMENITY_KEYS[svc_value] if svc_value else None,
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
@@ -152,8 +201,8 @@ async def get_ice_city_day_share(
     response.headers["Cache-Control"] = "no-store"
     row = (
         await session.execute(
-            text("SELECT id, name FROM cities WHERE id = :cid AND is_active"),
-            {"cid": int(city_id)},
+            text(f"SELECT id, name FROM cities WHERE id = :cid AND {public_city_scope_sql('cities')}"),
+            {"cid": int(city_id), **public_scope_params()},
         )
     ).first()
     if row is None:
@@ -225,13 +274,14 @@ async def post_ice_interest(
 async def get_public_search(
     response: Response,
     q: str = Query(..., min_length=1),
-    limit: int = Query(8, ge=1, le=20),
+    limit: int = Query(12, ge=1, le=20),
+    city_id: int | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """One search, three result groups: arena, trainer, city (tsvector + optional pg_trgm)."""
+    """Places, trainers, and cities. ``city_id`` lifts the open city above the rest."""
     response.headers["Cache-Control"] = "no-store"
     try:
-        return await search_public_ice(session, q, limit=limit)
+        return await search_public_ice(session, q, limit=limit, city_id=city_id)
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
 
@@ -242,15 +292,18 @@ async def get_public_arena_sessions(
     response: Response,
     date_from: date | None = Query(None, alias="from"),
     date_to: date | None = Query(None, alias="to"),
+    city_id: int | None = Query(None),
+    city: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Canonical ice_sessions feed grouped by local_date. Expired slots are omitted."""
-    response.headers["Cache-Control"] = "no-store"
+    scoped = await _slug_city_id(session, arena_ref, city_id, city)
     payload = await list_public_arena_sessions(
-        session, arena_ref, date_from=date_from, date_to=date_to
+        session, arena_ref, date_from=date_from, date_to=date_to, city_id=scoped
     )
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
+    set_public_json_list_cache(response)
     return payload
 
 
@@ -258,19 +311,35 @@ async def get_public_arena_sessions(
 async def get_public_arena_trainers(
     arena_ref: str,
     response: Response,
+    city_id: int | None = Query(None),
+    city: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Trainers on an arena with can_book from get_trainer_booking_availability."""
-    response.headers["Cache-Control"] = "no-store"
-    payload = await list_public_arena_trainers(session, arena_ref)
+    scoped = await _slug_city_id(session, arena_ref, city_id, city)
+    payload = await list_public_arena_trainers(session, arena_ref, city_id=scoped)
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
     for trainer in payload["items"]:
         _enrich_trainer_photo_urls(trainer)
+    set_public_json_list_cache(response)
     return payload
 
 
-_SHARE_CHANNELS = ("telegram", "copy", "story", "story_tg", "story_os", "story_fallback", "system")
+_SHARE_CHANNELS = (
+    "telegram",
+    "copy",
+    "story",
+    "story_tg",
+    "story_os",
+    "story_fallback",
+    "system",
+    "viber",
+    "whatsapp",
+    "image_tg",
+    "image_os",
+    "image_fallback",
+)
 
 
 @router.get("/ice/selection/share")
@@ -295,12 +364,14 @@ async def get_public_selection_share(
         compose_selection_share,
         load_selection_view,
         selection_image_path,
+        selection_image_version,
         selection_path,
     )
 
     response.headers["Cache-Control"] = "no-store"
     row = (
-        await session.execute(text("SELECT id, name FROM cities WHERE id = :cid AND is_active"), {"cid": int(city_id)})
+        await session.execute(text(f"SELECT id, name FROM cities WHERE id = :cid AND {public_city_scope_sql('cities')}"),
+            {"cid": int(city_id), **public_scope_params()},)
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="City not found")
@@ -324,7 +395,10 @@ async def get_public_selection_share(
             city_id=city["id"],
             payload={"venue_type": venue, "when": window_key, "channel": ch if ch in _SHARE_CHANNELS else None},
         )
-    image = base + selection_image_path(city_name=city["name"], venue=venue, when=window_key)
+    # ?v= — хэш данных превью (число мест, сеансов и день): Telegram кэширует og-картинку по URL.
+    image = base + selection_image_path(
+        city_name=city["name"], venue=venue, when=window_key, version=selection_image_version(view)
+    )
     story = image.replace("/og.png", "/story.png")
     return {**payload, "og_image_url": image, "story_image_url": story, "venue_type": venue, "when": window_key}
 
@@ -338,6 +412,8 @@ async def get_public_place_share(
     share_context: str | None = Query(None, description="Где нажали: arena_card, ice_list, hub."),
     record: bool = Query(True, description="false — предпросмотр в шите: показать, но не считать шерингом."),
     channel: str | None = Query(None, description="Канал: telegram | copy | story | system."),
+    city_id: int | None = Query(None),
+    city: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -356,7 +432,8 @@ async def get_public_place_share(
     одно намерение отправить, с каналом в ``payload.channel`` (Q-007: что реально шерят и куда).
     """
     response.headers["Cache-Control"] = "no-store"
-    view = await load_place_view(session, arena_ref, session_id=session_id)
+    scoped = await _slug_city_id(session, arena_ref, city_id, city)
+    view = await load_place_view(session, arena_ref, session_id=session_id, city_id=scoped)
     if view is None or not view["card"].get("slug"):
         raise HTTPException(status_code=404, detail="Arena not found")
     card = view["card"]
@@ -404,11 +481,14 @@ async def get_public_place_share(
 async def get_public_arena_card_route(
     arena_ref: str,
     response: Response,
+    city_id: int | None = Query(None, description="Город, если arena_ref — slug, а не id."),
+    city: str | None = Query(None, description="Slug или id города. Вместе со slug арены."),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Arena card: profile, media, tier on read, honest freshness/source."""
     response.headers["Cache-Control"] = "no-store"
-    payload = await get_public_arena_card(session, arena_ref)
+    scoped = await _slug_city_id(session, arena_ref, city_id, city)
+    payload = await get_public_arena_card(session, arena_ref, city_id=scoped)
     if payload is None:
         raise HTTPException(status_code=404, detail="Arena not found")
     return payload

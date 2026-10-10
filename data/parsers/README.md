@@ -6,7 +6,7 @@
 Дорожки агентов: [`ICE-DISCOVERY-AGENT-LANES.md`](../ICE-DISCOVERY-AGENT-LANES.md).  
 Реестр спайка (не спека): [`data/minsk-parser-registry.yaml`](../data/minsk-parser-registry.yaml).
 
-Не писать сюда ОХМ, школу, аренду льда. Только массовое / свободное.
+Массовое / свободное — всегда. ОХМ (`hockey_practice`) — только где в спеке арены явно включён (TASK-201-A); школа и аренда льда по-прежнему out.
 
 Жёстко (канон [`DESIGN-INGESTION-PARSERS-V1.md`](../DESIGN-INGESTION-PARSERS-V1.md) §6): не выдумывать сетку при 403; `drop_past`; HTTPS TLS fail ≠ сайта нет (пробовать http); Instagram не V1; job без фикстуры не включать.
 
@@ -31,6 +31,7 @@
 | [minsk-ledlife](./minsk-ledlife.md) | 4 | `ledlife_origin_html_v1` | weekly | **yes** | `data/fixtures/minsk-ledlife/` (403) |
 | [minsk-speed-oval](./minsk-speed-oval.md) | 115 | `minskarena_speed_oval_v1` | daily | no | `data/fixtures/minsk-speed-oval/` (ABWS 139+138) |
 | [lida-lds](./lida-lds.md) | 37 | `lida_html_photo_v1` | weekly | no | `data/fixtures/lida-lds/` |
+| [molodechno-src](./molodechno-src.md) | 18 | `molodechno_src_v1` | daily | no | `data/fixtures/molodechno-src/` |
 | [soligorsk-szk](./soligorsk-szk.md) | 19 | `soligorsk_szk_html_v1` | weekly | no | `data/fixtures/soligorsk-szk/` |
 | [ostrovets-lds](./ostrovets-lds.md) | 41 | `ostrovets_html_v1` | weekly | no | `data/fixtures/ostrovets-lds/` |
 
@@ -45,7 +46,7 @@
 
 Skip: [bereza-lds](./bereza-lds.md) (26 phone), [pruzhany-sdyushor](./pruzhany-sdyushor.md) (27), [ivatsevichi-lds](./ivatsevichi-lds.md) (28), [ozerny-rink](./ozerny-rink.md) (39 duplicate of 22).
 
-Skip stubs (empty sessions): [molodechno-src](./molodechno-src.md) (18), [zhodino-sdyushor](./zhodino-sdyushor.md) (20), [raubichi-rcop](./raubichi-rcop.md) (15), [silichi-rgc](./silichi-rgc.md) (16), [luninets-olimp](./luninets-olimp.md) (40).
+Skip stubs (empty sessions): [zhodino-sdyushor](./zhodino-sdyushor.md) (20), [raubichi-rcop](./raubichi-rcop.md) (15), [silichi-rgc](./silichi-rgc.md) (16), [luninets-olimp](./luninets-olimp.md) (40).
 
 Already skipped Минск (не писать длинные спеки): 9 Олимпик, 12 лыжероллер, 13 JUSTSKATE, 14 Финт.
 

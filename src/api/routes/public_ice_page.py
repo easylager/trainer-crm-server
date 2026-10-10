@@ -8,7 +8,7 @@ Telegram у получателя пересланной ссылки значи�
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,15 +21,16 @@ from src.application.ice_city_day import (
 from src.application.ice_city_day_og import render_ice_city_day_og
 from src.application.ice_city_day_page import ice_city_day_paths, render_ice_city_day_page
 from src.application.catalog_consumer_events import record_public_page_view
+from src.application.png_render_cache import render_png_cached
 from src.application.place_links import catalog_start_param, public_telegram_cta_url
 from src.shared.config import Settings
+from src.shared.html_template import fill_placeholders
 
 router = APIRouter(tags=["public-ice-share"])
 
-# Страница живая: её открывают спустя часы после пересылки, и к этому моменту утренние
-# сеансы уже прошли. Короткий кэш достаточен, чтобы пережить всплеск от одного репоста,
-# и слишком короткий, чтобы показать вчерашнее расписание.
-_PAGE_CACHE = {"Cache-Control": "public, max-age=300"}
+# TASK-189 пишет просмотр на каждый заход. Публичный кэш страницы его проглатывает,
+# поэтому HTML не кэшируется. Картинка og по-прежнему живёт своим max-age.
+_PAGE_CACHE = {"Cache-Control": "private, no-store"}
 _OG_CACHE = {"Cache-Control": "public, max-age=900"}
 
 
@@ -48,10 +49,32 @@ def _cta_url(city_id: int) -> str | None:
     )
 
 
+# Тот же каркас, что у 404 страницы места: человеку — выход в каталог, поисковику — noindex.
+_CITY_NOT_FOUND_HTML = """<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Город не найден — Glide</title>
+<meta property="og:title" content="Glide — карта льда" />
+<meta property="og:description" content="Где покататься сегодня: катки, расписание и цены." />
+<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
+margin:0;padding:48px 20px;text-align:center}a{color:#0f8f8a;font-weight:600}</style></head>
+<body><h1>Такого города нет в каталоге</h1>
+<p>Проверьте название или посмотрите, где покататься сегодня:</p>
+<p><a href="__HOME__">Открыть каталог Glide</a></p></body></html>"""
+
+
+def _city_not_found(home: str) -> HTMLResponse:
+    return HTMLResponse(
+        fill_placeholders(_CITY_NOT_FOUND_HTML, {"__HOME__": home}),
+        status_code=404,
+    )
+
+
 async def _load(session: AsyncSession, city_ref: str):
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
-        raise HTTPException(status_code=404, detail="City not found")
+        return None, None
     day = await get_city_ice_day(session, city_id=int(city["id"]))
     return city, day
 
@@ -64,6 +87,9 @@ async def ice_city_day_page(
 ):
     """Расписание массовых катаний города на день + og-теги для превью в Telegram."""
     city, day = await _load(session, city_ref)
+    if city is None or day is None:
+        base = _public_base()
+        return _city_not_found(f"{base}/" if base else "/")
     city_name = str(city["name"])
 
     canonical_path, og_path = ice_city_day_paths(city_name)
@@ -79,6 +105,7 @@ async def ice_city_day_page(
         canonical_url=f"{base}{canonical_path}" if base else canonical_path,
         og_image_url=f"{base}{og_path}" if base else og_path,
         cta_url=_cta_url(int(city["id"])),
+        country=str(city.get("country") or ""),
     )
     await record_public_page_view(
         session,
@@ -96,5 +123,16 @@ async def ice_city_day_og(
 ) -> Response:
     """og:image для страницы выше. Рисуется на лету из той же выборки — кэша на диске нет."""
     city, day = await _load(session, city_ref)
-    png = render_ice_city_day_og(city_name=str(city["name"]), day=day)
+    if city is None or day is None:
+        return Response(status_code=404)
+    # Рендер PIL — в threadpool и через LRU: параметры запроса картинку не меняют (query не читаем),
+    # ключ — город + сама выборка, так что обновление расписания сбрасывает кэш само.
+    png = await render_png_cached(
+        "ice_og",
+        {"city_id": int(city["id"]), "city": str(city["name"])},
+        day,
+        render_ice_city_day_og,
+        city_name=str(city["name"]),
+        day=day,
+    )
     return Response(content=png, media_type="image/png", headers=_OG_CACHE)

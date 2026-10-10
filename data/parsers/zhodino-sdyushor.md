@@ -1,6 +1,7 @@
 # Parser spec (skip): Ледовая площадка ГУ СДЮШОР (Жодино)
 
 - arena_id: 20
+- arena_slug: zhodino-sdyushor
 - city: Жодино
 - parser_key: zhodino_html_v1
 - cadence: weekly

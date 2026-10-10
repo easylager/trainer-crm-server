@@ -923,6 +923,11 @@
             );
             return;
           }
+          if (action === 'notify-slots') {
+            stopHubCardControl(ev);
+            if (tid) toggleHubNotifySlots(tid);
+            return;
+          }
           if (action === 'open-booking') {
             stopHubCardControl(ev);
             if (hubMeCardBookingId) {
@@ -1056,8 +1061,9 @@
        * Вход заливки «мой тренер». Место под именем — арена ближайшего окна:
        * своей арены у тренера в bootstrap нет, а выдумывать её нельзя. Нет окон
        * — нет и строки места, как и было у старой карточки тренера.
+       * `notifyWhenSlots` — только для состояния «окон нет» (чип 🔔/🔕).
        */
-      function buildMeCardTrainerInput(trainer, slots, hubMeta) {
+      function buildMeCardTrainerInput(trainer, slots, hubMeta, notifyWhenSlots) {
         var list = Array.isArray(slots) ? slots : [];
         var first = list.length ? list[0] : null;
         return {
@@ -1073,22 +1079,142 @@
             city_name: first ? (first.arena_city_name || '') : '',
           }, trainer.name),
           slots: list,
+          notify_when_slots: !!notifyWhenSlots,
           passes: hubBootstrapPasses(hubMeta),
           certificates: hubBootstrapCertificates(hubMeta),
         };
       }
 
+      /** Контекст последней отрисовки «мой тренер» — для optimistic toggle notify. */
+      var _meCardTrainerPaintCtx = null;
+
+      function notifyFlagFromEdgesPayload(data, trainerId) {
+        if (!data || !Array.isArray(data.all) || trainerId == null) return false;
+        var key = String(trainerId);
+        for (var i = 0; i < data.all.length; i++) {
+          var e = data.all[i];
+          if (e && String(e.trainer_id) === key) return !!e.notify_when_slots;
+        }
+        return false;
+      }
+
+      /** Warm cache → edges API. Нужно только когда окон нет (иначе чипа нет). */
+      function resolveHubNotifyWhenSlots(trainerId) {
+        var shell = window.ClientShell;
+        var warm = shell && typeof shell.readCatalogWarmCache === 'function'
+          ? shell.readCatalogWarmCache()
+          : null;
+        if (warm && warm.trainerEdges) {
+          return Promise.resolve(notifyFlagFromEdgesPayload(warm.trainerEdges, trainerId));
+        }
+        if (!initData) return Promise.resolve(false);
+        return fetch('/api/webapp/client/trainer-edges', { headers: headersJson() })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (data && shell && typeof shell.writeCatalogWarmCache === 'function') {
+              shell.writeCatalogWarmCache({
+                session: warm && warm.session ? warm.session : null,
+                trainerEdges: data,
+                servicesByCity: warm && warm.servicesByCity ? warm.servicesByCity : null,
+              });
+            }
+            return notifyFlagFromEdgesPayload(data, trainerId);
+          })
+          .catch(function () { return false; });
+      }
+
+      function patchWarmCacheNotify(trainerId, notifyOn) {
+        var shell = window.ClientShell;
+        if (!shell || typeof shell.readCatalogWarmCache !== 'function' ||
+            typeof shell.writeCatalogWarmCache !== 'function') return;
+        var warm = shell.readCatalogWarmCache();
+        if (!warm || !warm.trainerEdges || !Array.isArray(warm.trainerEdges.all)) return;
+        var key = String(trainerId);
+        var list = warm.trainerEdges.all.slice();
+        var found = false;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i] && String(list[i].trainer_id) === key) {
+            list[i] = Object.assign({}, list[i], { notify_when_slots: !!notifyOn });
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          list.push({ trainer_id: Number(trainerId) || trainerId, notify_when_slots: !!notifyOn });
+        }
+        shell.writeCatalogWarmCache({
+          session: warm.session || null,
+          trainerEdges: Object.assign({}, warm.trainerEdges, { all: list }),
+          servicesByCity: warm.servicesByCity || null,
+        });
+      }
+
+      function hubShowToast(message) {
+        var el = document.getElementById('appToast');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'appToast';
+          el.className = 'app-toast';
+          document.body.appendChild(el);
+        }
+        el.textContent = message;
+        el.classList.add('app-toast--visible');
+        if (hubShowToast._t) clearTimeout(hubShowToast._t);
+        hubShowToast._t = setTimeout(function () {
+          el.classList.remove('app-toast--visible');
+        }, 2400);
+      }
+
       /**
-       * «Мой тренер» одной рамкой. Крупного времени здесь нет намеренно: чужое
-       * окно — ещё не моя запись, поэтому время живёт только чипами. Полоса
-       * чипов и есть действие, а когда окон нет — глагол один, «написать».
+       * Тот же POST/DELETE, что catalog toggleNotifySlots — подписка на окна тренера.
        */
-      function paintMeCardForTrainer(trainer, slots, hubMeta) {
-        var view = renderMeCard(buildMeCardTrainerInput(trainer, slots, hubMeta), null);
+      function toggleHubNotifySlots(trainerId) {
+        if (!initData || trainerId == null) return;
+        var ctx = _meCardTrainerPaintCtx;
+        var nowNotify = !!(ctx && String(ctx.trainer.id) === String(trainerId) && ctx.notifyWhenSlots);
+        var nextNotify = !nowNotify;
+        if (ctx && String(ctx.trainer.id) === String(trainerId)) {
+          paintMeCardForTrainerSync(ctx.trainer, ctx.slots, ctx.hubMeta, nextNotify);
+        }
+        if (nextNotify) {
+          hubShowToast('🔔 Уведомим, когда тренер добавит свободные окна');
+        } else {
+          hubShowToast('Подписка на уведомления отменена');
+        }
+        var method = nextNotify ? 'POST' : 'DELETE';
+        var url = nextNotify
+          ? '/api/webapp/client/trainer-edges/notify-slots'
+          : '/api/webapp/client/trainer-edges/notify-slots/' + encodeURIComponent(String(trainerId));
+        var body = nextNotify ? JSON.stringify({ trainer_id: Number(trainerId) || trainerId }) : undefined;
+        fetch(url, { method: method, headers: headersJson(), body: body })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function (data) {
+            var on = !!(data && data.edge && data.edge.notify_when_slots);
+            patchWarmCacheNotify(trainerId, on);
+            if (ctx && String(ctx.trainer.id) === String(trainerId)) {
+              paintMeCardForTrainerSync(ctx.trainer, ctx.slots, ctx.hubMeta, on);
+            }
+          })
+          .catch(function () {
+            if (ctx && String(ctx.trainer.id) === String(trainerId)) {
+              paintMeCardForTrainerSync(ctx.trainer, ctx.slots, ctx.hubMeta, nowNotify);
+            }
+          });
+      }
+
+      function paintMeCardForTrainerSync(trainer, slots, hubMeta, notifyWhenSlots) {
+        _meCardTrainerPaintCtx = {
+          trainer: trainer,
+          slots: Array.isArray(slots) ? slots : [],
+          hubMeta: hubMeta,
+          notifyWhenSlots: !!notifyWhenSlots,
+        };
+        var view = renderMeCard(
+          buildMeCardTrainerInput(trainer, slots, hubMeta, notifyWhenSlots),
+          null
+        );
         if (!view) {
-          // Имени нет — лица нет, и карточку собирать нечем (модель не подставит
-          // «ваш тренер» вместо человека). Хаб при этом живой: остаётся остаток,
-          // карусель и нижний FAB записи.
+          _meCardTrainerPaintCtx = null;
           hubPersonalSlot = false;
           applyIceHeroVisibility();
           placeIceZone('below-trainer');
@@ -1098,19 +1224,36 @@
             passRowHead: 'Абонемент',
           });
         }
-        // Полоса окон — это и есть запись: нижний FAB с тем же смыслом убираем,
-        // а фото льда уступает место своему времени.
         hubOpenWindowShown = !!view.pick;
         hubPersonalSlot = !!view.pick;
         applyIceHeroVisibility();
         if (view.pick) {
           placeIceZone('top');
         } else {
-          // Окон нет — лёд города снова интересен, но ниже персональной зоны.
           placeIceZone('below-trainer');
         }
         syncClientHubBookFab();
-        return Promise.resolve();
+        return view;
+      }
+
+      /**
+       * «Мой тренер» одной рамкой. Крупного времени здесь нет намеренно: чужое
+       * окно — ещё не моя запись, поэтому время живёт только чипами. Полоса
+       * чипов и есть действие; когда окон нет — «Написать» + чип 🔔 «Напомнить».
+       */
+      function paintMeCardForTrainer(trainer, slots, hubMeta, notifyWhenSlots) {
+        var list = Array.isArray(slots) ? slots : [];
+        if (list.length) {
+          paintMeCardForTrainerSync(trainer, list, hubMeta, false);
+          return Promise.resolve();
+        }
+        var known = arguments.length >= 4;
+        var flagP = known
+          ? Promise.resolve(!!notifyWhenSlots)
+          : resolveHubNotifyWhenSlots(trainer.id);
+        return flagP.then(function (flag) {
+          paintMeCardForTrainerSync(trainer, list, hubMeta, flag);
+        });
       }
 
       /**
@@ -1120,7 +1263,7 @@
       function loadAndRenderMeCardForTrainer(trainer, hubMeta) {
         if (!trainer || trainer.id == null || String(trainer.id) === '') return Promise.resolve();
         if (trainer.canBook === false || !initData) {
-          return Promise.resolve(paintMeCardForTrainer(trainer, [], hubMeta));
+          return paintMeCardForTrainer(trainer, [], hubMeta);
         }
         return fetchTrainerSlots(trainer.id).then(function (slots) {
           if (slots === null) return;

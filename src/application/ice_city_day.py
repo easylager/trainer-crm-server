@@ -14,6 +14,7 @@ kind ``public_skate|open_ice``, ещё не начавшиеся (``starts_at_ut
 
 from __future__ import annotations
 
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
@@ -21,8 +22,23 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.arena_profile import ARENA_PROFILE_STATUS_PUBLISHED
 from src.application.ice_session_use_cases import STATUS_ACTIVE
+from src.application.schedule_staleness import (
+    LEVEL_STALE,
+    LEVEL_VERY_STALE,
+    load_arena_freshness,
+    stale_note,
+    staleness_level,
+    very_stale_note,
+)
+from src.shared.arena_schedule_mode import arena_schedule_mode_sql
+from src.shared.ice_discovery_scope import (
+    PUBLIC_ARENA_VISIBLE_SQL,
+    ice_discovery_countries,
+    public_city_scope_sql,
+    public_scope_params,
+)
+from src.shared.phone_guard import sanitize_public_phone
 
 DEFAULT_TIMEZONE = "Europe/Minsk"
 
@@ -61,15 +77,48 @@ def city_slug(name: str) -> str:
     return slug.strip("-")
 
 
+# Публичных городов десятки, а читают их на каждый /p/ и /c/. Кэш на процесс.
+# Сброс — смена города в админке и конец TTL. Между тестами кэш чистит conftest:
+# откат транзакции сам строки не забывает.
+PUBLIC_CITY_CACHE_TTL_SEC = 120
+
+_public_cities_cache: dict[tuple[str, ...], tuple[float, list[dict[str, Any]]]] = {}
+
+
+def invalidate_public_city_cache() -> None:
+    """Сбросить кэш публичных городов. Зовётся после создания и правки города в админке."""
+    _public_cities_cache.clear()
+
+
+async def _public_cities(session: AsyncSession) -> list[dict[str, Any]]:
+    countries = ice_discovery_countries()
+    now = time.monotonic()
+    hit = _public_cities_cache.get(countries)
+    if hit is not None and hit[0] > now:
+        return hit[1]
+    result = await session.execute(
+        text(
+            f"SELECT id, name, country FROM cities WHERE {public_city_scope_sql('cities')} "
+            "ORDER BY sort_order, id"
+        ),
+        public_scope_params(),
+    )
+    rows = [dict(row) for row in result.mappings().all()]
+    _public_cities_cache[countries] = (now + PUBLIC_CITY_CACHE_TTL_SEC, rows)
+    return rows
+
+
 async def resolve_city_by_ref(session: AsyncSession, city_ref: str) -> dict[str, Any] | None:
-    """Город по slug (``minsk``) или по числовому id. ``None`` — если такого города нет."""
+    """Город по slug (``minsk``) или по числовому id. ``None`` — если такого города нет.
+
+    Только публичные города (TASK-177): активный и в странах витрины. Город вне витрины
+    (RU при ``ICE_DISCOVERY_COUNTRIES=BY``) для ``/c/``, ``/ice/…`` и ``/p/`` не существует — 404.
+    Список городов берётся из памяти, пока не истечёт TTL и город не изменят в админке.
+    """
     ref = (city_ref or "").strip()
     if not ref:
         return None
-    result = await session.execute(
-        text("SELECT id, name, country FROM cities WHERE is_active ORDER BY sort_order, id")
-    )
-    rows = result.mappings().all()
+    rows = await _public_cities(session)
     if ref.isdigit():
         wanted_id = int(ref)
         for row in rows:
@@ -103,23 +152,45 @@ async def _city_timezone(session: AsyncSession, city_id: int) -> str:
     return (row[0] if row and row[0] else None) or DEFAULT_TIMEZONE
 
 
-def _local_today(tz_name: str) -> date:
+def _local_today(tz_name: str, now: datetime | None = None) -> date:
     try:
         tz = ZoneInfo(tz_name)
     except Exception:  # noqa: BLE001 — битый пояс в профиле не должен ронять публичную страницу
         tz = ZoneInfo(DEFAULT_TIMEZONE)
-    return datetime.now(tz).date()
+    return (now or datetime.now(timezone.utc)).astimezone(tz).date()
 
 
-_DAY_SQL = """
+# Общий FROM/WHERE для «лёд сегодня» и главной каталога — не дублировать правила отбора.
+ICE_CITY_DAY_FROM_SQL = """
+FROM ice_sessions s
+JOIN arenas a ON a.id = s.arena_id
+LEFT JOIN arena_profiles p ON p.arena_id = a.id
+JOIN cities c ON c.id = a.city_id
+"""
+
+ICE_CITY_DAY_SESSION_WHERE_SQL = f"""
+  AND {PUBLIC_ARENA_VISIBLE_SQL}
+  AND {arena_schedule_mode_sql()} <> 'season_closed'
+  AND s.status = :st
+  AND s.kind IN ('public_skate', 'open_ice')
+  AND s.starts_at_utc > :now
+  AND (s.valid_until IS NULL OR s.valid_until >= :now)
+"""
+
+_DAY_SQL = f"""
 SELECT
     a.id            AS arena_id,
     a.name          AS arena_name,
     a.address       AS address,
     p.slug          AS arena_slug,
     p.district      AS district,
+    p.phone         AS phone,
+    p.website_url   AS website_url,
+    p.tickets_url   AS tickets_url,
     s.id            AS session_id,
     s.kind          AS kind,
+    s.starts_at_utc,
+    s.ends_at_utc,
     s.starts_at_local,
     s.ends_at_local,
     s.price_adult_minor,
@@ -128,20 +199,87 @@ SELECT
     s.currency_code,
     s.price_note,
     s.session_label,
-    s.age_note
-FROM ice_sessions s
-JOIN arenas a ON a.id = s.arena_id
-LEFT JOIN arena_profiles p ON p.arena_id = a.id
+    s.age_note,
+    s.schedule_basis
+{ICE_CITY_DAY_FROM_SQL}
 WHERE a.city_id = :cid
-  AND a.is_active AND a.is_confirmed
-  AND (p.status IS NULL OR p.status = :published)
-  AND s.status = :st
-  AND s.kind IN ('public_skate', 'open_ice')
   AND s.local_date = :day
-  AND s.starts_at_utc > :now
-  AND (s.valid_until IS NULL OR s.valid_until >= :now)
+  {ICE_CITY_DAY_SESSION_WHERE_SQL}
 ORDER BY a.name, s.starts_at_local, s.id
 """
+
+_CITY_CLOCK_CTE = f"""
+WITH city_clock AS (
+    SELECT DISTINCT ON (a.city_id)
+           a.city_id,
+           COALESCE(p.timezone, '{DEFAULT_TIMEZONE}') AS tz
+    FROM arenas a
+    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+    WHERE a.city_id = ANY(:city_ids)
+    ORDER BY a.city_id, a.id
+)
+"""
+
+_SESSIONS_ON_LOCAL_DAY_BY_ARENA_SQL = text(
+    _CITY_CLOCK_CTE
+    + f"""
+SELECT a.city_id, a.id AS arena_id, COUNT(s.id) AS session_count
+{ICE_CITY_DAY_FROM_SQL}
+JOIN city_clock cc ON cc.city_id = a.city_id
+WHERE a.city_id = ANY(:city_ids)
+  AND s.local_date = (timezone(cc.tz, :now))::date
+  {ICE_CITY_DAY_SESSION_WHERE_SQL}
+GROUP BY a.city_id, a.id
+"""
+)
+
+
+async def count_sessions_on_local_calendar_day_by_city(
+    session: AsyncSession,
+    *,
+    city_ids: list[int],
+    now: datetime,
+) -> dict[int, int]:
+    """Сеансы на календарный «сегодня» города (как на /ice/{{city}}/today при ``is_today``).
+
+    Один запрос по аренам + один ``load_arena_freshness``; very_stale арены не считаем,
+    как ``_load_day_checked``.
+    """
+    if not city_ids:
+        return {}
+    rows = (
+        await session.execute(
+            _SESSIONS_ON_LOCAL_DAY_BY_ARENA_SQL,
+            {
+                "city_ids": city_ids,
+                "now": now,
+                "st": STATUS_ACTIVE,
+                **public_scope_params(),
+            },
+        )
+    ).mappings().all()
+    arena_ids = [int(r["arena_id"]) for r in rows if int(r["session_count"] or 0) > 0]
+    fresh = await load_arena_freshness(session, arena_ids, now=now) if arena_ids else {}
+    totals: dict[int, int] = {}
+    for row in rows:
+        aid = int(row["arena_id"])
+        cnt = int(row["session_count"] or 0)
+        if cnt <= 0:
+            continue
+        if staleness_level(fresh.get(aid)) == LEVEL_VERY_STALE:
+            continue
+        cid = int(row["city_id"])
+        totals[cid] = totals.get(cid, 0) + cnt
+    return totals
+
+
+def _iso_utc(value: Any) -> str | None:
+    """ISO-8601 для JSON-LD ``startDate``/``endDate``. Наивный штамп считаем UTC."""
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
 
 
 def _hhmm(value: Any) -> str:
@@ -198,7 +336,7 @@ async def _load_day(
             "day": day,
             "now": now,
             "st": STATUS_ACTIVE,
-            "published": ARENA_PROFILE_STATUS_PUBLISHED,
+            **public_scope_params(),
         },
     )
     return list(result.mappings().all())
@@ -227,6 +365,8 @@ def _group_by_arena(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
             {
                 "session_id": int(row["session_id"]),
                 "kind": row["kind"],
+                "starts_at_utc": _iso_utc(row["starts_at_utc"]),
+                "ends_at_utc": _iso_utc(row["ends_at_utc"]),
                 "starts_at_local": _hhmm(row["starts_at_local"]),
                 "ends_at_local": _hhmm(row["ends_at_local"]),
                 "price_adult_minor": row["price_adult_minor"],
@@ -239,13 +379,51 @@ def _group_by_arena(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
                 "price_note": row["price_note"],
                 "session_label": row["session_label"],
                 "age_note": row["age_note"],
+                "schedule_basis": row.get("schedule_basis") or "live",
             }
         )
     return [arenas[aid] for aid in order]
 
 
+async def _load_day_checked(
+    session: AsyncSession, *, city_id: int, day: date, now: datetime
+) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]], dict[int, dict[str, Any]]]:
+    """Сеансы дня, разделённые по свежести расписания арены (TASK-180).
+
+    Арена, чей парсер не читал сайт успешно дольше 72 ч, в список дня не попадает:
+    её сеансы больше не выдаём за расписание, она уходит в «Расписание не подтверждено».
+    """
+    rows = await _load_day(session, city_id=city_id, day=day, now=now)
+    fresh = await load_arena_freshness(session, {int(r["arena_id"]) for r in rows}, now=now)
+    shown: list[Mapping[str, Any]] = []
+    unconfirmed: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        aid = int(row["arena_id"])
+        level = staleness_level(fresh.get(aid))
+        if level != LEVEL_VERY_STALE:
+            shown.append(row)
+            continue
+        if aid not in unconfirmed:
+            sanitized_phone = sanitize_public_phone(row.get("phone"))
+            site = str(row["tickets_url"] or row["website_url"] or "").strip()
+            unconfirmed[aid] = {
+                "arena_id": aid,
+                "name": row["arena_name"],
+                "slug": row["arena_slug"],
+                "phone": sanitized_phone,
+                "note": very_stale_note(
+                    fresh.get(aid), now=now, has_phone=bool(sanitized_phone), has_site=bool(site)
+                ),
+            }
+    return shown, list(unconfirmed.values()), fresh
+
+
 async def get_city_ice_day(
-    session: AsyncSession, *, city_id: int, on_date: date | None = None
+    session: AsyncSession,
+    *,
+    city_id: int,
+    on_date: date | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """
     Массовые катания города на день. Если на сегодня всё уже прошло — отдаём завтра.
@@ -253,20 +431,31 @@ async def get_city_ice_day(
     Возврат пустого дня — нормальный, а не ошибочный результат: страница обязана честно
     сказать «на сегодня сеансов нет», а не притворяться, что данные ещё грузятся.
     Поле ``is_today`` говорит, какой день в итоге показан, чтобы заголовок не врал.
+
+    TASK-180: у арены с устаревшим расписанием (> 6 ч) — ``stale_note``; арены
+    без удачного прогона > 72 ч исключены из дня и перечислены в ``unconfirmed``.
     """
     tz_name = await _city_timezone(session, city_id)
-    today = _local_today(tz_name)
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    today = _local_today(tz_name, now)
 
     day = on_date or today
-    rows = await _load_day(session, city_id=city_id, day=day, now=now)
+    rows, unconfirmed, fresh = await _load_day_checked(session, city_id=city_id, day=day, now=now)
     fell_through = False
-    if not rows and on_date is None:
+    # TASK-180: если сегодня сеансы есть, но все — у арен с неподтверждённым расписанием,
+    # день остаётся сегодняшним: список «Расписание не подтверждено» и есть ответ на сегодня.
+    if not rows and not unconfirmed and on_date is None:
         day = today + timedelta(days=1)
-        rows = await _load_day(session, city_id=city_id, day=day, now=now)
+        rows, unconfirmed, fresh = await _load_day_checked(
+            session, city_id=city_id, day=day, now=now
+        )
         fell_through = True
 
     arenas = _group_by_arena(rows)
+    for arena in arenas:
+        arena_fresh = fresh.get(int(arena["arena_id"]))
+        arena["stale"] = staleness_level(arena_fresh) == LEVEL_STALE
+        arena["stale_note"] = stale_note(arena_fresh, now=now)
     sessions_total = sum(len(a["sessions"]) for a in arenas)
     prices = [
         int(s["price_adult_minor"])
@@ -287,6 +476,8 @@ async def get_city_ice_day(
         "arenas": arenas,
         "arena_count": len(arenas),
         "session_count": sessions_total,
+        "stale_arena_count": sum(1 for a in arenas if a["stale"]),
+        "unconfirmed": unconfirmed,
         "price_min_minor": min(prices) if prices else None,
         "price_max_minor": max(prices) if prices else None,
         "currency_code": currency,

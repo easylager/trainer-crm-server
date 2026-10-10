@@ -55,21 +55,32 @@
     return ymapsLoad;
   }
 
+  function readMetaMapKey() {
+    if (!global.document || typeof global.document.querySelector !== 'function') return '';
+    var el = global.document.querySelector('meta[name="ymaps-key"]');
+    return el ? el.getAttribute('content') || '' : '';
+  }
+
   function defaultGetKey() {
+    var fromMeta = MM.resolveApiKey({ metaKey: readMetaMapKey() });
+    if (fromMeta) {
+      return Promise.resolve(MM.mapKeyResult(fromMeta, { reason: 'meta', status: 200, missingKey: false }));
+    }
     var fromWindow = MM.resolveApiKey({ windowKey: global.YANDEX_MAPS_JS_API_KEY });
-    if (fromWindow) return Promise.resolve(fromWindow);
-    return fetch('/api/public/ice/map-config', { cache: 'no-store' })
-      .then(function (r) {
-        return r.ok ? r.json() : {};
-      })
-      .then(function (data) {
-        return MM.resolveApiKey({
-          env: { YANDEX_MAPS_JS_API_KEY: data && data.yandex_maps_js_api_key },
-        });
-      })
-      .catch(function () {
-        return '';
-      });
+    if (fromWindow) {
+      return Promise.resolve(MM.mapKeyResult(fromWindow, { reason: 'window', status: 200, missingKey: false }));
+    }
+    return MM.fetchMapConfigKey(global.fetch);
+  }
+
+  function normalizeKeyResult(raw) {
+    if (raw && typeof raw === 'object' && 'key' in raw) return raw;
+    var key = MM.resolveApiKey({ key: raw });
+    return MM.mapKeyResult(key, {
+      reason: key ? 'legacy' : 'config-failed',
+      status: key ? 200 : 0,
+      missingKey: false,
+    });
   }
 
   function liveText(item) {
@@ -82,8 +93,30 @@
   function renderEmpty(el, state) {
     if (!el) return;
     el.hidden = false;
+    var actions = '';
+    if (state.retryLabel || state.listLabel) {
+      actions =
+        '<div class="ice-map-unavail__actions">' +
+        (state.retryLabel
+          ? '<button type="button" class="ice-map-unavail__btn" data-map-unavail-action="retry">' +
+            esc(state.retryLabel) +
+            '</button>'
+          : '') +
+        (state.listLabel
+          ? '<button type="button" class="ice-map-unavail__btn ice-map-unavail__btn--soft" data-map-unavail-action="list">' +
+            esc(state.listLabel) +
+            '</button>'
+          : '') +
+        '</div>';
+    }
     el.innerHTML =
-      '<div class="ice-empty"><b>' + esc(state.title) + '</b><p>' + esc(state.body) + '</p></div>';
+      '<div class="ice-empty ice-map-unavail"><b>' +
+      esc(state.title) +
+      '</b><p>' +
+      esc(state.body) +
+      '</p>' +
+      actions +
+      '</div>';
   }
 
   function hideEmpty(el) {
@@ -158,11 +191,14 @@
     var ClusterLayout = null;
     var ymaps = null;
     var bboxState = null;
+    var bboxFetchGen = 0;
     var boundsTimer = null;
     var ignoreBounds = false;
     var started = false;
+    var starting = false;
     var missingKey = false;
     var keyResolved = '';
+    var lastUnavailableReason = 'config-failed';
     var userPlacemark = null;
 
     /* Шторка (TASK-147). full-положения внутри шторки нет: тяга вверх или
@@ -795,12 +831,19 @@
       });
       if (!url) return;
       bboxState = plan;
-      fetchJson(url).then(function (data) {
-        var raw = (data && data.items) || [];
-        mapItems = mapItemsFromList(raw);
-        syncObjects();
-        defaultSheet();
-      });
+      bboxFetchGen += 1;
+      var gen = bboxFetchGen;
+      fetchJson(url)
+        .then(function (data) {
+          if (gen !== bboxFetchGen) return;
+          var raw = (data && data.items) || [];
+          mapItems = mapItemsFromList(raw);
+          syncObjects();
+          defaultSheet();
+        })
+        .catch(function () {
+          /* Оставляем предыдущие пины; шторку не ломаем. */
+        });
     }
 
     function applyCityCamera() {
@@ -1038,19 +1081,50 @@
     }
 
     /* ─── Запуск ─── */
-    function showMissing() {
+    function bindUnavailableActions() {
+      if (!emptyEl || emptyEl.__unavailBound) return;
+      emptyEl.__unavailBound = true;
+      emptyEl.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-map-unavail-action]');
+        if (!btn) return;
+        var action = btn.getAttribute('data-map-unavail-action');
+        if (action === 'retry') {
+          if (starting || missingKey || btn.disabled) return;
+          start();
+          return;
+        }
+        if (action === 'list' && typeof opts.onShowList === 'function') opts.onShowList();
+      });
+    }
+
+    function showUnavailable(reason) {
+      reason = reason || lastUnavailableReason || 'config-failed';
+      lastUnavailableReason = reason;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[ice-map]', reason);
+      }
       showStage(false);
       showSheet(false);
-      renderEmpty(emptyEl, MM.missingKeyState());
+      bindUnavailableActions();
+      var view = MM.mapUnavailableState(reason);
+      if (reason === 'no-key') view = Object.assign({}, view, { retryLabel: '' });
+      renderEmpty(emptyEl, view);
+    }
+
+    function setRetryDisabled(on) {
+      if (!emptyEl || !emptyEl.querySelector) return;
+      var retryBtn = emptyEl.querySelector('[data-map-unavail-action="retry"]');
+      if (retryBtn) retryBtn.disabled = !!on;
     }
 
     function start() {
+      if (starting) return Promise.resolve();
       if (getIntent() === 'coach') {
         showCoachEmpty();
         return Promise.resolve();
       }
       if (missingKey) {
-        showMissing();
+        showUnavailable('no-key');
         return Promise.resolve();
       }
       if (map) {
@@ -1091,24 +1165,32 @@
         return Promise.resolve();
       }
       var getKey = opts.getKey || defaultGetKey;
-      return Promise.resolve(keyResolved || getKey())
-        .then(function (key) {
-          var resolved = keyResolved || MM.resolveApiKey({ key: key });
-          if (!resolved) {
-            missingKey = true;
-            showMissing();
+      starting = true;
+      setRetryDisabled(true);
+      var keyPromise = keyResolved
+        ? Promise.resolve(MM.mapKeyResult(keyResolved, { reason: 'cached', status: 200, missingKey: false }))
+        : Promise.resolve(getKey());
+      return keyPromise.then(function (raw) {
+          var result = normalizeKeyResult(raw);
+          if (!result.key) {
+            if (result.missingKey) {
+              missingKey = true;
+              showUnavailable('no-key');
+            } else {
+              showUnavailable(result.reason || 'config-failed');
+            }
             return;
           }
-          keyResolved = resolved;
+          keyResolved = result.key;
           started = true;
           var decision = MM.mapStartDecision({
-            key: resolved,
+            key: keyResolved,
             listItems: listItems,
             intent: getIntent(),
           });
-          if (decision.kind === 'missing-key') {
+          if (decision.kind === 'unavailable') {
             missingKey = true;
-            showMissing();
+            showUnavailable(decision.empty && decision.empty.reason ? decision.empty.reason : 'no-key');
             return;
           }
           if (decision.kind === 'coach') {
@@ -1127,7 +1209,7 @@
           // Единственная по-настоящему долгая ветка: тянем SDK Яндекса по сети.
           // Всё выше решается синхронно и лоадера не заслуживает.
           setLoading(true);
-          return loadYmaps(resolved).then(function (api) {
+          return loadYmaps(keyResolved).then(function (api) {
             ymaps = api;
             hideEmpty(emptyEl);
             showStage(true);
@@ -1141,8 +1223,20 @@
             fitCity();
           });
         })
-        .catch(function () {
-          showMissing();
+        .catch(function (err) {
+          var tag = err && err.message === 'no-key' ? 'no-key' : 'sdk-failed';
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[ice-map]', tag, err && err.message);
+          }
+          if (tag === 'no-key') missingKey = true;
+          showUnavailable(tag);
+        })
+        .then(function () {
+          starting = false;
+          setRetryDisabled(false);
+        }, function () {
+          starting = false;
+          setRetryDisabled(false);
         });
     }
 
@@ -1309,7 +1403,7 @@
       },
       refresh: function () {
         bboxState = null;
-        start();
+        if (!missingKey) start();
       },
       snapPeek: function () {
         if (!sheetEl || sheetEl.hidden) return;

@@ -1,0 +1,57 @@
+/**
+ * TASK-209: общие дизайн-токены Glide — одна палитра/шрифт/радиусы для сайта
+ * (static/share/*) и Mini App (static/webapp/*). Значения не хардкодить в
+ * шаблонах — ссылаться на var(--g-*) отсюда.
+ */
+:root {
+  --g-bg: #f4f6f7;
+  --g-surface: #ffffff;
+  --g-ink: #0d1b26;
+  --g-muted: #5d7285;
+  --g-ink-2: #4a5f71;
+  --g-line: #e1e8ec;
+  --g-line-strong: #c9d5dc;
+  --g-accent: #0f8f8a;
+  --g-accent-ink: #0b6f6b;
+  --g-accent-wash: #e3f4f3;
+  --g-dark: #0d1b26;
+  --g-dark-2: #1d2f3d;
+  --g-on-dark-muted: #c3d2dc;
+  --g-on-dark-accent: #9fd9d6;
+  --g-warn-wash: #fff4e5;
+  --g-warn-ink: #7a4a00;
+
+  --g-r-sm: 12px;
+  --g-r: 14px;
+  --g-r-md: 16px;
+  --g-r-lg: 20px;
+  --g-r-pill: 999px;
+  --g-tap: 44px;
+
+  --g-font: 'Golos Text', -apple-system, 'Segoe UI', sans-serif;
+}
+
+/*
+ * Тёмная тема внутри Telegram Mini App: страницы с темой читают
+ * Telegram.WebApp.themeParams и выставляют эти же переменные через JS
+ * (см. static/webapp/*-theme.js) — здесь фолбэк-палитра, если themeParams
+ * недоступны (например, страница открыта вне Telegram, но класс выставлен).
+ */
+body.tg-dark {
+  --g-bg: #17212b;
+  --g-surface: #1d2733;
+  --g-ink: #f1f5f7;
+  --g-muted: #8aa0b3;
+  --g-ink-2: #c3d2dc;
+  --g-line: #2b3744;
+  --g-line-strong: #3a4857;
+  --g-accent: #35b8b1;
+  --g-accent-ink: #0d1b26;
+  --g-accent-wash: #22383a;
+  --g-dark: #0d1b26;
+  --g-dark-2: #1d2f3d;
+  --g-on-dark-muted: #c3d2dc;
+  --g-on-dark-accent: #9fd9d6;
+  --g-warn-wash: #3a2d13;
+  --g-warn-ink: #ffcf86;
+}

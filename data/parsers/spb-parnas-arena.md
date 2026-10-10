@@ -1,7 +1,8 @@
 # Parser spec: Центр ледовых видов спорта «Парнас» (СПб)
 
 - arena_id: 174
-- city: Санкт-Петербург
+- arena_slug: tsentr-ledovykh-vidov-sporta-parnas
+- city: Санкт-Петербург/ЛО
 - parser_key: parnasarena_text_v1
 - cadence: weekly
 - timezone: Europe/Moscow
@@ -34,7 +35,6 @@ Two blockers ruled out the more obvious sources:
   "timezone": "Europe/Moscow",
   "currency_code": "RUB",
   "kind": "public_skate",
-  "run_year": 2026,
   "base_price_adult_minor": 70000,
   "rental_price_flat_minor": 50000,
   "prices_already_minor": true,

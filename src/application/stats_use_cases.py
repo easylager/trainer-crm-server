@@ -11,6 +11,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.admin_moderation_queue import list_trainer_ids_eligible_for_admin_moderation
+from src.application.catalog_consumer_events import get_catalog_demand_pulse
 from src.application.demand_signals_use_cases import get_signals_lifetime_totals
 from src.application.trainer_client_invite_tracking import sql_trainer_shared_client_invite
 from src.application.trainer_schedule_use_cases import this_week_monday
@@ -1682,7 +1683,10 @@ async def get_platform_stats(session: AsyncSession) -> dict:
             }
         )
 
+    catalog_demand_pulse = await get_catalog_demand_pulse(session)
+
     return {
+        "catalog_demand_pulse": catalog_demand_pulse,
         "trainers_by_status": trainers_by_status,
         "trainers_total": trainers_total,
         "trainers_pending_moderation": trainers_pending_moderation,

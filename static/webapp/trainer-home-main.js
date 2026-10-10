@@ -5264,6 +5264,28 @@
         wrap.style.display = show ? 'block' : 'none';
       }
 
+      function hubSelectedServiceIsOnline() {
+        var sid = hubBookServiceId;
+        if (sid == null) return false;
+        var svc = (hubBookQuickServices || []).filter(function(x) { return x.id === sid; })[0];
+        return !!(svc && svc.is_online);
+      }
+
+      /** Online offering has no venue. Venue offering shows the rink list only when there are several. */
+      function hubSyncBookArenaForSelectedService() {
+        if (hubSelectedServiceIsOnline()) {
+          hubBookArenaId = null;
+          setHubBookArenaVisibility(false);
+          return;
+        }
+        var ars = hubBookTrainerArenas || [];
+        if (hubBookArenaId == null) {
+          hubBookArenaId = hubPickDefaultArenaId(ars);
+          fillHubBookArenaPicklist(ars);
+        }
+        setHubBookArenaVisibility(ars.length > 1);
+      }
+
       /** Prefer last booking's arena when linked; else primary / first linked arena. */
       function hubPickDefaultArenaId(arenas, preferredId) {
         var list = arenas || [];
@@ -5353,6 +5375,7 @@
               sel.value = String(s.id);
               syncHubBookServicePickHighlight();
               syncHubBookPriceTierRadios();
+              hubSyncBookArenaForSelectedService();
             };
             pick.appendChild(b);
           });
@@ -5465,7 +5488,9 @@
           def.price_tier_kind != null && String(def.price_tier_kind).trim()
             ? def.price_tier_kind
             : null;
-        hubBookArenaId = hubPickDefaultArenaId(arList, def.arena_id);
+        hubBookArenaId = hubSelectedServiceIsOnline()
+          ? null
+          : hubPickDefaultArenaId(arList, def.arena_id);
         fillHubBookArenaPicklist(arList);
       }
 
@@ -5475,7 +5500,7 @@
         setHubBookServiceVisibility(true);
         syncHubBookPriceTierRadios();
         hubSyncClientFirstQuickServiceChrome();
-        setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
+        hubSyncBookArenaForSelectedService();
         applyHubBookNewSubmitButtonLabel();
         if (leadHint) {
           var lead = document.querySelector('#hubBookStepChoice .book-choice-lead');
@@ -5654,7 +5679,7 @@
                 applyHubSandboxNewClientPrefill();
                 setHubBookOptExistingVisible(false);
                 applyHubBookNewSubmitButtonLabel();
-                setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
+                hubSyncBookArenaForSelectedService();
                 hubEmbedSandboxBookStepNewBeforeQuickNext();
               } else {
                 var chEl = document.getElementById('hubBookStepChoice');
@@ -6547,7 +6572,7 @@
             client_id: clientId,
             service_id: hubBookServiceId,
           };
-          if (hubBookArenaId != null) {
+          if (!hubSelectedServiceIsOnline() && hubBookArenaId != null) {
             payload.arena_id = hubBookArenaId;
           }
           if (hubBookPriceVariantId != null) {
@@ -6596,6 +6621,7 @@
             hubBookServiceId = this.value ? parseInt(this.value, 10) : null;
             syncHubBookServicePickHighlight();
             syncHubBookPriceTierRadios();
+            hubSyncBookArenaForSelectedService();
           };
         }
         var bo = document.getElementById('hubBookOptExisting');
@@ -6619,19 +6645,6 @@
         if (bnChip) {
           bnChip.onclick = function() {
             hubGoBookNewClientFlow();
-          };
-        }
-        var be = document.getElementById('hubBookBackFromExisting');
-        if (be) {
-          be.onclick = function() {
-            if (hubBookClientFirstQuickMode && hubQuickBookHideLegacyClientChoice && !hubQuickBookIsSandbox) {
-              hubSetBookFlowStep('clients');
-              hubEnsureQuickBookSearchOnlyLayout();
-              var qinpBack = document.getElementById('hubBookClientSearch');
-              loadHubBookClients(qinpBack ? qinpBack.value.trim() : '');
-              return;
-            }
-            resetHubBookSteps();
           };
         }
         var hubBackCenter = document.getElementById('hubBookBackFromCenter');
@@ -6686,7 +6699,7 @@
               return;
             }
             var ars = hubBookTrainerArenas || [];
-            if (ars.length > 1 && hubBookArenaId == null) {
+            if (!hubSelectedServiceIsOnline() && ars.length > 1 && hubBookArenaId == null) {
               hubToast('Выберите площадку.');
               return;
             }
@@ -6733,7 +6746,7 @@
               hubBookClientFirstServiceStepOpen = true;
               hubSyncClientFirstQuickChoiceActionsVisible(false);
               setHubBookServiceVisibility(true);
-              setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
+              hubSyncBookArenaForSelectedService();
               syncHubBookPriceTierRadios();
               hubSyncClientFirstQuickServiceChrome();
               if (hubQuickBookIsSandbox) hubEmbedSandboxBookStepNewBeforeQuickNext();
@@ -6873,7 +6886,7 @@
                 hubBookClientFirstServiceStepOpen = true;
                 hubSyncClientFirstQuickChoiceActionsVisible(false);
                 setHubBookServiceVisibility(true);
-                setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
+                hubSyncBookArenaForSelectedService();
                 syncHubBookPriceTierRadios();
                 hubSyncClientFirstQuickServiceChrome();
                 if (hubQuickBookIsSandbox) hubEmbedSandboxBookStepNewBeforeQuickNext();

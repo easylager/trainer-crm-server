@@ -63,6 +63,7 @@ _EXPECTED_FIELDS = frozenset(
         "capacity_note",
         "external_url",
         "source_id",
+        "schedule_basis",
         "parser_job_id",
         "scrape_run_id",
     }
@@ -150,8 +151,10 @@ def test_strategy_has_no_sql_and_does_not_bypass_validator() -> None:
         assert "ice_sessions" not in source
         assert "execute(" not in source
 
-    validate_src = inspect.getsource(IceSessionValidator.validate)
+    # TASK-187: построчная проверка живёт в _reject_reason (validate/validate_outcome её зовут).
+    validate_src = inspect.getsource(IceSessionValidator._reject_reason)
     assert "kind" in validate_src
+    assert "_reject_reason" in inspect.getsource(IceSessionValidator.validate_outcome)
 
     scheduler_path = Path("src/ingestion/scheduler.py")
     sched = scheduler_path.read_text(encoding="utf-8")

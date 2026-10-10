@@ -8,12 +8,18 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
+const stalePath = path.resolve(__dirname, '../../static/webapp/schedule-staleness-model.js');
+const modePath = path.resolve(__dirname, '../../static/webapp/arena-schedule-mode-model.js');
 const modelPath = path.resolve(
   __dirname,
   '../../static/webapp/arena-card-model.js'
 );
 
 function loadModel() {
+  delete require.cache[require.resolve(stalePath)];
+  require(stalePath);
+  delete require.cache[require.resolve(modePath)];
+  require(modePath);
   const resolved = require.resolve(modelPath);
   delete require.cache[resolved];
   return require(modelPath);
@@ -468,6 +474,108 @@ describe('parseArenaRef', () => {
   });
 });
 
+describe('focusState (TASK-223)', () => {
+  const today = '2026-10-09';
+  const now = new Date('2026-10-09T10:00:00+03:00');
+  const days = [
+    {
+      local_date: today,
+      sessions: [
+        { id: 7, starts_at_local: '19:00', starts_at_utc: '2026-10-09T16:00:00Z' },
+        { id: 8, starts_at_local: '21:00', starts_at_utc: '2026-10-09T18:00:00Z' },
+      ],
+    },
+    {
+      local_date: '2026-10-10',
+      sessions: [{ id: 9, starts_at_local: '11:00', starts_at_utc: '2026-10-10T08:00:00Z' }],
+    },
+  ];
+
+  it('none when no focus session id', () => {
+    const { focusState } = loadModel();
+    assert.deepEqual(
+      focusState({ focusSessionId: null, days, sessionsLoaded: true, todayIso: today, now }),
+      { kind: 'none' }
+    );
+  });
+
+  it('found when session is in the feed', () => {
+    const { focusState } = loadModel();
+    assert.deepEqual(
+      focusState({
+        focusSessionId: '7',
+        days,
+        sessionsLoaded: true,
+        todayIso: today,
+        now,
+      }),
+      { kind: 'found', focusSessionId: '7', day: today }
+    );
+  });
+
+  it('gone with nearest slot when focus id is absent and feed loaded', () => {
+    const { focusState } = loadModel();
+    const gone = focusState({
+      focusSessionId: '99',
+      days,
+      freshness: { schedule_stale: false },
+      sessionsLoaded: true,
+      todayIso: today,
+      now,
+    });
+    assert.equal(gone.kind, 'gone');
+    assert.equal(gone.focusSessionId, '99');
+    assert.equal(gone.nearest.id, 7);
+    assert.match(gone.nearest.label, /Сегодня 19:00/);
+  });
+
+  it('gone with null nearest on empty feed', () => {
+    const { focusState } = loadModel();
+    const gone = focusState({
+      focusSessionId: '5',
+      days: [],
+      sessionsLoaded: true,
+      todayIso: today,
+      now,
+    });
+    assert.equal(gone.kind, 'gone');
+    assert.equal(gone.nearest, null);
+  });
+
+  it('none while sessions not loaded or on error', () => {
+    const { focusState } = loadModel();
+    assert.equal(
+      focusState({ focusSessionId: '7', days, sessionsLoaded: false, todayIso: today }).kind,
+      'none'
+    );
+    assert.equal(
+      focusState({
+        focusSessionId: '7',
+        days,
+        sessionsLoaded: true,
+        sessionsError: true,
+        todayIso: today,
+      }).kind,
+      'none'
+    );
+  });
+
+  it('unconfirmed instead of gone when schedule is very stale', () => {
+    const { focusState } = loadModel();
+    assert.deepEqual(
+      focusState({
+        focusSessionId: '99',
+        days,
+        freshness: { schedule_stale: true, schedule_very_stale: true },
+        sessionsLoaded: true,
+        todayIso: today,
+        now,
+      }),
+      { kind: 'unconfirmed', focusSessionId: '99' }
+    );
+  });
+});
+
 describe('tierBlocks', () => {
   it('level B asks to уточняется with phone and site; C does not promise a schedule', () => {
     const { iceSectionMode } = loadModel();
@@ -843,12 +951,65 @@ describe('TASK-146: карточка открывается на дне и се�
   });
 });
 
-describe('TASK-146: устаревшее расписание', () => {
-  it('schedule_stale не показываем в UI — слоты как источник правды', () => {
-    const { staleScheduleNote, shouldWarnScheduleStale } = loadModel();
+describe('TASK-180: устаревшее расписание в карточке', () => {
+  it('schedule_stale — баннер, слоты остаются', () => {
+    const { staleScheduleNote, shouldWarnScheduleStale, iceFeedView } = loadModel();
     const now = new Date('2026-10-02T10:00:00Z');
-    assert.equal(staleScheduleNote({ schedule_stale: true, schedule_observed_at: '2026-10-01T11:00:00Z' }, now), null);
-    assert.equal(shouldWarnScheduleStale({ schedule_stale: true }, now), false);
+    const fresh = {
+      schedule_stale: true,
+      schedule_very_stale: false,
+      schedule_observed_at: '2026-10-01T11:00:00Z',
+    };
+    assert.equal(shouldWarnScheduleStale(fresh), true);
+    assert.match(staleScheduleNote(fresh, now), /могло измениться/);
+    const feed = iceFeedView({ card: { freshness: fresh, tier: 'A' }, hasSessions: true });
+    assert.equal(feed.mode, 'ribbon');
+  });
+
+  it('schedule_very_stale — не показываем ленту сеансов', () => {
+    const { iceFeedView } = loadModel();
+    const very = {
+      schedule_stale: true,
+      schedule_very_stale: true,
+      schedule_observed_at: '2026-09-28T10:00:00Z',
+    };
+    const feed = iceFeedView({
+      card: { freshness: very, tier: 'A', phone: '+375 17 1' },
+      hasSessions: true,
+      now: new Date('2026-10-02T10:00:00Z'),
+    });
+    assert.equal(feed.mode, 'unconfirmed');
+    assert.match(feed.banner, /не обновлялось/);
+  });
+});
+
+describe('TASK-204 iceFeedView schedule_mode', () => {
+  it('phone mode shows call href', () => {
+    const { iceFeedView } = loadModel();
+    const feed = iceFeedView({
+      card: { schedule_mode: 'phone', phone: '+375291112233', tier: 'B' },
+      hasSessions: false,
+    });
+    assert.equal(feed.mode, 'phone');
+    assert.equal(feed.banner, 'Расписание по телефону');
+    assert.equal(feed.callHref, 'tel:+375291112233');
+  });
+
+  it('season_closed mode before calendar season banner', () => {
+    const { iceFeedView } = loadModel();
+    const feed = iceFeedView({
+      card: {
+        schedule_mode: 'season_closed',
+        schedule_reopen_date: '2026-11-01',
+        schedule_mode_note: 'ремонт',
+        in_season: false,
+        season_start_month: 11,
+      },
+      hasSessions: false,
+    });
+    assert.equal(feed.mode, 'closed');
+    assert.match(feed.banner, /Сезон закрыт/);
+    assert.match(feed.banner, /01\.11/);
   });
 });
 

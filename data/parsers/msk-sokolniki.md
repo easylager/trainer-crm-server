@@ -1,6 +1,8 @@
 # Parser spec: Ледовый дворец «Сокольники»
 
 - arena_id: 58
+- arena_slug: ledovyy-dvorets-sokolniki
+- city: Москва/МО
 - parser_key: ldsokolniki_html_v1
 - cadence: daily
 - requires_by_egress: false

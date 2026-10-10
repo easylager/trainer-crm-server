@@ -60,6 +60,7 @@ def default_registry() -> ParserRegistry:
     from src.ingestion.adapters_regional_batch_d import (
         BobruiskArenaParser,
         GomelLdsParser,
+        MolodechnoSrcParser,
         ShklovArenaParser,
         SoligorskSzkParser,
     )
@@ -81,6 +82,7 @@ def default_registry() -> ParserRegistry:
     from src.ingestion.adapters_spb_batch_j import IzhoretsHtmlParser
     from src.ingestion.adapters_spb_batch_m import DinamoYuniorHtmlParser
     from src.ingestion.adapters_spb_batch_o import ShuvalovskyLedHtmlParser
+    from src.ingestion.weekly_grid_v1 import WeeklyGridV1Parser
 
     registry = ParserRegistry()
     for parser in (
@@ -108,6 +110,7 @@ def default_registry() -> ParserRegistry:
         GorkiLdsParser(),
         OstrovetsLdsParser(),
         BobruiskArenaParser(),
+        MolodechnoSrcParser(),
         SoligorskSzkParser(),
         ShklovArenaParser(),
         GomelLdsParser(),
@@ -127,6 +130,7 @@ def default_registry() -> ParserRegistry:
         IzhoretsHtmlParser(),
         DinamoYuniorHtmlParser(),
         ShuvalovskyLedHtmlParser(),
+        WeeklyGridV1Parser(),
     ):
         registry.register(parser)
     return registry
@@ -163,6 +167,7 @@ from src.ingestion.adapters_regional_batch_c import (  # noqa: E402
 from src.ingestion.adapters_regional_batch_d import (  # noqa: E402
     BobruiskArenaParser,
     GomelLdsParser,
+    MolodechnoSrcParser,
     ShklovArenaParser,
     SoligorskSzkParser,
 )
@@ -191,6 +196,7 @@ __all__ = [
     "LidaLdsParser",
     "MinskArenaSaleframeParser",
     "MinskSpeedOvalParser",
+    "MolodechnoSrcParser",
     "MogilevDsParser",
     "NovopolotskLdsParser",
     "OrshaArenaParser",

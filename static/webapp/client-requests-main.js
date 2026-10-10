@@ -171,17 +171,25 @@
         return 'лет';
       }
 
+      /* TASK-196: валюта услуги — код из полезной нагрузки заявок. Отображение —
+         конвенция TASK-109 для цен тренера: RUB знаком ₽, BYN буквами. */
+      function priceCurrencyLabel(code) {
+        var c = String(code || '').trim().toUpperCase();
+        return c === 'RUB' ? '₽' : (c || 'BYN');
+      }
+
       function formatResponderServicePrice(s) {
         var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
         var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
         if (minV == null && s.price_byn == null) return escapeHtml('по запросу');
+        var cur = escapeHtml(priceCurrencyLabel(s.currency_code));
         if (minV != null && maxV != null && minV !== maxV) {
           var a = minV === Math.floor(minV) ? String(minV) : minV.toFixed(2);
-          return 'от ' + escapeHtml(a) + ' BYN';
+          return 'от ' + escapeHtml(a) + ' ' + cur;
         }
         var v = minV != null ? minV : s.price_byn;
         var numStr = v === Math.floor(v) ? String(v) : v.toFixed(2);
-        return escapeHtml(numStr) + ' BYN';
+        return escapeHtml(numStr) + ' ' + cur;
       }
 
       function responderEducationTypeLabel(typeKey) {
@@ -361,8 +369,17 @@
         const city = (req.city_name || '').trim() || '—';
         const service = (req.service_name || '').trim() || '—';
         var base = city + ', ' + service;
+        var tname = (req.trainer_name || '').trim();
+        if (req.request_subtype === 'pass_product_order') {
+          return tname ? ('Абонемент · ' + tname) : 'Абонемент';
+        }
+        if (req.request_subtype === 'certificate_product_order') {
+          return tname ? ('Сертификат · ' + tname) : 'Сертификат';
+        }
+        if (req.request_subtype === 'collective_pass_product_order') {
+          return tname ? ('Абонемент центра · ' + tname) : 'Абонемент центра';
+        }
         if (req.is_personalized) {
-          var tname = (req.trainer_name || '').trim();
           return tname ? ('Персональная · ' + tname) : ('Персональная · ' + base);
         }
         return base;

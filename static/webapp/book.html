@@ -22,7 +22,7 @@
   <script src="booking-deeplink.js?v=2026100518"></script>
   <script src="mini-app-empty-state.js?v=2026100518"></script>
   <script src="mini-app-more-icons.js?v=2026100518"></script>
-  <script src="mini-app-client-shell.js?v=2026100518"></script>
+  <script src="mini-app-client-shell.js?v=2026100699"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -1192,17 +1192,26 @@
         el.style.display = 'block';
       }
 
+      /* TASK-196: валюта услуги — код из полезной нагрузки карточки тренера
+         (/api/public/trainers/{id}). Отображение — конвенция TASK-109: RUB
+         знаком ₽, BYN буквами. Старые ответы без валюты — BYN. */
+      function priceCurrencyLabel(code) {
+        var c = String(code || '').trim().toUpperCase();
+        return c === 'RUB' ? '₽' : (c || 'BYN');
+      }
+
       function formatBookServicePrice(s) {
         var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
         var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
         if (minV == null && s.price_byn == null) return 'по запросу';
+        var cur = priceCurrencyLabel(s.currency_code);
         if (minV != null && maxV != null && minV !== maxV) {
           var a = minV === Math.floor(minV) ? String(minV) : minV.toFixed(2);
-          return 'от ' + a + ' BYN';
+          return 'от ' + a + ' ' + cur;
         }
         var v = minV != null ? minV : s.price_byn;
         var numStr = v === Math.floor(v) ? String(v) : v.toFixed(2);
-        return numStr + ' BYN';
+        return numStr + ' ' + cur;
       }
 
       function serviceDisplayNameForId(serviceId) {
@@ -1210,19 +1219,31 @@
         return row && row.service_name ? String(row.service_name).trim() : '';
       }
 
+      function bookServicesForSlot(services, slot) {
+        var list = Array.isArray(services) ? services : [];
+        if (!slot) return list;
+        var wantOnline = !!slot.is_online;
+        return list.filter(function(s) { return !!s.is_online === wantOnline; });
+      }
+
       /** Service line or dropdown on booking form — same rules as catalog booking form. */
-      function updateBookFormServiceUi(effServiceId, isGroupSlot) {
+      function updateBookFormServiceUi(effServiceId, isGroupSlot, slot) {
         var block = document.getElementById('bookServiceBlock');
         var lineEl = document.getElementById('bookServiceLine');
         var selectEl = document.getElementById('bookServiceSelect');
         if (!block) return;
         var t = bookTrainerDetailCache;
-        var services = (t && t.services) ? t.services : [];
+        var allServices = (t && t.services) ? t.services : [];
+        var services = bookServicesForSlot(allServices, slot);
         if (!services.length) {
-          block.style.display = 'none';
+          block.style.display = 'block';
           if (lineEl) {
-            lineEl.style.display = 'none';
-            lineEl.textContent = '';
+            lineEl.style.display = 'block';
+            lineEl.textContent = (slot && slot.is_online)
+              ? 'У тренера нет онлайн-услуг для этого слота.'
+              : (allServices.length
+                ? 'Нет офлайн-услуг для этого слота.'
+                : 'У тренера не настроены услуги.');
           }
           if (selectEl) {
             selectEl.innerHTML = '';
@@ -1231,7 +1252,23 @@
           return;
         }
         var effSid = effServiceId != null ? Number(effServiceId) : null;
+        var allowed = {};
+        services.forEach(function(s) {
+          var idn = s.service_id != null ? Number(s.service_id) : NaN;
+          if (Number.isFinite(idn) && idn > 0) allowed[idn] = true;
+        });
+        if (effSid != null && !allowed[effSid]) {
+          effSid = services.length === 1 ? Number(services[0].service_id) : null;
+          if (effSid != null) {
+            selectedServiceId = effSid;
+            sessionServiceId = effSid;
+          }
+        }
         if (isGroupSlot || services.length === 1) {
+          if (services.length === 1) {
+            selectedServiceId = Number(services[0].service_id);
+            sessionServiceId = selectedServiceId;
+          }
           var lineNm =
             (effSid != null ? serviceDisplayNameForId(effSid) : '') ||
             String(services[0].service_name || '').trim();
@@ -1457,7 +1494,8 @@
           inp.value = String(tier.id);
           const pb = tier.price_byn;
           const priceNum = pb === Math.floor(pb) ? String(pb) : Number(pb).toFixed(2);
-          const priceHtml = escapeHtmlBook(priceNum) + ' BYN';
+          // TASK-196: валюта тира — из полезной нагрузки (₽ для RUB), не «BYN» наизусть.
+          const priceHtml = escapeHtmlBook(priceNum) + ' ' + escapeHtmlBook(priceCurrencyLabel(tier.currency_code));
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
           tierTxt.className = 'tier-radio-text';
@@ -1703,13 +1741,25 @@
         }
       }
 
+      function bookServiceIsOnline(serviceId) {
+        var sid = serviceId != null ? Number(serviceId) : NaN;
+        if (!Number.isFinite(sid) || sid <= 0) return false;
+        var t = bookTrainerDetailCache;
+        var services = (t && t.services) ? t.services : [];
+        for (var i = 0; i < services.length; i++) {
+          if (Number(services[i].service_id) === sid) return !!services[i].is_online;
+        }
+        return false;
+      }
+
       async function fetchSlots() {
         const initData = tg?.initData || '';
         let q = 'trainer_id=' + encodeURIComponent(trainerId);
         const sidForSlots = effectiveServiceId();
         lastSlotsQueryServiceId = sidForSlots;
         if (sidForSlots != null) q += '&service_id=' + encodeURIComponent(sidForSlots);
-        if (Number.isFinite(Number(sessionArenaId)) && Number(sessionArenaId) > 0) {
+        var onlineSvc = bookServiceIsOnline(sidForSlots);
+        if (!onlineSvc && Number.isFinite(Number(sessionArenaId)) && Number(sessionArenaId) > 0) {
           q += '&arena_ids=' + encodeURIComponent(String(sessionArenaId));
         }
         var hdr = { Accept: 'application/json' };
@@ -1806,13 +1856,16 @@
         prefillBookPhoneField();
         await loadTrainerDetailForBook();
         var tDetailClamp = bookTrainerDetailCache;
-        var srvListClamp = (tDetailClamp && tDetailClamp.services) ? tDetailClamp.services : [];
+        var selSlot = (allSlots || []).find(function(s) { return Number(s.id) === Number(slotId); });
+        var srvListClamp = bookServicesForSlot(
+          (tDetailClamp && tDetailClamp.services) ? tDetailClamp.services : [],
+          selSlot
+        );
         var validSvcIds = new Map();
         srvListClamp.forEach(function(s) {
           var sidc = Number(s && s.service_id);
           if (Number.isFinite(sidc) && sidc > 0) validSvcIds.set(sidc, s);
         });
-        var selSlot = (allSlots || []).find(function(s) { return Number(s.id) === Number(slotId); });
         var slotPinnedSid = serviceIdFromSlotRow(selSlot);
         if (slotPinnedSid == null && lastSlotsQueryServiceId != null) {
           var lq = Number(lastSlotsQueryServiceId);
@@ -1864,7 +1917,7 @@
         } else {
           renderPriceTierUi(effSid);
         }
-        updateBookFormServiceUi(effSid, !isNaN(capBook) && capBook > 1);
+        updateBookFormServiceUi(effSid, !isNaN(capBook) && capBook > 1, selSlot);
         syncBookSlotSummaryLine(effSid, !isNaN(capBook) && capBook > 1);
         syncBookServiceDetailsTrigger(effSid);
         syncBookVenueHint(selSlot);

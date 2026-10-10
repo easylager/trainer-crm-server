@@ -30,7 +30,8 @@ CATALOG_START_PREFIX = "catalog_"
 # Ограничения Telegram на start/startapp: до 64 символов, только [A-Za-z0-9_-].
 _START_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
-#: Токены startapp. shop/gym/ice/… — фильтр типа места; skate/coach — интент вкладки.
+#: Токены startapp. shop/gym/ice/… — фильтр типа места; skate/coach — интент вкладки;
+#: ohm — любительский хоккей; service — заточка и прокат.
 CATALOG_LINK_TOKENS = (
     "skate",
     "coach",
@@ -41,10 +42,22 @@ CATALOG_LINK_TOKENS = (
     "choreo",
     "pool",
     "other",
+    "ohm",
+    "service",
 )
 #: Окно, которое умеет унести диплинк. ``any`` и ``auto`` в ссылку не кладём.
 CATALOG_WHEN_TOKENS = ("today_evening", "today", "tomorrow", "weekend")
-_WHEN_WITH = frozenset({"skate", "ice", "outdoor"})
+_WHEN_WITH = frozenset({"skate", "ice", "outdoor", "ohm"})
+
+#: Канал шаринга в query ``src`` (TASK-223). Неизвестное значение не попадает в URL и метрики.
+SHARE_SRC_VALUES = ("tg", "vb", "wa", "vk", "copy", "story", "sys", "img")
+_SHARE_SRC_SET = frozenset(SHARE_SRC_VALUES)
+
+
+def clean_share_src(raw: str | None) -> str | None:
+    """Нормализует ``src`` из ссылки; мусор и неизвестные токены → ``None``."""
+    value = (raw or "").strip().lower()
+    return value if value in _SHARE_SRC_SET else None
 
 
 def place_path(*, city_name: str, slug: str) -> str:
@@ -52,13 +65,35 @@ def place_path(*, city_name: str, slug: str) -> str:
     return f"{PLACE_PATH_PREFIX}/{city_slug(city_name)}/{slug}"
 
 
-def place_query(*, session_id: int | None = None, invite: bool = False) -> str:
+def place_query(
+    *,
+    session_id: int | None = None,
+    invite: bool = False,
+    src: str | None = None,
+) -> str:
     params: dict[str, str] = {}
     if session_id is not None and int(session_id) > 0:
         params["s"] = str(int(session_id))
     if invite:
         params["i"] = "1"
+    cleaned_src = clean_share_src(src)
+    if cleaned_src:
+        params["src"] = cleaned_src
     return ("?" + urlencode(params)) if params else ""
+
+
+def join_public_origin(canonical_url: str, path: str) -> str:
+    """Абсолютный URL, если у канонической страницы есть origin, иначе сам ``path``.
+
+    Канонические адреса каталога — ``/p/``, ``/c/``, ``/ice/``. Всё до этого маркера
+    и есть схема с хостом (``https://glide.example``); в тестах база бывает пустой,
+    и тогда ссылка остаётся корневой.
+    """
+    for marker in ("/ice/", "/c/", "/p/"):
+        idx = canonical_url.find(marker)
+        if idx > 0:
+            return canonical_url[:idx] + path
+    return path
 
 
 def place_page_url(
@@ -68,9 +103,12 @@ def place_page_url(
     slug: str,
     session_id: int | None = None,
     invite: bool = False,
+    src: str | None = None,
 ) -> str:
     base = (base_url or "").strip().rstrip("/")
-    return base + place_path(city_name=city_name, slug=slug) + place_query(session_id=session_id, invite=invite)
+    return (
+        base + place_path(city_name=city_name, slug=slug) + place_query(session_id=session_id, invite=invite, src=src)
+    )
 
 
 def place_image_path(
@@ -120,11 +158,12 @@ def place_start_param(arena_id: int, session_id: int | None = None) -> str:
 
 
 def catalog_start_param(city_id: int, intent: str | None = None, when: str | None = None) -> str:
-    """``catalog_12`` / ``catalog_12_coach`` / ``catalog_12_skate_weekend``.
+    """``catalog_12`` / ``catalog_12_coach`` / ``catalog_12_skate_weekend`` / ``catalog_12_ohm_weekend``.
 
-    Неизвестный токен не попадает в ссылку. Окно времени — только у льда
-    (``skate`` / ``ice`` / ``outdoor``): без ``intent=skate`` сохранённая вкладка
-    «Тренеры» съедает окно. У магазина и зала окна нет, ``when`` отбрасывается.
+    Неизвестный токен не попадает в ссылку. Окно времени остаётся у льда
+    (``skate`` / ``ice`` / ``outdoor``) и хоккея (``ohm``): без ``intent=skate``
+    сохранённая вкладка «Тренеры» съедает окно. У магазина, зала и услуг
+    (``service``) окна нет, ``when`` отбрасывается.
     """
     token = intent if intent in CATALOG_LINK_TOKENS else None
     when_ok = when if when in CATALOG_WHEN_TOKENS else None
@@ -200,6 +239,8 @@ def public_telegram_cta_url(
     surface: str,
     city_id: int | None = None,
     arena_id: int | None = None,
+    share_src: str | None = None,
+    session_id: int | None = None,
 ) -> str | None:
     """
     HTTPS-прокси перед ``t.me``: логируем клик «Открыть в Telegram», затем 302 в Telegram.
@@ -211,6 +252,11 @@ def public_telegram_cta_url(
         params["city_id"] = str(int(city_id))
     if arena_id is not None and int(arena_id) > 0:
         params["arena_id"] = str(int(arena_id))
+    cleaned_src = clean_share_src(share_src)
+    if cleaned_src:
+        params["src"] = cleaned_src
+    if session_id is not None and int(session_id) > 0:
+        params["s"] = str(int(session_id))
     path = f"/api/public/catalog/open-telegram?{urlencode(params)}"
     base = (base_url or "").strip().rstrip("/")
     if not base:

@@ -46,6 +46,144 @@ body.ar-pilot--ice .client-app-header {
   gap: 12px;
 }
 
+.ice-header-chrome {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+}
+
+.hdr-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  position: relative;
+}
+
+.hdr-scroll {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+.hdr-scroll::-webkit-scrollbar { display: none; }
+
+.hdr-scroll[hidden] { display: none !important; }
+
+.hdr-city { margin-left: auto; }
+
+.hdr-date-menu {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 6px);
+  left: 0;
+  right: auto;
+  min-width: 200px;
+  max-width: min(280px, 100%);
+}
+
+.hdr-folders {
+  position: relative;
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.hdr-folders[hidden] { display: none !important; }
+
+.hdr-folders::-webkit-scrollbar { display: none; }
+
+.hdr-folder {
+  position: relative;
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--glide-hint);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium, 500);
+  padding: 8px 0 12px;
+  cursor: pointer;
+  transition: transform .14s ease, color .14s ease;
+}
+
+.hdr-folder:active {
+  transform: scale(0.97) translateY(1px);
+}
+
+.hdr-folder[aria-pressed='true'] {
+  color: var(--glide-ink-teal);
+  font-weight: var(--app-weight-bold);
+}
+
+.hdr-folder small {
+  margin-left: 4px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  opacity: .72;
+}
+
+.hdr-underline {
+  position: absolute;
+  left: 0;
+  bottom: 4px;
+  height: 2px;
+  width: 0;
+  border-radius: var(--app-radius-xs);
+  background: var(--glide-ink-teal);
+  transition: transform .22s ease, width .22s ease;
+  pointer-events: none;
+}
+
+.ice-header-chrome .ice-intent-row,
+.ice-header-chrome .ice-filter-band,
+.ice-header-chrome .ice-section-hint {
+  margin-inline: 0;
+  padding-inline: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ice-filter-band {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ice-filter-band > [hidden] {
+  display: none !important;
+}
+
+.ice-filter-band .ice-shop-filters,
+.ice-filter-band .ice-shop-filters__panel {
+  width: 100%;
+  padding-inline: 0;
+  margin-inline: 0;
+  box-sizing: border-box;
+}
+
+.ice-filter-band .ice-shop-filters__block {
+  display: contents;
+}
+
+.ice-filter-band .ice-shop-filters__kicker {
+  display: none !important;
+}
+
+.ice-filter-band .ice-shop-active {
+  padding-inline: 0;
+}
+
 /* Намерение и город в одной строке: город меняет каталог, не поле поиска. */
 .ice-intent-row {
   display: flex;
@@ -58,6 +196,28 @@ body.ar-pilot--ice .client-app-header {
 .ice-intent-row .ice-seg {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  height: auto;
+  overflow: visible;
+}
+
+.ice-intent-row .ice-seg button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
+.ice-section-hint {
+  margin: 0;
+  padding: 0;
+  font-size: var(--app-text-caption);
+  line-height: 1.35;
+  color: var(--glide-hint);
+}
+
+.ice-section-hint[hidden] {
+  display: none;
 }
 
 .ice-seg {
@@ -76,6 +236,18 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-seg--2 {
   grid-template-columns: 1fr 1fr;
+}
+
+.ice-seg--3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.ice-seg--4 {
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+
+.ice-seg--4 button {
+  padding: 0 2px;
 }
 
 .ice-seg button {
@@ -97,35 +269,38 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-seg--quiet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid var(--glide-line);
   border-radius: 0;
   padding: 0;
-  gap: 0;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: unset;
 }
 
-.ice-seg--quiet.ice-seg--n3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
+.ice-seg--quiet.ice-seg--n3,
 .ice-seg--quiet.ice-seg--n4 {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: unset;
 }
 
 .ice-seg--quiet button {
-  height: 36px;
-  border-radius: 0;
-  font-size: var(--app-text-caption);
+  flex: 0 0 auto;
+  height: auto;
+  padding: 8px 13px;
+  border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line);
+  background: var(--app-canvas-bg);
+  font-size: var(--app-text-body);
   font-weight: var(--app-weight-semibold);
   color: var(--glide-hint);
+  box-shadow: none;
 }
 
 .ice-seg--quiet button[aria-pressed='true'] {
-  background: transparent;
-  color: var(--glide-text);
-  box-shadow: inset 0 -2px 0 var(--app-cta-fill);
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+  color: var(--app-cta-text);
 }
 
 .ice-catalog-tools {
@@ -138,24 +313,36 @@ body.ar-pilot--ice .client-app-header {
   display: none;
 }
 
-.ice-tools {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
+.ice-tools.ice-chips {
+  flex-wrap: nowrap;
+  align-items: stretch;
 }
 
 .ice-tools--one .ice-tool {
   flex: 0 1 auto;
 }
 
+/* Два дропдауна («Все места» + «Когда») делят строку, не переносятся. */
+.ice-tools.ice-chips .ice-tool {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ice-tools--one.ice-chips .ice-tool {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .ice-tool {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--app-radius-md);
+  height: auto;
+  min-height: 0;
+  padding: 8px 13px;
+  border-radius: var(--app-radius-pill);
   border: 1px solid var(--glide-line);
-  background: var(--glide-surface);
+  background: var(--app-canvas-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -185,8 +372,18 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-tool[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--app-cta-fill) 55%, var(--glide-line));
+  color: var(--glide-text);
+}
+
+.ice-tool[aria-pressed='true'] {
+  background: var(--app-cta-fill);
   border-color: var(--app-cta-fill);
-  color: var(--glide-ink-teal, var(--glide-ink-teal));
+  color: var(--app-cta-text);
+}
+
+.ice-tool[aria-pressed='true']::after {
+  border-top-color: currentColor;
 }
 
 .ice-menu {
@@ -417,21 +614,17 @@ body.ice-view-map .ice-citypill--insearch {
   color: var(--app-cta-text);
 }
 
-.ice-chips--svc {
-  padding-top: 2px;
-}
-
 .ice-shop-filters {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 0 16px 4px;
+  gap: 7px;
+  padding: 0;
 }
 
 .ice-shop-filters__panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .ice-shop-filters__map-bar {
@@ -483,82 +676,61 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
 }
 
 .ice-shop-filters__kicker {
-  margin: 0;
-  padding: 0 2px;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--glide-hint);
-  font-weight: var(--app-weight-semibold);
+  display: none;
 }
 
-.ice-chips--shop {
+.ice-chips--shop,
+.ice-chips--scroll {
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
   padding-bottom: 2px;
 }
 
-.ice-chips--shop::-webkit-scrollbar {
+.ice-chips--shop::-webkit-scrollbar,
+.ice-chips--scroll::-webkit-scrollbar {
   display: none;
 }
 
-.ice-chip--shop[aria-pressed='true'] {
-  background: var(--glide-brand-wash, rgba(69, 185, 187, 0.13));
-  border-color: color-mix(in srgb, var(--app-venue-shop, #a48bff) 55%, transparent);
-  color: var(--glide-ink-teal, var(--glide-ink-teal));
-}
-
 .ice-chip__n {
-  font-size: 11px;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
   color: var(--glide-hint);
   font-variant-numeric: tabular-nums;
 }
 
 .ice-chip--shop[aria-pressed='true'] .ice-chip__n {
-  color: var(--glide-ink-teal, var(--glide-ink-teal));
+  color: inherit;
+  opacity: 0.85;
 }
 
 .ice-shop-filters__time {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+  flex-wrap: nowrap;
 }
 
 .ice-shop-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: var(--app-radius-pill, 999px);
-  border: 1px solid var(--glide-line);
-  background: var(--glide-surface);
   font: inherit;
-  font-size: 13px;
-  font-weight: var(--app-weight-semibold);
-  color: inherit;
   cursor: pointer;
-}
-
-.ice-shop-toggle[aria-pressed='true'] {
-  border-color: color-mix(in srgb, var(--app-ok, #4fc98a) 50%, transparent);
-  background: color-mix(in srgb, var(--app-ok, #4fc98a) 12%, transparent);
-  color: var(--app-ok, #4fc98a);
 }
 
 .ice-shop-toggle__dot {
   width: 8px;
   height: 8px;
-  border-radius: 99px;
+  border-radius: var(--app-radius-pill);
   background: var(--glide-hint);
 }
 
 .ice-shop-toggle[aria-pressed='true'] .ice-shop-toggle__dot {
-  background: var(--app-ok, #4fc98a);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ok, #4fc98a) 22%, transparent);
+  background: var(--app-ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ok) 22%, transparent);
+}
+
+.ice-shop-toggle.ice-chip[aria-pressed='true'] .ice-shop-toggle__dot {
+  background: var(--app-cta-text);
+  box-shadow: none;
 }
 
 .ice-shop-when {
@@ -576,7 +748,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 0 2px;
+  padding: 0;
 }
 
 .ice-shop-active[hidden] {
@@ -590,7 +762,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   padding: 5px 9px;
   border-radius: var(--app-radius-pill, 999px);
   background: var(--glide-card, var(--glide-surface));
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
 }
 
@@ -598,7 +770,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   border: 0;
   background: none;
   padding: 0;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   line-height: 1;
   color: var(--glide-hint);
   cursor: pointer;
@@ -609,15 +781,19 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   background: none;
   padding: 4px 6px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
   color: var(--glide-hint);
   cursor: pointer;
 }
 
-.ice-chips--svc .ice-chip {
-  font-size: var(--app-text-caption);
-  padding: 6px 10px;
+.ice-chips--place-svc {
+  padding-top: 2px;
+}
+
+.ice-chips--place-svc .ice-chip__n {
+  font-weight: var(--app-weight-regular, 400);
+  opacity: 0.75;
 }
 
 .ice-hint {
@@ -750,7 +926,7 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   min-width: 0;
 }
 
-.ice-listhead .ice-nearest {
+.ice-listhead .ice-share-head {
   align-self: center;
 }
 
@@ -802,6 +978,41 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   background-color: var(--app-media-bed);
   background-size: cover;
   background-position: center;
+  overflow: hidden;
+}
+
+.ice-board__photo-img,
+.ice-acard__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+}
+
+.ice-map-unavail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ice-map-unavail__btn {
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: var(--app-weight-semibold);
+  background: var(--glide-accent);
+  color: var(--glide-on-accent);
+}
+
+.ice-map-unavail__btn--soft {
+  background: var(--glide-card);
+  color: var(--glide-text);
+  box-shadow: inset 0 0 0 1px var(--glide-line);
 }
 
 /*
@@ -985,6 +1196,8 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
 }
 
 .ice-acard__ph {
+  position: relative;
+  overflow: hidden;
   height: 74px;
   border-radius: var(--app-radius-sm);
   background: linear-gradient(150deg, var(--glide-line), var(--glide-paper));
@@ -1197,6 +1410,13 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   margin-top: 2px;
 }
 
+.ice-hit mark {
+  color: var(--glide-ink-teal);
+  font-weight: var(--app-weight-semibold);
+  background: none;
+  padding: 0;
+}
+
 .ice-picker {
   position: fixed;
   inset: 0;
@@ -1406,8 +1626,11 @@ body.ice-view-map .ice-sec--hero .ice-shop-filters__map-bar {
 
 /* Над картой плавают только поиск (с городом внутри) и окно времени. */
 body.ice-view-map .ice-sec--hero .ice-intent-row,
+body.ice-view-map .ice-sec--hero #iceWhenRow,
+body.ice-view-map .ice-sec--hero .hdr-folders,
 body.ice-view-map .ice-sec--hero #iceServiceChips,
-body.ice-view-map .ice-sec--hero #icePlaceTabs {
+body.ice-view-map .ice-sec--hero #icePlaceTabs,
+body.ice-view-map .ice-sec--hero #icePlaceService {
   display: none;
 }
 
@@ -1870,7 +2093,7 @@ html.client-mini-dark [class*="ground-pane"] {
 .ice-ypin--place.ice-ypin--compact .ice-ypin__body {
   height: 24px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: var(--app-text-caption);
   border-width: 1.5px;
 }
 
@@ -2029,10 +2252,36 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
  */
 .ice-share {
   margin-top: var(--app-space-4);
+  /*
+   * TASK-217. «Карта» — fixed-пилюля над таб-баром (bottom: inset + 12px,
+   * высота около 44px, z-index 8400). Кнопка шеринга стоит в конце ленты и
+   * при доскролле оказывается под ней. Запас снизу поднимает кнопку над
+   * пилюлей и над скримом панели; safe-area уже внутри inset у самой «Карты».
+   */
+  margin-bottom: 72px;
+}
+
+/* Перед «В этот день нет» кнопка внутри ленты: 72px снизу — дыра до разделителя.
+   Расстояние задаёт gap списка. Запас под «Карту» нужен только в конце ленты. */
+.ice-list > .ice-share {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .ice-share[hidden] {
   display: none;
+}
+
+/* TASK-182: «Показать ещё» под лентой — та же вторичная .btn-neutral, только отступ. */
+.ice-more {
+  margin-top: var(--app-space-4);
+}
+
+/* Магазины: страница 2+ не догрузилась (TASK-182). */
+.ice-rest-failed__note {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-caption);
+  color: var(--tg-theme-hint-color);
 }
 
 .ice-share__icon {
@@ -2161,27 +2410,49 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
   font-weight: var(--app-weight-semibold);
 }
 
-/* «Ближе» — сортировка ленты. Выключена выглядит как текст, включена — как выбранный чип. */
 .ice-search input { min-width: 0; }
-.ice-nearest {
+
+/*
+ * TASK-222. Компактный шеринг у подписи ленты — тот же жест, что у нижней
+ * «Поделиться подборкой», но в слот бывшего «Ближе»: пилюля + иконка «отправить».
+ * Не CTA-заливка: вторичное действие рядом с eyebrow, не конкурирует с карточкой.
+ */
+.ice-share-head {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  padding: 6px 12px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
   border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-pill);
-  background: transparent;
-  color: var(--glide-hint);
+  background: var(--glide-surface);
+  color: var(--glide-text);
   font: inherit;
-  font-size: var(--app-text-body);
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.01em;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.ice-nearest:disabled { opacity: 0.6; }
-.ice-nearest[aria-pressed="true"] {
-  background: var(--app-cta-fill);
-  border-color: var(--app-cta-fill);
-  color: var(--app-cta-text);
+.ice-share-head[hidden] {
+  display: none;
+}
+.ice-share-head__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--app-cta-fill);
+}
+.ice-share-head__label {
+  white-space: nowrap;
+}
+.ice-share-head:active {
+  transform: scale(0.97);
+  opacity: 0.92;
+}
+.ice-share-head:disabled {
+  opacity: 0.6;
 }
 
 /* TASK-146: парсер давно не читал сайт катка — подпись предупреждает, а не зовёт «ещё N сеансов». */

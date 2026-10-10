@@ -1,6 +1,8 @@
 # Parser spec: Шуваловский лёд
 
 - arena_id: 196
+- arena_slug: shuvalovskiy-led
+- city: Санкт-Петербург/ЛО
 - parser_key: shuvalovskyled_html_v1
 - cadence: daily
 - requires_by_egress: false
@@ -18,7 +20,6 @@
   "currency_code": "RUB",
   "kind": "public_skate",
   "prices_already_minor": true,
-  "run_year": 2026,
   "price_60min_weekday_minor": 70000,
   "price_60min_weekend_minor": 80000,
   "price_75min_weekday_minor": 87500,

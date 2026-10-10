@@ -13,6 +13,7 @@ from src.infrastructure.repositories.trainer_repository import (
     TRAINER_SERVICE_DEFAULT_TIER_LABEL,
     _sql_public_catalog_education_predicate,
 )
+from src.shared.currency import resolve_trainer_currencies
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
 
@@ -27,6 +28,8 @@ async def _trainer_services_with_prices_batch(
     """
     if not trainer_ids:
         return {}
+    # TASK-196: валюта цен — из города каждого тренера (BY → BYN, RU → RUB), одним запросом.
+    currency_by_tid = await resolve_trainer_currencies(session, list(trainer_ids))
     placeholders = ", ".join(f":id{i}" for i in range(len(trainer_ids)))
     params: dict[str, Any] = {f"id{i}": v for i, v in enumerate(trainer_ids)}
     rsv = await session.execute(
@@ -78,6 +81,7 @@ async def _trainer_services_with_prices_batch(
                 "label": lab or price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL,
                 "price_cents": pc,
                 "price_byn": round(pc / 100.0, 2),
+                "currency_code": currency_by_tid.get(t_id, "BYN"),
                 "sort_order": so,
             }
         )
@@ -107,6 +111,7 @@ async def _trainer_services_with_prices_batch(
                 "service_name": service_names_by_id.get(sid, "—") if sid is not None else "—",
                 "price_cents": pc,
                 "price_byn": price_byn,
+                "currency_code": currency_by_tid.get(int(tid), "BYN"),
                 "price_byn_min": price_byn_min,
                 "price_byn_max": price_byn_max,
                 "price_tiers": tiers,
@@ -711,6 +716,10 @@ async def archive_client_requests_fulfilled_by_bookings(
     If a booking was created without client_request_id (catalog flow), the linked request
     could stay status='new'. Archive when an active booking matches the same client+service
     and either a responding trainer or a personalized request trainer.
+
+    Pass and certificate orders are a purchase ask, not a request for that booking.
+    An existing lesson (or an already issued pass) must leave them status='new' so the
+    client still sees them and the trainer still gets the notification.
     """
     cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
     if cid is None:
@@ -721,6 +730,9 @@ async def archive_client_requests_fulfilled_by_bookings(
             SET status = 'archived'
             WHERE r.status = 'new'
               AND r.client_id = :cid
+              AND POSITION('__PASS_ORDER__:' IN COALESCE(r.comment, '')) <> 1
+              AND POSITION('__CERT_ORDER__:' IN COALESCE(r.comment, '')) <> 1
+              AND POSITION('__COLLECTIVE_PASS_ORDER__:' IN COALESCE(r.comment, '')) <> 1
               AND (
                 EXISTS (
                   SELECT 1 FROM bookings b

@@ -6,6 +6,7 @@ import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from src.ingestion.dates import minsk_today
 from src.ingestion.htmlutil import parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -22,6 +23,7 @@ LEDLIFE_MK_PRICE_BANDS_VAT_2026_09: dict[str, dict[str, int]] = {
 _LED_DATE = re.compile(r"(\d{2})\.(\d{2})\.(\d{2})")
 _LED_TIME = re.compile(r"^(\d{1,2})-(\d{2})$")
 _MASS_LABEL = re.compile(r"МАССОВ(ЫЕ|ОЕ)\s+КАТАН", re.IGNORECASE)
+_OHM_LABEL = re.compile(r"ОТРАБОТКА\s+ХОККЕЙНОГО\s+МАСТЕРСТВА", re.IGNORECASE)
 _JUNOST_DAY_LINE = re.compile(
     r"(?:понедельник|вторник|среда|четверг|пятница|суббота|воскресенье)"
     r"\s*,?\s*(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)",
@@ -82,9 +84,11 @@ def _parse_ledlife_style_table(
     html: str,
     *,
     pivot_year: int | None = None,
+    label_re: re.Pattern[str] = _MASS_LABEL,
+    kind_raw: str = "Массовое катание",
 ) -> list[ExtractedSlot]:
     """Schedule grid shared by ledlife.by and junost.by origin pages."""
-    anchor = pivot_year or date.today().year
+    anchor = pivot_year or minsk_today().year
     slots: list[ExtractedSlot] = []
     current_date: date | None = None
     for table in parse_tables(html):
@@ -110,7 +114,7 @@ def _parse_ledlife_style_table(
                 if current_date is None:
                     continue
                 start_raw, arena, duration_raw, label = _row_tail(cells, offset=0)
-            if not label or not _MASS_LABEL.search(label):
+            if not label or not label_re.search(label):
                 continue
             start = _norm_led_time(start_raw)
             if not start:
@@ -126,7 +130,7 @@ def _parse_ledlife_style_table(
                     local_date=current_date.isoformat(),
                     starts_at_local=start,
                     ends_at_local=_fmt(end_dt.hour, end_dt.minute),
-                    kind_raw="Массовое катание",
+                    kind_raw=kind_raw,
                     session_label=arena or None,
                 )
             )
@@ -424,7 +428,7 @@ def _parse_junost_paragraph_schedule(
     pivot_year: int | None = None,
 ) -> list[ExtractedSlot]:
     """Weekend MK blocks on junost.by news-style pages (no schedule table)."""
-    anchor = pivot_year or date.today().year
+    anchor = pivot_year or minsk_today().year
     focus = html
     title = re.search(r"Сеансы\s+массовых\s+катаний", html, re.I)
     if title:
@@ -494,6 +498,27 @@ def _ledlife_price_band_key(slot: ExtractedSlot) -> str:
     return "day_45"
 
 
+def _ledlife_ohm_price_bands(job: ParserJob) -> dict[str, int]:
+    raw = job.config.get("ohm_price_bands")
+    if isinstance(raw, dict) and raw:
+        out: dict[str, int] = {}
+        for key in ("day_60", "evening_60"):
+            value = raw.get(key)
+            if value is not None:
+                out[key] = int(value)
+        if out:
+            return out
+    return {"day_60": 1400, "evening_60": 1700}
+
+
+def _ledlife_ohm_price_band_key(slot: ExtractedSlot) -> str:
+    local = date.fromisoformat(slot.local_date)
+    hour = int(slot.starts_at_local.split(":")[0]) if slot.starts_at_local else 0
+    if local.weekday() >= 5 or hour >= 17:
+        return "evening_60"
+    return "day_60"
+
+
 def _ledlife_mk_rental_minor(job: ParserJob, *, price_book: dict[str, dict[str, int]]) -> int | None:
     if not price_book:
         return None
@@ -501,6 +526,23 @@ def _ledlife_mk_rental_minor(job: ParserJob, *, price_book: dict[str, dict[str, 
     if raw is None:
         return None
     return int(raw)
+
+
+def _apply_ledlife_ohm_prices(
+    slots: list[ExtractedSlot],
+    price_book: dict[str, int],
+    job: ParserJob,
+) -> None:
+    age_default = str(
+        job.config.get("ohm_age_note") or "без защитной хоккейной экипировки не допускаются"
+    )
+    for slot in slots:
+        band_key = _ledlife_ohm_price_band_key(slot)
+        adult_minor = price_book.get(band_key) or price_book.get("evening_60")
+        if adult_minor is not None:
+            slot.price_adult = _minor_to_major(adult_minor)
+        if not slot.age_note:
+            slot.age_note = age_default
 
 
 def _apply_ledlife_prices(
@@ -532,15 +574,23 @@ class LedlifeOriginHtmlParser(IceParser):
         blocked = is_by_origin_blocked_snapshot(schedule)
         slots: list[ExtractedSlot] = []
         if not blocked:
-            slots = _parse_ledlife_style_table(schedule)
-            if slots:
+            mk_slots = _parse_ledlife_style_table(schedule)
+            ohm_slots = _parse_ledlife_style_table(
+                schedule,
+                label_re=_OHM_LABEL,
+                kind_raw="hockey_practice",
+            )
+            slots = [*mk_slots, *ohm_slots]
+            if mk_slots:
                 try:
                     prices_html = await _load_ledlife_prices_html(job)
                 except Exception:  # noqa: BLE001 — optional prices page
                     prices_html = ""
                 if prices_html and not is_by_origin_blocked_snapshot(prices_html):
                     book = _ledlife_prices_from_stoimost(prices_html, job)
-                    _apply_ledlife_prices(slots, book, job)
+                    _apply_ledlife_prices(mk_slots, book, job)
+            if ohm_slots:
+                _apply_ledlife_ohm_prices(ohm_slots, _ledlife_ohm_price_bands(job), job)
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,

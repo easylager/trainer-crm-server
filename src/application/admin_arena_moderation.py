@@ -13,6 +13,12 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.arena_profile import (
+    ARENA_PROFILE_STATUS_DRAFT,
+    ARENA_PROFILE_STATUS_PUBLISHED,
+    load_arena_publish_blockers,
+)
+
 
 async def list_arenas_pending_moderation(session: AsyncSession) -> list[dict[str, Any]]:
     """Trainer-created arenas awaiting admin confirmation (AC-004), oldest first."""
@@ -96,7 +102,14 @@ async def approve_arena(session: AsyncSession, arena_id: int, admin_id: int) -> 
     silently at creation time, and an arena with no lat/lon would be confirmed yet absent
     from every map/"nearby" surface with no signal why. The admin bot flow requires manual
     coordinate entry (``set_arena_coordinates``) before retrying approve in that case.
+
+    TASK-177: also refuses an arena that fails ``arena_publish_blockers`` (a «Тестовая
+    арена» must never be confirmed into the catalog). On success, a profile that
+    ``ensure_arena_profile`` parked as ``draft`` (no coordinates at creation) becomes
+    ``published`` — approve is the moment it is meant to go public. ``archived`` stays.
     """
+    if await load_arena_publish_blockers(session, arena_id):
+        return False
     r = await session.execute(
         text(
             """
@@ -107,6 +120,14 @@ async def approve_arena(session: AsyncSession, arena_id: int, admin_id: int) -> 
         ),
         {"id": arena_id, "now": datetime.now(timezone.utc), "admin_id": admin_id},
     )
+    if r.rowcount > 0:
+        await session.execute(
+            text(
+                "UPDATE arena_profiles SET status = :pub, updated_at = now() "
+                "WHERE arena_id = :id AND status = :draft"
+            ),
+            {"id": arena_id, "pub": ARENA_PROFILE_STATUS_PUBLISHED, "draft": ARENA_PROFILE_STATUS_DRAFT},
+        )
     await session.commit()
     return r.rowcount > 0
 

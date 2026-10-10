@@ -1,6 +1,7 @@
 # Parser spec: Конькобежный стадион
 
 - arena_id: 115
+- arena_slug: konkobezhnaya-arena
 - city: Минск
 - parser_key: minskarena_speed_oval_v1
 - cadence: daily

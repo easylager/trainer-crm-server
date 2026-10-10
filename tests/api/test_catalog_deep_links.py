@@ -40,13 +40,13 @@ async def test_catalog_payload_keeps_city_and_filter(app_use_test_db, db_session
     shops = await build_catalog_deep_link_reply(db_session, f"catalog_{city_id}_shop", webapp_base_url=BASE)
     coaches = await build_catalog_deep_link_reply(db_session, f"catalog_{city_id}_coach", webapp_base_url=BASE)
     assert shops["url"] == f"{BASE}/webapp/ice?city_id={city_id}&venue=shop"
-    assert shops["button_text"] == "Магазины и заточка"
+    assert shops["button_text"] == "Магазины"
     assert coaches["url"] == f"{BASE}/webapp/ice?city_id={city_id}&intent=coach"
     weekend = await build_catalog_deep_link_reply(
         db_session, f"catalog_{city_id}_skate_weekend", webapp_base_url=BASE
     )
     assert weekend["url"] == f"{BASE}/webapp/ice?city_id={city_id}&intent=skate&when=weekend"
-    assert weekend["button_text"] == "Где покататься"
+    assert weekend["button_text"] == "Покататься"
     unknown_city = await build_catalog_deep_link_reply(db_session, "catalog_999999999", webapp_base_url=BASE)
     assert unknown_city["url"] == f"{BASE}/webapp/ice"
 

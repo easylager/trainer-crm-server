@@ -244,6 +244,11 @@ class Arena(Base):
     is_confirmed: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     confirmed_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    # TASK-177: a retired duplicate points at its canonical arena; the public /p/ URLs of
+    # the duplicate answer 301 to the canonical page instead of 404.
+    merged_into_arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True
+    )
 
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary= lambda: trainer_arenas_table, back_populates="arenas", lazy="raise"
@@ -278,6 +283,10 @@ class ArenaProfile(Base):
             "season_end_month IS NULL OR (season_end_month BETWEEN 1 AND 12)",
             name="ck_arena_profiles_season_end",
         ),
+        CheckConstraint(
+            "schedule_mode IN ('auto', 'phone', 'season_closed')",
+            name="ck_arena_profiles_schedule_mode",
+        ),
     )
 
     arena_id: Mapped[int] = mapped_column(
@@ -297,6 +306,9 @@ class ArenaProfile(Base):
     opening_hours: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
     season_start_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
     season_end_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
+    schedule_mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="auto")
+    reopen_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
+    schedule_mode_note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -370,12 +382,23 @@ class IceSession(Base):
             unique=True,
             postgresql_where=text("recurrence_key IS NOT NULL"),
         ),
+        # TASK-187 (migration 0219): одна строка парсера на (арена, начало, вид).
+        Index(
+            "uq_ice_sessions_parser_slot",
+            "arena_id",
+            "starts_at_utc",
+            "kind",
+            unique=True,
+            postgresql_where=text(
+                "source_id IS NOT NULL AND source_id <> 'admin' AND source_id NOT LIKE 'etalon_%'"
+            ),
+        ),
         CheckConstraint(
-            "kind IN ('public_skate', 'open_ice', 'rental', 'school_group', 'event')",
+            "kind IN ('public_skate', 'open_ice', 'rental', 'school_group', 'event', 'hockey_practice')",
             name="ck_ice_sessions_kind",
         ),
         CheckConstraint(
-            "status IN ('active', 'cancelled', 'superseded')",
+            "status IN ('active', 'cancelled', 'superseded', 'expired')",
             name="ck_ice_sessions_status",
         ),
         CheckConstraint(
@@ -393,6 +416,10 @@ class IceSession(Base):
         CheckConstraint(
             "EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 BETWEEN 30 AND 120",
             name="ck_ice_sessions_duration",
+        ),
+        CheckConstraint(
+            "schedule_basis IN ('live', 'projected', 'photo', 'manual')",
+            name="ck_ice_sessions_schedule_basis",
         ),
     )
 
@@ -422,6 +449,8 @@ class IceSession(Base):
     observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
+    # TASK-179: откуда расписание — live / projected / photo / manual (migration 0218).
+    schedule_basis: Mapped[str] = mapped_column(String(16), nullable=False, server_default="live")
 
 
 class IceCityInterest(Base):
@@ -742,6 +771,41 @@ class ClientTrainerEdge(Base):
     # --- contextual primary scope (future-proof, unused in initial UI) ---
     context_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     context_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+ICE_WATCH_KIND_SESSIONS = "sessions"
+ICE_WATCH_KIND_SCHEDULE_FRESH = "schedule_fresh"
+ICE_WATCH_KINDS = (ICE_WATCH_KIND_SESSIONS, ICE_WATCH_KIND_SCHEDULE_FRESH)
+
+
+class ClientIceWatch(Base):
+    """Client subscription: ice sessions on an arena matching a filter, or schedule refresh."""
+
+    __tablename__ = "client_ice_watches"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "arena_id",
+            "watch_kind",
+            name="uq_client_ice_watch_client_arena_kind",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    telegram_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("client_sessions.telegram_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False, index=True)
+    city_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cities.id", ondelete="SET NULL"), nullable=True)
+    watch_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    filter_json: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ClientMerge(Base):
@@ -1444,6 +1508,10 @@ class TrainerSubscription(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # trial, active, past_due, cancelled
     payment_external_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # NULL = welcome trial granted but N-day countdown not started (waits for first real completed).
+    trial_clock_started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     trial_roi_recap_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

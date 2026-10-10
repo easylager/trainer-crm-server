@@ -37,7 +37,14 @@ def loader():
 def cards(loader):
     paths = loader.discover_dossiers(_CARDS)
     parsed = [loader.parse_dossier(path) for path in paths]
-    return {card.slug: card for card in parsed}
+    return {card.slug: card for card in parsed if card.arena_id is not None}
+
+
+@pytest.fixture(scope="module")
+def slug_only_cards(loader):
+    paths = loader.discover_dossiers(_CARDS)
+    parsed = [loader.parse_dossier(path) for path in paths]
+    return {card.slug: card for card in parsed if card.arena_id is None}
 
 
 def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
@@ -66,6 +73,19 @@ def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
     assert cards["minsk-junost"].publishable_photo_count == 0
     assert cards["minsk-ledlife"].publishable_photo_count == 0
     assert cards["konkobezhnaya-arena"].publishable_photo_count == 3
+
+
+def test_mozyr_global_ice_dossier_parses(slug_only_cards) -> None:
+    card = slug_only_cards["mozyr-global-ice"]
+    assert card.arena_id is None
+    assert card.phone == "+375333339009"
+    assert card.website_url == "https://www.instagram.com/global_ice_/"
+    assert card.season_start_month == 1 and card.season_end_month == 12
+    assert card.social_urls.get("instagram") == "https://www.instagram.com/global_ice_/"
+    assert card.amenities.get("skate_rental") is True
+    assert card.amenities.get("skate_sharpening") is True
+    assert card.publishable_photo_count == 1
+    assert card.enough_facts and card.status == "published"
 
 
 def test_zamok_is_the_fullest_card(cards) -> None:
@@ -120,6 +140,21 @@ def test_unknown_amenities_stay_unset(cards) -> None:
         "accessibility": True,
     }
     assert oval.website_url == "https://minskarena.by/page.html?slug=massovie-katania"
+
+
+def test_opening_hours_strip_dossier_markers(cards, loader) -> None:
+    """TASK-208: loader must not persist unknown / Conflicts refs in opening_hours."""
+    chizh = cards["chizhovka"].opening_hours
+    assert chizh["complex"] == {"open": "07:00", "close": "23:00"}
+    assert "daily" not in chizh
+    assert chizh.get("note") is None
+    vitebsk = cards["vitebsk-ds"].opening_hours
+    assert vitebsk["kassa"] == {"open": "11:00", "close": "21:00"}
+    assert "daily" not in vitebsk
+    assert vitebsk.get("note") == "касса МК без выходных"
+    arena = cards["minskarena"].opening_hours
+    assert arena.get("note") == "Администрация: Пн–Чт 9:00–18:00, Пт 9:00–16:45"
+    assert cards["vitebsk-ds"].district is None
 
 
 def test_photo_decisions_skip_google_social_and_403_not_grant(cards) -> None:
@@ -259,6 +294,13 @@ def test_parse_only_arena_ids(loader) -> None:
     assert loader.parse_only_arena_ids(None) is None
     assert loader.parse_only_arena_ids("2,3,5,6,7") == frozenset({2, 3, 5, 6, 7})
     assert loader.parse_only_arena_ids(" 6 ") == frozenset({6})
+
+
+def test_parse_only_slugs(loader) -> None:
+    assert loader.parse_only_slugs(None) is None
+    assert loader.parse_only_slugs("mozyr-global-ice,zamok") == frozenset(
+        {"mozyr-global-ice", "zamok"}
+    )
 
 
 def test_refuses_production_database_url(loader) -> None:
@@ -479,3 +521,67 @@ async def test_apply_uploads_diamond_local_png(
     assert media[1] and "DiaMond" in media[1]
     assert media[2] and "diamondcity.by" in media[2]
     assert media[3] == "published"
+
+
+@pytest.mark.asyncio
+async def test_only_slugs_loads_mozyr_only(
+    loader, slug_only_cards, db_session, tmp_path: Path, monkeypatch
+) -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session as SyncSession
+
+    from scripts.create_mozyr_global_ice import CITY_NAME, SLUG, apply_mozyr_global_ice
+    from src.shared.config import Settings
+
+    url = Settings().database_url_sync or Settings().database_url
+    if url.startswith("postgresql+asyncpg"):
+        url = url.replace("postgresql+asyncpg", "postgresql+psycopg", 1)
+    with SyncSession(create_engine(url)) as sync_sess:
+        with sync_sess.begin():
+            created = apply_mozyr_global_ice(sync_sess)
+    arena_id = created.arena_id
+
+    def fake_upload(arena_id: int, _body: bytes, _content_type: str) -> dict:
+        token = uuid.uuid4().hex[:8]
+        variants = {
+            "thumb": f"arenas/{arena_id}/{token}_thumb.jpg",
+            "card": f"arenas/{arena_id}/{token}_card.jpg",
+            "hero": f"arenas/{arena_id}/{token}_hero.jpg",
+        }
+        return {"storage_key": variants["hero"], "variants": variants, "width": 32, "height": 24}
+
+    monkeypatch.setattr("src.infrastructure.s3.upload_arena_photo", fake_upload)
+
+    results = await loader.run_load(
+        cards_dir=_CARDS,
+        fixtures_dir=tmp_path,
+        apply=True,
+        seed_sessions=False,
+        report_path=None,
+        allow_local_dev=True,
+        only_slugs=frozenset({SLUG}),
+    )
+    assert len(results) == 1
+    assert results[0].error is None
+    assert results[0].card.slug == SLUG
+
+    row = (
+        await db_session.execute(
+            text(
+                """
+                SELECT a.id, p.phone, p.short_description, p.social_urls, p.status
+                FROM arena_profiles p
+                JOIN arenas a ON a.id = p.arena_id
+                JOIN cities c ON c.id = a.city_id
+                WHERE c.name = :city AND p.slug = :slug
+                """
+            ),
+            {"city": CITY_NAME, "slug": SLUG},
+        )
+    ).fetchone()
+    assert row is not None
+    assert int(row[0]) == arena_id
+    assert row[1] == "+375333339009"
+    assert row[2] and "800" in row[2]
+    assert row[3].get("instagram") == "https://www.instagram.com/global_ice_/"
+    assert row[4] == "published"

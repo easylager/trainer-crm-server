@@ -27,6 +27,7 @@ from src.application.place_page import (
     _services,
     _where,
     absolute_day_label,
+    session_kind_label,
     slot_price,
     slot_price_lines,
     slot_when,
@@ -169,9 +170,11 @@ def card_lines(view: Mapping[str, Any], *, invite: bool) -> dict[str, str]:
         sub_bits.append(district)
     elif _where(card):
         sub_bits.append(_where(card))
+    kind_line = session_kind_label(slot) if slot is not None else ""
     return {
         "kicker": kicker.upper(),
         "title": str(card.get("name") or ""),
+        "kind": kind_line,
         "big": big,
         "day": day,
         "time": time,
@@ -180,7 +183,12 @@ def card_lines(view: Mapping[str, Any], *, invite: bool) -> dict[str, str]:
         "extra": " · ".join(
             line for line in (slot_price_lines(slot) if slot is not None else []) if not line.startswith("Взрослый")
         ),
-        "foot": "Расписание, цены и как добраться — по ссылке",
+        "foot": (
+            # TASK-180: расписание давно не подтверждалось — картинка не обещает лишнего.
+            "Расписание могло измениться — уточните по ссылке"
+            if skating and view.get("schedule_note")
+            else "Расписание, цены и как добраться — по ссылке"
+        ),
     }
 
 
@@ -212,6 +220,12 @@ def _render_og(view: Mapping[str, Any], lines: Mapping[str, str]) -> Image.Image
         draw.text((pad, y), line, font=f_title, fill=_INK)
         y += 84
     y += 18
+    if lines.get("kind"):
+        f_kind = _font("Inter-SemiBold.ttf", 36)
+        for line in _wrap(draw, lines["kind"], f_kind, inner, 2):
+            draw.text((pad, y), line, font=f_kind, fill=_MUTED)
+            y += 48
+        y += 8
     for line in _wrap(draw, lines["big"], f_big, inner, 2):
         draw.text((pad, y), line, font=f_big, fill=_ACCENT)
         y += 76
@@ -281,7 +295,15 @@ def _render_story(
     for line in _wrap(draw, lines["title"], f_title, inner, 3):
         draw.text((x, y), line, font=f_title, fill=_INK)
         y += 92
-    y += 40
+    y += 24
+    if lines.get("kind"):
+        f_kind = _font("Inter-SemiBold.ttf", 44)
+        for line in _wrap(draw, lines["kind"], f_kind, inner, 2):
+            draw.text((x, y), line, font=f_kind, fill=_ACCENT)
+            y += 58
+        y += 16
+    else:
+        y += 16
     if lines["time"]:
         draw.text((x, y), lines["day"], font=f_day, fill=_MUTED)
         y += 70
@@ -372,19 +394,26 @@ def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> by
     from src.application.selection_page import (
         absolute_window_phrase,
         selection_share_description,
+        selection_share_places,
         selection_share_title,
     )
 
     window = view.get("window")
     phrase = absolute_window_phrase(window) if window and view.get("skating") else ""
     kicker = f"Карта льда · {phrase}" if phrase else "Карта льда"
-    names = [str(i.get("name") or "") for i in (view.get("items") or [])[:3]]
+    # TASK-222: подпись — те же три места в том же порядке, что строки «Ссылка»/«Другое».
+    names = [str(item.get("name") or "") for item, _slots in selection_share_places(view)[:3]]
     lines = {
         "kicker": kicker.upper(),
         "title": selection_share_title(view),
         "big": selection_share_description(view),
         "sub": " · ".join(n for n in names if n),
-        "foot": "Расписание, цены и адреса — по ссылке",
+        "foot": (
+            # TASK-180: часть расписания давно не подтверждалась — картинка не обещает лишнего.
+            "Часть расписания могла измениться — детали по ссылке"
+            if view.get("stale_notes")
+            else "Расписание, цены и адреса — по ссылке"
+        ),
     }
     fake_view = {"card": {"venue_type": view.get("venue") or "ice"}}
     if story:

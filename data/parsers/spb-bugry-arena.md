@@ -1,7 +1,8 @@
 # Parser spec: Ледовая арена «Бугры» (СПб)
 
 - arena_id: 111
-- city: Санкт-Петербург
+- arena_slug: ledovaya-arena-bugry
+- city: Санкт-Петербург/ЛО
 - parser_key: bugryarena_html_v1
 - cadence: weekly
 - timezone: Europe/Moscow
@@ -20,7 +21,6 @@
   "timezone": "Europe/Moscow",
   "currency_code": "RUB",
   "kind": "public_skate",
-  "run_year": 2026,
   "default_duration_minutes": 45,
   "rinks": {
     "big": {"label": "Большая арена", "price_adult_minor": 60000, "price_rental_minor": 50000},
