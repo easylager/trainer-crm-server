@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_media import attach_arena_media_payloads
+from src.application.catalog_search import query_wants_ohm, rank_cities, rank_people, rank_places
 from src.application.arena_profile import (
     AMENITY_LABELS_RU,
     ARENA_PROFILE_STATUS_PUBLISHED,
@@ -2252,172 +2253,164 @@ async def list_public_arena_trainers(
     }
 
 
-async def _pg_trgm_enabled(session: AsyncSession) -> bool:
-    result = await session.execute(
-        text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')")
-    )
-    return bool(result.scalar())
+def _search_amenities(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip().startswith("{"):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
-# TASK-146: «где заточить коньки» ищут словом услуги, а не названием мастерской.
-# Корень слова → ключ удобства: ищем по префиксу, чтобы «заточка», «заточить»,
-# «наточить» и «прокат коньков» попадали без морфологии.
-_SERVICE_SEARCH_STEMS: tuple[tuple[str, str], ...] = (
-    ("заточ", "skate_sharpening"),
-    ("наточ", "skate_sharpening"),
-    ("точк", "skate_sharpening"),
-    ("прокат", "skate_rental"),
-    ("аренд", "skate_rental"),
-    ("ремонт", "repair"),
-    ("формовк", "skate_molding"),
-    ("профилир", "blade_profiling"),
-    ("скан", "foot_scan"),
-    ("хокке", "discipline_hockey"),
-    ("фигурн", "discipline_figure"),
-    ("ролик", "discipline_roller"),
-    ("купить", "retail"),
-    ("магазин", "retail"),
-    ("экипир", "retail"),
-)
-
-
-def service_amenity_keys_for_query(query: str) -> list[str]:
-    """Ключи удобств, о которых спрашивает запрос («заточка» → skate_sharpening)."""
-    words = [w for w in (query or "").lower().replace("ё", "е").split() if w]
-    keys: list[str] = []
-    for word in words:
-        for stem, key in _SERVICE_SEARCH_STEMS:
-            if (word.startswith(stem) or stem in word) and key not in keys:
-                keys.append(key)
-    return keys
+def _search_groups(
+    places: list[dict[str, Any]],
+    people: list[dict[str, Any]],
+    cities: list[dict[str, Any]],
+    *,
+    city_id: int | None,
+    city_name: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Places in the open city stay in their own group when other cities also hit."""
+    local = [row for row in places if city_id is not None and row.get("city_id") == city_id]
+    other = [row for row in places if row.get("city_id") != city_id]
+    if local and other:
+        arena_groups = [
+            {"type": "arena", "label": city_name or "Этот город", "items": local[:limit]},
+            {"type": "arena", "label": "Другие города", "items": other[:4]},
+        ]
+    else:
+        arena_groups = [{"type": "arena", "label": "Места", "items": (local or other)[:limit]}]
+    return [
+        *arena_groups,
+        {"type": "trainer", "label": "Тренеры", "items": people[:limit]},
+        {"type": "city", "label": "Города", "items": cities[:limit]},
+    ]
 
 
 async def search_public_ice(
-    session: AsyncSession, q: str, *, limit: int = SEARCH_LIMIT
+    session: AsyncSession,
+    q: str,
+    *,
+    limit: int = SEARCH_LIMIT,
+    city_id: int | None = None,
 ) -> dict[str, Any]:
+    """Name, street, service word, venue word, and a light typo — ranked for one city."""
     query = (q or "").strip()
     if len(query) < 2:
         raise IcePublicQueryError("q must be at least 2 characters")
     cap = max(1, min(int(limit or SEARCH_LIMIT), 20))
-    like = f"%{query}%"
-    use_trgm = await _pg_trgm_enabled(session)
-    arena_sql = f"""
-        SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
-        FROM arenas a
-        LEFT JOIN arena_profiles p ON p.arena_id = a.id
-        JOIN cities c ON c.id = a.city_id
-        WHERE {PUBLIC_ARENA_VISIBLE_SQL}
-          AND (
-            to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
-              @@ plainto_tsquery('simple', :q)
-            OR a.name ILIKE :like
-            OR coalesce(p.district, '') ILIKE :like
-            OR EXISTS (
-                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{{}}'::jsonb)) am
-                WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
-            )
-          )
-        ORDER BY a.name, a.id
-        LIMIT :lim
-    """
-    if use_trgm:
-        arena_sql = f"""
-            SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
+    scoped = int(city_id) if city_id is not None else None
+    arenas = await session.execute(
+        text(
+            f"""
+            SELECT a.id, p.slug, a.name, a.address, a.city_id, p.district, c.name AS city_name,
+                   a.venue_type, p.amenities,
+                   LEFT(coalesce(p.short_description, ''), 400) AS blurb
             FROM arenas a
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
             WHERE {PUBLIC_ARENA_VISIBLE_SQL}
-              AND (
-                to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
-                  @@ plainto_tsquery('simple', :q)
-                OR a.name ILIKE :like
-                OR coalesce(p.district, '') ILIKE :like
-                OR similarity(a.name, :q) > 0.2
-                OR EXISTS (
-                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{{}}'::jsonb)) am
-                WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
-            )
-              )
-            ORDER BY GREATEST(similarity(a.name, :q), 0) DESC, a.name, a.id
-            LIMIT :lim
-        """
-    arenas = await session.execute(
-        text(arena_sql),
-        {
-            "q": query,
-            "like": like,
-            "lim": cap,
-            "svc_keys": service_amenity_keys_for_query(query),
-            "published": ARENA_PROFILE_STATUS_PUBLISHED,
-            "ice_countries": ice_discovery_countries(),
-        },
+            """
+        ),
+        public_scope_params(),
     )
+    place_rows = []
+    for raw in arenas.mappings():
+        place_rows.append(
+            {
+                "id": int(raw["id"]),
+                "slug": raw["slug"],
+                "name": raw["name"],
+                "address": scrub_dossier_leaks_from_public_text(raw["address"]) or "",
+                "city_id": int(raw["city_id"]),
+                "district": sanitize_public_district(raw["district"]) or "",
+                "city_name": raw["city_name"] or "",
+                "venue_type": normalize_venue_type(raw["venue_type"]),
+                "amenities": _search_amenities(raw["amenities"]),
+                "blurb": scrub_dossier_leaks_from_public_text(raw["blurb"]) or "",
+            }
+        )
+    ohm_ids: set[int] = set()
+    if query_wants_ohm(query):
+        ohm = await session.execute(
+            text(
+                f"""
+                SELECT DISTINCT s.arena_id
+                FROM ice_sessions s
+                WHERE {_OHM_SESSION_SQL}
+                """
+            ),
+            {"st": STATUS_ACTIVE, "now": datetime.now(timezone.utc)},
+        )
+        ohm_ids = {int(row[0]) for row in ohm.fetchall()}
     trainers = await session.execute(
         text(
             f"""
-            SELECT t.id, p.first_name, p.last_name, p.city_id
+            SELECT t.id, p.first_name, p.last_name, p.city_id, c.name AS city_name
             FROM trainers t
             JOIN trainer_profiles p ON p.trainer_id = t.id
+            LEFT JOIN cities c ON c.id = p.city_id
             WHERE {CATALOG_LISTED_SQL}
-              AND (
-                to_tsvector('simple', coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, ''))
-                  @@ plainto_tsquery('simple', :q)
-                OR coalesce(p.first_name, '') ILIKE :like
-                OR coalesce(p.last_name, '') ILIKE :like
-              )
-            ORDER BY p.last_name, p.first_name, t.id
-            LIMIT :lim
             """
-        ),
-        {"q": query, "like": like, "lim": cap},
+        )
     )
-    cities = await session.execute(
+    people_rows = [dict(row) for row in trainers.mappings()]
+    city_result = await session.execute(
         text(
             f"""
             SELECT id, name
             FROM cities
             WHERE {public_city_scope_sql("cities")}
-              AND (
-                to_tsvector('simple', coalesce(name, '')) @@ plainto_tsquery('simple', :q)
-                OR name ILIKE :like
-              )
-            ORDER BY name, id
-            LIMIT :lim
             """
         ),
-        {"q": query, "like": like, "lim": cap, "ice_countries": ice_discovery_countries()},
+        public_scope_params(),
     )
-    arena_items = [
+    city_rows = [dict(row) for row in city_result.mappings()]
+    city_name = ""
+    if scoped is not None:
+        for row in city_rows:
+            if int(row["id"]) == scoped:
+                city_name = str(row["name"] or "")
+                break
+    places = [
         {
-            "id": int(r[0]),
-            "slug": r[1],
-            "name": r[2],
-            "city_id": int(r[3]),
-            "district": r[4],
-            "city_name": r[5],
-            "venue_type": normalize_venue_type(r[6]),
-            "venue_chip": venue_type_chip(r[6]),
+            "id": hit["id"],
+            "slug": hit["slug"],
+            "name": hit["name"],
+            "city_id": hit["city_id"],
+            "district": hit["district"],
+            "city_name": hit["city_name"],
+            "venue_type": hit["venue_type"],
+            "venue_chip": venue_type_chip(hit["venue_type"]),
+            "address": hit["address"],
+            "hint": hit["hint"],
         }
-        for r in arenas.fetchall()
+        for hit in rank_places(query, place_rows, city_id=scoped, ohm_ids=ohm_ids)
     ]
-    trainer_items = [
+    people = [
         {
-            "id": int(r[0]),
-            "first_name": r[1],
-            "last_name": r[2],
-            "name": " ".join(x for x in (r[1], r[2]) if x).strip(),
-            "city_id": int(r[3]) if r[3] is not None else None,
+            "id": hit["id"],
+            "first_name": hit["first_name"],
+            "last_name": hit["last_name"],
+            "name": hit["name"],
+            "city_id": hit["city_id"],
+            "city_name": hit["city_name"],
+            "hint": hit["hint"],
         }
-        for r in trainers.fetchall()
+        for hit in rank_people(query, people_rows, city_id=scoped)
     ]
-    city_items = [{"id": int(r[0]), "name": r[1]} for r in cities.fetchall()]
+    found_cities = [
+        {"id": hit["id"], "name": hit["name"]} for hit in rank_cities(query, city_rows)
+    ]
     return {
         "q": query,
-        "groups": [
-            {"type": "arena", "items": arena_items},
-            {"type": "trainer", "items": trainer_items},
-            {"type": "city", "items": city_items},
-        ],
+        "groups": _search_groups(
+            places, people, found_cities, city_id=scoped, city_name=city_name, limit=cap
+        ),
     }
 
 

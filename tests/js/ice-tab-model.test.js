@@ -604,6 +604,24 @@ describe('groupSearchResults (AC-004)', () => {
     assert.equal(grouped[2].label, 'Города');
     assert.equal(grouped[1].items[0].last_name, 'Иванова');
   });
+
+  it('uses the server group label when the open city is split out', () => {
+    const { groupSearchResults } = loadModel();
+    const grouped = groupSearchResults({
+      groups: [
+        { type: 'arena', label: 'Минск', items: [{ id: 1, name: 'Чижовка' }] },
+        { type: 'arena', label: 'Другие города', items: [{ id: 2, name: 'Неман' }] },
+      ],
+    });
+    assert.deepEqual(grouped.map((g) => g.label), ['Минск', 'Другие города']);
+  });
+
+  it('asks search for the open city and highlights the typed stem', () => {
+    const { buildSearchUrl, highlightSearch } = loadModel();
+    assert.ok(buildSearchUrl('заточка', 12, 2).includes('city_id=2'));
+    assert.equal(highlightSearch('Чижовка-арена', 'чижовки'), '<mark>Чижовк</mark>а-арена');
+    assert.equal(highlightSearch('A & B', 'нет'), 'A &amp; B');
+  });
 });
 
 describe('pickFallbackCity (EDGE-001)', () => {

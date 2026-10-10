@@ -1410,6 +1410,13 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   margin-top: 2px;
 }
 
+.ice-hit mark {
+  background: color-mix(in srgb, var(--glide-accent) 32%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
 .ice-picker {
   position: fixed;
   inset: 0;

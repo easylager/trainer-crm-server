@@ -274,13 +274,14 @@ async def post_ice_interest(
 async def get_public_search(
     response: Response,
     q: str = Query(..., min_length=1),
-    limit: int = Query(8, ge=1, le=20),
+    limit: int = Query(12, ge=1, le=20),
+    city_id: int | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """One search, three result groups: arena, trainer, city (tsvector + optional pg_trgm)."""
+    """Places, trainers, and cities. ``city_id`` lifts the open city above the rest."""
     response.headers["Cache-Control"] = "no-store"
     try:
-        return await search_public_ice(session, q, limit=limit)
+        return await search_public_ice(session, q, limit=limit, city_id=city_id)
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
 

@@ -939,10 +939,70 @@
     };
   }
 
-  function buildSearchUrl(q, limit) {
+  function buildSearchUrl(q, limit, cityId) {
     var params = ['q=' + encodeURIComponent(String(q || '').trim())];
     if (limit) params.push('limit=' + encodeURIComponent(String(limit)));
+    if (cityId != null && cityId !== '') params.push('city_id=' + encodeURIComponent(String(cityId)));
     return '/api/public/search?' + params.join('&');
+  }
+
+  function foldSearch(value) {
+    return String(value || '').toLowerCase().replace(/ё/g, 'е');
+  }
+
+  function escapeSearchHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Bold the typed piece inside a hit. Matching is on the folded string, so
+   * «чижовки» highlights «Чижов» inside «Чижовка».
+   */
+  function highlightSearch(text, query) {
+    var raw = String(text || '');
+    if (!raw) return '';
+    var words = foldSearch(query).split(/[^0-9a-zа-я]+/).filter(function (w) { return w.length >= 2; });
+    if (!words.length) return escapeSearchHtml(raw);
+    var folded = foldSearch(raw);
+    var ranges = [];
+    words.forEach(function (word) {
+      var needles = [word];
+      if (word.length >= 5) needles.push(word.slice(0, word.length - 1));
+      if (word.length >= 6) needles.push(word.slice(0, word.length - 2));
+      var placed = false;
+      needles.forEach(function (needle) {
+        if (placed || needle.length < 4 && needle !== word) return;
+        var from = 0;
+        while (from < folded.length) {
+          var at = folded.indexOf(needle, from);
+          if (at < 0) break;
+          ranges.push([at, at + needle.length]);
+          from = at + needle.length;
+          placed = true;
+        }
+      });
+    });
+    if (!ranges.length) return escapeSearchHtml(raw);
+    ranges.sort(function (a, b) { return a[0] - b[0] || b[1] - a[1]; });
+    var merged = [];
+    ranges.forEach(function (range) {
+      var last = merged[merged.length - 1];
+      if (!last || range[0] > last[1]) merged.push(range.slice());
+      else if (range[1] > last[1]) last[1] = range[1];
+    });
+    var html = '';
+    var cursor = 0;
+    merged.forEach(function (range) {
+      html += escapeSearchHtml(raw.slice(cursor, range[0]));
+      html += '<mark>' + escapeSearchHtml(raw.slice(range[0], range[1])) + '</mark>';
+      cursor = range[1];
+    });
+    html += escapeSearchHtml(raw.slice(cursor));
+    return html;
   }
 
   function buildTrainersUrl(opts) {
@@ -1871,7 +1931,7 @@
     var q = String(query || '').trim();
     return {
       title: q ? 'По запросу «' + q + '» ничего нет' : 'Ничего не найдено',
-      body: 'Поиск ищет по каткам, тренерам и городам. Можно открыть весь лёд города списком.',
+      body: 'Можно искать название, улицу или услугу — заточка, прокат, ОХМ. Или открыть весь лёд города.',
       action: { label: 'Показать весь лёд города', kind: 'clear-search' },
     };
   }
@@ -1991,7 +2051,7 @@
     return groups.map(function (g) {
       return {
         type: g.type,
-        label: SEARCH_LABELS[g.type] || g.type,
+        label: g.label || SEARCH_LABELS[g.type] || g.type,
         items: g.items || [],
       };
     });
@@ -2202,6 +2262,7 @@
     mapShowsArenas: mapShowsArenas,
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
+    highlightSearch: highlightSearch,
     buildTrainersUrl: buildTrainersUrl,
     buildServicesUrl: buildServicesUrl,
     buildIceCitiesUrl: buildIceCitiesUrl,

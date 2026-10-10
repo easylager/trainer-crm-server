@@ -2559,7 +2559,7 @@
     searchGen += 1;
     var gen = searchGen;
     lastSearchQuery = query;
-    fetchJson(M.buildSearchUrl(query, 8))
+    fetchJson(M.buildSearchUrl(query, 12, state.cityId))
       .then(function (data) {
         if (gen !== searchGen) return;
         var grouped = M.groupSearchResults(data || { groups: [] });
@@ -2581,14 +2581,21 @@
               href = M.arenaHref(it);
               // Тип места, кроме льда: в выдаче по «заточке» мастерская не должна выглядеть катком.
               var chip = it.venue_type && it.venue_type !== 'ice' ? it.venue_chip : '';
-              sub = [chip, it.district, it.city_name, it.address].filter(Boolean).join(' · ');
+              var hint = it.hint || it.address || it.district || '';
+              var city = it.city_name || '';
+              sub = [chip && hint.indexOf(chip) !== 0 ? chip : '', hint, city && hint.indexOf(city) < 0 ? city : '']
+                .filter(Boolean)
+                .join(' · ');
             } else if (g.type === 'trainer') {
               href = M.trainerHref(it);
               title = it.name || [it.first_name, it.last_name].filter(Boolean).join(' ');
+              sub = it.hint || it.city_name || '';
             } else if (g.type === 'city') {
               href = 'city:' + it.id;
               title = it.name;
             }
+            var titleHtml = M.highlightSearch ? M.highlightSearch(title, query) : esc(title);
+            var subHtml = M.highlightSearch ? M.highlightSearch(sub, query) : esc(sub);
             html +=
               '<button type="button" class="ice-hit" data-href="' +
               esc(href) +
@@ -2597,9 +2604,9 @@
               '" data-city-name="' +
               esc(it.name || '') +
               '"><b>' +
-              esc(title) +
+              titleHtml +
               '</b><span>' +
-              esc(sub) +
+              subHtml +
               '</span></button>';
           });
         });
