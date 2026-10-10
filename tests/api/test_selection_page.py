@@ -170,6 +170,11 @@ async def test_selection_preview_and_telegram_keep_the_window(
         assert stale not in og_title
         assert stale not in share.json()["share_body"].lower()
     assert _og(page.text, "og:image").startswith("http")
+    tw_title = re.search(r'name="twitter:title" content="([^"]*)"', page.text)
+    tw_image = re.search(r'name="twitter:image" content="([^"]*)"', page.text)
+    assert tw_title and tw_title.group(1) == _og(page.text, "og:title")
+    assert tw_image and tw_image.group(1) == _og(page.text, "og:image")
+    assert "__TWITTER_" not in page.text and "__OG_IMAGE_" not in page.text
     assert f"startapp=catalog_{city_id}_skate_weekend" in page.text
     assert "/api/public/catalog/open-telegram" in page.text
     assert "В выходные" in page.text, "живая страница говорит ту же подпись, что и меню Mini App"

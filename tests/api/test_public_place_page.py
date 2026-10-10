@@ -78,6 +78,11 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert place["name"] in _meta(html, "og:title")
     assert "расписание массового катания" in _meta(html, "og:title")
     assert _meta(html, "og:image").endswith(place["path"] + "/og.png")
+    # Telegram предпочитает twitter:* и показывает незаполненный плейсхолдер вместо og:title.
+    assert _meta(html, "twitter:title") == _meta(html, "og:title")
+    assert _meta(html, "twitter:description") == _meta(html, "og:description")
+    assert _meta(html, "twitter:image") == _meta(html, "og:image")
+    assert "__TWITTER_" not in html and "__OG_IMAGE_ALT__" not in html
     assert _meta(html, "robots") == "index, follow"
     assert "19:30" in html and "8.50 BYN" in html
     assert "сегодня" not in _meta(html, "og:description").lower()

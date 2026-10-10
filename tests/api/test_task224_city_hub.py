@@ -182,6 +182,14 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert by_id.status_code == 301 and by_id.headers["location"] == f"/c/{slug}"
     assert f'<link rel="canonical" href="http://test/c/{slug}"' in html or f"/c/{slug}" in html
     assert 'content="index, follow"' in html
+    tw_title = re.search(r'name="twitter:title" content="([^"]*)"', html)
+    og_title = re.search(r'property="og:title" content="([^"]*)"', html)
+    tw_image = re.search(r'name="twitter:image" content="([^"]*)"', html)
+    og_image = re.search(r'property="og:image" content="([^"]*)"', html)
+    assert tw_title and og_title and tw_title.group(1) == og_title.group(1)
+    assert tw_image and og_image and tw_image.group(1) == og_image.group(1)
+    assert tw_image.group(1).startswith("http")
+    assert "__TWITTER_" not in html and "__OG_IMAGE_" not in html
 
 
 @pytest.mark.asyncio
