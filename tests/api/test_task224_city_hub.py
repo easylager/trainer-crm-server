@@ -21,7 +21,8 @@ from src.application.catalog_home_page import (
     map_point_inside_country,
     render_map_svg,
 )
-from src.application.city_hub_page import hot_window_key, open_state
+from src.application.city_hub_page import _skate_route, city_hub_document_title, hot_window_key, open_state
+from src.application.selection_page import _hero_kicker
 from src.application.ice_city_day import city_slug, invalidate_public_city_cache
 from src.application.ice_time_windows import resolve_window
 from src.application.ice_session_use_cases import create_ice_session
@@ -291,3 +292,39 @@ def test_open_state_and_hot_window() -> None:
     assert hot_window_key({"today": 0, "tomorrow": 0, "weekend": 0}, now=minsk_noon) is None
     friday_evening = datetime(2026, 10, 9, 17, 0, tzinfo=timezone.utc)  # пт 20:00 по Минску
     assert hot_window_key({"today": 1, "tomorrow": 5, "weekend": 7}, now=friday_evening) == "weekend"
+
+
+def test_ice_list_kicker_names_rinks_only() -> None:
+    assert _hero_kicker({"venue": "ice"}) == "катки"
+    assert _hero_kicker({"kind": "ohm", "venue": "ice"}) == "открытая тренировка, ОХМ"
+
+
+def test_city_hub_title_names_only_sections_on_the_page() -> None:
+    assert (
+        city_hub_document_title(
+            {"city": {"name": "Гомель"}, "rink_count": 2, "service_count": 2, "ohm_counts": {"all": 0}}
+        )
+        == "Гомель · где покататься, заточка | Glide"
+    )
+    assert (
+        city_hub_document_title(
+            {"city": {"name": "Минск"}, "rink_count": 12, "service_count": 14, "ohm_counts": {"all": 19}}
+        )
+        == "Минск · где покататься, заточка, хоккей | Glide"
+    )
+
+
+def test_skate_route_without_sessions_says_so() -> None:
+    html = _skate_route(
+        {
+            "slug": "gomel",
+            "skate_counts": {"today": 0, "tomorrow": 0, "weekend": 0, "all": 0},
+            "rink_count": 2,
+            "upcoming": [],
+            "today": date(2026, 10, 11),
+            "hot_skate": None,
+        }
+    )
+    assert "ближайших сеансов нет" in html
+    assert "Сегодня" not in html
+    assert 'class="quick"' not in html
