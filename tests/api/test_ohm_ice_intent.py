@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.api.app import app
 from src.application.ice_session_use_cases import create_ice_session
+from src.shared.notification_hours import NOTIFICATION_TZ
 from tests.api.test_public_arenas import _insert_arena, _insert_city
+
+
+def _minsk_today() -> date:
+    """Календарь каталога — Минск, не дата UTC-раннера. Иначе с 21:00 до полуночи UTC «завтра» теста — это уже «сегодня»."""
+    return datetime.now(timezone.utc).astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
 
 
 def _client() -> AsyncClient:
@@ -98,8 +105,8 @@ async def test_ohm_when_puts_that_day_first(app_use_test_db, db_session) -> None
     city_id = await _insert_city(db_session, name=name)
     later = await _insert_arena(db_session, city_id, name=f"Later {uuid.uuid4().hex[:4]}")
     tomorrow_rink = await _insert_arena(db_session, city_id, name=f"Tomorrow {uuid.uuid4().hex[:4]}")
-    tomorrow = date.today() + timedelta(days=1)
-    later_day = date.today() + timedelta(days=3)
+    tomorrow = _minsk_today() + timedelta(days=1)
+    later_day = _minsk_today() + timedelta(days=3)
     await _ohm(db_session, later, day=later_day, hhmm="13:00")
     await _ohm(db_session, tomorrow_rink, day=tomorrow, hhmm="10:00")
     await db_session.commit()
