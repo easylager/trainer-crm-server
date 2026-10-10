@@ -22,6 +22,9 @@
        фильтра, иначе выбранный чип исчез бы из собственного списка. */
     venueTypes: [],
     venueFacets: [],
+    /* '' или 'winter'. Не тип площадки: запрос season=winter. */
+    season: '',
+    seasonFacet: null,
     shopSourceItems: [],
     /* Магазины: страница 2+ не догрузилась — показываем загруженное и «Догрузить». */
     shopRestFailed: false,
@@ -264,6 +267,7 @@
         placeService: state.placeService,
         when: state.when,
         whenDay: state.whenDay,
+        season: state.season,
         scrollY: extra.scrollY != null ? Number(extra.scrollY) || 0 : readScrollY(),
         scrollAnchor: lastScrollAnchor,
         view: state.view,
@@ -734,7 +738,9 @@
     }
 
     var tabs = $('icePlaceTabs');
-    var tabItems = scope === 'places' && !inService ? M.placeTabsView(state.venueFacets, state.venueTypes) : [];
+    var tabItems = scope === 'places' && !inService
+      ? M.placeTabsView(state.venueFacets, state.venueTypes, state.seasonFacet)
+      : [];
     if (tabs) {
       if (tabItems.length) {
         tabs.hidden = false;
@@ -768,7 +774,10 @@
     var toolsRow = $('iceToolsRow');
     var placeMenu = $('icePlaceMenu');
     var whenMenu = $('iceWhenMenu');
-    var needPlaceTool = scope === 'places' && M.placeMenuNeeded(state.venueFacets);
+    /* На «Заточке» зимний фасет не открывает меню мест: раздел остаётся как был. */
+    var seasonForPlaces = inService ? null : state.seasonFacet;
+    var winterOn = state.season === 'winter' && !inService;
+    var needPlaceTool = scope === 'places' && M.placeMenuNeeded(state.venueFacets, seasonForPlaces);
     var needWhen = false;
 
     if (toolsHost && toolsRow) {
@@ -784,18 +793,24 @@
       toolHtml +=
         '<button type="button" class="ice-chip ice-tool" data-ui-picker="place" aria-expanded="' +
         (placeOpen ? 'true' : 'false') +
-        '"><span>' +
-        esc(M.placeMenuLabel(state.venueFacets, state.venueTypes)) +
+        '"' +
+        (winterOn ? ' aria-pressed="true"' : '') +
+        '><span>' +
+        esc(M.placeMenuLabel(state.venueFacets, state.venueTypes, winterOn)) +
         '</span></button>';
       if (placeMenu) {
-        var menuItems = M.placeMenuView(state.venueFacets, state.venueTypes);
+        var menuItems = M.placeMenuView(state.venueFacets, state.venueTypes, seasonForPlaces, winterOn);
         placeMenu.hidden = !placeOpen;
         placeMenu.innerHTML = menuItems
           .map(function (c) {
+            /* «Зимой» — data-season, не data-place-type: иначе клик запишет winter в venue_type. */
+            var filterAttr = c.season
+              ? ' data-season="' + esc(c.season) + '"'
+              : ' data-place-type="' + esc(c.key) + '"';
             return (
-              '<button type="button" data-place-type="' +
-              esc(c.key) +
-              '" aria-pressed="' +
+              '<button type="button"' +
+              filterAttr +
+              ' aria-pressed="' +
               (c.active ? 'true' : 'false') +
               '">' +
               esc(c.label) +
@@ -1011,6 +1026,7 @@
                поэтому фильтр надо прокидывать и сюда. Без этого чип «Зал» менял
                список, а на карте по-прежнему висели все катки города. */
             venueTypes: state.venueTypes,
+            season: state.season,
             limit: extra.limit || 50,
             /* Окно времени — и на карту: иначе пин «19:30» под чипом «Завтра» — сегодняшний. */
             when: whenQueryForApi().when,
@@ -1253,6 +1269,66 @@
     var coachOn = state.intent === 'coach';
     if (skate) skate.hidden = coachOn;
     if (coach) coach.hidden = !coachOn;
+    renderSeasonFooter();
+  }
+
+  function commitPlaceFilter(venueKey) {
+    state.season = '';
+    state.venueTypes = venueKey ? [venueKey] : [];
+    closeUiPicker();
+    if (mapCtl && mapViewActive()) mapCtl.refresh();
+    renderCatalogHeader();
+    persist();
+    loadArenas();
+  }
+
+  function commitWinterFilter() {
+    state.season = 'winter';
+    state.venueTypes = [];
+    state.placeService = '';
+    closeUiPicker();
+    if (mapCtl && mapViewActive()) mapCtl.refresh();
+    renderCatalogHeader();
+    persist();
+    loadArenas();
+  }
+
+  /** Текст под лентой переключает фильтр на «Зимой» и не вставляет карточки. */
+  function ensureSeasonFooter() {
+    var host = $('iceListSec');
+    if (!host) return null;
+    var btn = $('iceSeasonFoot');
+    if (btn) return btn;
+    if (!document || typeof document.createElement !== 'function') return null;
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'iceSeasonFoot';
+    btn.className = 'ice-season-foot';
+    btn.hidden = true;
+    btn.addEventListener('click', function () {
+      commitWinterFilter();
+    });
+    var list = $('iceList');
+    if (list && list.parentNode === host && typeof host.insertBefore === 'function') {
+      host.insertBefore(btn, list.nextSibling);
+    } else if (typeof host.appendChild === 'function') {
+      host.appendChild(btn);
+    }
+    return btn;
+  }
+
+  function renderSeasonFooter() {
+    var btn = ensureSeasonFooter();
+    if (!btn) return;
+    var places = M.catalogScope(state.intent, state.venueTypes) === 'places' && state.placeService !== 'service';
+    var label = places ? M.seasonListFooter(state.seasonFacet, state.season === 'winter') : '';
+    btn.textContent = label;
+    btn.hidden = !label;
+    var host = $('iceListSec');
+    var list = $('iceList');
+    if (label && host && list && list.parentNode === host && typeof host.insertBefore === 'function') {
+      host.insertBefore(btn, list.nextSibling);
+    }
   }
 
   function renderList() {
@@ -1271,6 +1347,7 @@
       });
     }
     setShareButton();
+    renderSeasonFooter();
     if (!list) return;
     var paint = M.listPaintMode({
       intent: state.intent,
@@ -1626,6 +1703,7 @@
     }
     state.cursor = data && data.next_cursor;
     state.venueFacets = (data && data.venue_type_facets) || [];
+    state.seasonFacet = (data && data.season_facet) || null;
     if (data && data.service_count != null) state.serviceCount = Number(data.service_count) || 0;
     state.window = (data && data.window) || null;
     renderCatalogHeader();
@@ -1878,6 +1956,7 @@
       cityId: state.cityId,
       intent: state.intent,
       venueTypes: state.venueTypes,
+      season: state.season,
       when: timeQ.when,
       whenDay: timeQ.whenDay,
       // Знаем, где человек, — ближние места выше (сервер считает distance_km).
@@ -1887,7 +1966,9 @@
        весь набор города, иначе подпись и пустое состояние врут про хвост за 50. */
     var scopeNow = M.catalogScope(state.intent, state.venueTypes);
     var shopScope = scopeNow === 'shop';
-    if (scopeNow === 'places' && state.placeService === 'service') query.svc = 'service';
+    if (scopeNow === 'places' && state.placeService === 'service' && state.season !== 'winter') {
+      query.svc = 'service';
+    }
     state.listQuery = query;
     var url = M.buildListUrl(
       Object.assign({}, query, { limit: shopScope ? M.MAP_PAGE_LIMIT : M.LIST_PAGE_LIMIT })
@@ -1904,6 +1985,11 @@
             loadTrainers();
           }
           return;
+        }
+        if (state.season === 'winter' && M.seasonFacetCount(data && data.season_facet) <= 0) {
+          state.season = '';
+          state.seasonFacet = (data && data.season_facet) || null;
+          return loadArenas();
         }
         state.loading = false;
         applyArenaPayload(data);
@@ -2290,6 +2376,8 @@
       state.items = [];
       state.total = 0;
       state.venueFacets = [];
+      state.season = '';
+      state.seasonFacet = null;
       state.shopUiPicker = false;
       closeShopMapFiltersPanel();
     } else {
@@ -2787,6 +2875,7 @@
         state.autoCoach = false;
         state.venueTypes = patch.venueTypes.slice();
         state.placeService = patch.placeService || '';
+        state.season = '';
         closeUiPicker();
         if (mode === 'coach') state.view = 'list';
         renderList();
@@ -2864,6 +2953,7 @@
         var btn = ev.target.closest('[data-place-service]');
         if (!btn) return;
         state.placeService = state.placeService === 'service' ? '' : 'service';
+        if (state.placeService === 'service') state.season = '';
         closeUiPicker();
         renderCatalogHeader();
         persist();
@@ -2876,12 +2966,7 @@
       placeTabs.addEventListener('click', function (ev) {
         var tab = ev.target.closest('[data-place-type]');
         if (!tab) return;
-        var key = tab.getAttribute('data-place-type') || '';
-        state.venueTypes = key ? [key] : [];
-        closeUiPicker();
-        if (mapCtl && mapViewActive()) mapCtl.refresh();
-        renderCatalogHeader();
-        loadArenas();
+        commitPlaceFilter(tab.getAttribute('data-place-type') || '');
       });
     }
 
@@ -2926,14 +3011,14 @@
           renderCatalogHeader();
           return;
         }
+        var seasonBtn = ev.target.closest('[data-season]');
+        if (seasonBtn && seasonBtn.closest('#icePlaceMenu')) {
+          commitWinterFilter();
+          return;
+        }
         var placeBtn = ev.target.closest('[data-place-type]');
         if (placeBtn && placeBtn.closest('#icePlaceMenu')) {
-          var pkey = placeBtn.getAttribute('data-place-type') || '';
-          state.venueTypes = pkey ? [pkey] : [];
-          closeUiPicker();
-          if (mapCtl && mapViewActive()) mapCtl.refresh();
-          renderCatalogHeader();
-          loadArenas();
+          commitPlaceFilter(placeBtn.getAttribute('data-place-type') || '');
           return;
         }
         var whenToggle = ev.target.closest('[data-when-toggle]');
@@ -3155,6 +3240,16 @@
       if (urlVenue) {
         state.intent = 'skate';
         state.venueTypes = [urlVenue];
+        state.season = '';
+      } else if (
+        saved &&
+        saved.season === 'winter' &&
+        M.coerceIntent(state.intent) === M.INTENTS.skate &&
+        !urlServiceBoot
+      ) {
+        state.season = 'winter';
+        state.venueTypes = [];
+        state.placeService = '';
       } else if (
         saved &&
         saved.venueTypes &&
@@ -3167,6 +3262,7 @@
         state.intent = urlServiceBoot.intent;
         state.venueTypes = urlServiceBoot.venueTypes.slice();
         state.placeService = urlServiceBoot.placeService;
+        state.season = '';
       }
       /* TASK-149: ?when=<окно> из ссылки (хаб «Сегодня вечером»). Читаем ПОСЛЕ intent и
          venue: именно они решают, видны ли чипы окна. У «Тренеров» и у не-ледовых типов

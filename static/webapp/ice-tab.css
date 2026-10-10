@@ -386,6 +386,25 @@ body.ar-pilot--ice .client-app-header {
   border-top-color: currentColor;
 }
 
+.ice-season-foot {
+  margin-top: 14px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--glide-line);
+  padding: 14px 4px 0;
+  cursor: pointer;
+}
+
+.ice-season-foot[hidden] {
+  display: none;
+}
+
 .ice-menu {
   display: none;
   flex-direction: column;

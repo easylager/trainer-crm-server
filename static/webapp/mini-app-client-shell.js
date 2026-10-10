@@ -522,7 +522,9 @@
       return;
     }
     rememberNavDirection(path);
-    var url = withInit(webappBasePath() + path);
+    /* /p/… — публичная страница места, не файл внутри /static/webapp/. */
+    var raw = String(path || '');
+    var url = raw.charAt(0) === '/' ? withInit(raw) : withInit(webappBasePath() + raw);
     // Full page loads in Telegram WebView: View Transitions delay navigation until snapshot capture.
     global.location.href = url;
   }

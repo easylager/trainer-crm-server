@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ru" class="trainer-theme-dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Сезонный каток — черновик (2026-10-10)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../static/webapp/theme.css">
+  <link rel="stylesheet" href="../../static/webapp/mini-app-client-theme.css">
+  <link rel="stylesheet" href="../../static/webapp/mini-app-components.css">
+  <link rel="stylesheet" href="../../static/webapp/ice-tab.css">
+  <style>
+    body.proto-doc {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Golos Text", var(--app-font-sans, system-ui, sans-serif);
+      background: #050607;
+      color: #eceae4;
+    }
+    .proto-layout {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 24px 16px 64px;
+      display: grid;
+      grid-template-columns: minmax(240px, 340px) 390px;
+      gap: 36px;
+      align-items: start;
+      justify-content: center;
+    }
+    @media (max-width: 820px) {
+      .proto-layout { grid-template-columns: 1fr; justify-items: center; }
+    }
+    .proto-aside { max-width: 340px; font-size: 14px; line-height: 1.5; color: #9a968c; }
+    .proto-kicker {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #57d0d2;
+    }
+    .proto-aside h1 {
+      margin: 8px 0 0;
+      font-size: 22px;
+      letter-spacing: -.02em;
+      color: #eceae4;
+      font-weight: 650;
+    }
+    .proto-aside p { margin: 10px 0 0; }
+    .proto-aside b { color: #eceae4; font-weight: 650; }
+    .proto-switch {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 16px;
+    }
+    .proto-switch button {
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      color: #c8c4ba;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 999px;
+      padding: 7px 12px;
+      cursor: pointer;
+    }
+    .proto-switch button[aria-pressed="true"] {
+      background: #45b9bb;
+      border-color: #45b9bb;
+      color: #062022;
+    }
+    .proto-phone {
+      width: 390px;
+      max-width: calc(100vw - 24px);
+      height: 780px;
+      border-radius: 36px;
+      overflow: auto;
+      box-shadow: 0 0 0 1px #262a2e, 0 32px 64px -24px rgba(0,0,0,.75);
+      background: var(--tg-theme-bg-color, var(--glide-paper));
+      color: var(--tg-theme-text-color, var(--glide-ink));
+    }
+    .proto-phone .ice-tab { max-width: none; margin: 0; padding: 0; }
+    .proto-screen { padding: 0; }
+    .proto-phone [data-screen].active { display: block !important; }
+    .proto-phone [data-screen][hidden] { display: none !important; }
+
+    .hdr-folders {
+      position: relative;
+      display: flex;
+      gap: 18px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 2px 2px 0;
+    }
+    .hdr-folders::-webkit-scrollbar { display: none; }
+    .hdr-folder {
+      position: relative;
+      flex: 0 0 auto;
+      border: 0;
+      background: none;
+      color: var(--glide-hint);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      padding: 8px 0 12px;
+      cursor: default;
+      pointer-events: none;
+    }
+    .hdr-folder.is-on {
+      color: var(--glide-ink-teal, #57d0d2);
+      font-weight: 650;
+    }
+    .hdr-folder small {
+      font-weight: 500;
+      opacity: .72;
+      margin-left: 4px;
+      font-size: 12px;
+    }
+    .hdr-underline {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 2px;
+      width: 72px;
+      border-radius: 2px;
+      background: var(--glide-ink-teal, #57d0d2);
+      transition: transform .2s ease, width .2s ease;
+    }
+
+    .season-foot {
+      margin-top: 14px;
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 650;
+      color: var(--glide-ink-teal);
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--glide-line);
+      padding: 14px 4px 0;
+      cursor: pointer;
+    }
+    .board-stack { display: flex; flex-direction: column; gap: 12px; }
+
+    .place { display: flex; flex-direction: column; }
+    .place-hero {
+      min-height: 168px;
+      display: flex;
+      align-items: flex-end;
+      padding: 16px;
+      background:
+        linear-gradient(180deg, transparent 30%, rgba(8, 16, 20, .72)),
+        var(--app-venue-ice);
+      color: var(--app-on-media, #fff);
+    }
+    .place-hero h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+    .place-hero p { margin: 4px 0 0; font-size: 13px; opacity: .82; }
+    .place-sec { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--glide-line); }
+    .place-h { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.015em; }
+    .place-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .place-chips span {
+      font-size: 12px;
+      font-weight: 650;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--app-cta-fill) 14%, transparent);
+      color: var(--glide-ink-teal);
+    }
+    .place-closed {
+      border: 1px solid var(--glide-line);
+      border-left: 3px solid var(--app-cta-fill);
+      border-radius: var(--app-radius-xs, 8px);
+      padding: 12px;
+      font-weight: 650;
+      background: color-mix(in srgb, var(--app-cta-fill) 12%, transparent);
+    }
+    .place-note { margin: 0; font-size: 14px; line-height: 1.45; color: var(--glide-text, inherit); }
+    .place-past {
+      margin: 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--glide-hint) 10%, transparent);
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--glide-hint);
+    }
+    .place-past b { color: var(--tg-theme-text-color, inherit); font-weight: 650; }
+    .place-btn {
+      display: block;
+      width: 100%;
+      text-align: center;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 650;
+      padding: 12px;
+      border-radius: 12px;
+      border: 0;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+      cursor: pointer;
+    }
+    .place-btn--quiet {
+      background: transparent;
+      color: inherit;
+      border: 1px solid var(--glide-line);
+    }
+    .place-off {
+      align-self: center;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      color: var(--glide-hint);
+      background: none;
+      border: 0;
+      cursor: pointer;
+      padding: 0;
+    }
+    .place-hint { margin: 0; font-size: 12px; line-height: 1.4; color: var(--glide-hint); }
+
+    .tg {
+      min-height: 720px;
+      margin: 0;
+      padding: 18px 14px 24px;
+      background: #0e1621;
+      color: #e7eef6;
+    }
+    .tg-top { font-size: 13px; color: #8ea0b5; margin-bottom: 16px; }
+    .tg-top b { display: block; color: #fff; font-size: 16px; margin-bottom: 2px; }
+    .bubble {
+      max-width: 300px;
+      margin-left: auto;
+      background: #2b5278;
+      border-radius: 14px 14px 4px 14px;
+      padding: 10px 12px 8px;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+    .bubble + .bubble { margin-top: 10px; background: #182533; margin-left: 0; margin-right: auto; border-radius: 14px 14px 14px 4px; }
+    .bubble b { display: block; margin-bottom: 4px; }
+    .bubble time { display: block; text-align: right; font-size: 11px; opacity: .65; margin-top: 4px; }
+    .bubble-label {
+      margin: 18px 0 6px;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #8ea0b5;
+    }
+  </style>
+</head>
+<body class="proto-doc ar-pilot--ice">
+  <div class="proto-layout">
+    <aside class="proto-aside">
+      <p class="proto-kicker">Черновик · сезонный каток</p>
+      <h1>Октябрь: закрытые уличные — не в «Все места».</h1>
+      <p>Выпадающий список мест получает строку <b>«Зимой»</b> с отдельным счётчиком. Сумма «Все места» сезонные катки не включает.</p>
+      <p>Строка под лентой переключает фильтр на «Зимой», а не вставляет карточки в основной список. Карточка места и напоминание в боте — без изменений.</p>
+      <div class="proto-switch" role="tablist">
+        <button type="button" data-go="list" aria-pressed="true">Лента</button>
+        <button type="button" data-go="menu" aria-pressed="false">Меню мест</button>
+        <button type="button" data-go="winter" aria-pressed="false">Зимой</button>
+        <button type="button" data-go="card" aria-pressed="false">Карточка</button>
+        <button type="button" data-go="bot" aria-pressed="false">В боте</button>
+      </div>
+      <p>На карточке кнопка живая: включите напоминание и посмотрите, что остаётся.</p>
+    </aside>
+
+    <div class="proto-phone" id="phone">
+      <!-- Лента: «Все места», меню закрыто -->
+      <section class="proto-screen active" data-screen="list">
+        <div class="ice-tab">
+          <div class="ice-sec ice-sec--hero">
+            <nav class="hdr-folders" aria-label="Раздел">
+              <button type="button" class="hdr-folder is-on">Покататься</button>
+              <button type="button" class="hdr-folder">Хоккей <small>4</small></button>
+              <button type="button" class="hdr-folder">Заточка <small>9</small></button>
+              <button type="button" class="hdr-folder">Магазины <small>13</small></button>
+              <span class="hdr-underline" aria-hidden="true"></span>
+            </nav>
+            <div class="ice-catalog-tools">
+              <div class="ice-chips ice-tools ice-tools--one">
+                <button type="button" class="ice-chip ice-tool" aria-expanded="false"><span>Все места</span></button>
+              </div>
+              <div class="ice-menu" hidden></div>
+            </div>
+          </div>
+          <div class="ice-sec">
+            <div class="board-stack" id="list-live"></div>
+            <button type="button" class="season-foot" data-jump="winter">3 катка откроются зимой</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Меню мест открыто -->
+      <section class="proto-screen" data-screen="menu" hidden>
+        <div class="ice-tab">
+          <div class="ice-sec ice-sec--hero">
+            <nav class="hdr-folders" aria-label="Раздел">
+              <button type="button" class="hdr-folder is-on">Покататься</button>
+              <button type="button" class="hdr-folder">Хоккей <small>4</small></button>
+              <button type="button" class="hdr-folder">Заточка <small>9</small></button>
+              <button type="button" class="hdr-folder">Магазины <small>13</small></button>
+              <span class="hdr-underline" aria-hidden="true"></span>
+            </nav>
+            <div class="ice-catalog-tools">
+              <div class="ice-chips ice-tools ice-tools--one">
+                <button type="button" class="ice-chip ice-tool" aria-expanded="true"><span>Все места</span></button>
+              </div>
+              <div class="ice-menu">
+                <button type="button" data-jump="list" aria-pressed="true">Все места<b>1</b></button>
+                <button type="button" data-jump="list" aria-pressed="false">Лёд<b>1</b></button>
+                <button type="button" data-jump="winter" aria-pressed="false">Зимой<b>3</b></button>
+              </div>
+            </div>
+          </div>
+          <div class="ice-sec">
+            <div class="board-stack" id="menu-live"></div>
+            <button type="button" class="season-foot" data-jump="winter">3 катка откроются зимой</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Фильтр «Зимой» -->
+      <section class="proto-screen" data-screen="winter" hidden>
+        <div class="ice-tab">
+          <div class="ice-sec ice-sec--hero">
+            <nav class="hdr-folders" aria-label="Раздел">
+              <button type="button" class="hdr-folder is-on">Покататься</button>
+              <button type="button" class="hdr-folder">Хоккей <small>4</small></button>
+              <button type="button" class="hdr-folder">Заточка <small>9</small></button>
+              <button type="button" class="hdr-folder">Магазины <small>13</small></button>
+              <span class="hdr-underline" aria-hidden="true"></span>
+            </nav>
+            <div class="ice-catalog-tools">
+              <div class="ice-chips ice-tools ice-tools--one">
+                <button type="button" class="ice-chip ice-tool" aria-expanded="false" aria-pressed="true"><span>Зимой</span></button>
+              </div>
+              <div class="ice-menu" hidden></div>
+            </div>
+          </div>
+          <div class="ice-sec">
+            <div class="board-stack" id="winter-stack"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="proto-screen" data-screen="card" hidden>
+        <article class="place">
+          <div class="place-hero">
+            <div>
+              <h1>Стадион «Спартак»</h1>
+              <p>ул. Ленинская, 50Б</p>
+            </div>
+          </div>
+          <div class="place-sec">
+            <div class="place-chips"><span>Прокат</span><span>Открытый лёд</span></div>
+            <p class="place-h">Катание</p>
+            <div class="place-closed" id="closed-line">Закрыт до декабря</div>
+            <p class="place-note">Открытый каток на стадионе. Лёд заливают, когда держится мороз, а не в назначенный день.</p>
+            <p class="place-past"><b>Прошлый сезон, январь 2026.</b> Вт–пт 14:00–21:00, сб–вс 12:00–21:00, понедельник выходной. Вход 8 руб., прокат 6 руб. Так было, не так будет.</p>
+            <button type="button" class="place-btn" id="remind">Напомнить, когда начнётся сезон</button>
+            <button type="button" class="place-off" id="remind-off" hidden>Выключить</button>
+            <p class="place-hint" id="remind-hint">В декабре напишем один раз. Лёд заливают по погоде — перед поездкой лучше уточнить.</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="proto-screen" data-screen="bot" hidden>
+        <div class="tg">
+          <div class="tg-top"><b>ICING</b>то, что придёт в декабре</div>
+          <p class="bubble-label">Если сеансов всё ещё нет</p>
+          <div class="bubble">
+            <b>Пора проверять коньки</b>
+            Стадион «Спартак» обычно открывается в декабре — на улице Ленинская, 50Б. Лёд заливают по погоде. На карточке есть телефон: один звонок, и не приедете кататься по луже.
+            <time>1 дек · 10:02</time>
+          </div>
+          <p class="bubble-label">Если к этому моменту сеансы уже есть — приходит только это</p>
+          <div class="bubble">
+            <b>Появились сеансы</b>
+            Стадион «Спартак»<br>
+            Ближайший: 2 дек 14:00
+            <time>1 дек · 18:40</time>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    function board(opts) {
+      var when = opts.time
+        ? '<span class="ice-board__day">' + opts.day + '</span><span class="ice-board__time">' + opts.time + '</span>'
+        : '<span class="ice-board__day">Сезон</span><span class="ice-board__time">' + opts.month + '</span>';
+      var facts = opts.time
+        ? '<span class="ice-board__facts"><span class="ice-board__prices">' + opts.prices + '</span></span>'
+        : '<span class="ice-board__facts"><span class="ice-board__status">' + opts.status + '</span></span>';
+      return (
+        '<a class="ice-board ice-board--type-ice" href="#card" data-open="card">' +
+          '<span class="ice-board__photo ice-board__photo--empty">' +
+            '<span class="ice-board__initial" aria-hidden="true">' + opts.icon + '</span>' +
+            '<span class="ice-board__scrim">' + when +
+              '<span class="ice-board__name">' + opts.name + '</span>' +
+              '<span class="ice-board__where">' + opts.where + '</span>' +
+            '</span>' +
+          '</span>' +
+          facts +
+          '<span class="ice-board__depth">' + opts.depth + '<span class="ice-board__go" aria-hidden="true">→</span></span>' +
+        '</a>'
+      );
+    }
+
+    var palace = board({
+      icon: '❄',
+      day: 'Сегодня',
+      time: '21:30',
+      name: 'Дворец спорта',
+      where: 'ул. Гагарина, 1',
+      prices: 'взр. 8 · дет. 5 · прокат +7 BYN',
+      depth: 'Ещё 4 сеанса в расписании',
+    });
+    var winter = [
+      board({
+        icon: '❄',
+        month: 'Декабрь',
+        name: 'Стадион «Спартак»',
+        where: 'ул. Ленинская, 50Б',
+        status: 'Закрыт до декабря',
+        depth: 'Напомнить об открытии',
+      }),
+      board({
+        icon: '❄',
+        month: 'Декабрь',
+        name: 'Космос-корт',
+        where: 'ул. Сурганова, 46',
+        status: 'Закрыт до декабря',
+        depth: 'Напомнить об открытии',
+      }),
+      board({
+        icon: '❄',
+        month: 'Декабрь',
+        name: 'СК «Торпедо»',
+        where: 'пр-т Витебский, 43',
+        status: 'Закрыт до декабря',
+        depth: 'Напомнить об открытии',
+      }),
+    ].join('');
+
+    document.getElementById('list-live').innerHTML = palace;
+    document.getElementById('menu-live').innerHTML = palace;
+    document.getElementById('winter-stack').innerHTML = winter;
+
+    function show(name) {
+      document.querySelectorAll('.proto-screen').forEach(function (el) {
+        var on = el.getAttribute('data-screen') === name;
+        el.hidden = !on;
+        el.classList.toggle('active', on);
+      });
+      document.querySelectorAll('.proto-switch button').forEach(function (btn) {
+        btn.setAttribute('aria-pressed', btn.getAttribute('data-go') === name ? 'true' : 'false');
+      });
+    }
+
+    document.querySelector('.proto-switch').addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      show(btn.getAttribute('data-go'));
+    });
+
+    document.getElementById('phone').addEventListener('click', function (e) {
+      var jump = e.target.closest('[data-jump]');
+      if (jump) {
+        e.preventDefault();
+        show(jump.getAttribute('data-jump'));
+        return;
+      }
+      var open = e.target.closest('[data-open]');
+      if (open) {
+        e.preventDefault();
+        show('card');
+      }
+    });
+
+    var on = false;
+    var remind = document.getElementById('remind');
+    var off = document.getElementById('remind-off');
+    var hint = document.getElementById('remind-hint');
+    function paintRemind() {
+      remind.className = on ? 'place-btn place-btn--quiet' : 'place-btn';
+      remind.textContent = on ? 'Напомним в декабре' : 'Напомнить, когда начнётся сезон';
+      off.hidden = !on;
+      hint.textContent = on
+        ? 'Одно сообщение, потом напоминание само выключится.'
+        : 'В декабре напишем один раз. Лёд заливают по погоде — перед поездкой лучше уточнить.';
+    }
+    remind.addEventListener('click', function () { on = !on; paintRemind(); });
+    off.addEventListener('click', function () { on = false; paintRemind(); });
+  </script>
+</body>
+</html>

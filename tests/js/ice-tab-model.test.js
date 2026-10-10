@@ -242,6 +242,97 @@ describe('catalog header (A′)', () => {
   });
 });
 
+describe('сезонный каток «Зимой»', () => {
+  const iceOnly = [{ key: 'ice', chip: 'Лёд', count: 1 }];
+  const winter3 = { key: 'winter', count: 3 };
+  const choreoMenu = [
+    { key: 'ice', chip: 'Лёд', count: 8 },
+    { key: 'gym', chip: 'Зал', count: 1 },
+    { key: 'choreo', chip: 'Хореография', count: 1 },
+  ];
+
+  it('count 0: строки «Зимой» нет, меню как сегодня', () => {
+    const { placeMenuView, placeMenuNeeded, PLACE_MENU_KEYS } = loadModel();
+    assert.ok(!PLACE_MENU_KEYS.includes('winter'));
+    assert.equal(placeMenuNeeded(iceOnly, { key: 'winter', count: 0 }), false);
+    assert.deepEqual(placeMenuView(iceOnly, [], { key: 'winter', count: 0 }), []);
+    assert.deepEqual(placeMenuView(iceOnly, []), []);
+    const today = placeMenuView(choreoMenu, []);
+    const withZero = placeMenuView(choreoMenu, [], { key: 'winter', count: 0 });
+    assert.deepEqual(withZero, today);
+    assert.ok(!withZero.some((row) => row.label === 'Зимой'));
+  });
+
+  it('count 3: строка «Зимой» и меню даже при одном типе площадки', () => {
+    const { placeMenuView, placeMenuNeeded } = loadModel();
+    assert.equal(placeMenuNeeded(iceOnly, winter3), true);
+    const menu = placeMenuView(iceOnly, [], winter3, false);
+    assert.deepEqual(
+      menu.map((row) => row.label),
+      ['Все места', 'Лёд', 'Зимой']
+    );
+    const winter = menu.find((row) => row.label === 'Зимой');
+    assert.equal(winter.count, 3);
+    assert.equal(winter.season, 'winter');
+    assert.equal(winter.active, false);
+    assert.equal(menu[menu.length - 1], winter);
+  });
+
+  it('«Все места» не включает зимние катки', () => {
+    const { placeMenuView } = loadModel();
+    const menu = placeMenuView(iceOnly, [], winter3, false);
+    assert.equal(menu.find((row) => row.label === 'Все места').count, 1);
+    assert.equal(menu.find((row) => row.label === 'Лёд').count, 1);
+    const mixed = placeMenuView(
+      [
+        { key: 'ice', chip: 'Лёд', count: 5 },
+        { key: 'gym', chip: 'Зал', count: 2 },
+      ],
+      [],
+      winter3,
+      false
+    );
+    assert.equal(mixed.find((row) => row.label === 'Все места').count, 7);
+    assert.equal(mixed.find((row) => row.label === 'Зимой').count, 3);
+  });
+
+  it('активный фильтр «Зимой»: подпись инструмента и нажатая строка', () => {
+    const { placeMenuView, placeMenuLabel } = loadModel();
+    assert.equal(placeMenuLabel(iceOnly, [], true), 'Зимой');
+    assert.equal(placeMenuLabel(iceOnly, ['ice'], true), 'Зимой');
+    assert.equal(placeMenuLabel(iceOnly, [], false), 'Все места');
+    const menu = placeMenuView(iceOnly, ['ice'], winter3, true);
+    assert.equal(menu.find((row) => row.label === 'Зимой').active, true);
+    assert.equal(menu.find((row) => row.label === 'Все места').active, false);
+    assert.equal(menu.find((row) => row.label === 'Лёд').active, false);
+  });
+
+  it('подвал: 1, 2, 5, 11 и пусто, когда фильтр «Зимой» уже включён', () => {
+    const { seasonListFooter } = loadModel();
+    assert.equal(seasonListFooter({ key: 'winter', count: 1 }, false), '1 каток откроется зимой');
+    assert.equal(seasonListFooter({ key: 'winter', count: 2 }, false), '2 катка откроются зимой');
+    assert.equal(seasonListFooter({ key: 'winter', count: 5 }, false), '5 катков откроются зимой');
+    assert.equal(seasonListFooter({ key: 'winter', count: 11 }, false), '11 катков откроются зимой');
+    assert.equal(seasonListFooter({ key: 'winter', count: 3 }, true), '');
+    assert.equal(seasonListFooter({ key: 'winter', count: 0 }, false), '');
+    assert.equal(seasonListFooter(null, false), '');
+  });
+
+  it('season=winter в запросе списка и без venue_type', () => {
+    const { buildListUrl } = loadModel();
+    const url = buildListUrl({
+      cityId: 3,
+      intent: 'skate',
+      season: 'winter',
+      venueTypes: ['ice'],
+    });
+    assert.match(url, /[?&]season=winter(&|$)/);
+    assert.ok(!url.includes('venue_type'));
+    const plain = buildListUrl({ cityId: 3, intent: 'skate' });
+    assert.ok(!plain.includes('season='));
+  });
+});
+
 describe('shop catalog filters', () => {
   const shops = [
     {

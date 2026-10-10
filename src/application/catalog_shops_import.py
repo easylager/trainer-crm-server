@@ -76,6 +76,7 @@ class ShopRecord:
     season: tuple[int, int] | None = None
     tickets_url: str | None = None
     photo: Path | None = None
+    photo_attribution: str | None = None
     point: tuple[float, float] | None = None
     hours_pending: str | None = None
 
@@ -182,6 +183,7 @@ def _parse_record(raw: Mapping[str, Any], *, photo_root: Path | None = None) -> 
         photo = ((photo_root or Path.cwd()) / str(raw["photo"])).resolve()
         if not photo.is_file():
             raise ShopImportError(f"{name}: photo not found: {raw['photo']}")
+    photo_attribution = (raw.get("photo_attribution") or "").strip() or None
     hours_pending = (raw.get("hours_pending") or "").strip() or None
     if venue_type == "shop" and hours is None and not hours_pending:
         raise ShopImportError(f"{name}: нет часов работы (hours) — у магазина они обязательны")
@@ -212,6 +214,7 @@ def _parse_record(raw: Mapping[str, Any], *, photo_root: Path | None = None) -> 
         season=season,
         tickets_url=tickets,
         photo=photo,
+        photo_attribution=photo_attribution,
         point=point,
         hours_pending=hours_pending,
     )
@@ -379,7 +382,7 @@ async def _attach_photo(session: AsyncSession, arena_id: int, rec: ShopRecord) -
             rec.photo.read_bytes(),
             "image/jpeg" if rec.photo.suffix.lower() in (".jpg", ".jpeg") else "image/png",
             license_key="permitted",
-            attribution=PARTNER_PHOTO_ATTRIBUTION,
+            attribution=rec.photo_attribution or PARTNER_PHOTO_ATTRIBUTION,
         )
     except RuntimeError as exc:
         if "S3 not configured" not in str(exc):

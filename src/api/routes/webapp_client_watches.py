@@ -17,7 +17,11 @@ from src.application.client_ice_watch_use_cases import (
 )
 from src.application.client_profile_use_cases import resolve_acting_client_id
 from src.application.client_trainer_edge_use_cases import unsubscribe_notify_slots as uc_unsubscribe_notify_slots
-from src.infrastructure.db.models import ICE_WATCH_KIND_SCHEDULE_FRESH, ICE_WATCH_KIND_SESSIONS
+from src.infrastructure.db.models import (
+    ICE_WATCH_KIND_SCHEDULE_FRESH,
+    ICE_WATCH_KIND_SEASON_OPEN,
+    ICE_WATCH_KIND_SESSIONS,
+)
 
 router = APIRouter(tags=["webapp"])
 
@@ -73,13 +77,16 @@ async def post_client_ice_watch(
     catalog_tid = client_catalog_telegram_key(principal)
     client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
     kind = (body.watch_kind or ICE_WATCH_KIND_SESSIONS).strip().lower()
-    if kind not in (ICE_WATCH_KIND_SESSIONS, ICE_WATCH_KIND_SCHEDULE_FRESH):
+    if kind not in (ICE_WATCH_KIND_SESSIONS, ICE_WATCH_KIND_SCHEDULE_FRESH, ICE_WATCH_KIND_SEASON_OPEN):
         raise HTTPException(status_code=400, detail="Недопустимый тип подписки.")
-    filter_json = {
-        "when": (body.when or "any").strip().lower() or "any",
-        "day": (body.day or "").strip() or None,
-        "intent": (body.intent or "skate").strip().lower() or "skate",
-    }
+    if kind == ICE_WATCH_KIND_SEASON_OPEN:
+        filter_json = {}
+    else:
+        filter_json = {
+            "when": (body.when or "any").strip().lower() or "any",
+            "day": (body.day or "").strip() or None,
+            "intent": (body.intent or "skate").strip().lower() or "skate",
+        }
     watch = await subscribe_ice_watch(
         session,
         client_id=client_id,

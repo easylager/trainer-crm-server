@@ -418,7 +418,8 @@ a.arena-row {
 }
 
 .arena-fresh a,
-.arena-fresh button.linkish {
+.arena-fresh button.linkish,
+.arena-season-remind button.linkish {
   color: var(--glide-ink-teal, var(--app-cta-fill));
   text-decoration: none;
   font-weight: var(--app-weight-semibold);
@@ -481,6 +482,22 @@ a.arena-row {
   font-size: var(--app-text-body);
   font-weight: var(--app-weight-semibold);
   background: color-mix(in srgb, var(--app-cta-fill) 12%, transparent);
+}
+
+.arena-season-remind {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.arena-season-remind > .arena-btn,
+.arena-season-remind > .arena-sub {
+  align-self: stretch;
+}
+
+.arena-season-remind .arena-sub {
+  line-height: 1.45;
 }
 
 .arena-state {

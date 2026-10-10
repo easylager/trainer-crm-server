@@ -104,3 +104,42 @@ async def test_ice_watch_subscribe_list_unsubscribe(app_use_test_db, db_session)
 
             hub2 = await client.get("/api/webapp/client/watches", headers=_client_auth_headers())
             assert hub2.json()["ice_watches"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ice_watch_season_open_accepted(app_use_test_db, db_session) -> None:
+    tid = _fresh_client_telegram_id()
+    await _insert_client(db_session, telegram_id=tid)
+    city_id = await _insert_city(db_session)
+    arena = (
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO arenas (city_id, name, latitude, longitude, is_active, is_confirmed, venue_type)
+                VALUES (:cid, 'Outdoor Rink', 53.9, 27.5, true, true, 'outdoor')
+                RETURNING id
+                """
+            ),
+            {"cid": city_id},
+        )
+    ).scalar_one()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO arena_profiles (arena_id, city_id, slug, timezone, status, season_start_month, season_end_month)
+            VALUES (:aid, :cid, 'outdoor-test', 'Europe/Minsk', 'published', 12, 3)
+            """
+        ),
+        {"aid": int(arena), "cid": city_id},
+    )
+    await db_session.commit()
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            post = await client.post(
+                "/api/webapp/client/ice-watches",
+                headers=_client_auth_headers(),
+                json={"arena_id": int(arena), "watch_kind": "season_open"},
+            )
+            assert post.status_code == 200, post.text
+            assert post.json()["watch"]["kind"] == "season_open"

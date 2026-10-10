@@ -115,9 +115,13 @@
     }
     if (opts.near) params.push('near=' + encodeURIComponent(opts.near));
     if (opts.bbox) params.push('bbox=' + encodeURIComponent(opts.bbox));
-    /* Тип площадки — список ключей через запятую; пусто = все типы. */
-    var venue = venueTypeParam(opts.venueTypes);
+    /* Тип площадки — список ключей через запятую; пусто = все типы.
+       season=winter — только катки закрытого сезона. Это не venue_type. */
+    var season = String(opts.season || '').trim().toLowerCase();
+    var winter = season === 'winter';
+    var venue = winter ? '' : venueTypeParam(opts.venueTypes);
     if (venue) params.push('venue_type=' + encodeURIComponent(venue));
+    if (winter) params.push('season=winter');
     if (opts.limit) params.push('limit=' + encodeURIComponent(String(opts.limit)));
     if (opts.cursor) params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
     var timeQ = whenListQuery(opts.when, opts.whenDay);
@@ -178,7 +182,17 @@
   }
 
   var PLACE_TAB_KEYS = ['ice', 'gym', 'outdoor'];
+  /* «Зимой» сюда не входит: закрытый сезон — отдельный фасет, не тип площадки. */
   var PLACE_MENU_KEYS = ['ice', 'gym', 'outdoor', 'choreo', 'pool', 'other'];
+
+  /** Счётчик season_facet. 0, мусор и чужой ключ — как будто зимних катков нет. */
+  function seasonFacetCount(seasonFacet) {
+    if (!seasonFacet || typeof seasonFacet !== 'object') return 0;
+    if (String(seasonFacet.key || 'winter') !== 'winter') return 0;
+    var n = Number(seasonFacet.count);
+    if (!isFinite(n) || n <= 0) return 0;
+    return Math.floor(n);
+  }
 
   function facetCount(facets, key) {
     facets = facets || [];
@@ -365,8 +379,13 @@
     };
   }
 
-  /** Хореография/бассейн — в меню, не в underline-ряду из трёх типов. */
-  function placeMenuNeeded(facets) {
+  /**
+   * Хореография/бассейн — в меню, не в underline-ряду из трёх типов.
+   * Закрытый сезон (count > 0) тоже открывает меню, даже если тип площадки один.
+   * count 0 — меню как без сезона, в том числе без выпадающего списка.
+   */
+  function placeMenuNeeded(facets, seasonFacet) {
+    if (seasonFacetCount(seasonFacet) > 0) return true;
     var menu = liveFacetsForKeys(facets, PLACE_MENU_KEYS);
     if (menu.length < 2) return false;
     for (var i = 0; i < menu.length; i++) {
@@ -380,8 +399,8 @@
     return selected.length === 1 ? String(selected[0] || '') : '';
   }
 
-  function placeTabsView(facets, selected) {
-    if (placeMenuNeeded(facets)) return [];
+  function placeTabsView(facets, selected, seasonFacet) {
+    if (placeMenuNeeded(facets, seasonFacet)) return [];
     facets = facets || [];
     selected = selected || [];
     var live = liveFacetsForKeys(facets, PLACE_TAB_KEYS);
@@ -401,15 +420,21 @@
     return out;
   }
 
-  function placeMenuView(facets, selected) {
-    if (!placeMenuNeeded(facets)) return [];
+  /**
+   * Меню мест. seasonFacet и winterActive необязательны: без них меню сегодняшнее.
+   * «Все места» — сумма только venue-фасетов. «Зимой» — отдельная строка под типами.
+   */
+  function placeMenuView(facets, selected, seasonFacet, winterActive) {
+    var winterN = seasonFacetCount(seasonFacet);
+    if (!placeMenuNeeded(facets, seasonFacet)) return [];
     facets = facets || [];
     selected = selected || [];
+    winterActive = !!winterActive;
     var live = liveFacetsForKeys(facets, PLACE_MENU_KEYS);
-    if (live.length < 2) return [];
-    var key = selectionVenueKey(selected);
+    if (live.length < 2 && winterN <= 0) return [];
+    var venueKey = winterActive ? '' : selectionVenueKey(selected);
     var total = sumFacetCounts(facets, PLACE_MENU_KEYS);
-    var out = [{ key: '', label: 'Все места', count: total, active: !key }];
+    var out = [{ key: '', label: 'Все места', count: total, active: !winterActive && !venueKey }];
     for (var j = 0; j < live.length; j++) {
       var f2 = live[j];
       var k = String(f2.key || '');
@@ -417,13 +442,23 @@
         key: k,
         label: String(f2.chip || k),
         count: Number(f2.count) || 0,
-        active: key === k,
+        active: !winterActive && venueKey === k,
+      });
+    }
+    if (winterN > 0) {
+      out.push({
+        key: 'winter',
+        season: 'winter',
+        label: 'Зимой',
+        count: winterN,
+        active: winterActive,
       });
     }
     return out;
   }
 
-  function placeMenuLabel(facets, selected) {
+  function placeMenuLabel(facets, selected, winterActive) {
+    if (winterActive) return 'Зимой';
     var key = selectionVenueKey(selected);
     if (!key) return 'Все места';
     var live = liveFacetsForKeys(facets, PLACE_MENU_KEYS);
@@ -431,6 +466,25 @@
       if (String(live[i].key) === key) return String(live[i].chip || key);
     }
     return 'Все места';
+  }
+
+  /**
+   * Строка под обычной лентой. Пустая строка — кнопки нет
+   * (счётчик 0 или фильтр «Зимой» уже включён).
+   * 1 каток откроется, 2 катка откроются, 5 катков откроются, 11 катков откроются.
+   */
+  function seasonListFooter(seasonFacet, winterActive) {
+    if (winterActive) return '';
+    var n = seasonFacetCount(seasonFacet);
+    if (n <= 0) return '';
+    return (
+      n +
+      ' ' +
+      pluralRu(n, 'каток', 'катка', 'катков') +
+      ' ' +
+      pluralRu(n, 'откроется', 'откроются', 'откроются') +
+      ' зимой'
+    );
   }
 
   function applyCatalogMode(mode) {
@@ -2114,6 +2168,7 @@
           placeService: state.placeService === 'service' ? 'service' : '',
           when: String(state.when || 'any'),
           whenDay: String(state.whenDay || ''),
+          season: state.season === 'winter' ? 'winter' : '',
           scrollY: state.scrollY || 0,
           scrollAnchor: state.scrollAnchor ? String(state.scrollAnchor) : '',
           view: state.view || 'list',
@@ -2248,6 +2303,8 @@
     placeTabsView: placeTabsView,
     placeMenuView: placeMenuView,
     placeMenuLabel: placeMenuLabel,
+    seasonFacetCount: seasonFacetCount,
+    seasonListFooter: seasonListFooter,
     applyCatalogMode: applyCatalogMode,
     catalogStateAfterCityChange: catalogStateAfterCityChange,
     catalogSearchPlaceholder: catalogSearchPlaceholder,
