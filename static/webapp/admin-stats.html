@@ -16,14 +16,10 @@
     .plan-trial { color: #fde68a; }
     .cat-demand { margin-bottom: 22px; }
     .cat-card { padding: 14px 14px 12px; }
-    .cat-strip {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      text-align: center;
-    }
-    .cat-strip > div { padding: 2px 6px 0; min-width: 0; }
-    .cat-strip > div + div { border-left: 1px solid rgba(255,255,255,0.08); }
-    .cat-strip .adm-kpi-value { font-size: 26px; font-variant-numeric: tabular-nums; }
+    .cat-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+    .cat-hero .adm-kpi-value { font-size: 32px; font-variant-numeric: tabular-nums; }
+    .cat-hero-side { text-align: right; }
+    .cat-hero-side b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
     .cat-mini {
       margin-top: 2px;
       font-size: 11px;
@@ -89,43 +85,65 @@
 
       function renderCatalogDemand(pulse) {
         if (!pulse) return '';
-        var openHint = pulse.share_open_pct != null
-          ? pulse.share_open_pct + '% от нажатий'
-          : 'приглашённые';
+        var monthLeft = pulse.minsk_month_remaining > 0
+          ? 'до ' + A.formatNum(pulse.minsk_month_goal) + ' ещё ' + A.formatNum(pulse.minsk_month_remaining)
+          : 'цель ' + A.formatNum(pulse.minsk_month_goal) + ' пройдена';
         var html = '<div class="cat-demand">';
         html += '<div class="adm-section-title">Каталог · спрос</div>';
         html += '<div class="adm-card cat-card">';
-        html += '<div class="cat-strip">';
-        html += '<div><div class="adm-kpi-label">Сегодня</div>' +
-          '<div class="adm-kpi-value">' + A.formatNum(pulse.dau) + '</div>' +
-          '<div class="cat-mini">Минск</div></div>';
-        html += '<div><div class="adm-kpi-label">7 дней</div>' +
-          '<div class="adm-kpi-value">' + A.formatNum(pulse.wau) + '</div>' +
-          '<div class="cat-mini">веб ' + A.formatNum(pulse.web_actors_7d) +
-          ' · TG ' + A.formatNum(pulse.telegram_actors_7d) + '</div></div>';
-        html += '<div><div class="adm-kpi-label">30 дней</div>' +
-          '<div class="adm-kpi-value">' + A.formatNum(pulse.mau) + '</div>' +
-          '<div class="cat-mini">акторы</div></div>';
+        html += '<div class="cat-hero">';
+        html += '<div><div class="adm-kpi-label">' + A.escapeHtml(pulse.minsk_name || 'Минск') +
+          ' · Telegram</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(pulse.minsk_telegram_this_week) + '</div>' +
+          '<div class="cat-mini">эта неделя, с понедельника</div></div>';
+        html += '<div class="cat-hero-side"><div class="cat-mini">прошлая неделя</div>' +
+          '<b>' + A.formatNum(pulse.minsk_telegram_prev_week) + '</b></div>';
         html += '</div>';
-        html += '<div class="cat-foot">Акторы, не люди. Один человек в вебе и в Telegram считается дважды.</div>';
+        html += '<div class="cat-foot">' + A.formatNum(pulse.minsk_telegram_month) + ' за ' +
+          A.escapeHtml(pulse.month_label || '') + ' · ' + monthLeft + '</div>';
+
+        var cities = pulse.cities || [];
+        if (cities.length) {
+          html += '<div class="cat-divider"></div>';
+          html += '<div class="adm-kpi-label">Другие города</div>';
+          html += cities.map(function (c) {
+            return '<div class="cat-arena"><span>' + A.escapeHtml(c.city_name || 'Город') +
+              '</span><span class="adm-list-meta">' + A.formatNum(c.telegram_this_week) +
+              ' · было ' + A.formatNum(c.telegram_prev_week) + '</span></div>';
+          }).join('');
+        }
+
         html += '<div class="cat-divider"></div>';
-        html += '<div class="cat-rows">';
-        html += '<div class="cat-row"><span>Билеты на сайте<span class="cat-quiet">не продажа</span></span>' +
-          '<b>' + A.formatNum(pulse.tickets_intent_actors_7d) + '</b></div>';
-        html += '<div class="cat-row"><span>Поделиться<span class="cat-quiet">нажатий за 7 дней</span></span>' +
-          '<b>' + A.formatNum(pulse.share_tap_7d) + '</b></div>';
+        html += '<div class="cat-row"><span>Уже были на прошлой неделе' +
+          '<span class="cat-quiet">из минских на этой</span></span>' +
+          '<b>' + A.formatNum(pulse.minsk_returning) + '</b></div>';
+        html += '<div class="cat-rows" style="margin-top:10px">';
+        html += '<div class="cat-row"><span>Поделились<span class="cat-quiet">аккаунты на этой неделе</span></span>' +
+          '<b>' + A.formatNum(pulse.share_people_7d) + '</b></div>';
+        var openHint = pulse.share_open_pct != null
+          ? pulse.share_open_pct + '% от поделившихся'
+          : 'аккаунты, без процента';
         html += '<div class="cat-row"><span>Открыли ссылку<span class="cat-quiet">' + openHint + '</span></span>' +
           '<b>' + A.formatNum(pulse.share_open_7d) + '</b></div>';
+        if ((+pulse.tickets_intent_actors_7d || 0) > 0) {
+          html += '<div class="cat-row"><span>Билеты на сайте<span class="cat-quiet">не продажа</span></span>' +
+            '<b>' + A.formatNum(pulse.tickets_intent_actors_7d) + '</b></div>';
+        }
         html += '</div>';
 
         var arenas = pulse.top_arenas_7d || [];
         if (arenas.length) {
           html += '<div class="cat-divider"></div>';
-          html += '<div class="adm-kpi-label">Арены за 7 дней</div>';
+          html += '<div class="adm-kpi-label">Арены · Telegram</div>';
           html += arenas.map(function (a) {
+            var place = a.city_name ? ' · ' + A.escapeHtml(a.city_name) : '';
             return '<div class="cat-arena"><span>' + A.escapeHtml(a.arena_name || ('#' + a.arena_id)) +
-              '</span><span class="adm-list-meta">' + A.formatNum(a.unique_actors) + ' уник.</span></div>';
+              place + '</span><span class="adm-list-meta">' + A.formatNum(a.unique_actors) + '</span></div>';
           }).join('');
+        }
+        if ((+pulse.browsers_this_week || 0) > 0) {
+          html += '<div class="cat-foot">Браузеры на сайте за эту неделю: ' +
+            A.formatNum(pulse.browsers_this_week) + '. Это не люди. Служебные заходы на сайт здесь остаются.</div>';
         }
 
         if (!pulse.comparable_since) {

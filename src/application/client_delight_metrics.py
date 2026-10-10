@@ -147,20 +147,23 @@ async def get_share_counts(
     if as_of_dt.tzinfo is None:
         as_of_dt = as_of_dt.replace(tzinfo=timezone.utc)
     since = as_of_dt - timedelta(days=days)
+    from src.application.catalog_consumer_events import share_actor_exclusion_sql
 
+    share_ex_sql, share_ex_params = share_actor_exclusion_sql(since=since, until=as_of_dt)
     rows = await session.execute(
         text(
-            """
+            f"""
             SELECT kind,
                    COUNT(*) AS events,
                    COUNT(DISTINCT actor_hash) AS sharers
             FROM client_share_events
             WHERE occurred_at >= :since AND occurred_at < :as_of
+              {share_ex_sql}
             GROUP BY kind
             ORDER BY kind
             """
         ),
-        {"since": since, "as_of": as_of_dt},
+        {"since": since, "as_of": as_of_dt, **share_ex_params},
     )
     by_kind = {
         str(r[0]): {"events": int(r[1] or 0), "sharers": int(r[2] or 0)} for r in rows.fetchall()
@@ -205,6 +208,10 @@ async def record_client_share(
 
     if kind not in CLIENT_SHARE_KINDS:
         raise ValueError(f"Unknown client share kind: {kind!r}")
+    from src.application.catalog_consumer_events import is_excluded_catalog_telegram
+
+    if is_excluded_catalog_telegram(telegram_id):
+        return
 
     import json
 
