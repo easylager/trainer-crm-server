@@ -138,6 +138,84 @@ def telegram_actor_hash(telegram_id: int | str) -> str | None:
     return _hmac_actor("tg", str(int(telegram_id)))
 
 
+#: Служебные аккаунты владельца и партнёра. В спрос не входят — ни новые события, ни уже
+#: записанные. Сайт ими не исключается: публичка знает только IP и браузер, не telegram id.
+CATALOG_METRICS_EXCLUDED_TELEGRAM_IDS = frozenset({1304982166, 7492839293, 326107164})
+#: Порог замера 6 декабря: уникальные в табе «Лёд» Минска за месяц. На карточке — Telegram-аккаунты.
+MINSK_MONTHLY_TELEGRAM_GOAL = 300
+_RU_MONTHS = (
+    "",
+    "январь",
+    "февраль",
+    "март",
+    "апрель",
+    "май",
+    "июнь",
+    "июль",
+    "август",
+    "сентябрь",
+    "октябрь",
+    "ноябрь",
+    "декабрь",
+)
+
+
+def is_excluded_catalog_telegram(telegram_id: int | str | None) -> bool:
+    if telegram_id is None:
+        return False
+    try:
+        return int(telegram_id) in CATALOG_METRICS_EXCLUDED_TELEGRAM_IDS
+    except (TypeError, ValueError):
+        return False
+
+
+def excluded_catalog_actor_hashes() -> list[str]:
+    """HMAC тех же id, которыми пишется мини-апп. Пусто, если секрет актёра не задан."""
+    hashes: list[str] = []
+    for telegram_id in sorted(CATALOG_METRICS_EXCLUDED_TELEGRAM_IDS):
+        actor = telegram_actor_hash(telegram_id)
+        if actor:
+            hashes.append(actor)
+    return hashes
+
+
+def _hash_exclusion_sql(column: str, hashes: list[str], prefix: str) -> tuple[str, dict[str, str]]:
+    """Фрагмент ``AND (col IS NULL OR col NOT IN (...))``. NULL — анонимный веб, его оставляем."""
+    if not hashes:
+        return "", {}
+    params = {f"{prefix}{i}": actor for i, actor in enumerate(hashes)}
+    placeholders = ", ".join(f":{key}" for key in params)
+    return f" AND ({column} IS NULL OR {column} NOT IN ({placeholders}))", params
+
+
+def catalog_actor_exclusion_sql(column: str = "actor_hash") -> tuple[str, dict[str, str]]:
+    return _hash_exclusion_sql(column, excluded_catalog_actor_hashes(), "ex_tg_")
+
+
+def share_actor_exclusion_sql(
+    *,
+    since: datetime,
+    until: datetime,
+    column: str = "actor_hash",
+) -> tuple[str, dict[str, str]]:
+    """Хэш «Поделиться» включает день (UTC) и вид. Считаем все дни окна для служебных id."""
+    from src.application.client_delight_metrics import share_actor_hash
+    from src.infrastructure.db.models import CLIENT_SHARE_KINDS
+
+    start = since.astimezone(timezone.utc).date() - timedelta(days=1)
+    end = until.astimezone(timezone.utc).date() + timedelta(days=1)
+    hashes: list[str] = []
+    day = start
+    while day <= end:
+        for telegram_id in sorted(CATALOG_METRICS_EXCLUDED_TELEGRAM_IDS):
+            for kind in CLIENT_SHARE_KINDS:
+                actor = share_actor_hash(telegram_id, kind, day)
+                if actor:
+                    hashes.append(actor)
+        day += timedelta(days=1)
+    return _hash_exclusion_sql(column, hashes, "ex_sh_")
+
+
 def event_dedup_hash(
     *,
     kind: str,
@@ -249,6 +327,8 @@ async def record_catalog_consumer_event(
     """Append one row (or nothing on dedup conflict). Returns True if inserted. Never raises into HTTP handlers."""
     if kind not in CATALOG_CONSUMER_KINDS:
         raise ValueError(f"Unknown catalog consumer kind: {kind!r}")
+    if actor_hash and actor_hash in excluded_catalog_actor_hashes():
+        return False
     sp = (start_param or "").strip() or None
     if sp and not is_valid_start_param(sp):
         sp = None
@@ -348,16 +428,18 @@ async def get_catalog_wau(
     comparable = await metrics_comparable_since(session)
     if comparable is not None and comparable > since:
         since = comparable
+    ex_sql, ex_params = catalog_actor_exclusion_sql()
     row = (
         await session.execute(
             text(
-                """
+                f"""
                 SELECT COUNT(DISTINCT actor_hash) AS wau
                 FROM catalog_consumer_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND actor_hash IS NOT NULL
                   AND kind IN (:pv, :mini)
                   AND COALESCE(payload->>'ua_class', 'human') = 'human'
+                  {ex_sql}
                 """
             ),
             {
@@ -365,6 +447,7 @@ async def get_catalog_wau(
                 "as_of": as_of_dt,
                 "pv": KIND_PUBLIC_PAGE_VIEW,
                 "mini": KIND_MINIAPP_CATALOG_ENTRY,
+                **ex_params,
             },
         )
     ).first()
@@ -501,10 +584,11 @@ async def get_catalog_weekly_unique_by_city(
     if comparable is None:
         return []
     since = max(as_of_dt - timedelta(weeks=weeks), comparable)
+    ex_sql, ex_params = catalog_actor_exclusion_sql("e.actor_hash")
     rows = (
         await session.execute(
             text(
-                """
+                f"""
                 SELECT (date_trunc('week', e.occurred_at AT TIME ZONE 'Europe/Minsk'))::date AS week_start,
                        e.city_id,
                        c.name AS city_name,
@@ -516,6 +600,7 @@ async def get_catalog_weekly_unique_by_city(
                   AND e.actor_hash IS NOT NULL
                   AND e.kind IN (:pv, :mini)
                   AND COALESCE(e.payload->>'ua_class', 'human') = 'human'
+                  {ex_sql}
                 GROUP BY 1, 2, 3
                 ORDER BY 1 DESC, 4 DESC
                 """
@@ -525,6 +610,7 @@ async def get_catalog_weekly_unique_by_city(
                 "as_of": as_of_dt,
                 "pv": KIND_PUBLIC_PAGE_VIEW,
                 "mini": KIND_MINIAPP_CATALOG_ENTRY,
+                **ex_params,
             },
         )
     ).mappings().all()
@@ -553,10 +639,11 @@ async def get_catalog_top_arenas_by_events(
     if comparable is None:
         return []
     since = max(as_of_dt - timedelta(days=days), comparable)
+    ex_sql, ex_params = catalog_actor_exclusion_sql("e.actor_hash")
     rows = (
         await session.execute(
             text(
-                """
+                f"""
                 SELECT e.arena_id,
                        a.name AS arena_name,
                        e.city_id,
@@ -568,6 +655,7 @@ async def get_catalog_top_arenas_by_events(
                   AND e.arena_id IS NOT NULL
                   AND e.kind IN (:pv, :mini)
                   AND COALESCE(e.payload->>'ua_class', 'human') = 'human'
+                  {ex_sql}
                 GROUP BY e.arena_id, a.name, e.city_id
                 ORDER BY events DESC, e.arena_id
                 LIMIT :lim
@@ -579,6 +667,7 @@ async def get_catalog_top_arenas_by_events(
                 "pv": KIND_PUBLIC_PAGE_VIEW,
                 "mini": KIND_MINIAPP_CATALOG_ENTRY,
                 "lim": limit,
+                **ex_params,
             },
         )
     ).mappings().all()
@@ -606,35 +695,44 @@ async def get_catalog_virality_cb_metrics(
     """
     as_of_dt = _as_utc(as_of)
     since = as_of_dt - timedelta(days=days)
+    share_ex_sql, share_ex_params = share_actor_exclusion_sql(since=since, until=as_of_dt)
+    open_ex_sql, open_ex_params = catalog_actor_exclusion_sql()
 
     shares = (
         await session.execute(
             text(
-                """
+                f"""
                 SELECT COUNT(*) AS events,
                        COUNT(DISTINCT actor_hash) AS sharers
                 FROM client_share_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND kind IN ('place', 'selection', 'ice_city_day')
+                  {share_ex_sql}
                 """
             ),
-            {"since": since, "as_of": as_of_dt},
+            {"since": since, "as_of": as_of_dt, **share_ex_params},
         )
     ).first()
 
     deeplink_opens = (
         await session.execute(
             text(
-                """
+                f"""
                 SELECT COUNT(*) AS events,
                        COUNT(DISTINCT actor_hash) AS actors
                 FROM catalog_consumer_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND kind = :kind
                   AND COALESCE((payload->>'share_deeplink')::boolean, false)
+                  {open_ex_sql}
                 """
             ),
-            {"since": since, "as_of": as_of_dt, "kind": KIND_MINIAPP_CATALOG_ENTRY},
+            {
+                "since": since,
+                "as_of": as_of_dt,
+                "kind": KIND_MINIAPP_CATALOG_ENTRY,
+                **open_ex_params,
+            },
         )
     ).first()
 
@@ -724,122 +822,285 @@ async def get_catalog_virality_cb_metrics(
     }
 
 
+def _pulse_calendar(as_of_dt: datetime) -> dict[str, Any]:
+    """Границы текущей и прошлой недели (пн, Минск) и календарного месяца."""
+    day = catalog_event_day_minsk(as_of_dt)
+    week_start = day - timedelta(days=day.weekday())
+    prev_start = week_start - timedelta(days=7)
+    month_start = day.replace(day=1)
+    return {
+        "week_start": minsk_day_start_utc(week_start),
+        "prev_week_start": minsk_day_start_utc(prev_start),
+        "month_start": minsk_day_start_utc(month_start),
+        "week_start_date": week_start,
+        "prev_week_start_date": prev_start,
+        "month_start_date": month_start,
+        "month_label": _RU_MONTHS[month_start.month],
+    }
+
+
 async def get_catalog_demand_pulse(
     session: AsyncSession,
     *,
     as_of: datetime | None = None,
 ) -> dict[str, Any]:
-    """Пульс спроса каталога для админского «Сейчас».
+    """Пульс спроса для админского «Сейчас».
 
-    Уникальные — актёры сопоставимого ряда (``dedup_key``), не люди: веб (HMAC от IP+UA)
-    и Telegram (HMAC от telegram id) не пересекаются, один человек в обоих каналах считается
-    дважды. «Сегодня» — календарный день по Минску, не скользящие 24 часа. Пока ряда нет,
-    уникальные — 0, а не сумма старых дневных хэшей.
+    Главное число — разные Telegram-аккаунты Минска за календарную неделю (пн–вс, Минск)
+    и за прошлую. Месяц — те же аккаунты с 1-го числа, рядом с порогом 300.
+    Остальные города — только где на этой неделе есть хотя бы один аккаунт.
+    «Уже были» — пересечение минских аккаунтов этой и прошлой недели.
 
-    Клик «билеты» — намерение на сайте, не продажа; превью и краулеры не входят.
-    «Поделиться» и открытие ссылки — число событий в том же окне, что и уникальные за 7 дней.
-    Открытие считается только у строк нового формата (``dedup_key``).
+    «Поделиться» — разные аккаунты, не нажатия. «Открыли» — разные аккаунты, открывшие
+    ссылку из чата. Процент есть только когда открытий не меньше десяти.
+    Арены — только входы в мини-приложение, с городом. Сайт — отдельная строка браузеров.
+
+    Служебные Telegram-аккаунты не входят, в том числе в уже записанные строки.
+    Их заходы на сайт остаются в строке браузеров.
     """
     as_of_dt = _as_utc(as_of)
+    cal = _pulse_calendar(as_of_dt)
     comparable = await metrics_comparable_since(session)
-    since_7d = as_of_dt - timedelta(days=7)
-    since_30d = as_of_dt - timedelta(days=30)
-    today_start = minsk_day_start_utc(catalog_event_day_minsk(as_of_dt))
-    if comparable is not None:
-        since_7d = max(since_7d, comparable)
-        since_30d = max(since_30d, comparable)
-        today_start = max(today_start, comparable)
+    week_start = cal["week_start"]
+    prev_start = cal["prev_week_start"]
+    month_start = cal["month_start"]
+    range_start = min(prev_start, month_start)
+    ex_sql, ex_params = catalog_actor_exclusion_sql("e.actor_hash")
+    human = "COALESCE(e.payload->>'ua_class', 'human') = 'human'"
+    comparable_sql = " AND e.occurred_at >= :comparable" if comparable is not None else ""
+    base = {
+        "as_of": as_of_dt,
+        "week": week_start,
+        "prev": prev_start,
+        "month": month_start,
+        "range_start": range_start,
+        "mini": KIND_MINIAPP_CATALOG_ENTRY,
+        "pv": KIND_PUBLIC_PAGE_VIEW,
+        **({"comparable": comparable} if comparable is not None else {}),
+        **ex_params,
+    }
 
-    dau = wau = mau = 0
-    web_actors_7d = telegram_actors_7d = 0
-    top_arenas_7d: list[dict[str, Any]] = []
+    minsk_row = (
+        await session.execute(
+            text("SELECT id, name FROM cities WHERE lower(name) = 'минск' AND country = 'BY' ORDER BY id LIMIT 1")
+        )
+    ).first()
+    minsk_id = int(minsk_row[0]) if minsk_row else None
+    minsk_name = str(minsk_row[1]) if minsk_row else "Минск"
+
+    this_week = prev_week = month_n = returning = 0
+    other_cities: list[dict[str, Any]] = []
+    browsers = 0
+    top_arenas: list[dict[str, Any]] = []
     if comparable is not None:
-        row = (
+        city_rows = (
             await session.execute(
                 text(
-                    """
-                    SELECT
-                        COUNT(DISTINCT actor_hash) FILTER (WHERE occurred_at >= :today) AS dau,
-                        COUNT(DISTINCT actor_hash) FILTER (WHERE occurred_at >= :since7) AS wau,
-                        COUNT(DISTINCT actor_hash) AS mau,
-                        COUNT(DISTINCT actor_hash) FILTER (
-                            WHERE occurred_at >= :since7 AND kind = :pv
-                        ) AS web_actors,
-                        COUNT(DISTINCT actor_hash) FILTER (
-                            WHERE occurred_at >= :since7 AND kind = :mini
-                        ) AS telegram_actors
-                    FROM catalog_consumer_events
-                    WHERE occurred_at >= :since30 AND occurred_at < :as_of
-                      AND actor_hash IS NOT NULL
-                      AND kind IN (:pv, :mini)
-                      AND COALESCE(payload->>'ua_class', 'human') = 'human'
+                    f"""
+                    SELECT e.city_id,
+                           c.name AS city_name,
+                           COUNT(DISTINCT e.actor_hash) FILTER (
+                               WHERE e.occurred_at >= :week
+                           ) AS this_week,
+                           COUNT(DISTINCT e.actor_hash) FILTER (
+                               WHERE e.occurred_at >= :prev AND e.occurred_at < :week
+                           ) AS prev_week,
+                           COUNT(DISTINCT e.actor_hash) FILTER (
+                               WHERE e.occurred_at >= :month
+                           ) AS month_n
+                    FROM catalog_consumer_events e
+                    JOIN cities c ON c.id = e.city_id
+                    WHERE e.occurred_at >= :range_start AND e.occurred_at < :as_of
+                      AND e.actor_hash IS NOT NULL
+                      AND e.kind = :mini
+                      AND {human}
+                      {comparable_sql}
+                      {ex_sql}
+                    GROUP BY e.city_id, c.name
                     """
                 ),
-                {
-                    "today": today_start,
-                    "since7": since_7d,
-                    "since30": since_30d,
-                    "as_of": as_of_dt,
-                    "pv": KIND_PUBLIC_PAGE_VIEW,
-                    "mini": KIND_MINIAPP_CATALOG_ENTRY,
-                },
+                base,
             )
-        ).one()
-        dau = int(row.dau or 0)
-        wau = int(row.wau or 0)
-        mau = int(row.mau or 0)
-        web_actors_7d = int(row.web_actors or 0)
-        telegram_actors_7d = int(row.telegram_actors or 0)
-        top_arenas_7d = await get_catalog_top_arenas_by_events(session, days=7, as_of=as_of_dt, limit=5)
+        ).mappings().all()
+        for row in city_rows:
+            item = {
+                "city_id": int(row["city_id"]),
+                "city_name": row["city_name"],
+                "telegram_this_week": int(row["this_week"] or 0),
+                "telegram_prev_week": int(row["prev_week"] or 0),
+                "telegram_month": int(row["month_n"] or 0),
+            }
+            if minsk_id is not None and item["city_id"] == minsk_id:
+                this_week = item["telegram_this_week"]
+                prev_week = item["telegram_prev_week"]
+                month_n = item["telegram_month"]
+            elif item["telegram_this_week"] > 0:
+                other_cities.append(item)
+        other_cities.sort(key=lambda c: (-c["telegram_this_week"], c["city_name"] or ""))
 
-    tickets_actors_7d = (
-        await session.execute(
-            text(
-                """
-                SELECT COUNT(DISTINCT actor_hash)
-                FROM catalog_consumer_events
-                WHERE occurred_at >= :since AND occurred_at < :as_of
-                  AND actor_hash IS NOT NULL
-                  AND kind = :kind
-                  AND payload->>'action' = 'tickets'
-                  AND COALESCE(payload->>'ua_class', 'human') = 'human'
-                """
-            ),
-            {"since": since_7d, "as_of": as_of_dt, "kind": KIND_PUBLIC_CONTACT_CLICK},
-        )
-    ).scalar_one()
+        if minsk_id is not None:
+            returning = int(
+                (
+                    await session.execute(
+                        text(
+                            f"""
+                            SELECT COUNT(*) FROM (
+                                SELECT e.actor_hash
+                                FROM catalog_consumer_events e
+                                WHERE e.occurred_at >= :week AND e.occurred_at < :as_of
+                                  AND e.city_id = :minsk
+                                  AND e.actor_hash IS NOT NULL
+                                  AND e.kind = :mini
+                                  AND {human}
+                                  {comparable_sql}
+                                  {ex_sql}
+                                INTERSECT
+                                SELECT e.actor_hash
+                                FROM catalog_consumer_events e
+                                WHERE e.occurred_at >= :prev AND e.occurred_at < :week
+                                  AND e.city_id = :minsk
+                                  AND e.actor_hash IS NOT NULL
+                                  AND e.kind = :mini
+                                  AND {human}
+                                  {comparable_sql}
+                                  {ex_sql}
+                            ) returning_actors
+                            """
+                        ),
+                        {**base, "minsk": minsk_id},
+                    )
+                ).scalar_one()
+                or 0
+            )
 
-    share_tap_7d = (
-        await session.execute(
-            text(
-                """
-                SELECT COUNT(*)
-                FROM client_share_events
-                WHERE occurred_at >= :since AND occurred_at < :as_of
-                  AND kind IN ('place', 'selection', 'ice_city_day')
-                """
-            ),
-            {"since": since_7d, "as_of": as_of_dt},
+        browsers = int(
+            (
+                await session.execute(
+                    text(
+                        f"""
+                        SELECT COUNT(DISTINCT e.actor_hash)
+                        FROM catalog_consumer_events e
+                        WHERE e.occurred_at >= :week AND e.occurred_at < :as_of
+                          AND e.actor_hash IS NOT NULL
+                          AND e.kind = :pv
+                          AND {human}
+                          {comparable_sql}
+                        """
+                    ),
+                    base,
+                )
+            ).scalar_one()
+            or 0
         )
-    ).scalar_one()
-    share_open_7d = (
-        await session.execute(
-            text(
-                """
-                SELECT COUNT(*)
-                FROM catalog_consumer_events
-                WHERE occurred_at >= :since AND occurred_at < :as_of
-                  AND kind = :kind
-                  AND dedup_key IS NOT NULL
-                  AND COALESCE((payload->>'share_deeplink')::boolean, false)
-                """
-            ),
-            {"since": since_7d, "as_of": as_of_dt, "kind": KIND_MINIAPP_CATALOG_ENTRY},
-        )
-    ).scalar_one()
-    taps = int(share_tap_7d or 0)
-    opens = int(share_open_7d or 0)
+        arena_rows = (
+            await session.execute(
+                text(
+                    f"""
+                    SELECT e.arena_id,
+                           a.name AS arena_name,
+                           c.name AS city_name,
+                           COUNT(DISTINCT e.actor_hash) AS unique_actors
+                    FROM catalog_consumer_events e
+                    LEFT JOIN arenas a ON a.id = e.arena_id
+                    LEFT JOIN cities c ON c.id = e.city_id
+                    WHERE e.occurred_at >= :week AND e.occurred_at < :as_of
+                      AND e.arena_id IS NOT NULL
+                      AND e.actor_hash IS NOT NULL
+                      AND e.kind = :mini
+                      AND {human}
+                      {comparable_sql}
+                      {ex_sql}
+                    GROUP BY e.arena_id, a.name, c.name
+                    ORDER BY unique_actors DESC, e.arena_id
+                    LIMIT 5
+                    """
+                ),
+                base,
+            )
+        ).mappings().all()
+        top_arenas = [
+            {
+                "arena_id": row["arena_id"],
+                "arena_name": row["arena_name"],
+                "city_name": row["city_name"],
+                "unique_actors": int(row["unique_actors"] or 0),
+            }
+            for row in arena_rows
+        ]
 
+    tickets = 0
+    share_people = 0
+    share_opens = 0
+    if comparable is not None:
+        tickets = int(
+            (
+                await session.execute(
+                    text(
+                        f"""
+                        SELECT COUNT(DISTINCT e.actor_hash)
+                        FROM catalog_consumer_events e
+                        WHERE e.occurred_at >= :week AND e.occurred_at < :as_of
+                          AND e.actor_hash IS NOT NULL
+                          AND e.kind = :tickets
+                          AND e.payload->>'action' = 'tickets'
+                          AND {human}
+                          {comparable_sql}
+                        """
+                    ),
+                    {**base, "tickets": KIND_PUBLIC_CONTACT_CLICK},
+                )
+            ).scalar_one()
+            or 0
+        )
+        share_ex_sql, share_ex_params = share_actor_exclusion_sql(since=week_start, until=as_of_dt)
+        share_people = int(
+            (
+                await session.execute(
+                    text(
+                        f"""
+                        SELECT COUNT(DISTINCT actor_hash)
+                        FROM client_share_events
+                        WHERE occurred_at >= :since AND occurred_at < :as_of
+                          AND kind IN ('place', 'selection', 'ice_city_day')
+                          AND actor_hash IS NOT NULL
+                          {share_ex_sql}
+                        """
+                    ),
+                    {"since": week_start, "as_of": as_of_dt, **share_ex_params},
+                )
+            ).scalar_one()
+            or 0
+        )
+        open_ex_sql, open_ex_params = catalog_actor_exclusion_sql()
+        share_opens = int(
+            (
+                await session.execute(
+                    text(
+                        f"""
+                        SELECT COUNT(DISTINCT actor_hash)
+                        FROM catalog_consumer_events
+                        WHERE occurred_at >= :since AND occurred_at < :as_of
+                          AND kind = :kind
+                          AND actor_hash IS NOT NULL
+                          AND dedup_key IS NOT NULL
+                          AND COALESCE((payload->>'share_deeplink')::boolean, false)
+                          {comparable_sql.replace("e.", "")}
+                          {open_ex_sql}
+                        """
+                    ),
+                    {
+                        "since": week_start,
+                        "as_of": as_of_dt,
+                        "kind": KIND_MINIAPP_CATALOG_ENTRY,
+                        **({"comparable": comparable} if comparable is not None else {}),
+                        **open_ex_params,
+                    },
+                )
+            ).scalar_one()
+            or 0
+        )
+
+    remaining = max(0, MINSK_MONTHLY_TELEGRAM_GOAL - month_n)
     return {
         "metric": "catalog_demand_pulse",
         "as_of": as_of_dt.isoformat(),
@@ -847,17 +1108,33 @@ async def get_catalog_demand_pulse(
         "comparable_since_date": (
             comparable.astimezone(ZoneInfo(NOTIFICATION_TZ)).date().isoformat() if comparable else None
         ),
-        "window_since_7d": since_7d.isoformat(),
-        "dau": dau,
-        "wau": wau,
-        "mau": mau,
-        "web_actors_7d": web_actors_7d,
-        "telegram_actors_7d": telegram_actors_7d,
-        "tickets_intent_actors_7d": int(tickets_actors_7d or 0),
-        "top_arenas_7d": top_arenas_7d,
-        "share_tap_7d": taps,
-        "share_open_7d": opens,
-        "share_open_pct": round(100.0 * opens / taps, 1) if taps else None,
+        "week_start": cal["week_start_date"].isoformat(),
+        "prev_week_start": cal["prev_week_start_date"].isoformat(),
+        "month_start": cal["month_start_date"].isoformat(),
+        "month_label": cal["month_label"],
+        "minsk_name": minsk_name,
+        "minsk_telegram_this_week": this_week,
+        "minsk_telegram_prev_week": prev_week,
+        "minsk_telegram_month": month_n,
+        "minsk_month_goal": MINSK_MONTHLY_TELEGRAM_GOAL,
+        "minsk_month_remaining": remaining,
+        "minsk_returning": returning,
+        "cities": [
+            {
+                "city_name": c["city_name"],
+                "telegram_this_week": c["telegram_this_week"],
+                "telegram_prev_week": c["telegram_prev_week"],
+            }
+            for c in other_cities
+        ],
+        "browsers_this_week": browsers,
+        "tickets_intent_actors_7d": tickets,
+        "share_people_7d": share_people,
+        "share_open_7d": share_opens,
+        "share_open_pct": (
+            round(100.0 * share_opens / share_people, 1) if share_people and share_opens >= 10 else None
+        ),
+        "top_arenas_7d": top_arenas,
     }
 
 

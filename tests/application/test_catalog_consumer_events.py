@@ -369,34 +369,55 @@ async def test_comparable_since_is_first_new_format_row_or_env(db_session, monke
     assert since == datetime(2026, 10, 6, 21, 0, tzinfo=timezone.utc)  # полночь по Минску
 
 
-async def test_demand_pulse_minsk_day_excludes_bots_and_splits_channels(db_session) -> None:
-    """«Сегодня» — календарный день Минска; превью не актор; билет бота не намерение."""
+async def _minsk_city_id(db_session) -> int:
+    found = (
+        await db_session.execute(
+            text("SELECT id FROM cities WHERE lower(name) = 'минск' AND country = 'BY' ORDER BY id LIMIT 1")
+        )
+    ).scalar()
+    if found:
+        return int(found)
+    return int(
+        (
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO cities (name, country, price_group, is_active, sort_order)
+                    VALUES ('Минск', 'BY', 'default', true, 0)
+                    RETURNING id
+                    """
+                )
+            )
+        ).scalar_one()
+    )
+
+
+async def test_demand_pulse_counts_minsk_telegram_week_not_browsers(db_session) -> None:
+    """Неделя Минска — Telegram-аккаунты. Превью и анонимное «поделиться» не люди."""
+    from src.application.client_delight_metrics import share_actor_hash
+
     now = datetime.now(timezone.utc)
     as_of = now + timedelta(minutes=1)
-    web_today = public_actor_hash(client_ip="203.0.113.10", user_agent="pulse-human")
-    web_earlier = public_actor_hash(client_ip="203.0.113.12", user_agent="pulse-earlier")
-    tg = telegram_actor_hash(424242)
+    minsk = await _minsk_city_id(db_session)
+    web = public_actor_hash(client_ip="203.0.113.10", user_agent="pulse-human")
     bot = public_actor_hash(client_ip="203.0.113.11", user_agent="pulse-bot")
+    tg = telegram_actor_hash(424242)
     before = await get_catalog_demand_pulse(db_session, as_of=as_of)
 
     await _insert_event(
-        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=web_today, at=now,
+        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=web, at=now,
         payload='{"ua_class": "human"}',
     )
     await _insert_event(
         db_session, kind=KIND_MINIAPP_CATALOG_ENTRY, actor=tg, at=now, surface="miniapp_ice",
-        payload='{"share_deeplink": true}',
+        city_id=minsk, payload='{"share_deeplink": true, "ua_class": "human"}',
     )
     await _insert_event(
         db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=bot, at=now,
         payload='{"ua_class": "preview"}',
     )
     await _insert_event(
-        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=web_earlier, at=now - timedelta(days=2),
-        payload='{"ua_class": "human"}',
-    )
-    await _insert_event(
-        db_session, kind=KIND_PUBLIC_CONTACT_CLICK, actor=web_today, at=now,
+        db_session, kind=KIND_PUBLIC_CONTACT_CLICK, actor=web, at=now,
         payload='{"action": "tickets", "ua_class": "human"}',
     )
     await _insert_event(
@@ -406,24 +427,131 @@ async def test_demand_pulse_minsk_day_excludes_bots_and_splits_channels(db_sessi
     await db_session.execute(
         text(
             """
-            INSERT INTO client_share_events (kind, occurred_at, payload)
-            VALUES ('place', :at, '{}'::jsonb)
+            INSERT INTO client_share_events (kind, occurred_at, actor_hash, payload)
+            VALUES ('place', :at, :actor, '{}'::jsonb),
+                   ('place', :at, NULL, '{}'::jsonb)
             """
         ),
-        {"at": now},
+        {
+            "at": now,
+            "actor": share_actor_hash(424242, "place", now.astimezone(timezone.utc).date()),
+        },
     )
     await db_session.flush()
 
     after = await get_catalog_demand_pulse(db_session, as_of=as_of)
-    assert after["dau"] - before["dau"] == 2
-    assert after["wau"] - before["wau"] == 3
-    assert after["mau"] - before["mau"] == 3
-    assert after["web_actors_7d"] - before["web_actors_7d"] == 2
-    assert after["telegram_actors_7d"] - before["telegram_actors_7d"] == 1
+    assert after["minsk_telegram_this_week"] - before["minsk_telegram_this_week"] == 1
+    assert after["minsk_telegram_month"] - before["minsk_telegram_month"] == 1
+    assert after["browsers_this_week"] - before["browsers_this_week"] == 1
     assert after["tickets_intent_actors_7d"] - before["tickets_intent_actors_7d"] == 1
-    assert after["share_tap_7d"] - before["share_tap_7d"] == 1
+    assert after["share_people_7d"] - before["share_people_7d"] == 1
     assert after["share_open_7d"] - before["share_open_7d"] == 1
-    assert after["web_actors_7d"] + after["telegram_actors_7d"] == after["wau"]
+    assert after["share_open_pct"] is None
+    assert after["minsk_month_goal"] == 300
+
+
+async def test_demand_pulse_drops_staff_telegram_keeps_website(db_session) -> None:
+    """Три служебных telegram id не входят в уже записанные строки. Сайт по IP остаётся."""
+    from src.application.client_delight_metrics import share_actor_hash
+
+    now = datetime.now(timezone.utc)
+    as_of = now + timedelta(minutes=1)
+    staff_id = 1304982166
+    staff = telegram_actor_hash(staff_id)
+    stranger = telegram_actor_hash(424242)
+    website = public_actor_hash(client_ip="198.51.100.8", user_agent="pulse-website")
+    assert staff and stranger and website
+    minsk = await _minsk_city_id(db_session)
+    before = await get_catalog_demand_pulse(db_session, as_of=as_of)
+
+    await _insert_event(
+        db_session, kind=KIND_MINIAPP_CATALOG_ENTRY, actor=staff, at=now, surface="miniapp_ice",
+        city_id=minsk, payload='{"share_deeplink": true, "ua_class": "human"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_MINIAPP_CATALOG_ENTRY, actor=stranger, at=now, surface="miniapp_ice",
+        city_id=minsk, payload='{"share_deeplink": false, "ua_class": "human"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=website, at=now,
+        payload='{"ua_class": "human"}',
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_share_events (kind, occurred_at, actor_hash, payload)
+            VALUES ('place', :at, :staff, '{}'::jsonb),
+                   ('place', :at, NULL, '{}'::jsonb)
+            """
+        ),
+        {
+            "at": now,
+            "staff": share_actor_hash(staff_id, "place", now.astimezone(timezone.utc).date()),
+        },
+    )
+    await db_session.flush()
+
+    after = await get_catalog_demand_pulse(db_session, as_of=as_of)
+    assert after["minsk_telegram_this_week"] - before["minsk_telegram_this_week"] == 1
+    assert after["browsers_this_week"] - before["browsers_this_week"] == 1
+    assert after["share_open_7d"] - before["share_open_7d"] == 0
+    assert after["share_people_7d"] - before["share_people_7d"] == 0
+
+
+async def test_demand_pulse_returning_other_city_and_telegram_arenas(db_session) -> None:
+    """Повторный заход, чужой город и арена считаются только по Telegram."""
+    now = datetime.now(timezone.utc)
+    as_of = now + timedelta(minutes=1)
+    minsk = await _minsk_city_id(db_session)
+    other_id, arena_ids = await _city_and_arenas(db_session, 1)
+    other_name = (
+        await db_session.execute(text("SELECT name FROM cities WHERE id = :id"), {"id": other_id})
+    ).scalar_one()
+    person = telegram_actor_hash(515151)
+    web = public_actor_hash(client_ip="203.0.113.40", user_agent="arena-web-only")
+    before = await get_catalog_demand_pulse(db_session, as_of=as_of)
+
+    await _insert_event(
+        db_session, kind=KIND_MINIAPP_CATALOG_ENTRY, actor=person, at=now - timedelta(days=7),
+        surface="miniapp_ice", city_id=minsk, payload='{"ua_class": "human"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_MINIAPP_CATALOG_ENTRY, actor=person, at=now,
+        surface="miniapp_ice", city_id=minsk, payload='{"ua_class": "human"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_MINIAPP_CATALOG_ENTRY, actor=telegram_actor_hash(515152), at=now,
+        surface="miniapp_ice", city_id=other_id, arena_id=arena_ids[0],
+        payload='{"ua_class": "human"}',
+    )
+    await _insert_event(
+        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=web, at=now,
+        city_id=minsk, arena_id=arena_ids[0], payload='{"ua_class": "human"}',
+    )
+    await db_session.flush()
+
+    after = await get_catalog_demand_pulse(db_session, as_of=as_of)
+    assert after["minsk_returning"] - before["minsk_returning"] == 1
+    city = next(c for c in after["cities"] if c["city_name"] == other_name)
+    assert city["telegram_this_week"] >= 1
+    arena = next(a for a in after["top_arenas_7d"] if a["arena_id"] == arena_ids[0])
+    assert arena["unique_actors"] == 1
+    assert arena["city_name"] == other_name
+
+
+async def test_staff_telegram_event_is_not_recorded(db_session) -> None:
+    staff = telegram_actor_hash(1304982166)
+    ok = await record_catalog_consumer_event(
+        db_session, kind=KIND_MINIAPP_CATALOG_ENTRY, surface="miniapp_ice", actor_hash=staff,
+    )
+    assert ok is False
+    left = (
+        await db_session.execute(
+            text("SELECT COUNT(*) FROM catalog_consumer_events WHERE actor_hash = :actor"),
+            {"actor": staff},
+        )
+    ).scalar_one()
+    assert int(left or 0) == 0
 
 
 # --- ретеншн ------------------------------------------------------------------------------------
