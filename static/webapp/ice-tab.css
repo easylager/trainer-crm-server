@@ -121,7 +121,7 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .hdr-folder[aria-pressed='true'] {
-  color: var(--glide-ink-teal, #57d0d2);
+  color: var(--glide-ink-teal);
   font-weight: var(--app-weight-bold);
 }
 
@@ -138,8 +138,8 @@ body.ar-pilot--ice .client-app-header {
   bottom: 4px;
   height: 2px;
   width: 0;
-  border-radius: 2px;
-  background: var(--glide-ink-teal, #57d0d2);
+  border-radius: var(--app-radius-xs);
+  background: var(--glide-ink-teal);
   transition: transform .22s ease, width .22s ease;
   pointer-events: none;
 }
@@ -1411,10 +1411,10 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
 }
 
 .ice-hit mark {
-  background: color-mix(in srgb, var(--glide-accent) 32%, transparent);
-  color: inherit;
-  border-radius: 3px;
-  padding: 0 1px;
+  color: var(--glide-ink-teal);
+  font-weight: var(--app-weight-semibold);
+  background: none;
+  padding: 0;
 }
 
 .ice-picker {
@@ -1625,6 +1625,7 @@ body.ice-view-map .ice-sec--hero .ice-shop-filters__map-bar {
 }
 
 /* Над картой плавают только поиск (с городом внутри) и окно времени. */
+body.ice-view-map .ice-sec--hero .ice-intent-row,
 body.ice-view-map .ice-sec--hero #iceWhenRow,
 body.ice-view-map .ice-sec--hero .hdr-folders,
 body.ice-view-map .ice-sec--hero #iceServiceChips,
