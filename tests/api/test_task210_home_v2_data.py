@@ -310,8 +310,10 @@ async def test_glide_city_cookie_set_on_city_and_place_pages(app_use_test_db, db
 
 
 @pytest.mark.asyncio
-async def test_when_query_works_without_js_switcher(app_use_test_db, db_session) -> None:
+async def test_when_query_works_without_js_switcher(app_use_test_db, db_session, monkeypatch) -> None:
     """``?when=`` меняет текст счётчика. Переключателя времени на главной больше нет."""
+    # Понедельник: в воскресенье до 18:00 окно «выходные» подписывается как «сегодня».
+    _freeze(monkeypatch, _utc(2026, 10, 12, 11))
     name = f"Переключ {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     await _insert_arena(db_session, city_id, name="Каток")
