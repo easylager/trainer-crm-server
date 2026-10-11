@@ -61,9 +61,17 @@ describe('куда отскакивает «Нет»', () => {
     assert.ok(spot.x + btn.w / 2 < 300 - 60);
   });
 
-  it('подписи «Нет» по шагам и не выходят за список', () => {
+  it('подписи «Нет» идут по кругу без конца', () => {
     assert.equal(live.nextLabel(0), 'Нет');
     assert.equal(live.nextLabel(1), 'Не-а');
-    assert.equal(live.nextLabel(99), 'Нет');
+    const seen = new Set();
+    for (let i = 1; i <= 40; i += 1) seen.add(live.nextLabel(i));
+    assert.equal(seen.has('Нет'), false);
+    assert.equal(live.nextLabel(9), live.nextLabel(1));
+    assert.ok(seen.size >= 6);
+  });
+
+  it('у «Да» своя подпись', () => {
+    assert.match(live.model({}).yesCaption, /«Да»/);
   });
 });

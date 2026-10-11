@@ -20,7 +20,9 @@
   'use strict';
 
   var HOCKEY = 'hockey_practice';
-  var NO_LABELS = ['Нет', 'Не-а', 'Мимо', 'Не догонишь', 'Ай!', 'Нет'];
+  /* Подписи «Нет» по кругу: сколько ни гоняй, реплики не кончаются. */
+  var NO_LABELS = ['Не-а', 'Мимо', 'Не догонишь', 'Ай!', 'Ну нет', 'Слишком медленно', 'Попробуй ещё', 'Даже не думай'];
+  var YES_MS = 2600;
   var STYLE_ID = 'zovi-live-style';
   var IDLE_MS = 2600;
   var DODGE_RADIUS = 64;
@@ -51,10 +53,19 @@
     'border:2px solid var(--zl-accent,#45b9bb);background:rgba(127,215,216,.28);opacity:0;pointer-events:none;',
     'transition:transform .7s cubic-bezier(.4,0,.2,1),opacity .2s}',
     '.zl-finger.is-on{opacity:1}',
-    '.zl-yes.is-poke{animation:zl-poke .4s ease}',
-    '@keyframes zl-poke{40%{transform:var(--zl-yes-at) scale(1.08)}}',
     '.zl-cap{margin:0;font-size:13px;line-height:1.35;color:var(--zl-muted,#5b6b78)}',
-    '@media (prefers-reduced-motion:reduce){.zl-no,.zl-finger{transition:none}.zl-yes.is-poke{animation:none}}'
+    '.zl-stamp{position:absolute;right:10px;top:50%;width:64px;height:64px;margin-top:-32px;border-radius:50%;',
+    'display:grid;place-items:center;border:3px solid var(--zl-accent-ink,#127f81);color:var(--zl-accent-ink,#127f81);',
+    'font-size:20px;font-weight:700;letter-spacing:.08em;opacity:0;pointer-events:none;transform:rotate(-14deg) scale(2.2);',
+    'box-shadow:inset 0 0 0 4px var(--zl-surface,#fff),inset 0 0 0 5.5px var(--zl-accent-ink,#127f81)}',
+    '.zl.is-yes .zl-stamp{animation:zl-stamp .55s cubic-bezier(.2,1.6,.4,1) .1s forwards}',
+    '@keyframes zl-stamp{to{opacity:.92;transform:rotate(-14deg) scale(1)}}',
+    '.zl.is-yes .zl-no,.zl.is-yes .zl-finger{opacity:0;pointer-events:none;transition:opacity .2s}',
+    '.zl-bit{position:absolute;z-index:4;width:6px;height:6px;border-radius:1px;pointer-events:none;',
+    'animation:zl-bit 1.1s cubic-bezier(.2,.7,.3,1) forwards}',
+    '@keyframes zl-bit{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}',
+    '@media (prefers-reduced-motion:reduce){.zl-no,.zl-finger{transition:none}',
+    '.zl.is-yes .zl-stamp{animation:none;opacity:.92;transform:rotate(-14deg)}}'
   ].join('');
 
   function esc(value) {
@@ -89,7 +100,8 @@
       time: String(data.time || ''),
       day: String(data.day || ''),
       place: String(data.place || ''),
-      caption: (to ? 'Так увидит ' + to : 'Так увидят в чате') + '. Попробуй нажать «Нет».'
+      caption: (to ? 'Так увидит ' + to : 'Так увидят в чате') + '. Попробуй нажать «Нет».',
+      yesCaption: 'Так выглядит «Да» — и ответ сразу увидишь ты.'
     };
   }
 
@@ -106,6 +118,7 @@
       '<span class="zl-ans zl-yes" data-zl-yes>Да</span>' +
       '<span class="zl-ans zl-no" data-zl-no>Нет</span>' +
       '<span class="zl-finger" data-zl-finger aria-hidden="true"></span>' +
+      '<span class="zl-stamp" aria-hidden="true">ДА</span>' +
       '</div></div>' +
       '<p class="zl-cap" data-zl-cap>' + esc(m.caption) + '</p>' +
       '</div>'
@@ -155,8 +168,10 @@
     return best;
   }
 
+  /** 0 — исходное «Нет»; дальше реплики по кругу, без конца. */
   function nextLabel(step) {
-    return NO_LABELS[Math.min(step, NO_LABELS.length - 1)];
+    if (step <= 0) return 'Нет';
+    return NO_LABELS[(step - 1) % NO_LABELS.length];
   }
 
   function ensureStyle(doc) {
@@ -215,7 +230,6 @@
       var yesY = Math.round((s.rink.h - s.yes.h) / 2);
       yesEl.style.left = yesX + 'px';
       yesEl.style.top = yesY + 'px';
-      yesEl.style.setProperty('--zl-yes-at', 'translate(0,0)');
       place(Math.max(yesX + s.yes.w + 18, s.rink.w * 0.55), (s.rink.h - s.btn.h) / 2);
     }
 
@@ -242,7 +256,7 @@
     }
 
     function onMove(ev) {
-      if (ev.pointerType === 'touch') return;
+      if (ev.pointerType === 'touch' || el.classList.contains('is-yes')) return;
       var p = local(ev);
       if (near(p)) {
         lastTouch = Date.now();
@@ -251,6 +265,7 @@
     }
 
     function onDown(ev) {
+      if (el.classList.contains('is-yes')) return;
       var p = local(ev);
       lastTouch = Date.now();
       if (ev.target === noEl || near(p)) {
@@ -258,11 +273,51 @@
         dodge(p, true);
         return;
       }
-      if (ev.target === yesEl) {
-        yesEl.classList.remove('is-poke');
-        void yesEl.offsetWidth;
-        yesEl.classList.add('is-poke');
+      if (ev.target === yesEl) celebrate();
+    }
+
+    /* «Да» в превью — то же, что увидит друг: штамп и ледяная крошка, потом снова вопрос. */
+    function celebrate() {
+      if (el.classList.contains('is-yes')) return;
+      lastTouch = Date.now();
+      el.classList.add('is-yes');
+      var cap = el.querySelector('[data-zl-cap]');
+      var before = cap ? cap.textContent : '';
+      if (cap) cap.textContent = model({}).yesCaption;
+      if (typeof options.onDodge === 'function') options.onDodge();
+      if (!still) burst();
+      timers.push(root.setTimeout(function () {
+        if (dead) return;
+        el.classList.remove('is-yes');
+        if (cap) cap.textContent = before;
+        step = 0;
+        noEl.textContent = nextLabel(0);
+        layout();
+        lastTouch = Date.now();
+      }, YES_MS));
+    }
+
+    function burst() {
+      var x = yesEl.offsetLeft + yesEl.offsetWidth / 2;
+      var y = yesEl.offsetTop + yesEl.offsetHeight / 2;
+      var colors = ['var(--zl-accent,#45b9bb)', 'var(--zl-ice,#2aa7c9)', 'var(--zl-line-strong,#cfd6d5)'];
+      var i;
+      for (i = 0; i < 18; i += 1) {
+        var bit = doc.createElement('span');
+        var angle = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
+        var dist = 40 + Math.random() * 70;
+        bit.className = 'zl-bit';
+        bit.style.left = x + 'px';
+        bit.style.top = y + 'px';
+        bit.style.background = colors[i % 3];
+        bit.style.setProperty('--dx', Math.round(Math.cos(angle) * dist) + 'px');
+        bit.style.setProperty('--dy', Math.round(Math.sin(angle) * dist + 30) + 'px');
+        bit.style.setProperty('--r', Math.round(Math.random() * 360) + 'deg');
+        rinkEl.appendChild(bit);
       }
+      timers.push(root.setTimeout(function () {
+        [].forEach.call(rinkEl.querySelectorAll('.zl-bit'), function (b) { b.remove(); });
+      }, 1300));
     }
 
     /* Палец-подсказка: подходит к «Нет», тот отъезжает. Только пока никто не трогает. */
@@ -272,7 +327,7 @@
         destroy();
         return;
       }
-      if (doc.hidden || Date.now() - lastTouch < IDLE_MS * 2) return;
+      if (doc.hidden || el.classList.contains('is-yes') || Date.now() - lastTouch < IDLE_MS * 2) return;
       var s = sizes();
       var startX = s.rink.w * (pos.x > s.rink.w / 2 ? 0.2 : 0.85);
       var target = { x: pos.x + s.btn.w / 2, y: pos.y + s.btn.h / 2 };
