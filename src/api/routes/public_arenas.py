@@ -162,7 +162,7 @@ async def get_public_ice_arenas(
     ),
     seg: str | None = Query(
         None,
-        description="На вкладке Хоккей: ohm (сеансы) или centers (центры по записи).",
+        description="На вкладке «С клюшкой»: ohm (сеансы) или centers (центры по записи).",
     ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:

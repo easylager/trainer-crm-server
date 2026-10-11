@@ -161,7 +161,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert "<span>Сегодня <small>0</small></span>" in skate, "ноль — не ссылка"
     assert "ближайший <b>завтра 12:00" in skate
 
-    ohm = _route(html, "Хоккей")
+    ohm = _route(html, "С клюшкой")
     assert ohm, html
     assert f'href="/c/{slug}?kind=ohm"' in ohm and "seg=" not in ohm and "1 каток" in ohm
     if ohm_weekend:
@@ -311,19 +311,19 @@ def test_city_hub_title_names_only_sections_on_the_page() -> None:
         city_hub_document_title(
             {"city": {"name": "Минск"}, "rink_count": 12, "service_count": 14, "ohm_counts": {"all": 19}}
         )
-        == "Минск · где покататься, заточка, хоккей | Glide"
+        == "Минск · где покататься, заточка, с клюшкой | Glide"
     )
     assert (
         city_hub_document_title(
             {"city": {"name": "Минск"}, "rink_count": 0, "service_count": 0, "ohm_counts": {"all": 0}, "center_count": 2}
         )
-        == "Минск · хоккей | Glide"
+        == "Минск · с клюшкой | Glide"
     )
 
 
 @pytest.mark.asyncio
 async def test_city_hub_hockey_tile_for_centers_without_sessions(app_use_test_db, db_session) -> None:
-    """Нет будущих ОХМ, но есть центр — плитка «Хоккей» ведёт на seg=centers."""
+    """Нет будущих ОХМ, но есть центр — плитка «С клюшкой» ведёт на seg=centers."""
     name = f"Центрхаб {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     center_name = f"Центр хаба {uuid.uuid4().hex[:4]}"
@@ -351,12 +351,12 @@ async def test_city_hub_hockey_tile_for_centers_without_sessions(app_use_test_db
         ohm = await client.get(f"/c/{slug}", params={"kind": "ohm"})
 
     assert hub.status_code == 200
-    tile = _route(hub.text, "Хоккей")
+    tile = _route(hub.text, "С клюшкой")
     assert tile, hub.text
     assert f'href="/c/{slug}?kind=ohm&amp;seg=centers"' in tile
     assert "1 центр" in tile
     assert "каток" not in tile
-    assert f"{name} · хоккей | Glide" in hub.text
+    assert f"{name} · с клюшкой | Glide" in hub.text
     assert ohm.status_code == 200
     assert ohm.headers.get("location") is None
     ohm_canon = re.search(r'<link rel="canonical" href="([^"]*)"', ohm.text)

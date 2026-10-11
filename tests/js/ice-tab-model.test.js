@@ -178,7 +178,7 @@ describe('catalog header (A′)', () => {
     assert.equal(modes.find((m) => m.id === 'coach').label, 'Тренеры');
   });
 
-  it('catalogModesView: Хоккей и Заточка — разделы в одном порядке с сайтом', () => {
+  it('catalogModesView: С клюшкой и Заточка — разделы в одном порядке с сайтом', () => {
     const { catalogModesView, sectionHint } = loadModel();
     const modes = catalogModesView({
       facets: [{ key: 'ice', count: 4 }, { key: 'shop', count: 2 }],
@@ -196,7 +196,7 @@ describe('catalog header (A′)', () => {
     );
     assert.deepEqual(
       modes.map((m) => m.label),
-      ['Покататься', 'Хоккей', 'Заточка', 'Магазины', 'Тренеры']
+      ['Покататься', 'С клюшкой', 'Заточка', 'Магазины', 'Тренеры']
     );
     assert.equal(modes.find((m) => m.id === 'service').active, true);
     assert.equal(modes.find((m) => m.id === 'places').active, false);
@@ -206,7 +206,7 @@ describe('catalog header (A′)', () => {
     assert.equal(sectionHint('shop', ''), '');
   });
 
-  it('Хоккей виден по центрам, даже если сеансов ОХМ нет', () => {
+  it('С клюшкой виден по центрам, даже если сеансов ОХМ нет', () => {
     const { catalogModesView, buildListUrl, formatSortCaption, boardCardView } = loadModel();
     const modes = catalogModesView({
       facets: [],
@@ -217,7 +217,7 @@ describe('catalog header (A′)', () => {
       trainerCount: 0,
       shopCount: 0,
     });
-    assert.ok(modes.some((m) => m.id === 'ohm' && m.label === 'Хоккей'));
+    assert.ok(modes.some((m) => m.id === 'ohm' && m.label === 'С клюшкой'));
     const url = buildListUrl({ cityId: 3, intent: 'ohm', seg: 'centers' });
     assert.match(url, /intent=ohm/);
     assert.match(url, /seg=centers/);

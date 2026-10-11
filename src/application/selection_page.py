@@ -810,7 +810,7 @@ def _hockey_segment_chips_html(view: Mapping[str, Any], *, city_name: str) -> st
     ohm_cls = "chip" + ("" if centers else " chip--on")
     centers_cls = "chip" + (" chip--on" if centers else "")
     return (
-        '<nav class="chips" aria-label="Хоккей">'
+        f'<nav class="chips" aria-label="{_esc(t("chip.hockey"))}">'
         f'<a class="{ohm_cls}" href="{_esc(ohm_href)}">ОХМ</a>'
         f'<a class="{centers_cls}" href="{_esc(centers_href)}">{centers_label}</a>'
         "</nav>"

@@ -69,7 +69,7 @@ async def test_kind_ohm_lists_only_arenas_with_hockey_practice(app_use_test_db, 
         all_page = await client.get(f"/c/{slug}")
 
     assert ohm_page.status_code == 200
-    assert "Минск · хоккей" in ohm_page.text or f"{name} · хоккей" in ohm_page.text
+    assert "Минск · с клюшкой" in ohm_page.text or f"{name} · с клюшкой" in ohm_page.text
     assert "открытая тренировка, ОХМ" in ohm_page.text
     assert "08:45" in ohm_page.text
     assert f"ОХМ-каток" in ohm_page.text or "ohm" in ohm_page.text.lower()
