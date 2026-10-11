@@ -205,7 +205,7 @@ SELECT
 WHERE a.city_id = :cid
   AND s.local_date = :day
   {ICE_CITY_DAY_SESSION_WHERE_SQL}
-ORDER BY a.name, s.starts_at_local, s.id
+ORDER BY s.starts_at_local, a.name, s.id
 """
 
 _CITY_CLOCK_CTE = f"""

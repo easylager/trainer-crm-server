@@ -834,16 +834,45 @@ def _hours_html(card: Mapping[str, Any]) -> str:
     hours = card.get("opening_hours")
     if not isinstance(hours, Mapping):
         return ""
+    season_closed = _out_of_season(card)
     rows = _fixed_hours_row("Комплекс", hours.get("complex")) + _fixed_hours_row("Касса", hours.get("kassa"))
     if has_known_hours(hours):
-        rows += "".join(
-            f'<p class="row"><span>{_esc(WEEKDAY_SHORT_RU[d])}</span>'
-            f'<b>{_esc(format_intervals_ru(intervals_for_weekday(hours, d)) if intervals_for_weekday(hours, d) else "выходной")}</b></p>'
-            for d in range(7)
-        )
+        rows += _hours_rows(hours, season_closed=season_closed)
     if not rows:
         return ""
+    if season_closed:
+        return (
+            '<section class="sec"><h2 class="sec__title">Часы в сезоне</h2>'
+            '<p class="muted">Сейчас приехать нельзя. '
+            "Ниже — часы на время, когда площадка открыта.</p>"
+            f"{rows}</section>"
+        )
     return f'<section class="sec"><h2 class="sec__title">Когда можно приехать</h2>{rows}</section>'
+
+
+def _out_of_season(card: Mapping[str, Any]) -> bool:
+    """Зимняя площадка вне сезона (``in_season``) или явный режим «сезон закрыт»."""
+    if normalize_schedule_mode(card.get("schedule_mode")) == SCHEDULE_MODE_SEASON_CLOSED:
+        return True
+    return card.get("in_season") is False
+
+
+def _hours_rows(hours: Mapping[str, Any], *, season_closed: bool) -> str:
+    """Закрытый сезон — «ежедневно», не расписание этой недели."""
+    if season_closed:
+        groups = hours_groups(hours)
+        if groups and all(pair for _, pair in groups):
+            return "".join(
+                f'<p class="row"><span>{_esc(label)}</span>'
+                f"<b>{_esc(pair[0])}–{_esc(pair[1])}</b></p>"
+                for label, pair in groups
+                if pair is not None
+            )
+    return "".join(
+        f'<p class="row"><span>{_esc(WEEKDAY_SHORT_RU[d])}</span>'
+        f'<b>{_esc(format_intervals_ru(intervals_for_weekday(hours, d)) if intervals_for_weekday(hours, d) else "выходной")}</b></p>'
+        for d in range(7)
+    )
 
 
 def _rental_catalog_html(card: Mapping[str, Any]) -> str:

@@ -432,7 +432,7 @@ def _skate_route(view: Mapping[str, Any]) -> str:
         price = _price_bits(first)
         live = _nearest_live(when, str(first.get("arena_name") or ""), price)
     elif window_n == 0:
-        live = "ближайших сеансов нет"
+        live = "времени катания в расписании нет"
     quick = "" if window_n == 0 else _quick_html(slug, counts, hot=view.get("hot_skate"), all_count=None, t="ice")
     return _route_html(href=_list_href(slug, t="ice"), name=t("route.skate"), count=count, live=live, dot_off=not upcoming, quick=quick)
 
@@ -548,8 +548,11 @@ def _places_html(view: Mapping[str, Any]) -> str:
             continue
         links = ""
         for p in group:
-            href = place_path(city_name=city_name, slug=p["slug"]) if p["slug"] else f"/p/{p['id']}"
-            links += f'<li><a href="{_esc(href)}">{_esc(p["name"])}</a></li>'
+            if p["slug"]:
+                href = place_path(city_name=city_name, slug=p["slug"])
+                links += f'<li><a href="{_esc(href)}">{_esc(p["name"])}</a></li>'
+            else:
+                links += f"<li>{_esc(p['name'])}</li>"
         parts.append(f'<h3 class="places__title">{title}</h3><ul class="places__list">{links}</ul>')
     return '<section class="hub-sec hub-sec--places"><details class="places"><summary>Все места города</summary>' + "".join(parts) + "</details></section>"
 
@@ -680,7 +683,7 @@ def render_city_hub_page(
         router = (
             '<section class="hub-sec"><h2>Что нужно?</h2>'
             f'<div class="router">{routes}</div>'
-            '<p class="hub-hint">Лыжероллеры, залы и школы появятся здесь плитками, когда в городе будут данные. Пустых плиток не показываем.</p>'
+            '<p class="hub-hint">Лыжероллеров и залов в списке пока нет.</p>'
             "</section>"
         )
     else:
@@ -694,16 +697,25 @@ def render_city_hub_page(
     )
     body = (
         hero
-        + router
         + _upcoming_html(view)
+        + router
         + _places_html(view)
         + _share_html(share, venue_type="ice", telegram_link_only=True)
         + dock
     )
     elements = []
-    for n, p in enumerate(view.get("places") or []):
-        path = place_path(city_name=city_name, slug=p["slug"]) if p.get("slug") else f"/p/{int(p['id'])}"
-        elements.append({"@type": "ListItem", "position": n + 1, "name": p["name"], "url": join_public_origin(canonical_url, path)})
+    for p in view.get("places") or []:
+        if not p.get("slug"):
+            continue
+        path = place_path(city_name=city_name, slug=p["slug"])
+        elements.append(
+            {
+                "@type": "ListItem",
+                "position": len(elements) + 1,
+                "name": p["name"],
+                "url": join_public_origin(canonical_url, path),
+            }
+        )
     ld = json_for_script(
         {
             "@context": "https://schema.org",
