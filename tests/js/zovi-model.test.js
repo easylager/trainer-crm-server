@@ -99,3 +99,25 @@ describe('билет и дата', () => {
     assert.equal(M.ticketQuery(999, 9999, -1, true), '?t=10&s=600&f=0&k=1');
   });
 });
+
+describe('воронка (TASK-237): тело маячка и ?src=', () => {
+  const model = M;
+
+  it('маячок несёт вид и токен, акт зажат в 0..10', () => {
+    assert.deepEqual(model.eventBody('invite_send_answer', 'tok'), { kind: 'invite_send_answer', device_token: 'tok' });
+    assert.deepEqual(model.eventBody('invite_no_attempt', 'tok', 4), {
+      kind: 'invite_no_attempt',
+      device_token: 'tok',
+      act: 4,
+    });
+    assert.equal(model.eventBody('invite_no_attempt', 'tok', 99).act, 10);
+  });
+
+  it('src берётся из адреса страницы только как короткое слово', () => {
+    assert.equal(model.srcQuery('?src=sys'), '?src=sys');
+    assert.equal(model.srcQuery('?a=1&src=copy&b=2'), '?src=copy');
+    assert.equal(model.srcQuery('?src=<script>'), '');
+    assert.equal(model.srcQuery(''), '');
+    assert.equal(model.srcQuery(undefined), '');
+  });
+});

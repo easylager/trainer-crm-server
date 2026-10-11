@@ -59,12 +59,27 @@ KIND_PUBLIC_PAGE_VIEW = "public_page_view"
 KIND_PUBLIC_TELEGRAM_CTA = "public_telegram_cta"
 KIND_MINIAPP_CATALOG_ENTRY = "miniapp_catalog_entry"
 KIND_PUBLIC_CONTACT_CLICK = "public_contact_click"
+# TASK-237: воронка открытки «Пойдёшь со мной на каток?».
+KIND_INVITE_CREATE = "invite_create"
+KIND_INVITE_OPEN = "invite_open"
+KIND_INVITE_NO_ATTEMPT = "invite_no_attempt"
+KIND_INVITE_YES = "invite_yes"
+KIND_INVITE_SEND_ANSWER = "invite_send_answer"
+
+INVITE_FUNNEL_KINDS = (
+    KIND_INVITE_CREATE,
+    KIND_INVITE_OPEN,
+    KIND_INVITE_NO_ATTEMPT,
+    KIND_INVITE_YES,
+    KIND_INVITE_SEND_ANSWER,
+)
 
 CATALOG_CONSUMER_KINDS = (
     KIND_PUBLIC_PAGE_VIEW,
     KIND_PUBLIC_TELEGRAM_CTA,
     KIND_MINIAPP_CATALOG_ENTRY,
     KIND_PUBLIC_CONTACT_CLICK,
+    *INVITE_FUNNEL_KINDS,
 )
 
 SURFACE_PLACE_PAGE = "place_page"
@@ -323,8 +338,13 @@ async def record_catalog_consumer_event(
     start_param: str | None = None,
     payload: dict[str, Any] | None = None,
     dedup: bool = True,
+    dedup_key: str | None = None,
 ) -> bool:
-    """Append one row (or nothing on dedup conflict). Returns True if inserted. Never raises into HTTP handlers."""
+    """Append one row (or nothing on dedup conflict). Returns True if inserted. Never raises into HTTP handlers.
+
+    ``dedup_key`` — готовый ключ вместо ``event_dedup_hash`` (воронка открытки, TASK-237: там
+    уникальность задаёт код приглашения, а не актёр с сутками).
+    """
     if kind not in CATALOG_CONSUMER_KINDS:
         raise ValueError(f"Unknown catalog consumer kind: {kind!r}")
     if actor_hash and actor_hash in excluded_catalog_actor_hashes():
@@ -334,7 +354,7 @@ async def record_catalog_consumer_event(
         sp = None
     day = catalog_event_day_minsk()
     body = dict(payload or {})
-    dedup_key = (
+    dedup_key = dedup_key or (
         event_dedup_hash(
             kind=kind,
             surface=surface,

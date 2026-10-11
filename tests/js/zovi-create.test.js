@@ -118,3 +118,57 @@ describe('имя как на сервере', () => {
     });
   });
 });
+
+describe('воронка (TASK-237): токен устройства, канал ссылки, вход', () => {
+  const { ensureDeviceToken, linkWithSrc, inviteRequestBody, readQuery } = loadModel();
+
+  function memoryStorage(initial) {
+    const data = new Map(Object.entries(initial || {}));
+    return {
+      getItem: (k) => (data.has(k) ? data.get(k) : null),
+      setItem: (k, v) => data.set(k, v),
+      data,
+    };
+  }
+
+  it('берёт zovi_device, который уже есть (его пишет открытка)', () => {
+    const store = memoryStorage({ zovi_device: '0123456789abcdef0123456789abcdef' });
+    assert.equal(ensureDeviceToken(store), '0123456789abcdef0123456789abcdef');
+  });
+
+  it('создаёт 32 hex и кладёт в то же поле', () => {
+    const store = memoryStorage();
+    const token = ensureDeviceToken(store, () => 171);
+    assert.equal(token, 'ab'.repeat(16));
+    assert.equal(store.data.get('zovi_device'), token);
+  });
+
+  it('битое значение заменяет, а без хранилища токен всё равно есть', () => {
+    assert.match(ensureDeviceToken(memoryStorage({ zovi_device: 'x' })), /^[0-9a-f]{32}$/);
+    assert.match(ensureDeviceToken(null), /^[0-9a-f]{32}$/);
+  });
+
+  it('ссылка получает src канала, чужие части адреса не трогает', () => {
+    assert.equal(linkWithSrc('https://x.by/zovi/abcd2345', 'sys'), 'https://x.by/zovi/abcd2345?src=sys');
+    assert.equal(linkWithSrc('https://x.by/zovi/abcd2345?a=1', 'copy'), 'https://x.by/zovi/abcd2345?a=1&src=copy');
+    assert.equal(linkWithSrc('https://x.by/zovi/abcd2345', ''), 'https://x.by/zovi/abcd2345');
+  });
+
+  it('тело создания несёт токен, src и via только когда они есть', () => {
+    const base = { toName: '', fromName: 'Макс', sessionId: 15, showPrice: false, parentCode: null };
+    assert.deepEqual(Object.keys(inviteRequestBody(base).body).sort(), [
+      'from_name', 'parent_code', 'session_id', 'show_price', 'to_name',
+    ]);
+    const full = inviteRequestBody({ ...base, deviceToken: 'a'.repeat(32), src: 'sys', via: 'arena_card' }).body;
+    assert.equal(full.device_token, 'a'.repeat(32));
+    assert.equal(full.src, 'sys');
+    assert.equal(full.via, 'arena_card');
+  });
+
+  it('via и src читаются из адреса, мусор отбрасывается', () => {
+    assert.equal(readQuery('?via=arena_card&src=sys').via, 'arena_card');
+    assert.equal(readQuery('?via=arena_card&src=sys').src, 'sys');
+    assert.equal(readQuery('?via=<b>&src=1').via, null);
+    assert.equal(readQuery('').src, null);
+  });
+});

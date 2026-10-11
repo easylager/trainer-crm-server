@@ -109,6 +109,9 @@ class Settings(BaseSettings):
     # TASK-231: создание открытки «Пойдёшь со мной на каток?» — свой бакет, не общий public.
     api_rate_limit_invite_max_requests: int = 20
     api_rate_limit_invite_window_sec: float = 3600.0
+    # TASK-237: маячки воронки открытки (до пяти актов + «отправить ответ» на открытие).
+    api_rate_limit_invite_event_max_requests: int = 60
+    api_rate_limit_invite_event_window_sec: float = 600.0
     # leftmost (по умолчанию: Railway режет клиентский XFF, левая запись — реальный IP) |
     # rightmost_hops (платформа дописывает справа). См. src/shared/client_ip.py, docs/ops.
     client_ip_strategy: str = "leftmost"

@@ -17,8 +17,21 @@
   var state = { to: DATA.to_name || '', from: DATA.from_name || '', tries: 0, answered: false };
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* Воронка — TASK-237. Пока одна точка входа: open, no_attempt, yes, send_answer. */
-  function track(name, data) { void name; void data; }
+  /* Воронка — TASK-237. «Открыто» и «да» пишет сервер сам (GET карточки и POST answer);
+     маячок нужен только тому, чего сервер не видит: попыткам «нет» (с номером акта) и «отправить ответ». */
+  var BEACONS = { no_attempt: 'invite_no_attempt', send_answer: 'invite_send_answer' };
+  function track(name, data) {
+    var kind = BEACONS[name];
+    if (!kind || !CODE) return;
+    var body = JSON.stringify(M.eventBody(kind, deviceToken, data && data.act));
+    try {
+      if (navigator.sendBeacon && navigator.sendBeacon(API + '/event', new Blob([body], { type: 'application/json' }))) return;
+    } catch (e) { /* ниже запасной путь */ }
+    try {
+      fetch(API + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true, credentials: 'same-origin' })
+        .catch(function () { /* маячок не повторяем */ });
+    } catch (e) { /* */ }
+  }
 
   /* ================= Токен устройства ================= */
   /* В приватном режиме хранилища может не быть: тогда токен живёт до закрытия страницы. */
@@ -231,9 +244,10 @@
 
   /* Акты. Номер акта = state.tries. */
   function nextAct(px, py) {
-    if (!stats.first) { stats.first = performance.now(); track('no_attempt', {}); }
+    if (!stats.first) stats.first = performance.now();
     state.tries++;
     var n = state.tries;
+    track('no_attempt', { act: n });   /* одна строка на открытие: сервер поднимает в ней номер акта */
     if (n === 1) { say('Не-а', 'Кнопка катается лучше тебя.'); glideFrom(px, py, 150); }
     else if (n === 2) { swap(px, py); return; }
     else if (n === 3) { unmask(); fall(px); return; }
@@ -574,7 +588,7 @@
   else idleWobble();
   track('open', { state: DATA.state });
   if (CODE && window.fetch) {
-    fetch(API, { headers: { 'X-Zovi-Device': deviceToken }, credentials: 'same-origin' })
+    fetch(API + M.srcQuery(window.location.search), { headers: { 'X-Zovi-Device': deviceToken }, credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(applyServer, function () { /* офлайн: открытка уже нарисована из SSR */ });
   }

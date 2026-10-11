@@ -82,6 +82,9 @@ def rate_limit_bucket_for_path(path: str) -> str:
     # TASK-231: только создание. Чтение открытки и ответ остаются в public.
     if path == "/api/public/invites":
         return "invite"
+    # TASK-237: маячок воронки пишет в базу, поэтому не делит бюджет с чтением открытки.
+    if path.startswith("/api/public/invites/") and path.endswith("/event"):
+        return "invite_event"
     if path.startswith("/api/public/photos/"):
         return "photo"
     if path.startswith("/api/public"):
@@ -109,6 +112,9 @@ def _get_limiters() -> dict[str, RateLimiter]:
             # иначе подделка UA снимала бы лимит целиком.
             "bot": RateLimiter(s.api_rate_limit_bot_max_requests, s.api_rate_limit_bot_window_sec),
             "invite": RateLimiter(s.api_rate_limit_invite_max_requests, s.api_rate_limit_invite_window_sec),
+            "invite_event": RateLimiter(
+                s.api_rate_limit_invite_event_max_requests, s.api_rate_limit_invite_event_window_sec
+            ),
         }
     return _limiters
 

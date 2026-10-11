@@ -102,6 +102,18 @@
     };
   }
 
+  /* Воронка (TASK-237): тело маячка и ?src= для запроса открытки. Сервер сверяет оба с белым списком. */
+  function eventBody(kind, deviceToken, act) {
+    var body = { kind: kind, device_token: deviceToken };
+    if (act != null) body.act = clampInt(act, 0, 10);
+    return body;
+  }
+
+  function srcQuery(search) {
+    var m = /[?&]src=([a-z]{2,8})(?:&|$)/.exec(String(search || ''));
+    return m ? '?src=' + m[1] : '';
+  }
+
   /* Картинка билета: имена и сеанс сервер берёт из базы, в query — только статистика. */
   function ticketQuery(tries, sec, falls, tricked) {
     return '?t=' + clampInt(tries, 0, 10) + '&s=' + clampInt(sec, 0, 600) + '&f=' + clampInt(falls, 0, 5) + '&k=' + (tricked ? 1 : 0);
@@ -117,6 +129,8 @@
     ticketWho: ticketWho,
     dayLabel: dayLabel,
     answerBody: answerBody,
+    eventBody: eventBody,
+    srcQuery: srcQuery,
     ticketQuery: ticketQuery
   };
 });

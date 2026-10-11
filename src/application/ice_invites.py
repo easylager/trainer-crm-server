@@ -319,6 +319,33 @@ async def answer_invite(
     responder_actor_hash: str | None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    payload, _inserted = await answer_invite_result(
+        session,
+        code,
+        device_token=device_token,
+        tries=tries,
+        resist_ms=resist_ms,
+        falls=falls,
+        tricked=tricked,
+        responder_actor_hash=responder_actor_hash,
+        now=now,
+    )
+    return payload
+
+
+async def answer_invite_result(
+    session: AsyncSession,
+    code: str,
+    *,
+    device_token: str,
+    tries: int,
+    resist_ms: int,
+    falls: int,
+    tricked: bool,
+    responder_actor_hash: str | None,
+    now: datetime | None = None,
+) -> tuple[dict[str, Any], bool]:
+    """Ответ и признак «вставлен сейчас» (``False`` — вернулся уже существовавший)."""
     moment = _as_utc(now or datetime.now(timezone.utc))
     cleaned = validate_answer_payload(
         device_token=device_token,
@@ -357,6 +384,7 @@ async def answer_invite(
         },
     )
     answer = inserted.mappings().first()
+    was_inserted = answer is not None
     if answer is None:
         answer = (
             (
@@ -373,7 +401,7 @@ async def answer_invite(
             .one()
         )
     await session.commit()
-    return _answer_payload(answer)
+    return _answer_payload(answer), was_inserted
 
 
 async def get_invite_status(

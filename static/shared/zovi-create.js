@@ -22,6 +22,7 @@
   var HOCKEY = 'hockey_practice';
   var MINE_KEY = 'zovi_mine';
   var MINE_LIMIT = 20;
+  var DEVICE_KEY = 'zovi_device';
   var WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
   var MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
   var STOP_ROOTS = [
@@ -203,7 +204,7 @@
     if (!input.sessionId) {
       return { ok: false, toError: '', fromError: '', formError: 'Выберите сеанс.' };
     }
-    return {
+    var built = {
       ok: true,
       body: {
         session_id: input.sessionId,
@@ -213,6 +214,34 @@
         parent_code: input.parentCode || null
       }
     };
+    /* TASK-237: воронка. Поля необязательные, сервер сверяет src и via с белым списком. */
+    if (input.deviceToken) built.body.device_token = input.deviceToken;
+    if (input.src) built.body.src = input.src;
+    if (input.via) built.body.via = input.via;
+    return built;
+  }
+
+  /* Тот же токен, что на открытке: по нему сервер склеивает «получил» и «создал своё». */
+  function ensureDeviceToken(storage, random) {
+    var tok = '';
+    try { tok = storage.getItem(DEVICE_KEY) || ''; } catch (err) { tok = ''; }
+    if (/^[0-9a-f]{32}$/.test(tok)) return tok;
+    var rnd = random || function () { return Math.floor(Math.random() * 256); };
+    var out = '';
+    var i;
+    for (i = 0; i < 16; i += 1) out += ('0' + (rnd() & 255).toString(16)).slice(-2);
+    try { storage.setItem(DEVICE_KEY, out); } catch (err) { /* приватный режим: токен живёт до закрытия страницы */ }
+    return out;
+  }
+
+  function safeStorage() {
+    try { return window.localStorage; } catch (err) { return null; }
+  }
+
+  /* Канал ссылки: Web Share — sys, «Скопировать» — copy. На открытку и превью не влияет. */
+  function linkWithSrc(link, src) {
+    if (!link || !src) return link;
+    return link + (link.indexOf('?') === -1 ? '?' : '&') + 'src=' + encodeURIComponent(src);
   }
 
   function kindLabel(kind) {
@@ -251,6 +280,7 @@
     });
   }
 
+  /* Воронку пишет сервер (создание — в POST /api/public/invites), клиентских маячков здесь нет. */
   function track() {}
 
   function selectedSession(state) {
@@ -273,10 +303,14 @@
     var city = parseInt(params.get('city') || '', 10);
     var sessionId = parseInt(params.get('s') || '', 10);
     var from = (params.get('from') || '').trim();
+    var via = (params.get('via') || '').trim().toLowerCase();
+    var src = (params.get('src') || '').trim().toLowerCase();
     return {
       cityId: city > 0 ? city : null,
       sessionId: sessionId > 0 ? sessionId : null,
-      parentCode: from || null
+      parentCode: from || null,
+      via: /^[a-z_]{1,20}$/.test(via) ? via : null,
+      src: /^[a-z]{2,8}$/.test(src) ? src : null
     };
   }
 
@@ -623,7 +657,10 @@
         fromName: fromInput.value,
         sessionId: state.sessionId,
         showPrice: state.showPrice,
-        parentCode: state.parentCode
+        parentCode: state.parentCode,
+        deviceToken: ensureDeviceToken(safeStorage()),
+        src: query.src,
+        via: query.via
       });
       toError.textContent = built.toError || '';
       fromError.textContent = built.fromError || '';
@@ -677,20 +714,21 @@
 
     doc.getElementById('send').addEventListener('click', function () {
       if (!state.link) return;
-      var text = (state.shareQuestion || state.question) + '\n' + state.link;
+      var sysLink = linkWithSrc(state.link, 'sys');
+      var text = (state.shareQuestion || state.question) + '\n' + sysLink;
       track('invite_share', {});
       if (navigator.share) {
-        navigator.share({ text: text, url: state.link }).catch(function (err) {
+        navigator.share({ text: text, url: sysLink }).catch(function (err) {
           if (err && err.name === 'AbortError') return;
-          copyText(state.link);
+          copyText(linkWithSrc(state.link, 'copy'));
         });
         return;
       }
-      copyText(state.link);
+      copyText(linkWithSrc(state.link, 'copy'));
     });
 
     doc.getElementById('copy').addEventListener('click', function () {
-      if (state.link) copyText(state.link);
+      if (state.link) copyText(linkWithSrc(state.link, 'copy'));
     });
 
     paintMine();
@@ -735,6 +773,8 @@
     nextDayLabel: nextDayLabel,
     validateInviteName: validateInviteName,
     inviteRequestBody: inviteRequestBody,
+    ensureDeviceToken: ensureDeviceToken,
+    linkWithSrc: linkWithSrc,
     kindLabel: kindLabel,
     citiesWithSessions: citiesWithSessions,
     pickCityId: pickCityId,

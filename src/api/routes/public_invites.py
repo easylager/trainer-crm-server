@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import date
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel
@@ -13,7 +16,21 @@ from src.api.deps import get_session
 from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
 from src.application.ice_invite_slots import list_invite_slots
-from src.application.ice_invites import InviteRejected, answer_invite, create_invite, get_invite, get_invite_status
+from src.application.ice_invites import (
+    InviteRejected,
+    answer_invite_result,
+    create_invite,
+    get_invite,
+    get_invite_status,
+)
+from src.application.zovi_funnel_events import (
+    record_invite_answered,
+    record_invite_beacon,
+    record_invite_created,
+    record_invite_opened,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/public", tags=["public-invites"])
 
@@ -24,6 +41,10 @@ class CreateInviteBody(BaseModel):
     from_name: str
     show_price: bool = False
     parent_code: str | None = None
+    # TASK-237: воронка. Всё необязательно; src и via сервер сверяет с белым списком.
+    device_token: str | None = None
+    src: str | None = None
+    via: str | None = None
 
 
 class AnswerInviteBody(BaseModel):
@@ -69,7 +90,7 @@ async def post_public_invite(
     _no_store(response)
     _, actor_hash = catalog_share_actor(principal, request)
     try:
-        return await create_invite(
+        created = await create_invite(
             session,
             session_id=body.session_id,
             to_name=body.to_name,
@@ -80,20 +101,35 @@ async def post_public_invite(
         )
     except InviteRejected as exc:
         raise _http(exc) from exc
+    await record_invite_created(
+        session,
+        code=created["code"],
+        actor_hash=actor_hash,
+        device_token=body.device_token,
+        src=body.src,
+        via=body.via,
+    )
+    return created
 
 
 @router.get("/invites/{code}")
 async def get_public_invite(
     code: str,
     response: Response,
+    request: Request,
+    src: str | None = Query(None, max_length=16),
     session: AsyncSession = Depends(get_session),
     x_zovi_device: str | None = Header(None, alias="X-Zovi-Device"),
 ) -> dict:
     _no_store(response)
     try:
-        return await get_invite(session, code, device_token=x_zovi_device)
+        card = await get_invite(session, code, device_token=x_zovi_device)
     except InviteRejected as exc:
         raise _http(exc) from exc
+    # Этот вызов делает JS страницы, а не превью-бот: здесь «открыто» считается.
+    _, actor_hash = catalog_share_actor(None, request)
+    await record_invite_opened(session, code=code, actor_hash=actor_hash, device_token=x_zovi_device, src=src)
+    return card
 
 
 @router.post("/invites/{code}/answer")
@@ -108,7 +144,7 @@ async def post_public_invite_answer(
     _no_store(response)
     _, actor_hash = catalog_share_actor(principal, request)
     try:
-        return await answer_invite(
+        answer, inserted = await answer_invite_result(
             session,
             code,
             device_token=body.device_token,
@@ -120,6 +156,44 @@ async def post_public_invite_answer(
         )
     except InviteRejected as exc:
         raise _http(exc) from exc
+    if inserted:
+        await record_invite_answered(
+            session,
+            code=code,
+            actor_hash=actor_hash,
+            device_token=body.device_token,
+            tries=answer["tries"],
+            tricked=answer["tricked"],
+        )
+    return answer
+
+
+@router.post("/invites/{code}/event", status_code=204)
+async def post_public_invite_event(
+    code: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Маячок страницы открытки (TASK-237): ``{kind, device_token, act?}``.
+
+    Всегда 204: маячку нечем обработать ошибку, а воронка не должна ломать открытку. Тело читаем
+    сами — ``sendBeacon`` шлёт его с любым Content-Type.
+    """
+    try:
+        data: Any = json.loads((await request.body()) or b"{}")
+        if isinstance(data, dict):
+            _, actor_hash = catalog_share_actor(None, request)
+            await record_invite_beacon(
+                session,
+                code=code,
+                kind=data.get("kind"),
+                device_token=data.get("device_token"),
+                act=data.get("act"),
+                actor_hash=actor_hash,
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning("zovi invite event dropped", exc_info=True)
+    return Response(status_code=204)
 
 
 @router.get("/invites/{code}/status")
