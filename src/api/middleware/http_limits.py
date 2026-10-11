@@ -1,9 +1,10 @@
 """
 HTTP rate limiting (per client IP) and Content-Length body caps for /api (Epic D).
 The public per-IP bucket also covers the marketing redirect at /go. TASK-190: public HTML pages
-(/p/ /c/ /ice/ /r/) and PNG renders (og.png/story.png) have their own buckets.
+(/p/ /c/ /ice/ /r/ /zovi) and PNG renders (og.png/story.png) have their own buckets.
 Webhooks are excluded from rate limit; multipart uploads use a larger cap when Content-Length is present.
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -59,7 +60,8 @@ def client_ip_from_request(request: Request) -> str:
     return ip or "unknown"
 
 
-_PAGE_PREFIXES = ("/p/", "/c/", "/ice/", "/r/")
+# «/zovi» покрывает и страницу создания, и открытку /zovi/{code}. Второй префикс не нужен.
+_PAGE_PREFIXES = ("/p/", "/c/", "/ice/", "/r/", "/zovi")
 
 
 def rate_limit_bucket_for_path(path: str) -> str:
@@ -106,9 +108,7 @@ def _get_limiters() -> dict[str, RateLimiter]:
             # Превью-боты и краулеры: общие IP (Telegram), поэтому лимит широкий — но не бесконечный,
             # иначе подделка UA снимала бы лимит целиком.
             "bot": RateLimiter(s.api_rate_limit_bot_max_requests, s.api_rate_limit_bot_window_sec),
-            "invite": RateLimiter(
-                s.api_rate_limit_invite_max_requests, s.api_rate_limit_invite_window_sec
-            ),
+            "invite": RateLimiter(s.api_rate_limit_invite_max_requests, s.api_rate_limit_invite_window_sec),
         }
     return _limiters
 

@@ -30,6 +30,7 @@ from src.api.routes import (
 from src.api.routes.org_webapp import router as org_webapp_router
 from src.api.routes.public_arenas import router as public_arenas_router
 from src.api.routes.public_invites import router as public_invites_router
+from src.api.routes.zovi_create_page import router as zovi_create_page_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
 from src.api.routes.catalog_entry import router as catalog_entry_router
@@ -1934,6 +1935,19 @@ def shared_list_scroll_restore_js(request: Request):
     )
 
 
+@app.get("/static/shared/zovi-create.js")
+def shared_zovi_create_js(request: Request):
+    """TASK-234: экран «Позови на каток». Use ``?v=…`` for long cache."""
+    path = _SHARED_DIR / "zovi-create.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 _LANDING_ASSET_MEDIA = {
     ".css": "text/css",
     ".js": "application/javascript",
@@ -2054,6 +2068,7 @@ async def health():
 app.include_router(public_router)
 app.include_router(public_arenas_router)
 app.include_router(public_invites_router)
+app.include_router(zovi_create_page_router)
 app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
 app.include_router(catalog_entry_router)

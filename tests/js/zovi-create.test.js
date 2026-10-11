@@ -1,0 +1,120 @@
+/**
+ * TASK-234: текст превью, день по умолчанию, проверка имени как на сервере.
+ * Run: node --test tests/js/zovi-create.test.js
+ */
+'use strict';
+
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+
+const modelPath = path.resolve(__dirname, '../../static/shared/zovi-create.js');
+
+function loadModel() {
+  const resolved = require.resolve(modelPath);
+  delete require.cache[resolved];
+  return require(modelPath);
+}
+
+describe('превью открытки', () => {
+  const { previewQuestion, previewMeta } = loadModel();
+
+  it('имя и массовое катание', () => {
+    assert.equal(previewQuestion('Лера', 'public_skate'), 'Лера, пойдёшь со мной на каток?');
+  });
+
+  it('ОХМ спрашивает про хоккей', () => {
+    assert.equal(previewQuestion('Лера', 'hockey_practice'), 'Лера, пойдёшь со мной на хоккей?');
+  });
+
+  it('без имени — открытка для компании', () => {
+    assert.equal(previewQuestion('', 'public_skate'), 'Пойдёшь со мной на каток?');
+    assert.equal(previewQuestion('   ', 'open_ice'), 'Пойдёшь со мной на каток?');
+  });
+
+  it('ОХМ без имени всё равно про хоккей', () => {
+    assert.equal(previewQuestion('', 'hockey_practice'), 'Пойдёшь со мной на хоккей?');
+  });
+
+  it('строка сеанса как в чате', () => {
+    assert.equal(
+      previewMeta('2026-10-17', '19:15', 'Ледовый дворец'),
+      'Сб, 17 окт · 19:15 · Ледовый дворец'
+    );
+  });
+});
+
+describe('день по умолчанию', () => {
+  const { defaultInviteDate, chooseDefaultDate, dayChips } = loadModel();
+
+  it('ближайшая суббота, если до неё не больше 6 дней', () => {
+    assert.equal(defaultInviteDate('2026-10-11'), '2026-10-17');
+    assert.equal(defaultInviteDate('2026-10-12'), '2026-10-17');
+    assert.equal(defaultInviteDate('2026-10-16'), '2026-10-17');
+    assert.equal(defaultInviteDate('2026-10-17'), '2026-10-17');
+  });
+
+  it('дальше 6 дней — сегодня', () => {
+    assert.equal(chooseDefaultDate('2026-10-11', '2026-10-18', 6), '2026-10-11');
+  });
+
+  it('в воскресенье чип «Вс» не переключается на «Сегодня»', () => {
+    const { rememberedChipKey } = loadModel();
+    assert.equal(rememberedChipKey('sun', '2026-10-11', '2026-10-11'), 'sun');
+    assert.equal(rememberedChipKey('today', '2026-10-11', '2026-10-11'), 'today');
+    assert.equal(rememberedChipKey(null, '2026-10-17', '2026-10-11'), 'sat');
+  });
+
+  it('чипы: сегодня, завтра, суббота, воскресенье, дата', () => {
+    const chips = dayChips('2026-10-12');
+    assert.deepEqual(
+      chips.map((chip) => chip.label),
+      ['Сегодня', 'Завтра', 'Сб', 'Вс', 'Дата']
+    );
+    assert.equal(chips[2].date, '2026-10-17');
+    assert.equal(chips[3].date, '2026-10-18');
+  });
+});
+
+describe('имя как на сервере', () => {
+  const { validateInviteName, inviteRequestBody } = loadModel();
+
+  it('пустое имя получателя можно, отправителя — нет', () => {
+    assert.deepEqual(validateInviteName('   ', 'to_name', false), { ok: true, value: null, error: '' });
+    const missing = validateInviteName('', 'from_name', true);
+    assert.equal(missing.ok, false);
+    assert.equal(missing.error, 'from_name: укажите имя — от 1 до 20 символов.');
+  });
+
+  it('схлопывает пробелы и приводит тире к дефису', () => {
+    assert.equal(validateInviteName('  Аня   Мария  ', 'to_name', false).value, 'Аня Мария');
+    assert.equal(validateInviteName('Анна–Мария', 'from_name', true).value, 'Анна-Мария');
+  });
+
+  it('длина, буквы и стоп-слова', () => {
+    assert.match(validateInviteName('А'.repeat(21), 'from_name', true).error, /не длиннее 20/);
+    assert.equal(validateInviteName('А'.repeat(20), 'from_name', true).ok, true);
+    assert.match(validateInviteName('Макс1', 'from_name', true).error, /только буквы/);
+    assert.match(validateInviteName('хуй', 'to_name', false).error, /нельзя использовать/);
+    assert.equal(validateInviteName('Nazim', 'to_name', false).ok, true);
+    assert.equal(validateInviteName('nazi', 'to_name', false).ok, false);
+  });
+
+  it('?from= уходит как parent_code, цена по умолчанию выключена', () => {
+    const built = inviteRequestBody({
+      toName: '',
+      fromName: 'Макс',
+      sessionId: 15,
+      showPrice: false,
+      parentCode: 'abcd2345',
+    });
+    assert.equal(built.ok, true);
+    assert.deepEqual(built.body, {
+      session_id: 15,
+      to_name: null,
+      from_name: 'Макс',
+      show_price: false,
+      parent_code: 'abcd2345',
+    });
+  });
+});

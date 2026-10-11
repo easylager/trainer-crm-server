@@ -69,7 +69,22 @@ _FOLD = str.maketrans({"ё": "е", "і": "и", "ў": "у"})
 _STATUS_ACTIVE = "active"
 _DUMMY_HASH = "0" * 64
 
-_LOAD_SESSION_FOR_CREATE = f"""
+# Список слотов (/zovi) и создание приглашения принимают один и тот же сеанс.
+# Алиасы: ice_sessions s, arenas a, arena_profiles p, cities c.
+# Параметры: :now и public_scope_params() (:ice_countries).
+INVITE_SESSION_PREDICATE = (
+    f"s.status = '{_STATUS_ACTIVE}'"
+    f" AND s.kind IN ({', '.join(repr(kind) for kind in INVITE_KINDS)})"
+    " AND s.starts_at_utc > :now"
+    f" AND ({PUBLIC_ARENA_VISIBLE_SQL})"
+)
+
+
+def invite_session_params(*, now: datetime) -> dict[str, Any]:
+    return {"now": _as_utc(now), **public_scope_params()}
+
+
+_LOAD_SESSION_ROW = f"""
 SELECT
     s.id,
     s.arena_id,
@@ -83,6 +98,11 @@ JOIN arenas a ON a.id = s.arena_id
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 WHERE s.id = :session_id
+"""
+
+_LOAD_SESSION_FOR_CREATE = f"""
+{_LOAD_SESSION_ROW}
+  AND {INVITE_SESSION_PREDICATE}
 """
 
 _INSERT_INVITE = """
@@ -515,27 +535,32 @@ def _status_key_ok(stored_hash: str, key: str | None) -> bool:
 async def _load_session_for_create(session: AsyncSession, *, session_id: int, now: datetime) -> Mapping[Any, Any]:
     if session_id <= 0:
         raise InviteRejected("session_id: сеанс не найден.")
-    row = (
+    params = {"session_id": int(session_id), **invite_session_params(now=now)}
+    row = (await session.execute(text(_LOAD_SESSION_FOR_CREATE), params)).mappings().first()
+    if row is not None:
+        return row
+    # Предикат уже отказал. Вторая выборка нужна только затем, чтобы назвать причину.
+    raw = (
         (
             await session.execute(
-                text(_LOAD_SESSION_FOR_CREATE),
+                text(_LOAD_SESSION_ROW),
                 {"session_id": int(session_id), **public_scope_params()},
             )
         )
         .mappings()
         .first()
     )
-    if row is None:
+    if raw is None:
         raise InviteRejected("session_id: сеанс не найден.")
-    if str(row["kind"]) not in _INVITE_KIND_SET:
+    if str(raw["kind"]) not in _INVITE_KIND_SET:
         raise InviteRejected("session_id: на этот сеанс нельзя позвать.")
-    if str(row["status"]) != _STATUS_ACTIVE:
+    if str(raw["status"]) != _STATUS_ACTIVE:
         raise InviteRejected("session_id: сеанс недоступен.")
-    if _as_utc(row["starts_at_utc"]) <= now:
+    if _as_utc(raw["starts_at_utc"]) <= now:
         raise InviteRejected("session_id: сеанс уже прошёл.")
-    if not row["arena_visible"]:
+    if not raw["arena_visible"]:
         raise InviteRejected("session_id: каток скрыт.")
-    return row
+    raise InviteRejected("session_id: сеанс не найден.")
 
 
 async def _existing_parent_code(session: AsyncSession, raw: str | None) -> str | None:

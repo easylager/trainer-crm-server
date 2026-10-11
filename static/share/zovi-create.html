@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="__LANG__">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>__OG_TITLE__</title>
+  <meta name="description" content="__OG_DESCRIPTION__" />
+  <link rel="canonical" href="__CANONICAL__" />
+  <meta name="robots" content="__ROBOTS__" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="__OG_LOCALE__" />
+  <meta property="og:site_name" content="Glide" />
+  <meta property="og:title" content="__OG_TITLE__" />
+  <meta property="og:description" content="__OG_DESCRIPTION__" />
+  <meta property="og:url" content="__CANONICAL__" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2" />
+  <style>
+    :root { --z-chip: #eef3f5; --z-ice: #2aa7c9; --z-cut: 18px; }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --g-bg: #17212b; --g-surface: #1d2733; --g-ink: #f1f5f7; --g-muted: #8aa0b3;
+        --g-line: #2b3744; --g-line-strong: #3a4857; --g-accent: #7fd7d8; --g-accent-pressed: #45b9bb;
+        --g-on-accent: #04262a; --g-accent-ink: #7fd7d8; --g-accent-wash: #163638;
+        --z-chip: #233140; --z-ice: #5cc4e0; color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      background: var(--g-bg);
+      color: var(--g-ink);
+      font-family: var(--g-font);
+      font-size: 16px;
+      line-height: 1.45;
+      padding: 16px 16px calc(32px + env(safe-area-inset-bottom, 0px));
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; background: none; }
+    :focus-visible { outline: 2px solid var(--g-accent); outline-offset: 3px; }
+    .wrap { max-width: 440px; margin: 0 auto; display: grid; gap: 12px; }
+    .brand { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+    .brand span { color: var(--g-accent-ink); }
+    .hero {
+      position: relative;
+      background: var(--g-surface);
+      border: 1px solid var(--g-line);
+      clip-path: polygon(0 0, calc(100% - var(--z-cut)) 0, 100% var(--z-cut), 100% 100%, 0 100%);
+      padding: 20px 20px 20px 23px;
+      display: grid;
+      gap: 14px;
+    }
+    .hero::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--z-ice); }
+    .kicker { margin: 0; font-size: 13px; font-weight: 500; color: var(--g-muted); }
+    .make-h { margin: 0; font-size: 26px; font-weight: 650; line-height: 1.12; letter-spacing: -.01em; text-wrap: balance; }
+    .field { display: grid; gap: 4px; min-width: 0; }
+    .field span, .switch span { font-size: 13px; color: var(--g-muted); }
+    .field input, .field select, .date-input {
+      width: 100%; min-height: 46px; padding: 0 12px; border-radius: 12px;
+      background: var(--z-chip); border: 1px solid transparent; color: var(--g-ink);
+    }
+    .field input:focus, .field select:focus, .date-input:focus { outline: none; border-color: var(--g-accent); background: var(--g-surface); }
+    .hint { margin: 0; font-size: 13px; color: var(--g-muted); }
+    .err { margin: 0; min-height: 0; font-size: 13px; color: #9b2c2c; }
+    .err:empty { display: none; }
+    .days { display: flex; flex-wrap: wrap; gap: 8px; }
+    .day {
+      min-height: 44px; padding: 0 14px; border-radius: 999px;
+      border: 1px solid var(--g-line); background: var(--g-surface); color: var(--g-ink); font-weight: 500;
+    }
+    .day[aria-pressed="true"] { background: var(--g-accent); color: var(--g-on-accent); border-color: transparent; font-weight: 600; }
+    .switch { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+    .switch input { width: 20px; height: 20px; accent-color: var(--g-accent); }
+    .sec { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 18px; padding: 16px 18px; display: grid; gap: 12px; }
+    .sec__title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--g-muted); }
+    .slots { display: grid; }
+    .slot {
+      display: grid; grid-template-columns: 58px 1fr auto; gap: 12px; align-items: center;
+      padding: 12px 0; border-top: 1px solid var(--g-line); cursor: pointer; text-align: left;
+    }
+    .slot:first-child { border-top: 0; padding-top: 0; }
+    .slot input { position: absolute; opacity: 0; pointer-events: none; }
+    .slot__time { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .slot__place { min-width: 0; font-size: 15px; font-weight: 500; line-height: 1.25; }
+    .slot__place small { display: block; font-size: 13px; font-weight: 400; color: var(--g-muted); }
+    .slot__mark {
+      width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--g-line-strong);
+      display: grid; place-items: center;
+    }
+    .slot__mark::after {
+      content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--g-on-accent); transform: scale(0);
+    }
+    .slot:has(input:checked) .slot__mark { border-color: var(--g-accent); background: var(--g-accent); }
+    .slot:has(input:checked) .slot__mark::after { transform: scale(1); }
+    .empty { margin: 0; color: var(--g-muted); }
+    .chat { display: grid; justify-items: end; }
+    .bubble { width: min(300px, 100%); border-radius: 16px 16px 4px 16px; overflow: hidden; background: var(--z-chip); }
+    .og {
+      position: relative; aspect-ratio: 1.91 / 1; background: var(--g-dark); color: #fff;
+      padding: 14px 16px; display: grid; align-content: space-between; overflow: hidden;
+    }
+    .og::after {
+      content: ""; position: absolute; right: 0; top: 0; border-style: solid;
+      border-width: 0 22px 22px 0; border-color: transparent var(--g-bg) transparent transparent;
+    }
+    .og__rail { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--g-accent); }
+    .og__brand { font-size: 12px; font-weight: 700; color: var(--g-on-dark-muted); }
+    .og__brand span { color: var(--g-on-dark-accent); }
+    .og__q { font-size: 21px; font-weight: 650; line-height: 1.1; letter-spacing: -.01em; }
+    .og__q span { color: var(--g-on-dark-accent); }
+    .og__t { font-size: 12px; color: var(--g-on-dark-muted); font-variant-numeric: tabular-nums; }
+    .bubble__url { padding: 8px 12px; font-size: 12px; color: var(--g-muted); word-break: break-all; }
+    .cta {
+      display: flex; align-items: center; justify-content: center; text-align: center;
+      min-height: 50px; padding: 0 16px; border-radius: var(--g-r);
+      background: var(--g-accent); color: var(--g-on-accent); font-size: 16px; font-weight: 600; text-decoration: none;
+    }
+    .cta:disabled { opacity: .55; }
+    .cta--ghost { background: var(--g-surface); color: var(--g-ink); border: 1px solid var(--g-line); }
+    .actions { display: grid; gap: 8px; }
+    .status { margin: 0; font-size: 14px; color: var(--g-muted); }
+    .mine { display: grid; gap: 8px; }
+    .mine h2 { margin: 0; font-size: 16px; }
+    .mine ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+    .mine a { color: var(--g-accent-ink); }
+    .mine__note { margin: 0; font-size: 13px; color: var(--g-muted); }
+    .toast {
+      position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+      background: var(--g-ink); color: var(--g-surface); padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 10;
+    }
+    @media (prefers-color-scheme: dark) { .err { color: #ffb4b4; } }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="zovi">
+    <div class="brand">Glide<span>.</span></div>
+
+    <form id="zovi-form" class="hero">
+      <p class="kicker">Свидание, на которое не стыдно позвать</p>
+      <h1 class="make-h">Позови кого-нибудь на&nbsp;лёд</h1>
+
+      <label class="field">
+        <span>Город</span>
+        <select id="city" name="city"></select>
+      </label>
+
+      <div class="days" id="days" role="group" aria-label="День"></div>
+      <input class="date-input" id="date-input" type="date" hidden />
+
+      <label class="switch">
+        <input id="show-price" type="checkbox" />
+        <span>Показать цену</span>
+      </label>
+
+      <div id="slots" class="slots" role="radiogroup" aria-label="Сеанс"></div>
+      <p class="empty" id="empty" hidden>В этот день сеансов нет</p>
+      <button class="cta cta--ghost" id="next-day" type="button" hidden></button>
+      <p class="err" id="slot-error" role="alert"></p>
+
+      <label class="field">
+        <span>Кого зовёшь</span>
+        <input id="to-name" name="to_name" type="text" maxlength="20" autocomplete="off" />
+        <p class="hint">Пусто — открытка для компании</p>
+        <p class="err" id="to-error" role="alert"></p>
+      </label>
+      <label class="field">
+        <span>Как тебя подписать</span>
+        <input id="from-name" name="from_name" type="text" maxlength="20" autocomplete="name" required />
+        <p class="err" id="from-error" role="alert"></p>
+      </label>
+    </form>
+
+    <section class="sec" aria-label="Превью">
+      <p class="sec__title">Так увидят в чате</p>
+      <div class="chat">
+        <div class="bubble">
+          <div class="og">
+            <span class="og__rail"></span>
+            <div class="og__brand">Glide<span>.</span> приглашение на лёд</div>
+            <div class="og__q" id="preview-q">Пойдёшь со мной на каток?</div>
+            <div class="og__t" id="preview-t"></div>
+          </div>
+          <div class="bubble__url" id="preview-url">ссылка появится после создания</div>
+        </div>
+      </div>
+      <button class="cta" id="create" type="submit" form="zovi-form">Создать приглашение</button>
+      <p class="err" id="form-error" role="alert"></p>
+    </section>
+
+    <section class="sec" id="done" hidden>
+      <p class="sec__title">Готово</p>
+      <p class="status" id="done-url"></p>
+      <div class="actions">
+        <button class="cta" id="send" type="button">Отправить</button>
+        <button class="cta cta--ghost" id="copy" type="button">Скопировать ссылку</button>
+        <a class="cta cta--ghost" id="friend" href="">Открыть как друг</a>
+      </div>
+    </section>
+
+    <section class="mine" id="mine">
+      <h2>Мои приглашения</h2>
+      <p class="mine__note">Хранится только на этом телефоне</p>
+      <ul id="mine-list"></ul>
+    </section>
+  </div>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="/static/shared/zovi-create.js?v=__ASSET_V__"></script>
+</body>
+</html>
