@@ -173,9 +173,9 @@
      не тяжелеет (бюджет веса — tests/unit/test_webapp_page_weight_budget.py).
      Версии — как у /zovi (__ASSET_V__ в zovi_create_page.py). */
   var ZOVI_SCRIPTS = [
-    '/static/shared/zovi-model.js?v=6',
-    '/static/shared/zovi-create.js?v=6',
-    '/static/shared/zovi-live.js?v=6',
+    '/static/shared/zovi-model.js?v=7',
+    '/static/shared/zovi-create.js?v=7',
+    '/static/shared/zovi-live.js?v=7',
   ];
   var zoviLoading = null;
 
@@ -645,21 +645,7 @@
   }
 
   function normalizedSections() {
-    var sections = state.slotSections;
-    var slots = state.slots || [];
-    if (sections && sections.length) return sections;
-    if (!slots.length) return [];
-    return [
-      {
-        dayLabel: '',
-        localDate: '',
-        dayNum: '',
-        rows: slots.map(function (s) {
-          var m = String(s.label || '').match(/(\d{1,2}:\d{2})\s*$/);
-          return { id: s.id, time: m ? m[1] : s.label, meta: '' };
-        }),
-      },
-    ];
+    return sectionsOf(state);
   }
 
   function ensureSlotDay() {
@@ -961,6 +947,10 @@
       return (
         '<div class="gss-zdone">' +
         '<p class="gss-zdone__t">Открытка готова. Отправь ' + esc(whom) + '</p>' +
+        (z.created.viaTelegram
+          ? '<p class="gss-zdone__how">Когда ответят, бот пришлёт билет сюда, в Telegram.</p>'
+          : '<p class="gss-zdone__how">Ответ появится на странице ответа — ' +
+            '<button type="button" class="gss-zlink gss-zlink--inline" data-gss-zstatus>открыть и сохранить</button></p>') +
         '<div class="gss-channels gss-channels--3">' +
         '<button type="button" class="gss-ch gss-ch--tg" data-zch="telegram">Telegram</button>' +
         '<button type="button" class="gss-ch" data-zch="copy">Ссылка</button>' +
@@ -1049,7 +1039,13 @@
         z.created = {
           code: res.body.code,
           url: global.location.origin + res.body.invite_path,
+          statusUrl: global.location.origin + res.body.status_path,
+          // Пуш шлёт Telegram-бот; у MAX тот же заголовок, но пуша нет.
+          viaTelegram:
+            !!headers['X-Telegram-Init-Data'] &&
+            String(headers['X-Mini-App-Platform'] || 'telegram') === 'telegram',
         };
+        rememberMine(z.created, built.body.to_name);
         try { global.localStorage.setItem(ZOVI_FROM_KEY, built.body.from_name); } catch (e) { /* */ }
         paintPostcardBottom();
       })
@@ -1059,6 +1055,24 @@
         z.error = 'Нет связи. Попробуй ещё раз.';
         paintPostcardBottom();
       });
+  }
+
+  /** «Мои приглашения» на /zovi — тот же список, что пишет страница создания. */
+  function rememberMine(created, toName) {
+    try {
+      var input = postcardInput(state);
+      var raw = global.localStorage.getItem('zovi_mine');
+      var items = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(items)) items = [];
+      items = items.filter(function (item) { return item && item.code !== created.code; });
+      items.unshift({
+        code: created.code,
+        to: toName || 'компания',
+        when: [input.day, input.time, input.place].filter(Boolean).join(' · '),
+        status_path: created.statusUrl,
+      });
+      global.localStorage.setItem('zovi_mine', JSON.stringify(items.slice(0, 20)));
+    } catch (e) { /* */ }
   }
 
   /** Полезная нагрузка для каналов: ссылка на открытку и сам вопрос. */
@@ -1417,6 +1431,10 @@
     if (zch && state.zovi && state.zovi.created) {
       haptic();
       CHANNELS[zch.getAttribute('data-zch')](postcardPayload());
+      return;
+    }
+    if (ev.target.closest('[data-gss-zstatus]') && state.zovi && state.zovi.created) {
+      openUrl(state.zovi.created.statusUrl);
       return;
     }
     if (ev.target.closest('[data-gss-zopen]') && state.zovi && state.zovi.created) {

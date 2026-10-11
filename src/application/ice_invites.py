@@ -109,11 +109,11 @@ _INSERT_INVITE = """
 INSERT INTO ice_invites (
     code, status_key_hash, session_id, arena_id, kind,
     starts_at_utc, ends_at_utc, to_name, from_name, show_price,
-    parent_code, creator_actor_hash, created_at
+    parent_code, creator_actor_hash, creator_telegram_id, created_at
 ) VALUES (
     :code, :status_key_hash, :session_id, :arena_id, :kind,
     :starts_at_utc, :ends_at_utc, :to_name, :from_name, :show_price,
-    :parent_code, :creator_actor_hash, :created_at
+    :parent_code, :creator_actor_hash, :creator_telegram_id, :created_at
 )
 """
 
@@ -131,6 +131,7 @@ SELECT
     i.ends_at_utc,
     i.first_opened_at,
     i.status_key_hash,
+    (i.creator_telegram_id IS NOT NULL) AS creator_notified,
     s.status AS session_status,
     s.price_adult_minor,
     s.currency_code,
@@ -231,6 +232,7 @@ async def create_invite(
     show_price: bool,
     parent_code: str | None,
     creator_actor_hash: str | None,
+    creator_telegram_id: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, str]:
     moment = _as_utc(now or datetime.now(timezone.utc))
@@ -253,6 +255,7 @@ async def create_invite(
         "show_price": bool(show_price),
         "parent_code": parent,
         "creator_actor_hash": creator_actor_hash,
+        "creator_telegram_id": creator_telegram_id,
         "created_at": moment,
     }
     code = await _insert_invite(session, params)
@@ -297,6 +300,8 @@ async def get_invite(
         "state": state,
         "session": _snapshot_session(row),
         "next_session": None,
+        # Ответ уйдёт создателю пушем сам (открытку собрали в Telegram).
+        "creator_notified": bool(row["creator_notified"]),
     }
     if state in ("gone", "past"):
         payload["next_session"] = await _next_session(session, row, now=moment)
@@ -319,7 +324,7 @@ async def answer_invite(
     responder_actor_hash: str | None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    payload, _inserted = await answer_invite_result(
+    payload, _inserted, _answer_id = await answer_invite_result(
         session,
         code,
         device_token=device_token,
@@ -344,8 +349,8 @@ async def answer_invite_result(
     tricked: bool,
     responder_actor_hash: str | None,
     now: datetime | None = None,
-) -> tuple[dict[str, Any], bool]:
-    """Ответ и признак «вставлен сейчас» (``False`` — вернулся уже существовавший)."""
+) -> tuple[dict[str, Any], bool, int]:
+    """Ответ, признак «вставлен сейчас» (``False`` — вернулся уже существовавший) и id строки."""
     moment = _as_utc(now or datetime.now(timezone.utc))
     cleaned = validate_answer_payload(
         device_token=device_token,
@@ -370,7 +375,7 @@ async def answer_invite_result(
                 :tries, :resist_ms, :falls, :tricked
             )
             ON CONFLICT (invite_id, responder_key) DO NOTHING
-            RETURNING tries, resist_ms, falls, tricked, answered_at
+            RETURNING id, tries, resist_ms, falls, tricked, answered_at
             """),
         {
             "invite_id": int(row["id"]),
@@ -390,7 +395,7 @@ async def answer_invite_result(
             (
                 await session.execute(
                     text("""
-                    SELECT tries, resist_ms, falls, tricked, answered_at
+                    SELECT id, tries, resist_ms, falls, tricked, answered_at
                     FROM ice_invite_answers
                     WHERE invite_id = :invite_id AND responder_key = :responder_key
                     """),
@@ -401,7 +406,7 @@ async def answer_invite_result(
             .one()
         )
     await session.commit()
-    return _answer_payload(answer), was_inserted
+    return _answer_payload(answer), was_inserted, int(answer["id"])
 
 
 async def get_invite_status(

@@ -119,7 +119,33 @@
     return '?t=' + clampInt(tries, 0, 10) + '&s=' + clampInt(sec, 0, 600) + '&f=' + clampInt(falls, 0, 5) + '&k=' + (tricked ? 1 : 0);
   }
 
+  /* Календарь по устройству: iPhone открывает .ics сам, Android — Google Календарь по ссылке,
+     компьютер — оба. ua — navigator.userAgent, touchMac — iPad, который притворяется Mac. */
+  function calendarPlatform(ua, touchMac) {
+    var u = String(ua || '');
+    if (/iPhone|iPad|iPod/.test(u) || (touchMac && /Macintosh/.test(u))) return 'ios';
+    if (/Android/.test(u)) return 'android';
+    return 'desktop';
+  }
+
+  function gcalStamp(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  }
+
+  function googleCalendarUrl(title, startIso, endIso, location, details) {
+    var dates = gcalStamp(startIso) + '/' + gcalStamp(endIso);
+    return 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+      '&text=' + encodeURIComponent(title || '') +
+      '&dates=' + dates +
+      '&location=' + encodeURIComponent(location || '') +
+      '&details=' + encodeURIComponent(details || '');
+  }
+
   return {
+    calendarPlatform: calendarPlatform,
+    googleCalendarUrl: googleCalendarUrl,
     decline: decline,
     activity: activity,
     questionParts: questionParts,

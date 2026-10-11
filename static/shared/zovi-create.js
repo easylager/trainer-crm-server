@@ -783,7 +783,10 @@
         );
         done.hidden = false;
         doneUrl.textContent = state.link;
-        friend.href = state.link;
+        friend.href = origin + res.body.status_path;
+        if (readTelegramInitData(pageSessionStorage())) {
+          doc.getElementById('done-how').textContent = 'Когда ответят, бот пришлёт билет в Telegram. Страница ответа — тоже здесь.';
+        }
         try { localStorage.setItem('zovi_from', built.body.from_name); } catch (err) { /* */ }
         saveMine({
           code: res.body.code,

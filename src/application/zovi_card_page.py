@@ -168,7 +168,14 @@ def page_data(invite: Mapping[str, Any]) -> dict[str, Any]:
     """Что уходит в ``<script type="application/json">``. Без ``my_answer``: SSR не знает устройство."""
     data = {key: value for key, value in invite.items() if key != "my_answer"}
     data["kind_label"] = kind_label(str(invite.get("kind") or ""))
+    data["calendar_title"] = calendar_title(invite)
     return data
+
+
+def calendar_title(invite: Mapping[str, Any]) -> str:
+    """«Каток с Максом» — и в .ics, и в ссылке на Google Календарь."""
+    what = "Хоккей" if invite.get("kind") == "hockey_practice" else "Каток"
+    return f"{what} с {decline(invite.get('from_name'), 'ins')}"
 
 
 def _json_for_script(data: Mapping[str, Any]) -> str:
@@ -252,3 +259,107 @@ color:var(--g-on-accent);font-weight:600;text-decoration:none}
 
 def render_not_found(catalog_url: str) -> str:
     return NOT_FOUND_HTML.replace("__CATALOG__", _esc(catalog_url))
+
+
+# ---------------------------------------------------------------------------
+# Страница статуса /zovi/{code}/s/{key} — для того, кто позвал.
+# Открытку собрали без Telegram — пуша нет, ответ виден здесь. Ключ в адресе —
+# единственный доступ: страница не показывает кнопки «Да», чтобы создатель не ответил сам себе.
+
+STATUS_HTML = """<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+__REFRESH__
+<title>Ответ на открытку — Glide</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+<link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2" />
+<style>
+body{margin:0;padding:16px 16px 48px;background:var(--g-bg);color:var(--g-ink);font-family:var(--g-font);line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:440px;margin:0 auto;display:grid;gap:12px}
+.brand{font-weight:700;font-size:17px;min-height:32px;display:flex;align-items:center;color:inherit;text-decoration:none}.brand span{color:var(--g-accent-ink)}
+.hero{position:relative;background:var(--g-surface);border:1px solid var(--g-line);padding:20px 20px 20px 23px;display:grid;gap:14px;
+clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,0 100%)}
+.hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#2aa7c9}
+p{margin:0}.kicker{font-size:13px;color:var(--g-muted)}
+.q{font-size:24px;font-weight:650;line-height:1.12;letter-spacing:-.02em}.q .name{color:var(--g-accent-ink)}
+.plan{font-size:14px;color:var(--g-muted);font-variant-numeric:tabular-nums}
+.state{padding-top:14px;border-top:1px solid var(--g-line);display:grid;gap:10px}
+.big{font-size:30px;font-weight:650;letter-spacing:-.02em;line-height:1.1}.big span{color:var(--g-accent-ink)}
+.ans{display:grid;gap:2px;padding:10px 12px;border:1px solid var(--g-line);border-radius:12px}
+.ans b{font-size:16px}.ans small{font-size:13px;color:var(--g-muted)}
+.muted{font-size:14px;color:var(--g-muted)}
+.cta{display:flex;align-items:center;justify-content:center;min-height:50px;border-radius:var(--g-r);background:var(--g-accent);
+color:var(--g-on-accent);font:inherit;font-weight:600;text-decoration:none;border:0;cursor:pointer;width:100%}
+</style></head>
+<body><div class="wrap"><a class="brand" href="__CATALOG__">Glide<span>.</span></a>
+<section class="hero">
+<p class="kicker">Твоя открытка</p>
+<p class="q">__QUESTION__</p>
+<p class="plan">__PLAN__</p>
+<div class="state">__STATE__</div>
+</section>
+<button class="cta" id="again" type="button" data-url="__INVITE_URL__" data-text="__SHARE_TEXT__">Отправить открытку ещё раз</button>
+<p class="muted">Сохрани эту страницу — по ней видно, ответили или нет. Ссылка только у тебя.</p>
+</div>
+<script>
+(function(){var b=document.getElementById('again');b.addEventListener('click',function(){var u=b.getAttribute('data-url'),t=b.getAttribute('data-text');
+if(navigator.share){navigator.share({text:t,url:u}).catch(function(){});return;}
+if(navigator.clipboard){navigator.clipboard.writeText(u).then(function(){b.textContent='Ссылка скопирована';});}else{window.prompt('Скопируйте:',u);}});})();
+</script>
+</body></html>"""
+
+
+def _status_answer_html(answer: Mapping[str, Any]) -> str:
+    seconds = max(0, round(int(answer.get("resist_ms") or 0) / 1000))
+    tries = int(answer.get("tries") or 0)
+    falls = int(answer.get("falls") or 0)
+    stats = f"Держались {seconds} с · отказов {tries} · падений {falls}"
+    return (
+        f'<div class="ans"><b>{_esc(verdict(tries, falls, bool(answer.get("tricked"))))}</b>'
+        f"<small>{_esc(stats)}</small></div>"
+    )
+
+
+def status_state_html(invite: Mapping[str, Any], status: Mapping[str, Any]) -> str:
+    """Что видит создатель: ответ(ы), «открыли, думают» или «ещё не открыли»."""
+    answers = list(status.get("answers") or [])
+    to = (invite.get("to_name") or "").strip()
+    if answers:
+        if to:
+            head = f'<p class="big"><span>{_esc(to)}</span>: ДА!</p>'
+        elif len(answers) == 1:
+            head = '<p class="big">Ответили: <span>ДА!</span></p>'
+        else:
+            head = f'<p class="big"><span>{len(answers)}</span> × ДА</p>'
+        return head + "".join(_status_answer_html(a) for a in answers)
+    if status.get("first_opened_at"):
+        return '<p class="big">Открыли. Думают…</p><p class="muted">Кнопка «Нет» держит оборону. Страница обновится сама.</p>'
+    return '<p class="big">Ещё не открыли</p><p class="muted">Как только ответят, здесь появится «ДА». Страница обновится сама.</p>'
+
+
+def render_status_page(
+    invite: Mapping[str, Any],
+    status: Mapping[str, Any],
+    *,
+    invite_url: str,
+    catalog_url: str,
+) -> str:
+    s = invite["session"]
+    plan = " · ".join(
+        p for p in (day_long(s.get("local_date")), str(s.get("starts_at_local") or ""), str(s["arena"].get("name") or "")) if p
+    )
+    answered = bool(status.get("answers"))
+    values = {
+        "__REFRESH__": "" if answered else '<meta http-equiv="refresh" content="30" />',
+        "__CATALOG__": _esc(catalog_url),
+        "__QUESTION__": _question_html(invite),
+        "__PLAN__": _esc(plan),
+        "__STATE__": status_state_html(invite, status),
+        "__INVITE_URL__": _esc(invite_url),
+        "__SHARE_TEXT__": _esc(question_text(invite.get("to_name"), str(invite.get("kind") or ""))),
+    }
+    out = STATUS_HTML
+    for key, value in values.items():
+        out = out.replace(key, value)
+    return out

@@ -7,15 +7,16 @@ import logging
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.catalog_share_actor import catalog_share_actor
 from src.api.deps import get_session
 from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
-from src.api.miniapp_auth.types import MiniAppPrincipal
+from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.application.ice_invite_slots import list_invite_slots
+from src.application.zovi_answer_push import push_answer_soon
 from src.application.ice_invites import (
     InviteRejected,
     answer_invite_result,
@@ -98,6 +99,12 @@ async def post_public_invite(
             show_price=body.show_price,
             parent_code=body.parent_code,
             creator_actor_hash=actor_hash,
+            # Ответ придёт пушем, только если открытку собрали в Telegram (не MAX).
+            creator_telegram_id=(
+                int(principal.user_id)
+                if principal is not None and principal.platform == MiniAppPlatform.TELEGRAM
+                else None
+            ),
         )
     except InviteRejected as exc:
         raise _http(exc) from exc
@@ -138,13 +145,14 @@ async def post_public_invite_answer(
     body: AnswerInviteBody,
     request: Request,
     response: Response,
+    background: BackgroundTasks,
     principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     _no_store(response)
     _, actor_hash = catalog_share_actor(principal, request)
     try:
-        answer, inserted = await answer_invite_result(
+        answer, inserted, answer_id = await answer_invite_result(
             session,
             code,
             device_token=body.device_token,
@@ -165,6 +173,8 @@ async def post_public_invite_answer(
             tries=answer["tries"],
             tricked=answer["tricked"],
         )
+        # Создателю — билет от бота, после ответа: получатель не ждёт Telegram.
+        background.add_task(push_answer_soon, answer_id)
     return answer
 
 

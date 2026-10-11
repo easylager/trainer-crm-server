@@ -19,14 +19,15 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
-from src.application.ice_invites import InviteRejected, get_invite
+from src.application.ice_invites import InviteRejected, get_invite, get_invite_status
 from src.application.png_render_cache import render_png_cached
 from src.application.zovi_card_image import render_zovi_og, render_zovi_ticket
 from src.shared.config import Settings
 from src.application.zovi_card_page import (
-    decline,
+    calendar_title,
     image_version,
     render_not_found,
+    render_status_page,
     render_zovi_page,
 )
 
@@ -75,6 +76,26 @@ async def zovi_card_page(code: str, request: Request, session: AsyncSession = De
         invite,
         page_url=page_url,
         og_image_url=f"{page_url}/og.png?v={image_version(invite)}",
+        catalog_url=f"{origin}/",
+    )
+    return HTMLResponse(html, headers=_PAGE_HEADERS)
+
+
+@router.get("/zovi/{code}/s/{key}", response_class=HTMLResponse)
+async def zovi_status_page(code: str, key: str, request: Request, session: AsyncSession = Depends(get_session)):
+    """Ответ на открытку для того, кто позвал. Неверный ключ и неизвестный код — одна 404."""
+    origin = _origin(request)
+    try:
+        status = await get_invite_status(session, code, key=key)
+    except InviteRejected:
+        return HTMLResponse(render_not_found(f"{origin}/"), status_code=404, headers=_PAGE_HEADERS)
+    invite = await _read(session, code)
+    if invite is None:
+        return HTMLResponse(render_not_found(f"{origin}/"), status_code=404, headers=_PAGE_HEADERS)
+    html = render_status_page(
+        invite,
+        status,
+        invite_url=f"{origin}/zovi/{invite['code']}",
         catalog_url=f"{origin}/",
     )
     return HTMLResponse(html, headers=_PAGE_HEADERS)
@@ -148,8 +169,7 @@ async def zovi_event_ics(code: str, request: Request, session: AsyncSession = De
         return Response(status_code=404)
     s = invite["session"]
     arena = s["arena"]
-    what = "Хоккей" if invite.get("kind") == "hockey_practice" else "Каток"
-    summary = f"{what} с {decline(invite.get('from_name'), 'ins')}"
+    summary = calendar_title(invite)
     location = ", ".join(str(p) for p in (arena.get("name"), arena.get("address"), arena.get("city")) if p)
     page_url = f"{_origin(request)}/zovi/{invite['code']}"
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

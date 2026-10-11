@@ -121,3 +121,22 @@ describe('воронка (TASK-237): тело маячка и ?src=', () => {
     assert.equal(model.srcQuery(undefined), '');
   });
 });
+
+describe('календарь по устройству', () => {
+  const M = require('../../static/shared/zovi-model.js');
+
+  it('iPhone и iPad — .ics, Android — Google, остальное — компьютер', () => {
+    assert.equal(M.calendarPlatform('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', false), 'ios');
+    assert.equal(M.calendarPlatform('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', true), 'ios');
+    assert.equal(M.calendarPlatform('Mozilla/5.0 (Linux; Android 14; Pixel 8)', false), 'android');
+    assert.equal(M.calendarPlatform('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', false), 'desktop');
+  });
+
+  it('ссылка на Google Календарь — UTC-время и экранированные поля', () => {
+    const url = M.googleCalendarUrl('Каток с Максом', '2026-10-13T08:00:00+00:00', '2026-10-13T09:00:00+00:00', 'ТЦ DiaMond city, Минск', 'https://x/zovi/abc');
+    assert.match(url, /^https:\/\/calendar\.google\.com\/calendar\/render\?action=TEMPLATE/);
+    assert.match(url, /&dates=20261013T080000Z\/20261013T090000Z/);
+    assert.match(url, /&text=%D0%9A%D0%B0%D1%82%D0%BE%D0%BA/);
+    assert.equal(url.includes(' '), false);
+  });
+});

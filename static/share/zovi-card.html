@@ -155,6 +155,7 @@
     .cta--ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
     .cta--secondary { background: transparent; color: var(--accent-ink); border: 1px solid var(--accent); }
     .note { margin: 0; font-size: 14px; color: var(--muted); }
+    .note--link { color: var(--accent-ink); font-weight: 600; text-decoration: none; text-align: center; }
     /* Билет: то, что скриншотят и постят. Срез и рейка — как у hero, перфорация — как у настоящего билета. */
     .tix { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
     .tix::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
@@ -252,11 +253,13 @@
           <p class="tix__brand">Glide<span>.</span> приглашение на лёд</p>
         </div>
       </div>
-      <button type="button" class="cta" id="sendBtn"><span>Отправить ответ <span id="fromD"></span></span></button>
+      <p class="note" id="sentNote"><span id="fromN"></span> уже знает: ответ ушёл сам.</p>
+      <button type="button" class="cta" id="sendBtn">Поделиться билетом</button>
       <div class="actions">
         <a class="cta cta--ghost" id="calBtn" href="#">В календарь</a>
         <a class="cta cta--ghost" id="routeLink" href="#" target="_blank" rel="noopener">Маршрут</a>
       </div>
+      <a class="note note--link" id="calAlt" href="#" target="_blank" rel="noopener" hidden>Добавить в Google Календарь</a>
     </div>
   </section>
 </div>

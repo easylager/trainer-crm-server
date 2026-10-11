@@ -508,3 +508,10 @@ async def test_create_with_telegram_init_data_stores_telegram_actor_hash(
     ).scalar_one()
     assert stored == telegram_actor_hash(user_id)
     assert stored != public_actor_hash(client_ip=_IP, user_agent=_UA)
+    telegram_id = (
+        await db_session.execute(
+            text("SELECT creator_telegram_id FROM ice_invites WHERE code = :code"),
+            {"code": created.json()["code"]},
+        )
+    ).scalar_one()
+    assert telegram_id == user_id

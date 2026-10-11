@@ -352,11 +352,12 @@
 .gss-zf__err { margin: 6px 0 0; font-size: var(--app-text-caption); line-height: 1.35; color: var(--glide-hint); }
 .gss-zf__err { color: var(--app-danger); }
 .gss-zf__err:empty { display: none; }
-.gss-zf + .gss-zf__hint + .gss-zf__err + .gss-zovi__btn,
-.gss-zf + .gss-zf__hint + .gss-zf__err:empty + .gss-zovi__btn { margin-top: 12px; }
+.gss-zf ~ .gss-zovi__btn { margin-top: 12px; }
 
 .gss-zdone { display: grid; gap: 10px; }
 .gss-zdone__t { margin: 0; font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }
+.gss-zdone__how { margin: -4px 0 0; font-size: var(--app-text-caption); line-height: 1.4; color: var(--glide-hint); }
+.gss-zlink--inline { padding: 0; font-size: inherit; }
 .gss-zdone__more { display: flex; justify-content: space-between; gap: 12px; }
 .gss-channels.gss-channels--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .gss-channels--3 .gss-ch { padding: 12px 4px; font-size: var(--app-text-caption); }

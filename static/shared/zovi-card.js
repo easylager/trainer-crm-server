@@ -74,7 +74,10 @@
   function paint() {
     var s = session(), who = M.ticketWho(state.to, state.from);
     $('fromG').textContent = M.decline(state.from, 'gen');
-    $('fromD').textContent = M.decline(state.from, 'dat');
+    $('fromN').textContent = state.from || 'Отправитель';
+    // Пуш создателю есть только у открыток из Telegram; иначе билет — единственный путь к нему.
+    $('sentNote').hidden = !DATA.creator_notified;
+    $('sendBtn').textContent = DATA.creator_notified ? 'Поделиться билетом' : 'Отправить билет ' + M.decline(state.from, 'dat');
     paintQuestion();
     $('tixTo').textContent = who[0];
     $('tixFrom').textContent = who[1];
@@ -82,7 +85,31 @@
     $('tixDay').textContent = M.dayLabel(s.local_date, 'ticket');
     $('tixPlace').textContent = placeLine();
     $('routeLink').href = routeUrl();
-    $('calBtn').href = PAGE + '/event.ics';
+    paintCalendar();
+  }
+
+  /* iPhone открывает .ics сам; Android — Google Календарь; компьютер — .ics и ссылка на Google. */
+  function paintCalendar() {
+    var s = session(), a = arena();
+    var platform = M.calendarPlatform(navigator.userAgent, navigator.maxTouchPoints > 1);
+    var ics = PAGE + '/event.ics';
+    var gcal = M.googleCalendarUrl(
+      DATA.calendar_title || '',
+      s.starts_at_utc, s.ends_at_utc,
+      [a.name, a.address, a.city].filter(Boolean).join(', '),
+      window.location.origin + PAGE
+    );
+    var cal = $('calBtn'), alt = $('calAlt');
+    if (platform === 'android') {
+      cal.href = gcal;
+      cal.target = '_blank';
+      cal.rel = 'noopener';
+      alt.hidden = true;
+      return;
+    }
+    cal.href = ics;
+    alt.href = gcal;
+    alt.hidden = platform !== 'desktop';
   }
 
   /* ================= Персонаж «Нет» ================= */
@@ -500,7 +527,16 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 2200);
   }
 
+  /* Без «Поделиться»: на телефоне — картинка в новой вкладке, на компьютере — сразу файл. */
   function openTicket(url) {
+    var touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (!touch) {
+      var a = document.createElement('a');
+      a.href = url; a.download = 'glide-bilet.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      toast('Билет сохранён — отправь его, куда хочешь');
+      return;
+    }
     toast('Удержите картинку, чтобы сохранить');
     window.open(url, '_blank', 'noopener');
   }
@@ -508,7 +544,7 @@
   $('sendBtn').addEventListener('click', function () {
     track('send_answer', {});
     var url = new URL(ticketUrl(), window.location.href).href;
-    var title = 'Ответ ' + M.decline(state.from, 'dat');
+    var title = 'Мой ответ — ДА 🎟';
     var file = null;
     if (ticketBlob && window.File) {
       try { file = new File([ticketBlob], 'glide-bilet.png', { type: 'image/png' }); } catch (e) { file = null; }
@@ -521,7 +557,7 @@
         return;
       }
       if (navigator.share) {
-        navigator.share({ title: title, url: url }).then(done, failed);
+        navigator.share({ title: title, text: title, url: url }).then(done, failed);
         return;
       }
     } catch (e) { /* in-app браузер без Web Share */ }

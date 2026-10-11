@@ -1829,6 +1829,16 @@ async def run_cancel_notifier_loop(client_bot: Bot) -> None:
             break
         except Exception as e:
             logger.exception("Cancel notifier: %s", e)
+        try:
+            # Ответы на открытки «Пойдёшь со мной на каток?», не ушедшие сразу.
+            from src.application.zovi_answer_push import process_invite_answer_pushes
+
+            async with async_session_factory() as session:
+                await process_invite_answer_pushes(session, client_bot)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Invite answer pushes: %s", e)
 
 
 async def run_booking_party_notifier_loop(trainer_bot: Bot, client_bot: Bot) -> None:
