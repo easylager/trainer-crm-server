@@ -1294,6 +1294,8 @@ class TrainerPassProduct(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     sessions_total: Mapped[int] = mapped_column(Integer(), nullable=False)
     price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
+    # NULL = no clock. A set value is whole days from the moment the trainer issues the pass.
+    validity_days: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

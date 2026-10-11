@@ -106,6 +106,7 @@
 | [2026-10-03-catalog-hub-v4-design.md](plans/2026-10-03-catalog-hub-v4-design.md) | TASK-148: подборки из данных, чипы без нулей, бесфотошные карточки (макет в `design/client-hub-catalog-final-v2.html`) |
 | [2026-10-03-hub-composition-05-06.md](plans/2026-10-03-hub-composition-05-06.md) | TASK-149: хаб как экраны 05/06 — узкая композиция; 150 пакет не стартовать |
 | [2026-09-25-search-places-label.md](plans/2026-09-25-search-places-label.md) | Поиск: «Покататься» → «Где заниматься» |
+| [2026-10-11-trainer-pass-validity.md](plans/2026-10-11-trainer-pass-validity.md) | Срок абонемента тренера: с выдачи, снимок на экземпляре, подсказка по числу занятий |
 
 ## ops — эксплуатация
 

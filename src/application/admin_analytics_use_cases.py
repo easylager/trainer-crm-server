@@ -1077,6 +1077,7 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
                 JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
                 JOIN trainers t ON t.id = tpp.trainer_id AND t.status <> 'deactivated'
                 WHERE pi.status = 'active' AND pi.sessions_remaining > 0
+                  AND (pi.expires_at IS NULL OR pi.expires_at > CURRENT_TIMESTAMP)
                 """
             )
         )

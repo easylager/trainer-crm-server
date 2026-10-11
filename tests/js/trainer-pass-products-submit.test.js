@@ -26,6 +26,7 @@ describe('trainer pass/certificate save: single in-flight submit', () => {
     assert.match(handler, /if \(state\.savingPassProduct\) return/);
     assert.match(handler, /state\.savingPassProduct = true/);
     assert.match(handler, /\/trainer\/pass-products/);
+    assert.match(handler, /validity_days: validity\.days/);
   });
 
   it('certificate save returns immediately if a create/update is already running', () => {

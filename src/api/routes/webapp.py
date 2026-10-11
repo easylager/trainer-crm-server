@@ -4907,6 +4907,7 @@ class PassProductCreateBody(BaseModel):
     price_cents: int
     service_ids: list[int] = Field(default_factory=list)
     tier_kinds: list[str] = Field(default_factory=list)
+    validity_days: int | None = Field(None, ge=1, le=3650)
     sort_order: int = 0
 
 
@@ -4931,6 +4932,7 @@ async def post_trainer_pass_product(
             price_cents=body.price_cents,
             service_ids=list(body.service_ids or []),
             tier_kinds=list(body.tier_kinds or []),
+            validity_days=body.validity_days,
             sort_order=body.sort_order,
         )
     except ValueError as e:
@@ -4944,6 +4946,7 @@ class PassProductPatchBody(BaseModel):
     price_cents: int | None = None
     service_ids: list[int] | None = None
     tier_kinds: list[str] | None = None
+    validity_days: int | None = Field(None, ge=1, le=3650)
     is_active: bool | None = None
     sort_order: int | None = None
 

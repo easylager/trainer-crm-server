@@ -8,7 +8,11 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.pass_product_use_cases import SQL_PASS_INSTANCE_SALE_PRICE_CENTS
+from src.application.pass_product_use_cases import (
+    SQL_PASS_INSTANCE_SALE_PRICE_CENTS,
+    SQL_PASS_NOT_EXPIRED,
+    _is_expired,
+)
 
 _PASS_SCOPE_SQL = """
 COALESCE(
@@ -30,6 +34,7 @@ _PASS_STATUS_LABEL_RU = {
     "active": "Активен",
     "used_up": "Использован",
     "cancelled": "Отменён",
+    "expired": "Истёк",
 }
 
 _CERT_STATUS_LABEL_RU = {
@@ -99,9 +104,11 @@ async def list_trainer_issued_items(
         clauses = ["p.trainer_id = :tid"]
         params: dict[str, Any] = {"tid": trainer_id}
         if status_norm == "active":
-            clauses.append("pi.status = 'active'")
+            clauses.append(f"pi.status = 'active' AND {SQL_PASS_NOT_EXPIRED}")
         elif status_norm == "closed":
-            clauses.append("pi.status <> 'active'")
+            clauses.append(
+                f"(pi.status <> 'active' OR (pi.expires_at IS NOT NULL AND pi.expires_at <= CURRENT_TIMESTAMP))"
+            )
         if q:
             clauses.append(
                 """(
@@ -145,16 +152,17 @@ async def list_trainer_issued_items(
             product_name = (row[7] or "").strip() or "Абонемент"
             client_id = int(row[1]) if row[1] is not None else None
             client_label = _client_label(row[10], client_id)
-            bucket = _pass_status_bucket(st)
+            display_status = "expired" if st == "active" and _is_expired(row[5]) else st
+            bucket = "closed" if display_status == "expired" else _pass_status_bucket(display_status)
             items.append(
                 {
                     "kind": "pass",
                     "id": int(row[0]),
                     "issued_at": _iso(row[4]),
                     "expires_at": _iso(row[5]),
-                    "status": st,
+                    "status": display_status,
                     "status_bucket": bucket,
-                    "status_label_ru": _PASS_STATUS_LABEL_RU.get(st, st),
+                    "status_label_ru": _PASS_STATUS_LABEL_RU.get(display_status, display_status),
                     "client_id": client_id,
                     "client_label_ru": client_label,
                     "client_phone": (row[11] or "").strip() or None,

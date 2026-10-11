@@ -121,6 +121,32 @@ async def test_list_redeemable_bookings_after_pass_issue(db_session: AsyncSessio
     assert detail is not None
     assert detail["tiers_label"] is None
     assert detail["tier_kinds"] == []
+    assert detail["can_redeem"] is True
+    assert detail["is_expired"] is False
+
+
+@pytest.mark.asyncio
+async def test_manual_redeem_rejects_expired_pass(db_session: AsyncSession) -> None:
+    yesterday = date.today() - timedelta(days=2)
+    trainer_id, client_id, booking_id, pass_product_id = await _seed_completed_booking_without_pass(
+        db_session, slot_date=yesterday
+    )
+    issued = await issue_pass_to_client(db_session, trainer_id, client_id, pass_product_id)
+    pass_instance_id = int(issued["id"])
+    await db_session.execute(
+        text("UPDATE pass_instances SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = :id"),
+        {"id": pass_instance_id},
+    )
+    await db_session.commit()
+
+    detail = await get_trainer_pass_instance_detail(db_session, trainer_id, pass_instance_id)
+    assert detail is not None
+    assert detail["is_expired"] is True
+    assert detail["can_redeem"] is False
+    with pytest.raises(ValueError, match="истёк"):
+        await manual_redeem_pass_for_booking(
+            db_session, trainer_id, pass_instance_id, booking_id
+        )
 
 
 @pytest.mark.asyncio
