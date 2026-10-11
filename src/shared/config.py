@@ -106,6 +106,9 @@ class Settings(BaseSettings):
     api_rate_limit_image_window_sec: float = 60.0
     api_rate_limit_bot_max_requests: int = 600
     api_rate_limit_bot_window_sec: float = 60.0
+    # TASK-231: создание открытки «Пойдёшь со мной на каток?» — свой бакет, не общий public.
+    api_rate_limit_invite_max_requests: int = 20
+    api_rate_limit_invite_window_sec: float = 3600.0
     # leftmost (по умолчанию: Railway режет клиентский XFF, левая запись — реальный IP) |
     # rightmost_hops (платформа дописывает справа). См. src/shared/client_ip.py, docs/ops.
     client_ip_strategy: str = "leftmost"

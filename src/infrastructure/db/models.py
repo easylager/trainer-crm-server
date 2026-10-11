@@ -1847,6 +1847,91 @@ class ClientShareEvent(Base):
 
 
 # ---------------------------------------------------------------------------
+# «Пойдёшь со мной на каток?» (TASK-231). One card, many answers.
+# session_id is SET NULL: parsers delete ice_sessions rows that leave the schedule.
+# The card keeps arena_id + kind + the UTC window. Status is read with status_key,
+# stored only as sha256. Repeat answers dedupe on sha256(device_token), not actor_hash.
+# ---------------------------------------------------------------------------
+
+_INVITE_CODE_CHECK = "code ~ '^[23456789abcdefghjkmnpqrstuvwxyz]{8}$'"
+_INVITE_KIND_CHECK = "kind IN ('public_skate', 'open_ice', 'hockey_practice')"
+
+
+class IceInvite(Base):
+    """A public invite card pointing at one real catalog session."""
+
+    __tablename__ = "ice_invites"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_ice_invites_code"),
+        CheckConstraint(_INVITE_CODE_CHECK, name="ck_ice_invites_code"),
+        CheckConstraint(_INVITE_KIND_CHECK, name="ck_ice_invites_kind"),
+        CheckConstraint(
+            "char_length(from_name) BETWEEN 1 AND 20",
+            name="ck_ice_invites_from_name",
+        ),
+        CheckConstraint(
+            "to_name IS NULL OR char_length(to_name) BETWEEN 1 AND 20",
+            name="ck_ice_invites_to_name",
+        ),
+        Index("ix_ice_invites_parent_code", "parent_code"),
+        Index("ix_ice_invites_created_at", "created_at"),
+        Index("ix_ice_invites_session_id", "session_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(8), nullable=False)
+    status_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    session_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("ice_sessions.id", ondelete="SET NULL"), nullable=True
+    )
+    arena_id: Mapped[int] = mapped_column(
+        ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    starts_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    to_name: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    from_name: Mapped[str] = mapped_column(String(20), nullable=False)
+    show_price: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    parent_code: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    creator_actor_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    first_opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class IceInviteAnswer(Base):
+    """One «да» on an invite. Unique per card and device token hash."""
+
+    __tablename__ = "ice_invite_answers"
+    __table_args__ = (
+        UniqueConstraint(
+            "invite_id",
+            "responder_key",
+            name="uq_ice_invite_answers_invite_responder",
+        ),
+        CheckConstraint("tries BETWEEN 0 AND 10", name="ck_ice_invite_answers_tries"),
+        CheckConstraint("resist_ms BETWEEN 0 AND 600000", name="ck_ice_invite_answers_resist"),
+        CheckConstraint("falls BETWEEN 0 AND 5", name="ck_ice_invite_answers_falls"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    invite_id: Mapped[int] = mapped_column(
+        ForeignKey("ice_invites.id", ondelete="CASCADE"), nullable=False
+    )
+    responder_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    responder_actor_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    answered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    tries: Mapped[int] = mapped_column(SmallInteger(), nullable=False)
+    resist_ms: Mapped[int] = mapped_column(Integer(), nullable=False)
+    falls: Mapped[int] = mapped_column(SmallInteger(), nullable=False)
+    tricked: Mapped[bool] = mapped_column(nullable=False)
+
+
+# ---------------------------------------------------------------------------
 # Lead Mode recovery nudges (D+0..D+30 reactivation series — idempotency log).
 # ---------------------------------------------------------------------------
 

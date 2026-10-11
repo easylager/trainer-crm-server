@@ -11,9 +11,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
-from src.api.middleware.http_limits import client_ip_from_request
+from src.api.catalog_share_actor import catalog_share_actor as _catalog_share_actor
 from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
-from src.api.miniapp_auth.principal_keys import client_catalog_telegram_key
 from src.api.miniapp_auth.types import MiniAppPrincipal
 from src.api.public_list_cache import set_public_json_list_cache
 from src.api.routes.public import _enrich_trainer_photo_urls
@@ -31,7 +30,6 @@ from src.application.arena_public_use_cases import (
     record_ice_city_interest,
     search_public_ice,
 )
-from src.application.catalog_consumer_events import public_actor_hash, telegram_actor_hash
 from src.application.client_delight_metrics import record_client_share
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import (
@@ -81,23 +79,6 @@ async def _slug_city_id(
             raise HTTPException(status_code=404, detail="Arena not found")
         resolved = int(found["id"])
     return resolved
-
-
-def _catalog_share_actor(
-    principal: MiniAppPrincipal | None, request: Request
-) -> tuple[int | None, str | None]:
-    """Актёр шаринга каталога — тот же стабильный HMAC, что у входов и просмотров.
-
-    Mini App: ``telegram_actor_hash`` от ключа клиента. Без principal — ``public_actor_hash``
-    по IP и User-Agent. ``None`` у хэша, если секрет актёра не задан (fail closed).
-    """
-    if principal is not None:
-        telegram_id = client_catalog_telegram_key(principal)
-        return telegram_id, telegram_actor_hash(telegram_id)
-    return None, public_actor_hash(
-        client_ip=client_ip_from_request(request),
-        user_agent=request.headers.get("user-agent"),
-    )
 
 
 @router.get("/ice/map-config")

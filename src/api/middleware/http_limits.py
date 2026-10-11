@@ -77,6 +77,9 @@ def rate_limit_bucket_for_path(path: str) -> str:
         return "skip"
     if path == "/api/public/ice/map-config":
         return "skip"
+    # TASK-231: только создание. Чтение открытки и ответ остаются в public.
+    if path == "/api/public/invites":
+        return "invite"
     if path.startswith("/api/public/photos/"):
         return "photo"
     if path.startswith("/api/public"):
@@ -103,6 +106,9 @@ def _get_limiters() -> dict[str, RateLimiter]:
             # Превью-боты и краулеры: общие IP (Telegram), поэтому лимит широкий — но не бесконечный,
             # иначе подделка UA снимала бы лимит целиком.
             "bot": RateLimiter(s.api_rate_limit_bot_max_requests, s.api_rate_limit_bot_window_sec),
+            "invite": RateLimiter(
+                s.api_rate_limit_invite_max_requests, s.api_rate_limit_invite_window_sec
+            ),
         }
     return _limiters
 
