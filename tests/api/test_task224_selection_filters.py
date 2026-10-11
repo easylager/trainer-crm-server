@@ -103,7 +103,9 @@ async def test_ohm_weekend_window_and_seg_counts(app_use_test_db, db_session) ->
     name = f"Окнинск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     rink = await _insert_arena(db_session, city_id, name=f"ОХМ-уик {uuid.uuid4().hex[:4]}")
-    today = date.today()
+    # Окно «Сб–Вс» считается по Минску. date.today() на CI — UTC: в воскресенье после 21:00
+    # там ещё вчерашние выходные, а страница уже показывает следующие.
+    today = datetime.now(ZoneInfo("Europe/Minsk")).date()
     saturday = _weekend_saturday(today)
     sunday = saturday + timedelta(days=1)
     monday = saturday + timedelta(days=2)
