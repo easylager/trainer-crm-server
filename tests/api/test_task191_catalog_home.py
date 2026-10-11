@@ -57,7 +57,12 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
 
     assert home.status_code == 200
     assert home.headers["content-type"].startswith("text/html")
-    assert home.text.lower().count("<script") == 1
+    # JSON-LD и жест удержания на карте. Внешнего бандла Mini App нет.
+    assert home.text.lower().count("<script") == 2
+    assert home.text.count('<script type="application/ld+json">') == 1
+    assert "<script src=" not in home.text.lower()
+    assert "home-map__hint" in home.text
+    assert "Зажмите точку — название." in home.text
     assert 'type="application/ld+json"' in home.text
     assert name in home.text
     assert f"/c/{slug}" in home.text
