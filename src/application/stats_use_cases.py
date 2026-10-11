@@ -709,7 +709,10 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
     r = await session.execute(
         text("""
             SELECT
-                COUNT(*) FILTER (WHERE pi.status = 'active' AND pi.sessions_remaining > 0) AS active,
+                COUNT(*) FILTER (
+                    WHERE pi.status = 'active' AND pi.sessions_remaining > 0
+                      AND (pi.expires_at IS NULL OR pi.expires_at > CURRENT_TIMESTAMP)
+                ) AS active,
                 COUNT(*) FILTER (WHERE pi.issued_at >= CURRENT_TIMESTAMP - INTERVAL '30 days') AS issued_30d
             FROM pass_instances pi
             JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
@@ -1489,7 +1492,8 @@ async def get_platform_stats(session: AsyncSession) -> dict:
             SELECT
                 (SELECT COUNT(*) FROM pass_instances pi
                  JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
-                 WHERE pi.status = 'active' AND pi.sessions_remaining > 0) AS passes_active,
+                 WHERE pi.status = 'active' AND pi.sessions_remaining > 0
+                   AND (pi.expires_at IS NULL OR pi.expires_at > CURRENT_TIMESTAMP)) AS passes_active,
                 (SELECT COUNT(*) FROM pass_instances WHERE issued_at >= CURRENT_TIMESTAMP - INTERVAL '30 days') AS passes_issued_30d,
                 (SELECT COUNT(*) FROM certificate_instances) AS certs_issued,
                 (SELECT COUNT(*) FROM certificate_instances WHERE status IN ('issued', 'activated') AND COALESCE(amount_remaining_cents, 0) > 0) AS certs_with_balance,

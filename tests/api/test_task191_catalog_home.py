@@ -109,7 +109,8 @@ async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_se
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    assert home.text.count("</script>") == 1
+    # JSON-LD и скрипт карты. Имя города с «</script>» не должно добавить третье закрытие.
+    assert home.text.count("</script>") == 2
     assert "<img" not in home.text
     ld = _json_ld(home.text)
     assert "@graph" in ld

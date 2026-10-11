@@ -136,8 +136,26 @@
     btnBack.hidden = false;
     btnBack.onclick = function () { window.history.back(); };
   }
-  var btnCatalog = document.getElementById('btnCatalog');
-  if (btnCatalog) btnCatalog.onclick = function () { goTo('ice?intent=coach'); };
+  var ICE_SKATE_CATALOG = 'ice?intent=skate';
+  var ICE_COACH_CATALOG = 'ice?intent=coach';
+
+  function syncCatalogBtn(opts) {
+    opts = opts || {};
+    var btn = document.getElementById('btnCatalog');
+    if (!btn) return;
+    if (opts.hide) {
+      btn.style.display = 'none';
+      return;
+    }
+    btn.style.display = '';
+    if (state.hubFilter === 'ice') {
+      btn.textContent = '+ Каталог «Покататься»';
+      btn.onclick = function () { goTo(ICE_SKATE_CATALOG); };
+    } else {
+      btn.textContent = '+ Найти ещё тренера в каталоге';
+      btn.onclick = function () { goTo(ICE_COACH_CATALOG); };
+    }
+  }
 
   /* ── toast ───────────────────────────────────────────────────── */
 
@@ -209,7 +227,7 @@
       { key: 'all', label: 'Все' },
       { key: 'trainers', label: 'Тренеры' },
       { key: 'notifications', label: 'Уведомления', count: n },
-      { key: 'ice', label: 'Катки' },
+      { key: 'ice', label: 'Площадки' },
     ];
     wrap.innerHTML = pills
       .map(function (p) {
@@ -254,7 +272,7 @@
         '<div class="st-watch-row" data-ice-watch="' + esc(String(w.id)) + '">' +
           '<span class="st-watch-icon st-watch-icon--ice" aria-hidden="true">' + icon + '</span>' +
           '<span class="st-watch-body">' +
-            '<span class="st-watch-title">' + esc(w.arena_name || 'Каток') + '</span>' +
+            '<span class="st-watch-title">' + esc(w.arena_name || 'Площадка') + '</span>' +
             '<span class="st-watch-filter">' + esc(w.filter_label || '') + '</span>' +
             '<span class="st-watch-status">' + esc(w.status_label || '') + '</span>' +
           '</span>' +
@@ -290,7 +308,7 @@
     }).join('');
     return (
       '<section class="st-section">' +
-        '<div class="st-section-head"><span class="st-section-label">Катки</span>' +
+        '<div class="st-section-head"><span class="st-section-label">Площадки</span>' +
         '<span class="st-section-count">' + items.length + '</span></div>' +
         '<div class="st-watch-list">' + cards + '</div>' +
       '</section>'
@@ -665,7 +683,21 @@
         '<button type="button" class="st-empty-cta" id="btnEmptyCatalog">Найти тренера</button>' +
       '</div>';
     var b = document.getElementById('btnEmptyCatalog');
-    if (b) b.onclick = function () { goTo('ice?intent=coach'); };
+    if (b) b.onclick = function () { goTo(ICE_COACH_CATALOG); };
+    syncCatalogBtn();
+  }
+
+  function renderEmptyIce(mount) {
+    mount.innerHTML =
+      '<div class="st-empty-block">' +
+        '<div class="st-empty-icon-wrap"><span class="st-empty-icon">🧊</span></div>' +
+        '<div class="st-empty-title">Здесь появятся напоминания о площадках</div>' +
+        '<div class="st-empty-desc">В каталоге «Покататься» нажмите 🔔 на карточке площадки — расскажем об обновлениях расписания и сеансах.</div>' +
+        '<button type="button" class="st-empty-cta" id="btnEmptyIceCatalog">Открыть «Покататься»</button>' +
+      '</div>';
+    var b = document.getElementById('btnEmptyIceCatalog');
+    if (b) b.onclick = function () { goTo(ICE_SKATE_CATALOG); };
+    syncCatalogBtn({ hide: true });
   }
 
   function renderEmptyFilter(mount) {
@@ -699,7 +731,11 @@
 
     var hasTrainers = (state.primary ? 1 : 0) + state.saved.length + state.past.length;
     var hasWatches = activeNotificationCount() > 0;
-    if (!hasTrainers && !hasWatches) { renderEmpty(mount); return; }
+    if (!hasTrainers && !hasWatches) {
+      if (state.hubFilter === 'ice') renderEmptyIce(mount);
+      else renderEmpty(mount);
+      return;
+    }
 
     var hf = state.hubFilter;
     var html = '';
@@ -710,6 +746,7 @@
       var totalVisible = (primary ? 1 : 0) + savedFiltered.length + pastFiltered.length;
       if (hasTrainers && totalVisible === 0 && state.filter !== 'all') {
         renderEmptyFilter(mount);
+        syncCatalogBtn({ hide: true });
         return;
       }
       if (primary) html += renderPrimary(primary);
@@ -718,15 +755,24 @@
     }
     if (hf === 'ice') {
       html += renderIceWatchesSection();
+      if (!html) {
+        renderEmptyIce(mount);
+        return;
+      }
     }
     if (!html && hf === 'notifications') {
       mount.innerHTML =
         '<div class="st-empty-block"><div class="st-empty-title">Нет активных напоминаний</div>' +
-        '<div class="st-empty-desc">Включите 🔔 в каталоге тренера или на карточке катка.</div></div>';
+        '<div class="st-empty-desc">Включите 🔔 в каталоге тренера или на карточке площадки в «Покататься».</div></div>';
+      syncCatalogBtn();
       return;
     }
-    if (!html) { renderEmpty(mount); return; }
+    if (!html) {
+      renderEmpty(mount);
+      return;
+    }
     mount.innerHTML = html;
+    syncCatalogBtn();
     wireMount(mount);
   }
 

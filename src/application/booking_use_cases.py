@@ -3042,6 +3042,7 @@ async def list_trainer_clients(
                 WHERE tpp.trainer_id = :tid
                   AND pi.status = 'active'
                   AND pi.sessions_remaining > 0
+                  AND (pi.expires_at IS NULL OR pi.expires_at > CURRENT_TIMESTAMP)
             ),
             last_completed_per_client AS (
                 SELECT

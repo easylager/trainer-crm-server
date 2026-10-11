@@ -1,7 +1,7 @@
 """Pass issue must not require a live (non-cancelled) booking."""
 from __future__ import annotations
 
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
@@ -71,6 +71,7 @@ async def test_issue_pass_roster_only_without_bookings(db_session) -> None:
     assert result["client_id"] == client_id
     assert result["sessions_total"] == 5
     assert result["status"] == "active"
+    assert result["expires_at"] is None
 
 
 @pytest.mark.asyncio
@@ -105,3 +106,39 @@ async def test_issue_pass_when_only_cancelled_bookings(db_session) -> None:
 
     assert result["client_id"] == client_id
     assert result["pass_product_id"] == product_id
+    assert result["expires_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_issue_pass_copies_validity_and_ignores_an_expired_pack(db_session) -> None:
+    trainer_id, product_id = await _trainer_with_pass_product(db_session)
+    client_id = await _insert_client(db_session)
+    await db_session.execute(
+        text("INSERT INTO trainer_client_roster (trainer_id, client_id) VALUES (:tid, :cid)"),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainer_pass_products SET validity_days = 90 WHERE id = :id"),
+        {"id": product_id},
+    )
+    await db_session.commit()
+
+    first = await issue_pass_to_client(db_session, trainer_id, client_id, product_id)
+    expires = datetime.fromisoformat(first["expires_at"])
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    remaining = expires - datetime.now(timezone.utc)
+    assert timedelta(days=89) < remaining < timedelta(days=91)
+
+    with pytest.raises(ValueError, match="активный абонемент"):
+        await issue_pass_to_client(db_session, trainer_id, client_id, product_id)
+
+    await db_session.execute(
+        text("UPDATE pass_instances SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = :id"),
+        {"id": first["id"]},
+    )
+    await db_session.commit()
+
+    second = await issue_pass_to_client(db_session, trainer_id, client_id, product_id)
+    assert second["id"] != first["id"]
+    assert second["expires_at"] is not None

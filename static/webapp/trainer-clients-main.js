@@ -3605,7 +3605,9 @@
           ]).then(function(results) {
             var passes = (results[0] && results[0].items) ? results[0].items : [];
             var certs = (results[1] && results[1].items) ? results[1].items : [];
-            var activePasses = passes.filter(function(p) { return (p.status || '') === 'active'; });
+            var activePasses = passes.filter(function(p) {
+              return (p.status || '') === 'active' && !p.is_expired;
+            });
             var activeCerts = certs.filter(function(c) { return (c.status || '') === 'active'; });
             var pathBase = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
             if (activePasses.length) {

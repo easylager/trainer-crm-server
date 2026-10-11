@@ -1531,6 +1531,19 @@ def webapp_trainer_pass_products_css(request: Request):
     )
 
 
+@app.get("/webapp/pass-validity-model.js")
+def webapp_pass_validity_model_js(request: Request):
+    """Suggested pass terms. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "pass-validity-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/trainer-pass-products-main.js")
 def webapp_trainer_pass_products_main_js(request: Request):
     """Trainer pass products logic (split from trainer-pass-products.html). Use ``?v=…`` for long cache."""

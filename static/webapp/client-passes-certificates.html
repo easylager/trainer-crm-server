@@ -847,7 +847,10 @@
         if (!iso) return '';
         try {
           var d = new Date(iso);
-          return 'до ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+          if (isNaN(d.getTime())) return '';
+          var label = 'до ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+          if (d.getTime() <= Date.now()) return 'срок истёк · ' + label;
+          return label;
         } catch (e) { return ''; }
       }
       function renderPassDetailScreen(p) {
@@ -1093,7 +1096,10 @@
               if (!iso) return '';
               try {
                 var d = new Date(iso);
-                return 'До ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+                if (isNaN(d.getTime())) return '';
+                var label = 'До ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+                if (d.getTime() <= Date.now()) return 'Срок истёк · ' + label;
+                return label;
               } catch (e) { return ''; }
             }
             function passListCardHtml(p) {

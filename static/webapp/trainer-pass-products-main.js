@@ -89,6 +89,7 @@
         passIssueSelectedClientId: null,
         passIssueSelectedClient: null,
         savingPassProduct: false,
+        validityTouched: false,
         savingCertProduct: false,
         certIssueSubmitting: false,
         certIssueIdempotencyKey: null,
@@ -369,7 +370,7 @@
       }
 
       function passStatusLabelRu(status) {
-        var map = { active: 'Активен', used_up: 'Использован', cancelled: 'Отменён' };
+        var map = { active: 'Активен', used_up: 'Использован', cancelled: 'Отменён', expired: 'Истёк' };
         return map[status] || status || '—';
       }
 
@@ -477,6 +478,7 @@
         var statusEl = document.getElementById('passDetailStatus');
         if (statusEl) {
           var st = (p.status || '').trim();
+          if (p.is_expired && st === 'active') st = 'expired';
           statusEl.hidden = !st;
           statusEl.textContent = passStatusLabelRu(st);
           statusEl.className = 'pp-pass-detail-status ' +
@@ -782,6 +784,64 @@
         return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
       }
 
+      var VALIDITY_PRESETS = { '30': 1, '90': 1, '120': 1, '150': 1, '180': 1, '365': 1 };
+
+      function formatValidityDays(days) {
+        if (days == null || days === '') return 'без срока';
+        if (Number(days) === 365) return '1 год';
+        return days + ' дн.';
+      }
+
+      function updateValidityHint() {
+        var el = document.getElementById('validityHint');
+        if (!el) return;
+        var sessions = parseInt(document.getElementById('inputSessions').value, 10);
+        var rec = window.PassValidity ? window.PassValidity.recommendedValidityDays(sessions) : null;
+        var tail = '';
+        if (sessions >= 1) {
+          tail = rec == null
+            ? ' Для короткого пакета обычно оставляют без срока.'
+            : ' Для ' + sessions + ' занятий обычно ' + rec + ' дней: занятие раз в неделю и запас.';
+        }
+        el.textContent = 'Срок считается с выдачи. Остаток после этой даты сгорает. Уже выданные абонементы не меняются.' + tail;
+      }
+
+      function applyValidityToForm(days) {
+        var sel = document.getElementById('inputValidity');
+        var custom = document.getElementById('inputValidityCustom');
+        if (!sel || !custom) return;
+        var key = days == null ? '' : String(days);
+        if (days != null && !VALIDITY_PRESETS[key]) {
+          sel.value = 'custom';
+          custom.style.display = '';
+          custom.value = String(days);
+        } else {
+          sel.value = key;
+          custom.style.display = 'none';
+          custom.value = '';
+        }
+        updateValidityHint();
+      }
+
+      function readValidityDays() {
+        var sel = document.getElementById('inputValidity');
+        var choice = sel ? sel.value : '';
+        if (choice === 'custom') {
+          var n = parseInt(document.getElementById('inputValidityCustom').value, 10);
+          if (!n || n < 1 || n > 3650) return { error: 'Срок — от 1 до 3650 дней или «без срока»' };
+          return { days: n };
+        }
+        if (!choice) return { days: null };
+        return { days: parseInt(choice, 10) };
+      }
+
+      function suggestValidityFromSessions() {
+        if (state.validityTouched || state.editingId) return;
+        var sessions = parseInt(document.getElementById('inputSessions').value, 10);
+        if (!window.PassValidity) return;
+        applyValidityToForm(window.PassValidity.recommendedValidityDays(sessions));
+      }
+
       function escapeHtml(s) {
         if (s == null) return '';
         var d = document.createElement('div');
@@ -802,7 +862,7 @@
           var serviceLabel = (p.service_name && p.service_name.trim()) ? p.service_name.trim() : 'любая услуга';
           var scopeParts = [serviceLabel];
           if (p.tiers_label && p.tiers_label.trim()) scopeParts.push(p.tiers_label.trim());
-          var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents) + ' · ' + scopeParts.join(', тарифы: ');
+          var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents) + ' · ' + formatValidityDays(p.validity_days) + ' · ' + scopeParts.join(', тарифы: ');
           var cardClass = 'product-card';
           if (!p.is_active) cardClass += ' inactive';
           if (p.scope_valid === false) cardClass += ' product-card--scope-warn';
@@ -997,6 +1057,9 @@
         document.getElementById('inputName').value = product ? product.name : '';
         document.getElementById('inputSessions').value = product ? String(product.sessions_total) : '';
         document.getElementById('inputPrice').value = product ? String(Math.round(product.price_cents / 100)) : '';
+        state.validityTouched = !!product;
+        applyValidityToForm(product ? product.validity_days : null);
+        if (!product) suggestValidityFromSessions();
         document.getElementById('inputActive').checked = product ? product.is_active : true;
         updateActiveLabel();
         document.getElementById('groupActive').style.display = product ? 'block' : 'none';
@@ -1035,6 +1098,22 @@
       document.getElementById('inputActive').onchange = function() {
         updateActiveLabel();
       };
+
+      document.getElementById('inputSessions').addEventListener('input', function() {
+        suggestValidityFromSessions();
+        updateValidityHint();
+      });
+      document.getElementById('inputValidity').addEventListener('change', function() {
+        state.validityTouched = true;
+        var custom = document.getElementById('inputValidityCustom');
+        var isCustom = this.value === 'custom';
+        custom.style.display = isCustom ? '' : 'none';
+        if (!isCustom) custom.value = '';
+        updateValidityHint();
+      });
+      document.getElementById('inputValidityCustom').addEventListener('input', function() {
+        state.validityTouched = true;
+      });
 
       function applyPassIssueClientFilter() {
         var q = (document.getElementById('passIssueClientSearch').value || '').trim();
@@ -1107,7 +1186,7 @@
           opt.value = p.id;
           var serviceLabel = (p.service_name && p.service_name.trim()) ? p.service_name.trim() : 'любая услуга';
           var scopeStr = (p.tiers_label && p.tiers_label.trim()) ? serviceLabel + ', тарифы: ' + p.tiers_label.trim() : serviceLabel;
-          opt.textContent = (p.name || '') + ' · ' + (p.sessions_total || 0) + ' занятий · ' + scopeStr;
+          opt.textContent = (p.name || '') + ' · ' + (p.sessions_total || 0) + ' занятий · ' + formatValidityDays(p.validity_days) + ' · ' + scopeStr;
           productSelect.appendChild(opt);
         });
         if (state.prefillClientIdForPassIssue) {
@@ -1768,6 +1847,8 @@
         if (!name) { alert('Введите название'); return; }
         if (!sessions || sessions < 1) { alert('Укажите количество занятий'); return; }
         if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в BYN'); return; }
+        var validity = readValidityDays();
+        if (validity.error) { alert(validity.error); return; }
         var priceCents = priceByn * 100;
 
         var serviceIds = getPassProductSelectedServiceIds();
@@ -1788,7 +1869,7 @@
           if (passBtn) passBtn.disabled = false;
         }
         if (state.editingId) {
-          var body = { name: name, sessions_total: sessions, price_cents: priceCents, is_active: document.getElementById('inputActive').checked, service_ids: serviceIds, tier_kinds: tierKinds };
+          var body = { name: name, sessions_total: sessions, price_cents: priceCents, validity_days: validity.days, is_active: document.getElementById('inputActive').checked, service_ids: serviceIds, tier_kinds: tierKinds };
           fetch(apiUrl('/trainer/pass-products/' + state.editingId), {
             method: 'PATCH',
             headers: headers(),
@@ -1802,7 +1883,7 @@
             .catch(function() { alert('Ошибка сети'); })
             .then(unlockPassSave);
         } else {
-          var body = { name: name, sessions_total: sessions, price_cents: priceCents, service_ids: serviceIds, tier_kinds: tierKinds };
+          var body = { name: name, sessions_total: sessions, price_cents: priceCents, validity_days: validity.days, service_ids: serviceIds, tier_kinds: tierKinds };
           fetch(apiUrl('/trainer/pass-products'), {
             method: 'POST',
             headers: headers(),

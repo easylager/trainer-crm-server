@@ -28,6 +28,35 @@ from src.shared.price_tier_kind import (
 
 logger = logging.getLogger(__name__)
 
+# Whole days on the product type. NULL is an open-ended pack: visit count is always limited,
+# so an unlimited clock is allowed (YClients permits «неограниченно» only in that case).
+PASS_VALIDITY_DAYS_MAX = 3650
+
+# Spendable only while the clock that started at issue has not run out.
+SQL_PASS_NOT_EXPIRED = "(pi.expires_at IS NULL OR pi.expires_at > CURRENT_TIMESTAMP)"
+
+_UNSET = object()
+
+
+def _clean_validity_days(value: int | None) -> int | None:
+    """None = no clock. Any other value is a whole-day term from issue."""
+    if value is None:
+        return None
+    days = int(value)
+    if days < 1 or days > PASS_VALIDITY_DAYS_MAX:
+        raise ValueError("Срок абонемента — от 1 до 3650 дней или без срока")
+    return days
+
+
+def _is_expired(expires_at: object | None, *, now: datetime | None = None) -> bool:
+    if expires_at is None:
+        return False
+    exp_dt = expires_at if isinstance(expires_at, datetime) else datetime.fromisoformat(str(expires_at))
+    if exp_dt.tzinfo is None:
+        exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    return exp_dt <= current
+
 # SQL predicate: does pass product 'p' cover this booking's service AND tier?
 # Params required: :booking_service_id (int), :booking_tier_kind (str | NULL)
 #
@@ -497,7 +526,8 @@ async def list_pass_products(session: AsyncSession, trainer_id: int, active_only
                     WHERE t.pass_product_id = p.id
                 ),
                 CAST(ARRAY[] AS TEXT[])
-            ) AS tier_kinds
+            ) AS tier_kinds,
+            p.validity_days
         FROM trainer_pass_products p
         WHERE p.trainer_id = :tid
     """
@@ -523,6 +553,7 @@ async def list_pass_products(session: AsyncSession, trainer_id: int, active_only
             "tiers_label": ", ".join(
                 PRICE_TIER_LABEL_RU[k] for k in PRICE_TIER_ORDER if k in set(row[10] or [])
             ) or None,
+            "validity_days": int(row[11]) if row[11] is not None else None,
         }
         for row in rows
     ]
@@ -539,17 +570,21 @@ async def create_pass_product(
     price_cents: int,
     service_ids: list[int] | None = None,
     tier_kinds: list[str] | None = None,
+    validity_days: int | None = None,
     sort_order: int = 0,
 ) -> int:
     """Create a pass product. Empty service_ids/tier_kinds = unrestricted. Returns product id."""
     validated_svc = await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids or [])
     validated_tiers = _normalized_tier_kinds(tier_kinds or [])
+    cleaned_validity = _clean_validity_days(validity_days)
     await validate_pass_product_tier_scope(session, trainer_id, validated_svc, validated_tiers)
     r = await session.execute(
         text(
             """
-            INSERT INTO trainer_pass_products (trainer_id, name, sessions_total, price_cents, sort_order)
-            VALUES (:tid, :name, :sessions_total, :price_cents, :sort_order)
+            INSERT INTO trainer_pass_products (
+                trainer_id, name, sessions_total, price_cents, validity_days, sort_order
+            )
+            VALUES (:tid, :name, :sessions_total, :price_cents, :validity_days, :sort_order)
             RETURNING id
             """
         ),
@@ -558,6 +593,7 @@ async def create_pass_product(
             "name": name[:128],
             "sessions_total": sessions_total,
             "price_cents": price_cents,
+            "validity_days": cleaned_validity,
             "sort_order": sort_order,
         },
     )
@@ -611,6 +647,7 @@ async def update_pass_product(
     price_cents: int | None = None,
     service_ids: list[int] | None = None,
     tier_kinds: list[str] | None = None,
+    validity_days: object = _UNSET,
     is_active: bool | None = None,
     sort_order: int | None = None,
 ) -> bool:
@@ -654,6 +691,10 @@ async def update_pass_product(
     if sort_order is not None:
         updates.append("sort_order = :sort_order")
         params["sort_order"] = sort_order
+    if validity_days is not _UNSET:
+        raw_days = None if validity_days is None else int(validity_days)  # type: ignore[arg-type]
+        updates.append("validity_days = :validity_days")
+        params["validity_days"] = _clean_validity_days(raw_days)
     if updates:
         updates.append("updated_at = CURRENT_TIMESTAMP")
         q = f"""
@@ -710,6 +751,7 @@ async def list_pass_instances_for_trainer_client(
                 pi.sessions_remaining,
                 pi.sessions_total,
                 pi.issued_at,
+                pi.expires_at,
                 pi.status,
                 p.name AS product_name,
                 pi.price_cents,
@@ -742,10 +784,12 @@ async def list_pass_instances_for_trainer_client(
             "sessions_remaining": row[2],
             "sessions_total": row[3],
             "issued_at": row[4].isoformat() if hasattr(row[4], "isoformat") else str(row[4]),
-            "status": row[5],
-            "product_name": row[6],
-            "price_cents": row[7],
-            "service_name": (row[8] or "").strip() or None,
+            "expires_at": row[5].isoformat() if row[5] is not None and hasattr(row[5], "isoformat") else (str(row[5]) if row[5] else None),
+            "status": row[6],
+            "is_expired": _is_expired(row[5]),
+            "product_name": row[7],
+            "price_cents": row[8],
+            "service_name": (row[9] or "").strip() or None,
         }
         for row in rows
     ]
@@ -823,6 +867,7 @@ async def list_client_pass_instances(
                 "expires_at": expires_at.isoformat()
                 if expires_at and hasattr(expires_at, "isoformat")
                 else (str(expires_at) if expires_at else None),
+                "is_expired": _is_expired(expires_at),
                 "status": row[6],
                 "product_name": (row[7] or "").strip() or "—",
                 "price_cents": price_cents,
@@ -888,7 +933,7 @@ async def client_ids_with_active_pass(
     if not uniq:
         return set()
     stmt = text(
-        """
+        f"""
         SELECT DISTINCT pi.client_id
         FROM pass_instances pi
         JOIN trainer_pass_products p ON p.id = pi.pass_product_id
@@ -896,6 +941,7 @@ async def client_ids_with_active_pass(
           AND pi.client_id IN :cids
           AND pi.status = 'active'
           AND pi.sessions_remaining > 0
+          AND {SQL_PASS_NOT_EXPIRED}
         """
     ).bindparams(bindparam("cids", expanding=True))
     r = await session.execute(stmt, {"tid": int(trainer_id), "cids": uniq})
@@ -955,11 +1001,12 @@ async def issue_pass_to_client(
         raise ValueError(scope_err or "Клиент не привязан к вашему кабинету")
     r = await session.execute(
         text(
-            """
+            f"""
             SELECT 1 FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             WHERE pi.client_id = :cid AND p.trainer_id = :tid
               AND pi.status = 'active' AND pi.sessions_remaining > 0
+              AND {SQL_PASS_NOT_EXPIRED}
             LIMIT 1
             """
         ),
@@ -969,14 +1016,27 @@ async def issue_pass_to_client(
         raise ValueError("У клиента уже есть активный абонемент")
     sessions_total = product["sessions_total"]
     sale_price_cents = int(product["price_cents"])
+    validity_days = product.get("validity_days")
+    # The day count is an int we already validated, so it is safe to splice as a number.
+    expires_sql = (
+        "NULL"
+        if validity_days is None
+        else f"CURRENT_TIMESTAMP + ({int(validity_days)} * INTERVAL '1 day')"
+    )
     r = await session.execute(
         text(
-            """
+            f"""
             INSERT INTO pass_instances (
-                client_id, pass_product_id, sessions_remaining, sessions_total, price_cents, status
+                client_id, pass_product_id, sessions_remaining, sessions_total, price_cents,
+                issued_at, expires_at, status
             )
-            VALUES (:cid, :pid, :rem, :total, :price, 'active')
-            RETURNING id, client_id, pass_product_id, sessions_remaining, sessions_total, issued_at, status
+            VALUES (
+                :cid, :pid, :rem, :total, :price,
+                CURRENT_TIMESTAMP,
+                {expires_sql},
+                'active'
+            )
+            RETURNING id, client_id, pass_product_id, sessions_remaining, sessions_total, issued_at, expires_at, status
             """
         ),
         {
@@ -996,6 +1056,7 @@ async def issue_pass_to_client(
     )
     await session.commit()
     issued_at = row[5]
+    expires_at = row[6]
 
     svc_ids = product.get("service_ids") or []
     service_names: list[str] = []
@@ -1020,7 +1081,8 @@ async def issue_pass_to_client(
         "sessions_remaining": row[3],
         "sessions_total": row[4],
         "issued_at": issued_at.isoformat() if hasattr(issued_at, "isoformat") else str(issued_at),
-        "status": row[6],
+        "expires_at": expires_at.isoformat() if expires_at is not None and hasattr(expires_at, "isoformat") else None,
+        "status": row[7],
         "product_name": product["name"],
         "price_cents": sale_price_cents,
         "service_names": service_names,
@@ -1080,6 +1142,7 @@ async def redeem_pass_session_for_booking(
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             WHERE pi.client_id = :cid AND p.trainer_id = :tid
               AND pi.status = 'active' AND pi.sessions_remaining > 0
+              AND {SQL_PASS_NOT_EXPIRED}
               AND {SQL_PASS_PRODUCT_COVERS_BOOKING}
             ORDER BY pi.expires_at ASC NULLS LAST, pi.sessions_remaining ASC
             LIMIT 1
@@ -1232,6 +1295,7 @@ async def get_trainer_pass_instance_detail(
         "sessions_total": int(row[3] or 0),
         "issued_at": _iso_dt(row[4]),
         "expires_at": _iso_dt(row[5]),
+        "is_expired": _is_expired(row[5]),
         "status": str(row[6] or ""),
         "pass_product_id": int(row[7]),
         "product_name": (row[8] or "").strip() or "Абонемент",
@@ -1239,7 +1303,7 @@ async def get_trainer_pass_instance_detail(
         "service_scope": scope,
         "tier_kinds": tier_kinds,
         "tiers_label": tiers_label,
-        "can_redeem": str(row[6]) == "active" and int(row[2] or 0) > 0,
+        "can_redeem": str(row[6]) == "active" and int(row[2] or 0) > 0 and not _is_expired(row[5]),
     }
 
 

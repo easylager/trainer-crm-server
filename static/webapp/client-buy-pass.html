@@ -666,7 +666,7 @@
             var hiPid = state.highlightPassProductId;
             state.items.forEach(function(p, idx) {
               var passPerSession = p.pass_price_per_session_cents != null ? (p.pass_price_per_session_cents / 100) : null;
-              var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents);
+              var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents) + ' · ' + (p.validity_days ? (p.validity_days + ' дн.') : 'без срока');
               if (passPerSession != null) {
                 meta += ' · ' + (passPerSession % 1 === 0 ? passPerSession : passPerSession.toFixed(2)) + ' BYN за занятие';
               }

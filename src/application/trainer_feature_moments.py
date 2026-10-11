@@ -152,6 +152,8 @@ async def fetch_trainer_feature_moment_facts(
                        WHERE tpp.trainer_id = :tid
                          AND pi.client_id = b.client_id
                          AND pi.status = 'active'
+                         AND pi.sessions_remaining > 0
+                         AND (pi.expires_at IS NULL OR pi.expires_at > CURRENT_TIMESTAMP)
                    )
                 ORDER BY occurrences DESC, b.client_id
                 LIMIT 1

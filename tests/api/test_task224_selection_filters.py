@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -75,6 +76,21 @@ async def _profile(
         )
 
 
+def _future_hhmm(day: date, hhmm: str) -> str:
+    """Время сеанса в этот день, которое ещё не наступило. Не 18:00 — им помечен понедельник."""
+    hour, minute = (int(part) for part in hhmm.split(":"))
+    tz = ZoneInfo("Europe/Minsk")
+    now = datetime.now(tz)
+    slot = datetime.combine(day, time(hour, minute), tzinfo=tz)
+    if slot > now:
+        return hhmm
+    ahead = now + timedelta(minutes=30)
+    if ahead.date() != day:
+        ahead = datetime.combine(day, time(23, 45), tzinfo=tz)
+    label = ahead.strftime("%H:%M")
+    return "18:15" if label == "18:00" else label
+
+
 def _weekend_saturday(from_day: date) -> date:
     """Суббота окна «Сб–Вс» — как в ice_time_windows.resolve_window('weekend')."""
     if from_day.weekday() in (5, 6):
@@ -92,7 +108,9 @@ async def test_ohm_weekend_window_and_seg_counts(app_use_test_db, db_session) ->
     sunday = saturday + timedelta(days=1)
     monday = saturday + timedelta(days=2)
     # Воскресенье внутри окна «Сб–Вс»; понедельник 18:00 — уже за пределами.
-    await _ohm(db_session, rink, day=sunday, hhmm="10:30")
+    # Если 10:30 в это воскресенье уже прошло, берём время, которое ещё впереди.
+    sunday_slot = _future_hhmm(sunday, "10:30")
+    await _ohm(db_session, rink, day=sunday, hhmm=sunday_slot)
     await _ohm(db_session, rink, day=monday, hhmm="18:00")
     await db_session.commit()
     slug = city_slug(name)
@@ -102,7 +120,7 @@ async def test_ohm_weekend_window_and_seg_counts(app_use_test_db, db_session) ->
 
     assert page.status_code == 200
     html = page.text
-    assert "10:30" in html
+    assert sunday_slot in html
     assert "18:00" not in html
     assert re.search(r'Сб–Вс[^<]*<small>\d+</small>', html)
     assert re.search(r'<span class="on">\s*Сб–Вс', html) or 'class="on">Сб–Вс' in html
