@@ -31,7 +31,7 @@
     "mode.season_closed": "Сейчас закрыто",
     "mode.reopen": "Откроется {date}",
     "kind.public_skate": "Массовое катание",
-    "kind.hockey_practice": "Хоккей для любителей (ОХМ)",
+    "kind.hockey_practice": "ОХМ",
     "cta.follow": "Следить за катком в Telegram",
     "cta.follow_closed": "Сообщить об открытии",
     "cta.following": "Вы следите за катком",

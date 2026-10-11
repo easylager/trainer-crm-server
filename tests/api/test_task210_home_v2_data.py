@@ -280,7 +280,7 @@ async def test_bad_day_falls_back_to_today_without_picker(app_use_test_db, db_se
     assert 'class="day-picker"' not in bad.text
     assert 'class="chips"' not in bad.text
     assert "chip--active" not in bad.text
-    assert '<p class="sub sub--ohm">Хоккей для любителей — ' in bad.text
+    assert '<p class="sub sub--ohm">ОХМ — ' in bad.text
     assert _counter(bad.text) == f"{name} — сегодня 1 катание"
 
 

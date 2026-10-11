@@ -1977,7 +1977,7 @@
     if (intent === INTENTS.ohm) {
       return {
         title: 'Сейчас нет ОХМ',
-        body: 'В этом городе нет будущих сеансов хоккея для любителей. Посмотрите массовое катание или смените город.',
+        body: 'В этом городе нет будущих сеансов ОХМ. Посмотрите массовое катание или смените город.',
         action: { label: 'Показать места', kind: 'intent:skate' },
         secondary: { label: 'Сменить город', kind: 'city' },
       };
@@ -2114,7 +2114,7 @@
     if (intent === INTENTS.ohm) {
       var ohmWord = pluralRu(total, 'каток', 'катка', 'катков');
       if (total === 0) return 'Пока нет ОХМ · смените город или чип';
-      return total + ' ' + ohmWord + ' · хоккей для любителей (ОХМ)';
+      return total + ' ' + ohmWord + ' · ОХМ';
     }
     var items = opts.items || [];
     var noun = venueNoun(items, opts.venueTypes);
