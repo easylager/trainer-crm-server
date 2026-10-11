@@ -362,7 +362,42 @@
     return { destroy: destroy, relayout: layout };
   }
 
+  /**
+   * Клавиатура на iPhone ложится поверх нижнего шита, а шит не двигается: поля имён
+   * оказываются под ней. Поднимаем панель на высоту клавиатуры (visualViewport) и
+   * докручиваем поле в фокусе к середине. Возвращает функцию отключения.
+   */
+  function liftForKeyboard(panel) {
+    var vv = root && root.visualViewport;
+    if (!panel || !vv) return function () {};
+    function fit() {
+      var covered = Math.max(0, root.innerHeight - vv.height - vv.offsetTop);
+      var open = covered > 80;
+      panel.style.marginBottom = open ? covered + 'px' : '';
+      panel.style.maxHeight = open ? Math.max(240, Math.round(vv.height) - 8) + 'px' : '';
+    }
+    function onFocus(ev) {
+      var field = ev.target;
+      if (!field || !field.matches || !field.matches('input, textarea')) return;
+      root.setTimeout(function () {
+        fit();
+        field.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 320);
+    }
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    panel.addEventListener('focusin', onFocus);
+    return function () {
+      vv.removeEventListener('resize', fit);
+      vv.removeEventListener('scroll', fit);
+      panel.removeEventListener('focusin', onFocus);
+      panel.style.marginBottom = '';
+      panel.style.maxHeight = '';
+    };
+  }
+
   return {
+    liftForKeyboard: liftForKeyboard,
     model: model,
     html: html,
     update: update,

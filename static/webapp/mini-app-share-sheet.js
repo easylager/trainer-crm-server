@@ -168,9 +168,9 @@
   var ZOVI_FROM_KEY = 'zovi_from';
   /* Открытка грузится по требованию: бюджет веса каталога (test_webapp_page_weight_budget). */
   var ZOVI_SCRIPTS = [
-    '/static/shared/zovi-model.js?v=9',
-    '/static/shared/zovi-create.js?v=9',
-    '/static/shared/zovi-live.js?v=9',
+    '/static/shared/zovi-model.js?v=10',
+    '/static/shared/zovi-create.js?v=10',
+    '/static/shared/zovi-live.js?v=10',
   ];
   var zoviLoading = null;
 
@@ -1105,6 +1105,7 @@
     }
     var el = root && root.querySelector('.gss-live [data-zl]');
     if (!el || !global.ZoviLive) return;
+    if (!state.zoviKb) state.zoviKb = global.ZoviLive.liftForKeyboard(sheetEl());
     state.zoviLive = global.ZoviLive.attach(el, {
       onDodge: function () {
         try {
@@ -1543,6 +1544,10 @@
     if (state && state.zoviLive) {
       state.zoviLive.destroy();
       state.zoviLive = null;
+    }
+    if (state && state.zoviKb) {
+      state.zoviKb();
+      state.zoviKb = null;
     }
     root.classList.remove('is-open');
     global.setTimeout(function () { if (root) root.hidden = true; }, 180);
