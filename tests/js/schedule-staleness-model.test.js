@@ -32,7 +32,7 @@ describe('TASK-180 schedule staleness (AC-3)', () => {
       schedule_very_stale: false,
       schedule_observed_at: '2026-10-05T15:40:00.000Z',
     };
-    assert.match(staleNote(stale, now), /^Расписание могло измениться · проверено /);
+    assert.equal(staleNote(stale, now), '');
     const very = {
       schedule_stale: true,
       schedule_very_stale: true,

@@ -20,7 +20,7 @@
       : typeof globalThis !== 'undefined'
         ? globalThis.MinskTime
         : null;
-  var STALE_SHORT = 'могло измениться';
+  var STALE_SHORT = '';
   var MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
   function parseDt(value) {
@@ -67,11 +67,8 @@
     return ' — уточните у катка';
   }
 
-  function staleNote(freshness, now) {
-    if (stalenessLevel(freshness) !== 'stale') return '';
-    var when = checkedAtLabel((freshness || {}).schedule_observed_at, now);
-    if (when) return 'Расписание могло измениться · проверено ' + when;
-    return 'Расписание могло измениться — уточните у катка';
+  function staleNote() {
+    return '';
   }
 
   function veryStaleNote(freshness, now, opts) {
@@ -85,8 +82,8 @@
     return 'Расписание не обновлялось ' + pluralDays(days) + tail;
   }
 
-  function shouldWarnScheduleStale(freshness) {
-    return stalenessLevel(freshness) === 'stale';
+  function shouldWarnScheduleStale() {
+    return false;
   }
 
   function scheduleStaleFlag(item) {

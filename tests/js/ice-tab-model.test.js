@@ -1574,7 +1574,7 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
 });
 
 describe('TASK-180: устаревшее расписание в ленте', () => {
-  it('schedule_stale помечает карточку и подпись глубины', () => {
+  it('schedule_stale не пишет оговорку в подпись глубины', () => {
     const { boardCardView } = loadModel();
     const item = { id: 1, name: 'Каток', live: { kind: 'session', local_date: '2026-10-02', starts_at_local: '18:00', more_count: 5, session_id: 3 } };
     const now = new Date('2026-10-02T10:00:00Z');
@@ -1583,8 +1583,8 @@ describe('TASK-180: устаревшее расписание в ленте', ()
       now,
       {}
     );
-    assert.equal(v.stale, true);
-    assert.match(v.depth, /могло измениться/);
+    assert.equal(v.stale, false);
+    assert.doesNotMatch(v.depth, /могло измениться/);
     assert.match(v.depth, /сеанс/);
   });
 });
