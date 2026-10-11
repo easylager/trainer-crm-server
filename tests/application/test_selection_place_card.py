@@ -107,6 +107,15 @@ def test_story_board_leads_with_this_evening_and_points_at_the_rest() -> None:
     assert "Пустой" not in str(board["rows"])
 
 
+def test_story_rows_name_places_when_the_city_has_no_ice() -> None:
+    view = {
+        "skating": True,
+        "items": [{"id": 1, "name": "Ледовый"}, {"id": 2, "name": "Зал Силы"}],
+        "slots": {},
+    }
+    assert selection_story_rows(view) == [("Ледовый", ""), ("Зал Силы", "")]
+
+
 def test_story_rows_keep_shops_when_the_list_is_not_about_ice() -> None:
     view = {"skating": False, "items": [{"id": 1, "name": "Мастерская"}], "slots": {}}
     assert selection_story_rows(view) == [("Мастерская", "")]

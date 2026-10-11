@@ -513,9 +513,12 @@ def selection_story_board(
     day = today or _minsk_day()
     sessions = _collect_sessions(view)
     if not sessions:
+        # Сеансов нет совсем — билет про места, как лента. Пустые строки рядом
+        # с живым льдом по-прежнему не рисуем: этот возврат только для пустого льда.
+        rows = [(str(item.get("name") or ""), "") for item in view.get("items") or []]
         return {
             "headline": selection_share_description(view),
-            "rows": [],
+            "rows": rows,
             "note": "",
             "image_cta": "",
             "text_cta": "",

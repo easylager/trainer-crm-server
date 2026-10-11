@@ -1238,8 +1238,9 @@ def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[s
 
     board = selection_story_board(view)
     lines = [selection_share_title(view), selection_share_description(view)]
-    # Тот же срез, что на story.png: вечер (или окно), без пустых площадок.
-    if view.get("skating") and board["rows"]:
+    # Тот же срез, что на story.png. Подпись «Сегодня вечером» нужна только когда
+    # есть сеансы; без льда заголовок уже равен строке со счётом мест.
+    if board["text_cta"]:
         lines.append(str(board["headline"]))
     cap = 6 if view.get("skating") else 3
     shown = board["rows"][:cap]
