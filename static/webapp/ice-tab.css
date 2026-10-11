@@ -1639,7 +1639,8 @@ body.ice-view-map .ice-sec--hero .ice-search,
 body.ice-view-map .ice-sec--hero #iceCatalogTools,
 body.ice-view-map .ice-sec--hero #iceShopFilters,
 body.ice-view-map .ice-sec--hero #iceShopMapFiltersBtn,
-body.ice-view-map .ice-sec--hero .ice-shop-filters__map-bar {
+body.ice-view-map .ice-sec--hero .ice-shop-filters__map-bar,
+body.ice-view-map .ice-sec--hero #iceHockeySeg {
   pointer-events: auto;
 }
 
@@ -2476,3 +2477,22 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
 
 /* TASK-146: парсер давно не читал сайт катка — подпись предупреждает, а не зовёт «ещё N сеансов». */
 .ice-board__depth--stale { color: var(--app-warning); }
+
+#iceHockeySeg .ice-chip[aria-pressed='true'] .ice-chip__n {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.ice-board__badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  padding: 4px 8px;
+  border-radius: var(--app-radius-pill);
+  background: rgba(8, 12, 16, 0.78);
+  color: var(--app-on-media);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.01em;
+}

@@ -875,6 +875,17 @@ def _hours_rows(hours: Mapping[str, Any], *, season_closed: bool) -> str:
     )
 
 
+def _rental_section_title(card: Mapping[str, Any], hours: Mapping[str, Any]) -> str:
+    """Minikatok продаёт услуги площадки. Остальной прайс — прокат, пока не сказано иначе."""
+    explicit = str(hours.get("rental_title") or "").strip()
+    if explicit:
+        return explicit
+    blob = f"{card.get('name') or ''} {card.get('website_url') or ''}".casefold()
+    if "minikatok" in blob:
+        return "Услуги"
+    return "Прокат инвентаря"
+
+
 def _rental_catalog_html(card: Mapping[str, Any]) -> str:
     hours = card.get("opening_hours") if isinstance(card.get("opening_hours"), Mapping) else {}
     catalog = hours.get("rental_catalog")
@@ -890,15 +901,20 @@ def _rental_catalog_html(card: Mapping[str, Any]) -> str:
             continue
         per = str(row.get("per") or "").strip()
         note = str(row.get("note") or "").strip()
-        price_text = f"{price}/{per}" if per else price
+        per_html = f'<span class="offer__per">/{_esc(per)}</span>' if per else ""
+        note_html = f'<p class="offer__note">{_esc(note)}</p>' if note else ""
         items.append(
-            f'<p class="row"><span>{_esc(label)}</span><b>{_esc(price_text)}</b>'
-            + (f'<span class="row__note">{_esc(note)}</span>' if note else "")
-            + "</p>"
+            '<div class="offer">'
+            f'<div class="offer__top"><span class="offer__name">{_esc(label)}</span>'
+            f'<b class="offer__price">{_esc(price)}{per_html}</b></div>'
+            f"{note_html}</div>"
         )
     if not items:
         return ""
-    return '<section class="sec"><h2 class="sec__title">Прокат инвентаря</h2>' + "".join(items) + "</section>"
+    title = _rental_section_title(card, hours)
+    note = str(hours.get("rental_note") or "").strip()
+    note_html = f'<p class="muted">{_esc(note)}</p>' if note else ""
+    return f'<section class="sec"><h2 class="sec__title">{_esc(title)}</h2>' + "".join(items) + note_html + "</section>"
 
 
 def _trainers_html(card: Mapping[str, Any], *, cta_url: str | None) -> str:

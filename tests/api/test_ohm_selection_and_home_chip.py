@@ -80,6 +80,99 @@ async def test_kind_ohm_lists_only_arenas_with_hockey_practice(app_use_test_db, 
     assert "08:45" not in all_page.text or "kind=ohm" in all_page.text
 
 
+@pytest.mark.asyncio
+async def test_ohm_centers_segment_lists_places_not_sessions(app_use_test_db, db_session) -> None:
+    """kind=ohm — сеансы без центров; seg=centers — карточка места, без времени сеанса."""
+    name = f"Центринск {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    rink = await _insert_arena(db_session, city_id, name=f"ОХМ-сеанс {uuid.uuid4().hex[:4]}")
+    center_name = f"Центр записи {uuid.uuid4().hex[:4]}"
+    center = await _insert_arena(
+        db_session,
+        city_id,
+        name=center_name,
+        phone="+375 29 110-20-35",
+        opening_hours={
+            "center_badge": "Льда нет",
+            "center_line": "Дорожка HST, бросковая зона.",
+        },
+    )
+    await db_session.execute(
+        text(
+            """
+            UPDATE arena_profiles
+            SET amenities = COALESCE(amenities, '{}'::jsonb) || '{"hockey_center": true}'::jsonb
+            WHERE arena_id = :id
+            """
+        ),
+        {"id": center},
+    )
+    arena_slug = (
+        await db_session.execute(
+            text("SELECT slug FROM arena_profiles WHERE arena_id = :id"),
+            {"id": center},
+        )
+    ).scalar_one()
+    await _ohm(db_session, rink, day=date.today() + timedelta(days=2), hhmm="08:45")
+    empty_name = f"Пустоцентр {uuid.uuid4().hex[:6]}"
+    await _insert_city(db_session, name=empty_name)
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+    place_href = f"/p/{slug}/{arena_slug}"
+
+    async with _client() as client:
+        ohm_page = await client.get(f"/c/{slug}", params={"kind": "ohm"})
+        centers_page = await client.get(f"/c/{slug}", params={"kind": "ohm", "seg": "centers"})
+        bad = await client.get(f"/c/{slug}", params={"kind": "ohm", "seg": "shops"})
+        skate = await client.get(f"/c/{slug}", params={"t": "ice"})
+        places = await client.get(f"/c/{slug}", params={"page": "1"})
+        empty = await client.get(f"/c/{city_slug(empty_name)}", params={"kind": "ohm", "seg": "centers"})
+
+    assert ohm_page.status_code == 200
+    ohm_canon = re.search(r'<link rel="canonical" href="([^"]*)"', ohm_page.text)
+    assert ohm_canon and ohm_canon.group(1).endswith(f"/c/{slug}?kind=ohm")
+    assert "seg=" not in ohm_canon.group(1)
+    assert "08:45" in ohm_page.text
+    assert center_name not in ohm_page.text
+    assert 'class="seg"' in ohm_page.text
+    assert "Записи нет" in ohm_page.text
+    assert f'class="chip chip--on" href="/c/{slug}?kind=ohm"' in ohm_page.text
+    assert f'class="chip" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm_page.text
+    assert "Центры <small>1</small>" in ohm_page.text
+
+    assert centers_page.status_code == 200
+    html = centers_page.text
+    canon = re.search(r'<link rel="canonical" href="([^"]*)"', html)
+    assert canon and canon.group(1).endswith(f"/c/{slug}?kind=ohm&amp;seg=centers")
+    assert f'<a class="sec pick" href="{place_href}">' in html
+    assert center_name in html
+    assert "Льда нет" in html
+    assert "Дорожка HST" in html
+    assert "08:45" not in html
+    assert 'class="slot' not in html
+    assert 'class="seg"' not in html
+    assert "Записи нет" not in html
+    assert "Позвать" not in html
+    assert "Позвонить" not in html
+    assert "По записи, не сеанс." in html
+    assert "1 центр" in html
+    assert f'class="chip chip--on" href="/c/{slug}?kind=ohm&amp;seg=centers"' in html
+
+    assert bad.status_code == 200
+    assert "08:45" in bad.text
+    assert center_name not in bad.text
+
+    assert skate.status_code == 200 and center_name not in skate.text
+    assert places.status_code == 200 and center_name not in places.text
+
+    assert empty.status_code == 200
+    assert "Центров по записи нет" in empty.text
+    assert 'class="seg"' not in empty.text
+    assert "Записи нет" not in empty.text
+    assert "Центры <small>0</small>" in empty.text
+
+
 def _city_surface(html: str, city_name: str) -> str:
     """Карточка «ваш город» или плитка — то, где у города живёт пометка «ОХМ»."""
     hero = re.search(r'<a class="hero-city".*?</a>', html, re.S)

@@ -696,6 +696,8 @@ async def get_catalog_virality_cb_metrics(
     as_of_dt = _as_utc(as_of)
     since = as_of_dt - timedelta(days=days)
     share_ex_sql, share_ex_params = share_actor_exclusion_sql(since=since, until=as_of_dt)
+    # Дневной хэш не покрывает стабильный HMAC каталога: служебные аккаунты исключаем и им.
+    stable_ex_sql, stable_ex_params = catalog_actor_exclusion_sql()
     open_ex_sql, open_ex_params = catalog_actor_exclusion_sql()
 
     shares = (
@@ -708,9 +710,10 @@ async def get_catalog_virality_cb_metrics(
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND kind IN ('place', 'selection', 'ice_city_day')
                   {share_ex_sql}
+                  {stable_ex_sql}
                 """
             ),
-            {"since": since, "as_of": as_of_dt, **share_ex_params},
+            {"since": since, "as_of": as_of_dt, **share_ex_params, **stable_ex_params},
         )
     ).first()
 
@@ -1053,6 +1056,7 @@ async def get_catalog_demand_pulse(
             or 0
         )
         share_ex_sql, share_ex_params = share_actor_exclusion_sql(since=week_start, until=as_of_dt)
+        stable_ex_sql, stable_ex_params = catalog_actor_exclusion_sql()
         share_people = int(
             (
                 await session.execute(
@@ -1064,9 +1068,10 @@ async def get_catalog_demand_pulse(
                           AND kind IN ('place', 'selection', 'ice_city_day')
                           AND actor_hash IS NOT NULL
                           {share_ex_sql}
+                          {stable_ex_sql}
                         """
                     ),
-                    {"since": week_start, "as_of": as_of_dt, **share_ex_params},
+                    {"since": week_start, "as_of": as_of_dt, **share_ex_params, **stable_ex_params},
                 )
             ).scalar_one()
             or 0

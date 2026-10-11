@@ -680,7 +680,7 @@
     }
     html += '</div>';
     if (mass.rentalCatalog.length) {
-      html += '<div class="arena-sec"><p class="arena-h">Прокат инвентаря</p><ul class="arena-price-list">';
+      html += '<div class="arena-sec"><p class="arena-h">' + esc(mass.rentalTitle || 'Прокат инвентаря') + '</p><ul class="arena-price-list">';
       mass.rentalCatalog.forEach(function (row) {
         html +=
           '<li class="arena-price-list__row"><span class="arena-price-list__name">' +
@@ -694,9 +694,43 @@
         }
         html += '</li>';
       });
-      html += '<p class="arena-sub">Ориентиры проката ФК «Минск» — на кассе могут отличаться.</p></div>';
+      if (mass.rentalNote) {
+        html += '<p class="arena-sub">' + esc(mass.rentalNote) + '</p>';
+      }
+      html += '</div>';
     }
     return html;
+  }
+
+  function renderPriceRows(catalog) {
+    var html = '<ul class="arena-price-list">';
+    catalog.forEach(function (row) {
+      html +=
+        '<li class="arena-price-list__row"><span class="arena-price-list__name">' +
+        esc(row.label || '') +
+        '</span><span class="arena-price-list__price">' +
+        esc(row.price || '') +
+        (row.per ? '<small>/' + esc(row.per) + '</small>' : '') +
+        '</span>';
+      if (row.note) html += '<span class="arena-price-list__note">' + esc(row.note) + '</span>';
+      html += '</li>';
+    });
+    return html + '</ul>';
+  }
+
+  /** Хоккейный центр: что это за место и прайс. Часы и телефон остаются в контактах. */
+  function renderCenterOffer() {
+    if (typeof M.centerOfferView !== 'function') return '';
+    var offer = M.centerOfferView(state.card);
+    if (!offer.enabled) return '';
+    var html = '<div class="arena-sec">';
+    if (offer.about) html += '<p class="arena-sub">' + esc(offer.about) + '</p>';
+    if (offer.catalog.length) {
+      html += '<p class="arena-h">' + esc(offer.title || 'Услуги') + '</p>';
+      html += renderPriceRows(offer.catalog);
+      if (offer.note) html += '<p class="arena-sub">' + esc(offer.note) + '</p>';
+    }
+    return html + '</div>';
   }
 
   /** TASK-146: у магазина вместо чипов удобств — плитки услуг и специализация. */
@@ -1404,7 +1438,8 @@
         '<a class="arena-info" href="' + esc(x.href) + '" data-action="external" data-href="' + esc(x.href) + '">' +
         '<small>' + esc(x.label) + '</small><b>' + esc(x.href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')) + '</b></a>';
     });
-    var lead = contacts.shortDescription && !mass.enabled ? contacts.shortDescription : null;
+    var offer = typeof M.centerOfferView === 'function' ? M.centerOfferView(card) : { enabled: false };
+    var lead = contacts.shortDescription && !mass.enabled && !offer.enabled ? contacts.shortDescription : null;
     if (!rows && !lead) return '';
     return (
       '<div class="arena-sec"><p class="arena-h">Адрес и контакты</p>' +
@@ -1440,6 +1475,7 @@
         renderOhmSection() +
         renderAmenities() +
         renderMassAccess() +
+        renderCenterOffer() +
         renderTrainers() +
         renderGroups() +
         renderInfo() +

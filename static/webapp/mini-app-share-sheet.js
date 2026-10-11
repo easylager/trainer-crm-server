@@ -63,8 +63,20 @@
     return '/api/public/arenas/' + encodeURIComponent(String(state.ref)) + '/share?' + q.join('&');
   }
 
+  /**
+   * Креденшл Mini App, если он есть. Тот же заголовок, что authHeaders в
+   * booking-client.js и MiniAppRuntime.authHeaders: вне Telegram запрос уходит без него.
+   */
+  function shareRequestHeaders() {
+    var rt = global.MiniAppRuntime;
+    if (rt && typeof rt.authHeaders === 'function') return rt.authHeaders() || {};
+    var tg = global.Telegram && global.Telegram.WebApp;
+    var cred = tg && tg.initData ? String(tg.initData) : '';
+    return cred ? { 'X-Telegram-Init-Data': cred } : {};
+  }
+
   function fetchPayload(extra) {
-    return fetch(endpoint(extra), { cache: 'no-store' }).then(function (r) {
+    return fetch(endpoint(extra), { cache: 'no-store', headers: shareRequestHeaders() }).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
       return r.json();
     });
@@ -73,7 +85,11 @@
   /** Событие шеринга — по нажатию канала. Ошибка счётчика не мешает отправке. */
   function track(channel) {
     try {
-      fetch(endpoint({ channel: channel }), { cache: 'no-store', keepalive: true }).catch(function () {});
+      fetch(endpoint({ channel: channel }), {
+        cache: 'no-store',
+        keepalive: true,
+        headers: shareRequestHeaders(),
+      }).catch(function () {});
     } catch (e) { /* */ }
   }
 

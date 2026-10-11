@@ -48,7 +48,7 @@ from src.application.arena_profile import (
 )
 
 #: Что можно завести из файла. Зал и прочее — руками в админке: там нет общих полей.
-IMPORT_VENUE_TYPES = frozenset({"shop", "ice", "outdoor"})
+IMPORT_VENUE_TYPES = frozenset({"shop", "ice", "outdoor", "other"})
 
 DISCIPLINE_KEYS = {"hockey": "discipline_hockey", "figure": "discipline_figure", "roller": "discipline_roller"}
 
@@ -79,6 +79,7 @@ class ShopRecord:
     photo_attribution: str | None = None
     point: tuple[float, float] | None = None
     hours_pending: str | None = None
+    hours_extra: dict[str, Any] = field(default_factory=dict)
 
     @property
     def display_address(self) -> str | None:
@@ -185,6 +186,7 @@ def _parse_record(raw: Mapping[str, Any], *, photo_root: Path | None = None) -> 
             raise ShopImportError(f"{name}: photo not found: {raw['photo']}")
     photo_attribution = (raw.get("photo_attribution") or "").strip() or None
     hours_pending = (raw.get("hours_pending") or "").strip() or None
+    hours_extra = _parse_hours_extra(name, raw)
     if venue_type == "shop" and hours is None and not hours_pending:
         raise ShopImportError(f"{name}: нет часов работы (hours) — у магазина они обязательны")
     point = None
@@ -217,7 +219,44 @@ def _parse_record(raw: Mapping[str, Any], *, photo_root: Path | None = None) -> 
         photo_attribution=photo_attribution,
         point=point,
         hours_pending=hours_pending,
+        hours_extra=hours_extra,
     )
+
+
+_HOURS_EXTRA_STRINGS = ("center_badge", "center_line", "rental_title", "rental_note")
+
+
+def _parse_hours_extra(name: str, raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Подпись центра и прайс. Не расписание сеанса."""
+    extra: dict[str, Any] = {}
+    for key in _HOURS_EXTRA_STRINGS:
+        value = str(raw.get(key) or "").strip()
+        if value:
+            extra[key] = value
+    catalog = raw.get("rental_catalog")
+    if catalog is None:
+        return extra
+    if not isinstance(catalog, list):
+        raise ShopImportError(f"{name}: rental_catalog must be a list")
+    rows: list[dict[str, str]] = []
+    for row in catalog:
+        if not isinstance(row, Mapping):
+            raise ShopImportError(f"{name}: rental_catalog row must be an object")
+        label = str(row.get("label") or "").strip()
+        price = str(row.get("price") or "").strip()
+        if not label or not price:
+            raise ShopImportError(f"{name}: rental_catalog row needs label and price")
+        item = {"label": label, "price": price}
+        note = str(row.get("note") or "").strip()
+        per = str(row.get("per") or "").strip()
+        if note:
+            item["note"] = note
+        if per:
+            item["per"] = per
+        rows.append(item)
+    if rows:
+        extra["rental_catalog"] = rows
+    return extra
 
 
 async def build_plan(
@@ -313,8 +352,12 @@ def _profile_fields_from_record(rec: ShopRecord) -> dict[str, Any]:
         fields["tickets_url"] = rec.tickets_url
     if rec.season is not None:
         fields["season_start_month"], fields["season_end_month"] = rec.season
-    if rec.hours is not None:
-        fields["opening_hours"] = {"weekly": {d: rec.hours.get(d) for d in WEEKDAY_KEYS}}
+    if rec.hours is not None or rec.hours_extra:
+        hours: dict[str, Any] = {}
+        if rec.hours is not None:
+            hours["weekly"] = {d: rec.hours.get(d) for d in WEEKDAY_KEYS}
+        hours.update(rec.hours_extra)
+        fields["opening_hours"] = hours
     return fields
 
 
@@ -418,6 +461,15 @@ async def _enrich_existing_place(session: AsyncSession, arena_id: int, rec: Shop
         socials.setdefault(key, value)
     if socials != dict(current.get("social_urls") or {}):
         patch["social_urls"] = socials
+    if rec.hours_extra:
+        hours = dict(current.get("opening_hours") or {})
+        if rec.hours is not None and not hours.get("weekly") and not hours.get("daily"):
+            hours["weekly"] = {d: rec.hours.get(d) for d in WEEKDAY_KEYS}
+        hours.update(rec.hours_extra)
+        if hours != dict(current.get("opening_hours") or {}):
+            patch["opening_hours"] = hours
+    if rec.amenities.get("hockey_center") is True:
+        patch["status"] = "published"
     if patch:
         await apply_admin_arena_profile_patch(session, arena_id, patch)
 
@@ -487,6 +539,11 @@ async def apply_plan(
         if rec.venue_type != "shop":
             # Каток уже есть (досье, админка): дополняем тем, что есть в файле, и ничего
             # не стираем — пустое поле в файле значит «не знаем», а не «удалить».
+            if rec.amenities.get("hockey_center") is True:
+                await session.execute(
+                    text("UPDATE arenas SET venue_type = :vt WHERE id = :id"),
+                    {"vt": rec.venue_type, "id": arena_id},
+                )
             await _enrich_existing_place(session, arena_id, rec)
             if revived:
                 await apply_admin_arena_profile_patch(session, arena_id, {"status": "published"})

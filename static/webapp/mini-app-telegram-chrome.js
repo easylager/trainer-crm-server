@@ -739,6 +739,39 @@ window.wireHubSlotMessageButtons = function (root) {
   var OUTAGE_OVERLAY_ID = 'miniAppOutageOverlay';
   var outageOverlayShown = false;
   var outagePollTimer = 0;
+  var outageArmTimer = 0;
+  var pageLeaving = false;
+
+  /* «Назад» обрывает незавершённые запросы. WebKit зовёт это не AbortError,
+     а «Load failed», и экран работ вспыхивает на долю секунды перед уходом. */
+  global.addEventListener('pagehide', function () {
+    pageLeaving = true;
+    if (outageArmTimer) {
+      global.clearTimeout(outageArmTimer);
+      outageArmTimer = 0;
+    }
+  });
+  global.addEventListener('pageshow', function () {
+    pageLeaving = false;
+  });
+
+  function pageIsLeaving() {
+    if (pageLeaving) return true;
+    try {
+      return document.visibilityState === 'hidden';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function armOutageOverlay(origFetch) {
+    if (outageOverlayShown || outageArmTimer || pageIsLeaving()) return;
+    outageArmTimer = global.setTimeout(function () {
+      outageArmTimer = 0;
+      if (pageIsLeaving()) return;
+      showOutageOverlay(origFetch);
+    }, 800);
+  }
 
   function isAppApiUrl(url) {
     var s = String(url || '');
@@ -887,7 +920,7 @@ window.wireHubSlotMessageButtons = function (root) {
         return res;
       }).catch(function (err) {
         if (err && err.name === 'AbortError') throw err;
-        if (isAppApiUrl(url)) showOutageOverlay(orig);
+        if (isAppApiUrl(url)) armOutageOverlay(orig);
         throw err;
       });
     };

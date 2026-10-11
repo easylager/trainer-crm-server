@@ -25,6 +25,8 @@
     /* '' или 'winter'. Не тип площадки: запрос season=winter. */
     season: '',
     seasonFacet: null,
+    /* Вкладка Хоккей: ohm — сеансы, centers — центры по записи. */
+    hockeySeg: 'ohm',
     shopSourceItems: [],
     /* Магазины: страница 2+ не догрузилась — показываем загруженное и «Догрузить». */
     shopRestFailed: false,
@@ -250,6 +252,32 @@
     } catch (e) { /* private mode */ }
   }
 
+  /* Адрес страницы = то, что человек видит. Иначе «Назад» с карточки
+     перечитывает старый ?city_id= из ссылки и открывает другой город. */
+  function syncCatalogUrl() {
+    if (!global.history || typeof global.history.replaceState !== 'function') return;
+    if (!state.cityId) return;
+    try {
+      var params = new URLSearchParams(global.location.search || '');
+      params.set('city_id', String(state.cityId));
+      params.set('intent', state.intent || 'skate');
+      if (state.intent === 'ohm' && state.hockeySeg === 'centers') params.set('seg', 'centers');
+      else params.delete('seg');
+      if (state.when && state.when !== 'any') params.set('when', state.when);
+      else params.delete('when');
+      if (state.whenDay) params.set('day', state.whenDay);
+      else params.delete('day');
+      var next = params.toString();
+      var cur = String(global.location.search || '').replace(/^\?/, '');
+      if (next === cur) return;
+      global.history.replaceState(
+        global.history.state,
+        '',
+        global.location.pathname + (next ? '?' + next : '') + (global.location.hash || '')
+      );
+    } catch (e) { /* file:// и урезанный WebView */ }
+  }
+
   function persist(extra) {
     extra = extra || {};
     if (extra.scrollAnchor != null) lastScrollAnchor = String(extra.scrollAnchor || '');
@@ -268,12 +296,14 @@
         when: state.when,
         whenDay: state.whenDay,
         season: state.season,
+        hockeySeg: state.hockeySeg,
         scrollY: extra.scrollY != null ? Number(extra.scrollY) || 0 : readScrollY(),
         scrollAnchor: lastScrollAnchor,
         view: state.view,
       },
       global.sessionStorage
     );
+    syncCatalogUrl();
     if (M.whenSkateFilterContext(state.intent, state.venueTypes)) {
       M.saveWhenPreference(state.when, state.whenDay, global.localStorage);
       persistIceWhenServer();
@@ -327,6 +357,7 @@
     return {
       skateCount: city != null ? city.skate_count : state.skateCount,
       ohmCount: city != null ? city.ohm_count : 0,
+      centerCount: city != null ? city.center_count : 0,
       trainerCount: city != null ? city.trainer_count : 0,
       placeCountHint: city != null ? city.place_count : 0,
       shopCount: city != null ? city.shop_count : state.shopCount,
@@ -412,6 +443,7 @@
   }
 
   function sessionWhenActive() {
+    if (state.intent === 'ohm' && state.hockeySeg === 'centers') return false;
     if (state.intent === 'ohm') return true;
     return M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets, {
       activeWindow: !!(state.window && state.window.key),
@@ -798,6 +830,39 @@
     }
   }
 
+  function renderHockeySeg(counts) {
+    var host = $('iceHockeySeg');
+    if (!host) return;
+    var scope = M.catalogScope(state.intent, state.venueTypes);
+    if (scope !== 'ohm') {
+      host.hidden = true;
+      host.innerHTML = '';
+      return;
+    }
+    var view = M.hockeySegView({
+      ohmCount: counts && counts.ohmCount,
+      centerCount: counts && counts.centerCount,
+      seg: state.hockeySeg,
+    });
+    if (!view.visible) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return;
+    }
+    var seg = view.seg;
+    var n = view.centerCount;
+    host.hidden = false;
+    host.innerHTML =
+      '<button type="button" class="ice-chip" data-hockey-seg="ohm" aria-pressed="' +
+      (seg === 'ohm' ? 'true' : 'false') +
+      '">ОХМ</button>' +
+      '<button type="button" class="ice-chip" data-hockey-seg="centers" aria-pressed="' +
+      (seg === 'centers' ? 'true' : 'false') +
+      '">Центры' +
+      (n ? ' <span class="ice-chip__n">' + esc(String(n)) + '</span>' : '') +
+      '</button>';
+  }
+
   function renderCatalogHeader() {
     var counts = cityCountsForModes();
     var modes = M.catalogModesView({
@@ -811,8 +876,10 @@
       shopCount: counts.shopCount,
       serviceCount: state.serviceCount,
       placeService: state.placeService,
+      centerCount: counts.centerCount,
     });
     paintFolderNav($('iceModeSeg'), modes, counts);
+    renderHockeySeg(counts);
     renderWhenChips();
 
     var scope = M.catalogScope(state.intent, state.venueTypes);
@@ -1225,12 +1292,16 @@
     var v = M.boardCardView(item, new Date(), { window: state.window });
     /* TASK-148 (AC-2): нет фото — нет фото-блока. Плашка типа места: иконка
        с сервера (venue_icon), фолбэк — монограмма имени. */
+    var badge = v.badge
+      ? '<span class="ice-board__badge">' + esc(v.badge) + '</span>'
+      : '';
     var photo = v.photo
-      ? '<span class="ice-board__photo">' + listPhotoHtml(v)
+      ? '<span class="ice-board__photo">' + listPhotoHtml(v) + badge
       : '<span class="ice-board__photo ice-board__photo--empty">' +
         '<span class="ice-board__initial" aria-hidden="true">' +
         esc(v.venueIcon || v.initial) +
-        '</span>';
+        '</span>' +
+        badge;
     var scrim =
       '<span class="ice-board__scrim">' +
       (v.offWindow ? '<span class="ice-board__off">' + esc(v.offLabel) + '</span>' : '') +
@@ -1277,10 +1348,12 @@
       scrim +
       '</span>' +
       (facts ? '<span class="ice-board__facts">' + facts + '</span>' : '') +
-      '<span class="ice-board__depth' + (v.stale ? ' ice-board__depth--stale' : '') + '">' +
-      esc(v.depth) +
-      '<span class="ice-board__go" aria-hidden="true">→</span>' +
-      '</span>' +
+      (v.depth
+        ? '<span class="ice-board__depth' + (v.stale ? ' ice-board__depth--stale' : '') + '">' +
+          esc(v.depth) +
+          '<span class="ice-board__go" aria-hidden="true">→</span>' +
+          '</span>'
+        : '') +
       '</a>' +
       '</div>'
     );
@@ -1432,6 +1505,7 @@
         loading: state.loading,
         venueTypes: state.venueTypes,
         window: state.window,
+        hockeySeg: state.hockeySeg,
       });
     }
     setShareButton();
@@ -1470,6 +1544,7 @@
           trainerCount: city.trainer_count,
           mapRinkCount: city.map_rink_count,
           hasSkate: M.shouldShowSkateChip(state.skateCount),
+          hockeySeg: state.hockeySeg,
         });
       }
       /* Фильтр мог отсечь первую страницу, а нужное — в несгруженном хвосте:
@@ -1652,7 +1727,7 @@
     var head = $('iceShareHeadBtn');
     if (btn) btn.disabled = true;
     if (head) head.disabled = true;
-    fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab')
+    fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab', { auth: true })
       .then(function (data) {
         if (!data) return;
         var shareUrl = String(data.share_url || '').trim();
@@ -2037,6 +2112,16 @@
         state.urlWhenHydrated = true;
       }
     }
+    if (state.intent === 'ohm') {
+      /* Город без центров или без ОХМ: сегмент подстраивается до запроса, иначе
+         сохранённые «Центры» из другого города откроют пустую ленту. */
+      var segCounts = cityCountsForModes();
+      state.hockeySeg = M.hockeySegView({
+        ohmCount: segCounts.ohmCount,
+        centerCount: segCounts.centerCount,
+        seg: state.hockeySeg,
+      }).seg;
+    }
     var lens = M.arenaListLens(state.intent);
     var gen = beginListFetch(lens);
     var timeQ = whenQueryForApi();
@@ -2049,6 +2134,7 @@
       whenDay: timeQ.whenDay,
       // Знаем, где человек, — ближние места выше (сервер считает distance_km).
       near: state.near || '',
+      seg: state.intent === 'ohm' ? state.hockeySeg : '',
     };
     /* Магазины фильтруются на клиенте (услуга, «Открыто сейчас») — фильтру нужен
        весь набор города, иначе подпись и пустое состояние врут про хвост за 50. */
@@ -2592,11 +2678,34 @@
     if (open) renderCityPicker($('iceCityFilter') && $('iceCityFilter').value);
   }
 
+  function navigationIsBackForward() {
+    try {
+      var nav = global.performance && global.performance.getEntriesByType
+        ? global.performance.getEntriesByType('navigation')[0]
+        : null;
+      return !!(nav && nav.type === 'back_forward');
+    } catch (e) {
+      return false;
+    }
+  }
+
   function resolveCity() {
     return fetchJson(M.buildIceCitiesUrl())
       .then(function (data) {
         state.cities = M.filterIceCities((data && data.items) || []);
         var urlCityId = M.cityIdFromSearch(global.location.search || '');
+        var saved = M.loadIceState(global.sessionStorage);
+        /* Возврат с карточки: город, который человек смотрел, важнее
+           старого ?city_id= в адресе. Свежая ссылка по-прежнему открывает свой город. */
+        if (navigationIsBackForward() && saved && saved.cityId) {
+          var fromReturn = state.cities.filter(function (c) {
+            return Number(c.id) === Number(saved.cityId);
+          })[0];
+          if (fromReturn) {
+            applyCity(fromReturn);
+            return;
+          }
+        }
         if (urlCityId) {
           var fromUrl = state.cities.filter(function (c) {
             return Number(c.id) === urlCityId;
@@ -2606,7 +2715,6 @@
             return;
           }
         }
-        var saved = M.loadIceState(global.sessionStorage);
         if (saved && saved.cityId) {
           var fromSaved = state.cities.filter(function (c) {
             return Number(c.id) === Number(saved.cityId);
@@ -2953,6 +3061,23 @@
       modeSeg.dataset.scrollWired = '1';
       modeSeg.addEventListener('scroll', placeFolderLine);
     }
+    var hockeySeg = $('iceHockeySeg');
+    if (hockeySeg) {
+      hockeySeg.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-hockey-seg]');
+        if (!btn) return;
+        var next = btn.getAttribute('data-hockey-seg') === 'centers' ? 'centers' : 'ohm';
+        if (state.hockeySeg === next) return;
+        state.hockeySeg = next;
+        state.items = [];
+        state.total = 0;
+        state.loadedIntent = null;
+        state.loading = true;
+        renderCatalogHeader();
+        persist();
+        loadList();
+      });
+    }
     if (modeSeg) {
       modeSeg.addEventListener('click', function (ev) {
         var btn = ev.target.closest('[data-catalog-mode]');
@@ -2963,6 +3088,7 @@
         state.autoCoach = false;
         state.venueTypes = patch.venueTypes.slice();
         state.placeService = patch.placeService || '';
+        state.hockeySeg = 'ohm';
         state.season = '';
         closeUiPicker();
         if (mode === 'coach') state.view = 'list';
@@ -3323,9 +3449,19 @@
       var urlSearch = global.location.search || '';
       var urlServiceBoot = M.placeServiceBootFromSearch(urlSearch);
       var urlIntent = M.intentFromSearch(urlSearch);
-      if (urlIntent) state.intent = M.coerceIntent(urlIntent);
+      var returning = navigationIsBackForward();
+      if (urlIntent && !returning) state.intent = M.coerceIntent(urlIntent);
+      /* Сегмент «Центры» живёт в адресе. Возврат с карточки берёт то,
+         что человек оставил, а не старый параметр ссылки. */
+      if (returning && saved && saved.hockeySeg === 'centers') {
+        state.hockeySeg = 'centers';
+      } else if (urlIntent) {
+        state.hockeySeg = params.get('seg') === 'centers' && state.intent === 'ohm' ? 'centers' : 'ohm';
+      } else if (saved && saved.hockeySeg === 'centers') {
+        state.hockeySeg = 'centers';
+      }
       var urlVenue = M.venueFromSearch(urlSearch);
-      if (urlVenue) {
+      if (urlVenue && !returning) {
         state.intent = 'skate';
         state.venueTypes = [urlVenue];
         state.season = '';
@@ -3346,7 +3482,7 @@
       ) {
         state.venueTypes = saved.venueTypes.slice();
       }
-      if (urlServiceBoot) {
+      if (urlServiceBoot && !returning) {
         state.intent = urlServiceBoot.intent;
         state.venueTypes = urlServiceBoot.venueTypes.slice();
         state.placeService = urlServiceBoot.placeService;

@@ -5,7 +5,7 @@
 плитка = потребность («Покататься», «Хоккей», «Заточка», «Магазины»,
 «Тренеры»), под плиткой — живая строка и быстрые окна времени («Сегодня 3 · Завтра 24 ·
 Сб–Вс 27»). Плитка без данных не показывается. Любой параметр (``?t=``, ``?w=``,
-``?kind=``, ``?svc=``, ``?page=``) — это уже список (``selection_page``).
+``?kind=``, ``?seg=``, ``?svc=``, ``?page=``) — это уже список (``selection_page``).
 
 Макет: design/prototypes/2026-10-09-city-router-home.html, экран 1.
 """
@@ -23,7 +23,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_profile import has_known_hours, intervals_for_weekday, normalize_hhmm
-from src.application.arena_public_use_cases import PLACE_SERVICE_KEYS, _OHM_SESSION_SQL, STATUS_ACTIVE
+from src.application.arena_public_use_cases import (
+    PLACE_SERVICE_KEYS,
+    STATUS_ACTIVE,
+    _NOT_HOCKEY_CENTER_SQL,
+    _OHM_SESSION_SQL,
+    city_hockey_center_count,
+)
 from src.application.catalog_home_page import _USER_UPCOMING_SQL, _format_date_string, _session_card
 from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, format_price_minor, human_date, plural_ru
 from src.application.ice_time_windows import home_default_when_key, resolve_window
@@ -65,6 +71,7 @@ _WINDOW_COUNTS_SQL = text(
     JOIN cities c ON c.id = a.city_id
     WHERE a.city_id = :city_id
       AND {PUBLIC_ARENA_VISIBLE_SQL}
+      AND {_NOT_HOCKEY_CENTER_SQL}
       AND s.status = :st
       AND s.kind IN ('public_skate', 'open_ice', 'hockey_practice')
       AND s.starts_at_utc > :now
@@ -84,6 +91,7 @@ _NEXT_OHM_SQL = text(
     JOIN cities c ON c.id = a.city_id
     WHERE a.city_id = :city_id
       AND {PUBLIC_ARENA_VISIBLE_SQL}
+      AND {_NOT_HOCKEY_CENTER_SQL}
       AND NOT (a.id = ANY(:very_stale_ids))
       AND {_OHM_SESSION_SQL}
     ORDER BY s.starts_at_utc, s.id
@@ -301,6 +309,7 @@ async def load_city_hub_view(
     shops = [p for p in places if p["venue_type"] == VENUE_TYPE_SHOP]
     service_places = [p for p in places if p["services"]]
 
+    center_count = await city_hockey_center_count(session, city_id=city_id)
     trainer_rows = (await session.execute(_TRAINERS_SQL, {"city_id": city_id})).mappings().all()
     trainer_count = sum(int(r["n"] or 0) for r in trainer_rows)
     roles: list[str] = []
@@ -325,6 +334,7 @@ async def load_city_hub_view(
         "ohm_counts": ohm,
         "skate_arena_count": len(skate_arenas),
         "ohm_arena_count": len(ohm_arenas),
+        "center_count": center_count,
         "upcoming": upcoming,
         "next_ohm": next_ohm,
         "places": places,
@@ -345,8 +355,8 @@ async def load_city_hub_view(
 def _list_href(slug: str, **params: str | None) -> str:
     from urllib.parse import urlencode
 
-    # Порядок как у selection_path: t, w, kind, svc — одна и та же ссылка в хабе и в списке.
-    order = ("t", "w", "kind", "svc")
+    # Порядок как у selection_path: t, w, kind, seg, svc — одна и та же ссылка в хабе и в списке.
+    order = ("t", "w", "kind", "seg", "svc")
     clean = {k: params[k] for k in order if params.get(k)}
     return f"/c/{slug}" + (("?" + urlencode(clean)) if clean else "")
 
@@ -439,9 +449,19 @@ def _skate_route(view: Mapping[str, Any]) -> str:
 
 def _ohm_route(view: Mapping[str, Any]) -> str:
     counts = view["ohm_counts"]
-    if int(counts.get("all") or 0) <= 0:
+    sessions = int(counts.get("all") or 0)
+    centers = int(view.get("center_count") or 0)
+    if sessions <= 0 and centers <= 0:
         return ""
     slug = str(view["slug"])
+    if sessions <= 0:
+        count = f"{centers} {plural_ru(centers, 'центр', 'центра', 'центров')}"
+        return _route_html(
+            href=_list_href(slug, kind="ohm", seg="centers"),
+            name=t("chip.hockey"),
+            count=count,
+            live="",
+        )
     n = int(view.get("ohm_arena_count") or 0)
     count = f"{n} {plural_ru(n, 'каток', 'катка', 'катков')}"
     live = ""
@@ -565,7 +585,7 @@ def city_hub_document_title(view: Mapping[str, Any]) -> str:
         bits.append("где покататься")
     if int(view.get("service_count") or 0):
         bits.append("заточка")
-    if int((view.get("ohm_counts") or {}).get("all") or 0):
+    if int((view.get("ohm_counts") or {}).get("all") or 0) or int(view.get("center_count") or 0):
         bits.append("хоккей")
     tail = ", ".join(bits) if bits else "места"
     return f"{city_name} · {tail} | Glide"

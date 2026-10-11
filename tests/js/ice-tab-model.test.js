@@ -206,6 +206,45 @@ describe('catalog header (A′)', () => {
     assert.equal(sectionHint('shop', ''), '');
   });
 
+  it('Хоккей виден по центрам, даже если сеансов ОХМ нет', () => {
+    const { catalogModesView, buildListUrl, formatSortCaption, boardCardView } = loadModel();
+    const modes = catalogModesView({
+      facets: [],
+      intent: 'skate',
+      venueTypes: [],
+      ohmCount: 0,
+      centerCount: 3,
+      trainerCount: 0,
+      shopCount: 0,
+    });
+    assert.ok(modes.some((m) => m.id === 'ohm' && m.label === 'Хоккей'));
+    const url = buildListUrl({ cityId: 3, intent: 'ohm', seg: 'centers' });
+    assert.match(url, /intent=ohm/);
+    assert.match(url, /seg=centers/);
+    assert.ok(!buildListUrl({ cityId: 3, intent: 'ohm' }).includes('seg='));
+    assert.ok(!buildListUrl({ cityId: 3, intent: 'skate', seg: 'centers' }).includes('seg='));
+    assert.equal(
+      formatSortCaption({ total: 3, intent: 'ohm', hockeySeg: 'centers' }),
+      '3 центра · по записи, не сеанс'
+    );
+    const card = boardCardView(
+      {
+        id: 7,
+        name: 'Lepshy Hockey Center',
+        venue_type: 'other',
+        center_badge: 'Льда нет',
+        phone: '+375 29 110-20-35',
+        live: { kind: 'place', text: 'Дорожка HST' },
+      },
+      new Date(),
+      {}
+    );
+    assert.equal(card.badge, 'Льда нет');
+    assert.equal(card.callHref, '');
+    assert.equal(card.depth, '');
+    assert.equal(card.sessionId, null);
+  });
+
   it('placeServiceChipView: чип «Заточка» только когда в городе есть такие места', () => {
     const { placeServiceChipView, buildListUrl } = loadModel();
     assert.equal(placeServiceChipView(0, false), null);
@@ -1682,5 +1721,23 @@ describe('TASK-204 schedule_mode on board card', () => {
     const v = boardCardView(item, now, {});
     assert.equal(v.isSession, false);
     assert.match(v.status, /Сезон закрыт/);
+  });
+});
+
+describe('hockeySegView', () => {
+  it('чипы только когда есть и ОХМ, и центры', () => {
+    const { hockeySegView } = loadModel();
+    assert.deepEqual(hockeySegView({ ohmCount: 4, centerCount: 3, seg: 'centers' }), { visible: true, seg: 'centers', centerCount: 3 });
+    assert.deepEqual(hockeySegView({ ohmCount: 2, centerCount: 0, seg: 'centers' }), { visible: false, seg: 'ohm', centerCount: 0 });
+  });
+
+  it('нет ОХМ, есть центры — открываем Центры', () => {
+    const { hockeySegView } = loadModel();
+    assert.deepEqual(hockeySegView({ ohmCount: 0, centerCount: 3, seg: 'ohm' }), { visible: false, seg: 'centers', centerCount: 3 });
+  });
+
+  it('мусор в seg и счётчиках — ОХМ', () => {
+    const { hockeySegView } = loadModel();
+    assert.deepEqual(hockeySegView({ ohmCount: 'x', centerCount: undefined, seg: 'zzz' }), { visible: false, seg: 'ohm', centerCount: 0 });
   });
 });

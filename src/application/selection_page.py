@@ -31,6 +31,7 @@ from src.application.arena_public_use_cases import (
     _CURRENT_SESSION_SQL,
     _OHM_SESSION_SQL,
     STATUS_ACTIVE,
+    city_hockey_center_count,
     city_ohm_window_counts,
     city_selection_session_counts,
     city_selection_venue_types,
@@ -82,6 +83,7 @@ _TOPIC = {
 }
 
 KIND_OHM = "ohm"
+SEG_CENTERS = "centers"
 
 SERVICE_AMENITY_KEYS: dict[str, tuple[str, ...]] = {
     "sharpening": ("skate_sharpening",),
@@ -136,6 +138,12 @@ def clean_kind(raw: str | None) -> str | None:
     return KIND_OHM if value == KIND_OHM else None
 
 
+def clean_seg(raw: str | None) -> str | None:
+    """``centers`` — центры по записи. Пусто и ``ohm`` — сеансы. Чужое значение отбрасываем."""
+    value = (raw or "").strip().lower()
+    return SEG_CENTERS if value == SEG_CENTERS else None
+
+
 def clean_svc(raw: str | None) -> str | None:
     value = (raw or "").strip().lower()
     return value if value in SERVICE_AMENITY_KEYS else None
@@ -149,10 +157,11 @@ def selection_path(
     page: int | None = None,
     kind: str | None = None,
     svc: str | None = None,
+    seg: str | None = None,
 ) -> str:
     params = {
         k: v
-        for k, v in (("t", venue), ("w", when), ("kind", kind), ("svc", svc))
+        for k, v in (("t", venue), ("w", when), ("kind", kind), ("seg", clean_seg(seg)), ("svc", svc))
         if v
     }
     if page is not None and int(page) > 1:
@@ -168,9 +177,14 @@ def selection_image_path(
     version: str | None = None,
     kind: str | None = None,
     svc: str | None = None,
+    seg: str | None = None,
 ) -> str:
     """Путь картинки подборки. ``version`` — хэш данных: Telegram держит превью по URL."""
-    params = {k: v for k, v in (("t", venue), ("w", when), ("kind", kind), ("svc", svc)) if v}
+    params = {
+        k: v
+        for k, v in (("t", venue), ("w", when), ("kind", kind), ("seg", clean_seg(seg)), ("svc", svc))
+        if v
+    }
     if version:
         params["v"] = version
     return f"/c/{city_slug(city_name)}/og.png" + (("?" + urlencode(params)) if params else "")
@@ -291,16 +305,22 @@ async def load_selection_view(
     page: int = 1,
     kind: str | None = None,
     svc: str | None = None,
+    seg: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     page = clean_page(page)
     kind = clean_kind(kind)
     svc = clean_svc(svc)
+    seg = clean_seg(seg)
+    if seg == SEG_CENTERS:
+        kind = KIND_OHM
     ohm = kind == KIND_OHM and not svc
+    centers = ohm and seg == SEG_CENTERS
     service_mode = bool(svc)
     skating = (
         not service_mode
+        and not centers
         and (ohm or venue is None or venue == "ice" or has_public_skating(venue))
     )
     window = None
@@ -310,6 +330,7 @@ async def load_selection_view(
     pages = 1
     open_now_count = 0
     ohm_counts: dict[str, int] | None = None
+    center_count: int | None = None
     if service_mode:
         catalog = await list_city_selection_places(
             session,
@@ -324,6 +345,23 @@ async def load_selection_view(
         pages = int(catalog.get("pages") or 1)
         open_now_count = int(catalog.get("open_now_count") or 0)
         venue = "service"
+    elif centers:
+        # Центр — место по записи, не сеанс: hockey_practice сюда не запрашиваем.
+        offset = (page - 1) * MAX_PLACES
+        listing = await list_public_ice_arenas(
+            session,
+            city_id=int(city["id"]),
+            intent="ohm",
+            hockey_segment="centers",
+            limit=MAX_PLACES,
+            cursor=str(offset) if offset else None,
+        )
+        items = list(listing.get("items") or [])
+        total = int(listing.get("total") or 0)
+        pages = max(1, (total + MAX_PLACES - 1) // MAX_PLACES)
+        venue = KIND_OHM
+        when = None
+        center_count = total
     elif ohm:
         tw = resolve_window(when, now) if when else None
         if tw:
@@ -340,6 +378,7 @@ async def load_selection_view(
         pages = int(catalog.get("pages") or 1)
         venue = KIND_OHM
         ohm_counts = await city_ohm_window_counts(session, city_id=int(city["id"]), now=now)
+        center_count = await city_hockey_center_count(session, city_id=int(city["id"]))
     elif when:
         vtypes = city_selection_venue_types(venue)
         venue_param = ",".join(sorted(vtypes)) if vtypes else venue
@@ -387,7 +426,7 @@ async def load_selection_view(
         stale_notes, unconfirmed_notes = await _apply_schedule_freshness(session, items, slots, now)
     # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
     window_empty = False
-    if service_mode:
+    if service_mode or centers:
         hits = items
         shown = items
     elif ohm:
@@ -438,6 +477,7 @@ async def load_selection_view(
         "when": when,
         "kind": kind,
         "svc": svc,
+        "seg": SEG_CENTERS if centers else None,
         "page": page,
         "pages": pages,
         "total": total,
@@ -457,6 +497,8 @@ async def load_selection_view(
     }
     if ohm_counts is not None:
         out["ohm_counts"] = ohm_counts
+    if center_count is not None:
+        out["center_count"] = center_count
     if service_mode:
         out["open_now_count"] = open_now_count
         out["service_filter_keys"] = SERVICE_AMENITY_KEYS[svc]
@@ -527,6 +569,8 @@ def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
     «катков», есть залы или места — «мест». Раньше слово считалось по 12 карточкам
     страницы, и подборка «все места» называла катками город, где катков — половина.
     """
+    if view.get("seg") == SEG_CENTERS:
+        return ("центр", "центра", "центров")
     if view.get("kind") == KIND_OHM:
         return ("каток", "катка", "катков")
     venue = view.get("venue")
@@ -742,6 +786,37 @@ def _ohm_rule_html() -> str:
     )
 
 
+def _centers_rule_html() -> str:
+    return '<p class="rule">По записи, не сеанс.</p>'
+
+
+def _hockey_segment_chips_html(view: Mapping[str, Any], *, city_name: str) -> str:
+    """ОХМ и Центры — те же чипы, что у услуг и типов мест. Подписей на чипах нет."""
+    centers = view.get("seg") == SEG_CENTERS
+    if not centers and not int(view.get("center_count") or 0):
+        # Город без центров: чип «Центры» вёл бы в пустой список.
+        return ""
+    ohm_href = selection_path(
+        city_name=city_name,
+        venue=None,
+        when=None if centers else view.get("when"),
+        kind=KIND_OHM,
+    )
+    centers_href = selection_path(
+        city_name=city_name, venue=None, when=None, kind=KIND_OHM, seg=SEG_CENTERS
+    )
+    count = view.get("center_count")
+    centers_label = "Центры" if count is None else f"Центры <small>{int(count)}</small>"
+    ohm_cls = "chip" + ("" if centers else " chip--on")
+    centers_cls = "chip" + (" chip--on" if centers else "")
+    return (
+        '<nav class="chips" aria-label="Хоккей">'
+        f'<a class="{ohm_cls}" href="{_esc(ohm_href)}">ОХМ</a>'
+        f'<a class="{centers_cls}" href="{_esc(centers_href)}">{centers_label}</a>'
+        "</nav>"
+    )
+
+
 def _service_chips_html(view: Mapping[str, Any], *, city_name: str) -> str:
     active = str(view.get("svc") or "service")
     chips = [
@@ -877,6 +952,46 @@ def _place_html(
     )
 
 
+def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
+    """Карточка центра: вся карточка — ссылка на страницу места. Без сеанса, цены и кнопок."""
+    slug = str(item.get("slug") or "").strip()
+    href = str(item.get("public_path") or "").strip()
+    if not href and slug:
+        href = place_path(city_name=city_name, slug=slug)
+    where = " · ".join(x for x in (item.get("district"), item.get("address")) if x)
+    badge = str(item.get("center_badge") or "").strip()
+    live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
+    line = ""
+    if str(live.get("kind") or "") != "session":
+        line = str(live.get("text") or item.get("live_line") or "").strip()
+    photo = _place_photo_url(item)
+    icon = str(item.get("venue_icon") or "").strip()
+    name = _esc(item.get("name"))
+    if photo:
+        media = (
+            f'<span class="pick__media" data-icon="{_esc(icon)}">'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f"</span>"
+        )
+    else:
+        media = f'<span class="pick__icon" aria-hidden="true">{_esc(icon)}</span>' if icon else ""
+    badge_html = f'<span class="badge">{_esc(badge)}</span>' if badge else ""
+    line_html = f'<p class="pick__line">{_esc(line)}</p>' if line else ""
+    inner = (
+        '<div class="pick__head">'
+        + media
+        + '<div class="pick__titles">'
+        + f'<h2 class="pick__name">{name}</h2>'
+        + (f'<p class="pick__where">{_esc(where)}</p>' if where else "")
+        + "</div></div>"
+        + badge_html
+        + line_html
+    )
+    if href:
+        return f'<a class="sec pick" href="{_esc(href)}">{inner}</a>'
+    return f'<section class="sec pick">{inner}</section>'
+
+
 def _filter_chips_html(view: Mapping[str, Any], *, city_name: str) -> str:
     chips = list(view.get("filter_chips") or [])
     if not chips or view.get("when"):
@@ -901,17 +1016,18 @@ def _pagination_html(view: Mapping[str, Any], *, city_name: str, canonical_base:
     if pages <= 1:
         return ""
     venue, when, kind, svc = view.get("venue"), view.get("when"), view.get("kind"), view.get("svc")
+    seg = view.get("seg")
     path_venue = None if kind == KIND_OHM or svc else venue
     prev_href = (
         selection_path(
-            city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, page=page - 1
+            city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, seg=seg, page=page - 1
         )
         if page > 1
         else None
     )
     next_href = (
         selection_path(
-            city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, page=page + 1
+            city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, seg=seg, page=page + 1
         )
         if page < pages
         else None
@@ -930,16 +1046,17 @@ def _head_links_html(view: Mapping[str, Any], *, city_name: str, canonical_base:
     if pages <= 1:
         return ""
     venue, when, kind, svc = view.get("venue"), view.get("when"), view.get("kind"), view.get("svc")
+    seg = view.get("seg")
     path_venue = None if kind == KIND_OHM or svc else venue
     links = []
     if page > 1:
         prev = selection_path(
-            city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, page=page - 1
+            city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, seg=seg, page=page - 1
         )
         links.append(f'<link rel="prev" href="{_esc(join_public_origin(canonical_base, prev))}" />')
     if page < pages:
         nxt = selection_path(
-            city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, page=page + 1
+            city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, seg=seg, page=page + 1
         )
         links.append(f'<link rel="next" href="{_esc(join_public_origin(canonical_base, nxt))}" />')
     return "".join(links)
@@ -948,6 +1065,8 @@ def _head_links_html(view: Mapping[str, Any], *, city_name: str, canonical_base:
 def _hero_kicker(view: Mapping[str, Any]) -> str:
     """Пояснение раздела — один раз под заголовком, не на кнопке."""
     if view.get("kind") == KIND_OHM:
+        if view.get("seg") == SEG_CENTERS:
+            return "центры по записи"
         return t("route.hockey.hint")
     if view.get("svc"):
         return t("route.service.hint")
@@ -984,24 +1103,30 @@ def render_selection_page(
     stale_notes = view.get("stale_notes") or {}
     unconfirmed_notes = view.get("unconfirmed_notes") or {}
     service_mode = bool(view.get("svc"))
+    centers_mode = view.get("seg") == SEG_CENTERS
     highlight = frozenset(view.get("service_filter_keys") or ())
     more_anchor = "ohm" if view.get("kind") == KIND_OHM else "schedule"
-    places = "".join(
-        _place_html(
-            i,
-            city_name=city_name,
-            slots=view["slots"].get(int(i["id"]), []),
-            stale=stale_notes.get(int(i["id"]), ""),
-            unconfirmed=unconfirmed_notes.get(int(i["id"]), ""),
-            more_anchor=more_anchor,
-            service_mode=service_mode,
-            service_highlight_keys=highlight,
+    if centers_mode:
+        places = "".join(_center_card_html(i, city_name=city_name) for i in view["items"])
+    else:
+        places = "".join(
+            _place_html(
+                i,
+                city_name=city_name,
+                slots=view["slots"].get(int(i["id"]), []),
+                stale=stale_notes.get(int(i["id"]), ""),
+                unconfirmed=unconfirmed_notes.get(int(i["id"]), ""),
+                more_anchor=more_anchor,
+                service_mode=service_mode,
+                service_highlight_keys=highlight,
+            )
+            for i in view["items"]
         )
-        for i in view["items"]
-    )
     if not places:
         if service_mode:
             empty = "Пока не знаем мест с заточкой или прокатом в этом городе."
+        elif centers_mode:
+            empty = "Центров по записи нет"
         elif view.get("kind") == KIND_OHM:
             empty = "Пока нет сеансов ОХМ в этом городе."
         else:
@@ -1015,11 +1140,16 @@ def render_selection_page(
         f'<p class="hero__where">{_esc(description)}</p>'
         "</header>"
     )
+    hockey_chips = ""
     ohm_seg = ""
     ohm_rule = ""
     if view.get("kind") == KIND_OHM:
-        ohm_seg = _ohm_seg_html(view, city_name=city_name)
-        ohm_rule = _ohm_rule_html()
+        hockey_chips = _hockey_segment_chips_html(view, city_name=city_name)
+        if centers_mode:
+            ohm_rule = _centers_rule_html()
+        else:
+            ohm_seg = _ohm_seg_html(view, city_name=city_name)
+            ohm_rule = _ohm_rule_html()
     chips = _service_chips_html(view, city_name=city_name) if service_mode else _filter_chips_html(
         view, city_name=city_name
     )
@@ -1033,6 +1163,7 @@ def render_selection_page(
     )
     body = (
         hero
+        + hockey_chips
         + ohm_seg
         + ohm_rule
         + chips
