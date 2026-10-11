@@ -423,6 +423,117 @@
     return { when: state.when, whenDay: state.whenDay };
   }
 
+  var folderLineQueued = false;
+
+  function folderTabCount(id, counts) {
+    if (id === 'ohm') return counts.ohmCount;
+    if (id === 'shop') return counts.shopCount;
+    if (id === 'coach') return counts.trainerCount;
+    if (id === 'service') return state.serviceCount;
+    return 0;
+  }
+
+  function folderTabInner(mode, counts) {
+    var count = folderTabCount(mode.id, counts);
+    var extra = count > 0 && mode.id !== 'places' ? ' <small>' + esc(String(count)) + '</small>' : '';
+    return esc(mode.label) + extra;
+  }
+
+  function folderTabSig(mode, counts) {
+    var count = folderTabCount(mode.id, counts);
+    return mode.id + '|' + mode.label + '|' + (count > 0 ? String(count) : '0');
+  }
+
+  function folderTabHtml(mode, counts) {
+    return (
+      '<button type="button" class="hdr-folder" role="tab" data-catalog-mode="' +
+      esc(mode.id) +
+      '" data-folder-sig="' +
+      esc(folderTabSig(mode, counts)) +
+      '" aria-pressed="' +
+      (mode.active ? 'true' : 'false') +
+      '">' +
+      folderTabInner(mode, counts) +
+      '</button>'
+    );
+  }
+
+  var FOLDER_LINE_HTML = '<span class="hdr-underline" id="iceFolderLine" aria-hidden="true"></span>';
+
+  /*
+   * Полоска — один и тот же узел. innerHTML на весь ряд создавал её заново
+   * с width:0, и transition проигрывался с нуля. Клик рисует шапку дважды
+   * (сразу и когда приходит список) — отсюда два мигания, потом фиксация.
+   */
+  function paintFolderNav(nav, modes, counts) {
+    if (!nav) return;
+    if (modes.length < 2) {
+      nav.hidden = true;
+      nav.innerHTML = '';
+      return;
+    }
+    nav.hidden = false;
+    nav.className = 'hdr-folders';
+    var html = modes
+      .map(function (mode) {
+        return folderTabHtml(mode, counts);
+      })
+      .join('');
+    var buttons =
+      typeof nav.querySelectorAll === 'function' ? nav.querySelectorAll('.hdr-folder') : [];
+    var same = buttons.length === modes.length;
+    var i;
+    for (i = 0; same && i < modes.length; i++) {
+      if (buttons[i].getAttribute('data-catalog-mode') !== modes[i].id) same = false;
+    }
+    if (same && buttons.length) {
+      for (i = 0; i < modes.length; i++) {
+        var btn = buttons[i];
+        var pressed = modes[i].active ? 'true' : 'false';
+        if (btn.getAttribute('aria-pressed') !== pressed) btn.setAttribute('aria-pressed', pressed);
+        var sig = folderTabSig(modes[i], counts);
+        if (btn.getAttribute('data-folder-sig') !== sig) {
+          btn.setAttribute('data-folder-sig', sig);
+          btn.innerHTML = folderTabInner(modes[i], counts);
+        }
+      }
+    } else {
+      var line = typeof nav.querySelector === 'function' ? nav.querySelector('.hdr-underline') : null;
+      if (line && typeof line.remove === 'function') line.remove();
+      if (line && typeof nav.appendChild === 'function') {
+        nav.innerHTML = html;
+        nav.appendChild(line);
+      } else if (typeof nav.insertAdjacentHTML === 'function') {
+        nav.innerHTML = html;
+        nav.insertAdjacentHTML('beforeend', FOLDER_LINE_HTML);
+      } else {
+        nav.innerHTML = html + FOLDER_LINE_HTML;
+      }
+    }
+    if (
+      typeof nav.querySelector === 'function' &&
+      !nav.querySelector('.hdr-underline') &&
+      String(nav.innerHTML).indexOf('iceFolderLine') === -1
+    ) {
+      if (typeof nav.insertAdjacentHTML === 'function') nav.insertAdjacentHTML('beforeend', FOLDER_LINE_HTML);
+      else nav.innerHTML += FOLDER_LINE_HTML;
+    }
+    schedulePlaceFolderLine();
+  }
+
+  function schedulePlaceFolderLine() {
+    if (typeof requestAnimationFrame !== 'function') {
+      placeFolderLine();
+      return;
+    }
+    if (folderLineQueued) return;
+    folderLineQueued = true;
+    requestAnimationFrame(function () {
+      folderLineQueued = false;
+      placeFolderLine();
+    });
+  }
+
   function placeFolderLine() {
     var nav = $('iceModeSeg');
     var line = $('iceFolderLine');
@@ -432,8 +543,21 @@
       line.style.width = '0px';
       return;
     }
-    line.style.width = on.offsetWidth + 'px';
-    line.style.transform = 'translateX(' + on.offsetLeft + 'px)';
+    var nextW = on.offsetWidth + 'px';
+    var nextT = 'translateX(' + on.offsetLeft + 'px)';
+    if (line.style.width === nextW && line.style.transform === nextT) return;
+    /* Первый показ — без проезда из нуля. Дальше черта переезжает один раз. */
+    if (line.dataset.ready !== '1') {
+      line.style.transition = 'none';
+      line.style.width = nextW;
+      line.style.transform = nextT;
+      void line.offsetWidth;
+      line.style.transition = '';
+      line.dataset.ready = '1';
+      return;
+    }
+    line.style.width = nextW;
+    line.style.transform = nextT;
   }
 
   function renderWhenChips() {
@@ -688,43 +812,7 @@
       serviceCount: state.serviceCount,
       placeService: state.placeService,
     });
-    var modeSeg = $('iceModeSeg');
-    if (modeSeg) {
-      if (modes.length < 2) {
-        modeSeg.hidden = true;
-        modeSeg.innerHTML = '';
-      } else {
-        modeSeg.hidden = false;
-        modeSeg.className = 'hdr-folders';
-        modeSeg.innerHTML = modes
-          .map(function (m) {
-            var count =
-              m.id === 'ohm'
-                ? counts.ohmCount
-                : m.id === 'shop'
-                  ? counts.shopCount
-                  : m.id === 'coach'
-                    ? counts.trainerCount
-                    : m.id === 'service'
-                      ? state.serviceCount
-                      : 0;
-            var extra = count > 0 && m.id !== 'places' ? ' <small>' + esc(String(count)) + '</small>' : '';
-            return (
-              '<button type="button" class="hdr-folder" role="tab" data-catalog-mode="' +
-              esc(m.id) +
-              '" aria-pressed="' +
-              (m.active ? 'true' : 'false') +
-              '">' +
-              esc(m.label) +
-              extra +
-              '</button>'
-            );
-          })
-          .join('') + '<span class="hdr-underline" id="iceFolderLine" aria-hidden="true"></span>';
-        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(placeFolderLine);
-        else placeFolderLine();
-      }
-    }
+    paintFolderNav($('iceModeSeg'), modes, counts);
     renderWhenChips();
 
     var scope = M.catalogScope(state.intent, state.venueTypes);

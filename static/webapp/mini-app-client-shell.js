@@ -755,7 +755,7 @@
   function prefetchIceAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'ice-tab.js?v=2026100590', as: 'script' },
+      { href: base + 'ice-tab.js?v=2026101102', as: 'script' },
       { href: base + 'ice-tab-model.js?v=202610061', as: 'script' },
       { href: base + 'ice-map-model.js?v=202610054', as: 'script' },
       { href: base + 'ice-map.js?v=2026100590', as: 'script' },
