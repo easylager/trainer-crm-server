@@ -771,7 +771,7 @@ def _place_html(
     service_highlight_keys: frozenset[str] | None = None,
 ) -> str:
     slug = str(item.get("slug") or "")
-    href = place_path(city_name=city_name, slug=slug) if slug else f"/p/{item['id']}"
+    href = place_path(city_name=city_name, slug=slug) if slug else ""
     where = " · ".join(x for x in (item.get("district"), item.get("address")) if x)
     chips = ""
     rest = len(slots) - MAX_SLOTS_PER_PLACE
@@ -785,12 +785,18 @@ def _place_html(
         )
         basis_cls = public_basis_css_class(str(s.get("schedule_basis") or "live"))
         slot_cls = "slot" + (f" {basis_cls}" if basis_cls else "")
-        chips += (
-            f'<a class="{_esc(slot_cls)}" href="{_esc(href + place_query(session_id=int(s["id"])))}">'
+        slot_inner = (
             f'<span class="slot__time">{_esc(hhmm)}</span>'
-            f'<span class="slot__price">{_esc(day_text)}{(" · " + _esc(price)) if price else ""}</span></a>'
+            f'<span class="slot__price">{_esc(day_text)}{(" · " + _esc(price)) if price else ""}</span>'
         )
-    if rest > 0:
+        if href:
+            chips += (
+                f'<a class="{_esc(slot_cls)}" href="{_esc(href + place_query(session_id=int(s["id"])))}">'
+                f"{slot_inner}</a>"
+            )
+        else:
+            chips += f'<span class="{_esc(slot_cls)}">{slot_inner}</span>'
+    if rest > 0 and href:
         chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
     line = "" if chips else f'<p class="muted">{_esc(item.get("live_line") or "")}</p>'
     if unconfirmed:
@@ -800,11 +806,19 @@ def _place_html(
     stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)
     icon = str(item.get("venue_icon") or "").strip()
-    if photo:
+    name = _esc(item.get("name"))
+    name_html = f'<a href="{_esc(href)}">{name}</a>' if href else name
+    if photo and href:
         media = (
             f'<a class="pick__media" href="{_esc(href)}" data-icon="{_esc(icon)}">'
             f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
             f"</a>"
+        )
+    elif photo:
+        media = (
+            f'<span class="pick__media" data-icon="{_esc(icon)}">'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f"</span>"
         )
     else:
         media = f'<span class="pick__icon" aria-hidden="true">{_esc(icon)}</span>' if icon else ""
@@ -840,7 +854,7 @@ def _place_html(
             '<div class="pick__head">'
             + media
             + '<div class="pick__titles">'
-            + f'<h2 class="pick__name"><a href="{_esc(href)}">{_esc(item.get("name"))}</a>'
+            + f'<h2 class="pick__name">{name_html}'
             + rink_note
             + open_html
             + "</h2>"
@@ -855,7 +869,7 @@ def _place_html(
         '<div class="pick__head">'
         + media
         + '<div class="pick__titles">'
-        + f'<h2 class="pick__name"><a href="{_esc(href)}">{_esc(item.get("name"))}</a></h2>'
+        + f'<h2 class="pick__name">{name_html}</h2>'
         + (f'<p class="pick__where">{_esc(where)}</p>' if where else "")
         + "</div></div>"
         + (stale_html + f'<div class="slots">{chips}</div>' if chips else line)
@@ -1033,13 +1047,15 @@ def render_selection_page(
         + dock
     )
     elements = []
-    for n, item in enumerate(view["items"]):
+    for item in view["items"]:
         slug = str(item.get("slug") or "").strip()
-        path = place_path(city_name=city_name, slug=slug) if slug else f"/p/{int(item['id'])}"
+        if not slug:
+            continue
+        path = place_path(city_name=city_name, slug=slug)
         elements.append(
             {
                 "@type": "ListItem",
-                "position": n + 1,
+                "position": len(elements) + 1,
                 "name": item.get("name"),
                 "url": join_public_origin(canonical_url, path),
             }

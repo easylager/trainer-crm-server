@@ -6,7 +6,7 @@ import html as html_lib
 import logging
 import math
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
@@ -620,7 +620,7 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
     if minsk:
         parts.append(
             f'<circle cx="{float(minsk["x"]):.1f}" cy="{float(minsk["y"]):.1f}" r="{float(minsk["r"]) + 24:.1f}" '
-            f'fill="#0f8f8a" fill-opacity="0.14"/>'
+            f'fill="var(--g-accent)" fill-opacity="0.14"/>'
         )
     ordered = sorted(points, key=lambda p: (bool(p.get("is_oblast_center")), bool(p.get("is_minsk"))))
     parts.append('<g class="home-map__cities">')
@@ -628,7 +628,7 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
         x, y, r = float(pt["x"]), float(pt["y"]), float(pt["r"])
         tap = _MAP_TAP_RADIUS_MAJOR if pt.get("is_oblast_center") else _MAP_TAP_RADIUS_MINOR
         ring = (
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r + 8:.1f}" fill="none" stroke="#0f8f8a" '
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r + 8:.1f}" fill="none" stroke="var(--g-accent)" '
             'stroke-width="2" stroke-dasharray="3 4"/>'
             if pt.get("has_ohm")
             else ""
@@ -637,7 +637,7 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
             f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city" aria-label="{_esc(pt["name"])}">'
             f'<circle class="home-map__tap" cx="{x:.1f}" cy="{y:.1f}" r="{tap:.1f}" fill="transparent"/>'
             f"{ring}"
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="#0f8f8a"/></a>'
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="var(--g-accent)"/></a>'
         )
     parts.append("</g>")
     parts.append('<g font-size="20" font-weight="600" fill="#0d1b26" pointer-events="none">')
@@ -1082,21 +1082,20 @@ def _hero_city_html(user_city: Mapping[str, Any] | None) -> str:
     if not user_city:
         return ""
     bits: list[str] = []
-    places = int(user_city.get("place_count") or 0)
-    if places:
-        bits.append(f"{places} {plural_ru(places, 'место', 'места', 'мест')}")
     nxt = user_city.get("next_skate")
     if isinstance(nxt, Mapping) and nxt.get("hhmm"):
         if nxt.get("is_today"):
-            bits.append(f"<b>ближайший сеанс {_esc(nxt['hhmm'])}</b>")
+            bits.append(f"<b>лёд сегодня с {_esc(nxt['hhmm'])}</b>")
         else:
             bits.append(f"ближайший — <b>{_esc(_next_phrase(nxt))}</b>")
     ohm = user_city.get("next_ohm")
     if isinstance(ohm, Mapping) and ohm.get("hhmm"):
-        if ohm.get("is_weekend") and not ohm.get("is_today"):
-            bits.append("ОХМ в выходные")
+        if ohm.get("is_today"):
+            bits.append("хоккей для любителей сегодня")
+        elif ohm.get("is_weekend"):
+            bits.append("хоккей для любителей в выходные")
         else:
-            bits.append(f"ОХМ {_esc(str(ohm.get('day_label') or ''))}".strip())
+            bits.append(f"хоккей для любителей {_esc(str(ohm.get('day_label') or ''))}".strip())
     live = " · ".join(bits)
     return (
         f'<a class="hero-city" href="{_esc(user_city.get("href") or "/c/" + str(user_city.get("slug") or ""))}">'
@@ -1153,12 +1152,20 @@ def _ru_footer_html(cities: list[Mapping[str, Any]]) -> str:
 
 
 def _ohm_sub_html(view: Mapping[str, Any]) -> str:
-    cities = [c for c in (view.get("cities") or []) if str(c.get("country") or "").upper() == "BY"]
-    ohm_cities = len([c for c in cities if c.get("has_ohm")])
-    if not ohm_cities:
+    cities = [
+        c
+        for c in (view.get("cities") or [])
+        if str(c.get("country") or "").upper() == "BY" and c.get("has_ohm")
+    ]
+    if not cities:
         return ""
-    word = plural_ru(ohm_cities, "городе", "городах", "городах")
-    return f'<p class="sub sub--ohm">Хоккей для любителей — в {ohm_cities} {word}.</p>'
+    if len(cities) == 1:
+        name = _esc(str(cities[0].get("name") or ""))
+        nxt = cities[0].get("next_ohm") if isinstance(cities[0].get("next_ohm"), Mapping) else {}
+        when = " сегодня" if nxt.get("is_today") else ""
+        return f'<p class="sub sub--ohm">Хоккей для любителей{when} — {name}.</p>'
+    word = plural_ru(len(cities), "городе", "городах", "городах")
+    return f'<p class="sub sub--ohm">Хоккей для любителей — в {len(cities)} {word}.</p>'
 
 
 def _json_ld(view: Mapping[str, Any], *, canonical_url: str) -> str:
@@ -1212,18 +1219,39 @@ def _format_date_string(now: datetime) -> str:
     return f"{weekday.capitalize()}, {local.day} {months_gen[local.month - 1]}"
 
 
-def _counter_text(session_count: int, city_count: int, when_key: str) -> str:
+def _counter_when_text(when_key: str, now: datetime) -> str:
+    """В воскресенье до 18:00 окно «выходные» — это остаток сегодня, не суббота+воскресенье."""
     when_text = {
         "today": t("home.counter.when.today"),
         "tomorrow": t("home.counter.when.tomorrow"),
         "weekend": t("home.counter.when.weekend"),
         "day": t("home.counter.when.day"),
     }.get(when_key, t("home.counter.when.today"))
+    if when_key == "weekend":
+        local = now.astimezone(ZoneInfo(DEFAULT_TIMEZONE))
+        if local.weekday() == 6 and local.time() < time(18, 0):
+            return t("home.counter.when.today")
+    return when_text
+
+
+def _counter_text(
+    session_count: int,
+    city_count: int,
+    when_key: str,
+    *,
+    now: datetime,
+    city_name: str | None = None,
+) -> str:
+    when_text = _counter_when_text(when_key, now)
+    sessions_word = plural_ru(session_count, "катание", "катания", "катаний")
+    if city_count == 1 and city_name:
+        label = when_text[:1].lower() + when_text[1:]
+        return f"{city_name} — {label} {session_count} {sessions_word}"
     return t(
         "home.counter",
         when=when_text,
         sessions=session_count,
-        sessions_word=plural_ru(session_count, "сеанс", "сеанса", "сеансов"),
+        sessions_word=sessions_word,
         cities=city_count,
         cities_word=plural_ru(city_count, "городе", "городах", "городах"),
     )
@@ -1262,9 +1290,12 @@ def render_catalog_home_page(
     user_slug = str(user_city.get("slug") or "") if user_city else None
 
     by_cities = [c for c in cities if c.get("country") == "BY"]
-    total_sessions = sum(int(c.get("session_count") or 0) for c in by_cities)
-    cities_with_sessions = len([c for c in by_cities if int(c.get("session_count") or 0) > 0])
-    counter_text = _counter_text(total_sessions, cities_with_sessions, when_key)
+    with_sessions = [c for c in by_cities if int(c.get("session_count") or 0) > 0]
+    total_sessions = sum(int(c.get("session_count") or 0) for c in with_sessions)
+    sole_name = str(with_sessions[0].get("name") or "") if len(with_sessions) == 1 else None
+    counter_text = _counter_text(
+        total_sessions, len(with_sessions), when_key, now=now, city_name=sole_name
+    )
 
     tiles, rest = split_home_tiles(cities, user_city_slug=user_slug)
     scheduled = len([c for c in by_cities if int(c.get("horizon_arenas_with_sessions") or 0) > 0])

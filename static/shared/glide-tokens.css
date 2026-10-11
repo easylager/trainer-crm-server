@@ -11,9 +11,14 @@
   --g-ink-2: #4a5f71;
   --g-line: #e1e8ec;
   --g-line-strong: #c9d5dc;
-  --g-accent: #0f8f8a;
-  --g-accent-ink: #0b6f6b;
-  --g-accent-wash: #e3f4f3;
+  /* Тил логотипа, значение в значение с theme.css --glide-500.
+     Заливка — --g-accent. Текст на ней — --g-on-accent (белый на тиле ~2.1:1).
+     Буквы и ссылки на светлом — --g-accent-ink (#0B6E70, ~6:1). */
+  --g-accent: #45B9BB;
+  --g-accent-pressed: #2E9A9C;
+  --g-on-accent: #04262A;
+  --g-accent-ink: #0B6E70;
+  --g-accent-wash: #D3EFEF;
   --g-dark: #0d1b26;
   --g-dark-2: #1d2f3d;
   --g-on-dark-muted: #c3d2dc;
@@ -45,9 +50,11 @@ body.tg-dark {
   --g-ink-2: #c3d2dc;
   --g-line: #2b3744;
   --g-line-strong: #3a4857;
-  --g-accent: #35b8b1;
-  --g-accent-ink: #0d1b26;
-  --g-accent-wash: #22383a;
+  --g-accent: #7FD7D8;
+  --g-accent-pressed: #45B9BB;
+  --g-on-accent: #04262A;
+  --g-accent-ink: #7FD7D8;
+  --g-accent-wash: #163638;
   --g-dark: #0d1b26;
   --g-dark-2: #1d2f3d;
   --g-on-dark-muted: #c3d2dc;

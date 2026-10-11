@@ -115,8 +115,8 @@ async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db
     async with _client() as client:
         after = await client.get("/", cookies={"glide_city": slug})
     assert after.status_code == 200
-    assert '<p class="sub sub--ohm">Хоккей для любителей — в' in after.text
-    assert "ОХМ" in _city_surface(after.text, name)
+    assert '<p class="sub sub--ohm">Хоккей для любителей — ' in after.text
+    assert "хоккей для любителей" in _city_surface(after.text, name)
 
     await db_session.execute(text("DELETE FROM ice_sessions WHERE id = :id"), {"id": ohm_id})
     await db_session.commit()

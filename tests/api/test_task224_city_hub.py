@@ -326,6 +326,6 @@ def test_skate_route_without_sessions_says_so() -> None:
             "hot_skate": None,
         }
     )
-    assert "ближайших сеансов нет" in html
+    assert "времени катания в расписании нет" in html
     assert "Сегодня" not in html
     assert 'class="quick"' not in html
