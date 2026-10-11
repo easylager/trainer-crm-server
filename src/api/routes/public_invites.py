@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +12,7 @@ from src.api.catalog_share_actor import catalog_share_actor
 from src.api.deps import get_session
 from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
+from src.application.ice_invite_slots import list_invite_slots
 from src.application.ice_invites import InviteRejected, answer_invite, create_invite, get_invite, get_invite_status
 
 router = APIRouter(prefix="/api/public", tags=["public-invites"])
@@ -37,6 +40,22 @@ def _http(exc: InviteRejected) -> HTTPException:
 
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
+
+
+@router.get("/invites/slots")
+async def get_public_invite_slots(
+    response: Response,
+    city_id: int | None = Query(None),
+    day: date | None = Query(None, alias="date"),
+    session_id: int | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Будущие сеансы города на день по Минску. ``session_id`` без города подставляет день сеанса."""
+    _no_store(response)
+    try:
+        return await list_invite_slots(session, city_id=city_id, day=day, session_id=session_id)
+    except InviteRejected as exc:
+        raise _http(exc) from exc
 
 
 @router.post("/invites", status_code=201)
