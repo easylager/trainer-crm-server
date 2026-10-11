@@ -1652,7 +1652,7 @@
     var head = $('iceShareHeadBtn');
     if (btn) btn.disabled = true;
     if (head) head.disabled = true;
-    fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab')
+    fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab', { auth: true })
       .then(function (data) {
         if (!data) return;
         var shareUrl = String(data.share_url || '').trim();

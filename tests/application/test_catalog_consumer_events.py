@@ -498,6 +498,41 @@ async def test_demand_pulse_drops_staff_telegram_keeps_website(db_session) -> No
     assert after["share_people_7d"] - before["share_people_7d"] == 0
 
 
+async def test_sharers_drop_stable_staff_hash(db_session) -> None:
+    """Стабильный HMAC служебного id не входит в sharers. Дневной хэш его не покрывает.
+
+    Анонимный NULL остаётся в числе событий и не входит в COUNT(DISTINCT).
+    """
+    now = datetime.now(timezone.utc)
+    as_of = now + timedelta(minutes=1)
+    staff = telegram_actor_hash(1304982166)
+    stranger = telegram_actor_hash(424242)
+    assert staff and stranger and staff != stranger
+    await _insert_event(
+        db_session, kind=KIND_PUBLIC_PAGE_VIEW, actor=stranger, at=now,
+        payload='{"ua_class": "human"}',
+    )
+    before_v = await get_catalog_virality_cb_metrics(db_session, days=1, as_of=as_of)
+    before_p = await get_catalog_demand_pulse(db_session, as_of=as_of)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_share_events (kind, occurred_at, actor_hash, payload)
+            VALUES ('place', :at, :staff, '{}'::jsonb),
+                   ('selection', :at, :stranger, '{}'::jsonb),
+                   ('ice_city_day', :at, NULL, '{}'::jsonb)
+            """
+        ),
+        {"at": now, "staff": staff, "stranger": stranger},
+    )
+    await db_session.flush()
+    after_v = await get_catalog_virality_cb_metrics(db_session, days=1, as_of=as_of)
+    after_p = await get_catalog_demand_pulse(db_session, as_of=as_of)
+    assert after_v["distinct_sharers"] - before_v["distinct_sharers"] == 1
+    assert after_v["share_events"] - before_v["share_events"] == 2
+    assert after_p["share_people_7d"] - before_p["share_people_7d"] == 1
+
+
 async def test_demand_pulse_returning_other_city_and_telegram_arenas(db_session) -> None:
     """Повторный заход, чужой город и арена считаются только по Telegram."""
     now = datetime.now(timezone.utc)

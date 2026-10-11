@@ -178,6 +178,11 @@ async def get_share_counts(
     }
 
 
+# Sentinel: catalog callers pass ``actor_hash=None`` when the HMAC secret is unset and
+# that NULL must be stored. Omitting the argument keeps the per-day trainer hash.
+_ACTOR_HASH_OMITTED: object = object()
+
+
 def share_actor_hash(telegram_id: int | str | None, kind: str, day: date) -> str | None:
     """
     Irreversible per-day actor key. ``None`` in, ``None`` out — an anonymous share is still
@@ -199,10 +204,16 @@ async def record_client_share(
     trainer_id: int | None = None,
     telegram_id: int | str | None = None,
     payload: dict | None = None,
+    actor_hash: str | None | object = _ACTOR_HASH_OMITTED,
 ) -> None:
     """
     Append one share event. Never raises into the caller's request: a failed *measurement*
     must not break the *feature* being measured — the share dialog still has to open.
+
+    ``telegram_id`` still drops service accounts (``CATALOG_METRICS_EXCLUDED_TELEGRAM_IDS``)
+    before any insert. Pass ``actor_hash`` — including ``None`` when the HMAC secret is
+    unset — to store that value. Omit it and the row keeps the per-day
+    :func:`share_actor_hash` used by trainer shares.
     """
     from src.infrastructure.db.models import CLIENT_SHARE_KINDS
 
@@ -215,7 +226,10 @@ async def record_client_share(
 
     import json
 
-    actor = share_actor_hash(telegram_id, kind, datetime.now(timezone.utc).date())
+    if actor_hash is _ACTOR_HASH_OMITTED:
+        actor = share_actor_hash(telegram_id, kind, datetime.now(timezone.utc).date())
+    else:
+        actor = actor_hash
     try:
         await session.execute(
             text(

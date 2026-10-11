@@ -5,12 +5,16 @@ import logging
 import time
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.middleware.http_limits import client_ip_from_request
+from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
+from src.api.miniapp_auth.principal_keys import client_catalog_telegram_key
+from src.api.miniapp_auth.types import MiniAppPrincipal
 from src.api.public_list_cache import set_public_json_list_cache
 from src.api.routes.public import _enrich_trainer_photo_urls
 from src.application.selection_page import SERVICE_AMENITY_KEYS, clean_svc
@@ -27,6 +31,7 @@ from src.application.arena_public_use_cases import (
     record_ice_city_interest,
     search_public_ice,
 )
+from src.application.catalog_consumer_events import public_actor_hash, telegram_actor_hash
 from src.application.client_delight_metrics import record_client_share
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import (
@@ -76,6 +81,23 @@ async def _slug_city_id(
             raise HTTPException(status_code=404, detail="Arena not found")
         resolved = int(found["id"])
     return resolved
+
+
+def _catalog_share_actor(
+    principal: MiniAppPrincipal | None, request: Request
+) -> tuple[int | None, str | None]:
+    """Актёр шаринга каталога — тот же стабильный HMAC, что у входов и просмотров.
+
+    Mini App: ``telegram_actor_hash`` от ключа клиента. Без principal — ``public_actor_hash``
+    по IP и User-Agent. ``None`` у хэша, если секрет актёра не задан (fail closed).
+    """
+    if principal is not None:
+        telegram_id = client_catalog_telegram_key(principal)
+        return telegram_id, telegram_actor_hash(telegram_id)
+    return None, public_actor_hash(
+        client_ip=client_ip_from_request(request),
+        user_agent=request.headers.get("user-agent"),
+    )
 
 
 @router.get("/ice/map-config")
@@ -185,10 +207,12 @@ async def get_nearest_ice_now(
 @router.get("/ice/share/{city_id}")
 async def get_ice_city_day_share(
     city_id: int,
+    request: Request,
     response: Response,
     share_context: str | None = Query(
         None, description="Где нажали «Поделиться»: ice_tab (вкладка «Лёд»)."
     ),
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -198,10 +222,11 @@ async def get_ice_city_day_share(
     (``share_url``/``share_body``/``share_text``), поэтому фронт переиспользует
     ``openTelegramShareUrlFromMiniApp`` без правок.
 
-    Ручка публичная и по этой причине **не знает, кто поделился**: у события шеринга
-    города остаётся ``actor_hash = NULL``. Это осознанный размен — доля шеринга по
-    людям здесь не считается, зато вкладка «Лёд» работает и до авторизации, как и вся
-    остальная публичная витрина Ice Discovery.
+    Ручка публичная и работает без авторизации. Валидный initData Mini App пишет
+    стабильный ``telegram_actor_hash`` того же человека, что и входы в каталог.
+    Без креденшла — ``public_actor_hash`` по IP и User-Agent. Невалидный, просроченный
+    или ненастроенный креденшл не даёт 401. Без ``CATALOG_ACTOR_HMAC_SECRET`` хэш не
+    считается и ``actor_hash`` остаётся NULL.
     """
     response.headers["Cache-Control"] = "no-store"
     row = (
@@ -224,11 +249,14 @@ async def get_ice_city_day_share(
     share_body = share_body_for_native_share_dialog(share_text, page_url)
 
     ctx = (share_context or "").strip().lower() or "ice_tab"
+    telegram_id, actor = _catalog_share_actor(principal, request)
     await record_client_share(
         session,
         kind=CLIENT_SHARE_KIND_ICE_CITY_DAY,
         share_context=ctx,
         city_id=int(city_id),
+        telegram_id=telegram_id,
+        actor_hash=actor,
         payload={
             "local_date": day.get("local_date"),
             "arena_count": day.get("arena_count"),
@@ -349,6 +377,7 @@ _SHARE_CHANNELS = (
 
 @router.get("/ice/selection/share")
 async def get_public_selection_share(
+    request: Request,
     response: Response,
     city_id: int = Query(...),
     venue_type: str | None = Query(None),
@@ -356,12 +385,16 @@ async def get_public_selection_share(
     record: bool = Query(True),
     channel: str | None = Query(None),
     share_context: str | None = Query(None),
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
     «Поделиться подборкой» из каталога (TASK-146): ссылка на /c/{город}?t=&w= — ровно
     та выборка, что на экране (город, тип места, окно времени). Тот же контракт, что у
     шеринга места; превью — og.png подборки.
+
+    Актёр пишется только при ``record=true``: стабильный хэш Mini App либо IP+UA,
+    как у ``/ice/share``. Без секрета актёра — NULL.
     """
     from src.application.selection_page import (
         clean_venue,
@@ -393,11 +426,14 @@ async def get_public_selection_share(
     payload = compose_selection_share(view, page_url=page_url)
     if record:
         ch = (channel or "").strip().lower()
+        telegram_id, actor = _catalog_share_actor(principal, request)
         await record_client_share(
             session,
             kind=CLIENT_SHARE_KIND_SELECTION,
             share_context=(share_context or "ice_list").strip().lower()[:40],
             city_id=city["id"],
+            telegram_id=telegram_id,
+            actor_hash=actor,
             payload={"venue_type": venue, "when": window_key, "channel": ch if ch in _SHARE_CHANNELS else None},
         )
     # ?v= — хэш данных превью (число мест, сеансов и день): Telegram кэширует og-картинку по URL.
@@ -411,6 +447,7 @@ async def get_public_selection_share(
 @router.get("/arenas/{arena_ref}/share")
 async def get_public_place_share(
     arena_ref: str,
+    request: Request,
     response: Response,
     session_id: int | None = Query(None, description="Сеанс, которым делятся (ссылка ведёт прямо на него)."),
     invite: bool = Query(False, description="Тон «Позвать с собой» вместо «Расписание»."),
@@ -419,6 +456,7 @@ async def get_public_place_share(
     channel: str | None = Query(None, description="Канал: telegram | copy | story | system."),
     city_id: int | None = Query(None),
     city: str | None = Query(None),
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -430,7 +468,9 @@ async def get_public_place_share(
     для «Сохранить картинку» (истории Instagram/VK) и ``invite_*`` — тот же текст в тоне
     «погнали?», чтобы переключатель в шит-оверлее не ходил на сервер второй раз.
 
-    Публичная ручка: кто поделился, не знает (``actor_hash = NULL``), как и ``/ice/share``.
+    Публичная ручка. При ``record=true`` актёр — стабильный хэш Mini App, если креденшл
+    валиден, иначе хэш IP и User-Agent. Мусорный креденшл не даёт 401. Без секрета
+    актёра ``actor_hash`` остаётся NULL.
 
     Шит «Поделиться» сначала показывает превью (``record=false`` — переключатели и выбор
     сеанса не должны раздувать счётчик), а событие пишет по нажатию канала: одна строка ==
@@ -453,12 +493,15 @@ async def get_public_place_share(
     ctx = (share_context or "").strip().lower()[:40] or "arena_card"
     if record:
         ch = (channel or "").strip().lower()
+        telegram_id, actor = _catalog_share_actor(principal, request)
         await record_client_share(
             session,
             kind=CLIENT_SHARE_KIND_PLACE,
             share_context=ctx,
             city_id=int(card["city_id"]),
             arena_id=int(card["id"]),
+            telegram_id=telegram_id,
+            actor_hash=actor,
             payload={
                 "venue_type": card.get("venue_type"),
                 "session_id": focus_id,

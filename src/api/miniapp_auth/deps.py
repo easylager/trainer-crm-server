@@ -142,6 +142,33 @@ def get_client_miniapp_principal(
         raise miniapp_credential_http_exception() from None
 
 
+def get_optional_client_miniapp_principal(
+    x_mini_app_platform: str | None = Header(None, alias="X-Mini-App-Platform"),
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    x_vk_launch: str | None = Header(None, alias="X-VK-Launch-Params"),
+) -> MiniAppPrincipal | None:
+    """Client identity for public routes. Never rejects the request.
+
+    Same transports and the same client-bot checks as :func:`get_client_miniapp_principal`.
+    Missing, invalid, expired, unconfigured, or unsupported credentials yield ``None``
+    so anonymous and non-Telegram callers still get 200.
+    """
+    platform = _normalized_miniapp_platform(x_mini_app_platform)
+    if platform not in (MiniAppPlatform.TELEGRAM.value, MiniAppPlatform.MAX.value):
+        return None
+    if platform == MiniAppPlatform.MAX.value:
+        raw = (init_data or x_vk_launch or "").strip()
+    else:
+        raw = (init_data or x_telegram_init_data or "").strip()
+    if not raw:
+        return None
+    try:
+        return get_client_miniapp_principal(MiniappCredentialIn(raw=raw, platform=platform))
+    except HTTPException:
+        return None
+
+
 def get_trainer_miniapp_principal(
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
 ) -> MiniAppPrincipal:

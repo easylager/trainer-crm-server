@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хоккей: шаринг</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #45b9bb;
+    --brand-2: #7fd7d8;
+    --studio: #050607;
+    --studio-text: #eceae4;
+    --studio-hint: #9a968c;
+    --font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --bg: #0e141b;
+    --surface: #1d2733;
+    --ink: #f1f5f7;
+    --muted: #8aa0b3;
+    --line: #2b3744;
+    --accent: #7fd7d8;
+    --accent-ink: #04262a;
+    --warn: #ffcf86;
+    --warn-wash: #3a2d13;
+    --dry: #e7b3b3;
+    --dry-wash: #3a2224;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    font-family: var(--font);
+    background: var(--studio);
+    color: var(--studio-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 20px 64px;
+    display: grid;
+    grid-template-columns: minmax(280px, 420px) 1fr;
+    gap: 36px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; justify-items: center; }
+  }
+  .thesis { max-width: 420px; }
+  .kicker {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--brand-2);
+  }
+  h1 { margin: 10px 0 0; font-size: 26px; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; }
+  .lede { margin: 12px 0 0; font-size: 14px; line-height: 1.55; color: var(--studio-hint); }
+  .box {
+    margin: 14px 0 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--studio-hint);
+  }
+  .box strong { color: var(--studio-text); font-weight: 600; }
+  .box ul { margin: 8px 0 0; padding-left: 18px; }
+  .box li { margin-bottom: 6px; }
+  .people { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .people button {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.04);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .people button.is-on {
+    border-color: rgba(69,185,187,.55);
+    background: rgba(69,185,187,.16);
+    color: #dff6f6;
+  }
+  .log { margin-top: 12px; min-height: 2.8em; font-size: 13px; line-height: 1.45; color: var(--studio-hint); }
+  .log b { color: var(--studio-text); }
+
+  .phone {
+    width: 390px;
+    max-width: calc(100vw - 32px);
+    height: 780px;
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 28px;
+    overflow: hidden;
+    border: 1px solid #2a3036;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 80px rgba(0,0,0,.45);
+  }
+  .chrome {
+    padding: 18px 16px 0;
+    flex: none;
+  }
+  .city {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .title {
+    margin: 2px 0 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+  }
+  .modes {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+    overflow: auto;
+  }
+  .mode {
+    flex: none;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    background: transparent;
+  }
+  .mode.is-on { background: var(--surface); color: var(--ink); }
+  .sub {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .seg {
+    flex: 1;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: transparent;
+  }
+  .seg.is-on { border-color: rgba(127,215,216,.55); background: #163638; }
+  .seg b { display: block; font-size: 14px; font-weight: 700; }
+  .seg span { display: block; margin-top: 2px; font-size: 11px; line-height: 1.3; color: var(--muted); font-weight: 500; }
+  .hint {
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+  .scroll { flex: 1; overflow: auto; padding: 12px 16px 24px; }
+  .card {
+    background: var(--surface);
+    border-radius: 18px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .photo {
+    height: 132px;
+    display: flex;
+    align-items: flex-end;
+    padding: 10px;
+    background:
+      linear-gradient(180deg, transparent 30%, rgba(8,12,16,.72)),
+      var(--ph, #243140);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    background: var(--warn-wash);
+    color: var(--warn);
+  }
+  .badge.dry { background: var(--dry-wash); color: var(--dry); }
+  .badge.ice { background: #163638; color: var(--accent); }
+  .body { padding: 12px 14px 14px; }
+  .name { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
+  .addr { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .line { margin: 8px 0 0; font-size: 14px; line-height: 1.4; }
+  .hours { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  .btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.ghost { background: transparent; color: var(--accent); border: 1px solid #2f4c4c; }
+  .session .when {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 14px 0;
+  }
+  .session .when b { font-size: 22px; letter-spacing: -.03em; }
+  .session .when span { font-size: 14px; font-weight: 700; color: var(--accent); }
+  .offer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--line);
+  }
+  .offer:first-of-type { margin-top: 12px; }
+  .offer b { display: block; font-size: 15px; }
+  .offer span { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .offer em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--warn); white-space: nowrap; }
+  .linkrow {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-top: 8px;
+    padding: 12px;
+    border-radius: 14px;
+    background: #17212b;
+    border: 1px solid var(--line);
+  }
+  .linkrow b { display: block; font-size: 14px; }
+  .linkrow span { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+  .back {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0 0;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .note {
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  .phone { position: relative; }
+  .chrome-head { display: flex; justify-content: space-between; align-items: flex-end; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center;
+    background: var(--surface); color: var(--accent);
+  }
+  .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .share-wide {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+    min-height: 46px; margin: 4px 0 14px; border-radius: 14px;
+    border: 1px dashed #2f4c4c; color: var(--accent); font-size: 14px; font-weight: 700;
+  }
+  .share-wide svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .break { text-align: center; margin: 4px 0 12px; }
+  .break span { display: inline-block; padding: 5px 10px; border-radius: 999px; background: #17212b; font-size: 12px; color: var(--muted); }
+  .break b { color: var(--ink); }
+  .card.off { opacity: .55; }
+  .qa { display: flex; gap: 8px; margin-top: 12px; }
+  .qa button { flex: 1; padding: 10px 4px; border-radius: 12px; background: #17212b; border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--ink); }
+  .qa button.hl { border-color: rgba(127,215,216,.6); color: var(--accent); }
+  .scrimbg { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: none; }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; display: none;
+    background: #141c25; border-radius: 22px 22px 0 0; padding: 10px 16px 22px;
+  }
+  .phone.has-sheet .scrimbg, .phone.has-sheet .sheet { display: block; }
+  .grab { width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 0 auto 12px; }
+  .sheet h4 { margin: 0; font-size: 16px; }
+  .og { margin-top: 12px; border-radius: 14px; overflow: hidden; background: var(--surface); }
+  .og .pic { height: 120px; padding: 12px; display: flex; flex-direction: column; justify-content: flex-end;
+    background: linear-gradient(135deg, #163638, #243140); }
+  .og .pic b { font-size: 17px; letter-spacing: -.02em; }
+  .og .pic span { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .og .txt { padding: 10px 12px; font-size: 12.5px; line-height: 1.45; color: var(--muted); white-space: pre-line; }
+  .chan { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+  .chan button { padding: 10px 0; border-radius: 12px; background: var(--surface); font-size: 12px; font-weight: 600; }
+  .bubble { margin: 8px 0 14px auto; max-width: 88%; background: #1f3a52; border-radius: 16px 16px 4px 16px; overflow: hidden; }
+  .bubble .og { margin: 0; border-radius: 0; background: transparent; }
+  .crumb { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  .tag { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; vertical-align: middle; }
+  .tag.new { background: #163638; color: var(--accent); }
+  .tag.chk { background: var(--warn-wash); color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="thesis">
+    <p class="kicker">Прототип · шаринг на вкладке Хоккей</p>
+    <h1>На ОХМ зовут команду. На Центр дают ссылку.</h1>
+    <p class="lede">ОХМ получает то, чего ему не хватало до «Покататься»: «Поделиться подборкой». «Позвать» на сеанс уже работает. У Центров нет времени сеанса, поэтому «Позвать» им не нужен. Остаётся «Поделиться» местом.</p>
+    <div class="box">
+      <strong>Метки на экранах</strong>
+      <ul>
+        <li><span class="tag new">НОВОЕ</span> — делаем в S1.</li>
+        <li><span class="tag chk">ПРОВЕРИТЬ</span> — уже в коде, на центрах не проверено (S2).</li>
+        <li>Без метки — уже работает, не трогаем.</li>
+      </ul>
+    </div>
+    <div class="people" id="views">
+      <button type="button" data-view="ohm" class="is-on">1 · ОХМ</button>
+      <button type="button" data-view="sheet">2 · Шит подборки</button>
+      <button type="button" data-view="centers">3 · Центры</button>
+      <button type="button" data-view="center">4 · Карточка центра</button>
+      <button type="button" data-view="friend">5 · У друга в чате</button>
+    </div>
+    <p class="log" id="log"></p>
+  </div>
+
+  <div class="phone" id="phone">
+    <div class="chrome">
+      <div class="chrome-head">
+        <div><div class="city">Минск</div><h2 class="title">Каталог</h2></div>
+        <button type="button" class="icon-btn" id="headShare" data-view="sheet" aria-label="Поделиться хоккеем: Минск">
+          <svg viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
+        </button>
+      </div>
+      <div class="modes">
+        <span class="mode">Покататься</span>
+        <span class="mode is-on">Хоккей</span>
+        <span class="mode">Заточка</span>
+        <span class="mode">Магазины</span>
+        <span class="mode">Тренеры</span>
+      </div>
+      <div class="sub" id="sub">
+        <button type="button" class="seg" data-view="ohm"><b>ОХМ</b><span>билет на лёд</span></button>
+        <button type="button" class="seg" data-view="centers"><b>Центры · 3</b><span>по записи, не сеанс</span></button>
+      </div>
+      <div class="modes" id="when">
+        <span class="mode">Сегодня</span><span class="mode">Завтра</span><span class="mode is-on">Сб–Вс</span>
+      </div>
+    </div>
+    <div class="scroll" id="scroll"></div>
+    <div class="scrimbg" data-view="ohm"></div>
+    <div class="sheet" id="sheet">
+      <div class="grab"></div>
+      <h4>Поделиться подборкой <span class="tag new">НОВОЕ</span></h4>
+      <div class="og">
+        <div class="pic"><b>Минск · хоккей</b><span>Сб, 11 окт – Вс, 12 окт · 4 катка</span></div>
+        <div class="txt">• Чижовка-арена — 08:15
+• ТЦ DiaMond city — 15:30
+• Минск-арена — 21:30</div>
+      </div>
+      <div class="chan"><button>Telegram</button><button>Viber</button><button>WhatsApp</button><button>Ссылка</button></div>
+      <p class="note">Ссылка: <b>/c/minsk?kind=ohm&amp;w=weekend</b>. Вкладки «Позвать с собой» тут нет: звать — с карточки сеанса.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+var SHARE_ICON = '<svg viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>';
+
+var LOG = {
+  ohm: '<b>ОХМ.</b> «Позвать» на карточке сеанса уже работает. Новое: кнопка в шапке и «Поделиться подборкой» после блока «в окне». Тот же жест, что на «Покататься».',
+  sheet: '<b>Шит подборки.</b> Превью и заголовок «Минск · хоккей — Сб–Вс» сервер уже умеет. Не хватает одного: эндпоинт должен принимать <b>kind=ohm</b>.',
+  centers: '<b>Центры.</b> Кнопки шаринга в шапке нет, внизу тоже. «Позвать» без времени ничего не обещает. Подборка из трёх мест в чате никому не нужна.',
+  center: '<b>Карточка центра.</b> «Поделиться» стоит в ряду быстрых действий, как у любого места без слотов. Проверить превью и обратный путь.',
+  friend: '<b>У друга.</b> Превью центра: имя, адрес, плашка покрытия, без строк про сеансы. Тап → карточка в Mini App → «Назад» ведёт в Хоккей · Центры.'
+};
+
+function session(name, where, time, price, off) {
+  return '<article class="card session' + (off ? ' off' : '') + '">'
+    + '<div class="when"><b>' + time + '</b><span>' + price + '</span></div>'
+    + '<div class="body" style="padding-top:6px">'
+    + '<h3 class="name">' + name + '</h3><p class="addr">' + where + '</p>'
+    + '<div class="row"><button class="btn ghost" type="button">Позвать</button></div>'
+    + '</div></article>';
+}
+
+function center(badge, dry, name, addr, line) {
+  return '<article class="card"><div class="photo"><span class="badge' + (dry ? ' dry' : '') + '">' + badge + '</span></div>'
+    + '<div class="body"><h3 class="name">' + name + '</h3><p class="addr">' + addr + '</p><p class="line">' + line + '</p>'
+    + '<div class="row"><button class="btn primary" type="button">Позвонить</button>'
+    + '<button class="btn ghost" type="button" data-view="center">Карточка</button></div></div></article>';
+}
+
+var VIEWS = {
+  ohm: function () {
+    return session('Чижовка-арена', 'Малая арена · сб', '08:15', '17 Br')
+      + session('ТЦ DiaMond city', 'Сб', '15:30', '14 Br')
+      + '<button type="button" class="share-wide" data-view="sheet">' + SHARE_ICON + 'Поделиться подборкой<span class="tag new">НОВОЕ</span></button>'
+      + '<div class="break"><span><b>Не на выходных</b> · ближайшие</span></div>'
+      + session('Минск-арена', 'Пн · ближайший', '21:30', '20 Br', true);
+  },
+  sheet: function () { return VIEWS.ohm(); },
+  centers: function () {
+    return center('Льда нет', true, 'Lepshy Hockey Center', 'пр-т Победителей, 4А', 'Дорожка HST, бросковая зона, зал ОФП.')
+      + center('Синтетика', false, 'Хоккейный центр «Финт»', 'Октябрьская площадь, 1', 'Бросковая зона 22×10 м.')
+      + center('Синтетика', false, 'Minikatok.by', 'ул. Ермака, 12', 'Аренда площадки до 8 человек.');
+  },
+  center: function () {
+    return '<button type="button" class="back" data-view="centers">← Центры</button>'
+      + '<article class="card"><div class="photo"><span class="badge">Синтетика</span></div><div class="body">'
+      + '<h3 class="name">Хоккейный центр «Финт»</h3><p class="addr">Минск, Октябрьская площадь, 1</p>'
+      + '<div class="qa"><button>Позвонить</button><button>Маршрут</button><button class="hl">Поделиться</button></div>'
+      + '<p class="note">«Поделиться» — уже есть у мест без слотов <span class="tag chk">ПРОВЕРИТЬ</span>. «Позвать с собой» не появляется: слотов нет.</p>'
+      + '<div class="offer"><div><b>Бросковая зона</b><span>Час с человека</span></div><em>по записи</em></div>'
+      + '</div></article>';
+  },
+  friend: function () {
+    return '<p class="crumb">Чат «Хоккей по средам» <span class="tag chk">ПРОВЕРИТЬ</span></p>'
+      + '<div class="bubble"><div class="og"><div class="pic"><b>Хоккейный центр «Финт»</b><span>Синтетика · Октябрьская площадь, 1</span></div>'
+      + '<div class="txt">Бросковая зона 22×10 м. По записи, ежедневно 07:00–22:00.</div></div></div>'
+      + '<p class="note">Открыть → карточка «Финт» в Mini App → «Назад» → <b>Хоккей · Центры</b>. Не ОХМ, не «Покататься».</p>';
+  }
+};
+
+function show(view) {
+  var phone = document.getElementById('phone');
+  var isCenters = view === 'centers' || view === 'center' || view === 'friend';
+  phone.classList.toggle('has-sheet', view === 'sheet');
+  document.getElementById('scroll').innerHTML = VIEWS[view]();
+  document.getElementById('log').innerHTML = LOG[view];
+  document.getElementById('headShare').style.visibility = isCenters ? 'hidden' : 'visible';
+  document.getElementById('when').style.display = isCenters ? 'none' : 'flex';
+  document.querySelectorAll('.seg').forEach(function (el) {
+    el.classList.toggle('is-on', el.getAttribute('data-view') === (isCenters ? 'centers' : 'ohm'));
+  });
+  document.querySelectorAll('#views [data-view]').forEach(function (el) {
+    el.classList.toggle('is-on', el.getAttribute('data-view') === view);
+  });
+  document.getElementById('scroll').scrollTop = 0;
+}
+
+document.body.addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-view]');
+  if (btn) show(btn.getAttribute('data-view'));
+});
+show('ohm');
+</script>
+</body>
+</html>
