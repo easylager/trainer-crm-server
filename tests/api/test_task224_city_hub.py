@@ -104,6 +104,7 @@ def test_map_svg_links_every_city_with_tap_zone_and_ohm_ring() -> None:
     assert 'href="/c/minsk"' in svg and 'href="/c/gorki"' in svg
     assert svg.count('class="home-map__tap"') == 2
     assert f'r="{_MAP_TAP_RADIUS_MAJOR:.1f}"' in svg, "областной центр — зона ≥ 44px"
+    assert "<title>" not in svg, "нативная подсказка верхней ссылки всегда говорит «Минск»"
     # Кольцо ОХМ только у Минска; подпись — только у областного центра.
     assert svg.count('stroke-dasharray="3 4"') == 1
     assert ">Минск</text>" in svg and ">Горки</text>" not in svg

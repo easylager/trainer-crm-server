@@ -605,7 +605,10 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
     """Карта страны: точка = город (ссылка на /c/{slug}), кольцо = есть ОХМ, подпись у областных центров.
 
     У каждой точки прозрачный круг-зона нажатия (см. _MAP_TAP_RADIUS_*): сами точки малы,
-    а карта должна работать пальцем. Областные центры рисуются последними — их зона важнее.
+    а карта должна работать пальцем. Областные центры рисуются последними, их зона шире
+    и накрывает соседей (Раубичи в 18 единицах от Минска при радиусе 37). Какой город
+    откроется, решает скрипт страницы: ближайший центр внутри своей зоны, не верхняя ссылка.
+    ``<title>`` нет — иначе браузер показывает название верхней ссылки, то есть Минск.
     """
     parts = [
         '<svg class="home-map" viewBox="0 0 600 520" role="img" aria-label="',
@@ -623,14 +626,6 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
     parts.append('<g class="home-map__cities">')
     for pt in ordered:
         x, y, r = float(pt["x"]), float(pt["y"]), float(pt["r"])
-        n = int(pt["session_count"])
-        places = int(pt.get("place_count") or 0)
-        bits = [f"{places} {plural_ru(places, 'место', 'места', 'мест')}"]
-        if n:
-            bits.append(f"{n} {plural_ru(n, 'сеанс', 'сеанса', 'сеансов')}")
-        if pt.get("has_ohm"):
-            bits.append(t("chip.hockey"))
-        title = f"{pt['name']} — {' · '.join(bits)}"
         tap = _MAP_TAP_RADIUS_MAJOR if pt.get("is_oblast_center") else _MAP_TAP_RADIUS_MINOR
         ring = (
             f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r + 8:.1f}" fill="none" stroke="#0f8f8a" '
@@ -640,7 +635,6 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
         )
         parts.append(
             f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city" aria-label="{_esc(pt["name"])}">'
-            f"<title>{_esc(title)}</title>"
             f'<circle class="home-map__tap" cx="{x:.1f}" cy="{y:.1f}" r="{tap:.1f}" fill="transparent"/>'
             f"{ring}"
             f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="#0f8f8a"/></a>'
@@ -1287,7 +1281,7 @@ def render_catalog_home_page(
     map_svg = str(view.get("map_svg") or "")
     map_html = (
         f'<figure class="map card">{map_svg}</figure>'
-        '<p class="hint">Размер точки — мест в городе. Пунктирное кольцо — есть хоккей для любителей.</p>'
+        '<p class="hint">Размер точки — мест в городе. Пунктирное кольцо — есть хоккей для любителей. Зажмите точку — название.</p>'
         if map_svg
         else ""
     )
