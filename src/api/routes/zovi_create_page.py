@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from src.application.zovi_card_page import inline_shared_assets
 from src.shared.config import Settings
 from src.shared.html_template import fill_placeholders
 
@@ -30,7 +31,7 @@ def _esc(value: str) -> str:
 
 def render_zovi_create_page(*, canonical_url: str) -> str:
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
-    return fill_placeholders(
+    return inline_shared_assets(fill_placeholders(
         template,
         {
             "__LANG__": "ru-BY",
@@ -39,9 +40,9 @@ def render_zovi_create_page(*, canonical_url: str) -> str:
             "__OG_DESCRIPTION__": _esc(_OG_DESCRIPTION),
             "__CANONICAL__": _esc(canonical_url),
             "__ROBOTS__": "index, follow",
-            "__ASSET_V__": "14",
+            "__ASSET_V__": "15",
         },
-    )
+    ))
 
 
 def _canonical(request: Request) -> str:

@@ -809,10 +809,10 @@
     doc.getElementById('send').addEventListener('click', function () {
       if (!state.link) return;
       var sysLink = linkWithSrc(state.link, 'sys');
-      var text = (state.shareQuestion || state.question) + '\n' + sysLink;
       track('invite_share', {});
       if (navigator.share) {
-        navigator.share({ text: text, url: sysLink }).catch(function (err) {
+        // Только ссылка: вопрос и сеанс уже в её превью.
+        navigator.share({ url: sysLink }).catch(function (err) {
           if (err && err.name === 'AbortError') return;
           copyText(linkWithSrc(state.link, 'copy'));
         });

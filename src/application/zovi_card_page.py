@@ -164,6 +164,34 @@ def asset_version(name: str) -> str:
         return "0"
 
 
+_SHARED_SCRIPT_RE = re.compile(r'<script src="/static/shared/([a-z][a-z0-9-]*\.js)\?v=[^"]*"></script>')
+_CLOSING_TAG_RE = re.compile(r"</(script|style)", re.IGNORECASE)
+_SHARED_STYLE_RE = re.compile(r'<link rel="stylesheet" href="/static/shared/([a-z][a-z0-9-]*\.css)\?v=[^"]*" />')
+
+
+@lru_cache(maxsize=16)
+def _shared_text(name: str, mtime_ns: int) -> str:
+    del mtime_ns  # ключ кэша: правка файла — новое содержимое
+    # «</script» или «</style» внутри встроенного кода закрыли бы тег раньше времени.
+    # Остальные «</» не трогаем: в JS это бывает регулярное выражение (/</g).
+    return _CLOSING_TAG_RE.sub(r"<\\/\1", (_SHARED_DIR / name).read_text(encoding="utf-8"))
+
+
+def _shared(name: str) -> str:
+    return _shared_text(name, (_SHARED_DIR / name).stat().st_mtime_ns)
+
+
+def inline_shared_assets(html_text: str) -> str:
+    """Стили и скрипты из ``/static/shared`` — прямо в страницу.
+
+    Открытку и ``/zovi`` открывают по ссылке из чата, во встроенных браузерах: каждый лишний
+    запрос — задержка первой отрисовки. И прокси вроде бесплатного ngrok отдают телефону
+    вместо подресурсов HTML-заглушку — страница остаётся без стилей и механики (2026-10-12).
+    """
+    html_text = _SHARED_STYLE_RE.sub(lambda m: f"<style>{_shared(m.group(1))}</style>", html_text)
+    return _SHARED_SCRIPT_RE.sub(lambda m: f"<script>{_shared(m.group(1))}</script>", html_text)
+
+
 def page_data(invite: Mapping[str, Any]) -> dict[str, Any]:
     """Что уходит в ``<script type="application/json">``. Без ``my_answer``: SSR не знает устройство."""
     data = {key: value for key, value in invite.items() if key != "my_answer"}
@@ -230,7 +258,7 @@ def render_zovi_page(
         "__MODEL_V__": asset_version("zovi-model.js"),
         "__CARD_V__": asset_version("zovi-card.js"),
     }
-    return fill_placeholders(template, values)
+    return inline_shared_assets(fill_placeholders(template, values))
 
 
 NOT_FOUND_HTML = """<!DOCTYPE html>
@@ -258,7 +286,7 @@ color:var(--g-on-accent);font-weight:600;text-decoration:none}
 
 
 def render_not_found(catalog_url: str) -> str:
-    return NOT_FOUND_HTML.replace("__CATALOG__", _esc(catalog_url))
+    return inline_shared_assets(NOT_FOUND_HTML.replace("__CATALOG__", _esc(catalog_url)))
 
 
 # ---------------------------------------------------------------------------
@@ -299,12 +327,12 @@ color:var(--g-on-accent);font:inherit;font-weight:600;text-decoration:none;borde
 <p class="plan">__PLAN__</p>
 <div class="state">__STATE__</div>
 </section>
-<button class="cta" id="again" type="button" data-url="__INVITE_URL__" data-text="__SHARE_TEXT__">Отправить открытку ещё раз</button>
+<button class="cta" id="again" type="button" data-url="__INVITE_URL__">Отправить открытку ещё раз</button>
 <p class="muted">Сохрани эту страницу — по ней видно, ответили или нет. Ссылка только у тебя.</p>
 </div>
 <script>
-(function(){var b=document.getElementById('again');b.addEventListener('click',function(){var u=b.getAttribute('data-url'),t=b.getAttribute('data-text');
-if(navigator.share){navigator.share({text:t,url:u}).catch(function(){});return;}
+(function(){var b=document.getElementById('again');b.addEventListener('click',function(){var u=b.getAttribute('data-url');
+if(navigator.share){navigator.share({url:u}).catch(function(){});return;}
 if(navigator.clipboard){navigator.clipboard.writeText(u).then(function(){b.textContent='Ссылка скопирована';});}else{window.prompt('Скопируйте:',u);}});})();
 </script>
 </body></html>"""
@@ -357,9 +385,8 @@ def render_status_page(
         "__PLAN__": _esc(plan),
         "__STATE__": status_state_html(invite, status),
         "__INVITE_URL__": _esc(invite_url),
-        "__SHARE_TEXT__": _esc(question_text(invite.get("to_name"), str(invite.get("kind") or ""))),
     }
     out = STATUS_HTML
     for key, value in values.items():
         out = out.replace(key, value)
-    return out
+    return inline_shared_assets(out)

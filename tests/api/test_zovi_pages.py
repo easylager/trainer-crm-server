@@ -68,7 +68,11 @@ async def test_page_has_question_meta_and_noindex(app_use_test_db, db_session) -
     assert place["arena"] in html
     data = _embedded(html)
     assert data["code"] == code and data["state"] == "ok" and "my_answer" not in data
-    assert "/static/shared/zovi-card.js?v=" in html
+    # Стили и механика встроены: страница из чата не ждёт подресурсов (и ngrok их не подменит).
+    assert 'src="/static/shared/' not in html
+    assert 'href="/static/shared/' not in html
+    assert "ZoviModel" in html and "--g-font" in html
+    assert html.count("</script>") == html.count("<script")
 
 
 @pytest.mark.asyncio

@@ -168,9 +168,9 @@
   var ZOVI_FROM_KEY = 'zovi_from';
   /* Открытка грузится по требованию: бюджет веса каталога (test_webapp_page_weight_budget). */
   var ZOVI_SCRIPTS = [
-    '/static/shared/zovi-model.js?v=14',
-    '/static/shared/zovi-create.js?v=14',
-    '/static/shared/zovi-live.js?v=14',
+    '/static/shared/zovi-model.js?v=15',
+    '/static/shared/zovi-create.js?v=15',
+    '/static/shared/zovi-live.js?v=15',
   ];
   var zoviLoading = null;
 
@@ -633,7 +633,9 @@
     system: function (p) {
       var ap = payloadForSrc(p, 'sys');
       if (global.navigator && typeof navigator.share === 'function') {
-        navigator.share({ text: ap.share_body, url: ap.share_url }).catch(function () {});
+        var data = { url: ap.share_url };
+        if (ap.share_body) data.text = ap.share_body;
+        navigator.share(data).catch(function () {});
         return;
       }
       // Нет системного меню (Telegram Desktop и т.п.) — открываем страницу места:
@@ -1086,10 +1088,9 @@
     } catch (e) { /* */ }
   }
 
+  /* Только ссылка, без текста: вопрос и сеанс уже в превью ссылки (решение владельца). */
   function postcardPayload() {
-    var input = postcardInput(state);
-    var m = global.ZoviLive ? global.ZoviLive.model(input) : { name: '', ask: '' };
-    return { share_url: state.zovi.created.url, share_body: m.name + m.ask };
+    return { share_url: state.zovi.created.url, share_body: '' };
   }
 
   function paintPostcardBottom() {
