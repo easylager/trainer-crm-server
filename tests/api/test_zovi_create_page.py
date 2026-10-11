@@ -32,7 +32,7 @@ async def test_zovi_page_is_indexable(app_use_test_db) -> None:
     assert _meta(html, "robots") == "index, follow"
     assert "noindex" not in html
     assert "og:image" not in html
-    assert "/static/shared/zovi-create.js?v=5" in html
+    assert "/static/shared/zovi-create.js?v=6" in html
     assert 'id="back"' in html
     assert "К расписанию" in html
     assert script.status_code == 200

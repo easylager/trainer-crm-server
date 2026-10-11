@@ -70,57 +70,62 @@ describe('варианты шита', () => {
     assert.equal(byId.schedule, 'Расписание');
   });
 
-  it('открытка без сеанса — кнопка неактивна', () => {
-    const html = sheet.postcardButtonHtml({ venueType: 'ice', sessionId: null, context: 'arena_card' });
+  const slotSections = [
+    {
+      dayLabel: 'Сегодня',
+      localDate: '2026-10-12',
+      dayNum: '12',
+      rows: [
+        { id: '9001', time: '20:00', meta: '11 BYN', kind: 'public_skate' },
+        { id: '7', time: '21:15', meta: '14 BYN · ОХМ', kind: 'hockey_practice' },
+      ],
+    },
+  ];
+
+  it('открытка без сеанса — «Создать» неактивна', () => {
+    const html = sheet.postcardBottomHtml({ venueType: 'ice', sessionId: null, zovi: {} });
+    assert.match(html, /Создать открытку<\/button>/);
     assert.match(html, /disabled/);
-    assert.equal(html.includes('data-href'), false);
-    assert.match(html, /Создать открытку/);
+    assert.equal(sheet.postcardReady({ venueType: 'ice', sessionId: null }), false);
+    assert.equal(sheet.postcardReady({ venueType: 'ice', sessionId: '9001' }), true);
+    assert.equal(sheet.postcardReady({ venueType: 'shop', sessionId: '9001' }), false);
   });
 
-  it('превью открытки — день, время и каток', () => {
-    const copy = sheet.postcardCopy({
+  it('открытка собирается в шите: поля имён, без перехода на /zovi', () => {
+    const html = sheet.postcardBottomHtml({ venueType: 'ice', sessionId: '9001', zovi: { to: 'Лера', from: 'Макс' } });
+    assert.match(html, /data-gss-z="to"[^>]*value="Лера"/);
+    assert.match(html, /data-gss-z="from"[^>]*value="Макс"/);
+    assert.equal(html.includes('/zovi?'), false);
+    assert.equal(html.includes('disabled'), false);
+  });
+
+  it('готовая открытка — каналы отправки и «Изменить»', () => {
+    const html = sheet.postcardBottomHtml({
       venueType: 'ice',
       sessionId: '9001',
-      placeName: 'Ледовый дворец',
-      slotSections: [
-        {
-          dayLabel: 'Сегодня',
-          localDate: '2026-10-12',
-          dayNum: '12',
-          rows: [{ id: '9001', time: '20:00', meta: '' }],
-        },
-      ],
+      zovi: { to: 'Лера', from: 'Макс', created: { code: 'abcd2345', url: 'https://x/zovi/abcd2345' } },
     });
-    assert.equal(copy.question, 'Пойдёшь со мной на каток?');
-    assert.equal(copy.meta, 'Пн, 12 окт · 20:00 · Ледовый дворец');
-    assert.equal(copy.note, 'Кнопка «Нет» убегает');
-
-    const hockey = sheet.postcardCopy({
-      venueType: 'ice',
-      sessionId: '7',
-      placeName: 'Чижовка',
-      slotSections: [
-        {
-          localDate: '2026-10-16',
-          rows: [{ id: '7', time: '19:00', meta: 'ОХМ' }],
-        },
-      ],
-    });
-    assert.equal(hockey.question, 'Пойдёшь со мной на хоккей?');
-    assert.equal(hockey.meta, 'Пт, 16 окт · 19:00 · Чижовка');
+    assert.match(html, /data-zch="telegram"/);
+    assert.match(html, /data-zch="copy"/);
+    assert.match(html, /data-zch="system"/);
+    assert.match(html, /data-gss-zedit/);
+    assert.equal(html.includes('data-gss-z="to"'), false);
   });
 
-  it('адрес с s и via', () => {
-    assert.equal(
-      sheet.postcardHref({ venueType: 'ice', sessionId: '9001', context: 'arena_card' }),
-      '/zovi?s=9001&via=arena_card'
-    );
-    assert.equal(
-      sheet.postcardHref({ venueType: 'ice', sessionId: 42, context: 'ice_list' }),
-      '/zovi?s=42&via=ice_list'
-    );
-    const html = sheet.postcardButtonHtml({ venueType: 'ice', sessionId: '9001', context: 'arena_card' });
-    assert.equal(html.includes('disabled'), false);
-    assert.match(html, /data-href="\/zovi\?s=9001&amp;via=arena_card"/);
+  it('данные живой открытки — сеанс из шита, имена из полей, вид сеанса', () => {
+    const base = { venueType: 'ice', placeName: 'Ледовый дворец', slotSections, zovi: { to: 'Лера', from: 'Макс' } };
+    const skate = sheet.postcardInput({ ...base, sessionId: '9001' });
+    assert.equal(skate.time, '20:00');
+    assert.equal(skate.day, 'Пн, 12 окт');
+    assert.equal(skate.place, 'Ледовый дворец');
+    assert.equal(skate.kind, 'public_skate');
+    assert.equal(skate.toName, 'Лера');
+    assert.equal(skate.fromName, 'Макс');
+    assert.equal(sheet.postcardInput({ ...base, sessionId: '7' }).kind, 'hockey_practice');
+  });
+
+  it('via — откуда позвали', () => {
+    assert.equal(sheet.postcardVia({ context: 'ice_list' }), 'ice_list');
+    assert.equal(sheet.postcardVia({ context: 'arena_card' }), 'arena_card');
   });
 });

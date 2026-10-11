@@ -390,6 +390,7 @@
     var query = readQuery(doc.location.search);
     state.parentCode = query.parentCode;
     state.sessionId = query.sessionId;
+    state.pickedMode = !!query.sessionId;
     state.date = defaultInviteDate(state.today);
 
     var back = doc.getElementById('back');
@@ -414,9 +415,12 @@
     var fromError = doc.getElementById('from-error');
     var slotError = doc.getElementById('slot-error');
     var formError = doc.getElementById('form-error');
-    var previewQ = doc.getElementById('preview-q');
-    var previewT = doc.getElementById('preview-t');
-    var previewUrl = doc.getElementById('preview-url');
+    var liveEl = doc.getElementById('live');
+    var pickedEl = doc.getElementById('picked');
+    var pickedWhen = doc.getElementById('picked-when');
+    var pickedWhere = doc.getElementById('picked-where');
+    var live = (doc.defaultView && doc.defaultView.ZoviLive) || null;
+    var liveCard = null;
     var done = doc.getElementById('done');
     var doneUrl = doc.getElementById('done-url');
     var friend = doc.getElementById('friend');
@@ -531,16 +535,43 @@
       }
     }
 
+    function liveInput() {
+      var picked = selectedSession(state);
+      return {
+        toName: toInput.value,
+        fromName: fromInput.value,
+        kind: picked ? picked.session.kind : '',
+        time: picked ? picked.session.starts_at_local : '',
+        day: shortDate(state.date),
+        place: picked ? picked.arena.name : ''
+      };
+    }
+
+    /* Сеанс пришёл в ссылке (из каталога) — одна строка вместо города, дня и списка. */
+    function paintPicked() {
+      var picked = state.pickedMode ? selectedSession(state) : null;
+      form.classList.toggle('is-picked', !!picked);
+      pickedEl.hidden = !picked;
+      if (!picked) return;
+      pickedWhen.textContent = shortDate(state.date) + ' · ' + picked.session.starts_at_local;
+      pickedWhere.textContent = picked.arena.name + (picked.session.kind === HOCKEY ? ' · ОХМ' : '');
+    }
+
     function paintPreview() {
       var picked = selectedSession(state);
       var kind = picked ? picked.session.kind : '';
       state.question = previewQuestion(toInput.value, kind);
-      previewQ.textContent = state.question;
-      if (picked) {
-        previewT.textContent = previewMeta(state.date, picked.session.starts_at_local, picked.arena.name);
-      } else {
-        previewT.textContent = shortDate(state.date);
+      paintPicked();
+      if (!live || !liveEl) return;
+      // Сеанс сменился — перерисовать открытку целиком; имена — обновить на месте.
+      var key = picked ? String(picked.session.id) : '';
+      if (!liveCard || liveCard.key !== key) {
+        if (liveCard) liveCard.handle.destroy();
+        liveEl.innerHTML = live.html(liveInput());
+        liveCard = { key: key, handle: live.attach(liveEl.firstChild) };
+        return;
       }
+      live.update(liveEl.firstChild, liveInput());
     }
 
     function paintMine() {
@@ -670,6 +701,15 @@
       fromError.textContent = '';
       paintPreview();
     }
+    doc.getElementById('picked-change').addEventListener('click', function () {
+      state.pickedMode = false;
+      paintPicked();
+      slotsEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    try {
+      var savedFrom = localStorage.getItem('zovi_from') || '';
+      if (!fromInput.value && validateInviteName(savedFrom, 'from_name', true).ok) fromInput.value = savedFrom;
+    } catch (err) { /* */ }
     toInput.addEventListener('input', onToName);
     toInput.addEventListener('change', onToName);
     fromInput.addEventListener('input', onFromName);
@@ -744,7 +784,7 @@
         done.hidden = false;
         doneUrl.textContent = state.link;
         friend.href = state.link;
-        previewUrl.textContent = state.link.replace(/^https?:\/\//, '');
+        try { localStorage.setItem('zovi_from', built.body.from_name); } catch (err) { /* */ }
         saveMine({
           code: res.body.code,
           to: built.body.to_name || 'компания',

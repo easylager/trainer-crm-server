@@ -1949,6 +1949,19 @@ def shared_zovi_card_js(request: Request):
     )
 
 
+@app.get("/static/shared/zovi-live.js")
+def shared_zovi_live_js(request: Request):
+    """Живая открытка — превью с убегающим «Нет» в шите каталога и на /zovi."""
+    path = _SHARED_DIR / "zovi-live.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/list-scroll-restore.js")
 def shared_list_scroll_restore_js(request: Request):
     """Скролл списка /c/ и «Лёд сегодня» после возврата с /p/ (no-store убивает bfcache)."""

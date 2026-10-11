@@ -279,42 +279,88 @@
   color: var(--glide-hint);
 }
 
-.gss-card {
-  position: relative;
-  min-height: 148px;
-  display: grid;
-  align-content: space-between;
-  gap: 8px;
-  padding: 16px 16px 14px 18px;
+/* Открытка: живое превью (static/shared/zovi-live.js) в цветах темы мини-аппа. */
+.gss-live .zl {
+  --zl-surface: var(--app-chip-bg);
+  --zl-ink: var(--glide-text);
+  --zl-muted: var(--glide-hint);
+  --zl-line: var(--glide-line);
+  --zl-line-strong: var(--glide-line-strong);
+  --zl-accent: var(--app-cta-fill);
+  --zl-on-accent: var(--app-cta-text);
+  --zl-accent-ink: var(--glide-ink-teal, var(--app-cta-fill));
+  --zl-ice: var(--app-cta-fill);
+  margin-bottom: 14px;
+}
+
+.gss-live--wait {
+  min-height: 260px;
+  margin-bottom: 14px;
   border-radius: var(--app-radius-lg);
-  background: var(--glide-deep);
-  color: var(--glide-on-deep);
-  overflow: hidden;
+  background: var(--app-chip-bg);
+  animation: gss-pulse 1.2s ease-in-out infinite;
 }
-.gss-card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--app-cta-fill);
+
+.gss-slot-sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--glide-line);
+  background: var(--app-chip-bg);
 }
-.gss-card__q {
-  margin: 0;
-  font-size: var(--app-text-title);
+.gss-slot-sum__when { display: grid; gap: 2px; min-width: 0; }
+.gss-slot-sum__when b {
+  font-size: var(--app-text-body);
   font-weight: var(--app-weight-semibold);
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
-.gss-card__t,
-.gss-card__note {
-  margin: 0;
+.gss-slot-sum__when em { font-style: normal; font-size: var(--app-text-caption); color: var(--glide-hint); }
+.gss-slot-sum__change,
+.gss-zlink {
+  flex: none;
+  border: 0;
+  padding: 6px 0;
+  background: transparent;
+  color: var(--glide-ink-teal, var(--app-cta-fill));
+  font: inherit;
   font-size: var(--app-text-caption);
-  line-height: 1.35;
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
 }
-.gss-card__t { color: var(--glide-on-deep-hint); font-variant-numeric: tabular-nums; }
-.gss-card__note { color: var(--glide-on-deep-hint); }
+
+.gss-zf { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gss-zf__f { display: grid; gap: 4px; min-width: 0; }
+.gss-zf__f span { font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold); color: var(--glide-hint); }
+.gss-zf__f input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--glide-line-strong, var(--glide-line));
+  background: var(--glide-card);
+  color: var(--glide-text);
+  font: inherit;
+  font-size: var(--app-text-lead); /* меньше 16px — iOS приближает страницу при фокусе */
+}
+.gss-zf__f input:focus { outline: none; border-color: var(--app-cta-fill); }
+.gss-zf__hint,
+.gss-zf__err { margin: 6px 0 0; font-size: var(--app-text-caption); line-height: 1.35; color: var(--glide-hint); }
+.gss-zf__err { color: var(--app-danger); }
+.gss-zf__err:empty { display: none; }
+.gss-zf + .gss-zf__hint + .gss-zf__err + .gss-zovi__btn,
+.gss-zf + .gss-zf__hint + .gss-zf__err:empty + .gss-zovi__btn { margin-top: 12px; }
+
+.gss-zdone { display: grid; gap: 10px; }
+.gss-zdone__t { margin: 0; font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }
+.gss-zdone__more { display: flex; justify-content: space-between; gap: 12px; }
+.gss-channels.gss-channels--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.gss-channels--3 .gss-ch { padding: 12px 4px; font-size: var(--app-text-caption); }
+
 .gss-zovi__btn {
   display: flex;
   align-items: center;

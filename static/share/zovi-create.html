@@ -103,23 +103,22 @@
     .slot:has(input:checked) .slot__mark { border-color: var(--g-accent); background: var(--g-accent); }
     .slot:has(input:checked) .slot__mark::after { transform: scale(1); }
     .empty { margin: 0; color: var(--g-muted); }
-    .chat { display: grid; justify-items: end; }
-    .bubble { width: min(300px, 100%); border-radius: 16px 16px 4px 16px; overflow: hidden; background: var(--z-chip); }
-    .og {
-      position: relative; aspect-ratio: 1.91 / 1; background: var(--g-dark); color: #fff;
-      padding: 14px 16px; display: grid; align-content: space-between; overflow: hidden;
+    /* Живая открытка (static/shared/zovi-live.js) в цветах страницы. */
+    .zl {
+      --zl-surface: var(--g-surface); --zl-ink: var(--g-ink); --zl-muted: var(--g-muted);
+      --zl-line: var(--g-line); --zl-line-strong: var(--g-line-strong); --zl-accent: var(--g-accent);
+      --zl-on-accent: var(--g-on-accent); --zl-accent-ink: var(--g-accent-ink); --zl-ice: var(--z-ice);
+      margin: 0;
     }
-    .og::after {
-      content: ""; position: absolute; right: 0; top: 0; border-style: solid;
-      border-width: 0 22px 22px 0; border-color: transparent var(--g-bg) transparent transparent;
+    .picked {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 14px; border: 1px solid var(--g-line); border-radius: 12px; background: var(--g-bg);
     }
-    .og__rail { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--g-accent); }
-    .og__brand { font-size: 12px; font-weight: 700; color: var(--g-on-dark-muted); }
-    .og__brand span { color: var(--g-on-dark-accent); }
-    .og__q { font-size: 21px; font-weight: 650; line-height: 1.1; letter-spacing: -.01em; }
-    .og__q span { color: var(--g-on-dark-accent); }
-    .og__t { font-size: 12px; color: var(--g-on-dark-muted); font-variant-numeric: tabular-nums; }
-    .bubble__url { padding: 8px 12px; font-size: 12px; color: var(--g-muted); word-break: break-all; }
+    .picked__when { display: grid; gap: 2px; min-width: 0; }
+    .picked__when b { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .picked__when small { font-size: 13px; color: var(--g-muted); }
+    .picked__change { flex: none; color: var(--g-accent-ink); font-size: 14px; font-weight: 600; min-height: 44px; }
+    .hero.is-picked .pick-only { display: none !important; }
     .cta {
       display: flex; align-items: center; justify-content: center; text-align: center;
       min-height: 50px; padding: 0 16px; border-radius: var(--g-r);
@@ -150,20 +149,25 @@
       <p class="kicker">Свидание, на которое не стыдно позвать</p>
       <h1 class="make-h">Позови кого-нибудь на&nbsp;лёд</h1>
 
-      <label class="field">
+      <div class="picked" id="picked" hidden>
+        <span class="picked__when"><b id="picked-when"></b><small id="picked-where"></small></span>
+        <button class="picked__change" id="picked-change" type="button">Другое время</button>
+      </div>
+
+      <label class="field pick-only">
         <span>Город</span>
         <select id="city" name="city"></select>
       </label>
 
-      <div class="days" id="days" role="group" aria-label="День"></div>
+      <div class="days pick-only" id="days" role="group" aria-label="День"></div>
       <input class="date-input" id="date-input" type="date" hidden />
 
-      <label class="switch">
+      <label class="switch pick-only">
         <input id="show-price" type="checkbox" />
         <span>Показать цену</span>
       </label>
 
-      <div id="slots" class="slots" role="radiogroup" aria-label="Сеанс"></div>
+      <div id="slots" class="slots pick-only" role="radiogroup" aria-label="Сеанс"></div>
       <p class="empty" id="empty" hidden>В этот день сеансов нет</p>
       <button class="cta cta--ghost" id="next-day" type="button" hidden></button>
       <p class="err" id="slot-error" role="alert"></p>
@@ -182,18 +186,8 @@
     </form>
 
     <section class="sec" aria-label="Превью">
-      <p class="sec__title">Так увидят в чате</p>
-      <div class="chat">
-        <div class="bubble">
-          <div class="og">
-            <span class="og__rail"></span>
-            <div class="og__brand">Glide<span>.</span> приглашение на лёд</div>
-            <div class="og__q" id="preview-q">Пойдёшь со мной на каток?</div>
-            <div class="og__t" id="preview-t"></div>
-          </div>
-          <div class="bubble__url" id="preview-url">ссылка появится после создания</div>
-        </div>
-      </div>
+      <p class="sec__title">Так получит друг</p>
+      <div id="live"></div>
       <button class="cta" id="create" type="submit" form="zovi-form">Создать приглашение</button>
       <p class="err" id="form-error" role="alert"></p>
     </section>
@@ -215,6 +209,8 @@
     </section>
   </div>
   <div class="toast" id="toast" role="status" hidden></div>
+  <script src="/static/shared/zovi-model.js?v=__ASSET_V__"></script>
+  <script src="/static/shared/zovi-live.js?v=__ASSET_V__"></script>
   <script src="/static/shared/zovi-create.js?v=__ASSET_V__"></script>
 </body>
 </html>
