@@ -993,8 +993,81 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
     return '<section class="sec"><h2 class="sec__title">Контакты</h2>' + "".join(rows) + "</section>"
 
 
+_SHARE_ICONS = {
+    "tg": (
+        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" '
+        'd="M21.5 4.4 2.6 11.6c-1.3.5-1.2 1.2-.2 1.5l4.8 1.5 11.1-7c.5-.3 1-.1.6.2l-9 8.1-.3 4.6'
+        'c.5 0 .7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.7c.3-1.3-.5-1.9-1.6-1.4z"/></svg>'
+    ),
+    "vb": (
+        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="'
+        'M11.4 0C9.473.028 5.333.344 3.02 2.467 1.302 4.187.696 6.7.633 9.817.57 12.933.4'
+        '88 18.776 6.12 20.36h.003l-.004 2.416s-.037.977.61 1.177c.777.242 1.234-.5 1.98-'
+        '1.302.407-.44.972-1.084 1.397-1.58 3.85.326 6.812-.416 7.15-.525.776-.252 5.176-'
+        '.816 5.892-6.657.74-6.02-.36-9.83-2.34-11.546-.596-.55-3.006-2.3-8.375-2.323 0 0'
+        '-.395-.025-1.037-.017zm.058 1.693c.545-.004.88.017.88.017 4.542.02 6.717 1.388 7'
+        '.222 1.846 1.675 1.435 2.53 4.868 1.906 9.897v.002c-.604 4.878-4.174 5.184-4.832'
+        ' 5.395-.28.09-2.882.737-6.153.524 0 0-2.436 2.94-3.197 3.704-.12.12-.26.167-.352'
+        '.144-.13-.033-.166-.188-.165-.414l.02-4.018c-4.762-1.32-4.485-6.292-4.43-8.895.0'
+        '54-2.604.543-4.738 1.996-6.173 1.96-1.773 5.474-2.018 7.11-2.03zm.38 2.602c-.167'
+        ' 0-.303.135-.304.302 0 .167.133.303.3.305 1.624.01 2.946.537 4.028 1.592 1.073 1'
+        '.046 1.62 2.468 1.633 4.334.002.167.14.3.307.3.166-.002.3-.138.3-.304-.014-1.984'
+        '-.618-3.596-1.816-4.764-1.19-1.16-2.692-1.753-4.447-1.765zm-3.96.695c-.19-.032-.'
+        '4.005-.616.117l-.01.002c-.43.247-.816.562-1.146.932-.002.004-.006.004-.008.008-.'
+        '267.323-.42.638-.46.948-.008.046-.01.093-.007.14 0 .136.022.27.065.4l.013.01c.13'
+        '5.48.473 1.276 1.205 2.604.42.768.903 1.5 1.446 2.186.27.344.56.673.87.984l.132.'
+        '132c.31.308.64.6.984.87.686.543 1.418 1.027 2.186 1.447 1.328.733 2.126 1.07 2.6'
+        '04 1.206l.01.014c.13.042.265.064.402.063.046.002.092 0 .138-.008.31-.036.627-.19'
+        '.948-.46.004 0 .003-.002.008-.005.37-.33.683-.72.93-1.148l.003-.01c.225-.432.15-'
+        '.842-.18-1.12-.004 0-.698-.58-1.037-.83-.36-.255-.73-.492-1.113-.71-.51-.285-1.0'
+        '32-.106-1.248.174l-.447.564c-.23.283-.657.246-.657.246-3.12-.796-3.955-3.955-3.9'
+        '55-3.955s-.037-.426.248-.656l.563-.448c.277-.215.456-.737.17-1.248-.217-.383-.45'
+        '4-.756-.71-1.115-.25-.34-.826-1.033-.83-1.035-.137-.165-.31-.265-.502-.297zm4.49'
+        '.88c-.158.002-.29.124-.3.282-.01.167.115.312.282.324 1.16.085 2.017.466 2.645 1.'
+        '15.63.688.93 1.524.906 2.57-.002.168.13.306.3.31.166.003.305-.13.31-.297.025-1.1'
+        '75-.334-2.193-1.067-2.994-.74-.81-1.777-1.253-3.05-1.346h-.024zm.463 1.63c-.16.0'
+        '02-.29.127-.3.287-.008.167.12.31.288.32.523.028.875.175 1.113.422.24.245.388.62.'
+        '416 1.164.01.167.15.295.318.287.167-.008.295-.15.287-.317-.03-.644-.215-1.178-.5'
+        '8-1.557-.367-.378-.893-.574-1.52-.607h-.018z'
+        '"/></svg>'
+    ),
+    "wa": (
+        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" '
+        'd="M12 3.2A8.7 8.7 0 0 0 4.4 16.3L3.2 20.8l4.6-1.2A8.7 8.7 0 1 0 12 3.2zm5 12.2c-.2.6-1.2 1.1'
+        "-1.7 1.2-.4.1-1 .1-1.6-.1-.4-.1-.8-.3-1.4-.5-2.4-1-4-3.4-4.1-3.6-.1-.2-1.1-1.5-1.1-2.8"
+        " 0-1.3.7-2 .9-2.2.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .5.4.2.5.7 1.7.7 1.8.1.1 0 .3-.1.4l-.3.4"
+        "c-.1.1-.2.3-.1.5.1.3.6 1 1.4 1.6 1 .8 1.8 1.1 2 .1.1 0 .3-.2.4-.3l.4-.5c.1-.2.3-.1.5-.1"
+        '.2 0 1.4.7 1.6.8.2.1.4.2.4.3.1.2 0 .7-.2 1.3z"/></svg>'
+    ),
+    "vk": (
+        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" '
+        'd="M4.2 7.2h2.3c.1 2.4 1.1 3.8 2 3.8.5 0 .8-.2.8-1.6V7.2h2.2v2.4c0 1.5.7 1.8 1.2.8.7-1.2'
+        " 1.1-3.2 1.1-3.2h2.2s.2 1.2-1 2.8c-.8 1.1-1.1 1.4-.3 2.4.7.9 1.7 1.7 1.7 1.7h-2.3s-.6-.7"
+        '-1.4-1.6c-.5-.6-.8-.8-1.1-.5-.4.4-.4 1.2-.4 1.2v.9H9.6c-3.4 0-5.3-2.3-5.4-6.1z"/></svg>'
+    ),
+    "copy": (
+        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<rect x="9" y="9" width="13" height="13" rx="2"></rect>'
+        '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
+    ),
+}
+
+
+def _share_icon(kind: str, label: str, href: str, *, blank: bool) -> str:
+    opened = ' rel="noopener" target="_blank"' if blank else ""
+    return (
+        f'<a class="share__icon share__icon--{kind}" href="{_esc(href)}"{opened} aria-label="{_esc(label)}">'
+        f"{_SHARE_ICONS[kind]}</a>"
+    )
+
+
 def _share_html(
-    share: Mapping[str, str], *, venue_type: str = "ice", telegram_link_only: bool = False
+    share: Mapping[str, str],
+    *,
+    venue_type: str = "ice",
+    telegram_link_only: bool = False,
+    story_image_url: str | None = None,
 ) -> str:
     """Ряд «Поделиться». Подборка в Telegram — только url (превью из og), без text=."""
     url = share["share_url"]
@@ -1006,16 +1079,27 @@ def _share_html(
     wa = f"https://wa.me/?text={quote(full, safe='')}"
     viber = f"viber://forward?text={quote(full, safe='')}"
     vk = f"https://vk.com/share.php?url={quote(url, safe='')}"
+    story = ""
+    if story_image_url:
+        story = (
+            f'<a class="share__story" href="{_esc(story_image_url)}" download="glide-story.png">'
+            "Сохранить картинку в галерею</a>"
+        )
     return (
         f'<section class="share" aria-label="{t("cta.share")}">'
         f'<p class="share__title">{"Позвать друзей" if venue_type == "ice" else t("cta.share")}</p>'
         '<div class="share__row">'
-        f'<a class="share__btn share__btn--tg" href="{_esc(tg)}" rel="noopener" target="_blank">Telegram</a>'
-        f'<a class="share__btn" href="{_esc(viber)}">Viber</a>'
-        f'<a class="share__btn" href="{_esc(wa)}" rel="noopener" target="_blank">WhatsApp</a>'
-        f'<a class="share__btn" href="{_esc(vk)}" rel="noopener" target="_blank">VK</a>'
-        f'<button class="share__btn" type="button" data-copy="{_esc(full)}">Скопировать</button>'
-        "</div></section>"
+        + _share_icon("tg", "Telegram", tg, blank=True)
+        + _share_icon("vb", "Viber", viber, blank=False)
+        + _share_icon("wa", "WhatsApp", wa, blank=True)
+        + _share_icon("vk", "VK", vk, blank=True)
+        + (
+            f'<button class="share__icon share__icon--copy" type="button" data-copy="{_esc(full)}" '
+            f'aria-label="Скопировать">{_SHARE_ICONS["copy"]}</button>'
+        )
+        + "</div>"
+        + story
+        + "</section>"
     )
 
 
@@ -1174,7 +1258,7 @@ def render_place_page(
             _amenities_html(card),
             _trainers_html(card, cta_url=cta_url),
             _contacts_html(card),
-            _share_html(share, venue_type=vt),
+            _share_html(share, venue_type=vt, story_image_url=story_image_url),
         ]
     )
     city = _city(card)
@@ -1194,7 +1278,6 @@ def render_place_page(
         "__CANONICAL__": _esc(canonical_url),
         "__OG_URL__": _esc(share["share_url"]),
         "__OG_IMAGE__": _esc(og_image_url),
-        "__STORY_IMAGE__": _esc(story_image_url),
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,
         "__ROBOTS__": robots,

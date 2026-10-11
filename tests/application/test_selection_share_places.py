@@ -44,6 +44,33 @@ def test_share_places_rank_a_place_by_its_earliest_session_of_the_day() -> None:
     assert rows[0][1][0]["starts_at_local"] == "07:15", "строка рисует ближайший сеанс места"
 
 
+def test_share_text_skips_places_without_a_session() -> None:
+    from src.application.selection_page import compose_selection_share
+
+    today = date(2026, 10, 12)
+    view = {
+        "skating": True,
+        "city": {"name": "Минск"},
+        "venue": None,
+        "total": 3,
+        "session_count": 2,
+        "items": [
+            {"id": 1, "name": "ТЦ Замок"},
+            {"id": 2, "name": "ТЦ DiaMond city"},
+            {"id": 3, "name": "Lifestyle"},
+        ],
+        "slots": {
+            2: [{"local_date": today, "starts_at_local": "13:30"}],
+        },
+    }
+    text = compose_selection_share(view, page_url="http://test/c/minsk")["share_text"]
+    assert "Сегодня днём" in text
+    assert "• ТЦ DiaMond city — 13:30" in text
+    assert "Все 2 сеанса — по ссылке" in text
+    assert "ТЦ Замок" not in text
+    assert "Lifestyle" not in text
+
+
 def test_share_places_ignore_yesterday_and_read_string_slot_keys() -> None:
     today = date(2026, 10, 8)
     items = [{"id": 5, "name": "Вчера"}, {"id": 6, "name": "Aa сегодня нет"}]

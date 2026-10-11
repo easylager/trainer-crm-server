@@ -632,6 +632,7 @@ def city_hub_image_version(view: Mapping[str, Any]) -> str:
             str(view["skate_counts"].get("all")),
             str(view["ohm_counts"].get("all")),
             view["today"].isoformat(),
+            "board2",
         )
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:10]
@@ -642,9 +643,13 @@ def compose_city_hub_share(view: Mapping[str, Any], *, page_url: str) -> dict[st
 
     city_name = str(view["city"]["name"])
     lines = [f"{city_name} · где покататься", city_hub_description(view)]
-    for card in list(view.get("upcoming") or [])[:3]:
-        hhmm, day = _session_when(card, today=view["today"])
-        lines.append(f"• {card.get('arena_name')} — {day} {hhmm}".replace("  ", " "))
+    # Картинка показывает удобный срез (обычно вечер). Текст не перечисляет
+    # три ближайших слота — они не совпадают с тем, что на билете.
+    today_n = int((view.get("skate_counts") or {}).get("today") or 0)
+    if today_n:
+        word = plural_ru(today_n, "сеанс", "сеанса", "сеансов")
+        lines.append(f"Сегодня {today_n} {word} — удобные часы на карточке")
+    lines.append("Полный список — по ссылке")
     text_value = page_url + "\n\n" + "\n".join(lines)
     return {
         "share_url": page_url,
@@ -720,7 +725,12 @@ def render_city_hub_page(
         + _upcoming_html(view)
         + router
         + _places_html(view)
-        + _share_html(share, venue_type="ice", telegram_link_only=True)
+        + _share_html(
+            share,
+            venue_type="ice",
+            telegram_link_only=True,
+            story_image_url=story_image_url or og_image_url,
+        )
         + dock
     )
     elements = []
@@ -755,7 +765,6 @@ def render_city_hub_page(
             "__CANONICAL__": _esc(canonical_url),
             "__OG_URL__": _esc(share["share_url"]),
             "__OG_IMAGE__": _esc(og_image_url),
-            "__STORY_IMAGE__": _esc(story_image_url or og_image_url),
             "__LANG__": lang,
             "__OG_LOCALE__": og_locale,
             "__ROBOTS__": "index, follow",

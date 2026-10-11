@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import io
+from datetime import date, datetime, timedelta
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
@@ -332,10 +333,24 @@ def _render_story(
                 draw.text((x + inner - tw + 30, y + 16), when, font=f_row_time, fill=_ACCENT)
             y += row_h
             draw.line([(x, y), (x + inner, y)], fill=_LINE, width=2)
+        # Хвост объясняет, что список на билете — срез, а не весь город.
+        # В сторис ссылка не нажимается: дочитывают по QR на корешке.
         hidden = len(rows) - len(shown)
+        tail: list[str] = []
+        note = str(lines.get("rows_note") or "")
+        if note:
+            tail.extend(_wrap(draw, note, f_sub, inner, 2))
         if hidden > 0:
-            more = f"и ещё {hidden} {plural_ru(hidden, 'место', 'места', 'мест')} — по ссылке"
-            draw.text((x, y + 20), more, font=f_sub, fill=_MUTED)
+            tail.append(f"и ещё {hidden} — сканируй QR")
+        else:
+            cta = str(lines.get("rows_cta") or "")
+            if cta:
+                tail.extend(_wrap(draw, cta, f_sub, inner, 2))
+        for line in tail:
+            if y > stub_y - 56:
+                break
+            draw.text((x, y + 16), line, font=f_sub, fill=_MUTED)
+            y += 52
     elif lines.get("extra"):
         y += 16
         for line in _wrap(draw, lines["extra"].replace(" · ", "  ·  "), f_sub, inner, 3):
@@ -384,36 +399,196 @@ def render_place_card(
     return buf.getvalue()
 
 
-def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> bytes:
-    """og.png / story.png подборки (/c/{город}): что за подборка, сколько мест и сеансов, первые места."""
+# Вечер в каталоге начинается в 16:00 — то же правило, что у окна «сегодня вечером».
+_EVENING_MINUTES = 16 * 60
+
+
+def _slot_day(slot: Mapping[str, Any]) -> date | None:
+    local = slot.get("local_date")
+    if isinstance(local, datetime):
+        return local.date()
+    if isinstance(local, date):
+        return local
+    if isinstance(local, str) and len(local) >= 10:
+        try:
+            return date.fromisoformat(local[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _band(hhmm: str) -> str:
+    hour, minute = (int(part) for part in hhmm.split(":", 1))
+    mins = hour * 60 + minute
+    if mins < 12 * 60:
+        return "morning"
+    if mins < _EVENING_MINUTES:
+        return "day"
+    return "evening"
+
+
+def _collect_sessions(view: Mapping[str, Any]) -> list[tuple[date, str, str]]:
+    """Все сеансы, которые уже лежат на подборке: день, время, название."""
+    from src.application.selection_page import _view_slots
+
+    found: list[tuple[date, str, str]] = []
+    for item in view.get("items") or []:
+        name = str(item.get("name") or "")
+        for slot in _view_slots(view, item):
+            if not isinstance(slot, Mapping):
+                continue
+            day = _slot_day(slot)
+            hhmm = str(slot.get("starts_at_local") or "")[:5]
+            if day is None or ":" not in hhmm:
+                continue
+            found.append((day, hhmm, name))
+    found.sort(key=lambda row: (row[0], row[1], row[2].casefold()))
+    return found
+
+
+def _pick_slice(
+    sessions: list[tuple[date, str, str]], today: date
+) -> tuple[str, date, list[tuple[date, str, str]]]:
+    """Без окна человек хочет не ближайший слот, а удобные часы — обычно вечер."""
+
+    def take(day: date, band: str | None = None) -> list[tuple[date, str, str]]:
+        return [row for row in sessions if row[0] == day and (band is None or _band(row[1]) == band)]
+
+    if take(today, "evening"):
+        return "Сегодня вечером", today, take(today, "evening")
+    if take(today, "day"):
+        return "Сегодня днём", today, take(today, "day")
+    if take(today, "morning"):
+        return "Сегодня утром", today, take(today, "morning")
+    future = sorted({row[0] for row in sessions if row[0] > today})
+    if not future:
+        day = max(row[0] for row in sessions)
+        return "Ближайшие сеансы", day, take(day)
+    nxt = future[0]
+    tomorrow = today + timedelta(days=1)
+    if nxt == tomorrow and take(nxt, "evening"):
+        return "Завтра вечером", nxt, take(nxt, "evening")
+    if nxt == tomorrow:
+        return "Завтра", nxt, take(nxt)
+    return absolute_day_label(nxt), nxt, take(nxt)
+
+
+def _rest_note(rest: list[tuple[date, str, str]], hero_day: date) -> str:
+    bits: list[str] = []
+    for band, word in (("morning", "утром"), ("day", "днём"), ("evening", "вечером")):
+        count = sum(1 for day, hhmm, _name in rest if day == hero_day and _band(hhmm) == band)
+        if count:
+            bits.append(f"{word} ещё {count}")
+    later = sum(1 for day, _hhmm, _name in rest if day != hero_day)
+    if later:
+        bits.append(f"в другие дни ещё {later}")
+    return " · ".join(bits)
+
+
+def selection_story_board(
+    view: Mapping[str, Any], *, today: date | None = None
+) -> dict[str, Any]:
+    """Срез билета подборки: что показать, что честно оставить за QR и ссылкой.
+
+    Пустая площадка на лёд не попадает. Без окна героем становятся вечерние
+    сеансы сегодня — человек зовёт кататься после работы, а не на ближайшие
+    13:30. Окно «вечером / сегодня / выходные» уже само есть ответ, его не режем.
+    Заточка и центры — про место, не про слот.
+    """
     from src.application.selection_page import (
+        _minsk_day,
         absolute_window_phrase,
         selection_share_description,
-        selection_share_places,
+    )
+
+    if not view.get("skating"):
+        rows = [(str(item.get("name") or ""), "") for item in view.get("items") or []]
+        return {
+            "headline": selection_share_description(view),
+            "rows": rows,
+            "note": "",
+            "image_cta": "",
+            "text_cta": "",
+        }
+    day = today or _minsk_day()
+    sessions = _collect_sessions(view)
+    if not sessions:
+        return {
+            "headline": selection_share_description(view),
+            "rows": [],
+            "note": "",
+            "image_cta": "",
+            "text_cta": "",
+        }
+    window = view.get("window")
+    if window and not view.get("window_empty"):
+        headline = absolute_window_phrase(window) or "Сеансы"
+        hero = sessions
+        hero_day = hero[0][0]
+        rest: list[tuple[date, str, str]] = []
+    else:
+        headline, hero_day, hero = _pick_slice(sessions, day)
+        hero_keys = {(row[0], row[1], row[2]) for row in hero}
+        rest = [row for row in sessions if (row[0], row[1], row[2]) not in hero_keys]
+    total = int(view.get("session_count") or 0)
+    more = bool(rest) or total > len(sessions)
+    if more and total:
+        noun = plural_ru(total, "сеанс", "сеанса", "сеансов")
+        image_cta = f"Все {total} {noun} — сканируй QR"
+        text_cta = f"Все {total} {noun} — по ссылке"
+    elif more:
+        image_cta = "Все сеансы — сканируй QR"
+        text_cta = "Все сеансы — по ссылке"
+    else:
+        image_cta = "Цены и адреса — сканируй QR"
+        text_cta = "Цены и адреса — по ссылке"
+    return {
+        "headline": headline,
+        "rows": [(name, hhmm) for _day, hhmm, name in hero],
+        "note": _rest_note(rest, hero_day),
+        "image_cta": image_cta,
+        "text_cta": text_cta,
+    }
+
+
+def selection_story_rows(view: Mapping[str, Any], *, today: date | None = None) -> list[tuple[str, str]]:
+    """Строки героя билета. Пустая площадка сюда не входит."""
+    rows = selection_story_board(view, today=today)["rows"]
+    return [(str(name), str(when)) for name, when in rows]
+
+
+def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> bytes:
+    """og.png / story.png подборки: удобный срез сеансов, а не два ближайших слота."""
+    from src.application.selection_page import (
+        absolute_window_phrase,
         selection_share_title,
     )
 
     window = view.get("window")
     phrase = absolute_window_phrase(window) if window and view.get("skating") else ""
     kicker = f"Карта льда · {phrase}" if phrase else "Карта льда"
-    # TASK-222: подпись — те же три места в том же порядке, что строки «Ссылка»/«Другое».
-    names = [str(item.get("name") or "") for item, _slots in selection_share_places(view)[:3]]
+    board = selection_story_board(view)
+    preview = [f"{name} {when}".strip() for name, when in board["rows"][:3]]
+    if board["note"]:
+        preview.append(str(board["note"]))
     lines = {
         "kicker": kicker.upper(),
         "title": selection_share_title(view),
-        "big": selection_share_description(view),
-        "sub": " · ".join(n for n in names if n),
+        "big": str(board["headline"]),
+        "sub": " · ".join(bit for bit in preview if bit),
         "foot": "Расписание, цены и адреса — по ссылке",
     }
     fake_view = {"card": {"venue_type": view.get("venue") or "ice"}}
     if story:
-        # В середине билета — первые места с ближайшим временем: ради этого и смотрят историю.
-        rows = []
-        for item in view.get("items") or []:
-            slots = (view.get("slots") or {}).get(int(item["id"])) or []
-            when = str(slots[0].get("starts_at_local") or "")[:5] if slots else ""
-            rows.append((str(item.get("name") or ""), when))
-        lines = {**lines, "day": "", "time": "", "sub": "", "rows": rows}
+        lines = {
+            **lines,
+            "day": "",
+            "time": "",
+            "sub": "",
+            "rows": board["rows"],
+            "rows_note": board["note"],
+            "rows_cta": board["image_cta"],
+        }
         img = _render_story(
             fake_view,
             lines,

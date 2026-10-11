@@ -683,11 +683,16 @@ def selection_image_version(view: Mapping[str, Any]) -> str:
     В хэш входят ровно те числа, что человек видит на картинке, и день по Минску:
     расписание меняется внутри дня, и превью обязано перечитаться.
     """
+    from src.application.place_card_image import selection_story_board
+
+    board = selection_story_board(view)
     raw = "|".join(
         (
             str(selection_place_count(view)),
             str(int(view.get("session_count") or 0)),
             _minsk_day().isoformat(),
+            str(board.get("headline") or ""),
+            str(len(board.get("rows") or [])),
         )
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:10]
@@ -1174,6 +1179,7 @@ def render_selection_page(
             share,
             venue_type="ice" if view.get("skating") else "shop",
             telegram_link_only=True,
+            story_image_url=story_image_url or og_image_url,
         )
         + dock
     )
@@ -1213,7 +1219,6 @@ def render_selection_page(
             "__CANONICAL__": _esc(canonical_url),
             "__OG_URL__": _esc(share["share_url"]),
             "__OG_IMAGE__": _esc(og_image_url),
-            "__STORY_IMAGE__": _esc(story_image_url or og_image_url),
             "__LANG__": lang,
             "__OG_LOCALE__": og_locale,
             "__ROBOTS__": "noindex, follow" if (variant or page_no > 1) else "index, follow",
@@ -1229,14 +1234,24 @@ def render_selection_page(
 
 def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[str, str]:
     from src.application.client_share_message import share_body_for_native_share_dialog
+    from src.application.place_card_image import selection_story_board
 
+    board = selection_story_board(view)
     lines = [selection_share_title(view), selection_share_description(view)]
-    for item, slots in selection_share_places(view)[:3]:
-        if slots:
-            first = slots[0]
-            lines.append(f"• {item.get('name')} — {str(first.get('starts_at_local') or '')[:5]}")
-        else:
-            lines.append(f"• {item.get('name')}")
+    # Тот же срез, что на story.png: вечер (или окно), без пустых площадок.
+    if view.get("skating") and board["rows"]:
+        lines.append(str(board["headline"]))
+    cap = 6 if view.get("skating") else 3
+    shown = board["rows"][:cap]
+    for name, when in shown:
+        lines.append(f"• {name} — {when}" if when else f"• {name}")
+    hidden = len(board["rows"]) - len(shown)
+    if hidden:
+        lines.append(f"и ещё {hidden} — по ссылке")
+    if board["note"]:
+        lines.append(str(board["note"]))
+    if board["text_cta"]:
+        lines.append(str(board["text_cta"]))
     text_value = page_url + "\n\n" + "\n".join(lines)
     return {
         "share_url": page_url,
