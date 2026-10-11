@@ -257,7 +257,7 @@
   function shouldWarnScheduleStale(freshness) {
     var S = staleApi();
     if (S) return S.shouldWarnScheduleStale(freshness);
-    return !!(freshness && freshness.schedule_stale && !freshness.schedule_very_stale);
+    return false;
   }
 
   function staleScheduleNote(freshness, now, card) {

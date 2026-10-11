@@ -51,7 +51,7 @@ def test_notes_wording() -> None:
         "schedule_very_stale": False,
         "schedule_observed_at": datetime(2026, 10, 5, 18, 40, tzinfo=MINSK).isoformat(),
     }
-    assert stale_note(stale, now=now) == "Расписание могло измениться · проверено вчера в 18:40"
+    assert stale_note(stale, now=now) == ""
     assert very_stale_note(stale, now=now) == ""
     very = {
         "schedule_stale": True,
@@ -113,7 +113,7 @@ async def test_ice_city_day_marks_stale_and_drops_very_stale(app_use_test_db, db
     by_id = {a["arena_id"]: a for a in day["arenas"]}
 
     # AC-1: 7 ч — помечен; 1 ч и ручной — нет.
-    assert by_id[ids["stale"]]["stale_note"].startswith("Расписание могло измениться · проверено ")
+    assert by_id[ids["stale"]]["stale_note"] == ""
     assert by_id[ids["fresh"]]["stale_note"] == ""
     assert by_id[ids["manual"]]["stale_note"] == ""
     assert day["stale_arena_count"] == 1
@@ -128,12 +128,12 @@ async def test_ice_city_day_marks_stale_and_drops_very_stale(app_use_test_db, db
     html = render_ice_city_day_page(
         city_name="Стейл", day=day, canonical_url="/ice/x/today", og_image_url="/og.png", cta_url=None
     )
-    assert 'class="arena__stale"' in html and "Расписание могло измениться" in html
+    assert 'class="arena__stale"' not in html and "могло измениться" not in html
     assert "Расписание не подтверждено" in html and "Каток Забытый" in html
     assert 'href="tel:+375171234567"' in html
     # Каток Забытый — только в блоке «не подтверждено», без своего списка сеансов.
     assert html.count("Каток Забытый") == 1
-    assert og_footer(day) == "Часть расписания могла измениться — детали на странице"
+    assert og_footer(day) == "Время и цены каждого сеанса — на странице"
 
 
 @pytest.mark.asyncio
@@ -156,8 +156,8 @@ async def test_selection_page_marks_stale_and_hides_very_stale_slots(app_use_tes
         share={"share_url": "https://x/c/x", "share_text": "x", "share_body": "x"},
         city_page_url=None,
     )
-    assert html.count('class="pick__stale"') == 2
-    assert "Расписание могло измениться · проверено " in html
+    assert html.count('class="pick__stale"') == 1
+    assert "могло измениться" not in html
     assert "Расписание не обновлялось" in html and "уточните по телефону" in html
 
 
@@ -180,9 +180,9 @@ async def test_place_page_stale_and_very_stale(app_use_test_db, db_session) -> N
 
     stale = await load_place_view(db_session, str(ids["stale"]), now=now)
     assert stale is not None and stale["session_count"] == 1
-    assert stale["schedule_note"].startswith("Расписание могло измениться · проверено ")
-    assert 'class="sched__stale"' in render(stale)
-    assert card_lines(stale, invite=False)["foot"] == "Расписание могло измениться — уточните по ссылке"
+    assert stale["schedule_note"] == ""
+    assert 'class="sched__stale"' not in render(stale)
+    assert card_lines(stale, invite=False)["foot"] == "Расписание, цены и как добраться — по ссылке"
 
     very = await load_place_view(db_session, str(ids["very"]), now=now)
     assert very is not None

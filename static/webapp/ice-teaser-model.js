@@ -240,7 +240,7 @@
     var price = formatPrice(payload.price_adult_minor, payload.currency_code);
     if (price) facts.push(price);
     var S = staleApi();
-    if (S && S.scheduleStaleFlag(payload)) facts.push(S.STALE_SHORT);
+    if (S && S.STALE_SHORT && S.scheduleStaleFlag(payload)) facts.push(S.STALE_SHORT);
     var name = String(payload.arena_name || '').trim();
     var city = String(payload.city_name || '').trim();
     return {

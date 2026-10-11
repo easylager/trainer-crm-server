@@ -981,7 +981,7 @@ describe('TASK-146: карточка открывается на дне и се�
 });
 
 describe('TASK-180: устаревшее расписание в карточке', () => {
-  it('schedule_stale — баннер, слоты остаются', () => {
+  it('schedule_stale — без баннера, слоты остаются', () => {
     const { staleScheduleNote, shouldWarnScheduleStale, iceFeedView } = loadModel();
     const now = new Date('2026-10-02T10:00:00Z');
     const fresh = {
@@ -989,8 +989,8 @@ describe('TASK-180: устаревшее расписание в карточк�
       schedule_very_stale: false,
       schedule_observed_at: '2026-10-01T11:00:00Z',
     };
-    assert.equal(shouldWarnScheduleStale(fresh), true);
-    assert.match(staleScheduleNote(fresh, now), /могло измениться/);
+    assert.equal(shouldWarnScheduleStale(fresh), false);
+    assert.equal(staleScheduleNote(fresh, now), '');
     const feed = iceFeedView({ card: { freshness: fresh, tier: 'A' }, hasSessions: true });
     assert.equal(feed.mode, 'ribbon');
   });

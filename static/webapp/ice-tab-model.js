@@ -63,7 +63,7 @@
   function scheduleStaleWarn(freshness) {
     var S = staleApi();
     if (S) return S.shouldWarnScheduleStale(freshness);
-    return !!(freshness && freshness.schedule_stale && !freshness.schedule_very_stale);
+    return false;
   }
 
   /** TASK-180: > 72 ч без удачного прогона — сеансы не показываем как текущее расписание. */

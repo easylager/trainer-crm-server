@@ -95,7 +95,7 @@
     var day = dayLabel(session && session.local_date, now);
     if (day && day !== 'Сегодня') place = day + ' · ' + place;
     var S = staleApi();
-    if (S && S.scheduleStaleFlag(session)) place += ' · ' + S.STALE_SHORT;
+    if (S && S.STALE_SHORT && S.scheduleStaleFlag(session)) place += ' · ' + S.STALE_SHORT;
     return {
       time: hhmm(session && session.starts_at_local),
       place: place,
