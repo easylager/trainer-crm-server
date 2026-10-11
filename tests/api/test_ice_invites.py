@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -14,7 +15,8 @@ from sqlalchemy import text
 
 from src.api.app import app
 from src.api.middleware.http_limits import reset_http_limiters_for_tests
-from src.application.catalog_consumer_events import public_actor_hash
+from src.application.catalog_consumer_events import public_actor_hash, telegram_actor_hash
+from tests.shared.test_telegram_webapp import _build_signed_init_data
 from src.application.place_links import place_path
 from tests.api.test_public_arenas import _insert_arena, _insert_city
 
@@ -473,3 +475,36 @@ async def test_price_is_omitted_unless_sender_asked(app_use_test_db, db_session)
     assert "2500" not in hidden_raw
     assert "25 BYN" not in hidden_raw
     assert shown_card.json()["session"]["price"] == "25 BYN"
+
+
+class _ClientBot:
+    def __init__(self, token: str) -> None:
+        self.telegram_bot_token_client = token
+        self.vk_mini_app_protected_key = ""
+
+
+@pytest.mark.asyncio
+async def test_create_with_telegram_init_data_stores_telegram_actor_hash(
+    app_use_test_db, db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = "123456:ABC-DEF"
+    user_id = 424242
+    monkeypatch.setattr("src.api.miniapp_auth.deps.Settings", lambda: _ClientBot(token))
+    raw = _build_signed_init_data(token, user_id=user_id, auth_date=int(time.time()))
+    place = await _place(db_session)
+    session_id = await _insert_session(db_session, place["arena_id"], starts_at=_at(days=2))
+    async with _client() as client:
+        created = await client.post(
+            "/api/public/invites",
+            json={"session_id": session_id, "from_name": "Макс", "to_name": "Аня"},
+            headers=_headers(**{"X-Telegram-Init-Data": raw}),
+        )
+    assert created.status_code == 201, created.text
+    stored = (
+        await db_session.execute(
+            text("SELECT creator_actor_hash FROM ice_invites WHERE code = :code"),
+            {"code": created.json()["code"]},
+        )
+    ).scalar_one()
+    assert stored == telegram_actor_hash(user_id)
+    assert stored != public_actor_hash(client_ip=_IP, user_agent=_UA)

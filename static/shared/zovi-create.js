@@ -215,6 +215,45 @@
     };
   }
 
+  function inviteRequestHeaders(initData) {
+    var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    var cred = String(initData || '').trim();
+    if (cred) headers['X-Telegram-Init-Data'] = cred;
+    return headers;
+  }
+
+  function readTelegramInitData(storage) {
+    try {
+      if (!storage || typeof storage.getItem !== 'function') return '';
+      return String(storage.getItem('zovi_tg') || '');
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function pageSessionStorage() {
+    try {
+      return sessionStorage;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function openedWithVia(search) {
+    var via = new URLSearchParams(String(search || '')).get('via');
+    return !!(via && String(via).trim());
+  }
+
+  function returnToSchedule(win) {
+    var history = win && win.history;
+    if (history && history.length > 1 && typeof history.back === 'function') {
+      history.back();
+      return 'back';
+    }
+    if (win && win.location) win.location.href = '/';
+    return 'home';
+  }
+
   function kindLabel(kind) {
     if (kind === HOCKEY) return 'ОХМ';
     if (kind === 'open_ice') return 'Открытый лёд';
@@ -318,6 +357,15 @@
     state.parentCode = query.parentCode;
     state.sessionId = query.sessionId;
     state.date = defaultInviteDate(state.today);
+
+    var back = doc.getElementById('back');
+    if (back && openedWithVia(doc.location.search)) {
+      back.hidden = false;
+      back.addEventListener('click', function (event) {
+        event.preventDefault();
+        returnToSchedule(doc.defaultView);
+      });
+    }
 
     var citySelect = doc.getElementById('city');
     var daysEl = doc.getElementById('days');
@@ -633,7 +681,7 @@
       track('invite_submit', { session_id: state.sessionId });
       fetch('/api/public/invites', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: inviteRequestHeaders(readTelegramInitData(pageSessionStorage())),
         body: JSON.stringify(built.body)
       }).then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (body) {
@@ -740,6 +788,10 @@
     pickCityId: pickCityId,
     minskToday: minskToday,
     readQuery: readQuery,
+    inviteRequestHeaders: inviteRequestHeaders,
+    readTelegramInitData: readTelegramInitData,
+    openedWithVia: openedWithVia,
+    returnToSchedule: returnToSchedule,
     mount: mount,
     track: track
   };

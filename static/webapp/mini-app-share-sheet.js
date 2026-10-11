@@ -6,8 +6,8 @@
  * (/p/{city}/{slug}): у неё своё превью, и она открывается в любом мессенджере.
  *
  * Что внутри и почему:
- *  - переключатель «Расписание / Позвать с собой» — один и тот же факт, разный тон
- *    (объявление vs. вопрос другу). Тексты обоих приходят одним запросом;
+ *  - переключатель варианта. У катка: «Погнали кататься», «Открытка», «Расписание».
+ *    У остальных мест — «Место» и «Позвать с собой». Тексты ссылки приходят одним запросом;
  *  - выбор сеанса — делятся конкретным временем, а не «приходи как-нибудь»;
  *  - превью — та самая картинка, которую увидит друг. Человек видит результат до
  *    отправки — и охотнее отправляет;
@@ -73,6 +73,109 @@
     var tg = global.Telegram && global.Telegram.WebApp;
     var cred = tg && tg.initData ? String(tg.initData) : '';
     return cred ? { 'X-Telegram-Init-Data': cred } : {};
+  }
+
+  var CARD_WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  var CARD_MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+
+  /** Адрес «Создать открытку». null — кнопки нет или она неактивна: нет сеанса. */
+  function postcardHref(sheetState) {
+    if (!sheetState || sheetState.endpoint) return null;
+    if ((sheetState.venueType || 'ice') !== 'ice') return null;
+    if (sheetState.sessionId == null || String(sheetState.sessionId).trim() === '') return null;
+    var via = sheetState.context === 'ice_list' ? 'ice_list' : 'arena_card';
+    return '/zovi?s=' + encodeURIComponent(String(sheetState.sessionId).trim()) + '&via=' + via;
+  }
+
+  function placeNameFromShare(body) {
+    var line = String(body || '').split('\n')[0].trim();
+    var at = line.indexOf(' — ');
+    if (at <= 0) return '';
+    return line.slice(0, at).trim();
+  }
+
+  function shortCardDate(iso) {
+    var parts = String(iso || '').split('-');
+    if (parts.length < 3 || !parts[0]) return '';
+    var date = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+    if (isNaN(date.getTime())) return '';
+    return CARD_WEEKDAYS[date.getUTCDay()] + ', ' + date.getUTCDate() + ' ' + CARD_MONTHS[date.getUTCMonth()];
+  }
+
+  function sectionsOf(sheetState) {
+    if (!sheetState) return [];
+    if (sheetState.slotSections && sheetState.slotSections.length) return sheetState.slotSections;
+    var slots = sheetState.slots || [];
+    if (!slots.length) return [];
+    return [
+      {
+        dayLabel: '',
+        localDate: '',
+        dayNum: '',
+        rows: slots.map(function (s) {
+          var m = String(s.label || '').match(/(\d{1,2}:\d{2})\s*$/);
+          return { id: s.id, time: m ? m[1] : s.label, meta: s.meta || '' };
+        }),
+      },
+    ];
+  }
+
+  function selectedPostcardSlot(sheetState) {
+    if (!sheetState || sheetState.sessionId == null || String(sheetState.sessionId).trim() === '') return null;
+    var want = String(sheetState.sessionId);
+    var sections = sectionsOf(sheetState);
+    var i;
+    var j;
+    for (i = 0; i < sections.length; i++) {
+      var rows = sections[i].rows || [];
+      for (j = 0; j < rows.length; j++) {
+        if (String(rows[j].id) === want) return { section: sections[i], row: rows[j] };
+      }
+    }
+    return null;
+  }
+
+  function rinkName(sheetState) {
+    if (!sheetState) return '';
+    if (sheetState.placeName) return String(sheetState.placeName);
+    var payload = sheetState.payload;
+    return placeNameFromShare(payload && payload.place_share_body);
+  }
+
+  /** Текст тёмной карточки — тот же, что «Так увидят в чате» на /zovi, без имени адресата. */
+  function postcardCopy(sheetState) {
+    var picked = selectedPostcardSlot(sheetState);
+    var meta = picked && picked.row ? String(picked.row.meta || '') : '';
+    var hockey = meta.indexOf('ОХМ') !== -1;
+    var day = '';
+    if (picked && picked.section) {
+      day = shortCardDate(picked.section.localDate);
+      if (!day && picked.section.dayLabel) {
+        day = picked.section.dayLabel + (picked.section.dayNum ? ' ' + picked.section.dayNum : '');
+      }
+    }
+    var time = picked && picked.row && picked.row.time ? String(picked.row.time) : '';
+    var parts = [];
+    if (day) parts.push(day);
+    if (time) parts.push(time);
+    var rink = rinkName(sheetState);
+    if (rink) parts.push(rink);
+    return {
+      question: hockey ? 'Пойдёшь со мной на хоккей?' : 'Пойдёшь со мной на каток?',
+      meta: parts.join(' · '),
+      note: 'Кнопка «Нет» убегает',
+    };
+  }
+
+  /** Тот же initData, что уходит в share. /zovi не грузит telegram-web-app.js и читает его отсюда. */
+  function stashTelegramCredential() {
+    try {
+      var headers = shareRequestHeaders();
+      var cred = headers && headers['X-Telegram-Init-Data'] ? String(headers['X-Telegram-Init-Data']) : '';
+      if (!global.sessionStorage) return;
+      if (cred) global.sessionStorage.setItem('zovi_tg', cred);
+      else global.sessionStorage.removeItem('zovi_tg');
+    } catch (e) { /* */ }
   }
 
   function fetchPayload(extra) {
@@ -684,8 +787,8 @@
   }
 
   function sessionPicker() {
-    if (state.endpoint) return '';
-    if (!state.invite) return '';
+    var variant = activeVariant();
+    if (!variant || !variant.needsSession) return '';
     return slotList();
   }
 
@@ -716,22 +819,12 @@
     return og;
   }
 
-  function renderTabsHtml() {
-    var isIce = (state.venueType || 'ice') === 'ice';
-    if (state.endpoint) return '';
-    return (
-      '<div class="gss-tabs" role="group" aria-label="Тон">' +
-      '<button type="button" class="gss-tab' +
-      (!state.invite ? ' is-on' : '') +
-      '" data-invite="0">' +
-      (isIce ? 'Расписание' : 'Место') +
-      '</button>' +
-      '<button type="button" class="gss-tab' +
-      (state.invite ? ' is-on' : '') +
-      '" data-invite="1">Позвать с собой</button>' +
-      '</div>'
-    );
+  function isIcePlace(sheetState) {
+    return (sheetState && sheetState.venueType ? sheetState.venueType : 'ice') === 'ice';
   }
+
+  var SHARE_NOTE =
+    '<p class="gss-note">В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис. Ссылку для стикера скопируйте сами.</p>';
 
   function renderChannelsHtml(p) {
     return (
@@ -775,17 +868,194 @@
     return '<figure class="gss-preview">' + renderPreview(p) + caption + '</figure>';
   }
 
+  function renderPostcardPreview(sheetState) {
+    var copy = postcardCopy(sheetState);
+    return (
+      '<div class="gss-card">' +
+      '<p class="gss-card__q">' +
+      esc(copy.question) +
+      '</p>' +
+      (copy.meta ? '<p class="gss-card__t">' + esc(copy.meta) + '</p>' : '') +
+      '<p class="gss-card__note">' +
+      esc(copy.note) +
+      '</p></div>'
+    );
+  }
+
+  function renderPostcardButton(sheetState) {
+    var href = postcardHref(sheetState);
+    return (
+      '<button type="button" class="gss-zovi__btn" data-variant-action="postcard"' +
+      (href ? ' data-href="' + esc(href) + '"' : ' disabled') +
+      '>Создать открытку →</button>'
+    );
+  }
+
+  function renderShareBottom(sheetState) {
+    return renderChannelsHtml(sheetState.payload) + SHARE_NOTE;
+  }
+
+  function openPostcard(btn) {
+    haptic();
+    stashTelegramCredential();
+    var href = btn && btn.getAttribute ? btn.getAttribute('data-href') : '';
+    // Тот же webview: openLink уводит во внешний браузер и теряет Telegram.
+    if (href) global.location.href = href;
+  }
+
+  /**
+   * Вариант шита — одна запись. Новый вариант: запись и свои рендеры,
+   * без правок paintBody и обработчиков.
+   * shareInvite: null — свой низ, запрос «поделиться» не шлём.
+   */
+  var SHARE_VARIANTS = [
+    {
+      id: 'invite',
+      label: function (sheetState) {
+        return isIcePlace(sheetState) ? 'Погнали кататься' : 'Позвать с собой';
+      },
+      rank: function (sheetState) {
+        return isIcePlace(sheetState) ? 0 : 1;
+      },
+      needsSession: true,
+      shareInvite: true,
+      available: function (sheetState) {
+        return !sheetState.endpoint;
+      },
+      renderPreview: function (sheetState) {
+        return renderPreviewFigureHtml(sheetState.payload);
+      },
+      renderBottom: renderShareBottom,
+    },
+    {
+      id: 'postcard',
+      label: function () {
+        return 'Открытка';
+      },
+      rank: function () {
+        return 1;
+      },
+      needsSession: true,
+      shareInvite: null,
+      available: function (sheetState) {
+        return !sheetState.endpoint && isIcePlace(sheetState);
+      },
+      renderPreview: renderPostcardPreview,
+      renderBottom: renderPostcardButton,
+      onAction: openPostcard,
+      onSession: function () {
+        preserveSheetScroll(paintPreviewBlock);
+      },
+    },
+    {
+      id: 'schedule',
+      label: function (sheetState) {
+        return isIcePlace(sheetState) ? 'Расписание' : 'Место';
+      },
+      rank: function (sheetState) {
+        return isIcePlace(sheetState) ? 2 : 0;
+      },
+      needsSession: false,
+      shareInvite: false,
+      available: function (sheetState) {
+        return !sheetState.endpoint;
+      },
+      renderPreview: function (sheetState) {
+        return renderPreviewFigureHtml(sheetState.payload);
+      },
+      renderBottom: renderShareBottom,
+    },
+  ];
+
+  function variantById(id) {
+    var i;
+    for (i = 0; i < SHARE_VARIANTS.length; i++) {
+      if (SHARE_VARIANTS[i].id === id) return SHARE_VARIANTS[i];
+    }
+    return null;
+  }
+
+  function visibleVariants(sheetState) {
+    var list = [];
+    var i;
+    var source = sheetState || {};
+    for (i = 0; i < SHARE_VARIANTS.length; i++) {
+      if (SHARE_VARIANTS[i].available(source)) list.push(SHARE_VARIANTS[i]);
+    }
+    list.sort(function (a, b) {
+      return a.rank(source) - b.rank(source);
+    });
+    return list;
+  }
+
+  function activeVariant() {
+    if (!state || !state.variantId) return null;
+    var variant = variantById(state.variantId);
+    if (!variant || !variant.available(state)) return null;
+    return variant;
+  }
+
+  function initialVariantId(opts) {
+    opts = opts || {};
+    if (opts.endpoint) return null;
+    return opts.invite ? 'invite' : 'schedule';
+  }
+
+  function selectVariant(id) {
+    var variant = variantById(id);
+    if (!variant || !state || !variant.available(state)) return false;
+    state.variantId = id;
+    if (variant.shareInvite != null) state.invite = !!variant.shareInvite;
+    return true;
+  }
+
+  function renderTabsHtml() {
+    var list = visibleVariants(state);
+    if (!list.length) return '';
+    return (
+      '<div class="gss-tabs" role="group" aria-label="Тон">' +
+      list
+        .map(function (variant) {
+          var on = variant.id === state.variantId;
+          return (
+            '<button type="button" class="gss-tab' +
+            (on ? ' is-on' : '') +
+            '" data-variant="' +
+            esc(variant.id) +
+            '" aria-pressed="' +
+            (on ? 'true' : 'false') +
+            '">' +
+            esc(variant.label(state)) +
+            '</button>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function previewHtml() {
+    var variant = activeVariant();
+    if (variant) return variant.renderPreview(state);
+    return renderPreviewFigureHtml(state.payload);
+  }
+
+  function bottomHtml() {
+    var variant = activeVariant();
+    if (variant) return variant.renderBottom(state);
+    return renderShareBottom(state);
+  }
+
   function paintBody() {
     root.querySelector('.gss-body').innerHTML =
       renderTabsHtml() +
       sessionPicker() +
       '<div class="gss-preview-host">' +
-      renderPreviewFigureHtml(state.payload) +
+      previewHtml() +
       '</div>' +
       '<div class="gss-channels-host">' +
-      renderChannelsHtml(state.payload) +
-      '</div>' +
-      '<p class="gss-note">В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис. Ссылку для стикера скопируйте сами.</p>';
+      bottomHtml() +
+      '</div>';
   }
 
   function paintSlotPicker() {
@@ -810,8 +1080,13 @@
       paintBody();
       return;
     }
-    previewHost.innerHTML = renderPreviewFigureHtml(state.payload);
-    channelsHost.innerHTML = renderChannelsHtml(state.payload);
+    previewHost.innerHTML = previewHtml();
+    channelsHost.innerHTML = bottomHtml();
+  }
+
+  function rememberPlace(data) {
+    var name = placeNameFromShare(data && data.place_share_body);
+    if (name) state.placeName = name;
   }
 
   function reloadPreview() {
@@ -822,6 +1097,7 @@
       .then(function (data) {
         if (token !== state.token) return;
         state.payload = data;
+        rememberPlace(data);
         preserveSheetScroll(paintPreviewBlock);
       })
       .catch(function () {
@@ -831,10 +1107,16 @@
       });
   }
 
+  function variantLoadsShare() {
+    var variant = activeVariant();
+    if (!variant) return true;
+    return variant.shareInvite != null;
+  }
+
   function reload() {
-    state.payload = null;
+    if (variantLoadsShare()) state.payload = null;
     paintBody();
-    reloadPreview();
+    if (variantLoadsShare()) reloadPreview();
   }
 
   function onClick(ev) {
@@ -842,13 +1124,13 @@
       close();
       return;
     }
-    var tab = ev.target.closest('[data-invite]');
+    var tab = ev.target.closest('[data-variant]');
     if (tab) {
-      var invite = tab.getAttribute('data-invite') === '1';
-      if (invite !== state.invite) {
+      var nextId = tab.getAttribute('data-variant');
+      if (nextId && nextId !== state.variantId && selectVariant(nextId)) {
         haptic();
-        state.invite = invite;
         // Тексты обоих тонов уже в ответе — второй запрос нужен только ради картинки.
+        // Открытка запрос не шлёт и событие не пишет.
         reload();
       }
       return;
@@ -869,7 +1151,9 @@
       state.sessionId = slot.getAttribute('data-slot');
       syncSlotPickerUi('slot');
       if (slot.blur) slot.blur();
-      reloadPreview();
+      var slotVariant = activeVariant();
+      if (slotVariant && typeof slotVariant.onSession === 'function') slotVariant.onSession();
+      else reloadPreview();
       return;
     }
     if (ev.target.closest('[data-gss-load-slots]') && typeof state.loadSlots === 'function') {
@@ -893,6 +1177,13 @@
     if (ev.target.closest('[data-gss-save-image]') && state.payload) {
       haptic();
       CHANNELS.image(state.payload);
+      return;
+    }
+    var actionBtn = ev.target.closest('[data-variant-action]');
+    if (actionBtn) {
+      if (actionBtn.disabled) return;
+      var actionVariant = activeVariant();
+      if (actionVariant && typeof actionVariant.onAction === 'function') actionVariant.onAction(actionBtn);
       return;
     }
     var ch = ev.target.closest('[data-ch]');
@@ -945,12 +1236,16 @@
       sessionId: resolveInitialSessionId(opts),
       slotDay: null,
       invite: !!opts.invite,
+      variantId: null,
+      placeName: '',
       sessionMissing: !!opts.sessionMissing,
       context: opts.context || 'arena_card',
       venueType: opts.venueType || 'ice',
       loadSlots: opts.loadSlots || null,
       payload: null,
     };
+    var opening = initialVariantId(opts);
+    if (opening) selectVariant(opening);
     ensureSlotDay();
     root.hidden = false;
     global.requestAnimationFrame(function () { root.classList.add('is-open'); });
@@ -973,6 +1268,15 @@
     _openImageSave: openImageSave,
     _telegramShareHref: telegramShareHref,
     _resolveInitialSessionId: resolveInitialSessionId,
+    variantsFor: function (sheetState) {
+      return visibleVariants(sheetState).map(function (variant) {
+        return { id: variant.id, label: variant.label(sheetState) };
+      });
+    },
+    initialVariantId: initialVariantId,
+    postcardHref: postcardHref,
+    postcardButtonHtml: renderPostcardButton,
+    postcardCopy: postcardCopy,
     _previewFigureHtml: function (payload, selection) {
       var prev = state;
       state = selection

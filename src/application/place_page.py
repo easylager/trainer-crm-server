@@ -625,9 +625,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     if mode == SCHEDULE_MODE_PHONE:
         return (
             f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
-            f'<p class="sched__mode">{_esc(PHONE_LINE)}</p>'
-            + _schedule_mode_call_html(card)
-            + "</section>"
+            f'<p class="sched__mode">{_esc(PHONE_LINE)}</p>' + _schedule_mode_call_html(card) + "</section>"
         )
     if mode == SCHEDULE_MODE_SEASON_CLOSED:
         reopen = _parse_iso_date(card.get("schedule_reopen_date"))
@@ -670,9 +668,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
         )
     phone = str(card.get("phone") or "").strip()
     non_live = [
-        basis_hint_ru(str(s.get("schedule_basis") or "live"))
-        for day in days
-        for s in (day.get("sessions") or [])
+        basis_hint_ru(str(s.get("schedule_basis") or "live")) for day in days for s in (day.get("sessions") or [])
     ]
     non_live = [h for h in non_live if h]
     basis_note = ""
@@ -863,8 +859,7 @@ def _hours_rows(hours: Mapping[str, Any], *, season_closed: bool) -> str:
         groups = hours_groups(hours)
         if groups and all(pair for _, pair in groups):
             return "".join(
-                f'<p class="row"><span>{_esc(label)}</span>'
-                f"<b>{_esc(pair[0])}–{_esc(pair[1])}</b></p>"
+                f'<p class="row"><span>{_esc(label)}</span>' f"<b>{_esc(pair[0])}–{_esc(pair[1])}</b></p>"
                 for label, pair in groups
                 if pair is not None
             )
@@ -968,7 +963,9 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
         rows.append(f'<p class="row"><span>Адрес</span><b>{addr_html}</b></p>')
     phone = str(card.get("phone") or "").strip()
     if phone and is_valid_public_phone(phone):
-        rows.append(f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a></b></p>')
+        rows.append(
+            f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a></b></p>'
+        )
     site = safe_external_url(card.get("website_url"))
     if site:
         label = str(card.get("venue_site_label") or "Сайт")
@@ -993,8 +990,49 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
     return '<section class="sec"><h2 class="sec__title">Контакты</h2>' + "".join(rows) + "</section>"
 
 
+def zovi_entry_path(view: Mapping[str, Any]) -> str | None:
+    """Ссылка «Позвать открыткой». ``None`` — ссылки нет.
+
+    Выбранный сеанс (``?s=`` и он найден) важнее ближайшего из тех, что страница
+    уже показывает. Не каток или пустое расписание — без ссылки.
+    """
+    card = view.get("card") or {}
+    if not isinstance(card, Mapping) or not _skating(card):
+        return None
+    session_id = _zovi_session_id(view)
+    if session_id is None:
+        return None
+    return f"/zovi?s={session_id}&via=place"
+
+
+def _zovi_session_id(view: Mapping[str, Any]) -> int | None:
+    focus = view.get("focus")
+    if isinstance(focus, Mapping) and focus.get("id") is not None:
+        return int(focus["id"])
+    best: tuple[str, str, int] | None = None
+    shown = list(view.get("days") or []) + list(view.get("ohm_days") or [])
+    for day in shown:
+        if not isinstance(day, Mapping):
+            continue
+        for slot in day.get("sessions") or []:
+            if not isinstance(slot, Mapping) or slot.get("id") is None:
+                continue
+            key = (
+                str(slot.get("local_date") or day.get("local_date") or ""),
+                str(slot.get("starts_at_local") or ""),
+                int(slot["id"]),
+            )
+            if best is None or key < best:
+                best = key
+    return None if best is None else best[2]
+
+
 def _share_html(
-    share: Mapping[str, str], *, venue_type: str = "ice", telegram_link_only: bool = False
+    share: Mapping[str, str],
+    *,
+    venue_type: str = "ice",
+    telegram_link_only: bool = False,
+    zovi_path: str | None = None,
 ) -> str:
     """Ряд «Поделиться». Подборка в Telegram — только url (превью из og), без text=."""
     url = share["share_url"]
@@ -1006,6 +1044,7 @@ def _share_html(
     wa = f"https://wa.me/?text={quote(full, safe='')}"
     viber = f"viber://forward?text={quote(full, safe='')}"
     vk = f"https://vk.com/share.php?url={quote(url, safe='')}"
+    zovi = f'<p class="share__zovi"><a href="{_esc(zovi_path)}">Позвать открыткой →</a></p>' if zovi_path else ""
     return (
         f'<section class="share" aria-label="{t("cta.share")}">'
         f'<p class="share__title">{"Позвать друзей" if venue_type == "ice" else t("cta.share")}</p>'
@@ -1015,7 +1054,7 @@ def _share_html(
         f'<a class="share__btn" href="{_esc(wa)}" rel="noopener" target="_blank">WhatsApp</a>'
         f'<a class="share__btn" href="{_esc(vk)}" rel="noopener" target="_blank">VK</a>'
         f'<button class="share__btn" type="button" data-copy="{_esc(full)}">Скопировать</button>'
-        "</div></section>"
+        "</div>" + zovi + "</section>"
     )
 
 
@@ -1174,17 +1213,13 @@ def render_place_page(
             _amenities_html(card),
             _trainers_html(card, cta_url=cta_url),
             _contacts_html(card),
-            _share_html(share, venue_type=vt),
+            _share_html(share, venue_type=vt, zovi_path=zovi_entry_path(view)),
         ]
     )
     city = _city(card)
     city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city)} сегодня</a>' if city_page_url and city else ""
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
-    robots = (
-        "noindex, follow"
-        if (view.get("focus") is not None or invite or bool(share_src))
-        else "index, follow"
-    )
+    robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
 
     html = _TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))

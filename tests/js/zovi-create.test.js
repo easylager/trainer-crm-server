@@ -118,3 +118,41 @@ describe('имя как на сервере', () => {
     });
   });
 });
+
+describe('вход из каталога', () => {
+  const { inviteRequestHeaders, readTelegramInitData, openedWithVia, returnToSchedule } = loadModel();
+
+  it('креденшл из sessionStorage уходит заголовком, пустой — нет', () => {
+    assert.deepEqual(inviteRequestHeaders(''), {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    });
+    assert.equal(inviteRequestHeaders('  signed  ')['X-Telegram-Init-Data'], 'signed');
+    assert.equal(readTelegramInitData({ getItem: () => 'init' }), 'init');
+    assert.equal(readTelegramInitData(null), '');
+    assert.equal(
+      readTelegramInitData({
+        getItem() {
+          throw new Error('blocked');
+        },
+      }),
+      ''
+    );
+  });
+
+  it('via включает возврат: назад, если история есть, иначе на главную', () => {
+    assert.equal(openedWithVia(''), false);
+    assert.equal(openedWithVia('?s=15'), false);
+    assert.equal(openedWithVia('?s=15&via=place'), true);
+    assert.equal(openedWithVia('?via=%20'), false);
+
+    const backed = { history: { length: 2, back() { this.went = true; } }, location: { href: '' } };
+    assert.equal(returnToSchedule(backed), 'back');
+    assert.equal(backed.history.went, true);
+    assert.equal(backed.location.href, '');
+
+    const fresh = { history: { length: 1, back() { throw new Error('no'); } }, location: { href: '' } };
+    assert.equal(returnToSchedule(fresh), 'home');
+    assert.equal(fresh.location.href, '/');
+  });
+});
