@@ -78,14 +78,12 @@
   var CARD_WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
   var CARD_MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-  /** Открытку можно собрать: каток и выбранный сеанс. */
   function postcardReady(sheetState) {
     if (!sheetState || sheetState.endpoint) return false;
     if ((sheetState.venueType || 'ice') !== 'ice') return false;
     return sheetState.sessionId != null && String(sheetState.sessionId).trim() !== '';
   }
 
-  /** Откуда позвали — для воронки TASK-237 (`via` в POST /api/public/invites). */
   function postcardVia(sheetState) {
     return sheetState && sheetState.context === 'ice_list' ? 'ice_list' : 'arena_card';
   }
@@ -145,7 +143,6 @@
     return placeNameFromShare(payload && payload.place_share_body);
   }
 
-  /** Данные живой открытки: сеанс из шита, имена из полей. */
   function postcardInput(sheetState) {
     var picked = selectedPostcardSlot(sheetState);
     var row = picked && picked.row;
@@ -169,9 +166,7 @@
   }
 
   var ZOVI_FROM_KEY = 'zovi_from';
-  /* Скрипты открытки грузятся, только когда открыли шит катка: страница каталога
-     не тяжелеет (бюджет веса — tests/unit/test_webapp_page_weight_budget.py).
-     Версии — как у /zovi (__ASSET_V__ в zovi_create_page.py). */
+  /* Открытка грузится по требованию: бюджет веса каталога (test_webapp_page_weight_budget). */
   var ZOVI_SCRIPTS = [
     '/static/shared/zovi-model.js?v=7',
     '/static/shared/zovi-create.js?v=7',
@@ -183,30 +178,39 @@
     return !!(global.ZoviModel && global.ZoviCreate && global.ZoviLive);
   }
 
+  /* fetch с заголовком: бесплатный ngrok иначе отдаёт телефону HTML вместо JS. */
+  function loadScript(src) {
+    return fetch(src, { credentials: 'same-origin', headers: { 'ngrok-skip-browser-warning': '1' } })
+      .then(function (r) {
+        if (!r.ok || !/javascript/.test(r.headers.get('content-type') || '')) throw new Error(src);
+        return r.text();
+      })
+      .then(function (code) {
+        var tag = document.createElement('script');
+        tag.text = code + '\n//# sourceURL=' + src;
+        (document.head || document.documentElement).appendChild(tag);
+      });
+  }
+
   function loadZovi() {
     if (zoviLoaded()) return Promise.resolve(true);
     if (zoviLoading) return zoviLoading;
     zoviLoading = ZOVI_SCRIPTS.reduce(function (chain, src) {
-      return chain.then(function () {
-        return new Promise(function (resolve, reject) {
-          var tag = document.createElement('script');
-          tag.src = src;
-          tag.async = false;
-          tag.onload = resolve;
-          tag.onerror = reject;
-          (document.head || document.documentElement).appendChild(tag);
-        });
-      });
-    }, Promise.resolve()).then(
-      function () { return zoviLoaded(); },
-      function () { zoviLoading = null; return false; }
-    );
+      return chain.then(function () { return loadScript(src); });
+    }, Promise.resolve()).then(zoviLoaded, function () {
+      zoviLoading = null;
+      return false;
+    });
     return zoviLoading;
   }
 
-  /** Скрипты догрузились — дописать имя из прошлого раза и показать открытку. */
   function onZoviLoaded(ok) {
-    if (!ok || !state || !state.zovi) return;
+    if (!state || !state.zovi) return;
+    state.zovi.failed = !ok;
+    if (!ok) {
+      if (state.variantId === 'postcard') preserveSheetScroll(paintPreviewBlock);
+      return;
+    }
     if (!state.zovi.from) state.zovi.from = prefillFromName();
     if (state.variantId === 'postcard') preserveSheetScroll(paintPreviewBlock);
   }
@@ -222,7 +226,6 @@
     return res.ok ? res.value : '';
   }
 
-  /** «Твоё имя»: что вводил в прошлый раз, иначе имя из Telegram. */
   function prefillFromName() {
     try {
       var saved = global.localStorage && global.localStorage.getItem(ZOVI_FROM_KEY);
@@ -837,7 +840,6 @@
     return slotList();
   }
 
-  /** Сеанс уже выбран — одна строка вместо списка; «Другое время» раскрывает список. */
   function pickedSlotSummary(picked) {
     var day = shortCardDate(picked.section.localDate) || picked.section.dayLabel || '';
     var when = (day ? day + ' · ' : '') + (picked.row.time || '');
@@ -929,7 +931,11 @@
 
   function renderPostcardPreview(sheetState) {
     var live = global.ZoviLive;
-    if (!live) return '<div class="gss-live gss-live--wait" aria-busy="true"></div>';
+    if (!live) {
+      return sheetState.zovi && sheetState.zovi.failed
+        ? '<p class="gss-note">Открытка не загрузилась. <button type="button" class="gss-zlink" data-gss-zretry>Ещё раз</button></p>'
+        : '<div class="gss-live gss-live--wait" aria-busy="true"></div>';
+    }
     return '<div class="gss-live">' + live.html(postcardInput(sheetState)) + '</div>';
   }
 
@@ -938,7 +944,6 @@
     return String(z.to || '').trim();
   }
 
-  /** Низ открытки: поля и «Создать» — или, когда создана, куда отправить. */
   function renderPostcardBottom(sheetState) {
     var z = sheetState.zovi || {};
     var to = postcardTo(sheetState);
@@ -985,7 +990,6 @@
     return renderChannelsHtml(sheetState.payload) + SHARE_NOTE;
   }
 
-  /** Короткая ошибка сервера: «from_name: …» → без технического префикса. */
   function humanError(detail) {
     var text = typeof detail === 'string' ? detail : '';
     return text.replace(/^(to_name|from_name):\s*/, '') || 'Не получилось создать открытку. Попробуй ещё раз.';
@@ -1057,7 +1061,6 @@
       });
   }
 
-  /** «Мои приглашения» на /zovi — тот же список, что пишет страница создания. */
   function rememberMine(created, toName) {
     try {
       var input = postcardInput(state);
@@ -1075,7 +1078,6 @@
     } catch (e) { /* */ }
   }
 
-  /** Полезная нагрузка для каналов: ссылка на открытку и сам вопрос. */
   function postcardPayload() {
     var input = postcardInput(state);
     var m = global.ZoviLive ? global.ZoviLive.model(input) : { name: '', ask: '' };
@@ -1088,7 +1090,6 @@
     host.innerHTML = renderPostcardBottom(state);
   }
 
-  /** Живая открытка в DOM — оживить; старую остановить. */
   function mountLive() {
     if (state && state.zoviLive) {
       state.zoviLive.destroy();
@@ -1268,7 +1269,6 @@
     return renderShareBottom(state);
   }
 
-  /** Выбранный сеанс виден сразу, а не прокручен за край списка. */
   function revealPickedSlot() {
     var list = root && root.querySelector('.gss-slot-list');
     var row = list && list.querySelector('.gss-slot-row.is-on');
@@ -1417,6 +1417,12 @@
     if (ev.target.closest('[data-gss-save-image]') && state.payload) {
       haptic();
       CHANNELS.image(state.payload);
+      return;
+    }
+    if (ev.target.closest('[data-gss-zretry]')) {
+      state.zovi.failed = false;
+      preserveSheetScroll(paintPreviewBlock);
+      loadZovi().then(onZoviLoaded);
       return;
     }
     if (ev.target.closest('[data-gss-pick-open]')) {
