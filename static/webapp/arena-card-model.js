@@ -1067,11 +1067,15 @@
     if (!hours || typeof hours !== 'object') return { enabled: false };
     var catalog = Array.isArray(hours.rental_catalog) ? hours.rental_catalog : [];
     var week = weekHours(hours, new Date(), card.timezone);
+    /* Центр по записи: прайс — отдельная секция, часы остаются в контактах.
+       «Когда можно приехать» — про массовый доступ, не про бронь площадки. */
+    var center = String(hours.center_badge || '').trim();
     var enabled =
-      catalog.length > 0 ||
-      hours.free_entry === true ||
-      Boolean(hours.rental_close && week) ||
-      Boolean(hours.access_note && week);
+      !center &&
+      (catalog.length > 0 ||
+        hours.free_entry === true ||
+        Boolean(hours.rental_close && week) ||
+        Boolean(hours.access_note && week));
     if (!enabled) return { enabled: false };
     return {
       enabled: true,
@@ -1081,6 +1085,35 @@
       trackClose: String(hours.track_close || '').trim(),
       accessNote: String(hours.access_note || '').trim(),
       rentalCatalog: catalog,
+      rentalTitle: rentalSectionTitle(card, hours),
+      rentalNote: String(hours.rental_note || '').trim(),
+    };
+  }
+
+  /** Прайс Minikatok — услуги площадки, не прокат роликов ФК «Минск». */
+  function rentalSectionTitle(card, hours) {
+    var explicit = String((hours && hours.rental_title) || '').trim();
+    if (explicit) return explicit;
+    var blob = (String(card.name || '') + ' ' + String(card.website_url || '')).toLowerCase();
+    if (blob.indexOf('minikatok') !== -1) return 'Услуги';
+    return 'Прокат инвентаря';
+  }
+
+  /** Карточка хоккейного центра: коротко о месте и прайс, без ленты «открыть карточку». */
+  function centerOfferView(card) {
+    card = card || {};
+    var hours = card.opening_hours;
+    if (!hours || typeof hours !== 'object') return { enabled: false };
+    if (!String(hours.center_badge || '').trim()) return { enabled: false };
+    var catalog = Array.isArray(hours.rental_catalog) ? hours.rental_catalog : [];
+    var about = String(card.short_description || '').trim();
+    if (!catalog.length && !about) return { enabled: false };
+    return {
+      enabled: true,
+      title: rentalSectionTitle(card, hours),
+      catalog: catalog,
+      note: String(hours.rental_note || '').trim(),
+      about: about,
     };
   }
 
@@ -1367,6 +1400,7 @@
     quickActions: quickActions,
     weekHours: weekHours,
     massAccessView: massAccessView,
+    centerOfferView: centerOfferView,
     intervalsForWeekday: intervalsForWeekday,
     formatIntervalsRu: formatIntervalsRu,
   };

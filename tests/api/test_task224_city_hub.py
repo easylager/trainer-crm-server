@@ -163,7 +163,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
 
     ohm = _route(html, "Хоккей")
     assert ohm, html
-    assert f'href="/c/{slug}?kind=ohm"' in ohm and "1 каток" in ohm
+    assert f'href="/c/{slug}?kind=ohm"' in ohm and "seg=" not in ohm and "1 каток" in ohm
     if ohm_weekend:
         assert f'href="/c/{slug}?w=weekend&amp;kind=ohm"' in ohm and f"Сб–Вс <small>{ohm_weekend}</small>" in ohm
         assert "07:00" in ohm
@@ -313,6 +313,59 @@ def test_city_hub_title_names_only_sections_on_the_page() -> None:
         )
         == "Минск · где покататься, заточка, хоккей | Glide"
     )
+    assert (
+        city_hub_document_title(
+            {"city": {"name": "Минск"}, "rink_count": 0, "service_count": 0, "ohm_counts": {"all": 0}, "center_count": 2}
+        )
+        == "Минск · хоккей | Glide"
+    )
+
+
+@pytest.mark.asyncio
+async def test_city_hub_hockey_tile_for_centers_without_sessions(app_use_test_db, db_session) -> None:
+    """Нет будущих ОХМ, но есть центр — плитка «Хоккей» ведёт на seg=centers."""
+    name = f"Центрхаб {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    center_name = f"Центр хаба {uuid.uuid4().hex[:4]}"
+    center = await _insert_arena(db_session, city_id, name=center_name)
+    await db_session.execute(
+        text("UPDATE arenas SET venue_type = 'other' WHERE id = :id"),
+        {"id": center},
+    )
+    await db_session.execute(
+        text(
+            """
+            UPDATE arena_profiles
+            SET amenities = COALESCE(amenities, '{}'::jsonb) || '{"hockey_center": true}'::jsonb
+            WHERE arena_id = :id
+            """
+        ),
+        {"id": center},
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+
+    async with _client() as client:
+        hub = await client.get(f"/c/{slug}")
+        ohm = await client.get(f"/c/{slug}", params={"kind": "ohm"})
+
+    assert hub.status_code == 200
+    tile = _route(hub.text, "Хоккей")
+    assert tile, hub.text
+    assert f'href="/c/{slug}?kind=ohm&amp;seg=centers"' in tile
+    assert "1 центр" in tile
+    assert "каток" not in tile
+    assert f"{name} · хоккей | Glide" in hub.text
+    assert ohm.status_code == 200
+    assert ohm.headers.get("location") is None
+    ohm_canon = re.search(r'<link rel="canonical" href="([^"]*)"', ohm.text)
+    assert ohm_canon and ohm_canon.group(1).endswith(f"/c/{slug}?kind=ohm")
+    assert "seg=" not in ohm_canon.group(1)
+    assert "Пока нет сеансов ОХМ" in ohm.text
+    assert center_name not in ohm.text
+    assert "Центры <small>1</small>" in ohm.text
+    assert f'class="chip" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm.text
 
 
 def test_skate_route_without_sessions_says_so() -> None:

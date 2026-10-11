@@ -160,6 +160,10 @@ async def get_public_ice_arenas(
         None,
         description="winter — только катки закрытого сезона; без параметра они скрыты из основной ленты.",
     ),
+    seg: str | None = Query(
+        None,
+        description="На вкладке Хоккей: ohm (сеансы) или centers (центры по записи).",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
@@ -184,6 +188,7 @@ async def get_public_ice_arenas(
             day=day,
             season=season,
             service_keys=SERVICE_AMENITY_KEYS[svc_value] if svc_value else None,
+            hockey_segment=seg,
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc

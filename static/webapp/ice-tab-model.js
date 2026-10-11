@@ -130,6 +130,9 @@
     if (opts.svc === 'service' || opts.svc === 'sharpening' || opts.svc === 'rental') {
       params.push('svc=' + encodeURIComponent(opts.svc));
     }
+    if (intent === INTENTS.ohm && opts.seg === 'centers') {
+      params.push('seg=centers');
+    }
     return '/api/public/ice/arenas?' + params.join('&');
   }
 
@@ -237,6 +240,21 @@
   }
 
   /**
+   * Сегмент ОХМ / Центры. Чипы видны, только когда в городе есть и то и другое:
+   * пустой чип «Центры» в городе без центров — тупик. Нет ОХМ, а центры есть —
+   * открываем Центры, а не пустую ленту сеансов.
+   */
+  function hockeySegView(opts) {
+    opts = opts || {};
+    var ohm = Math.max(0, Number(opts.ohmCount) || 0);
+    var centers = Math.max(0, Number(opts.centerCount) || 0);
+    var seg = opts.seg === 'centers' ? 'centers' : 'ohm';
+    if (centers <= 0) seg = 'ohm';
+    else if (ohm <= 0) seg = 'centers';
+    return { visible: ohm > 0 && centers > 0, seg: seg, centerCount: centers };
+  }
+
+  /**
    * TASK-182 (F1). Автопереход на «Тренеров» — только когда сервер честно сказал
    * «в городе нет льда»: лента мест (не магазины), без чипа другого типа, total = 0
    * в ответе сервера. Пустота после клиентских фильтров (магазины + «Открыто сейчас»
@@ -332,7 +350,8 @@
       });
     }
     var ohmN = Number(opts.ohmCount);
-    if (!isNaN(ohmN) && ohmN > 0) {
+    var centerN = Number(opts.centerCount);
+    if ((!isNaN(ohmN) && ohmN > 0) || (!isNaN(centerN) && centerN > 0)) {
       modes.push({ id: 'ohm', label: hockeyChipLabel(), active: scope === 'ohm' });
     }
     var serviceN = Math.max(0, Number(opts.serviceCount) || 0);
@@ -1876,6 +1895,10 @@
       depth = 'Ещё ' + more + ' ' + pluralRu(more, 'сеанс', 'сеанса', 'сеансов') + ' в расписании';
     } else if (isSession) {
       depth = 'Расписание и цены';
+    } else if (String(item.center_badge || '').trim()) {
+      /* Центр по записи: карточка сама открывает место. Отдельная строка
+         «Открыть карточку» и звонок в ленте ломают табло сеанса. */
+      depth = '';
     } else {
       /* Подпись склоняет сервер по venue_type: на зале это «карточку зала».
          Хардкод «катка» здесь и был тем, что ломалось на первой же не-ледовой
@@ -1929,6 +1952,7 @@
       offWindow: off,
       offLabel: off ? windowMissLabel(opts.window) + (isSession ? ' · ближайший' : '') : '',
       callHref: callHref,
+      badge: String(item.center_badge || '').trim(),
     };
   }
 
@@ -1942,6 +1966,14 @@
     opts = opts || {};
     var trainers = Number(opts.trainerCount) || 0;
     var rinks = Number(opts.mapRinkCount) || 0;
+    if (intent === INTENTS.ohm && opts.hockeySeg === 'centers') {
+      return {
+        title: 'Центров по записи нет',
+        body: 'В этом городе нет хоккейных центров без открытого сеанса.',
+        action: { label: 'Показать места', kind: 'intent:skate' },
+        secondary: { label: 'Сменить город', kind: 'city' },
+      };
+    }
     if (intent === INTENTS.ohm) {
       return {
         title: 'Сейчас нет ОХМ',
@@ -2053,6 +2085,7 @@
     // о результате запроса, которого ещё не было. Подпись ждёт вместе со списком.
     if ((opts.loading && !total) || wrongLens) {
       if (intent === INTENTS.coach) return 'Ищем тренеров…';
+      if (intent === INTENTS.ohm && opts.hockeySeg === 'centers') return 'Ищем центры…';
       if (intent === INTENTS.ohm) return 'Ищем ОХМ…';
       return 'Ищем катки…';
     }
@@ -2072,6 +2105,11 @@
       var svc = opts.serviceLabel ? ' · ' + opts.serviceLabel : '';
       if (total === 0) return 'Пока нет тренеров' + svc;
       return total + ' ' + coachWord + svc;
+    }
+    if (intent === INTENTS.ohm && opts.hockeySeg === 'centers') {
+      var centerWord = pluralRu(total, 'центр', 'центра', 'центров');
+      if (total === 0) return 'Центров по записи пока нет';
+      return total + ' ' + centerWord + ' · по записи, не сеанс';
     }
     if (intent === INTENTS.ohm) {
       var ohmWord = pluralRu(total, 'каток', 'катка', 'катков');
@@ -2169,6 +2207,7 @@
           when: String(state.when || 'any'),
           whenDay: String(state.whenDay || ''),
           season: state.season === 'winter' ? 'winter' : '',
+          hockeySeg: state.hockeySeg === 'centers' ? 'centers' : 'ohm',
           scrollY: state.scrollY || 0,
           scrollAnchor: state.scrollAnchor ? String(state.scrollAnchor) : '',
           view: state.view || 'list',
@@ -2289,6 +2328,7 @@
     ICE_SCROLL_KEY: ICE_SCROLL_KEY,
     INTENTS: INTENTS,
     buildListUrl: buildListUrl,
+    hockeySegView: hockeySegView,
     buildMapListUrl: buildMapListUrl,
     venueTypeParam: venueTypeParam,
     venueChipsView: venueChipsView,

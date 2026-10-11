@@ -16,7 +16,16 @@ _MULTI_SPACE_RE = re.compile(r"\s{2,}")
 _LABEL_WORD_RE = re.compile(r"^(?:комплекс|касс[аы]|каток|ежедневно|катания)$", re.I)
 _STRUCTURE_KEYS = ("daily", "kassa", "complex", "hours")
 
-_OPENING_HOURS_STRING_KEYS = ("note", "access_note", "rental_close", "track_close")
+_OPENING_HOURS_STRING_KEYS = (
+    "note",
+    "access_note",
+    "rental_close",
+    "track_close",
+    "rental_title",
+    "rental_note",
+    "center_badge",
+    "center_line",
+)
 
 
 def text_contains_dossier_leak(value: str | None) -> bool:

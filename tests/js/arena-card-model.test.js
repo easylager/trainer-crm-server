@@ -1071,4 +1071,50 @@ describe('massAccessView', () => {
     assert.equal(massAccessView({ opening_hours: { weekly: { mon: [['10:00', '18:00']] } } }).enabled, false);
     assert.equal(massAccessView({}).enabled, false);
   });
+
+  it('у Minikatok прайс называется «Услуги» и без сноски ФК «Минск»', () => {
+    const { massAccessView } = loadModel();
+    const v = massAccessView({
+      name: 'Minikatok.by',
+      website_url: 'https://minikatok.by/',
+      opening_hours: {
+        rental_catalog: [{ label: 'Каток на компанию, 45 мин', price: '100 BYN' }],
+      },
+    });
+    assert.equal(v.rentalTitle, 'Услуги');
+    assert.equal(v.rentalNote, '');
+  });
+
+  it('центр по записи не включает «Когда можно приехать», прайс — отдельный блок', () => {
+    const { massAccessView, centerOfferView } = loadModel();
+    const card = {
+      name: 'Хоккейный центр «Финт»',
+      short_description: 'Бросковый центр на синтетическом льду.',
+      opening_hours: {
+        center_badge: 'Синтетика',
+        weekly: { mon: [['07:00', '22:00']] },
+        rental_title: 'Услуги',
+        rental_catalog: [{ label: 'Накануне или в день визита', price: '12 BYN', per: 'час' }],
+      },
+    };
+    assert.equal(massAccessView(card).enabled, false);
+    const offer = centerOfferView(card);
+    assert.equal(offer.enabled, true);
+    assert.equal(offer.title, 'Услуги');
+    assert.equal(offer.catalog.length, 1);
+    assert.match(offer.about, /синтетическом/);
+  });
+
+  it('сноска проката только если она записана у места', () => {
+    const { massAccessView } = loadModel();
+    const v = massAccessView({
+      name: 'Лыжероллерная трасса',
+      opening_hours: {
+        ...lyzhHours,
+        rental_note: 'Ориентиры проката ФК «Минск» — на кассе могут отличаться.',
+      },
+    });
+    assert.equal(v.rentalTitle, 'Прокат инвентаря');
+    assert.match(v.rentalNote, /ФК «Минск»/);
+  });
 });

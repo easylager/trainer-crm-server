@@ -45,6 +45,44 @@ def test_real_partner_file_parses_and_names_only_stated_services() -> None:
     assert len(rinks) == 4
 
 
+def test_hockey_centers_file_keeps_badge_line_and_services() -> None:
+    city, records, _rinks = parse_shops_file(REPO / "data" / "catalog" / "hockey-centers-minsk.json")
+    assert city == "Минск"
+    by_key = {r.key: r for r in records}
+    assert set(by_key) == {"lepshy-hockey-center", "fint", "minikatok"}
+    for rec in records:
+        assert rec.venue_type == "other"
+        assert rec.amenities["hockey_center"] is True
+        assert rec.hours_extra["center_badge"]
+        assert rec.hours_extra["center_line"]
+    mini = by_key["minikatok"]
+    assert mini.hours_extra["rental_title"] == "Услуги"
+    assert "rental_note" not in mini.hours_extra
+    assert len(mini.hours_extra["rental_catalog"]) == 6
+    assert "ФК" not in json.dumps(mini.hours_extra, ensure_ascii=False)
+    lepshy = by_key["lepshy-hockey-center"]
+    assert lepshy.website is None
+    assert lepshy.instagram is None
+    assert lepshy.hours_extra["center_badge"] == "Льда нет"
+    assert lepshy.hours_extra["rental_title"] == "Услуги"
+    catalog = lepshy.hours_extra["rental_catalog"]
+    assert [row["label"] for row in catalog] == [
+        "Пробная тренировка, 45–60 мин",
+        "Дорожка HST, 60 мин",
+        "Бросок и дриблинг, 45 или 60 мин",
+        "Заточка лезвия",
+        "Правка геометрии лезвия",
+        "Профиль лезвия",
+        "Термоформовка коньков",
+        "Мелкий ремонт",
+    ]
+    assert catalog[0]["price"] == "бесплатно"
+    assert catalog[3]["price"] == "15 BYN"
+    blob = json.dumps(lepshy.hours_extra, ensure_ascii=False)
+    assert "лагер" not in blob.lower()
+    assert "4–9" not in blob
+
+
 def test_unknown_service_rejects_the_whole_file(tmp_path: Path) -> None:
     bad = {"city": "Минск", "shops": [{"name": "X", "services": ["massage"]}]}
     path = tmp_path / "bad.json"

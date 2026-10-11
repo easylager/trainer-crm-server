@@ -41,6 +41,8 @@ VENUE_AMENITY_KEYS = frozenset(
         "locker_rooms",  # раздевалки
         "cafe",  # кафе
         "accessibility",  # доступность
+        # Хоккейный центр по записи: не массовое катание и не сеанс ОХМ.
+        "hockey_center",
     }
 )
 
@@ -89,6 +91,7 @@ AMENITY_LABELS_RU = {
     "locker_rooms": "Раздевалки",
     "cafe": "Кафе",
     "accessibility": "Доступность",
+    "hockey_center": "Хоккейный центр",
     "retail": "Розница",
     "repair": "Ремонт",
     "skate_molding": "Формовка",
@@ -632,7 +635,7 @@ async def touch_arena_profile(session: AsyncSession, arena_id: int) -> None:
 #   {"daily": {"open": "10:00", "close": "20:00"}} — каждый день одинаково;
 #   {"weekly": {"mon": ["10:00", "19:00"], ...}}   — один интервал в день;
 #   {"weekly": {"mon": [["11:00","15:00"],["19:00","22:00"]], ...}} — несколько окон (лыжероллерная).
-#   Опционально: rental_close, access_note, free_entry (bool) — для карточки, не schema.org.
+#   Опционально: rental_close, access_note, free_entry (bool), rental_title, rental_note.
 # ---------------------------------------------------------------------------
 
 WEEKDAY_KEYS: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")

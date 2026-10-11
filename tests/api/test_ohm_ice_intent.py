@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from src.api.app import app
 from src.application.ice_session_use_cases import create_ice_session
@@ -96,6 +97,73 @@ async def test_intent_ohm_lists_only_arenas_with_hockey_practice(app_use_test_db
     assert cities.status_code == 200
     city_row = next(c for c in cities.json()["items"] if int(c["id"]) == city_id)
     assert int(city_row.get("ohm_count") or 0) == 1
+
+
+@pytest.mark.asyncio
+async def test_hockey_center_is_its_own_segment(app_use_test_db, db_session) -> None:
+    name = f"HockeyCenter {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    rink = await _insert_arena(db_session, city_id, name=f"OHM {uuid.uuid4().hex[:4]}")
+    center = await _insert_arena(
+        db_session,
+        city_id,
+        name="Lepshy Hockey Center",
+        phone="+375 29 110-20-35",
+        opening_hours={
+            "center_badge": "Льда нет",
+            "center_line": "Дорожка HST, бросковая зона, зал ОФП.",
+        },
+    )
+    await db_session.execute(
+        text("UPDATE arenas SET venue_type = 'other' WHERE id = :id"),
+        {"id": center},
+    )
+    await db_session.execute(
+        text(
+            """
+            UPDATE arena_profiles
+            SET amenities = COALESCE(amenities, '{}'::jsonb) || '{"hockey_center": true}'::jsonb
+            WHERE arena_id = :id
+            """
+        ),
+        {"id": center},
+    )
+    day = date.today() + timedelta(days=2)
+    await _ohm(db_session, rink, day=day, hhmm="08:15")
+    await db_session.commit()
+
+    async with _client() as client:
+        skate = await client.get(
+            "/api/public/ice/arenas", params={"city_id": city_id, "intent": "skate", "limit": 50}
+        )
+        ohm = await client.get(
+            "/api/public/ice/arenas", params={"city_id": city_id, "intent": "ohm", "limit": 50}
+        )
+        centers = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": city_id, "intent": "ohm", "seg": "centers", "limit": 50},
+        )
+        bad = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": city_id, "intent": "ohm", "seg": "shops", "limit": 50},
+        )
+        cities = await client.get("/api/public/ice/cities")
+
+    assert center not in {int(i["id"]) for i in skate.json()["items"]}
+    assert [int(i["id"]) for i in ohm.json()["items"]] == [rink]
+    assert centers.status_code == 200
+    items = centers.json()["items"]
+    assert [int(i["id"]) for i in items] == [center]
+    card = items[0]
+    assert card["center_badge"] == "Льда нет"
+    assert card["live"]["kind"] == "place"
+    assert "HST" in card["live"]["text"]
+    assert card["live"].get("session_id") is None
+    assert card["phone"] == "+375 29 110-20-35"
+    assert bad.status_code == 400
+    city_row = next(c for c in cities.json()["items"] if int(c["id"]) == city_id)
+    assert int(city_row["center_count"]) == 1
+    assert int(city_row["ohm_count"]) == 1
 
 
 @pytest.mark.asyncio

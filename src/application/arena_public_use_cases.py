@@ -129,6 +129,9 @@ _OHM_SESSION_SQL = """
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
 """
 
+# Хоккейный центр по записи — не сеанс ОХМ и не массовое катание.
+_NOT_HOCKEY_CENTER_SQL = "COALESCE(p.amenities->>'hockey_center', '') <> 'true'"
+
 
 def _today_minsk() -> date:
     """Calendar day for Ice copy and default feed window (UTC+3, no DST)."""
@@ -406,8 +409,16 @@ def _place_line(item: Mapping[str, Any]) -> str:
     return line[:1].upper() + line[1:]
 
 
+def _is_hockey_center(row: Mapping[str, Any]) -> bool:
+    return _as_mapping(row.get("amenities")).get("hockey_center") is True
+
+
 def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     currency = item.get("currency_code") or "BYN"
+    if _is_hockey_center(item):
+        hours = _as_mapping(item.get("opening_hours"))
+        text = str(hours.get("center_line") or "").strip() or _place_line(item)
+        return {"kind": "place", "text": text, "currency_code": currency}
     mode = normalize_schedule_mode(item.get("schedule_mode"))
     # intent=ohm: те же live-строки, что у МК, но next_* уже из hockey_practice.
     skate_like = intent in (INTENT_SKATE, INTENT_OHM)
@@ -582,6 +593,12 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         payload["shop_services"] = [k for k in SHOP_SERVICE_KEYS if amenities.get(k) is True]
         payload["shop_disciplines"] = [k for k in SHOP_DISCIPLINE_KEYS if amenities.get(k) is True]
         payload["opening_hours"] = _as_mapping(item.get("opening_hours"))
+    if _is_hockey_center(item):
+        hours = _as_mapping(item.get("opening_hours"))
+        badge = str(hours.get("center_badge") or "").strip()
+        if badge:
+            payload["center_badge"] = badge
+        payload["opening_hours"] = hours
     return payload
 
 
@@ -1033,7 +1050,8 @@ async def list_city_selection_places(
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
-        WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{type_clause}
+        WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}
+          AND {_NOT_HOCKEY_CENTER_SQL}{type_clause}
     """
     facet_sql = f"""
         SELECT COALESCE(a.venue_type, 'ice') AS vt, COUNT(*)::int AS n
@@ -1041,6 +1059,7 @@ async def list_city_selection_places(
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
         WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}
+          AND {_NOT_HOCKEY_CENTER_SQL}
         GROUP BY 1
     """
     # Сначала места с будущими сеансами (ближайший — выше), потом остальные по алфавиту.
@@ -1054,7 +1073,8 @@ async def list_city_selection_places(
             FROM ice_sessions s
             WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
         ) nx ON true
-        WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{type_clause}
+        WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}
+          AND {_NOT_HOCKEY_CENTER_SQL}{type_clause}
         ORDER BY (nx.next_at IS NULL), nx.next_at, a.name, a.id
         LIMIT :lim OFFSET :off
     """
@@ -1130,6 +1150,7 @@ async def list_city_ohm_places(
         JOIN cities c ON c.id = a.city_id
         WHERE a.city_id = :city_id
           AND {PUBLIC_ARENA_VISIBLE_SQL}
+          AND {_NOT_HOCKEY_CENTER_SQL}
           AND EXISTS (
               SELECT 1 FROM ice_sessions s
               WHERE s.arena_id = a.id AND {_OHM_SESSION_SQL}{window_clause}
@@ -1223,6 +1244,7 @@ async def city_ohm_window_counts(
                 JOIN cities c ON c.id = a.city_id
                 WHERE a.city_id = :city_id
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
+                  AND {_NOT_HOCKEY_CENTER_SQL}
                   AND {_OHM_SESSION_SQL}
                 """),
             params,
@@ -1234,6 +1256,29 @@ async def city_ohm_window_counts(
         "weekend": int(row["weekend"] or 0),
         "all": int(row["all"] or 0),
     }
+
+
+async def city_hockey_center_count(session: AsyncSession, *, city_id: int) -> int:
+    """Видимые хоккейные центры города. Это места, не сеансы ОХМ."""
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+
+    value = (
+        await session.execute(
+            text(
+                f"""
+                SELECT COUNT(*)::int
+                FROM arenas a
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE a.city_id = :city_id
+                  AND {PUBLIC_ARENA_VISIBLE_SQL}
+                  AND (p.amenities->>'hockey_center') = 'true'
+                """
+            ),
+            {"city_id": int(city_id), **public_scope_params()},
+        )
+    ).scalar_one()
+    return int(value or 0)
 
 
 async def city_selection_session_counts(
@@ -1325,6 +1370,20 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                                    AND {_OHM_SESSION_SQL}
                              )
                        ) AS ohm_count,
+                       (
+                           SELECT COUNT(*)::int
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND (p.status IS NULL OR p.status = :published)
+                             AND (p.amenities->>'hockey_center') = 'true'
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
+                       ) AS center_count,
                        (
                            SELECT COUNT(*)::int
                            FROM trainers t
@@ -1482,6 +1541,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
     for row in rows:
         skate_count = int(row["skate_count"] or 0)
         ohm_count = int(row["ohm_count"] or 0)
+        center_count = int(row["center_count"] or 0)
         trainer_count = int(row["trainer_count"] or 0)
         map_rink_count = int(row["map_rink_count"] or 0)
         place_count = int(row["place_count"] or 0)
@@ -1510,6 +1570,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "country": row["country"],
                 "skate_count": skate_count,
                 "ohm_count": ohm_count,
+                "center_count": center_count,
                 "trainer_count": trainer_count,
                 "map_rink_count": map_rink_count,
                 "place_count": place_count,
@@ -1536,8 +1597,12 @@ async def list_public_ice_arenas(
     when: str | None = None,
     day: str | None = None,
     service_keys: tuple[str, ...] | list[str] | None = None,
+    hockey_segment: str | None = None,
 ) -> dict[str, Any]:
     intent_value = parse_intent(intent)
+    segment = (hockey_segment or "").strip().lower()
+    if segment not in ("", "ohm", "centers"):
+        raise IcePublicQueryError("seg must be ohm or centers")
     season_filter = parse_season_filter(season)
     venue_filter = parse_venue_type_filter(venue_type)
     bbox_box = parse_bbox(bbox)
@@ -1565,12 +1630,16 @@ async def list_public_ice_arenas(
     if window is not None:
         _apply_window(rows)
     if intent_value == INTENT_SKATE:
+        # Центр по записи — не ответ на «где покататься».
+        rows = [r for r in rows if not _is_hockey_center(r)]
         # TASK-180: очень устаревший каток не попадает «в окно» — его сеанс мы не
         # показываем как ответ на «Сегодня вечером», он уходит к остальным с честной строкой.
         _mark_unconfirmed_schedules(rows)
-    if intent_value == INTENT_OHM:
+    if intent_value == INTENT_OHM and segment == "centers":
+        rows = [r for r in rows if _is_hockey_center(r)]
+    elif intent_value == INTENT_OHM:
         # Только катки с будущим ОХМ; МК-лента (intent=skate) сюда не заходит.
-        rows = [r for r in rows if int(r.get("future_session_count") or 0) > 0]
+        rows = [r for r in rows if int(r.get("future_session_count") or 0) > 0 and not _is_hockey_center(r)]
         _mark_unconfirmed_schedules(rows)
     if near_pt is not None:
         nlat, nlon = near_pt
