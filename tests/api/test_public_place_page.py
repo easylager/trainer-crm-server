@@ -292,6 +292,37 @@ async def test_selection_image_rendering_runs_off_event_loop_thread(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_place_page_zovi_entry_link(app_use_test_db, db_session) -> None:
+    rink = await _place(db_session)
+    early = await _add_future_session(db_session, rink["arena_id"], days_ahead=1, starts_at_local="10:00")
+    later = await _add_future_session(db_session, rink["arena_id"], days_ahead=2, starts_at_local="21:00")
+    empty = await _place(db_session)
+    shop = await _place(
+        db_session,
+        venue_type="shop",
+        amenities={"retail": True},
+        opening_hours={"daily": {"open": "10:00", "close": "20:00"}},
+    )
+    await db_session.commit()
+
+    async with _client() as client:
+        focused = await client.get(rink["path"], params={"s": later})
+        nearest = await client.get(rink["path"])
+        bare = await client.get(empty["path"])
+        store = await client.get(shop["path"])
+
+    assert focused.status_code == 200, focused.text
+    assert f"/zovi?s={later}&amp;via=place" in focused.text
+    assert f"/zovi?s={early}&amp;via=place" not in focused.text
+    assert f"/zovi?s={early}&amp;via=place" in nearest.text
+    assert f"/zovi?s={later}&amp;via=place" not in nearest.text
+    assert "Позвать открыткой" not in bare.text
+    assert "/zovi?" not in bare.text
+    assert "Позвать открыткой" not in store.text
+    assert "/zovi?" not in store.text
+
+
+@pytest.mark.asyncio
 async def test_shop_page_shows_services_not_a_schedule(app_use_test_db, db_session) -> None:
     place = await _place(
         db_session,
@@ -499,9 +530,7 @@ def test_hero_photo_is_used_when_published_and_skipped_otherwise() -> None:
     assert _hero_photo_url({"hero": {"variants": {"thumb": "/api/public/photos/arenas/1/t.jpg"}}}) == (
         "/api/public/photos/arenas/1/t.jpg"
     )
-    assert _hero_photo_url(
-        {"hero": {"variants": {"hero": "/h.jpg", "card": "/c.jpg", "thumb": "/t.jpg"}}}
-    ) == "/c.jpg"
+    assert _hero_photo_url({"hero": {"variants": {"hero": "/h.jpg", "card": "/c.jpg", "thumb": "/t.jpg"}}}) == "/c.jpg"
     assert _hero_photo_url({"hero": {"variants": {"hero": "javascript:alert(1)"}}}) is None
     assert _hero_photo_url({"hero": None}) is None
 
@@ -510,7 +539,15 @@ def test_hero_photo_is_used_when_published_and_skipped_otherwise() -> None:
 async def test_every_script_the_client_pages_load_is_actually_served(app_use_test_db) -> None:
     """catalog-geo-model.js годами отдавался с 404 — геолокация молча не работала.
     Ловим весь класс: каждый локальный <script>/<link> клиентских страниц должен отвечать 200."""
-    pages = ["ice", "arena", "catalog?trainer_id=1", "client-home", "book?trainer_id=1", "client-bookings", "client-requests"]
+    pages = [
+        "ice",
+        "arena",
+        "catalog?trainer_id=1",
+        "client-home",
+        "book?trainer_id=1",
+        "client-bookings",
+        "client-requests",
+    ]
     async with _client() as client:
         for page in pages:
             html = (await client.get(f"/webapp/{page}")).text

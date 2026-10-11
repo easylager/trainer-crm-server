@@ -45,6 +45,10 @@
     button { cursor: pointer; border: 0; background: none; }
     :focus-visible { outline: 2px solid var(--g-accent); outline-offset: 3px; }
     .wrap { max-width: 440px; margin: 0 auto; display: grid; gap: 12px; }
+    .back {
+      justify-self: start; color: var(--g-accent-ink); font-size: 15px; font-weight: 600;
+      text-decoration: none; min-height: 44px; display: inline-flex; align-items: center;
+    }
     .brand { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
     .brand span { color: var(--g-accent-ink); }
     .hero {
@@ -139,6 +143,7 @@
 </head>
 <body>
   <div class="wrap" id="zovi">
+    <a class="back" id="back" href="/" hidden>← К расписанию</a>
     <div class="brand">Glide<span>.</span></div>
 
     <form id="zovi-form" class="hero">

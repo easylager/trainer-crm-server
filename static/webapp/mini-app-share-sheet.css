@@ -50,8 +50,7 @@
 }
 
 .gss-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 4px;
   padding: 4px;
   border-radius: var(--app-radius-md);
@@ -59,14 +58,17 @@
   margin-bottom: 10px;
 }
 .gss-tab {
+  flex: 1 1 0;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
-  padding: 9px 8px;
+  padding: 9px 6px;
   border-radius: var(--app-radius-sm);
   font: inherit;
-  font-size: var(--app-text-body);
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
+  line-height: 1.2;
   cursor: pointer;
 }
 .gss-tab.is-on { background: var(--glide-card); box-shadow: var(--app-float-shadow); }
@@ -276,6 +278,62 @@
   line-height: 1.45;
   color: var(--glide-hint);
 }
+
+.gss-card {
+  position: relative;
+  min-height: 148px;
+  display: grid;
+  align-content: space-between;
+  gap: 8px;
+  padding: 16px 16px 14px 18px;
+  border-radius: var(--app-radius-lg);
+  background: var(--glide-deep);
+  color: var(--glide-on-deep);
+  overflow: hidden;
+}
+.gss-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--app-cta-fill);
+}
+.gss-card__q {
+  margin: 0;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.gss-card__t,
+.gss-card__note {
+  margin: 0;
+  font-size: var(--app-text-caption);
+  line-height: 1.35;
+}
+.gss-card__t { color: var(--glide-on-deep-hint); font-variant-numeric: tabular-nums; }
+.gss-card__note { color: var(--glide-on-deep-hint); }
+.gss-zovi__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--app-radius-md);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  text-align: center;
+  cursor: pointer;
+}
+.gss-zovi__btn:disabled { opacity: 0.45; cursor: default; }
 
 .gss-channels {
   display: grid;

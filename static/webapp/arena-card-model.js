@@ -1222,7 +1222,7 @@
   function shareSlotKindNote(session) {
     var kind = session && session.kind;
     if (kind === 'hockey_practice') {
-      var GC = global.GlideCopy;
+      var GC = rootRef.GlideCopy;
       if (GC && typeof GC.t === 'function') {
         var full = String(GC.t('kind.hockey_practice') || '');
         if (full && full !== 'kind.hockey_practice') {
