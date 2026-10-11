@@ -32,6 +32,7 @@ from src.api.routes.public_arenas import router as public_arenas_router
 from src.api.routes.public_invites import router as public_invites_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
+from src.api.routes.zovi_pages import router as zovi_pages_router
 from src.api.routes.catalog_entry import router as catalog_entry_router
 from src.api.routes.catalog_consumer_telemetry import router as catalog_consumer_telemetry_router
 from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
@@ -1921,6 +1922,32 @@ def shared_glide_tokens_css(request: Request):
     )
 
 
+@app.get("/static/shared/zovi-model.js")
+def shared_zovi_model_js(request: Request):
+    """TASK-232: модель открытки «Пойдёшь со мной на каток?» (вопрос, склонение, вердикт)."""
+    path = _SHARED_DIR / "zovi-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/shared/zovi-card.js")
+def shared_zovi_card_js(request: Request):
+    """TASK-232: механика открытки — убегающее «Нет», пять актов, билет «ДА»."""
+    path = _SHARED_DIR / "zovi-card.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/list-scroll-restore.js")
 def shared_list_scroll_restore_js(request: Request):
     """Скролл списка /c/ и «Лёд сегодня» после возврата с /p/ (no-store убивает bfcache)."""
@@ -2056,6 +2083,7 @@ app.include_router(public_arenas_router)
 app.include_router(public_invites_router)
 app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
+app.include_router(zovi_pages_router)
 app.include_router(catalog_entry_router)
 app.include_router(catalog_consumer_telemetry_router)
 app.include_router(redirects_router)

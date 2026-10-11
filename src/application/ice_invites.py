@@ -251,19 +251,23 @@ async def get_invite(
     *,
     device_token: str | None,
     now: datetime | None = None,
+    mark_opened: bool = True,
 ) -> dict[str, Any]:
+    """``mark_opened=False`` — read only. The SSR page uses it: link-preview bots
+    fetch the page without JS, and that is not «opened» (TASK-232)."""
     moment = _as_utc(now or datetime.now(timezone.utc))
     row = await _load_invite(session, code)
     if row is None:
         raise InviteRejected(NOT_FOUND_DETAIL, 404)
-    await session.execute(
-        text("""
-            UPDATE ice_invites
-            SET first_opened_at = :now
-            WHERE id = :id AND first_opened_at IS NULL
-            """),
-        {"id": int(row["id"]), "now": moment},
-    )
+    if mark_opened:
+        await session.execute(
+            text("""
+                UPDATE ice_invites
+                SET first_opened_at = :now
+                WHERE id = :id AND first_opened_at IS NULL
+                """),
+            {"id": int(row["id"]), "now": moment},
+        )
     state = _invite_state(row, now=moment)
     payload: dict[str, Any] = {
         "code": row["code"],

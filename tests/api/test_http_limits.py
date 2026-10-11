@@ -45,6 +45,11 @@ def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/p/minsk/olimp/session/3/story.png") == "image"
     assert rate_limit_bucket_for_path("/c/minsk/og.png") == "image"
     assert rate_limit_bucket_for_path("/ice/minsk/today/og.png") == "image"
+    # TASK-232: открытка — страница, её картинки — PNG-рендер.
+    assert rate_limit_bucket_for_path("/zovi/abcd2345") == "page"
+    assert rate_limit_bucket_for_path("/zovi/abcd2345/event.ics") == "page"
+    assert rate_limit_bucket_for_path("/zovi/abcd2345/og.png") == "image"
+    assert rate_limit_bucket_for_path("/zovi/abcd2345/ticket.png") == "image"
     assert rate_limit_bucket_for_path("/cabinet") == "skip"
 
 

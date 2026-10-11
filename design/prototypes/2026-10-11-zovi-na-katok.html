@@ -136,10 +136,10 @@
   .tix { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
   .tix::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
   .tix p { margin: 0; }
-  .tix__top { position: relative; padding: 16px 18px 14px 21px; display: grid; gap: 6px; }
+  .tix__top { position: relative; padding: 16px 104px 14px 21px; display: grid; gap: 6px; }
   .tix__who { font-size: 15px; font-weight: 600; color: var(--muted); }
   .tix__who span { color: var(--ink); }
-  .tix__time { display: flex; align-items: baseline; gap: 10px; font-size: 46px; font-weight: 650; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .tix__time { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 46px; font-weight: 650; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
   .tix__time small { font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--accent-ink); }
   .tix__place { font-size: 14px; color: var(--muted); max-width: 72%; }
   .tix__cut { position: relative; height: 0; border-top: 1.5px dashed var(--line-strong); margin: 0 14px; }
@@ -219,6 +219,7 @@
     box-shadow: 0 8px 24px rgba(13, 27, 38, .2);
   }
 
+  @media (max-width: 420px) { .tix__top { padding-right: 84px; } .stamp { width: 64px; height: 64px; font-size: 20px; right: 12px; } }
   @media (max-width: 360px) { .fields, .actions { grid-template-columns: 1fr; } .tix__time { font-size: 38px; } .stamp { width: 64px; height: 64px; font-size: 20px; } }
   @media (prefers-reduced-motion: reduce) {
     .reveal > * { animation: none; }
@@ -262,8 +263,8 @@
         <div class="tix__bottom">
           <p class="tix__verdict" id="verdict"></p>
           <dl class="tix__stats">
-            <div><dt>Сопротивление</dt><dd id="stSec">0&nbsp;с</dd></div>
-            <div><dt>Попыток «нет»</dt><dd id="stTries">0</dd></div>
+            <div><dt>Держались</dt><dd id="stSec">0&nbsp;с</dd></div>
+            <div><dt>Отказов</dt><dd id="stTries">0</dd></div>
             <div><dt>Падений</dt><dd id="stFalls">0</dd></div>
           </dl>
           <p class="tix__brand">Glide<span>.</span> приглашение на лёд</p>

@@ -1,7 +1,7 @@
 """
 HTTP rate limiting (per client IP) and Content-Length body caps for /api (Epic D).
 The public per-IP bucket also covers the marketing redirect at /go. TASK-190: public HTML pages
-(/p/ /c/ /ice/ /r/) and PNG renders (og.png/story.png) have their own buckets.
+(/p/ /c/ /ice/ /r/ /zovi/) and PNG renders (og.png/story.png) have their own buckets.
 Webhooks are excluded from rate limit; multipart uploads use a larger cap when Content-Length is present.
 """
 from __future__ import annotations
@@ -59,7 +59,7 @@ def client_ip_from_request(request: Request) -> str:
     return ip or "unknown"
 
 
-_PAGE_PREFIXES = ("/p/", "/c/", "/ice/", "/r/")
+_PAGE_PREFIXES = ("/p/", "/c/", "/ice/", "/r/", "/zovi/")
 
 
 def rate_limit_bucket_for_path(path: str) -> str:
