@@ -353,6 +353,7 @@
 .gss-zf__err { color: var(--app-danger); }
 .gss-zf__err:empty { display: none; }
 .gss-zf ~ .gss-zovi__btn { margin-top: 12px; }
+.gss-zovi__btn + .gss-zf__hint { text-align: center; }
 
 .gss-zdone { display: grid; gap: 10px; }
 .gss-zdone__t { margin: 0; font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }

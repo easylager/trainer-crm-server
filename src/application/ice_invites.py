@@ -236,7 +236,8 @@ async def create_invite(
     now: datetime | None = None,
 ) -> dict[str, str]:
     moment = _as_utc(now or datetime.now(timezone.utc))
-    to_value = normalize_invite_name(to_name, field="to_name", required=False)
+    # Кого зовут — обязательно: открытка обращается к человеку по имени (решение владельца 2026-10-12).
+    to_value = normalize_invite_name(to_name, field="to_name", required=True)
     from_value = normalize_invite_name(from_name, field="from_name", required=True)
     if from_value is None:
         raise InviteRejected(f"from_name: укажите имя — от 1 до {NAME_MAX_LENGTH} символов.")

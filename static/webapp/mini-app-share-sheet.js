@@ -168,9 +168,9 @@
   var ZOVI_FROM_KEY = 'zovi_from';
   /* Открытка грузится по требованию: бюджет веса каталога (test_webapp_page_weight_budget). */
   var ZOVI_SCRIPTS = [
-    '/static/shared/zovi-model.js?v=8',
-    '/static/shared/zovi-create.js?v=8',
-    '/static/shared/zovi-live.js?v=8',
+    '/static/shared/zovi-model.js?v=9',
+    '/static/shared/zovi-create.js?v=9',
+    '/static/shared/zovi-live.js?v=9',
   ];
   var zoviLoading = null;
 
@@ -217,6 +217,12 @@
 
   function zoviApi() {
     return global.ZoviCreate || null;
+  }
+
+  /** Пуш шлёт Telegram-бот; у MAX тот же заголовок, но пуша нет. */
+  function botWillAnswer() {
+    var h = shareRequestHeaders();
+    return !!h['X-Telegram-Init-Data'] && String(h['X-Mini-App-Platform'] || 'telegram') === 'telegram';
   }
 
   function cleanName(raw) {
@@ -978,11 +984,15 @@
       esc(z.from || '') +
       '" /></label>' +
       '</div>' +
-      '<p class="gss-zf__hint">Пусто в «Кого зовёшь» — открытка для общего чата.</p>' +
       '<p class="gss-zf__err" data-gss-zerr role="alert">' + esc(z.error || '') + '</p>' +
       '<button type="button" class="gss-zovi__btn" data-variant-action="postcard"' +
       (postcardReady(sheetState) && !z.busy ? '' : ' disabled') +
-      '>' + (z.busy ? 'Создаём…' : 'Создать открытку') + '</button>'
+      '>' + (z.busy ? 'Создаём…' : 'Создать открытку') + '</button>' +
+      '<p class="gss-zf__hint">' +
+      (botWillAnswer()
+        ? 'Ответ пришлёт бот сюда, в Telegram, — с билетом.'
+        : 'Ответ появится на странице ответа — ссылку покажем после создания.') +
+      '</p>'
     );
   }
 
@@ -1008,8 +1018,9 @@
       via: postcardVia(state),
     });
     if (!built.ok) {
-      z.error = humanError(built.fromError || built.toError || built.formError);
+      z.error = humanError(built.toError || built.fromError || built.formError);
       if (!String(z.from || '').trim()) z.error = 'Подпиши открытку — как тебя зовут?';
+      if (!String(z.to || '').trim()) z.error = 'Кого зовёшь? Впиши имя.';
       paintPostcardBottom();
       return;
     }
@@ -1044,10 +1055,7 @@
           code: res.body.code,
           url: global.location.origin + res.body.invite_path,
           statusUrl: global.location.origin + res.body.status_path,
-          // Пуш шлёт Telegram-бот; у MAX тот же заголовок, но пуша нет.
-          viaTelegram:
-            !!headers['X-Telegram-Init-Data'] &&
-            String(headers['X-Mini-App-Platform'] || 'telegram') === 'telegram',
+          viaTelegram: botWillAnswer(),
         };
         rememberMine(z.created, built.body.to_name);
         try { global.localStorage.setItem(ZOVI_FROM_KEY, built.body.from_name); } catch (e) { /* */ }

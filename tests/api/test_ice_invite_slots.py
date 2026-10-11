@@ -143,7 +143,7 @@ async def test_every_listed_session_can_be_invited(app_use_test_db, db_session) 
         assert kept in ids
         assert dropped not in ids
         for session_id in ids:
-            created = await _create(client, session_id, to_name=None)
+            created = await _create(client, session_id, to_name="Лера")
             assert created.status_code == 201, created.text
 
 

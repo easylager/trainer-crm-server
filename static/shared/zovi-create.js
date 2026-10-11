@@ -196,7 +196,7 @@
   }
 
   function inviteRequestBody(input) {
-    var to = validateInviteName(input.toName, 'to_name', false);
+    var to = validateInviteName(input.toName, 'to_name', true);
     var from = validateInviteName(input.fromName, 'from_name', true);
     if (!to.ok || !from.ok) {
       return { ok: false, toError: to.error, fromError: from.error };
@@ -700,6 +700,9 @@
     function onFromName() {
       fromError.textContent = '';
       paintPreview();
+    }
+    if (readTelegramInitData(pageSessionStorage())) {
+      doc.getElementById('answer-where').textContent = 'Ответ пришлёт бот в Telegram — с билетом.';
     }
     doc.getElementById('picked-change').addEventListener('click', function () {
       state.pickedMode = false;

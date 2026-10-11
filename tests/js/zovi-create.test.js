@@ -100,9 +100,15 @@ describe('имя как на сервере', () => {
     assert.equal(validateInviteName('nazi', 'to_name', false).ok, false);
   });
 
+  it('без имени адресата открытку не создать', () => {
+    const built = inviteRequestBody({ toName: ' ', fromName: 'Макс', sessionId: 15 });
+    assert.equal(built.ok, false);
+    assert.match(built.toError, /to_name/);
+  });
+
   it('?from= уходит как parent_code, цена по умолчанию выключена', () => {
     const built = inviteRequestBody({
-      toName: '',
+      toName: 'Лера',
       fromName: 'Макс',
       sessionId: 15,
       showPrice: false,
@@ -111,7 +117,7 @@ describe('имя как на сервере', () => {
     assert.equal(built.ok, true);
     assert.deepEqual(built.body, {
       session_id: 15,
-      to_name: null,
+      to_name: 'Лера',
       from_name: 'Макс',
       show_price: false,
       parent_code: 'abcd2345',
@@ -155,7 +161,7 @@ describe('воронка (TASK-237): токен устройства, канал
   });
 
   it('тело создания несёт токен, src и via только когда они есть', () => {
-    const base = { toName: '', fromName: 'Макс', sessionId: 15, showPrice: false, parentCode: null };
+    const base = { toName: 'Лера', fromName: 'Макс', sessionId: 15, showPrice: false, parentCode: null };
     assert.deepEqual(Object.keys(inviteRequestBody(base).body).sort(), [
       'from_name', 'parent_code', 'session_id', 'show_price', 'to_name',
     ]);

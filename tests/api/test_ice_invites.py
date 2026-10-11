@@ -130,11 +130,11 @@ async def test_create_future_session_returns_code_and_status_link(app_use_test_d
         assert body["invite_path"] == f"/zovi/{code}"
         assert body["status_path"] == f"/zovi/{code}/s/{body['status_key']}"
 
-        projected = await _create(client, projected_id, to_name=None)
+        projected = await _create(client, projected_id, to_name="Лера")
         assert projected.status_code == 201, projected.text
         assert "projected" not in projected.text
 
-        child = await _create(client, session_id, parent_code=code, to_name=None)
+        child = await _create(client, session_id, parent_code=code, to_name="Лера")
         assert child.status_code == 201, child.text
         stranger = await _create(client, session_id, parent_code="no-such-code")
         assert stranger.status_code == 201, stranger.text
@@ -212,13 +212,13 @@ async def test_create_future_session_returns_code_and_status_link(app_use_test_d
     ).scalar_one()
     assert parent_of_child == code
     assert parent_of_stranger is None
-    group = (
+    recipient = (
         await db_session.execute(
             text("SELECT to_name FROM ice_invites WHERE code = :code"),
             {"code": projected.json()["code"]},
         )
     ).scalar_one()
-    assert group is None
+    assert recipient == "Лера"
 
 
 @pytest.mark.asyncio
@@ -515,3 +515,19 @@ async def test_create_with_telegram_init_data_stores_telegram_actor_hash(
         )
     ).scalar_one()
     assert telegram_id == user_id
+
+
+@pytest.mark.asyncio
+async def test_recipient_name_is_required(app_use_test_db, db_session) -> None:
+    place = await _place(db_session)
+    session_id = await _insert_session(db_session, place["arena_id"], starts_at=_at(days=2))
+    before = await _invite_count(db_session)
+    async with _client() as client:
+        empty = await _create(client, session_id, to_name="  ")
+        missing = await client.post(
+            "/api/public/invites", json={"session_id": session_id, "from_name": "Макс"}, headers=_headers()
+        )
+    assert empty.status_code == 422
+    assert "to_name" in empty.text
+    assert missing.status_code == 422
+    assert await _invite_count(db_session) == before

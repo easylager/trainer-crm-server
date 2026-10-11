@@ -174,8 +174,7 @@
 
       <label class="field">
         <span>Кого зовёшь</span>
-        <input id="to-name" name="to_name" type="text" maxlength="20" autocomplete="off" />
-        <p class="hint">Пусто — открытка для компании</p>
+        <input id="to-name" name="to_name" type="text" maxlength="20" autocomplete="off" required />
         <p class="err" id="to-error" role="alert"></p>
       </label>
       <label class="field">
@@ -189,6 +188,7 @@
       <p class="sec__title">Так получит друг</p>
       <div id="live"></div>
       <button class="cta" id="create" type="submit" form="zovi-form">Создать приглашение</button>
+      <p class="hint" id="answer-where">Ответ появится на странице ответа — ссылку покажем сразу после создания.</p>
       <p class="err" id="form-error" role="alert"></p>
     </section>
 

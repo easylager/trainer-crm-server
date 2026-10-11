@@ -74,7 +74,10 @@ async def test_page_has_question_meta_and_noindex(app_use_test_db, db_session) -
 @pytest.mark.asyncio
 async def test_hockey_session_asks_about_hockey_and_group_card_has_no_name(app_use_test_db, db_session) -> None:
     hockey, _, _ = await _invite(db_session, kind="hockey_practice", to_name="Аня")
-    group, _, _ = await _invite(db_session, to_name=None)
+    # Старые открытки без имени (до 2026-10-12) всё ещё открываются как «для компании».
+    group, _, _ = await _invite(db_session, to_name="Лера")
+    await db_session.execute(text("UPDATE ice_invites SET to_name = NULL WHERE code = :code"), {"code": group})
+    await db_session.commit()
     async with _client() as client:
         first = await client.get(f"/zovi/{hockey}", headers=_headers())
         second = await client.get(f"/zovi/{group}", headers=_headers())
