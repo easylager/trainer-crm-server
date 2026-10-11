@@ -39,7 +39,7 @@ def render_zovi_create_page(*, canonical_url: str) -> str:
             "__OG_DESCRIPTION__": _esc(_OG_DESCRIPTION),
             "__CANONICAL__": _esc(canonical_url),
             "__ROBOTS__": "index, follow",
-            "__ASSET_V__": "10",
+            "__ASSET_V__": "14",
         },
     )
 

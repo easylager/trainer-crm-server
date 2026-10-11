@@ -61,6 +61,7 @@
     '.zl.is-yes .zl-stamp{animation:zl-stamp .55s cubic-bezier(.2,1.6,.4,1) .1s forwards}',
     '@keyframes zl-stamp{to{opacity:.92;transform:rotate(-14deg) scale(1)}}',
     '.zl.is-yes .zl-no,.zl.is-yes .zl-finger{opacity:0;pointer-events:none;transition:opacity .2s}',
+    '.zl-typing .zl-rink,.zl-typing .zl-cap{display:none}',
     '.zl-bit{position:absolute;z-index:4;width:6px;height:6px;border-radius:1px;pointer-events:none;',
     'animation:zl-bit 1.1s cubic-bezier(.2,.7,.3,1) forwards}',
     '@keyframes zl-bit{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}',
@@ -327,7 +328,7 @@
         destroy();
         return;
       }
-      if (doc.hidden || el.classList.contains('is-yes') || Date.now() - lastTouch < IDLE_MS * 2) return;
+      if (doc.hidden || !rinkEl.clientWidth || el.classList.contains('is-yes') || Date.now() - lastTouch < IDLE_MS * 2) return;
       var s = sizes();
       var startX = s.rink.w * (pos.x > s.rink.w / 2 ? 0.2 : 0.85);
       var target = { x: pos.x + s.btn.w / 2, y: pos.y + s.btn.h / 2 };
@@ -363,36 +364,54 @@
   }
 
   /**
-   * Клавиатура на iPhone ложится поверх нижнего шита, а шит не двигается: поля имён
-   * оказываются под ней. Поднимаем панель на высоту клавиатуры (visualViewport) и
-   * докручиваем поле в фокусе к середине. Возвращает функцию отключения.
+   * Поле имени не должно уходить под клавиатуру. Telegram на iOS не кладёт клавиатуру
+   * поверх, а сжимает окно мини-аппа (замер 2026-10-12: 719 → 384 px), и делает это
+   * ~0,9 с спустя фокус. Шит ужимается вместе с окном, поле оказывается ниже его
+   * видимой части. Поэтому докручиваем поле к середине шита после каждого изменения
+   * размера окна — сам шит, без scrollIntoView, который двигает и страницу под ним.
    */
   function liftForKeyboard(panel) {
-    var vv = root && root.visualViewport;
-    if (!panel || !vv) return function () {};
-    function fit() {
-      var covered = Math.max(0, root.innerHeight - vv.height - vv.offsetTop);
-      var open = covered > 80;
-      panel.style.marginBottom = open ? covered + 'px' : '';
-      panel.style.maxHeight = open ? Math.max(240, Math.round(vv.height) - 8) + 'px' : '';
+    if (!panel) return function () {};
+    var field = null;
+    var timers = [];
+    var tw = root.Telegram && root.Telegram.WebApp;
+    function settle() {
+      if (!field || field.ownerDocument.activeElement !== field) return;
+      var pr = panel.getBoundingClientRect();
+      var fr = field.getBoundingClientRect();
+      panel.scrollTop += fr.top - pr.top - (panel.clientHeight - fr.height) / 2;
     }
     function onFocus(ev) {
-      var field = ev.target;
-      if (!field || !field.matches || !field.matches('input, textarea')) return;
-      root.setTimeout(function () {
-        fit();
-        field.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }, 320);
+      var target = ev.target;
+      if (!target || !target.matches || !target.matches('input, textarea')) return;
+      field = target;
+      // Пока печатают — прячем каток с кнопками: над клавиатурой остаются вопрос с именами и поля.
+      panel.classList.add('zl-typing');
+      timers.forEach(function (t) { root.clearTimeout(t); });
+      timers = [80, 450, 1000, 1500].map(function (ms) { return root.setTimeout(settle, ms); });
     }
-    vv.addEventListener('resize', fit);
-    vv.addEventListener('scroll', fit);
+    function onBlur() {
+      root.setTimeout(function () {
+        var active = panel.ownerDocument.activeElement;
+        if (!active || !panel.contains(active)) {
+          field = null;
+          panel.classList.remove('zl-typing');
+        }
+      }, 0);
+    }
     panel.addEventListener('focusin', onFocus);
+    panel.addEventListener('focusout', onBlur);
+    root.addEventListener('resize', settle);
+    if (root.visualViewport) root.visualViewport.addEventListener('resize', settle);
+    if (tw && typeof tw.onEvent === 'function') tw.onEvent('viewportChanged', settle);
     return function () {
-      vv.removeEventListener('resize', fit);
-      vv.removeEventListener('scroll', fit);
+      timers.forEach(function (t) { root.clearTimeout(t); });
+      panel.classList.remove('zl-typing');
       panel.removeEventListener('focusin', onFocus);
-      panel.style.marginBottom = '';
-      panel.style.maxHeight = '';
+      panel.removeEventListener('focusout', onBlur);
+      root.removeEventListener('resize', settle);
+      if (root.visualViewport) root.visualViewport.removeEventListener('resize', settle);
+      if (tw && typeof tw.offEvent === 'function') tw.offEvent('viewportChanged', settle);
     };
   }
 

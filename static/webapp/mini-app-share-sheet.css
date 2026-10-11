@@ -301,6 +301,10 @@
   animation: gss-pulse 1.2s ease-in-out infinite;
 }
 
+/* Печатают имена: над клавиатурой — открытка и поля, без вкладок и строки сеанса. */
+.zl-typing .gss-tabs,
+.zl-typing .gss-slot-sum { display: none; }
+
 .gss-slot-sum {
   display: flex;
   align-items: center;

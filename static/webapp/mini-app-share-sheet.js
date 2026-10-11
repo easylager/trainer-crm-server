@@ -168,9 +168,9 @@
   var ZOVI_FROM_KEY = 'zovi_from';
   /* Открытка грузится по требованию: бюджет веса каталога (test_webapp_page_weight_budget). */
   var ZOVI_SCRIPTS = [
-    '/static/shared/zovi-model.js?v=10',
-    '/static/shared/zovi-create.js?v=10',
-    '/static/shared/zovi-live.js?v=10',
+    '/static/shared/zovi-model.js?v=14',
+    '/static/shared/zovi-create.js?v=14',
+    '/static/shared/zovi-live.js?v=14',
   ];
   var zoviLoading = null;
 
