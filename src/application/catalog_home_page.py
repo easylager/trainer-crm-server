@@ -1091,11 +1091,11 @@ def _hero_city_html(user_city: Mapping[str, Any] | None) -> str:
     ohm = user_city.get("next_ohm")
     if isinstance(ohm, Mapping) and ohm.get("hhmm"):
         if ohm.get("is_today"):
-            bits.append("хоккей для любителей сегодня")
+            bits.append("ОХМ сегодня")
         elif ohm.get("is_weekend"):
-            bits.append("хоккей для любителей в выходные")
+            bits.append("ОХМ в выходные")
         else:
-            bits.append(f"хоккей для любителей {_esc(str(ohm.get('day_label') or ''))}".strip())
+            bits.append(f"ОХМ {_esc(str(ohm.get('day_label') or ''))}".strip())
     live = " · ".join(bits)
     return (
         f'<a class="hero-city" href="{_esc(user_city.get("href") or "/c/" + str(user_city.get("slug") or ""))}">'
@@ -1163,9 +1163,9 @@ def _ohm_sub_html(view: Mapping[str, Any]) -> str:
         name = _esc(str(cities[0].get("name") or ""))
         nxt = cities[0].get("next_ohm") if isinstance(cities[0].get("next_ohm"), Mapping) else {}
         when = " сегодня" if nxt.get("is_today") else ""
-        return f'<p class="sub sub--ohm">Хоккей для любителей{when} — {name}.</p>'
+        return f'<p class="sub sub--ohm">ОХМ{when} — {name}.</p>'
     word = plural_ru(len(cities), "городе", "городах", "городах")
-    return f'<p class="sub sub--ohm">Хоккей для любителей — в {len(cities)} {word}.</p>'
+    return f'<p class="sub sub--ohm">ОХМ — в {len(cities)} {word}.</p>'
 
 
 def _json_ld(view: Mapping[str, Any], *, canonical_url: str) -> str:
@@ -1312,7 +1312,7 @@ def render_catalog_home_page(
     map_svg = str(view.get("map_svg") or "")
     map_html = (
         f'<figure class="map card">{map_svg}</figure>'
-        '<p class="hint">Размер точки — мест в городе. Пунктирное кольцо — есть хоккей для любителей. Зажмите точку — название.</p>'
+        '<p class="hint">Размер точки — мест в городе. Пунктирное кольцо — есть ОХМ. Зажмите точку — название.</p>'
         if map_svg
         else ""
     )

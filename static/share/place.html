@@ -247,14 +247,27 @@
     .share { margin: 18px 0 0; }
     .share + .actions { margin-top: 16px; }
     .share__title { margin: 0 0 8px; font-weight: 600; }
-    .share__row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .share__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .share__icon {
+      flex: 0 0 auto; width: 44px; height: 44px; border-radius: 14px;
+      display: inline-flex; align-items: center; justify-content: center; color: #fff;
+    }
+    .share__icon svg { width: 22px; height: 22px; display: block; }
+    button.share__icon { padding: 0; border: 0; cursor: pointer; font: inherit; }
+    .share__icon--tg { background: #229ed9; }
+    .share__icon--vb { background: #7360f2; }
+    .share__icon--wa { background: #25d366; }
+    .share__icon--vk { background: #0077ff; }
+    .share__icon--copy { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
     .share__btn {
-      flex: 1 1 auto; min-width: 96px; padding: 11px 14px; border-radius: 12px;
+      flex: 0 0 auto; padding: 11px 14px; border-radius: 12px;
       background: var(--surface); border: 1px solid var(--line); color: var(--ink);
       font: inherit; font-size: 14px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer;
     }
-    .share__btn--tg { background: #229ed9; border-color: #229ed9; color: #fff; }
-    .share__story { display: inline-block; margin-top: 10px; font-size: 14px; }
+    .share__story {
+      display: inline-block; margin-top: 10px; font-size: 14px; font-weight: 500;
+      color: var(--muted); text-decoration: underline; text-underline-offset: 3px;
+    }
     .share__zovi { margin: 12px 0 0; }
     .share__zovi a {
       display: inline-flex; align-items: center; min-height: 44px;
@@ -279,7 +292,6 @@
       <span>__CITY__</span>
     </nav>
     __BODY__
-    <a class="share__story" href="__STORY_IMAGE__" download>Картинка для истории (Instagram, VK)</a>
     <div class="trust">__TRUST__</div>
     <footer>__CITY_LINK__</footer>
   </main>
@@ -358,6 +370,67 @@
         img.addEventListener('error', function () { dropBrokenPhoto(img); });
         if (img.complete && img.naturalWidth === 0) dropBrokenPhoto(img);
       });
+      /*
+        Сайт не пишет в «Фото» напрямую. Android: файл в «Загрузки», галерея его видит.
+        iPhone: системное меню, пункт «Сохранить изображение» кладёт кадр в галерею.
+        Без JS остаётся обычная ссылка download.
+      */
+      var storyLink = document.querySelector('.share__story');
+      if (storyLink) {
+        storyLink.addEventListener('click', function (event) {
+          var href = storyLink.getAttribute('href') || '';
+          if (!href) return;
+          event.preventDefault();
+          saveStoryImage(href);
+        });
+      }
+      function storyFetchPath(href) {
+        try {
+          var u = new URL(href, location.href);
+          return u.pathname + u.search;
+        } catch (e) {
+          return href;
+        }
+      }
+      function isIos() {
+        var ua = navigator.userAgent || '';
+        return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      }
+      function blobDownload(blob) {
+        var objectUrl = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = 'glide-story.png';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2000);
+        say('Сохранено — проверьте «Загрузки» или галерею');
+      }
+      function saveStoryImage(href) {
+        fetch(storyFetchPath(href), { cache: 'no-store' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('http');
+            return r.blob();
+          })
+          .then(function (blob) {
+            var file = new File([blob], 'glide-story.png', { type: blob.type || 'image/png' });
+            var nav = navigator;
+            if (isIos() && nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+              nav.share({ files: [file] }).catch(function (err) {
+                if (err && err.name === 'AbortError') return;
+                blobDownload(blob);
+              });
+              return;
+            }
+            blobDownload(blob);
+          })
+          .catch(function () {
+            say('Удержите картинку и выберите «Сохранить в Фото»');
+            window.location.href = href;
+          });
+      }
       if (navigator.share) {
         var row = document.querySelector('.share__row');
         var copy = document.querySelector('[data-copy]');

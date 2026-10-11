@@ -60,7 +60,8 @@ async def test_selection_page_shows_places_sessions_and_keeps_filters(app_use_te
     assert "все места" in page.text.lower()
     assert f'href="/p/{slug}/' in page.text, "место в хабе ведёт на свою страницу"
     # TASK-222: с сайта Telegram подборки — только url, без text= (превью из og).
-    tg = re.search(r'class="share__btn share__btn--tg" href="([^"]+)"', page.text)
+    # href стоит раньше aria-label: иконка, не текстовая кнопка.
+    tg = re.search(r'<a class="share__icon share__icon--tg" href="([^"]+)"', page.text)
     assert tg and "t.me/share/url?url=" in tg.group(1) and "&amp;text=" not in tg.group(1)
     assert by_id.status_code == 301 and by_id.headers["location"] == f"/c/{slug}"
     assert Image.open(io.BytesIO(img.content)).size == (1200, 630)
@@ -251,14 +252,16 @@ async def test_selection_preview_counts_the_whole_selection_and_bumps_image_vers
     assert description in body["share_body"]
     assert description in body["share_text"]
 
-    # og.png и story.png рисуются из той же подписи: одна правда, а не два счёта.
+    # Картинка — вечерний (или дневной) срез, не вторая копия «15 катков · 10 сеансов».
+    # Счёт подборки остаётся в og:description и в тексте шера, это проверено выше.
     pc.reset_png_cache_for_tests()
     drawn.clear()
     async with _client() as client:
         og = await client.get(f"/c/{slug}/og.png")
         story = await client.get(f"/c/{slug}/story.png")
     assert og.status_code == 200 and story.status_code == 200
-    assert drawn == [description, description], drawn
+    assert drawn == [], drawn
+    assert "10 сеансов" in body["share_body"]
 
     # Лишние query-параметры внутренний кэш PNG не видит: ?v= — для Telegram, не для рендера.
     async with _client() as client:

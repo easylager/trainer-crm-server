@@ -1,10 +1,11 @@
-"""TASK-201-B / TASK-224: /c/?kind=ohm и строка «Хоккей для любителей» на главной."""
+"""TASK-201-B / TASK-224: /c/?kind=ohm и строка «ОХМ» на главной."""
 
 from __future__ import annotations
 
 import re
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -186,7 +187,7 @@ def _city_surface(html: str, city_name: str) -> str:
 
 @pytest.mark.asyncio
 async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db, db_session) -> None:
-    """Строка «Хоккей для любителей» и «ОХМ» у города — только пока есть будущий ОХМ."""
+    """Строка «ОХМ» на главной и у города — только пока есть будущий ОХМ."""
     name = f"Чипинск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name, country="BY")
     rink = await _insert_arena(db_session, city_id, name=f"Чип-каток {uuid.uuid4().hex[:4]}")
@@ -201,15 +202,18 @@ async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db
     # В общей БД ОХМ уже может быть у других городов — тогда строка жива и до нашего сеанса.
     world_was_clean = "sub--ohm" not in before.text
 
-    ohm_id = await _ohm(db_session, rink, day=date.today() + timedelta(days=1), hhmm="11:00")
+    # Каталог считает «сегодня» по Минску. date.today() на CI — UTC, и после 21:00 UTC
+    # сеанс «завтра» оказывается сегодняшним: строка становится «ОХМ сегодня —».
+    tomorrow = datetime.now(ZoneInfo("Europe/Minsk")).date() + timedelta(days=1)
+    ohm_id = await _ohm(db_session, rink, day=tomorrow, hhmm="11:00")
     await db_session.commit()
     invalidate_public_city_cache()
 
     async with _client() as client:
         after = await client.get("/", cookies={"glide_city": slug})
     assert after.status_code == 200
-    assert '<p class="sub sub--ohm">Хоккей для любителей — ' in after.text
-    assert "хоккей для любителей" in _city_surface(after.text, name)
+    assert re.search(r'<p class="sub sub--ohm">ОХМ(?: сегодня)? — ', after.text)
+    assert "ОХМ" in _city_surface(after.text, name)
 
     await db_session.execute(text("DELETE FROM ice_sessions WHERE id = :id"), {"id": ohm_id})
     await db_session.commit()

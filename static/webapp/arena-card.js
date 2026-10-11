@@ -930,7 +930,7 @@
       var label = GC.t('kind.hockey_practice');
       if (label && label !== 'kind.hockey_practice') return String(label);
     }
-    return 'Хоккей для любителей (ОХМ)';
+    return 'ОХМ';
   }
 
   function strip() {
