@@ -75,10 +75,15 @@ async def test_sharpening_count_stays_put_and_skips_roller_rental(
     sharp = await _insert_arena(db_session, city_id, name=f"Заточка {uuid.uuid4().hex[:4]}")
     rental = await _insert_arena(db_session, city_id, name=f"Прокат {uuid.uuid4().hex[:4]}")
     roller = await _insert_arena(db_session, city_id, name=f"Роллеры {uuid.uuid4().hex[:4]}")
+    center = await _insert_arena(db_session, city_id, name=f"Центр {uuid.uuid4().hex[:4]}")
     shop = await _insert_arena(db_session, city_id, name=f"Магазин {uuid.uuid4().hex[:4]}")
     await db_session.execute(
         text("UPDATE arenas SET venue_type = 'other' WHERE id = :id"),
         {"id": roller},
+    )
+    await db_session.execute(
+        text("UPDATE arenas SET venue_type = 'other' WHERE id = :id"),
+        {"id": center},
     )
     await db_session.execute(
         text("UPDATE arenas SET venue_type = 'shop' WHERE id = :id"),
@@ -88,6 +93,7 @@ async def test_sharpening_count_stays_put_and_skips_roller_rental(
         (sharp, {"skate_sharpening": True}),
         (rental, {"skate_rental": True}),
         (roller, {"skate_rental": True}),
+        (center, {"hockey_center": True, "skate_sharpening": True}),
         (shop, {"skate_sharpening": True, "repair": True}),
     ):
         await db_session.execute(
@@ -125,4 +131,5 @@ async def test_sharpening_count_stays_put_and_skips_roller_rental(
     opened_ids = {int(item["id"]) for item in opened.json()["items"]}
     assert opened_ids == {sharp, rental}
     assert roller not in opened_ids
+    assert center not in opened_ids
     assert shop not in opened_ids

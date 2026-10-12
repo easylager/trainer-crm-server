@@ -266,7 +266,11 @@ def row_in_sharpening_section(row: Mapping[str, Any]) -> bool:
     """Место раздела «Заточка»: заточка и услуги лезвия, либо прокат коньков на льду.
 
     Магазин сюда не входит — у него свой раздел. Прокат на трассе для роликов тоже.
+    Хоккейный центр лента «Покататься» не показывает, поэтому и заточка его не считает:
+    иначе чип на вкладке «С клюшкой» обещает место, которого в разделе нет.
     """
+    if _is_hockey_center(row):
+        return False
     venue = normalize_venue_type(row.get("venue_type"))
     if venue in DEFAULT_HIDDEN_VENUE_TYPES:
         return False
