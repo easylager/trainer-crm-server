@@ -465,7 +465,7 @@ async def selection_page(
     w: str | None = Query(None, description="Окно: today_evening|today|tomorrow|weekend"),
     kind: str | None = Query(None, description="Вид сеанса: ohm — раздел «С клюшкой»"),
     seg: str | None = Query(None, description="В разделе «С клюшкой»: ohm — сеансы, centers — центры по записи"),
-    svc: str | None = Query(None, description="Услуга: sharpening|rental|service — заточка и прокат"),
+    svc: str | None = Query(None, description="Услуга: sharpening|service — заточка, rental — прокат коньков"),
     page: int | None = Query(None, ge=1, description="Страница списка мест"),
     src: str | None = Query(None, description="канал шаринга: tg|vb|wa|vk|copy|story|sys|img"),
     session: AsyncSession = Depends(get_session),

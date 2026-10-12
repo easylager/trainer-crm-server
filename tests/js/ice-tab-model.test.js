@@ -201,7 +201,7 @@ describe('catalog header (A′)', () => {
     assert.equal(modes.find((m) => m.id === 'service').active, true);
     assert.equal(modes.find((m) => m.id === 'places').active, false);
     assert.equal(sectionHint('ohm', ''), 'открытая тренировка, ОХМ');
-    assert.equal(sectionHint('places', 'service'), 'заточка и прокат');
+    assert.equal(sectionHint('places', 'service'), 'заточка коньков');
     assert.equal(sectionHint('places', ''), 'каток, зал или трасса');
     assert.equal(sectionHint('shop', ''), '');
   });

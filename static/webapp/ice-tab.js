@@ -1535,9 +1535,7 @@
       var empty;
       if (shopScope && state.shopSourceItems.length && M.hasActiveShopFilters(shopFilterState())) {
         empty = M.formatEmptyShopFilters({
-          sharpeningCount: state.shopSourceItems.filter(function (it) {
-            return (it.shop_services || []).indexOf('skate_sharpening') >= 0;
-          }).length,
+          sharpeningCount: state.serviceCount,
         });
       } else {
         empty = M.formatEmptyList(state.intent, {

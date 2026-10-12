@@ -135,7 +135,7 @@ async def get_public_ice_arenas(
     ),
     svc: str | None = Query(
         None,
-        description="Услуга места: sharpening | rental | service (заточка и прокат).",
+        description="Услуга места: sharpening | service — заточка, rental — прокат коньков.",
     ),
     season: str | None = Query(
         None,
