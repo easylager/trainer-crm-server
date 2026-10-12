@@ -1,4 +1,5 @@
 """Epic D: API rate limit (IP) and body-size helpers."""
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from starlette.requests import Request
@@ -28,6 +29,9 @@ def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/gopher") == "skip"
     assert rate_limit_bucket_for_path("/api/webhooks/bepaid") == "skip"
     assert rate_limit_bucket_for_path("/api/public/cities") == "public"
+    assert rate_limit_bucket_for_path("/api/public/invites") == "invite"
+    assert rate_limit_bucket_for_path("/api/public/invites/abcd2345") == "public"
+    assert rate_limit_bucket_for_path("/api/public/invites/abcd2345/answer") == "public"
     assert rate_limit_bucket_for_path("/api/public/ice/map-config") == "skip"
     assert rate_limit_bucket_for_path("/api/public/photos/trainers/x.jpg") == "photo"
     assert rate_limit_bucket_for_path("/api/webapp/schedule") == "webapp"
@@ -38,10 +42,17 @@ def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/c/minsk") == "page"
     assert rate_limit_bucket_for_path("/ice/minsk/today") == "page"
     assert rate_limit_bucket_for_path("/r/tg/5") == "page"
+    assert rate_limit_bucket_for_path("/zovi") == "page"
+    assert rate_limit_bucket_for_path("/zovi/abcd2345") == "page"
     assert rate_limit_bucket_for_path("/p/minsk/olimp/og.png") == "image"
     assert rate_limit_bucket_for_path("/p/minsk/olimp/session/3/story.png") == "image"
     assert rate_limit_bucket_for_path("/c/minsk/og.png") == "image"
     assert rate_limit_bucket_for_path("/ice/minsk/today/og.png") == "image"
+    # TASK-232: открытка — страница, её картинки — PNG-рендер.
+    assert rate_limit_bucket_for_path("/zovi/abcd2345") == "page"
+    assert rate_limit_bucket_for_path("/zovi/abcd2345/event.ics") == "page"
+    assert rate_limit_bucket_for_path("/zovi/abcd2345/og.png") == "image"
+    assert rate_limit_bucket_for_path("/zovi/abcd2345/ticket.png") == "image"
     assert rate_limit_bucket_for_path("/cabinet") == "skip"
 
 
@@ -65,7 +76,9 @@ def test_client_ip_from_x_forwarded_for_is_rightmost_trusted_hop():
 def test_max_body_bytes_for_path():
     assert max_body_bytes_for_path("/api/webhooks/bepaid") >= max_body_bytes_for_path("/api/public/cities")
     assert max_body_bytes_for_path("/api/upload/photo") >= max_body_bytes_for_path("/api/trainers")
-    assert max_body_bytes_for_path("/api/webapp/trainer/photos") >= max_body_bytes_for_path("/api/webapp/client/session")
+    assert max_body_bytes_for_path("/api/webapp/trainer/photos") >= max_body_bytes_for_path(
+        "/api/webapp/client/session"
+    )
     assert max_body_bytes_for_path("/api/webapp/admin/arenas/9/photos") >= max_body_bytes_for_path(
         "/api/webapp/admin/arenas/9"
     )

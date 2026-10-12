@@ -1,0 +1,789 @@
+<meta charset="utf-8">
+<title>Пойдёшь на каток?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  /* Layout: публичная страница Glide — спокойный светлый холст, одна hero-карточка
+     со срезом 45° и ледяной рейкой. Тил — только CTA и акценты. Тёмная подача — только в превью для чата. */
+  :root {
+    --bg: #f4f6f7;            /* --g-bg */
+    --surface: #ffffff;       /* --g-surface */
+    --ink: #0d1b26;           /* --g-ink */
+    --muted: #5d7285;         /* --g-muted */
+    --line: #e1e8ec;          /* --g-line */
+    --line-strong: #c9d5dc;   /* --g-line-strong */
+    --accent: #45b9bb;        /* --g-accent */
+    --accent-pressed: #2e9a9c;
+    --on-accent: #04262a;     /* --g-on-accent */
+    --accent-ink: #0b6e70;    /* --g-accent-ink */
+    --accent-wash: #d3efef;   /* --g-accent-wash */
+    --chip: #eef3f5;
+    --ice: #2aa7c9;           /* цвет вида «лёд» на страницах мест */
+    --dark: #0d1b26;          /* --g-dark: только превью для чата */
+    --dark-2: #1d2f3d;
+    --on-dark-muted: #c3d2dc;
+    --on-dark-accent: #9fd9d6;
+    --trail: rgba(42, 167, 201, 0.35);
+    --cut: 18px;
+    --r: 14px;
+    --r-lg: 20px;
+    --font: "Golos Text", -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17212b; --surface: #1d2733; --ink: #f1f5f7; --muted: #8aa0b3; --line: #2b3744; --line-strong: #3a4857;
+      --accent: #7fd7d8; --accent-pressed: #45b9bb; --on-accent: #04262a; --accent-ink: #7fd7d8; --accent-wash: #163638;
+      --chip: #233140; --ice: #5cc4e0; --trail: rgba(127, 215, 216, 0.32); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17212b; --surface: #1d2733; --ink: #f1f5f7; --muted: #8aa0b3; --line: #2b3744; --line-strong: #3a4857;
+    --accent: #7fd7d8; --accent-pressed: #45b9bb; --on-accent: #04262a; --accent-ink: #7fd7d8; --accent-wash: #163638;
+    --chip: #233140; --ice: #5cc4e0; --trail: rgba(127, 215, 216, 0.32); color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.45;
+    padding: 16px 16px 48px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .wrap { max-width: 440px; margin: 0 auto; display: grid; gap: 12px; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
+  .brand { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .brand span { color: var(--accent-ink); }
+  .views { display: flex; gap: 4px; padding: 3px; background: var(--chip); border-radius: 999px; }
+  .views button { padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .views button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(13, 27, 38, .08); }
+
+  /* Hero-карточка: срез 45° и ледяная рейка, как у страниц мест. */
+  .hero {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+    padding: 20px 20px 20px 23px;
+    display: grid;
+    gap: 16px;
+  }
+  .hero::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--ice); }
+
+  .kicker { margin: 0; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .kicker b { color: var(--ink); font-weight: 600; }
+  .q {
+    margin: 0;
+    font-size: clamp(30px, 8.6vw, 38px);
+    font-weight: 650;
+    line-height: 1.08;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+  }
+  .q .name { color: var(--accent-ink); }
+
+  /* Сеанс: время — герой, место и цена — подписи. */
+  .plan { display: grid; grid-template-columns: auto 1fr; column-gap: 16px; row-gap: 2px; align-items: center; padding: 14px 0 0; border-top: 1px solid var(--line); }
+  .plan__time { grid-row: span 2; font-size: 40px; font-weight: 650; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .plan__day { font-size: 13px; font-weight: 600; color: var(--accent-ink); }
+  .plan__place { min-width: 0; font-weight: 600; line-height: 1.25; }
+  .plan__meta { grid-column: 1 / -1; margin-top: 8px; font-size: 14px; color: var(--muted); }
+
+  /* Каток для кнопок: «Нет» скользит по нему и оставляет след. */
+  .rink { position: relative; height: 200px; margin: 0 -4px; }
+  .rink canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .ans {
+    position: absolute; left: 0; top: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 52px; padding: 0 28px; border-radius: var(--r);
+    font-size: 17px; font-weight: 600; white-space: nowrap;
+    will-change: transform;
+    user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .ans--yes { z-index: 2; border: 1px solid transparent; background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 24px rgba(69, 185, 187, .35); transform-origin: 0 0; transition: background .35s, color .35s, border-color .35s, box-shadow .35s; }
+  /* «Да» в маскировке: выглядит ровно как «Нет». */
+  .ans--yes.is-mask { background: var(--surface); color: var(--ink); border-color: var(--line-strong); box-shadow: none; }
+  .ans .lbl { display: inline-block; transition: opacity .18s ease; }
+  .ans--yes:active { background: var(--accent-pressed); }
+  .ans--no { transform-origin: 50% 100%; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); transition: background .3s, color .3s, border-color .3s, box-shadow .3s; }
+    .ans--no.is-down { pointer-events: none; }
+  .ans--no.is-yes { background: var(--accent); color: var(--on-accent); border-color: transparent; box-shadow: 0 8px 24px rgba(69, 185, 187, .35); }
+  .hint { margin: 0; min-height: 1.45em; font-size: 14px; color: var(--muted); transition: opacity .25s; }
+
+  /* Ответ «да» */
+  .yes h2 { margin: 0; font-size: clamp(30px, 8.6vw, 38px); font-weight: 650; line-height: 1.08; letter-spacing: -.02em; text-wrap: balance; }
+  .yes h2 span { color: var(--accent-ink); }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cta {
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    min-height: 50px; padding: 0 16px; border-radius: var(--r);
+    background: var(--accent); color: var(--on-accent); font-size: 16px; font-weight: 600; text-decoration: none;
+  }
+  .cta--ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+  .cta--secondary { background: transparent; color: var(--accent-ink); border: 1px solid var(--accent); }
+  .note { margin: 0; font-size: 14px; color: var(--muted); }
+  /* Билет: то, что скриншотят и постят. Срез и рейка — как у hero, перфорация — как у настоящего билета. */
+  .tix { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .tix::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+  .tix p { margin: 0; }
+  .tix__top { position: relative; padding: 16px 104px 14px 21px; display: grid; gap: 6px; }
+  .tix__who { font-size: 15px; font-weight: 600; color: var(--muted); }
+  .tix__who span { color: var(--ink); }
+  .tix__time { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 46px; font-weight: 650; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .tix__time small { font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--accent-ink); }
+  .tix__place { font-size: 14px; color: var(--muted); max-width: 72%; }
+  .tix__cut { position: relative; height: 0; border-top: 1.5px dashed var(--line-strong); margin: 0 14px; }
+  .tix__cut::before, .tix__cut::after { content: ""; position: absolute; top: -11px; width: 22px; height: 22px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line); }
+  .tix__cut::before { left: -26px; } .tix__cut::after { right: -26px; }
+  .tix__bottom { padding: 14px 18px 14px 21px; display: grid; gap: 12px; }
+  .tix__verdict { font-size: 17px; font-weight: 600; line-height: 1.3; text-wrap: balance; }
+  .tix__stats { margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tix__stats div { min-width: 0; }
+  .tix__stats dt { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .tix__stats dd { margin: 2px 0 0; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .tix__brand { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .tix__brand span { color: var(--accent-ink); }
+  .stamp {
+    position: absolute; right: 16px; top: 18px;
+    width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center;
+    border: 3px solid var(--accent-ink); color: var(--accent-ink);
+    font-size: 24px; font-weight: 700; letter-spacing: .08em;
+    transform: rotate(-14deg); opacity: .9;
+    box-shadow: inset 0 0 0 4px var(--surface), inset 0 0 0 5.5px var(--accent-ink);
+  }
+  .stamp.hit { animation: stamp .55s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: .35s; }
+  @keyframes stamp { 0% { transform: rotate(-14deg) scale(2.2); opacity: 0; } 60% { opacity: .95; } 100% { transform: rotate(-14deg) scale(1); opacity: .9; } }
+  .burst { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+
+  .reveal > * { animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
+  .reveal > *:nth-child(2) { animation-delay: .06s; }
+  .reveal > *:nth-child(3) { animation-delay: .12s; }
+  .reveal > *:nth-child(4) { animation-delay: .18s; }
+  .reveal > *:nth-child(5) { animation-delay: .24s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* Создать приглашение */
+  .sec { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; display: grid; gap: 12px; }
+  .sec__title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .make-h { margin: 0; font-size: 26px; font-weight: 650; line-height: 1.12; letter-spacing: -.01em; text-wrap: balance; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .field { display: grid; gap: 4px; min-width: 0; }
+  .field span { font-size: 13px; color: var(--muted); }
+  .field input {
+    width: 100%; min-height: 46px; padding: 0 12px; border-radius: 12px;
+    background: var(--chip); border: 1px solid transparent; color: var(--ink); font: inherit;
+  }
+  .field input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+  .slots { display: grid; }
+  .slot { display: grid; grid-template-columns: 58px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  .slot:first-child { border-top: 0; padding-top: 0; }
+  .slot input { position: absolute; opacity: 0; pointer-events: none; }
+  .slot__time { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .slot__place { min-width: 0; font-size: 15px; font-weight: 500; line-height: 1.25; }
+  .slot__place small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
+  .slot__mark { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; transition: border-color .2s, background .2s; }
+  .slot__mark::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--on-accent); transform: scale(0); transition: transform .2s cubic-bezier(.2, .9, .3, 1.4); }
+  .slot:has(input:checked) .slot__mark { border-color: var(--accent); background: var(--accent); }
+  .slot:has(input:checked) .slot__mark::after { transform: scale(1); }
+  .slot:has(input:focus-visible) .slot__time { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  /* Превью в чате: здесь — тёмная подача, как у og.png Glide. */
+  .chat { display: grid; justify-items: end; }
+  .bubble { width: min(300px, 100%); border-radius: 16px 16px 4px 16px; overflow: hidden; background: var(--chip); }
+  .og { position: relative; aspect-ratio: 1.91 / 1; background: var(--dark); color: #fff; padding: 14px 16px; display: grid; align-content: space-between; overflow: hidden; }
+  .og::after { content: ""; position: absolute; right: 0; top: 0; border-style: solid; border-width: 0 22px 22px 0; border-color: transparent var(--bg) transparent transparent; }
+  .og__brand { font-size: 12px; font-weight: 700; color: var(--on-dark-muted); }
+  .og__brand span { color: var(--on-dark-accent); }
+  .og__q { font-size: 21px; font-weight: 650; line-height: 1.1; letter-spacing: -.01em; }
+  .og__q span { color: var(--on-dark-accent); }
+  .og__t { font-size: 12px; color: var(--on-dark-muted); font-variant-numeric: tabular-nums; }
+  .og__rail { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+  .bubble__url { padding: 8px 12px; font-size: 12px; color: var(--muted); }
+
+  .proto { margin: 4px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+  .proto button { color: var(--accent-ink); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+    background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 10;
+    box-shadow: 0 8px 24px rgba(13, 27, 38, .2);
+  }
+
+  @media (max-width: 420px) { .tix__top { padding-right: 84px; } .stamp { width: 64px; height: 64px; font-size: 20px; right: 12px; } }
+  @media (max-width: 360px) { .fields, .actions { grid-template-columns: 1fr; } .tix__time { font-size: 38px; } .stamp { width: 64px; height: 64px; font-size: 20px; } }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal > * { animation: none; }
+    .stamp.hit { animation: none; }
+  }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand">Glide<span>.</span></div>
+    <div class="views" role="group" aria-label="Экран прототипа">
+      <button type="button" data-view="card" aria-pressed="true">Открытка</button>
+      <button type="button" data-view="make" aria-pressed="false">Создать</button>
+    </div>
+  </div>
+
+  <!-- Получатель -->
+  <section class="hero" id="cardView" aria-live="polite">
+    <div id="askBody" style="display:grid;gap:16px">
+      <p class="kicker">Приглашение на лёд от <b id="fromG">Макса</b></p>
+      <h1 class="q"><span class="name" id="toName">Лера</span>, пойдёшь со&nbsp;мной на&nbsp;каток?</h1>
+      <div class="plan" id="plan"></div>
+      <div class="rink" id="rink">
+        <canvas id="trail" aria-hidden="true"></canvas>
+        <button type="button" class="ans ans--yes" id="yesBtn"><span class="lbl" id="yesLbl">Да</span></button>
+        <button type="button" class="ans ans--no" id="noBtn"><span class="lbl" id="noLbl">Нет</span></button>
+      </div>
+      <p class="hint" id="hint"></p>
+    </div>
+
+    <div class="yes reveal" id="yesBody" hidden style="display:grid;gap:16px">
+      <p class="kicker">Ответ получен</p>
+      <div class="tix" id="tix">
+        <div class="tix__top">
+          <p class="tix__who"><span id="tixTo">Лера</span> + <span id="tixFrom">Макс</span></p>
+          <p class="tix__time"><span id="tixTime">19:15</span><small id="tixDay">Сб, 17 октября</small></p>
+          <p class="tix__place" id="tixPlace"></p>
+          <span class="stamp" id="stamp" aria-label="Да">ДА</span>
+        </div>
+        <div class="tix__cut" aria-hidden="true"></div>
+        <div class="tix__bottom">
+          <p class="tix__verdict" id="verdict"></p>
+          <dl class="tix__stats">
+            <div><dt>Держались</dt><dd id="stSec">0&nbsp;с</dd></div>
+            <div><dt>Отказов</dt><dd id="stTries">0</dd></div>
+            <div><dt>Падений</dt><dd id="stFalls">0</dd></div>
+          </dl>
+          <p class="tix__brand">Glide<span>.</span> приглашение на лёд</p>
+        </div>
+      </div>
+      <button type="button" class="cta" id="sendBtn"><span>Отправить ответ <span id="fromD">Максу</span></span></button>
+      <div class="actions">
+        <button type="button" class="cta cta--ghost" id="calBtn">В календарь</button>
+        <a class="cta cta--ghost" id="routeLink" href="#" target="_blank" rel="noopener">Маршрут</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Отправитель -->
+  <div id="makeView" hidden style="display:grid;gap:12px">
+    <section class="hero">
+      <p class="kicker">Свидание, на которое не стыдно позвать</p>
+      <h2 class="make-h">Позови кого-нибудь на&nbsp;лёд</h2>
+      <div class="fields">
+        <label class="field"><span>Кого зовёшь</span><input id="inTo" type="text" value="Лера" maxlength="20" autocomplete="off"></label>
+        <label class="field"><span>Твоё имя</span><input id="inFrom" type="text" value="Макс" maxlength="20" autocomplete="off"></label>
+      </div>
+    </section>
+    <section class="sec">
+      <p class="sec__title">Минск · суббота, 17 октября</p>
+      <div class="slots" id="slots" role="radiogroup" aria-label="Сеанс"></div>
+    </section>
+    <section class="sec">
+      <p class="sec__title">Так увидят в чате</p>
+      <div class="chat">
+        <div class="bubble">
+          <div class="og">
+            <span class="og__rail"></span>
+            <div class="og__brand">Glide<span>.</span> приглашение на лёд</div>
+            <div class="og__q"><span id="ogTo">Лера</span>, пойдёшь со&nbsp;мной на&nbsp;каток?</div>
+            <div class="og__t" id="ogT"></div>
+          </div>
+          <div class="bubble__url">домен.by/zovi/k7q2</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="cta" id="copyBtn">Скопировать ссылку</button>
+        <button type="button" class="cta cta--ghost" data-view="card">Открыть как друг</button>
+      </div>
+    </section>
+  </div>
+
+  <p class="proto">Прототип. Сеансы — из расписания прода на субботу, 17 октября. <button type="button" id="resetBtn">Сначала</button></p>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  var SLOTS = [
+    { id: 'ldsmo', dayShort: 'Суббота', day: 'Суббота, 17 октября', time: '19:15', end: '20:15', place: 'Ледовый дворец спорта Минской области', addr: 'ул. Притыцкого, 27' },
+    { id: 'zamok', dayShort: 'Суббота', day: 'Суббота, 17 октября', time: '19:15', end: '20:00', place: 'Каток в ТЦ «Замок»', addr: 'пр-т Победителей, 65' },
+    { id: 'diamond', dayShort: 'Суббота', day: 'Суббота, 17 октября', time: '17:45', end: '18:30', place: 'Каток в ТЦ DiaMond city', addr: 'Щомыслицкий с/с, 32/4' }
+  ];
+
+  var state = { to: 'Лера', from: 'Макс', slot: SLOTS[0], tries: 0, answered: false, view: 'card' };
+  var $ = function (id) { return document.getElementById(id); };
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function decline(name, kind) {
+    var n = String(name || '').trim();
+    if (!n) return kind === 'dat' ? 'другу' : 'друга';
+    if (/[ая]$/i.test(n)) return n.slice(0, -1) + (kind === 'dat' ? 'е' : (/[гкхжшщч]а$/i.test(n) ? 'и' : (/я$/i.test(n) ? 'и' : 'ы')));
+    if (/[бвгджзклмнпрстфхцчшщ]$/i.test(n)) return n + (kind === 'dat' ? 'у' : 'а');
+    if (/й$/i.test(n)) return n.slice(0, -1) + (kind === 'dat' ? 'ю' : 'я');
+    return n;
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function planHtml(s) {
+    return '<span class="plan__time">' + s.time + '</span>' +
+      '<span class="plan__day">' + s.day + '</span>' +
+      '<span class="plan__place">' + esc(s.place) + '</span>' +
+      '<span class="plan__meta">Массовое катание до ' + s.end + ' · ' + esc(s.addr) + '</span>';
+  }
+  function paint() {
+    $('toName').textContent = state.to || 'Эй';
+    $('fromG').textContent = decline(state.from, 'gen');
+    $('fromD').textContent = decline(state.from, 'dat');
+    $('plan').innerHTML = planHtml(state.slot);
+    $('tixTo').textContent = state.to || 'Ты';
+    $('tixFrom').textContent = state.from || 'я';
+    $('tixTime').textContent = state.slot.time;
+    $('tixDay').textContent = 'Сб, 17 октября';
+    $('tixPlace').textContent = state.slot.place + ', ' + state.slot.addr;
+    $('ogTo').textContent = state.to || 'Эй';
+    $('ogT').textContent = 'Сб, 17 окт · ' + state.slot.time + ' · ' + state.slot.place;
+    $('routeLink').href = 'https://yandex.by/maps/?text=' + encodeURIComponent('Минск, ' + state.slot.addr);
+  }
+
+  /* ================= Персонаж «Нет» ================= */
+  /* Кнопка «Нет» — новичок на коньках. Пять актов, у каждого своя реплика и движение.
+     Акт меняется не чаще, чем раз в DWELL мс, и только когда кнопка доехала: реплику
+     успевают прочитать, даже если гонять курсор без остановки. */
+  var DWELL = 1900;
+
+  function Spring(v, k, c) { this.x = v; this.v = 0; this.to = v; this.k = k; this.c = c; }
+  Spring.prototype.step = function (dt) { var a = -this.k * (this.x - this.to) - this.c * this.v; this.v += a * dt; this.x += this.v * dt; };
+  Spring.prototype.done = function () { return Math.abs(this.x - this.to) < 0.25 && Math.abs(this.v) < 0.8; };
+  Spring.prototype.snap = function (v) { this.x = this.to = v; this.v = 0; };
+
+  var rink = $('rink'), noBtn = $('noBtn'), yesBtn = $('yesBtn'), trail = $('trail');
+  /* Скольжение ~0.9 с с мягким докатом. Наклон — недодемпфирован: кнопка балансирует. */
+  var nx = new Spring(0, 34, 9.6), ny = new Spring(0, 34, 9.6);
+  var rot = new Spring(0, 70, 5.5), sq = new Spring(1, 150, 11), ys = new Spring(1, 90, 13);
+  /* «Да» тоже ездит: в акте перестановки кнопки меняются местами. */
+  var yx = new Spring(0, 30, 9), yy = new Spring(0, 30, 9);
+  var masked = false, swapUntil = 0;
+  var raf = 0, lastT = 0, points = [], nextActAt = 0, lastPress = -1e9, lying = false, timers = [];
+  var stats = { first: 0, falls: 0 }, idleTimer = 0;
+  /* Где курсор сейчас. Нужен и во время скольжения: кнопка не должна въехать под неподвижную мышь. */
+  var ptr = null, lastDodge = -1e9, NEAR = 72, DODGE_GAP = 240;
+
+  /* Пока «Нет» не трогают, она нервно балансирует: зовёт попробовать.
+     Иначе половина людей сразу жмёт «Да» и не видит представления. */
+  function idleWobble() {
+    clearInterval(idleTimer);
+    if (reduce) return;
+    idleTimer = setInterval(function () {
+      if (state.answered || state.tries > 0 || state.view !== 'card') return;
+      rot.v += (Math.random() < .5 ? -1 : 1) * 55;
+      kick();
+    }, 2600);
+  }
+
+  function later(fn, ms) { timers.push(setTimeout(fn, reduce ? Math.min(ms, 300) : ms)); }
+  function clearLater() { timers.forEach(clearTimeout); timers = []; }
+
+  function rinkBox() { return { w: rink.clientWidth, h: rink.clientHeight }; }
+  function noBox() { return { w: noBtn.offsetWidth, h: noBtn.offsetHeight }; }
+  /* Прямоугольник «Да» вокруг её цели — с запасом 12 px, чтобы «Нет» не прилипала. */
+  function yesBox() { return { x: yx.to - 12, y: yy.to - 12, w: yesBtn.offsetWidth * ys.x + 24, h: yesBtn.offsetHeight * ys.x + 24 }; }
+
+  function apply() {
+    /* Наклон в сторону движения: так держат равновесие на льду. Чем позже акт — тем хуже держит. */
+    var wob = state.tries >= 4 ? 0.6 : 0.25 + state.tries * 0.12;
+    var lean = Math.max(-14, Math.min(14, nx.v * 0.035 * wob * 2));
+    noBtn.style.transform = 'translate(' + nx.x.toFixed(2) + 'px,' + ny.x.toFixed(2) + 'px) rotate(' + (rot.x + lean).toFixed(2) + 'deg) scale(1,' + sq.x.toFixed(3) + ')';
+    yesBtn.style.transform = 'translate(' + yx.x.toFixed(2) + 'px,' + yy.x.toFixed(2) + 'px) scale(' + ys.x.toFixed(3) + ')';
+  }
+  function homeNo() {
+    var r = rinkBox(), b = noBox();
+    nx.snap(Math.max(0, r.w - b.w)); ny.snap(0); rot.snap(0); sq.snap(1); ys.snap(1); yx.snap(0); yy.snap(0); apply();
+  }
+  function clampTarget(x, y) {
+    var r = rinkBox(), b = noBox(), yb = yesBox();
+    x = Math.min(Math.max(0, x), r.w - b.w);
+    y = Math.min(Math.max(0, y), r.h - b.h);
+    /* Не заезжать на «Да»: выталкиваем по самой короткой оси, оставаясь на катке. */
+    if (x < yb.x + yb.w && x + b.w > yb.x && y < yb.y + yb.h && y + b.h > yb.y) {
+      var opts = [
+        { x: yb.x + yb.w, y: y }, { x: yb.x - b.w, y: y },
+        { x: x, y: yb.y + yb.h }, { x: x, y: yb.y - b.h }
+      ].filter(function (o) { return o.x >= 0 && o.x <= r.w - b.w && o.y >= 0 && o.y <= r.h - b.h; });
+      opts.sort(function (a, c) { return Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y); });
+      if (opts.length) { x = opts[0].x; y = opts[0].y; }
+    }
+    return { x: x, y: y };
+  }
+  function glideFrom(px, py, dist) {
+    var b = noBox(), cx = nx.x + b.w / 2, cy = ny.x + b.h / 2;
+    var dx = cx - px, dy = cy - py, len = Math.hypot(dx, dy) || 1;
+    dx /= len; dy /= len;
+    var t = clampTarget(nx.x + dx * dist, ny.x + dy * dist * 0.8);
+    if (Math.hypot(t.x - nx.x, t.y - ny.x) < dist * 0.45) {
+      var r = rinkBox();
+      var far = [[r.w - b.w, r.h - b.h], [r.w - b.w, 0], [0, r.h - b.h], [0, 0], [(r.w - b.w) / 2, r.h - b.h]];
+      far.sort(function (a, c) { return Math.hypot(c[0] + b.w / 2 - px, c[1] + b.h / 2 - py) - Math.hypot(a[0] + b.w / 2 - px, a[1] + b.h / 2 - py); });
+      t = clampTarget(far[0][0], far[0][1]);
+    }
+    nx.to = t.x; ny.to = t.y;
+    /* Отталкивание: стартовая скорость в сторону цели. Без неё пружина первые 150 мс
+       почти стоит — и кнопка «зависает» под пальцем. Докат остаётся мягким. */
+    var ex = t.x - nx.x, ey = t.y - ny.x, el = Math.hypot(ex, ey) || 1;
+    var push = Math.min(900, 380 + el * 3);
+    nx.v = nx.v * 0.3 + ex / el * push;
+    ny.v = ny.v * 0.3 + ey / el * push;
+    rot.v += (dx >= 0 ? 1 : -1) * (30 + state.tries * 25);   /* толчок: качнуло */
+    kick();
+  }
+
+  function kick() {
+    if (reduce) { nx.snap(nx.to); ny.snap(ny.to); rot.snap(rot.to); sq.snap(sq.to); ys.snap(ys.to); yx.snap(yx.to); yy.snap(yy.to); apply(); return; }
+    if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(tick); }
+  }
+  /* Борта катка: толчок может пронести кнопку дальше края — отскакивает, как шайба, теряя скорость. */
+  function boards() {
+    var r = rinkBox(), b = noBox(), mx = Math.max(0, r.w - b.w), my = Math.max(0, r.h - b.h);
+    if (nx.x < 0) { nx.x = 0; if (nx.v < 0) nx.v = -nx.v * 0.35; }
+    /* Справа кнопка может оказаться за бортом, когда подпись стала шире: не обрезаем рывком,
+       пружина (keepInside) мягко вернёт. Летит наружу — отскок. */
+    if (nx.x > mx && nx.v > 0) nx.v = -nx.v * 0.35;
+    if (nx.x > mx + 120) nx.x = mx + 120;
+    if (ny.x < 0) { ny.x = 0; if (ny.v < 0) ny.v = -ny.v * 0.35; }
+    if (ny.x > my) { ny.x = my; if (ny.v > 0) ny.v = -ny.v * 0.35; }
+  }
+
+  function tick(t) {
+    var dt = Math.min(0.032, (t - lastT) / 1000); lastT = t;
+    for (var i = 0; i < 4; i++) { nx.step(dt / 4); ny.step(dt / 4); rot.step(dt / 4); sq.step(dt / 4); ys.step(dt / 4); yx.step(dt / 4); yy.step(dt / 4); boards(); }
+    apply();
+    var b = noBox(), speed = Math.hypot(nx.v, ny.v);
+    if (ptr && !lying && !state.answered && !noBtn.classList.contains('is-yes') && nearNo(ptr.x, ptr.y)) attempt(ptr.x, ptr.y);
+    if (speed > 30) points.push({ x: nx.x + b.w * 0.3, y: ny.x + b.h, x2: nx.x + b.w * 0.7, t: t, heavy: lying });
+    drawTrail(t);
+    if (nx.done() && ny.done() && rot.done() && sq.done() && ys.done() && yx.done() && yy.done() && !points.length) { raf = 0; return; }
+    raf = requestAnimationFrame(tick);
+  }
+  function drawTrail(now) {
+    var dpr = window.devicePixelRatio || 1, w = rink.clientWidth, h = rink.clientHeight;
+    if (trail.width !== Math.round(w * dpr)) { trail.width = Math.round(w * dpr); trail.height = Math.round(h * dpr); }
+    var ctx = trail.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    points = points.filter(function (p) { return now - p.t < 1100; });
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--trail').trim(); ctx.lineCap = 'round';
+    for (var i = 1; i < points.length; i++) {
+      var a = points[i - 1], p = points[i];
+      if (p.t - a.t > 80) continue;
+      ctx.globalAlpha = Math.max(0, 1 - (now - p.t) / 1100);
+      if (p.heavy) {   /* упал — широкая борозда вместо двух лезвий */
+        ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo((a.x + a.x2) / 2, a.y - 3); ctx.lineTo((p.x + p.x2) / 2, p.y - 3); ctx.stroke();
+      } else {
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y - 2); ctx.lineTo(p.x, p.y - 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(a.x2, a.y - 2); ctx.lineTo(p.x2, p.y - 2); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function say(text, hint) {
+    var lbl = $('noLbl'), h = $('hint');
+    if (hint != null) { h.style.opacity = '0'; later(function () { h.textContent = hint; h.style.opacity = '1'; }, 160); }
+    if (reduce) { lbl.textContent = text; keepInside(); return; }
+    lbl.style.opacity = '0';
+    later(function () { lbl.textContent = text; lbl.style.opacity = '1'; keepInside(); }, 160);
+  }
+
+  /* Подпись стала длиннее — кнопка шире. Плавно отъезжаем от борта, а не торчим за ним. */
+  function keepInside() {
+    var r = rinkBox(), b = noBox();
+    var mx = Math.max(0, r.w - b.w), my = Math.max(0, r.h - b.h);
+    if (nx.to > mx) nx.to = mx;
+    if (ny.to > my) ny.to = my;
+    if (nx.x > mx || ny.x > my || nx.to !== nx.x) kick();
+  }
+
+  /* Акты. Номер акта = state.tries. */
+  function nextAct(px, py) {
+    if (!stats.first) stats.first = performance.now();
+    state.tries++;
+    var n = state.tries;
+    if (n === 1) { say('Не-а', 'Кнопка катается лучше тебя.'); glideFrom(px, py, 150); }
+    else if (n === 2) { swap(px, py); return; }
+    else if (n === 3) { unmask(); fall(px); return; }
+    else if (n === 4) {
+      say('Ладно… может быть', 'Устала. Ещё раз — и сдастся.');
+      nx.k = ny.k = 18; nx.c = ny.c = 7.5;          /* устала: едет медленно и недалеко */
+      glideFrom(px, py, 70);
+    } else { giveUp(); return; }
+    nextActAt = performance.now() + DWELL;
+  }
+
+  function sayYesLabel(text) {
+    var lbl = $('yesLbl');
+    if (reduce) { lbl.textContent = text; return; }
+    lbl.style.opacity = '0';
+    later(function () { lbl.textContent = text; lbl.style.opacity = '1'; }, 160);
+  }
+
+  /* Акт 2: кнопки меняются местами. Под курсором оказывается «Да», переодетая в «Нет».
+     Нажал её — засчитано как «да», с отдельным вердиктом. Настоящая «Нет» уезжает на место «Да». */
+  function swap(px, py) {
+    var r = rinkBox(), b = noBox();
+    var yw = yesBtn.offsetWidth * ys.x, yh = yesBtn.offsetHeight * ys.x;
+    var noX = nx.x, noY = ny.x, yesX = yx.x, yesY = yy.x;
+    yx.to = Math.min(Math.max(0, noX + (b.w - yw) / 2), r.w - yw);
+    yy.to = Math.min(Math.max(0, noY + (b.h - yh) / 2), r.h - yh);
+    nx.to = Math.min(Math.max(0, yesX), r.w - b.w);
+    ny.to = Math.min(Math.max(0, yesY), r.h - b.h);
+    /* Разъехаться по дуге, а не сквозь друг друга: боковой толчок в разные стороны. */
+    var dx = noX - yesX, dy = noY - yesY, d = Math.hypot(dx, dy) || 1;
+    var pxn = -dy / d, pyn = dx / d;
+    yx.v += pxn * 260; yy.v += pyn * 260 - 120;
+    nx.v -= pxn * 260; ny.v -= pyn * 260 - 120;
+    rot.v += 90;
+    masked = true;
+    swapUntil = performance.now() + 900;
+    later(function () { yesBtn.classList.add('is-mask'); sayYesLabel('Нет'); }, 260);
+    say('Настоящая «Нет»', 'Кнопки перепутались. Или нет?');
+    kick();
+    nextActAt = performance.now() + DWELL + 700;   /* дать заметить подмену */
+  }
+
+  /* Снять маскировку: «Да» снова тиловая. */
+  function unmask() {
+    if (!masked) return;
+    masked = false;
+    yesBtn.classList.remove('is-mask');
+    sayYesLabel('Да');
+  }
+
+  /* Акт 3: потеряла равновесие, крутанулась, проехала на «спине», встала. */
+  function fall(px) {
+    lying = true;
+    stats.falls++;
+    noBtn.classList.add('is-down');
+    var r = rinkBox(), b = noBox();
+    var dir = nx.x + b.w / 2 > px ? 1 : -1;
+    nx.to = Math.min(Math.max(0, nx.x + dir * 120), r.w - b.w);
+    ny.to = r.h - b.h - 4;
+    rot.to = dir * 360 + dir * 8;                   /* полный оборот и лёг на бок */
+    rot.v += dir * 200;
+    sq.to = 0.78;                                    /* придавило */
+    say('Ай', null);
+    $('hint').style.opacity = '0';
+    later(function () { $('hint').textContent = 'Падать на льду не страшно, если есть за кого держаться.'; $('hint').style.opacity = '1'; }, 420);
+    kick();
+    later(function () {
+      rot.x -= dir * 360; rot.to = 0; rot.v = -dir * 120;   /* встаёт, качаясь */
+      sq.to = 1; sq.v = 3;
+      lying = false; noBtn.classList.remove('is-down');
+      say('Я в порядке', null);
+      kick();
+      nextActAt = performance.now() + DWELL;
+    }, 1700);
+    nextActAt = performance.now() + 1700 + DWELL;
+  }
+
+  /* Акт 5: подъезжает к «Да» и становится вторым «Да». */
+  function giveUp() {
+    noBtn.classList.add('is-yes');
+    say('Да', 'Даже кнопка согласилась.');
+    nx.k = ny.k = 26; nx.c = ny.c = 8.5;
+    ys.to = 1;
+    unmask();
+    later(function () {
+      /* Встать рядом с «Да»: справа, если влезает, иначе слева. */
+      var r = rinkBox(), b = noBox(), yw = yesBtn.offsetWidth;
+      var right = yx.to + yw + 8;
+      nx.to = right + b.w <= r.w ? right : Math.max(0, yx.to - b.w - 8);
+      ny.to = yy.to; rot.to = 0; rot.v += 40;
+      kick();
+    }, 200);
+    kick();
+  }
+
+  /* Две независимые вещи. Уклон — всегда: пружина плавно меняет цель, кнопку не поймать.
+     История — по таймеру: новая реплика не раньше nextActAt, поэтому её успевают прочитать,
+     как бы быстро ни гнали курсор. */
+  function attempt(px, py) {
+    if (state.answered || lying || noBtn.classList.contains('is-yes')) return;
+    var now = performance.now();
+    if (now < swapUntil) return;   /* кнопки меняются местами — не сбивать маршрут */
+    if (now - lastDodge < DODGE_GAP) return;
+    lastDodge = now;
+    if (now >= nextActAt) { nextAct(px, py); return; }
+    glideFrom(px, py, 110);
+  }
+
+  /* Расстояние от точки до прямоугольника кнопки. */
+  function nearNo(px, py) {
+    var b = noBox();
+    var cx = Math.min(Math.max(px, nx.x), nx.x + b.w), cy = Math.min(Math.max(py, ny.x), ny.x + b.h);
+    return Math.hypot(px - cx, py - cy) < NEAR;
+  }
+
+  function localPoint(e) { var b = rink.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; }
+
+  rink.addEventListener('pointermove', function (e) {
+    if (e.pointerType !== 'mouse') return;
+    ptr = localPoint(e);
+    if (nearNo(ptr.x, ptr.y)) attempt(ptr.x, ptr.y);
+  });
+  rink.addEventListener('pointerleave', function () { ptr = null; });
+  noBtn.addEventListener('pointerdown', function (e) {
+    if (noBtn.classList.contains('is-yes')) return;
+    e.preventDefault();
+    lastPress = performance.now();
+    var p = localPoint(e);
+    lastDodge = -1e9;   /* палец уже на кнопке — уезжаем сразу */
+    attempt(p.x, p.y);
+  });
+  noBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    /* Клик того же касания, что уже обработан в pointerdown, игнорируем: иначе рывок,
+       а касание, превратившее «Нет» в «Да», сразу засчитало бы ответ. */
+    if (performance.now() - lastPress < 700) return;
+    if (noBtn.classList.contains('is-yes')) { sayYes(); return; }
+    var b = noBox();
+    attempt(nx.x + b.w / 2 + (Math.random() - .5) * 40, ny.x + b.h / 2 + (Math.random() - .5) * 40);
+  });
+  yesBtn.addEventListener('click', sayYes);
+
+  /* ================= «Да» ================= */
+  function sayYes() {
+    if (state.answered) return;
+    state.answered = true;
+    stats.tricked = masked;   /* нажали «Нет», а это была «Да» */
+    try { if (navigator.vibrate) navigator.vibrate([12, 40, 18]); } catch (e) { /* */ }
+    clearInterval(idleTimer);
+    var sec = stats.first ? Math.max(1, Math.round((performance.now() - stats.first) / 1000)) : 0;
+    $('stSec').textContent = sec + '\u00a0с';
+    $('stTries').textContent = String(state.tries);
+    $('stFalls').textContent = String(stats.falls);
+    $('verdict').textContent = stats.tricked ? 'Нажали «Нет». Это была «Да» в маскировке. Засчитано.' : verdict(state.tries, stats.falls);
+    $('askBody').hidden = true;
+    var yb = $('yesBody');
+    yb.hidden = false;
+    yb.classList.remove('reveal'); void yb.offsetWidth; yb.classList.add('reveal');
+    var st = $('stamp'); st.classList.remove('hit'); void st.offsetWidth; st.classList.add('hit');
+    later(function () { burst($('cardView')); }, 420);   /* крошка — в момент удара штампа */
+  }
+
+  /* Вердикт без рода: открытку шлют кому угодно. */
+  function verdict(tries, falls) {
+    if (tries === 0) return 'Ответ «да» — с первой секунды. Кнопка «Нет» даже не проснулась.';
+    if (tries <= 2) return 'Пара секунд на раздумья. Для приличия.';
+    if (tries >= 5) return 'Кнопка «Нет» сдалась первой.';
+    if (falls) return 'Кнопку «Нет» довели до падения. Беспощадно.';
+    return 'Долго думали. Но правильно.';
+  }
+
+  /* Ледяная крошка из-под конька: мягкий веер вверх, медленное оседание. */
+  function burst(host) {
+    if (reduce) return;
+    var c = document.createElement('canvas'); c.className = 'burst'; host.appendChild(c);
+    var w = host.clientWidth, h = host.clientHeight, dpr = window.devicePixelRatio || 1;
+    c.width = w * dpr; c.height = h * dpr;
+    var ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+    var css = getComputedStyle(document.documentElement);
+    var cols = [css.getPropertyValue('--accent').trim(), css.getPropertyValue('--ice').trim(), css.getPropertyValue('--line-strong').trim()];
+    var bits = [];
+    for (var i = 0; i < 70; i++) {
+      var ang = -Math.PI / 2 + (Math.random() - .5) * 1.9, sp = 260 + Math.random() * 360;
+      bits.push({ x: w * .5, y: h * .42, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: 1.5 + Math.random() * 3.2, a: Math.random() * 6, va: (Math.random() - .5) * 6, col: cols[i % 3], flake: Math.random() < .4 });
+    }
+    var t0 = performance.now(), last = t0;
+    (function f(t) {
+      var dt = Math.min(0.033, (t - last) / 1000); last = t;
+      var age = (t - t0) / 1000;
+      ctx.clearRect(0, 0, w, h);
+      bits.forEach(function (b) {
+        b.vy += 520 * dt; b.vx *= Math.pow(0.18, dt); b.vy *= Math.pow(0.55, dt);
+        b.x += b.vx * dt; b.y += b.vy * dt; b.a += b.va * dt;
+        ctx.save(); ctx.globalAlpha = Math.max(0, 1 - Math.max(0, age - 1.1) / 0.9);
+        ctx.translate(b.x, b.y); ctx.rotate(b.a); ctx.strokeStyle = ctx.fillStyle = b.col; ctx.lineWidth = 1.3;
+        if (b.flake) { for (var k = 0; k < 3; k++) { ctx.rotate(Math.PI / 3); ctx.beginPath(); ctx.moveTo(-b.r * 1.7, 0); ctx.lineTo(b.r * 1.7, 0); ctx.stroke(); } }
+        else { ctx.beginPath(); ctx.moveTo(0, -b.r); ctx.lineTo(b.r * .8, 0); ctx.lineTo(0, b.r); ctx.lineTo(-b.r * .8, 0); ctx.closePath(); ctx.fill(); }
+        ctx.restore();
+      });
+      if (age < 2) requestAnimationFrame(f); else c.remove();
+    })(t0);
+  }
+
+  /* ================= Создать ================= */
+  function renderSlots() {
+    $('slots').innerHTML = SLOTS.map(function (s) {
+      return '<label class="slot"><input type="radio" name="slot" value="' + s.id + '"' + (s.id === state.slot.id ? ' checked' : '') + '>' +
+        '<span class="slot__time">' + s.time + '</span>' +
+        '<span class="slot__place">' + esc(s.place) + '<small>' + esc(s.addr) + '</small></span>' +
+        '<span class="slot__mark" aria-hidden="true"></span></label>';
+    }).join('');
+  }
+  $('slots').addEventListener('change', function (e) {
+    var s = SLOTS.filter(function (x) { return x.id === e.target.value; })[0];
+    if (s) { state.slot = s; paint(); }
+  });
+  $('inTo').addEventListener('input', function (e) { state.to = e.target.value.trim(); paint(); });
+  $('inFrom').addEventListener('input', function (e) { state.from = e.target.value.trim(); paint(); });
+
+  var toastTimer = 0;
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 2200);
+  }
+  $('copyBtn').addEventListener('click', function () {
+    var url = 'https://домен.by/zovi/k7q2';
+    try { navigator.clipboard.writeText(url).then(function () { toast('Ссылка скопирована'); }, function () { toast(url); }); }
+    catch (e) { toast(url); }
+  });
+  $('sendBtn').addEventListener('click', function () { toast('В настоящей версии отправит этот билет картинкой'); });
+  $('calBtn').addEventListener('click', function () { toast('В настоящей версии добавит сеанс в календарь'); });
+
+  /* ================= Экраны ================= */
+  function reset() {
+    clearLater();
+    state.tries = 0; state.answered = false; points = []; nextActAt = 0; lying = false;
+    stats.first = 0; stats.falls = 0; stats.tricked = false; ptr = null; lastDodge = -1e9;
+    masked = false; swapUntil = 0; yesBtn.classList.remove('is-mask'); $('yesLbl').textContent = 'Да'; $('yesLbl').style.opacity = '1';
+    nx.k = ny.k = 34; nx.c = ny.c = 9.6;
+    $('askBody').hidden = false; $('yesBody').hidden = true;
+    noBtn.classList.remove('is-yes', 'is-down'); $('noLbl').textContent = 'Нет'; $('noLbl').style.opacity = '1';
+    $('hint').textContent = ''; $('hint').style.opacity = '1';
+    paint();
+    requestAnimationFrame(function () { homeNo(); drawTrail(performance.now()); });
+  }
+  function show(view) {
+    state.view = view;
+    $('cardView').hidden = view !== 'card';
+    $('makeView').hidden = view !== 'make';
+    document.querySelectorAll('.views button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === view)); });
+    if (view === 'card') reset();
+    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-view]');
+    if (b) show(b.getAttribute('data-view'));
+  });
+  $('resetBtn').addEventListener('click', function () { show('card'); });
+  window.addEventListener('resize', function () { if (!state.answered && state.tries === 0) homeNo(); });
+
+  renderSlots();
+  reset();
+  idleWobble();
+})();
+</script>

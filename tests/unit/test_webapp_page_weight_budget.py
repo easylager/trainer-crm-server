@@ -63,3 +63,16 @@ def test_ice_and_catalog_page_weight_stay_within_five_percent() -> None:
     for name, baseline in _BASELINE_GZIP.items():
         size = page_gzip_bytes(name)
         assert size * 20 <= baseline * 21, f"{name} gzip {size} bytes is more than 5% over the budget {baseline}"
+
+
+# TASK-232: открытка /zovi/{code} открывается из Threads и Instagram по мобильной сети.
+# Шаблон с CSS внутри + свои JS (без токенов и шрифтов) — не больше 40 КБ gzip.
+_ZOVI_CARD_BUDGET_GZIP = 40 * 1024
+
+
+def test_zovi_card_page_weight_within_budget() -> None:
+    template = _REPO / "static" / "share" / "zovi-card.html"
+    total = _gzip_len(template.read_bytes())
+    for name in ("zovi-model.js", "zovi-card.js"):
+        total += _gzip_len((_REPO / "static" / "shared" / name).read_bytes())
+    assert total <= _ZOVI_CARD_BUDGET_GZIP, f"zovi card gzip {total} bytes is over {_ZOVI_CARD_BUDGET_GZIP}"

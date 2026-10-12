@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>__OG_TITLE__</title>
+  <meta name="description" content="__OG_DESCRIPTION__" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:site_name" content="Glide — карта льда" />
+  <meta property="og:title" content="__OG_TITLE__" />
+  <meta property="og:description" content="__OG_DESCRIPTION__" />
+  <meta property="og:url" content="__OG_URL__" />
+  <meta property="og:image" content="__OG_IMAGE__" />
+  <meta property="og:image:alt" content="__OG_TITLE__" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="__OG_TITLE__" />
+  <meta name="twitter:description" content="__OG_DESCRIPTION__" />
+  <meta name="twitter:image" content="__OG_IMAGE__" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2" />
+  <style>
+    /* TASK-232. Перенос утверждённого прототипа design/prototypes/2026-10-11-zovi-na-katok.html:
+       спокойный светлый холст, одна hero-карточка со срезом 45° и ледяной рейкой.
+       Тил — только CTA и акценты. Тёмная подача — только в og.png. */
+    :root {
+      --bg: var(--g-bg);
+      --surface: var(--g-surface);
+      --ink: var(--g-ink);
+      --muted: var(--g-muted);
+      --line: var(--g-line);
+      --line-strong: var(--g-line-strong);
+      --accent: var(--g-accent);
+      --accent-pressed: var(--g-accent-pressed);
+      --on-accent: var(--g-on-accent);
+      --accent-ink: var(--g-accent-ink);
+      --accent-wash: var(--g-accent-wash);
+      --chip: #eef3f5;
+      --ice: #2aa7c9;           /* цвет вида «лёд» на страницах мест */
+      --trail: rgba(42, 167, 201, 0.35);
+      --cut: 18px;
+      --r: var(--g-r);
+      --r-lg: var(--g-r-lg);
+      --font: var(--g-font);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #17212b; --surface: #1d2733; --ink: #f1f5f7; --muted: #8aa0b3; --line: #2b3744; --line-strong: #3a4857;
+        --accent: #7fd7d8; --accent-pressed: #45b9bb; --on-accent: #04262a; --accent-ink: #7fd7d8; --accent-wash: #163638;
+        --chip: #233140; --ice: #5cc4e0; --trail: rgba(127, 215, 216, 0.32); color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #17212b; --surface: #1d2733; --ink: #f1f5f7; --muted: #8aa0b3; --line: #2b3744; --line-strong: #3a4857;
+      --accent: #7fd7d8; --accent-pressed: #45b9bb; --on-accent: #04262a; --accent-ink: #7fd7d8; --accent-wash: #163638;
+      --chip: #233140; --ice: #5cc4e0; --trail: rgba(127, 215, 216, 0.32); color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font);
+      font-size: 16px;
+      line-height: 1.45;
+      padding: 16px 16px 48px;
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+    .wrap { max-width: 440px; margin: 0 auto; display: grid; gap: 12px; }
+
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
+    .brand { font-weight: 700; font-size: 17px; letter-spacing: -.01em; color: inherit; text-decoration: none; }
+    .brand span { color: var(--accent-ink); }
+
+    /* Hero-карточка: срез 45° и ледяная рейка, как у страниц мест. */
+    .hero {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+      padding: 20px 20px 20px 23px;
+      display: grid;
+      gap: 16px;
+    }
+    .hero::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--ice); }
+
+    .kicker { margin: 0; font-size: 13px; font-weight: 500; color: var(--muted); }
+    .kicker b { color: var(--ink); font-weight: 600; }
+    .q {
+      margin: 0;
+      font-size: clamp(30px, 8.6vw, 38px);
+      font-weight: 650;
+      line-height: 1.08;
+      letter-spacing: -.02em;
+      text-wrap: balance;
+    }
+    .q .name { color: var(--accent-ink); }
+
+    /* Сеанс: время — герой, место и цена — подписи. */
+    .plan { display: grid; grid-template-columns: auto 1fr; column-gap: 16px; row-gap: 2px; align-items: center; padding: 14px 0 0; border-top: 1px solid var(--line); }
+    .plan__time { grid-row: span 2; font-size: 40px; font-weight: 650; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+    .plan__day { font-size: 13px; font-weight: 600; color: var(--accent-ink); }
+    .plan__place { min-width: 0; font-weight: 600; line-height: 1.25; }
+    .plan__meta { grid-column: 1 / -1; margin-top: 8px; font-size: 14px; color: var(--muted); }
+
+    /* Каток для кнопок: «Нет» скользит по нему и оставляет след. */
+    .rink { position: relative; height: 200px; margin: 0 -4px; }
+    .rink canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .ans {
+      position: absolute; left: 0; top: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 52px; padding: 0 28px; border-radius: var(--r);
+      font-size: 17px; font-weight: 600; white-space: nowrap;
+      will-change: transform;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .ans--yes { z-index: 2; border: 1px solid transparent; background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 24px rgba(69, 185, 187, .35); transform-origin: 0 0; transition: background .35s, color .35s, border-color .35s, box-shadow .35s; }
+    /* «Да» в маскировке: выглядит ровно как «Нет». */
+    .ans--yes.is-mask { background: var(--surface); color: var(--ink); border-color: var(--line-strong); box-shadow: none; }
+    .ans .lbl { display: inline-block; transition: opacity .18s ease; }
+    .ans--yes:active { background: var(--accent-pressed); }
+    .ans--no { transform-origin: 50% 100%; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); transition: background .3s, color .3s, border-color .3s, box-shadow .3s; }
+    .ans--no.is-down { pointer-events: none; }
+    .ans--no.is-yes { background: var(--accent); color: var(--on-accent); border-color: transparent; box-shadow: 0 8px 24px rgba(69, 185, 187, .35); }
+    .hint { margin: 0; min-height: 1.45em; font-size: 14px; color: var(--muted); transition: opacity .25s; }
+
+    /* Сеанс убрали или он прошёл: открытка остаётся, вместо кнопок — честная строка. */
+    .closed { display: grid; gap: 10px; padding: 14px 0 0; border-top: 1px solid var(--line); }
+    .closed__title { margin: 0; font-size: 17px; font-weight: 600; }
+    .closed__next { margin: 0; font-size: 15px; color: var(--muted); }
+    .closed a { color: var(--accent-ink); font-weight: 600; }
+
+    /* Ответ «да» */
+    .yes h2 { margin: 0; font-size: clamp(30px, 8.6vw, 38px); font-weight: 650; line-height: 1.08; letter-spacing: -.02em; text-wrap: balance; }
+    .yes h2 span { color: var(--accent-ink); }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .cta {
+      display: flex; align-items: center; justify-content: center; text-align: center;
+      min-height: 50px; padding: 0 16px; border-radius: var(--r);
+      background: var(--accent); color: var(--on-accent); font-size: 16px; font-weight: 600; text-decoration: none;
+    }
+    .cta--ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+    .cta--secondary { background: transparent; color: var(--accent-ink); border: 1px solid var(--accent); }
+    .note { margin: 0; font-size: 14px; color: var(--muted); }
+    .note--link { color: var(--accent-ink); font-weight: 600; text-decoration: none; text-align: center; }
+    /* Билет: то, что скриншотят и постят. Срез и рейка — как у hero, перфорация — как у настоящего билета. */
+    .tix { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+    .tix::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+    .tix p { margin: 0; }
+    .tix__top { position: relative; padding: 16px 104px 14px 21px; display: grid; gap: 6px; }
+    .tix__who { font-size: 15px; font-weight: 600; color: var(--muted); }
+    .tix__who span { color: var(--ink); }
+    .tix__time { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 46px; font-weight: 650; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+    .tix__time small { font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--accent-ink); }
+    .tix__place { font-size: 14px; color: var(--muted); max-width: 72%; }
+    .tix__cut { position: relative; height: 0; border-top: 1.5px dashed var(--line-strong); margin: 0 14px; }
+    .tix__cut::before, .tix__cut::after { content: ""; position: absolute; top: -11px; width: 22px; height: 22px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line); }
+    .tix__cut::before { left: -26px; } .tix__cut::after { right: -26px; }
+    .tix__bottom { padding: 14px 18px 14px 21px; display: grid; gap: 12px; }
+    .tix__verdict { font-size: 17px; font-weight: 600; line-height: 1.3; text-wrap: balance; }
+    .tix__stats { margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .tix__stats div { min-width: 0; }
+    .tix__stats dt { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .tix__stats dd { margin: 2px 0 0; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .tix__brand { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .tix__brand span { color: var(--accent-ink); }
+    .stamp {
+      position: absolute; right: 16px; top: 18px;
+      width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center;
+      border: 3px solid var(--accent-ink); color: var(--accent-ink);
+      font-size: 24px; font-weight: 700; letter-spacing: .08em;
+      transform: rotate(-14deg); opacity: .9;
+      box-shadow: inset 0 0 0 4px var(--surface), inset 0 0 0 5.5px var(--accent-ink);
+    }
+    .stamp.hit { animation: stamp .55s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: .35s; }
+    @keyframes stamp { 0% { transform: rotate(-14deg) scale(2.2); opacity: 0; } 60% { opacity: .95; } 100% { transform: rotate(-14deg) scale(1); opacity: .9; } }
+    .burst { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+
+    .reveal > * { animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
+    .reveal > *:nth-child(2) { animation-delay: .06s; }
+    .reveal > *:nth-child(3) { animation-delay: .12s; }
+    .reveal > *:nth-child(4) { animation-delay: .18s; }
+    .reveal > *:nth-child(5) { animation-delay: .24s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+    .toast {
+      position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+      background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 10;
+      box-shadow: 0 8px 24px rgba(13, 27, 38, .2);
+    }
+
+    @media (max-width: 420px) { .tix__top { padding-right: 84px; } .stamp { width: 64px; height: 64px; font-size: 20px; right: 12px; } }
+  @media (max-width: 360px) { .actions { grid-template-columns: 1fr; } .tix__time { font-size: 38px; } .stamp { width: 64px; height: 64px; font-size: 20px; } }
+    @media (prefers-reduced-motion: reduce) {
+      .reveal > * { animation: none; }
+      .stamp.hit { animation: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a class="brand" href="__CATALOG_URL__">Glide<span>.</span></a>
+  </div>
+
+  <section class="hero" id="cardView" aria-live="polite">
+    <div id="askBody" style="display:grid;gap:16px">
+      <p class="kicker">Приглашение на лёд от <b id="fromG">__FROM_GEN__</b></p>
+      <h1 class="q" id="question">__QUESTION_HTML__</h1>
+      <div class="plan" id="plan">__PLAN_HTML__</div>
+      <div class="rink" id="rink">
+        <canvas id="trail" aria-hidden="true"></canvas>
+        <button type="button" class="ans ans--yes" id="yesBtn"><span class="lbl" id="yesLbl">Да</span></button>
+        <button type="button" class="ans ans--no" id="noBtn"><span class="lbl" id="noLbl">Нет</span></button>
+      </div>
+      <p class="hint" id="hint"></p>
+      <div class="closed" id="closed" hidden>
+        <p class="closed__title" id="closedTitle"></p>
+        <p class="closed__next" id="closedNext"></p>
+      </div>
+    </div>
+
+    <div class="yes reveal" id="yesBody" hidden style="display:grid;gap:16px">
+      <p class="kicker">Ответ получен</p>
+      <div class="tix" id="tix">
+        <div class="tix__top">
+          <p class="tix__who"><span id="tixTo"></span> + <span id="tixFrom"></span></p>
+          <p class="tix__time"><span id="tixTime"></span><small id="tixDay"></small></p>
+          <p class="tix__place" id="tixPlace"></p>
+          <span class="stamp" id="stamp" aria-label="Да">ДА</span>
+        </div>
+        <div class="tix__cut" aria-hidden="true"></div>
+        <div class="tix__bottom">
+          <p class="tix__verdict" id="verdict"></p>
+          <dl class="tix__stats">
+            <div><dt>Держались</dt><dd id="stSec">0&nbsp;с</dd></div>
+            <div><dt>Отказов</dt><dd id="stTries">0</dd></div>
+            <div><dt>Падений</dt><dd id="stFalls">0</dd></div>
+          </dl>
+          <p class="tix__brand">Glide<span>.</span> приглашение на лёд</p>
+        </div>
+      </div>
+      <p class="note" id="sentNote"><span id="fromN"></span> уже знает: ответ ушёл сам.</p>
+      <button type="button" class="cta" id="sendBtn">Поделиться билетом</button>
+      <div class="actions">
+        <a class="cta cta--ghost" id="calBtn" href="#">В календарь</a>
+        <a class="cta cta--ghost" id="routeLink" href="#" target="_blank" rel="noopener">Маршрут</a>
+      </div>
+      <a class="note note--link" id="calAlt" href="#" target="_blank" rel="noopener" hidden>Добавить в Google Календарь</a>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script type="application/json" id="zoviData">__DATA_JSON__</script>
+<script src="/static/shared/zovi-model.js?v=__MODEL_V__"></script>
+<script src="/static/shared/zovi-card.js?v=__CARD_V__"></script>
+</body>
+</html>

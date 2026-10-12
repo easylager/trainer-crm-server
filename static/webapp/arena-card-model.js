@@ -1214,8 +1214,15 @@
     }
     add(days);
     add(ohmDays);
+    // Массовое и ОХМ приходят двумя списками; в дне — один порядок, по времени.
+    order.sort();
     return order.map(function (iso) {
-      return { local_date: iso, sessions: byDate[iso] };
+      var sessions = byDate[iso].slice().sort(function (a, b) {
+        var ta = String((a && a.starts_at_local) || '');
+        var tb = String((b && b.starts_at_local) || '');
+        return ta < tb ? -1 : ta > tb ? 1 : 0;
+      });
+      return { local_date: iso, sessions: sessions };
     });
   }
 
@@ -1290,6 +1297,7 @@
           id: s.id,
           time: time,
           meta: metaBits.join(' · '),
+          kind: s.kind || '',
         });
       }
       if (rows.length) {

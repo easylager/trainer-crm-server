@@ -6,8 +6,8 @@
  * (/p/{city}/{slug}): у неё своё превью, и она открывается в любом мессенджере.
  *
  * Что внутри и почему:
- *  - переключатель «Расписание / Позвать с собой» — один и тот же факт, разный тон
- *    (объявление vs. вопрос другу). Тексты обоих приходят одним запросом;
+ *  - переключатель варианта. У катка: «Погнали кататься», «Открытка», «Расписание».
+ *    У остальных мест — «Место» и «Позвать с собой». Тексты ссылки приходят одним запросом;
  *  - выбор сеанса — делятся конкретным временем, а не «приходи как-нибудь»;
  *  - превью — та самая картинка, которую увидит друг. Человек видит результат до
  *    отправки — и охотнее отправляет;
@@ -73,6 +73,173 @@
     var tg = global.Telegram && global.Telegram.WebApp;
     var cred = tg && tg.initData ? String(tg.initData) : '';
     return cred ? { 'X-Telegram-Init-Data': cred } : {};
+  }
+
+  var CARD_WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  var CARD_MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+
+  function postcardReady(sheetState) {
+    if (!sheetState || sheetState.endpoint) return false;
+    if ((sheetState.venueType || 'ice') !== 'ice') return false;
+    return sheetState.sessionId != null && String(sheetState.sessionId).trim() !== '';
+  }
+
+  function postcardVia(sheetState) {
+    return sheetState && sheetState.context === 'ice_list' ? 'ice_list' : 'arena_card';
+  }
+
+  function placeNameFromShare(body) {
+    var line = String(body || '').split('\n')[0].trim();
+    var at = line.indexOf(' — ');
+    if (at <= 0) return '';
+    return line.slice(0, at).trim();
+  }
+
+  function shortCardDate(iso) {
+    var parts = String(iso || '').split('-');
+    if (parts.length < 3 || !parts[0]) return '';
+    var date = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+    if (isNaN(date.getTime())) return '';
+    return CARD_WEEKDAYS[date.getUTCDay()] + ', ' + date.getUTCDate() + ' ' + CARD_MONTHS[date.getUTCMonth()];
+  }
+
+  function sectionsOf(sheetState) {
+    if (!sheetState) return [];
+    if (sheetState.slotSections && sheetState.slotSections.length) return sheetState.slotSections;
+    var slots = sheetState.slots || [];
+    if (!slots.length) return [];
+    return [
+      {
+        dayLabel: '',
+        localDate: '',
+        dayNum: '',
+        rows: slots.map(function (s) {
+          var m = String(s.label || '').match(/(\d{1,2}:\d{2})\s*$/);
+          return { id: s.id, time: m ? m[1] : s.label, meta: s.meta || '' };
+        }),
+      },
+    ];
+  }
+
+  function selectedPostcardSlot(sheetState) {
+    if (!sheetState || sheetState.sessionId == null || String(sheetState.sessionId).trim() === '') return null;
+    var want = String(sheetState.sessionId);
+    var sections = sectionsOf(sheetState);
+    var i;
+    var j;
+    for (i = 0; i < sections.length; i++) {
+      var rows = sections[i].rows || [];
+      for (j = 0; j < rows.length; j++) {
+        if (String(rows[j].id) === want) return { section: sections[i], row: rows[j] };
+      }
+    }
+    return null;
+  }
+
+  function rinkName(sheetState) {
+    if (!sheetState) return '';
+    if (sheetState.placeName) return String(sheetState.placeName);
+    var payload = sheetState.payload;
+    return placeNameFromShare(payload && payload.place_share_body);
+  }
+
+  function postcardInput(sheetState) {
+    var picked = selectedPostcardSlot(sheetState);
+    var row = picked && picked.row;
+    var meta = row ? String(row.meta || '') : '';
+    var day = '';
+    if (picked && picked.section) {
+      day = shortCardDate(picked.section.localDate);
+      if (!day && picked.section.dayLabel) {
+        day = picked.section.dayLabel + (picked.section.dayNum ? ' ' + picked.section.dayNum : '');
+      }
+    }
+    var z = (sheetState && sheetState.zovi) || {};
+    return {
+      toName: z.to || '',
+      fromName: z.from || '',
+      kind: (row && row.kind) || (meta.indexOf('ОХМ') !== -1 ? 'hockey_practice' : 'public_skate'),
+      time: row && row.time ? String(row.time) : '',
+      day: day,
+      place: rinkName(sheetState),
+    };
+  }
+
+  var ZOVI_FROM_KEY = 'zovi_from';
+  /* Открытка грузится по требованию: бюджет веса каталога (test_webapp_page_weight_budget). */
+  var ZOVI_SCRIPTS = [
+    '/static/shared/zovi-model.js?v=15',
+    '/static/shared/zovi-create.js?v=15',
+    '/static/shared/zovi-live.js?v=15',
+  ];
+  var zoviLoading = null;
+
+  function zoviLoaded() {
+    return !!(global.ZoviModel && global.ZoviCreate && global.ZoviLive);
+  }
+
+  /* fetch с заголовком: бесплатный ngrok иначе отдаёт телефону HTML вместо JS. */
+  function loadScript(src) {
+    return fetch(src, { credentials: 'same-origin', headers: { 'ngrok-skip-browser-warning': '1' } })
+      .then(function (r) {
+        if (!r.ok || !/javascript/.test(r.headers.get('content-type') || '')) throw new Error(src);
+        return r.text();
+      })
+      .then(function (code) {
+        var tag = document.createElement('script');
+        tag.text = code + '\n//# sourceURL=' + src;
+        (document.head || document.documentElement).appendChild(tag);
+      });
+  }
+
+  function loadZovi() {
+    if (zoviLoaded()) return Promise.resolve(true);
+    if (zoviLoading) return zoviLoading;
+    zoviLoading = ZOVI_SCRIPTS.reduce(function (chain, src) {
+      return chain.then(function () { return loadScript(src); });
+    }, Promise.resolve()).then(zoviLoaded, function () {
+      zoviLoading = null;
+      return false;
+    });
+    return zoviLoading;
+  }
+
+  function onZoviLoaded(ok) {
+    if (!state || !state.zovi) return;
+    state.zovi.failed = !ok;
+    if (!ok) {
+      if (state.variantId === 'postcard') preserveSheetScroll(paintPreviewBlock);
+      return;
+    }
+    if (!state.zovi.from) state.zovi.from = prefillFromName();
+    if (state.variantId === 'postcard') preserveSheetScroll(paintPreviewBlock);
+  }
+
+  function zoviApi() {
+    return global.ZoviCreate || null;
+  }
+
+  /** Пуш шлёт Telegram-бот; у MAX тот же заголовок, но пуша нет. */
+  function botWillAnswer() {
+    var h = shareRequestHeaders();
+    return !!h['X-Telegram-Init-Data'] && String(h['X-Mini-App-Platform'] || 'telegram') === 'telegram';
+  }
+
+  function cleanName(raw) {
+    var api = zoviApi();
+    if (!api || typeof api.validateInviteName !== 'function') return '';
+    var res = api.validateInviteName(raw, 'from_name', true);
+    return res.ok ? res.value : '';
+  }
+
+  function prefillFromName() {
+    try {
+      var saved = global.localStorage && global.localStorage.getItem(ZOVI_FROM_KEY);
+      if (saved && cleanName(saved)) return cleanName(saved);
+    } catch (e) { /* */ }
+    var t = tg();
+    var user = t && t.initDataUnsafe && t.initDataUnsafe.user;
+    return user ? cleanName(user.first_name) : '';
   }
 
   function fetchPayload(extra) {
@@ -466,7 +633,9 @@
     system: function (p) {
       var ap = payloadForSrc(p, 'sys');
       if (global.navigator && typeof navigator.share === 'function') {
-        navigator.share({ text: ap.share_body, url: ap.share_url }).catch(function () {});
+        var data = { url: ap.share_url };
+        if (ap.share_body) data.text = ap.share_body;
+        navigator.share(data).catch(function () {});
         return;
       }
       // Нет системного меню (Telegram Desktop и т.п.) — открываем страницу места:
@@ -487,21 +656,7 @@
   }
 
   function normalizedSections() {
-    var sections = state.slotSections;
-    var slots = state.slots || [];
-    if (sections && sections.length) return sections;
-    if (!slots.length) return [];
-    return [
-      {
-        dayLabel: '',
-        localDate: '',
-        dayNum: '',
-        rows: slots.map(function (s) {
-          var m = String(s.label || '').match(/(\d{1,2}:\d{2})\s*$/);
-          return { id: s.id, time: m ? m[1] : s.label, meta: '' };
-        }),
-      },
-    ];
+    return sectionsOf(state);
   }
 
   function ensureSlotDay() {
@@ -684,9 +839,26 @@
   }
 
   function sessionPicker() {
-    if (state.endpoint) return '';
-    if (!state.invite) return '';
+    var variant = activeVariant();
+    if (!variant || !variant.needsSession) return '';
+    if (variant.collapsesPicker && !state.zovi.pickOpen) {
+      var picked = selectedPostcardSlot(state);
+      if (picked) return pickedSlotSummary(picked);
+    }
     return slotList();
+  }
+
+  function pickedSlotSummary(picked) {
+    var day = shortCardDate(picked.section.localDate) || picked.section.dayLabel || '';
+    var when = (day ? day + ' · ' : '') + (picked.row.time || '');
+    return (
+      '<div class="gss-slot-picker gss-slot-sum">' +
+      '<span class="gss-slot-sum__when"><b>' + esc(when) + '</b>' +
+      (picked.row.meta ? '<em>' + esc(picked.row.meta) + '</em>' : '') +
+      '</span>' +
+      '<button type="button" class="gss-slot-sum__change" data-gss-pick-open>Другое время</button>' +
+      '</div>'
+    );
   }
 
   function renderPreview(p) {
@@ -716,22 +888,12 @@
     return og;
   }
 
-  function renderTabsHtml() {
-    var isIce = (state.venueType || 'ice') === 'ice';
-    if (state.endpoint) return '';
-    return (
-      '<div class="gss-tabs" role="group" aria-label="Тон">' +
-      '<button type="button" class="gss-tab' +
-      (!state.invite ? ' is-on' : '') +
-      '" data-invite="0">' +
-      (isIce ? 'Расписание' : 'Место') +
-      '</button>' +
-      '<button type="button" class="gss-tab' +
-      (state.invite ? ' is-on' : '') +
-      '" data-invite="1">Позвать с собой</button>' +
-      '</div>'
-    );
+  function isIcePlace(sheetState) {
+    return (sheetState && sheetState.venueType ? sheetState.venueType : 'ice') === 'ice';
   }
+
+  var SHARE_NOTE =
+    '<p class="gss-note">В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис. Ссылку для стикера скопируйте сами.</p>';
 
   function renderChannelsHtml(p) {
     return (
@@ -775,17 +937,374 @@
     return '<figure class="gss-preview">' + renderPreview(p) + caption + '</figure>';
   }
 
+  function renderPostcardPreview(sheetState) {
+    var live = global.ZoviLive;
+    if (!live) {
+      return sheetState.zovi && sheetState.zovi.failed
+        ? '<p class="gss-note">Открытка не загрузилась. <button type="button" class="gss-zlink" data-gss-zretry>Ещё раз</button></p>'
+        : '<div class="gss-live gss-live--wait" aria-busy="true"></div>';
+    }
+    return '<div class="gss-live">' + live.html(postcardInput(sheetState)) + '</div>';
+  }
+
+  function postcardTo(sheetState) {
+    var z = (sheetState && sheetState.zovi) || {};
+    return String(z.to || '').trim();
+  }
+
+  function renderPostcardBottom(sheetState) {
+    var z = sheetState.zovi || {};
+    var to = postcardTo(sheetState);
+    if (z.created) {
+      var whom = to ? (global.ZoviModel ? global.ZoviModel.decline(to, 'dat') : to) : 'в чат';
+      return (
+        '<div class="gss-zdone">' +
+        '<p class="gss-zdone__t">Открытка готова. Отправь ' + esc(whom) + '</p>' +
+        (z.created.viaTelegram
+          ? '<p class="gss-zdone__how">Когда ответят, бот пришлёт билет сюда, в Telegram.</p>'
+          : '<p class="gss-zdone__how">Ответ появится на странице ответа — ' +
+            '<button type="button" class="gss-zlink gss-zlink--inline" data-gss-zstatus>открыть и сохранить</button></p>') +
+        '<div class="gss-channels gss-channels--3">' +
+        '<button type="button" class="gss-ch gss-ch--tg" data-zch="telegram">Telegram</button>' +
+        '<button type="button" class="gss-ch" data-zch="copy">Ссылка</button>' +
+        '<button type="button" class="gss-ch" data-zch="system">Другое</button>' +
+        '</div>' +
+        '<div class="gss-zdone__more">' +
+        '<button type="button" class="gss-zlink" data-gss-zopen>Посмотреть как ' + esc(to || 'друг') + '</button>' +
+        '<button type="button" class="gss-zlink" data-gss-zedit>Изменить</button>' +
+        '</div></div>'
+      );
+    }
+    return (
+      '<div class="gss-zf">' +
+      '<label class="gss-zf__f"><span>Кого зовёшь</span>' +
+      '<input type="text" data-gss-z="to" maxlength="20" autocomplete="off" enterkeyhint="next" placeholder="Лера" value="' +
+      esc(z.to || '') +
+      '" /></label>' +
+      '<label class="gss-zf__f"><span>Твоё имя</span>' +
+      '<input type="text" data-gss-z="from" maxlength="20" autocomplete="given-name" enterkeyhint="done" placeholder="Макс" value="' +
+      esc(z.from || '') +
+      '" /></label>' +
+      '</div>' +
+      '<p class="gss-zf__err" data-gss-zerr role="alert">' + esc(z.error || '') + '</p>' +
+      '<button type="button" class="gss-zovi__btn" data-variant-action="postcard"' +
+      (postcardReady(sheetState) && !z.busy ? '' : ' disabled') +
+      '>' + (z.busy ? 'Создаём…' : 'Создать открытку') + '</button>' +
+      '<p class="gss-zf__hint">' +
+      (botWillAnswer()
+        ? 'Ответ пришлёт бот сюда, в Telegram, — с билетом.'
+        : 'Ответ появится на странице ответа — ссылку покажем после создания.') +
+      '</p>'
+    );
+  }
+
+  function renderShareBottom(sheetState) {
+    return renderChannelsHtml(sheetState.payload) + SHARE_NOTE;
+  }
+
+  function humanError(detail) {
+    var text = typeof detail === 'string' ? detail : '';
+    return text.replace(/^(to_name|from_name):\s*/, '') || 'Не получилось создать открытку. Попробуй ещё раз.';
+  }
+
+  function createPostcard() {
+    var z = state.zovi;
+    var api = zoviApi();
+    if (!api || z.busy || !postcardReady(state)) return;
+    var built = api.inviteRequestBody({
+      sessionId: Number(state.sessionId),
+      toName: z.to,
+      fromName: z.from,
+      showPrice: false,
+      deviceToken: api.ensureDeviceToken(global.localStorage),
+      via: postcardVia(state),
+    });
+    if (!built.ok) {
+      z.error = humanError(built.toError || built.fromError || built.formError);
+      if (!String(z.from || '').trim()) z.error = 'Подпиши открытку — как тебя зовут?';
+      if (!String(z.to || '').trim()) z.error = 'Кого зовёшь? Впиши имя.';
+      paintPostcardBottom();
+      return;
+    }
+    haptic();
+    z.busy = true;
+    z.error = '';
+    paintPostcardBottom();
+    var headers = shareRequestHeaders();
+    headers['Content-Type'] = 'application/json';
+    headers.Accept = 'application/json';
+    var forSession = String(state.sessionId);
+    var sheetState = state;
+    fetch('/api/public/invites', { method: 'POST', headers: headers, body: JSON.stringify(built.body) })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          return { ok: res.ok, body: body };
+        });
+      })
+      .then(function (res) {
+        if (sheetState !== state) return;
+        z.busy = false;
+        if (!res.ok || !res.body || !res.body.invite_path) {
+          z.error = humanError(res.body && res.body.detail);
+          paintPostcardBottom();
+          return;
+        }
+        if (String(state.sessionId) !== forSession) {
+          paintPostcardBottom();
+          return;
+        }
+        z.created = {
+          code: res.body.code,
+          url: global.location.origin + res.body.invite_path,
+          statusUrl: global.location.origin + res.body.status_path,
+          viaTelegram: botWillAnswer(),
+        };
+        rememberMine(z.created, built.body.to_name);
+        try { global.localStorage.setItem(ZOVI_FROM_KEY, built.body.from_name); } catch (e) { /* */ }
+        paintPostcardBottom();
+      })
+      .catch(function () {
+        if (sheetState !== state) return;
+        z.busy = false;
+        z.error = 'Нет связи. Попробуй ещё раз.';
+        paintPostcardBottom();
+      });
+  }
+
+  function rememberMine(created, toName) {
+    try {
+      var input = postcardInput(state);
+      var raw = global.localStorage.getItem('zovi_mine');
+      var items = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(items)) items = [];
+      items = items.filter(function (item) { return item && item.code !== created.code; });
+      items.unshift({
+        code: created.code,
+        to: toName || 'компания',
+        when: [input.day, input.time, input.place].filter(Boolean).join(' · '),
+        status_path: created.statusUrl,
+      });
+      global.localStorage.setItem('zovi_mine', JSON.stringify(items.slice(0, 20)));
+    } catch (e) { /* */ }
+  }
+
+  /* Только ссылка, без текста: вопрос и сеанс уже в превью ссылки (решение владельца). */
+  function postcardPayload() {
+    return { share_url: state.zovi.created.url, share_body: '' };
+  }
+
+  function paintPostcardBottom() {
+    var host = root && root.querySelector('.gss-channels-host');
+    if (!host) return;
+    host.innerHTML = renderPostcardBottom(state);
+  }
+
+  function mountLive() {
+    if (state && state.zoviLive) {
+      state.zoviLive.destroy();
+      state.zoviLive = null;
+    }
+    var el = root && root.querySelector('.gss-live [data-zl]');
+    if (!el || !global.ZoviLive) return;
+    if (!state.zoviKb) state.zoviKb = global.ZoviLive.liftForKeyboard(sheetEl());
+    state.zoviLive = global.ZoviLive.attach(el, {
+      onDodge: function () {
+        try {
+          var t = tg();
+          if (t && t.HapticFeedback) t.HapticFeedback.impactOccurred('light');
+        } catch (e) { /* */ }
+      },
+    });
+  }
+
+  function onPostcardInput(ev) {
+    var input = ev.target && ev.target.closest && ev.target.closest('[data-gss-z]');
+    if (!input || !state || !state.zovi) return;
+    state.zovi[input.getAttribute('data-gss-z')] = input.value;
+    if (state.zovi.error) {
+      state.zovi.error = '';
+      var err = root.querySelector('[data-gss-zerr]');
+      if (err) err.textContent = '';
+    }
+    var live = root.querySelector('.gss-live [data-zl]');
+    if (live && global.ZoviLive) global.ZoviLive.update(live, postcardInput(state));
+  }
+
+  /**
+   * Вариант шита — одна запись. Новый вариант: запись и свои рендеры,
+   * без правок paintBody и обработчиков.
+   * shareInvite: null — свой низ, запрос «поделиться» не шлём.
+   */
+  var SHARE_VARIANTS = [
+    {
+      id: 'invite',
+      label: function (sheetState) {
+        return isIcePlace(sheetState) ? 'Погнали кататься' : 'Позвать с собой';
+      },
+      rank: function (sheetState) {
+        return isIcePlace(sheetState) ? 0 : 1;
+      },
+      needsSession: true,
+      shareInvite: true,
+      available: function (sheetState) {
+        return !sheetState.endpoint;
+      },
+      renderPreview: function (sheetState) {
+        return renderPreviewFigureHtml(sheetState.payload);
+      },
+      renderBottom: renderShareBottom,
+    },
+    {
+      id: 'postcard',
+      label: function () {
+        return 'Открытка';
+      },
+      rank: function () {
+        return 1;
+      },
+      needsSession: true,
+      shareInvite: null,
+      available: function (sheetState) {
+        return !sheetState.endpoint && isIcePlace(sheetState);
+      },
+      renderPreview: renderPostcardPreview,
+      renderBottom: renderPostcardBottom,
+      onAction: createPostcard,
+      collapsesPicker: true,
+      onSession: function () {
+        // Другой сеанс — другая открытка: готовую ссылку не подсовываем.
+        state.zovi.created = null;
+        state.zovi.pickOpen = false;
+        paintSlotPicker();
+        preserveSheetScroll(paintPreviewBlock);
+      },
+    },
+    {
+      id: 'schedule',
+      label: function (sheetState) {
+        return isIcePlace(sheetState) ? 'Расписание' : 'Место';
+      },
+      rank: function (sheetState) {
+        return isIcePlace(sheetState) ? 2 : 0;
+      },
+      needsSession: false,
+      shareInvite: false,
+      available: function (sheetState) {
+        return !sheetState.endpoint;
+      },
+      renderPreview: function (sheetState) {
+        return renderPreviewFigureHtml(sheetState.payload);
+      },
+      renderBottom: renderShareBottom,
+    },
+  ];
+
+  function variantById(id) {
+    var i;
+    for (i = 0; i < SHARE_VARIANTS.length; i++) {
+      if (SHARE_VARIANTS[i].id === id) return SHARE_VARIANTS[i];
+    }
+    return null;
+  }
+
+  function visibleVariants(sheetState) {
+    var list = [];
+    var i;
+    var source = sheetState || {};
+    for (i = 0; i < SHARE_VARIANTS.length; i++) {
+      if (SHARE_VARIANTS[i].available(source)) list.push(SHARE_VARIANTS[i]);
+    }
+    list.sort(function (a, b) {
+      return a.rank(source) - b.rank(source);
+    });
+    return list;
+  }
+
+  function activeVariant() {
+    if (!state || !state.variantId) return null;
+    var variant = variantById(state.variantId);
+    if (!variant || !variant.available(state)) return null;
+    return variant;
+  }
+
+  function initialVariantId(opts) {
+    opts = opts || {};
+    if (opts.endpoint) return null;
+    return opts.invite ? 'invite' : 'schedule';
+  }
+
+  function selectVariant(id) {
+    var variant = variantById(id);
+    if (!variant || !state || !variant.available(state)) return false;
+    state.variantId = id;
+    if (state.zovi) state.zovi.pickOpen = false;
+    if (variant.shareInvite != null) state.invite = !!variant.shareInvite;
+    return true;
+  }
+
+  function renderTabsHtml() {
+    var list = visibleVariants(state);
+    if (!list.length) return '';
+    return (
+      '<div class="gss-tabs" role="group" aria-label="Тон">' +
+      list
+        .map(function (variant) {
+          var on = variant.id === state.variantId;
+          return (
+            '<button type="button" class="gss-tab' +
+            (on ? ' is-on' : '') +
+            '" data-variant="' +
+            esc(variant.id) +
+            '" aria-pressed="' +
+            (on ? 'true' : 'false') +
+            '">' +
+            esc(variant.label(state)) +
+            '</button>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function previewHtml() {
+    var variant = activeVariant();
+    if (variant) return variant.renderPreview(state);
+    return renderPreviewFigureHtml(state.payload);
+  }
+
+  function bottomHtml() {
+    var variant = activeVariant();
+    if (variant) return variant.renderBottom(state);
+    return renderShareBottom(state);
+  }
+
+  function revealPickedSlot() {
+    var list = root && root.querySelector('.gss-slot-list');
+    var row = list && list.querySelector('.gss-slot-row.is-on');
+    if (!row) return;
+    var top = row.offsetTop - list.offsetTop;
+    if (top < list.scrollTop || top + row.offsetHeight > list.scrollTop + list.clientHeight) {
+      list.scrollTop = Math.max(0, top - 8);
+    }
+  }
+
   function paintBody() {
+    paintBodyHtml();
+    revealPickedSlot();
+    mountLive();
+  }
+
+  function paintBodyHtml() {
     root.querySelector('.gss-body').innerHTML =
       renderTabsHtml() +
       sessionPicker() +
       '<div class="gss-preview-host">' +
-      renderPreviewFigureHtml(state.payload) +
+      previewHtml() +
       '</div>' +
       '<div class="gss-channels-host">' +
-      renderChannelsHtml(state.payload) +
-      '</div>' +
-      '<p class="gss-note">В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис. Ссылку для стикера скопируйте сами.</p>';
+      bottomHtml() +
+      '</div>';
   }
 
   function paintSlotPicker() {
@@ -810,8 +1329,14 @@
       paintBody();
       return;
     }
-    previewHost.innerHTML = renderPreviewFigureHtml(state.payload);
-    channelsHost.innerHTML = renderChannelsHtml(state.payload);
+    previewHost.innerHTML = previewHtml();
+    channelsHost.innerHTML = bottomHtml();
+    mountLive();
+  }
+
+  function rememberPlace(data) {
+    var name = placeNameFromShare(data && data.place_share_body);
+    if (name) state.placeName = name;
   }
 
   function reloadPreview() {
@@ -822,6 +1347,7 @@
       .then(function (data) {
         if (token !== state.token) return;
         state.payload = data;
+        rememberPlace(data);
         preserveSheetScroll(paintPreviewBlock);
       })
       .catch(function () {
@@ -831,10 +1357,16 @@
       });
   }
 
+  function variantLoadsShare() {
+    var variant = activeVariant();
+    if (!variant) return true;
+    return variant.shareInvite != null;
+  }
+
   function reload() {
-    state.payload = null;
+    if (variantLoadsShare()) state.payload = null;
     paintBody();
-    reloadPreview();
+    if (variantLoadsShare()) reloadPreview();
   }
 
   function onClick(ev) {
@@ -842,13 +1374,13 @@
       close();
       return;
     }
-    var tab = ev.target.closest('[data-invite]');
+    var tab = ev.target.closest('[data-variant]');
     if (tab) {
-      var invite = tab.getAttribute('data-invite') === '1';
-      if (invite !== state.invite) {
+      var nextId = tab.getAttribute('data-variant');
+      if (nextId && nextId !== state.variantId && selectVariant(nextId)) {
         haptic();
-        state.invite = invite;
         // Тексты обоих тонов уже в ответе — второй запрос нужен только ради картинки.
+        // Открытка запрос не шлёт и событие не пишет.
         reload();
       }
       return;
@@ -869,7 +1401,9 @@
       state.sessionId = slot.getAttribute('data-slot');
       syncSlotPickerUi('slot');
       if (slot.blur) slot.blur();
-      reloadPreview();
+      var slotVariant = activeVariant();
+      if (slotVariant && typeof slotVariant.onSession === 'function') slotVariant.onSession();
+      else reloadPreview();
       return;
     }
     if (ev.target.closest('[data-gss-load-slots]') && typeof state.loadSlots === 'function') {
@@ -893,6 +1427,47 @@
     if (ev.target.closest('[data-gss-save-image]') && state.payload) {
       haptic();
       CHANNELS.image(state.payload);
+      return;
+    }
+    if (ev.target.closest('[data-gss-zretry]')) {
+      state.zovi.failed = false;
+      preserveSheetScroll(paintPreviewBlock);
+      loadZovi().then(onZoviLoaded);
+      return;
+    }
+    if (ev.target.closest('[data-gss-pick-open]')) {
+      haptic();
+      state.zovi.pickOpen = true;
+      ensureSlotDay();
+      preserveSheetScroll(paintSlotPicker);
+      revealPickedSlot();
+      return;
+    }
+    var zch = ev.target.closest('[data-zch]');
+    if (zch && state.zovi && state.zovi.created) {
+      haptic();
+      CHANNELS[zch.getAttribute('data-zch')](postcardPayload());
+      return;
+    }
+    if (ev.target.closest('[data-gss-zstatus]') && state.zovi && state.zovi.created) {
+      openUrl(state.zovi.created.statusUrl);
+      return;
+    }
+    if (ev.target.closest('[data-gss-zopen]') && state.zovi && state.zovi.created) {
+      openUrl(state.zovi.created.url);
+      return;
+    }
+    if (ev.target.closest('[data-gss-zedit]') && state.zovi) {
+      haptic();
+      state.zovi.created = null;
+      paintPostcardBottom();
+      return;
+    }
+    var actionBtn = ev.target.closest('[data-variant-action]');
+    if (actionBtn) {
+      if (actionBtn.disabled) return;
+      var actionVariant = activeVariant();
+      if (actionVariant && typeof actionVariant.onAction === 'function') actionVariant.onAction(actionBtn);
       return;
     }
     var ch = ev.target.closest('[data-ch]');
@@ -920,6 +1495,7 @@
       '</div>' +
       '<div class="gss-toast" role="status" aria-live="polite"></div>';
     root.addEventListener('click', onClick);
+    root.addEventListener('input', onPostcardInput);
     document.body.appendChild(root);
     return root;
   }
@@ -945,12 +1521,19 @@
       sessionId: resolveInitialSessionId(opts),
       slotDay: null,
       invite: !!opts.invite,
+      variantId: null,
+      placeName: opts.placeName ? String(opts.placeName) : '',
       sessionMissing: !!opts.sessionMissing,
       context: opts.context || 'arena_card',
       venueType: opts.venueType || 'ice',
       loadSlots: opts.loadSlots || null,
       payload: null,
+      zovi: { to: '', from: prefillFromName(), created: null, busy: false, error: '', pickOpen: false },
+      zoviLive: null,
     };
+    if (!state.endpoint && (state.venueType || 'ice') === 'ice') loadZovi().then(onZoviLoaded);
+    var opening = initialVariantId(opts);
+    if (opening) selectVariant(opening);
     ensureSlotDay();
     root.hidden = false;
     global.requestAnimationFrame(function () { root.classList.add('is-open'); });
@@ -959,6 +1542,14 @@
 
   function close() {
     if (!root) return;
+    if (state && state.zoviLive) {
+      state.zoviLive.destroy();
+      state.zoviLive = null;
+    }
+    if (state && state.zoviKb) {
+      state.zoviKb();
+      state.zoviKb = null;
+    }
     root.classList.remove('is-open');
     global.setTimeout(function () { if (root) root.hidden = true; }, 180);
   }
@@ -973,6 +1564,16 @@
     _openImageSave: openImageSave,
     _telegramShareHref: telegramShareHref,
     _resolveInitialSessionId: resolveInitialSessionId,
+    variantsFor: function (sheetState) {
+      return visibleVariants(sheetState).map(function (variant) {
+        return { id: variant.id, label: variant.label(sheetState) };
+      });
+    },
+    initialVariantId: initialVariantId,
+    postcardReady: postcardReady,
+    postcardVia: postcardVia,
+    postcardInput: postcardInput,
+    postcardBottomHtml: renderPostcardBottom,
     _previewFigureHtml: function (payload, selection) {
       var prev = state;
       state = selection

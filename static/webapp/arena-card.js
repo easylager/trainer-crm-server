@@ -615,6 +615,7 @@
       invite: !!invite,
       venueType: skatingCard() ? 'ice' : state.card.venue_type,
       context: 'arena_card',
+      placeName: state.card.name || '',
       loadSlots: loadSlots,
     });
   }

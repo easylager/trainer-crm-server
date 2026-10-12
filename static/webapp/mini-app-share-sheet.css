@@ -50,8 +50,7 @@
 }
 
 .gss-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 4px;
   padding: 4px;
   border-radius: var(--app-radius-md);
@@ -59,14 +58,17 @@
   margin-bottom: 10px;
 }
 .gss-tab {
+  flex: 1 1 0;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
-  padding: 9px 8px;
+  padding: 9px 6px;
   border-radius: var(--app-radius-sm);
   font: inherit;
-  font-size: var(--app-text-body);
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
+  line-height: 1.2;
   cursor: pointer;
 }
 .gss-tab.is-on { background: var(--glide-card); box-shadow: var(--app-float-shadow); }
@@ -276,6 +278,114 @@
   line-height: 1.45;
   color: var(--glide-hint);
 }
+
+/* Открытка: живое превью (static/shared/zovi-live.js) в цветах темы мини-аппа. */
+.gss-live .zl {
+  --zl-surface: var(--app-chip-bg);
+  --zl-ink: var(--glide-text);
+  --zl-muted: var(--glide-hint);
+  --zl-line: var(--glide-line);
+  --zl-line-strong: var(--glide-line-strong);
+  --zl-accent: var(--app-cta-fill);
+  --zl-on-accent: var(--app-cta-text);
+  --zl-accent-ink: var(--glide-ink-teal, var(--app-cta-fill));
+  --zl-ice: var(--app-cta-fill);
+  margin-bottom: 14px;
+}
+
+.gss-live--wait {
+  min-height: 260px;
+  margin-bottom: 14px;
+  border-radius: var(--app-radius-lg);
+  background: var(--app-chip-bg);
+  animation: gss-pulse 1.2s ease-in-out infinite;
+}
+
+/* Печатают имена: над клавиатурой — открытка и поля, без вкладок и строки сеанса. */
+.zl-typing .gss-tabs,
+.zl-typing .gss-slot-sum { display: none; }
+
+.gss-slot-sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--glide-line);
+  background: var(--app-chip-bg);
+}
+.gss-slot-sum__when { display: grid; gap: 2px; min-width: 0; }
+.gss-slot-sum__when b {
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.gss-slot-sum__when em { font-style: normal; font-size: var(--app-text-caption); color: var(--glide-hint); }
+.gss-slot-sum__change,
+.gss-zlink {
+  flex: none;
+  border: 0;
+  padding: 6px 0;
+  background: transparent;
+  color: var(--glide-ink-teal, var(--app-cta-fill));
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+}
+
+.gss-zf { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gss-zf__f { display: grid; gap: 4px; min-width: 0; }
+.gss-zf__f span { font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold); color: var(--glide-hint); }
+.gss-zf__f input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--glide-line-strong, var(--glide-line));
+  background: var(--glide-card);
+  color: var(--glide-text);
+  font: inherit;
+  font-size: var(--app-text-lead); /* меньше 16px — iOS приближает страницу при фокусе */
+}
+.gss-zf__f input:focus { outline: none; border-color: var(--app-cta-fill); }
+.gss-zf__hint,
+.gss-zf__err { margin: 6px 0 0; font-size: var(--app-text-caption); line-height: 1.35; color: var(--glide-hint); }
+.gss-zf__err { color: var(--app-danger); }
+.gss-zf__err:empty { display: none; }
+.gss-zf ~ .gss-zovi__btn { margin-top: 12px; }
+.gss-zovi__btn + .gss-zf__hint { text-align: center; }
+
+.gss-zdone { display: grid; gap: 10px; }
+.gss-zdone__t { margin: 0; font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }
+.gss-zdone__how { margin: -4px 0 0; font-size: var(--app-text-caption); line-height: 1.4; color: var(--glide-hint); }
+.gss-zlink--inline { padding: 0; font-size: inherit; }
+.gss-zdone__more { display: flex; justify-content: space-between; gap: 12px; }
+.gss-channels.gss-channels--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.gss-channels--3 .gss-ch { padding: 12px 4px; font-size: var(--app-text-caption); }
+
+.gss-zovi__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--app-radius-md);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  text-align: center;
+  cursor: pointer;
+}
+.gss-zovi__btn:disabled { opacity: 0.45; cursor: default; }
 
 .gss-channels {
   display: grid;

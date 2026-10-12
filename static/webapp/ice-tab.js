@@ -1332,6 +1332,7 @@
       v.sessionId != null && global.GlideShareSheet
         ? '<button type="button" class="ice-board__invite" data-invite-arena="' + esc(v.arenaId) +
           '" data-invite-session="' + esc(v.sessionId) + '" data-invite-label="' + esc(v.inviteLabel) +
+          '" data-invite-place="' + esc(v.name) +
           '">Позвать</button>'
         : '';
     return (
@@ -2944,7 +2945,7 @@
     return iso;
   }
 
-  function openCatalogInvite(ref, sessionId, label) {
+  function openCatalogInvite(ref, sessionId, label, placeName) {
     if (!global.GlideShareSheet || !ref) return;
     var picked =
       sessionId != null && String(sessionId).trim() !== '' ? String(sessionId).trim() : null;
@@ -2955,6 +2956,7 @@
         slots: picked ? [{ id: picked, label: label || '' }] : [],
         invite: true,
         context: 'ice_list',
+        placeName: placeName || '',
       });
     };
     var ACM = global.ArenaCardModel;
@@ -2984,6 +2986,7 @@
           slotSections: slotSections,
           invite: true,
           context: 'ice_list',
+          placeName: placeName || '',
         });
       })
       .catch(fallback);
@@ -3006,7 +3009,8 @@
       openCatalogInvite(
         invite.getAttribute('data-invite-arena'),
         invite.getAttribute('data-invite-session'),
-        invite.getAttribute('data-invite-label')
+        invite.getAttribute('data-invite-label'),
+        invite.getAttribute('data-invite-place')
       );
       return;
     }
