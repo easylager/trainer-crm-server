@@ -248,20 +248,36 @@ async def process_invite_answer_pushes(session: AsyncSession, bot: Bot) -> int:
     return sent
 
 
+_NEEDS_PUSH = """
+SELECT 1
+FROM ice_invite_answers a
+JOIN ice_invites i ON i.id = a.invite_id
+WHERE a.id = :answer_id AND a.notified_at IS NULL AND i.creator_telegram_id IS NOT NULL
+"""
+
+
 async def push_answer_soon(answer_id: int) -> None:
-    """Фоновая задача после ответа: своя сессия и свой бот, ошибки — только в лог."""
+    """Фоновая задача после ответа: своя сессия и свой бот. Никогда не бросает наружу.
+
+    Бот создаётся, только если пуш вообще нужен: открытки без Telegram — большинство
+    ответов с сайта, и aiogram падает уже на создании бота с негодным токеном.
+    """
     from src.infrastructure.db.session import async_session_factory
     from src.shared.config import Settings
 
-    settings = Settings()
-    token = settings.telegram_bot_token_client
-    if not token:
-        return
-    bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot: Bot | None = None
     try:
         async with async_session_factory() as session:
+            needed = (await session.execute(text(_NEEDS_PUSH), {"answer_id": int(answer_id)})).first()
+            if needed is None:
+                return
+            token = Settings().telegram_bot_token_client
+            if not token:
+                return
+            bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
             await deliver_invite_answer_push(session, bot, int(answer_id))
     except Exception:
         logger.exception("zovi answer push task failed answer_id=%s", answer_id)
     finally:
-        await bot.session.close()
+        if bot is not None:
+            await bot.session.close()

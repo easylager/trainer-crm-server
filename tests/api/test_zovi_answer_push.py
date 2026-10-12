@@ -248,3 +248,28 @@ async def test_status_page_shows_the_answer_to_the_key_holder(app_use_test_db, d
     assert "Держались 5 с · отказов 2 · падений 0" in answered.text
     assert 'http-equiv="refresh"' not in answered.text
     assert 'id="yesBtn"' not in answered.text
+
+
+@pytest.mark.asyncio
+async def test_background_push_never_raises_and_skips_bot_without_telegram(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    from src.application import zovi_answer_push
+
+    built: list[str] = []
+
+    class _BrokenBot:
+        def __init__(self, token, **_kw):
+            built.append(token)
+            raise ValueError("Token is invalid!")
+
+    monkeypatch.setattr(zovi_answer_push, "Bot", _BrokenBot)
+    no_tg, _ = await _invite(db_session, telegram_id=None)
+    plain = await _answer(db_session, no_tg["code"], device="device-token-bg1")
+    await zovi_answer_push.push_answer_soon(plain)
+    assert built == []
+
+    with_tg, _ = await _invite(db_session)
+    pushed = await _answer(db_session, with_tg["code"], device="device-token-bg2")
+    await zovi_answer_push.push_answer_soon(pushed)  # не бросает, хотя бот не создаётся
+    assert len(built) == 1
