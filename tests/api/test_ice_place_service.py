@@ -59,3 +59,70 @@ async def test_svc_service_keeps_places_with_sharpening_or_rental(app_use_test_d
     filtered_ids = {int(i["id"]) for i in filtered.json()["items"]}
     assert filtered_ids == {sharp}
     assert int(filtered.json()["service_count"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_sharpening_count_stays_put_and_skips_roller_rental(
+    app_use_test_db, db_session
+) -> None:
+    """Цифра на «Заточке» не зависит от открытого раздела.
+
+    Магазины и ОХМ грузят другой срез, но чип должен показывать размер самого
+    раздела. Прокат роликов на трассе — не заточка и не прокат коньков.
+    """
+    name = f"SvcStable {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    sharp = await _insert_arena(db_session, city_id, name=f"Заточка {uuid.uuid4().hex[:4]}")
+    rental = await _insert_arena(db_session, city_id, name=f"Прокат {uuid.uuid4().hex[:4]}")
+    roller = await _insert_arena(db_session, city_id, name=f"Роллеры {uuid.uuid4().hex[:4]}")
+    shop = await _insert_arena(db_session, city_id, name=f"Магазин {uuid.uuid4().hex[:4]}")
+    await db_session.execute(
+        text("UPDATE arenas SET venue_type = 'other' WHERE id = :id"),
+        {"id": roller},
+    )
+    await db_session.execute(
+        text("UPDATE arenas SET venue_type = 'shop' WHERE id = :id"),
+        {"id": shop},
+    )
+    for arena_id, amenities in (
+        (sharp, {"skate_sharpening": True}),
+        (rental, {"skate_rental": True}),
+        (roller, {"skate_rental": True}),
+        (shop, {"skate_sharpening": True, "repair": True}),
+    ):
+        await db_session.execute(
+            text("UPDATE arena_profiles SET amenities = CAST(:a AS jsonb) WHERE arena_id = :id"),
+            {"id": arena_id, "a": json.dumps(amenities)},
+        )
+    await db_session.commit()
+
+    async with _client() as client:
+        plain = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": city_id, "intent": "skate", "limit": 50},
+        )
+        opened = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": city_id, "intent": "skate", "limit": 50, "svc": "service"},
+        )
+        shops = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": city_id, "intent": "skate", "limit": 50, "venue_type": "shop"},
+        )
+        ohm = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": city_id, "intent": "ohm", "limit": 50},
+        )
+
+    assert plain.status_code == opened.status_code == shops.status_code == ohm.status_code == 200
+    counts = {
+        int(plain.json()["service_count"]),
+        int(opened.json()["service_count"]),
+        int(shops.json()["service_count"]),
+        int(ohm.json()["service_count"]),
+    }
+    assert counts == {2}
+    opened_ids = {int(item["id"]) for item in opened.json()["items"]}
+    assert opened_ids == {sharp, rental}
+    assert roller not in opened_ids
+    assert shop not in opened_ids

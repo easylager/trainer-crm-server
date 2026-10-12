@@ -251,6 +251,35 @@ def _row_has_any_amenity(row: Mapping[str, Any], keys: tuple[str, ...] | list[st
     return any(_amenity_on(amenities.get(k)) for k in keys)
 
 
+# Прокат коньков имеет смысл на льду. На лыжероллерной трассе тот же ключ —
+# прокат роликов и велосипедов, и раздел «Заточка» из‑за него врал.
+_ICE_RENTAL_VENUE_TYPES = frozenset({VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR})
+_SKATE_SERVICE_KEYS_ANY_PLACE = (
+    "skate_sharpening",
+    "repair",
+    "skate_molding",
+    "blade_profiling",
+)
+
+
+def row_in_sharpening_section(row: Mapping[str, Any]) -> bool:
+    """Место раздела «Заточка»: заточка и услуги лезвия, либо прокат коньков на льду.
+
+    Магазин сюда не входит — у него свой раздел. Прокат на трассе для роликов тоже.
+    """
+    venue = normalize_venue_type(row.get("venue_type"))
+    if venue in DEFAULT_HIDDEN_VENUE_TYPES:
+        return False
+    amenities = _as_mapping(row.get("amenities"))
+    if any(_amenity_on(amenities.get(key)) for key in _SKATE_SERVICE_KEYS_ANY_PLACE):
+        return True
+    return venue in _ICE_RENTAL_VENUE_TYPES and _amenity_on(amenities.get("skate_rental"))
+
+
+def _is_full_service_section_filter(keys: tuple[str, ...] | list[str] | None) -> bool:
+    return tuple(keys or ()) == PLACE_SERVICE_KEYS
+
+
 def _venue_type_facets(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Сколько площадок каждого типа есть в этой выдаче — чипы без пустышек.
 
@@ -1583,6 +1612,37 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
     return items
 
 
+async def _count_city_sharpening_section(
+    session: AsyncSession, *, city_id: int, month: int
+) -> int:
+    """Сколько мест откроет раздел «Заточка» в городе.
+
+    Считаем по всему городу, а не по текущему чипу: вкладка «Магазины» и ОХМ
+    грузят другой набор строк, и цифра на «Заточке» прыгала вместе с ними.
+    """
+    scope = public_scope_params()
+    loaded = (
+        await session.execute(
+            text(
+                f"""
+                SELECT COALESCE(a.venue_type, 'ice') AS venue_type,
+                       p.amenities, p.season_start_month, p.season_end_month
+                FROM arenas a
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}
+                """
+            ),
+            {"city_id": int(city_id), **scope},
+        )
+    ).mappings().all()
+    return sum(
+        1
+        for row in loaded
+        if not _is_closed_season_row(row, month=month) and row_in_sharpening_section(row)
+    )
+
+
 async def list_public_ice_arenas(
     session: AsyncSession,
     *,
@@ -1659,8 +1719,10 @@ async def list_public_ice_arenas(
     season_facet_count = sum(1 for r in rows if _is_closed_season_row(r, month=month))
     usable_rows = [r for r in rows if not _is_closed_season_row(r, month=month)]
     facets = _venue_type_facets(usable_rows)
-    # Шапка (Заточка, типы мест) считает места, которыми можно пользоваться сейчас.
+    # Шапка (типы мест) считает места, которыми можно пользоваться сейчас.
     # Фильтр «Зимой» меняет только ленту, не эти числа.
+    # «Заточка» — отдельный счёт по всему городу: чип «Магазины» и ОХМ не должны
+    # подменять его своим срезом.
     header_rows = usable_rows
     if venue_filter:
         header_rows = [
@@ -1672,7 +1734,14 @@ async def list_public_ice_arenas(
             for r in header_rows
             if normalize_venue_type(r.get("venue_type")) not in DEFAULT_HIDDEN_VENUE_TYPES
         ]
-    service_count = sum(1 for r in header_rows if _row_has_any_amenity(r, PLACE_SERVICE_KEYS))
+    if intent_value != INTENT_OHM and bbox_box is None:
+        service_count = sum(1 for r in usable_rows if row_in_sharpening_section(r))
+    elif city_id is not None:
+        service_count = await _count_city_sharpening_section(
+            session, city_id=int(city_id), month=month
+        )
+    else:
+        service_count = sum(1 for r in usable_rows if row_in_sharpening_section(r))
     if season_filter == "winter":
         rows = [r for r in rows if _is_closed_season_row(r, month=month)]
         if venue_filter:
@@ -1680,7 +1749,10 @@ async def list_public_ice_arenas(
     else:
         rows = header_rows
     if service_keys:
-        rows = [r for r in rows if _row_has_any_amenity(r, service_keys)]
+        if _is_full_service_section_filter(service_keys):
+            rows = [r for r in rows if row_in_sharpening_section(r)]
+        else:
+            rows = [r for r in rows if _row_has_any_amenity(r, service_keys)]
     if window is not None and season_filter != "winter":
         # Сначала то, что есть в выбранном окне; остальное — ниже, с честной подписью.
         # Закрытый сезон в это окно не ставим: сеанса у него нет.
