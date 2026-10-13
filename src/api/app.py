@@ -1936,6 +1936,32 @@ def share_style_b_css(request: Request):
     )
 
 
+@app.get("/static/share/place-share.css")
+def share_place_share_css(request: Request):
+    """TASK-252: закреплённая кнопка «Позвать на …» на странице места."""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "place-share.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/place-share.js")
+def share_place_share_js(request: Request):
+    """TASK-252: выбор сеанса и GlideShareSheet на /p/…"""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "place-share.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/glide-tokens.css")
 def shared_glide_tokens_css(request: Request):
     """TASK-209: общие дизайн-токены для static/share/* и static/webapp/*. Use ``?v=…`` for long cache."""
