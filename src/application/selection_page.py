@@ -1239,12 +1239,27 @@ def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[s
 _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
 
 
+def _selection_thumb_img_attrs(item: Mapping[str, Any]) -> tuple[str | None, str]:
+    """Квадрат 64×64 CSS (128×128 @2x): ``src`` — thumb, иначе card; ``srcset`` только если слот >128px."""
+    thumb = visible_photo_url(str(item.get("thumb") or ""))
+    card = visible_photo_url(str(item.get("card") or ""))
+    src = thumb or card
+    if not src:
+        return None, ""
+    if thumb and card and thumb != card:
+        return src, (
+            f' srcset="{_esc(thumb)} 320w, {_esc(card)} 800w"'
+            ' sizes="(min-width: 641px) 128px, 64px"'
+        )
+    return src, ""
+
+
 def _b_thumb(item: Mapping[str, Any], *, href: str) -> str:
     from src.application.catalog_icons import rink_motif_svg
 
-    photo = _place_photo_url(item)
+    photo, extra = _selection_thumb_img_attrs(item)
     inner = (
-        f'<img src="{_esc(photo)}" alt="" loading="lazy" decoding="async" width="128" height="128" />'
+        f'<img src="{_esc(photo)}"{extra} alt="" loading="lazy" decoding="async" width="128" height="128" />'
         if photo
         else rink_motif_svg(small=True)
     )
