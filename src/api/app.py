@@ -1962,6 +1962,32 @@ def share_place_share_js(request: Request):
     )
 
 
+@app.get("/static/share/place-tg-shell.js")
+def share_place_tg_shell_js(request: Request):
+    """TASK-256: Mini App shell bootstrap на серверной /p/…"""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "place-tg-shell.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/place-tg-shell.css")
+def share_place_tg_shell_css(request: Request):
+    """TASK-256: отступы dock + tab bar на /p/… в Mini App."""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "place-tg-shell.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/glide-tokens.css")
 def shared_glide_tokens_css(request: Request):
     """TASK-209: общие дизайн-токены для static/share/* и static/webapp/*. Use ``?v=…`` for long cache."""

@@ -173,7 +173,8 @@ html:active-view-transition-type(back)::view-transition-new(root) {
  * уникальным в документе.
  */
 .arena-hero,
-.ice-board__photo[data-vt-hero] {
+.ice-board__photo[data-vt-hero],
+.b-hero__img[data-vt-hero] {
   view-transition-name: client-arena-hero;
 }
 

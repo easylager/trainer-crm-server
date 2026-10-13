@@ -143,6 +143,11 @@
     return seg.replace(/\.html$/, '');
   }
 
+  function isPublicPlaceRoute() {
+    var p = global.location.pathname || '';
+    return /^\/p\/[^/]+\/[^/]+/.test(p);
+  }
+
   function resolveActiveTab() {
     if (state.forcedTab) return state.forcedTab;
     var key = pathnameKey();
@@ -1093,8 +1098,13 @@
   }
 
   function boot() {
+    if (isPublicPlaceRoute() && !getInitData()) return;
     init();
     refreshWatchesSummary();
+    if (isPublicPlaceRoute()) {
+      if (state.mode === 'tabs') setForcedTab('catalog');
+      return;
+    }
     reportCatalogPresence('miniapp_shell', readStartParam());
     if (maybeOpenArenaDeepLink()) return;
     if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {

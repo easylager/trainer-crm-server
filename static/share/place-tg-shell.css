@@ -1,0 +1,14 @@
+/* TASK-256: Mini App shell on /p/… — tab bar + «Позвать» dock (tokens only). */
+
+body.b.has-place-share.client-shell-body {
+  padding-bottom: calc(var(--place-share-dock-h) + var(--client-shell-tab-inset));
+}
+
+body.b.has-place-share.client-shell-body .place-share-dock {
+  bottom: var(--client-shell-tab-inset);
+}
+
+body.b.has-place-share.client-shell-body .place-share-zovi,
+body.b.has-place-share.client-shell-body .b-ticket {
+  scroll-margin-bottom: calc(var(--place-share-dock-h) + var(--client-shell-tab-inset));
+}
