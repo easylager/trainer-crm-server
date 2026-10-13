@@ -21,6 +21,14 @@ def photo_url_from_cdn(file_key: str | None, base: str | None) -> str | None:
     return root + "/" + quote(key, safe="/")
 
 
+def visible_photo_url(url: str | None) -> str | None:
+    """Публичный URL картинки. Нет опубликованного кадра — вызывающий не передаёт URL."""
+    raw = str(url or "").strip()
+    if not raw.lower().startswith(("https://", "http://", "/")):
+        return None
+    return raw
+
+
 def public_photo_url(file_key: str | None, cdn_base: str | None = None) -> str | None:
     """CDN URL when configured, else the public photo proxy. Rejects private prefixes."""
     key = (file_key or "").strip()

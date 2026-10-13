@@ -14,8 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.application.ice_city_day import (
+    aliased_city_slug,
     city_slug,
     get_city_ice_day,
+    list_public_cities,
+    render_unknown_city_html,
     resolve_city_by_ref,
 )
 from src.application.ice_city_day_og import render_ice_city_day_og
@@ -24,8 +27,6 @@ from src.application.catalog_consumer_events import record_public_page_view
 from src.application.png_render_cache import render_png_cached
 from src.application.place_links import catalog_start_param, public_telegram_cta_url
 from src.shared.config import Settings
-from src.shared.html_template import fill_placeholders
-
 router = APIRouter(tags=["public-ice-share"])
 
 # TASK-189 пишет просмотр на каждый заход. Публичный кэш страницы его проглатывает,
@@ -49,29 +50,6 @@ def _cta_url(city_id: int) -> str | None:
     )
 
 
-# Тот же каркас, что у 404 страницы места: человеку — выход в каталог, поисковику — noindex.
-_CITY_NOT_FOUND_HTML = """<!DOCTYPE html>
-<html lang="ru"><head><meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="robots" content="noindex" />
-<title>Город не найден — Glide</title>
-<meta property="og:title" content="Glide — карта льда" />
-<meta property="og:description" content="Где покататься сегодня: катки, расписание и цены." />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
-<style>body{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
-margin:0;padding:48px 20px;text-align:center}h1{font-weight:600;letter-spacing:-.01em}a{color:#0B6E70;font-weight:600}</style></head>
-<body><h1>Такого города нет в каталоге</h1>
-<p>Проверьте название или посмотрите, где покататься сегодня:</p>
-<p><a href="__HOME__">Открыть каталог Glide</a></p></body></html>"""
-
-
-def _city_not_found(home: str) -> HTMLResponse:
-    return HTMLResponse(
-        fill_placeholders(_CITY_NOT_FOUND_HTML, {"__HOME__": home}),
-        status_code=404,
-    )
-
-
 async def _load(session: AsyncSession, city_ref: str):
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
@@ -87,10 +65,15 @@ async def ice_city_day_page(
     session: AsyncSession = Depends(get_session),
 ):
     """Расписание массовых катаний города на день + og-теги для превью в Telegram."""
+    alias = await aliased_city_slug(session, city_ref)
+    if alias and city_ref.strip().lower() != alias:
+        return RedirectResponse(url=f"/ice/{alias}/today", status_code=301)
     city, day = await _load(session, city_ref)
     if city is None or day is None:
         base = _public_base()
-        return _city_not_found(f"{base}/" if base else "/")
+        home = f"{base}/" if base else "/"
+        cities = await list_public_cities(session)
+        return HTMLResponse(render_unknown_city_html(cities, home=home), status_code=404)
     city_name = str(city["name"])
 
     canonical_path, og_path = ice_city_day_paths(city_name)

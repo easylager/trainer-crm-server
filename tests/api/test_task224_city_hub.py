@@ -158,8 +158,8 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert f'href="/c/{slug}?t=ice&amp;w=tomorrow"' in skate and f"Завтра <small>{skate_tomorrow}</small>" in skate
     if skate_weekend:
         assert f'href="/c/{slug}?t=ice&amp;w=weekend"' in skate and f"Сб–Вс <small>{skate_weekend}</small>" in skate
-    assert "<span>Сегодня <small>0</small></span>" in skate, "ноль — не ссылка"
-    assert "ближайший <b>завтра 12:00" in skate
+    assert "<span>Сегодня <small>—</small></span>" in skate, "ноль — не ссылка и не цифра"
+    assert "ближайший" not in skate
 
     ohm = _route(html, "С клюшкой")
     assert ohm, html
@@ -168,7 +168,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
         assert f'href="/c/{slug}?w=weekend&amp;kind=ohm"' in ohm and f"Сб–Вс <small>{ohm_weekend}</small>" in ohm
         assert "07:00" in ohm
     else:
-        assert "<span>Сб–Вс <small>0</small></span>" in ohm
+        assert "<span>Сб–Вс <small>—</small></span>" in ohm
     assert f"Все <small>{ohm_all}</small>" in ohm
 
     # Нет данных — нет плитки.

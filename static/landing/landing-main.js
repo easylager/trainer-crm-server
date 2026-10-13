@@ -1,6 +1,21 @@
 (function () {
   'use strict';
 
+  function demoWeekRange() {
+    var shifted = new Date(Date.now() + 180 * 60000);
+    var dow = shifted.getUTCDay();
+    var iso = dow === 0 ? 7 : dow;
+    var monday = new Date(shifted.getTime());
+    monday.setUTCDate(monday.getUTCDate() + (1 - iso));
+    var end = new Date(monday.getTime());
+    end.setUTCDate(end.getUTCDate() + 6);
+    var months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+    if (monday.getUTCMonth() === end.getUTCMonth()) {
+      return monday.getUTCDate() + '–' + end.getUTCDate() + ' ' + months[end.getUTCMonth()];
+    }
+    return monday.getUTCDate() + ' ' + months[monday.getUTCMonth()] + '–' + end.getUTCDate() + ' ' + months[end.getUTCMonth()];
+  }
+
   function readConfig() {
     var el = document.getElementById('landing-config');
     if (el && el.textContent) {
@@ -173,7 +188,7 @@
     if (id === 'slots') {
       return (
         '<div class="landing-bento__viz bv-sched" aria-hidden="true">' +
-        '<p class="bv-sched__day">Среда · Minsk Arena</p>' +
+        '<p class="bv-sched__day">Среда · Минск-Арена</p>' +
         '<ul class="bv-sched__list">' +
         '<li class="bv-sched__row bv-sched__row--sky">' +
         '<span class="bv-sched__time">17:00</span>' +
@@ -186,7 +201,7 @@
         '</li>' +
         '<li class="bv-sched__row bv-sched__row--amber">' +
         '<span class="bv-sched__time">19:00</span>' +
-        '<span class="bv-sched__main"><span class="bv-sched__name">Дарья</span><span class="bv-sched__meta">Minsk Arena</span></span>' +
+        '<span class="bv-sched__main"><span class="bv-sched__name">Дарья</span><span class="bv-sched__meta">Минск-Арена</span></span>' +
         '</li>' +
         '</ul></div>'
       );
@@ -199,7 +214,7 @@
         '<div class="bv-catalog__avatar"></div>' +
         '<div class="bv-catalog__main">' +
         '<p class="bv-catalog__name">Алексей <span>· тренер</span></p>' +
-        '<p class="bv-catalog__meta">Minsk Arena · фигурное</p>' +
+        '<p class="bv-catalog__meta">Минск-Арена · фигурное</p>' +
         '</div>' +
         '<span class="bv-catalog__cta">Запись</span>' +
         '</div></div>'
@@ -208,7 +223,7 @@
     if (id === 'analytics') {
       return (
         '<div class="landing-bento__viz bv-analytics" aria-hidden="true">' +
-        '<p class="bv-analytics__banner">Неделя 16–22 июня</p>' +
+        '<p class="bv-analytics__banner">Неделя ' + demoWeekRange() + '</p>' +
         '<div class="bv-analytics__metrics">' +
         '<div class="bv-analytics__metric"><strong>12</strong><span>записей</span></div>' +
         '<div class="bv-analytics__metric bv-analytics__metric--hi"><strong>840</strong><span>BYN</span></div>' +
@@ -226,7 +241,7 @@
         '<div class="landing-bento__viz bv-dossier" aria-hidden="true">' +
         '<div class="bv-dossier__client">' +
         '<div class="bv-dossier__avatar">А</div>' +
-        '<div><p class="bv-dossier__name">Анна К.</p><p class="bv-dossier__sub">Фигурное · Minsk Arena</p></div>' +
+        '<div><p class="bv-dossier__name">Анна К.</p><p class="bv-dossier__sub">Фигурное · Минск-Арена</p></div>' +
         '</div>' +
         '<div class="bv-dossier__tags">' +
         '<span class="bv-d-tag">Фигурное</span>' +

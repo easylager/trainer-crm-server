@@ -474,7 +474,7 @@ async def test_outdoor_rink_has_its_schedule_like_any_rink(app_use_test_db, db_s
         resp = await client.get(place["path"])
         card = await client.get(f"/api/public/arenas/{place['arena_id']}")
     assert "Массовое катание</h2>" in resp.text and "18:15" in resp.text
-    assert "зависит от погоды" in resp.text
+    assert "зависит от погоды" not in resp.text
     assert card.json()["has_skating"] is True
 
 
@@ -520,19 +520,47 @@ def test_hours_without_leading_zero_are_not_compared_as_strings() -> None:
     assert open_now_label(broken, now=noon_minsk) == ""
 
 
-def test_hero_photo_is_used_when_published_and_skipped_otherwise() -> None:
-    from src.application.place_page import _hero_photo_url
+def test_place_without_published_media_shows_no_picture() -> None:
+    """A11: нет published-медиа — страница без картинки. Файл в хранилище на просмотр не проверяем."""
+    from datetime import datetime, timezone
 
-    assert _hero_photo_url({"hero": {"variants": {"hero": "/api/public/photos/arenas/1/h.jpg"}}}) == (
-        "/api/public/photos/arenas/1/h.jpg"
-    )
-    assert _hero_photo_url({"hero": {"variants": {"card": "https://cdn.example/a.jpg"}}}) == "https://cdn.example/a.jpg"
-    assert _hero_photo_url({"hero": {"variants": {"thumb": "/api/public/photos/arenas/1/t.jpg"}}}) == (
-        "/api/public/photos/arenas/1/t.jpg"
-    )
-    assert _hero_photo_url({"hero": {"variants": {"hero": "/h.jpg", "card": "/c.jpg", "thumb": "/t.jpg"}}}) == "/c.jpg"
+    from src.application.place_page import _hero_photo_url, render_place_page
+
+    published = "/api/public/photos/arenas/38/card.jpg"
+    assert _hero_photo_url({"hero": {"variants": {"card": published}}}) == published
     assert _hero_photo_url({"hero": {"variants": {"hero": "javascript:alert(1)"}}}) is None
     assert _hero_photo_url({"hero": None}) is None
+    assert _hero_photo_url({}) is None
+
+    now = datetime(2026, 10, 13, 9, 0, tzinfo=timezone.utc)
+    share = {"share_url": "https://x/p/x", "share_text": "x", "share_body": "x"}
+
+    def page(hero: dict | None) -> str:
+        return render_place_page(
+            {
+                "card": {
+                    "name": "Бобруйск-арена",
+                    "venue_type": "shop",
+                    "city_name": "Бобруйск",
+                    "country": "BY",
+                    "hero": hero,
+                },
+                "today": now.date(),
+                "now": now,
+            },
+            canonical_url="/p/x",
+            base_path="/p/x",
+            og_image_url="/p/x/og.png",
+            story_image_url="/p/x/story.png",
+            cta_url=None,
+            city_page_url=None,
+            share=share,
+        )
+
+    bare = page(None)
+    assert 'class="hero__photo"' not in bare
+    shown = page({"variants": {"card": published}})
+    assert f'class="hero__photo" src="{published}"' in shown
 
 
 @pytest.mark.asyncio

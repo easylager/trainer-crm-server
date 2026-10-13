@@ -183,7 +183,7 @@ async def test_selection_preview_and_telegram_keep_the_window(
 
 @pytest.mark.asyncio
 async def test_selection_page_ssr_phone_guard(app_use_test_db, db_session) -> None:
-    """TASK-207: невалидные телефоны не попадают в SSR подборки (/c/)."""
+    """TASK-207/243: невалидные телефоны не попадают в SSR подборки (/c/); старые расписания — как обычно."""
     now = datetime.now(timezone.utc).replace(microsecond=0)
     stale_at = now - timedelta(hours=80)
     city_label = f"Телподбор{uuid.uuid4().hex[:6]}"
@@ -205,9 +205,11 @@ async def test_selection_page_ssr_phone_guard(app_use_test_db, db_session) -> No
     html = page.text
     _assert_invalid_phone_ssr(_selection_pick_block(html, "Каток без связи"), _PHONE_GUARD_UNKNOWN)
     _assert_invalid_phone_ssr(_selection_pick_block(html, "Каток короткий"), _PHONE_GUARD_SHORT)
-    valid_block = _selection_pick_block(html, "Каток валидный")
-    assert 'href="tel:+375291234567"' in valid_block
-    assert "уточните по телефону" in valid_block.lower()
+    # TASK-243: расписание старше 72 ч — обычные сеансы, без строки о свежести.
+    for arena_name, _phone in cases:
+        block = _selection_pick_block(html, arena_name)
+        assert 'class="slot' in block, arena_name
+        assert "уточн" not in block.casefold() and "не подтвержд" not in block.casefold()
 
 
 @pytest.mark.asyncio

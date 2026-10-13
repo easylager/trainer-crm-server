@@ -140,15 +140,12 @@
   function iceWatchBtnHtml() {
     if (!initData()) return '';
     if (seasonRemindActive()) return '';
-    var stale = M.shouldWarnScheduleStale(state.card && state.card.freshness);
-    var kind = stale ? 'schedule_fresh' : 'sessions';
+    var kind = 'sessions';
     var on = state.iceWatchKinds && state.iceWatchKinds[kind];
     // Выкл — 🔔; вкл — 🔕. Текст только в подсказке, не отдельной полосой под заголовком.
     var hint = on
       ? 'Напоминание в Telegram включено. Нажмите, чтобы отключить'
-      : stale
-        ? 'Напомнить в Telegram, когда обновится расписание'
-        : 'Напомнить в Telegram о подходящих сеансах';
+      : 'Напомнить в Telegram о подходящих сеансах';
     return (
       '<button type="button" class="arena-watch-btn' +
       (on ? ' arena-watch-btn--on' : '') +
@@ -541,7 +538,7 @@
     var picked = sharePickedId();
     if (picked && sessionExistsInSchedule(picked)) return picked;
     var fs = getFocusState();
-    if (fs.kind === 'gone' || fs.kind === 'unconfirmed') return null;
+    if (fs.kind === 'gone') return null;
     return slots.length ? String(slots[0].id) : null;
   }
 
@@ -611,7 +608,7 @@
       slots: payload.slots,
       slotSections: payload.slotSections,
       sessionId: resolvedShareSessionId(),
-      sessionMissing: fs.kind === 'gone' || fs.kind === 'unconfirmed',
+      sessionMissing: fs.kind === 'gone',
       invite: !!invite,
       venueType: skatingCard() ? 'ice' : state.card.venue_type,
       context: 'arena_card',
@@ -1135,16 +1132,6 @@
         '</div>'
       );
     }
-    if (feed.mode === 'unconfirmed') {
-      return (
-        '<div class="arena-sec">' +
-        '<div class="arena-h-row"><p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
-        scheduleHeaderTools(null) +
-        '</div>' +
-        '<p class="arena-stale">' + esc(feed.banner || '') + '</p>' +
-        '</div>'
-      );
-    }
     var days = strip();
     if (!state.day) {
       // День из ленты — если он есть в полосе; иначе свой умный дефолт.
@@ -1159,9 +1146,6 @@
     var hasTicketLinks = daySessions.some(function (s) {
       return M.iceRowCta(s, state.card && state.card.tickets_url).href;
     });
-    var staleNote = M.shouldWarnScheduleStale(state.card.freshness)
-      ? M.staleScheduleNote(state.card.freshness, new Date(), state.card)
-      : '';
     var focusGone = renderFocusGoneNotice(getFocusState());
     return (
       '<div class="arena-sec">' +
@@ -1169,8 +1153,9 @@
       scheduleHeaderTools(tickets) +
       '</div>' +
       focusGone +
-      (staleNote ? '<p class="arena-stale">' + esc(staleNote) + '</p>' : '') +
-      '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
+      (M.scheduleInviteHint(hasTicketLinks)
+        ? '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>'
+        : '') +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
       '</div>'
@@ -1471,14 +1456,10 @@
   }
 
   function renderFreshness() {
-    var text = M.formatFreshness(state.card.freshness, new Date());
+    // TASK-243: ни свежести, ни проверки, ни оговорок — только «Сообщить об ошибке».
     var html = '<div class="arena-sec"><div class="arena-fresh">';
-    if (text) html += '<span>' + esc(text) + '</span>';
-    M.trustLines(state.card, new Date()).forEach(function (line) {
-      html += '<span>' + esc(line) + '</span>';
-    });
     html +=
-      '<span><button type="button" class="linkish" data-action="report">Сообщить об ошибке</button> — конкретное поле, а не письмо в поддержку</span>';
+      '<span><button type="button" class="linkish" data-action="report">Сообщить об ошибке</button></span>';
     html += '</div></div>';
     return html;
   }
@@ -1788,7 +1769,7 @@
     if (fs.kind === 'found') {
       if (fs.day) state.focus.day = fs.day;
       state.sharePickSessionId = String(fs.focusSessionId);
-    } else if (state.focus && state.focus.sessionId && (fs.kind === 'gone' || fs.kind === 'unconfirmed')) {
+    } else if (state.focus && state.focus.sessionId && fs.kind === 'gone') {
       state.sharePickSessionId = null;
     }
     if (state.focus && state.focus.sessionId && state.sessions) {

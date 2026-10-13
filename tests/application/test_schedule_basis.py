@@ -53,7 +53,7 @@ def test_normalizer_uses_extraction_basis() -> None:
 
 def test_basis_hint_live_is_empty() -> None:
     assert basis_hint_ru("live") is None
-    assert basis_hint_ru("projected") == "Обычная сетка катка — уточняйте по телефону"
+    assert basis_hint_ru("projected") is None
 
 
 def test_parser_default_basis_photo_and_live() -> None:
@@ -71,12 +71,11 @@ def _arena(basis: str) -> dict:
     }
 
 
-def test_city_day_basis_hint_is_visible_text_not_tooltip() -> None:
-    """На телефоне ``title`` не виден: основание должно быть текстом в карточке арены."""
+def test_city_day_basis_hint_is_not_shown() -> None:
+    """Откуда сеанс, на карточке не пишем. Класс слота в данных остаётся."""
     html = _arena_html(_arena("projected"))
-    assert "Обычная сетка катка — уточняйте по телефону" in html
-    assert 'class="arena__basis"' in html
-    assert "title=" not in html
+    assert "уточн" not in html.casefold()
+    assert "arena__basis" not in html
     assert "slot--basis-projected" in html
 
 

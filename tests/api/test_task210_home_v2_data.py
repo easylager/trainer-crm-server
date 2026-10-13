@@ -224,7 +224,8 @@ async def test_ac5_sql_budget_on_upcoming_path_with_cookie(app_use_test_db, db_s
 
 
 @pytest.mark.asyncio
-async def test_today_counter_matches_ice_page_without_closed_or_very_stale(app_use_test_db, db_session) -> None:
+async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale(app_use_test_db, db_session) -> None:
+    """Закрытый сезон не считаем; расписание старше 72 ч считаем как обычное (TASK-243)."""
     name = f"Счётчик {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     normal = await _insert_arena(db_session, city_id, name="Живой каток")
@@ -257,8 +258,8 @@ async def test_today_counter_matches_ice_page_without_closed_or_very_stale(app_u
     assert ice.status_code == 200
     from src.application.catalog_home_page import parse_city_session_count_from_home
 
-    assert parse_city_session_count_from_home(home.text, name) == 1
-    assert re.search(r"1 сеанс на ", ice.text)
+    assert parse_city_session_count_from_home(home.text, name) == 2
+    assert re.search(r"2 сеанса на ", ice.text)
 
 
 @pytest.mark.asyncio

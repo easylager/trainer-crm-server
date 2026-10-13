@@ -48,6 +48,7 @@ from src.application.arena_profile import (
     intervals_for_weekday,
     opening_hours_schema_org,
 )
+from src.application.ice_city_day import city_slug
 from src.application.place_links import join_public_origin, place_query
 from src.shared.arena_schedule_mode import (
     PHONE_LINE,
@@ -58,15 +59,21 @@ from src.shared.arena_schedule_mode import (
 )
 from src.application.schedule_staleness import (
     LEVEL_FRESH,
-    LEVEL_VERY_STALE,
     load_arena_freshness,
     stale_note,
     staleness_level,
-    very_stale_note,
 )
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
 from src.shared.phone_guard import is_valid_public_phone, tel_href
+from src.application.photo_cdn import visible_photo_url
+from src.shared.public_display import (
+    display_host,
+    format_phone_display,
+    format_place_address,
+    format_public_name,
+    sentence_when,
+)
 from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 from src.shared.venue_types import has_public_skating
 
@@ -344,19 +351,11 @@ async def load_place_view(
             date_from=today,
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
-        # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API).
+        # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API). Сеансы не
+        # снимаем ни на каком уровне — решение владельца (TASK-243).
         fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
         level = staleness_level(fresh)
-        if level == LEVEL_VERY_STALE:
-            # > 72 ч без удачного прогона: сеансы не выдаём за расписание вовсе.
-            lookup_days = []
-            schedule_note = very_stale_note(
-                fresh,
-                now=now,
-                has_phone=bool(str(card.get("phone") or "").strip()),
-                has_site=bool(str(card.get("tickets_url") or card.get("website_url") or "").strip()),
-            )
-        elif lookup_days:
+        if lookup_days:
             schedule_note = stale_note(fresh, now=now)
 
     focus = None
@@ -370,13 +369,12 @@ async def load_place_view(
                     focus = slot
         # Ссылку открыли позже, чем сеанс начался (или он за пределами недели) — это
         # нормальная жизнь пересланной ссылки, а не ошибка. Говорим как есть.
-        # Расписание не подтверждено (> 72 ч) — не говорим «сеанс прошёл», говорим про расписание.
-        focus_missing = focus is None and level != LEVEL_VERY_STALE
+        focus_missing = focus is None
 
     all_slots = [s for d in days for s in d.get("sessions") or []]
     next_slot = all_slots[0] if all_slots else None
     ohm_days: list[dict[str, Any]] = []
-    if _skating(card) and level != LEVEL_VERY_STALE:
+    if _skating(card):
         ohm_lookup = await public_arena_session_days(
             session,
             int(card["id"]),
@@ -391,7 +389,7 @@ async def load_place_view(
                 for slot in day.get("sessions") or []:
                     if int(slot["id"]) == int(session_id):
                         focus = slot
-            focus_missing = focus is None and level != LEVEL_VERY_STALE
+            focus_missing = focus is None
     return {
         "card": card,
         "days": days,
@@ -427,11 +425,20 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
             if start:
                 return "closed", f"Сезон закрыт · откроется в {_MONTHS_PREP[int(start) - 1]}"
             return "closed", "Сезон закрыт"
+        lines: list[str] = []
         nxt = view.get("next_slot")
         if nxt is not None:
-            if _parse_iso_date(nxt.get("local_date")) == today:
-                return "live", "Сегодня есть лёд"
-            return "soon", f"Ближайший лёд: {slot_when(nxt, today=today)}"
+            when = _sentence_when_slot(nxt, today=today)
+            if when:
+                lines.append(f"{t('kind.public_skate')}: {when}")
+        ohm = _first_shown_slot(view.get("ohm_days"))
+        if ohm is not None:
+            when = _sentence_when_slot(ohm, today=today)
+            if when:
+                lines.append(f"{t('kind.hockey_practice')}: {when}")
+        if lines:
+            kind = "live" if any("сегодня" in line for line in lines) else "soon"
+            return kind, "\n".join(lines)
     label = open_now_label(card, now=now)
     if label:
         return ("open" if label.startswith("Открыто") else "shut"), label
@@ -446,9 +453,28 @@ def _city(card: Mapping[str, Any]) -> str:
     return str(card.get("city_name") or "").strip()
 
 
+def _sentence_when_slot(slot: Mapping[str, Any], *, today: date) -> str:
+    day = _parse_iso_date(slot.get("local_date"))
+    hhmm = str(slot.get("starts_at_local") or "")[:5]
+    if day is None:
+        return hhmm
+    return sentence_when(day, hhmm, today=today)
+
+
+def _first_shown_slot(days: Any) -> Mapping[str, Any] | None:
+    for day in days or []:
+        if not isinstance(day, Mapping):
+            continue
+        for slot in day.get("sessions") or []:
+            if isinstance(slot, Mapping):
+                return slot
+    return None
+
+
 def _where(card: Mapping[str, Any]) -> str:
-    parts = [str(card.get("district") or "").strip(), str(card.get("address") or "").strip()]
-    return " · ".join(p for p in parts if p)
+    district = str(card.get("district") or "").strip()
+    street = format_place_address(str(card.get("address") or ""), city=_city(card))
+    return " · ".join(p for p in (district, street) if p)
 
 
 def _services(card: Mapping[str, Any]) -> list[str]:
@@ -483,7 +509,7 @@ def invite_share_hook(view: Mapping[str, Any]) -> str:
 
 def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
     card = view["card"]
-    name = str(card.get("name") or "")
+    name = format_public_name(str(card.get("name") or ""))
     city = _city(card)
     focus = view.get("focus")
     if focus is not None:
@@ -640,21 +666,6 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     focus = view.get("focus")
     focus_id = int(focus["id"]) if focus is not None else None
     note = str(view.get("schedule_note") or "").strip()
-    if view.get("schedule_level") == LEVEL_VERY_STALE:
-        # TASK-180: расписание > 72 ч не подтверждалось — вместо сеансов просьба уточнить.
-        phone = str(card.get("phone") or "").strip()
-        links = []
-        if phone and is_valid_public_phone(phone):
-            links.append(f'<a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a>')
-        tickets = safe_external_url(card.get("tickets_url")) or safe_external_url(card.get("website_url"))
-        if tickets:
-            links.append(f'<a href="{_esc(tickets)}" rel="nofollow noopener" target="_blank">Сайт катка</a>')
-        return (
-            f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
-            f'<p class="sched__stale">{_esc(note)}</p>'
-            + (f'<p class="sched__stale">{" · ".join(links)}</p>' if links else "")
-            + "</section>"
-        )
     if not days:
         phone = str(card.get("phone") or "").strip()
         hint = (
@@ -700,7 +711,7 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
             f'<p class="day__label">{_esc(day_heading(d, today=view["today"]))}</p>'
             f'<div class="slots">{chips}{more_html}</div></div>'
         )
-    parts.append('<p class="hint">Нажмите на время, чтобы поделиться именно этим сеансом.</p></section>')
+    parts.append("</section>")
     return "".join(parts)
 
 
@@ -713,7 +724,7 @@ def _ohm_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
     focus_id = int(focus["id"]) if focus is not None else None
     notes: list[str] = []
     for slot in slots:
-        for key in ("age_note", "capacity_note"):
+        for key in ("age_note", "capacity_note", "price_note"):
             note = str(slot.get(key) or "").strip()
             if note and note not in notes:
                 notes.append(note)
@@ -735,7 +746,7 @@ def _ohm_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
             f'<div class="slots">{chips}</div></div>'
         )
     if notes:
-        parts.append(f'<p class="hint">{_esc(" ".join(notes))}</p>')
+        parts.append(f'<p class="hint">{_esc(" · ".join(notes))}</p>')
     parts.append("</section>")
     return "".join(parts)
 
@@ -932,7 +943,7 @@ def _hero_photo_url(card: Mapping[str, Any]) -> str | None:
     if not isinstance(variants, Mapping):
         return None
     url = str(variants.get("card") or variants.get("thumb") or variants.get("hero") or "").strip()
-    return url if url.lower().startswith(("https://", "http://", "/")) else None
+    return visible_photo_url(url)
 
 
 def _maps_url(card: Mapping[str, Any]) -> str | None:
@@ -944,17 +955,13 @@ def _maps_url(card: Mapping[str, Any]) -> str | None:
 
 
 def _display_host(url: str) -> str:
-    """«https://xn--j1aaid0h.xn--90ais/» → «конёк.бел»: адрес показываем так, как его набирают."""
-    host = url.split("://", 1)[-1].rstrip("/")
-    try:
-        return host.encode("ascii").decode("idna") if "xn--" in host else host
-    except UnicodeError:
-        return host
+    """Домен без пути: «https://chizhovka-arena.by/tickets» → «chizhovka-arena.by»."""
+    return display_host(url)
 
 
 def _contacts_html(card: Mapping[str, Any]) -> str:
     rows: list[str] = []
-    address = str(card.get("address") or "").strip()
+    address = format_place_address(str(card.get("address") or ""), city=_city(card))
     maps = _maps_url(card)
     if address:
         addr_html = (
@@ -964,7 +971,7 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
     phone = str(card.get("phone") or "").strip()
     if phone and is_valid_public_phone(phone):
         rows.append(
-            f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a></b></p>'
+            f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel_href(phone))}">{_esc(format_phone_display(phone))}</a></b></p>'
         )
     site = safe_external_url(card.get("website_url"))
     if site:
@@ -1105,6 +1112,7 @@ def _share_html(
     zovi_path: str | None = None,
 ) -> str:
     """Ряд «Поделиться». Подборка в Telegram — только url (превью из og), без text=."""
+    del venue_type  # один блок «Позвать друзей» и на катке, и в подборке
     url = share["share_url"]
     body = share["share_body"]
     full = f"{body}\n{url}" if body else url
@@ -1114,16 +1122,17 @@ def _share_html(
     wa = f"https://wa.me/?text={quote(full, safe='')}"
     viber = f"viber://forward?text={quote(full, safe='')}"
     vk = f"https://vk.com/share.php?url={quote(url, safe='')}"
-    zovi = f'<p class="share__zovi"><a href="{_esc(zovi_path)}">Позвать открыткой →</a></p>' if zovi_path else ""
-    story = ""
+    more: list[str] = []
     if story_image_url:
-        story = (
-            f'<a class="share__story" href="{_esc(story_image_url)}" download="glide-story.png">'
-            "Сохранить картинку в галерею</a>"
+        more.append(
+            f'<a class="share__story" href="{_esc(story_image_url)}" download="glide-story.png">{_esc(t("share.story"))}</a>'
         )
+    if zovi_path:
+        more.append(f'<a href="{_esc(zovi_path)}">{_esc(t("share.card"))}</a>')
+    more_html = f'<p class="share__more">{"".join(more)}</p>' if more else ""
     return (
-        f'<section class="share" aria-label="{t("cta.share")}">'
-        f'<p class="share__title">{"Позвать друзей" if venue_type == "ice" else t("cta.share")}</p>'
+        f'<section class="share" aria-label="{t("cta.invite_friends")}">'
+        f'<p class="share__title">{_esc(t("cta.invite_friends"))}</p>'
         '<div class="share__row">'
         + _share_icon("tg", "Telegram", tg, blank=True)
         + _share_icon("vb", "Viber", viber, blank=False)
@@ -1134,41 +1143,15 @@ def _share_html(
             f'aria-label="Скопировать">{_SHARE_ICONS["copy"]}</button>'
         )
         + "</div>"
-        + story
-        + zovi
+        + more_html
         + "</section>"
     )
 
 
 def _trust_html(view: Mapping[str, Any]) -> str:
-    """Откуда данные и насколько они свежие (DEC-014). Без этого «8 BYN» — просто цифра."""
-    card = view["card"]
-    now: datetime = view["now"]
-    fresh = card.get("freshness") or {}
-    lines: list[str] = []
-    observed = _parse_iso_dt(fresh.get("schedule_observed_at"))
-    if _skating(card) and observed is not None:
-        source = str(fresh.get("source_label") or "сайта катка")
-        if source.startswith("сайт "):
-            source = "сайта " + source[5:]
-        lines.append(f"Расписание с {source}, {ago_label(observed, now=now)}.")
-    verified = _parse_iso_dt(fresh.get("verified_at"))
-    edited = _parse_iso_dt(fresh.get("profile_updated_at"))
-    if verified is not None:
-        lines.append(
-            f"Карточку проверила команда Glide {verified.day} {_MONTHS_GEN[verified.month - 1]} {verified.year}."
-        )
-    if edited is not None and (verified is None or edited > verified):
-        # Q-012: у места без расписания с сайта единственный честный сигнал свежести —
-        # последняя правка карточки командой.
-        lines.append(f"Данные карточки {ago_label(edited, now=now).replace('обновлено', 'обновлены', 1)}.")
-    if not lines:
-        lines.append("Карточку собрала команда Glide по открытым данным.")
-    if card.get("venue_type") == "outdoor":
-        lines.append("Открытый лёд зависит от погоды — уточняйте перед выездом.")
-    if _skating(card) and view.get("session_count"):
-        lines.append("Время и цену конкретного сеанса лучше уточнить на месте.")
-    return "".join(f"<p>{_esc(line)}</p>" for line in lines)
+    """Свежесть и источник на публичной карточке не пишем. Ссылки «сообщить» здесь нет."""
+    del view
+    return ""
 
 
 def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> str:
@@ -1247,11 +1230,13 @@ def render_place_page(
     badge = status_badge(view)
     vt = str(card.get("venue_type") or "ice")
     icon = {"ice": "❄️", "gym": "🏋️", "choreo": "🩰", "pool": "🏊", "outdoor": "🌳", "shop": "🧰"}.get(vt, "📍")
-    badge_html = (
-        f'<p class="badge badge--{_esc(badge[0])}"><span class="badge__dot"></span>{_esc(badge[1])}</p>'
-        if badge
-        else ""
-    )
+    badge_html = ""
+    if badge:
+        badge_html = "".join(
+            f'<p class="badge badge--{_esc(badge[0])}"><span class="badge__dot"></span>{_esc(line)}</p>'
+            for line in str(badge[1]).split("\n")
+            if line
+        )
     where = _where(card)
     photo = _hero_photo_url(card)
     photo_html = (
@@ -1263,7 +1248,7 @@ def render_place_page(
         f'<header class="hero hero--{_esc(vt)}{" hero--photo" if photo else ""}">'
         + photo_html
         + f'<p class="hero__type">{icon} {_esc(card.get("venue_noun") or "")}</p>'
-        f'<h1 class="hero__title">{_esc(card.get("name"))}</h1>'
+        f'<h1 class="hero__title">{_esc(format_public_name(str(card.get("name") or "")))}</h1>'
         + (f'<p class="hero__where">{_esc(where)}</p>' if where else "")
         + badge_html
         + "</header>"
@@ -1286,9 +1271,9 @@ def render_place_page(
             hero,
             _focus_html(view, invite=invite),
             about,
-            actions,
             _schedule_html(view, base_path=base_path, invite=invite),
             _ohm_html(view, base_path=base_path, invite=invite),
+            actions,
             _services_html(card),
             _hours_html(card),
             _rental_catalog_html(card),
@@ -1316,7 +1301,12 @@ def render_place_page(
         "__ROBOTS__": robots,
         "__HEAD_EXTRA__": "",
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
-        "__CITY__": _esc(city or "Беларусь"),
+        "__BRAND__": _esc(t("brand.mark")),
+        "__CITY__": (
+            f'<a href="/c/{_esc(city_slug(city))}">{_esc(t("nav.back_city", city=format_public_name(city)))}</a>'
+            if city
+            else _esc("Беларусь")
+        ),
         "__CITY_LINK__": city_link,
         "__TRUST__": _trust_html(view),
         "__BODY__": body,

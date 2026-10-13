@@ -62,7 +62,8 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
     assert home.text.count('<script type="application/ld+json">') == 1
     assert "<script src=" not in home.text.lower()
     assert "home-map__hint" in home.text
-    assert "Зажмите точку — название." in home.text
+    assert "Зажмите точку — название." not in home.text
+    assert "Размер точки" not in home.text
     assert 'type="application/ld+json"' in home.text
     assert name in home.text
     assert f"/c/{slug}" in home.text
@@ -281,9 +282,11 @@ async def test_catalog_home_city_order_minsk_first_then_by_activity(app_use_test
         re.S,
     )
     names = [name for name, _fact in tiles]
-    assert "Минск" not in names
+    assert names and names[0] == "Минск"
     counts: list[int] = []
-    for _name, fact in tiles:
+    for tile_name, fact in tiles:
+        if tile_name == "Минск":
+            continue
         plain = re.sub(r"<[^>]+>", "", fact)
         found = re.search(r"(\d+)\s+сеанс", plain)
         counts.append(int(found.group(1)) if found else 0)
@@ -316,7 +319,7 @@ async def test_catalog_home_ice_today_link_only_with_sessions_today(app_use_test
             tile = match.group(0)
             name = re.search(r'<span class="n">([^<]*)</span>', tile)
             if name and name.group(1) == city_name:
-                fact = re.search(r'<span class="f">(.*?)</span>', tile, re.S)
+                fact = re.search(r'<span class="f">(.*?)</span>(?=<span class="has">|</a>)', tile, re.S)
                 return fact.group(1) if fact else ""
         return None
 

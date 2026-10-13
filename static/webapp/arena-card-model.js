@@ -15,10 +15,6 @@
   'use strict';
 
   var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
-  function staleApi() {
-    return rootRef.ScheduleStalenessModel || null;
-  }
-
   function scheduleModeApi() {
     return rootRef.ArenaScheduleModeModel || null;
   }
@@ -215,96 +211,6 @@
       parts.push('без проката');
     }
     return parts.join(' · ');
-  }
-
-  function daysBetween(fromIso, now) {
-    var from = new Date(fromIso);
-    if (isNaN(from.getTime()) || !now) return null;
-    var S = staleApi();
-    if (S) return S.minskDaysBetween(from, now);
-    var a = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-    var b = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    return Math.round((b - a) / 86400000);
-  }
-
-  function pluralDays(n) {
-    var S = staleApi();
-    if (S) return S.pluralDays(n);
-    var abs = Math.abs(n);
-    var mod10 = abs % 10;
-    var mod100 = abs % 100;
-    if (mod10 === 1 && mod100 !== 11) return abs + ' день';
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return abs + ' дня';
-    return abs + ' дней';
-  }
-
-  function formatFreshness(freshness, now) {
-    freshness = freshness || {};
-    if (!freshness.schedule_observed_at) return null;
-    var days = daysBetween(freshness.schedule_observed_at, now || new Date());
-    if (days == null || days < 0) return null;
-    var when;
-    if (days === 0) when = 'сегодня';
-    else when = pluralDays(days) + ' назад';
-    var text = 'Расписание обновлено ' + when;
-    if (freshness.source_label) {
-      text += ' · по данным ' + freshness.source_label;
-    }
-    return text;
-  }
-
-  /** TASK-180: > 6 ч без удачного прогона — баннер над слотами; сеансы всё равно видны. */
-  function shouldWarnScheduleStale(freshness) {
-    var S = staleApi();
-    if (S) return S.shouldWarnScheduleStale(freshness);
-    return false;
-  }
-
-  function staleScheduleNote(freshness, now, card) {
-    var S = staleApi();
-    now = now || new Date();
-    if (S) {
-      var level = S.stalenessLevel(freshness);
-      if (level === 'stale') return S.staleNote(freshness, now);
-      if (level === 'very_stale') {
-        card = card || {};
-        return S.veryStaleNote(freshness, now, {
-          hasPhone: !!String(card.phone || '').trim(),
-          hasSite: !!(card.tickets_url || card.website_url),
-        });
-      }
-      return null;
-    }
-    return null;
-  }
-
-  /**
-   * TASK-146 (DEC-014): откуда данные карточки и насколько они свежие — для мест без
-   * владельца-аккаунта (магазин, зал). Расписание льда говорит само за себя
-   * (formatFreshness); здесь — карточка: проверка, последняя правка, погода.
-   */
-  function trustLines(card, now) {
-    card = card || {};
-    var f = card.freshness || {};
-    var lines = [];
-    var verified = f.verified_at ? new Date(f.verified_at) : null;
-    var edited = f.profile_updated_at ? new Date(f.profile_updated_at) : null;
-    if (verified && !isNaN(verified.getTime())) {
-      lines.push('Проверено командой Glide');
-    }
-    if (edited && !isNaN(edited.getTime()) && (!verified || edited > verified)) {
-      var d = daysBetween(f.profile_updated_at, now || new Date());
-      if (d != null && d >= 0) {
-        lines.push('Данные обновлены ' + (d === 0 ? 'сегодня' : pluralDays(d) + ' назад'));
-      }
-    }
-    if (!lines.length && !f.schedule_observed_at) {
-      lines.push('Карточку собрала команда Glide по открытым данным');
-    }
-    if (card.venue_type === 'outdoor') {
-      lines.push('Открытый лёд зависит от погоды — уточняйте перед выездом');
-    }
-    return lines;
   }
 
   var MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
@@ -709,8 +615,8 @@
   }
 
   /**
-   * TASK-223: сеанс из шаринга в загруженной ленте — найден, пропал или расписание не подтверждено.
-   * «gone» только при успешной загрузке и отсутствии id; при very_stale — unconfirmed, не «прошёл».
+   * TASK-223: сеанс из шаринга в загруженной ленте — найден или пропал.
+   * «gone» только при успешной загрузке и отсутствии id. Свежесть расписания не влияет (TASK-243).
    */
   function focusState(opts) {
     opts = opts || {};
@@ -721,18 +627,6 @@
     }
     if (!opts.sessionsLoaded) {
       return { kind: 'none', focusSessionId: want };
-    }
-    var freshness = opts.freshness || {};
-    var S = staleApi();
-    var level = S
-      ? S.stalenessLevel(freshness)
-      : freshness.schedule_very_stale
-        ? 'very_stale'
-        : freshness.schedule_stale
-          ? 'stale'
-          : 'fresh';
-    if (level === 'very_stale') {
-      return { kind: 'unconfirmed', focusSessionId: want };
     }
     var days = opts.days || [];
     var day = dayForSession(days, want);
@@ -773,12 +667,6 @@
     var banner = seasonClosedBanner(card);
     if (banner) {
       return { mode: 'closed', banner: banner, showRibbon: false };
-    }
-    var S = staleApi();
-    var level = S ? S.stalenessLevel(card.freshness) : 'fresh';
-    if (level === 'very_stale') {
-      var note = staleScheduleNote(card.freshness, opts.now, card);
-      return { mode: 'unconfirmed', banner: note || 'Расписание не подтверждено', showRibbon: false };
     }
     var mode = iceSectionMode({
       tier: opts.tier || card.tier,
@@ -1329,7 +1217,7 @@
     if (hasTicketLinks) {
       return 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.';
     }
-    return 'Выберите слот — он попадёт в приглашение. Покупка онлайн здесь не нужна.';
+    return '';
   }
 
   function startParamFromLocation(loc) {
@@ -1346,7 +1234,6 @@
   return {
     AMENITY_ORDER: AMENITY_ORDER,
     formatSessionPrices: formatSessionPrices,
-    formatFreshness: formatFreshness,
     sessionNowState: sessionNowState,
     sessionStartMs: sessionStartMs,
     compareSessionsByStart: compareSessionsByStart,
@@ -1394,11 +1281,8 @@
     shareSlotInviteLabel: shareSlotInviteLabel,
     scheduleInviteHint: scheduleInviteHint,
     shopServicesView: shopServicesView,
-    trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,
-    shouldWarnScheduleStale: shouldWarnScheduleStale,
-    staleScheduleNote: staleScheduleNote,
     parseScheduleFocus: parseScheduleFocus,
     defaultScheduleDay: defaultScheduleDay,
     formatChildTicketAgeNote: formatChildTicketAgeNote,

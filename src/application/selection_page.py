@@ -47,16 +47,20 @@ from src.application.place_links import catalog_start_param, join_public_origin,
 from src.application.place_page import absolute_day_label
 from src.application.schedule_staleness import (
     LEVEL_STALE,
-    LEVEL_VERY_STALE,
     load_arena_freshness,
     stale_note,
     staleness_level,
-    very_stale_note,
 )
 from src.shared.catalog_sharpening import SHARPENING_AMENITY_KEYS
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.phone_guard import is_valid_public_phone, tel_href
+from src.application.photo_cdn import visible_photo_url
+from src.shared.public_display import (
+    format_public_name,
+    format_street_address,
+    session_day_phrase,
+)
 from src.shared.schedule_basis import public_basis_css_class
 from src.shared.venue_types import DEFAULT_HIDDEN_VENUE_TYPES, VENUE_TYPE_KEYS, has_public_skating
 
@@ -241,23 +245,15 @@ async def _window_slots(
     return out
 
 
-async def _selection_session_totals(
-    session: AsyncSession, counts: Mapping[int, int], *, now: datetime
-) -> tuple[int, int]:
-    """``(сеансов, мест с сеансами)`` по всей подборке — по местам, которые мы показываем.
+def _selection_session_totals(counts: Mapping[int, int]) -> tuple[int, int]:
+    """``(сеансов, мест с сеансами)`` по всей подборке.
 
-    Место со «сверхстарым» расписанием (>72 ч) сеансов на странице не имеет: «не обновлялось
-    N дней — уточните по телефону». В счёте его тоже нет — иначе превью обещает сеансы,
-    которых человек не увидит.
+    Свежесть расписания на счёт не влияет: сеансы места с давним прогоном парсера
+    показываем как обычно (решение владельца, TASK-243).
     """
-    if not counts:
-        return 0, 0
-    fresh = await load_arena_freshness(session, list(counts), now=now)
     sessions = 0
     places = 0
-    for arena_id, n in counts.items():
-        if staleness_level(fresh.get(int(arena_id))) == LEVEL_VERY_STALE:
-            continue
+    for n in counts.values():
         sessions += int(n)
         if int(n) > 0:
             places += 1
@@ -269,31 +265,17 @@ async def _apply_schedule_freshness(
     items: list[Mapping[str, Any]],
     slots: dict[int, list[dict[str, Any]]],
     now: datetime,
-) -> tuple[dict[int, str], dict[int, str]]:
-    """Пометки свежести и снятие сеансов старше 72 часов — до подсчёта попаданий в окно.
-
-    TASK-180: > 6 ч — строка «могло измениться»; > 72 ч — сеансы места не показываем
-    и не считаем: «не обновлялось N дней — уточните».
-    """
+) -> dict[int, str]:
+    """Пометки свежести (TASK-180) для мест с сеансами. Сеансы не снимаем ни на каком уровне."""
     stale_notes: dict[int, str] = {}
-    unconfirmed_notes: dict[int, str] = {}
     if not items:
-        return stale_notes, unconfirmed_notes
+        return stale_notes
     fresh = await load_arena_freshness(session, [int(i["id"]) for i in items], now=now)
     for item in items:
         aid = int(item["id"])
-        level = staleness_level(fresh.get(aid))
-        if level == LEVEL_STALE and slots.get(aid):
+        if staleness_level(fresh.get(aid)) == LEVEL_STALE and slots.get(aid):
             stale_notes[aid] = stale_note(fresh.get(aid), now=now)
-        elif level == LEVEL_VERY_STALE:
-            slots.pop(aid, None)
-            unconfirmed_notes[aid] = very_stale_note(
-                fresh.get(aid),
-                now=now,
-                has_phone=bool(str(item.get("phone") or "").strip()),
-                has_site=bool(str(item.get("tickets_url") or item.get("website_url") or "").strip()),
-            )
-    return stale_notes, unconfirmed_notes
+    return stale_notes
 
 
 async def load_selection_view(
@@ -421,9 +403,8 @@ async def load_selection_view(
     )
     # TASK-180: свежесть на момент ``now`` — см. ``_apply_schedule_freshness``.
     stale_notes: dict[int, str] = {}
-    unconfirmed_notes: dict[int, str] = {}
     if skating and items:
-        stale_notes, unconfirmed_notes = await _apply_schedule_freshness(session, items, slots, now)
+        stale_notes = await _apply_schedule_freshness(session, items, slots, now)
     # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
     window_empty = False
     if service_mode or centers:
@@ -446,7 +427,7 @@ async def load_selection_view(
                 now,
                 session_sql=session_sql,
             )
-            stale_notes, unconfirmed_notes = await _apply_schedule_freshness(session, items, slots, now)
+            stale_notes = await _apply_schedule_freshness(session, items, slots, now)
             hits = [i for i in items if slots.get(int(i["id"]))]
         shown = hits or items
     else:
@@ -470,7 +451,7 @@ async def load_selection_view(
             if skating
             else {}
         )
-        session_total, window_places = await _selection_session_totals(session, selection_counts, now=now)
+        session_total, window_places = _selection_session_totals(selection_counts)
     out: dict[str, Any] = {
         "city": dict(city),
         "venue": venue,
@@ -487,7 +468,6 @@ async def load_selection_view(
         "items": shown_page,
         "slots": slots,
         "stale_notes": stale_notes,
-        "unconfirmed_notes": unconfirmed_notes,
         "skating": skating,
         "session_count": session_total,
         # Места с сеансом в окне — по всей выборке: это число обещает заголовок.
@@ -743,20 +723,19 @@ def _esc(value: Any) -> str:
     return html_lib.escape(str(value if value is not None else ""), quote=True)
 
 
+def _selection_where(item: Mapping[str, Any], *, city_name: str) -> str:
+    district = str(item.get("district") or "").strip()
+    street = format_street_address(str(item.get("address") or ""), city=city_name)
+    return " · ".join(x for x in (district, street) if x)
+
+
 def _place_photo_url(item: Mapping[str, Any]) -> str | None:
-    """Тот же кадр, что в мини-карточке каталога. Нет URL — нет фото-блока."""
+    """Тот же кадр, что в мини-карточке. Нет опубликованного — карточка без фото."""
     for key in ("card", "thumb"):
-        url = str(item.get(key) or "").strip()
-        if url.lower().startswith(("https://", "http://", "/")):
+        url = visible_photo_url(str(item.get(key) or ""))
+        if url:
             return url
     return None
-
-
-def _phone_link(item: Mapping[str, Any]) -> str:
-    phone = str(item.get("phone") or "").strip()
-    if phone and is_valid_public_phone(phone):
-        return f' <a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a>'
-    return ""
 
 
 def _yandex_maps_href(item: Mapping[str, Any]) -> str | None:
@@ -827,7 +806,6 @@ def _service_chips_html(view: Mapping[str, Any], *, city_name: str) -> str:
     chips = [
         ("sharpening", "Заточка"),
         ("rental", "Прокат"),
-        ("service", "Все услуги"),
     ]
     parts: list[str] = []
     for key, label in chips:
@@ -845,20 +823,23 @@ def _place_html(
     city_name: str,
     slots: list[dict[str, Any]],
     stale: str = "",
-    unconfirmed: str = "",
     more_anchor: str = "schedule",
     service_mode: bool = False,
     service_highlight_keys: frozenset[str] | None = None,
 ) -> str:
+    today = datetime.now(ZoneInfo("Europe/Minsk")).date()
     slug = str(item.get("slug") or "")
     href = place_path(city_name=city_name, slug=slug) if slug else ""
-    where = " · ".join(x for x in (item.get("district"), item.get("address")) if x)
+    where = _selection_where(item, city_name=city_name)
     chips = ""
     rest = len(slots) - MAX_SLOTS_PER_PLACE
     for s in slots[:MAX_SLOTS_PER_PLACE]:
         hhmm = str(s.get("starts_at_local") or "")[:5]
         day = s.get("local_date")
-        day_text = f"{day.day:02d}.{day.month:02d}" if hasattr(day, "day") else ""
+        if hasattr(day, "year"):
+            phrase = session_day_phrase(day, hhmm, today=today)
+        else:
+            phrase = hhmm
         price = format_price_minor(
             s.get("price_adult_minor") if s.get("price_adult_minor") is not None else s.get("price_minor"),
             str(s.get("currency_code") or "BYN"),
@@ -866,8 +847,8 @@ def _place_html(
         basis_cls = public_basis_css_class(str(s.get("schedule_basis") or "live"))
         slot_cls = "slot" + (f" {basis_cls}" if basis_cls else "")
         slot_inner = (
-            f'<span class="slot__time">{_esc(hhmm)}</span>'
-            f'<span class="slot__price">{_esc(day_text)}{(" · " + _esc(price)) if price else ""}</span>'
+            f'<span class="slot__time">{_esc(phrase)}</span>'
+            + (f'<span class="slot__price">{_esc(price)}</span>' if price else "")
         )
         if href:
             chips += (
@@ -879,14 +860,11 @@ def _place_html(
     if rest > 0 and href:
         chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
     line = "" if chips else f'<p class="muted">{_esc(item.get("live_line") or "")}</p>'
-    if unconfirmed:
-        # TASK-180: > 72 ч без подтверждения — не расписание, а просьба уточнить.
-        line = f'<p class="pick__stale">{_esc(unconfirmed)}{_phone_link(item)}</p>'
     # TASK-180: > 6 ч — сеансы показываем, но над ними спокойная строка «могло измениться».
     stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)
     icon = str(item.get("venue_icon") or "").strip()
-    name = _esc(item.get("name"))
+    name = _esc(format_public_name(str(item.get("name") or "")))
     name_html = f'<a href="{_esc(href)}">{name}</a>' if href else name
     if photo and href:
         media = (
@@ -909,7 +887,9 @@ def _place_html(
         state = str(open_st.get("state") or "unknown")
         olabel = str(open_st.get("label") or "")
         rink_note = ' <small class="muted">· каток</small>' if vtype in ("ice", "outdoor") else ""
-        open_html = f'<span class="pick__open pick__open--{_esc(state)}">{_esc(olabel)}</span>'
+        open_html = (
+            f'<span class="pick__open pick__open--{_esc(state)}">{_esc(olabel)}</span>' if olabel else ""
+        )
         highlight = service_highlight_keys or frozenset()
         amenity_keys = list(item.get("amenity_keys") or [])
         svc_bits = ""
@@ -963,7 +943,7 @@ def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
     href = str(item.get("public_path") or "").strip()
     if not href and slug:
         href = place_path(city_name=city_name, slug=slug)
-    where = " · ".join(x for x in (item.get("district"), item.get("address")) if x)
+    where = _selection_where(item, city_name=city_name)
     badge = str(item.get("center_badge") or "").strip()
     live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
     line = ""
@@ -971,7 +951,7 @@ def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
         line = str(live.get("text") or item.get("live_line") or "").strip()
     photo = _place_photo_url(item)
     icon = str(item.get("venue_icon") or "").strip()
-    name = _esc(item.get("name"))
+    name = _esc(format_public_name(str(item.get("name") or "")))
     if photo:
         media = (
             f'<span class="pick__media" data-icon="{_esc(icon)}">'
@@ -1109,7 +1089,6 @@ def render_selection_page(
         else ""
     )
     stale_notes = view.get("stale_notes") or {}
-    unconfirmed_notes = view.get("unconfirmed_notes") or {}
     service_mode = bool(view.get("svc"))
     centers_mode = view.get("seg") == SEG_CENTERS
     highlight = frozenset(view.get("service_filter_keys") or ())
@@ -1123,7 +1102,6 @@ def render_selection_page(
                 city_name=city_name,
                 slots=view["slots"].get(int(i["id"]), []),
                 stale=stale_notes.get(int(i["id"]), ""),
-                unconfirmed=unconfirmed_notes.get(int(i["id"]), ""),
                 more_anchor=more_anchor,
                 service_mode=service_mode,
                 service_highlight_keys=highlight,
@@ -1227,9 +1205,10 @@ def render_selection_page(
             "__ROBOTS__": "noindex, follow" if (variant or page_no > 1) else "index, follow",
             "__HEAD_EXTRA__": _head_links_html(view, city_name=city_name, canonical_base=canonical_url),
             "__JSONLD__": ld,
-            "__CITY__": _esc(city_name),
+            "__BRAND__": _esc(t("brand.mark")),
+            "__CITY__": _esc(format_public_name(city_name)),
             "__CITY_LINK__": city_link,
-            "__TRUST__": "<p>Расписание — с сайтов катков и от администраций; время и цену уточняйте на месте.</p>",
+            "__TRUST__": "",
             "__BODY__": body,
         },
     )

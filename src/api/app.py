@@ -39,7 +39,7 @@ from src.api.routes.catalog_consumer_telemetry import router as catalog_consumer
 from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.api.routes.public import issue_trainer_join_redirect
-from src.application.landing_manifest import inject_landing_html
+from src.application.landing_manifest import inject_landing_html, polish_trainer_landing_html
 from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.api.middleware.maintenance import MaintenanceModeMiddleware
@@ -2007,7 +2007,7 @@ def _trainer_landing_html() -> str:
         raise HTTPException(status_code=404, detail="Landing not found")
     html = path.read_text(encoding="utf-8")
     try:
-        html = inject_landing_html(html)
+        html = polish_trainer_landing_html(inject_landing_html(html))
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return html
@@ -2139,5 +2139,14 @@ async def _static_webapp_cache_align(request: Request, call_next):
 
 # Alias for repo path static/webapp — same files as explicit /webapp/* routes above (cache via middleware).
 app.mount("/static/webapp", StaticFiles(directory=str(_WEBAPP_DIR)), name="static_webapp")
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon_ico():
+    """Иконка вкладки. Файл бренда, не отдельный .ico."""
+    path = _LOGOS_DIR / "01-icon" / "glide-icon-teal-transparent-128.png"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(path, media_type="image/png")
+
+
 if _LOGOS_DIR.is_dir():
     app.mount("/logos", StaticFiles(directory=str(_LOGOS_DIR)), name="logos")

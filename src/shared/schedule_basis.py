@@ -69,10 +69,12 @@ def resolve_schedule_basis(
 
 
 def basis_hint_ru(basis: str | None) -> str | None:
-    key = normalize_schedule_basis(basis)
-    if key == SCHEDULE_BASIS_LIVE:
-        return None
-    return _BASIS_HINT_RU.get(key)
+    """Публичный UI не пишет, откуда сеанс. ``schedule_basis`` остаётся в данных.
+
+    Словарь ``_BASIS_HINT_RU`` сохранён как описание значений, не как подпись.
+    """
+    del basis
+    return None
 
 
 def public_basis_css_class(basis: str | None) -> str:
