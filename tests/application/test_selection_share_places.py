@@ -44,10 +44,12 @@ def test_share_places_rank_a_place_by_its_earliest_session_of_the_day() -> None:
     assert rows[0][1][0]["starts_at_local"] == "07:15", "строка рисует ближайший сеанс места"
 
 
-def test_share_text_skips_places_without_a_session() -> None:
+def test_share_text_skips_places_without_a_session(monkeypatch) -> None:
+    from src.application import selection_page
     from src.application.selection_page import compose_selection_share
 
     today = date(2026, 10, 12)
+    monkeypatch.setattr(selection_page, "_minsk_day", lambda now=None: today)
     view = {
         "skating": True,
         "city": {"name": "Минск"},
