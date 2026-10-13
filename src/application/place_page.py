@@ -744,7 +744,7 @@ def _share_html(
     zovi_path: str | None = None,
 ) -> str:
     """Ряд «Поделиться». Подборка в Telegram — только url (превью из og), без text=."""
-    del venue_type  # один блок «Позвать друзей» и на катке, и в подборке
+    del venue_type
     url = share["share_url"]
     body = share["share_body"]
     full = f"{body}\n{url}" if body else url
@@ -892,26 +892,23 @@ def _nojs_messenger_row(share: Mapping[str, str]) -> str:
     return f'<div class="place-share-fallback">{row}</div>'
 
 
-def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool, telegram_url: str | None) -> str:
+def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool) -> str:
     pick = _effective_pick_session(view)
     if pick is None or not _skating(view["card"]):
         return ""
     start = format_clock(str(pick.get("starts_at_local") or ""))
     label = f"Позвать на {start}" if start else "Позвать с собой"
-    zovi = zovi_entry_path(view)
-    zovi_html = f'<a class="place-share-dock__zovi" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>' if zovi else ""
-    tg_html = (
-        f'<a class="place-share-dock__zovi" href="{_esc(telegram_url)}">В Telegram</a>' if telegram_url else ""
-    )
     return (
         '<div class="place-share-dock" id="placeShareDock">'
         '<div class="place-share-dock__inner">'
         f'<button type="button" class="place-share-dock__btn" id="placeShareBtn">{_esc(label)}</button>'
-        f"{tg_html}{zovi_html}</div></div>"
+        "</div></div>"
     )
 
 
-def _place_share_scripts_html(view: Mapping[str, Any], *, invite: bool, base_path: str) -> str:
+def _place_share_scripts_html(
+    view: Mapping[str, Any], *, invite: bool, base_path: str, telegram_url: str | None
+) -> str:
     pick = _effective_pick_session(view)
     if pick is None or not _skating(view["card"]):
         return ""
@@ -929,6 +926,7 @@ def _place_share_scripts_html(view: Mapping[str, Any], *, invite: bool, base_pat
         "sessionMissing": bool(view.get("focus_missing")),
         "invite": invite,
         "basePath": base_path,
+        "telegramCta": telegram_url or "",
     }
     wv = _webapp_bundle_version()
     pv = PLACE_SHARE_VERSION
@@ -999,8 +997,10 @@ def render_place_page(
         "__STYLE_V__": STYLE_VERSION,
         "__CITY_LINK__": city_link,
         "__BODY__": body,
-        "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite, telegram_url=cta_url),
-        "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(view, invite=invite, base_path=base_path),
+        "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite),
+        "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(
+            view, invite=invite, base_path=base_path, telegram_url=cta_url
+        ),
     }
     page_html = fill_placeholders(html, replacements)
     if _effective_pick_session(view) is not None and _skating(card):
@@ -1206,7 +1206,13 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         href, blank = links["tickets"]
         attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
         tickets_link = f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>'
-    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{tickets_link}'
+    zovi = zovi_entry_path(view)
+    zovi_link = (
+        f'<p class="place-share-zovi"><a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a></p>'
+        if zovi
+        else ""
+    )
+    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{tickets_link}{zovi_link}'
     aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 

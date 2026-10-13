@@ -1,6 +1,7 @@
 /* TASK-252: закреплённая «Позвать на …» и no-JS ряд мессенджеров под билетом. */
 body.b.has-place-share {
-  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  --place-share-dock-h: calc(12px + 52px + 12px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: var(--place-share-dock-h);
 }
 
 .place-share-dock {
@@ -10,15 +11,12 @@ body.b.has-place-share {
   bottom: 0;
   z-index: 9;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(180deg, rgba(233, 239, 241, 0) 0%, var(--g-bg) 28%);
+  background: linear-gradient(180deg, transparent 0%, var(--g-bg) 28%);
   pointer-events: none;
 }
 
 .place-share-dock__inner {
   pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   max-width: 560px;
   margin: 0 auto;
 }
@@ -38,7 +36,7 @@ body.b.has-place-share {
   font-size: 17px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(16, 32, 43, 0.12);
+  box-shadow: var(--g-shadow);
 }
 
 .place-share-dock__btn:disabled {
@@ -46,12 +44,9 @@ body.b.has-place-share {
   cursor: default;
 }
 
-.place-share-dock__zovi {
-  align-self: center;
+.place-share-zovi {
+  margin: 14px 0 0;
   font-size: 14px;
-  font-weight: 600;
-  color: var(--g-ink-2);
-  text-decoration: none;
 }
 
 .place-share-fallback {
@@ -81,6 +76,10 @@ body.b.has-place-share {
 
 html.js .place-share-fallback {
   display: none;
+}
+
+body.b.has-place-share .b-ticket {
+  scroll-margin-bottom: var(--place-share-dock-h);
 }
 
 .b-ticket--picked {

@@ -88,6 +88,21 @@
     var btn = document.getElementById('placeShareBtn');
     if (btn) btn.textContent = inviteLabel(sid);
     if (!opts || !opts.skipUrl) syncUrl(sid);
+    revealPickedTicket();
+  }
+
+  function revealPickedTicket() {
+    var el = document.querySelector('.b-ticket--picked');
+    if (!el || typeof el.scrollIntoView !== 'function') return;
+    var run = function () {
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    };
+    run();
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(run);
+      });
+    }
   }
 
   function openShare() {
@@ -143,6 +158,10 @@
       event.preventDefault();
       applyPick(el.getAttribute('data-session-id'));
     });
+  });
+
+  window.addEventListener('load', function () {
+    if (document.querySelector('.b-ticket--picked')) revealPickedTicket();
   });
 
   var btn = document.getElementById('placeShareBtn');

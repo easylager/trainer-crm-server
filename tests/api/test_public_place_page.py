@@ -507,6 +507,8 @@ async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db
     assert resp.status_code == 200
     assert css.status_code == 200 and js.status_code == 200
     assert 'id="placeShareBtn"' in html and "Позвать на 11:15" in html
+    dock = html.split('id="placeShareDock"', 1)[1].split("</div></div>", 1)[0]
+    assert "В Telegram" not in dock and "place-share-dock__zovi" not in dock
     assert "place-share-fallback" in html and "viber://forward?text=" in html
     assert "Позвать друзей" not in html and "b-invite" not in html and 'class="b-share"' not in html
     assert f"{place['path']}?s={sid}" in html
