@@ -557,9 +557,13 @@ def render_city_hub_page(
         story_image_url=story_image_url or og_image_url,
         coach_href=coach_href or "",
     )
+    from src.application.catalog_list_share import catalog_list_share_tail
     from src.application.public_web_cta import phone_beacon_script
 
     body += phone_beacon_script(body)
+    has_share_pick = int(view.get("rink_count") or 0) > 0
+    need_share_js = bool(view.get("upcoming")) or has_share_pick
+    share_tail = catalog_list_share_tail(scripts=need_share_js, css=has_share_pick)
     elements = []
     for p in view.get("places") or []:
         if not p.get("slug"):
@@ -602,6 +606,7 @@ def render_city_hub_page(
             "__STYLE_V__": STYLE_VERSION,
             "__CITY_LINK__": "",
             "__BODY__": body,
+            **share_tail,
         },
     )
 
@@ -660,27 +665,48 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
     all_href = _list_href(slug, t="ice", w="today") if today_n else _list_href(slug, t="ice")
     by_slug = {str(p.get("slug") or ""): p for p in view.get("places") or []}
     tiles: list[str] = []
+    from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
+
     for card in upcoming:
         hhmm, day = _session_when(card, today=view["today"])
         arena_slug = str(card.get("arena_slug") or "").strip()
         href = place_path(city_name=city_name, slug=arena_slug) if arena_slug else "#"
-        if card.get("session_id"):
-            href += f"?s={int(card['session_id'])}"
+        session_id = card.get("session_id")
+        if session_id:
+            href += f"?s={int(session_id)}"
         place = by_slug.get(arena_slug) or {}
         name = format_public_name(str(card.get("arena_name") or ""))
         badge = hhmm if day == "сегодня" else f"{day} {hhmm}"
-        tiles.append(
-            tile_html(
-                href=href,
-                name=name,
-                line=_price_bits(card) or day,
-                photo_url=place.get("photo_url"),
-                photo_alt=name,
-                toned=bool(place.get("display_tone")),
-                badge=badge,
-                badge_kind="time",
-            )
+        tile = tile_html(
+            href=href,
+            name=name,
+            line=_price_bits(card) or day,
+            photo_url=place.get("photo_url"),
+            photo_alt=name,
+            toned=bool(place.get("display_tone")),
+            badge=badge,
+            badge_kind="time",
         )
+        arena_ref = place.get("id")
+        if arena_ref is not None and session_id and href and href != "#":
+            local_date = card.get("local_date")
+            if hasattr(local_date, "year"):
+                label = invite_label_for_slot(
+                    {"local_date": local_date, "starts_at_local": card.get("starts_at_local")},
+                    today=view["today"],
+                )
+            else:
+                label = hhmm
+            invite = catalog_invite_link(
+                arena_ref=int(arena_ref),
+                session_id=int(session_id),
+                invite_label=label,
+                place_name=name,
+                fallback_href=href,
+                css_class="b-tile__invite",
+            )
+            tile = f'<div class="b-tile-wrap">{invite}{tile}</div>'
+        tiles.append(tile)
     more = f'<a class="b-more" href="{_esc(all_href)}">{_esc("Весь день" if today_n else "Все")}</a>'
     return section(
         t("hub.nearest_ice"),
@@ -1006,7 +1032,12 @@ def _b_body(
     photo = hero_place.get("photo_hero") if hero_place else None
     toned = bool(hero_place.get("display_tone")) if hero_place else False
     alt = format_public_name(str(hero_place.get("name") or "")) if hero_place else ""
-    share_block = share_html(
+    from src.application.catalog_list_share import catalog_selection_share_button, city_hub_share_endpoint
+
+    share_pick = ""
+    if int(view.get("rink_count") or 0) > 0:
+        share_pick = catalog_selection_share_button(endpoint=city_hub_share_endpoint(view))
+    share_block = share_pick + share_html(
         share, telegram_url=cta_url, story_image_url=story_image_url, telegram_link_only=True
     )
     if variant == VARIANT_ONE and rinks:

@@ -1130,12 +1130,23 @@ def render_selection_page(
         variant="list",
     )
     controls = _b_controls(view, city_name=city_name)
+    from src.application.catalog_list_share import (
+        catalog_list_share_tail,
+        catalog_selection_share_button,
+        selection_share_endpoint,
+    )
+
+    share_pick = ""
+    if not service_mode and not centers_mode and view.get("items"):
+        share_pick = catalog_selection_share_button(endpoint=selection_share_endpoint(view))
+    need_share_js = bool(share_pick) or any((view.get("slots") or {}).values())
     body = (
         hero
         + (f'<section class="b-sec">{controls}</section>' if controls else "")
         + (f'<section class="b-sec">{note}</section>' if note else "")
         + f'<section class="b-sec b-cards">{places}</section>'
         + _b_pager(view, city_name=city_name)
+        + share_pick
         + share_html(share, telegram_url=cta_url, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
     )
     elements = []
@@ -1189,6 +1200,7 @@ def render_selection_page(
             "__STYLE_V__": STYLE_VERSION,
             "__CITY_LINK__": city_link,
             "__BODY__": body,
+            **catalog_list_share_tail(scripts=need_share_js, css=bool(share_pick)),
         },
     )
 
@@ -1318,7 +1330,26 @@ def _b_place_card(
         if tickets
         else (f'<p class="b-note">{_esc(item.get("live_line") or "")}</p>' if item.get("live_line") else "")
     )
-    return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
+    card = '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
+    if not slots or not href:
+        return card
+    first = slots[0]
+    sid = first.get("id")
+    if sid is None:
+        return card
+    from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
+
+    place_name = format_public_name(str(item.get("name") or ""))
+    label = invite_label_for_slot(first, today=today)
+    invite_href = href + place_query(session_id=int(sid))
+    invite = catalog_invite_link(
+        arena_ref=int(item["id"]),
+        session_id=int(sid),
+        invite_label=label,
+        place_name=place_name,
+        fallback_href=invite_href,
+    )
+    return f'<div class="b-card2-wrap">{invite}{card}</div>'
 
 
 def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:
