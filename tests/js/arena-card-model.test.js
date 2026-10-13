@@ -258,7 +258,7 @@ describe('ribbonLegend', () => {
 });
 
 describe('buildWeekSummaries', () => {
-  it('shows Данных нет for a weekday with no sessions or lessons', () => {
+  it('says Сеансов нет for a weekday with no sessions or lessons', () => {
     const { buildWeekSummaries } = loadModel();
     const days = buildWeekSummaries({
       from: '2026-09-07',
@@ -271,7 +271,8 @@ describe('buildWeekSummaries', () => {
     const empty = days.find((d) => d.localDate === '2026-09-08');
     assert.ok(empty);
     assert.equal(empty.empty, true);
-    assert.equal(empty.title, 'Данных нет');
+    assert.equal(empty.title, 'Сеансов нет');
+    assert.equal(empty.meta, '');
   });
 });
 
@@ -555,7 +556,7 @@ describe('focusState (TASK-223)', () => {
 });
 
 describe('tierBlocks', () => {
-  it('level B asks to уточняется with phone and site; C does not promise a schedule', () => {
+  it('ribbon when sessions exist; without them B is pending and C is none', () => {
     const { iceSectionMode } = loadModel();
     assert.equal(iceSectionMode({ tier: 'A', hasSessions: true }), 'ribbon');
     assert.equal(iceSectionMode({ tier: 'B', hasSessions: false }), 'pending');
@@ -984,8 +985,34 @@ describe('TASK-204 iceFeedView schedule_mode', () => {
       hasSessions: false,
     });
     assert.equal(feed.mode, 'phone');
-    assert.equal(feed.banner, 'Расписание по телефону');
+    assert.equal(feed.banner, 'Время массового катания называют по телефону.');
     assert.equal(feed.callHref, 'tel:+375291112233');
+  });
+
+  it('no sessions: phone sentence, site sentence, or no section', () => {
+    const { iceFeedView } = loadModel();
+    const phone = iceFeedView({
+      card: { tier: 'C', phone: '+375291112233' },
+      hasSessions: false,
+    });
+    assert.equal(phone.mode, 'phone');
+    assert.equal(phone.banner, 'Время массового катания называют по телефону.');
+    assert.equal(phone.callHref, 'tel:+375291112233');
+
+    const site = iceFeedView({
+      card: { tier: 'B', website_url: 'https://rink.example/ice' },
+      hasSessions: false,
+    });
+    assert.equal(site.mode, 'site');
+    assert.equal(site.banner, 'Время массового катания — на сайте катка');
+    assert.equal(site.siteHref, 'https://rink.example/ice');
+
+    const none = iceFeedView({
+      card: { tier: 'B', phone: 'unknown', website_url: 'javascript:alert(1)' },
+      hasSessions: false,
+    });
+    assert.equal(none.mode, 'none');
+    assert.equal(none.banner, null);
   });
 
   it('season_closed mode before calendar season banner', () => {

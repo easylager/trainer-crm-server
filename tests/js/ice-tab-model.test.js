@@ -587,7 +587,7 @@ describe('trainer catalog chip (TASK-076 AC-002)', () => {
 });
 
 describe('formatSortCaption (AC-003 + EDGE-002)', () => {
-  it('says сначала с актуальным расписанием when an A-tier rink is present', () => {
+  it('says сначала с расписанием when an A-tier rink is present', () => {
     const { formatSortCaption } = loadModel();
     const text = formatSortCaption({
       total: 14,
@@ -595,7 +595,8 @@ describe('formatSortCaption (AC-003 + EDGE-002)', () => {
     });
     assert.match(text, /14/);
     assert.match(text, /катков/);
-    assert.match(text, /актуальн/);
+    assert.match(text, /сначала с расписанием/);
+    assert.ok(!/актуальн|уточняется/.test(text));
   });
 
   it('does not claim актуальное расписание when no A-tier rinks', () => {
@@ -679,15 +680,27 @@ describe('formatLiveLine (prototype: three prices, not mashed live.text)', () =>
     );
   });
 
-  it('uses prototype B/C copy when there is no session', () => {
+  it('says the time is by phone, or nothing, when there is no session', () => {
     const { formatLiveLine } = loadModel();
-    assert.match(
-      formatLiveLine({ tier: 'B', live: { kind: 'unknown', text: 'Расписание уточняется' } }),
-      /телефон|сайт/
+    assert.equal(
+      formatLiveLine({
+        tier: 'B',
+        phone: '+375291112233',
+        live: { kind: 'unknown', text: 'Расписание уточняется' },
+      }),
+      'Время — по телефону'
     );
-    assert.match(
+    assert.equal(
       formatLiveLine({ tier: 'C', live: { kind: 'unknown', text: 'Расписание уточняется' } }),
-      /справочник/
+      ''
+    );
+    assert.equal(
+      formatLiveLine({
+        tier: 'B',
+        website_url: 'https://rink.example',
+        live: { kind: 'unknown', text: '' },
+      }),
+      ''
     );
   });
 });
@@ -1218,23 +1231,24 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     assert.equal(boardCardView(one, now).depth, 'Расписание и цены');
   });
 
-  it('AC-006: каток без расписания отдаёт текст статуса, а не пустые слоты', () => {
+  it('AC-006: каток без расписания не рисует пустое время; телефон — отдельной строкой', () => {
     const { boardCardView } = loadModel();
-    const v = boardCardView(
-      {
-        id: 9,
-        name: 'Юность',
-        district: 'Центральный район',
-        tier: 'B',
-        venue_cta: 'Открыть карточку катка',
-        live: { kind: 'unknown' },
-      },
-      now
-    );
-    assert.equal(v.isSession, false);
-    assert.equal(v.time, '');
-    assert.ok(v.status.length > 0);
-    assert.equal(v.depth, 'Открыть карточку катка');
+    const base = {
+      id: 9,
+      name: 'Юность',
+      district: 'Центральный район',
+      tier: 'B',
+      venue_cta: 'Открыть карточку катка',
+      live: { kind: 'unknown', text: '' },
+    };
+    const quiet = boardCardView(base, now);
+    assert.equal(quiet.isSession, false);
+    assert.equal(quiet.time, '');
+    assert.equal(quiet.status, '');
+    assert.equal(quiet.depth, 'Открыть карточку катка');
+    const calling = boardCardView(Object.assign({}, base, { phone: '+375291112233' }), now);
+    assert.equal(calling.status, 'Время — по телефону');
+    assert.equal(calling.time, '');
   });
 
   it('зал не называется катком: подпись берётся из venue_cta сервера', () => {
@@ -1433,7 +1447,7 @@ describe('TASK-146: подпись и строка ленты для магаз�
     const { formatSortCaption } = loadModel();
     assert.equal(
       formatSortCaption({ total: 2, items: [{ venue_type: 'ice', tier: 'B' }, {}], intent: 'skate' }),
-      '2 катка · расписание уточняется'
+      '2 катка'
     );
   });
 });

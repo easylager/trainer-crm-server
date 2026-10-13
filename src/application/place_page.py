@@ -1148,10 +1148,19 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         return ""
     if mode == SCHEDULE_MODE_PHONE or not days:
         call = _b_call(card, links)
-        if not call:
-            return ""
-        body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
-        return section(title, body, klass="b-sec--place", sec_id="schedule")
+        if call:
+            body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
+            return section(title, body, klass="b-sec--place", sec_id="schedule")
+        site = safe_external_url(card.get("website_url"))
+        if site:
+            host = _display_host(site)
+            link = (
+                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+                f"{_esc(host or site)}</a>"
+            )
+            body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{link}'
+            return section(title, body, klass="b-sec--place", sec_id="schedule")
+        return ""
 
     today = view["today"]
     focus = view.get("focus")

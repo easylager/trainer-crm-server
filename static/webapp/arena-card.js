@@ -921,6 +921,21 @@
     return scheduleSlots().some(function (s) { return String(s.id) === id; });
   }
 
+  function copyLine(key, fallback) {
+    var GC = global.GlideCopy;
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t(key);
+      if (label && label !== key) return String(label);
+    }
+    return fallback;
+  }
+
+  function displayHost(url) {
+    var rest = String(url || '').replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+    var host = rest.split('/')[0].split('?')[0].split('#')[0].replace(/^www\./i, '');
+    return host || String(url || '');
+  }
+
   /** Заголовок блока сеансов катка: «Массовое катание», не «Расписание» — так же, как на сайте. */
   function iceSectionTitle() {
     var GC = global.GlideCopy;
@@ -1072,10 +1087,46 @@
     return html;
   }
 
+  function renderScheduleFact(feed) {
+    feed = feed || {};
+    if (!feed.banner) return '';
+    var action = '';
+    if (feed.mode === 'phone' && feed.callHref) {
+      action =
+        '<a class="arena-btn arena-btn--call" href="' +
+        esc(feed.callHref) +
+        '">' +
+        esc(copyLine('cta.call', 'Позвонить')) +
+        '</a>';
+    } else if (feed.mode === 'site' && feed.siteHref) {
+      action =
+        '<a class="arena-btn" href="' +
+        esc(feed.siteHref) +
+        '" data-action="external" data-href="' +
+        esc(feed.siteHref) +
+        '">' +
+        esc(displayHost(feed.siteHref)) +
+        '</a>';
+    } else {
+      return '';
+    }
+    return (
+      '<div class="arena-sec">' +
+      '<p class="arena-h">' +
+      esc(iceSectionTitle()) +
+      '</p>' +
+      '<div class="arena-closed">' +
+      esc(feed.banner) +
+      '</div>' +
+      action +
+      '</div>'
+    );
+  }
+
   function renderIceSection() {
     /* Секция про массовое катание существует только для льда. На зале она
        обещала бы расписание сеансов, которых там не бывает в принципе —
-       это не «данных пока нет», а неверный вопрос к площадке. */
+       это неверный вопрос к площадке. */
     // has_skating — каток или уличный лёд (сервер: venue_types.has_public_skating).
     if (!skatingCard()) return '';
     if (state.sessionsError) {
@@ -1103,34 +1154,8 @@
         '</div>'
       );
     }
-    if (feed.mode === 'phone') {
-      var call =
-        feed.callHref
-          ? '<a class="arena-btn arena-btn--call" href="' + esc(feed.callHref) + '">Позвонить</a>'
-          : '';
-      return (
-        '<div class="arena-sec">' +
-        '<p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
-        '<div class="arena-closed">' + esc(feed.banner) + '</div>' +
-        call +
-        '</div>'
-      );
-    }
-    if (feed.mode === 'none') {
-      return '';
-    }
-    if (feed.mode === 'pending') {
-      return (
-        '<div class="arena-sec">' +
-        '<div class="arena-h-row"><p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
-        scheduleHeaderTools(null) +
-        '</div>' +
-        '<div class="arena-empty">' +
-        '<b>Расписание уточняется</b>' +
-        '<p>Мы пока не получили расписание массового катания от этого катка. Не показываем то, за что не отвечаем — позвоните или загляните на сайт.</p>' +
-        '</div>' +
-        '</div>'
-      );
+    if (feed.mode === 'phone' || feed.mode === 'site' || feed.mode === 'none' || feed.mode === 'pending') {
+      return renderScheduleFact(feed);
     }
     var days = strip();
     if (!state.day) {
