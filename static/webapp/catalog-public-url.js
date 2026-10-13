@@ -1,7 +1,7 @@
 /**
  * Публичный URL места для анонимного веб-каталога (TASK-191-B).
  * Путь приходит с API как ``public_path`` (серверный place_path / city_slug).
- * В Telegram Mini App остаётся arena?ref=…
+ * В Telegram Mini App по умолчанию arena?ref=…; при mini_app_server_place_card (TASK-257) — /p/…
  */
 (function (root, factory) {
   'use strict';
@@ -14,6 +14,8 @@
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
+
+  var serverPlaceCardInMiniApp = false;
 
   function isTelegramMiniApp() {
     var g = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : null;
@@ -32,8 +34,13 @@
     return path;
   }
 
+  function applyClientSession(session) {
+    serverPlaceCardInMiniApp = !!(session && session.mini_app_server_place_card);
+  }
+
   function arenaHref(item, miniAppHref) {
-    if (isTelegramMiniApp()) {
+    var inMiniApp = isTelegramMiniApp();
+    if (inMiniApp && !serverPlaceCardInMiniApp) {
       return miniAppHref;
     }
     var pub = publicHrefFromItem(item);
@@ -42,6 +49,7 @@
 
   return {
     isTelegramMiniApp: isTelegramMiniApp,
+    applyClientSession: applyClientSession,
     publicHrefFromItem: publicHrefFromItem,
     arenaHref: arenaHref,
   };

@@ -88,6 +88,15 @@
       href += '&day=' + day;
       if (session.session_id != null) href += '&s=' + encodeURIComponent(String(session.session_id));
     }
+    if (typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.arenaHref) {
+      var item = {
+        id: session.arena_id,
+        slug: session.arena_slug,
+        public_path: session.public_path,
+        live: { kind: 'session', session_id: session.session_id, local_date: day },
+      };
+      return CatalogPublicUrl.arenaHref(item, href);
+    }
     return href;
   }
 

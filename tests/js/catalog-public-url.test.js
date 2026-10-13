@@ -35,6 +35,33 @@ describe('catalog-public-url', () => {
     g.Telegram = prev;
   });
 
+  it('TASK-257: allowlisted Mini App user gets /p/ with session', () => {
+    const g = globalThis;
+    const prev = g.Telegram;
+    g.Telegram = { WebApp: { initData: 'signed-payload', platform: 'ios' } };
+    api.applyClientSession({ mini_app_server_place_card: true });
+    const href = api.arenaHref(
+      {
+        public_path: '/p/minsk/led',
+        live: { kind: 'session', session_id: 42 },
+      },
+      'arena?ref=1&s=42',
+    );
+    assert.equal(href, '/p/minsk/led?s=42');
+    api.applyClientSession({ mini_app_server_place_card: false });
+    g.Telegram = prev;
+  });
+
+  it('TASK-257: non-allowlisted Mini App user keeps arena?ref=', () => {
+    const g = globalThis;
+    const prev = g.Telegram;
+    g.Telegram = { WebApp: { initData: 'signed-payload', platform: 'ios' } };
+    api.applyClientSession({ mini_app_server_place_card: false });
+    const href = api.arenaHref({ public_path: '/p/minsk/x' }, 'arena?ref=1');
+    assert.equal(href, 'arena?ref=1');
+    g.Telegram = prev;
+  });
+
   it('treats platform-only WebApp as anonymous web', () => {
     const g = globalThis;
     const prev = g.Telegram;

@@ -227,6 +227,7 @@ from src.application.arena_profile import (
 )
 from src.application.arena_public_use_cases import get_hub_ice_teaser, parse_near
 from src.api.middleware.http_limits import client_ip_from_request
+from src.shared.catalog_mini_app_place_card import mini_app_server_place_card_enabled
 from src.shared.ip_geo import is_ip_in_served_market
 from src.application.arena_media import (
     ArenaMediaLimitError,
@@ -2240,6 +2241,7 @@ async def get_client_session_state(
         "pending_referral": await _pending_referral_payload(telegram_id, session),
         "ice_when": ice_when_pref.get("when") if ice_when_pref else None,
         "ice_when_day": ice_when_pref.get("when_day") if ice_when_pref else None,
+        "mini_app_server_place_card": mini_app_server_place_card_enabled(telegram_id),
     }
     return JSONResponse(
         content=payload,
@@ -3162,6 +3164,7 @@ async def get_client_hub_bootstrap(
         "passes": passes,
         "certificates": certificates,
         "ice_teaser": ice_teaser,
+        "mini_app_server_place_card": mini_app_server_place_card_enabled(telegram_id),
         "pending_referral": await _pending_referral_payload(telegram_id, session),
         "platform": {
             "vertical_key": "ice",
