@@ -40,9 +40,10 @@ def test_public_place_shell_skips_client_api_and_auth_overlay() -> None:
     shell = (REPO / "static/webapp/mini-app-client-shell.js").read_text(encoding="utf-8")
     chrome = (REPO / "static/webapp/mini-app-telegram-chrome.js").read_text(encoding="utf-8")
     assert "if (isPublicPlaceRoute()) return Promise.resolve();" in shell
+    # На /p/ boot() выходит до загрузки клиентской сессии (а с ней — подписок и диплинков).
     boot_idx = shell.index("function boot()")
     pub_return = shell.index("if (isPublicPlaceRoute())", boot_idx)
-    watches = shell.index("refreshWatchesSummary();", boot_idx)
-    assert pub_return < watches
+    session = shell.index("loadClientSessionBeforeDeepLink()", boot_idx)
+    assert pub_return < session
     assert "if (isPublicPlaceRoute()) return;" in chrome
     assert "function showRecoverableOverlay()" in chrome

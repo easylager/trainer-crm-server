@@ -12,7 +12,7 @@ from src.api.app import app
 from src.application.ice_city_day import get_city_ice_day
 from src.application.place_page import _b_schedule, load_place_view
 from src.application.public_web_cta import place_action_links
-from src.shared.arena_schedule_mode import PHONE_LINE, SEASON_CLOSED_LINE
+from src.shared.arena_schedule_mode import PHONE_LINE, SEASON_CLOSED_LINE, season_closed_user_line
 from tests.api.test_public_arenas import _add_future_session, _insert_arena, _insert_city
 
 
@@ -107,7 +107,8 @@ async def test_place_page_season_closed_ssr(app_use_test_db, db_session) -> None
     links = place_action_links(view["card"], base_url="", surface="place_page", city_id=None)
     html = _b_schedule(view, base_path=f"/p/{arena_id}", invite=False, links=links)
     assert SEASON_CLOSED_LINE in html
-    assert f"откроется {reopen:%d.%m}" in html
+    # Дата словами, как в Mini App (arena-schedule-mode-model.js): «откроется 12 декабря».
+    assert season_closed_user_line(reopen_date=reopen, note=None).split(" · ")[-1] in html
     assert "ремонт" in html
 
 
