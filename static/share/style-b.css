@@ -258,6 +258,8 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
   color: var(--g-ink) !important; text-decoration: none; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .b-share__extra { display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; padding-top: 4px; }
+.b-share__title { margin: 0; font-size: 17px; font-weight: 700; }
+.b-share__bot { margin-top: 6px; }
 
 /* ── Подвал ───────────────────────────────────────────────────────────── */
 .b-foot { padding: 28px 16px 8px; display: flex; flex-direction: column; gap: 12px; font-size: 15px; color: var(--g-ink-2); }

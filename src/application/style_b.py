@@ -229,7 +229,12 @@ def share_html(
     zovi_path: str | None = None,
     telegram_link_only: bool = False,
 ) -> str:
-    """«Позвать друзей» (бирюза) раскрывает мессенджеры; рядом «В Telegram». Без JS тоже работает."""
+    """«Позвать друзей» без JS: открытый ряд мессенджеров, под ним «Открыть в Telegram».
+
+    С JS страницы показывают окно шеринга Mini App (кнопка подборки, «Позвать»), а этот блок
+    прячет ``catalog-list-share.css``. Раскрывашки нет: в сетке из двух колонок она ломалась.
+    """
+
     url = share["share_url"]
     body = share.get("share_body") or ""
     full = f"{body}\n{url}" if body else url
@@ -256,14 +261,12 @@ def share_html(
     if zovi_path:
         extra.append(f'<a href="{esc(zovi_path)}">{esc(t("share.card"))}</a>')
     extra_html = f'<div class="b-share__extra">{"".join(extra)}</div>' if extra else ""
-    invite = (
-        '<details class="b-invite">'
-        f'<summary class="b-btn b-btn--accent">{esc(t("cta.invite_friends"))}</summary>'
-        f'<div class="b-share__row share__row">{row}</div>{extra_html}</details>'
+    title = esc(t("cta.invite_friends"))
+    bot = (
+        f'<a class="b-btn b-share__bot" href="{esc(telegram_url)}">Открыть в Telegram</a>' if telegram_url else ""
     )
-    tg_btn = f'<a class="b-btn" href="{esc(telegram_url)}">В Telegram</a>' if telegram_url else ""
-    if tg_btn:
-        top = f'<div class="b-btns">{invite}{tg_btn}</div>'
-    else:
-        top = invite
-    return f'<section class="b-share" aria-label="{esc(t("cta.invite_friends"))}">{top}</section>'
+    return (
+        f'<section class="b-share" aria-label="{title}">'
+        f'<p class="b-share__title">{title}</p>'
+        f'<div class="b-share__row share__row">{row}</div>{extra_html}{bot}</section>'
+    )

@@ -1155,7 +1155,7 @@ def render_selection_page(
     )
 
     share_pick = ""
-    if not centers_mode and view.get("items"):
+    if view.get("items"):
         share_pick = catalog_selection_share_button(endpoint=selection_share_endpoint(view))
     need_share_js = bool(share_pick) or any((view.get("slots") or {}).values())
     body = (
@@ -1194,7 +1194,8 @@ def render_selection_page(
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = (
         f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(format_public_name(city_name))} сегодня</a>'
-        if city_page_url and not view.get("svc")
+        # «Весь лёд» — про массовое катание; со списков заточки, ОХМ и центров ссылка не по теме.
+        if city_page_url and not view.get("svc") and not view.get("kind") and not view.get("seg")
         else ""
     )
     # ?t= и ?w= — та же подборка с фильтром. В индекс идёт только базовый /c/{город}.
