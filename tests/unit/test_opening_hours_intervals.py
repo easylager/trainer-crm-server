@@ -28,7 +28,7 @@ def test_open_now_during_evening_track_window() -> None:
     card = {"opening_hours": LYZHEROLLER_HOURS, "timezone": "Europe/Minsk"}
     # Monday 2026-10-05 22:00 Minsk — after rental close, track still open until 23:00
     now = datetime(2026, 10, 5, 19, 0, tzinfo=ZoneInfo("UTC"))  # 22:00 Minsk
-    assert open_now_label(card, now=now) == "Открыто до 23:00"
+    assert open_now_label(card, now=now) == "открыто до 23:00"
 
 
 def test_place_line_mass_access() -> None:

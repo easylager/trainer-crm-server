@@ -63,10 +63,18 @@
     return '';
   }
 
+  var PD =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./public-display-model.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.PublicDisplayModel
+        : null;
+
   function formatPrice(minor, currency) {
+    if (PD && PD.formatPriceMinor) return PD.formatPriceMinor(minor, currency || 'BYN');
     if (minor == null || minor === '' || isNaN(Number(minor))) return '';
     var major = Number(minor) / 100;
-    var num = Number.isInteger(major) ? String(major) : major.toFixed(2);
+    var num = Number.isInteger(major) ? String(major) : major.toFixed(2).replace('.', ',');
     return num + ' ' + (currency || 'BYN');
   }
 

@@ -1,0 +1,132 @@
+{
+  "today": "2026-10-13",
+  "cases": [
+    { "id": "clock-09-00", "fn": "format_clock", "args": { "hhmm": "09:00" }, "expect": "9:00" },
+    { "id": "clock-9-00", "fn": "format_clock", "args": { "hhmm": "9:00" }, "expect": "9:00" },
+    { "id": "clock-00-15", "fn": "format_clock", "args": { "hhmm": "00:15" }, "expect": "0:15" },
+    { "id": "clock-12-05", "fn": "format_clock", "args": { "hhmm": "12:05" }, "expect": "12:05" },
+    { "id": "clock-09-30", "fn": "format_clock", "args": { "hhmm": "09:30" }, "expect": "9:30" },
+    { "id": "clock-19-00", "fn": "format_clock", "args": { "hhmm": "19:00" }, "expect": "19:00" },
+    { "id": "clock-01-00", "fn": "format_clock", "args": { "hhmm": "01:00" }, "expect": "1:00" },
+    { "id": "clock-23-59", "fn": "format_clock", "args": { "hhmm": "23:59" }, "expect": "23:59" },
+    { "id": "clock-trim", "fn": "format_clock", "args": { "hhmm": "  08:45  " }, "expect": "8:45" },
+    { "id": "clock-empty", "fn": "format_clock", "args": { "hhmm": "" }, "expect": "" },
+
+    { "id": "day-today", "fn": "short_day_word", "args": { "day": "2026-10-13" }, "expect": "сегодня" },
+    { "id": "day-tomorrow", "fn": "short_day_word", "args": { "day": "2026-10-14" }, "expect": "завтра" },
+    { "id": "day-thu", "fn": "short_day_word", "args": { "day": "2026-10-15" }, "expect": "чт" },
+    { "id": "day-fri", "fn": "short_day_word", "args": { "day": "2026-10-16" }, "expect": "пт" },
+    { "id": "day-sat", "fn": "short_day_word", "args": { "day": "2026-10-17" }, "expect": "сб" },
+    { "id": "day-sun", "fn": "short_day_word", "args": { "day": "2026-10-18" }, "expect": "вс" },
+    { "id": "day-mon", "fn": "short_day_word", "args": { "day": "2026-10-12" }, "expect": "пн" },
+    { "id": "day-yesterday", "fn": "short_day_word", "args": { "day": "2026-10-12" }, "expect": "пн" },
+
+    { "id": "phrase-today", "fn": "session_day_phrase", "args": { "day": "2026-10-13", "hhmm": "12:45" }, "expect": "сегодня 12:45" },
+    { "id": "phrase-tomorrow", "fn": "session_day_phrase", "args": { "day": "2026-10-14", "hhmm": "08:30" }, "expect": "завтра 8:30" },
+    { "id": "phrase-weekday", "fn": "session_day_phrase", "args": { "day": "2026-10-15", "hhmm": "10:30" }, "expect": "чт 10:30" },
+    { "id": "phrase-morning", "fn": "session_day_phrase", "args": { "day": "2026-10-13", "hhmm": "09:00" }, "expect": "сегодня 9:00" },
+    { "id": "phrase-late", "fn": "session_day_phrase", "args": { "day": "2026-10-14", "hhmm": "23:15" }, "expect": "завтра 23:15" },
+
+    { "id": "when-today", "fn": "sentence_when", "args": { "day": "2026-10-13", "hhmm": "14:00" }, "expect": "сегодня, 14:00" },
+    { "id": "when-tomorrow", "fn": "sentence_when", "args": { "day": "2026-10-14", "hhmm": "09:00" }, "expect": "завтра, 9:00" },
+    { "id": "when-weekday", "fn": "sentence_when", "args": { "day": "2026-10-16", "hhmm": "18:30" }, "expect": "пт, 18:30" },
+    { "id": "when-midnight", "fn": "sentence_when", "args": { "day": "2026-10-13", "hhmm": "00:30" }, "expect": "сегодня, 0:30" },
+
+    { "id": "price-int", "fn": "format_price_minor", "args": { "minor": 1000, "currency": "BYN" }, "expect": "10 BYN" },
+    { "id": "price-cents", "fn": "format_price_minor", "args": { "minor": 850, "currency": "BYN" }, "expect": "8,50 BYN" },
+    { "id": "price-1350", "fn": "format_price_minor", "args": { "minor": 1350, "currency": "BYN" }, "expect": "13,50 BYN" },
+    { "id": "price-one", "fn": "format_price_minor", "args": { "minor": 100, "currency": "BYN" }, "expect": "1 BYN" },
+    { "id": "price-zero", "fn": "format_price_minor", "args": { "minor": 0, "currency": "BYN" }, "expect": "0 BYN" },
+    { "id": "price-null", "fn": "format_price_minor", "args": { "minor": null, "currency": "BYN" }, "expect": "" },
+    { "id": "price-99", "fn": "format_price_minor", "args": { "minor": 99, "currency": "BYN" }, "expect": "0,99 BYN" },
+    { "id": "price-20050", "fn": "format_price_minor", "args": { "minor": 20050, "currency": "BYN" }, "expect": "200,50 BYN" },
+    { "id": "price-rub", "fn": "format_price_minor", "args": { "minor": 50000, "currency": "RUB" }, "expect": "500 RUB" },
+
+    {
+      "id": "open-midday",
+      "fn": "open_status",
+      "args": {
+        "opening_hours": { "daily": { "open": "10:00", "close": "22:00" } },
+        "now_utc": "2026-10-13T09:00:00+00:00",
+        "timezone": "Europe/Minsk"
+      },
+      "expect": "открыто до 22:00"
+    },
+    {
+      "id": "open-19-close",
+      "fn": "open_status",
+      "args": {
+        "opening_hours": { "daily": { "open": "09:00", "close": "19:00" } },
+        "now_utc": "2026-10-13T08:00:00+00:00",
+        "timezone": "Europe/Minsk"
+      },
+      "expect": "открыто до 19:00"
+    },
+    {
+      "id": "open-9-close",
+      "fn": "open_status",
+      "args": {
+        "opening_hours": { "daily": { "open": "09:00", "close": "21:00" } },
+        "now_utc": "2026-10-13T07:30:00+00:00",
+        "timezone": "Europe/Minsk"
+      },
+      "expect": "открыто до 21:00"
+    },
+    {
+      "id": "open-before",
+      "fn": "open_status",
+      "args": {
+        "opening_hours": { "daily": { "open": "10:00", "close": "20:00" } },
+        "now_utc": "2026-10-13T06:00:00+00:00",
+        "timezone": "Europe/Minsk"
+      },
+      "expect": "откроется в 10:00"
+    },
+    {
+      "id": "open-night-tail",
+      "fn": "open_status",
+      "args": {
+        "opening_hours": { "daily": { "open": "18:00", "close": "02:00" } },
+        "now_utc": "2026-10-12T22:30:00+00:00",
+        "timezone": "Europe/Minsk"
+      },
+      "expect": "открыто до 2:00"
+    },
+    {
+      "id": "open-midnight-close",
+      "fn": "open_status",
+      "args": {
+        "opening_hours": { "daily": { "open": "10:00", "close": "00:00" } },
+        "now_utc": "2026-10-13T18:00:00+00:00",
+        "timezone": "Europe/Minsk"
+      },
+      "expect": "открыто до 0:00"
+    },
+
+    { "id": "sched-phone", "fn": "schedule_phone_line", "args": {}, "expect": "Расписание по телефону" },
+    {
+      "id": "sched-closed-plain",
+      "fn": "schedule_season_closed",
+      "args": {},
+      "expect": "Сезон закрыт"
+    },
+    {
+      "id": "sched-closed-reopen",
+      "fn": "schedule_season_closed",
+      "args": { "reopen_date": "2026-11-01" },
+      "expect": "Сезон закрыт · откроется 01.11"
+    },
+    {
+      "id": "sched-closed-note",
+      "fn": "schedule_season_closed",
+      "args": { "reopen_date": "2026-11-15", "note": "ремонт льда" },
+      "expect": "Сезон закрыт · откроется 15.11 — ремонт льда"
+    },
+    {
+      "id": "sched-closed-note-only",
+      "fn": "schedule_season_closed",
+      "args": { "note": "ждём мороз" },
+      "expect": "Сезон закрыт — ждём мороз"
+    }
+  ]
+}

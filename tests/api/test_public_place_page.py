@@ -516,7 +516,7 @@ def test_hours_without_leading_zero_are_not_compared_as_strings() -> None:
 
     card = {"opening_hours": {"daily": {"open": "7:00", "close": "22:00"}}, "timezone": "Europe/Minsk"}
     noon_minsk = datetime(2026, 10, 2, 9, 0, tzinfo=timezone.utc)  # 12:00 по Минску
-    assert open_now_label(card, now=noon_minsk) == "Открыто до 22:00"
+    assert open_now_label(card, now=noon_minsk) == "открыто до 22:00"
     broken = {"opening_hours": {"daily": {"open": "утром", "close": "22:00"}}}
     assert open_now_label(broken, now=noon_minsk) == ""
 
