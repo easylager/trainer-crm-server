@@ -551,9 +551,16 @@
     }
     var done = function () { /* поделились */ };
     var failed = function (err) { if (!err || err.name !== 'AbortError') openTicket(url); };
+    /* Отказ системного окна с файлом (повторное нажатие, браузер не пустил файл) — пробуем
+       поделиться ссылкой; скачивание — только если «Поделиться» нет совсем. */
+    var shareLink = function (err) {
+      if (err && err.name === 'AbortError') return;
+      if (!navigator.share) { openTicket(url); return; }
+      navigator.share({ title: title, text: title, url: url }).then(done, failed);
+    };
     try {
       if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: title }).then(done, failed);
+        navigator.share({ files: [file], title: title }).then(done, shareLink);
         return;
       }
       if (navigator.share) {
