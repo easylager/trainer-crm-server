@@ -25,7 +25,7 @@ _PHONE_GUARD_VALID = "+375 29 123-45-67"
 
 
 def _selection_pick_block(html: str, arena_name: str) -> str:
-    for block in re.findall(r'<section class="sec pick">.*?</section>', html, re.DOTALL):
+    for block in re.findall(r'<article class="b-card2">.*?</article>', html, re.DOTALL):
         if arena_name in block:
             return block
     raise AssertionError(f"pick block for {arena_name!r} missing")
@@ -202,7 +202,7 @@ async def test_selection_page_ssr_phone_guard(app_use_test_db, db_session) -> No
     # TASK-243: расписание старше 72 ч — обычные сеансы, без строки о свежести.
     for arena_name, _phone in cases:
         block = _selection_pick_block(html, arena_name)
-        assert 'class="slot' in block, arena_name
+        assert 'class="b-slot' in block, arena_name
         assert "уточн" not in block.casefold() and "не подтвержд" not in block.casefold()
 
 

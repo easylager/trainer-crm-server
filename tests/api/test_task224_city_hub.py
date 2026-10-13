@@ -148,7 +148,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     html = hub.text
     assert re.search(rf'<h1 class="b-hero__title[^"]*">{re.escape(name)}(<br>| )на льду</h1>', html)
     assert "Что нужно" in html
-    assert 'class="pick"' not in html, "хаб — не список мест"
+    assert 'class="b-card2"' not in html, "хаб — не список мест"
 
     skate = _route(html, "Покататься")
     assert skate, html
@@ -274,7 +274,7 @@ async def test_city_hub_with_params_is_still_the_list(app_use_test_db, db_sessio
         hub_src = await client.get(f"/c/{slug}", params={"src": "tg"})
     for resp in (weekend, ice, paged):
         assert resp.status_code == 200
-        assert 'class="pick' in resp.text, "список мест"
+        assert 'class="b-card2' in resp.text, "список мест"
         assert "на льду" not in resp.text
     assert hub_src.status_code == 200 and "на льду" in hub_src.text, "?src= — не фильтр"
 
@@ -364,7 +364,7 @@ async def test_city_hub_hockey_tile_for_centers_without_sessions(app_use_test_db
     assert "Пока нет сеансов ОХМ" in ohm.text
     assert center_name not in ohm.text
     assert "Центры <small>1</small>" in ohm.text
-    assert f'class="chip" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm.text
+    assert f'class="b-toggle" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm.text
 
 
 @pytest.mark.asyncio

@@ -84,7 +84,7 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert _meta(html, "twitter:image") == _meta(html, "og:image")
     assert "__TWITTER_" not in html and "__OG_IMAGE_ALT__" not in html
     assert _meta(html, "robots") == "index, follow"
-    assert "19:30" in html and "8.50 BYN" in html
+    assert "19:30" in html and "8,50 BYN" in html
     assert "сегодня" not in _meta(html, "og:description").lower()
     assert "завтра" not in _meta(html, "og:description").lower()
     # Шеринг дальше — во все мессенджеры, без Telegram у получателя.

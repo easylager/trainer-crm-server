@@ -143,7 +143,7 @@ async def test_public_page_opens_without_auth_and_carries_og_tags(
     # Расписание — в первом же ответе, а не подгружается скриптом.
     assert "Ледовый дворец «Проба»" in html or "Ледовый дворец" in html
     assert starts_at_local in html
-    assert "8.50 BYN" in html
+    assert "8,50 BYN" in html
     # Ни одного незаменённого плейсхолдера шаблона.
     assert "__" not in html.split("<style>")[0]
 

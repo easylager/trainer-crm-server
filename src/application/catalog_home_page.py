@@ -715,7 +715,8 @@ def _fold_arena_rows(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
         if horizon_n > 0:
             city["horizon_arenas_with_sessions"] += 1
         photo_key = str(row.get("photo_key") or "").strip()
-        if photo_key:
+        # Фото города — только каток: магазин на плитке города («Спортмастер» у Бобруйска) путает.
+        if photo_key and str(row.get("venue_type") or "ice") in ("ice", "outdoor"):
             # Фото города — самое крупное фото крытого катка; уличный каток и магазин — запасные.
             rank = (str(row.get("venue_type") or "ice") == "ice", int(row.get("photo_width") or 0))
             if not city["photo_key"] or rank > city.get("_photo_rank", (False, -1)):

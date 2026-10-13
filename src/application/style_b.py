@@ -13,9 +13,20 @@ from urllib.parse import quote
 from src.application.catalog_icons import icon_svg, rink_motif_svg
 from src.shared.copy_ru import t
 
-# Версии статики для шаблона b.html и главной: меняются вместе с файлами.
-TOKENS_VERSION = "2026101401"
-STYLE_VERSION = "2026101401"
+def _file_version(rel: str) -> str:
+    """?v= по содержимому файла: поменяли CSS — поменялась ссылка, кэш браузера не держит старое."""
+    import hashlib
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / rel
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()[:10]
+    except OSError:
+        return "0"
+
+
+TOKENS_VERSION = _file_version("static/shared/glide-tokens.css")
+STYLE_VERSION = _file_version("static/share/style-b.css")
 
 
 def esc(value: Any) -> str:

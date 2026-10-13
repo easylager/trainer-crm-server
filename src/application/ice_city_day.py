@@ -335,13 +335,13 @@ def _hhmm(value: Any) -> str:
 
 
 def format_price_minor(minor: int | None, currency: str) -> str:
-    """``850, "BYN"`` → ``"8.50 BYN"``. ``None`` → пустая строка, а не «0»."""
+    """``850, "BYN"`` → ``"8,50 BYN"`` (русская запятая). ``None`` → пустая строка, а не «0»."""
     if minor is None:
         return ""
     major = int(minor) / 100.0
     if major == int(major):
         return f"{int(major)} {currency}"
-    return f"{major:.2f} {currency}"
+    return f"{major:.2f} {currency}".replace(".", ",", 1)
 
 
 def plural_ru(n: int, one: str, few: str, many: str) -> str:

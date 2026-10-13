@@ -136,30 +136,30 @@ async def test_ohm_centers_segment_lists_places_not_sessions(app_use_test_db, db
     assert "seg=" not in ohm_canon.group(1)
     assert "08:45" in ohm_page.text
     assert center_name not in ohm_page.text
-    assert 'class="seg"' in ohm_page.text
+    assert 'aria-label="Когда"' in ohm_page.text
     assert "Записи нет" in ohm_page.text
-    assert f'class="chip chip--on" href="/c/{slug}?kind=ohm"' in ohm_page.text
-    assert f'class="chip" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm_page.text
+    assert f'class="b-toggle b-toggle--on" href="/c/{slug}?kind=ohm"' in ohm_page.text
+    assert f'class="b-toggle" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm_page.text
     assert "Центры <small>1</small>" in ohm_page.text
 
     assert centers_page.status_code == 200
     html = centers_page.text
     canon = re.search(r'<link rel="canonical" href="([^"]*)"', html)
     assert canon and canon.group(1).endswith(f"/c/{slug}?kind=ohm&amp;seg=centers")
-    assert f'<a class="sec pick" href="{place_href}">' in html
+    assert f'href="{place_href}"' in html
     assert center_name in html
     assert "Льда нет" in html
     assert "Дорожка HST" in html
     assert "08:45" not in html
-    assert 'class="slot' not in html
-    assert 'class="seg"' not in html
+    assert 'class="b-slot' not in html
+    assert 'aria-label="Когда"' not in html
     assert "Записи нет" not in html
     assert "Позвать друзей" in html
     assert "Позвать открыткой" not in html
     assert "Позвонить" not in html
     assert "По записи, не сеанс." in html
     assert "1 центр" in html
-    assert f'class="chip chip--on" href="/c/{slug}?kind=ohm&amp;seg=centers"' in html
+    assert f'class="b-toggle b-toggle--on" href="/c/{slug}?kind=ohm&amp;seg=centers"' in html
 
     assert bad.status_code == 200
     assert "08:45" in bad.text
@@ -170,7 +170,7 @@ async def test_ohm_centers_segment_lists_places_not_sessions(app_use_test_db, db
 
     assert empty.status_code == 200
     assert "Центров по записи нет" in empty.text
-    assert 'class="seg"' not in empty.text
+    assert 'aria-label="Когда"' not in empty.text
     assert "Записи нет" not in empty.text
     assert "Центры <small>0</small>" in empty.text
 
