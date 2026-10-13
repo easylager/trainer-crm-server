@@ -1456,13 +1456,10 @@
   }
 
   function renderFreshness() {
-    // TASK-243: дату обновления расписания и источник не показываем.
+    // TASK-243: ни свежести, ни проверки, ни оговорок — только «Сообщить об ошибке».
     var html = '<div class="arena-sec"><div class="arena-fresh">';
-    M.trustLines(state.card, new Date()).forEach(function (line) {
-      html += '<span>' + esc(line) + '</span>';
-    });
     html +=
-      '<span><button type="button" class="linkish" data-action="report">Сообщить об ошибке</button> — конкретное поле, а не письмо в поддержку</span>';
+      '<span><button type="button" class="linkish" data-action="report">Сообщить об ошибке</button></span>';
     html += '</div></div>';
     return html;
   }

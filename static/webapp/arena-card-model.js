@@ -15,10 +15,6 @@
   'use strict';
 
   var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
-  function staleApi() {
-    return rootRef.ScheduleStalenessModel || null;
-  }
-
   function scheduleModeApi() {
     return rootRef.ArenaScheduleModeModel || null;
   }
@@ -215,71 +211,6 @@
       parts.push('без проката');
     }
     return parts.join(' · ');
-  }
-
-  function daysBetween(fromIso, now) {
-    var from = new Date(fromIso);
-    if (isNaN(from.getTime()) || !now) return null;
-    var S = staleApi();
-    if (S) return S.minskDaysBetween(from, now);
-    var a = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-    var b = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    return Math.round((b - a) / 86400000);
-  }
-
-  function pluralDays(n) {
-    var S = staleApi();
-    if (S) return S.pluralDays(n);
-    var abs = Math.abs(n);
-    var mod10 = abs % 10;
-    var mod100 = abs % 100;
-    if (mod10 === 1 && mod100 !== 11) return abs + ' день';
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return abs + ' дня';
-    return abs + ' дней';
-  }
-
-  function formatFreshness(freshness, now) {
-    freshness = freshness || {};
-    if (!freshness.schedule_observed_at) return null;
-    var days = daysBetween(freshness.schedule_observed_at, now || new Date());
-    if (days == null || days < 0) return null;
-    var when;
-    if (days === 0) when = 'сегодня';
-    else when = pluralDays(days) + ' назад';
-    var text = 'Расписание обновлено ' + when;
-    if (freshness.source_label) {
-      text += ' · по данным ' + freshness.source_label;
-    }
-    return text;
-  }
-
-  /**
-   * TASK-146 (DEC-014): откуда данные карточки и насколько они свежие — для мест без
-   * владельца-аккаунта (магазин, зал). Расписание льда говорит само за себя
-   * (formatFreshness); здесь — карточка: проверка, последняя правка, погода.
-   */
-  function trustLines(card, now) {
-    card = card || {};
-    var f = card.freshness || {};
-    var lines = [];
-    var verified = f.verified_at ? new Date(f.verified_at) : null;
-    var edited = f.profile_updated_at ? new Date(f.profile_updated_at) : null;
-    if (verified && !isNaN(verified.getTime())) {
-      lines.push('Проверено командой Glide');
-    }
-    if (edited && !isNaN(edited.getTime()) && (!verified || edited > verified)) {
-      var d = daysBetween(f.profile_updated_at, now || new Date());
-      if (d != null && d >= 0) {
-        lines.push('Данные обновлены ' + (d === 0 ? 'сегодня' : pluralDays(d) + ' назад'));
-      }
-    }
-    if (!lines.length && !f.schedule_observed_at) {
-      lines.push('Карточку собрала команда Glide по открытым данным');
-    }
-    if (card.venue_type === 'outdoor') {
-      lines.push('Открытый лёд зависит от погоды — уточняйте перед выездом');
-    }
-    return lines;
   }
 
   var MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
@@ -1303,7 +1234,6 @@
   return {
     AMENITY_ORDER: AMENITY_ORDER,
     formatSessionPrices: formatSessionPrices,
-    formatFreshness: formatFreshness,
     sessionNowState: sessionNowState,
     sessionStartMs: sessionStartMs,
     compareSessionsByStart: compareSessionsByStart,
@@ -1351,7 +1281,6 @@
     shareSlotInviteLabel: shareSlotInviteLabel,
     scheduleInviteHint: scheduleInviteHint,
     shopServicesView: shopServicesView,
-    trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,
     parseScheduleFocus: parseScheduleFocus,

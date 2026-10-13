@@ -56,36 +56,6 @@ describe('formatSessionPrices', () => {
   });
 });
 
-describe('formatFreshness', () => {
-  it('uses schedule_observed_at and source_label when both exist', () => {
-    const { formatFreshness } = loadModel();
-    const now = new Date('2026-09-06T12:00:00Z');
-    const text = formatFreshness(
-      {
-        schedule_observed_at: '2026-09-04T10:00:00+00:00',
-        source_label: 'сайт катка',
-        source_url: 'https://rink.example',
-      },
-      now
-    );
-    assert.match(text, /2 дн/);
-    assert.match(text, /сайт катка/);
-  });
-
-  it('does not invent a date when observed_at is missing', () => {
-    const { formatFreshness } = loadModel();
-    const text = formatFreshness(
-      {
-        schedule_observed_at: null,
-        source_label: null,
-        source_url: null,
-      },
-      new Date('2026-09-06T12:00:00Z')
-    );
-    assert.equal(text, null);
-  });
-});
-
 describe('sessionNowState', () => {
   it('marks a session as live when now is between start and end', () => {
     const { sessionNowState } = loadModel();
@@ -813,25 +783,16 @@ describe('магазин и доверие (TASK-146)', () => {
     assert.deepEqual(v.disciplines, ['Хоккей']);
   });
 
-  it('свежесть карточки без расписания — по последней правке; улица — про погоду', () => {
-    const { trustLines } = loadModel();
-    const now = new Date('2026-10-02T12:00:00Z');
-    const shop = trustLines(
-      { venue_type: 'shop', freshness: { profile_updated_at: '2026-09-29T10:00:00Z' } },
-      now
-    );
-    assert.equal(shop.length, 1);
-    assert.match(shop[0], /^Данные обновлены 3 дня назад$/);
-    assert.deepEqual(trustLines({ venue_type: 'gym', freshness: {} }, now), [
-      'Карточку собрала команда Glide по открытым данным',
-    ]);
-    const outdoor = trustLines({ venue_type: 'outdoor', freshness: { schedule_observed_at: '2026-10-02T08:00:00Z' } }, now);
-    assert.deepEqual(outdoor, ['Открытый лёд зависит от погоды — уточняйте перед выездом']);
-    const verified = trustLines(
-      { venue_type: 'shop', freshness: { verified_at: '2026-09-06T10:00:00Z' } },
-      now
-    );
-    assert.deepEqual(verified, ['Проверено командой Glide']);
+  it('TASK-243: подвал карточки без строк свежести, проверки и оговорок', () => {
+    const M = loadModel();
+    assert.equal(M.trustLines, undefined);
+    assert.equal(M.formatFreshness, undefined);
+    const fs = require('node:fs');
+    const src = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/arena-card.js'), 'utf8');
+    for (const bad of ['Проверено командой', 'Данные обновлены', 'уточняйте перед выездом', 'Расписание обновлено', 'по открытым данным']) {
+      assert.equal(src.includes(bad), false, bad);
+    }
+    assert.match(src, /Сообщить об ошибке/);
   });
 });
 
