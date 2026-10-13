@@ -18,6 +18,20 @@
   var MODES = { auto: 'auto', phone: 'phone', season_closed: 'season_closed' };
   var PHONE_LINE = 'Расписание по телефону';
   var SEASON_CLOSED_LINE = 'Сезон закрыт';
+  var MONTHS_GEN = [
+    'января',
+    'февраля',
+    'марта',
+    'апреля',
+    'мая',
+    'июня',
+    'июля',
+    'августа',
+    'сентября',
+    'октября',
+    'ноября',
+    'декабря',
+  ];
   var SCAN_LIMIT = 256;
   var MATCH_START_LIMIT = 64;
   var MAX_PHONE_DIGITS = 15;
@@ -34,7 +48,10 @@
   function formatReopenSuffix(iso) {
     var s = String(iso || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
-    return 'откроется ' + s.slice(8, 10) + '.' + s.slice(5, 7);
+    var day = Number(s.slice(8, 10));
+    var month = Number(s.slice(5, 7));
+    if (!day || month < 1 || month > 12) return '';
+    return 'откроется ' + day + ' ' + MONTHS_GEN[month - 1];
   }
 
   function seasonClosedLine(card) {

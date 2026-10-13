@@ -787,14 +787,13 @@
     var tz = MT.resolveTimeZone(timeZone);
     var weekday = MT.weekdayMon0(now, tz);
     var nowMins = OH.toMinutes(MT.hhmm(now, tz));
-    var formatClock = PD && PD.formatClock ? PD.formatClock : function (v) { return String(v || '').slice(0, 5); };
     /* Вчерашний ночной хвост (пт 18:00–02:00 → сб 01:00) тоже «открыто». */
     var open = OH.openIntervalAt(hours, weekday, nowMins);
-    if (open) return 'открыто до ' + formatClock(open[1]);
+    if (open) return 'открыто до ' + PD.formatClock(open[1]);
     var intervals = intervalsForWeekday(hours, weekday);
     var hm = MT.hhmm(now, tz);
     for (var i = 0; i < intervals.length; i++) {
-      if (hm < intervals[i][0]) return 'откроется в ' + formatClock(intervals[i][0]);
+      if (hm < intervals[i][0]) return 'откроется в ' + PD.formatClock(intervals[i][0]);
     }
     return '';
   }

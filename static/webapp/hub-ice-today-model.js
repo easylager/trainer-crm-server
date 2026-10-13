@@ -71,11 +71,7 @@
         : null;
 
   function formatPrice(minor, currency) {
-    if (PD && PD.formatPriceMinor) return PD.formatPriceMinor(minor, currency || 'BYN');
-    if (minor == null || minor === '' || isNaN(Number(minor))) return '';
-    var major = Number(minor) / 100;
-    var num = Number.isInteger(major) ? String(major) : major.toFixed(2).replace('.', ',');
-    return num + ' ' + (currency || 'BYN');
+    return PD.formatPriceMinor(minor, currency || 'BYN');
   }
 
   function hasStarted(session, now) {

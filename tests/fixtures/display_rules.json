@@ -32,15 +32,17 @@
     { "id": "when-weekday", "fn": "sentence_when", "args": { "day": "2026-10-16", "hhmm": "18:30" }, "expect": "пт, 18:30" },
     { "id": "when-midnight", "fn": "sentence_when", "args": { "day": "2026-10-13", "hhmm": "00:30" }, "expect": "сегодня, 0:30" },
 
-    { "id": "price-int", "fn": "format_price_minor", "args": { "minor": 1000, "currency": "BYN" }, "expect": "10 BYN" },
-    { "id": "price-cents", "fn": "format_price_minor", "args": { "minor": 850, "currency": "BYN" }, "expect": "8,50 BYN" },
-    { "id": "price-1350", "fn": "format_price_minor", "args": { "minor": 1350, "currency": "BYN" }, "expect": "13,50 BYN" },
-    { "id": "price-one", "fn": "format_price_minor", "args": { "minor": 100, "currency": "BYN" }, "expect": "1 BYN" },
-    { "id": "price-zero", "fn": "format_price_minor", "args": { "minor": 0, "currency": "BYN" }, "expect": "0 BYN" },
-    { "id": "price-null", "fn": "format_price_minor", "args": { "minor": null, "currency": "BYN" }, "expect": "" },
-    { "id": "price-99", "fn": "format_price_minor", "args": { "minor": 99, "currency": "BYN" }, "expect": "0,99 BYN" },
-    { "id": "price-20050", "fn": "format_price_minor", "args": { "minor": 20050, "currency": "BYN" }, "expect": "200,50 BYN" },
-    { "id": "price-rub", "fn": "format_price_minor", "args": { "minor": 50000, "currency": "RUB" }, "expect": "500 RUB" },
+    { "id": "price-int", "fn": "format_minor_amount", "args": { "minor": 1000 }, "expect": "10" },
+    { "id": "price-cents", "fn": "format_minor_amount", "args": { "minor": 850 }, "expect": "8,50" },
+    { "id": "price-1350", "fn": "format_minor_amount", "args": { "minor": 1350 }, "expect": "13,50" },
+    { "id": "price-one", "fn": "format_minor_amount", "args": { "minor": 100 }, "expect": "1" },
+    { "id": "price-zero", "fn": "format_minor_amount", "args": { "minor": 0 }, "expect": "0" },
+    { "id": "price-null", "fn": "format_minor_amount", "args": { "minor": null }, "expect": "" },
+    { "id": "price-99", "fn": "format_minor_amount", "args": { "minor": 99 }, "expect": "0,99" },
+    { "id": "price-20050", "fn": "format_minor_amount", "args": { "minor": 20050 }, "expect": "200,50" },
+    { "id": "price-large", "fn": "format_minor_amount", "args": { "minor": 50000 }, "expect": "500" },
+    { "id": "price-hub-int", "fn": "format_price_minor", "args": { "minor": 1000, "currency": "BYN" }, "expect": "10 BYN" },
+    { "id": "price-hub-cents", "fn": "format_price_minor", "args": { "minor": 850, "currency": "BYN" }, "expect": "8,50 BYN" },
 
     {
       "id": "open-midday",
@@ -114,13 +116,13 @@
       "id": "sched-closed-reopen",
       "fn": "schedule_season_closed",
       "args": { "reopen_date": "2026-11-01" },
-      "expect": "Сезон закрыт · откроется 01.11"
+      "expect": "Сезон закрыт · откроется 1 ноября"
     },
     {
       "id": "sched-closed-note",
       "fn": "schedule_season_closed",
       "args": { "reopen_date": "2026-11-15", "note": "ремонт льда" },
-      "expect": "Сезон закрыт · откроется 15.11 — ремонт льда"
+      "expect": "Сезон закрыт · откроется 15 ноября — ремонт льда"
     },
     {
       "id": "sched-closed-note-only",

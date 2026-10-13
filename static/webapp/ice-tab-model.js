@@ -35,6 +35,12 @@
       : typeof globalThis !== 'undefined'
         ? globalThis.GlideCopy
         : null;
+  var PD =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./public-display-model.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.PublicDisplayModel
+        : null;
 
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   /** Окно «Когда» между визитами в каталог (localStorage); sessionStorage — полный снимок вкладки. */
@@ -1682,9 +1688,7 @@
   }
 
   function formatMinorAmount(minor) {
-    if (minor == null || minor === '' || isNaN(Number(minor))) return '';
-    var major = Number(minor) / 100;
-    return Number.isInteger(major) ? String(major) : major.toFixed(2).replace(/\.00$/, '');
+    return PD.formatMinorAmount(minor);
   }
 
   function formatThreePrices(live) {
@@ -2400,6 +2404,7 @@
     formatMeta: formatMeta,
     formatDistanceKm: formatDistanceKm,
     liveTone: liveTone,
+    formatMinorAmount: formatMinorAmount,
     formatThreePrices: formatThreePrices,
     formatLiveLine: formatLiveLine,
     sessionDayLabel: sessionDayLabel,

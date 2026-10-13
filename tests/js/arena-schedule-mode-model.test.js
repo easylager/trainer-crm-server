@@ -79,7 +79,7 @@ describe('arena schedule mode model', () => {
       schedule_mode_note: 'ремонт',
     });
     assert.match(line, /Сезон закрыт/);
-    assert.match(line, /откроется 01\.11/);
+    assert.match(line, /откроется 1 ноября/);
     assert.match(line, /ремонт/);
   });
 });

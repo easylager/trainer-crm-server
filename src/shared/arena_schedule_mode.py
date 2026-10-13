@@ -22,6 +22,21 @@ SCHEDULE_MODES = (
 PHONE_LINE = "Расписание по телефону"
 SEASON_CLOSED_LINE = "Сезон закрыт"
 
+_MONTHS_GEN = (
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+
 _ARENA_SCHEDULE_MODE_SQL = "COALESCE(p.schedule_mode, 'auto')"
 
 
@@ -83,7 +98,7 @@ def validate_schedule_mode_patch(fields: Mapping[str, Any]) -> dict[str, Any]:
 def format_reopen_suffix(reopen: date | None) -> str:
     if reopen is None:
         return ""
-    return f"откроется {reopen.day:02d}.{reopen.month:02d}"
+    return f"откроется {reopen.day} {_MONTHS_GEN[reopen.month - 1]}"
 
 
 def season_closed_user_line(

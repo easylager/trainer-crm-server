@@ -69,6 +69,14 @@
     return word + ', ' + clock;
   }
 
+  /** minor без валюты — «10», «8,50» (список льда). */
+  function formatMinorAmount(minor) {
+    if (minor == null || minor === '' || isNaN(Number(minor))) return '';
+    var major = Number(minor) / 100;
+    if (major === Math.floor(major)) return String(Math.floor(major));
+    return major.toFixed(2).replace('.', ',');
+  }
+
   /** minor + currency → «8,50 BYN»; целые без копеек — «10 BYN». */
   function formatPriceMinor(minor, currency) {
     if (minor == null || minor === '' || isNaN(Number(minor))) return '';
@@ -84,6 +92,7 @@
     shortDayWord: shortDayWord,
     sessionDayPhrase: sessionDayPhrase,
     sentenceWhen: sentenceWhen,
+    formatMinorAmount: formatMinorAmount,
     formatPriceMinor: formatPriceMinor,
     addDaysIso: addDaysIso,
   };

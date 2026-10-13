@@ -12,6 +12,7 @@ from src.application.place_page import open_now_label
 from src.shared.arena_schedule_mode import PHONE_LINE, season_closed_user_line
 from src.shared.public_display import (
     format_clock,
+    format_minor_amount,
     sentence_when,
     session_day_phrase,
     short_day_word,
@@ -45,6 +46,9 @@ def _run_case(case: dict, *, today: date) -> str:
             str(args.get("hhmm") or ""),
             today=today,
         )
+    if fn == "format_minor_amount":
+        minor = args.get("minor")
+        return format_minor_amount(minor if minor is not None else None)
     if fn == "format_price_minor":
         minor = args.get("minor")
         return format_price_minor(minor if minor is not None else None, str(args.get("currency") or "BYN"))
