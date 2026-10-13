@@ -72,6 +72,28 @@ def sentence_when(day: date, hhmm: str, *, today: date) -> str:
     return f"{word}, {clock}" if clock else word
 
 
+# Коды городов Беларуси, в которых уверены (без них номер не делим — неверная группировка хуже
+# слитной). Четырёхзначные проверяются раньше трёхзначных с тем же началом.
+_BY_CITY_CODES = (
+    "1642",  # Кобрин
+    "1775",  # Жодино
+    "2334",  # Жлобин
+    "152",  # Гродно
+    "162",  # Брест
+    "163",  # Барановичи
+    "165",  # Пинск
+    "174",  # Солигорск
+    "176",  # Молодечно
+    "177",  # Борисов
+    "212",  # Витебск
+    "214",  # Полоцк, Новополоцк
+    "222",  # Могилёв
+    "225",  # Бобруйск
+    "232",  # Гомель
+    "236",  # Мозырь
+)
+
+
 def format_phone_display(phone: str) -> str:
     """«+375 29 330-07-49» и «+7 999 123-45-67». ``tel:`` этим не кормим."""
     from src.shared.phone_guard import tel_href
@@ -87,7 +109,14 @@ def format_phone_display(phone: str) -> str:
         # длиннее (Жлобин — 2334), и деление «23 343-52-59» было бы неправдой: оставляем подряд.
         if code in ("25", "29", "33", "44", "17"):
             return f"+375 {code} {digits[5:8]}-{digits[8:10]}-{digits[10:12]}"
-        return f"+375 {digits[3:]}"
+        rest = digits[3:]
+        for city in _BY_CITY_CODES:
+            if rest.startswith(city):
+                local = rest[len(city):]
+                # 6 цифр — «XX-XX-XX», 5 — «X-XX-XX».
+                head = local[:-4]
+                return f"+375 {city} {head}-{local[-4:-2]}-{local[-2:]}"
+        return f"+375 {rest}"
     if digits.startswith("7") and len(digits) == 11:
         return f"+7 {digits[1:4]} {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
     return href if href.startswith("+") else raw

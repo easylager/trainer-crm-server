@@ -43,6 +43,8 @@
     "price.with_rental": "с прокатом {total} {currency}",
     "footer.made_by": "Сделано теми, кто сам катается.",
     "home.counter.when.today": "Сегодня",
+    "home.counter.today_done": "Сегодня сеансов нет, завтра лёд в {cities} {cities_word}",
+    "home.counter.today_done_bare": "Сегодня сеансов нет",
     "home.counter.when.tomorrow": "Завтра",
     "home.counter.when.weekend": "В эти выходные",
     "home.counter.when.day": "В этот день",

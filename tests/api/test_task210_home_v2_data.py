@@ -326,7 +326,8 @@ async def test_when_query_works_without_js_switcher(app_use_test_db, db_session,
     await db_session.commit()
     invalidate_public_city_cache()
     prefixes = {
-        "today": "Сегодня в Беларуси",
+        # Без сеансов «сегодня» — «Сегодня сеансов нет…» (TASK-275), с сеансами — «Сегодня в Беларуси N…».
+        "today": "Сегодня",
         "tomorrow": "Завтра в Беларуси",
         "weekend": "В эти выходные в Беларуси",
     }

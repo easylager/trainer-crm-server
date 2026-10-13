@@ -1161,6 +1161,23 @@ def _counter_text(
     )
 
 
+def _today_done_text(cities: list[Mapping[str, Any]]) -> str:
+    """«0 сеансов в 0 городах» — правда, но бесполезная: говорим, что сегодня льда нет,
+    и где он завтра. Счётчик считает оставшиеся сеансы — «нет» верно и днём, и вечером."""
+    tomorrow = [
+        c
+        for c in cities
+        if isinstance(c.get("next_skate"), Mapping) and c["next_skate"].get("day_label") == "завтра"
+    ]
+    if not tomorrow:
+        return t("home.counter.today_done_bare")
+    return t(
+        "home.counter.today_done",
+        cities=len(tomorrow),
+        cities_word=plural_ru(len(tomorrow), "городе", "городах", "городах"),
+    )
+
+
 def _b_home_city_card(user_city: Mapping[str, Any] | None) -> str:
     """Тёмная карточка «Ваш город»: сколько сеансов и ближайший, ниже — «Другой город»."""
     from src.application.catalog_icons import icon_svg
@@ -1305,6 +1322,8 @@ def render_catalog_home_page(
     total_sessions = sum(int(c.get("session_count") or 0) for c in with_sessions)
     sole_name = str(with_sessions[0].get("name") or "") if len(with_sessions) == 1 else None
     counter_text = _counter_text(total_sessions, len(with_sessions), when_key, now=now, city_name=sole_name)
+    if when_key == "today" and not total_sessions:
+        counter_text = _today_done_text(by_cities)
     counter_text = re.sub(r"(\d) ", "\\1\u00a0", counter_text)
 
     hero_city = user_city
