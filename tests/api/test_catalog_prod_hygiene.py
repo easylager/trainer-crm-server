@@ -114,7 +114,7 @@ async def test_visible_arena_baseline_is_public(app_use_test_db, db_session) -> 
         )
         card = await client.get(f"/api/public/arenas/{arena_id}")
         sitemap = await client.get("/sitemap.xml")
-        today = await client.get(f"/ice/{city_slug(city_name)}/today")
+        today = await client.get(f"/c/{city_slug(city_name)}?t=ice&w=today")
         selection = await client.get(f"/c/{city_slug(city_name)}")
     assert arena_id in {i["id"] for i in by_city.json()["items"]}
     assert arena_id in {i["id"] for i in bbox.json()["items"]}

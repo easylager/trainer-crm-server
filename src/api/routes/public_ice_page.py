@@ -1,53 +1,36 @@
 """
-Публичная страница «Лёд сегодня в городе» — шеринг-артефакт №1 эпика (TASK-096, DEC-004).
+Старый адрес «Лёд сегодня в городе» (TASK-096, DEC-004) и его og-картинка.
 
-Отдельный модуль и отдельный роутер без префикса ``/api``: это не API, а страница,
-которую открывает человек по ссылке из чата. Авторизации нет **осознанно** — требовать
-Telegram у получателя пересланной ссылки значит убить пересылку на первом же шаге.
+С TASK-266 страница — постоянная переадресация на список ``/c/{город}?t=ice&w=today``:
+ссылки из чатов живут, в поиске один адрес. Роутер без префикса ``/api`` и без авторизации:
+его открывает человек по ссылке из чата.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.application.ice_city_day import (
     aliased_city_slug,
-    city_slug,
     get_city_ice_day,
+    ice_city_day_page_url,
     list_public_cities,
     render_unknown_city_html,
     resolve_city_by_ref,
 )
 from src.application.ice_city_day_og import render_ice_city_day_og
-from src.application.ice_city_day_page import ice_city_day_paths, render_ice_city_day_page
-from src.application.catalog_consumer_events import record_public_page_view
 from src.application.png_render_cache import render_png_cached
-from src.application.place_links import catalog_start_param, public_telegram_cta_url
 from src.shared.config import Settings
 router = APIRouter(tags=["public-ice-share"])
 
-# TASK-189 пишет просмотр на каждый заход. Публичный кэш страницы его проглатывает,
-# поэтому HTML не кэшируется. Картинка og по-прежнему живёт своим max-age.
-_PAGE_CACHE = {"Cache-Control": "private, no-store"}
 _OG_CACHE = {"Cache-Control": "public, max-age=900"}
 
 
 def _public_base() -> str:
     return (Settings().webapp_base_url or "").strip().rstrip("/")
-
-
-def _cta_url(city_id: int) -> str | None:
-    """В каталог этого города на сегодня, с теми же фильтрами, что у страницы."""
-    base = _public_base()
-    return public_telegram_cta_url(
-        base,
-        start_param=catalog_start_param(int(city_id), "skate", "today"),
-        surface="ice_city_day",
-        city_id=int(city_id),
-    )
 
 
 async def _load(session: AsyncSession, city_ref: str):
@@ -61,43 +44,23 @@ async def _load(session: AsyncSession, city_ref: str):
 @router.get("/ice/{city_ref}/today", response_class=HTMLResponse)
 async def ice_city_day_page(
     city_ref: str,
-    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    """Расписание массовых катаний города на день + og-теги для превью в Telegram."""
+    """Старый адрес «Лёд сегодня» (TASK-266): навсегда на список «Покататься → Сегодня».
+
+    Одна ссылка на одну вещь: поиск переносит вес на список, старые ссылки из чатов не ломаются.
+    По id, по старому slug и по канону — один переход сразу на канонический список.
+    """
+    city = await resolve_city_by_ref(session, city_ref)
+    if city is not None:
+        return RedirectResponse(url=ice_city_day_page_url(base_url="", city_name=str(city["name"])), status_code=301)
     alias = await aliased_city_slug(session, city_ref)
-    if alias and city_ref.strip().lower() != alias:
-        return RedirectResponse(url=f"/ice/{alias}/today", status_code=301)
-    city, day = await _load(session, city_ref)
-    if city is None or day is None:
-        base = _public_base()
-        home = f"{base}/" if base else "/"
-        cities = await list_public_cities(session)
-        return HTMLResponse(render_unknown_city_html(cities, home=home), status_code=404)
-    city_name = str(city["name"])
-
-    canonical_path, og_path = ice_city_day_paths(city_name)
-    if city_ref.strip().lower() != city_slug(city_name):
-        # Пришли по id (`/ice/12/today`) — уводим на канонический slug, чтобы в чатах
-        # ходила одна ссылка, а не две на одно и то же.
-        return RedirectResponse(url=canonical_path, status_code=301)
-
+    if alias:
+        return RedirectResponse(url=f"/c/{alias}?t=ice&w=today", status_code=301)
     base = _public_base()
-    html = render_ice_city_day_page(
-        city_name=city_name,
-        day=day,
-        canonical_url=f"{base}{canonical_path}" if base else canonical_path,
-        og_image_url=f"{base}{og_path}" if base else og_path,
-        cta_url=_cta_url(int(city["id"])),
-        country=str(city.get("country") or ""),
-    )
-    await record_public_page_view(
-        session,
-        request,
-        surface="ice_city_day",
-        city_id=int(city["id"]),
-    )
-    return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+    home = f"{base}/" if base else "/"
+    cities = await list_public_cities(session)
+    return HTMLResponse(render_unknown_city_html(cities, home=home), status_code=404)
 
 
 @router.get("/ice/{city_ref}/today/og.png")

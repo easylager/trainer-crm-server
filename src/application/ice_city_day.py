@@ -584,5 +584,6 @@ def compose_ice_city_day_share_message(
 
 
 def ice_city_day_page_url(*, base_url: str, city_name: str) -> str:
+    """«Лёд сегодня» в городе — список «Покататься → Сегодня» (TASK-266; ``/ice/…/today`` уводит сюда)."""
     base = (base_url or "").strip().rstrip("/")
-    return f"{base}/ice/{city_slug(city_name)}/today"
+    return f"{base}/c/{city_slug(city_name)}?t=ice&w=today"

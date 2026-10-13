@@ -35,8 +35,35 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" />
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=__TOKENS_V__" />
   <link rel="stylesheet" href="/static/share/style-b.css?v=__STYLE_V__" />
+  <script>
+    /*
+      Битое фото → разметка катка, как у места без фото (rink_motif_svg): герой, плитка, миниатюра.
+      Слушатель в <head>: ошибка ленивой картинки может прийти раньше скриптов в конце страницы.
+      error и load не всплывают — ловим на погружении.
+    */
+    (function () {
+      function dropBrokenPhoto(e) {
+        var img = e.target;
+        if (!img || img.tagName !== 'IMG') return;
+        if (e.type === 'load' && img.naturalWidth > 0) return;
+        var box = img.closest('.b-hero, .b-tile__media, .b-card2__thumb');
+        if (!box) return;
+        var hero = box.classList.contains('b-hero');
+        var motif = document.getElementById(hero ? 'b-motif-hero' : 'b-motif-small');
+        if (motif) img.replaceWith(motif.content.cloneNode(true));
+        else img.remove();
+        box.classList.remove('b-toned-wrap');
+        var badge = hero ? null : box.querySelector('.b-badge:not(.b-badge--time)');
+        if (badge) badge.classList.add('b-badge--light');
+      }
+      window.addEventListener('error', dropBrokenPhoto, true);
+      window.addEventListener('load', dropBrokenPhoto, true);
+    })();
+  </script>
 </head>
 <body class="b">
+  <template id="b-motif-hero"><svg class="b-motif b-hero__motif" viewBox="0 0 390 360" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><rect class="b-motif__line" x="-40" y="50" width="470" height="250" rx="90"/><line class="b-motif__mid" x1="195" y1="50" x2="195" y2="300"/><line class="b-motif__line" x1="95" y1="50" x2="95" y2="300"/><line class="b-motif__line" x1="295" y1="50" x2="295" y2="300"/><circle class="b-motif__mid" cx="195" cy="175" r="46"/><circle class="b-motif__dot" cx="195" cy="175" r="4"/><circle class="b-motif__line" cx="40" cy="115" r="30"/><circle class="b-motif__line" cx="40" cy="235" r="30"/><circle class="b-motif__line" cx="350" cy="115" r="30"/><circle class="b-motif__line" cx="350" cy="235" r="30"/></svg></template>
+  <template id="b-motif-small"><svg class="b-motif" viewBox="0 0 230 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><rect class="b-motif__line" x="-30" y="14" width="290" height="92" rx="40"/><line class="b-motif__mid" x1="115" y1="14" x2="115" y2="106"/><circle class="b-motif__mid" cx="115" cy="60" r="20"/></svg></template>
   <main class="b-page">
     __BODY__
     <footer class="b-foot">__CITY_LINK__</footer>
@@ -92,29 +119,6 @@
             window.prompt('Скопируйте:', text);
           }
         });
-      });
-      function dropBrokenPhoto(img) {
-        var hero = img.closest('.hero');
-        if (hero) hero.classList.remove('hero--photo');
-        var media = img.closest('.pick__media');
-        if (media) {
-          var icon = media.getAttribute('data-icon') || '';
-          var head = media.parentNode;
-          media.remove();
-          if (icon && head && !head.querySelector('.pick__icon')) {
-            var plate = document.createElement('span');
-            plate.className = 'pick__icon';
-            plate.setAttribute('aria-hidden', 'true');
-            plate.textContent = icon;
-            head.insertBefore(plate, head.firstChild);
-          }
-          return;
-        }
-        img.remove();
-      }
-      document.querySelectorAll('.hero__photo, .pick__photo').forEach(function (img) {
-        img.addEventListener('error', function () { dropBrokenPhoto(img); });
-        if (img.complete && img.naturalWidth === 0) dropBrokenPhoto(img);
       });
       /*
         Сайт не пишет в «Фото» напрямую. Android: файл в «Загрузки», галерея его видит.

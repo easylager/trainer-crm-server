@@ -248,18 +248,18 @@ async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale
     cookies = await _hero_cookie(db_session)
     await db_session.commit()
     invalidate_public_city_cache()
-    slug = city_slug(name)
 
     async with _client() as client:
         client.cookies.set("glide_city", cookies["glide_city"])
         home = await client.get("/?when=today")
-        ice = await client.get(f"/ice/{slug}/today")
     assert home.status_code == 200
-    assert ice.status_code == 200
     from src.application.catalog_home_page import parse_city_session_count_from_home
+    from src.application.ice_city_day import get_city_ice_day
 
     assert parse_city_session_count_from_home(home.text, name) == 2
-    assert re.search(r"2 сеанса на ", ice.text)
+    # Страницы /ice/…/today больше нет (TASK-266); её выборка живёт в шеринге города.
+    day = await get_city_ice_day(db_session, city_id=city_id)
+    assert day["session_count"] == 2
 
 
 @pytest.mark.asyncio

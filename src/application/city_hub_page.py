@@ -557,6 +557,9 @@ def render_city_hub_page(
         story_image_url=story_image_url or og_image_url,
         coach_href=coach_href or "",
     )
+    from src.application.public_web_cta import phone_beacon_script
+
+    body += phone_beacon_script(body)
     elements = []
     for p in view.get("places") or []:
         if not p.get("slug"):
@@ -940,7 +943,7 @@ def _b_rink_arrive(rink: Mapping[str, Any], *, base_url: str, city_id: int, show
         btn_html = buttons[0]
     else:
         btn_html = f'<div class="b-btns">{"".join(buttons)}</div>' if buttons else ""
-    return section(t("hub.directions"), head + btn_html) + str(links.get("beacon_script") or "")
+    return section(t("hub.directions"), head + btn_html)
 
 
 def _b_phone_block(view: Mapping[str, Any], rink: Mapping[str, Any], *, base_url: str) -> str:
