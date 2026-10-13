@@ -40,7 +40,7 @@
 .b-ticket--picked { box-shadow: inset 0 0 0 2px var(--g-accent); }
 .b-ticket__time {
   font-family: var(--g-font-display); font-weight: 400;
-  font-size: 32px; line-height: 1; font-variant-numeric: tabular-nums;
+  font-size: 32px; line-height: 1; font-variant-numeric: proportional-nums;
 }
 .b-ticket__sub { font-size: 14px; color: var(--g-ink-2); }
 .b-ticket--dark .b-ticket__sub { color: var(--g-on-dark-muted); }
@@ -112,3 +112,7 @@
 .b-row__title { font-size: 17px; font-weight: 600; }
 .b-row__line { font-size: 14px; color: var(--g-ink-2); }
 .b-row__go { color: var(--g-muted); width: 18px; height: 18px; }
+
+/* Время крупным шрифтом (Dela Gothic One) — пропорциональные цифры: моноширинная «1»
+   у этой гарнитуры шире соседей, и «11:00» читалось как «1 1:00». */
+.b-badge--time { font-variant-numeric: proportional-nums; }
