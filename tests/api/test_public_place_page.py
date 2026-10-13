@@ -7,6 +7,7 @@ import json
 import re
 import threading
 import uuid
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -326,6 +327,11 @@ async def test_place_page_style_b_about_focus_and_day_fragments(app_use_test_db,
     )
     assert "#schedule:has(#d-" not in html
     assert "b-sched-day" not in html
+    css = (Path(__file__).resolve().parents[2] / "static/share/style-b.css").read_text()
+    sched = css.split(".b-sched {", 1)[1].split("}", 1)[0]
+    assert "flex-wrap" not in sched
+    assert "overflow-x: auto" in sched
+    assert "grid-auto-flow: column" in sched
     plan_time = re.search(r'<span class="b-plan__time">([^<]+)</span>', html)
     assert plan_time and plan_time.group(1).startswith("9:00")
 
@@ -496,7 +502,7 @@ async def test_share_preview_is_not_counted_and_channel_is(app_use_test_db, db_s
 @pytest.mark.asyncio
 async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db, db_session) -> None:
     """TASK-252: ?s= → «Позвать на …», no-JS мессенджеры, без раскрывашки «Позвать друзей»."""
-    place = await _place(db_session)
+    place = await _place(db_session, tickets_url="https://led.by/tickets")
     sid = await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="11:15")
     await db_session.commit()
     async with _client() as client:
@@ -506,13 +512,66 @@ async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db
     html = resp.text
     assert resp.status_code == 200
     assert css.status_code == 200 and js.status_code == 200
-    assert 'id="placeShareBtn"' in html and "Позвать на 11:15" in html
+    assert 'id="placeShareBtn"' in html and "Позвать на завтра 11:15" in html
+    assert "place-share-zovi" not in html
+    links_row = re.search(r'<div class="b-links">(.*?)</div>', html, re.S)
+    assert links_row
+    assert "Билеты — на сайте катка" in links_row.group(1)
+    assert ">Открытка</a>" in links_row.group(1)
     dock = html.split('id="placeShareDock"', 1)[1].split("</div></div>", 1)[0]
     assert "В Telegram" not in dock and "place-share-dock__zovi" not in dock
     assert "place-share-fallback" in html and "viber://forward?text=" in html
     assert "Позвать друзей" not in html and "b-invite" not in html and 'class="b-share"' not in html
     assert f"{place['path']}?s={sid}" in html
     assert "mini-app-share-sheet.js" in html
+
+
+def _share_button(html: str) -> str:
+    match = re.search(r'id="placeShareBtn">([^<]+)', html)
+    assert match, html
+    return match.group(1)
+
+
+@pytest.mark.asyncio
+async def test_place_share_button_names_today_tomorrow_and_later(app_use_test_db, db_session) -> None:
+    """TASK-252 rework: «Позвать на 22:15» / «на завтра 12:15» / «на сб 10:15»."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from src.shared.public_display import invite_cta_when
+
+    place = await _place(db_session)
+    tz = ZoneInfo("Europe/Minsk")
+    now = datetime.now(tz)
+    today = now.date()
+    later_at = datetime.combine(today + timedelta(days=3), datetime.min.time(), tzinfo=tz).replace(hour=10, minute=15)
+    tomorrow_at = datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=tz).replace(hour=12, minute=15)
+    from tests.api.test_public_arenas import _add_minsk_session
+
+    sid_tomorrow = await _add_minsk_session(db_session, place["arena_id"], when=tomorrow_at)
+    sid_later = await _add_minsk_session(db_session, place["arena_id"], when=later_at)
+    sid_today = None
+    today_at = (now + timedelta(hours=2)).replace(second=0, microsecond=0)
+    if today_at.date() == today and today_at.minute != 15:
+        today_at = today_at.replace(minute=15)
+    if today_at.date() == today and today_at > now:
+        sid_today = await _add_minsk_session(db_session, place["arena_id"], when=today_at)
+    await db_session.commit()
+
+    async with _client() as client:
+        tomorrow = await client.get(place["path"], params={"s": sid_tomorrow})
+        later = await client.get(place["path"], params={"s": sid_later})
+        plain = await client.get(place["path"])
+        today_page = await client.get(place["path"], params={"s": sid_today}) if sid_today else None
+
+    assert _share_button(tomorrow.text) == "Позвать на " + invite_cta_when(tomorrow_at.date(), "12:15", today=today)
+    assert _share_button(later.text) == "Позвать на " + invite_cta_when(later_at.date(), "10:15", today=today)
+    if today_page is not None:
+        clock = today_at.strftime("%H:%M")
+        assert _share_button(today_page.text) == "Позвать на " + invite_cta_when(today, clock, today=today)
+        assert "завтра" not in _share_button(today_page.text)
+    else:
+        assert _share_button(plain.text).startswith("Позвать на завтра ")
 
 
 @pytest.mark.asyncio

@@ -65,6 +65,20 @@ def session_day_phrase(day: date, hhmm: str, *, today: date) -> str:
     return f"{word} {clock}".strip()
 
 
+def invite_cta_when(day: date | None, hhmm: str, *, today: date) -> str:
+    """Подпись кнопки «Позвать на …»: сегодня — только время, иначе день строчными.
+
+    «22:15», «завтра 12:15», «сб 10:15». Пустая строка, если времени нет.
+    """
+    clock = format_clock(hhmm)
+    if not clock:
+        return ""
+    if day is None or day == today:
+        return clock
+    word = short_day_word(day, today=today)
+    return f"{word} {clock}" if word else clock
+
+
 def sentence_when(day: date, hhmm: str, *, today: date) -> str:
     """«сегодня, 14:00» / «завтра, 9:00» — день строчными в середине фразы."""
     clock = format_clock(hhmm)

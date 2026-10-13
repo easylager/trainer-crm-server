@@ -44,18 +44,6 @@ body.b.has-place-share {
   cursor: default;
 }
 
-.place-share-zovi {
-  margin: 14px 0 0;
-  font-size: 14px;
-  scroll-margin-bottom: var(--place-share-dock-h);
-}
-
-.place-share-zovi a {
-  color: var(--g-accent-ink);
-  font-weight: 600;
-  text-decoration: none;
-}
-
 .place-share-fallback {
   display: flex;
   flex-wrap: wrap;
@@ -89,7 +77,8 @@ body.b.has-place-share .b-ticket {
   scroll-margin-bottom: var(--place-share-dock-h);
 }
 
-.b-ticket--picked {
-  outline: 2px solid var(--g-accent);
-  outline-offset: 2px;
+/* Одна рамка выбранного билета — inset в glide-components. Фокус ссылки её не дублирует. */
+html.js .b-ticket--picked:focus,
+html.js .b-ticket--picked:focus-visible {
+  outline: none;
 }
