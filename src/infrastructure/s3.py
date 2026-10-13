@@ -303,24 +303,6 @@ def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) 
         return None
 
 
-def photo_exists(file_key: str) -> bool:
-    """True, когда объект фото лежит в хранилище. Скачивание не нужно."""
-    norm_key = resolve_object_key_under_prefixes(
-        file_key, ("trainers/", "collectives/", "arenas/")
-    )
-    if not norm_key:
-        return False
-    settings = Settings()
-    if _use_local():
-        root = Path(settings.local_storage_path).resolve()
-        return (root / norm_key).is_file()
-    try:
-        _get_client().head_object(Bucket=settings.s3_bucket, Key=norm_key)
-        return True
-    except Exception:
-        return False
-
-
 def get_photo(file_key: str) -> tuple[bytes, str] | None:
     """
     Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.

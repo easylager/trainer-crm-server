@@ -757,7 +757,7 @@ def _selection_where(item: Mapping[str, Any], *, city_name: str) -> str:
 
 
 def _place_photo_url(item: Mapping[str, Any]) -> str | None:
-    """Тот же кадр, что в мини-карточке. Файла нет — карточка без фото."""
+    """Тот же кадр, что в мини-карточке. Нет опубликованного — карточка без фото."""
     for key in ("card", "thumb"):
         url = visible_photo_url(str(item.get(key) or ""))
         if url:

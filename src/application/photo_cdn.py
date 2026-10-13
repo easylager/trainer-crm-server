@@ -22,18 +22,10 @@ def photo_url_from_cdn(file_key: str | None, base: str | None) -> str | None:
 
 
 def visible_photo_url(url: str | None) -> str | None:
-    """URL картинки, только если файл на месте. Иначе страница без фото, не битая картинка."""
+    """Публичный URL картинки. Нет опубликованного кадра — вызывающий не передаёт URL."""
     raw = str(url or "").strip()
     if not raw.lower().startswith(("https://", "http://", "/")):
         return None
-    prefix = "/api/public/photos/"
-    if raw.startswith(prefix):
-        from urllib.parse import unquote
-
-        from src.infrastructure import s3
-
-        key = unquote(raw[len(prefix) :].split("?", 1)[0])
-        return raw if s3.photo_exists(key) else None
     return raw
 
 
