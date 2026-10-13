@@ -41,13 +41,56 @@
     }
   }
 
-  function deepLinkTarget(sp) {
+  function parseArenaDeepLink(sp) {
     sp = String(sp || '').trim();
     var arena = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
-    if (arena) {
-      var arenaPath = 'arena?ref=' + arena[1];
-      if (arena[2]) arenaPath += '&s=' + arena[2];
-      return { key: 'arena', path: arenaPath };
+    if (!arena) return null;
+    return { arenaId: arena[1], sessionId: arena[2] || null };
+  }
+
+  function arenaLegacyMiniAppPath(arenaId, sessionId) {
+    var arenaPath = 'arena?ref=' + encodeURIComponent(String(arenaId));
+    if (sessionId != null) arenaPath += '&s=' + encodeURIComponent(String(sessionId));
+    return arenaPath;
+  }
+
+  function arenaPlacePath(publicPath, sessionId) {
+    var path = String(publicPath || '').trim();
+    if (!path) return '';
+    if (sessionId != null) return path + '?s=' + encodeURIComponent(String(sessionId));
+    return path;
+  }
+
+  /**
+   * TASK-257: при serverPlaceCard — public_path из GET /api/public/arenas/{id}, иначе arena?ref=.
+   */
+  function resolveArenaDeepLinkTarget(sp, options) {
+    options = options || {};
+    var parsed = parseArenaDeepLink(sp);
+    if (!parsed) return Promise.resolve(null);
+    var legacy = { key: 'arena', path: arenaLegacyMiniAppPath(parsed.arenaId, parsed.sessionId) };
+    if (!options.serverPlaceCard) return Promise.resolve(legacy);
+    var fetchCard = options.fetchPublicArenaCard;
+    if (typeof fetchCard !== 'function') return Promise.resolve(legacy);
+    return Promise.resolve()
+      .then(function () {
+        return fetchCard(parsed.arenaId);
+      })
+      .then(function (card) {
+        var pub = card && card.public_path;
+        if (!pub) return legacy;
+        return { key: 'place', path: arenaPlacePath(pub, parsed.sessionId) };
+      })
+      .catch(function () {
+        return legacy;
+      });
+  }
+
+  function deepLinkTarget(sp) {
+    sp = String(sp || '').trim();
+    var parsed = parseArenaDeepLink(sp);
+    if (parsed) {
+      return { key: 'arena', path: arenaLegacyMiniAppPath(parsed.arenaId, parsed.sessionId) };
     }
     if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
     var catalog =
@@ -107,6 +150,8 @@
     if (!loc) return false;
     if (!storage && typeof sessionStorage !== 'undefined') storage = sessionStorage;
     var sp = String(readStartParam(ctx) || '').trim();
+    /* Arena startapp ждёт mini_app_server_place_card из /client/session — обрабатывает shell. */
+    if (parseArenaDeepLink(sp)) return false;
     var target = deepLinkTarget(sp);
     if (!target) return false;
     try {
@@ -123,6 +168,10 @@
   return {
     DEEP_LINK_FLAG: DEEP_LINK_FLAG,
     readStartParam: readStartParam,
+    parseArenaDeepLink: parseArenaDeepLink,
+    arenaLegacyMiniAppPath: arenaLegacyMiniAppPath,
+    arenaPlacePath: arenaPlacePath,
+    resolveArenaDeepLinkTarget: resolveArenaDeepLinkTarget,
     deepLinkTarget: deepLinkTarget,
     pathnameKey: pathnameKey,
     isAlreadyOnTarget: isAlreadyOnTarget,

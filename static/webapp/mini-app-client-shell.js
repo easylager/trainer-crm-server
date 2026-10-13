@@ -1002,7 +1002,7 @@
     prefetchBookAssets: prefetchBookAssets,
     readBookingsWarmCache: readBookingsWarmCache,
     writeBookingsWarmCache: writeBookingsWarmCache,
-    maybeOpenArenaDeepLink: maybeOpenArenaDeepLink,
+    maybeOpenArenaDeepLink: maybeOpenArenaDeepLinkWithSession,
     deepLinkTarget: deepLinkTarget,
     reportCatalogPresence: reportCatalogPresence,
     readStartParam: readStartParam,
@@ -1066,6 +1066,10 @@
   }
 
   function deepLinkTarget(sp) {
+    var G = global.GlideDeepLink;
+    if (G && typeof G.deepLinkTarget === 'function') {
+      return G.deepLinkTarget(sp);
+    }
     sp = String(sp || '').trim();
     var arena = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
     if (arena) {
@@ -1091,19 +1095,90 @@
     return null;
   }
 
-  function maybeOpenArenaDeepLink() {
-    var sp = String(readStartParam() || '').trim();
-    var target = deepLinkTarget(sp);
+  function isAlreadyOnDeepLinkTarget(target) {
+    if (!target || !target.path) return false;
+    var raw = String(target.path);
+    if (raw.charAt(0) === '/') {
+      var wantPath = raw.split('?')[0];
+      var wantQuery = raw.indexOf('?') >= 0 ? '?' + raw.split('?').slice(1).join('?') : '';
+      return global.location.pathname === wantPath && (global.location.search || '') === wantQuery;
+    }
+    var current = pathnameKey();
+    if (current === target.key && target.key === 'arena') return true;
+    if (current === target.key) {
+      var qPart = target.path.indexOf('?') >= 0 ? target.path.split('?')[1] : '';
+      return global.location.search === (qPart ? '?' + qPart : '');
+    }
+    return false;
+  }
+
+  function followDeepLinkTarget(sp, target) {
     if (!target) return false;
     try {
       if (global.sessionStorage.getItem(DEEP_LINK_FLAG) === sp) return false;
       global.sessionStorage.setItem(DEEP_LINK_FLAG, sp);
     } catch (e) { /* без storage — как раньше, по ключу страницы */ }
-    var current = pathnameKey();
-    if (current === target.key && target.key === 'arena') return false;
-    if (current === target.key && global.location.search === '?' + target.path.split('?')[1]) return false;
+    if (isAlreadyOnDeepLinkTarget(target)) return false;
     navigate(target.path);
     return true;
+  }
+
+  function fetchPublicArenaCardForDeepLink(arenaId) {
+    return global
+      .fetch('/api/public/arenas/' + encodeURIComponent(String(arenaId)), { cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      });
+  }
+
+  function maybeOpenArenaDeepLinkWithSession(session) {
+    var sp = String(readStartParam() || '').trim();
+    var G = global.GlideDeepLink;
+    var serverPlaceCard = !!(session && session.mini_app_server_place_card);
+    if (G && typeof G.resolveArenaDeepLinkTarget === 'function') {
+      return G.resolveArenaDeepLinkTarget(sp, {
+        serverPlaceCard: serverPlaceCard,
+        fetchPublicArenaCard: fetchPublicArenaCardForDeepLink,
+      }).then(function (target) {
+        return followDeepLinkTarget(sp, target);
+      });
+    }
+    return Promise.resolve(followDeepLinkTarget(sp, deepLinkTarget(sp)));
+  }
+
+  function loadClientSessionBeforeDeepLink() {
+    var initData = getInitData();
+    if (!initData) return Promise.resolve(null);
+    var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
+    return global
+      .fetch('/api/webapp/client/session', { headers: headers, cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  function bootAfterSession(session) {
+    if (
+      session &&
+      typeof CatalogPublicUrl !== 'undefined' &&
+      CatalogPublicUrl.applyClientSession
+    ) {
+      CatalogPublicUrl.applyClientSession(session);
+    }
+    refreshWatchesSummary();
+    reportCatalogPresence('miniapp_shell', readStartParam());
+    return maybeOpenArenaDeepLinkWithSession(session).then(function (opened) {
+      if (opened) return;
+      if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {
+        scheduleCatalogNavigationPrefetch();
+      }
+      global.navigateClientHome = function () {
+        navigate('client-home');
+      };
+    });
   }
 
   function boot() {
@@ -1113,16 +1188,7 @@
       if (state.mode === 'tabs') setForcedTab('catalog');
       return;
     }
-    refreshWatchesSummary();
-    reportCatalogPresence('miniapp_shell', readStartParam());
-    if (maybeOpenArenaDeepLink()) return;
-    if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {
-      scheduleCatalogNavigationPrefetch();
-    }
-    /* Keep navigateClientHome for legacy buttons on tier B pages */
-    global.navigateClientHome = function () {
-      navigate('client-home');
-    };
+    loadClientSessionBeforeDeepLink().then(bootAfterSession);
   }
 
   /*
