@@ -119,15 +119,11 @@ def very_stale_note(
     has_phone: bool = True,
     has_site: bool = False,
 ) -> str:
-    """Строка для ``very_stale``: «Расписание не обновлялось 4 дня — уточните по телефону»."""
+    """Сеансы старше порога прячем. Заголовок без просьбы «уточните»."""
+    del now, has_phone, has_site
     if staleness_level(freshness) != LEVEL_VERY_STALE:
         return ""
-    tail = _ask_tail(has_phone=has_phone, has_site=has_site)
-    observed = _parse_dt((freshness or {}).get("schedule_observed_at"))
-    if observed is None:
-        return UNCONFIRMED_HEADING + tail
-    days = max(1, minsk_days_between(observed, now))
-    return f"Расписание не обновлялось {_plural_days(days)}{tail}"
+    return UNCONFIRMED_HEADING
 
 
 async def load_arena_freshness(

@@ -1170,7 +1170,9 @@
       '</div>' +
       focusGone +
       (staleNote ? '<p class="arena-stale">' + esc(staleNote) + '</p>' : '') +
-      '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
+      (M.scheduleInviteHint(hasTicketLinks)
+        ? '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>'
+        : '') +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
       '</div>'

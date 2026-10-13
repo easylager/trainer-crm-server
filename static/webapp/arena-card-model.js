@@ -1329,7 +1329,7 @@
     if (hasTicketLinks) {
       return 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.';
     }
-    return 'Выберите слот — он попадёт в приглашение. Покупка онлайн здесь не нужна.';
+    return '';
   }
 
   function startParamFromLocation(loc) {

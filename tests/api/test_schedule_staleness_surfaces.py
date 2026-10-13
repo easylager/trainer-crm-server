@@ -58,11 +58,8 @@ def test_notes_wording() -> None:
         "schedule_very_stale": True,
         "schedule_observed_at": datetime(2026, 10, 2, 12, 0, tzinfo=MINSK).isoformat(),
     }
-    assert very_stale_note(very, now=now) == "Расписание не обновлялось 4 дня — уточните по телефону"
-    assert (
-        very_stale_note(very, now=now, has_phone=False, has_site=True)
-        == "Расписание не обновлялось 4 дня — уточните на сайте катка"
-    )
+    assert very_stale_note(very, now=now) == "Расписание не подтверждено"
+    assert very_stale_note(very, now=now, has_phone=False, has_site=True) == "Расписание не подтверждено"
     assert stale_note(very, now=now) == ""
     assert stale_note({"schedule_stale": False}, now=now) == ""
 
@@ -122,8 +119,7 @@ async def test_ice_city_day_marks_stale_and_drops_very_stale(app_use_test_db, db
     assert day["session_count"] == 3
     assert [u["arena_id"] for u in day["unconfirmed"]] == [ids["very"]]
     # 80 ч — это 3 или 4 календарных дня по Минску, в зависимости от часа запуска.
-    days = (now.astimezone(MINSK).date() - (now - timedelta(hours=80)).astimezone(MINSK).date()).days
-    assert day["unconfirmed"][0]["note"] == f"Расписание не обновлялось {days} дня — уточните по телефону"
+    assert day["unconfirmed"][0]["note"] == "Расписание не подтверждено"
 
     html = render_ice_city_day_page(
         city_name="Стейл", day=day, canonical_url="/ice/x/today", og_image_url="/og.png", cta_url=None
@@ -156,9 +152,9 @@ async def test_selection_page_marks_stale_and_hides_very_stale_slots(app_use_tes
         share={"share_url": "https://x/c/x", "share_text": "x", "share_body": "x"},
         city_page_url=None,
     )
-    assert html.count('class="pick__stale"') == 1
+    assert 'class="pick__stale"' not in html
     assert "могло измениться" not in html
-    assert "Расписание не обновлялось" in html and "уточните по телефону" in html
+    assert "уточн" not in html.casefold()
 
 
 @pytest.mark.asyncio
@@ -187,9 +183,9 @@ async def test_place_page_stale_and_very_stale(app_use_test_db, db_session) -> N
     very = await load_place_view(db_session, str(ids["very"]), now=now)
     assert very is not None
     assert very["days"] == [] and very["next_slot"] is None and very["session_count"] == 0
-    assert very["schedule_note"].startswith("Расписание не обновлялось ")
+    assert very["schedule_note"] == "Расписание не подтверждено"
     html = render(very)
-    assert "Расписание не обновлялось" in html and 'href="tel:+375171234567"' in html
+    assert "уточн" not in html.casefold()
     assert 'class="slot' not in html
 
     for key in ("fresh", "manual"):
@@ -257,8 +253,7 @@ async def test_public_list_does_not_advertise_very_stale_session(app_use_test_db
     assert very["freshness"]["schedule_very_stale"] is True
     assert very["live"]["kind"] == "unconfirmed"
     assert "starts_at_local" not in very["live"] and "session_id" not in very["live"]
-    days = (now.astimezone(MINSK).date() - (now - timedelta(hours=80)).astimezone(MINSK).date()).days
-    assert very["live"]["text"] == f"Расписание не обновлялось {days} дня — уточните по телефону"
+    assert very["live"]["text"] == "Расписание не подтверждено"
     assert very["live_line"] == very["live"]["text"]
     for key in ("fresh", "stale", "manual"):
         assert by_id[ids[key]]["live"]["kind"] == "session"

@@ -915,7 +915,7 @@ def compute_service_open_state(
     tz = ZoneInfo(str(timezone_name or NOTIFICATION_TZ))
     local = now.astimezone(tz)
     if not has_known_hours(opening_hours):
-        return {"state": "unknown", "label": "часы уточняйте по телефону"}
+        return {"state": "unknown", "label": ""}
     intervals = intervals_for_weekday(opening_hours, local.weekday())
     if not intervals:
         tomorrow = intervals_for_weekday(opening_hours, (local.weekday() + 1) % 7)
