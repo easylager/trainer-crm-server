@@ -285,7 +285,7 @@ describe('TASK-185 AC-2: карточка арены', () => {
     await flushPromises(40);
 
     assert.match(root.innerHTML, /Arena Test Rink/);
-    assert.match(root.innerHTML, /Расписание/);
+    assert.match(root.innerHTML, /<p class="arena-h">Массовое катание<\/p>/);
     assert.match(root.innerHTML, /id="arenaRows"/);
     assert.doesNotMatch(root.innerHTML, /Не удалось загрузить расписание/);
     assert.match(root.innerHTML, /Не удалось загрузить тренеров/);
