@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="__LANG__">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>__OG_TITLE__</title>
+  <meta name="description" content="__OG_DESCRIPTION__" />
+  <link rel="canonical" href="__CANONICAL__" />
+  __HEAD_EXTRA__
+  <meta name="robots" content="__ROBOTS__" />
+
+  <meta property="og:type" content="place" />
+  <meta property="og:locale" content="__OG_LOCALE__" />
+  <link rel="icon" href="/favicon.ico" type="image/png" />
+  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />
+  <meta property="og:site_name" content="Glide" />
+  <meta property="og:title" content="__OG_TITLE__" />
+  <meta property="og:description" content="__OG_DESCRIPTION__" />
+  <meta property="og:url" content="__OG_URL__" />
+  <meta property="og:image" content="__OG_IMAGE__" />
+  <meta property="og:image:alt" content="__OG_TITLE__" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <!-- twitter:* повторяют og:*. Свои плейсхолдеры хаб и подборка не заполняют, и Telegram показывает их текстом вместо карточки. -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="__OG_TITLE__" />
+  <meta name="twitter:description" content="__OG_DESCRIPTION__" />
+  <meta name="twitter:image" content="__OG_IMAGE__" />
+
+  <script type="application/ld+json">__JSONLD__</script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=__TOKENS_V__" />
+  <link rel="stylesheet" href="/static/share/style-b.css?v=__STYLE_V__" />
+</head>
+<body class="b">
+  <main class="b-page">
+    __BODY__
+    <footer class="b-foot">__CITY_LINK__</footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/shared/list-scroll-restore.js?v=1"></script>
+  <script>
+    /*
+      JS страницы: «Скопировать», «Поделиться» и восстановление скролла списка.
+      Cache-Control: no-store (учёт просмотров) отключает bfcache — без sessionStorage
+      возврат /c/ → /p/ → назад всегда открывал список сверху. Без JS ссылки работают.
+    */
+    (function () {
+      var Api = window.GlideListScrollRestore;
+      if (Api) {
+        var path = location.pathname;
+        var search = location.search;
+        function saveListScroll() {
+          Api.save(sessionStorage, path, search, window.scrollY || window.pageYOffset || 0);
+        }
+        function restoreListScroll() {
+          var y = Api.consume(sessionStorage, path, search);
+          if (!y) return;
+          var go = function () { window.scrollTo(0, y); };
+          go();
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(function () { requestAnimationFrame(go); });
+          } else {
+            setTimeout(go, 0);
+          }
+        }
+        window.addEventListener('pagehide', saveListScroll);
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'hidden') saveListScroll();
+        });
+        if (document.readyState === 'complete') restoreListScroll();
+        else window.addEventListener('load', restoreListScroll);
+      }
+
+      var toast = document.getElementById('toast');
+      function say(text) {
+        toast.textContent = text;
+        toast.classList.add('show');
+        setTimeout(function () { toast.classList.remove('show'); }, 1800);
+      }
+      document.querySelectorAll('[data-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var text = btn.getAttribute('data-copy') || '';
+          var done = function () { say('Скопировано — вставьте в любой чат'); };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () { window.prompt('Скопируйте:', text); });
+          } else {
+            window.prompt('Скопируйте:', text);
+          }
+        });
+      });
+      function dropBrokenPhoto(img) {
+        var hero = img.closest('.hero');
+        if (hero) hero.classList.remove('hero--photo');
+        var media = img.closest('.pick__media');
+        if (media) {
+          var icon = media.getAttribute('data-icon') || '';
+          var head = media.parentNode;
+          media.remove();
+          if (icon && head && !head.querySelector('.pick__icon')) {
+            var plate = document.createElement('span');
+            plate.className = 'pick__icon';
+            plate.setAttribute('aria-hidden', 'true');
+            plate.textContent = icon;
+            head.insertBefore(plate, head.firstChild);
+          }
+          return;
+        }
+        img.remove();
+      }
+      document.querySelectorAll('.hero__photo, .pick__photo').forEach(function (img) {
+        img.addEventListener('error', function () { dropBrokenPhoto(img); });
+        if (img.complete && img.naturalWidth === 0) dropBrokenPhoto(img);
+      });
+      /*
+        Сайт не пишет в «Фото» напрямую. Android: файл в «Загрузки», галерея его видит.
+        iPhone: системное меню, пункт «Сохранить изображение» кладёт кадр в галерею.
+        Без JS остаётся обычная ссылка download.
+      */
+      var storyLink = document.querySelector('.share__story');
+      if (storyLink) {
+        storyLink.addEventListener('click', function (event) {
+          var href = storyLink.getAttribute('href') || '';
+          if (!href) return;
+          event.preventDefault();
+          saveStoryImage(href);
+        });
+      }
+      function storyFetchPath(href) {
+        try {
+          var u = new URL(href, location.href);
+          return u.pathname + u.search;
+        } catch (e) {
+          return href;
+        }
+      }
+      function isIos() {
+        var ua = navigator.userAgent || '';
+        return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      }
+      function blobDownload(blob) {
+        var objectUrl = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = 'glide-story.png';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2000);
+        say('Сохранено — проверьте «Загрузки» или галерею');
+      }
+      function saveStoryImage(href) {
+        fetch(storyFetchPath(href), { cache: 'no-store' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('http');
+            return r.blob();
+          })
+          .then(function (blob) {
+            var file = new File([blob], 'glide-story.png', { type: blob.type || 'image/png' });
+            var nav = navigator;
+            if (isIos() && nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+              nav.share({ files: [file] }).catch(function (err) {
+                if (err && err.name === 'AbortError') return;
+                blobDownload(blob);
+              });
+              return;
+            }
+            blobDownload(blob);
+          })
+          .catch(function () {
+            say('Удержите картинку и выберите «Сохранить в Фото»');
+            window.location.href = href;
+          });
+      }
+      if (navigator.share) {
+        var row = document.querySelector('.share__row');
+        var copy = document.querySelector('[data-copy]');
+        if (row && copy) {
+          var more = document.createElement('button');
+          more.type = 'button';
+          more.className = 'share__btn';
+          more.textContent = 'Ещё…';
+          more.addEventListener('click', function () {
+            navigator.share({ title: document.title, text: copy.getAttribute('data-copy') || '' }).catch(function () {});
+          });
+          row.appendChild(more);
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

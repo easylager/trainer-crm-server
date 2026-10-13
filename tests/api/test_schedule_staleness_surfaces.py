@@ -194,7 +194,7 @@ async def test_place_page_shows_very_stale_sessions(app_use_test_db, db_session)
         assert view["schedule_note"] == "", key
         html = render(view)
         assert 'class="sched__stale"' not in html, key
-        assert 'class="slot' in html, key
+        assert 'class="b-ticket' in html, key
         _assert_no_freshness_words(html)
     very = await load_place_view(db_session, str(ids["very"]), now=now)
     assert very is not None and very["schedule_level"] == LEVEL_VERY_STALE

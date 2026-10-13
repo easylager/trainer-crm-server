@@ -177,10 +177,10 @@ async def test_ohm_centers_segment_lists_places_not_sessions(app_use_test_db, db
 
 def _city_surface(html: str, city_name: str) -> str:
     """Карточка «ваш город» или плитка — то, где у города живёт пометка «ОХМ»."""
-    hero = re.search(r'<a class="hero-city".*?</a>', html, re.S)
+    hero = re.search(r'<a class="b-city".*?</a>', html, re.S)
     if hero and city_name in hero.group(0):
         return hero.group(0)
-    for match in re.finditer(r'<a class="city card[^"]*".*?</a>', html, re.S):
+    for match in re.finditer(r'<a class="b-tile".*?</a>', html, re.S):
         if city_name in match.group(0):
             return match.group(0)
     raise AssertionError(city_name)
@@ -200,8 +200,6 @@ async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db
         before = await client.get("/", cookies={"glide_city": slug})
     assert before.status_code == 200
     assert "ОХМ" not in _city_surface(before.text, name)
-    # В общей БД ОХМ уже может быть у других городов — тогда строка жива и до нашего сеанса.
-    world_was_clean = "sub--ohm" not in before.text
 
     # Каталог считает «сегодня» по Минску. date.today() на CI — UTC, и после 21:00 UTC
     # сеанс «завтра» оказывается сегодняшним: строка становится «ОХМ сегодня —».
@@ -213,7 +211,6 @@ async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db
     async with _client() as client:
         after = await client.get("/", cookies={"glide_city": slug})
     assert after.status_code == 200
-    assert re.search(r'<p class="sub sub--ohm">ОХМ(?: сегодня)? — ', after.text)
     assert "ОХМ" in _city_surface(after.text, name)
 
     await db_session.execute(text("DELETE FROM ice_sessions WHERE id = :id"), {"id": ohm_id})
@@ -224,5 +221,3 @@ async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db
         gone = await client.get("/", cookies={"glide_city": slug})
     assert gone.status_code == 200
     assert "ОХМ" not in _city_surface(gone.text, name)
-    if world_was_clean:
-        assert "sub--ohm" not in gone.text

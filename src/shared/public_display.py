@@ -13,6 +13,16 @@ _WEEKDAYS_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 _SPB_LO = re.compile(r"^санкт-петербург\s*/\s*ло$", re.IGNORECASE)
 _OBLAST = re.compile(r"(область|обл\.?)$", re.IGNORECASE)
 _PROSPEKT_DOT = re.compile(r"пр-т\.")
+# «ул. Ташкентская 19» → «ул. Ташкентская, 19»: номер дома после улицы — через запятую.
+_HOUSE_NO_COMMA = re.compile(
+    r"^((?:ул\.|пр-т|просп\.|проспект|пер\.|бул\.|бульвар|пл\.|площадь|тракт|ш\.)\s+[^\d,]*[^\d\s,])\s+(\d[\w/-]*)$",
+    re.IGNORECASE,
+)
+# «Замковая площадь 11А» → «Замковая площадь, 11А».
+_HOUSE_NO_COMMA_TAIL = re.compile(
+    r"^([^\d,]*\s(?:площадь|улица|проспект|переулок|бульвар))\s+(\d[\w/-]*)$",
+    re.IGNORECASE,
+)
 _HK = re.compile(r"(?i)(?<!\w)хк(?!\w)")
 
 
@@ -62,7 +72,12 @@ def format_phone_display(phone: str) -> str:
         return raw
     digits = href[1:] if href.startswith("+") else href
     if digits.startswith("375") and len(digits) == 12:
-        return f"+375 {digits[3:5]} {digits[5:8]}-{digits[8:10]}-{digits[10:12]}"
+        code = digits[3:5]
+        # Мобильные (25, 29, 33, 44) и Минск (17) — код из двух цифр. У остальных городов код
+        # длиннее (Жлобин — 2334), и деление «23 343-52-59» было бы неправдой: оставляем подряд.
+        if code in ("25", "29", "33", "44", "17"):
+            return f"+375 {code} {digits[5:8]}-{digits[8:10]}-{digits[10:12]}"
+        return f"+375 {digits[3:]}"
     if digits.startswith("7") and len(digits) == 11:
         return f"+7 {digits[1:4]} {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
     return href if href.startswith("+") else raw
@@ -107,7 +122,8 @@ def format_street_address(address: str, *, city: str = "", region: str = "") -> 
             continue
         if _OBLAST.search(folded):
             continue
-        kept.append(piece)
+        piece = _HOUSE_NO_COMMA.sub(r"\1, \2", piece)
+        kept.append(_HOUSE_NO_COMMA_TAIL.sub(r"\1, \2", piece))
     return ", ".join(kept)
 
 
@@ -143,8 +159,3 @@ def _guillemets(text: str) -> str:
         else:
             out.append(ch)
     return "".join(out)
-
-
-def is_roller_place(name: str) -> bool:
-    """Лыжероллерная трасса в каталоге лежит как ``other``. Считаем её по имени."""
-    return "лыжероллер" in _fold(str(name or ""))

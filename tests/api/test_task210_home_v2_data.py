@@ -45,13 +45,13 @@ def _freeze(monkeypatch, moment: datetime) -> None:
 def _counter(html: str) -> str:
     match = re.search(r'<p class="[^"]*\bcounter\b[^"]*">([^<]*)</p>', html)
     assert match, "counter"
-    return match.group(1)
+    return match.group(1).replace("\u00a0", " ")
 
 
 def _city_tile(html: str, city_name: str) -> str:
-    for match in re.finditer(r'<a class="city card[^"]*".*?</a>', html, re.S):
+    for match in re.finditer(r'<a class="b-tile".*?</a>', html.replace("\u00a0", " "), re.S):
         tile = match.group(0)
-        name = re.search(r'<span class="n">([^<]*)</span>', tile)
+        name = re.search(r'<span class="b-tile__name">([^<]*)</span>', tile)
         if name and html_lib.unescape(name.group(1)) == city_name:
             return tile
     raise AssertionError(city_name)
@@ -180,7 +180,7 @@ async def test_ac4_by_cities_stay_on_the_map_and_ru_does_not(app_use_test_db, db
     for slug in ("brest", "bobruysk", "grodno"):
         assert f'href="/c/{slug}" class="home-map__city"' in resp.text
     assert 'href="/c/tver" class="home-map__city"' not in resp.text
-    elsewhere = re.search(r'<p class="elsewhere">.*?</p>', resp.text, re.S)
+    elsewhere = re.search(r'<span class="elsewhere">.*?</span>', resp.text, re.S)
     assert elsewhere and 'href="/c/tver"' in elsewhere.group(0)
 
 
@@ -281,7 +281,6 @@ async def test_bad_day_falls_back_to_today_without_picker(app_use_test_db, db_se
     assert 'class="day-picker"' not in bad.text
     assert 'class="chips"' not in bad.text
     assert "chip--active" not in bad.text
-    assert '<p class="sub sub--ohm">ОХМ — ' in bad.text
     assert _counter(bad.text) == f"{name} — сегодня 1 сеанс"
 
 
@@ -406,7 +405,7 @@ async def test_single_place_city_button_opens_the_place(app_use_test_db, db_sess
     async with _client() as client:
         resp = await client.get("/", cookies={"glide_city": slug})
     assert resp.status_code == 200
-    assert f'<a class="hero-city" href="/p/{slug}/{arena_slug}">' in resp.text
+    assert f'<a class="b-city" href="/p/{slug}/{arena_slug}">' in resp.text
     assert 'class="city-button"' not in resp.text
 
 

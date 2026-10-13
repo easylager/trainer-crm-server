@@ -1,10 +1,10 @@
 """Прайс на карточке места: Minikatok — услуги, сноска ФК «Минск» не общая."""
 
-from src.application.place_page import _rental_catalog_html
+from src.application.place_page import _b_rental
 
 
 def test_minikatok_price_list_is_services_without_fk_minsk_note() -> None:
-    html = _rental_catalog_html(
+    html = _b_rental(
         {
             "name": "Minikatok.by",
             "website_url": "https://minikatok.by/",
@@ -22,7 +22,7 @@ def test_minikatok_price_list_is_services_without_fk_minsk_note() -> None:
 
 
 def test_explicit_rental_note_stays_on_the_place_that_owns_it() -> None:
-    html = _rental_catalog_html(
+    html = _b_rental(
         {
             "name": "Лыжероллерная трасса",
             "opening_hours": {
@@ -33,6 +33,6 @@ def test_explicit_rental_note_stays_on_the_place_that_owns_it() -> None:
     )
     assert "Прокат инвентаря" in html
     assert "ФК «Минск»" in html
-    assert 'class="offer__price"' in html
+    assert '8 BYN/час' in html
     assert "8 BYN" in html
     assert 'class="row"' not in html

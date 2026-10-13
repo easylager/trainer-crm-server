@@ -196,6 +196,20 @@ _CITY_STATS_SQL = text(
                LIMIT 1
            ) AS photo_key,
            (
+               SELECT COALESCE(m.variants->>'hero', m.variants->>'card')
+               FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+               ORDER BY m.sort_order, m.id
+               LIMIT 1
+           ) AS photo_hero_key,
+           (
+               SELECT m.width
+               FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+               ORDER BY m.sort_order, m.id
+               LIMIT 1
+           ) AS photo_width,
+           (
                SELECT COALESCE(m.display_tone, false)
                FROM media m
                WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
@@ -617,7 +631,7 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
         '<svg class="home-map" viewBox="0 0 600 520" role="img" aria-label="',
         _esc(t("home.map.aria")),
         '">',
-        f'<path d="{_MAP_COUNTRY_PATH}" fill="var(--g-dark)" stroke="var(--g-dark-line)" stroke-width="2" stroke-linejoin="round"/>',
+        f'<path d="{_MAP_COUNTRY_PATH}" fill="#12232f" stroke="var(--g-dark-line)" stroke-width="2" stroke-linejoin="round"/>',
     ]
     minsk = next((p for p in points if p.get("is_minsk")), None)
     if minsk:
@@ -640,7 +654,7 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
             f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city" aria-label="{_esc(pt["name"])}">'
             f'<circle class="home-map__tap" cx="{x:.1f}" cy="{y:.1f}" r="{tap:.1f}" fill="transparent"/>'
             f"{ring}"
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "var(--g-line-strong)"}"/></a>'
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "#4a6273"}"/></a>'
         )
     parts.append("</g>")
     parts.append('<g font-size="20" font-weight="600" fill="var(--g-on-photo)" pointer-events="none">')
@@ -701,9 +715,14 @@ def _fold_arena_rows(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
         if horizon_n > 0:
             city["horizon_arenas_with_sessions"] += 1
         photo_key = str(row.get("photo_key") or "").strip()
-        if photo_key and not city["photo_key"]:
-            city["photo_key"] = photo_key
-            city["display_tone"] = bool(row.get("display_tone"))
+        if photo_key:
+            # Фото города — самое крупное фото крытого катка; уличный каток и магазин — запасные.
+            rank = (str(row.get("venue_type") or "ice") == "ice", int(row.get("photo_width") or 0))
+            if not city["photo_key"] or rank > city.get("_photo_rank", (False, -1)):
+                city["photo_key"] = photo_key
+                city["photo_hero_key"] = str(row.get("photo_hero_key") or photo_key)
+                city["display_tone"] = bool(row.get("display_tone"))
+                city["_photo_rank"] = rank
     cities: list[dict[str, Any]] = []
     for cid in order:
         city = buckets[cid]
@@ -1014,70 +1033,6 @@ def _next_phrase(fact: Mapping[str, Any] | None) -> str:
     return " ".join(x for x in (day, hhmm) if x)
 
 
-def _city_has_line(city: Mapping[str, Any]) -> str:
-    bits: list[str] = []
-    if int(city.get("ice_place_count") or 0):
-        bits.append("лёд")
-    if city.get("has_ohm"):
-        bits.append("ОХМ")
-    if city.get("has_sharpening"):
-        bits.append("заточка")
-    if int(city.get("shop_count") or 0):
-        bits.append("магазины")
-    if city.get("has_trainers"):
-        bits.append("тренеры")
-    return " · ".join(bits)
-
-
-def _media_html(city: Mapping[str, Any] | None, *, hero: bool) -> str:
-    from src.application.catalog_icons import rink_motif_svg
-    from src.application.photo_cdn import public_photo_url
-
-    source = city or {}
-    key = str(source.get("photo_key") or "").strip()
-    url = public_photo_url(key) if key else (str(source.get("photo_url") or "").strip() or None)
-    if not url:
-        return f'<span class="g-motif-wrap">{rink_motif_svg()}</span>'
-    klass = "g-photo g-photo--toned" if (city or {}).get("display_tone") else "g-photo"
-    priority = ' fetchpriority="high"' if hero else ""
-    size = 'width="1600" height="900"' if hero else 'width="640" height="360"'
-    return f'<img class="{klass}" src="{_esc(url)}" alt="" {size}{priority} decoding="async" />'
-
-
-def _city_media(city: Mapping[str, Any] | None) -> str:
-    return _media_html(city, hero=False)
-
-
-def _city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
-    name = str(city["name"])
-    slug = str(city["slug"])
-    sessions = int(city.get("session_count") or 0)
-    quiet = ""
-    if sessions:
-        s_word = plural_ru(sessions, "сеанс", "сеанса", "сеансов")
-        when = _period_when_phrase(when_key)
-        when_html = f" {_esc(when)}" if when and when_key != "today" else ""
-        fact = (
-            f'<span class="f__bit"><b>{sessions} {s_word}</b>{when_html}</span>'
-            f' <span class="f__sep">·</span> '
-            f'<span class="f__bit">{_esc(_rink_count_text(city))}</span>'
-        )
-    elif city.get("next_skate"):
-        fact = f"ближайший — <b>{_esc(_next_phrase(city.get('next_skate')))}</b>"
-    else:
-        fact = _esc(_rink_count_text(city))
-        quiet = " city--quiet"
-    has = _city_has_line(city)
-    has_html = f'<span class="has">{_esc(has)}</span>' if has else ""
-    return (
-        f'<a class="city card{quiet}" href="/c/{_esc(slug)}">'
-        f"{_city_media(city)}"
-        f'<span class="n">{_esc(format_public_name(name))}</span>'
-        f'<span class="f">{fact}</span>'
-        f"{has_html}</a>"
-    )
-
-
 def _tile_rank(city: Mapping[str, Any]) -> tuple[Any, ...]:
     return (
         -int(city.get("session_count") or 0),
@@ -1114,126 +1069,6 @@ def split_home_tiles(
         rest = tiles[_MAX_CITY_TILES:] + rest
         tiles = tiles[:_MAX_CITY_TILES]
     return tiles, rest
-
-
-def _when_nav(view: Mapping[str, Any]) -> str:
-    when_key = str(view.get("when_key") or "today")
-    items = (
-        ("today", t("when.today"), "/?when=today"),
-        ("tomorrow", t("when.tomorrow"), "/?when=tomorrow"),
-        ("weekend", t("when.weekend"), "/?when=weekend"),
-        ("day", t("when.day"), "/?when=day"),
-    )
-    links = [
-        f'<a class="{"on" if key == when_key else ""}" href="{href}">{_esc(label)}</a>'
-        for key, label, href in items
-    ]
-    if view.get("show_day_picker"):
-        links.extend(
-            f'<a href="{_esc(item["href"])}">{_esc(item["label"])}</a>' for item in view.get("day_picker") or []
-        )
-    return f'<nav class="when">{"".join(links)}</nav>'
-
-
-def _hero_city_html(user_city: Mapping[str, Any] | None) -> str:
-    if not user_city:
-        return ""
-    bits: list[str] = []
-    nxt = user_city.get("next_skate")
-    if isinstance(nxt, Mapping) and nxt.get("hhmm"):
-        if nxt.get("is_today"):
-            bits.append(f"<b>лёд сегодня с {_esc(nxt['hhmm'])}</b>")
-        else:
-            bits.append(f"ближайший — <b>{_esc(_next_phrase(nxt))}</b>")
-    ohm = user_city.get("next_ohm")
-    if isinstance(ohm, Mapping) and ohm.get("hhmm"):
-        if ohm.get("is_today"):
-            bits.append("ОХМ сегодня")
-        elif ohm.get("is_weekend"):
-            bits.append("ОХМ в выходные")
-        else:
-            bits.append(f"ОХМ {_esc(str(ohm.get('day_label') or ''))}".strip())
-    sessions = int(user_city.get("session_count") or 0)
-    nxt = user_city.get("next_skate") if isinstance(user_city.get("next_skate"), Mapping) else None
-    if sessions and isinstance(nxt, Mapping) and nxt.get("is_today") and nxt.get("hhmm") and nxt.get("arena_name"):
-        word = plural_ru(sessions, "сеанс", "сеанса", "сеансов")
-        live = f"{sessions} {word} · ближайший в {nxt['hhmm']}, {format_public_name(str(nxt['arena_name']))}"
-    else:
-        live = " · ".join(bits)
-        live_html = f'<span class="live">{live}</span>' if live else ""
-    if sessions and isinstance(nxt, Mapping) and nxt.get("is_today") and nxt.get("hhmm") and nxt.get("arena_name"):
-        live_html = f'<span class="live">{_esc(live)}</span>'
-    return (
-        f'<a class="hero-city" href="{_esc(user_city.get("href") or "/c/" + str(user_city.get("slug") or ""))}">'
-        "<span>"
-        f'<span class="cap">{_esc(t("home.city_button.caption"))}</span>'
-        f'<span class="name">{_esc(format_public_name(str(user_city.get("name") or "")))}</span>'
-        f"{live_html}"
-        "</span>"
-        '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
-        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
-        "</a>"
-        f'<p><a href="#cities">{_esc(t("home.other_city"))}</a></p>'
-    )
-
-
-def _tiles_html(tiles: list[Mapping[str, Any]], *, when_key: str) -> str:
-    if not tiles:
-        return ""
-    return '<div class="cities">' + "".join(_city_tile(c, when_key=when_key) for c in tiles) + "</div>"
-
-
-def _more_cities_html(rest: list[Mapping[str, Any]]) -> str:
-    if not rest:
-        return ""
-    buckets: dict[str, list[Mapping[str, Any]]] = {}
-    for city in rest:
-        region = _BY_REGIONS.get(str(city.get("slug") or ""), _OTHER_REGION)
-        buckets.setdefault(region, []).append(city)
-    lines: list[str] = []
-    for region in sorted(buckets):
-        names = ", ".join(
-            f'<a href="/c/{_esc(c["slug"])}">{_esc(format_public_name(str(c["name"])))}</a>'
-            for c in sorted(buckets[region], key=lambda c: str(c.get("name") or ""))
-        )
-        label = region.replace(" область", "")
-        lines.append(f"<b>{_esc(label)}:</b> {names}")
-    n = len(rest)
-    summary = f"Ещё {n} {plural_ru(n, 'город', 'города', 'городов')} по областям"
-    return (
-        '<details class="more card">'
-        f"<summary>{_esc(summary)}</summary>"
-        f'<p class="more__list">{"<br>".join(lines)}</p>'
-        "</details>"
-    )
-
-
-def _ru_footer_html(cities: list[Mapping[str, Any]]) -> str:
-    ru = [c for c in cities if str(c.get("country") or "").upper() == "RU"]
-    if not ru:
-        return ""
-    links = ", ".join(
-        f'<a href="/c/{_esc(c["slug"])}">{_esc(format_public_name(str(c["name"])))}</a>'
-        for c in sorted(ru, key=lambda c: str(c.get("name")))
-    )
-    return f'<p class="elsewhere">Также: {links}</p>'
-
-
-def _ohm_sub_html(view: Mapping[str, Any]) -> str:
-    cities = [
-        c
-        for c in (view.get("cities") or [])
-        if str(c.get("country") or "").upper() == "BY" and c.get("has_ohm")
-    ]
-    if not cities:
-        return ""
-    if len(cities) == 1:
-        name = _esc(str(cities[0].get("name") or ""))
-        nxt = cities[0].get("next_ohm") if isinstance(cities[0].get("next_ohm"), Mapping) else {}
-        when = " сегодня" if nxt.get("is_today") else ""
-        return f'<p class="sub sub--ohm">ОХМ{when} — {name}.</p>'
-    word = plural_ru(len(cities), "городе", "городах", "городах")
-    return f'<p class="sub sub--ohm">ОХМ — в {len(cities)} {word}.</p>'
 
 
 def _json_ld(view: Mapping[str, Any], *, canonical_url: str) -> str:
@@ -1325,6 +1160,113 @@ def _counter_text(
     )
 
 
+def _b_home_city_card(user_city: Mapping[str, Any] | None) -> str:
+    """Тёмная карточка «Ваш город»: сколько сеансов и ближайший, ниже — «Другой город»."""
+    from src.application.catalog_icons import icon_svg
+
+    if not user_city:
+        return ""
+    bits: list[str] = []
+    sessions = int(user_city.get("session_count") or 0)
+    nxt = user_city.get("next_skate") if isinstance(user_city.get("next_skate"), Mapping) else None
+    if sessions:
+        bits.append(f"{sessions}\u00a0{plural_ru(sessions, 'сеанс', 'сеанса', 'сеансов')}")
+    if nxt and nxt.get("hhmm"):
+        place = format_public_name(str(nxt.get("arena_name") or ""))
+        when = f"в\u00a0{nxt['hhmm']}" if nxt.get("is_today") else _next_phrase(nxt)
+        bits.append(f"ближайший {when}" + (f", {place}" if place else ""))
+    ohm = user_city.get("next_ohm") if isinstance(user_city.get("next_ohm"), Mapping) else None
+    if ohm and ohm.get("hhmm"):
+        if ohm.get("is_today"):
+            bits.append("ОХМ сегодня")
+        elif ohm.get("is_weekend"):
+            bits.append("ОХМ в выходные")
+        else:
+            bits.append(f"ОХМ {ohm.get('day_label') or ''}".strip())
+    line = " · ".join(bits)
+    href = user_city.get("href") or "/c/" + str(user_city.get("slug") or "")
+    line_html = f'<span class="b-city__line">{_esc(line)}</span>' if line else ""
+    return (
+        f'<a class="b-city" href="{_esc(href)}"><span class="b-city__body">'
+        f'<span class="b-city__kicker">Ваш город</span>'
+        f'<span class="b-city__name">{_esc(format_public_name(str(user_city.get("name") or "")))}</span>'
+        f"{line_html}</span>{icon_svg('arrow')}</a>"
+        f'<a class="b-link" href="#cities">{_esc(t("home.other_city"))}</a>'
+    )
+
+
+def _b_when_nav(view: Mapping[str, Any]) -> str:
+    when_key = str(view.get("when_key") or "today")
+    items = (
+        ("today", t("when.today"), "/?when=today"),
+        ("tomorrow", t("when.tomorrow"), "/?when=tomorrow"),
+        ("weekend", t("when.weekend"), "/?when=weekend"),
+        ("day", t("when.day"), "/?when=day"),
+    )
+    links = "".join(
+        f'<a href="{href}"' + (' aria-current="true"' if key == when_key else "") + f">{_esc(label)}</a>"
+        for key, label, href in items
+    )
+    nav = f'<nav class="b-when" aria-label="Когда">{links}</nav>'
+    if view.get("show_day_picker"):
+        days = "".join(
+            f'<a class="b-day" href="{_esc(item["href"])}"><span>{_esc(item["label"])}</span></a>'
+            for item in view.get("day_picker") or []
+        )
+        nav += f'<nav class="b-days" aria-label="День">{days}</nav>'
+    return nav
+
+
+def _b_city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
+    from src.application.style_b import b_photo_url, tile_html
+
+    name = format_public_name(str(city["name"]))
+    sessions = int(city.get("session_count") or 0)
+    if sessions:
+        word = plural_ru(sessions, "сеанс", "сеанса", "сеансов")
+        when = _period_when_phrase(when_key)
+        head = f"{sessions}\u00a0{word}" + (f" {when}" if when and when_key != "today" else "")
+        line = f"{head} · {_rink_count_text(city)}"
+    elif city.get("next_skate"):
+        line = f"ближайший {_next_phrase(city.get('next_skate'))}"
+    else:
+        line = _rink_count_text(city)
+    if city.get("has_ohm"):
+        line += " · ОХМ"
+    return tile_html(
+        href=f"/c/{city['slug']}",
+        name=name,
+        line=line,
+        photo_url=b_photo_url(city.get("photo_key")),
+        photo_alt=name,
+        toned=bool(city.get("display_tone")),
+    )
+
+
+def _b_more_cities(rest: list[Mapping[str, Any]]) -> str:
+    from src.application.catalog_icons import icon_svg
+
+    if not rest:
+        return ""
+    buckets: dict[str, list[Mapping[str, Any]]] = {}
+    for city in rest:
+        region = _BY_REGIONS.get(str(city.get("slug") or ""), _OTHER_REGION)
+        buckets.setdefault(region, []).append(city)
+    lines: list[str] = []
+    for region in sorted(buckets):
+        names = ", ".join(
+            f'<a href="/c/{_esc(c["slug"])}">{_esc(format_public_name(str(c["name"])))}</a>'
+            for c in sorted(buckets[region], key=lambda c: str(c.get("name") or ""))
+        )
+        lines.append(f"<p><b>{_esc(region.replace(' область', ''))}:</b> {names}</p>")
+    n = len(rest)
+    summary = f"Ещё {n}\u00a0{plural_ru(n, 'город', 'города', 'городов')} по областям"
+    return (
+        f'<details class="b-details"><summary>{_esc(summary)}{icon_svg("down")}</summary>'
+        f'<div class="b-details__body">{"".join(lines)}</div></details>'
+    )
+
+
 def render_catalog_home_page(
     view: Mapping[str, Any],
     *,
@@ -1334,13 +1276,13 @@ def render_catalog_home_page(
     trainers_url: str,
     robots: str = "index, follow",
 ) -> str:
-    """Главная — только города (TASK-224).
+    """Главная в стиле B (доска «B · Главная»).
 
-    Сверху «ваш город» (cookie glide_city, по умолчанию Минск), под ним карта страны с
-    точками-ссылками, затем плитки городов и раскрывашка «ещё N городов по областям».
-    Чипов видов спорта и переключателя времени здесь нет — это делает страница города.
-    ``?when=`` в view-model по-прежнему понимается (счётчик и факты плиток считаются по окну).
+    Герой с фото катка «вашего города», выбор времени, карточка «Ваш город», тёмная карта,
+    сетка городов с фото и раскрывашка «ещё N городов по областям».
     """
+    from src.application.style_b import STYLE_VERSION, TOKENS_VERSION, b_photo_url, brand_link, hero_html
+
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     cities = list(view.get("cities") or [])
     now = view.get("now") if isinstance(view.get("now"), datetime) else _utc_now()
@@ -1348,8 +1290,6 @@ def render_catalog_home_page(
     lang, og_locale = html_lang_for_country(country)
     when_key = str(view.get("when_key") or "today")
 
-    # TASK-210: нейтральный заголовок (PDEC-019)
-    page_h1 = "Где покататься"
     title = "Где покататься в Беларуси — катки и расписание массовых катаний | Glide"
     description = (
         "Где покататься: города с катками, расписание массовых катаний и ссылки на все места в каталоге Glide."
@@ -1361,31 +1301,53 @@ def render_catalog_home_page(
     with_sessions = [c for c in by_cities if int(c.get("session_count") or 0) > 0]
     total_sessions = sum(int(c.get("session_count") or 0) for c in with_sessions)
     sole_name = str(with_sessions[0].get("name") or "") if len(with_sessions) == 1 else None
-    counter_text = _counter_text(
-        total_sessions, len(with_sessions), when_key, now=now, city_name=sole_name
+    counter_text = _counter_text(total_sessions, len(with_sessions), when_key, now=now, city_name=sole_name)
+    counter_text = re.sub(r"(\d) ", "\\1\u00a0", counter_text)
+
+    hero_city = user_city
+    if not (hero_city and hero_city.get("photo_hero_key")):
+        hero_city = next((c for c in by_cities if c.get("photo_hero_key")), None)
+    photo = b_photo_url(hero_city.get("photo_hero_key")) if hero_city else None
+    hero = hero_html(
+        title="Где покататься",
+        title_break="покататься",
+        kicker=_format_date_string(now).lower(),
+        sub_html=_esc(counter_text),
+        sub_class="counter",
+        photo_url=photo,
+        photo_alt=f"Каток, {format_public_name(str(hero_city.get('name') or ''))}" if hero_city else "",
+        toned=bool(hero_city.get("display_tone")) if hero_city else False,
+        bar_html=brand_link(),
+        variant="tall",
     )
 
     tiles, rest = split_home_tiles(cities, user_city_slug=user_slug)
-    scheduled = len([c for c in by_cities if int(c.get("horizon_arenas_with_sessions") or 0) > 0])
-    cities_head = (
-        f'<div class="head"><h2 class="section" id="cities">{"Сегодня в городах" if when_key == "today" else "Города"}</h2>'
-        + (f'<span class="muted small">{scheduled} с расписанием</span>' if scheduled else "")
-        + "</div>"
-    )
     if not cities:
-        cities_html = f'<p class="muted">{_esc(t("home.cities_empty"))}</p>'
+        cities_html = f'<section class="b-sec"><p class="b-text">{_esc(t("home.cities_empty"))}</p></section>'
     else:
-        cities_html = _tiles_html(tiles, when_key=when_key) + _more_cities_html(rest)
+        grid = "".join(_b_city_tile(c, when_key=when_key) for c in tiles)
+        head = "Сегодня в городах" if when_key == "today" else "Города"
+        cities_html = (
+            f'<section class="b-sec" id="cities"><div class="b-sec__head"><h2 class="b-h2">{head}</h2></div>'
+            f'<div class="b-grid2">{grid}</div>{_b_more_cities(rest)}</section>'
+        )
 
     map_svg = str(view.get("map_svg") or "")
-    legend = (
-        f'<p class="map-legend"><span><i></i>{_esc(t("home.map.legend_on"))}</span>'
-        f'<span class="off"><i></i>{_esc(t("home.map.legend_off"))}</span></p>'
-    )
-    map_html = f'<figure class="map card">{map_svg}</figure>{legend}' if map_svg else ""
-
+    map_html = ""
+    if map_svg:
+        map_html = (
+            '<section class="b-sec"><div class="b-sec__head"><h2 class="b-h2">Лёд по всей Беларуси</h2></div>'
+            f'<figure class="b-map">{map_svg}<figcaption class="b-map__legend">'
+            f'<span><i></i>{_esc(t("home.map.legend_on"))}</span>'
+            f'<span class="off"><i></i>{_esc(t("home.map.legend_off"))}</span></figcaption></figure></section>'
+        )
+    cta = ""
+    if cta_url:
+        cta = (
+            f'<section class="b-sec"><a class="b-btn b-btn--accent b-btn--wide" href="{_esc(cta_url)}">'
+            "Открыть в Telegram</a></section>"
+        )
     values = {
-        "__BRAND__": _esc(t("brand.mark")),
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,
         "__OG_TITLE__": _esc(title),
@@ -1394,29 +1356,30 @@ def render_catalog_home_page(
         "__OG_IMAGE__": _esc(og_image_url),
         "__ROBOTS__": _esc(robots),
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url),
-        "__DATE__": _esc(_format_date_string(now)),
-        "__HOME_MEDIA__": _media_html(user_city, hero=True),
-        "__PAGE_H1__": _esc(page_h1),
-        "__COUNTER_TEXT__": _esc(counter_text),
-        "__OHM_SUB__": _ohm_sub_html(view),
-        "__WHEN__": _when_nav(view),
-        "__HERO_CITY__": _hero_city_html(user_city),
-        "__FOOTER__": _esc(t("home.footer")),
+        "__TOKENS_V__": TOKENS_VERSION,
+        "__STYLE_V__": STYLE_VERSION,
+        "__HERO__": hero,
+        "__WHEN__": _b_when_nav(view),
+        "__HERO_CITY__": _b_home_city_card(user_city),
         "__MAP__": map_html,
-        "__CITIES_HEAD__": cities_head,
         "__CITIES__": cities_html,
-        "__ELSEWHERE__": _ru_footer_html(cities),
+        "__CTA__": cta,
+        "__FOOTER__": _esc(t("home.footer")),
+        "__ELSEWHERE__": _b_elsewhere(cities),
         "__TRAINERS_URL__": _esc(trainers_url),
     }
-    html = fill_placeholders(template, values)
-    if cta_url:
-        html = html.replace("__CTA_URL__", _esc(cta_url))
-    else:
-        start = html.find('<a class="cta"')
-        end = html.find("</a>", start)
-        if start != -1 and end != -1:
-            html = html[:start] + html[end + 4 :]
-    return html
+    return fill_placeholders(template, values)
+
+
+def _b_elsewhere(cities: list[Mapping[str, Any]]) -> str:
+    ru = [c for c in cities if str(c.get("country") or "").upper() == "RU"]
+    if not ru:
+        return ""
+    links = "".join(
+        f'<a href="/c/{_esc(c["slug"])}">{_esc(format_public_name(str(c["name"])))}</a>'
+        for c in sorted(ru, key=lambda c: str(c.get("name")))
+    )
+    return f'<span class="elsewhere">{links}</span>'
 
 
 def catalog_home_og_image_url(base_url: str) -> str:
@@ -1427,31 +1390,25 @@ def catalog_home_og_image_url(base_url: str) -> str:
     return path
 
 
-_TILE_RE = re.compile(
-    r'<a class="city card[^"]*" href="[^"]+">'
-    r'(?:<span class="g-motif-wrap">.*?</span>|<img[^>]*>)?'
-    r'<span class="n">(?P<name>[^<]+)</span>'
-    r'<span class="f">(?P<fact>.*?)</span>(?=<span class="has">|</a>)',
-    re.S,
-)
-
-
 def parse_city_session_count_from_home(html: str, city_name: str) -> int | None:
     """Тестовый хелпер: «N сеансов» в плитке города; город в раскрывашке — 0; нет на странице — None."""
-    for match in _TILE_RE.finditer(html):
-        if html_lib.unescape(match.group("name")) == city_name:
-            fact = re.sub(r"<[^>]+>", "", match.group("fact"))
-            found = re.search(r"(\d+)\s+сеанс", fact)
+    plain = html.replace("\u00a0", " ")
+    for match in re.finditer(
+        r'<a class="b-tile" href="[^"]+">.*?<span class="b-tile__name">([^<]+)</span>'
+        r'<span class="b-tile__line">([^<]*)</span>',
+        plain,
+        re.S,
+    ):
+        if html_lib.unescape(match.group(1)) == city_name:
+            found = re.search(r"(\d+)\s+сеанс", match.group(2))
             return int(found.group(1)) if found else 0
-    hero = re.search(r'<a class="hero-city" href="[^"]+">.*?<span class="name">([^<]+)</span>.*?</a>', html, re.S)
+    hero = re.search(
+        r'<a class="b-city" href="[^"]+">.*?<span class="b-city__name">([^<]+)</span>(.*?)</a>', plain, re.S
+    )
     if hero and html_lib.unescape(hero.group(1)) == city_name:
-        live = re.search(r'<span class="live">(.*?)</span>', hero.group(0), re.S)
-        if live:
-            found = re.search(r"(\d+)\s+сеанс", re.sub(r"<[^>]+>", "", live.group(1)))
-            if found:
-                return int(found.group(1))
-        return 0
-    more = re.search(r'<details class="more card">(.*?)</details>', html, re.S)
+        found = re.search(r"(\d+)\s+сеанс", re.sub(r"<[^>]+>", "", hero.group(2)))
+        return int(found.group(1)) if found else 0
+    more = re.search(r'<details class="b-details">(.*?)</details>', plain, re.S)
     if more and f">{html_lib.escape(city_name, quote=True)}</a>" in more.group(1):
         return 0
     return None

@@ -10,7 +10,8 @@ from sqlalchemy import text
 
 from src.api.app import app
 from src.application.ice_city_day import get_city_ice_day
-from src.application.place_page import _schedule_html, load_place_view
+from src.application.place_page import _b_schedule, load_place_view
+from src.application.public_web_cta import place_action_links
 from src.shared.arena_schedule_mode import PHONE_LINE, SEASON_CLOSED_LINE
 from tests.api.test_public_arenas import _add_future_session, _insert_arena, _insert_city
 
@@ -82,8 +83,9 @@ async def test_place_page_phone_mode_ssr(app_use_test_db, db_session) -> None:
 
     view = await load_place_view(db_session, str(arena_id))
     assert view is not None
-    html = _schedule_html(view, base_path=f"/p/{arena_id}", invite=False)
-    assert PHONE_LINE in html
+    links = place_action_links(view["card"], base_url="", surface="place_page", city_id=None)
+    html = _b_schedule(view, base_path=f"/p/{arena_id}", invite=False, links=links)
+    assert "по телефону" in html
     assert "tel:+375291112233" in html
 
 
@@ -102,7 +104,8 @@ async def test_place_page_season_closed_ssr(app_use_test_db, db_session) -> None
     await db_session.commit()
 
     view = await load_place_view(db_session, str(arena_id))
-    html = _schedule_html(view, base_path=f"/p/{arena_id}", invite=False)
+    links = place_action_links(view["card"], base_url="", surface="place_page", city_id=None)
+    html = _b_schedule(view, base_path=f"/p/{arena_id}", invite=False, links=links)
     assert SEASON_CLOSED_LINE in html
     assert f"откроется {reopen:%d.%m}" in html
     assert "ремонт" in html

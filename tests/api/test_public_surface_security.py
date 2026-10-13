@@ -70,12 +70,15 @@ def test_safe_external_url_allows_only_http_s() -> None:
 
 
 def test_contacts_block_drops_javascript_tickets_url() -> None:
-    from src.application.place_page import _contacts_html
+    from src.application.place_page import _b_arrive
+    from src.application.public_web_cta import place_action_links
 
-    html = _contacts_html({"tickets_url": "javascript:alert(1)", "website_url": "javascript:alert(2)"})
-    assert "javascript:" not in html
-    ok = _contacts_html({"tickets_url": "https://ticket.by/rink"})
-    assert 'href="https://ticket.by/rink"' in ok
+    bad_card = {"id": 1, "tickets_url": "javascript:alert(1)", "website_url": "javascript:alert(2)"}
+    links = place_action_links(bad_card, base_url="", surface="place_page", city_id=None)
+    assert "tickets" not in links
+    assert "javascript:" not in _b_arrive(bad_card, links)
+    ok = place_action_links({"id": 1, "tickets_url": "https://ticket.by/rink"}, base_url="", surface="place_page", city_id=None)
+    assert "tickets" in ok
 
 
 def test_markup_chars_detection_keeps_legit_names() -> None:

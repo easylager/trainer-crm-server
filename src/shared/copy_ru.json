@@ -56,7 +56,6 @@
   "route.service.hint": "заточка коньков",
   "brand.mark": "Glide",
   "ice.today.h1": "{city}: лёд сегодня",
-  "hub.no_rollers_halls": "Лыжероллеров и залов в списке пока нет.",
   "hub.no_skate_times": "времени катания в расписании нет",
   "hub.open_until": "{name} открыт до {time}",
   "cta.invite_friends": "Позвать друзей",
@@ -74,11 +73,14 @@
   "hub.nearby": "Лёд рядом",
   "hub.nearby_scheduled": "Лёд по расписанию рядом",
   "hub.when_title": "Когда кататься",
-  "hub.phone_when": "Время массового катания „{name}“ называет по телефону",
+  "hub.phone_when": "{name} называет время массового катания по телефону.",
   "hub.directions": "Как добраться",
   "cta.follow_rink": "Следить за катком",
   "cta.invite_short": "Позвать",
   "place.on_site": "На месте",
   "home.map.legend_on": "лёд сегодня",
-  "home.map.legend_off": "сегодня нет"
+  "home.map.legend_off": "сегодня нет",
+  "place.phone_schedule": "Время массового катания называют по телефону.",
+  "place.tickets_online": "Билеты — на сайте катка ↗",
+  "cta.enroll": "Записаться"
 }

@@ -490,10 +490,10 @@ async def test_slot_ten_days_ahead_is_not_called_past(app_use_test_db, db_sessio
     assert 'id="plan"' in resp.text and "12:00" in resp.text
 
 
-def test_hours_html_labels_complex_and_kassa() -> None:
-    from src.application.place_page import _hours_html
+def test_hours_rows_label_complex_and_kassa() -> None:
+    from src.application.place_page import _b_hours_rows
 
-    chizh = _hours_html(
+    chizh = _b_hours_rows(
         {
             "opening_hours": {
                 "complex": {"open": "07:00", "close": "23:00"},
@@ -501,11 +501,11 @@ def test_hours_html_labels_complex_and_kassa() -> None:
             }
         }
     )
-    assert "Комплекс" in chizh and "7:00–23:00" in chizh
-    assert "Касса" not in chizh
-    vitebsk = _hours_html({"opening_hours": {"kassa": {"open": "11:00", "close": "21:00"}}})
-    assert "Касса" in vitebsk and "11:00–21:00" in vitebsk
-    assert "Комплекс" not in vitebsk
+    assert chizh == [("Комплекс", "7:00–23:00")]
+    vitebsk = _b_hours_rows({"opening_hours": {"kassa": {"open": "11:00", "close": "21:00"}}})
+    assert vitebsk == [("Касса", "11:00–21:00")]
+    daily = _b_hours_rows({"opening_hours": {"daily": {"open": "07:00", "close": "23:00"}}})
+    assert daily == [("Открыто", "каждый день 7:00–23:00")]
 
 
 def test_hours_without_leading_zero_are_not_compared_as_strings() -> None:
@@ -524,13 +524,14 @@ def test_place_without_published_media_shows_no_picture() -> None:
     """A11: нет published-медиа — страница без картинки. Файл в хранилище на просмотр не проверяем."""
     from datetime import datetime, timezone
 
-    from src.application.place_page import _hero_photo_url, render_place_page
+    from src.application.place_page import render_place_page
+    from src.application.style_b import media_url
 
     published = "/api/public/photos/arenas/38/card.jpg"
-    assert _hero_photo_url({"hero": {"variants": {"card": published}}}) == published
-    assert _hero_photo_url({"hero": {"variants": {"hero": "javascript:alert(1)"}}}) is None
-    assert _hero_photo_url({"hero": None}) is None
-    assert _hero_photo_url({}) is None
+    assert media_url({"variants": {"card": published}}) == published
+    assert media_url({"variants": {"hero": "javascript:alert(1)"}}) is None
+    assert media_url(None) is None
+    assert media_url({}) is None
 
     now = datetime(2026, 10, 13, 9, 0, tzinfo=timezone.utc)
     share = {"share_url": "https://x/p/x", "share_text": "x", "share_body": "x"}
@@ -558,10 +559,10 @@ def test_place_without_published_media_shows_no_picture() -> None:
         )
 
     bare = page(None)
-    assert '<img class="hero__photo' not in bare
-    assert "g-motif" in bare
+    assert '<img class="b-hero__img' not in bare
+    assert "b-motif" in bare
     shown = page({"variants": {"card": published}})
-    assert f'class="hero__photo g-photo" src="{published}"' in shown
+    assert f'class="b-hero__img" src="{published}"' in shown
 
 
 @pytest.mark.asyncio
