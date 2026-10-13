@@ -87,10 +87,15 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert "19:30" in html and "8,50 BYN" in html
     assert "сегодня" not in _meta(html, "og:description").lower()
     assert "завтра" not in _meta(html, "og:description").lower()
-    # Шеринг дальше — во все мессенджеры, без Telegram у получателя.
+    # TASK-252: мессенджеры под выбранным билетом, не блок «Позвать друзей».
+    assert "place-share-fallback" in html
     assert "https://t.me/share/url?url=" in html
     assert "https://wa.me/?text=" in html
     assert "viber://forward?text=" in html
+    assert "Позвать друзей" not in html
+    assert "b-invite" not in html
+    assert 'id="placeShareBtn"' in html
+    assert "mini-app-share-sheet.js" in html
     ld = _json_ld(html)
     assert ld["@type"] == "IceRink"
     assert ld["telephone"] == "+375 29 111-22-33"
@@ -486,6 +491,26 @@ async def test_share_preview_is_not_counted_and_channel_is(app_use_test_db, db_s
     )
     assert len(rows) == 1
     assert rows[0]["channel"] == "telegram"
+
+
+@pytest.mark.asyncio
+async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db, db_session) -> None:
+    """TASK-252: ?s= → «Позвать на …», no-JS мессенджеры, без раскрывашки «Позвать друзей»."""
+    place = await _place(db_session)
+    sid = await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="11:15")
+    await db_session.commit()
+    async with _client() as client:
+        resp = await client.get(place["path"], params={"s": sid})
+        css = await client.get("/static/share/place-share.css?v=1")
+        js = await client.get("/static/share/place-share.js?v=1")
+    html = resp.text
+    assert resp.status_code == 200
+    assert css.status_code == 200 and js.status_code == 200
+    assert 'id="placeShareBtn"' in html and "Позвать на 11:15" in html
+    assert "place-share-fallback" in html and "viber://forward?text=" in html
+    assert "Позвать друзей" not in html and "b-invite" not in html and 'class="b-share"' not in html
+    assert f"{place['path']}?s={sid}" in html
+    assert "mini-app-share-sheet.js" in html
 
 
 @pytest.mark.asyncio

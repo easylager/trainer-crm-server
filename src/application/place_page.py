@@ -25,6 +25,7 @@ tier A/B/C в ``arena_public_use_cases``).
 from __future__ import annotations
 
 import html as html_lib
+import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -836,6 +837,114 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
     return json_for_script(place)
 
 
+_B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _file_version(rel: str) -> str:
+    import hashlib
+
+    path = _REPO_ROOT / rel
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()[:10]
+    except OSError:
+        return "0"
+
+
+PLACE_SHARE_VERSION = _file_version("static/share/place-share.css")
+
+
+def _webapp_bundle_version() -> str:
+    try:
+        text = (_REPO_ROOT / "static" / "webapp" / "arena.html").read_text(encoding="utf-8")
+    except OSError:
+        return "0"
+    match = re.search(r"minsk-time\.js\?v=(\d+)", text)
+    return match.group(1) if match else "0"
+
+
+def _effective_pick_session(view: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    focus = view.get("focus")
+    if isinstance(focus, Mapping):
+        return focus
+    nxt = view.get("next_slot")
+    return nxt if isinstance(nxt, Mapping) else None
+
+
+def _nojs_messenger_row(share: Mapping[str, str]) -> str:
+    """Простые ссылки мессенджеров под выбранным билетом (без JS)."""
+    url = share["share_url"]
+    body = share.get("share_body") or ""
+    full = f"{body}\n{url}" if body else url
+    tg = f"https://t.me/share/url?url={quote(url, safe='')}"
+    if body:
+        tg += f"&text={quote(body, safe='')}"
+    links = (
+        ("Telegram", tg, True),
+        ("Viber", f"viber://forward?text={quote(full, safe='')}", False),
+        ("WhatsApp", f"https://wa.me/?text={quote(full, safe='')}", True),
+    )
+    row = "".join(
+        f'<a href="{_esc(href)}"' + (' rel="noopener" target="_blank"' if blank else "") + f">{_esc(label)}</a>"
+        for label, href, blank in links
+    )
+    row += f'<button type="button" data-copy="{_esc(full)}">Скопировать</button>'
+    return f'<div class="place-share-fallback">{row}</div>'
+
+
+def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool, telegram_url: str | None) -> str:
+    pick = _effective_pick_session(view)
+    if pick is None or not _skating(view["card"]):
+        return ""
+    start = format_clock(str(pick.get("starts_at_local") or ""))
+    label = f"Позвать на {start}" if start else "Позвать с собой"
+    zovi = zovi_entry_path(view)
+    zovi_html = f'<a class="place-share-dock__zovi" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>' if zovi else ""
+    tg_html = (
+        f'<a class="place-share-dock__zovi" href="{_esc(telegram_url)}">В Telegram</a>' if telegram_url else ""
+    )
+    return (
+        '<div class="place-share-dock" id="placeShareDock">'
+        '<div class="place-share-dock__inner">'
+        f'<button type="button" class="place-share-dock__btn" id="placeShareBtn">{_esc(label)}</button>'
+        f"{tg_html}{zovi_html}</div></div>"
+    )
+
+
+def _place_share_scripts_html(view: Mapping[str, Any], *, invite: bool, base_path: str) -> str:
+    pick = _effective_pick_session(view)
+    if pick is None or not _skating(view["card"]):
+        return ""
+    card = view["card"]
+    pick_day = _parse_iso_date(pick.get("local_date"))
+    boot = {
+        "ref": str(card["id"]),
+        "placeName": format_public_name(str(card.get("name") or "")),
+        "timezone": str(card.get("timezone") or "Europe/Minsk"),
+        "today": view["today"].isoformat(),
+        "days": view.get("days") or [],
+        "ohmDays": view.get("ohm_days") or [],
+        "sessionId": int(pick["id"]),
+        "focusDay": pick_day.isoformat() if pick_day else "",
+        "sessionMissing": bool(view.get("focus_missing")),
+        "invite": invite,
+        "basePath": base_path,
+    }
+    wv = _webapp_bundle_version()
+    pv = PLACE_SHARE_VERSION
+    return (
+        f'<script type="application/json" id="place-share-data">{json_for_script(boot)}</script>\n'
+        f'<script>window.__PLACE_SHARE__=JSON.parse(document.getElementById("place-share-data").textContent);</script>\n'
+        f'<link rel="stylesheet" href="/webapp/mini-app-share-sheet.css?v={_esc(wv)}" />\n'
+        f'<link rel="stylesheet" href="/static/share/place-share.css?v={_esc(pv)}" />\n'
+        f'<script src="/webapp/minsk-time.js?v={_esc(wv)}"></script>\n'
+        f'<script src="/webapp/public-display-model.js?v={_esc(wv)}"></script>\n'
+        f'<script src="/webapp/arena-card-model.js?v={_esc(wv)}"></script>\n'
+        f'<script src="/webapp/mini-app-share-sheet.js?v={_esc(wv)}"></script>\n'
+        f'<script src="/static/share/place-share.js?v={_esc(pv)}"></script>'
+    )
+
+
 def render_place_page(
     view: Mapping[str, Any],
     *,
@@ -890,13 +999,16 @@ def render_place_page(
         "__STYLE_V__": STYLE_VERSION,
         "__CITY_LINK__": city_link,
         "__BODY__": body,
+        "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite, telegram_url=cta_url),
+        "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(view, invite=invite, base_path=base_path),
     }
-    return fill_placeholders(html, replacements)
+    page_html = fill_placeholders(html, replacements)
+    if _effective_pick_session(view) is not None and _skating(card):
+        page_html = page_html.replace("<body class=\"b\">", '<body class="b has-place-share">', 1)
+    return page_html
 
 
 # ── TASK-246 · стиль B «Лёд и свет» (доска «B · Место») ──────────────────────
-
-_B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
 
 _B_AMENITIES: tuple[tuple[str, str, str], ...] = (
     ("skate_rental", "skate", "Прокат коньков"),
@@ -987,9 +1099,15 @@ def _b_price_mode(slots: list[Mapping[str, Any]]) -> str:
     return max(counts.items(), key=lambda kv: kv[1])[0]
 
 
-def _b_ticket(slot: Mapping[str, Any], *, base_path: str, invite: bool, focused: bool, common_price: str) -> str:
-    from src.application.catalog_icons import icon_svg
-
+def _b_ticket(
+    slot: Mapping[str, Any],
+    *,
+    base_path: str,
+    invite: bool,
+    focused: bool,
+    common_price: str,
+    nojs_share: Mapping[str, str] | None = None,
+) -> str:
     start = format_clock(str(slot.get("starts_at_local") or ""))
     end = format_clock(str(slot.get("ends_at_local") or ""))
     sub_bits = [f"до {end}"] if end else []
@@ -997,13 +1115,16 @@ def _b_ticket(slot: Mapping[str, Any], *, base_path: str, invite: bool, focused:
     if price and price != common_price:
         sub_bits.append(price)
     sub = f'<span class="b-ticket__sub">{_esc(" · ".join(sub_bits))}</span>' if sub_bits else ""
-    href = base_path + place_query(session_id=int(slot["id"]), invite=invite) + "#plan"
+    href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
     klass = "b-ticket b-ticket--picked" if focused else "b-ticket"
-    return (
-        f'<a class="{klass}" href="{_esc(href)}" rel="nofollow">'
-        f'<span class="b-ticket__time">{_esc(start)}</span>{sub}'
-        f'<span class="b-ticket__go">{icon_svg("invite")}{_esc(t("cta.invite_short"))}</span></a>'
+    sid = int(slot["id"])
+    ticket = (
+        f'<a class="{klass}" href="{_esc(href)}" rel="nofollow" data-session-id="{sid}">'
+        f'<span class="b-ticket__time">{_esc(start)}</span>{sub}</a>'
     )
+    if focused and nojs_share is not None:
+        ticket += _nojs_messenger_row(nojs_share)
+    return ticket
 
 
 def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
@@ -1030,7 +1151,9 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
 
     today = view["today"]
     focus = view.get("focus")
+    pick = _effective_pick_session(view)
     focus_id = int(focus["id"]) if focus is not None else None
+    pick_id = int(pick["id"]) if pick is not None else None
     by_date: dict[date, list[Mapping[str, Any]]] = {}
     for day in days:
         d = _parse_iso_date(day.get("local_date"))
@@ -1058,9 +1181,18 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         if not n:
             sched_bits.append(f'<span class="{day_klass} b-day--off">{inner}</span>')
             continue
+        nojs_share = None
+        if pick_id is not None and any(int(s["id"]) == pick_id for s in slots):
+            page_url = base_path + place_query(session_id=pick_id, invite=invite)
+            nojs_share = share_payload(view, page_url=page_url, invite=invite)
         tickets = "".join(
             _b_ticket(
-                s, base_path=base_path, invite=invite, focused=(focus_id == int(s["id"])), common_price=common
+                s,
+                base_path=base_path,
+                invite=invite,
+                focused=(pick_id == int(s["id"])),
+                common_price=common,
+                nojs_share=nojs_share if pick_id == int(s["id"]) else None,
             )
             for s in slots
         )
@@ -1319,7 +1451,6 @@ def render_place_body_b(
     story_image_url: str | None,
 ) -> str:
     from src.application.public_web_cta import phone_beacon_script, place_action_links
-    from src.application.style_b import share_html
 
     card = view["card"]
     links = place_action_links(
@@ -1334,12 +1465,6 @@ def render_place_body_b(
         _b_arrive(card, links),
         _b_onsite(card, cta_url=cta_url),
         _b_rental(card),
-        share_html(
-            share,
-            telegram_url=cta_url,
-            story_image_url=story_image_url,
-            zovi_path=zovi_entry_path(view),
-        ),
     ]
     body = "".join(parts)
     return body + phone_beacon_script(body)
