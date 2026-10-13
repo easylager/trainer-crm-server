@@ -280,12 +280,10 @@ details.b-details[open] > summary .b-icon { transform: rotate(180deg); }
 a.b-info__row .b-info__val { color: var(--g-accent-ink); }
 a.b-info__row[href^="tel:"] .b-info__val { color: var(--g-ink); }
 
-.b-days { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
-.b-days::-webkit-scrollbar { display: none; }
 .b-day {
   flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px 0; border-radius: 14px;
-  background: var(--g-surface); color: var(--g-ink) !important; text-decoration: none;
+  background: var(--g-surface); color: var(--g-ink); text-decoration: none;
 }
 .b-day span { font-size: 13px; }
 .b-day b { font-size: 18px; }
@@ -293,8 +291,6 @@ a.b-info__row[href^="tel:"] .b-info__val { color: var(--g-ink); }
 .b-day--end { background: #eef7f7; }
 .b-day--off { color: #8396a4 !important; }
 .b-day--off i { color: inherit; }
-.b-day[aria-current="true"] { background: var(--g-dark); color: var(--g-on-photo) !important; }
-.b-day[aria-current="true"] i { color: var(--g-on-dark-accent); }
 .b-daypane[hidden] { display: none; }
 
 /* ── Кнопки ───────────────────────────────────────────────────────────── */
@@ -376,11 +372,23 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
   .b-hero { border-radius: 24px; margin: 0 16px; }
 }
 
-/* Дни расписания места: без JS работает через :target */
-.b-daypane { display: none; }
-.b-daypane--default { display: block; }
-.b-daypane:target { display: block; scroll-margin-top: 120px; }
-.b-panes:has(.b-daypane:target) .b-daypane--default:not(:target) { display: none; }
+/* Дни расписания места: без JS — :target на ссылке дня, pane — следующий sibling */
+.b-sched {
+  display: flex; flex-wrap: wrap; column-gap: 6px;
+  overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px;
+}
+.b-sched::-webkit-scrollbar { display: none; }
+.b-sched > .b-day { order: 0; flex: 0 0 64px; }
+.b-sched > .b-daypane { order: 1; flex: 1 1 100%; display: none; scroll-margin-top: 120px; }
+.b-sched > .b-day--current { background: var(--g-dark); color: var(--g-on-photo); }
+.b-sched > .b-day--current i { color: var(--g-on-dark-accent); }
+.b-sched > .b-day--current + .b-daypane { display: block; }
+.b-sched:has(> .b-day:target) > .b-day--current:not(:target) { background: var(--g-surface); color: var(--g-ink); }
+.b-sched:has(> .b-day:target) > .b-day--current:not(:target) i { color: var(--g-accent-ink); }
+.b-sched:has(> .b-day:target) > .b-day--current:not(:target) + .b-daypane { display: none; }
+.b-sched > .b-day:target { background: var(--g-dark); color: var(--g-on-photo); }
+.b-sched > .b-day:target i { color: var(--g-on-dark-accent); }
+.b-sched > .b-day:target + .b-daypane { display: block; }
 
 /* Сеанс из ссылки */
 .b-plan {
@@ -390,7 +398,7 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 .b-plan__kicker { font-size: 14px; color: var(--g-on-dark-accent); }
 .b-plan__day { font-size: 16px; }
 .b-plan__time { font-family: var(--g-font-display); font-size: 34px; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.b-plan__line, .b-plan__soon { font-size: 15px; color: var(--g-on-dark-muted); }
+.b-plan__line, .b-plan__soon, .b-plan__where { font-size: 15px; color: var(--g-on-dark-muted); }
 .b-plan--gone { gap: 6px; }
 
 /* «Позвать друзей»: раскрытый блок занимает всю ширину ряда */

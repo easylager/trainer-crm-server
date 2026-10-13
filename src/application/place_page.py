@@ -1045,39 +1045,36 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         for d, slots in by_date.items():
             if any(int(s["id"]) == focus_id for s in slots):
                 default_day = d
-    strip: list[str] = []
+    sched_bits: list[str] = []
     for offset in range(SCHEDULE_DAYS):
         d = today + timedelta(days=offset)
         label = short_day_word(d, today=today)
-        n = len(by_date.get(d, []))
-        klass = "b-day"
+        slots = by_date.get(d, [])
+        n = len(slots)
+        day_klass = "b-day"
         if d.weekday() >= 5:
-            klass += " b-day--end"
+            day_klass += " b-day--end"
         inner = f"<span>{_esc(label)}</span><b>{d.day}</b><i>{n if n else '—'}</i>"
-        if n:
-            current = ' aria-current="true"' if d == default_day else ""
-            strip.append(f'<a class="{klass}" href="#d-{d.isoformat()}"{current}>{inner}</a>')
-        else:
-            strip.append(f'<span class="{klass} b-day--off">{inner}</span>')
-    panes: list[str] = []
-    for d in sorted(by_date):
+        if not n:
+            sched_bits.append(f'<span class="{day_klass} b-day--off">{inner}</span>')
+            continue
         tickets = "".join(
             _b_ticket(
                 s, base_path=base_path, invite=invite, focused=(focus_id == int(s["id"])), common_price=common
             )
-            for s in by_date[d]
+            for s in slots
         )
-        klass = "b-daypane b-daypane--default" if d == default_day else "b-daypane"
-        panes.append(f'<div class="{klass}" id="d-{d.isoformat()}"><div class="b-tickets">{tickets}</div></div>')
+        frag = f"d-{d.isoformat()}"
+        if d == default_day:
+            day_klass += " b-day--current"
+        sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
+        sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
     tickets_link = ""
     if links.get("tickets"):
         href, blank = links["tickets"]
         attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
         tickets_link = f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>'
-    body = (
-        f'<nav class="b-days" aria-label="День">{"".join(strip)}</nav>'
-        f'<div class="b-panes">{"".join(panes)}</div>{tickets_link}'
-    )
+    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{tickets_link}'
     aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
@@ -1266,8 +1263,16 @@ def _b_rental(card: Mapping[str, Any]) -> str:
     return section(_rental_section_title(card, hours), body, klass="b-sec--place")
 
 
+def _b_about(card: Mapping[str, Any]) -> str:
+    text = str(card.get("short_description") or "").strip()
+    if not text:
+        return ""
+    return f'<section class="b-sec b-sec--place"><p class="b-text">{_esc(text)}</p></section>'
+
+
 def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
     """Сеанс из ссылки ``?s=`` — тёмный билет над расписанием."""
+    card = view["card"]
     focus = view.get("focus")
     if focus is None:
         if not view.get("focus_missing"):
@@ -1288,6 +1293,9 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
     label = session_kind_label(focus)
     time_text = f"{start}–{end}" if end else start
     extra = " · ".join(x for x in (label, prices) if x)
+    place_name = format_public_name(str(card.get("name") or ""))
+    address = format_place_address(str(card.get("address") or ""), city=_city(card))
+    where = " · ".join(x for x in (place_name, address) if x)
     return (
         '<section class="b-sec" id="plan"><div class="b-plan">'
         f'<span class="b-plan__kicker">{_esc(kicker)}</span>'
@@ -1295,6 +1303,7 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
         f'<span class="b-plan__time">{_esc(time_text)}</span>'
         + (f'<span class="b-plan__line">{_esc(extra)}</span>' if extra else "")
         + (f'<span class="b-plan__soon">{_esc(soon)}</span>' if soon else "")
+        + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
         + "</div></section>"
     )
 
@@ -1318,6 +1327,7 @@ def render_place_body_b(
     )
     parts = [
         _b_hero(card, status_html=_b_status(view)),
+        _b_about(card),
         _b_plan(view, invite=invite),
         _b_schedule(view, base_path=base_path, invite=invite, links=links),
         _b_ohm(view),
