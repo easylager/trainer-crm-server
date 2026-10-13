@@ -1208,7 +1208,7 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         tickets_link = f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>'
     zovi = zovi_entry_path(view)
     zovi_link = (
-        f'<p class="place-share-zovi"><a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a></p>'
+        f'<p class="place-share-zovi"><a href="{_esc(zovi)}">{_esc(t("share.card"))}</a></p>'
         if zovi
         else ""
     )

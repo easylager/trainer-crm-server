@@ -88,14 +88,33 @@
     var btn = document.getElementById('placeShareBtn');
     if (btn) btn.textContent = inviteLabel(sid);
     if (!opts || !opts.skipUrl) syncUrl(sid);
-    revealPickedTicket();
+    revealAboveDock();
   }
 
-  function revealPickedTicket() {
-    var el = document.querySelector('.b-ticket--picked');
-    if (!el || typeof el.scrollIntoView !== 'function') return;
+  function dockClearanceTop() {
+    var dock = document.getElementById('placeShareDock');
+    if (!dock) return window.innerHeight;
+    return dock.getBoundingClientRect().top - 8;
+  }
+
+  function revealAboveDock() {
+    var nodes = [];
+    var ticket = document.querySelector('.b-ticket--picked');
+    var zovi = document.querySelector('.place-share-zovi');
+    if (ticket) nodes.push(ticket);
+    if (zovi) nodes.push(zovi);
+    if (!nodes.length) return;
     var run = function () {
-      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      var limit = dockClearanceTop();
+      var maxBottom = 0;
+      var minTop = Infinity;
+      for (var i = 0; i < nodes.length; i++) {
+        var r = nodes[i].getBoundingClientRect();
+        if (r.bottom > maxBottom) maxBottom = r.bottom;
+        if (r.top < minTop) minTop = r.top;
+      }
+      if (maxBottom > limit) window.scrollBy(0, maxBottom - limit);
+      if (minTop < 0) window.scrollBy(0, minTop);
     };
     run();
     if (typeof requestAnimationFrame === 'function') {
@@ -161,7 +180,9 @@
   });
 
   window.addEventListener('load', function () {
-    if (document.querySelector('.b-ticket--picked')) revealPickedTicket();
+    if (document.querySelector('.b-ticket--picked') || document.querySelector('.place-share-zovi')) {
+      revealAboveDock();
+    }
   });
 
   var btn = document.getElementById('placeShareBtn');

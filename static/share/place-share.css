@@ -47,6 +47,13 @@ body.b.has-place-share {
 .place-share-zovi {
   margin: 14px 0 0;
   font-size: 14px;
+  scroll-margin-bottom: var(--place-share-dock-h);
+}
+
+.place-share-zovi a {
+  color: var(--g-accent-ink);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .place-share-fallback {
