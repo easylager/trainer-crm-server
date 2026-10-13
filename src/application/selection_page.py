@@ -1200,7 +1200,7 @@ def render_selection_page(
             "__STYLE_V__": STYLE_VERSION,
             "__CITY_LINK__": city_link,
             "__BODY__": body,
-            **catalog_list_share_tail(scripts=need_share_js),
+            **catalog_list_share_tail(scripts=need_share_js, css=bool(share_pick)),
         },
     )
 

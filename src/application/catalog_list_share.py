@@ -109,9 +109,18 @@ def catalog_list_share_scripts_html() -> str:
     )
 
 
-def catalog_list_share_tail(*, scripts: bool) -> dict[str, str]:
+def catalog_list_share_css_html() -> str:
+    cv = CATALOG_LIST_SHARE_VERSION
+    return f'<link rel="stylesheet" href="/static/share/catalog-list-share.css?v={_esc(cv)}" />'
+
+
+def catalog_list_share_tail(*, scripts: bool, css: bool = False) -> dict[str, str]:
     """Плейсхолдеры b.html для списка и хаба (не страница места)."""
+    css = css or scripts
+    scripts_html = catalog_list_share_scripts_html() if scripts else ""
+    if css and not scripts:
+        scripts_html = catalog_list_share_css_html()
     return {
         "__PLACE_SHARE_BAR__": "",
-        "__PLACE_SHARE_SCRIPTS__": catalog_list_share_scripts_html() if scripts else "",
+        "__PLACE_SHARE_SCRIPTS__": scripts_html,
     }

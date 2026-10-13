@@ -27,4 +27,8 @@ describe('catalog-list-share.js (TASK-253)', () => {
     assert.match(src, /closest\('\[data-catalog-selection-share\]'\)/);
     assert.match(src, /preventDefault/);
   });
+
+  it('«Позвать»: preventDefault только при GlideShareSheet', () => {
+    assert.match(src, /invite && window\.GlideShareSheet/);
+  });
 });

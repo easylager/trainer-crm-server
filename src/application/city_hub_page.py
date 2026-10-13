@@ -561,8 +561,9 @@ def render_city_hub_page(
     from src.application.public_web_cta import phone_beacon_script
 
     body += phone_beacon_script(body)
-    need_share_js = bool(view.get("upcoming")) or int(view.get("rink_count") or 0) > 0
-    share_tail = catalog_list_share_tail(scripts=need_share_js)
+    has_share_pick = int(view.get("rink_count") or 0) > 0
+    need_share_js = bool(view.get("upcoming")) or has_share_pick
+    share_tail = catalog_list_share_tail(scripts=need_share_js, css=has_share_pick)
     elements = []
     for p in view.get("places") or []:
         if not p.get("slug"):

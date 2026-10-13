@@ -39,3 +39,16 @@
   width: 100%;
   justify-content: center;
 }
+
+/* Без JS: кнопка подборки мертва — прячем; остаётся share_html. С JS: наоборот. */
+.b-sec--share-pick {
+  display: none;
+}
+
+html.js .b-sec--share-pick {
+  display: block;
+}
+
+html.js .b-share {
+  display: none;
+}

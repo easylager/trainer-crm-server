@@ -94,7 +94,7 @@
 
   document.addEventListener('click', function (ev) {
     var invite = ev.target.closest('[data-invite-arena]');
-    if (invite) {
+    if (invite && window.GlideShareSheet) {
       ev.preventDefault();
       openCatalogInvite(
         invite.getAttribute('data-invite-arena'),
