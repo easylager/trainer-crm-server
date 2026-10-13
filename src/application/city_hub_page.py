@@ -357,6 +357,7 @@ async def load_city_hub_view(
                 "amenities": amenities if isinstance(amenities, Mapping) else {},
                 "photo_url": b_photo_url(variants.get("card")),
                 "photo_hero": b_photo_url(variants.get("hero") or variants.get("card")),
+                "photo_variants": dict(variants),
                 "photo_width": int(row.get("photo_width") or 0),
                 "display_tone": bool(row.get("display_tone")),
                 "in_sharpening": row_in_sharpening_section(row, month=sharpening_month),
@@ -677,6 +678,7 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
         place = by_slug.get(arena_slug) or {}
         name = format_public_name(str(card.get("arena_name") or ""))
         badge = hhmm if day == "сегодня" else f"{day} {hhmm}"
+        pv = place.get("photo_variants")
         tile = tile_html(
             href=href,
             name=name,
@@ -686,6 +688,7 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
             toned=bool(place.get("display_tone")),
             badge=badge,
             badge_kind="time",
+            photo_variants=pv if isinstance(pv, Mapping) else None,
         )
         arena_ref = place.get("id")
         if arena_ref is not None and session_id and href and href != "#":
@@ -1030,6 +1033,9 @@ def _b_body(
     with_photo.sort(key=lambda p: (str(p.get("venue_type")) != "ice", -int(p.get("photo_width") or 0)))
     hero_place = with_photo[0] if with_photo else None
     photo = hero_place.get("photo_hero") if hero_place else None
+    hero_variants = hero_place.get("photo_variants") if hero_place else None
+    if not isinstance(hero_variants, Mapping):
+        hero_variants = None
     toned = bool(hero_place.get("display_tone")) if hero_place else False
     alt = format_public_name(str(hero_place.get("name") or "")) if hero_place else ""
     from src.application.catalog_list_share import catalog_selection_share_button, city_hub_share_endpoint
@@ -1052,6 +1058,7 @@ def _b_body(
             sub = _esc(rink_name)
         if week_n:
             sub += f" · {week_n} {plural_ru(week_n, 'сеанс', 'сеанса', 'сеансов')} на этой неделе"
+        rv = rink.get("photo_variants")
         hero = hero_html(
             title=t("hub.on_ice", city=city_name),
             title_break="на льду",
@@ -1060,6 +1067,7 @@ def _b_body(
             photo_alt=rink_name,
             toned=bool(rink.get("display_tone")),
             bar_html=_b_bar(view),
+            photo_variants=rv if isinstance(rv, Mapping) else None,
         )
         return "".join(
             [
@@ -1073,6 +1081,7 @@ def _b_body(
         )
     if variant == VARIANT_PHONE and rinks:
         rink = rinks[0]
+        rv = rink.get("photo_variants")
         hero = hero_html(
             title=t("hub.on_ice", city=city_name),
             title_break="на льду",
@@ -1081,6 +1090,7 @@ def _b_body(
             photo_alt=format_public_name(str(rink.get("name") or "")),
             toned=bool(rink.get("display_tone")),
             bar_html=_b_bar(view),
+            photo_variants=rv if isinstance(rv, Mapping) else None,
         )
         blocks = [hero]
         for r in rinks:
@@ -1097,6 +1107,7 @@ def _b_body(
         photo_url=photo,
         photo_alt=alt,
         toned=toned,
+        photo_variants=hero_variants,
         bar_html=_b_bar(view),
     )
     empty = ""

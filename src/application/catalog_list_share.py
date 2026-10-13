@@ -101,11 +101,11 @@ def catalog_list_share_scripts_html() -> str:
     return (
         f'<link rel="stylesheet" href="/webapp/mini-app-share-sheet.css?v={_esc(wv)}" />\n'
         f'<link rel="stylesheet" href="/static/share/catalog-list-share.css?v={_esc(cv)}" />\n'
-        f'<script src="/webapp/minsk-time.js?v={_esc(wv)}"></script>\n'
-        f'<script src="/webapp/public-display-model.js?v={_esc(wv)}"></script>\n'
-        f'<script src="/webapp/arena-card-model.js?v={_esc(wv)}"></script>\n'
-        f'<script src="/webapp/mini-app-share-sheet.js?v={_esc(wv)}"></script>\n'
-        f'<script src="/static/share/catalog-list-share.js?v={_esc(cv)}"></script>'
+        f'<script defer src="/webapp/minsk-time.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/public-display-model.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/arena-card-model.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/mini-app-share-sheet.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/static/share/catalog-list-share.js?v={_esc(cv)}"></script>'
     )
 
 

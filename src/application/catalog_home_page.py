@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html as html_lib
+import json
 import logging
 import math
 import re
@@ -189,19 +190,12 @@ _CITY_STATS_SQL = text(
            ) AS window_sessions,
            COUNT(DISTINCT s.id) AS horizon_sessions,
            (
-               SELECT m.variants->>'card'
+               SELECT m.variants
                FROM media m
                WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
                ORDER BY m.sort_order, m.id
                LIMIT 1
-           ) AS photo_key,
-           (
-               SELECT COALESCE(m.variants->>'hero', m.variants->>'card')
-               FROM media m
-               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-               ORDER BY m.sort_order, m.id
-               LIMIT 1
-           ) AS photo_hero_key,
+           ) AS photo_variants,
            (
                SELECT m.width
                FROM media m
@@ -690,6 +684,7 @@ def _fold_arena_rows(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
                 "_lat_n": 0,
                 "_slugs": [],
                 "photo_key": "",
+                "photo_variants": {},
                 "display_tone": False,
             }
         city = buckets[cid]
@@ -714,14 +709,19 @@ def _fold_arena_rows(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
             city["arenas_with_sessions"] += 1
         if horizon_n > 0:
             city["horizon_arenas_with_sessions"] += 1
-        photo_key = str(row.get("photo_key") or "").strip()
+        raw_variants = row.get("photo_variants")
+        if isinstance(raw_variants, str):
+            raw_variants = json.loads(raw_variants)
+        variants = raw_variants if isinstance(raw_variants, Mapping) else {}
+        photo_key = str(variants.get("card") or "").strip()
         # Фото города — только каток: магазин на плитке города («Спортмастер» у Бобруйска) путает.
         if photo_key and str(row.get("venue_type") or "ice") in ("ice", "outdoor"):
             # Фото города — самое крупное фото крытого катка; уличный каток и магазин — запасные.
             rank = (str(row.get("venue_type") or "ice") == "ice", int(row.get("photo_width") or 0))
             if not city["photo_key"] or rank > city.get("_photo_rank", (False, -1)):
                 city["photo_key"] = photo_key
-                city["photo_hero_key"] = str(row.get("photo_hero_key") or photo_key)
+                city["photo_hero_key"] = str(variants.get("hero") or photo_key)
+                city["photo_variants"] = dict(variants)
                 city["display_tone"] = bool(row.get("display_tone"))
                 city["_photo_rank"] = rank
     cities: list[dict[str, Any]] = []
@@ -1234,6 +1234,7 @@ def _b_city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
         line = _rink_count_text(city)
     if city.get("has_ohm"):
         line += " · ОХМ"
+    variants = city.get("photo_variants")
     return tile_html(
         href=f"/c/{city['slug']}",
         name=name,
@@ -1241,6 +1242,7 @@ def _b_city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
         photo_url=b_photo_url(city.get("photo_key")),
         photo_alt=name,
         toned=bool(city.get("display_tone")),
+        photo_variants=variants if isinstance(variants, Mapping) else None,
     )
 
 
@@ -1308,6 +1310,9 @@ def render_catalog_home_page(
     hero_city = user_city
     if not (hero_city and hero_city.get("photo_hero_key")):
         hero_city = next((c for c in by_cities if c.get("photo_hero_key")), None)
+    hero_variants = hero_city.get("photo_variants") if hero_city else None
+    if not isinstance(hero_variants, Mapping):
+        hero_variants = None
     photo = b_photo_url(hero_city.get("photo_hero_key")) if hero_city else None
     hero = hero_html(
         title="Где покататься",
@@ -1320,6 +1325,7 @@ def render_catalog_home_page(
         toned=bool(hero_city.get("display_tone")) if hero_city else False,
         bar_html=brand_link(),
         variant="tall",
+        photo_variants=hero_variants,
     )
 
     tiles, rest = split_home_tiles(cities, user_city_slug=user_slug)

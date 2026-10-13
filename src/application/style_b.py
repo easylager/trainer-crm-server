@@ -53,10 +53,50 @@ def media_url(media: Mapping[str, Any] | None, *, size: str = "hero") -> str | N
         return None
     order = ("hero", "card", "thumb") if size == "hero" else ("card", "hero", "thumb")
     for key in order:
-        url = str(variants.get(key) or "").strip()
-        if url.lower().startswith(("https://", "http://", "/")):
+        url = _variant_public_url(variants.get(key))
+        if url:
             return url
     return None
+
+
+_VARIANT_WIDTHS = {"thumb": 320, "card": 800, "hero": 1600}
+_HERO_SIZES = "100vw"
+_TILE_SIZES = "(max-width: 640px) calc((100vw - 42px) / 2), 230px"
+
+
+def _variant_public_url(raw: Any) -> str | None:
+    key = str(raw or "").strip()
+    if not key:
+        return None
+    if key.lower().startswith(("https://", "http://", "/")):
+        return key
+    return b_photo_url(key)
+
+
+def _photo_srcset(variants: Mapping[str, Any], *, layout: str) -> tuple[str | None, str]:
+    """``src`` и атрибуты ``srcset``/``sizes`` для героя или плитки (экран ~390px)."""
+    order = ("thumb", "card", "hero") if layout == "hero" else ("thumb", "card")
+    src_order = ("card", "thumb", "hero") if layout == "hero" else ("card", "thumb")
+    parts: list[str] = []
+    seen: set[str] = set()
+    for name in order:
+        url = _variant_public_url(variants.get(name))
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        parts.append(f"{esc(url)} {_VARIANT_WIDTHS[name]}w")
+    src = None
+    for name in src_order:
+        url = _variant_public_url(variants.get(name))
+        if url:
+            src = url
+            break
+    if not src:
+        return None, ""
+    if len(parts) < 2:
+        return src, ""
+    sizes = _HERO_SIZES if layout == "hero" else _TILE_SIZES
+    return src, f' srcset="{", ".join(parts)}" sizes="{sizes}"'
 
 
 def hero_html(
@@ -72,17 +112,22 @@ def hero_html(
     title_break: str = "",
     extra_html: str = "",
     sub_class: str = "",
+    photo_variants: Mapping[str, Any] | None = None,
 ) -> str:
     """Герой на всю ширину: фото (или разметка катка), градиент, панель сверху, текст снизу."""
     klass = "b-hero"
     if variant:
         klass += f" b-hero--{variant}"
-    if toned and photo_url:
+    src = photo_url
+    srcset_attrs = ""
+    if isinstance(photo_variants, Mapping):
+        src, srcset_attrs = _photo_srcset(photo_variants, layout="hero")
+    if toned and src:
         klass += " b-toned-wrap"
-    if photo_url:
+    if src:
         img_class = "b-hero__img b-toned" if toned else "b-hero__img"
         media = (
-            f'<img class="{img_class}" src="{esc(photo_url)}" alt="{esc(photo_alt)}" '
+            f'<img class="{img_class}" src="{esc(src)}"{srcset_attrs} alt="{esc(photo_alt)}" '
             'width="1600" height="900" fetchpriority="high" decoding="async" />'
         )
     else:
@@ -139,13 +184,18 @@ def tile_html(
     toned: bool = False,
     badge: str = "",
     badge_kind: str = "",
+    photo_variants: Mapping[str, Any] | None = None,
 ) -> str:
     """Карточка с фото (или разметкой катка) и двумя строками — для сеток и каруселей."""
-    if photo_url:
+    src = photo_url
+    srcset_attrs = ""
+    if isinstance(photo_variants, Mapping):
+        src, srcset_attrs = _photo_srcset(photo_variants, layout="tile")
+    if src:
         img_class = "b-toned" if toned else ""
         wrap = " b-toned-wrap" if toned else ""
         media = (
-            f'<span class="b-tile__media{wrap}"><img class="{img_class}" src="{esc(photo_url)}" '
+            f'<span class="b-tile__media{wrap}"><img class="{img_class}" src="{esc(src)}"{srcset_attrs} '
             f'alt="{esc(photo_alt)}" loading="lazy" decoding="async" width="460" height="240" />'
         )
     else:
