@@ -1193,7 +1193,7 @@ def render_selection_page(
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = (
         f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(format_public_name(city_name))} сегодня</a>'
-        if city_page_url
+        if city_page_url and not view.get("svc")
         else ""
     )
     # ?t= и ?w= — та же подборка с фильтром. В индекс идёт только базовый /c/{город}.

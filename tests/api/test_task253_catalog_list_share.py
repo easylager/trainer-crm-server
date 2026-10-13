@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from datetime import date, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from src.api.app import app
 from src.application.ice_city_day import city_slug
@@ -81,6 +83,38 @@ async def test_selection_share_endpoint_api(app_use_test_db, db_session) -> None
     assert "when=tomorrow" in page.text
     assert api.status_code == 200
     assert api.json().get("share_url")
+
+
+async def _service_place(db_session, arena_id: int) -> None:
+    await db_session.execute(
+        text("UPDATE arena_profiles SET amenities = CAST(:a AS jsonb) WHERE arena_id = :id"),
+        {"a": json.dumps({"skate_sharpening": True}), "id": arena_id},
+    )
+
+
+@pytest.mark.asyncio
+async def test_service_list_share_url_and_text(app_use_test_db, db_session) -> None:
+    name = f"Сервис {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    place = f"Заточка {uuid.uuid4().hex[:4]}"
+    aid = await _insert_arena(db_session, city_id, name=place)
+    await _service_place(db_session, aid)
+    await db_session.commit()
+    slug = city_slug(name)
+    async with _client() as client:
+        page = await client.get(f"/c/{slug}", params={"svc": "service"})
+        api = await client.get(
+            "/api/public/ice/selection/share",
+            params={"city_id": city_id, "svc": "service", "record": "false"},
+        )
+    assert page.status_code == 200
+    assert "svc=service" in page.text
+    assert "Весь лёд" not in page.text
+    body = api.json()
+    assert body["share_url"].endswith(f"/c/{slug}?svc=service")
+    assert "сеанс" not in body["share_body"].lower()
+    assert place in body["share_body"]
+    assert "?svc=service" in body["og_image_url"]
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ import re
 from typing import Any, Mapping
 from urllib.parse import urlencode
 
-from src.application.selection_page import KIND_OHM, clean_venue, clean_when
+from src.application.selection_page import KIND_OHM, clean_kind, clean_seg, clean_svc, clean_venue, clean_when
 from src.shared.public_display import format_clock, session_day_phrase
 
 _REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[2]
@@ -42,8 +42,17 @@ def _webapp_bundle_version() -> str:
 def selection_share_endpoint(view: Mapping[str, Any]) -> str:
     """Query для ``GlideShareSheet.open({ endpoint })`` — как ``openIceShareDialog`` в ice-tab.js."""
     params: dict[str, str] = {"city_id": str(int(view["city"]["id"]))}
+    svc = clean_svc(str(view.get("svc") or "") or None)
+    if svc:
+        params["svc"] = svc
+    kind = clean_kind(str(view.get("kind") or "") or None)
+    if kind:
+        params["kind"] = kind
+    seg = clean_seg(str(view.get("seg") or "") or None)
+    if seg:
+        params["seg"] = seg
     venue = view.get("venue")
-    if venue and str(venue) not in ("service", KIND_OHM):
+    if venue and str(venue) not in ("service", KIND_OHM) and not svc and not kind:
         cleaned = clean_venue(str(venue))
         if cleaned:
             params["venue_type"] = cleaned
