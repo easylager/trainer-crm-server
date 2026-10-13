@@ -405,7 +405,7 @@ async def test_share_api_points_at_the_page_and_counts_the_click(app_use_test_db
 
 
 @pytest.mark.asyncio
-async def test_sitemap_lists_places_and_city_days_for_search(app_use_test_db, db_session) -> None:
+async def test_sitemap_lists_places_and_cities_for_search(app_use_test_db, db_session) -> None:
     place = await _place(db_session)
     hidden = await _place(db_session)
     await db_session.execute(
@@ -417,7 +417,8 @@ async def test_sitemap_lists_places_and_city_days_for_search(app_use_test_db, db
         robots = await client.get("/robots.txt")
     assert sm.status_code == 200 and sm.headers["content-type"].startswith("application/xml")
     assert place["path"] + "</loc>" in sm.text
-    assert f"/ice/{city_slug(place['city_name'])}/today</loc>" in sm.text
+    # TASK-266: /ice/{город}/today — переадресация на список, в индексе её нет.
+    assert "/ice/" not in sm.text
     assert hidden["path"] + "</loc>" not in sm.text
     assert f"/c/{city_slug(place['city_name'])}</loc>" in sm.text
     assert "Sitemap: " in robots.text and "/sitemap.xml" in robots.text

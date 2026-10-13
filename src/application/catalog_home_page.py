@@ -539,7 +539,7 @@ def _upcoming_more_href(
     if when_key == "today":
         return f"/c/{slug}?w=today"
     if when_key == "day" and selected_day == today:
-        return f"/ice/{slug}/today"
+        return f"/c/{slug}?t=ice&w=today"
     return None
 
 

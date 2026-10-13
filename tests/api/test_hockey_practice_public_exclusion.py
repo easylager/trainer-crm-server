@@ -140,10 +140,10 @@ async def test_skate_surfaces_exclude_hockey_practice(app_use_test_db, db_sessio
         assert flat
         assert all(s["kind"] == KIND_PUBLIC_SKATE for s in flat)
 
-        city = (
-            await db_session.execute(text("SELECT name FROM cities WHERE id = :id"), {"id": seed_city_id})
-        ).scalar_one()
-        ice_day = await client.get(f"/ice/{city}/today")
+        # «Лёд сегодня» — список /c/{город}?t=ice&w=today (TASK-266).
+        ice_day = await client.get(
+            f"/c/{seed_city_id}", params={"t": "ice", "w": "today"}, follow_redirects=True
+        )
         assert ice_day.status_code == 200
         assert KIND_HOCKEY_PRACTICE not in ice_day.text
 

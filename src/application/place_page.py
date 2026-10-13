@@ -1309,7 +1309,7 @@ def render_place_body_b(
     share: Mapping[str, str],
     story_image_url: str | None,
 ) -> str:
-    from src.application.public_web_cta import place_action_links
+    from src.application.public_web_cta import phone_beacon_script, place_action_links
     from src.application.style_b import share_html
 
     card = view["card"]
@@ -1330,6 +1330,6 @@ def render_place_body_b(
             story_image_url=story_image_url,
             zovi_path=zovi_entry_path(view),
         ),
-        str(links.get("beacon_script") or ""),
     ]
-    return "".join(parts)
+    body = "".join(parts)
+    return body + phone_beacon_script(body)
