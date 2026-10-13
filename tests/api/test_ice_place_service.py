@@ -1,4 +1,4 @@
-"""Чип «Заточка и прокат» в ленте мини-аппа: ?svc=service и service_count."""
+"""Раздел «Заточка» в ленте мини-аппа: ?svc=service и service_count."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def _client() -> AsyncClient:
 
 
 @pytest.mark.asyncio
-async def test_svc_service_keeps_places_with_sharpening_or_rental(app_use_test_db, db_session) -> None:
+async def test_svc_service_keeps_places_with_sharpening(app_use_test_db, db_session) -> None:
     name = f"SvcChip {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     sharp = await _insert_arena(db_session, city_id, name=f"Заточка {uuid.uuid4().hex[:4]}")
@@ -67,8 +67,8 @@ async def test_sharpening_count_stays_put_and_skips_roller_rental(
 ) -> None:
     """Цифра на «Заточке» не зависит от открытого раздела.
 
-    Магазины и ОХМ грузят другой срез, но чип должен показывать размер самого
-    раздела. Прокат роликов на трассе — не заточка и не прокат коньков.
+    Магазин и хоккейный центр с заточкой входят в раздел. Прокат на льду,
+    прокат роликов на трассе и ремонт сами по себе — нет.
     """
     name = f"SvcStable {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
@@ -127,9 +127,8 @@ async def test_sharpening_count_stays_put_and_skips_roller_rental(
         int(shops.json()["service_count"]),
         int(ohm.json()["service_count"]),
     }
-    assert counts == {2}
+    assert counts == {3}
     opened_ids = {int(item["id"]) for item in opened.json()["items"]}
-    assert opened_ids == {sharp, rental}
+    assert opened_ids == {sharp, center, shop}
+    assert rental not in opened_ids
     assert roller not in opened_ids
-    assert center not in opened_ids
-    assert shop not in opened_ids

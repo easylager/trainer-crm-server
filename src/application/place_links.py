@@ -31,7 +31,7 @@ CATALOG_START_PREFIX = "catalog_"
 _START_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 #: Токены startapp. shop/gym/ice/… — фильтр типа места; skate/coach — интент вкладки;
-#: ohm — любительский хоккей; service — заточка и прокат.
+#: ohm — любительский хоккей; service — раздел «Заточка».
 CATALOG_LINK_TOKENS = (
     "skate",
     "coach",

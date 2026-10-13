@@ -32,6 +32,7 @@ from src.application.place_links import (
 )
 from src.application.schedule_staleness import LEVEL_VERY_STALE, load_arena_freshness, staleness_level
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
+from src.shared.catalog_sharpening import SHARPENING_MONTH_PARAM, SHARPENING_SECTION_SQL
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.copy_ru import t
 from src.shared.glide_city_cookie import normalize_glide_city_slug
@@ -230,15 +231,14 @@ ORDER BY a.city_id, (s.kind = 'hockey_practice'), s.starts_at_utc, s.id
 """
 )
 
-# Что вообще есть в городе: заточка (amenity), тренеры в каталоге. Будущий ОХМ — из _CITY_NEXT_SQL.
+# Что вообще есть в городе: раздел «Заточка», тренеры в каталоге. Будущий ОХМ — из _CITY_NEXT_SQL.
 _CITY_FLAGS_SQL = text(
     f"""
 SELECT c.id,
        EXISTS (
          SELECT 1 FROM arenas a
          LEFT JOIN arena_profiles p ON p.arena_id = a.id
-         WHERE a.city_id = c.id AND {PUBLIC_ARENA_VISIBLE_SQL}
-           AND (p.amenities ->> 'skate_sharpening') = 'true'
+         WHERE a.city_id = c.id AND {SHARPENING_SECTION_SQL}
        ) AS has_sharpening,
        EXISTS (
          SELECT 1 FROM trainer_cities tc
@@ -792,7 +792,16 @@ async def _attach_city_facts(
         else:
             city["next_skate"] = fact
     flag_rows = (
-        (await session.execute(_CITY_FLAGS_SQL, {"city_ids": city_ids, **public_scope_params()})).mappings().all()
+        (
+            await session.execute(
+                _CITY_FLAGS_SQL,
+                {
+                    "city_ids": city_ids,
+                    SHARPENING_MONTH_PARAM: now.astimezone(ZoneInfo(DEFAULT_TIMEZONE)).month,
+                    **public_scope_params(),
+                },
+            )
+        ).mappings().all()
     )
     for row in flag_rows:
         city = by_id.get(int(row["id"]))

@@ -72,7 +72,7 @@
     "route.skate.hint": "каток, зал или трасса",
     "selection.ice.hint": "катки",
     "route.hockey.hint": "открытая тренировка, ОХМ",
-    "route.service.hint": "заточка и прокат"
+    "route.service.hint": "заточка коньков"
   };
 
   function t(key, kw) {

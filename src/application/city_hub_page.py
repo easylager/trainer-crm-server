@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_profile import has_known_hours, intervals_for_weekday, normalize_hhmm
 from src.application.arena_public_use_cases import (
-    PLACE_SERVICE_KEYS,
     STATUS_ACTIVE,
     _NOT_HOCKEY_CENTER_SQL,
     _OHM_SESSION_SQL,
@@ -35,6 +34,7 @@ from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, format_pri
 from src.application.ice_time_windows import home_default_when_key, resolve_window
 from src.application.place_links import catalog_start_param, join_public_origin, place_path, public_telegram_cta_url
 from src.application.schedule_staleness import LEVEL_VERY_STALE, load_arena_freshness, staleness_level
+from src.shared.catalog_sharpening import row_in_sharpening_section
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
@@ -50,8 +50,6 @@ _UPCOMING_LIMIT = 3
 _UPCOMING_FETCH = 24
 _WINDOW_KEYS = ("today", "tomorrow", "weekend")
 _WINDOW_LABELS = {"today": "Сегодня", "tomorrow": "Завтра", "weekend": "Сб–Вс"}
-#: Услуги, которые делают место «заточкой и прокатом» независимо от типа.
-SERVICE_KEYS: tuple[str, ...] = PLACE_SERVICE_KEYS
 _SOON_MINUTES = 60
 
 # Сеансы города по окнам, по аренам и по виду (МК / ОХМ) — один запрос.
@@ -104,7 +102,14 @@ _NEXT_OHM_SQL = text(
 _PLACES_SQL = text(
     f"""
     SELECT a.id, a.name, COALESCE(a.venue_type, 'ice') AS venue_type,
+           a.is_active, a.is_confirmed, a.created_by_trainer_id,
            p.slug, p.opening_hours, p.amenities, p.phone,
+           p.season_start_month, p.season_end_month, p.status AS profile_status,
+           c.country, c.is_active AS city_is_active,
+           EXISTS (
+               SELECT 1 FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+           ) AS has_photo,
            COALESCE(p.timezone, '{DEFAULT_TIMEZONE}') AS tz
     FROM arenas a
     LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -288,9 +293,8 @@ async def load_city_hub_view(
 
     place_rows = (await session.execute(_PLACES_SQL, {"city_id": city_id, **scope})).mappings().all()
     places: list[dict[str, Any]] = []
+    sharpening_month = now.astimezone(ZoneInfo(DEFAULT_TIMEZONE)).month
     for row in place_rows:
-        amenities = _as_mapping(row.get("amenities"))
-        services = [k for k in SERVICE_KEYS if amenities.get(k) is True]
         hours = _as_mapping(row.get("opening_hours"))
         state = open_state(hours, now=now, tz_name=str(row.get("tz") or DEFAULT_TIMEZONE))
         places.append(
@@ -299,7 +303,7 @@ async def load_city_hub_view(
                 "name": str(row["name"]),
                 "slug": str(row.get("slug") or ""),
                 "venue_type": str(row.get("venue_type") or "ice"),
-                "services": services,
+                "in_sharpening": row_in_sharpening_section(row, month=sharpening_month),
                 "open_state": state["state"],
                 "open_close": state["close"],
                 "has_phone": bool(str(row.get("phone") or "").strip()),
@@ -307,7 +311,7 @@ async def load_city_hub_view(
         )
     rinks = [p for p in places if _is_rink(p["venue_type"])]
     shops = [p for p in places if p["venue_type"] == VENUE_TYPE_SHOP]
-    service_places = [p for p in places if p["services"]]
+    service_places = [p for p in places if p["in_sharpening"]]
 
     center_count = await city_hockey_center_count(session, city_id=city_id)
     trainer_rows = (await session.execute(_TRAINERS_SQL, {"city_id": city_id})).mappings().all()
@@ -499,7 +503,7 @@ def _service_route(view: Mapping[str, Any]) -> str:
     if n <= 0:
         return ""
     slug = str(view["slug"])
-    service_places = [p for p in view.get("places") or [] if p.get("services")]
+    service_places = [p for p in view.get("places") or [] if p.get("in_sharpening")]
     live, off = _open_live(service_places, list(view.get("service_open") or []))
     count = f"{n} {plural_ru(n, 'место', 'места', 'мест')}"
     return _route_html(href=_list_href(slug, svc="service"), name=t("route.service"), count=count, live=live, dot_off=off)

@@ -377,14 +377,14 @@
 
   /** Строка под разделом. На кнопке её нет: человек видит пояснение один раз, уже внутри. */
   function sectionHint(scope, placeService) {
-    if (placeService === 'service') return copyLabel('route.service.hint', 'заточка и прокат');
+    if (placeService === 'service') return copyLabel('route.service.hint', 'заточка коньков');
     if (scope === 'ohm') return copyLabel('route.hockey.hint', 'открытая тренировка, ОХМ');
     if (scope === 'places') return copyLabel('route.skate.hint', 'каток, зал или трасса');
     return '';
   }
 
   /**
-   * Счёт мест с заточкой или прокатом. В шапке это отдельный раздел, не чип под «Покататься».
+   * Счёт раздела «Заточка» с сервера. В шапке это отдельный раздел, не чип под «Покататься».
    * Ноль мест — раздела нет, пока его сами не включили.
    */
   function placeServiceChipView(count, active) {
@@ -532,7 +532,7 @@
   }
 
   function catalogSearchPlaceholder(scope, placeService) {
-    if (placeService === 'service') return 'Заточка или прокат';
+    if (placeService === 'service') return 'Заточка';
     if (scope === 'coach') return 'Имя тренера';
     if (scope === 'shop') return 'Магазин';
     if (scope === 'ohm') return 'Каток с ОХМ';
@@ -672,6 +672,11 @@
       if (shopServicesOf(items[i]).indexOf(key) >= 0) n += 1;
     }
     return n;
+  }
+
+  /** Сколько магазинов покажет кнопка «Показать N с заточкой» (фильтр shop-service:skate_sharpening). */
+  function sharpeningShopCount(items) {
+    return shopServiceCount(items || [], 'skate_sharpening');
   }
 
   function shopDisciplineCount(items, key) {
@@ -2360,6 +2365,7 @@
     filterShopCatalog: filterShopCatalog,
     hasActiveShopFilters: hasActiveShopFilters,
     formatEmptyShopFilters: formatEmptyShopFilters,
+    sharpeningShopCount: sharpeningShopCount,
     intervalsForWeekday: intervalsForWeekday,
     shopOpenAtMinutes: shopOpenAtMinutes,
     noIceInCity: noIceInCity,

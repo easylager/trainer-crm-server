@@ -38,7 +38,6 @@ from src.application.arena_public_use_cases import (
     list_city_ohm_places,
     list_city_selection_places,
     list_public_ice_arenas,
-    PLACE_SERVICE_KEYS,
 )
 from src.application.ice_time_windows import resolve_window
 from src.shared.copy_ru import t
@@ -54,6 +53,7 @@ from src.application.schedule_staleness import (
     staleness_level,
     very_stale_note,
 )
+from src.shared.catalog_sharpening import SHARPENING_AMENITY_KEYS
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.phone_guard import is_valid_public_phone, tel_href
@@ -86,9 +86,9 @@ KIND_OHM = "ohm"
 SEG_CENTERS = "centers"
 
 SERVICE_AMENITY_KEYS: dict[str, tuple[str, ...]] = {
-    "sharpening": ("skate_sharpening",),
+    "sharpening": SHARPENING_AMENITY_KEYS,
     "rental": ("skate_rental",),
-    "service": PLACE_SERVICE_KEYS,
+    "service": SHARPENING_AMENITY_KEYS,
 }
 
 _SERVICE_LABELS = {
@@ -1073,7 +1073,10 @@ def _hero_kicker(view: Mapping[str, Any]) -> str:
         if view.get("seg") == SEG_CENTERS:
             return "центры по записи"
         return t("route.hockey.hint")
-    if view.get("svc"):
+    svc = str(view.get("svc") or "")
+    if svc == "rental":
+        return "прокат коньков"
+    if svc:
         return t("route.service.hint")
     if view.get("venue") == "ice":
         return t("selection.ice.hint")

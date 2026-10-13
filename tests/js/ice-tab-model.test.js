@@ -201,7 +201,7 @@ describe('catalog header (A′)', () => {
     assert.equal(modes.find((m) => m.id === 'service').active, true);
     assert.equal(modes.find((m) => m.id === 'places').active, false);
     assert.equal(sectionHint('ohm', ''), 'открытая тренировка, ОХМ');
-    assert.equal(sectionHint('places', 'service'), 'заточка и прокат');
+    assert.equal(sectionHint('places', 'service'), 'заточка коньков');
     assert.equal(sectionHint('places', ''), 'каток, зал или трасса');
     assert.equal(sectionHint('shop', ''), '');
   });
@@ -1739,5 +1739,28 @@ describe('hockeySegView', () => {
   it('мусор в seg и счётчиках — ОХМ', () => {
     const { hockeySegView } = loadModel();
     assert.deepEqual(hockeySegView({ ohmCount: 'x', centerCount: undefined, seg: 'zzz' }), { visible: false, seg: 'ohm', centerCount: 0 });
+  });
+});
+
+describe('ice-tab-model: счётчик «Показать N с заточкой» в пустом магазине', () => {
+  const shops = [
+    { id: 1, shop_services: ['skate_sharpening', 'skate_rental'] },
+    { id: 2, shop_services: ['skate_rental'] },
+    { id: 3, shop_services: ['skate_sharpening'] },
+    { id: 4 },
+  ];
+
+  it('равен числу магазинов, которые покажет фильтр shop-service:skate_sharpening', () => {
+    const M = loadModel();
+    const shown = M.filterShopCatalog(shops, { shopService: 'skate_sharpening' }, new Date());
+    assert.equal(M.sharpeningShopCount(shops), 2);
+    assert.equal(M.sharpeningShopCount(shops), shown.length);
+  });
+
+  it('не зависит от числа катков с заточкой в городе', () => {
+    const M = loadModel();
+    const empty = M.formatEmptyShopFilters({ sharpeningCount: M.sharpeningShopCount(shops) });
+    assert.equal(empty.secondary.label, 'Показать 2 с заточкой');
+    assert.equal(M.formatEmptyShopFilters({ sharpeningCount: M.sharpeningShopCount([]) }).secondary, null);
   });
 });

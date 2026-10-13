@@ -56,6 +56,12 @@ from src.shared.arena_schedule_mode import (
 )
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.currency import currency_for_country
+from src.shared.catalog_sharpening import (
+    SHARPENING_MONTH_PARAM,
+    SHARPENING_SECTION_SQL,
+    is_sharpening_section_keys,
+    row_in_sharpening_section,
+)
 from src.shared.ice_discovery_scope import (
     PUBLIC_ARENA_VISIBLE_SQL,
     PUBLIC_CITY_SCOPE_SQL,
@@ -88,15 +94,6 @@ from src.shared.dossier_public_text import (
     scrub_dossier_leaks_from_public_text,
 )
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
-
-#: «Заточка и прокат» — те же ключи, что плитка хаба города и ?svc=service на сайте.
-PLACE_SERVICE_KEYS: tuple[str, ...] = (
-    "skate_sharpening",
-    "skate_rental",
-    "repair",
-    "skate_molding",
-    "blade_profiling",
-)
 
 INTENT_SKATE = "skate"
 INTENT_COACH = "coach"
@@ -251,37 +248,25 @@ def _row_has_any_amenity(row: Mapping[str, Any], keys: tuple[str, ...] | list[st
     return any(_amenity_on(amenities.get(k)) for k in keys)
 
 
-# Прокат коньков имеет смысл на льду. На лыжероллерной трассе тот же ключ —
-# прокат роликов и велосипедов, и раздел «Заточка» из‑за него врал.
+# ?svc=rental — отдельный фильтр, не раздел «Заточка».
+# Прокат коньков только на льду: на лыжероллерной трассе тот же ключ — прокат роликов.
 _ICE_RENTAL_VENUE_TYPES = frozenset({VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR})
-_SKATE_SERVICE_KEYS_ANY_PLACE = (
-    "skate_sharpening",
-    "repair",
-    "skate_molding",
-    "blade_profiling",
+SKATE_RENTAL_SQL = (
+    "(p.amenities ->> 'skate_rental') = 'true'"
+    " AND COALESCE(a.venue_type, 'ice') IN ('ice', 'outdoor')"
 )
 
 
-def row_in_sharpening_section(row: Mapping[str, Any]) -> bool:
-    """Место раздела «Заточка»: заточка и услуги лезвия, либо прокат коньков на льду.
+def is_skate_rental_keys(keys: tuple[str, ...] | list[str] | None) -> bool:
+    return tuple(str(key) for key in (keys or ()) if key) == ("skate_rental",)
 
-    Магазин сюда не входит — у него свой раздел. Прокат на трассе для роликов тоже.
-    Хоккейный центр лента «Покататься» не показывает, поэтому и заточка его не считает:
-    иначе чип на вкладке «С клюшкой» обещает место, которого в разделе нет.
-    """
-    if _is_hockey_center(row):
-        return False
+
+def row_in_skate_rental(row: Mapping[str, Any]) -> bool:
+    """Прокат коньков: ``skate_rental`` только у ``ice`` и ``outdoor``."""
     venue = normalize_venue_type(row.get("venue_type"))
-    if venue in DEFAULT_HIDDEN_VENUE_TYPES:
+    if venue not in _ICE_RENTAL_VENUE_TYPES:
         return False
-    amenities = _as_mapping(row.get("amenities"))
-    if any(_amenity_on(amenities.get(key)) for key in _SKATE_SERVICE_KEYS_ANY_PLACE):
-        return True
-    return venue in _ICE_RENTAL_VENUE_TYPES and _amenity_on(amenities.get("skate_rental"))
-
-
-def _is_full_service_section_filter(keys: tuple[str, ...] | list[str] | None) -> bool:
-    return tuple(keys or ()) == PLACE_SERVICE_KEYS
+    return _amenity_on(_as_mapping(row.get("amenities")).get("skate_rental"))
 
 
 def _venue_type_facets(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -640,12 +625,13 @@ def _arena_list_sql(session_sql: str) -> str:
     return f"""
 SELECT
     a.id, a.city_id, a.name, a.address, a.latitude, a.longitude, a.venue_type,
+    a.is_active, a.is_confirmed, a.created_by_trainer_id,
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
     p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
     p.schedule_mode, p.reopen_date, p.schedule_mode_note,
     p.amenities, p.status, p.verified_at, p.updated_at AS profile_updated_at,
-    c.country, c.name AS city_name,
+    c.country, c.is_active AS city_is_active, c.name AS city_name,
     nxt.id AS next_session_id,
     nxt.kind AS next_kind,
     nxt.starts_at_utc AS next_starts_at_utc,
@@ -992,25 +978,32 @@ async def list_city_selection_places(
     offset = (page - 1) * CITY_SELECTION_PAGE_SIZE
     scope = public_scope_params()
     if service_keys:
-        keys = [str(k) for k in service_keys if k]
+        keys = tuple(str(k) for k in service_keys if k)
+        month = now.astimezone(ZoneInfo(NOTIFICATION_TZ)).month
         params: dict[str, Any] = {
             "city_id": int(city_id),
             "now": now,
             "st": STATUS_ACTIVE,
-            "svc_keys": keys,
+            SHARPENING_MONTH_PARAM: month,
             **scope,
         }
-        svc_clause = """
-          AND EXISTS (
-              SELECT 1 FROM unnest(CAST(:svc_keys AS text[])) k
-              WHERE (p.amenities ->> k) = 'true'
-          )
-        """
+        if is_sharpening_section_keys(keys):
+            where_sql = SHARPENING_SECTION_SQL
+        elif is_skate_rental_keys(keys):
+            where_sql = f"{PUBLIC_ARENA_VISIBLE_SQL} AND {SKATE_RENTAL_SQL}"
+        else:
+            params["svc_keys"] = list(keys)
+            where_sql = f"""{PUBLIC_ARENA_VISIBLE_SQL}
+              AND EXISTS (
+                  SELECT 1 FROM unnest(CAST(:svc_keys AS text[])) k
+                  WHERE (p.amenities ->> k) = 'true'
+              )
+            """
         visible = f"""
             FROM arenas a
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
-            WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}{svc_clause}
+            WHERE a.city_id = :city_id AND {where_sql}
         """
         total = int((await session.execute(text(f"SELECT COUNT(*)::int {visible}"), params)).scalar_one())
         id_rows = (
@@ -1621,29 +1614,25 @@ async def _count_city_sharpening_section(
 ) -> int:
     """Сколько мест откроет раздел «Заточка» в городе.
 
-    Считаем по всему городу, а не по текущему чипу: вкладка «Магазины» и ОХМ
-    грузят другой набор строк, и цифра на «Заточке» прыгала вместе с ними.
+    Нужен, когда загруженный срез уже не город целиком (bbox): цифра на чипе
+    не должна сжиматься вместе с картой. Сам предикат — ``SHARPENING_SECTION_SQL``.
     """
     scope = public_scope_params()
-    loaded = (
-        await session.execute(
-            text(
-                f"""
-                SELECT COALESCE(a.venue_type, 'ice') AS venue_type,
-                       p.amenities, p.season_start_month, p.season_end_month
-                FROM arenas a
-                LEFT JOIN arena_profiles p ON p.arena_id = a.id
-                JOIN cities c ON c.id = a.city_id
-                WHERE a.city_id = :city_id AND {PUBLIC_ARENA_VISIBLE_SQL}
-                """
-            ),
-            {"city_id": int(city_id), **scope},
-        )
-    ).mappings().all()
-    return sum(
-        1
-        for row in loaded
-        if not _is_closed_season_row(row, month=month) and row_in_sharpening_section(row)
+    return int(
+        (
+            await session.execute(
+                text(
+                    f"""
+                    SELECT COUNT(*)::int
+                    FROM arenas a
+                    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                    JOIN cities c ON c.id = a.city_id
+                    WHERE a.city_id = :city_id AND {SHARPENING_SECTION_SQL}
+                    """
+                ),
+                {"city_id": int(city_id), SHARPENING_MONTH_PARAM: int(month), **scope},
+            )
+        ).scalar_one()
     )
 
 
@@ -1691,31 +1680,36 @@ async def list_public_ice_arenas(
     rows = await _load_ice_arena_rows(
         session, city_id=city_id, bbox=bbox_box, intent=intent_value, now=now, window=window
     )
+    # Полный загруженный срез: раздел «Заточка» берёт места отсюда, а не из чипа
+    # «Покататься» (тот прячет магазины и хоккейные центры).
+    catalog_rows = rows
     if window is not None:
         _apply_window(rows)
-    if intent_value == INTENT_SKATE:
-        # Центр по записи — не ответ на «где покататься».
-        rows = [r for r in rows if not _is_hockey_center(r)]
-        # TASK-180: очень устаревший каток не попадает «в окно» — его сеанс мы не
-        # показываем как ответ на «Сегодня вечером», он уходит к остальным с честной строкой.
-        _mark_unconfirmed_schedules(rows)
-    if intent_value == INTENT_OHM and segment == "centers":
-        rows = [r for r in rows if _is_hockey_center(r)]
-    elif intent_value == INTENT_OHM:
-        # Только катки с будущим ОХМ; МК-лента (intent=skate) сюда не заходит.
-        rows = [r for r in rows if int(r.get("future_session_count") or 0) > 0 and not _is_hockey_center(r)]
-        _mark_unconfirmed_schedules(rows)
     if near_pt is not None:
         nlat, nlon = near_pt
-        for row in rows:
+        for row in catalog_rows:
             lat, lon = row.get("latitude"), row.get("longitude")
             if lat is None or lon is None:
                 row["distance_km"] = None
             else:
                 row["distance_km"] = haversine_km(nlat, nlon, float(lat), float(lon))
     else:
-        for row in rows:
+        for row in catalog_rows:
             row["distance_km"] = None
+    sharpening_section = is_sharpening_section_keys(service_keys)
+    if intent_value == INTENT_SKATE:
+        # TASK-180: очень устаревший каток не попадает «в окно» — его сеанс мы не
+        # показываем как ответ на «Сегодня вечером», он уходит к остальным с честной строкой.
+        _mark_unconfirmed_schedules(catalog_rows)
+        # Центр по записи — не ответ на «где покататься». Фасеты ленты считаем без него.
+        # В разделе «Заточка» он возвращается ниже, если у него заточка или профилирование.
+        rows = [r for r in rows if not _is_hockey_center(r)]
+    if intent_value == INTENT_OHM and segment == "centers":
+        rows = [r for r in rows if _is_hockey_center(r)]
+    elif intent_value == INTENT_OHM:
+        # Только катки с будущим ОХМ; МК-лента (intent=skate) сюда не заходит.
+        rows = [r for r in rows if int(r.get("future_session_count") or 0) > 0 and not _is_hockey_center(r)]
+        _mark_unconfirmed_schedules(rows)
     # Фасеты считаем до фильтра типа, но без закрытого сезона: «Все места» и «Лёд»
     # — только то, чем можно пользоваться сейчас. «Зимой» — отдельный счётчик.
     today = _today_minsk()
@@ -1738,24 +1732,27 @@ async def list_public_ice_arenas(
             for r in header_rows
             if normalize_venue_type(r.get("venue_type")) not in DEFAULT_HIDDEN_VENUE_TYPES
         ]
-    if intent_value != INTENT_OHM and bbox_box is None:
-        service_count = sum(1 for r in usable_rows if row_in_sharpening_section(r))
-    elif city_id is not None:
+    # Bbox режет загруженные строки, а чип «Заточка» считает город. Без bbox
+    # загруженный срез и есть город (или вся область bbox без города).
+    if city_id is not None and bbox_box is not None:
         service_count = await _count_city_sharpening_section(
             session, city_id=int(city_id), month=month
         )
     else:
-        service_count = sum(1 for r in usable_rows if row_in_sharpening_section(r))
-    if season_filter == "winter":
+        service_count = sum(
+            1 for r in catalog_rows if row_in_sharpening_section(r, month=month)
+        )
+    if sharpening_section:
+        rows = [r for r in catalog_rows if row_in_sharpening_section(r, month=month)]
+    elif season_filter == "winter":
         rows = [r for r in rows if _is_closed_season_row(r, month=month)]
         if venue_filter:
             rows = [r for r in rows if normalize_venue_type(r.get("venue_type")) in venue_filter]
     else:
         rows = header_rows
-    if service_keys:
-        if _is_full_service_section_filter(service_keys):
-            rows = [r for r in rows if row_in_sharpening_section(r)]
-        else:
+        if is_skate_rental_keys(service_keys):
+            rows = [r for r in rows if row_in_skate_rental(r)]
+        elif service_keys:
             rows = [r for r in rows if _row_has_any_amenity(r, service_keys)]
     if window is not None and season_filter != "winter":
         # Сначала то, что есть в выбранном окне; остальное — ниже, с честной подписью.
