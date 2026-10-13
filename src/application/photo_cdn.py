@@ -21,6 +21,22 @@ def photo_url_from_cdn(file_key: str | None, base: str | None) -> str | None:
     return root + "/" + quote(key, safe="/")
 
 
+def visible_photo_url(url: str | None) -> str | None:
+    """URL картинки, только если файл на месте. Иначе страница без фото, не битая картинка."""
+    raw = str(url or "").strip()
+    if not raw.lower().startswith(("https://", "http://", "/")):
+        return None
+    prefix = "/api/public/photos/"
+    if raw.startswith(prefix):
+        from urllib.parse import unquote
+
+        from src.infrastructure import s3
+
+        key = unquote(raw[len(prefix) :].split("?", 1)[0])
+        return raw if s3.photo_exists(key) else None
+    return raw
+
+
 def public_photo_url(file_key: str | None, cdn_base: str | None = None) -> str | None:
     """CDN URL when configured, else the public photo proxy. Rejects private prefixes."""
     key = (file_key or "").strip()

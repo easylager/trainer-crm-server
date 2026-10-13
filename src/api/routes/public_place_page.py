@@ -21,7 +21,14 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
-from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
+from src.application.ice_city_day import (
+    aliased_city_slug,
+    city_slug,
+    ice_city_day_page_url,
+    list_public_cities,
+    render_unknown_city_html,
+    resolve_city_by_ref,
+)
 from src.application.place_card_image import render_place_card, share_display_path
 from src.application.arena_public_use_cases import resolve_merged_arena_id
 from src.application.catalog_consumer_events import record_public_page_view
@@ -491,7 +498,13 @@ async def selection_page(
     base = _base()
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
-        return _not_found(_catalog_home(base))
+        alias = await aliased_city_slug(session, city_ref)
+        if alias:
+            q = request.url.query
+            return RedirectResponse(url=f"/c/{alias}" + (f"?{q}" if q else ""), status_code=301)
+        cities = await list_public_cities(session)
+        home = _catalog_home(base)
+        return HTMLResponse(render_unknown_city_html(cities, home=home), status_code=404)
     venue, when, kind_value, svc_value = clean_venue(t), clean_when(w), clean_kind(kind), clean_svc(svc)
     seg_value = clean_seg(seg)
     if seg_value:

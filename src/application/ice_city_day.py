@@ -90,6 +90,59 @@ def invalidate_public_city_cache() -> None:
     _public_cities_cache.clear()
 
 
+# Старые ссылки без «/ЛО» в slug. Город в базе не переименовываем.
+CITY_SLUG_ALIASES = {"sankt-peterburg": "sankt-peterburg-lo"}
+
+
+def render_unknown_city_html(cities: list[dict[str, Any]], *, home: str) -> str:
+    """404 города: заголовок и список опубликованных городов. Место здесь не ищем."""
+    import html as html_lib
+
+    from src.shared.copy_ru import t
+    from src.shared.public_display import format_public_name
+
+    links: list[str] = []
+    for row in cities:
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+        slug = city_slug(name)
+        label = html_lib.escape(format_public_name(name), quote=True)
+        links.append(f'<p><a href="/c/{html_lib.escape(slug, quote=True)}">{label}</a></p>')
+    listing = "".join(links)
+    home_esc = html_lib.escape(home, quote=True)
+    title = html_lib.escape(t("city.not_found"), quote=True)
+    return f"""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>{title}</title>
+<link rel="icon" href="/favicon.ico" type="image/png" />
+<link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+<style>body{{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
+margin:0;padding:48px 20px;text-align:center}}h1{{font-weight:600;letter-spacing:-.01em}}a{{color:#0B6E70;font-weight:600}}</style></head>
+<body><h1>{title}</h1>
+{listing}
+<p><a href="{home_esc}">Открыть каталог {html_lib.escape(t("brand.mark"), quote=True)}</a></p></body></html>"""
+
+
+async def list_public_cities(session: AsyncSession) -> list[dict[str, Any]]:
+    """Публичные города витрины. Тот же кэш, что у резолва slug."""
+    return await _public_cities(session)
+
+
+async def aliased_city_slug(session: AsyncSession, city_ref: str) -> str | None:
+    """Канонический slug, если ``city_ref`` — известный алиас и город опубликован."""
+    target = CITY_SLUG_ALIASES.get((city_ref or "").strip().lower())
+    if not target:
+        return None
+    city = await resolve_city_by_ref(session, target)
+    if city is None:
+        return None
+    return city_slug(str(city["name"]))
+
+
 async def _public_cities(session: AsyncSession) -> list[dict[str, Any]]:
     countries = ice_discovery_countries()
     now = time.monotonic()
