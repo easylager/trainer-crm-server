@@ -1984,12 +1984,20 @@ LIMIT 4
         if alat is not None and alon is not None:
             nlat, nlon = near
             distance_km = haversine_km(nlat, nlon, float(alat), float(alon))
+    def _session_public_path(r: Mapping[str, Any]) -> str | None:
+        slug = r.get("arena_slug")
+        city_name = r.get("city_name")
+        if city_name and slug:
+            return place_path(city_name=str(city_name), slug=str(slug))
+        return None
+
     sessions = [
         {
             "session_id": int(r["session_id"]),
             "arena_id": int(r["arena_id"]),
             "arena_slug": r["arena_slug"],
             "arena_name": r["arena_name"],
+            "public_path": _session_public_path(r),
             "venue_type": normalize_venue_type(r["venue_type"]),
             "kind": r["kind"],
             "starts_at_utc": (
@@ -2010,10 +2018,12 @@ LIMIT 4
         }
         for r in rows
     ]
+    teaser_public_path = _session_public_path(row)
     return {
         "arena_id": int(row["arena_id"]),
         "arena_slug": row["arena_slug"],
         "arena_name": row["arena_name"],
+        "public_path": teaser_public_path,
         "arena_district": row["arena_district"],
         "city_id": int(row["city_id"]) if row["city_id"] is not None else None,
         "city_name": row["city_name"],

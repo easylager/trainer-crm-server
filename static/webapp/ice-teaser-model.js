@@ -88,7 +88,24 @@
     // id важнее slug: тизер бывает «ближайший по стране», а slug уникален только в городе.
     var ref = (payload && (payload.arena_id != null ? payload.arena_id : payload.arena_slug)) || '';
     if (!ref) return '';
-    return 'arena?ref=' + encodeURIComponent(String(ref));
+    var href = 'arena?ref=' + encodeURIComponent(String(ref));
+    var sessionId = payload && payload.session_id;
+    if (sessionId != null && typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.arenaHref) {
+      var item = {
+        id: payload.arena_id,
+        slug: payload.arena_slug,
+        public_path: payload.public_path,
+        live: { kind: 'session', session_id: sessionId },
+      };
+      return CatalogPublicUrl.arenaHref(item, href);
+    }
+    if (payload && payload.public_path && typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.arenaHref) {
+      return CatalogPublicUrl.arenaHref(
+        { id: payload.arena_id, slug: payload.arena_slug, public_path: payload.public_path },
+        href,
+      );
+    }
+    return href;
   }
 
   function slotHasStarted(payload, now) {

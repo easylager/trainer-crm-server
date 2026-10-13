@@ -325,6 +325,9 @@
   }
 
   function applyIceWhenFromClientSession(session) {
+    if (typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.applyClientSession) {
+      CatalogPublicUrl.applyClientSession(session);
+    }
     if (!session || state.urlWhenHydrated) return false;
     if (session.ice_when == null && !session.ice_when_day) return false;
     var restored = M.hydrateWhenFromSaved(

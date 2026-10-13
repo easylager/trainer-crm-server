@@ -2248,7 +2248,10 @@
               btn.addEventListener('click', function() {
                 var arena = btn.getAttribute('data-arena');
                 if (arena) {
-                  navigateTo('arena?ref=' + encodeURIComponent(arena));
+                  var place = places.filter(function(p) {
+                    return p && String(p.id) === String(arena);
+                  })[0];
+                  navigateTo(place ? miniAppPlaceHref(place) : 'arena?ref=' + encodeURIComponent(arena));
                   return;
                 }
                 var tid = btn.getAttribute('data-tid');
@@ -2504,7 +2507,28 @@
         );
       }
 
+      function applyHubBootstrapFlags(hubMeta) {
+        if (
+          hubMeta &&
+          typeof CatalogPublicUrl !== 'undefined' &&
+          CatalogPublicUrl.applyClientSession
+        ) {
+          CatalogPublicUrl.applyClientSession(hubMeta);
+        }
+      }
+
+      function miniAppPlaceHref(item) {
+        var ref = item && item.id;
+        if (ref == null) return '';
+        var href = 'arena?ref=' + encodeURIComponent(String(ref));
+        if (typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.arenaHref) {
+          return CatalogPublicUrl.arenaHref(item, href);
+        }
+        return href;
+      }
+
       function applyHubState(bookingDays, requestItems, hubMeta) {
+        applyHubBootstrapFlags(hubMeta);
         hubPersonalSlot = false;
         hubPrimaryTrainer = null;
         hubOpenWindowShown = false;
@@ -2726,6 +2750,7 @@
               fetch(apiUrl('/client/session'), { headers: headersJson(), cache: 'no-store' }).then(jsonOrThrow).catch(function() { return {}; }),
             ]).then(function(results) {
               var sess = results[2] || {};
+              applyHubBootstrapFlags(sess);
               if (renderPendingReferralGate(sess.pending_referral)) {
                 return;
               }

@@ -735,6 +735,13 @@
       .then(function (results) {
         var session = results[0];
         var edges = results[1];
+        if (
+          session &&
+          typeof CatalogPublicUrl !== 'undefined' &&
+          CatalogPublicUrl.applyClientSession
+        ) {
+          CatalogPublicUrl.applyClientSession(session);
+        }
         if (!session && !edges) return;
         var cityId = session && session.city_id;
         if (!cityId) {
