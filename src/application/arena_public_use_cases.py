@@ -429,8 +429,10 @@ def _place_line(item: Mapping[str, Any]) -> str:
     if amenities.get("skate_rental") is True and not rental_close:
         bits.append("прокат на месте")
     if not bits:
-        phone_hint = "часы работы уточняйте по телефону" if sanitize_public_phone(item.get("phone")) else "часы работы уточняются"
-        bits.append(phone_hint)
+        # Не знаем часов — не говорим «уточняются» (TASK-276): есть телефон — как узнать, нет — молчим.
+        if not sanitize_public_phone(item.get("phone")):
+            return ""
+        bits.append("часы — по телефону")
     line = " · ".join(bits)
     return line[:1].upper() + line[1:]
 

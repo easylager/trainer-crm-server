@@ -555,7 +555,7 @@ button[data-call-phone]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
 a.bd-tel,
 a.tc-tel,
 a.crm-tel-link,
-a[href^="tel:"]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
+a[href^="tel:"]:not(.bd-btn):not(.btn-primary):not(.btn-secondary):not(.arena-btn) {
   -webkit-appearance: none;
   appearance: none;
   background: transparent !important;

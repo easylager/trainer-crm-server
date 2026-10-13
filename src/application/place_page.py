@@ -48,6 +48,7 @@ from src.application.arena_profile import (
 )
 from src.application.ice_city_day import city_slug
 from src.application.place_links import join_public_origin, place_query
+from src.shared.phone_guard import is_valid_public_phone
 from src.shared.arena_schedule_mode import (
     PHONE_LINE,
     SCHEDULE_MODE_PHONE,
@@ -400,7 +401,8 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
     now: datetime = view["now"]
     if _skating(card):
         mode = normalize_schedule_mode(card.get("schedule_mode"))
-        if mode == SCHEDULE_MODE_PHONE:
+        # «По телефону» без рабочего номера — противоречие на одной странице (TASK-276).
+        if mode == SCHEDULE_MODE_PHONE and is_valid_public_phone(str(card.get("phone") or "")):
             return "closed", PHONE_LINE
         if mode == SCHEDULE_MODE_SEASON_CLOSED:
             reopen = _parse_iso_date(card.get("schedule_reopen_date"))

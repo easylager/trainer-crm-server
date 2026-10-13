@@ -1093,7 +1093,7 @@
     var action = '';
     if (feed.mode === 'phone' && feed.callHref) {
       action =
-        '<a class="arena-btn arena-btn--call" href="' +
+        '<a class="arena-btn arena-btn--pri" href="' +
         esc(feed.callHref) +
         '">' +
         esc(copyLine('cta.call', 'Позвонить')) +
