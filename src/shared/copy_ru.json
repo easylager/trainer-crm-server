@@ -53,5 +53,15 @@
   "route.skate.hint": "каток, зал или трасса",
   "selection.ice.hint": "катки",
   "route.hockey.hint": "открытая тренировка, ОХМ",
-  "route.service.hint": "заточка коньков"
+  "route.service.hint": "заточка коньков",
+  "brand.mark": "Glide",
+  "ice.today.h1": "{city}: лёд сегодня",
+  "hub.no_rollers_halls": "Лыжероллеров и залов в списке пока нет.",
+  "hub.no_skate_times": "времени катания в расписании нет",
+  "hub.open_until": "{name} открыт до {time}",
+  "cta.invite_friends": "Позвать друзей",
+  "share.story": "Картинка для истории",
+  "share.card": "Открытка",
+  "city.not_found": "Такого города нет в каталоге",
+  "nav.back_city": "‹ {city}"
 }

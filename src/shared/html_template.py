@@ -15,6 +15,12 @@ from typing import Any
 
 _PLACEHOLDER_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
 
+# Иконка бренда на каждой SSR-странице. Файл отдаёт маршрут ``/favicon.ico``.
+PUBLIC_ICON_LINKS = (
+    '<link rel="icon" href="/favicon.ico" type="image/png" />\n'
+    '  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />'
+)
+
 
 def fill_placeholders(template: str, values: Mapping[str, str]) -> str:
     """Заменить известные плейсхолдеры шаблона; незнакомые ``__X__`` остаются как есть."""

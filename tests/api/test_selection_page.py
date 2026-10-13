@@ -207,7 +207,7 @@ async def test_selection_page_ssr_phone_guard(app_use_test_db, db_session) -> No
     _assert_invalid_phone_ssr(_selection_pick_block(html, "Каток короткий"), _PHONE_GUARD_SHORT)
     valid_block = _selection_pick_block(html, "Каток валидный")
     assert 'href="tel:+375291234567"' in valid_block
-    assert "уточните по телефону" in valid_block.lower()
+    assert "уточн" not in valid_block.casefold()
 
 
 @pytest.mark.asyncio

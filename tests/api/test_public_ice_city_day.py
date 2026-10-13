@@ -385,12 +385,12 @@ async def test_ice_today_og_is_absolute_and_the_page_stays_light(
     assert page.status_code == 200
     assert "prefers-color-scheme: dark" not in page.text
     og = re.search(r'<meta property="og:title" content="([^"]*)"', page.text)
-    assert og and "сегодня" not in og.group(1).lower() and "завтра" not in og.group(1).lower()
+    assert og and og.group(1).endswith(": лёд сегодня")
     assert "сегодня" not in share.json()["share_text"].lower()
     assert "завтра" not in share.json()["share_text"].lower()
     assert f"startapp=catalog_{cid}_skate_today" in page.text
     assert "/api/public/catalog/open-telegram" in page.text
-    assert "Лёд · " in page.text
+    assert "Лёд · " not in page.text
 
 
 @pytest.mark.asyncio
@@ -418,4 +418,4 @@ async def test_ice_city_day_ssr_phone_guard(app_use_test_db, db_session) -> None
     _assert_invalid_phone_ssr(_ice_day_unconfirmed_row(html, "Каток короткий"), _PHONE_GUARD_SHORT)
     valid_row = _ice_day_unconfirmed_row(html, "Каток валидный")
     assert 'href="tel:+375291234567"' in valid_row
-    assert "уточните по телефону" in valid_row.lower()
+    assert "уточн" not in valid_row.casefold()

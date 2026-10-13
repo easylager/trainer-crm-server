@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import html as html_lib
 import json
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.shared.config import Settings
 
@@ -159,6 +161,32 @@ def inject_landing_html(html: str, settings: Settings | None = None) -> str:
     if marker not in html:
         raise ValueError("landing index.html must contain </head>")
     return html.replace(marker, bootstrap + marker, 1)
+
+
+def polish_trainer_landing_html(html: str, *, today: date | None = None) -> str:
+    """Демо-даты лендинга — среда текущей недели по Минску, не застывший июнь."""
+    day = today or datetime.now(ZoneInfo("Europe/Minsk")).date()
+    monday = day - timedelta(days=day.weekday())
+    months = (
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    )
+
+    def label(offset: int) -> str:
+        d = monday + timedelta(days=offset)
+        return f"{d.day} {months[d.month - 1]}"
+
+    sunday = monday + timedelta(days=6)
+    if monday.month == sunday.month:
+        week = f"{monday.day}–{sunday.day} {months[sunday.month - 1]}"
+    else:
+        week = f"{label(0)}–{label(6)}"
+    html = html.replace("18 июня", label(2))
+    html = html.replace("19 июня", label(3))
+    html = html.replace("16–22 июня", week)
+    html = html.replace("11 июня", label(-7))
+    html = html.replace("3 июня", label(-14))
+    return html
 
 
 def clear_landing_manifest_cache_for_tests() -> None:

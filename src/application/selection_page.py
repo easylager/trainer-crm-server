@@ -57,6 +57,13 @@ from src.shared.catalog_sharpening import SHARPENING_AMENITY_KEYS
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.phone_guard import is_valid_public_phone, tel_href
+from src.application.photo_cdn import visible_photo_url
+from src.shared.public_display import (
+    format_phone_display,
+    format_public_name,
+    format_street_address,
+    session_day_phrase,
+)
 from src.shared.schedule_basis import public_basis_css_class
 from src.shared.venue_types import DEFAULT_HIDDEN_VENUE_TYPES, VENUE_TYPE_KEYS, has_public_skating
 
@@ -743,11 +750,17 @@ def _esc(value: Any) -> str:
     return html_lib.escape(str(value if value is not None else ""), quote=True)
 
 
+def _selection_where(item: Mapping[str, Any], *, city_name: str) -> str:
+    district = str(item.get("district") or "").strip()
+    street = format_street_address(str(item.get("address") or ""), city=city_name)
+    return " · ".join(x for x in (district, street) if x)
+
+
 def _place_photo_url(item: Mapping[str, Any]) -> str | None:
-    """Тот же кадр, что в мини-карточке каталога. Нет URL — нет фото-блока."""
+    """Тот же кадр, что в мини-карточке. Файла нет — карточка без фото."""
     for key in ("card", "thumb"):
-        url = str(item.get(key) or "").strip()
-        if url.lower().startswith(("https://", "http://", "/")):
+        url = visible_photo_url(str(item.get(key) or ""))
+        if url:
             return url
     return None
 
@@ -755,7 +768,7 @@ def _place_photo_url(item: Mapping[str, Any]) -> str | None:
 def _phone_link(item: Mapping[str, Any]) -> str:
     phone = str(item.get("phone") or "").strip()
     if phone and is_valid_public_phone(phone):
-        return f' <a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a>'
+        return f' <a href="tel:{_esc(tel_href(phone))}">{_esc(format_phone_display(phone))}</a>'
     return ""
 
 
@@ -827,7 +840,6 @@ def _service_chips_html(view: Mapping[str, Any], *, city_name: str) -> str:
     chips = [
         ("sharpening", "Заточка"),
         ("rental", "Прокат"),
-        ("service", "Все услуги"),
     ]
     parts: list[str] = []
     for key, label in chips:
@@ -850,15 +862,19 @@ def _place_html(
     service_mode: bool = False,
     service_highlight_keys: frozenset[str] | None = None,
 ) -> str:
+    today = datetime.now(ZoneInfo("Europe/Minsk")).date()
     slug = str(item.get("slug") or "")
     href = place_path(city_name=city_name, slug=slug) if slug else ""
-    where = " · ".join(x for x in (item.get("district"), item.get("address")) if x)
+    where = _selection_where(item, city_name=city_name)
     chips = ""
     rest = len(slots) - MAX_SLOTS_PER_PLACE
     for s in slots[:MAX_SLOTS_PER_PLACE]:
         hhmm = str(s.get("starts_at_local") or "")[:5]
         day = s.get("local_date")
-        day_text = f"{day.day:02d}.{day.month:02d}" if hasattr(day, "day") else ""
+        if hasattr(day, "year"):
+            phrase = session_day_phrase(day, hhmm, today=today)
+        else:
+            phrase = hhmm
         price = format_price_minor(
             s.get("price_adult_minor") if s.get("price_adult_minor") is not None else s.get("price_minor"),
             str(s.get("currency_code") or "BYN"),
@@ -866,8 +882,8 @@ def _place_html(
         basis_cls = public_basis_css_class(str(s.get("schedule_basis") or "live"))
         slot_cls = "slot" + (f" {basis_cls}" if basis_cls else "")
         slot_inner = (
-            f'<span class="slot__time">{_esc(hhmm)}</span>'
-            f'<span class="slot__price">{_esc(day_text)}{(" · " + _esc(price)) if price else ""}</span>'
+            f'<span class="slot__time">{_esc(phrase)}</span>'
+            + (f'<span class="slot__price">{_esc(price)}</span>' if price else "")
         )
         if href:
             chips += (
@@ -880,13 +896,14 @@ def _place_html(
         chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
     line = "" if chips else f'<p class="muted">{_esc(item.get("live_line") or "")}</p>'
     if unconfirmed:
-        # TASK-180: > 72 ч без подтверждения — не расписание, а просьба уточнить.
-        line = f'<p class="pick__stale">{_esc(unconfirmed)}{_phone_link(item)}</p>'
+        # Сеансы спрятаны. Просьбу «уточните» не пишем; телефон остаётся ссылкой.
+        link = _phone_link(item)
+        line = f'<p class="pick__phone">{link}</p>' if link else ""
     # TASK-180: > 6 ч — сеансы показываем, но над ними спокойная строка «могло измениться».
     stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)
     icon = str(item.get("venue_icon") or "").strip()
-    name = _esc(item.get("name"))
+    name = _esc(format_public_name(str(item.get("name") or "")))
     name_html = f'<a href="{_esc(href)}">{name}</a>' if href else name
     if photo and href:
         media = (
@@ -909,7 +926,9 @@ def _place_html(
         state = str(open_st.get("state") or "unknown")
         olabel = str(open_st.get("label") or "")
         rink_note = ' <small class="muted">· каток</small>' if vtype in ("ice", "outdoor") else ""
-        open_html = f'<span class="pick__open pick__open--{_esc(state)}">{_esc(olabel)}</span>'
+        open_html = (
+            f'<span class="pick__open pick__open--{_esc(state)}">{_esc(olabel)}</span>' if olabel else ""
+        )
         highlight = service_highlight_keys or frozenset()
         amenity_keys = list(item.get("amenity_keys") or [])
         svc_bits = ""
@@ -963,7 +982,7 @@ def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
     href = str(item.get("public_path") or "").strip()
     if not href and slug:
         href = place_path(city_name=city_name, slug=slug)
-    where = " · ".join(x for x in (item.get("district"), item.get("address")) if x)
+    where = _selection_where(item, city_name=city_name)
     badge = str(item.get("center_badge") or "").strip()
     live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
     line = ""
@@ -971,7 +990,7 @@ def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
         line = str(live.get("text") or item.get("live_line") or "").strip()
     photo = _place_photo_url(item)
     icon = str(item.get("venue_icon") or "").strip()
-    name = _esc(item.get("name"))
+    name = _esc(format_public_name(str(item.get("name") or "")))
     if photo:
         media = (
             f'<span class="pick__media" data-icon="{_esc(icon)}">'
@@ -1227,9 +1246,10 @@ def render_selection_page(
             "__ROBOTS__": "noindex, follow" if (variant or page_no > 1) else "index, follow",
             "__HEAD_EXTRA__": _head_links_html(view, city_name=city_name, canonical_base=canonical_url),
             "__JSONLD__": ld,
-            "__CITY__": _esc(city_name),
+            "__BRAND__": _esc(t("brand.mark")),
+            "__CITY__": _esc(format_public_name(city_name)),
             "__CITY_LINK__": city_link,
-            "__TRUST__": "<p>Расписание — с сайтов катков и от администраций; время и цену уточняйте на месте.</p>",
+            "__TRUST__": "",
             "__BODY__": body,
         },
     )

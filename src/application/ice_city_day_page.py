@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.application.ice_city_day import (
-    cacheable_day_label,
     city_slug,
     plural_ru,
     price_range_line,
@@ -25,9 +24,11 @@ from src.application.ice_city_day import (
 )
 from src.application.place_links import join_public_origin, place_path
 from src.application.schedule_staleness import UNCONFIRMED_HEADING
+from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.phone_guard import is_valid_public_phone, tel_href
-from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
+from src.shared.public_display import format_phone_display, format_public_name, format_street_address
+from src.shared.schedule_basis import public_basis_css_class
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
 
@@ -36,9 +37,10 @@ def _esc(value: Any) -> str:
     return html_lib.escape(str(value or ""), quote=True)
 
 
-def _arena_where(arena: Mapping[str, Any]) -> str:
-    parts = [str(arena.get("district") or "").strip(), str(arena.get("address") or "").strip()]
-    return " · ".join(p for p in parts if p)
+def _arena_where(arena: Mapping[str, Any], *, city_name: str) -> str:
+    district = str(arena.get("district") or "").strip()
+    street = format_street_address(str(arena.get("address") or ""), city=city_name)
+    return " · ".join(p for p in (district, street) if p)
 
 
 def _slot_html(slot: Mapping[str, Any]) -> str:
@@ -59,19 +61,16 @@ def _slot_html(slot: Mapping[str, Any]) -> str:
 
 
 def _basis_note_html(sessions: list[Mapping[str, Any]]) -> str:
-    """TASK-179: откуда расписание — видимой строкой, а не только ``title`` (на телефоне его не видно)."""
-    for slot in sessions:
-        hint = basis_hint_ru(str(slot.get("schedule_basis") or "live"))
-        if hint:
-            return f'<p class="arena__basis">{_esc(hint)}</p>'
+    """Источник сеанса в публичный текст не пишем."""
+    del sessions
     return ""
 
 
 def _arena_html(arena: Mapping[str, Any], *, city_name: str = "") -> str:
-    where = _arena_where(arena)
+    where = _arena_where(arena, city_name=city_name)
     sessions = list(arena.get("sessions") or [])
     slots = "".join(_slot_html(s) for s in sessions)
-    name = _esc(arena.get("name"))
+    name = _esc(format_public_name(str(arena.get("name") or "")))
     slug = str(arena.get("slug") or "").strip()
     if slug and city_name:
         # TASK-146: у каждого катка своя публичная страница — расписание на неделю,
@@ -99,15 +98,19 @@ def _unconfirmed_html(items: list[Mapping[str, Any]], *, city_name: str) -> str:
         return ""
     rows = []
     for item in items:
-        name = _esc(item.get("name"))
+        name = _esc(format_public_name(str(item.get("name") or "")))
         slug = str(item.get("slug") or "").strip()
         if slug and city_name:
             name = f'<a href="{_esc(place_path(city_name=city_name, slug=slug))}">{name}</a>'
         phone = str(item.get("phone") or "").strip()
         phone_html = ""
         if phone and is_valid_public_phone(phone):
-            phone_html = f' · <a href="tel:{_esc(tel_href(phone))}">{_esc(phone)}</a>'
-        rows.append(f"<li><b>{name}</b> — {_esc(item.get('note'))}{phone_html}</li>")
+            phone_html = f' · <a href="tel:{_esc(tel_href(phone))}">{_esc(format_phone_display(phone))}</a>'
+        note = str(item.get("note") or "")
+        if "уточн" in note.casefold():
+            note = ""
+        note_html = f" — {_esc(note)}" if note else ""
+        rows.append(f"<li><b>{name}</b>{note_html}{phone_html}</li>")
     return (
         '<section class="unconfirmed">'
         f'<p class="unconfirmed__title">{_esc(UNCONFIRMED_HEADING)}</p>'
@@ -125,8 +128,7 @@ def _empty_html(city_name: str, day_label: str) -> str:
     return (
         '<div class="empty">'
         f"<p>На {_esc(day_label)} массовых катаний в расписании нет.</p>"
-        f'<p class="muted">Это не значит, что катки {_esc(city_name)} закрыты: '
-        "если время не подтверждено, оно спрятано. Уточните по телефону на странице катка.</p>"
+        f'<p class="muted">Катки {_esc(city_name)} на другие дни — на странице города.</p>'
         "</div>"
     )
 
@@ -201,29 +203,27 @@ def render_ice_city_day_page(
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
 
     day_label = str(day.get("day_label") or "сегодня")
+    shown_city = format_public_name(city_name)
     arenas = list(day.get("arenas") or [])
-    description = summary_line(day, city_name=city_name)
-    # og и <title> кэширует мессенджер. Живой lede ниже по-прежнему говорит «сегодня».
-    og_label = cacheable_day_label(day) or day_label
-    og_title = f"Лёд в городе {city_name} — расписание на {og_label}"
-    og_description = summary_line(day, city_name=city_name, absolute=True)
+    description = summary_line(day, city_name=shown_city)
+    og_title = t("ice.today.h1", city=shown_city)
+    og_description = summary_line(day, city_name=shown_city, absolute=True)
 
     if arenas:
         body = "".join(_arena_html(a, city_name=city_name) for a in arenas)
     else:
-        body = _empty_html(city_name, day_label)
+        body = _empty_html(shown_city, day_label)
     body += _unconfirmed_html(list(day.get("unconfirmed") or []), city_name=city_name)
 
     session_count = int(day.get("session_count") or 0)
     if session_count:
         s_word = plural_ru(session_count, "сеанс", "сеанса", "сеансов")
-        footer = f"{session_count} {s_word} на {_esc(day.get('local_date'))}"
+        footer = f"{session_count} {s_word} сегодня"
         prices = price_range_line(day)
         if prices:
             footer += f" · {prices}"
-        footer += ". Данные с сайтов и от администраций катков — время и цену уточняйте на месте."
     else:
-        footer = "Расписание обновляется по данным катков."
+        footer = ""
 
     html = template
     lang, og_locale = html_lang_for_country(country)
@@ -239,8 +239,8 @@ def render_ice_city_day_page(
         "__OG_LOCALE__": og_locale,
         "__ROBOTS__": robots,
         "__JSONLD__": _day_json_ld(day, city_name=city_name, canonical_url=canonical_url),
-        "__DAY_LABEL_UPPER__": _esc(day_label.upper()),
-        "__CITY__": _esc(city_name),
+        "__BRAND__": _esc(t("brand.mark")),
+        "__H1__": _esc(og_title),
         "__FOOTER__": footer,
         "__BODY__": body,
     }

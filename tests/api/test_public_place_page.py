@@ -474,7 +474,7 @@ async def test_outdoor_rink_has_its_schedule_like_any_rink(app_use_test_db, db_s
         resp = await client.get(place["path"])
         card = await client.get(f"/api/public/arenas/{place['arena_id']}")
     assert "Массовое катание</h2>" in resp.text and "18:15" in resp.text
-    assert "зависит от погоды" in resp.text
+    assert "зависит от погоды" not in resp.text
     assert card.json()["has_skating"] is True
 
 
@@ -520,9 +520,10 @@ def test_hours_without_leading_zero_are_not_compared_as_strings() -> None:
     assert open_now_label(broken, now=noon_minsk) == ""
 
 
-def test_hero_photo_is_used_when_published_and_skipped_otherwise() -> None:
+def test_hero_photo_is_used_when_published_and_skipped_otherwise(monkeypatch) -> None:
     from src.application.place_page import _hero_photo_url
 
+    monkeypatch.setattr("src.infrastructure.s3.photo_exists", lambda _key: True)
     assert _hero_photo_url({"hero": {"variants": {"hero": "/api/public/photos/arenas/1/h.jpg"}}}) == (
         "/api/public/photos/arenas/1/h.jpg"
     )
@@ -533,6 +534,8 @@ def test_hero_photo_is_used_when_published_and_skipped_otherwise() -> None:
     assert _hero_photo_url({"hero": {"variants": {"hero": "/h.jpg", "card": "/c.jpg", "thumb": "/t.jpg"}}}) == "/c.jpg"
     assert _hero_photo_url({"hero": {"variants": {"hero": "javascript:alert(1)"}}}) is None
     assert _hero_photo_url({"hero": None}) is None
+    monkeypatch.setattr("src.infrastructure.s3.photo_exists", lambda _key: False)
+    assert _hero_photo_url({"hero": {"variants": {"hero": "/api/public/photos/arenas/1/missing.jpg"}}}) is None
 
 
 @pytest.mark.asyncio

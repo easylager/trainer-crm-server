@@ -1,6 +1,31 @@
 (function(){
 'use strict';
 
+function demoWeekDates() {
+  var shifted = new Date(Date.now() + 180 * 60000);
+  var dow = shifted.getUTCDay();
+  var iso = dow === 0 ? 7 : dow;
+  var monday = new Date(shifted.getTime());
+  monday.setUTCDate(monday.getUTCDate() + (1 - iso));
+  var months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  function label(offset) {
+    var d = new Date(monday.getTime());
+    d.setUTCDate(d.getUTCDate() + offset);
+    return d.getUTCDate() + ' ' + months[d.getUTCMonth()];
+  }
+  function range() {
+    var end = new Date(monday.getTime());
+    end.setUTCDate(end.getUTCDate() + 6);
+    if (monday.getUTCMonth() === end.getUTCMonth()) {
+      return monday.getUTCDate() + '–' + end.getUTCDate() + ' ' + months[end.getUTCMonth()];
+    }
+    return label(0) + '–' + label(6);
+  }
+  return { wed: label(2), thu: label(3), week: range(), last: label(-7), older: label(-14) };
+}
+var DEMO = demoWeekDates();
+var DEMO_DAY = DEMO.wed;
+
 var reduce   = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 var isMobile = function(){ return window.matchMedia('(max-width: 860px)').matches; };
 var isCompactHero = function(){ return window.matchMedia('(max-width: 1180px)').matches; };
@@ -156,9 +181,9 @@ function beat5(){
     side('client');
     bubble('✅ <b>Ваша запись подтверждена!</b>' +
            '<div class="bubble__rows">' +
-           '📅 <b>18 июня (ср) 18:00</b> — 60 мин.<br>' +
+           '📅 <b>' + DEMO_DAY + ' (ср) 18:00</b> — 60 мин.<br>' +
            '🎯 Фигурное катание<br>' +
-           '📍 Минск · 🏟 Minsk Arena' +
+           '📍 Минск · 🏟 Минск-Арена' +
            '</div>', '18:44', true);
     after(reduce ? 20 : 1800, reminder);
   });
@@ -170,7 +195,7 @@ function reminder(){
   after(reduce ? 20 : 440, function(){
     bubble('⏰ <b>Напоминание о занятии</b>' +
            '<div class="bubble__rows">' +
-           '📅 <b>18 июня</b> (ср) · 18:00<br>' +
+           '📅 <b>' + DEMO_DAY + '</b> (ср) · 18:00<br>' +
            '⏱ Длительность: 60 мин.' +
            '</div>' +
            'Адрес и детали — в <b>«Мои записи»</b> (меню бота).', '17:00');
@@ -260,19 +285,19 @@ var FRAGS = [
   { cap:'Экран клиента · запись',
     html:
       '<p class="frag__screen">Выберите время</p>' +
-      '<div class="day-title">Среда, 18 июня</div>' +
+      '<div class="day-title">Среда, ' + DEMO_DAY + '</div>' +
       '<div class="slot-card" style="cursor:default">' +
         '<span class="slot-card-body"><span class="slot-time">18:00–19:00</span>' +
-        '<span class="slot-venue-pill">Minsk Arena</span></span>' +
+        '<span class="slot-venue-pill">Минск-Арена</span></span>' +
         '<span class="slot-arrow">›</span></div>' +
       '<div class="slot-card" style="cursor:default">' +
         '<span class="slot-card-body"><span class="slot-time">19:00–20:00</span>' +
-        '<span class="slot-venue-pill">Minsk Arena</span></span>' +
+        '<span class="slot-venue-pill">Минск-Арена</span></span>' +
         '<span class="slot-arrow">›</span></div>' +
-      '<div class="day-title">Четверг, 19 июня</div>' +
+      '<div class="day-title">Четверг, ' + DEMO.thu + '</div>' +
       '<div class="slot-card" style="cursor:default">' +
         '<span class="slot-card-body"><span class="slot-time">07:30–08:30</span>' +
-        '<span class="slot-venue-pill">Чижовка-Арена</span></span>' +
+        '<span class="slot-venue-pill">Чижовка-арена</span></span>' +
         '<span class="slot-arrow">›</span></div>'
   },
   /* 1 — Расписание · schedule.html */
@@ -281,18 +306,18 @@ var FRAGS = [
       '<p class="frag__screen">Моё расписание</p>' +
       '<div class="sched__chips" style="margin-bottom:12px">' +
         '<span class="chip chip--on">Все</span><span class="chip">Свободны</span><span class="chip">Заняты</span></div>' +
-      '<div class="day-title">Среда, 18 июня</div>' +
+      '<div class="day-title">Среда, ' + DEMO_DAY + '</div>' +
       '<div class="s-card s-card--a"><div class="s-main">' +
         '<div class="s-time">16:00–17:00</div><div class="s-client">Максим</div>' +
-        '<div class="s-venue">Фигурное катание · 📍 Minsk Arena</div></div>' +
+        '<div class="s-venue">Фигурное катание · 📍 Минск-Арена</div></div>' +
         '<span class="s-status">занят</span></div>' +
       '<div class="s-card s-card--free"><div class="s-main">' +
         '<div class="s-time">18:00–19:00</div><div class="s-client s-client--muted">Свободно</div>' +
-        '<div class="s-venue">Фигурное катание · 📍 Minsk Arena</div></div>' +
+        '<div class="s-venue">Фигурное катание · 📍 Минск-Арена</div></div>' +
         '<span class="s-status s-status--free">свободен</span></div>' +
       '<div class="s-card"><div class="s-main">' +
         '<div class="s-time">19:00–20:00</div><div class="s-client">Дарья</div>' +
-        '<div class="s-venue">Фигурное катание · 📍 Minsk Arena</div></div>' +
+        '<div class="s-venue">Фигурное катание · 📍 Минск-Арена</div></div>' +
         '<span class="s-status">занят</span></div>'
   },
   /* 2 — Клиенты · trainer-clients.html */
@@ -306,7 +331,7 @@ var FRAGS = [
         '<div class="c-nameRow"><span class="c-name">Анна К.</span>' +
         '<span class="c-pill">Постоянный</span></div>' +
         '<div class="c-meta">+375 29 ··· 41 07</div>' +
-        '<div class="c-meta">Последнее занятие: 11 июня</div></div>' +
+        '<div class="c-meta">Последнее занятие: ' + DEMO.last + '</div></div>' +
         '<span class="c-arrow">→</span></div>' +
       '<div class="c-card"><span class="c-av">МД</span><div class="c-main">' +
         '<div class="c-nameRow"><span class="c-name">Максим Д.</span>' +
@@ -318,7 +343,7 @@ var FRAGS = [
         '<div class="c-nameRow"><span class="c-name">Дарья С.</span>' +
         '<span class="c-pill c-pill--gray">Нет в боте</span></div>' +
         '<div class="c-meta">+375 44 ··· 90 33</div>' +
-        '<div class="c-meta">Последнее занятие: 3 июня</div></div>' +
+        '<div class="c-meta">Последнее занятие: ' + DEMO.older + '</div></div>' +
         '<span class="c-arrow">→</span></div>'
   },
   /* 3 — Заметки · dossier (trainer-clients-main.js:2321) */
@@ -371,13 +396,13 @@ var FRAGS = [
       '<div class="t-card"><span class="t-photo"></span><div class="t-info">' +
         '<div class="t-name">Алексей</div>' +
         '<div class="t-meta">Минск · фигурное катание</div>' +
-        '<div class="t-meta">Minsk Arena, Чижовка-Арена</div>' +
+        '<div class="t-meta">Минск-Арена, Чижовка-арена</div>' +
         '<span class="t-badge">Набор в группу</span></div>' +
         '<span class="c-arrow">→</span></div>' +
       '<div class="t-card"><span class="t-photo"></span><div class="t-info">' +
         '<div class="t-name">Ирина</div>' +
         '<div class="t-meta">Минск · фигурное катание</div>' +
-        '<div class="t-meta">Чижовка-Арена</div></div>' +
+        '<div class="t-meta">Чижовка-арена</div></div>' +
         '<span class="c-arrow">→</span></div>'
   },
   /* 6 — Реферальная программа · trainer-referral.html (labels verbatim) */

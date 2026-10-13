@@ -6,7 +6,8 @@ from src.application.place_card_image import selection_story_board, selection_st
 from src.application.selection_page import _place_html, _place_photo_url
 
 
-def test_place_card_uses_list_card_photo() -> None:
+def test_place_card_uses_list_card_photo(monkeypatch) -> None:
+    monkeypatch.setattr("src.infrastructure.s3.photo_exists", lambda _key: True)
     html = _place_html(
         {
             "id": 3,
