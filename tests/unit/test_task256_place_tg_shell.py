@@ -26,3 +26,11 @@ def test_theme_includes_place_hero_view_transition() -> None:
     theme = (REPO / "static/webapp/mini-app-client-theme.css").read_text(encoding="utf-8")
     assert ".b-hero__img[data-vt-hero]" in theme
     assert re.search(r"client-arena-hero", theme)
+
+
+def test_place_tg_shell_applies_style_b_tg_dark() -> None:
+    boot = (REPO / "static/share/place-tg-shell.js").read_text(encoding="utf-8")
+    assert "tg-dark" in boot
+    assert "colorScheme === 'dark'" in boot
+    assert "telegram-web-app.js" in boot
+    assert "if (!getTg())" in boot

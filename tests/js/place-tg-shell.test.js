@@ -65,6 +65,9 @@ describe('TASK-256 place-tg-shell wiring', () => {
     const src = read('static/share/place-tg-shell.js');
     assert.match(src, /if \(!initData\(\)\) return/);
     assert.match(src, /if \(!isPlacePage\(\)\) return/);
+    assert.match(src, /tg-dark/);
+    assert.match(src, /if \(!getTg\(\)\)/);
+    assert.match(src, /telegram-web-app\.js/);
   });
 
   it('mini-app-client-shell на /p/ без initData не монтирует вкладки', () => {

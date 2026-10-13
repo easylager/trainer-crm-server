@@ -73,9 +73,32 @@
     });
   }
 
+  function getTg() {
+    return global.Telegram && global.Telegram.WebApp ? global.Telegram.WebApp : null;
+  }
+
+  /** Стиль B читает --g-* из glide-tokens; в Telegram dark — body.tg-dark, не --tg-theme-*. */
+  function syncStyleBDarkClass() {
+    var body = global.document.body;
+    if (!body) return;
+    var tg = getTg();
+    if (tg && tg.colorScheme === 'dark') body.classList.add('tg-dark');
+    else body.classList.remove('tg-dark');
+  }
+
+  function wireThemeScheme() {
+    var tg = getTg();
+    if (!tg || typeof tg.onEvent !== 'function') return;
+    try {
+      tg.onEvent('themeChanged', syncStyleBDarkClass);
+    } catch (e) { /* */ }
+  }
+
   function activateShell() {
     var body = global.document.body;
     if (!body) return;
+    syncStyleBDarkClass();
+    wireThemeScheme();
     body.setAttribute('data-client-shell', 'tabs');
     body.classList.add('ar-pilot', 'ar-pilot--place');
     if (global.ClientShell && typeof global.ClientShell.init === 'function') {
@@ -86,6 +109,9 @@
     }
     wireBackButton();
     markHeroForTransition();
+    [0, 50, 120, 300, 800, 1500].forEach(function (ms) {
+      setTimeout(syncStyleBDarkClass, ms);
+    });
   }
 
   function boot() {
@@ -103,15 +129,18 @@
     loadStyle(w + 'mini-app-client-shell.css?v=' + encodeURIComponent(v));
     loadStyle('/static/share/place-tg-shell.css?v=' + encodeURIComponent(shareV));
 
-    var chain = [
-      'https://telegram.org/js/telegram-web-app.js',
+    var chain = [];
+    if (!getTg()) {
+      chain.push('https://telegram.org/js/telegram-web-app.js');
+    }
+    chain.push(
       w + 'mini-app-full-height.js?v=' + v,
       w + 'client-mini-app-theme.js?v=' + v,
       w + 'mini-app-telegram-chrome.js?v=' + v,
       w + 'mini-app-empty-state.js?v=' + v,
       w + 'mini-app-more-icons.js?v=' + v,
-      w + 'mini-app-client-shell.js?v=' + v,
-    ];
+      w + 'mini-app-client-shell.js?v=' + v
+    );
 
     var i = 0;
     function next() {

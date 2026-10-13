@@ -37,7 +37,13 @@ const browser = await chromium.launch();
 const plain = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const plainPage = await plain.newPage();
 await plainPage.goto(`${base}${placePath}`, { waitUntil: 'networkidle' });
+const plainMeta = await plainPage.evaluate(() => ({
+  tab: !!document.getElementById('clientTabBar'),
+  tgDark: document.body.classList.contains('tg-dark'),
+  bodyBg: getComputedStyle(document.body).backgroundColor,
+}));
 await plainPage.screenshot({ path: path.join(outDir, 'browser.png'), fullPage: false });
+console.log('browser meta', JSON.stringify(plainMeta));
 await plain.close();
 
 const tg = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -46,7 +52,24 @@ const tgPage = await tg.newPage();
 await tgPage.goto(`${base}${placePath}`, { waitUntil: 'networkidle' });
 await tgPage.waitForSelector('#clientTabBar', { timeout: 20000 });
 await tgPage.waitForTimeout(1000);
+const tgMeta = await tgPage.evaluate(() => {
+  const body = document.body;
+  const el = document.elementFromPoint(195, 400);
+  const cs = el ? getComputedStyle(el) : null;
+  const dock = document.getElementById('placeShareBtn');
+  const bar = document.getElementById('clientTabBar');
+  const dockBox = dock ? dock.getBoundingClientRect() : null;
+  const barBox = bar ? bar.getBoundingClientRect() : null;
+  return {
+    tgDark: body.classList.contains('tg-dark'),
+    bodyBg: getComputedStyle(body).backgroundColor,
+    at400: cs ? cs.backgroundColor : '',
+    dockY: dockBox ? [Math.round(dockBox.top), Math.round(dockBox.bottom)] : null,
+    barY: barBox ? Math.round(barBox.top) : null,
+  };
+});
 await tgPage.screenshot({ path: path.join(outDir, 'telegram.png'), fullPage: false });
+console.log('telegram meta', JSON.stringify(tgMeta));
 await tg.close();
 
 await browser.close();
