@@ -277,7 +277,9 @@ async def test_catalog_home_city_order_minsk_first_then_by_activity(app_use_test
     hero = re.search(r'<a class="hero-city".*?<span class="name">([^<]+)</span>', home.text, re.S)
     assert hero and hero.group(1) == "Минск"
     tiles = re.findall(
-        r'<a class="city card[^"]*" href="[^"]+"><span class="n">([^<]+)</span><span class="f">(.*?)</span>',
+        r'<a class="city card[^"]*" href="[^"]+">'
+        r'(?:<span class="g-motif-wrap">.*?</span>|<img[^>]*>)?'
+        r'<span class="n">([^<]+)</span><span class="f">(.*?)</span>',
         home.text,
         re.S,
     )

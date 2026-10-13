@@ -147,8 +147,8 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
         by_id = await client.get(f"/c/{city_id}")
     assert hub.status_code == 200
     html = hub.text
-    assert f'<h1 class="hero__title">{name}</h1>' in html
-    assert "Что нужно?" in html
+    assert f'<h1 class="hero__title g-hero__title">{name} на льду</h1>' in html
+    assert "Что нужно" in html
     assert 'class="pick"' not in html, "хаб — не список мест"
 
     skate = _route(html, "Покататься")
@@ -166,7 +166,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert f'href="/c/{slug}?kind=ohm"' in ohm and "seg=" not in ohm and "1 каток" in ohm
     if ohm_weekend:
         assert f'href="/c/{slug}?w=weekend&amp;kind=ohm"' in ohm and f"Сб–Вс <small>{ohm_weekend}</small>" in ohm
-        assert "07:00" in ohm
+        assert "7:00" in ohm
     else:
         assert "<span>Сб–Вс <small>—</small></span>" in ohm
     assert f"Все <small>{ohm_all}</small>" in ohm
@@ -177,7 +177,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert not _route(html, "Тренеры")
 
     # «Ближайшее на льду» — ссылки на страницы мест; все места — списком (SEO).
-    assert "Ближайшее на льду" in html
+    assert "Ближайший лёд" in html
     assert f'href="/p/{slug}/' in html
     assert "Все места города" in html
     # Канон и редирект по id — как у подборки.
@@ -276,8 +276,8 @@ async def test_city_hub_with_params_is_still_the_list(app_use_test_db, db_sessio
     for resp in (weekend, ice, paged):
         assert resp.status_code == 200
         assert 'class="pick' in resp.text, "список мест"
-        assert "Что нужно?" not in resp.text
-    assert hub_src.status_code == 200 and "Что нужно?" in hub_src.text, "?src= — не фильтр"
+        assert "на льду" not in resp.text
+    assert hub_src.status_code == 200 and "на льду" in hub_src.text, "?src= — не фильтр"
 
 
 def test_open_state_and_hot_window() -> None:
@@ -366,6 +366,45 @@ async def test_city_hub_hockey_tile_for_centers_without_sessions(app_use_test_db
     assert center_name not in ohm.text
     assert "Центры <small>1</small>" in ohm.text
     assert f'class="chip" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm.text
+
+
+@pytest.mark.asyncio
+async def test_one_rink_city_shows_the_week_not_the_router(app_use_test_db, db_session) -> None:
+    name = f"Кобрин {uuid.uuid4().hex[:4]}"
+    city_id = await _insert_city(db_session, name=name)
+    rink = await _insert_arena(db_session, city_id, name="Ледовый")
+    await _session(db_session, rink, day=_minsk_today(), hhmm="12:30")
+    await db_session.commit()
+    invalidate_public_city_cache()
+    async with _client() as client:
+        resp = await client.get(f"/c/{city_slug(name)}")
+    assert resp.status_code == 200
+    assert "Неделя" in resp.text
+    assert "Что нужно" not in resp.text
+    assert "12:30" in resp.text
+    assert "/* task246-week */" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_phone_city_asks_to_call_and_invents_nothing(app_use_test_db, db_session) -> None:
+    name = f"Жлобин {uuid.uuid4().hex[:4]}"
+    city_id = await _insert_city(db_session, name=name)
+    rink = await _insert_arena(db_session, city_id, name="Дворец")
+    await db_session.execute(
+        text(
+            "UPDATE arena_profiles SET schedule_mode = 'phone', phone = '+375291112233' WHERE arena_id = :id"
+        ),
+        {"id": rink},
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+    async with _client() as client:
+        resp = await client.get(f"/c/{city_slug(name)}")
+    assert resp.status_code == 200
+    assert "называет по телефону" in resp.text
+    assert "Что нужно" not in resp.text
+    assert "Неделя" not in resp.text
+    assert "g-motif" in resp.text
 
 
 def test_skate_route_without_sessions_says_so() -> None:

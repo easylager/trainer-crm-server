@@ -32,8 +32,9 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102461" />
+  <link rel="stylesheet" href="/static/share/style-b.css?v=2026102461" />
   <style>
     /*
       TASK-146. Страница самодостаточная, как «Лёд сегодня»: один запрос, ноль своих
@@ -59,14 +60,14 @@
       --accent-ink: var(--g-on-accent);
       --accent-text: var(--g-accent-ink);
       --accent-wash: var(--g-accent-wash);
-      --chip: #eef3f5;
-      --live: #12a150;
-      --warn: #b4690e;
+      --chip: var(--g-chip);
+      --live: var(--g-live);
+      --warn: var(--g-warn-ink);
       --cut: 18px;
-      --ice: #2aa7c9;
-      --gym: #e08a1e;
-      --shop: #7a5af5;
-      --other: #5d7285;
+      --ice: var(--g-kind-ice);
+      --gym: var(--g-kind-gym);
+      --shop: var(--g-kind-shop);
+      --other: var(--g-muted);
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
@@ -194,11 +195,11 @@
     .tile__sub { font-size: 13px; color: var(--muted); }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
     .chip small { font-size: 12px; font-weight: 500; opacity: .72; }
-    .seg{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px;background:#e6ecef;border-radius:14px;margin:0 0 12px}
+    .seg{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px;background:var(--g-seg);border-radius:14px;margin:0 0 12px}
     .seg a,.seg span{display:flex;align-items:center;justify-content:center;gap:4px;min-height:42px;border-radius:10px;font-size:14px;font-weight:500;color:var(--ink);text-decoration:none}
     .seg small{font-size:12px;color:var(--muted)}
-    .seg .on{background:#fff;font-weight:600;box-shadow:0 1px 2px rgba(13,27,38,.12)}
-    .seg .off{color:#9aacb8}
+    .seg .on{background:var(--g-surface);font-weight:600;box-shadow:var(--g-shadow)}
+    .seg .off{color:var(--g-quiet)}
     .rule{margin:0 0 12px;padding:12px 14px;border-radius:14px;background:var(--accent-wash);font-size:14px;line-height:1.45;color:var(--muted)}
     .rule b{color:var(--ink);font-weight:600}
     .pick__open{display:inline-block;margin-left:8px;font-size:13px;font-weight:600;color:var(--live);white-space:nowrap}
@@ -253,14 +254,14 @@
     .share__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .share__icon {
       flex: 0 0 auto; width: 44px; height: 44px; border-radius: 14px;
-      display: inline-flex; align-items: center; justify-content: center; color: #fff;
+      display: inline-flex; align-items: center; justify-content: center; color: var(--g-on-photo);
     }
     .share__icon svg { width: 22px; height: 22px; display: block; }
     button.share__icon { padding: 0; border: 0; cursor: pointer; font: inherit; }
-    .share__icon--tg { background: #229ed9; }
-    .share__icon--vb { background: #7360f2; }
-    .share__icon--wa { background: #25d366; }
-    .share__icon--vk { background: #0077ff; }
+    .share__icon--tg { background: var(--g-tg); }
+    .share__icon--vb { background: var(--g-vb); }
+    .share__icon--wa { background: var(--g-wa); }
+    .share__icon--vk { background: var(--g-vk); }
     .share__icon--copy { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
     .share__btn {
       flex: 0 0 auto; padding: 11px 14px; border-radius: 12px;

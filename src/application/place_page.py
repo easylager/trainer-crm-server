@@ -69,6 +69,7 @@ from src.shared.phone_guard import is_valid_public_phone, tel_href
 from src.application.photo_cdn import visible_photo_url
 from src.shared.public_display import (
     display_host,
+    format_clock,
     format_phone_display,
     format_place_address,
     format_public_name,
@@ -129,26 +130,26 @@ _MONTHS_PREP = (
 
 #: Услуги магазина — тайлы с короткой подписью, а не просто теги.
 _SHOP_SERVICES: tuple[tuple[str, str, str, str], ...] = (
-    ("retail", "🛒", "Розница", "Коньки, защита, форма"),
-    ("skate_sharpening", "🔧", "Заточка", "Лезвия под ваш стиль катания"),
-    ("skate_molding", "🔥", "Формовка", "Ботинок по форме стопы"),
-    ("blade_profiling", "📐", "Профилирование", "Профиль лезвия под игрока"),
-    ("foot_scan", "🦶", "3D-скан стопы", "Точный подбор размера"),
-    ("skate_rental", "🔁", "Прокат", "Коньки на время"),
-    ("repair", "🛠️", "Ремонт", "Коньки, клюшки, форма"),
+    ("retail", "shop", "Розница", "Коньки, защита, форма"),
+    ("skate_sharpening", "sharpen", "Заточка", "Лезвия под ваш стиль катания"),
+    ("skate_molding", "sharpen", "Формовка", "Ботинок по форме стопы"),
+    ("blade_profiling", "sharpen", "Профилирование", "Профиль лезвия под игрока"),
+    ("foot_scan", "person", "3D-скан стопы", "Точный подбор размера"),
+    ("skate_rental", "shop", "Прокат", "Коньки на время"),
+    ("repair", "sharpen", "Ремонт", "Коньки, клюшки, форма"),
 )
 _SHOP_DISCIPLINES: tuple[tuple[str, str], ...] = (
-    ("discipline_hockey", "🏒 Хоккей"),
-    ("discipline_figure", "⛸ Фигурное"),
-    ("discipline_roller", "🛼 Ролики"),
+    ("discipline_hockey", "Хоккей"),
+    ("discipline_figure", "Фигурное"),
+    ("discipline_roller", "Ролики"),
 )
-_AMENITY_CHIPS: tuple[tuple[str, str], ...] = (
-    ("skate_rental", "⛸ Прокат коньков"),
-    ("skate_sharpening", "🔧 Заточка на месте"),
-    ("locker_rooms", "🚪 Раздевалки"),
-    ("cafe", "☕ Кафе"),
-    ("parking", "🅿️ Парковка"),
-    ("accessibility", "♿ Доступная среда"),
+_AMENITY_CHIPS: tuple[tuple[str, str, str], ...] = (
+    ("skate_rental", "shop", "Прокат коньков"),
+    ("skate_sharpening", "sharpen", "Заточка на месте"),
+    ("locker_rooms", "person", "Раздевалки"),
+    ("cafe", "shop", "Кафе"),
+    ("parking", "parking", "Парковка"),
+    ("accessibility", "person", "Доступная среда"),
 )
 _SCHEMA_TYPES = {
     "ice": "IceRink",
@@ -304,10 +305,10 @@ def open_now_label(card: Mapping[str, Any], *, now: datetime) -> str:
     hhmm = local.strftime("%H:%M")
     for open_, close in intervals:
         if _hhmm_in_interval(hhmm, open_, close):
-            return f"Открыто до {close}"
+            return f"Открыто до {format_clock(close)}"
     for open_, _close in intervals:
         if hhmm < open_:
-            return f"Откроется в {open_}"
+            return f"Откроется в {format_clock(open_)}"
     return "Сегодня уже закрыто"
 
 
@@ -619,20 +620,18 @@ def _esc(value: Any) -> str:
 
 
 def _slot_chip(slot: Mapping[str, Any], *, focused: bool, base_path: str, invite: bool) -> str:
-    hhmm = str(slot.get("starts_at_local") or "")[:5]
-    price = slot_price(slot)
+    hhmm = format_clock(str(slot.get("starts_at_local") or ""))
+    end = format_clock(str(slot.get("ends_at_local") or ""))
     href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
     basis_cls = public_basis_css_class(str(slot.get("schedule_basis") or "live"))
-    cls = "slot slot--focus" if focused else "slot"
+    cls = "ticket" + (" ticket--on" if focused else "")
     if basis_cls:
         cls += f" {basis_cls}"
-    price_html = f'<span class="slot__price">{_esc(price)}</span>' if price else ""
-    hint = basis_hint_ru(str(slot.get("schedule_basis") or "live"))
-    title_attr = f' title="{_esc(hint)}"' if hint else ""
-    # Слот — ссылка на ту же страницу с ?s=: выбрал сеанс — и делишься уже им.
+    end_html = f'<span class="ticket__end">до {_esc(end)}</span>' if end else ""
     return (
-        f'<a class="{cls}" href="{_esc(href)}#plan" rel="nofollow"{title_attr}>'
-        f'<span class="slot__time">{_esc(hhmm)}</span>{price_html}</a>'
+        f'<a class="{cls}" href="{_esc(href)}#plan" rel="nofollow">'
+        f'<b class="ticket__time">{_esc(hhmm)}</b>{end_html}'
+        f'<span class="ticket__go">{_esc(t("cta.invite_short"))}</span></a>'
     )
 
 
@@ -689,7 +688,32 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
         else:
             tel_link = ""
         basis_note = f'<p class="schedule-basis">{_esc(non_live[0])}.{tel_link}</p>'
-    parts = [f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>']
+    price = ""
+    for day in days:
+        for slot in day.get("sessions") or []:
+            price = slot_price(slot)
+            if price:
+                break
+        if price:
+            break
+    title = t("kind.public_skate")
+    if price:
+        title = f"{title} · {price}"
+    today = view["today"]
+    by_date = {_parse_iso_date(day.get("local_date")): bool(day.get("sessions")) for day in days}
+    strip = []
+    if isinstance(today, date):
+        for offset in range(7):
+            day = today + timedelta(days=offset)
+            label = WEEKDAY_SHORT_RU[day.weekday()]
+            if by_date.get(day):
+                strip.append(f'<a href="#schedule">{_esc(label)}</a>')
+            else:
+                strip.append(f'<span class="off">{_esc(label)} —</span>')
+    strip_html = f'<nav class="daystrip">{"".join(strip)}</nav>' if strip else ""
+    parts = [
+        f'<section class="sec" id="schedule"><h2 class="sec__title">{_esc(title)}</h2>{strip_html}'
+    ]
     if note:
         # TASK-180: > 6 ч без удачного прогона — сеансы показываем, но честно.
         parts.append(f'<p class="sched__stale">{_esc(note)}</p>')
@@ -728,7 +752,7 @@ def _ohm_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
             note = str(slot.get(key) or "").strip()
             if note and note not in notes:
                 notes.append(note)
-    parts = [f'<section class="sec" id="ohm"><h2 class="sec__title">{t("kind.hockey_practice")}</h2>']
+    parts = [f'<section class="sec ohm" id="ohm"><h2 class="sec__title">{t("kind.hockey_practice")}</h2>']
     for day in days:
         d = _parse_iso_date(day.get("local_date"))
         if d is None:
@@ -746,7 +770,7 @@ def _ohm_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
             f'<div class="slots">{chips}</div></div>'
         )
     if notes:
-        parts.append(f'<p class="hint">{_esc(" · ".join(notes))}</p>')
+        parts.append(f'<p class="hint">{_esc(". ".join(notes))}</p>')
     parts.append("</section>")
     return "".join(parts)
 
@@ -792,8 +816,10 @@ def _services_html(card: Mapping[str, Any]) -> str:
     if card.get("venue_type") != "shop":
         return ""
     amenities = card.get("amenities") or {}
+    from src.application.catalog_icons import icon_svg
+
     tiles = [
-        f'<div class="tile"><span class="tile__icon">{icon}</span>'
+        f'<div class="tile"><span class="tile__icon">{icon_svg(icon)}</span>'
         f'<p class="tile__title">{_esc(title)}</p><p class="tile__sub">{_esc(sub)}</p></div>'
         for key, icon, title, sub in _SHOP_SERVICES
         if amenities.get(key) is True
@@ -818,11 +844,17 @@ def _amenities_html(card: Mapping[str, Any]) -> str:
     if card.get("venue_type") == "shop":
         return ""
     amenities = card.get("amenities") or {}
-    chips = [f'<span class="chip">{_esc(label)}</span>' for key, label in _AMENITY_CHIPS if amenities.get(key) is True]
+    from src.application.catalog_icons import icon_svg
+
+    chips = [
+        f'<span class="chip">{icon_svg(icon)}{_esc(label)}</span>'
+        for key, icon, label in _AMENITY_CHIPS
+        if amenities.get(key) is True
+    ]
     if not chips:
         return ""
     return (
-        '<section class="sec"><h2 class="sec__title">Удобства</h2>'
+        f'<section class="sec"><h2 class="sec__title">{_esc(t("place.on_site"))}</h2>'
         f'<div class="chips">{"".join(chips)}</div></section>'
     )
 
@@ -834,7 +866,10 @@ def _fixed_hours_row(label: str, block: Any) -> str:
     close = str(block.get("close") or "").strip()
     if not open_ or not close:
         return ""
-    return f'<p class="row"><span>{_esc(label)}</span><b>{_esc(f"{open_}–{close}")}</b></p>'
+    return (
+        f'<p class="row"><span>{_esc(label)}</span>'
+        f'<b>{_esc(f"{format_clock(open_)}–{format_clock(close)}")}</b></p>'
+    )
 
 
 def _hours_html(card: Mapping[str, Any]) -> str:
@@ -1229,7 +1264,6 @@ def render_place_page(
     title = page_title(view, invite=invite)
     badge = status_badge(view)
     vt = str(card.get("venue_type") or "ice")
-    icon = {"ice": "❄️", "gym": "🏋️", "choreo": "🩰", "pool": "🏊", "outdoor": "🌳", "shop": "🧰"}.get(vt, "📍")
     badge_html = ""
     if badge:
         badge_html = "".join(
@@ -1238,23 +1272,35 @@ def render_place_page(
             if line
         )
     where = _where(card)
+    from src.application.catalog_icons import rink_motif_svg
+
     photo = _hero_photo_url(card)
-    photo_html = (
-        f'<img class="hero__photo" src="{_esc(photo)}" alt="{_esc(card.get("name"))}" loading="eager" decoding="async" />'
-        if photo
-        else ""
-    )
+    toned = bool((card.get("hero") or {}).get("display_tone")) if isinstance(card.get("hero"), Mapping) else False
+    if photo:
+        klass = "hero__photo g-photo g-photo--toned" if toned else "hero__photo g-photo"
+        photo_html = (
+            f'<img class="{klass}" src="{_esc(photo)}" alt="" width="1600" height="900" '
+            'fetchpriority="high" decoding="async" />'
+        )
+    else:
+        photo_html = f'<div class="g-motif-wrap">{rink_motif_svg()}</div>'
+    city_name = _city(card)
+    back = ""
+    if city_name:
+        back = (
+            f'<a class="g-hero__back" href="/c/{_esc(city_slug(city_name))}">'
+            f'{_esc(t("nav.back_city", city=format_public_name(city_name)))}</a>'
+        )
     hero = (
-        f'<header class="hero hero--{_esc(vt)}{" hero--photo" if photo else ""}">'
+        f'<header class="g-hero hero hero--{_esc(vt)}{" g-hero--photo" if photo else " g-hero--motif"}">'
         + photo_html
-        + f'<p class="hero__type">{icon} {_esc(card.get("venue_noun") or "")}</p>'
-        f'<h1 class="hero__title">{_esc(format_public_name(str(card.get("name") or "")))}</h1>'
-        + (f'<p class="hero__where">{_esc(where)}</p>' if where else "")
+        + back
+        + '<div class="g-hero__copy">'
+        f'<h1 class="hero__title g-hero__title">{_esc(format_public_name(str(card.get("name") or "")))}</h1>'
+        + (f'<p class="g-hero__sub">{_esc(where)}</p>' if where else "")
         + badge_html
-        + "</header>"
+        + "</div></header>"
     )
-    description_text = str(card.get("short_description") or "").strip()
-    about = f'<p class="about">{_esc(description_text)}</p>' if description_text else ""
     from src.application.public_web_cta import render_place_primary_actions
 
     base_url = join_public_origin(canonical_url, "/").rstrip("/") if canonical_url else ""
@@ -1266,20 +1312,24 @@ def render_place_page(
         city_name=_city(card) or "",
         telegram_url=cta_url,
     )
+    arrive = (
+        f'<section class="g-sec"><h2>{_esc(t("hub.directions"))}</h2>'
+        + actions
+        + _hours_html(card)
+        + _contacts_html(card)
+        + "</section>"
+    )
     body = "".join(
         [
             hero,
             _focus_html(view, invite=invite),
-            about,
             _schedule_html(view, base_path=base_path, invite=invite),
             _ohm_html(view, base_path=base_path, invite=invite),
-            actions,
-            _services_html(card),
-            _hours_html(card),
-            _rental_catalog_html(card),
+            arrive,
             _amenities_html(card),
             _trainers_html(card, cta_url=cta_url),
-            _contacts_html(card),
+            _services_html(card),
+            _rental_catalog_html(card),
             _share_html(share, venue_type=vt, story_image_url=story_image_url, zovi_path=zovi_entry_path(view)),
         ]
     )
@@ -1302,11 +1352,7 @@ def render_place_page(
         "__HEAD_EXTRA__": "",
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
         "__BRAND__": _esc(t("brand.mark")),
-        "__CITY__": (
-            f'<a href="/c/{_esc(city_slug(city))}">{_esc(t("nav.back_city", city=format_public_name(city)))}</a>'
-            if city
-            else _esc("Беларусь")
-        ),
+        "__CITY__": "",
         "__CITY_LINK__": city_link,
         "__TRUST__": _trust_html(view),
         "__BODY__": body,

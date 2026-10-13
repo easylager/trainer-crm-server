@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import html as html_lib
+import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -37,7 +38,18 @@ from src.shared.catalog_sharpening import row_in_sharpening_section
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
-from src.shared.public_display import format_public_name, is_roller_place
+from src.application.city_style_b import (
+    VARIANT_ONE,
+    VARIANT_PHONE,
+    choose_city_variant,
+    load_nearby,
+    load_week,
+    render_one_city,
+    render_phone_city,
+)
+from src.application.city_style_b import _origin as city_origin
+from src.application.photo_cdn import public_photo_url
+from src.shared.public_display import format_clock, format_public_name, is_roller_place
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.specialist_roles import specialist_role_display
 from src.shared.venue_types import VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR, VENUE_TYPE_SHOP
@@ -101,10 +113,26 @@ _NEXT_OHM_SQL = text(
 _PLACES_SQL = text(
     f"""
     SELECT a.id, a.name, COALESCE(a.venue_type, 'ice') AS venue_type,
+           a.latitude, a.longitude,
            a.is_active, a.is_confirmed, a.created_by_trainer_id,
-           p.slug, p.opening_hours, p.amenities, p.phone,
+           p.slug, a.address, p.opening_hours, p.amenities, p.phone, p.website_url,
+           COALESCE(p.schedule_mode, 'auto') AS schedule_mode,
            p.season_start_month, p.season_end_month, p.status AS profile_status,
            c.country, c.is_active AS city_is_active,
+           (
+               SELECT m.variants->>'card'
+               FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+               ORDER BY m.sort_order, m.id
+               LIMIT 1
+           ) AS photo_key,
+           (
+               SELECT COALESCE(m.display_tone, false)
+               FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+               ORDER BY m.sort_order, m.id
+               LIMIT 1
+           ) AS display_tone,
            EXISTS (
                SELECT 1 FROM media m
                WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
@@ -302,12 +330,25 @@ async def load_city_hub_view(
     for row in place_rows:
         hours = _as_mapping(row.get("opening_hours"))
         state = open_state(hours, now=now, tz_name=str(row.get("tz") or DEFAULT_TIMEZONE))
+        photo_key = str(row.get("photo_key") or "").strip()
+        amenities = row.get("amenities")
+        if isinstance(amenities, str):
+            amenities = json.loads(amenities)
         places.append(
             {
                 "id": int(row["id"]),
                 "name": str(row["name"]),
                 "slug": str(row.get("slug") or ""),
                 "venue_type": str(row.get("venue_type") or "ice"),
+                "address": str(row.get("address") or ""),
+                "latitude": row.get("latitude"),
+                "longitude": row.get("longitude"),
+                "phone": str(row.get("phone") or ""),
+                "website_url": str(row.get("website_url") or ""),
+                "schedule_mode": str(row.get("schedule_mode") or "auto"),
+                "amenities": amenities if isinstance(amenities, Mapping) else {},
+                "photo_url": public_photo_url(photo_key) if photo_key else None,
+                "display_tone": bool(row.get("display_tone")),
                 "in_sharpening": row_in_sharpening_section(row, month=sharpening_month),
                 "open_state": state["state"],
                 "open_close": state["close"],
@@ -329,6 +370,17 @@ async def load_city_hub_view(
 
     tz = ZoneInfo(DEFAULT_TIMEZONE)
     local_now = now.astimezone(tz)
+    variant = choose_city_variant(places)
+    week_rows: list[dict[str, Any]] = []
+    nearby: list[dict[str, Any]] = []
+    if variant == VARIANT_ONE:
+        rink = next(p for p in places if p["venue_type"] in ("ice", "outdoor"))
+        week_rows = await load_week(session, arena_id=int(rink["id"]), today=local_now.date(), now=now)
+    origin = city_origin(places)
+    if variant in (VARIANT_ONE, VARIANT_PHONE) and origin is not None:
+        nearby = await load_nearby(
+            session, city_id=city_id, origin=origin, today=local_now.date(), now=now
+        )
     return {
         "city": dict(city),
         "slug": city_slug(city_name),
@@ -353,6 +405,9 @@ async def load_city_hub_view(
         "trainer_roles": roles[:3],
         "hot_skate": hot_window_key(skate, now=now),
         "hot_ohm": hot_window_key(ohm, now=now),
+        "variant": variant,
+        "week_rows": week_rows,
+        "nearby": nearby,
     }
 
 
@@ -397,19 +452,31 @@ def _quick_html(slug: str, counts: Mapping[str, int], *, hot: str | None, all_co
     return '<div class="quick">' + "".join(parts) + "</div>"
 
 
-def _route_html(*, href: str, name: str, count: str, live: str, dot_off: bool = False, quick: str = "") -> str:
+def _route_html(
+    *,
+    href: str,
+    name: str,
+    count: str,
+    live: str,
+    dot_off: bool = False,
+    quick: str = "",
+    icon: str = "",
+) -> str:
+    from src.application.catalog_icons import icon_svg
+
     dot = '<span class="dot dot--off"></span>' if dot_off else '<span class="dot"></span>'
     live_html = f'<div class="live">{dot}{live}</div>' if live else ""
+    mark = icon_svg(icon)
     return (
         '<article class="route">'
-        f'<a class="t" href="{_esc(href)}"><span class="name">{_esc(name)}</span><span class="cnt">{_esc(count)}</span></a>'
+        f'<a class="t" href="{_esc(href)}">{mark}<span class="name">{_esc(name)}</span><span class="cnt">{_esc(count)}</span></a>'
         f"{live_html}{quick}</article>"
     )
 
 
 def _session_when(card: Mapping[str, Any], *, today: date) -> tuple[str, str]:
     """(«22:15», «сегодня»/«завтра»/«сб, 11 окт»)."""
-    starts = str(card.get("starts_at_local") or "").strip()[:5]
+    starts = format_clock(str(card.get("starts_at_local") or ""))
     local_date = card.get("local_date")
     if isinstance(local_date, datetime):
         local_date = local_date.date()
@@ -455,7 +522,7 @@ def _skate_route(view: Mapping[str, Any]) -> str:
     # Ближайший сеанс уже в блоке «Ближайшее на льду» — в плитке его не повторяем.
     live = "" if upcoming or window_n or all_n else t("hub.no_skate_times")
     quick = "" if window_n == 0 and all_n == 0 else _quick_html(slug, counts, hot=view.get("hot_skate"), all_count=all_n, t="ice")
-    return _route_html(href=_list_href(slug, t="ice"), name=t("route.skate"), count=count, live=live, dot_off=not upcoming, quick=quick)
+    return _route_html(href=_list_href(slug, t="ice"), name=t("route.skate"), count=count, live=live, dot_off=not upcoming, quick=quick, icon="skate")
 
 
 def _ohm_route(view: Mapping[str, Any]) -> str:
@@ -472,6 +539,7 @@ def _ohm_route(view: Mapping[str, Any]) -> str:
             name=t("chip.hockey"),
             count=count,
             live="",
+            icon="stick",
         )
     n = int(view.get("ohm_arena_count") or 0)
     count = f"{n} {plural_ru(n, 'каток', 'катка', 'катков')}"
@@ -483,7 +551,7 @@ def _ohm_route(view: Mapping[str, Any]) -> str:
         price = format_price_minor(nxt.get("price_adult_minor"), str(nxt.get("currency_code") or "BYN"))
         live = _nearest_live(when, str(nxt.get("arena_name") or ""), price)
     quick = _quick_html(slug, counts, hot=view.get("hot_ohm"), all_count=int(counts.get("all") or 0), kind="ohm")
-    return _route_html(href=_list_href(slug, kind="ohm"), name=t("chip.hockey"), count=count, live=live, quick=quick)
+    return _route_html(href=_list_href(slug, kind="ohm"), name=t("chip.hockey"), count=count, live=live, quick=quick, icon="stick")
 
 
 def _open_live(places: list[Mapping[str, Any]], open_places: list[Mapping[str, Any]]) -> tuple[str, bool]:
@@ -521,7 +589,7 @@ def _service_route(view: Mapping[str, Any]) -> str:
     service_places = [p for p in view.get("places") or [] if p.get("in_sharpening")]
     live, off = _open_live(service_places, list(view.get("service_open") or []))
     count = f"{n} {plural_ru(n, 'место', 'места', 'мест')}"
-    return _route_html(href=_list_href(slug, svc="service"), name=t("route.service"), count=count, live=live, dot_off=off)
+    return _route_html(href=_list_href(slug, svc="service"), name=t("route.service"), count=count, live=live, dot_off=off, icon="sharpen")
 
 
 def _shops_route(view: Mapping[str, Any]) -> str:
@@ -531,7 +599,7 @@ def _shops_route(view: Mapping[str, Any]) -> str:
     slug = str(view["slug"])
     shops = [p for p in view.get("places") or [] if p.get("venue_type") == VENUE_TYPE_SHOP]
     live, off = _open_live(shops, list(view.get("shops_open") or []))
-    return _route_html(href=_list_href(slug, t="shop"), name=t("route.shops"), count=str(n), live=live, dot_off=off)
+    return _route_html(href=_list_href(slug, t="shop"), name=t("route.shops"), count=str(n), live=live, dot_off=off, icon="shop")
 
 
 def _trainers_route(view: Mapping[str, Any], *, href: str) -> str:
@@ -541,7 +609,19 @@ def _trainers_route(view: Mapping[str, Any], *, href: str) -> str:
     count = f"{n} {plural_ru(n, 'тренер', 'тренера', 'тренеров')}"
     roles = [str(r) for r in (view.get("trainer_roles") or []) if str(r).casefold() != "тренер"]
     live = _esc(", ".join(roles)) if roles else ""
-    return _route_html(href=href, name=t("route.trainers"), count=count, live=live)
+    return _route_html(href=href, name=t("route.trainers"), count=count, live=live, icon="person")
+
+
+def _place_media(place: Mapping[str, Any] | None, *, hero: bool) -> str:
+    from src.application.catalog_icons import rink_motif_svg
+
+    url = str((place or {}).get("photo_url") or "").strip()
+    if not url:
+        return f'<span class="g-motif-wrap">{rink_motif_svg()}</span>'
+    klass = "g-photo g-photo--toned" if (place or {}).get("display_tone") else "g-photo"
+    priority = ' fetchpriority="high"' if hero else ""
+    size = 'width="1600" height="900"' if hero else 'width="640" height="360"'
+    return f'<img class="{klass}" src="{_esc(url)}" alt="" {size}{priority} decoding="async" />'
 
 
 def _upcoming_html(view: Mapping[str, Any]) -> str:
@@ -553,6 +633,7 @@ def _upcoming_html(view: Mapping[str, Any]) -> str:
     today_n = int(view["skate_counts"].get("today") or 0)
     all_href = _list_href(slug, t="ice", w="today") if today_n else _list_href(slug, t="ice")
     all_label = "Все сегодня →" if today_n else "Все →"
+    by_slug = {str(p.get("slug") or ""): p for p in view.get("places") or []}
     cards: list[str] = []
     for card in upcoming:
         hhmm, day = _session_when(card, today=view["today"])
@@ -560,17 +641,16 @@ def _upcoming_html(view: Mapping[str, Any]) -> str:
         href = place_path(city_name=city_name, slug=arena_slug) if arena_slug else "#"
         if card.get("session_id"):
             href += f"?s={int(card['session_id'])}"
-        sub_bits = [b for b in (_price_bits(card),) if b]
         cards.append(
-            f'<a class="next__item" href="{_esc(href)}">'
-            f'<span class="time">{_esc(hhmm)}<small>{_esc(day)}</small></span>'
-            f'<span class="what"><b>{_esc(format_public_name(str(card.get("arena_name") or "")))}</b>'
-            + (f"<span>{_esc(' · '.join(sub_bits))}</span>" if sub_bits else "")
-            + "</span></a>"
+            f'<a class="g-ticket" href="{_esc(href)}">'
+            f"{_place_media(by_slug.get(arena_slug), hero=False)}"
+            f'<b class="ticket__time">{_esc(hhmm)}</b>'
+            f'<span>{_esc(format_public_name(str(card.get("arena_name") or "")))}</span>'
+            f'<small>{_esc(day)}</small></a>'
         )
     return (
         '<section class="hub-sec">'
-        f'<div class="hub-head"><h2>Ближайшее на льду</h2><a href="{_esc(all_href)}">{all_label}</a></div>'
+        f'<div class="hub-head"><h2>{_esc(t("hub.nearest_ice"))}</h2><a href="{_esc(all_href)}">{all_label}</a></div>'
         f'<div class="next">{"".join(cards)}</div></section>'
     )
 
@@ -701,12 +781,16 @@ def render_city_hub_page(
     local_now = view["local_now"]
     title = city_hub_document_title(view)
     description = city_hub_description(view)
+    rinks = [p for p in view.get("places") or [] if str(p.get("venue_type") or "ice") in ("ice", "outdoor")]
+    hero_place = next((p for p in rinks if p.get("photo_url")), None)
     hero = (
-        '<header class="hero hero--ice hub-hero">'
-        f'<p class="hero__type">{_esc(_format_date_string(view["now"]))} · {local_now.strftime("%H:%M")}</p>'
-        f'<h1 class="hero__title">{_esc(format_public_name(city_name))}</h1>'
-        f'<p class="hero__where">{_hero_sub(view)}</p>'
-        "</header>"
+        '<header class="hero hero--ice hub-hero g-hero">'
+        f"{_place_media(hero_place, hero=True)}"
+        '<div class="g-hero__copy">'
+        f'<p class="hero__type">{_esc(_format_date_string(view["now"]))} · {format_clock(local_now.strftime("%H:%M"))}</p>'
+        f'<h1 class="hero__title g-hero__title">{_esc(t("hub.on_ice", city=format_public_name(city_name)))}</h1>'
+        f'<p class="hero__where g-hero__sub">{_hero_sub(view)}</p>'
+        "</div></header>"
     )
     coach_href = trainers_href
     if coach_href is None:
@@ -732,7 +816,7 @@ def render_city_hub_page(
         hint = f'<p class="hub-hint">{_esc(t("hub.no_rollers_halls"))}</p>'
     if routes:
         router = (
-            '<section class="hub-sec"><h2>Что нужно?</h2>'
+            f'<section class="hub-sec"><h2>{_esc(t("hub.what"))}</h2>'
             f'<div class="router">{routes}</div>'
             f"{hint}"
             "</section>"
@@ -746,19 +830,25 @@ def render_city_hub_page(
         city_name=None,
         telegram_url=cta_url,
     )
-    body = (
-        hero
-        + _upcoming_html(view)
-        + router
-        + _places_html(view)
-        + _share_html(
-            share,
-            venue_type="ice",
-            telegram_link_only=True,
-            story_image_url=story_image_url or og_image_url,
+    variant = str(view.get("variant") or "many")
+    if variant == VARIANT_ONE:
+        body = render_one_city(view)
+    elif variant == VARIANT_PHONE:
+        body = render_phone_city(view, base_url=base_url)
+    else:
+        body = (
+            hero
+            + _upcoming_html(view)
+            + router
+            + _places_html(view)
+            + _share_html(
+                share,
+                venue_type="ice",
+                telegram_link_only=True,
+                story_image_url=story_image_url or og_image_url,
+            )
+            + dock
         )
-        + dock
-    )
     elements = []
     for p in view.get("places") or []:
         if not p.get("slug"):

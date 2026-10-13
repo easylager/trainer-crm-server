@@ -4,7 +4,7 @@
  * шаблонах — ссылаться на var(--g-*) отсюда.
  */
 :root {
-  --g-bg: #f4f6f7;
+  --g-bg: #f5f7f8;
   --g-surface: #ffffff;
   --g-ink: #0d1b26;
   --g-muted: #5d7285;
@@ -34,6 +34,25 @@
   --g-tap: 44px;
 
   --g-font: 'Golos Text', -apple-system, 'Segoe UI', sans-serif;
+  --g-font-display: 'Dela Gothic One', 'Arial Black', sans-serif;
+  --g-shadow: 0 1px 2px rgba(13, 27, 38, .08);
+  --g-r-card: 18px;
+  --g-r-btn: 14px;
+  --g-dark-line: #2c4659;
+  --g-dark-line-2: #1d3243;
+  --g-on-photo: #ffffff;
+  --g-hero-shade: linear-gradient(to bottom, rgba(13, 27, 38, .55) 0%, transparent 38%, rgba(13, 27, 38, .9) 100%);
+  --g-chip: #eef3f5;
+  --g-live: #12a150;
+  --g-kind-ice: #2aa7c9;
+  --g-kind-gym: #e08a1e;
+  --g-kind-shop: #7a5af5;
+  --g-quiet: #9aacb8;
+  --g-seg: #e6ecef;
+  --g-tg: #229ed9;
+  --g-vb: #7360f2;
+  --g-wa: #25d366;
+  --g-vk: #0077ff;
 }
 
 /*

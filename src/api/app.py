@@ -1910,6 +1910,19 @@ def webapp_glide_copy_js(request: Request):
     )
 
 
+@app.get("/static/share/style-b.css")
+def share_style_b_css(request: Request):
+    """TASK-246: стили каталога. Версия в ``?v=`` — новая на каждую правку файла."""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "style-b.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/glide-tokens.css")
 def shared_glide_tokens_css(request: Request):
     """TASK-209: общие дизайн-токены для static/share/* и static/webapp/*. Use ``?v=…`` for long cache."""

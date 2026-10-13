@@ -127,11 +127,11 @@ async def test_ac1_weekend_count_excludes_friday_and_sunday_evening_rolls_forwar
         midweek = await client.get("/")
 
     assert explicit.status_code == 200
-    assert _counter(explicit.text) == f"{name} — в эти выходные 2 катания"
-    assert _counter(default.text) == f"{name} — в эти выходные 2 катания"
+    assert _counter(explicit.text) == f"{name} — в эти выходные 2 сеанса"
+    assert _counter(default.text) == f"{name} — в эти выходные 2 сеанса"
     assert 'name="robots" content="noindex, follow"' in explicit.text
     assert 'rel="canonical"' in explicit.text
-    assert _counter(midweek.text) == f"{midweek_name} — сегодня 1 катание"
+    assert _counter(midweek.text) == f"{midweek_name} — сегодня 1 сеанс"
 
     sunday = _utc(2026, 10, 11, 19)
     _freeze(monkeypatch, sunday)
@@ -146,7 +146,7 @@ async def test_ac1_weekend_count_excludes_friday_and_sunday_evening_rolls_forwar
     async with _client() as client:
         rolled = await client.get("/")
     # Без сдвига на следующие выходные в окне остаётся только вс 20:00 — это 1, а не 2.
-    assert _counter(rolled.text) == f"{late_name} — в эти выходные 2 катания"
+    assert _counter(rolled.text) == f"{late_name} — в эти выходные 2 сеанса"
 
 
 @pytest.mark.asyncio
@@ -282,7 +282,7 @@ async def test_bad_day_falls_back_to_today_without_picker(app_use_test_db, db_se
     assert 'class="chips"' not in bad.text
     assert "chip--active" not in bad.text
     assert '<p class="sub sub--ohm">ОХМ — ' in bad.text
-    assert _counter(bad.text) == f"{name} — сегодня 1 катание"
+    assert _counter(bad.text) == f"{name} — сегодня 1 сеанс"
 
 
 @pytest.mark.asyncio
@@ -380,7 +380,7 @@ async def test_counter_ignores_ru_sessions(app_use_test_db, db_session, monkeypa
 
     async with _client() as client:
         resp = await client.get("/")
-    assert _counter(resp.text) == f"{by_name} — сегодня 1 катание"
+    assert _counter(resp.text) == f"{by_name} — сегодня 1 сеанс"
 
 
 @pytest.mark.asyncio

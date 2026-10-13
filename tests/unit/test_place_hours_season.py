@@ -13,7 +13,7 @@ def test_season_closed_hours_are_not_this_weeks_timetable() -> None:
     assert "Часы в сезоне" in html
     assert "Сейчас приехать нельзя" in html
     assert "Ежедневно" in html
-    assert "08:00–22:00" in html
+    assert "8:00–22:00" in html
     assert "Пн" not in html
 
 

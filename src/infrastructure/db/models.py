@@ -361,6 +361,8 @@ class Media(Base):
     source_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
+    #: TASK-246: кадр на сайте в тоне (серый + бирюза), а не в цвете. Ставит менеджер.
+    display_tone: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
 
 class IceSession(Base):

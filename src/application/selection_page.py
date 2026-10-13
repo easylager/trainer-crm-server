@@ -863,23 +863,25 @@ def _place_html(
     # TASK-180: > 6 ч — сеансы показываем, но над ними спокойная строка «могло измениться».
     stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)
-    icon = str(item.get("venue_icon") or "").strip()
     name = _esc(format_public_name(str(item.get("name") or "")))
     name_html = f'<a href="{_esc(href)}">{name}</a>' if href else name
     if photo and href:
         media = (
-            f'<a class="pick__media" href="{_esc(href)}" data-icon="{_esc(icon)}">'
+            f'<a class="pick__media" href="{_esc(href)}" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
             f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
             f"</a>"
         )
     elif photo:
         media = (
-            f'<span class="pick__media" data-icon="{_esc(icon)}">'
+            f'<span class="pick__media" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
             f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
             f"</span>"
         )
     else:
-        media = f'<span class="pick__icon" aria-hidden="true">{_esc(icon)}</span>' if icon else ""
+        from src.application.catalog_icons import icon_svg
+
+        mark = icon_svg({"ice": "skate", "outdoor": "skate", "shop": "shop"}.get(str(item.get("venue_type") or "ice"), "person"))
+        media = f'<span class="pick__icon" aria-hidden="true">{mark}</span>' if mark else ""
     if service_mode:
         vtype = str(item.get("venue_type") or "ice")
         pick_cls = "sec pick" + (" pick--rink" if vtype in ("ice", "outdoor") else "")
@@ -950,16 +952,18 @@ def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
     if str(live.get("kind") or "") != "session":
         line = str(live.get("text") or item.get("live_line") or "").strip()
     photo = _place_photo_url(item)
-    icon = str(item.get("venue_icon") or "").strip()
     name = _esc(format_public_name(str(item.get("name") or "")))
     if photo:
         media = (
-            f'<span class="pick__media" data-icon="{_esc(icon)}">'
+            f'<span class="pick__media" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
             f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
             f"</span>"
         )
     else:
-        media = f'<span class="pick__icon" aria-hidden="true">{_esc(icon)}</span>' if icon else ""
+        from src.application.catalog_icons import icon_svg
+
+        mark = icon_svg({"ice": "skate", "outdoor": "skate", "shop": "shop"}.get(str(item.get("venue_type") or "ice"), "person"))
+        media = f'<span class="pick__icon" aria-hidden="true">{mark}</span>' if mark else ""
     badge_html = f'<span class="badge">{_esc(badge)}</span>' if badge else ""
     line_html = f'<p class="pick__line">{_esc(line)}</p>' if line else ""
     inner = (

@@ -115,6 +115,7 @@ def _publicize_item(row: Mapping[str, Any], cdn_base: str | None) -> dict[str, A
         "blurhash": row.get("blurhash"),
         "width": row.get("width"),
         "height": row.get("height"),
+        "display_tone": bool(row.get("display_tone")),
         "variants": variants,
     }
 
@@ -167,6 +168,7 @@ def _media_row_dict(row: Any) -> dict[str, Any]:
         "source_url": row[10],
         "sort_order": int(row[11] or 0),
         "status": row[12],
+        "display_tone": bool(row[13]),
     }
 
 
@@ -186,7 +188,7 @@ async def load_media_for_owners(
         text(
             f"""
             SELECT id, owner_type, owner_id, storage_key, variants, width, height, blurhash,
-                   license, attribution, source_url, sort_order, status
+                   license, attribution, source_url, sort_order, status, display_tone
             FROM media
             WHERE owner_type = :owner_type AND owner_id IN ({placeholders})
             ORDER BY owner_id, sort_order, id
@@ -275,7 +277,7 @@ async def upload_arena_media_from_bytes(
                 :sort_order, :status
             )
             RETURNING id, owner_type, owner_id, storage_key, variants, width, height, blurhash,
-                      license, attribution, source_url, sort_order, status
+                      license, attribution, source_url, sort_order, status, display_tone
             """
         ),
         {

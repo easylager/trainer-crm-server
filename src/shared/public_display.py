@@ -20,6 +20,15 @@ def _fold(value: str) -> str:
     return value.strip().casefold().replace("ё", "е")
 
 
+def format_clock(hhmm: str) -> str:
+    """«9:00», «12:15». Час без ведущего нуля. Минуты остаются двумя цифрами."""
+    raw = str(hhmm or "").strip()
+    match = re.match(r"^(\d{1,2}):(\d{2})", raw)
+    if not match:
+        return raw[:5]
+    return f"{int(match.group(1))}:{match.group(2)}"
+
+
 def short_day_word(day: date, *, today: date) -> str:
     """«сегодня» / «завтра» / «чт» — строчными, для середины фразы и списков."""
     if day == today:
@@ -30,15 +39,15 @@ def short_day_word(day: date, *, today: date) -> str:
 
 
 def session_day_phrase(day: date, hhmm: str, *, today: date) -> str:
-    """«сегодня 12:45» / «завтра 08:30» / «чт 10:30»."""
-    clock = str(hhmm or "").strip()[:5]
+    """«сегодня 12:45» / «завтра 8:30» / «чт 10:30»."""
+    clock = format_clock(hhmm)
     word = short_day_word(day, today=today)
     return f"{word} {clock}".strip()
 
 
 def sentence_when(day: date, hhmm: str, *, today: date) -> str:
-    """«сегодня, 14:00» / «завтра, 09:00» — день строчными в середине фразы."""
-    clock = str(hhmm or "").strip()[:5]
+    """«сегодня, 14:00» / «завтра, 9:00» — день строчными в середине фразы."""
+    clock = format_clock(hhmm)
     word = short_day_word(day, today=today)
     return f"{word}, {clock}" if clock else word
 

@@ -18,12 +18,12 @@ TODAY = date(2026, 10, 13)  # вторник
 
 def test_c4_session_day_phrase() -> None:
     assert session_day_phrase(TODAY, "12:45", today=TODAY) == "сегодня 12:45"
-    assert session_day_phrase(date(2026, 10, 14), "08:30", today=TODAY) == "завтра 08:30"
+    assert session_day_phrase(date(2026, 10, 14), "08:30", today=TODAY) == "завтра 8:30"
     assert session_day_phrase(date(2026, 10, 15), "10:30", today=TODAY) == "чт 10:30"
 
 
 def test_c5_sentence_when_is_lowercase_mid_phrase() -> None:
-    assert sentence_when(date(2026, 10, 14), "09:00", today=TODAY) == "завтра, 09:00"
+    assert sentence_when(date(2026, 10, 14), "09:00", today=TODAY) == "завтра, 9:00"
     assert sentence_when(TODAY, "14:00", today=TODAY) == "сегодня, 14:00"
 
 

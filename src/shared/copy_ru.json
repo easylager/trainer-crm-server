@@ -63,5 +63,22 @@
   "share.story": "Картинка для истории",
   "share.card": "Открытка",
   "city.not_found": "Такого города нет в каталоге",
-  "nav.back_city": "‹ {city}"
+  "nav.back_city": "‹ {city}",
+  "home.footer": "Glide делают люди, которые сами катаются.",
+  "home.other_city": "Другой город",
+  "hub.on_ice": "{city} на льду",
+  "hub.nearest_ice": "Ближайший лёд",
+  "hub.what": "Что нужно",
+  "hub.today": "Сегодня",
+  "hub.week": "Неделя",
+  "hub.nearby": "Лёд рядом",
+  "hub.nearby_scheduled": "Лёд по расписанию рядом",
+  "hub.when_title": "Когда кататься",
+  "hub.phone_when": "Время массового катания „{name}“ называет по телефону",
+  "hub.directions": "Как добраться",
+  "cta.follow_rink": "Следить за катком",
+  "cta.invite_short": "Позвать",
+  "place.on_site": "На месте",
+  "home.map.legend_on": "лёд сегодня",
+  "home.map.legend_off": "сегодня нет"
 }

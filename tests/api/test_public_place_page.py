@@ -473,7 +473,7 @@ async def test_outdoor_rink_has_its_schedule_like_any_rink(app_use_test_db, db_s
     async with _client() as client:
         resp = await client.get(place["path"])
         card = await client.get(f"/api/public/arenas/{place['arena_id']}")
-    assert "Массовое катание</h2>" in resp.text and "18:15" in resp.text
+    assert "Массовое катание" in resp.text and "18:15" in resp.text
     assert "зависит от погоды" not in resp.text
     assert card.json()["has_skating"] is True
 
@@ -501,7 +501,7 @@ def test_hours_html_labels_complex_and_kassa() -> None:
             }
         }
     )
-    assert "Комплекс" in chizh and "07:00–23:00" in chizh
+    assert "Комплекс" in chizh and "7:00–23:00" in chizh
     assert "Касса" not in chizh
     vitebsk = _hours_html({"opening_hours": {"kassa": {"open": "11:00", "close": "21:00"}}})
     assert "Касса" in vitebsk and "11:00–21:00" in vitebsk
@@ -558,9 +558,10 @@ def test_place_without_published_media_shows_no_picture() -> None:
         )
 
     bare = page(None)
-    assert 'class="hero__photo"' not in bare
+    assert '<img class="hero__photo' not in bare
+    assert "g-motif" in bare
     shown = page({"variants": {"card": published}})
-    assert f'class="hero__photo" src="{published}"' in shown
+    assert f'class="hero__photo g-photo" src="{published}"' in shown
 
 
 @pytest.mark.asyncio
