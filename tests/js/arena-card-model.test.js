@@ -1002,7 +1002,7 @@ describe('TASK-204 iceFeedView schedule_mode', () => {
     });
     assert.equal(feed.mode, 'closed');
     assert.match(feed.banner, /Сезон закрыт/);
-    assert.match(feed.banner, /01\.11/);
+    assert.match(feed.banner, /1 ноября/);
   });
 });
 
