@@ -213,6 +213,8 @@
   });
 
   var btn = document.getElementById('placeShareBtn');
+  var dockEl = document.getElementById('placeShareDock');
+  if (dockEl) dockEl.hidden = false;
   if (btn) {
     btn.addEventListener('click', function () {
       openShare();

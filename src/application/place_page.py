@@ -911,7 +911,8 @@ def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool) -> str:
     )
     label = f"Позвать на {when}" if when else "Позвать с собой"
     return (
-        '<div class="place-share-dock" id="placeShareDock">'
+        # hidden до скрипта: без JS кнопке нечего открыть — под выбранным сеансом свои ссылки.
+        '<div class="place-share-dock" id="placeShareDock" hidden>'
         '<div class="place-share-dock__inner">'
         f'<button type="button" class="place-share-dock__btn" id="placeShareBtn">{_esc(label)}</button>'
         "</div></div>"

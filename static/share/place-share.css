@@ -4,6 +4,8 @@ body.b.has-place-share {
   padding-bottom: var(--place-share-dock-h);
 }
 
+.place-share-dock[hidden] { display: none; }
+
 .place-share-dock {
   position: fixed;
   left: 0;
