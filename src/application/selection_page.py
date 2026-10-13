@@ -1155,7 +1155,7 @@ def render_selection_page(
     )
 
     share_pick = ""
-    if not service_mode and not centers_mode and view.get("items"):
+    if not centers_mode and view.get("items"):
         share_pick = catalog_selection_share_button(endpoint=selection_share_endpoint(view))
     need_share_js = bool(share_pick) or any((view.get("slots") or {}).values())
     body = (
@@ -1194,7 +1194,7 @@ def render_selection_page(
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = (
         f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(format_public_name(city_name))} сегодня</a>'
-        if city_page_url
+        if city_page_url and not view.get("svc")
         else ""
     )
     # ?t= и ?w= — та же подборка с фильтром. В индекс идёт только базовый /c/{город}.
@@ -1376,13 +1376,12 @@ def _b_place_card(
         if tickets
         else (f'<p class="b-note">{_esc(note)}</p>' if note else "")
     )
-    card = '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
     if not slots or not href:
-        return card
+        return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
     first = slots[0]
     sid = first.get("id")
     if sid is None:
-        return card
+        return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
     from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
 
     place_name = format_public_name(str(item.get("name") or ""))
@@ -1394,8 +1393,13 @@ def _b_place_card(
         invite_label=label,
         place_name=place_name,
         fallback_href=invite_href,
+        css_class="b-slot b-slot--invite",
     )
-    return f'<div class="b-card2-wrap">{invite}{card}</div>'
+    if tickets:
+        body = f'<div class="b-slots">{invite}{"".join(tickets)}</div>'
+    else:
+        body = f'<div class="b-slots">{invite}</div>'
+    return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
 
 
 def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:
