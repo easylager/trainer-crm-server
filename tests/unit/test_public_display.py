@@ -7,12 +7,22 @@ from src.shared.public_display import (
     format_place_address,
     format_public_name,
     format_street_address,
+    invite_cta_when,
     sentence_when,
     session_day_phrase,
 )
 
 
 TODAY = date(2026, 10, 13)  # вторник
+
+
+def test_invite_cta_when_today_tomorrow_and_later() -> None:
+    """Кнопка «Позвать»: сегодня без дня, завтра и дальше — день строчными."""
+    assert invite_cta_when(TODAY, "22:15", today=TODAY) == "22:15"
+    assert invite_cta_when(date(2026, 10, 14), "12:15", today=TODAY) == "завтра 12:15"
+    assert invite_cta_when(date(2026, 10, 17), "10:15", today=TODAY) == "сб 10:15"
+    assert invite_cta_when(date(2026, 10, 14), "09:00", today=TODAY) == "завтра 9:00"
+    assert invite_cta_when(None, "", today=TODAY) == ""
 
 
 def test_c4_session_day_phrase() -> None:

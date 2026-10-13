@@ -67,6 +67,7 @@ from src.shared.public_display import (
     display_host,
     format_clock,
     format_phone_display,
+    invite_cta_when,
     format_place_address,
     format_public_name,
     format_street_address,
@@ -841,17 +842,22 @@ _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _file_version(rel: str) -> str:
+def _share_asset_version() -> str:
+    """Один ?v= на css и js дока: правка скрипта тоже сбрасывает кэш."""
     import hashlib
 
-    path = _REPO_ROOT / rel
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()[:10]
-    except OSError:
-        return "0"
+    digest = hashlib.sha256()
+    for rel in ("static/share/place-share.css", "static/share/place-share.js"):
+        path = _REPO_ROOT / rel
+        digest.update(rel.encode())
+        try:
+            digest.update(path.read_bytes())
+        except OSError:
+            digest.update(b"0")
+    return digest.hexdigest()[:10]
 
 
-PLACE_SHARE_VERSION = _file_version("static/share/place-share.css")
+PLACE_SHARE_VERSION = _share_asset_version()
 
 
 def _webapp_bundle_version() -> str:
@@ -896,8 +902,12 @@ def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool) -> str:
     pick = _effective_pick_session(view)
     if pick is None or not _skating(view["card"]):
         return ""
-    start = format_clock(str(pick.get("starts_at_local") or ""))
-    label = f"Позвать на {start}" if start else "Позвать с собой"
+    when = invite_cta_when(
+        _parse_iso_date(pick.get("local_date")),
+        str(pick.get("starts_at_local") or ""),
+        today=view["today"],
+    )
+    label = f"Позвать на {when}" if when else "Позвать с собой"
     return (
         '<div class="place-share-dock" id="placeShareDock">'
         '<div class="place-share-dock__inner">'
@@ -1205,18 +1215,16 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
             day_klass += " b-day--current"
         sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
         sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
-    tickets_link = ""
+    foot: list[str] = []
     if links.get("tickets"):
         href, blank = links["tickets"]
         attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
-        tickets_link = f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>'
+        foot.append(f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>')
     zovi = zovi_entry_path(view)
-    zovi_link = (
-        f'<p class="place-share-zovi"><a href="{_esc(zovi)}">{_esc(t("share.card"))}</a></p>'
-        if zovi
-        else ""
-    )
-    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{tickets_link}{zovi_link}'
+    if zovi:
+        foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
+    links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
+    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{links_row}'
     aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 

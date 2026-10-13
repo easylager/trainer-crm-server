@@ -62,6 +62,17 @@
     return (word + ' ' + clock).trim();
   }
 
+  /** «22:15» сегодня, «завтра 12:15», «сб 10:15». formatClock — только у времени. */
+  function inviteCtaWhen(dayIso, hhmm, todayIso) {
+    var clock = formatClock(hhmm);
+    if (!clock) return '';
+    var day = String(dayIso || '').slice(0, 10);
+    var today = String(todayIso || '').slice(0, 10);
+    if (!day || day === today) return clock;
+    var word = shortDayWord(day, today);
+    return word ? word + ' ' + clock : clock;
+  }
+
   function sentenceWhen(dayIso, hhmm, todayIso) {
     var clock = formatClock(hhmm);
     var word = shortDayWord(dayIso, todayIso);
@@ -91,6 +102,7 @@
     formatClock: formatClock,
     shortDayWord: shortDayWord,
     sessionDayPhrase: sessionDayPhrase,
+    inviteCtaWhen: inviteCtaWhen,
     sentenceWhen: sentenceWhen,
     formatMinorAmount: formatMinorAmount,
     formatPriceMinor: formatPriceMinor,

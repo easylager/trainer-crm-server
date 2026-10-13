@@ -122,6 +122,8 @@ body.b img { max-width: 100%; }
   align-self: flex-start; display: inline-flex; align-items: center;
   min-height: 44px; font-size: 15px; font-weight: 600; text-decoration: none;
 }
+.b-links { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; }
+.b-links > .b-link { align-self: center; }
 
 /* ── Выбор времени ────────────────────────────────────────────────────── */
 .b-when {
@@ -274,14 +276,35 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
   .b-hero { border-radius: 24px; margin: 0 16px; }
 }
 
-/* Дни расписания места: без JS — :target на ссылке дня, pane — следующий sibling */
+/* Дни расписания места: одна строка, горизонтальный скролл.
+   Без JS выбор дня — :target на ссылке, pane — следующий sibling.
+   Панель сеансов липнет к видимой ширине ленты и не едет вместе с пилюлями. */
 .b-sched {
-  display: flex; flex-wrap: wrap; column-gap: 6px;
-  overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: auto auto;
+  grid-auto-columns: 64px;
+  column-gap: 6px;
+  row-gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 0 16px;
+  container-type: inline-size;
+  -webkit-overflow-scrolling: touch;
 }
 .b-sched::-webkit-scrollbar { display: none; }
-.b-sched > .b-day { order: 0; flex: 0 0 64px; }
-.b-sched > .b-daypane { order: 1; flex: 1 1 100%; display: none; scroll-margin-top: 120px; }
+.b-sched > .b-day { grid-row: 1; width: 64px; }
+.b-sched > .b-daypane {
+  grid-row: 2;
+  grid-column: 1;
+  display: none;
+  position: sticky;
+  left: 0;
+  width: 100cqi;
+  justify-self: start;
+  scroll-margin-top: 120px;
+}
 .b-sched > .b-day--current { background: var(--g-dark); color: var(--g-on-photo); }
 .b-sched > .b-day--current i { color: var(--g-on-dark-accent); }
 .b-sched > .b-day--current + .b-daypane { display: block; }
