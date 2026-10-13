@@ -674,6 +674,11 @@
     return n;
   }
 
+  /** Сколько магазинов покажет кнопка «Показать N с заточкой» (фильтр shop-service:skate_sharpening). */
+  function sharpeningShopCount(items) {
+    return shopServiceCount(items || [], 'skate_sharpening');
+  }
+
   function shopDisciplineCount(items, key) {
     var n = 0;
     for (var i = 0; i < items.length; i++) {
@@ -2360,6 +2365,7 @@
     filterShopCatalog: filterShopCatalog,
     hasActiveShopFilters: hasActiveShopFilters,
     formatEmptyShopFilters: formatEmptyShopFilters,
+    sharpeningShopCount: sharpeningShopCount,
     intervalsForWeekday: intervalsForWeekday,
     shopOpenAtMinutes: shopOpenAtMinutes,
     noIceInCity: noIceInCity,

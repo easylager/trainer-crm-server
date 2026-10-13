@@ -1535,7 +1535,7 @@
       var empty;
       if (shopScope && state.shopSourceItems.length && M.hasActiveShopFilters(shopFilterState())) {
         empty = M.formatEmptyShopFilters({
-          sharpeningCount: state.serviceCount,
+          sharpeningCount: M.sharpeningShopCount(state.shopSourceItems),
         });
       } else {
         empty = M.formatEmptyList(state.intent, {
