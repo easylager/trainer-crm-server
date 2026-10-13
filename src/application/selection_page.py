@@ -435,6 +435,22 @@ async def load_selection_view(
     else:
         hits = [i for i in items if slots.get(int(i["id"]))] if window else items
         window_empty = bool(window) and not hits
+        if window_empty and skating:
+            # В окне пусто — ближайшие сеансы теми же билетами, а не строкой из API.
+            slots = await _window_slots(
+                session, [int(i["id"]) for i in items], None, now, session_sql=session_sql
+            )
+            stale_notes = await _apply_schedule_freshness(session, items, slots, now)
+            nearest = [i for i in items if slots.get(int(i["id"]))]
+            # Сначала места с ближайшим льдом — по времени первого сеанса.
+            nearest.sort(
+                key=lambda i: (
+                    str(slots[int(i["id"])][0].get("local_date") or ""),
+                    str(slots[int(i["id"])][0].get("starts_at_local") or ""),
+                    int(i["id"]),
+                )
+            )
+            items = nearest + [i for i in items if not slots.get(int(i["id"]))]
         shown = hits or items
     shown_page = shown[:MAX_PLACES] if not service_mode else shown
     # Счёт для превью — по всей подборке, а не по странице: один агрегат вместо len(shown_page).
@@ -602,10 +618,11 @@ def selection_description(view: Mapping[str, Any]) -> str:
         n = int(view.get("total") or 0)
         noun = selection_count_noun(view)
         k = int(view.get("open_now_count") or 0)
-        return (
-            f"{n} {plural_ru(n, *noun)} · "
-            f"{k} {plural_ru(k, 'открыто', 'открыты', 'открыты')} сейчас"
-        )
+        head = f"{n} {plural_ru(n, *noun)}"
+        # Ночью «0 открыты сейчас» — шум: статус каждого места и так на карточке.
+        if not k:
+            return head
+        return f"{head} · {k} {plural_ru(k, 'открыто', 'открыты', 'открыты')} сейчас"
     n = selection_place_count(view)
     noun = selection_count_noun(view)
     bits = [f"{n} {plural_ru(n, *noun)}"]
@@ -1279,6 +1296,18 @@ def _b_card_head(item: Mapping[str, Any], *, city_name: str, href: str, extra: s
     )
 
 
+# Строки состояния из ленты, которые говорят факт. «Расписание уточняется» (kind unknown) —
+# оговорка: на сайте её нет (решение владельца, craft-guide), карточка просто без строки.
+_B_FACT_LIVE_KINDS = frozenset({"phone", "season_closed", "closed", "place"})
+
+
+def _b_state_note(item: Mapping[str, Any]) -> str:
+    live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
+    if str(live.get("kind") or "") not in _B_FACT_LIVE_KINDS:
+        return ""
+    return str(live.get("text") or "").strip()
+
+
 def _b_place_card(
     item: Mapping[str, Any],
     *,
@@ -1340,10 +1369,11 @@ def _b_place_card(
     rest = len(slots) - MAX_SLOTS_PER_PLACE
     if rest > 0 and href:
         tickets.append(f'<a class="b-slot b-slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>')
+    note = _b_state_note(item)
     body = (
         f'<div class="b-slots">{"".join(tickets)}</div>'
         if tickets
-        else (f'<p class="b-note">{_esc(item.get("live_line") or "")}</p>' if item.get("live_line") else "")
+        else (f'<p class="b-note">{_esc(note)}</p>' if note else "")
     )
     card = '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
     if not slots or not href:
@@ -1372,7 +1402,7 @@ def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:
     href = str(item.get("public_path") or "").strip() or (place_path(city_name=city_name, slug=slug) if slug else "")
     badge = str(item.get("center_badge") or "").strip()
     live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
-    line = "" if str(live.get("kind") or "") == "session" else str(live.get("text") or item.get("live_line") or "").strip()
+    line = _b_state_note(item)
     extra = (f'<span class="b-chip b-chip--sm">{_esc(badge)}</span>' if badge else "") + (
         f'<span class="b-card2__where">{_esc(line)}</span>' if line else ""
     )

@@ -45,6 +45,7 @@ from src.application.training_group_use_cases import (
     list_open_training_groups_catalog,
 )
 from src.application.trainer_use_cases import list_active_trainers_for_client
+from src.shared.public_display import format_clock, short_day_word
 from src.shared.arena_schedule_mode import (
     PHONE_LINE,
     SCHEDULE_MODE_PHONE,
@@ -358,11 +359,8 @@ def _format_price_minor(minor: int | None, currency: str) -> str:
 
 
 def _date_label(local_date: date, today: date) -> str:
-    if local_date == today:
-        return "Сегодня"
-    if local_date == today + timedelta(days=1):
-        return "Завтра"
-    return local_date.isoformat()
+    """Начало строки ленты: «Сегодня» / «Завтра» / «Пт». ISO-дату люди не видят (craft-guide)."""
+    return short_day_word(local_date, today=today).capitalize()
 
 
 def _completeness_score(row: Mapping[str, Any]) -> int:
@@ -498,7 +496,7 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
         session_currency = item.get("next_currency_code") or currency
         price = _format_price_minor(item.get("next_price_adult_minor"), session_currency)
         more = max(0, int(item.get("future_session_count") or 0) - 1)
-        parts = [f"{_date_label(local_date, today)} {hhmm}".strip()]
+        parts = [f"{_date_label(local_date, today)} {format_clock(hhmm)}".strip()]
         if price:
             parts.append(price)
         if more:
