@@ -1949,6 +1949,19 @@ def shared_glide_tokens_css(request: Request):
     )
 
 
+@app.get("/static/shared/glide-components.css")
+def shared_glide_components_css(request: Request):
+    """TASK-249: общие компоненты стиля B для static/share/* и static/webapp/*. Use ``?v=…`` for long cache."""
+    path = _SHARED_DIR / "glide-components.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/zovi-model.js")
 def shared_zovi_model_js(request: Request):
     """TASK-232: модель открытки «Пойдёшь со мной на каток?» (вопрос, склонение, вердикт)."""
