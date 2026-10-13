@@ -1065,20 +1065,16 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
             for s in slots
         )
         frag = f"d-{d.isoformat()}"
-        wrap_klass = "b-sched-day"
         if d == default_day:
-            wrap_klass += " b-sched-day--default"
-        sched_bits.append(
-            f'<div class="{wrap_klass}" id="{frag}">'
-            f'<a class="{day_klass}" href="#{frag}">{inner}</a>'
-            f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div></div>'
-        )
+            day_klass += " b-day--current"
+        sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
+        sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
     tickets_link = ""
     if links.get("tickets"):
         href, blank = links["tickets"]
         attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
         tickets_link = f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>'
-    body = f'<div class="b-sched" aria-label="День">{"".join(sched_bits)}</div>{tickets_link}'
+    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{tickets_link}'
     aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 

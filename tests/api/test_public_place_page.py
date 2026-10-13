@@ -313,9 +313,14 @@ async def test_place_page_style_b_about_focus_and_day_fragments(app_use_test_db,
     where_text = where.group(1)
     assert place["name"] in where_text
     assert "пр. Независимости, 25" in where_text
-    assert re.search(r'<a class="b-day" href="#d-\d{4}-\d{2}-\d{2}"', html)
-    assert re.search(r'<div class="b-sched-day[^"]*" id="d-\d{4}-\d{2}-\d{2}"', html)
+    assert re.search(
+        r'<a class="b-day[^"]*" id="d-\d{4}-\d{2}-\d{2}" href="#d-\d{4}-\d{2}-\d{2}"[^>]*>'
+        r".*?</a>\s*<div class=\"b-daypane\">",
+        html,
+        re.S,
+    )
     assert "#schedule:has(#d-" not in html
+    assert "b-sched-day" not in html
     plan_time = re.search(r'<span class="b-plan__time">([^<]+)</span>', html)
     assert plan_time and plan_time.group(1).startswith("9:00")
 
