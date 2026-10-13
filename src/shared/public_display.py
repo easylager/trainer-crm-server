@@ -30,6 +30,16 @@ def _fold(value: str) -> str:
     return value.strip().casefold().replace("ё", "е")
 
 
+def format_minor_amount(minor: int | None) -> str:
+    """Сумма из minor без валюты: «10», «8,50» — для списков (пара ice-tab formatMinorAmount)."""
+    if minor is None:
+        return ""
+    major = int(minor) / 100.0
+    if major == int(major):
+        return str(int(major))
+    return f"{major:.2f}".replace(".", ",", 1)
+
+
 def format_clock(hhmm: str) -> str:
     """«9:00», «12:15». Час без ведущего нуля. Минуты остаются двумя цифрами."""
     raw = str(hhmm or "").strip()

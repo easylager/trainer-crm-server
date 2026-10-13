@@ -33,6 +33,12 @@
       : typeof globalThis !== 'undefined'
         ? globalThis.MinskTime
         : null;
+  var PD =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./public-display-model.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.PublicDisplayModel
+        : null;
   var ruText = RuText;
 
   var AMENITY_ORDER = [
@@ -775,19 +781,19 @@
     return parts.join(' · ');
   }
 
-  /** «открыт до 20:00» — только если открыто сейчас; до открытия — «откроется в 10:00». */
+  /** «открыто до 20:00» — только если открыто сейчас; до открытия — «откроется в 10:00». */
   function openUntilLabel(hours, now, timeZone) {
     now = now instanceof Date ? now : new Date();
     var tz = MT.resolveTimeZone(timeZone);
     var weekday = MT.weekdayMon0(now, tz);
     var nowMins = OH.toMinutes(MT.hhmm(now, tz));
-    /* Вчерашний ночной хвост (пт 18:00–02:00 → сб 01:00) тоже «открыт». */
+    /* Вчерашний ночной хвост (пт 18:00–02:00 → сб 01:00) тоже «открыто». */
     var open = OH.openIntervalAt(hours, weekday, nowMins);
-    if (open) return 'открыт до ' + open[1];
+    if (open) return 'открыто до ' + PD.formatClock(open[1]);
     var intervals = intervalsForWeekday(hours, weekday);
     var hm = MT.hhmm(now, tz);
     for (var i = 0; i < intervals.length; i++) {
-      if (hm < intervals[i][0]) return 'откроется в ' + intervals[i][0];
+      if (hm < intervals[i][0]) return 'откроется в ' + PD.formatClock(intervals[i][0]);
     }
     return '';
   }

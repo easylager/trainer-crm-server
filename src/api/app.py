@@ -1168,6 +1168,19 @@ def webapp_opening_hours_js(request: Request):
     )
 
 
+@app.get("/webapp/public-display-model.js")
+def webapp_public_display_model_js(request: Request):
+    """TASK-250: время, день, цена — общие для public_display.py и Mini App models."""
+    path = _WEBAPP_DIR / "public-display-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/minsk-time.js")
 def webapp_minsk_time_js(request: Request):
     """TASK-184: календарь и «сейчас» каталога (Europe/Minsk / TZ арены)."""

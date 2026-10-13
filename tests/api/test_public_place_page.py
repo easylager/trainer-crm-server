@@ -516,7 +516,7 @@ def test_hours_without_leading_zero_are_not_compared_as_strings() -> None:
 
     card = {"opening_hours": {"daily": {"open": "7:00", "close": "22:00"}}, "timezone": "Europe/Minsk"}
     noon_minsk = datetime(2026, 10, 2, 9, 0, tzinfo=timezone.utc)  # 12:00 по Минску
-    assert open_now_label(card, now=noon_minsk) == "Открыто до 22:00"
+    assert open_now_label(card, now=noon_minsk) == "открыто до 22:00"
     broken = {"opening_hours": {"daily": {"open": "утром", "close": "22:00"}}}
     assert open_now_label(broken, now=noon_minsk) == ""
 
@@ -567,6 +567,25 @@ def test_place_without_published_media_shows_no_picture() -> None:
 
 
 @pytest.mark.asyncio
+def _assert_public_display_before_dependent_models(html: str, page: str) -> None:
+    """TASK-250: public-display-model.js must load before models that call PublicDisplayModel."""
+    pd = html.find("public-display-model.js")
+    dependent = (
+        "arena-card-model.js",
+        "hub-ice-today-model.js",
+        "ice-tab-model.js",
+    )
+    needs_pd = any(name in html for name in dependent)
+    if not needs_pd:
+        return
+    assert pd >= 0, f"{page}: missing public-display-model.js"
+    for name in dependent:
+        pos = html.find(name)
+        if pos >= 0:
+            assert pd < pos, f"{page}: public-display-model.js must precede {name}"
+
+
+@pytest.mark.asyncio
 async def test_every_script_the_client_pages_load_is_actually_served(app_use_test_db) -> None:
     """catalog-geo-model.js годами отдавался с 404 — геолокация молча не работала.
     Ловим весь класс: каждый локальный <script>/<link> клиентских страниц должен отвечать 200."""
@@ -582,6 +601,7 @@ async def test_every_script_the_client_pages_load_is_actually_served(app_use_tes
     async with _client() as client:
         for page in pages:
             html = (await client.get(f"/webapp/{page}")).text
+            _assert_public_display_before_dependent_models(html, page)
             assets = re.findall(r'(?:src|href)="([a-z0-9-]+\.(?:js|css))\?v=[0-9]+"', html)
             assert assets, page
             for asset in set(assets):

@@ -279,7 +279,7 @@ def _hhmm_in_interval(hhmm: str, open_: str, close: str) -> bool:
 
 
 def open_now_label(card: Mapping[str, Any], *, now: datetime) -> str:
-    """«Открыто до 22:00» / «Закроется в 19:00» / «Сегодня выходной»."""
+    """«открыто до 22:00» / «откроется в 10:00» / «Сегодня выходной»."""
     tz = ZoneInfo(str(card.get("timezone") or "Europe/Minsk"))
     local = now.astimezone(tz)
     hours = card.get("opening_hours")
@@ -291,10 +291,10 @@ def open_now_label(card: Mapping[str, Any], *, now: datetime) -> str:
     hhmm = local.strftime("%H:%M")
     for open_, close in intervals:
         if _hhmm_in_interval(hhmm, open_, close):
-            return f"Открыто до {format_clock(close)}"
+            return f"открыто до {format_clock(close)}"
     for open_, _close in intervals:
         if hhmm < open_:
-            return f"Откроется в {format_clock(open_)}"
+            return f"откроется в {format_clock(open_)}"
     return "Сегодня уже закрыто"
 
 

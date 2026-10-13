@@ -324,13 +324,13 @@ describe('TASK-182 AC-2: часы через полночь, одна реали
     );
   });
 
-  it('карточка места: та же логика («открыт до 00:00», «открыт до 02:00»)', () => {
+  it('карточка места: та же логика («открыто до 0:00», «открыто до 2:00»)', () => {
     delete require.cache[require.resolve(arenaModelPath)];
     const A = require(arenaModelPath);
     // Момент задаётся явно по Минску (UTC+3, без DST), а не в TZ машины.
     const at = (h, m) => new Date(Date.UTC(2026, 9, 6, h - 3, m));
-    assert.equal(A.openUntilLabel({ daily: { open: '10:00', close: '00:00' } }, at(12, 0)), 'открыт до 00:00');
-    assert.equal(A.openUntilLabel({ daily: { open: '18:00', close: '02:00' } }, at(1, 0)), 'открыт до 02:00');
+    assert.equal(A.openUntilLabel({ daily: { open: '10:00', close: '00:00' } }, at(12, 0)), 'открыто до 0:00');
+    assert.equal(A.openUntilLabel({ daily: { open: '18:00', close: '02:00' } }, at(1, 0)), 'открыто до 2:00');
   });
 
   it('дублей нет: обе модели берут часы из opening-hours.js', () => {
