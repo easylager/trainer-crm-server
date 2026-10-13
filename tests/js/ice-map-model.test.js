@@ -688,7 +688,7 @@ describe('clusterFocus (тап по кластеру)', () => {
 describe('тип места: цвет пина и легенда (TASK-147, хвост к макету 02)', () => {
   const fs = require('node:fs');
   const cssPath = path.resolve(__dirname, '../../static/webapp/ice-tab.css');
-  const themePath = path.resolve(__dirname, '../../static/webapp/theme.css');
+  const themePath = path.resolve(__dirname, '../../static/shared/glide-tokens.css');
 
   function place(id, venue, extra) {
     return rink(Object.assign({ id, venue_type: venue, latitude: 53.9 + id / 100, longitude: 27.5 }, extra || {}));
@@ -777,14 +777,14 @@ describe('тип места: цвет пина и легенда (TASK-147, хв
     assert.equal(pinView(outdoor).time, '19:00');
   });
 
-  it('каждому типу — токен --app-venue-*, который есть в theme.css, и правило в CSS пина и легенды', () => {
+  it('каждому типу — токен --app-venue-*, который есть в glide-tokens.css, и правило в CSS пина и легенды', () => {
     const { VENUE_TOKEN } = loadModel();
     const css = fs.readFileSync(cssPath, 'utf8');
     const theme = fs.readFileSync(themePath, 'utf8');
     Object.keys(VENUE_TOKEN).forEach((key) => {
       const token = VENUE_TOKEN[key];
       assert.match(token, /^--app-venue-/);
-      assert.ok(theme.includes(token + ':'), token + ' объявлен в theme.css');
+      assert.ok(theme.includes(token + ':'), token + ' объявлен в glide-tokens.css');
       [`.ice-ypin--${key}`, `.ice-map-legend__item--${key}`].forEach((sel) => {
         const at = css.indexOf(sel);
         assert.ok(at >= 0, sel + ' есть в ice-tab.css');
