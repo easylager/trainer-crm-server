@@ -1069,12 +1069,21 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         )
         klass = "b-daypane b-daypane--default" if d == default_day else "b-daypane"
         panes.append(f'<div class="{klass}" id="d-{d.isoformat()}"><div class="b-tickets">{tickets}</div></div>')
+    day_pick_css = "".join(
+        f"#schedule:has(#{frag}:target) .b-day[href=\"#{frag}\"]"
+        f"{{background:var(--g-dark);color:var(--g-on-photo)!important}}"
+        f"#schedule:has(#{frag}:target) .b-day[href=\"#{frag}\"] i{{color:var(--g-on-dark-accent)}}"
+        for d in sorted(by_date)
+        for frag in (f"d-{d.isoformat()}",)
+    )
+    day_pick_style = f"<style>{day_pick_css}</style>" if day_pick_css else ""
     tickets_link = ""
     if links.get("tickets"):
         href, blank = links["tickets"]
         attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
         tickets_link = f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>'
     body = (
+        f"{day_pick_style}"
         f'<nav class="b-days" aria-label="День">{"".join(strip)}</nav>'
         f'<div class="b-panes">{"".join(panes)}</div>{tickets_link}'
     )
@@ -1266,8 +1275,16 @@ def _b_rental(card: Mapping[str, Any]) -> str:
     return section(_rental_section_title(card, hours), body, klass="b-sec--place")
 
 
+def _b_about(card: Mapping[str, Any]) -> str:
+    text = str(card.get("short_description") or "").strip()
+    if not text:
+        return ""
+    return f'<section class="b-sec b-sec--place"><p class="b-text">{_esc(text)}</p></section>'
+
+
 def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
     """Сеанс из ссылки ``?s=`` — тёмный билет над расписанием."""
+    card = view["card"]
     focus = view.get("focus")
     if focus is None:
         if not view.get("focus_missing"):
@@ -1288,6 +1305,9 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
     label = session_kind_label(focus)
     time_text = f"{start}–{end}" if end else start
     extra = " · ".join(x for x in (label, prices) if x)
+    place_name = format_public_name(str(card.get("name") or ""))
+    address = format_place_address(str(card.get("address") or ""), city=_city(card))
+    where = " · ".join(x for x in (place_name, address) if x)
     return (
         '<section class="b-sec" id="plan"><div class="b-plan">'
         f'<span class="b-plan__kicker">{_esc(kicker)}</span>'
@@ -1295,6 +1315,7 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
         f'<span class="b-plan__time">{_esc(time_text)}</span>'
         + (f'<span class="b-plan__line">{_esc(extra)}</span>' if extra else "")
         + (f'<span class="b-plan__soon">{_esc(soon)}</span>' if soon else "")
+        + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
         + "</div></section>"
     )
 
@@ -1318,6 +1339,7 @@ def render_place_body_b(
     )
     parts = [
         _b_hero(card, status_html=_b_status(view)),
+        _b_about(card),
         _b_plan(view, invite=invite),
         _b_schedule(view, base_path=base_path, invite=invite, links=links),
         _b_ohm(view),

@@ -292,6 +292,32 @@ async def test_selection_image_rendering_runs_off_event_loop_thread(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_place_page_style_b_about_focus_and_day_fragments(app_use_test_db, db_session) -> None:
+    blurb = "Крытый каток с массовым катанием в центре города."
+    place = await _place(db_session, short_description=blurb)
+    await db_session.execute(
+        text("UPDATE arenas SET address = :addr WHERE id = :id"),
+        {"addr": "пр. Независимости, 25", "id": place["arena_id"]},
+    )
+    session_id = await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="9:00")
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"], params={"s": session_id})
+
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    assert blurb in html
+    assert 'class="b-plan__where"' in html
+    assert place["name"] in html
+    assert "пр. Независимости, 25" in html
+    assert re.search(r'<a class="b-day" href="#d-\d{4}-\d{2}-\d{2}"', html)
+    assert re.search(r'<div class="b-daypane[^"]*" id="d-\d{4}-\d{2}-\d{2}"', html)
+    plan_time = re.search(r'<span class="b-plan__time">([^<]+)</span>', html)
+    assert plan_time and plan_time.group(1).startswith("9:00")
+
+
+@pytest.mark.asyncio
 async def test_place_page_zovi_entry_link(app_use_test_db, db_session) -> None:
     rink = await _place(db_session)
     early = await _add_future_session(db_session, rink["arena_id"], days_ahead=1, starts_at_local="10:00")

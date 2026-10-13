@@ -381,6 +381,11 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 .b-daypane--default { display: block; }
 .b-daypane:target { display: block; scroll-margin-top: 120px; }
 .b-panes:has(.b-daypane:target) .b-daypane--default:not(:target) { display: none; }
+.b-sec--place:has(.b-daypane:target) .b-day[aria-current="true"] {
+  background: var(--g-surface);
+  color: var(--g-ink) !important;
+}
+.b-sec--place:has(.b-daypane:target) .b-day[aria-current="true"] i { color: var(--g-accent-ink); }
 
 /* Сеанс из ссылки */
 .b-plan {
@@ -390,7 +395,7 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 .b-plan__kicker { font-size: 14px; color: var(--g-on-dark-accent); }
 .b-plan__day { font-size: 16px; }
 .b-plan__time { font-family: var(--g-font-display); font-size: 34px; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.b-plan__line, .b-plan__soon { font-size: 15px; color: var(--g-on-dark-muted); }
+.b-plan__line, .b-plan__soon, .b-plan__where { font-size: 15px; color: var(--g-on-dark-muted); }
 .b-plan--gone { gap: 6px; }
 
 /* «Позвать друзей»: раскрытый блок занимает всю ширину ряда */
