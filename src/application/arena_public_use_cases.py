@@ -112,18 +112,28 @@ SEARCH_LIMIT = 8
 # PDEC-005: vitrine shows only slots that have not started. An in-progress
 # session is past — live line / pin / hub card all show start time, so
 # "12:45 сегодня" at 13:10 is a lie even if the ice is still open.
-_CURRENT_SESSION_SQL = """
+# Каток с закрытым сезоном (TASK-204) сеансов не показывает нигде: ни в ленте, ни в
+# списках, ни в счётчиках. Подзапрос по s.arena_id — фрагмент не зависит от алиасов
+# вызывающего запроса.
+_NOT_SEASON_CLOSED_SQL = """NOT EXISTS (
+        SELECT 1 FROM arena_profiles sc
+        WHERE sc.arena_id = s.arena_id AND sc.schedule_mode = 'season_closed'
+    )"""
+
+_CURRENT_SESSION_SQL = f"""
     s.status = :st
     AND s.kind IN ('public_skate', 'open_ice')
     AND s.starts_at_utc > :now
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
+    AND {_NOT_SEASON_CLOSED_SQL}
 """
 
-_OHM_SESSION_SQL = """
+_OHM_SESSION_SQL = f"""
     s.status = :st
     AND s.kind = 'hockey_practice'
     AND s.starts_at_utc > :now
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
+    AND {_NOT_SEASON_CLOSED_SQL}
 """
 
 # Хоккейный центр по записи — не сеанс ОХМ и не массовое катание.

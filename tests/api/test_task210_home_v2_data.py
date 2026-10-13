@@ -257,9 +257,15 @@ async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale
     from src.application.ice_city_day import get_city_ice_day
 
     assert parse_city_session_count_from_home(home.text, name) == 2
-    # Страницы /ice/…/today больше нет (TASK-266); её выборка живёт в шеринге города.
+    # Страницы /ice/…/today больше нет (TASK-266): старый адрес ведёт в список, и он
+    # обязан сойтись с главной — закрытый каток без сеансов, старый с сеансами.
     day = await get_city_ice_day(db_session, city_id=city_id)
     assert day["session_count"] == 2
+    async with _client() as client:
+        listing = await client.get(f"/c/{city_slug(name)}?t=ice&w=today")
+    assert listing.status_code == 200
+    assert "Живой каток" in listing.text and "Старый каток" in listing.text
+    assert "Закрытый каток" not in listing.text
 
 
 @pytest.mark.asyncio
