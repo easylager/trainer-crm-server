@@ -36,14 +36,10 @@ from src.shared.catalog_sharpening import SHARPENING_MONTH_PARAM, SHARPENING_SEC
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.copy_ru import t
 from src.shared.glide_city_cookie import normalize_glide_city_slug
+from src.shared.public_display import format_public_name
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
-from src.shared.schedule_basis import (
-    SCHEDULE_BASIS_LIVE,
-    SCHEDULE_BASIS_PHOTO,
-    SCHEDULE_BASIS_PROJECTED,
-    normalize_schedule_basis,
-)
+from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE, normalize_schedule_basis
 
 _log = logging.getLogger(__name__)
 
@@ -431,12 +427,8 @@ def _price_with_rental(row: Mapping[str, Any]) -> str | None:
 
 
 def _basis_fields(basis: str) -> tuple[str, str | None]:
-    if basis == SCHEDULE_BASIS_PROJECTED:
-        return t("basis.projected"), t("basis.projected_long")
-    if basis == SCHEDULE_BASIS_LIVE:
-        return t("basis.live"), None
-    if basis == SCHEDULE_BASIS_PHOTO:
-        return t("basis.photo"), None
+    """Источник сеанса в публичный текст не попадает. Поле в данных остаётся."""
+    del basis
     return "", None
 
 
@@ -1038,7 +1030,12 @@ def _city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
     quiet = ""
     if sessions:
         s_word = plural_ru(sessions, "сеанс", "сеанса", "сеансов")
-        fact = f"<b>{sessions} {s_word}</b> {_esc(_period_when_phrase(when_key))} · {_esc(_rink_count_text(city))}"
+        when = _esc(_period_when_phrase(when_key))
+        fact = (
+            f'<span class="f__bit">{_esc(_rink_count_text(city))}</span>'
+            f' <span class="f__sep">·</span> '
+            f'<span class="f__bit"><b>{sessions} {s_word}</b> {when}</span>'
+        )
     elif city.get("next_skate"):
         fact = f"ближайший — <b>{_esc(_next_phrase(city.get('next_skate')))}</b>"
     else:
@@ -1048,7 +1045,7 @@ def _city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
     has_html = f'<span class="has">{_esc(has)}</span>' if has else ""
     return (
         f'<a class="city card{quiet}" href="/c/{_esc(slug)}">'
-        f'<span class="n">{_esc(name)}</span>'
+        f'<span class="n">{_esc(format_public_name(name))}</span>'
         f'<span class="f">{fact}</span>'
         f"{has_html}</a>"
     )
@@ -1073,17 +1070,22 @@ def split_home_tiles(
     карточкой сверху и плиткой не дублируется. Остальные — ссылками в раскрывашке.
     """
     by_cities = [c for c in cities if str(c.get("country") or "").upper() == "BY"]
+    wanted = user_city_slug or ""
     tiles: list[Mapping[str, Any]] = []
     rest: list[Mapping[str, Any]] = []
     for city in sorted(by_cities, key=_tile_rank):
         slug = str(city.get("slug") or "")
-        if slug == (user_city_slug or ""):
-            continue
+        is_user = bool(wanted) and slug == wanted
         is_live = int(city.get("horizon_arenas_with_sessions") or 0) > 0 or int(city.get("session_count") or 0) > 0
-        if (slug in _OBLAST_CENTER_SLUGS or is_live) and len(tiles) < _MAX_CITY_TILES:
+        if is_user or ((slug in _OBLAST_CENTER_SLUGS or is_live) and len(tiles) < _MAX_CITY_TILES):
             tiles.append(city)
         else:
             rest.append(city)
+    if wanted:
+        tiles.sort(key=lambda c: 0 if str(c.get("slug") or "") == wanted else 1)
+    if len(tiles) > _MAX_CITY_TILES:
+        rest = tiles[_MAX_CITY_TILES:] + rest
+        tiles = tiles[:_MAX_CITY_TILES]
     return tiles, rest
 
 
@@ -1110,7 +1112,7 @@ def _hero_city_html(user_city: Mapping[str, Any] | None) -> str:
         f'<a class="hero-city" href="{_esc(user_city.get("href") or "/c/" + str(user_city.get("slug") or ""))}">'
         "<span>"
         f'<span class="cap">{_esc(t("home.city_button.caption"))}</span>'
-        f'<span class="name">{_esc(user_city.get("name"))}</span>'
+        f'<span class="name">{_esc(format_public_name(str(user_city.get("name") or "")))}</span>'
         + (f'<span class="live">{live}</span>' if live else "")
         + "</span>"
         '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
@@ -1135,7 +1137,7 @@ def _more_cities_html(rest: list[Mapping[str, Any]]) -> str:
     lines: list[str] = []
     for region in sorted(buckets):
         names = ", ".join(
-            f'<a href="/c/{_esc(c["slug"])}">{_esc(c["name"])}</a>'
+            f'<a href="/c/{_esc(c["slug"])}">{_esc(format_public_name(str(c["name"])))}</a>'
             for c in sorted(buckets[region], key=lambda c: str(c.get("name") or ""))
         )
         label = region.replace(" область", "")
@@ -1155,7 +1157,8 @@ def _ru_footer_html(cities: list[Mapping[str, Any]]) -> str:
     if not ru:
         return ""
     links = ", ".join(
-        f'<a href="/c/{_esc(c["slug"])}">{_esc(c["name"])}</a>' for c in sorted(ru, key=lambda c: str(c.get("name")))
+        f'<a href="/c/{_esc(c["slug"])}">{_esc(format_public_name(str(c["name"])))}</a>'
+        for c in sorted(ru, key=lambda c: str(c.get("name")))
     )
     return f'<p class="elsewhere">Также: {links}</p>'
 
@@ -1319,14 +1322,10 @@ def render_catalog_home_page(
         cities_html = _tiles_html(tiles, when_key=when_key) + _more_cities_html(rest)
 
     map_svg = str(view.get("map_svg") or "")
-    map_html = (
-        f'<figure class="map card">{map_svg}</figure>'
-        '<p class="hint">Размер точки — мест в городе. Пунктирное кольцо — есть ОХМ. Зажмите точку — название.</p>'
-        if map_svg
-        else ""
-    )
+    map_html = f'<figure class="map card">{map_svg}</figure>' if map_svg else ""
 
     values = {
+        "__BRAND__": _esc(t("brand.mark")),
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,
         "__OG_TITLE__": _esc(title),
@@ -1366,7 +1365,8 @@ def catalog_home_og_image_url(base_url: str) -> str:
 
 
 _TILE_RE = re.compile(
-    r'<a class="city card[^"]*" href="[^"]+"><span class="n">(?P<name>[^<]+)</span><span class="f">(?P<fact>.*?)</span>',
+    r'<a class="city card[^"]*" href="[^"]+"><span class="n">(?P<name>[^<]+)</span>'
+    r'<span class="f">(?P<fact>.*?)</span>(?=<span class="has">|</a>)',
     re.S,
 )
 

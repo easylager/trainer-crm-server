@@ -11,7 +11,9 @@
 
   <meta property="og:type" content="place" />
   <meta property="og:locale" content="__OG_LOCALE__" />
-  <meta property="og:site_name" content="Glide — карта льда" />
+  <link rel="icon" href="/favicon.ico" type="image/png" />
+  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />
+  <meta property="og:site_name" content="Glide" />
   <meta property="og:title" content="__OG_TITLE__" />
   <meta property="og:description" content="__OG_DESCRIPTION__" />
   <meta property="og:url" content="__OG_URL__" />
@@ -107,7 +109,7 @@
     .dock {
       margin: 16px -16px 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
     }
-    .dock .cta { box-shadow: 0 8px 24px rgba(69, 185, 187, .35); }
+    .dock .cta { box-shadow: none; }
     .hero__type { margin: 0 0 6px; font-size: 13px; font-weight: 500; color: var(--muted); }
     .hero__title { margin: 0; font-size: clamp(26px, 7vw, 34px); font-weight: 600; line-height: 1.12; letter-spacing: -.01em; }
     .hero__where { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
@@ -141,6 +143,7 @@
     .plan__note { margin: 6px 0 0; }
 
     .actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0 0 12px; }
+    .actions--pair { grid-template-columns: 1fr 1fr; }
     @media (min-width: 420px) { .actions { grid-template-columns: 1fr 1fr; } .actions--one { grid-template-columns: 1fr; } }
     .cta {
       display: block; padding: 14px 18px; border-radius: 14px;
@@ -264,8 +267,9 @@
       background: var(--surface); border: 1px solid var(--line); color: var(--ink);
       font: inherit; font-size: 14px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer;
     }
+    .share__more { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; }
     .share__story {
-      display: inline-block; margin-top: 10px; font-size: 14px; font-weight: 500;
+      display: inline-block; margin-top: 0; font-size: 14px; font-weight: 500;
       color: var(--muted); text-decoration: underline; text-underline-offset: 3px;
     }
     .share__zovi { margin: 12px 0 0; }
@@ -288,7 +292,7 @@
 <body>
   <main class="wrap">
     <nav class="top">
-      <a class="top__brand" href="/">Glide<span> · карта льда</span></a>
+      <a class="top__brand" href="/">__BRAND__</a>
       <span>__CITY__</span>
     </nav>
     __BODY__

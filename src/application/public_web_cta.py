@@ -105,6 +105,7 @@ def render_place_primary_actions(
     """Верхний ряд CTA на /p/: звонок, билеты, маршрут; Telegram — вторичный в dock."""
     arena_id = int(card["id"]) if card.get("id") is not None else None
     phone = str(card.get("phone") or "").strip()
+    del city_name  # «‹ город» живёт в шапке страницы, не в этом ряду
     tickets = safe_external_url(card.get("tickets_url"))
     maps = _maps_href(card.get("latitude"), card.get("longitude"))
     buttons: list[str] = []
@@ -118,7 +119,7 @@ def render_place_primary_actions(
             arena_id=arena_id,
         )
         buttons.append(
-            f'<a class="cta" href="{_esc(tel)}" data-catalog-phone-beacon="{_esc(beacon)}">Позвонить</a>'
+            f'<a class="cta cta--ghost" href="{_esc(tel)}" data-catalog-phone-beacon="{_esc(beacon)}">Позвонить</a>'
         )
         phone_beacon = True
     if tickets and public_outbound_url(
@@ -132,22 +133,29 @@ def render_place_primary_actions(
         buttons.append(
             f'<a class="cta cta--ghost" href="{_esc(tickets)}" rel="noopener nofollow" target="_blank">Билеты</a>'
         )
+    pair: list[str] = []
+    if tel:
+        pair.append(buttons[0])
+    route_btn = ""
     if maps and public_outbound_url(
         base_url, action=CONTACT_ACTION_DIRECTION, surface=surface, city_id=city_id, arena_id=arena_id
     ):
         url = public_outbound_url(
             base_url, action=CONTACT_ACTION_DIRECTION, surface=surface, city_id=city_id, arena_id=arena_id
         )
-        buttons.append(f'<a class="cta cta--ghost" href="{_esc(url)}" rel="nofollow">Как добраться</a>')
+        route_btn = f'<a class="cta cta--ghost" href="{_esc(url)}" rel="nofollow">Как добраться</a>'
     elif maps:
-        buttons.append(
+        route_btn = (
             f'<a class="cta cta--ghost" href="{_esc(maps)}" rel="noopener nofollow" target="_blank">Как добраться</a>'
         )
-    if city_name:
-        city_href = selection_path(city_name=city_name, venue=None, when=None)
-        buttons.append(f'<a class="cta cta--ghost" href="{_esc(city_href)}">Все места города</a>')
-    if not buttons:
+    if route_btn:
+        pair.append(route_btn)
+    # «Позвонить» уже в buttons[0], билеты — остальное. Город — ссылка в шапке, не кнопка.
+    extras = buttons[1:] if tel else buttons
+    if not pair and not extras and not telegram_url:
         return ""
+    pair_html = f'<div class="actions actions--pair">{"".join(pair)}</div>' if pair else ""
+    extra_html = f'<div class="actions">{"".join(extras)}</div>' if extras else ""
     dock = ""
     if telegram_url:
         dock = (
@@ -155,7 +163,7 @@ def render_place_primary_actions(
             "Открыть в Telegram</a></div>"
         )
     beacon_js = _PHONE_BEACON_SCRIPT if phone_beacon else ""
-    return f'<div class="actions">{"".join(buttons)}</div>{dock}{beacon_js}'
+    return pair_html + extra_html + dock + beacon_js
 
 
 def render_generic_web_dock(

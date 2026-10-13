@@ -154,7 +154,8 @@ async def test_ohm_centers_segment_lists_places_not_sessions(app_use_test_db, db
     assert 'class="slot' not in html
     assert 'class="seg"' not in html
     assert "Записи нет" not in html
-    assert "Позвать" not in html
+    assert "Позвать друзей" in html
+    assert "Позвать открыткой" not in html
     assert "Позвонить" not in html
     assert "По записи, не сеанс." in html
     assert "1 центр" in html

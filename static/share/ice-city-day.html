@@ -10,6 +10,8 @@
 
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="__OG_LOCALE__" />
+  <link rel="icon" href="/favicon.ico" type="image/png" />
+  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />
   <meta property="og:site_name" content="Glide" />
   <meta property="og:title" content="__OG_TITLE__" />
   <meta property="og:description" content="__OG_DESCRIPTION__" />
@@ -62,6 +64,7 @@
       text-transform: uppercase;
       color: var(--ic-accent-text);
     }
+    .kicker a { color: inherit; text-decoration: none; }
     h1 { margin: 0 0 8px; font-size: clamp(26px, 7vw, 34px); font-weight: 600; letter-spacing: -.01em; line-height: 1.12; }
     .lede { margin: 0 0 24px; color: var(--ic-muted); font-size: 14px; }
     .arena {
@@ -129,8 +132,8 @@
 </head>
 <body>
   <main class="wrap">
-    <p class="kicker">Лёд · __DAY_LABEL_UPPER__</p>
-    <h1>__CITY__</h1>
+    <p class="kicker"><a href="/">__BRAND__</a></p>
+    <h1>__H1__</h1>
     <p class="lede">__DESCRIPTION__</p>
     __BODY__
     <a class="cta" href="__CTA_URL__">То же расписание в Telegram</a>
