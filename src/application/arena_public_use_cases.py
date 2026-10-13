@@ -532,27 +532,6 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
     }
 
 
-def _unconfirmed_live_if_very_stale(
-    item: Mapping[str, Any], live: dict[str, Any], freshness: Mapping[str, Any]
-) -> dict[str, Any]:
-    """TASK-180: > 72 ч без удачного прогона — сеанс не выдаём за текущее расписание.
-
-    Ни дня, ни времени, ни цены: строка «Расписание не обновлялось N дней — уточните
-    по телефону», а сам каток остаётся в ленте (телефон и сайт — в карточке места).
-    """
-    from src.application.schedule_staleness import LEVEL_VERY_STALE, staleness_level, very_stale_note
-
-    if staleness_level(freshness) != LEVEL_VERY_STALE:
-        return live
-    note = very_stale_note(
-        freshness,
-        now=datetime.now(timezone.utc),
-        has_phone=bool(sanitize_public_phone(item.get("phone"))),
-        has_site=bool(str(item.get("website_url") or "").strip()),
-    )
-    return {"kind": "unconfirmed", "text": note, "currency_code": live.get("currency_code")}
-
-
 def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     hero = item.get("hero")
     thumb = None
@@ -566,8 +545,6 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
             card = variants.get("card") or variants.get("hero") or thumb
     live = _build_live(item, intent=intent, today=today)
     freshness = item.get("_freshness") or _schedule_freshness(item)
-    if live.get("kind") == "session":
-        live = _unconfirmed_live_if_very_stale(item, live, freshness)
     venue_type = normalize_venue_type(item.get("venue_type"))
     amenities = _as_mapping(item.get("amenities"))
     city_name = str(item.get("city_name") or "").strip()
@@ -1321,8 +1298,8 @@ async def city_selection_session_counts(
     городу, а на странице видно 12 карточек; окно ``?w=`` сужает счёт так же, как сам
     список. Фильтр — тот же, что у ``list_city_selection_places``.
 
-    Возвращаем по местам, а не суммой: страница не показывает сеансы мест, чьё расписание
-    не подтверждалось больше 72 ч, и счёт обязан совпадать с тем, что человек видит.
+    Возвращаем по местам, а не суммой: счёт обязан совпадать с тем, что человек видит
+    в карточках.
     """
     params: dict[str, Any] = {
         "city_id": int(city_id),
@@ -1698,9 +1675,6 @@ async def list_public_ice_arenas(
             row["distance_km"] = None
     sharpening_section = is_sharpening_section_keys(service_keys)
     if intent_value == INTENT_SKATE:
-        # TASK-180: очень устаревший каток не попадает «в окно» — его сеанс мы не
-        # показываем как ответ на «Сегодня вечером», он уходит к остальным с честной строкой.
-        _mark_unconfirmed_schedules(catalog_rows)
         # Центр по записи — не ответ на «где покататься». Фасеты ленты считаем без него.
         # В разделе «Заточка» он возвращается ниже, если у него заточка или профилирование.
         rows = [r for r in rows if not _is_hockey_center(r)]
@@ -1709,7 +1683,6 @@ async def list_public_ice_arenas(
     elif intent_value == INTENT_OHM:
         # Только катки с будущим ОХМ; МК-лента (intent=skate) сюда не заходит.
         rows = [r for r in rows if int(r.get("future_session_count") or 0) > 0 and not _is_hockey_center(r)]
-        _mark_unconfirmed_schedules(rows)
     # Фасеты считаем до фильтра типа, но без закрытого сезона: «Все места» и «Лёд»
     # — только то, чем можно пользоваться сейчас. «Зимой» — отдельный счётчик.
     today = _today_minsk()
@@ -1877,17 +1850,6 @@ _WINDOW_FIELDS = (
 )
 
 
-def _mark_unconfirmed_schedules(rows: list[dict[str, Any]]) -> None:
-    from src.application.schedule_staleness import LEVEL_VERY_STALE, staleness_level
-
-    for row in rows:
-        fresh = _schedule_freshness(row)
-        row["_freshness"] = fresh
-        if staleness_level(fresh) == LEVEL_VERY_STALE and row.get("next_session_id") is not None:
-            row["window_hit"] = False
-            row["outside_window"] = False
-
-
 def _apply_window(rows: list[dict[str, Any]]) -> None:
     """Есть сеанс в окне — карточка показывает его; нет — ближайший вне окна, с пометкой."""
     for row in rows:
@@ -1949,23 +1911,15 @@ async def get_hub_ice_teaser(
     if city_id is not None:
         params["city_id"] = int(city_id)
         city_filter = "  AND a.city_id = :city_id\n"
-    # TASK-180: арены, чей парсер не читал сайт успешно > 72 ч, на Главной не продаём —
-    # их сеансы больше не выдаём за расписание. > 6 ч — показываем с пометкой.
-    from src.application.schedule_staleness import (
-        LEVEL_STALE,
-        LEVEL_VERY_STALE,
-        load_arena_freshness,
-        staleness_level,
-    )
+    # TASK-180: флаг ``schedule_stale`` — для внутреннего использования. Сеансы арен
+    # с давним прогоном (> 72 ч) показываем как обычно (решение владельца, TASK-243).
+    from src.application.schedule_staleness import LEVEL_FRESH, load_arena_freshness, staleness_level
 
     job_arena_ids = (
         await session.execute(text("SELECT arena_id FROM ice_parser_jobs WHERE is_enabled"))
     ).scalars().all()
     job_fresh = await load_arena_freshness(session, job_arena_ids, now=now)
-    params["unconfirmed_ids"] = [
-        aid for aid, fr in job_fresh.items() if staleness_level(fr) == LEVEL_VERY_STALE
-    ]
-    stale_ids = {aid for aid, fr in job_fresh.items() if staleness_level(fr) == LEVEL_STALE}
+    stale_ids = {aid for aid, fr in job_fresh.items() if staleness_level(fr) != LEVEL_FRESH}
     # TASK-148 (AC-4): «Сегодня на льду» — вместе с тизером отдаём до 4 ближайших
     # сеансов (тизер — первый), чтобы хаб рисовал блок без нового эндпоинта и без
     # второго раунд-трипа. Раньше был LATERAL LIMIT 1 по аренам + внешний LIMIT 1:
@@ -1994,7 +1948,6 @@ LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 WHERE {_CURRENT_SESSION_SQL}
   AND {PUBLIC_ARENA_VISIBLE_SQL}
-  AND NOT (a.id = ANY(:unconfirmed_ids))
   AND {arena_schedule_mode_sql()} <> 'season_closed'
 {city_filter}ORDER BY s.starts_at_utc, a.id
 LIMIT 4

@@ -59,11 +59,9 @@ from src.shared.arena_schedule_mode import (
 )
 from src.application.schedule_staleness import (
     LEVEL_FRESH,
-    LEVEL_VERY_STALE,
     load_arena_freshness,
     stale_note,
     staleness_level,
-    very_stale_note,
 )
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
@@ -353,19 +351,11 @@ async def load_place_view(
             date_from=today,
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
-        # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API).
+        # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API). Сеансы не
+        # снимаем ни на каком уровне — решение владельца (TASK-243).
         fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
         level = staleness_level(fresh)
-        if level == LEVEL_VERY_STALE:
-            # > 72 ч без удачного прогона: сеансы не выдаём за расписание вовсе.
-            lookup_days = []
-            schedule_note = very_stale_note(
-                fresh,
-                now=now,
-                has_phone=bool(str(card.get("phone") or "").strip()),
-                has_site=bool(str(card.get("tickets_url") or card.get("website_url") or "").strip()),
-            )
-        elif lookup_days:
+        if lookup_days:
             schedule_note = stale_note(fresh, now=now)
 
     focus = None
@@ -379,13 +369,12 @@ async def load_place_view(
                     focus = slot
         # Ссылку открыли позже, чем сеанс начался (или он за пределами недели) — это
         # нормальная жизнь пересланной ссылки, а не ошибка. Говорим как есть.
-        # Расписание не подтверждено (> 72 ч) — не говорим «сеанс прошёл», говорим про расписание.
-        focus_missing = focus is None and level != LEVEL_VERY_STALE
+        focus_missing = focus is None
 
     all_slots = [s for d in days for s in d.get("sessions") or []]
     next_slot = all_slots[0] if all_slots else None
     ohm_days: list[dict[str, Any]] = []
-    if _skating(card) and level != LEVEL_VERY_STALE:
+    if _skating(card):
         ohm_lookup = await public_arena_session_days(
             session,
             int(card["id"]),
@@ -400,7 +389,7 @@ async def load_place_view(
                 for slot in day.get("sessions") or []:
                     if int(slot["id"]) == int(session_id):
                         focus = slot
-            focus_missing = focus is None and level != LEVEL_VERY_STALE
+            focus_missing = focus is None
     return {
         "card": card,
         "days": days,
@@ -677,9 +666,6 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
     focus = view.get("focus")
     focus_id = int(focus["id"]) if focus is not None else None
     note = str(view.get("schedule_note") or "").strip()
-    if view.get("schedule_level") == LEVEL_VERY_STALE:
-        # Сеансы не выдаём за расписание. Оговорку «уточните» на сайте не пишем.
-        return ""
     if not days:
         phone = str(card.get("phone") or "").strip()
         hint = (

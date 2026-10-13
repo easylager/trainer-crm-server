@@ -34,14 +34,11 @@ _PHONE_GUARD_SHORT = "123-456"
 _PHONE_GUARD_VALID = "+375 29 123-45-67"
 
 
-def _ice_day_unconfirmed_row(html: str, arena_name: str) -> str:
-    m = re.search(
-        rf"<li><b>(?:<a[^>]*>)?{re.escape(arena_name)}(?:</a>)?</b>.*?</li>",
-        html,
-        re.DOTALL,
-    )
-    assert m, f"unconfirmed row for {arena_name!r} missing"
-    return m.group(0)
+def _ice_day_arena_block(html: str, arena_name: str) -> str:
+    for block in re.findall(r'<article class="arena".*?</article>', html, re.DOTALL):
+        if arena_name in block:
+            return block
+    raise AssertionError(f"arena block for {arena_name!r} missing")
 
 
 def _assert_invalid_phone_ssr(fragment: str, raw_phone: str) -> None:
@@ -395,7 +392,7 @@ async def test_ice_today_og_is_absolute_and_the_page_stays_light(
 
 @pytest.mark.asyncio
 async def test_ice_city_day_ssr_phone_guard(app_use_test_db, db_session) -> None:
-    """TASK-207: невалидные телефоны не попадают в SSR «лёд сегодня» (блок не подтверждено)."""
+    """TASK-207/243: «очень старые» катки — в обычном списке дня; невалидные телефоны в SSR не попадают."""
     now = datetime.now(timezone.utc).replace(microsecond=0)
     stale_at = now - timedelta(hours=80)
     city_label = f"Телдень{uuid.uuid4().hex[:6]}"
@@ -414,8 +411,11 @@ async def test_ice_city_day_ssr_phone_guard(app_use_test_db, db_session) -> None
         page = await client.get(f"/ice/{city_slug(city_label)}/today")
     assert page.status_code == 200, page.text
     html = page.text
-    _assert_invalid_phone_ssr(_ice_day_unconfirmed_row(html, "Каток без связи"), _PHONE_GUARD_UNKNOWN)
-    _assert_invalid_phone_ssr(_ice_day_unconfirmed_row(html, "Каток короткий"), _PHONE_GUARD_SHORT)
-    valid_row = _ice_day_unconfirmed_row(html, "Каток валидный")
-    assert 'href="tel:+375291234567"' in valid_row
-    assert "уточн" not in valid_row.casefold()
+    assert 'class="unconfirmed' not in html
+    assert "не подтвержд" not in html.casefold()
+    for arena_name, phone in cases:
+        block = _ice_day_arena_block(html, arena_name)
+        assert 'class="slots"' in block, arena_name
+        if phone != _PHONE_GUARD_VALID:
+            _assert_invalid_phone_ssr(block, phone)
+    assert _PHONE_GUARD_UNKNOWN not in html and _PHONE_GUARD_SHORT not in html

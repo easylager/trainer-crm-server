@@ -25,11 +25,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.ice_session_use_cases import STATUS_ACTIVE
 from src.application.schedule_staleness import (
     LEVEL_STALE,
-    LEVEL_VERY_STALE,
     load_arena_freshness,
     stale_note,
     staleness_level,
-    very_stale_note,
 )
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.ice_discovery_scope import (
@@ -38,7 +36,6 @@ from src.shared.ice_discovery_scope import (
     public_city_scope_sql,
     public_scope_params,
 )
-from src.shared.phone_guard import sanitize_public_phone
 
 DEFAULT_TIMEZONE = "Europe/Minsk"
 
@@ -295,8 +292,7 @@ async def count_sessions_on_local_calendar_day_by_city(
 ) -> dict[int, int]:
     """Сеансы на календарный «сегодня» города (как на /ice/{{city}}/today при ``is_today``).
 
-    Один запрос по аренам + один ``load_arena_freshness``; very_stale арены не считаем,
-    как ``_load_day_checked``.
+    Один запрос по аренам. Свежесть расписания на счёт не влияет (TASK-243).
     """
     if not city_ids:
         return {}
@@ -311,15 +307,10 @@ async def count_sessions_on_local_calendar_day_by_city(
             },
         )
     ).mappings().all()
-    arena_ids = [int(r["arena_id"]) for r in rows if int(r["session_count"] or 0) > 0]
-    fresh = await load_arena_freshness(session, arena_ids, now=now) if arena_ids else {}
     totals: dict[int, int] = {}
     for row in rows:
-        aid = int(row["arena_id"])
         cnt = int(row["session_count"] or 0)
         if cnt <= 0:
-            continue
-        if staleness_level(fresh.get(aid)) == LEVEL_VERY_STALE:
             continue
         cid = int(row["city_id"])
         totals[cid] = totals.get(cid, 0) + cnt
@@ -440,35 +431,15 @@ def _group_by_arena(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 async def _load_day_checked(
     session: AsyncSession, *, city_id: int, day: date, now: datetime
-) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]], dict[int, dict[str, Any]]]:
-    """Сеансы дня, разделённые по свежести расписания арены (TASK-180).
+) -> tuple[list[Mapping[str, Any]], dict[int, dict[str, Any]]]:
+    """Сеансы дня и свежесть расписания их арен (TASK-180).
 
-    Арена, чей парсер не читал сайт успешно дольше 72 ч, в список дня не попадает:
-    её сеансы больше не выдаём за расписание, она уходит в «Расписание не подтверждено».
+    Свежесть только помечает арену (``stale``), сеансы не снимает ни на каком уровне:
+    решение владельца, TASK-243.
     """
     rows = await _load_day(session, city_id=city_id, day=day, now=now)
     fresh = await load_arena_freshness(session, {int(r["arena_id"]) for r in rows}, now=now)
-    shown: list[Mapping[str, Any]] = []
-    unconfirmed: dict[int, dict[str, Any]] = {}
-    for row in rows:
-        aid = int(row["arena_id"])
-        level = staleness_level(fresh.get(aid))
-        if level != LEVEL_VERY_STALE:
-            shown.append(row)
-            continue
-        if aid not in unconfirmed:
-            sanitized_phone = sanitize_public_phone(row.get("phone"))
-            site = str(row["tickets_url"] or row["website_url"] or "").strip()
-            unconfirmed[aid] = {
-                "arena_id": aid,
-                "name": row["arena_name"],
-                "slug": row["arena_slug"],
-                "phone": sanitized_phone,
-                "note": very_stale_note(
-                    fresh.get(aid), now=now, has_phone=bool(sanitized_phone), has_site=bool(site)
-                ),
-            }
-    return shown, list(unconfirmed.values()), fresh
+    return rows, fresh
 
 
 async def get_city_ice_day(
@@ -485,21 +456,18 @@ async def get_city_ice_day(
     сказать «на сегодня сеансов нет», а не притворяться, что данные ещё грузятся.
     Поле ``is_today`` говорит, какой день в итоге показан, чтобы заголовок не врал.
 
-    TASK-180: у арены с устаревшим расписанием (> 6 ч) — ``stale_note``; арены
-    без удачного прогона > 72 ч исключены из дня и перечислены в ``unconfirmed``.
+    TASK-180: у арены с устаревшим расписанием (> 6 ч) — ``stale_note`` (пустой).
     """
     tz_name = await _city_timezone(session, city_id)
     now = now or datetime.now(timezone.utc)
     today = _local_today(tz_name, now)
 
     day = on_date or today
-    rows, unconfirmed, fresh = await _load_day_checked(session, city_id=city_id, day=day, now=now)
+    rows, fresh = await _load_day_checked(session, city_id=city_id, day=day, now=now)
     fell_through = False
-    # TASK-180: если сегодня сеансы есть, но все — у арен с неподтверждённым расписанием,
-    # день остаётся сегодняшним: список «Расписание не подтверждено» и есть ответ на сегодня.
-    if not rows and not unconfirmed and on_date is None:
+    if not rows and on_date is None:
         day = today + timedelta(days=1)
-        rows, unconfirmed, fresh = await _load_day_checked(
+        rows, fresh = await _load_day_checked(
             session, city_id=city_id, day=day, now=now
         )
         fell_through = True
@@ -530,7 +498,6 @@ async def get_city_ice_day(
         "arena_count": len(arenas),
         "session_count": sessions_total,
         "stale_arena_count": sum(1 for a in arenas if a["stale"]),
-        "unconfirmed": unconfirmed,
         "price_min_minor": min(prices) if prices else None,
         "price_max_minor": max(prices) if prices else None,
         "currency_code": currency,

@@ -33,7 +33,6 @@ from src.application.catalog_home_page import _USER_UPCOMING_SQL, _format_date_s
 from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, format_price_minor, human_date, plural_ru
 from src.application.ice_time_windows import home_default_when_key, resolve_window
 from src.application.place_links import catalog_start_param, join_public_origin, place_path, public_telegram_cta_url
-from src.application.schedule_staleness import LEVEL_VERY_STALE, load_arena_freshness, staleness_level
 from src.shared.catalog_sharpening import row_in_sharpening_section
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.copy_ru import t
@@ -91,7 +90,6 @@ _NEXT_OHM_SQL = text(
     WHERE a.city_id = :city_id
       AND {PUBLIC_ARENA_VISIBLE_SQL}
       AND {_NOT_HOCKEY_CENTER_SQL}
-      AND NOT (a.id = ANY(:very_stale_ids))
       AND {_OHM_SESSION_SQL}
     ORDER BY s.starts_at_utc, s.id
     LIMIT 1
@@ -240,9 +238,6 @@ async def load_city_hub_view(
         .mappings()
         .all()
     )
-    arena_ids = sorted({int(r["arena_id"]) for r in count_rows})
-    fresh = await load_arena_freshness(session, arena_ids, now=now) if arena_ids else {}
-    very_stale = {aid for aid, item in fresh.items() if staleness_level(item) == LEVEL_VERY_STALE}
 
     skate = {k: 0 for k in (*_WINDOW_KEYS, "all")}
     ohm = {k: 0 for k in (*_WINDOW_KEYS, "all")}
@@ -250,8 +245,6 @@ async def load_city_hub_view(
     ohm_arenas: set[int] = set()
     for row in count_rows:
         aid = int(row["arena_id"])
-        if aid in very_stale:
-            continue
         target = ohm if row.get("is_ohm") else skate
         for key in (*_WINDOW_KEYS, "all"):
             target[key] += int(row.get(f"{key}_n") or 0)
@@ -269,7 +262,6 @@ async def load_city_hub_view(
                     "now": now,
                     "st": STATUS_ACTIVE,
                     "lim": _UPCOMING_FETCH,
-                    "very_stale_ids": sorted(very_stale) or [-1],
                     **scope,
                 },
             )
@@ -295,7 +287,7 @@ async def load_city_hub_view(
             (
                 await session.execute(
                     _NEXT_OHM_SQL,
-                    {"city_id": city_id, "now": now, "st": STATUS_ACTIVE, "very_stale_ids": sorted(very_stale) or [-1], **scope},
+                    {"city_id": city_id, "now": now, "st": STATUS_ACTIVE, **scope},
                 )
             )
             .mappings()

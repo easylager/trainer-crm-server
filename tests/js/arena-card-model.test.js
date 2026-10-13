@@ -560,19 +560,27 @@ describe('focusState (TASK-223)', () => {
     );
   });
 
-  it('unconfirmed instead of gone when schedule is very stale', () => {
+  it('TASK-243: very stale schedule does not change focus — found or gone as usual', () => {
     const { focusState } = loadModel();
-    assert.deepEqual(
-      focusState({
-        focusSessionId: '99',
-        days,
-        freshness: { schedule_stale: true, schedule_very_stale: true },
-        sessionsLoaded: true,
-        todayIso: today,
-        now,
-      }),
-      { kind: 'unconfirmed', focusSessionId: '99' }
-    );
+    const freshness = { schedule_stale: true, schedule_very_stale: true };
+    const found = focusState({
+      focusSessionId: '7',
+      days,
+      freshness,
+      sessionsLoaded: true,
+      todayIso: today,
+      now,
+    });
+    assert.equal(found.kind, 'found');
+    const gone = focusState({
+      focusSessionId: '99',
+      days,
+      freshness,
+      sessionsLoaded: true,
+      todayIso: today,
+      now,
+    });
+    assert.equal(gone.kind, 'gone');
   });
 });
 
@@ -980,35 +988,30 @@ describe('TASK-146: карточка открывается на дне и се�
   });
 });
 
-describe('TASK-180: устаревшее расписание в карточке', () => {
-  it('schedule_stale — без баннера, слоты остаются', () => {
-    const { staleScheduleNote, shouldWarnScheduleStale, iceFeedView } = loadModel();
+describe('TASK-180/243: свежесть расписания не меняет карточку', () => {
+  it('stale и very_stale — лента сеансов как обычно, без баннера', () => {
+    const M = loadModel();
+    assert.equal(M.staleScheduleNote, undefined);
+    assert.equal(M.shouldWarnScheduleStale, undefined);
     const now = new Date('2026-10-02T10:00:00Z');
-    const fresh = {
+    const stale = {
       schedule_stale: true,
       schedule_very_stale: false,
       schedule_observed_at: '2026-10-01T11:00:00Z',
     };
-    assert.equal(shouldWarnScheduleStale(fresh), false);
-    assert.equal(staleScheduleNote(fresh, now), '');
-    const feed = iceFeedView({ card: { freshness: fresh, tier: 'A' }, hasSessions: true });
-    assert.equal(feed.mode, 'ribbon');
-  });
-
-  it('schedule_very_stale — не показываем ленту сеансов', () => {
-    const { iceFeedView } = loadModel();
     const very = {
       schedule_stale: true,
       schedule_very_stale: true,
       schedule_observed_at: '2026-09-28T10:00:00Z',
     };
-    const feed = iceFeedView({
-      card: { freshness: very, tier: 'A', phone: '+375 17 1' },
-      hasSessions: true,
-      now: new Date('2026-10-02T10:00:00Z'),
-    });
-    assert.equal(feed.mode, 'unconfirmed');
-    assert.match(feed.banner, /не обновлялось/);
+    for (const freshness of [stale, very]) {
+      const feed = M.iceFeedView({
+        card: { freshness, tier: 'A', phone: '+375 17 1' },
+        hasSessions: true,
+        now,
+      });
+      assert.deepEqual(feed, { mode: 'ribbon', banner: null, showRibbon: true });
+    }
   });
 });
 

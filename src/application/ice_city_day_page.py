@@ -23,11 +23,9 @@ from src.application.ice_city_day import (
     summary_line,
 )
 from src.application.place_links import join_public_origin, place_path
-from src.application.schedule_staleness import UNCONFIRMED_HEADING
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
-from src.shared.phone_guard import is_valid_public_phone, tel_href
-from src.shared.public_display import format_phone_display, format_public_name, format_street_address
+from src.shared.public_display import format_public_name, format_street_address
 from src.shared.schedule_basis import public_basis_css_class
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
@@ -90,32 +88,6 @@ def _arena_html(arena: Mapping[str, Any], *, city_name: str = "") -> str:
     parts.append(_basis_note_html(sessions))
     parts.append("</article>")
     return "".join(parts)
-
-
-def _unconfirmed_html(items: list[Mapping[str, Any]], *, city_name: str) -> str:
-    """TASK-180: катки, чьё расписание > 72 ч не подтверждалось, — не в списке дня, а здесь."""
-    if not items:
-        return ""
-    rows = []
-    for item in items:
-        name = _esc(format_public_name(str(item.get("name") or "")))
-        slug = str(item.get("slug") or "").strip()
-        if slug and city_name:
-            name = f'<a href="{_esc(place_path(city_name=city_name, slug=slug))}">{name}</a>'
-        phone = str(item.get("phone") or "").strip()
-        phone_html = ""
-        if phone and is_valid_public_phone(phone):
-            phone_html = f' · <a href="tel:{_esc(tel_href(phone))}">{_esc(format_phone_display(phone))}</a>'
-        note = str(item.get("note") or "")
-        if "уточн" in note.casefold():
-            note = ""
-        note_html = f" — {_esc(note)}" if note else ""
-        rows.append(f"<li><b>{name}</b>{note_html}{phone_html}</li>")
-    return (
-        '<section class="unconfirmed">'
-        f'<p class="unconfirmed__title">{_esc(UNCONFIRMED_HEADING)}</p>'
-        f"<ul>{''.join(rows)}</ul></section>"
-    )
 
 
 def _empty_html(city_name: str, day_label: str) -> str:
@@ -213,7 +185,6 @@ def render_ice_city_day_page(
         body = "".join(_arena_html(a, city_name=city_name) for a in arenas)
     else:
         body = _empty_html(shown_city, day_label)
-    body += _unconfirmed_html(list(day.get("unconfirmed") or []), city_name=city_name)
 
     session_count = int(day.get("session_count") or 0)
     if session_count:

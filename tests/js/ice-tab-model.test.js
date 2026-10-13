@@ -1628,7 +1628,7 @@ describe('TASK-180: устаревшее расписание в ленте', ()
   });
 });
 
-describe('TASK-180: очень устаревшее расписание в ленте (> 72 ч)', () => {
+describe('TASK-180/243: очень устаревшее расписание в ленте (> 72 ч) — как обычно', () => {
   const now = new Date('2026-10-06T10:00:00Z');
   const base = {
     id: 1,
@@ -1651,46 +1651,32 @@ describe('TASK-180: очень устаревшее расписание в ле
     },
   };
 
-  it('старый ответ API (kind=session) не показывает день, время и цену как текущие', () => {
+  it('TASK-243: сеанс показываем как обычно — день, время, цена', () => {
     const { boardCardView } = loadModel();
     const v = boardCardView(base, now, {});
-    assert.equal(v.isSession, false);
-    assert.equal(v.veryStale, true);
-    assert.equal(v.day, '');
-    assert.equal(v.time, '');
-    assert.equal(v.prices, '');
-    assert.equal(v.sessionId, null);
-    assert.equal(v.status, 'Расписание не обновлялось 4 дня — уточните по телефону');
-    assert.doesNotMatch(v.depth, /сеанс/);
-  });
-
-  it('kind=unconfirmed от сервера — берём его строку', () => {
-    const { boardCardView, formatLiveLine } = loadModel();
-    const item = {
-      ...base,
-      live: { kind: 'unconfirmed', text: 'Расписание не обновлялось 5 дней — уточните по телефону' },
-    };
-    const v = boardCardView(item, now, {});
-    assert.equal(v.isSession, false);
-    assert.equal(v.status, 'Расписание не обновлялось 5 дней — уточните по телефону');
-    assert.equal(formatLiveLine(item, now), 'Расписание не обновлялось 5 дней — уточните по телефону');
-  });
-
-  it('не отвечает на выбранное окно и не помечается «могло измениться»', () => {
-    const { boardCardView, splitByWindow } = loadModel();
-    const parts = splitByWindow([base], 'today_evening');
-    assert.equal(parts.hits.length, 0);
-    assert.equal(parts.rest.length, 1);
-    const v = boardCardView(base, now, {});
+    assert.equal(v.isSession, true);
+    assert.equal(v.veryStale, undefined);
+    assert.equal(v.time, '18:00');
+    assert.notEqual(v.day, '');
+    assert.match(v.prices, /10/);
+    assert.equal(v.sessionId, 3);
+    assert.equal(v.status, '');
     assert.equal(v.stale, false);
-    assert.doesNotMatch(v.depth, /могло измениться/);
+    assert.doesNotMatch(JSON.stringify(v), /не обновлялось|не подтвержд|уточн|могло измениться/);
   });
 
-  it('formatLiveLine для сеанса с very_stale — строка «не обновлялось», без времени', () => {
+  it('TASK-243: отвечает на выбранное окно, как свежий', () => {
+    const { splitByWindow } = loadModel();
+    const parts = splitByWindow([base], 'today_evening');
+    assert.equal(parts.hits.length, 1);
+    assert.equal(parts.rest.length, 0);
+  });
+
+  it('TASK-243: formatLiveLine — время сеанса, без строки о свежести', () => {
     const { formatLiveLine } = loadModel();
     const line = formatLiveLine(base, now);
-    assert.match(line, /не обновлялось 4 дня/);
-    assert.doesNotMatch(line, /18:00/);
+    assert.match(line, /18:00/);
+    assert.doesNotMatch(line, /не обновлялось|не подтвержд|уточн/);
   });
 });
 

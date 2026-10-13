@@ -173,15 +173,11 @@ describe('AC-4 catalog models avoid device getHours/getDay/toISOString date slic
 });
 
 describe('staleness «N дней» uses Minsk calendar', () => {
-  it('veryStaleNote counts days in Minsk', () => {
+  it('minskDaysBetween counts days in Minsk', () => {
     const S = load('schedule-staleness-model.js');
     const now = new Date('2026-10-06T20:00:00Z');
     const observed = new Date('2026-10-04T10:00:00Z');
-    const note = S.veryStaleNote(
-      { schedule_stale: true, schedule_very_stale: true, schedule_observed_at: observed.toISOString() },
-      now,
-      { hasPhone: true }
-    );
-    assert.match(note, /2 дня/);
+    assert.equal(S.minskDaysBetween(observed, now), 2);
+    assert.equal(S.pluralDays(2), '2 дня');
   });
 });

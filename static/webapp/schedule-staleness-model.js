@@ -1,5 +1,6 @@
 /**
- * TASK-180: тексты и даты устаревания расписания — в паре с src/application/schedule_staleness.py.
+ * TASK-180: уровни и даты устаревания расписания — в паре с src/application/schedule_staleness.py.
+ * TASK-243: публичный UI на уровень не реагирует — сеансы показываем как есть.
  * Browser: window.ScheduleStalenessModel. Node tests: module.exports.
  */
 (function (root, factory) {
@@ -60,26 +61,8 @@
     return 'stale';
   }
 
-  function askTail(opts) {
-    opts = opts || {};
-    if (opts.hasPhone) return ' — уточните по телефону';
-    if (opts.hasSite) return ' — уточните на сайте катка';
-    return ' — уточните у катка';
-  }
-
   function staleNote() {
     return '';
-  }
-
-  function veryStaleNote(freshness, now, opts) {
-    opts = opts || {};
-    if (stalenessLevel(freshness) !== 'very_stale') return '';
-    var hasPhone = opts.hasPhone !== undefined ? opts.hasPhone : true;
-    var tail = askTail({ hasPhone: hasPhone, hasSite: !!opts.hasSite });
-    var observed = parseDt((freshness || {}).schedule_observed_at);
-    if (!observed) return 'Расписание не подтверждено' + tail;
-    var days = Math.max(1, minskDaysBetween(observed, now));
-    return 'Расписание не обновлялось ' + pluralDays(days) + tail;
   }
 
   function shouldWarnScheduleStale() {
@@ -99,7 +82,6 @@
     pluralDays: pluralDays,
     stalenessLevel: stalenessLevel,
     staleNote: staleNote,
-    veryStaleNote: veryStaleNote,
     shouldWarnScheduleStale: shouldWarnScheduleStale,
     scheduleStaleFlag: scheduleStaleFlag,
   };

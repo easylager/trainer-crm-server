@@ -24,20 +24,24 @@ describe('TASK-180 schedule staleness (AC-3)', () => {
     assert.equal(checkedAtLabel('2026-10-05T20:50:00.000Z', now), 'вчера в 23:50');
   });
 
-  it('stale and very_stale notes match backend wording', () => {
-    const { staleNote, veryStaleNote } = loadModel();
+  it('TASK-243: level is computed, but no wording for stale or very_stale', () => {
+    const S = loadModel();
     const now = new Date('2026-10-06T06:00:00.000Z');
     const stale = {
       schedule_stale: true,
       schedule_very_stale: false,
       schedule_observed_at: '2026-10-05T15:40:00.000Z',
     };
-    assert.equal(staleNote(stale, now), '');
     const very = {
       schedule_stale: true,
       schedule_very_stale: true,
       schedule_observed_at: '2026-10-02T09:00:00.000Z',
     };
-    assert.equal(veryStaleNote(very, now, { hasPhone: true }), 'Расписание не обновлялось 4 дня — уточните по телефону');
+    assert.equal(S.stalenessLevel(stale), 'stale');
+    assert.equal(S.stalenessLevel(very), 'very_stale');
+    assert.equal(S.staleNote(stale, now), '');
+    assert.equal(S.staleNote(very, now), '');
+    assert.equal(S.shouldWarnScheduleStale(very), false);
+    assert.equal(S.veryStaleNote, undefined);
   });
 });

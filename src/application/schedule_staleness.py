@@ -9,8 +9,8 @@
 * ``fresh`` — показываем как есть;
 * ``stale`` (> 6 ч без удачного прогона) — сеансы показываем как есть.
   Каталог не пишет, что расписание могло измениться: показанное время и есть ответ;
-* ``very_stale`` (> 72 ч) — сеансы **не** выдаём за расписание:
-  «Расписание не обновлялось 4 дня — уточните по телефону».
+* ``very_stale`` (> 72 ч) — тоже показываем как есть (решение владельца, TASK-243).
+  Уровень остаётся в данных и алертах; публичный UI на него не реагирует.
 
 Арены без парсера (ручные сеансы) всегда ``fresh`` — так решено в TASK-180.
 Все даты — по Минску. Те же строки собирает фронт (``arena-card-model.js``,
@@ -38,7 +38,6 @@ _MONTHS_SHORT = ("янв", "фев", "мар", "апр", "мая", "июн", "и
 
 # Короткая метка для каталога. Пустая: показанное расписание не сопровождаем оговоркой.
 STALE_SHORT = ""
-UNCONFIRMED_HEADING = "Расписание не подтверждено"
 
 
 def _parse_dt(value: Any) -> datetime | None:
@@ -104,28 +103,6 @@ def stale_note(freshness: Mapping[str, Any] | None, *, now: datetime) -> str:
     return ""
 
 
-def _ask_tail(*, has_phone: bool, has_site: bool) -> str:
-    if has_phone:
-        return " — уточните по телефону"
-    if has_site:
-        return " — уточните на сайте катка"
-    return " — уточните у катка"
-
-
-def very_stale_note(
-    freshness: Mapping[str, Any] | None,
-    *,
-    now: datetime,
-    has_phone: bool = True,
-    has_site: bool = False,
-) -> str:
-    """Сеансы старше порога прячем. Заголовок без просьбы «уточните»."""
-    del now, has_phone, has_site
-    if staleness_level(freshness) != LEVEL_VERY_STALE:
-        return ""
-    return UNCONFIRMED_HEADING
-
-
 async def load_arena_freshness(
     session: AsyncSession, arena_ids: Iterable[int], *, now: datetime
 ) -> dict[int, dict[str, Any]]:
@@ -180,11 +157,9 @@ __all__ = [
     "LEVEL_STALE",
     "LEVEL_VERY_STALE",
     "STALE_SHORT",
-    "UNCONFIRMED_HEADING",
     "checked_at_label",
     "load_arena_freshness",
     "minsk_days_between",
     "stale_note",
     "staleness_level",
-    "very_stale_note",
 ]

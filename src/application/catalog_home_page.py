@@ -30,7 +30,6 @@ from src.application.place_links import (
     place_path,
     public_telegram_cta_url,
 )
-from src.application.schedule_staleness import LEVEL_VERY_STALE, load_arena_freshness, staleness_level
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.catalog_sharpening import SHARPENING_MONTH_PARAM, SHARPENING_SECTION_SQL
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
@@ -172,8 +171,7 @@ _MAP_TAP_RADIUS_MAJOR = 37.0
 _MAP_TAP_RADIUS_MINOR = 28.0
 
 # Одна строка на арену: места считаем в Python, сеансы — тем же предикатом, что «лёд сегодня».
-# Окно (:starts_at…:ends_at) и горизонт блока «Ближайшие» (:horizon_end) режутся здесь,
-# very_stale отбрасывается после load_arena_freshness — как count_sessions_on_local_calendar_day_by_city.
+# Окно (:starts_at…:ends_at) и горизонт блока «Ближайшие» (:horizon_end) режутся здесь.
 _CITY_STATS_SQL = text(
     f"""
     SELECT c.id,
@@ -203,7 +201,7 @@ _CITY_STATS_SQL = text(
 )
 
 # TASK-224: факты для плитки города и строки «ваш город» — одним запросом на все города.
-# Ближайший сеанс МК и ближайший ОХМ (в горизонте недели), без сверхстарых арен.
+# Ближайший сеанс МК и ближайший ОХМ (в горизонте недели).
 _CITY_NEXT_SQL = text(
     f"""
 SELECT DISTINCT ON (a.city_id, (s.kind = 'hockey_practice'))
@@ -215,7 +213,6 @@ SELECT DISTINCT ON (a.city_id, (s.kind = 'hockey_practice'))
        COALESCE(p.timezone, '{DEFAULT_TIMEZONE}') AS tz
 {ICE_CITY_DAY_FROM_SQL}
 WHERE a.city_id = ANY(:city_ids)
-  AND NOT (a.id = ANY(:very_stale_ids))
   AND {PUBLIC_ARENA_VISIBLE_SQL}
   AND {arena_schedule_mode_sql()} <> 'season_closed'
   AND s.status = :st
@@ -311,7 +308,6 @@ JOIN city_clock cc ON cc.city_id = a.city_id
 WHERE a.city_id = :user_city_id
   AND s.starts_at_utc >= :starts_at
   AND s.starts_at_utc < :ends_at
-  AND NOT (a.id = ANY(:very_stale_ids))
   {ICE_CITY_DAY_SESSION_WHERE_SQL}
 ORDER BY s.starts_at_utc, s.id
 LIMIT :lim
@@ -642,7 +638,7 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
     return "".join(parts)
 
 
-def _fold_arena_rows(rows: list[Mapping[str, Any]], *, very_stale: set[int]) -> list[dict[str, Any]]:
+def _fold_arena_rows(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     buckets: dict[int, dict[str, Any]] = {}
     order: list[int] = []
     for row in rows:
@@ -680,10 +676,8 @@ def _fold_arena_rows(rows: list[Mapping[str, Any]], *, very_stale: set[int]) -> 
         place_slug = str(row.get("place_slug") or "").strip()
         if place_slug:
             city["_slugs"].append(place_slug)
-        aid = int(row["arena_id"])
-        stale = aid in very_stale
-        window_n = 0 if stale else int(row.get("window_sessions") or 0)
-        horizon_n = 0 if stale else int(row.get("horizon_sessions") or 0)
+        window_n = int(row.get("window_sessions") or 0)
+        horizon_n = int(row.get("horizon_sessions") or 0)
         city["session_count"] += window_n
         if window_n > 0:
             city["arenas_with_sessions"] += 1
@@ -740,7 +734,6 @@ async def _attach_city_facts(
     *,
     now: datetime,
     horizon_end: datetime,
-    very_stale: set[int],
 ) -> None:
     """Дописывает в каждый город ``next_skate``, ``next_ohm``, ``has_ohm``, ``has_sharpening``, ``has_trainers``.
 
@@ -762,7 +755,6 @@ async def _attach_city_facts(
                 _CITY_NEXT_SQL,
                 {
                     "city_ids": city_ids,
-                    "very_stale_ids": sorted(very_stale) or [-1],
                     "now": now,
                     "horizon_end": horizon_end,
                     "st": STATUS_ACTIVE,
@@ -889,14 +881,7 @@ async def load_catalog_home_view(
         .all()
     )
 
-    session_arena_ids = [
-        int(row["arena_id"])
-        for row in stats_rows
-        if int(row.get("window_sessions") or 0) > 0 or int(row.get("horizon_sessions") or 0) > 0
-    ]
-    fresh = await load_arena_freshness(session, session_arena_ids, now=now) if session_arena_ids else {}
-    very_stale = {aid for aid, item in fresh.items() if staleness_level(item) == LEVEL_VERY_STALE}
-    catalog_cities = _fold_arena_rows(list(stats_rows), very_stale=very_stale)
+    catalog_cities = _fold_arena_rows(list(stats_rows))
 
     city_groups = group_catalog_cities_by_country(catalog_cities)
     catalog_cities = [city for _, group in city_groups for city in group]
@@ -916,7 +901,6 @@ async def load_catalog_home_view(
         catalog_cities,
         now=now,
         horizon_end=horizon_end,
-        very_stale=very_stale,
     )
     has_hockey = any(bool(c.get("has_ohm")) for c in catalog_cities)
     countries = {str(c.get("country") or "") for c in catalog_cities}
