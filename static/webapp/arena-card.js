@@ -924,6 +924,16 @@
     return scheduleSlots().some(function (s) { return String(s.id) === id; });
   }
 
+  /** Заголовок блока сеансов катка: «Массовое катание», не «Расписание» — так же, как на сайте. */
+  function iceSectionTitle() {
+    var GC = global.GlideCopy;
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t('kind.public_skate');
+      if (label && label !== 'kind.public_skate') return String(label);
+    }
+    return 'Массовое катание';
+  }
+
   function ohmChipTitle() {
     var GC = global.GlideCopy;
     if (GC && typeof GC.t === 'function') {
@@ -997,11 +1007,22 @@
         (next ? '<button type="button" class="linkish" data-day-jump="' + esc(next.iso) + '">Ближайший — ' + esc(next.top.toLowerCase() === 'завтра' ? 'завтра' : next.top + ' ' + next.num) + ' →</button>' : '') +
         '</div>';
     }
+    var sectionTitle = iceSectionTitle();
     view.groups.forEach(function (g) {
+      /* Заголовок блока уже говорит «Массовое катание». На карточке слота остаётся
+         только своё имя (малая/большая арена, «Свободный лёд»), без повтора. */
+      var ownTitle = g.title && g.title !== sectionTitle ? g.title : '';
+      var head = '';
+      if (ownTitle || g.duration) {
+        head =
+          '<div class="arena-show__head">' +
+          (ownTitle ? '<b>' + esc(ownTitle) + '</b>' : '') +
+          (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') +
+          '</div>';
+      }
       html +=
         '<div class="arena-show">' +
-        '<div class="arena-show__head"><b>' + esc(g.title) + '</b>' +
-        (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') + '</div>' +
+        head +
         (g.prices.length
           ? '<div class="arena-show__prices">' + g.prices.map(function (p) {
               return '<span><small>' + esc(p.label) + '</small>' + esc(p.value) + '</span>';
@@ -1063,7 +1084,7 @@
     if (state.sessionsError) {
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Расписание</p>' +
+        '<p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
         '<div class="arena-empty">' +
         '<b>Не удалось загрузить расписание</b>' +
         '<p>Похоже, пропала связь. Расписание можно загрузить заново.</p>' +
@@ -1079,7 +1100,7 @@
     if (feed.mode === 'closed') {
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Расписание</p>' +
+        '<p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
         '<div class="arena-closed">' + esc(feed.banner) + '</div>' +
         renderSeasonRemindBlock() +
         '</div>'
@@ -1092,7 +1113,7 @@
           : '';
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Расписание</p>' +
+        '<p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
         '<div class="arena-closed">' + esc(feed.banner) + '</div>' +
         call +
         '</div>'
@@ -1104,7 +1125,7 @@
     if (feed.mode === 'pending') {
       return (
         '<div class="arena-sec">' +
-        '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
+        '<div class="arena-h-row"><p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
         scheduleHeaderTools(null) +
         '</div>' +
         '<div class="arena-empty">' +
@@ -1117,7 +1138,7 @@
     if (feed.mode === 'unconfirmed') {
       return (
         '<div class="arena-sec">' +
-        '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
+        '<div class="arena-h-row"><p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
         scheduleHeaderTools(null) +
         '</div>' +
         '<p class="arena-stale">' + esc(feed.banner || '') + '</p>' +
@@ -1144,7 +1165,7 @@
     var focusGone = renderFocusGoneNotice(getFocusState());
     return (
       '<div class="arena-sec">' +
-      '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
+      '<div class="arena-h-row"><p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
       scheduleHeaderTools(tickets) +
       '</div>' +
       focusGone +
