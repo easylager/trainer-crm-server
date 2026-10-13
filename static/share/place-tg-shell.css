@@ -1,0 +1,43 @@
+/* TASK-256: Mini App shell on /p/… — tab bar + «Позвать» dock (tokens only). */
+
+body.b.has-place-share.client-shell-body {
+  padding-bottom: calc(var(--place-share-dock-h) + var(--client-shell-tab-inset));
+}
+
+body.b.has-place-share.client-shell-body .place-share-dock {
+  bottom: var(--client-shell-tab-inset);
+}
+
+body.b.has-place-share.client-shell-body .place-share-zovi,
+body.b.has-place-share.client-shell-body .b-ticket {
+  scroll-margin-bottom: calc(var(--place-share-dock-h) + var(--client-shell-tab-inset));
+}
+
+/* Стиль B в Telegram dark: --g-* из body.tg-dark, не --app-canvas-bg мини-аппа. */
+html.trainer-theme-dark body.b.tg-dark.client-shell-body,
+html.trainer-theme-light body.b.tg-dark.client-shell-body {
+  background-color: var(--g-bg) !important;
+  color: var(--g-ink) !important;
+}
+
+body.b.client-shell-body.tg-dark::after {
+  background: linear-gradient(to bottom, transparent, var(--g-bg) 58%);
+}
+
+body.b.tg-dark .b-when {
+  background: var(--g-line);
+}
+
+body.b.tg-dark .b-day--end {
+  background: var(--g-accent-wash);
+}
+
+body.b.tg-dark .b-ticket {
+  background: var(--g-surface);
+  color: var(--g-ink) !important;
+  box-shadow: var(--g-shadow);
+}
+
+body.b.tg-dark .b-ticket__sub {
+  color: var(--g-ink-2);
+}
