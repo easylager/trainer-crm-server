@@ -18,6 +18,55 @@
   function scheduleModeApi() {
     return rootRef.ArenaScheduleModeModel || null;
   }
+  function glideCopy() {
+    if (typeof module === 'object' && module.exports && typeof require === 'function') {
+      return require('./glide-copy.js');
+    }
+    return rootRef.GlideCopy || null;
+  }
+  function copyLine(key, fallback) {
+    var GC = glideCopy();
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t(key);
+      if (label && label !== key) return String(label);
+    }
+    return fallback;
+  }
+  function safeHttpUrl(value) {
+    var url = String(value || '').trim();
+    var low = url.toLowerCase();
+    if (low.indexOf('https://') !== 0 && low.indexOf('http://') !== 0) return '';
+    return url;
+  }
+  function callHrefFor(card) {
+    var SM = scheduleModeApi();
+    var raw = card && card.phone;
+    if (SM && typeof SM.phoneToTelHref === 'function') return SM.phoneToTelHref(raw) || '';
+    var digits = String(raw || '').replace(/\D/g, '');
+    return digits.length >= 7 ? 'tel:' + String(raw || '').replace(/[^\d+]/g, '') : '';
+  }
+  /** Нет сеансов: факт и способ узнать. Нет телефона и сайта — секции нет. */
+  function scheduleAsk(card) {
+    var callHref = callHrefFor(card);
+    if (callHref) {
+      return {
+        mode: 'phone',
+        banner: copyLine('place.phone_schedule', 'Время массового катания называют по телефону.'),
+        showRibbon: false,
+        callHref: callHref,
+      };
+    }
+    var siteHref = safeHttpUrl(card && card.website_url);
+    if (siteHref) {
+      return {
+        mode: 'site',
+        banner: copyLine('place.site_schedule', 'Время массового катания — на сайте катка'),
+        showRibbon: false,
+        siteHref: siteHref,
+      };
+    }
+    return { mode: 'none', banner: null, showRibbon: false };
+  }
 
   var RuText = typeof globalThis !== 'undefined' ? globalThis.RuText : null;
   /* TASK-182: часы работы — общий модуль со вкладкой «Лёд» (opening-hours.js). */
@@ -418,8 +467,8 @@
           localDate: key,
           weekday: WEEKDAYS_SHORT[wd],
           empty: true,
-          title: 'Данных нет',
-          meta: 'расписание на неделю уточняется',
+          title: copyLine('place.day_empty', 'Сеансов нет'),
+          meta: '',
           cta: '—',
         });
       } else {
@@ -660,12 +709,7 @@
     var SM = scheduleModeApi();
     var mode = SM ? SM.normalizeMode(card.schedule_mode) : 'auto';
     if (SM && mode === 'phone') {
-      return {
-        mode: 'phone',
-        banner: SM.phoneLine(),
-        showRibbon: false,
-        callHref: SM.phoneToTelHref(card.phone),
-      };
+      return scheduleAsk(card);
     }
     if (SM && mode === 'season_closed') {
       return { mode: 'closed', banner: SM.seasonClosedLine(card), showRibbon: false };
@@ -674,11 +718,14 @@
     if (banner) {
       return { mode: 'closed', banner: banner, showRibbon: false };
     }
-    var mode = iceSectionMode({
+    var sectionMode = iceSectionMode({
       tier: opts.tier || card.tier,
       hasSessions: opts.hasSessions,
     });
-    return { mode: mode, banner: null, showRibbon: mode === 'ribbon' };
+    if (sectionMode === 'ribbon') {
+      return { mode: 'ribbon', banner: null, showRibbon: true };
+    }
+    return scheduleAsk(card);
   }
 
   function seasonClosedBanner(card) {

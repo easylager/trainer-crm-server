@@ -63,7 +63,10 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert "Завтра" in page_js
     # «Неделя» сводкой заменена полосой из семи дней с датами (dayStrip).
     assert "dayStrip" in page_js
-    assert "Расписание уточняется" in page_js
+    assert "Расписание уточняется" not in page_js
+    assert "пока не получили" not in page_js
+    assert "Время массового катания называют по телефону." in page_js
+    assert "Время массового катания — на сайте катка" in page_js
     assert "Это ваш каток?" not in page_js
     assert "Забрать страницу" not in page_js
     assert "Сообщить об ошибке" in page_js
@@ -286,7 +289,11 @@ async def test_arena_card_level_b_payload_has_contacts_not_sessions(
     assert feed.status_code == 200
     assert feed.json()["days"] == []
     js = (REPO_ROOT / "static/webapp/arena-card.js").read_text(encoding="utf-8")
-    assert "Расписание уточняется" in js
+    model_js = (REPO_ROOT / "static/webapp/arena-card-model.js").read_text(encoding="utf-8")
+    assert "Расписание уточняется" not in js
+    assert "пока не получили" not in js
+    assert "Время массового катания называют по телефону." in model_js
+    assert "Время массового катания — на сайте катка" in model_js
     # С 8a00820f звонок — быстрое действие «Телефон» (copyPhone), сайт рядом в quick actions.
     model = (REPO_ROOT / "static/webapp/arena-card-model.js").read_text(encoding="utf-8")
     assert "label: 'Телефон'" in model

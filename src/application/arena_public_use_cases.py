@@ -398,8 +398,8 @@ _SHOP_SERVICE_LABELS = tuple((key, AMENITY_LABELS_RU[key]) for key in SHOP_SERVI
 def _place_line(item: Mapping[str, Any]) -> str:
     """Строка ленты для места без сеансов (магазин, зал): что тут есть и когда открыто.
 
-    «Расписание уточняется» у магазина — неверный вопрос к месту: расписания у него
-    не бывает. Говорим то, что знаем: услуги и часы. Не знаем — честно «уточняйте».
+    Вопрос «когда сеанс» у магазина неверный: расписания у него не бывает.
+    Говорим то, что знаем: услуги и часы.
     """
     bits: list[str] = []
     if normalize_venue_type(item.get("venue_type")) == VENUE_TYPE_SHOP:
@@ -429,8 +429,10 @@ def _place_line(item: Mapping[str, Any]) -> str:
     if amenities.get("skate_rental") is True and not rental_close:
         bits.append("прокат на месте")
     if not bits:
-        phone_hint = "часы работы уточняйте по телефону" if sanitize_public_phone(item.get("phone")) else "часы работы уточняются"
-        bits.append(phone_hint)
+        # Не знаем часов — не говорим «уточняются» (TASK-276): есть телефон — как узнать, нет — молчим.
+        if not sanitize_public_phone(item.get("phone")):
+            return ""
+        bits.append("часы — по телефону")
     line = " · ".join(bits)
     return line[:1].upper() + line[1:]
 
@@ -475,8 +477,8 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
         and not item.get("next_session_id")
         and not is_in_season(item.get("season_start_month"), item.get("season_end_month"), today.month)
     ):
-        # Q-014: вне сезона каток остаётся в ленте (он существует, и его страница в поиске),
-        # но говорит правду — «закрыт до ноября», а не «расписание уточняется».
+        # Q-014: вне сезона каток остаётся в ленте (он существует, и его страница в поиске)
+        # и говорит правду — «закрыт до ноября».
         start = item.get("season_start_month")
         text = (
             f"Сезон закрыт · откроется в {_MONTHS_PREP_RU[int(start) - 1]}" if start else "Сезон закрыт"
@@ -486,7 +488,7 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
         if not item.get("next_session_id"):
             return {
                 "kind": "unknown",
-                "text": "Расписание уточняется",
+                "text": "",
                 "currency_code": currency,
             }
         local_date = item["next_local_date"]

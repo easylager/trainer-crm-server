@@ -878,7 +878,8 @@ def _place_html(
             chips += f'<span class="{_esc(slot_cls)}">{slot_inner}</span>'
     if rest > 0 and href:
         chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
-    line = "" if chips else f'<p class="muted">{_esc(item.get("live_line") or "")}</p>'
+    raw_line = str(item.get("live_line") or "").strip()
+    line = "" if chips or not raw_line else f'<p class="muted">{_esc(raw_line)}</p>'
     # TASK-180: > 6 ч — сеансы показываем, но над ними спокойная строка «могло измениться».
     stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)

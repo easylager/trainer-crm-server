@@ -48,6 +48,7 @@ from src.application.arena_profile import (
 )
 from src.application.ice_city_day import city_slug
 from src.application.place_links import join_public_origin, place_query
+from src.shared.phone_guard import is_valid_public_phone
 from src.shared.arena_schedule_mode import (
     PHONE_LINE,
     SCHEDULE_MODE_PHONE,
@@ -400,7 +401,8 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
     now: datetime = view["now"]
     if _skating(card):
         mode = normalize_schedule_mode(card.get("schedule_mode"))
-        if mode == SCHEDULE_MODE_PHONE:
+        # «По телефону» без рабочего номера — противоречие на одной странице (TASK-276).
+        if mode == SCHEDULE_MODE_PHONE and is_valid_public_phone(str(card.get("phone") or "")):
             return "closed", PHONE_LINE
         if mode == SCHEDULE_MODE_SEASON_CLOSED:
             reopen = _parse_iso_date(card.get("schedule_reopen_date"))
@@ -1148,10 +1150,19 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         return ""
     if mode == SCHEDULE_MODE_PHONE or not days:
         call = _b_call(card, links)
-        if not call:
-            return ""
-        body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
-        return section(title, body, klass="b-sec--place", sec_id="schedule")
+        if call:
+            body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
+            return section(title, body, klass="b-sec--place", sec_id="schedule")
+        site = safe_external_url(card.get("website_url"))
+        if site:
+            host = _display_host(site)
+            link = (
+                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+                f"{_esc(host or site)}</a>"
+            )
+            body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{link}'
+            return section(title, body, klass="b-sec--place", sec_id="schedule")
+        return ""
 
     today = view["today"]
     focus = view.get("focus")

@@ -380,6 +380,7 @@ async def test_skate_intent_lists_every_arena_tier_a_first(
     assert by_id[skate]["tier"] == "A"
     assert by_id[profile_only]["tier"] == "B"
     assert by_id[profile_only]["live"]["kind"] == "unknown"
+    assert by_id[profile_only]["live"]["text"] == ""
     assert profile_only in coach_ids
     assert profile_only in group_ids
     skate_row = skate_items[0]
