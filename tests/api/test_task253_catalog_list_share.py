@@ -20,9 +20,6 @@ def _client() -> AsyncClient:
 
 
 def _card_block(html: str, arena_name: str) -> str:
-    for block in re.findall(r'<div class="b-card2-wrap">.*?</div>\s*</div>', html, re.DOTALL):
-        if arena_name in block:
-            return block
     for block in re.findall(r'<article class="b-card2">.*?</article>', html, re.DOTALL):
         if arena_name in block:
             return block
@@ -63,7 +60,7 @@ async def test_selection_tile_no_invite_without_session(app_use_test_db, db_sess
         page = await client.get(f"/c/{slug}", params={"t": "ice"})
     assert page.status_code == 200
     assert rink_name in page.text
-    assert "b-card2-wrap" not in page.text
+    assert "b-slot--invite" not in page.text
     assert "data-invite-arena=" not in page.text
 
 
