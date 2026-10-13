@@ -935,11 +935,11 @@ def _place_share_scripts_html(
         f'<script>window.__PLACE_SHARE__=JSON.parse(document.getElementById("place-share-data").textContent);</script>\n'
         f'<link rel="stylesheet" href="/webapp/mini-app-share-sheet.css?v={_esc(wv)}" />\n'
         f'<link rel="stylesheet" href="/static/share/place-share.css?v={_esc(pv)}" />\n'
-        f'<script src="/webapp/minsk-time.js?v={_esc(wv)}"></script>\n'
-        f'<script src="/webapp/public-display-model.js?v={_esc(wv)}"></script>\n'
-        f'<script src="/webapp/arena-card-model.js?v={_esc(wv)}"></script>\n'
-        f'<script src="/webapp/mini-app-share-sheet.js?v={_esc(wv)}"></script>\n'
-        f'<script src="/static/share/place-share.js?v={_esc(pv)}"></script>'
+        f'<script defer src="/webapp/minsk-time.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/public-display-model.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/arena-card-model.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/mini-app-share-sheet.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/static/share/place-share.js?v={_esc(pv)}"></script>'
     )
 
 
@@ -1053,7 +1053,10 @@ def _b_hero(card: Mapping[str, Any], *, status_html: str = "") -> str:
     from src.application.style_b import back_pill, brand_link, hero_html, media_url
 
     hero_media = card.get("hero") if isinstance(card.get("hero"), Mapping) else None
-    photo = media_url(hero_media, size="hero")
+    photo = media_url(hero_media, size="card") or media_url(hero_media, size="hero")
+    photo_variants = None
+    if hero_media and isinstance(hero_media.get("variants"), Mapping):
+        photo_variants = hero_media.get("variants")
     toned = bool(hero_media.get("display_tone")) if hero_media else False
     city_name = _city(card)
     bar = ""
@@ -1071,6 +1074,7 @@ def _b_hero(card: Mapping[str, Any], *, status_html: str = "") -> str:
         bar_html=bar,
         variant="place",
         extra_html=status_html,
+        photo_variants=photo_variants,
     )
 
 

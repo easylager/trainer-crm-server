@@ -32,7 +32,9 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" /></noscript>
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=__TOKENS_V__" />
   <link rel="stylesheet" href="/static/share/style-b.css?v=__STYLE_V__" />
   <script>
@@ -70,9 +72,9 @@
   </main>
   __PLACE_SHARE_BAR__
   __PLACE_SHARE_SCRIPTS__
-  <script src="/static/share/place-tg-shell.js?v=2026101304" data-webapp-v="2026101349" data-share-v="2026101304"></script>
+  <script defer src="/static/share/place-tg-shell.js?v=2026101304" data-webapp-v="2026101349" data-share-v="2026101304"></script>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/static/shared/list-scroll-restore.js?v=1"></script>
+  <script defer src="/static/shared/list-scroll-restore.js?v=1"></script>
   <script>
     /*
       JS страницы: «Скопировать», «Поделиться» и восстановление скролла списка.
