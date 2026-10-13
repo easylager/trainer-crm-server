@@ -52,7 +52,8 @@ const tgPage = await tg.newPage();
 await tgPage.goto(`${base}${placePath}`, { waitUntil: 'networkidle' });
 await tgPage.waitForSelector('#clientTabBar', { timeout: 20000 });
 await tgPage.waitForTimeout(1000);
-const tgMeta = await tgPage.evaluate(() => {
+const errText = 'Что-то пошло не так';
+const tgMeta = await tgPage.evaluate((err) => {
   const body = document.body;
   const el = document.elementFromPoint(195, 400);
   const cs = el ? getComputedStyle(el) : null;
@@ -66,8 +67,16 @@ const tgMeta = await tgPage.evaluate(() => {
     at400: cs ? cs.backgroundColor : '',
     dockY: dockBox ? [Math.round(dockBox.top), Math.round(dockBox.bottom)] : null,
     barY: barBox ? Math.round(barBox.top) : null,
+    hasErr: document.body.innerText.includes(err),
+    title: document.querySelector('.b-hero__title')?.textContent?.trim() || '',
+    hasTabBar: !!document.getElementById('clientTabBar'),
+    hasPozvat: !!document.getElementById('placeShareBtn'),
   };
-});
+}, errText);
+if (tgMeta.hasErr) {
+  console.error('telegram screenshot still shows recoverable error overlay');
+  process.exit(1);
+}
 await tgPage.screenshot({ path: path.join(outDir, 'telegram.png'), fullPage: false });
 console.log('telegram meta', JSON.stringify(tgMeta));
 await tg.close();

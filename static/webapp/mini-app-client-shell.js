@@ -704,6 +704,7 @@
   }
 
   function refreshWatchesSummary() {
+    if (isPublicPlaceRoute()) return Promise.resolve();
     var initData = getInitData();
     if (!initData) return Promise.resolve();
     var headers = { 'X-Telegram-Init-Data': initData };
@@ -1034,6 +1035,7 @@
    * Учёт входа в мини-апп каталога (WAU, startapp после шаринга). Один раз на surface/день/start_param.
    */
   function reportCatalogPresence(surface, startParam, extra) {
+    if (isPublicPlaceRoute()) return;
     var tg = getTg();
     if (!tg || !tg.initData) return;
     var sp = startParam != null ? String(startParam).trim() : '';
@@ -1100,11 +1102,11 @@
   function boot() {
     if (isPublicPlaceRoute() && !getInitData()) return;
     init();
-    refreshWatchesSummary();
     if (isPublicPlaceRoute()) {
       if (state.mode === 'tabs') setForcedTab('catalog');
       return;
     }
+    refreshWatchesSummary();
     reportCatalogPresence('miniapp_shell', readStartParam());
     if (maybeOpenArenaDeepLink()) return;
     if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {

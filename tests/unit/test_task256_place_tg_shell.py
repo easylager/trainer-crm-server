@@ -34,3 +34,15 @@ def test_place_tg_shell_applies_style_b_tg_dark() -> None:
     assert "colorScheme === 'dark'" in boot
     assert "telegram-web-app.js" in boot
     assert "if (!getTg())" in boot
+
+
+def test_public_place_shell_skips_client_api_and_auth_overlay() -> None:
+    shell = (REPO / "static/webapp/mini-app-client-shell.js").read_text(encoding="utf-8")
+    chrome = (REPO / "static/webapp/mini-app-telegram-chrome.js").read_text(encoding="utf-8")
+    assert "if (isPublicPlaceRoute()) return Promise.resolve();" in shell
+    boot_idx = shell.index("function boot()")
+    pub_return = shell.index("if (isPublicPlaceRoute())", boot_idx)
+    watches = shell.index("refreshWatchesSummary();", boot_idx)
+    assert pub_return < watches
+    assert "if (isPublicPlaceRoute()) return;" in chrome
+    assert "function showRecoverableOverlay()" in chrome
