@@ -280,8 +280,6 @@ details.b-details[open] > summary .b-icon { transform: rotate(180deg); }
 a.b-info__row .b-info__val { color: var(--g-accent-ink); }
 a.b-info__row[href^="tel:"] .b-info__val { color: var(--g-ink); }
 
-.b-days { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
-.b-days::-webkit-scrollbar { display: none; }
 .b-day {
   flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px 0; border-radius: 14px;
@@ -293,8 +291,6 @@ a.b-info__row[href^="tel:"] .b-info__val { color: var(--g-ink); }
 .b-day--end { background: #eef7f7; }
 .b-day--off { color: #8396a4 !important; }
 .b-day--off i { color: inherit; }
-.b-day[aria-current="true"] { background: var(--g-dark); color: var(--g-on-photo) !important; }
-.b-day[aria-current="true"] i { color: var(--g-on-dark-accent); }
 .b-daypane[hidden] { display: none; }
 
 /* ── Кнопки ───────────────────────────────────────────────────────────── */
@@ -376,16 +372,32 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
   .b-hero { border-radius: 24px; margin: 0 16px; }
 }
 
-/* Дни расписания места: без JS работает через :target */
-.b-daypane { display: none; }
-.b-daypane--default { display: block; }
-.b-daypane:target { display: block; scroll-margin-top: 120px; }
-.b-panes:has(.b-daypane:target) .b-daypane--default:not(:target) { display: none; }
-.b-sec--place:has(.b-daypane:target) .b-day[aria-current="true"] {
-  background: var(--g-surface);
-  color: var(--g-ink) !important;
+/* Дни расписания места: без JS — :target на .b-sched-day, pill и pane в одной обёртке */
+.b-sched {
+  display: flex; flex-wrap: wrap; column-gap: 6px; row-gap: 0;
+  overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px;
 }
-.b-sec--place:has(.b-daypane:target) .b-day[aria-current="true"] i { color: var(--g-accent-ink); }
+.b-sched::-webkit-scrollbar { display: none; }
+.b-sched-day { display: contents; }
+.b-sched .b-day { flex: 0 0 64px; }
+.b-sched .b-daypane {
+  flex: 1 1 100%; display: none; scroll-margin-top: 120px;
+}
+.b-sched-day--default > .b-daypane { display: block; }
+.b-sched-day:target > .b-daypane { display: block; }
+.b-sched:has(.b-sched-day:target) .b-sched-day--default:not(:target) > .b-daypane { display: none; }
+.b-sched-day--default > .b-day {
+  background: var(--g-dark); color: var(--g-on-photo) !important;
+}
+.b-sched-day--default > .b-day i { color: var(--g-on-dark-accent); }
+.b-sched:has(.b-sched-day:target) .b-sched-day--default > .b-day {
+  background: var(--g-surface); color: var(--g-ink) !important;
+}
+.b-sched:has(.b-sched-day:target) .b-sched-day--default > .b-day i { color: var(--g-accent-ink); }
+.b-sched-day:target > .b-day {
+  background: var(--g-dark); color: var(--g-on-photo) !important;
+}
+.b-sched-day:target > .b-day i { color: var(--g-on-dark-accent); }
 
 /* Сеанс из ссылки */
 .b-plan {

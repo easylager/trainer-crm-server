@@ -1045,48 +1045,40 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         for d, slots in by_date.items():
             if any(int(s["id"]) == focus_id for s in slots):
                 default_day = d
-    strip: list[str] = []
+    sched_bits: list[str] = []
     for offset in range(SCHEDULE_DAYS):
         d = today + timedelta(days=offset)
         label = short_day_word(d, today=today)
-        n = len(by_date.get(d, []))
-        klass = "b-day"
+        slots = by_date.get(d, [])
+        n = len(slots)
+        day_klass = "b-day"
         if d.weekday() >= 5:
-            klass += " b-day--end"
+            day_klass += " b-day--end"
         inner = f"<span>{_esc(label)}</span><b>{d.day}</b><i>{n if n else '—'}</i>"
-        if n:
-            current = ' aria-current="true"' if d == default_day else ""
-            strip.append(f'<a class="{klass}" href="#d-{d.isoformat()}"{current}>{inner}</a>')
-        else:
-            strip.append(f'<span class="{klass} b-day--off">{inner}</span>')
-    panes: list[str] = []
-    for d in sorted(by_date):
+        if not n:
+            sched_bits.append(f'<span class="{day_klass} b-day--off">{inner}</span>')
+            continue
         tickets = "".join(
             _b_ticket(
                 s, base_path=base_path, invite=invite, focused=(focus_id == int(s["id"])), common_price=common
             )
-            for s in by_date[d]
+            for s in slots
         )
-        klass = "b-daypane b-daypane--default" if d == default_day else "b-daypane"
-        panes.append(f'<div class="{klass}" id="d-{d.isoformat()}"><div class="b-tickets">{tickets}</div></div>')
-    day_pick_css = "".join(
-        f"#schedule:has(#{frag}:target) .b-day[href=\"#{frag}\"]"
-        f"{{background:var(--g-dark);color:var(--g-on-photo)!important}}"
-        f"#schedule:has(#{frag}:target) .b-day[href=\"#{frag}\"] i{{color:var(--g-on-dark-accent)}}"
-        for d in sorted(by_date)
-        for frag in (f"d-{d.isoformat()}",)
-    )
-    day_pick_style = f"<style>{day_pick_css}</style>" if day_pick_css else ""
+        frag = f"d-{d.isoformat()}"
+        wrap_klass = "b-sched-day"
+        if d == default_day:
+            wrap_klass += " b-sched-day--default"
+        sched_bits.append(
+            f'<div class="{wrap_klass}" id="{frag}">'
+            f'<a class="{day_klass}" href="#{frag}">{inner}</a>'
+            f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div></div>'
+        )
     tickets_link = ""
     if links.get("tickets"):
         href, blank = links["tickets"]
         attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
         tickets_link = f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>'
-    body = (
-        f"{day_pick_style}"
-        f'<nav class="b-days" aria-label="День">{"".join(strip)}</nav>'
-        f'<div class="b-panes">{"".join(panes)}</div>{tickets_link}'
-    )
+    body = f'<div class="b-sched" aria-label="День">{"".join(sched_bits)}</div>{tickets_link}'
     aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
