@@ -82,7 +82,7 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     async with _client() as client:
         resp = await client.get(place["path"])
     assert resp.status_code == 200, resp.text
-    assert resp.headers["cache-control"] == "private, no-store"
+    assert resp.headers["cache-control"] == "private, no-cache"
     html = resp.text
     assert place["name"] in _meta(html, "og:title")
     assert "расписание массового катания" in _meta(html, "og:title")

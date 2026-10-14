@@ -105,9 +105,9 @@ async def catalog_home_page(
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
 
 
-# TASK-189 считает просмотр на каждый заход на /p/ и /c/. Публичный кэш обошёл бы
-# origin и занизил счётчик. Картинки по-прежнему кэшируются: просмотр они не пишут.
-_PAGE_CACHE = {"Cache-Control": "private, no-store"}
+# TASK-189: просмотр на каждый полноценный GET /p/ и /c/ (prefetch — нет, см. record_public_page_view).
+# private, no-cache: браузер может держать страницу в bfcache, но при прямом заходе сверяется с origin.
+_PAGE_CACHE = {"Cache-Control": "private, no-cache"}
 _IMAGE_CACHE = {"Cache-Control": "public, max-age=900"}
 _IMAGE_CACHE_SESSION = {"Cache-Control": "public, max-age=300, stale-while-revalidate=60"}
 
