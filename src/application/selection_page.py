@@ -1341,9 +1341,12 @@ def _b_place_card(
             s.get("price_adult_minor") if s.get("price_adult_minor") is not None else s.get("price_minor"),
             str(s.get("currency_code") or "BYN"),
         )
+        from src.shared.public_view_transitions import session_time_vt_style
+
+        vt = session_time_vt_style(int(s["id"]))
         inner = (
             (f'<span class="b-slot__day">{_esc(word)}</span>' if word else "")
-            + f'<b class="b-slot__time">{_esc(clock)}</b>'
+            + f'<b class="b-slot__time"{vt}>{_esc(clock)}</b>'
             + (f'<span class="b-slot__price">{_esc(price)}</span>' if price else "")
         )
         if href:
@@ -1439,7 +1442,7 @@ def _b_controls(view: Mapping[str, Any], *, city_name: str) -> str:
                     when = key if key != "all" else None
                     href = selection_path(city_name=city_name, venue=None, when=when, kind=KIND_OHM)
                     parts.append(f'<a class="b-toggle" href="{_esc(href)}">{inner}</a>')
-            out += f'<nav class="b-toggles" aria-label="Когда">{"".join(parts)}</nav>'
+            out += f'<nav class="b-toggles vt-when-strip" aria-label="Когда">{"".join(parts)}</nav>'
             out += (
                 '<p class="b-rule"><b>Любительский хоккей:</b> полная экипировка, детям — шлем с маской. '
                 "Записи нет — билет в кассе катка.</p>"
