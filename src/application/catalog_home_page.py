@@ -537,6 +537,30 @@ def _upcoming_more_href(
     return None
 
 
+def _city_list_when(when: str | None, when_key: str, *, selected_day: date | None, today: date) -> str | None:
+    """Окно, которое плитка города несёт в список. Только явно выбранное: без ``when``
+    главная показывает умный дефолт, и плитка по-прежнему ведёт на страницу города.
+
+    Выбрал «Завтра» — плитка «24 сеанса завтра» открывает именно эти сеансы, а не
+    город с другим окном. Произвольную дату список не понимает — тогда без окна.
+    """
+    if not (when or "").strip():
+        return None
+    if when_key in ("today", "tomorrow", "weekend"):
+        return when_key
+    if when_key == "day" and selected_day == today:
+        return "today"
+    if when_key == "day" and selected_day == today + timedelta(days=1):
+        return "tomorrow"
+    return None
+
+
+def _city_href(city: Mapping[str, Any], *, when: str | None, default: str) -> str:
+    if when and int(city.get("session_count") or 0) > 0:
+        return f"/c/{city['slug']}?t=ice&w={when}"
+    return default
+
+
 def build_city_layout(catalog_cities: list[dict[str, Any]]) -> dict[str, Any]:
     by_cities = [c for c in catalog_cities if str(c.get("country") or "").upper() == "BY"]
     ru_cities = [c for c in catalog_cities if str(c.get("country") or "").upper() == "RU"]
@@ -883,6 +907,7 @@ async def load_catalog_home_view(
         "country": "BY",
         "now": now,
         "when_key": when_key,
+        "city_when": _city_list_when(when, when_key, selected_day=selected_day, today=today),
         "period_start": period_start,
         "period_end": period_end,
         "selected_date": selected_day.isoformat() if selected_day else None,
@@ -1178,7 +1203,7 @@ def _today_done_text(cities: list[Mapping[str, Any]]) -> str:
     )
 
 
-def _b_home_city_card(user_city: Mapping[str, Any] | None) -> str:
+def _b_home_city_card(user_city: Mapping[str, Any] | None, *, city_when: str | None = None) -> str:
     """Тёмная карточка «Ваш город»: сколько сеансов и ближайший, ниже — «Другой город»."""
     from src.application.catalog_icons import icon_svg
 
@@ -1203,6 +1228,8 @@ def _b_home_city_card(user_city: Mapping[str, Any] | None) -> str:
             bits.append(f"ОХМ {ohm.get('day_label') or ''}".strip())
     line = " · ".join(bits)
     href = user_city.get("href") or "/c/" + str(user_city.get("slug") or "")
+    if href == f"/c/{user_city.get('slug')}":
+        href = _city_href(user_city, when=city_when, default=href)
     line_html = f'<span class="b-city__line">{_esc(line)}</span>' if line else ""
     return (
         f'<a class="b-city" href="{_esc(href)}"><span class="b-city__body">'
@@ -1235,7 +1262,7 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
     return nav
 
 
-def _b_city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
+def _b_city_tile(city: Mapping[str, Any], *, when_key: str, city_when: str | None = None) -> str:
     from src.application.style_b import b_photo_url, tile_html
 
     name = format_public_name(str(city["name"]))
@@ -1253,7 +1280,7 @@ def _b_city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
         line += " · ОХМ"
     variants = city.get("photo_variants")
     return tile_html(
-        href=f"/c/{city['slug']}",
+        href=_city_href(city, when=city_when, default=f"/c/{city['slug']}"),
         name=name,
         line=line,
         photo_url=b_photo_url(city.get("photo_key")),
@@ -1351,7 +1378,8 @@ def render_catalog_home_page(
     if not cities:
         cities_html = f'<section class="b-sec"><p class="b-text">{_esc(t("home.cities_empty"))}</p></section>'
     else:
-        grid = "".join(_b_city_tile(c, when_key=when_key) for c in tiles)
+        city_when = view.get("city_when")
+        grid = "".join(_b_city_tile(c, when_key=when_key, city_when=city_when) for c in tiles)
         head = "Сегодня в городах" if when_key == "today" else "Города"
         cities_html = (
             f'<section class="b-sec" id="cities"><div class="b-sec__head"><h2 class="b-h2">{head}</h2></div>'
@@ -1387,7 +1415,7 @@ def render_catalog_home_page(
         "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__HERO__": hero,
         "__WHEN__": _b_when_nav(view),
-        "__HERO_CITY__": _b_home_city_card(user_city),
+        "__HERO_CITY__": _b_home_city_card(user_city, city_when=view.get("city_when")),
         "__MAP__": map_html,
         "__CITIES__": cities_html,
         "__CTA__": cta,
