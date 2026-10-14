@@ -12,7 +12,6 @@ from src.application.ice_time_windows import (
     home_fallback_periods_after_empty_today,
     home_shift_note_for_period,
     resolve_window,
-    selection_today_should_shift,
 )
 
 MSK = timezone(timedelta(hours=3))
@@ -27,8 +26,6 @@ def test_should_shift_only_for_today_default_or_explicit() -> None:
     assert not home_empty_today_should_shift("today", "today")
     assert not home_empty_today_should_shift("tomorrow", "tomorrow")
     assert not home_empty_today_should_shift(None, "weekend")
-    assert selection_today_should_shift("today")
-    assert not selection_today_should_shift("tomorrow")
 
 
 def test_fallback_periods_start_with_tomorrow_minsk_midnight() -> None:

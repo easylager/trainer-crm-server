@@ -39,12 +39,7 @@ from src.application.arena_public_use_cases import (
     list_city_selection_places,
     list_public_ice_arenas,
 )
-from src.application.ice_time_windows import (
-    home_fallback_periods_after_empty_today,
-    home_shift_note_for_period,
-    resolve_window,
-    selection_today_should_shift,
-)
+from src.application.ice_time_windows import resolve_window
 from src.shared.copy_ru import t
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
@@ -296,8 +291,6 @@ async def load_selection_view(
     svc: str | None = None,
     seg: str | None = None,
     now: datetime | None = None,
-    list_day: str | None = None,
-    _allow_today_shift: bool = True,
 ) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     page = clean_page(page)
@@ -354,12 +347,7 @@ async def load_selection_view(
         when = None
         center_count = total
     elif ohm:
-        if list_day:
-            from src.application.ice_time_windows import resolve_list_window
-
-            tw = resolve_list_window(None, list_day, now)
-        else:
-            tw = resolve_window(when, now) if when else None
+        tw = resolve_window(when, now) if when else None
         if tw:
             window = tw.as_payload()
         catalog = await list_city_ohm_places(
@@ -375,7 +363,7 @@ async def load_selection_view(
         venue = KIND_OHM
         ohm_counts = await city_ohm_window_counts(session, city_id=int(city["id"]), now=now)
         center_count = await city_hockey_center_count(session, city_id=int(city["id"]))
-    elif when or list_day:
+    elif when:
         vtypes = city_selection_venue_types(venue)
         venue_param = ",".join(sorted(vtypes)) if vtypes else venue
         offset = (page - 1) * MAX_PLACES
@@ -384,8 +372,7 @@ async def load_selection_view(
             city_id=int(city["id"]),
             intent="skate",
             venue_type=venue_param,
-            when=when if skating and not list_day else None,
-            day=list_day,
+            when=when if skating else None,
             limit=MAX_PLACES,
             cursor=str(offset) if offset else None,
         )
@@ -420,15 +407,23 @@ async def load_selection_view(
     stale_notes: dict[int, str] = {}
     if skating and items:
         stale_notes = await _apply_schedule_freshness(session, items, slots, now)
-    # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
+    # В окне — только места, где в окне есть лёд; пусто — ближайшее, кроме явного ``w=today``.
     window_empty = False
+    today_window_done = False
+    explicit_today = (when or "").strip().lower() == "today"
     if service_mode or centers:
         hits = items
         shown = items
     elif ohm:
         hits = [i for i in items if slots.get(int(i["id"]))]
         window_empty = bool(window) and not hits
-        if window_empty:
+        if window_empty and explicit_today:
+            today_window_done = True
+            items = []
+            shown = []
+            slots = {}
+            stale_notes = {}
+        elif window_empty:
             catalog = await list_city_ohm_places(
                 session, city_id=int(city["id"]), page=page, now=now, window=None
             )
@@ -444,11 +439,19 @@ async def load_selection_view(
             )
             stale_notes = await _apply_schedule_freshness(session, items, slots, now)
             hits = [i for i in items if slots.get(int(i["id"]))]
-        shown = hits or items
+            shown = hits or items
+        else:
+            shown = hits or items
     else:
         hits = [i for i in items if slots.get(int(i["id"]))] if window else items
         window_empty = bool(window) and not hits
-        if window_empty and skating:
+        if window_empty and explicit_today and skating:
+            today_window_done = True
+            items = []
+            shown = []
+            slots = {}
+            stale_notes = {}
+        elif window_empty and skating:
             # В окне пусто — ближайшие сеансы теми же билетами, а не строкой из API.
             slots = await _window_slots(
                 session, [int(i["id"]) for i in items], None, now, session_sql=session_sql
@@ -464,7 +467,9 @@ async def load_selection_view(
                 )
             )
             items = nearest + [i for i in items if not slots.get(int(i["id"]))]
-        shown = hits or items
+            shown = hits or items
+        else:
+            shown = hits or items
     shown_page = shown[:MAX_PLACES] if not service_mode else shown
     # Счёт для превью — по всей подборке, а не по странице: один агрегат вместо len(shown_page).
     if ohm:
@@ -496,6 +501,7 @@ async def load_selection_view(
         "filter_chips": filter_chips,
         "window": window,
         "window_empty": window_empty,
+        "today_window_done": today_window_done,
         "items": shown_page,
         "slots": slots,
         "stale_notes": stale_notes,
@@ -513,47 +519,6 @@ async def load_selection_view(
     if service_mode:
         out["open_now_count"] = open_now_count
         out["service_filter_keys"] = SERVICE_AMENITY_KEYS[svc]
-    if (
-        _allow_today_shift
-        and selection_today_should_shift(when)
-        and not list_day
-        and out.get("window_empty")
-        and (ohm or skating)
-    ):
-        today = now.astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
-        for fallback_key, fw in home_fallback_periods_after_empty_today(now):
-            if fallback_key == "tomorrow":
-                shifted = await load_selection_view(
-                    session,
-                    city=city,
-                    venue=venue,
-                    when="tomorrow",
-                    page=page,
-                    kind=kind,
-                    svc=svc,
-                    seg=seg,
-                    now=now,
-                    _allow_today_shift=False,
-                )
-            else:
-                shifted = await load_selection_view(
-                    session,
-                    city=city,
-                    venue=venue,
-                    when=None,
-                    list_day=fw.local_date,
-                    page=page,
-                    kind=kind,
-                    svc=svc,
-                    seg=seg,
-                    now=now,
-                    _allow_today_shift=False,
-                )
-            if int(shifted.get("session_count") or 0) > 0 and not shifted.get("window_empty"):
-                shifted["period_shift_note"] = home_shift_note_for_period(fallback_key, fw, today=today)
-                if fallback_key == "tomorrow":
-                    shifted["when"] = "tomorrow"
-                return shifted
     return out
 
 
@@ -655,6 +620,17 @@ def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
     return ("место", "места", "мест")
 
 
+def selection_tomorrow_href(view: Mapping[str, Any]) -> str:
+    """Ссылка «Смотреть завтра» для пустого ``w=today``."""
+    city_name = str(view["city"]["name"])
+    if view.get("kind") == KIND_OHM:
+        return selection_path(city_name=city_name, venue=None, when="tomorrow", kind=KIND_OHM)
+    venue = str(view.get("venue") or "ice")
+    if venue not in ("ice", "outdoor"):
+        venue = "ice"
+    return selection_path(city_name=city_name, venue=venue, when="tomorrow")
+
+
 def selection_place_count(view: Mapping[str, Any]) -> int:
     """Сколько мест в подборке целиком — не страница.
 
@@ -662,6 +638,8 @@ def selection_place_count(view: Mapping[str, Any]) -> int:
     ровно то, что обещает заголовок. Пустое окно честно падает на всю выборку
     («сеансов нет — ближайшие»), иначе в превью стоял бы ноль при непустом списке.
     """
+    if view.get("today_window_done"):
+        return 0
     if view.get("when"):
         in_window = int(view.get("window_places") or 0)
         if in_window:
@@ -670,6 +648,8 @@ def selection_place_count(view: Mapping[str, Any]) -> int:
 
 
 def selection_description(view: Mapping[str, Any]) -> str:
+    if view.get("today_window_done"):
+        return t("selection.today_done")
     svc = view.get("svc")
     if svc:
         n = int(view.get("total") or 0)
@@ -758,6 +738,8 @@ def selection_image_version(view: Mapping[str, Any]) -> str:
 
 def selection_share_description(view: Mapping[str, Any]) -> str:
     """og:description. Пустое окно называет даты, а не «сегодня вечером»."""
+    if view.get("today_window_done"):
+        return t("selection.today_done")
     text = selection_description(view)
     window = view.get("window")
     if view.get("window_empty") and window:
@@ -1163,9 +1145,12 @@ def render_selection_page(
     share_title = selection_share_title(view)
     description = selection_description(view)
     share_description = selection_share_description(view)
-    shift_note = str(view.get("period_shift_note") or "").strip()
-    if shift_note:
-        note = f'<p class="b-rule">{_esc(shift_note)}</p>'
+    if view.get("today_window_done"):
+        tomorrow = selection_tomorrow_href(view)
+        note = (
+            f'<p class="b-rule">{_esc(t("selection.today_done"))} '
+            f'<a href="{_esc(tomorrow)}">{_esc(t("selection.view_tomorrow"))}</a></p>'
+        )
     elif view.get("window_empty"):
         note = f'<p class="b-rule">{_esc(view["window"]["label"])}: сеансов нет — показываем ближайшие.</p>'
     else:

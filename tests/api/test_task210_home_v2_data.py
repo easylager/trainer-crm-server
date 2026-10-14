@@ -338,7 +338,7 @@ async def test_when_query_works_without_js_switcher(app_use_test_db, db_session,
             assert resp.status_code == 200, when
             counter = _counter(resp.text)
             if when == "today":
-                assert counter.startswith(prefix) or counter.startswith("На сегодня всё"), counter
+                assert counter.startswith(prefix), counter
             else:
                 assert counter.startswith(prefix), counter
             assert 'name="robots" content="noindex, follow"' in resp.text

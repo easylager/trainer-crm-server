@@ -28,6 +28,8 @@
   "home.counter.today_done_bare": "Сегодня сеансов нет",
   "home.shift.after_today_tomorrow": "На сегодня всё — вот завтра",
   "home.shift.after_today_day": "На сегодня всё — вот {day}",
+  "selection.today_done": "На сегодня всё",
+  "selection.view_tomorrow": "Смотреть завтра",
   "home.counter.when.tomorrow": "Завтра",
   "home.counter.when.weekend": "В эти выходные",
   "home.counter.when.day": "В этот день",

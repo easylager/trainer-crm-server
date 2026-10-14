@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -69,14 +69,79 @@ def test_home_counter_after_last_session_points_to_tomorrow() -> None:
     assert _today_done_text([{"next_skate": {"day_label": "сб"}}]) == "Сегодня сеансов нет"
 
 
+def _freeze_modules(monkeypatch, fixed: datetime, *modules: str) -> None:
+    import datetime as dt
+
+    class _Clock(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is not None:
+                return fixed.astimezone(tz)
+            return fixed.replace(tzinfo=None)
+
+    for mod in modules:
+        monkeypatch.setattr(f"{mod}.datetime", _Clock)
+
+
+@pytest.mark.asyncio
+async def test_explicit_today_empty_shows_done_and_tomorrow_link(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """Явный ``w=today`` вечером: пустой список, подпись и ссылка на завтра — без ближайших дней."""
+    fixed = datetime(2026, 10, 7, 22, 0, tzinfo=ZoneInfo("Europe/Minsk")).astimezone(timezone.utc)
+    _freeze_modules(monkeypatch, fixed, "src.application.selection_page", "src.application.arena_public_use_cases")
+
+    name = f"Сегодня {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Каток")
+    today = fixed.astimezone(ZoneInfo("Europe/Minsk")).date()
+    await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=today,
+        starts_at_local="08:00",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=1100,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    later = today + timedelta(days=4)
+    later_id = await _insert_arena(db_session, city_id, name="Каток через четыре дня")
+    await create_ice_session(
+        db_session,
+        later_id,
+        local_date=later,
+        starts_at_local="09:30",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=1100,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        resp = await client.get(f"/c/{city_slug(name)}?t=ice&w=today")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "На сегодня всё" in body
+    assert "Смотреть завтра" in body
+    assert "w=tomorrow" in body
+    assert "Каток через четыре дня" not in body
+    assert selection_description({"today_window_done": True}) == "На сегодня всё"
+
+
 @pytest.mark.asyncio
 async def test_list_with_empty_window_shows_nearest_as_tickets(app_use_test_db, db_session) -> None:
-    """Окно «сегодня» пусто: ближайшие сеансы — билетами, без ISO-дат и «уточняется»."""
+    """Пустое окно не-«сегодня»: ближайшие сеансы — билетами, без ISO-дат и «уточняется»."""
     name = f"Окно {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     later = await _insert_arena(db_session, city_id, name="Каток через три дня")
     await _insert_arena(db_session, city_id, name="Каток без расписания")
-    day = datetime.now(ZoneInfo("Europe/Minsk")).date() + timedelta(days=3)
+    minsk_today = datetime.now(ZoneInfo("Europe/Minsk")).date()
+    day = minsk_today + timedelta(days=3)
     await create_ice_session(
         db_session,
         later,
@@ -93,12 +158,10 @@ async def test_list_with_empty_window_shows_nearest_as_tickets(app_use_test_db, 
     invalidate_public_city_cache()
 
     async with _client() as client:
-        resp = await client.get(f"/c/{city_slug(name)}?t=ice&w=today")
+        resp = await client.get(f"/c/{city_slug(name)}?t=ice&w=tomorrow")
     assert resp.status_code == 200
     body = resp.text
     assert "b-slot__time" in body and "9:30" in body
     assert not _ISO_DATE.search(re.sub(r'(href|content|datetime)="[^"]*"', "", body))
     assert "уточняется" not in body
-    assert "На сегодня всё" in body
-    assert "сеансов нет — показываем ближайшие" not in body
-    assert "Каток через три дня" in body
+    assert body.index("Каток через три дня") < body.index("Каток без расписания")

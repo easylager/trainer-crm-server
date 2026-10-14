@@ -1,10 +1,10 @@
-"""Главная и /c/{город}?w=today: вечером без будущих сеансов — вкладка «Завтра» и подпись."""
+"""Главная: вечером без будущих сеансов — «Завтра». Список: явный ``w=today`` не сдвигается."""
 
 from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -13,7 +13,9 @@ from httpx import ASGITransport, AsyncClient
 from src.api.app import app
 from src.application.ice_city_day import city_slug, invalidate_public_city_cache
 from src.application.ice_session_use_cases import create_ice_session
+from src.shared.copy_ru import t
 from tests.api.test_public_arenas import _insert_arena, _insert_city
+from tests.api.test_selection_page import _og
 
 
 def _client() -> AsyncClient:
@@ -22,6 +24,20 @@ def _client() -> AsyncClient:
 
 def _utc(y, m, d, hh, mm=0):
     return datetime(y, m, d, hh, mm, tzinfo=ZoneInfo("Europe/Minsk")).astimezone(timezone.utc)
+
+
+def _freeze_modules(monkeypatch, fixed: datetime, *modules: str) -> None:
+    import datetime as dt
+
+    class _Clock(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is not None:
+                return fixed.astimezone(tz)
+            return fixed.replace(tzinfo=None)
+
+    for mod in modules:
+        monkeypatch.setattr(f"{mod}.datetime", _Clock)
 
 
 @pytest.mark.asyncio
@@ -58,6 +74,7 @@ async def test_catalog_home_shifts_to_tomorrow_evening(app_use_test_db, db_sessi
     )
     await db_session.commit()
     invalidate_public_city_cache()
+    slug = city_slug(name)
 
     async with _client() as client:
         home = await client.get("/")
@@ -67,6 +84,7 @@ async def test_catalog_home_shifts_to_tomorrow_evening(app_use_test_db, db_sessi
     assert 'href="/?when=tomorrow" aria-current="true"' in home.text
     assert "На сегодня всё — вот завтра" in home.text
     assert "1 сеанс" in home.text.replace("\u00a0", " ")
+    assert f'href="/c/{slug}?t=ice&amp;w=tomorrow"' in home.text
 
     assert explicit.status_code == 200
     assert explicit.url.path == "/" and "when=today" in str(explicit.url)
@@ -74,22 +92,86 @@ async def test_catalog_home_shifts_to_tomorrow_evening(app_use_test_db, db_sessi
     assert "На сегодня всё — вот завтра" not in explicit.text
 
 
-def _freeze_modules(monkeypatch, fixed: datetime, *modules: str) -> None:
-    import datetime as dt
+@pytest.mark.asyncio
+async def test_home_shifts_at_2359_minsk(app_use_test_db, db_session, monkeypatch) -> None:
+    fixed = _utc(2026, 10, 13, 23, 59)
+    monkeypatch.setattr("src.application.catalog_home_page._utc_now", lambda: fixed)
+    name = f"2359 {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Каток")
+    await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=date(2026, 10, 13),
+        starts_at_local="08:00",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=500,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=date(2026, 10, 14),
+        starts_at_local="10:00",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=500,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
 
-    class _Clock(dt.datetime):
-        @classmethod
-        def now(cls, tz=None):
-            if tz is not None:
-                return fixed.astimezone(tz)
-            return fixed.replace(tzinfo=None)
+    async with _client() as client:
+        home = await client.get("/")
 
-    for mod in modules:
-        monkeypatch.setattr(f"{mod}.datetime", _Clock)
+    assert home.status_code == 200
+    assert 'href="/?when=tomorrow" aria-current="true"' in home.text
+    assert "На сегодня всё — вот завтра" in home.text
 
 
 @pytest.mark.asyncio
-async def test_city_ice_list_shifts_to_tomorrow_without_url_change(app_use_test_db, db_session, monkeypatch) -> None:
+async def test_city_explicit_today_at_midnight_minsk(app_use_test_db, db_session, monkeypatch) -> None:
+    """00:00 по Минску: новый календарный день, ``w=today`` пуст — без сдвига на завтрашние сеансы."""
+    fixed = _utc(2026, 10, 14, 0, 0)
+    _freeze_modules(
+        monkeypatch,
+        fixed,
+        "src.application.selection_page",
+        "src.application.arena_public_use_cases",
+    )
+    name = f"0000 {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Каток")
+    await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=date(2026, 10, 15),
+        starts_at_local="10:00",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=500,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+    done = t("selection.today_done")
+
+    async with _client() as client:
+        resp = await client.get(f"/c/{slug}", params={"t": "ice", "w": "today"})
+
+    assert resp.status_code == 200
+    assert done in resp.text
+    assert "10:00" not in resp.text
+    assert _og(resp.text, "og:description") == done
+
+
+@pytest.mark.asyncio
+async def test_city_ice_list_keeps_today_without_nearest_fallback(app_use_test_db, db_session, monkeypatch) -> None:
     fixed = _utc(2026, 10, 7, 23, 59)
     _freeze_modules(
         monkeypatch,
@@ -128,15 +210,18 @@ async def test_city_ice_list_shifts_to_tomorrow_without_url_change(app_use_test_
     await db_session.commit()
     invalidate_public_city_cache()
     slug = city_slug(name)
+    done = t("selection.today_done")
 
     async with _client() as client:
         resp = await client.get(f"/c/{slug}", params={"t": "ice", "w": "today"})
 
     assert resp.status_code == 200
     assert "w=today" in str(resp.url)
-    assert "На сегодня всё — вот завтра" in resp.text
-    assert "12:00" in resp.text
+    assert done in resp.text
+    assert "Смотреть завтра" in resp.text
+    assert "12:00" not in resp.text
     assert "сеансов нет — показываем ближайшие" not in resp.text
+    assert _og(resp.text, "og:description") == done
 
 
 @pytest.mark.asyncio
@@ -170,4 +255,3 @@ async def test_only_past_sessions_today_no_shift_when_tomorrow_empty(app_use_tes
     assert 'href="/?when=tomorrow" aria-current="true"' in home.text or re.search(
         r"вот (ср|чт|пт|сб|вс|завтра)", home.text.lower()
     )
-

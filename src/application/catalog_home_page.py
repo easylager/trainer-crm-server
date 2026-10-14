@@ -544,6 +544,29 @@ def _upcoming_more_href(
     return None
 
 
+def _home_tile_when(
+    when: str | None,
+    when_key: str,
+    *,
+    selected_day: date | None,
+    today: date,
+    home_shift_note: str,
+) -> str | None:
+    """Окно для ссылок плиток: явный ``?when=`` или сдвиг главной без смены URL."""
+    link = _city_list_when(when, when_key, selected_day=selected_day, today=today)
+    if link:
+        return link
+    if not home_shift_note:
+        return None
+    if when_key == "tomorrow":
+        return "tomorrow"
+    if when_key == "weekend":
+        return "weekend"
+    if when_key == "day" and selected_day == today + timedelta(days=1):
+        return "tomorrow"
+    return None
+
+
 def _city_list_when(when: str | None, when_key: str, *, selected_day: date | None, today: date) -> str | None:
     """Окно, которое плитка города несёт в список. Только явно выбранное: без ``when``
     главная показывает умный дефолт, и плитка по-прежнему ведёт на страницу города.
@@ -935,9 +958,6 @@ async def load_catalog_home_view(
         "country": "BY",
         "now": now,
         "when_key": when_key,
-        "city_when": _city_list_when(when, when_key, selected_day=selected_day, today=today),
-        "period_start": period_start,
-        "period_end": period_end,
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": None,
         "user_city_id": None,
@@ -1086,9 +1106,9 @@ async def load_catalog_home_view(
         "day_picker": _build_day_picker(now) if show_day_picker else [],
         "country": country,
         "when_key": when_key,
-        "city_when": _city_list_when(when, when_key, selected_day=selected_day, today=today),
-        "period_start": period_start,
-        "period_end": period_end,
+        "city_when": _home_tile_when(
+            when, when_key, selected_day=selected_day, today=today, home_shift_note=home_shift_note
+        ),
         "home_shift_note": home_shift_note,
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": user_city_vm,

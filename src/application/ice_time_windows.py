@@ -256,10 +256,6 @@ def home_shift_note_for_period(when_key: str, window: TimeWindow, *, today: date
     return t("home.shift.after_today_tomorrow")
 
 
-def selection_today_should_shift(when: str | None) -> bool:
-    return (when or "").strip().lower() == "today"
-
-
 def resolve_home_window(
     when: str | None,
     day: str | None = None,
