@@ -275,11 +275,19 @@ def share_html(
     )
 
 
-def trainer_rows_html(trainers: list[Mapping[str, Any]], *, href_for: Any) -> str:
-    """Тренеры строками (TASK-265): лицо, имя, занятие и цена «от», справа — «Записаться» или «Написать».
+def trainer_rows_html(
+    trainers: list[Mapping[str, Any]],
+    *,
+    href_for: Any,
+    cta: str | None = None,
+) -> str:
+    """Тренеры строками (TASK-265): лицо, имя, занятие и цена «от», справа — CTA.
 
     Вся строка — ссылка в Telegram на карточку тренера (``href_for(trainer)``), как тап по
     тренеру на карточке катка в Mini App. Без фото — первая буква имени, не пустой кружок.
+
+    ``cta`` — фиксированная подпись справа (например ``t("cta.go")`` на SSR-карточке места).
+    Иначе «Записаться» / «Написать» по ``can_book``.
     """
     rows: list[str] = []
     for trainer in trainers:
@@ -293,12 +301,12 @@ def trainer_rows_html(trainers: list[Mapping[str, Any]], *, href_for: Any) -> st
             ava = f'<span class="b-row__ava b-row__ava--mono" aria-hidden="true">{esc(trainer.get("initial") or "")}</span>'
         line = str(trainer.get("line") or "")
         line_html = f'<span class="b-row__line">{esc(line)}</span>' if line else ""
-        cta = t("cta.enroll") if trainer.get("can_book") else t("cta.write")
+        row_cta = cta if cta else (t("cta.enroll") if trainer.get("can_book") else t("cta.write"))
         rows.append(
             f'<div class="b-row b-row--coach">{ava}'
             f'<span class="b-row__body"><a class="b-row__title b-row__link" href="{esc(href)}">{esc(trainer.get("name"))}</a>'
             f"{line_html}</span>"
-            f'<span class="b-row__cta">{esc(cta)}</span></div>'
+            f'<span class="b-row__cta">{esc(row_cta)}</span></div>'
         )
     if not rows:
         return ""

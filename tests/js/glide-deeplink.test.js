@@ -38,6 +38,10 @@ describe('GlideDeepLink.deepLinkTarget', () => {
       key: 'ice',
       path: 'ice?city_id=7&intent=service',
     });
+    assert.deepEqual(G.deepLinkTarget('trainer_15'), {
+      key: 'catalog',
+      path: 'catalog?trainer_id=15',
+    });
     assert.equal(G.deepLinkTarget('nope'), null);
   });
 });
