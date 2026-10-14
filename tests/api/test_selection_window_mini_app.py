@@ -88,6 +88,42 @@ async def test_today_window_zero_shows_nearest_caption(app_use_test_db, db_sessi
 
 
 @pytest.mark.asyncio
+async def test_today_window_afternoon_session_counts_as_in_window(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """14:00 Минск, сеанс в 16:00 — в окне «сегодня», без подписи «сеансов нет»."""
+    fixed = _utc(2026, 10, 7, 14, 0)
+    _freeze_modules(monkeypatch, fixed, "src.application.selection_page", "src.application.arena_public_use_cases")
+    name = f"День {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Каток днём")
+    today = fixed.astimezone(ZoneInfo("Europe/Minsk")).date()
+    await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=today,
+        starts_at_local="16:00",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=500,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+    empty_caption = t("selection.window.empty_caption", label="Сегодня")
+
+    async with _client() as client:
+        resp = await client.get(f"/c/{slug}", params={"t": "ice", "w": "today"})
+
+    assert resp.status_code == 200
+    assert empty_caption not in resp.text
+    assert "16:00" in resp.text
+    assert "b-card2--off" not in resp.text
+
+
+@pytest.mark.asyncio
 async def test_today_window_partial_shows_break(app_use_test_db, db_session, monkeypatch) -> None:
     fixed = _utc(2026, 10, 7, 14, 0)
     _freeze_modules(monkeypatch, fixed, "src.application.selection_page", "src.application.arena_public_use_cases")

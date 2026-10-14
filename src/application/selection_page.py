@@ -39,7 +39,7 @@ from src.application.arena_public_use_cases import (
     list_city_selection_places,
     list_public_ice_arenas,
 )
-from src.application.ice_time_windows import resolve_window
+from src.application.ice_time_windows import resolve_list_window, resolve_window
 from src.shared.copy_ru import t
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
@@ -207,8 +207,17 @@ async def _window_slots(
     """Сеансы мест в окне (или ближайшие, если окна нет) одним запросом."""
     if not arena_ids:
         return {}
-    start = datetime.fromisoformat(window["from"]) if window else now
-    end = datetime.fromisoformat(window["to"]) if window else None
+    if window:
+        win_from = datetime.fromisoformat(str(window["from"]))
+        if win_from.tzinfo is None:
+            win_from = win_from.replace(tzinfo=timezone.utc)
+        start = max(now, win_from)
+        end = datetime.fromisoformat(str(window["to"]))
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+    else:
+        start = now
+        end = None
     rows = (
         await session.execute(
             text(f"""
@@ -375,9 +384,11 @@ async def load_selection_view(
             when=when if skating else None,
             limit=MAX_PLACES,
             cursor=str(offset) if offset else None,
+            now=now,
         )
         items = list(listing.get("items") or [])
-        window = listing.get("window")
+        tw = resolve_list_window(when, None, now) if skating and when else None
+        window = tw.as_payload() if tw else listing.get("window")
         total = int(listing.get("total") or len(items))
         pages = max(1, (total + MAX_PLACES - 1) // MAX_PLACES)
         filter_chips = []
@@ -448,8 +459,11 @@ async def load_selection_view(
             shown = hits or items
     elif skating and window:
         window_slots = slots
-        nearest_slots = await _window_slots(
-            session, [int(i["id"]) for i in items], None, now, session_sql=session_sql
+        missing_ids = [int(i["id"]) for i in items if not window_slots.get(int(i["id"]))]
+        nearest_slots = (
+            await _window_slots(session, missing_ids, None, now, session_sql=session_sql)
+            if missing_ids
+            else {}
         )
         display_slots: dict[int, list[dict[str, Any]]] = {}
         for item in items:
