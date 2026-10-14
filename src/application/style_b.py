@@ -57,6 +57,9 @@ def public_fonts_head_html() -> str:
         f'as="font" type="font/woff2" crossorigin />\n'
         f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-lat.woff2?v={v}" '
         f'as="font" type="font/woff2" crossorigin />\n'
+        # Основной текст тоже: без него на медленной сети абзацы перерисовывались из системного шрифта.
+        f'  <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v={v}" '
+        f'as="font" type="font/woff2" crossorigin />\n'
         f'  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v={v}" />'
     )
 
