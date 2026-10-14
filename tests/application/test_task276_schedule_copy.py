@@ -43,7 +43,7 @@ def test_schedule_section_phone_without_banner_text() -> None:
     assert "на сайте катка" not in html
 
 
-def test_schedule_section_hours_with_phone() -> None:
+def test_schedule_section_does_not_repeat_hours_from_info() -> None:
     html = _b_schedule(
         _view(
             phone="+375291112233",
@@ -54,10 +54,10 @@ def test_schedule_section_hours_with_phone() -> None:
         links={"tel": "tel:+375291112233"},
     )
     assert "tel:+375291112233" in html
-    assert "каждый день 7:00–23:00" in html
+    assert "каждый день 7:00–23:00" not in html
 
 
-def test_schedule_section_site_when_no_phone_or_hours() -> None:
+def test_schedule_section_site_when_no_phone() -> None:
     html = _b_schedule(
         _view(website="https://rink.example/ice"),
         base_path="/p/1",

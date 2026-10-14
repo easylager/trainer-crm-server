@@ -45,18 +45,15 @@
     var digits = String(raw || '').replace(/\D/g, '');
     return digits.length >= 7 ? 'tel:' + String(raw || '').replace(/[^\d+]/g, '') : '';
   }
-  /** Нет сеансов: телефон и часы, иначе сайт, иначе секции нет. */
+  /** Нет сеансов: телефон (часы — в блоке info), иначе сайт, иначе секции нет. */
   function scheduleAsk(card) {
     var callHref = callHrefFor(card);
-    var week = weekHours(card && card.opening_hours, new Date(), card && card.timezone);
-    var hasHours = week && week.rows && week.rows.length;
-    if (callHref || hasHours) {
+    if (callHref) {
       return {
         mode: 'phone',
         banner: null,
         showRibbon: false,
-        callHref: callHref || undefined,
-        hoursWeek: hasHours ? week : null,
+        callHref: callHref,
       };
     }
     var siteHref = safeHttpUrl(card && card.website_url);

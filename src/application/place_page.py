@@ -1202,25 +1202,12 @@ def _b_schedule_site_link(card: Mapping[str, Any]) -> str:
     )
 
 
-def _b_schedule_hours_block(card: Mapping[str, Any]) -> str:
-    rows = _b_hours_rows(card)
-    if not rows:
-        return ""
-    bits = [
-        f'<div class="b-info__row"><span class="b-info__key">{_esc(key)}</span>'
-        f'<span class="b-info__val">{_esc(value)}</span></div>'
-        for key, value in rows
-    ]
-    return f'<div class="b-info b-info--schedule">{"".join(bits)}</div>'
-
-
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
     from src.application.style_b import section
 
     call = _b_call(card, links)
-    hours = _b_schedule_hours_block(card)
-    if call or hours:
-        return section(title, f"{call}{hours}", klass="b-sec--place", sec_id="schedule")
+    if call:
+        return section(title, call, klass="b-sec--place", sec_id="schedule")
     site_link = _b_schedule_site_link(card)
     if site_link:
         body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{site_link}'
