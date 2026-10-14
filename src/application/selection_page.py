@@ -486,12 +486,11 @@ async def load_selection_view(
         rest = [i for i in items if int(i["id"]) in off_window_ids]
         rest.sort(key=_slot_sort_key)
         tail = [i for i in items if int(i["id"]) not in display_slots]
-        # Как inWindow в Mini App: «время по телефону» и закрытый сезон — не ответ на окно,
-        # они уходят под разделитель; место без сеансов остаётся в основной группе.
-        tail_rest = [i for i in tail if _live_kind(i) in _WINDOW_REST_KINDS]
-        tail_in = [i for i in tail if _live_kind(i) not in _WINDOW_REST_KINDS]
-        shown = hits + tail_in + rest + tail_rest
-        window_rest_ids = [int(i["id"]) for i in rest + tail_rest]
+        # В окне — только места с сеансом в окне. Ниже разделителя: сначала ближайший лёд,
+        # потом места без расписания (по телефону, закрытый сезон, без сеансов) — ответ
+        # на «Сегодня» не начинается с катка, где льда нет вовсе (TASK-275).
+        shown = hits + rest + tail
+        window_rest_ids = [int(i["id"]) for i in rest + tail]
         window_hits = len(hits)
         window_empty = window_hits == 0 and bool(rest or tail)
     else:
@@ -1422,14 +1421,6 @@ def _b_state_note(item: Mapping[str, Any]) -> str:
     return str(live.get("text") or "").strip()
 
 
-_WINDOW_REST_KINDS = frozenset({"phone", "season_closed"})
-
-
-def _live_kind(item: Mapping[str, Any]) -> str:
-    live = item.get("live")
-    return str(live.get("kind") or "") if isinstance(live, Mapping) else ""
-
-
 def _window_miss_label(window: Mapping[str, Any] | None) -> str:
     if not window:
         return ""
@@ -1438,19 +1429,23 @@ def _window_miss_label(window: Mapping[str, Any] | None) -> str:
 
 
 def _b_window_break(view: Mapping[str, Any], rest_count: int) -> str:
+    """«Сегодня нет · 2 катка · их ближайшее время». ``rest_count`` — места с ближайшим сеансом:
+    места без расписания тоже под разделителем, но ближайшего времени у них нет."""
     window = view.get("window")
-    if not window or rest_count <= 0:
+    if not window:
         return ""
-    noun = selection_count_noun(view)
-    sub = t(
-        "selection.window.break_sub",
-        count=rest_count,
-        noun=plural_ru(rest_count, noun[0], noun[1], noun[2]),
-    )
     title = _window_miss_label(window)
+    sub = ""
+    if rest_count > 0:
+        noun = selection_count_noun(view)
+        sub = " · " + t(
+            "selection.window.break_sub",
+            count=rest_count,
+            noun=plural_ru(rest_count, noun[0], noun[1], noun[2]),
+        )
     return (
         '<div class="b-window-break" role="separator">'
-        f'<span class="b-window-break__pill"><b>{_esc(title)}</b> · {_esc(sub)}</span>'
+        f'<span class="b-window-break__pill"><b>{_esc(title)}</b>{_esc(sub)}</span>'
         "</div>"
     )
 
@@ -1494,7 +1489,8 @@ def _b_selection_cards(
             )
         )
     if hits and rest and window:
-        parts.append(_b_window_break(view, len(rest)))
+        off_ids = {int(x) for x in (view.get("off_window_ids") or [])}
+        parts.append(_b_window_break(view, sum(1 for i in rest if int(i["id"]) in off_ids)))
     for item in rest:
         parts.append(
             _b_place_card(
