@@ -13,23 +13,14 @@
   var inner = dock.querySelector('.b-tgdock__inner');
   var THRESHOLD = 48;
 
-  function dockBlockHeight() {
-    if (!inner) return dock.offsetHeight;
-    var style = window.getComputedStyle(dock);
-    return (
-      inner.offsetHeight +
-      parseFloat(style.paddingTop || 0) +
-      parseFloat(style.paddingBottom || 0)
-    );
-  }
+  // Высота плашки в потоке. Мерить можно только пока она в потоке: плавающая
+  // пилюля ниже, и заполнитель по ней дёргал контент на разницу высот.
+  var inFlowHeight = 0;
 
   function sync() {
     var floating = window.scrollY > THRESHOLD;
-    if (floating) {
-      if (spacer) spacer.style.height = dockBlockHeight() + 'px';
-    } else if (spacer) {
-      spacer.style.height = '0px';
-    }
+    if (!dock.classList.contains('is-floating')) inFlowHeight = dock.offsetHeight;
+    if (spacer) spacer.style.height = floating ? inFlowHeight + 'px' : '0px';
     dock.classList.toggle('is-floating', floating);
   }
 
