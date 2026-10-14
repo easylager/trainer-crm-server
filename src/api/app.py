@@ -2148,19 +2148,6 @@ def shared_public_page_view_beacon_js(request: Request):
     )
 
 
-@app.get("/static/shared/public-link-prefetch.js")
-def shared_public_link_prefetch_js(request: Request):
-    """FEEL-A: prefetch по касанию ссылки на /, /c/, /p/."""
-    path = _SHARED_DIR / "public-link-prefetch.js"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="JS file not found")
-    return FileResponse(
-        path,
-        media_type="application/javascript",
-        headers=_webapp_versioned_asset_cache_headers(request),
-    )
-
-
 @app.get("/static/shared/list-scroll-restore.js")
 def shared_list_scroll_restore_js(request: Request):
     """Запасное восстановление скролла списка /c/ если bfcache недоступен."""
