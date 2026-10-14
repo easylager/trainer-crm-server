@@ -349,6 +349,16 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-row { position: relative; }
 .b-row__link { color: var(--g-ink) !important; text-decoration: none; }
 .b-row__link::after { content: ""; position: absolute; inset: 0; }
+/* Тренер строкой (TASK-265): лицо вместо иконки, справа — действие, как «Записаться» у карточки. */
+.b-row__ava {
+  flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%;
+  object-fit: cover; background: var(--g-accent-wash);
+}
+.b-row__ava--mono {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: var(--g-accent-ink);
+}
+.b-row__cta { flex: 0 0 auto; font-size: 15px; font-weight: 600; color: var(--g-accent-ink); white-space: nowrap; }
 .b-quick { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .b-quick a, .b-quick span {
   display: inline-flex; align-items: center; gap: 4px;

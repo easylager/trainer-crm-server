@@ -107,7 +107,10 @@
     "feed.time_by_phone": "Время — по телефону",
     "feed.schedule_first": "сначала с расписанием",
     "place.tickets_online": "Билеты — на сайте катка ↗",
-    "cta.enroll": "Записаться"
+    "cta.enroll": "Записаться",
+    "cta.write": "Написать",
+    "place.trainers": "Тренеры",
+    "hub.trainers_all": "Все тренеры"
   };
 
   function t(key, kw) {

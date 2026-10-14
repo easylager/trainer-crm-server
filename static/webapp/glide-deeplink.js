@@ -86,6 +86,19 @@
       });
   }
 
+  /**
+   * ``trainer_7`` / ``trainer_7_a_3`` (place_links.trainer_start_param) — карточка тренера,
+   * тот же путь, что тап по тренеру на карточке катка (arena-card-model.buildBookingHref).
+   */
+  function trainerDeepLinkTarget(sp) {
+    var m = /^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?$/i.exec(String(sp || '').trim());
+    if (!m) return null;
+    var path = m[2]
+      ? 'catalog?from=arena&trainer_id=' + m[1] + '&arena_id=' + m[2]
+      : 'catalog?trainer_id=' + m[1];
+    return { key: 'catalog', path: path };
+  }
+
   function deepLinkTarget(sp) {
     sp = String(sp || '').trim();
     var parsed = parseArenaDeepLink(sp);
@@ -93,6 +106,8 @@
       return { key: 'arena', path: arenaLegacyMiniAppPath(parsed.arenaId, parsed.sessionId) };
     }
     if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
+    var coach = trainerDeepLinkTarget(sp);
+    if (coach) return coach;
     var catalog =
       /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other|ohm|service))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(
         sp

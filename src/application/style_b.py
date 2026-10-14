@@ -273,3 +273,33 @@ def share_html(
         f'<p class="b-share__title">{title}</p>'
         f'<div class="b-share__row share__row">{row}</div>{extra_html}{bot}</section>'
     )
+
+
+def trainer_rows_html(trainers: list[Mapping[str, Any]], *, href_for: Any) -> str:
+    """Тренеры строками (TASK-265): лицо, имя, занятие и цена «от», справа — «Записаться» или «Написать».
+
+    Вся строка — ссылка в Telegram на карточку тренера (``href_for(trainer)``), как тап по
+    тренеру на карточке катка в Mini App. Без фото — первая буква имени, не пустой кружок.
+    """
+    rows: list[str] = []
+    for trainer in trainers:
+        href = href_for(trainer)
+        if not href:
+            continue
+        photo = trainer.get("photo_url")
+        if photo:
+            ava = f'<img class="b-row__ava" src="{esc(photo)}" alt="" width="44" height="44" loading="lazy" decoding="async" fetchpriority="low" />'
+        else:
+            ava = f'<span class="b-row__ava b-row__ava--mono" aria-hidden="true">{esc(trainer.get("initial") or "")}</span>'
+        line = str(trainer.get("line") or "")
+        line_html = f'<span class="b-row__line">{esc(line)}</span>' if line else ""
+        cta = t("cta.enroll") if trainer.get("can_book") else t("cta.write")
+        rows.append(
+            f'<div class="b-row b-row--coach">{ava}'
+            f'<span class="b-row__body"><a class="b-row__title b-row__link" href="{esc(href)}">{esc(trainer.get("name"))}</a>'
+            f"{line_html}</span>"
+            f'<span class="b-row__cta">{esc(cta)}</span></div>'
+        )
+    if not rows:
+        return ""
+    return f'<div class="b-list">{"".join(rows)}</div>'
