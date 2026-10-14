@@ -25,6 +25,12 @@
     return doc.getElementById ? doc.getElementById('schedule') : null;
   }
 
+  function responseIsHtml(res) {
+    if (!res || !res.headers || typeof res.headers.get !== 'function') return false;
+    var ct = (res.headers.get('content-type') || '').toLowerCase();
+    return ct.indexOf('text/html') !== -1;
+  }
+
   function wireBfCacheSessionRefresh(g, opts) {
     opts = opts || {};
     var fetchFn = opts.fetch || (g && g.fetch);
@@ -50,7 +56,7 @@
 
       fetchFn(url, { credentials: 'same-origin', headers: { Accept: 'text/html' } })
         .then(function (res) {
-          if (!res || !res.ok) throw new Error('fetch');
+          if (!res || !res.ok || !responseIsHtml(res)) throw new Error('fetch');
           return res.text();
         })
         .then(function (html) {
@@ -61,6 +67,7 @@
           if (typeof g.scrollTo === 'function') {
             g.scrollTo(0, scrollY);
           }
+          loadedAt = nowFn();
         })
         .catch(function () {});
     });
