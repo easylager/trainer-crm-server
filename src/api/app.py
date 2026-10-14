@@ -2120,6 +2120,19 @@ def shared_list_scroll_restore_js(request: Request):
     )
 
 
+@app.get("/static/shared/public-bfcache-session-refresh.js")
+def shared_public_bfcache_session_refresh_js(request: Request):
+    """FEEL-A: тихое обновление списка сеансов после долгого bfcache."""
+    path = _SHARED_DIR / "public-bfcache-session-refresh.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/zovi-create.js")
 def shared_zovi_create_js(request: Request):
     """TASK-234: экран «Позови на каток». Use ``?v=…`` for long cache."""

@@ -1289,7 +1289,11 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{links_row}'
+    body = (
+        f'<div data-glide-session-list-root>'
+        f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{links_row}'
+        f"</div>"
+    )
     aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 

@@ -1167,7 +1167,7 @@ def render_selection_page(
         hero
         + (f'<section class="b-sec">{controls}</section>' if controls else "")
         + (f'<section class="b-sec">{note}</section>' if note else "")
-        + f'<section class="b-sec b-cards">{places}</section>'
+        + f'<section class="b-sec b-cards" data-glide-session-list-root>{places}</section>'
         + _b_pager(view, city_name=city_name)
         + share_pick
         + share_html(share, telegram_url=None, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
