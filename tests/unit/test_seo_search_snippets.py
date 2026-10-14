@@ -101,3 +101,9 @@ def test_breadcrumbs_are_absolute_or_absent() -> None:
         "https://glideclub.by/p/minsk/zamok",
     ]
     assert breadcrumb_script("/p/minsk/zamok", [("Glide", "/")]) == ""
+
+
+def test_city_search_description_names_ohm_when_the_city_has_it() -> None:
+    text = city_hub_search_description(_hub(ohm_counts={"all": 19}, ohm_arena_count=4)).replace("\u00a0", " ")
+    assert "Открытые тренировки с клюшкой (ОХМ) — на 4 катках." in text
+    assert "ОХМ" not in city_hub_search_description(_hub())

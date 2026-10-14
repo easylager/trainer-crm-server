@@ -541,6 +541,13 @@ def city_hub_search_description(view: Mapping[str, Any]) -> str:
     elif rinks:
         n = len(rinks)
         sentences.append(f"{n}\u00a0{plural_ru(n, 'каток', 'катка', 'катков')} {in_city}: адреса, телефоны и часы работы")
+    # ОХМ — свой запрос («охм минск»): список ОХМ закрыт от индекса, поэтому слово
+    # должно быть хотя бы в сниппете города.
+    ohm_n = int(view.get("ohm_arena_count") or 0) if int((view.get("ohm_counts") or {}).get("all") or 0) else 0
+    if ohm_n:
+        sentences.append(
+            f"Открытые тренировки с клюшкой (ОХМ) — на {ohm_n}\u00a0{plural_ru(ohm_n, 'катке', 'катках', 'катках')}"
+        )
     service_n = int(view.get("service_count") or 0)
     if service_n:
         sentences.append(f"Заточка коньков — {service_n}\u00a0{plural_ru(service_n, 'место', 'места', 'мест')}")
