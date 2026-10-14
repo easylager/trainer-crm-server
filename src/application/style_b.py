@@ -30,6 +30,35 @@ STYLE_VERSION = _file_version("static/share/style-b.css")
 # Отдельной ссылкой, не @import из style-b.css: импорт без ?v= шёл с no-store и ещё одним кругом до первой отрисовки.
 COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
 DOCK_SCRIPT_VERSION = _file_version("static/share/tg-dock.js")
+PUBLIC_FONTS_CSS_VERSION = _file_version("static/shared/glide-public-fonts.css")
+
+
+def _fonts_dir_version() -> str:
+    import hashlib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "static" / "fonts" / "glide-public"
+    digest = hashlib.sha256()
+    for path in sorted(root.glob("*.woff2")):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:10]
+
+
+PUBLIC_FONTS_ASSET_VERSION = _fonts_dir_version()
+
+
+def public_fonts_head_html() -> str:
+    """Self-hosted Golos Text + Dela Gothic One для публичных страниц стиля B."""
+    css_v = PUBLIC_FONTS_CSS_VERSION
+    asset_v = PUBLIC_FONTS_ASSET_VERSION
+    return (
+        f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v={asset_v}" '
+        f'as="font" type="font/woff2" crossorigin />\n'
+        f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-lat.woff2?v={asset_v}" '
+        f'as="font" type="font/woff2" crossorigin />\n'
+        f'  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v={css_v}" />'
+    )
 
 
 def esc(value: Any) -> str:

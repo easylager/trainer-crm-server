@@ -1408,7 +1408,7 @@ def render_catalog_home_page(
             f'<span class="off"><i></i>{_esc(t("home.map.legend_off"))}</span></figcaption></figure></section>'
         )
     # TASK-278: «Открыть в Telegram» — плашкой внизу экрана, а не секцией в конце страницы.
-    from src.application.style_b import telegram_dock_html, telegram_dock_script_html
+    from src.application.style_b import public_fonts_head_html, telegram_dock_html, telegram_dock_script_html
 
     cta = telegram_dock_html(cta_url, hint=t("tg.map_all"))
     values = {
@@ -1420,6 +1420,7 @@ def render_catalog_home_page(
         "__OG_IMAGE__": _esc(og_image_url),
         "__ROBOTS__": _esc(robots),
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url),
+        "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,

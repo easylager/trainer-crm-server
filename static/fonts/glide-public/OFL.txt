@@ -1,0 +1,2 @@
+Golos Text and Dela Gothic One are licensed under the SIL Open Font License 1.1.
+See https://openfontlicense.org and the upstream repositories googlefonts/golos-text and googlefonts/dela-gothic-one.

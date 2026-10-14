@@ -1199,7 +1199,7 @@ def render_selection_page(
             "itemListElement": elements,
         }
     )
-    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = (
@@ -1226,6 +1226,7 @@ def render_selection_page(
             "__ROBOTS__": "noindex, follow" if (variant or page_no > 1) else "index, follow",
             "__HEAD_EXTRA__": _head_links_html(view, city_name=city_name, canonical_base=canonical_url),
             "__JSONLD__": ld,
+            "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
             "__COMPONENTS_V__": COMPONENTS_VERSION,
