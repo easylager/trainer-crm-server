@@ -47,26 +47,39 @@
   }
   /** Нет сеансов: факт и способ узнать. Нет телефона и сайта — секции нет. */
   function scheduleAsk(card) {
-    var banner = copyLine('place.schedule_not_published', 'Расписание пока не публикуют.');
+    var SM = scheduleModeApi();
+    var noGrid = SM && typeof SM.hasNoPublishedGrid === 'function' && SM.hasNoPublishedGrid(card);
     var callHref = callHrefFor(card);
+    var siteHref = safeHttpUrl(card && card.website_url);
+    if (noGrid) {
+      if (!callHref && !siteHref) {
+        return { mode: 'none', banner: null, showRibbon: false };
+      }
+      return {
+        mode: callHref ? 'phone' : 'site',
+        banner: copyLine('place.schedule_not_published', 'Расписание пока не публикуют.'),
+        showRibbon: false,
+        callHref: callHref || undefined,
+        siteHref: callHref ? undefined : siteHref,
+      };
+    }
     if (callHref) {
       return {
         mode: 'phone',
-        banner: banner,
+        banner: copyLine('place.phone_schedule', 'Время массового катания называют по телефону.'),
         showRibbon: false,
         callHref: callHref,
       };
     }
-    var siteHref = safeHttpUrl(card && card.website_url);
     if (siteHref) {
       return {
         mode: 'site',
-        banner: banner,
+        banner: copyLine('place.site_schedule', 'Время массового катания — на сайте катка'),
         showRibbon: false,
         siteHref: siteHref,
       };
     }
-    return { mode: 'none', banner: banner, showRibbon: false };
+    return { mode: 'none', banner: null, showRibbon: false };
   }
 
   var RuText = typeof globalThis !== 'undefined' ? globalThis.RuText : null;

@@ -992,27 +992,38 @@ describe('TASK-204 iceFeedView schedule_mode', () => {
   it('no sessions: phone sentence, site sentence, or no section', () => {
     const { iceFeedView } = loadModel();
     const phone = iceFeedView({
-      card: { tier: 'C', phone: '+375291112233' },
+      card: { tier: 'C', phone: '+375291112233', freshness: { schedule_auto: true } },
       hasSessions: false,
     });
     assert.equal(phone.mode, 'phone');
-    assert.equal(phone.banner, 'Расписание пока не публикуют.');
+    assert.equal(phone.banner, 'Время массового катания называют по телефону.');
     assert.equal(phone.callHref, 'tel:+375291112233');
 
     const site = iceFeedView({
-      card: { tier: 'B', website_url: 'https://rink.example/ice' },
+      card: { tier: 'B', website_url: 'https://rink.example/ice', freshness: { schedule_auto: true } },
       hasSessions: false,
     });
     assert.equal(site.mode, 'site');
-    assert.equal(site.banner, 'Расписание пока не публикуют.');
+    assert.equal(site.banner, 'Время массового катания — на сайте катка');
     assert.equal(site.siteHref, 'https://rink.example/ice');
+
+    const skip = iceFeedView({
+      card: {
+        tier: 'B',
+        website_url: 'https://rink.example/ice',
+        freshness: { schedule_auto: false },
+      },
+      hasSessions: false,
+    });
+    assert.equal(skip.mode, 'site');
+    assert.equal(skip.banner, 'Расписание пока не публикуют.');
 
     const none = iceFeedView({
       card: { tier: 'B', phone: 'unknown', website_url: 'javascript:alert(1)' },
       hasSessions: false,
     });
     assert.equal(none.mode, 'none');
-    assert.equal(none.banner, 'Расписание пока не публикуют.');
+    assert.equal(none.banner, null);
   });
 
   it('season_closed mode before calendar season banner', () => {

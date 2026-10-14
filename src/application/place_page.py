@@ -54,6 +54,7 @@ from src.shared.arena_schedule_mode import (
     SCHEDULE_MODE_PHONE,
     SCHEDULE_MODE_SEASON_CLOSED,
     normalize_schedule_mode,
+    schedule_has_no_published_grid,
     season_closed_user_line,
 )
 from src.application.schedule_staleness import (
@@ -1191,23 +1192,35 @@ def _b_ticket(
     return ticket
 
 
-def _b_schedule_unpublished(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
-    """Нет сеансов в базе — факт без намёка, что сетка есть на сайте."""
+def _b_schedule_site_link(card: Mapping[str, Any]) -> str:
+    site = safe_external_url(card.get("website_url"))
+    if not site:
+        return ""
+    host = _display_host(site)
+    return (
+        f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+        f"{_esc(host or site)}</a>"
+    )
+
+
+def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
     from src.application.style_b import section
 
-    bits = [f'<p class="b-text">{_esc(t("place.schedule_not_published"))}</p>']
     call = _b_call(card, links)
+    site_link = _b_schedule_site_link(card)
+    if schedule_has_no_published_grid(card):
+        if not call and not site_link:
+            return ""
+        body = f'<p class="b-text">{_esc(t("place.schedule_not_published"))}</p>'
+        body += call or site_link
+        return section(title, body, klass="b-sec--place", sec_id="schedule")
     if call:
-        bits.append(call)
-    else:
-        site = safe_external_url(card.get("website_url"))
-        if site:
-            host = _display_host(site)
-            bits.append(
-                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
-                f"{_esc(host or site)}</a>"
-            )
-    return section(title, "".join(bits), klass="b-sec--place", sec_id="schedule")
+        body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
+        return section(title, body, klass="b-sec--place", sec_id="schedule")
+    if site_link:
+        body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{site_link}'
+        return section(title, body, klass="b-sec--place", sec_id="schedule")
+    return ""
 
 
 def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
@@ -1225,8 +1238,8 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
     if card.get("in_season") is False:
         return ""
-    if mode == SCHEDULE_MODE_PHONE or not days:
-        return _b_schedule_unpublished(card, links, title=title)
+    if not days:
+        return _b_schedule_when_empty(card, links, title=title)
 
     today = view["today"]
     focus = view.get("focus")
