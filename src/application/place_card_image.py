@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import io
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
@@ -322,9 +322,11 @@ def _render_story(
         f_row_time = _font("Inter-Bold.ttf", 44)
         row_h = 84
         limit = stub_y - 70
-        room = max(1, (limit - y) // row_h)
-        # Всё влезло — рисуем всё; иначе оставляем место под строку «и ещё N».
-        shown = rows if len(rows) <= room else rows[: max(1, (limit - y - 64) // row_h)]
+        # Место под одну нижнюю строку, чтобы она не села на корешок «Сканируй QR».
+        has_tail = bool(str(lines.get("rows_note") or "") or str(lines.get("rows_cta") or ""))
+        reserve = 72 if has_tail else 0
+        room = max(1, (limit - y - reserve) // row_h)
+        shown = rows[:room]
         draw.line([(x, y), (x + inner, y)], fill=_LINE, width=2)
         for name, when in shown:
             tw = int(draw.textlength(when, font=f_row_time)) + 30 if when else 0
@@ -336,17 +338,19 @@ def _render_story(
             draw.line([(x, y), (x + inner, y)], fill=_LINE, width=2)
         # Хвост объясняет, что список на билете — срез, а не весь город.
         # В сторис ссылка не нажимается: дочитывают по QR на корешке.
-        hidden = len(rows) - len(shown)
+        # «и ещё 1» — это строка, которая не влезла в билет, а не ещё один сеанс.
+        # Рядом с «в другие дни ещё 104» она читается как сломанный счётчик.
+        # Если есть честная подпись («Все 110 сеансов — сканируй QR»), рисуем её.
         tail: list[str] = []
         note = str(lines.get("rows_note") or "")
+        cta = str(lines.get("rows_cta") or "")
         if note:
             tail.extend(_wrap(draw, note, f_sub, inner, 2))
-        if hidden > 0:
+        if cta:
+            tail.extend(_wrap(draw, cta, f_sub, inner, 2))
+        elif len(rows) > len(shown):
+            hidden = len(rows) - len(shown)
             tail.append(f"и ещё {hidden} — сканируй QR")
-        else:
-            cta = str(lines.get("rows_cta") or "")
-            if cta:
-                tail.extend(_wrap(draw, cta, f_sub, inner, 2))
         for line in tail:
             if y > stub_y - 56:
                 break
@@ -400,10 +404,6 @@ def render_place_card(
     return buf.getvalue()
 
 
-# Вечер в каталоге начинается в 16:00 — то же правило, что у окна «сегодня вечером».
-_EVENING_MINUTES = 16 * 60
-
-
 def _slot_day(slot: Mapping[str, Any]) -> date | None:
     local = slot.get("local_date")
     if isinstance(local, datetime):
@@ -416,16 +416,6 @@ def _slot_day(slot: Mapping[str, Any]) -> date | None:
         except ValueError:
             return None
     return None
-
-
-def _band(hhmm: str) -> str:
-    hour, minute = (int(part) for part in hhmm.split(":", 1))
-    mins = hour * 60 + minute
-    if mins < 12 * 60:
-        return "morning"
-    if mins < _EVENING_MINUTES:
-        return "day"
-    return "evening"
 
 
 def _collect_sessions(view: Mapping[str, Any]) -> list[tuple[date, str, str]]:
@@ -447,31 +437,18 @@ def _collect_sessions(view: Mapping[str, Any]) -> list[tuple[date, str, str]]:
     return found
 
 
-def _pick_slice(
-    sessions: list[tuple[date, str, str]], today: date
-) -> tuple[str, date, list[tuple[date, str, str]]]:
-    """Без окна человек хочет не ближайший слот, а удобные часы — обычно вечер."""
-
-    def take(day: date, band: str | None = None) -> list[tuple[date, str, str]]:
-        return [row for row in sessions if row[0] == day and (band is None or _band(row[1]) == band)]
-
-    if take(today, "evening"):
-        return "Сегодня вечером", today, take(today, "evening")
-    if take(today, "day"):
-        return "Сегодня днём", today, take(today, "day")
-    if take(today, "morning"):
-        return "Сегодня утром", today, take(today, "morning")
-    future = sorted({row[0] for row in sessions if row[0] > today})
-    if not future:
-        day = max(row[0] for row in sessions)
-        return "Ближайшие сеансы", day, take(day)
-    nxt = future[0]
-    tomorrow = today + timedelta(days=1)
-    if nxt == tomorrow and take(nxt, "evening"):
-        return "Завтра вечером", nxt, take(nxt, "evening")
-    if nxt == tomorrow:
-        return "Завтра", nxt, take(nxt)
-    return absolute_day_label(nxt), nxt, take(nxt)
+def _one_session_per_place(
+    sessions: list[tuple[date, str, str]],
+) -> list[tuple[date, str, str]]:
+    """Ближайший сеанс каждой площадки — билет города, а не четыре слота одного ТЦ."""
+    seen: set[str] = set()
+    out: list[tuple[date, str, str]] = []
+    for row in sessions:
+        if row[2] in seen:
+            continue
+        seen.add(row[2])
+        out.append(row)
+    return out
 
 
 def _interleave_places(rows: list[tuple[date, str, str]]) -> list[tuple[date, str, str]]:
@@ -496,30 +473,17 @@ def _row_when(row: tuple[date, str, str], *, with_day: bool) -> str:
     return f"{_WEEKDAYS_SHORT[day.weekday()]} {hhmm}" if with_day else hhmm
 
 
-def _rest_note(rest: list[tuple[date, str, str]], hero_day: date) -> str:
-    bits: list[str] = []
-    for band, word in (("morning", "утром"), ("day", "днём"), ("evening", "вечером")):
-        count = sum(1 for day, hhmm, _name in rest if day == hero_day and _band(hhmm) == band)
-        if count:
-            bits.append(f"{word} ещё {count}")
-    later = sum(1 for day, _hhmm, _name in rest if day != hero_day)
-    if later:
-        bits.append(f"в другие дни ещё {later}")
-    return " · ".join(bits)
-
-
 def selection_story_board(
     view: Mapping[str, Any], *, today: date | None = None
 ) -> dict[str, Any]:
-    """Срез билета подборки: что показать, что честно оставить за QR и ссылкой.
+    """Срез билета подборки: что показать и что честно оставить за QR.
 
-    Пустая площадка на лёд не попадает. Без окна героем становятся вечерние
-    сеансы сегодня — человек зовёт кататься после работы, а не на ближайшие
-    13:30. Окно «вечером / сегодня / выходные» уже само есть ответ, его не режем.
+    Пустая площадка на лёд не попадает. Без окна это вся подборка города:
+    ближайший сеанс каждой площадки и счёт всех сеансов, а не «Сегодня вечером».
+    Окно «вечером / сегодня / выходные» уже само есть ответ — его не режем.
     Заточка и центры — про место, не про слот.
     """
     from src.application.selection_page import (
-        _minsk_day,
         absolute_window_phrase,
         selection_share_description,
     )
@@ -533,8 +497,9 @@ def selection_story_board(
             "image_cta": "",
             "text_cta": "",
         }
-    day = today or _minsk_day()
     sessions = _collect_sessions(view)
+    if today is not None:
+        sessions = [row for row in sessions if row[0] >= today]
     if not sessions:
         # Сеансов нет совсем — билет про места, как лента. Пустые строки рядом
         # с живым льдом по-прежнему не рисуем: этот возврат только для пустого льда.
@@ -549,15 +514,15 @@ def selection_story_board(
     window = view.get("window")
     if window and not view.get("window_empty"):
         headline = absolute_window_phrase(window) or "Сеансы"
-        hero = sessions
-        hero_day = hero[0][0]
-        rest: list[tuple[date, str, str]] = []
+        hero = _interleave_places(sessions)
+        # Окно «Сб–Вс» — два дня: «10:15» без дня не говорит, суббота это или воскресенье.
+        with_day = len({row[0] for row in hero}) > 1
     else:
-        headline, hero_day, hero = _pick_slice(sessions, day)
-        hero_keys = {(row[0], row[1], row[2]) for row in hero}
-        rest = [row for row in sessions if (row[0], row[1], row[2]) not in hero_keys]
+        headline = selection_share_description(view)
+        hero = _one_session_per_place(sessions)
+        with_day = True
     total = int(view.get("session_count") or 0)
-    more = bool(rest) or total > len(sessions)
+    more = total > len(hero) or len(sessions) > len(hero)
     if more and total:
         noun = plural_ru(total, "сеанс", "сеанса", "сеансов")
         image_cta = f"Все {total} {noun} — сканируй QR"
@@ -568,13 +533,10 @@ def selection_story_board(
     else:
         image_cta = "Цены и адреса — сканируй QR"
         text_cta = "Цены и адреса — по ссылке"
-    hero = _interleave_places(hero)
-    # Окно «Сб–Вс» — два дня: «10:15» без дня не говорит, суббота это или воскресенье.
-    with_day = len({row[0] for row in hero}) > 1
     return {
         "headline": headline,
         "rows": [(row[2], _row_when(row, with_day=with_day)) for row in hero],
-        "note": _rest_note(rest, hero_day),
+        "note": "",
         "image_cta": image_cta,
         "text_cta": text_cta,
     }

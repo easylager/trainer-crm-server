@@ -1242,22 +1242,22 @@ def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[s
 
     board = selection_story_board(view)
     lines = [selection_share_title(view), selection_share_description(view)]
-    # Тот же срез, что на story.png. Подпись «Сегодня вечером» нужна только когда
-    # есть сеансы; без льда заголовок уже равен строке со счётом мест.
-    # Окно «Сб, 17 окт – Вс, 18 окт» уже в заголовке — второй раз его не повторяем.
-    if board["text_cta"] and str(board["headline"]) not in lines[0]:
-        lines.append(str(board["headline"]))
+    # Тот же срез, что на story.png. Окно «Сб, 17 окт – Вс, 18 окт» уже в заголовке —
+    # второй раз его не повторяем. Счёт мест тоже уже стоит второй строкой.
+    headline = str(board["headline"])
+    if board["text_cta"] and headline not in lines[0] and headline != lines[1]:
+        lines.append(headline)
     cap = 6 if view.get("skating") else 3
     shown = board["rows"][:cap]
     for name, when in shown:
         lines.append(f"• {name} — {when}" if when else f"• {name}")
-    hidden = len(board["rows"]) - len(shown)
-    if hidden:
-        lines.append(f"и ещё {hidden} — по ссылке")
+    # «и ещё 4» рядом с «Все 110 сеансов» — два счёта про разное. Остаётся один.
     if board["note"]:
         lines.append(str(board["note"]))
     if board["text_cta"]:
         lines.append(str(board["text_cta"]))
+    elif len(board["rows"]) > len(shown):
+        lines.append(f"и ещё {len(board['rows']) - len(shown)} — по ссылке")
     text_value = page_url + "\n\n" + "\n".join(lines)
     return {
         "share_url": page_url,

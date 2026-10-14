@@ -248,15 +248,15 @@ async def test_selection_preview_counts_the_whole_selection_and_bumps_image_vers
     assert description in body["share_body"]
     assert description in body["share_text"]
 
-    # Картинка — вечерний (или дневной) срез, не вторая копия «15 катков · 10 сеансов».
-    # Счёт подборки остаётся в og:description и в тексте шера, это проверено выше.
+    # Картинка города без окна — то же «15 катков · 10 сеансов», не «Сегодня вечером».
+    # og.png и story.png рисуются отдельно, поэтому подпись считается дважды.
     pc.reset_png_cache_for_tests()
     drawn.clear()
     async with _client() as client:
         og = await client.get(f"/c/{slug}/og.png")
         story = await client.get(f"/c/{slug}/story.png")
     assert og.status_code == 200 and story.status_code == 200
-    assert drawn == [], drawn
+    assert drawn == [description, description], drawn
     assert "10 сеансов" in body["share_body"]
 
     # Лишние query-параметры внутренний кэш PNG не видит: ?v= — для Telegram, не для рендера.

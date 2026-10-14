@@ -66,8 +66,9 @@ def test_share_text_skips_places_without_a_session(monkeypatch) -> None:
         },
     }
     text = compose_selection_share(view, page_url="http://test/c/minsk")["share_text"]
-    assert "Сегодня днём" in text
-    assert "• ТЦ DiaMond city — 13:30" in text
+    assert "Сегодня" not in text
+    assert "и ещё" not in text
+    assert "• ТЦ DiaMond city — Пн 13:30" in text
     assert "Все 2 сеанса — по ссылке" in text
     assert "ТЦ Замок" not in text
     assert "Lifestyle" not in text

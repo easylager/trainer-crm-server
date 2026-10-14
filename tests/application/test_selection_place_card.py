@@ -67,15 +67,21 @@ def test_story_rows_drop_places_without_a_session() -> None:
         },
     }
     board = selection_story_board(view, today=today)
-    assert board["headline"] == "Сегодня вечером"
-    assert board["rows"] == [("Ледовый дворец", "20:00")]
-    assert board["note"] == "днём ещё 1"
+    assert board["headline"] != "Сегодня вечером"
+    assert "сеанс" in board["headline"]
+    assert board["rows"] == [
+        ("ТЦ DiaMond city", "Пн 13:30"),
+        ("Ледовый дворец", "Пн 20:00"),
+    ]
+    assert board["note"] == ""
+    assert "и ещё" not in board["image_cta"]
+    assert board["image_cta"] == "Цены и адреса — сканируй QR"
     assert "ТЦ Замок" not in str(board["rows"])
     assert "Lifestyle" not in str(board["rows"])
     assert selection_story_rows(view, today=today) == board["rows"]
 
 
-def test_story_board_leads_with_this_evening_and_points_at_the_rest() -> None:
+def test_story_board_of_the_whole_city_is_one_session_per_place() -> None:
     today = date(2026, 10, 12)
     view = {
         "skating": True,
@@ -96,15 +102,16 @@ def test_story_board_leads_with_this_evening_and_points_at_the_rest() -> None:
         },
     }
     board = selection_story_board(view, today=today)
-    assert board["headline"] == "Сегодня вечером"
+    assert "Сегодня вечером" not in board["headline"]
+    assert "в другие дни" not in board["note"]
     assert board["rows"] == [
-        ("DiaMond", "16:30"),
-        ("Ледовый", "20:00"),
-        ("DiaMond", "21:15"),
+        ("DiaMond", "Пн 13:30"),
+        ("Ледовый", "Пн 20:00"),
     ]
-    assert board["note"] == "днём ещё 1 · в другие дни ещё 1"
+    assert board["note"] == ""
     assert board["image_cta"] == "Все 6 сеансов — сканируй QR"
     assert board["text_cta"] == "Все 6 сеансов — по ссылке"
+    assert "и ещё" not in board["image_cta"]
     assert "Пустой" not in str(board["rows"])
 
 
