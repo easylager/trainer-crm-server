@@ -538,21 +538,24 @@ def absolute_window_phrase(window: Mapping[str, Any] | None) -> str:
     return phrase
 
 
-def selection_share_title(view: Mapping[str, Any]) -> str:
-    """Заголовок для og и текста в чате: те же факты, что на странице, но даты абсолютные."""
+def selection_share_title(view: Mapping[str, Any], *, with_window: bool = True) -> str:
+    """Заголовок для og и текста в чате: те же факты, что на странице, но даты абсолютные.
+
+    ``with_window=False`` — для картинки, где даты уже стоят отдельной строкой.
+    """
     city = str(view["city"]["name"])
     svc = view.get("svc")
     if svc:
         return f"{city} · {_SERVICE_LABELS.get(str(svc), _TOPIC['service']).lower()}"
     if view.get("kind") == KIND_OHM:
-        window = view.get("window")
+        window = view.get("window") if with_window else None
         if window:
             phrase = absolute_window_phrase(window)
             if phrase:
                 return f"{city} · {t('chip.hockey').lower()} — {phrase}"
         return f"{city} · {t('chip.hockey').lower()}"
     topic = _TOPIC.get(view.get("venue"), "Места")
-    window = view.get("window")
+    window = view.get("window") if with_window else None
     if window and view.get("skating"):
         phrase = absolute_window_phrase(window)
         if phrase:
@@ -692,6 +695,8 @@ def selection_image_version(view: Mapping[str, Any]) -> str:
             _minsk_day().isoformat(),
             str(board.get("headline") or ""),
             str(len(board.get("rows") or [])),
+            # Порядок строк тоже на картинке: перетасовка арен должна сбросить кэш превью.
+            "/".join(f"{name}{when}" for name, when in (board.get("rows") or [])[:6]),
         )
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:10]
@@ -1233,7 +1238,8 @@ def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[s
     lines = [selection_share_title(view), selection_share_description(view)]
     # Тот же срез, что на story.png. Подпись «Сегодня вечером» нужна только когда
     # есть сеансы; без льда заголовок уже равен строке со счётом мест.
-    if board["text_cta"]:
+    # Окно «Сб, 17 окт – Вс, 18 окт» уже в заголовке — второй раз его не повторяем.
+    if board["text_cta"] and str(board["headline"]) not in lines[0]:
         lines.append(str(board["headline"]))
     cap = 6 if view.get("skating") else 3
     shown = board["rows"][:cap]
