@@ -89,7 +89,7 @@ async def test_unfiltered_selection_matches_feed_without_shops(app_use_test_db, 
     body = share.json()["share_body"]
     assert "Ледовый" in body and "Зал Силы" in body
     assert shop not in body
-    assert "2 места" in body
+    assert "3 места" in body
     assert "каток" not in body.lower()
     assert shop in shops.text
 

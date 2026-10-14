@@ -41,6 +41,11 @@ from src.application.arena_public_use_cases import (
 )
 from src.application.ice_time_windows import resolve_window
 from src.shared.copy_ru import t
+from src.application.city_place_counts import (
+    CityPlaceCounts,
+    city_place_count_noun,
+    city_place_counts_from_facets,
+)
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
 from src.application.place_links import catalog_start_param, join_public_origin, place_path, place_query
@@ -492,6 +497,7 @@ async def load_selection_view(
         "window_places": window_places,
         # Фасеты всего города: по ним выбирается слово «катков»/«мест», а не по странице.
         "venue_type_facets": facets,
+        "city_place_counts": city_place_counts_from_facets(facets).as_dict() if facets else None,
     }
     if ohm_counts is not None:
         out["ohm_counts"] = ohm_counts
@@ -563,6 +569,24 @@ def selection_share_title(view: Mapping[str, Any], *, with_window: bool = True) 
     return f"{city} · {topic.lower()}"
 
 
+def _whole_city_inventory(view: Mapping[str, Any]) -> bool:
+    if view.get("svc") or view.get("kind") == KIND_OHM or view.get("seg") == SEG_CENTERS:
+        return False
+    return view.get("venue") is None
+
+
+def _city_inventory_counts(view: Mapping[str, Any]) -> CityPlaceCounts | None:
+    raw = view.get("city_place_counts")
+    if not raw or not _whole_city_inventory(view):
+        return None
+    return CityPlaceCounts(
+        total=int(raw.get("total") or 0),
+        rinks=int(raw.get("rinks") or 0),
+        shops=int(raw.get("shops") or 0),
+        other=int(raw.get("other") or 0),
+    )
+
+
 def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
     """Слово при счётчике — по всему городу, а не по странице.
 
@@ -570,6 +594,9 @@ def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
     «катков», есть залы или места — «мест». Раньше слово считалось по 12 карточкам
     страницы, и подборка «все места» называла катками город, где катков — половина.
     """
+    inventory = _city_inventory_counts(view)
+    if inventory is not None:
+        return city_place_count_noun(inventory)
     if view.get("seg") == SEG_CENTERS:
         return ("центр", "центра", "центров")
     if view.get("kind") == KIND_OHM:
@@ -607,11 +634,17 @@ def selection_place_count(view: Mapping[str, Any]) -> int:
     Без окна — вся выборка города. С ``?w=`` — места, у которых в окне есть сеанс:
     ровно то, что обещает заголовок. Пустое окно честно падает на всю выборку
     («сеансов нет — ближайшие»), иначе в превью стоял бы ноль при непустом списке.
+
+    Подборка без чипа — число всех мест города (катки, магазины, трасса), хотя в
+    ленте магазины скрыты до ``?t=shop``.
     """
     if view.get("when"):
         in_window = int(view.get("window_places") or 0)
         if in_window:
             return in_window
+    inventory = _city_inventory_counts(view)
+    if inventory is not None:
+        return inventory.total
     return int(view.get("total") or 0)
 
 

@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import html as html_lib
 import json
 from datetime import date, datetime, timedelta, timezone
@@ -31,6 +30,11 @@ from src.application.arena_public_use_cases import (
     city_hockey_center_count,
 )
 from src.application.catalog_home_page import _USER_UPCOMING_SQL, _session_card
+from src.application.city_place_counts import (
+    city_hub_place_groups,
+    city_place_counts_from_places,
+    city_place_inventory_line,
+)
 from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, format_price_minor, human_date, plural_ru
 from src.application.ice_time_windows import home_default_when_key, resolve_window
 from src.application.place_links import (
@@ -370,6 +374,7 @@ async def load_city_hub_view(
                 "has_phone": bool(str(row.get("phone") or "").strip()),
             }
         )
+    inventory = city_place_counts_from_places(places)
     rinks = [p for p in places if _is_rink(p["venue_type"])]
     shops = [p for p in places if p["venue_type"] == VENUE_TYPE_SHOP]
     service_places = [p for p in places if p["in_sharpening"]]
@@ -407,9 +412,11 @@ async def load_city_hub_view(
         "now": now,
         "local_now": local_now,
         "today": local_now.date(),
-        "place_count": len(places),
-        "rink_count": len(rinks),
-        "shop_count": len(shops),
+        "place_count": inventory.total,
+        "rink_count": inventory.rinks,
+        "shop_count": inventory.shops,
+        "other_place_count": inventory.other,
+        "city_place_counts": inventory.as_dict(),
         "service_count": len(service_places),
         "skate_counts": skate,
         "skate_by_arena": skate_by_arena,
@@ -498,16 +505,21 @@ def city_hub_document_title(view: Mapping[str, Any]) -> str:
 
 
 def city_hub_description(view: Mapping[str, Any]) -> str:
-    """og:description считает места тем же ``place_count``, что и шапка страницы."""
-    places = list(view.get("places") or [])
-    n = int(view.get("place_count") if view.get("place_count") is not None else len(places))
-    only_rinks = bool(places) and all(_is_rink(p["venue_type"]) for p in places)
-    noun = ("каток", "катка", "катков") if only_rinks else ("место", "места", "мест")
-    bits = [f"{n} {plural_ru(n, *noun)}"]
-    sessions = int(view["skate_counts"].get("all") or 0)
-    if sessions:
-        bits.append(f"{sessions} {plural_ru(sessions, 'сеанс', 'сеанса', 'сеансов')}")
-    return " · ".join(bits)
+    """og:description — те же числа, что в share API подборки и на og.png."""
+    raw = view.get("city_place_counts")
+    if raw:
+        from src.application.city_place_counts import CityPlaceCounts
+
+        counts = CityPlaceCounts(
+            total=int(raw.get("total") or 0),
+            rinks=int(raw.get("rinks") or 0),
+            shops=int(raw.get("shops") or 0),
+            other=int(raw.get("other") or 0),
+        )
+    else:
+        counts = city_place_counts_from_places(list(view.get("places") or []))
+    sessions = int((view.get("skate_counts") or {}).get("all") or 0)
+    return city_place_inventory_line(counts, sessions)
 
 
 def city_hub_search_description(view: Mapping[str, Any]) -> str:
@@ -564,24 +576,30 @@ def _breadcrumbs(view: Mapping[str, Any], canonical_url: str) -> str:
 
 
 def city_hub_image_version(view: Mapping[str, Any]) -> str:
-    raw = "|".join(
-        (
-            str(view.get("place_count")),
-            str(view["skate_counts"].get("today")),
-            str(view["skate_counts"].get("all")),
-            str(view["ohm_counts"].get("all")),
-            view["today"].isoformat(),
-            "board2",
-        )
-    )
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:10]
+    """Совместимость: хэш превью совпадает с ``selection_image_version`` для того же города."""
+    from src.application.selection_page import selection_image_version
+
+    sel_view = {
+        "city": view.get("city"),
+        "venue": None,
+        "when": None,
+        "total": int(view.get("place_count") or 0),
+        "session_count": int((view.get("skate_counts") or {}).get("all") or 0),
+        "items": [],
+        "city_place_counts": view.get("city_place_counts"),
+        "venue_type_facets": [],
+    }
+    return selection_image_version(sel_view)
 
 
-def compose_city_hub_share(view: Mapping[str, Any], *, page_url: str) -> dict[str, str]:
+def compose_city_hub_share(
+    view: Mapping[str, Any], *, page_url: str, inventory_line: str | None = None
+) -> dict[str, str]:
     from src.application.client_share_message import share_body_for_native_share_dialog
 
     city_name = str(view["city"]["name"])
-    lines = [f"{city_name} · где покататься", city_hub_description(view)]
+    line = inventory_line if inventory_line is not None else city_hub_description(view)
+    lines = [f"{city_name} · где покататься", line]
     # Картинка показывает удобный срез (обычно вечер). Текст не перечисляет
     # три ближайших слота — они не совпадают с тем, что на билете.
     today_n = int((view.get("skate_counts") or {}).get("today") or 0)
@@ -607,12 +625,13 @@ def render_city_hub_page(
     story_image_url: str | None = None,
     base_url: str = "",
     trainers_href: str | None = None,
+    og_description: str | None = None,
 ) -> str:
     city = view["city"]
     city_name = str(city["name"])
     city_id = int(city["id"])
     title = city_hub_document_title(view)
-    description = city_hub_description(view)
+    description = og_description if og_description is not None else city_hub_description(view)
     coach_href = trainers_href
     if coach_href is None:
         coach_href = public_telegram_cta_url(
@@ -926,12 +945,7 @@ def _b_all_places(view: Mapping[str, Any]) -> str:
         return ""
     city_name = str(view["city"]["name"])
     groups: list[str] = []
-    for title, group in (
-        ("Катки", [p for p in places if _is_rink(p["venue_type"])]),
-        ("Магазины и другие места", [p for p in places if not _is_rink(p["venue_type"])]),
-    ):
-        if not group:
-            continue
+    for title, group in city_hub_place_groups(places):
         links = []
         for p in group:
             label = _esc(format_public_name(p["name"]))
