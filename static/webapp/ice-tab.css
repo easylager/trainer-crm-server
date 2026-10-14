@@ -2078,19 +2078,27 @@ html.client-mini-dark [class*="ground-pane"] {
   --map-venue: var(--app-venue-shop);
 }
 
-/* Пилюли мест (магазины, катки, залы): цвет типа, на общем плане — компактнее. */
+/*
+ * Пилюли мест (магазины, катки, залы) всегда в одной яркой заливке — и на карте
+ * катков, и на карте магазинов. Раньше невыбранные были полупрозрачной смесью,
+ * а при выборе соседа ещё и гасли до 0.42: свайп шторки менял выбор, и чипы мигали
+ * «ярко ↔ тускло». Тип места несёт точка внутри, выбор — масштаб и ободок.
+ */
 .ice-ypin--place .ice-ypin__body {
   height: 28px;
   padding: 0 10px;
   border-width: 2px;
-  border-color: var(--map-venue, var(--glide-brand));
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+  color: var(--app-cta-text);
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.12),
     0 6px 18px -6px rgba(0, 0, 0, 0.8);
 }
 
-.ice-ypin--place:not(.ice-ypin--sel) .ice-ypin__body {
-  background: color-mix(in srgb, var(--map-venue, var(--glide-brand)) 38%, var(--glide-card));
+.ice-ypin--place .ice-ypin__tail {
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
 }
 
 .ice-ypin--place .ice-ypin__dot {
@@ -2099,15 +2107,16 @@ html.client-mini-dark [class*="ground-pane"] {
   background: var(--map-venue, var(--glide-brand));
 }
 
+/* Лёд на тиловой заливке не виден — его точка цвета текста, как у выбранного пина. */
+.ice-ypin--place.ice-ypin--ice .ice-ypin__dot {
+  background: var(--app-cta-text);
+}
+
 .ice-ypin--place .ice-ypin__label {
-  color: var(--glide-text);
+  color: inherit;
   max-width: 88px;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.ice-ypin--place.ice-ypin--off:not(.ice-ypin--sel) .ice-ypin__body {
-  opacity: 0.72;
 }
 
 .ice-ypin--place.ice-ypin--compact .ice-ypin__body {
@@ -2126,30 +2135,16 @@ html.client-mini-dark [class*="ground-pane"] {
   height: 6px;
 }
 
-/* Магазины: фиолетовая обводка — всё на карте уже под фильтр. */
-.ice-ypin--shop.ice-ypin--place .ice-ypin__body {
-  border-color: var(--app-venue-shop);
-}
-
-.ice-ypin--shop.ice-ypin--place:not(.ice-ypin--sel) .ice-ypin__body {
-  background: color-mix(in srgb, var(--app-venue-shop) 42%, var(--glide-card));
-}
-
-.ice-ypin--shop.ice-ypin--place .ice-ypin__dot {
-  background: var(--app-venue-shop);
-}
-
 .ice-ypin--place.ice-ypin--sel {
   z-index: 6;
-  transform: translate(-50%, -100%) scale(1.06);
+  transform: translate(-50%, -100%) scale(1.12);
 }
 
+/* Заливка у всех одна, поэтому выбранный выделяет ободок цвета карточки. */
 .ice-ypin--place.ice-ypin--sel .ice-ypin__body {
-  background: var(--app-cta-fill);
-  border-color: var(--app-cta-fill);
-  color: var(--app-cta-text);
   box-shadow:
-    0 0 0 3px rgba(69, 185, 187, 0.35),
+    0 0 0 2px var(--glide-card),
+    0 0 0 4px var(--app-cta-fill),
     0 10px 24px -6px rgba(0, 0, 0, 0.9);
 }
 
@@ -2160,10 +2155,6 @@ html.client-mini-dark [class*="ground-pane"] {
 .ice-ypin--place.ice-ypin--sel .ice-ypin__label,
 .ice-ypin--place.ice-ypin--sel .ice-ypin__name {
   color: inherit;
-}
-
-.ice-ypin--dim:not(.ice-ypin--sel):not(.ice-ypin--shop) {
-  opacity: 0.42;
 }
 
 .ice-ypin--other,
@@ -2222,11 +2213,6 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
   border-radius: 50%;
   background: var(--map-venue, var(--glide-brand));
   flex: 0 0 auto;
-}
-
-/* TASK-146: сеанс вне выбранного окна — пин бледный, время на нём не живёт (kind=dot). */
-.ice-ypin--off {
-  opacity: 0.6;
 }
 
 .ice-ycluster {

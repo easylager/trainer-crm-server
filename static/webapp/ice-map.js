@@ -505,8 +505,6 @@
       objs.forEach(function (obj) {
         var want = !!(item && obj.properties.get('arenaId') === item.id);
         if (obj.properties.get('sel') !== want) obj.properties.set('sel', want);
-        var dim = !isShopCatalog() && !!(item && !want);
-        if (obj.properties.get('dim') !== dim) obj.properties.set('dim', dim);
       });
     }
 
@@ -744,7 +742,6 @@
             venue: view.venue,
             kind: view.kind,
             sel: false,
-            dim: false,
             compact: pinCompact(),
             arenaId: item.id,
             item: item,
@@ -903,7 +900,6 @@
               ' ice-ypin--' + String(props.get('venue') || 'ice') +
               ' ice-ypin--' + String(props.get('kind') || 'dot') +
               (props.get('sel') ? ' ice-ypin--sel' : '') +
-              (props.get('dim') ? ' ice-ypin--dim' : '') +
               (props.get('compact') ? ' ice-ypin--compact' : '');
             var label = root.querySelector('.ice-ypin__label');
             var labelText = String(props.get('label') || '');
