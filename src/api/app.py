@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.exc import InterfaceError, OperationalError, TimeoutError as SATimeoutError
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
@@ -1926,15 +1926,69 @@ def webapp_glide_copy_js(request: Request):
     )
 
 
+_STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
+_GLIDE_PUBLIC_FONT_FILES = frozenset(p.name for p in (_STATIC_DIR / "fonts" / "glide-public").glob("*.woff2"))
+
+
 @app.get("/static/share/style-b.css")
 def share_style_b_css(request: Request):
     """TASK-246: стили каталога. Версия в ``?v=`` — новая на каждую правку файла."""
-    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "style-b.css"
+    path = _STATIC_DIR / "share" / "style-b.css"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
     return FileResponse(
         path,
         media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/shared/glide-public-fonts.css")
+def share_glide_public_fonts_css(request: Request):
+    """Self-hosted Golos + Dela для публички; ``?v=`` совпадает с preload и ``@font-face``."""
+    from src.application.style_b import public_fonts_css_text
+
+    return Response(
+        content=public_fonts_css_text(),
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/fonts/glide-public/{filename}")
+def share_glide_public_font(filename: str, request: Request):
+    if filename not in _GLIDE_PUBLIC_FONT_FILES:
+        raise HTTPException(status_code=404, detail="Font file not found")
+    path = _STATIC_DIR / "fonts" / "glide-public" / filename
+    return FileResponse(
+        path,
+        media_type="font/woff2",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/tg-dock.js")
+def share_tg_dock_js(request: Request):
+    """Плашка «Открыть в Telegram»: in-flow → fixed pill."""
+    path = _STATIC_DIR / "share" / "tg-dock.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/b-press.js")
+def share_b_press_js(request: Request):
+    """Публичка: отклик нажатия (iOS touchstart + b-press без flash при скролле)."""
+    path = _STATIC_DIR / "share" / "b-press.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
 

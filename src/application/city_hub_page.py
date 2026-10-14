@@ -662,7 +662,7 @@ def render_city_hub_page(
         }
     )
     from src.application.public_web_cta import public_page_view_beacon_script
-    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
     lang, og_locale = html_lang_for_country(str(city.get("country") or ""))
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -680,6 +680,7 @@ def render_city_hub_page(
             "__ROBOTS__": "index, follow",
             "__HEAD_EXTRA__": "",
             "__JSONLD__": ld,
+            "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
             "__COMPONENTS_V__": COMPONENTS_VERSION,

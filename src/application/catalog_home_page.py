@@ -671,8 +671,10 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
         parts.append(
             f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city" aria-label="{_esc(pt["name"])}">'
             f'<circle class="home-map__tap" cx="{x:.1f}" cy="{y:.1f}" r="{tap:.1f}" fill="transparent"/>'
+            f'<g class="home-map__vis">'
             f"{ring}"
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "#4a6273"}"/></a>'
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "#4a6273"}"/>'
+            f"</g></a>"
         )
     parts.append("</g>")
     parts.append('<g font-size="20" font-weight="600" fill="var(--g-on-photo)" pointer-events="none">')
@@ -1407,7 +1409,12 @@ def render_catalog_home_page(
             f'<span class="off"><i></i>{_esc(t("home.map.legend_off"))}</span></figcaption></figure></section>'
         )
     # TASK-278: «Открыть в Telegram» — плашкой внизу экрана, а не секцией в конце страницы.
-    from src.application.style_b import telegram_dock_html
+    from src.application.style_b import (
+        b_press_script_html,
+        public_fonts_head_html,
+        telegram_dock_html,
+        telegram_dock_script_html,
+    )
 
     cta = telegram_dock_html(cta_url, hint=t("tg.map_all"))
     values = {
@@ -1419,6 +1426,7 @@ def render_catalog_home_page(
         "__OG_IMAGE__": _esc(og_image_url),
         "__ROBOTS__": _esc(robots),
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url),
+        "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
@@ -1428,6 +1436,8 @@ def render_catalog_home_page(
         "__MAP__": map_html,
         "__CITIES__": cities_html,
         "__CTA__": cta,
+        "__B_PRESS_SCRIPT__": b_press_script_html(),
+        "__TG_DOCK_SCRIPT__": telegram_dock_script_html(),
         "__FOOTER__": _esc(t("home.footer")),
         "__ELSEWHERE__": _b_elsewhere(cities),
         "__TRAINERS_URL__": _esc(trainers_url),

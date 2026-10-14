@@ -1026,7 +1026,7 @@ def render_place_page(
     robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
 
     from src.application.public_web_cta import public_page_view_beacon_script
-    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
     html = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
@@ -1042,6 +1042,7 @@ def render_place_page(
         "__ROBOTS__": robots,
         "__HEAD_EXTRA__": "",
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
+        "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
@@ -1057,6 +1058,10 @@ def render_place_page(
             arena_id=int(card["id"]),
         ),
     }
+    from src.application.style_b import b_press_script_html, telegram_dock_script_html
+
+    replacements["__B_PRESS_SCRIPT__"] = b_press_script_html()
+    replacements["__TG_DOCK_SCRIPT__"] = telegram_dock_script_html()
     if robots.startswith("index") and city:
         from src.application.place_links import breadcrumb_script
 
