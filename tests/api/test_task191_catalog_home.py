@@ -58,8 +58,9 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
     assert home.status_code == 200
     assert home.headers["content-type"].startswith("text/html")
     # JSON-LD и жест удержания на карте. Внешнего бандла Mini App нет.
-    assert home.text.lower().count("<script") == 3
+    assert home.text.lower().count("<script") == 4
     assert home.text.count('<script type="application/ld+json">') == 1
+    assert "b-press.js" in home.text
     assert "tg-dock.js" in home.text
     assert "home-map__hint" in home.text
     assert "Зажмите точку — название." not in home.text
@@ -114,7 +115,7 @@ async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_se
         home = await client.get("/")
     assert home.status_code == 200
     # JSON-LD и скрипт карты. Имя города с «</script>» не должно добавить третье закрытие.
-    assert home.text.count("</script>") == 3
+    assert home.text.count("</script>") == 4
     assert "<img src=x" not in home.text
     ld = _json_ld(home.text)
     assert "@graph" in ld

@@ -1052,8 +1052,9 @@ def render_place_page(
             view, invite=invite, base_path=base_path, telegram_url=cta_url
         ),
     }
-    from src.application.style_b import telegram_dock_script_html
+    from src.application.style_b import b_press_script_html, telegram_dock_script_html
 
+    replacements["__B_PRESS_SCRIPT__"] = b_press_script_html()
     replacements["__TG_DOCK_SCRIPT__"] = telegram_dock_script_html()
     if robots.startswith("index") and city:
         from src.application.place_links import breadcrumb_script

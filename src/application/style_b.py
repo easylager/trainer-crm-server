@@ -30,6 +30,7 @@ STYLE_VERSION = _file_version("static/share/style-b.css")
 # Отдельной ссылкой, не @import из style-b.css: импорт без ?v= шёл с no-store и ещё одним кругом до первой отрисовки.
 COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
 DOCK_SCRIPT_VERSION = _file_version("static/share/tg-dock.js")
+PRESS_SCRIPT_VERSION = _file_version("static/share/b-press.js")
 FONT_V_PLACEHOLDER = "__FONT_V__"
 
 
@@ -409,3 +410,9 @@ def telegram_dock_script_html() -> str:
     """Скрипт плашки Telegram — только вне Mini App."""
     v = DOCK_SCRIPT_VERSION
     return f'<script defer src="/static/share/tg-dock.js?v={esc(v)}"></script>'
+
+
+def b_press_script_html() -> str:
+    """Отклик нажатия на публичке (iOS + защита от press при скролле)."""
+    v = PRESS_SCRIPT_VERSION
+    return f'<script defer src="/static/share/b-press.js?v={esc(v)}"></script>'

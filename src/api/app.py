@@ -1980,6 +1980,19 @@ def share_tg_dock_js(request: Request):
     )
 
 
+@app.get("/static/share/b-press.js")
+def share_b_press_js(request: Request):
+    """Публичка: отклик нажатия (iOS touchstart + b-press без flash при скролле)."""
+    path = _STATIC_DIR / "share" / "b-press.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/share/place-share.css")
 def share_place_share_css(request: Request):
     """TASK-252: закреплённая кнопка «Позвать на …» на странице места."""

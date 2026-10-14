@@ -424,7 +424,7 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-card2 .b-chip--hl { background: var(--g-accent-wash); }
 .b-toggle--off { color: #8396a4 !important; background: transparent; }
 
-/* ── Отклик нажатия (публичка): только transform, без layout ─────────── */
+/* ── Отклик нажатия (публичка): b-press.js, transform как mini-app-trainer-stats.css:103–105 */
 @media (prefers-reduced-motion: no-preference) {
   .b-city,
   .b-when a,
@@ -436,18 +436,18 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
   a.b-card,
   a.b-card2__thumb,
   .home-map__vis {
-    transition: transform .1s ease;
+    transition: transform 0.12s ease;
   }
-  .b-city:active,
-  .b-when a:active,
-  a.b-tile:active,
-  a.b-row:active,
-  a.b-slot:active,
-  a.b-table__row:active,
-  a.b-ticket:active,
-  a.b-card:active,
-  a.b-card2__thumb:active,
-  .home-map__city:active .home-map__vis {
+  .b-city.b-press,
+  .b-when a.b-press,
+  a.b-tile.b-press,
+  a.b-row.b-press,
+  a.b-slot.b-press,
+  a.b-table__row.b-press,
+  a.b-ticket.b-press,
+  a.b-card.b-press,
+  a.b-card2__thumb.b-press,
+  .home-map__city.b-press .home-map__vis {
     transform: scale(0.98);
   }
   .home-map__vis { transform-box: fill-box; transform-origin: center; }
