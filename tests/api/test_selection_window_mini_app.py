@@ -166,6 +166,9 @@ async def test_today_window_partial_shows_break(app_use_test_db, db_session, mon
     cards = body.split('b-cards"', 1)[1].split("</section>", 1)[0]
     assert "b-window-break" in cards
     assert cards.index("16:00") < cards.index("b-window-break") < cards.index("10:00")
+    # «Ближайший: завтра» и время в слоте — время не повторяется в подписи.
+    assert "Ближайший: завтра</span>" in cards
+    assert "Ближайший: завтра 10:00" not in cards
 
 
 @pytest.mark.asyncio

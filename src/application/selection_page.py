@@ -1437,13 +1437,6 @@ def _window_miss_label(window: Mapping[str, Any] | None) -> str:
     return t("selection.window.miss", label=label) if label else ""
 
 
-def _slot_when_phrase(slot: Mapping[str, Any], *, today: date) -> str:
-    day = slot.get("local_date")
-    clock = format_clock(str(slot.get("starts_at_local") or ""))
-    word = short_day_word(day, today=today) if hasattr(day, "year") else ""
-    return f"{word} {clock}".strip()
-
-
 def _b_window_break(view: Mapping[str, Any], rest_count: int) -> str:
     window = view.get("window")
     if not window or rest_count <= 0:
@@ -1569,8 +1562,8 @@ def _b_place_card(
         clock = format_clock(str(s.get("starts_at_local") or ""))
         word = short_day_word(day, today=today) if hasattr(day, "year") else ""
         if off_window and idx == 0:
-            when = _slot_when_phrase(s, today=today)
-            word = t("selection.window.nearest_prefix", when=when)
+            # Время и так стоит в слоте рядом — в подписи только день: «Ближайший: сб · 19:15».
+            word = t("selection.window.nearest_prefix", when=word) if word else "Ближайший"
         price = format_price_minor(
             s.get("price_adult_minor") if s.get("price_adult_minor") is not None else s.get("price_minor"),
             str(s.get("currency_code") or "BYN"),
