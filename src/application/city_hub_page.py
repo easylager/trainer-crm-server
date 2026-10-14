@@ -504,6 +504,22 @@ def city_hub_document_title(view: Mapping[str, Any]) -> str:
     return f"{city_name} · {tail} | Glide"
 
 
+def city_hub_selection_preview_view(view: Mapping[str, Any]) -> dict[str, Any]:
+    """Минимальный view подборки для og:description и ``?v=`` — без ``load_selection_view``."""
+    raw = view.get("city_place_counts") or {}
+    return {
+        "city": view.get("city"),
+        "venue": None,
+        "when": None,
+        "skating": True,
+        "city_place_counts": raw,
+        "session_count": int((view.get("skate_counts") or {}).get("all") or 0),
+        "total": int(raw.get("total") or view.get("place_count") or 0),
+        "items": [],
+        "venue_type_facets": [],
+    }
+
+
 def city_hub_description(view: Mapping[str, Any]) -> str:
     """og:description — те же числа, что в share API подборки и на og.png."""
     raw = view.get("city_place_counts")
@@ -573,23 +589,6 @@ def _breadcrumbs(view: Mapping[str, Any], canonical_url: str) -> str:
 
     name = format_public_name(str(view["city"]["name"]))
     return breadcrumb_script(canonical_url, [("Glide", "/"), (name, canonical_url)])
-
-
-def city_hub_image_version(view: Mapping[str, Any]) -> str:
-    """Совместимость: хэш превью совпадает с ``selection_image_version`` для того же города."""
-    from src.application.selection_page import selection_image_version
-
-    sel_view = {
-        "city": view.get("city"),
-        "venue": None,
-        "when": None,
-        "total": int(view.get("place_count") or 0),
-        "session_count": int((view.get("skate_counts") or {}).get("all") or 0),
-        "items": [],
-        "city_place_counts": view.get("city_place_counts"),
-        "venue_type_facets": [],
-    }
-    return selection_image_version(sel_view)
 
 
 def compose_city_hub_share(

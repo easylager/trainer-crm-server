@@ -596,12 +596,12 @@ async def _city_hub(
 ):
     """Маршрутизатор города (TASK-224): плитки-потребности, ближайшее на льду, все места."""
     from src.application.city_hub_page import (
+        city_hub_selection_preview_view,
         compose_city_hub_share,
         load_city_hub_view,
         render_city_hub_page,
     )
     from src.application.selection_page import (
-        load_selection_view,
         selection_image_path,
         selection_image_version,
         selection_share_description,
@@ -613,11 +613,11 @@ async def _city_hub(
     if city_ref != slug:
         return RedirectResponse(url=f"/c/{slug}", status_code=301)
     view = await load_city_hub_view(session, city=city)
-    sel_view = await load_selection_view(session, city=city, venue=None, when=None)
-    inventory_line = selection_share_description(sel_view)
+    preview = city_hub_selection_preview_view(view)
+    inventory_line = selection_share_description(preview)
     page_url = f"{base}/c/{slug}"
     og_image = base + selection_image_path(
-        city_name=city_name, venue=None, when=None, version=selection_image_version(sel_view)
+        city_name=city_name, venue=None, when=None, version=selection_image_version(preview)
     )
     html = render_city_hub_page(
         view,

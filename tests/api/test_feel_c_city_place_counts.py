@@ -8,12 +8,29 @@ from datetime import date, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from src.api.app import app
 from src.application.ice_city_day import city_slug, invalidate_public_city_cache
 from tests.api.test_catalog_shops import _admin_create_shop
 from tests.api.test_public_arenas import _add_future_session, _insert_arena, _insert_city
+
+# С лишним load_selection_view на хабе (fb656681) на этом сиде было 15 SQL; без — 7.
+CITY_HUB_SQL_BUDGET = 10
+CITY_HUB_SQL_EXPECT = 7
+
+
+def _count_sql(db_session):
+    bind = db_session.sync_session.get_bind()
+    counts = {"n": 0}
+
+    def _before(conn, cursor, statement, parameters, context, executemany):
+        head = (statement or "").lstrip().upper()
+        if head.startswith(("SELECT", "INSERT", "UPDATE", "DELETE", "WITH")):
+            counts["n"] += 1
+
+    event.listen(bind, "before_cursor_execute", _before)
+    return bind, counts, _before
 
 
 def _client() -> AsyncClient:
@@ -24,6 +41,30 @@ def _og(html: str, prop: str) -> str:
     match = re.search(rf'<meta property="{prop}" content="([^"]*)"', html)
     assert match, prop
     return match.group(1)
+
+
+@pytest.mark.asyncio
+async def test_city_hub_page_stays_within_sql_budget(app_use_test_db, db_session) -> None:
+    name = f"SqlHub {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    for n in range(3):
+        rink = await _insert_arena(db_session, city_id, name=f"Каток {n}")
+        if n < 2:
+            await _add_future_session(db_session, rink, days_ahead=1 + n, starts_at_local="10:00")
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+
+    bind, counts, before = _count_sql(db_session)
+    try:
+        async with _client() as client:
+            resp = await client.get(f"/c/{slug}")
+    finally:
+        event.remove(bind, "before_cursor_execute", before)
+
+    assert resp.status_code == 200
+    assert counts["n"] <= CITY_HUB_SQL_BUDGET
+    assert counts["n"] == CITY_HUB_SQL_EXPECT
 
 
 @pytest.mark.asyncio
