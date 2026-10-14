@@ -23,6 +23,10 @@
   --g-on-accent: var(--glide-950);
   --g-accent-ink: var(--glide-700);
   --g-accent-wash: var(--glide-100);
+  /* Кнопка «Открыть в Telegram» (TASK-278): узнаваемый синий, белый текст ~5:1. */
+  --g-tg: #1873b8;
+  --g-tg-pressed: #12609b;
+  --g-on-tg: #ffffff;
   --g-dark: #0d1b26;
   --g-dark-2: #1d2f3d;
   --g-on-dark-muted: #c3d2dc;

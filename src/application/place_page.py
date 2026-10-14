@@ -906,22 +906,28 @@ def _nojs_messenger_row(share: Mapping[str, str]) -> str:
     return f'<div class="place-share-fallback">{row}</div>'
 
 
-def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool) -> str:
+def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool, telegram_url: str | None = None) -> str:
+    from src.application.style_b import telegram_button_html, telegram_dock_html, telegram_hint_html
+
     pick = _effective_pick_session(view)
     if pick is None or not _skating(view["card"]):
-        return ""
+        # Позвать некуда — внизу одна «Открыть в Telegram» (TASK-278).
+        return telegram_dock_html(telegram_url, hint=t("tg.map_all"))
     when = invite_cta_when(
         _parse_iso_date(pick.get("local_date")),
         str(pick.get("starts_at_local") or ""),
         today=view["today"],
     )
     label = f"Позвать на {when}" if when else "Позвать с собой"
+    tg = telegram_button_html(telegram_url, short=True) if telegram_url else ""
+    # Без Telegram-ссылки панели без JS показывать нечего — как раньше, ждёт скрипт.
+    dock_hidden = "" if tg else " hidden"
     return (
-        # hidden до скрипта: без JS кнопке нечего открыть — под выбранным сеансом свои ссылки.
-        '<div class="place-share-dock" id="placeShareDock" hidden>'
-        '<div class="place-share-dock__inner">'
-        f'<button type="button" class="place-share-dock__btn" id="placeShareBtn">{_esc(label)}</button>'
-        "</div></div>"
+        f'<div class="place-share-dock" id="placeShareDock"{dock_hidden}>'
+        '<div class="place-share-dock__inner"><div class="place-share-dock__row">'
+        # «Позвать» hidden до скрипта: без JS ей нечего открыть — под выбранным сеансом свои ссылки.
+        f'<button type="button" class="place-share-dock__btn" id="placeShareBtn" hidden>{_esc(label)}</button>'
+        f"{tg}</div>{telegram_hint_html(t('tg.map_all_named')) if tg else ''}</div></div>"
     )
 
 
@@ -1017,7 +1023,7 @@ def render_place_page(
         "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__CITY_LINK__": city_link,
         "__BODY__": body,
-        "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite),
+        "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite, telegram_url=cta_url),
         "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(
             view, invite=invite, base_path=base_path, telegram_url=cta_url
         ),

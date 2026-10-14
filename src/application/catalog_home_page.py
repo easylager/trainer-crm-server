@@ -1368,12 +1368,10 @@ def render_catalog_home_page(
             f'<span><i></i>{_esc(t("home.map.legend_on"))}</span>'
             f'<span class="off"><i></i>{_esc(t("home.map.legend_off"))}</span></figcaption></figure></section>'
         )
-    cta = ""
-    if cta_url:
-        cta = (
-            f'<section class="b-sec"><a class="b-btn b-btn--accent b-btn--wide" href="{_esc(cta_url)}">'
-            "Открыть в Telegram</a></section>"
-        )
+    # TASK-278: «Открыть в Telegram» — плашкой внизу экрана, а не секцией в конце страницы.
+    from src.application.style_b import telegram_dock_html
+
+    cta = telegram_dock_html(cta_url, hint=t("tg.map_all"))
     values = {
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,

@@ -1,6 +1,6 @@
 /* TASK-252: закреплённая «Позвать на …» и no-JS ряд мессенджеров под билетом. */
 body.b.has-place-share {
-  --place-share-dock-h: calc(12px + 52px + 12px + env(safe-area-inset-bottom, 0px));
+  --place-share-dock-h: calc(12px + 52px + 8px + 18px + 12px + env(safe-area-inset-bottom, 0px));
   padding-bottom: var(--place-share-dock-h);
 }
 
@@ -21,15 +21,33 @@ body.b.has-place-share {
   pointer-events: auto;
   max-width: 560px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+
+/* TASK-278: «Позвать» и Telegram в одной строке; без JS — только Telegram во всю ширину. */
+.place-share-dock__row { display: flex; gap: 8px; }
+.place-share-dock__row .b-tgbtn { flex: 1 1 auto; }
+.place-share-dock__row.has-invite .b-tgbtn { flex: 0 0 auto; gap: 6px; padding: 0 12px; font-size: 16px; }
+/* Вдвоём в строке на 390 px: «Позвать на завтра 21:15» должна влезть целиком. */
+.place-share-dock__row.has-invite .place-share-dock__btn { padding: 0 12px; font-size: 16px; }
+.place-share-dock__row.has-invite .b-tgbtn__long { display: none; }
+.place-share-dock__row.has-invite .b-tgbtn__short { display: inline; }
+.place-share-dock__btn[hidden] { display: none; }
 
 .place-share-dock__btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
   width: 100%;
   min-height: 52px;
   padding: 0 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: 0;
   border-radius: 16px;
   background: var(--g-accent);
@@ -83,4 +101,11 @@ body.b.has-place-share .b-ticket {
 html.js .b-ticket--picked:focus,
 html.js .b-ticket--picked:focus-visible {
   outline: none;
+}
+
+/* Телефон: «Позвать на завтра 21:15» целиком важнее подписи — Telegram остаётся самолётиком,
+   а строка под кнопками называет его словами. */
+@media (max-width: 420px) {
+  .place-share-dock__row.has-invite .b-tgbtn { width: 52px; padding: 0; }
+  .place-share-dock__row.has-invite .b-tgbtn__short { display: none; }
 }

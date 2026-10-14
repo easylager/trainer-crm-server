@@ -423,3 +423,35 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-card2 .b-chip { background: #eef3f5; }
 .b-card2 .b-chip--hl { background: var(--g-accent-wash); }
 .b-toggle--off { color: #8396a4 !important; background: transparent; }
+
+/* ── «Открыть в Telegram» (TASK-278, вариант A) ──────────────────────────
+   Одна синяя кнопка внизу каждого экрана и тихая строка про карту под ней.
+   Внутри Telegram (оболочка Mini App ставит data-client-shell) она не нужна. */
+.b-tgbtn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 52px; padding: 0 18px; border-radius: 16px;
+  background: var(--g-tg); color: var(--g-on-tg) !important;
+  font-size: 17px; font-weight: 700; text-decoration: none; white-space: nowrap;
+  box-shadow: var(--g-shadow);
+}
+.b-tgbtn:active { background: var(--g-tg-pressed); }
+.b-tgbtn:focus-visible { outline: 3px solid var(--g-tg); outline-offset: 2px; }
+.b-tgbtn__icon { flex: 0 0 auto; width: 22px; height: 22px; }
+.b-tgbtn__short { display: none; }
+.b-tghint {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 13px; color: var(--g-ink-2);
+}
+.b-tghint__icon { flex: 0 0 auto; width: 16px; height: 16px; color: var(--g-tg); }
+.b-tgdock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 9;
+  padding: 12px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, transparent 0%, var(--g-bg) 28%);
+  pointer-events: none;
+}
+.b-tgdock__inner {
+  pointer-events: auto; max-width: 560px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 8px;
+}
+body.b:not([data-client-shell]):has(.b-tgdock) { padding-bottom: calc(12px + 52px + 8px + 18px + 10px + env(safe-area-inset-bottom, 0px)); }
+body[data-client-shell] .tg-out { display: none !important; }

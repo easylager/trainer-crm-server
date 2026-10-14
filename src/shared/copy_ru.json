@@ -91,5 +91,12 @@
   "cta.enroll": "Записаться",
   "cta.write": "Написать",
   "place.trainers": "Тренеры",
-  "hub.trainers_all": "Все тренеры"
+  "hub.trainers_all": "Все тренеры",
+  "tg.open": "Открыть в Telegram",
+  "tg.open_short": "Telegram",
+  "tg.map_all": "там карта всех катков",
+  "tg.map_all_named": "в Telegram — карта всех катков",
+  "tg.map_city": "там все катки города на карте",
+  "tg.map_city_n": "там все {n} {word} на карте",
+  "tg.map_city_one": "там этот каток на карте"
 }
