@@ -89,7 +89,8 @@ async def test_place_page_phone_mode_ssr(app_use_test_db, db_session) -> None:
     assert view is not None
     links = place_action_links(view["card"], base_url="", surface="place_page", city_id=None)
     html = _b_schedule(view, base_path=f"/p/{arena_id}", invite=False, links=links)
-    assert "по телефону" in html
+    # Без фразы о расписании: звонок и есть способ узнать время.
+    assert "по телефону" not in html
     assert "tel:+375291112233" in html
 
 

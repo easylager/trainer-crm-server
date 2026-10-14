@@ -24,7 +24,12 @@ from src.application.ice_city_day import (
     plural_ru,
 )
 from src.application.ice_session_use_cases import STATUS_ACTIVE
-from src.application.ice_time_windows import home_picker_dates, resolve_home_window
+from src.application.ice_time_windows import (
+    home_picker_dates,
+    resolve_day_window,
+    resolve_home_window,
+    resolve_window,
+)
 from src.application.place_links import (
     catalog_start_param,
     join_public_origin,
@@ -671,8 +676,10 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
         parts.append(
             f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city" aria-label="{_esc(pt["name"])}">'
             f'<circle class="home-map__tap" cx="{x:.1f}" cy="{y:.1f}" r="{tap:.1f}" fill="transparent"/>'
+            f'<g class="home-map__vis">'
             f"{ring}"
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "#4a6273"}"/></a>'
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "#4a6273"}"/>'
+            f"</g></a>"
         )
     parts.append("</g>")
     parts.append('<g font-size="20" font-weight="600" fill="var(--g-on-photo)" pointer-events="none">')
@@ -907,9 +914,6 @@ async def load_catalog_home_view(
         "country": "BY",
         "now": now,
         "when_key": when_key,
-        "city_when": _city_list_when(when, when_key, selected_day=selected_day, today=today),
-        "period_start": period_start,
-        "period_end": period_end,
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": None,
         "user_city_id": None,
@@ -952,6 +956,12 @@ async def load_catalog_home_view(
 
     city_groups = group_catalog_cities_by_country(catalog_cities)
     catalog_cities = [city for _, group in city_groups for city in group]
+    await _attach_city_facts(
+        session,
+        catalog_cities,
+        now=now,
+        horizon_end=horizon_end,
+    )
     public_slug_set = {str(c["slug"]) for c in catalog_cities}
     user_city = _resolve_user_city(catalog_cities, user_city_slug=user_city_slug, public_slug_set=public_slug_set)
     user_city_id = int(user_city["id"]) if user_city else None
@@ -963,12 +973,6 @@ async def load_catalog_home_view(
     sessions_title = ""
     shop_count = int(user_city.get("shop_count") or 0) if user_city else 0
 
-    await _attach_city_facts(
-        session,
-        catalog_cities,
-        now=now,
-        horizon_end=horizon_end,
-    )
     has_hockey = any(bool(c.get("has_ohm")) for c in catalog_cities)
     countries = {str(c.get("country") or "") for c in catalog_cities}
     country = "BY" if "BY" in countries else (next(iter(countries), "BY") if countries else "BY")
@@ -1011,6 +1015,7 @@ async def load_catalog_home_view(
         "day_picker": _build_day_picker(now) if show_day_picker else [],
         "country": country,
         "when_key": when_key,
+        "city_when": _city_list_when(when, when_key, selected_day=selected_day, today=today),
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": user_city_vm,
         "user_city_id": user_city_id,
@@ -1254,7 +1259,7 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
         f'<a href="{href}"' + (' aria-current="true"' if key == when_key else "") + f">{_esc(label)}</a>"
         for key, label, href in items
     )
-    nav = f'<nav class="b-when" aria-label="Когда">{links}</nav>'
+    nav = f'<nav class="b-when vt-when-strip" aria-label="Когда">{links}</nav>'
     if view.get("show_day_picker"):
         days = "".join(
             f'<a class="b-day" href="{_esc(item["href"])}"><span>{_esc(item["label"])}</span></a>'
@@ -1330,6 +1335,7 @@ def render_catalog_home_page(
     Герой с фото катка «вашего города», выбор времени, карточка «Ваш город», тёмная карта,
     сетка городов с фото и раскрывашка «ещё N городов по областям».
     """
+    from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, b_photo_url, brand_link, hero_html
 
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -1406,7 +1412,12 @@ def render_catalog_home_page(
             f'<span class="off"><i></i>{_esc(t("home.map.legend_off"))}</span></figcaption></figure></section>'
         )
     # TASK-278: «Открыть в Telegram» — плашкой внизу экрана, а не секцией в конце страницы.
-    from src.application.style_b import telegram_dock_html
+    from src.application.style_b import (
+        b_press_script_html,
+        public_fonts_head_html,
+        telegram_dock_html,
+        telegram_dock_script_html,
+    )
 
     cta = telegram_dock_html(cta_url, hint=t("tg.map_all"))
     values = {
@@ -1418,6 +1429,7 @@ def render_catalog_home_page(
         "__OG_IMAGE__": _esc(og_image_url),
         "__ROBOTS__": _esc(robots),
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url),
+        "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
@@ -1427,9 +1439,12 @@ def render_catalog_home_page(
         "__MAP__": map_html,
         "__CITIES__": cities_html,
         "__CTA__": cta,
+        "__B_PRESS_SCRIPT__": b_press_script_html(),
+        "__TG_DOCK_SCRIPT__": telegram_dock_script_html(),
         "__FOOTER__": _esc(t("home.footer")),
         "__ELSEWHERE__": _b_elsewhere(cities),
         "__TRAINERS_URL__": _esc(trainers_url),
+        "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(surface="catalog_home"),
     }
     return fill_placeholders(template, values)
 

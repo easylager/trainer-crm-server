@@ -10,10 +10,13 @@ from src.api.middleware.http_limits import client_ip_from_request
 from src.application.catalog_consumer_events import (
     KIND_PUBLIC_TELEGRAM_CTA,
     classify_user_agent,
+    normalize_public_page_path,
     public_actor_hash,
     record_catalog_consumer_event,
     record_public_contact_click,
+    record_public_page_view,
     resolve_entry_scope,
+    resolve_public_page_view_scope,
 )
 from src.application.public_web_cta import CONTACT_ACTION_DIRECTION, CONTACT_ACTION_PHONE, CONTACT_ACTION_TICKETS
 from src.shared.html_template import safe_external_url
@@ -97,6 +100,50 @@ async def open_telegram_from_public_page(
         base = (settings.webapp_base_url or "").rstrip("/")
         return RedirectResponse(url=f"{base}/webapp/ice", status_code=302, headers={"Cache-Control": "no-store"})
     return RedirectResponse(url=link, status_code=302, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/page-view")
+async def public_page_view_beacon(
+    request: Request,
+    surface: str = Query(..., min_length=1, max_length=40),
+    path: str = Query("", max_length=512, description="location.pathname страницы"),
+    city_id: int | None = Query(None),
+    arena_id: int | None = Query(None),
+    s: str | None = Query(None, description="id сеанса из ?s="),
+    src: str | None = Query(None, description="канал шаринга"),
+    i: str | None = Query(None, description="1 — тон «Позвать с собой»"),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Просмотр /, /c/, /p/ с клиента (prefetch/bfcache-safe); GET HTML просмотр не пишет."""
+    surf = surface.strip().lower()
+    if surf not in _ALLOWED_SURFACES:
+        return Response(status_code=400)
+    page_path = normalize_public_page_path(path)
+    if page_path is None:
+        return Response(status_code=204)
+    scope = await resolve_public_page_view_scope(session, city_id=city_id, arena_id=arena_id)
+    if scope is None:
+        return Response(status_code=204)
+    scope_city, scope_arena = scope
+    invite = (i or "").strip().lower() in ("1", "true", "yes")
+    session_id = None
+    raw_s = (s or "").strip()
+    if raw_s.isdigit() and 0 < int(raw_s) < 2**31:
+        session_id = int(raw_s)
+    await record_public_page_view(
+        session,
+        request,
+        surface=surf,
+        city_id=scope_city,
+        arena_id=scope_arena,
+        page_path=page_path,
+        extra_payload={
+            "s": session_id,
+            "i": "1" if invite else None,
+            "src": clean_share_src(src),
+        },
+    )
+    return Response(status_code=204)
 
 
 @router.post("/contact-click")

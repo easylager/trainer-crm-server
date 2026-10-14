@@ -22,9 +22,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <script type="application/ld+json">__JSONLD__</script>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  __PUBLIC_FONTS_HEAD__
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2" />
   <style>
     /*
@@ -78,8 +76,6 @@
     .arena__name a { color: inherit; text-decoration: none; }
     .arena__name a::after { content: " ›"; color: var(--ic-accent-text); }
     .arena__where { margin: 2px 0 12px; color: var(--ic-muted); font-size: 14px; }
-    /* TASK-180: строка свежести расписания (сейчас всегда пустая, TASK-243). */
-    .arena__stale { margin: -6px 0 12px; color: var(--ic-warn); font-size: 13px; }
     .arena__basis { margin: 10px 0 0; color: var(--ic-muted); font-size: 13px; line-height: 1.4; }
     .slots { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
     .slot {
@@ -133,32 +129,11 @@
     <a class="cta" href="__CTA_URL__">То же расписание в Telegram</a>
     <footer>__FOOTER__</footer>
   </main>
-  <script src="/static/shared/list-scroll-restore.js?v=1"></script>
+  <script src="/static/shared/list-scroll-restore.js?v=2"></script>
   <script>
-    /* no-store убивает bfcache — возвращаем позицию списка после /p/. */
     (function () {
       var Api = window.GlideListScrollRestore;
-      if (!Api) return;
-      var path = location.pathname;
-      var search = location.search;
-      function save() {
-        Api.save(sessionStorage, path, search, window.scrollY || window.pageYOffset || 0);
-      }
-      function restore() {
-        var y = Api.consume(sessionStorage, path, search);
-        if (!y) return;
-        var go = function () { window.scrollTo(0, y); };
-        go();
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(function () { requestAnimationFrame(go); });
-        }
-      }
-      window.addEventListener('pagehide', save);
-      document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'hidden') save();
-      });
-      if (document.readyState === 'complete') restore();
-      else window.addEventListener('load', restore);
+      if (Api && Api.wirePublicListScrollRestore) Api.wirePublicListScrollRestore(sessionStorage);
     })();
   </script>
 </body>

@@ -74,6 +74,27 @@ def public_outbound_url(
     return None
 
 
+PAGE_VIEW_BEACON_VERSION = "2"
+
+
+def public_page_view_beacon_script(
+    *,
+    surface: str,
+    city_id: int | None = None,
+    arena_id: int | None = None,
+) -> str:
+    """``sendBeacon`` при разборе страницы (не на bfcache-возврате) — учёт просмотра публички."""
+    attrs = [f'data-surface="{_esc(surface)}"']
+    if city_id is not None and int(city_id) > 0:
+        attrs.append(f'data-city-id="{int(city_id)}"')
+    if arena_id is not None and int(arena_id) > 0:
+        attrs.append(f'data-arena-id="{int(arena_id)}"')
+    return (
+        f'<script defer src="/static/shared/public-page-view-beacon.js?v={PAGE_VIEW_BEACON_VERSION}" '
+        f'{" ".join(attrs)}></script>'
+    )
+
+
 def contact_click_beacon_url(
     *,
     action: str,

@@ -39,4 +39,35 @@ describe('list-scroll-restore (public /c/ and ice-today)', () => {
     storage.setItem(Api.storageKey('/c/minsk', ''), 'nope');
     assert.equal(Api.consume(storage, '/c/minsk', ''), 0);
   });
+
+  it('wirePublicListScrollRestore skips scroll when pageshow.persisted (bfcache)', () => {
+    const storage = memStorage();
+    Api.save(storage, '/c/minsk', '', 400);
+    const scrollToCalls = [];
+    const listeners = {};
+    const g = {
+      location: { pathname: '/c/minsk', search: '' },
+      scrollY: 0,
+      pageYOffset: 0,
+      scrollTo(_x, y) {
+        scrollToCalls.push(y);
+      },
+      addEventListener(type, fn) {
+        listeners[type] = fn;
+      },
+      removeEventListener() {},
+      document: { addEventListener() {}, visibilityState: 'visible' },
+      requestAnimationFrame(fn) {
+        fn();
+      },
+    };
+    Api.wirePublicListScrollRestore(storage, g);
+    assert.equal(typeof listeners.pageshow, 'function');
+    listeners.pageshow({ persisted: true });
+    assert.equal(scrollToCalls.length, 0);
+    assert.ok(storage._mem[Api.storageKey('/c/minsk', '')]);
+    listeners.pageshow({ persisted: false });
+    assert.deepEqual(scrollToCalls, [400, 400]);
+    assert.equal(Api.consume(storage, '/c/minsk', ''), 0);
+  });
 });

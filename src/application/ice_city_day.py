@@ -23,12 +23,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_session_use_cases import STATUS_ACTIVE
-from src.application.schedule_staleness import (
-    LEVEL_STALE,
-    load_arena_freshness,
-    stale_note,
-    staleness_level,
-)
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.ice_discovery_scope import (
     PUBLIC_ARENA_VISIBLE_SQL,
@@ -108,20 +102,23 @@ def render_unknown_city_html(cities: list[dict[str, Any]], *, home: str) -> str:
         links.append(f'<p><a href="/c/{html_lib.escape(slug, quote=True)}">{label}</a></p>')
     listing = "".join(links)
     home_esc = html_lib.escape(home, quote=True)
+    from src.application.style_b import public_fonts_head_html
+
     title = html_lib.escape(t("city.not_found"), quote=True)
-    return f"""<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
 <title>{title}</title>
 <link rel="icon" href="/favicon.ico" type="image/png" />
 <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+__PUBLIC_FONTS_HEAD__
 <style>body{{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
 margin:0;padding:48px 20px;text-align:center}}h1{{font-weight:600;letter-spacing:-.01em}}a{{color:#0B6E70;font-weight:600}}</style></head>
 <body><h1>{title}</h1>
 {listing}
 <p><a href="{home_esc}">Открыть каталог {html_lib.escape(t("brand.mark"), quote=True)}</a></p></body></html>"""
+    return html.replace("__PUBLIC_FONTS_HEAD__", public_fonts_head_html())
 
 
 async def list_public_cities(session: AsyncSession) -> list[dict[str, Any]]:
@@ -431,15 +428,8 @@ def _group_by_arena(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 async def _load_day_checked(
     session: AsyncSession, *, city_id: int, day: date, now: datetime
-) -> tuple[list[Mapping[str, Any]], dict[int, dict[str, Any]]]:
-    """Сеансы дня и свежесть расписания их арен (TASK-180).
-
-    Свежесть только помечает арену (``stale``), сеансы не снимает ни на каком уровне:
-    решение владельца, TASK-243.
-    """
-    rows = await _load_day(session, city_id=city_id, day=day, now=now)
-    fresh = await load_arena_freshness(session, {int(r["arena_id"]) for r in rows}, now=now)
-    return rows, fresh
+) -> list[Mapping[str, Any]]:
+    return await _load_day(session, city_id=city_id, day=day, now=now)
 
 
 async def get_city_ice_day(
@@ -456,27 +446,20 @@ async def get_city_ice_day(
     сказать «на сегодня сеансов нет», а не притворяться, что данные ещё грузятся.
     Поле ``is_today`` говорит, какой день в итоге показан, чтобы заголовок не врал.
 
-    TASK-180: у арены с устаревшим расписанием (> 6 ч) — ``stale_note`` (пустой).
     """
     tz_name = await _city_timezone(session, city_id)
     now = now or datetime.now(timezone.utc)
     today = _local_today(tz_name, now)
 
     day = on_date or today
-    rows, fresh = await _load_day_checked(session, city_id=city_id, day=day, now=now)
+    rows = await _load_day_checked(session, city_id=city_id, day=day, now=now)
     fell_through = False
     if not rows and on_date is None:
         day = today + timedelta(days=1)
-        rows, fresh = await _load_day_checked(
-            session, city_id=city_id, day=day, now=now
-        )
+        rows = await _load_day_checked(session, city_id=city_id, day=day, now=now)
         fell_through = True
 
     arenas = _group_by_arena(rows)
-    for arena in arenas:
-        arena_fresh = fresh.get(int(arena["arena_id"]))
-        arena["stale"] = staleness_level(arena_fresh) == LEVEL_STALE
-        arena["stale_note"] = stale_note(arena_fresh, now=now)
     sessions_total = sum(len(a["sessions"]) for a in arenas)
     prices = [
         int(s["price_adult_minor"])
@@ -497,7 +480,6 @@ async def get_city_ice_day(
         "arenas": arenas,
         "arena_count": len(arenas),
         "session_count": sessions_total,
-        "stale_arena_count": sum(1 for a in arenas if a["stale"]),
         "price_min_minor": min(prices) if prices else None,
         "price_max_minor": max(prices) if prices else None,
         "currency_code": currency,

@@ -23,6 +23,7 @@ from src.application.catalog_consumer_events import (
     record_catalog_consumer_event,
 )
 from src.application.ice_city_day import city_slug
+from tests.api.public_page_view_beacon import post_catalog_page_view
 from src.shared.client_ip import trusted_client_ip
 from src.shared.ua_class import UA_CRAWLER, UA_HUMAN, UA_PREVIEW, UA_SEARCH, classify_user_agent
 
@@ -105,12 +106,20 @@ async def test_page_views_store_class_not_ua(app_use_test_db, db_session, monkey
         "python-requests/2.31": "1.1.1.5",
         _HUMAN_UA: "1.1.1.6",
     }
+    list_path = f"/c/{city_slug(name)}"
     async with _client() as client:
         for ua, ip in uas.items():
-            r = await client.get(
-                f"/c/{city_slug(name)}?t=ice&w=today", headers={"user-agent": ua, "x-forwarded-for": ip}
-            )
+            headers = {"user-agent": ua, "x-forwarded-for": ip}
+            r = await client.get(f"{list_path}?t=ice&w=today", headers=headers)
             assert r.status_code == 200, r.text
+            beacon = await post_catalog_page_view(
+                client,
+                surface="selection_page",
+                path=list_path,
+                city_id=city_id,
+                headers=headers,
+            )
+            assert beacon.status_code == 204
     rows = (
         await db_session.execute(
             text(
@@ -209,13 +218,20 @@ async def test_same_real_ip_is_one_actor_and_rate_limit_applies(app_use_test_db,
     reset_http_limiters_for_tests()
     city_id, _, name = await _city_arena(db_session)
     statuses = []
+    list_path = f"/c/{city_slug(name)}"
     async with _client() as client:
         for _ in range(100):
-            r = await client.get(
-                f"/c/{city_slug(name)}?t=ice&w=today",
-                headers={"user-agent": _HUMAN_UA, "x-forwarded-for": "203.0.113.50, 100.64.1.1"},
-            )
+            headers = {"user-agent": _HUMAN_UA, "x-forwarded-for": "203.0.113.50, 100.64.1.1"}
+            r = await client.get(f"{list_path}?t=ice&w=today", headers=headers)
             statuses.append(r.status_code)
+            if r.status_code == 200:
+                await post_catalog_page_view(
+                    client,
+                    surface="selection_page",
+                    path=list_path,
+                    city_id=city_id,
+                    headers=headers,
+                )
     assert statuses.count(200) == 30
     assert statuses.count(429) == 70
     actors = (

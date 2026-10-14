@@ -24,6 +24,7 @@ from tests.api.test_public_arenas import (
     _insert_arena,
     _insert_city,
 )
+from tests.api.public_page_view_beacon import post_catalog_page_view
 from tests.db_catalog_helpers import require_seed_service_id
 
 
@@ -82,7 +83,7 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     async with _client() as client:
         resp = await client.get(place["path"])
     assert resp.status_code == 200, resp.text
-    assert resp.headers["cache-control"] == "private, no-store"
+    assert resp.headers["cache-control"] == "private, no-cache"
     html = resp.text
     assert place["name"] in _meta(html, "og:title")
     assert "расписание массового катания" in _meta(html, "og:title")
@@ -121,6 +122,16 @@ async def test_share_src_is_tracked_and_noindex_without_changing_canonical(
     async with _client() as client:
         resp = await client.get(place["path"], params={"src": "wa", "garbage": "x"})
         bad = await client.get(place["path"], params={"src": "evil"})
+        beacon = await post_catalog_page_view(
+            client,
+            surface="place_page",
+            path=place["path"],
+            city_id=place["city_id"],
+            arena_id=place["arena_id"],
+            extra_params={"src": "wa"},
+            headers={"User-Agent": "Mozilla/5.0 Task146ShareSrc"},
+        )
+        assert beacon.status_code == 204
     assert _meta(resp.text, "robots") == "noindex, follow"
     assert re.search(rf'<link rel="canonical" href="[^"]*{re.escape(place["path"])}"', resp.text)
     assert "src=wa" in _meta(resp.text, "og:url")

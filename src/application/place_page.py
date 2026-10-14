@@ -56,12 +56,6 @@ from src.shared.arena_schedule_mode import (
     normalize_schedule_mode,
     season_closed_user_line,
 )
-from src.application.schedule_staleness import (
-    LEVEL_FRESH,
-    load_arena_freshness,
-    stale_note,
-    staleness_level,
-)
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
 from src.shared.public_display import (
@@ -259,22 +253,6 @@ def starts_in_label(slot: Mapping[str, Any], *, now: datetime) -> str:
     return f"Начнётся через {hours} ч {rest} мин"
 
 
-def ago_label(moment: datetime | None, *, now: datetime) -> str:
-    """«обновлено 3 часа назад» без ложной точности."""
-    if moment is None:
-        return ""
-    seconds = max(0, int((now - moment).total_seconds()))
-    if seconds < 3600:
-        return "обновлено меньше часа назад"
-    hours = seconds // 3600
-    if hours < 24:
-        return f"обновлено {hours} {plural_ru(hours, 'час', 'часа', 'часов')} назад"
-    days = hours // 24
-    if days == 1:
-        return "обновлено вчера"
-    return f"обновлено {days} {plural_ru(days, 'день', 'дня', 'дней')} назад"
-
-
 def _hhmm_in_interval(hhmm: str, open_: str, close: str) -> bool:
     if close > open_:
         return open_ <= hhmm < close
@@ -323,7 +301,6 @@ async def load_place_view(
     today = now.astimezone(tz).date()
 
     lookup_days: list[dict[str, Any]] = []
-    level = LEVEL_FRESH
     schedule_note = ""
     schedule_mode = normalize_schedule_mode(card.get("schedule_mode"))
     if _skating(card) and schedule_mode == SCHEDULE_MODE_PHONE:
@@ -341,12 +318,6 @@ async def load_place_view(
             date_from=today,
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
-        # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API). Сеансы не
-        # снимаем ни на каком уровне — решение владельца (TASK-243).
-        fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
-        level = staleness_level(fresh)
-        if lookup_days:
-            schedule_note = stale_note(fresh, now=now)
 
     focus = None
     focus_missing = False
@@ -394,7 +365,6 @@ async def load_place_view(
         "focus_missing": focus_missing,
         "next_slot": next_slot,
         "session_count": len(all_slots),
-        "schedule_level": level,
         "schedule_note": schedule_note,
         "today": today,
         "now": now,
@@ -1025,7 +995,8 @@ def render_place_page(
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
     robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
 
-    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+    from src.application.public_web_cta import public_page_view_beacon_script
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
     html = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
@@ -1041,6 +1012,7 @@ def render_place_page(
         "__ROBOTS__": robots,
         "__HEAD_EXTRA__": "",
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
+        "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
@@ -1050,7 +1022,16 @@ def render_place_page(
         "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(
             view, invite=invite, base_path=base_path, telegram_url=cta_url
         ),
+        "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(
+            surface="place_page",
+            city_id=int(card.get("city_id") or 0) or None,
+            arena_id=int(card.get("id") or card.get("arena_id") or 0) or None,
+        ),
     }
+    from src.application.style_b import b_press_script_html, telegram_dock_script_html
+
+    replacements["__B_PRESS_SCRIPT__"] = b_press_script_html()
+    replacements["__TG_DOCK_SCRIPT__"] = telegram_dock_script_html()
     if robots.startswith("index") and city:
         from src.application.place_links import breadcrumb_script
 
@@ -1166,12 +1147,15 @@ def _b_price_mode(slots: list[Mapping[str, Any]]) -> str:
 def _b_ticket(
     slot: Mapping[str, Any],
     *,
+    vt_session_id: int | None,
     base_path: str,
     invite: bool,
     focused: bool,
     common_price: str,
     nojs_share: Mapping[str, str] | None = None,
 ) -> str:
+    from src.shared.public_view_transitions import session_time_vt_style
+
     start = format_clock(str(slot.get("starts_at_local") or ""))
     end = format_clock(str(slot.get("ends_at_local") or ""))
     sub_bits = [f"до {end}"] if end else []
@@ -1182,13 +1166,38 @@ def _b_ticket(
     href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
     klass = "b-ticket b-ticket--picked" if focused else "b-ticket"
     sid = int(slot["id"])
+    vt = session_time_vt_style(sid) if vt_session_id is not None and sid == vt_session_id else ""
     ticket = (
         f'<a class="{klass}" href="{_esc(href)}" rel="nofollow" data-session-id="{sid}">'
-        f'<span class="b-ticket__time">{_esc(start)}</span>{sub}</a>'
+        f'<span class="b-ticket__time"{vt}>{_esc(start)}</span>{sub}</a>'
     )
     if focused and nojs_share is not None:
         ticket += _nojs_messenger_row(nojs_share)
     return ticket
+
+
+def _b_schedule_site_link(card: Mapping[str, Any]) -> str:
+    site = safe_external_url(card.get("website_url"))
+    if not site:
+        return ""
+    host = _display_host(site)
+    return (
+        f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+        f"{_esc(host or site)}</a>"
+    )
+
+
+def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
+    from src.application.style_b import section
+
+    call = _b_call(card, links)
+    if call:
+        return section(title, call, klass="b-sec--place", sec_id="schedule")
+    site_link = _b_schedule_site_link(card)
+    if site_link:
+        body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{site_link}'
+        return section(title, body, klass="b-sec--place", sec_id="schedule")
+    return ""
 
 
 def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
@@ -1206,21 +1215,8 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
     if card.get("in_season") is False:
         return ""
-    if mode == SCHEDULE_MODE_PHONE or not days:
-        call = _b_call(card, links)
-        if call:
-            body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
-            return section(title, body, klass="b-sec--place", sec_id="schedule")
-        site = safe_external_url(card.get("website_url"))
-        if site:
-            host = _display_host(site)
-            link = (
-                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
-                f"{_esc(host or site)}</a>"
-            )
-            body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{link}'
-            return section(title, body, klass="b-sec--place", sec_id="schedule")
-        return ""
+    if not days:
+        return _b_schedule_when_empty(card, links, title=title)
 
     today = view["today"]
     focus = view.get("focus")
@@ -1261,6 +1257,7 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         tickets = "".join(
             _b_ticket(
                 s,
+                vt_session_id=pick_id,
                 base_path=base_path,
                 invite=invite,
                 focused=(pick_id == int(s["id"])),
@@ -1283,7 +1280,11 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{links_row}'
+    body = (
+        f'<div data-glide-session-list-root>'
+        f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{links_row}'
+        f"</div>"
+    )
     aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 

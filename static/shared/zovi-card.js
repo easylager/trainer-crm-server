@@ -77,7 +77,7 @@
     $('fromN').textContent = state.from || 'Отправитель';
     // Пуш создателю есть только у открыток из Telegram; иначе билет — единственный путь к нему.
     $('sentNote').hidden = !DATA.creator_notified;
-    $('sendBtn').textContent = DATA.creator_notified ? 'Поделиться билетом' : 'Отправить билет ' + M.decline(state.from, 'dat');
+    $('sendBtn').textContent = DATA.creator_notified ? 'Поделиться ответом' : 'Отправить ответ ' + M.decline(state.from, 'dat');
     paintQuestion();
     $('tixTo').textContent = who[0];
     $('tixFrom').textContent = who[1];
@@ -534,7 +534,7 @@
       var a = document.createElement('a');
       a.href = url; a.download = 'glide-bilet.png';
       document.body.appendChild(a); a.click(); a.remove();
-      toast('Билет сохранён — отправь его, куда хочешь');
+      toast('Картинка сохранена — отправь её, куда хочешь');
       return;
     }
     toast('Удержите картинку, чтобы сохранить');

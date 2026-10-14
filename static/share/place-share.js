@@ -55,6 +55,103 @@
     return slots.length ? String(slots[0].id) : null;
   }
 
+  var PLAN_WD_FULL = [
+    'Понедельник',
+    'Вторник',
+    'Среда',
+    'Четверг',
+    'Пятница',
+    'Суббота',
+    'Воскресенье',
+  ];
+  var PLAN_MONTHS_GEN = [
+    'января',
+    'февраля',
+    'марта',
+    'апреля',
+    'мая',
+    'июня',
+    'июля',
+    'августа',
+    'сентября',
+    'октября',
+    'ноября',
+    'декабря',
+  ];
+
+  function weekdayMon0FromIso(iso) {
+    var sun = MT.weekdaySun0FromIso(iso);
+    return sun === 0 ? 6 : sun - 1;
+  }
+
+  function findSession(sessionId) {
+    var sid = String(sessionId);
+    var days = combinedDays();
+    for (var i = 0; i < days.length; i++) {
+      var sessions = days[i].sessions || [];
+      for (var j = 0; j < sessions.length; j++) {
+        if (sessions[j] && String(sessions[j].id) === sid) return sessions[j];
+      }
+    }
+    return null;
+  }
+
+  function planDayHeading(localDate) {
+    var day = String(localDate || '').slice(0, 10);
+    var today = todayIso();
+    if (!day) return '';
+    var wd = PLAN_WD_FULL[weekdayMon0FromIso(day)];
+    if (day === today) return 'Сегодня, ' + wd.toLowerCase();
+    if (day === MT.addDaysIso(today, 1)) return 'Завтра, ' + wd.toLowerCase();
+    var bits = day.split('-');
+    return wd + ', ' + Number(bits[2]) + ' ' + PLAN_MONTHS_GEN[Number(bits[1]) - 1];
+  }
+
+  function planPriceLine(session) {
+    session = session || {};
+    var cur = session.currency_code || 'BYN';
+    var lines = [];
+    var adult = session.price_adult_minor != null ? session.price_adult_minor : session.price_minor;
+    if (adult != null) lines.push('Взрослый — ' + PD.formatPriceMinor(adult, cur));
+    if (session.price_child_minor != null) {
+      lines.push('Детский — ' + PD.formatPriceMinor(session.price_child_minor, cur));
+    }
+    if (session.price_rental_minor != null) {
+      lines.push('Прокат коньков — ' + PD.formatPriceMinor(session.price_rental_minor, cur));
+    }
+    var note = String(session.price_note || '').trim();
+    if (note) lines.push(note);
+    return lines.join(' · ');
+  }
+
+  function paintPlan(sessionId) {
+    var plan = document.querySelector('#plan .b-plan');
+    if (!plan || plan.classList.contains('b-plan--gone')) return;
+    var session = findSession(sessionId);
+    if (!session) return;
+    var dayEl = plan.querySelector('.b-plan__day');
+    var timeEl = plan.querySelector('.b-plan__time');
+    if (dayEl) dayEl.textContent = planDayHeading(session.local_date);
+    var start = PD.formatClock(String(session.starts_at_local || '').slice(0, 5));
+    var end = PD.formatClock(String(session.ends_at_local || '').slice(0, 5));
+    if (timeEl) timeEl.textContent = end ? start + '–' + end : start;
+    var kind = M.iceKindLabel ? M.iceKindLabel(session) : '';
+    var extra = [kind, planPriceLine(session)].filter(Boolean).join(' · ');
+    var lineEl = plan.querySelector('.b-plan__line');
+    if (extra) {
+      if (!lineEl) {
+        lineEl = document.createElement('span');
+        lineEl.className = 'b-plan__line';
+        if (timeEl && timeEl.parentNode) timeEl.parentNode.insertBefore(lineEl, timeEl.nextSibling);
+      }
+      lineEl.textContent = extra;
+      lineEl.hidden = false;
+    } else if (lineEl) {
+      lineEl.textContent = '';
+      lineEl.hidden = true;
+    }
+  }
+
   function inviteLabel(sessionId) {
     if (!sessionId || !PD.inviteCtaWhen) return 'Позвать с собой';
     var sid = String(sessionId);
@@ -107,6 +204,7 @@
     });
     var btn = document.getElementById('placeShareBtn');
     if (btn) btn.textContent = inviteLabel(sid);
+    paintPlan(sid);
     if (!opts || !opts.skipUrl) syncUrl(sid);
     if (opts && opts.reveal) revealAboveDock();
   }
