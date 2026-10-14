@@ -375,9 +375,24 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-quick a.hot small { color: var(--g-on-dark-accent); }
 
 /* ── Списки /c/{город}?… ───────────────────────────────────────────────── */
-.b-hero--list { min-height: 260px; }
+.b-hero--list { min-height: 260px; overflow: visible; }
 .b-hero--list .b-hero__title { font-size: 40px; line-height: 1; }
+.b-hero--list .b-hero__sub {
+  overflow-wrap: anywhere;
+  color: #d6e4ea;
+}
 .b-cards { gap: 10px; }
+.b-card2--off { opacity: 0.72; }
+.b-card2__off { margin: 0 0 8px; font-size: 13px; color: #8396a4; }
+.b-window-break {
+  display: flex; align-items: center; gap: 12px; margin: 16px 0 12px; color: #8396a4; font-size: 13px;
+}
+.b-window-break::before, .b-window-break::after {
+  content: ""; flex: 1; height: 1px; background: #d8e2e8;
+}
+.b-window-break__pill { white-space: normal; text-align: center; max-width: 92%; }
+.b-window-break__pill b { color: var(--g-ink-2); font-weight: 600; }
+
 .b-card2 {
   display: flex; flex-direction: column; gap: 12px;
   padding: 14px; border-radius: 18px; background: var(--g-surface); box-shadow: var(--g-shadow);

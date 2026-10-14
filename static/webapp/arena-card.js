@@ -1089,7 +1089,6 @@
 
   function renderScheduleFact(feed) {
     feed = feed || {};
-    if (!feed.banner) return '';
     var action = '';
     if (feed.mode === 'phone' && feed.callHref) {
       action =
@@ -1107,17 +1106,15 @@
         '">' +
         esc(displayHost(feed.siteHref)) +
         '</a>';
-    } else {
-      return '';
     }
+    if (!feed.banner && !action) return '';
+    var intro = feed.banner ? '<div class="arena-closed">' + esc(feed.banner) + '</div>' : '';
     return (
       '<div class="arena-sec">' +
       '<p class="arena-h">' +
       esc(iceSectionTitle()) +
       '</p>' +
-      '<div class="arena-closed">' +
-      esc(feed.banner) +
-      '</div>' +
+      intro +
       action +
       '</div>'
     );

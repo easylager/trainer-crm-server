@@ -264,8 +264,10 @@ async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale
     async with _client() as client:
         listing = await client.get(f"/c/{city_slug(name)}?t=ice&w=today")
     assert listing.status_code == 200
-    assert "Живой каток" in listing.text and "Старый каток" in listing.text
-    assert "Закрытый каток" not in listing.text
+    # Как в Mini App (inWindow): закрытый сезон — не ответ на «Сегодня», он под разделителем.
+    cards = listing.text.split('b-cards"', 1)[1].split("</section>", 1)[0]
+    assert "Живой каток" in cards and "Старый каток" in cards
+    assert cards.index("Старый каток") < cards.index("b-window-break") < cards.index("Закрытый каток")
 
 
 @pytest.mark.asyncio
@@ -336,7 +338,8 @@ async def test_when_query_works_without_js_switcher(app_use_test_db, db_session,
         for when, prefix in prefixes.items():
             resp = await client.get(f"/?when={when}")
             assert resp.status_code == 200, when
-            assert _counter(resp.text).startswith(prefix), _counter(resp.text)
+            counter = _counter(resp.text)
+            assert counter.startswith(prefix), counter
             assert 'name="robots" content="noindex, follow"' in resp.text
             assert 'rel="canonical"' in resp.text
             assert 'class="day-picker"' not in resp.text

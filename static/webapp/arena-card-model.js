@@ -45,13 +45,13 @@
     var digits = String(raw || '').replace(/\D/g, '');
     return digits.length >= 7 ? 'tel:' + String(raw || '').replace(/[^\d+]/g, '') : '';
   }
-  /** Нет сеансов: факт и способ узнать. Нет телефона и сайта — секции нет. */
+  /** Нет сеансов: телефон (часы — в блоке info), иначе сайт, иначе секции нет. */
   function scheduleAsk(card) {
     var callHref = callHrefFor(card);
     if (callHref) {
       return {
         mode: 'phone',
-        banner: copyLine('place.phone_schedule', 'Время массового катания называют по телефону.'),
+        banner: null,
         showRibbon: false,
         callHref: callHref,
       };

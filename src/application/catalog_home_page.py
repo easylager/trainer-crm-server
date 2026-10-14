@@ -24,7 +24,12 @@ from src.application.ice_city_day import (
     plural_ru,
 )
 from src.application.ice_session_use_cases import STATUS_ACTIVE
-from src.application.ice_time_windows import home_picker_dates, resolve_home_window
+from src.application.ice_time_windows import (
+    home_picker_dates,
+    resolve_day_window,
+    resolve_home_window,
+    resolve_window,
+)
 from src.application.place_links import (
     catalog_start_param,
     join_public_origin,
@@ -909,9 +914,6 @@ async def load_catalog_home_view(
         "country": "BY",
         "now": now,
         "when_key": when_key,
-        "city_when": _city_list_when(when, when_key, selected_day=selected_day, today=today),
-        "period_start": period_start,
-        "period_end": period_end,
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": None,
         "user_city_id": None,
@@ -954,6 +956,12 @@ async def load_catalog_home_view(
 
     city_groups = group_catalog_cities_by_country(catalog_cities)
     catalog_cities = [city for _, group in city_groups for city in group]
+    await _attach_city_facts(
+        session,
+        catalog_cities,
+        now=now,
+        horizon_end=horizon_end,
+    )
     public_slug_set = {str(c["slug"]) for c in catalog_cities}
     user_city = _resolve_user_city(catalog_cities, user_city_slug=user_city_slug, public_slug_set=public_slug_set)
     user_city_id = int(user_city["id"]) if user_city else None
@@ -965,12 +973,6 @@ async def load_catalog_home_view(
     sessions_title = ""
     shop_count = int(user_city.get("shop_count") or 0) if user_city else 0
 
-    await _attach_city_facts(
-        session,
-        catalog_cities,
-        now=now,
-        horizon_end=horizon_end,
-    )
     has_hockey = any(bool(c.get("has_ohm")) for c in catalog_cities)
     countries = {str(c.get("country") or "") for c in catalog_cities}
     country = "BY" if "BY" in countries else (next(iter(countries), "BY") if countries else "BY")
@@ -1013,6 +1015,7 @@ async def load_catalog_home_view(
         "day_picker": _build_day_picker(now) if show_day_picker else [],
         "country": country,
         "when_key": when_key,
+        "city_when": _city_list_when(when, when_key, selected_day=selected_day, today=today),
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": user_city_vm,
         "user_city_id": user_city_id,

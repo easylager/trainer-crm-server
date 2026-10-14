@@ -1,4 +1,4 @@
-"""TASK-276: нет сеансов — факт и способ узнать, без оговорки системы."""
+"""TASK-276: нет сеансов — контакт без оговорок про отсутствие сетки."""
 
 from __future__ import annotations
 
@@ -7,34 +7,57 @@ from datetime import date
 from src.application.place_page import _b_schedule
 
 
-def _view(*, phone: str = "", website: str = "") -> dict:
+def _view(
+    *,
+    phone: str = "",
+    website: str = "",
+    opening_hours: dict | None = None,
+) -> dict:
+    card: dict = {
+        "venue_type": "ice",
+        "schedule_mode": "auto",
+        "phone": phone,
+        "website_url": website,
+        "in_season": True,
+        "freshness": {"schedule_auto": True},
+    }
+    if opening_hours is not None:
+        card["opening_hours"] = opening_hours
     return {
-        "card": {
-            "venue_type": "ice",
-            "schedule_mode": "auto",
-            "phone": phone,
-            "website_url": website,
-            "in_season": True,
-        },
+        "card": card,
         "days": [],
         "today": date(2026, 10, 14),
     }
 
 
-def test_schedule_section_phone_matches_the_shared_sentence() -> None:
+def test_schedule_section_phone_without_banner_text() -> None:
     html = _b_schedule(
         _view(phone="+375291112233", website="https://rink.example/ice"),
         base_path="/p/1",
         invite=False,
         links={"tel": "tel:+375291112233"},
     )
-    assert "Время массового катания называют по телефону." in html
     assert "tel:+375291112233" in html
-    assert "уточняется" not in html
-    assert "пока не получили" not in html
+    assert "называют по телефону" not in html
+    assert "не публикуют" not in html
+    assert "на сайте катка" not in html
 
 
-def test_schedule_section_site_when_there_is_no_phone() -> None:
+def test_schedule_section_does_not_repeat_hours_from_info() -> None:
+    html = _b_schedule(
+        _view(
+            phone="+375291112233",
+            opening_hours={"daily": {"open": "07:00", "close": "23:00"}},
+        ),
+        base_path="/p/1",
+        invite=False,
+        links={"tel": "tel:+375291112233"},
+    )
+    assert "tel:+375291112233" in html
+    assert "каждый день 7:00–23:00" not in html
+
+
+def test_schedule_section_site_when_no_phone() -> None:
     html = _b_schedule(
         _view(website="https://rink.example/ice"),
         base_path="/p/1",
@@ -43,11 +66,10 @@ def test_schedule_section_site_when_there_is_no_phone() -> None:
     )
     assert "Время массового катания — на сайте катка" in html
     assert 'href="https://rink.example/ice"' in html
-    assert "rink.example" in html
-    assert "уточняется" not in html
+    assert "не публикуют" not in html
 
 
-def test_schedule_section_absent_without_phone_and_site() -> None:
+def test_schedule_section_absent_without_contact() -> None:
     html = _b_schedule(_view(), base_path="/p/1", invite=False, links={})
     assert html == ""
 

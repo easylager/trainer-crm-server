@@ -577,21 +577,28 @@ async def _city_hub(
 ):
     """Маршрутизатор города (TASK-224): плитки-потребности, ближайшее на льду, все места."""
     from src.application.city_hub_page import (
-        city_hub_image_version,
+        city_hub_selection_preview_view,
         compose_city_hub_share,
         load_city_hub_view,
         render_city_hub_page,
     )
-    from src.application.selection_page import selection_image_path, selection_start_param
+    from src.application.selection_page import (
+        selection_image_path,
+        selection_image_version,
+        selection_share_description,
+        selection_start_param,
+    )
 
     city_name = str(city["name"])
     slug = city_slug(city_name)
     if city_ref != slug:
         return RedirectResponse(url=f"/c/{slug}", status_code=301)
     view = await load_city_hub_view(session, city=city)
+    preview = city_hub_selection_preview_view(view)
+    inventory_line = selection_share_description(preview)
     page_url = f"{base}/c/{slug}"
     og_image = base + selection_image_path(
-        city_name=city_name, venue=None, when=None, version=city_hub_image_version(view)
+        city_name=city_name, venue=None, when=None, version=selection_image_version(preview)
     )
     html = render_city_hub_page(
         view,
@@ -603,9 +610,10 @@ async def _city_hub(
             surface="selection_page",
             city_id=int(city["id"]),
         ),
-        share=compose_city_hub_share(view, page_url=page_url),
+        share=compose_city_hub_share(view, page_url=page_url, inventory_line=inventory_line),
         story_image_url=og_image.replace("/og.png", "/story.png"),
         base_url=base,
+        og_description=inventory_line,
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=slug)

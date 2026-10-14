@@ -1176,6 +1176,30 @@ def _b_ticket(
     return ticket
 
 
+def _b_schedule_site_link(card: Mapping[str, Any]) -> str:
+    site = safe_external_url(card.get("website_url"))
+    if not site:
+        return ""
+    host = _display_host(site)
+    return (
+        f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+        f"{_esc(host or site)}</a>"
+    )
+
+
+def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
+    from src.application.style_b import section
+
+    call = _b_call(card, links)
+    if call:
+        return section(title, call, klass="b-sec--place", sec_id="schedule")
+    site_link = _b_schedule_site_link(card)
+    if site_link:
+        body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{site_link}'
+        return section(title, body, klass="b-sec--place", sec_id="schedule")
+    return ""
+
+
 def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
     from src.application.style_b import section
 
@@ -1191,21 +1215,8 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
     if card.get("in_season") is False:
         return ""
-    if mode == SCHEDULE_MODE_PHONE or not days:
-        call = _b_call(card, links)
-        if call:
-            body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
-            return section(title, body, klass="b-sec--place", sec_id="schedule")
-        site = safe_external_url(card.get("website_url"))
-        if site:
-            host = _display_host(site)
-            link = (
-                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
-                f"{_esc(host or site)}</a>"
-            )
-            body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{link}'
-            return section(title, body, klass="b-sec--place", sec_id="schedule")
-        return ""
+    if not days:
+        return _b_schedule_when_empty(card, links, title=title)
 
     today = view["today"]
     focus = view.get("focus")

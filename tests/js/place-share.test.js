@@ -27,6 +27,11 @@ describe('place-share.js (TASK-252)', () => {
     assert.match(src, /data-session-id/);
   });
 
+  it('тап обновляет блок «Выбранный сеанс»', () => {
+    assert.match(src, /paintPlan\(/);
+    assert.match(src, /\.b-plan__time/);
+  });
+
   it('док зовёт «Погнали», а не «Расписание»', () => {
     assert.match(src, /invite:\s*true/);
     assert.doesNotMatch(src, /invite:\s*invite\b/);

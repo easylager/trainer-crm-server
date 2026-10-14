@@ -38,6 +38,7 @@ def _hub_view(**extra):
         "slug": "minsk",
         "place_count": 27,
         "rink_count": 14,
+        "city_place_counts": {"total": 27, "rinks": 14, "shops": 8, "other": 5},
         "places": [{"venue_type": "ice", "name": "Каток"}, {"venue_type": "shop", "name": "Магазин"}],
         "skate_counts": {"today": 3, "tomorrow": 0, "weekend": 1, "all": 138},
         "ohm_counts": {"all": 0},
