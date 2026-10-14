@@ -869,9 +869,15 @@
     return '<div class="gss-slot-picker">' + html + '</div>';
   }
 
+  function variantNeedsSession(variant, sheetState) {
+    if (!variant) return false;
+    var source = sheetState || state || {};
+    return typeof variant.needsSession === 'function' ? !!variant.needsSession(source) : !!variant.needsSession;
+  }
+
   function sessionPicker() {
     var variant = activeVariant();
-    if (!variant || !variant.needsSession) return '';
+    if (!variantNeedsSession(variant)) return '';
     if (variant.collapsesPicker && !state.zovi.pickOpen) {
       var picked = selectedPostcardSlot(state);
       if (picked) return pickedSlotSummary(picked);
@@ -1229,7 +1235,11 @@
       rank: function (sheetState) {
         return isIcePlace(sheetState) ? 2 : 0;
       },
-      needsSession: false,
+      // Карточка катка показывает сеанс (session_id уходит в запрос) — значит, его можно сменить,
+      // как в «Погнали кататься» и «Открытке». У места без льда сеансов нет.
+      needsSession: function (sheetState) {
+        return isIcePlace(sheetState);
+      },
       shareInvite: false,
       available: function (sheetState) {
         return !sheetState.endpoint;
@@ -1611,7 +1621,11 @@
     _resolveInitialSessionId: resolveInitialSessionId,
     variantsFor: function (sheetState) {
       return visibleVariants(sheetState).map(function (variant) {
-        return { id: variant.id, label: variant.label(sheetState) };
+        return {
+          id: variant.id,
+          label: variant.label(sheetState),
+          picksSession: variantNeedsSession(variant, sheetState),
+        };
       });
     },
     initialVariantId: initialVariantId,
