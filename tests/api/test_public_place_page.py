@@ -781,3 +781,55 @@ async def test_every_script_the_client_pages_load_is_actually_served(app_use_tes
             for asset in set(assets):
                 resp = await client.get(f"/webapp/{asset}?v=1")
                 assert resp.status_code == 200, f"{page}: /webapp/{asset} → {resp.status_code}"
+
+
+async def _add_ohm_session(db_session, arena_id: int, *, days_ahead: int, starts_at_local: str) -> int:
+    from datetime import timedelta
+
+    from src.application.ice_session_use_cases import create_ice_session
+    from tests.api.test_public_arenas import _minsk_today
+
+    created = await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=_minsk_today() + timedelta(days=days_ahead),
+        starts_at_local=starts_at_local,
+        duration_minutes=60,
+        kind="hockey_practice",
+        price_adult_minor=1700,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    return int(created["id"])
+
+
+def _ohm_section(html: str) -> str:
+    return html.split('id="ohm"', 1)[1].split("</section>", 1)[0]
+
+
+@pytest.mark.asyncio
+async def test_ohm_sessions_are_pickable_tickets_like_public_skate(app_use_test_db, db_session) -> None:
+    """ОХМ — та же полоса дней и билеты, что у массового катания: сеанс можно выбрать и позвать."""
+    place = await _place(db_session)
+    await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="19:30")
+    ohm_id = await _add_ohm_session(db_session, place["arena_id"], days_ahead=2, starts_at_local="08:30")
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"])
+        picked = await client.get(place["path"], params={"s": ohm_id})
+
+    assert resp.status_code == 200
+    ohm = _ohm_section(resp.text)
+    assert 'class="b-sched"' in ohm and "b-table" not in ohm
+    # Свой якорь у полосы ОХМ: дни массового катания (#d-…) не перехватывают её.
+    assert 'href="#o-' in ohm and 'href="#d-' not in ohm
+    assert f'data-session-id="{ohm_id}"' in ohm
+    assert f'href="{place["path"]}?s={ohm_id}"' in ohm
+    assert "b-ticket--dark" in ohm
+    assert "8:30" in ohm
+
+    # Ссылка на сеанс ОХМ открывает его день в полосе ОХМ и отмечает билет выбранным.
+    ohm = _ohm_section(picked.text)
+    assert re.search(r'class="b-day[^"]*b-day--current" id="o-', ohm)
+    assert re.search(rf'class="b-ticket b-ticket--dark b-ticket--picked" href="[^"]*" rel="nofollow" data-session-id="{ohm_id}"', ohm)

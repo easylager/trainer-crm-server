@@ -215,15 +215,16 @@
     return dock.getBoundingClientRect().top - 8;
   }
 
+  /* Полос дней две — массовое катание и ОХМ: каждая докручивает свой текущий день. */
   function alignCurrentDay() {
-    var strip = document.querySelector('.b-sched');
-    if (!strip) return;
-    var day = strip.querySelector(':scope > .b-day:target') || strip.querySelector(':scope > .b-day--current');
-    if (!day || !day.getBoundingClientRect) return;
-    var dayRect = day.getBoundingClientRect();
-    var stripRect = strip.getBoundingClientRect();
-    if (dayRect.left < stripRect.left) strip.scrollLeft -= stripRect.left - dayRect.left;
-    else if (dayRect.right > stripRect.right) strip.scrollLeft += dayRect.right - stripRect.right;
+    document.querySelectorAll('.b-sched').forEach(function (strip) {
+      var day = strip.querySelector(':scope > .b-day:target') || strip.querySelector(':scope > .b-day--current');
+      if (!day || !day.getBoundingClientRect) return;
+      var dayRect = day.getBoundingClientRect();
+      var stripRect = strip.getBoundingClientRect();
+      if (dayRect.left < stripRect.left) strip.scrollLeft -= stripRect.left - dayRect.left;
+      else if (dayRect.right > stripRect.right) strip.scrollLeft += dayRect.right - stripRect.right;
+    });
   }
 
   function revealAboveDock() {

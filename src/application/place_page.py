@@ -1153,6 +1153,7 @@ def _b_ticket(
     focused: bool,
     common_price: str,
     nojs_share: Mapping[str, str] | None = None,
+    dark: bool = False,
 ) -> str:
     from src.shared.public_view_transitions import session_time_vt_style
 
@@ -1164,7 +1165,7 @@ def _b_ticket(
         sub_bits.append(price)
     sub = f'<span class="b-ticket__sub">{_esc(" · ".join(sub_bits))}</span>' if sub_bits else ""
     href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
-    klass = "b-ticket b-ticket--picked" if focused else "b-ticket"
+    klass = "b-ticket" + (" b-ticket--dark" if dark else "") + (" b-ticket--picked" if focused else "")
     sid = int(slot["id"])
     vt = session_time_vt_style(sid) if vt_session_id is not None and sid == vt_session_id else ""
     ticket = (
@@ -1200,38 +1201,35 @@ def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *,
     return ""
 
 
-def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
-    from src.application.style_b import section
-
-    card = view["card"]
-    if not _skating(card):
-        return ""
-    title = t("kind.public_skate")
-    mode = normalize_schedule_mode(card.get("schedule_mode"))
-    days = list(view.get("days") or [])
-    if mode == SCHEDULE_MODE_SEASON_CLOSED:
-        reopen = _parse_iso_date(card.get("schedule_reopen_date"))
-        line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
-        return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
-    if card.get("in_season") is False:
-        return ""
-    if not days:
-        return _b_schedule_when_empty(card, links, title=title)
-
-    today = view["today"]
-    focus = view.get("focus")
-    pick = _effective_pick_session(view)
-    focus_id = int(focus["id"]) if focus is not None else None
-    pick_id = int(pick["id"]) if pick is not None else None
+def _sessions_by_date(days: list[Mapping[str, Any]]) -> dict[date, list[Mapping[str, Any]]]:
     by_date: dict[date, list[Mapping[str, Any]]] = {}
     for day in days:
         d = _parse_iso_date(day.get("local_date"))
         if d is not None and day.get("sessions"):
             by_date[d] = list(day.get("sessions") or [])
-    if not by_date:
-        return ""
-    all_slots = [s for slots in by_date.values() for s in slots]
-    common = _b_price_mode(all_slots)
+    return by_date
+
+
+def _b_day_strip(
+    view: Mapping[str, Any],
+    by_date: Mapping[date, list[Mapping[str, Any]]],
+    *,
+    frag_prefix: str,
+    base_path: str,
+    invite: bool,
+    common: str,
+    dark: bool = False,
+) -> str:
+    """Полоса дней недели и билеты дня — без JS (#якорь + :target), как в Mini App.
+
+    Одна функция для массового катания и ОХМ: у каждой полосы свой префикс якоря, выбор
+    сеанса общий — кнопка «Позвать» берёт любой билет со страницы.
+    """
+    today = view["today"]
+    focus = view.get("focus")
+    pick = _effective_pick_session(view)
+    focus_id = int(focus["id"]) if focus is not None else None
+    pick_id = int(pick["id"]) if pick is not None else None
     default_day = min(by_date)
     if focus_id is not None:
         for d, slots in by_date.items():
@@ -1263,14 +1261,42 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
                 focused=(pick_id == int(s["id"])),
                 common_price=common,
                 nojs_share=nojs_share if pick_id == int(s["id"]) else None,
+                dark=dark,
             )
             for s in slots
         )
-        frag = f"d-{d.isoformat()}"
+        frag = f"{frag_prefix}-{d.isoformat()}"
         if d == default_day:
             day_klass += " b-day--current"
         sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
         sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
+    return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>'
+
+
+def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    card = view["card"]
+    if not _skating(card):
+        return ""
+    title = t("kind.public_skate")
+    mode = normalize_schedule_mode(card.get("schedule_mode"))
+    days = list(view.get("days") or [])
+    if mode == SCHEDULE_MODE_SEASON_CLOSED:
+        reopen = _parse_iso_date(card.get("schedule_reopen_date"))
+        line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
+        return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
+    if card.get("in_season") is False:
+        return ""
+    if not days:
+        return _b_schedule_when_empty(card, links, title=title)
+
+    by_date = _sessions_by_date(days)
+    if not by_date:
+        return ""
+    all_slots = [s for slots in by_date.values() for s in slots]
+    common = _b_price_mode(all_slots)
+    strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
     foot: list[str] = []
     if links.get("tickets"):
         href, blank = links["tickets"]
@@ -1280,23 +1306,22 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = (
-        f'<div data-glide-session-list-root>'
-        f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{links_row}'
-        f"</div>"
-    )
+    body = f"<div data-glide-session-list-root>{strip}{links_row}</div>"
     aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
 
-def _b_ohm(view: Mapping[str, Any]) -> str:
+def _b_ohm(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
+    """ОХМ — те же полоса дней и билеты, что у массового катания, только тёмные.
+
+    Сеанс ОХМ выбирается тапом и уходит в «Позвать», как в Mini App (``arenaOhmDayTabs``).
+    """
     from src.application.style_b import section
 
-    days = [d for d in (view.get("ohm_days") or []) if d.get("sessions")]
-    if not days:
+    by_date = _sessions_by_date([d for d in (view.get("ohm_days") or []) if d.get("sessions")])
+    if not by_date:
         return ""
-    today = view["today"]
-    slots = [s for d in days for s in d.get("sessions") or []]
+    slots = [s for d in sorted(by_date) for s in by_date[d]]
     first = slots[0]
     aside_bits: list[str] = []
     price = _b_price_mode(slots)
@@ -1311,16 +1336,7 @@ def _b_ohm(view: Mapping[str, Any]) -> str:
             aside_bits.append(f"{minutes} мин")
     except ValueError:
         pass
-    rows: list[str] = []
-    for day in days:
-        d = _parse_iso_date(day.get("local_date"))
-        if d is None:
-            continue
-        times = " · ".join(format_clock(str(s.get("starts_at_local") or "")) for s in day.get("sessions") or [])
-        rows.append(
-            f'<div class="b-table__row"><span class="b-table__day">{_esc(short_day_word(d, today=today))}</span>'
-            f'<span class="b-table__times">{_esc(times)}</span></div>'
-        )
+    strip = _b_day_strip(view, by_date, frag_prefix="o", base_path=base_path, invite=invite, common=price, dark=True)
     notes: list[str] = []
     for slot in slots:
         for key in ("age_note", "capacity_note", "price_note"):
@@ -1329,7 +1345,7 @@ def _b_ohm(view: Mapping[str, Any]) -> str:
                 notes.append(note)
     notes_html = f'<p class="b-note">{_esc(" ".join(notes))}</p>' if notes else ""
     aside = f'<span class="b-aside">{_esc(" · ".join(aside_bits))}</span>' if aside_bits else ""
-    body = f'<div class="b-table b-table--dark">{"".join(rows)}</div>{notes_html}'
+    body = f"{strip}{notes_html}"
     return section(t("kind.hockey_practice"), body, aside_html=aside, klass="b-sec--place", sec_id="ohm")
 
 
@@ -1568,7 +1584,7 @@ def render_place_body_b(
         _b_about(card),
         _b_plan(view, invite=invite),
         _b_schedule(view, base_path=base_path, invite=invite, links=links),
-        _b_ohm(view),
+        _b_ohm(view, base_path=base_path, invite=invite),
         _b_arrive(card, links),
         _b_onsite(card, cta_url=cta_url, trainers_listed=bool(view.get("trainers"))),
         _b_trainers(view, base_url=base_url),
