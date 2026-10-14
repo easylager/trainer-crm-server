@@ -20,7 +20,7 @@ def _client() -> AsyncClient:
 
 
 def _dock(html: str) -> str:
-    match = re.search(r'<nav class="b-tgdock tg-out"[^>]*>(.*?)</nav>', html, re.S)
+    match = re.search(r'<nav class="b-tgdock"[^>]*>(.*?)</nav>', html, re.S)
     assert match, "нет плашки Telegram"
     return match.group(1)
 

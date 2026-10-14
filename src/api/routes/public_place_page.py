@@ -146,7 +146,7 @@ _NOT_FOUND_HTML = """<!DOCTYPE html>
 <title>Место не найдено — Glide</title>
 <meta property="og:title" content="Glide — карта льда" />
 <meta property="og:description" content="Где покататься сегодня: катки, расписание и цены." />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+__PUBLIC_FONTS_HEAD__
 <style>body{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
 margin:0;padding:48px 20px;text-align:center}h1{font-weight:600;letter-spacing:-.01em}a{color:#0B6E70;font-weight:600}</style></head>
 <body><h1>Этого места больше нет в каталоге</h1>
@@ -160,7 +160,10 @@ def _catalog_home(base: str) -> str:
 
 def _not_found(home: str) -> HTMLResponse:
     # 404, а не 200: поисковик должен забыть адрес. Человеку — понятная страница с выходом.
-    return HTMLResponse(_NOT_FOUND_HTML.replace("__HOME__", home), status_code=404)
+    from src.application.style_b import public_fonts_head_html
+
+    html = _NOT_FOUND_HTML.replace("__PUBLIC_FONTS_HEAD__", public_fonts_head_html()).replace("__HOME__", home)
+    return HTMLResponse(html, status_code=404)
 
 
 async def _merged_redirect(session: AsyncSession, arena_id: int, request: Request) -> RedirectResponse | None:

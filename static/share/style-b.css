@@ -472,6 +472,8 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
   font-size: 13px; color: var(--g-ink-2);
 }
 .b-tghint__icon { flex: 0 0 auto; width: 16px; height: 16px; color: var(--g-tg-btn); }
+.b-tgdock-host { display: block; }
+.b-tgdock__spacer { height: 0; overflow: hidden; }
 .b-tgdock {
   position: relative; z-index: 1;
   padding: 12px 0 calc(4px + env(safe-area-inset-bottom, 0px));

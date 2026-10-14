@@ -244,8 +244,11 @@ def render_zovi_page(
     catalog_url: str,
 ) -> str:
     title = question_text(invite.get("to_name"), str(invite.get("kind") or ""))
+    from src.application.style_b import public_fonts_head_html
+
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     values = {
+        "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__OG_TITLE__": _esc(title),
         "__OG_DESCRIPTION__": _esc(og_description(invite)),
         "__OG_URL__": _esc(page_url),
@@ -266,7 +269,7 @@ NOT_FOUND_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
 <title>Приглашение не найдено — Glide</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+__PUBLIC_FONTS_HEAD__
 <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2" />
 <style>
 body{margin:0;padding:16px 16px 48px;background:var(--g-bg);color:var(--g-ink);font-family:var(--g-font);line-height:1.45;-webkit-font-smoothing:antialiased}
@@ -286,7 +289,12 @@ color:var(--g-on-accent);font-weight:600;text-decoration:none}
 
 
 def render_not_found(catalog_url: str) -> str:
-    return inline_shared_assets(NOT_FOUND_HTML.replace("__CATALOG__", _esc(catalog_url)))
+    from src.application.style_b import public_fonts_head_html
+
+    html = NOT_FOUND_HTML.replace("__PUBLIC_FONTS_HEAD__", public_fonts_head_html()).replace(
+        "__CATALOG__", _esc(catalog_url)
+    )
+    return inline_shared_assets(html)
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +308,7 @@ STATUS_HTML = """<!DOCTYPE html>
 <meta name="robots" content="noindex, nofollow" />
 __REFRESH__
 <title>Ответ на открытку — Glide</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+__PUBLIC_FONTS_HEAD__
 <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2" />
 <style>
 body{margin:0;padding:16px 16px 48px;background:var(--g-bg);color:var(--g-ink);font-family:var(--g-font);line-height:1.45;-webkit-font-smoothing:antialiased}
@@ -386,7 +394,9 @@ def render_status_page(
         "__STATE__": status_state_html(invite, status),
         "__INVITE_URL__": _esc(invite_url),
     }
-    out = STATUS_HTML
+    from src.application.style_b import public_fonts_head_html
+
+    out = STATUS_HTML.replace("__PUBLIC_FONTS_HEAD__", public_fonts_head_html())
     for key, value in values.items():
         out = out.replace(key, value)
     return inline_shared_assets(out)

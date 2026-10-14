@@ -30,7 +30,7 @@ STYLE_VERSION = _file_version("static/share/style-b.css")
 # Отдельной ссылкой, не @import из style-b.css: импорт без ?v= шёл с no-store и ещё одним кругом до первой отрисовки.
 COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
 DOCK_SCRIPT_VERSION = _file_version("static/share/tg-dock.js")
-PUBLIC_FONTS_CSS_VERSION = _file_version("static/shared/glide-public-fonts.css")
+FONT_V_PLACEHOLDER = "__FONT_V__"
 
 
 def _fonts_dir_version() -> str:
@@ -50,15 +50,22 @@ PUBLIC_FONTS_ASSET_VERSION = _fonts_dir_version()
 
 def public_fonts_head_html() -> str:
     """Self-hosted Golos Text + Dela Gothic One для публичных страниц стиля B."""
-    css_v = PUBLIC_FONTS_CSS_VERSION
-    asset_v = PUBLIC_FONTS_ASSET_VERSION
+    v = PUBLIC_FONTS_ASSET_VERSION
     return (
-        f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v={asset_v}" '
+        f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v={v}" '
         f'as="font" type="font/woff2" crossorigin />\n'
-        f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-lat.woff2?v={asset_v}" '
+        f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-lat.woff2?v={v}" '
         f'as="font" type="font/woff2" crossorigin />\n'
-        f'  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v={css_v}" />'
+        f'  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v={v}" />'
     )
+
+
+def public_fonts_css_text() -> str:
+    """Текст glide-public-fonts.css с подставленным ?v= (тот же, что в preload и @font-face)."""
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "static" / "shared" / "glide-public-fonts.css"
+    return path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
 
 
 def esc(value: Any) -> str:
@@ -392,8 +399,9 @@ def telegram_dock_html(href: str | None, *, hint: str = "") -> str:
     if not href:
         return ""
     return (
-        '<nav class="b-tgdock tg-out" aria-label="Telegram"><div class="b-tgdock__inner">'
-        f"{telegram_button_html(href, short=True)}{telegram_hint_html(hint)}</div></nav>"
+        '<div class="b-tgdock-host tg-out"><div class="b-tgdock__spacer" aria-hidden="true"></div>'
+        '<nav class="b-tgdock" aria-label="Telegram"><div class="b-tgdock__inner">'
+        f"{telegram_button_html(href, short=True)}{telegram_hint_html(hint)}</div></nav></div>"
     )
 
 
