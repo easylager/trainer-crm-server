@@ -16,7 +16,15 @@ from sqlalchemy import text
 
 from src.api.app import app
 from src.application.ice_city_day import city_slug
-from tests.api.test_public_arenas import _add_future_session, _insert_arena, _insert_city
+from src.infrastructure.db.models import SUBSCRIPTION_TIER_ONLINE
+from tests.api.test_public_arenas import (
+    _add_future_session,
+    _create_active_trainer_via_api,
+    _ensure_trainer_subscription_tier,
+    _insert_arena,
+    _insert_city,
+)
+from tests.db_catalog_helpers import require_seed_service_id
 
 
 def _client() -> AsyncClient:
@@ -158,6 +166,35 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
     assert _meta(ihtml, "og:title").startswith("Погнали кататься?")
     assert "Тебя зовут кататься" in ihtml
     assert f"/session/{sid}/og.png?i=1" in _meta(ihtml, "og:image")
+
+
+@pytest.mark.asyncio
+async def test_place_page_lists_arena_trainers_with_pereiti_cta(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
+    monkeypatch.setenv("CLIENT_BOT_MAIN_MINI_APP", "true")
+    place = await _place(db_session)
+    sid = await require_seed_service_id(db_session)
+    async with _client() as client:
+        tid = await _create_active_trainer_via_api(
+            client,
+            db_session,
+            city_id=place["city_id"],
+            service_ids=[sid],
+            arena_ids=[place["arena_id"]],
+            first_name="Александр",
+            last_name="Гаевский",
+        )
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        await db_session.commit()
+        resp = await client.get(place["path"])
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    assert 'id="trainers"' in html
+    assert "Александр Гаевский" in html
+    assert "Перейти" in html
+    assert f"startapp=trainer_{tid}_a_{place['arena_id']}" in html
 
 
 @pytest.mark.asyncio

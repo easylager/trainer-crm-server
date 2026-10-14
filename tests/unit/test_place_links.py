@@ -14,7 +14,9 @@ from src.application.place_links import (
     place_page_url,
     place_start_param,
     public_telegram_cta_url,
+    parse_trainer_deep_link,
     telegram_open_link,
+    trainer_start_param,
 )
 
 
@@ -41,10 +43,20 @@ def test_place_url_is_city_scoped_and_readable() -> None:
     )
 
 
+def test_trainer_start_param_roundtrip() -> None:
+    assert trainer_start_param(42) == "trainer_42"
+    assert trainer_start_param(7, 3) == "trainer_7_a_3"
+    assert is_valid_start_param("trainer_42")
+    assert parse_trainer_deep_link("trainer_42") == (42, None)
+    assert parse_trainer_deep_link("trainer_7_a_3") == (7, 3)
+    assert parse_trainer_deep_link("arena_1") is None
+
+
 def test_start_params_fit_telegram_limits() -> None:
     for value in (
         place_start_param(123456789),
         place_start_param(123456789, 987654321),
+        trainer_start_param(99),
         catalog_start_param(12, "coach"),
         catalog_start_param(9),
         catalog_start_param(12, "skate", "today_evening"),

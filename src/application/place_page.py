@@ -1423,7 +1423,12 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str) -> str:
             arena_id=arena_id,
         )
 
-    return section(t("place.trainers"), trainer_rows_html(trainers, href_for=href_for), klass="b-sec--place", sec_id="trainers")
+    return section(
+        t("place.trainers"),
+        trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go")),
+        klass="b-sec--place",
+        sec_id="trainers",
+    )
 
 
 def _b_onsite(card: Mapping[str, Any], *, cta_url: str | None, trainers_listed: bool = False) -> str:
