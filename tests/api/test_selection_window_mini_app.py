@@ -163,13 +163,14 @@ async def test_today_window_partial_shows_break(app_use_test_db, db_session, mon
 
     body = resp.text
     assert resp.status_code == 200
-    cards = body.split('b-cards">', 1)[1].split("</section>", 1)[0]
+    cards = body.split('b-cards"', 1)[1].split("</section>", 1)[0]
     assert "b-window-break" in cards
     assert cards.index("16:00") < cards.index("b-window-break") < cards.index("10:00")
 
 
 @pytest.mark.asyncio
-async def test_today_window_fully_empty_skate_state(app_use_test_db, db_session, monkeypatch) -> None:
+async def test_today_window_rink_without_sessions_stays_a_card(app_use_test_db, db_session, monkeypatch) -> None:
+    """Каток без сеансов — карточка, как в Mini App; «нет массового катания» — только для пустого списка."""
     fixed = _utc(2026, 10, 7, 12, 0)
     _freeze_modules(monkeypatch, fixed, "src.application.selection_page", "src.application.arena_public_use_cases")
     name = f"Пусто {uuid.uuid4().hex[:6]}"
@@ -183,8 +184,8 @@ async def test_today_window_fully_empty_skate_state(app_use_test_db, db_session,
         resp = await client.get(f"/c/{slug}", params={"t": "ice", "w": "today"})
 
     assert resp.status_code == 200
-    assert t("selection.empty.skate.title") in resp.text
-    assert t("selection.empty.skate.body") in resp.text
+    assert "Без льда" in resp.text.split('b-cards"', 1)[1]
+    assert t("selection.empty.skate.title") not in resp.text
 
 
 @pytest.mark.asyncio
@@ -257,3 +258,43 @@ async def test_midnight_minsk_still_today_window(app_use_test_db, db_session, mo
     assert resp.status_code == 200
     assert caption in resp.text
     assert "10:00" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_today_window_phone_rink_goes_below_the_break(app_use_test_db, db_session, monkeypatch) -> None:
+    """inWindow в Mini App: «время по телефону» — не ответ на окно, его место под разделителем."""
+    from sqlalchemy import text
+
+    fixed = _utc(2026, 10, 7, 12, 0)
+    _freeze_modules(monkeypatch, fixed, "src.application.selection_page", "src.application.arena_public_use_cases")
+    name = f"Звонок {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    live_id = await _insert_arena(db_session, city_id, name="Каток с сеансом")
+    phone_id = await _insert_arena(db_session, city_id, name="Каток по звонку")
+    await db_session.execute(
+        text("UPDATE arena_profiles SET schedule_mode = 'phone' WHERE arena_id = :id"), {"id": phone_id}
+    )
+    today = fixed.astimezone(ZoneInfo("Europe/Minsk")).date()
+    await create_ice_session(
+        db_session,
+        live_id,
+        local_date=today,
+        starts_at_local="16:00",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=500,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        resp = await client.get(f"/c/{city_slug(name)}", params={"t": "ice", "w": "today"})
+
+    assert resp.status_code == 200
+    cards = resp.text.split('b-cards"', 1)[1].split("</section>", 1)[0]
+    assert cards.index("Каток с сеансом") < cards.index("b-window-break") < cards.index("Каток по звонку")
+    phone_card = cards[cards.index("Каток по звонку") :]
+    assert "Сегодня нет" in phone_card
+    assert "ближайший" not in phone_card.lower()

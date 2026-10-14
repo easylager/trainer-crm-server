@@ -427,6 +427,7 @@ async def load_selection_view(
     window_empty = False
     window_hits = 0
     off_window_ids: set[int] = set()
+    window_rest_ids: list[int] = []
 
     def _slot_sort_key(item: Mapping[str, Any]) -> tuple[str, str, int]:
         aid = int(item["id"])
@@ -485,7 +486,12 @@ async def load_selection_view(
         rest = [i for i in items if int(i["id"]) in off_window_ids]
         rest.sort(key=_slot_sort_key)
         tail = [i for i in items if int(i["id"]) not in display_slots]
-        shown = hits + rest + tail
+        # Как inWindow в Mini App: «время по телефону» и закрытый сезон — не ответ на окно,
+        # они уходят под разделитель; место без сеансов остаётся в основной группе.
+        tail_rest = [i for i in tail if _live_kind(i) in _WINDOW_REST_KINDS]
+        tail_in = [i for i in tail if _live_kind(i) not in _WINDOW_REST_KINDS]
+        shown = hits + tail_in + rest + tail_rest
+        window_rest_ids = [int(i["id"]) for i in rest + tail_rest]
         window_hits = len(hits)
         window_empty = window_hits == 0 and bool(rest or tail)
     else:
@@ -535,6 +541,7 @@ async def load_selection_view(
         "window_empty": window_empty,
         "window_hits": window_hits,
         "off_window_ids": sorted(off_window_ids),
+        "window_rest_ids": window_rest_ids,
         "items": shown_page,
         "slots": slots,
         "stale_notes": stale_notes,
@@ -802,14 +809,7 @@ def selection_share_description(view: Mapping[str, Any]) -> str:
     empty_caption = _selection_window_empty_caption(view)
     if empty_caption:
         return empty_caption
-    text = selection_description(view)
-    window = view.get("window")
-    if view.get("window_empty") and window:
-        live = f"{str(window['label']).lower()} сеансов нет — ближайшие"
-        phrase = absolute_window_phrase(window)
-        if phrase and live in text:
-            text = text.replace(live, f"{phrase}: сеансов нет — ближайшие")
-    return text
+    return selection_description(view)
 
 
 _LINK_VENUES = frozenset({"shop", "gym", "ice", "outdoor", "choreo", "pool", "other"})
@@ -1215,11 +1215,6 @@ def render_selection_page(
     more_anchor = "ohm" if view.get("kind") == KIND_OHM else "schedule"
     if centers_mode:
         places = "".join(_b_center_card(i, city_name=city_name) for i in view["items"])
-    elif view.get("skating") and not any((view.get("slots") or {}).values()):
-        places = (
-            f'<div class="b-empty"><b>{_esc(t("selection.empty.skate.title"))}</b>'
-            f'<p>{_esc(t("selection.empty.skate.body"))}</p></div>'
-        )
     else:
         places = _b_selection_cards(
             view,
@@ -1235,14 +1230,18 @@ def render_selection_page(
             empty = "Центров по записи нет"
         elif view.get("kind") == KIND_OHM:
             empty = "Пока нет сеансов ОХМ в этом городе."
+        else:
+            empty = ""
+        if empty:
+            places = f'<p class="b-text">{_esc(empty)}</p>'
         elif view.get("skating"):
+            # Как formatEmptyList в Mini App, но только когда мест нет вовсе.
             places = (
                 f'<div class="b-empty"><b>{_esc(t("selection.empty.skate.title"))}</b>'
                 f'<p>{_esc(t("selection.empty.skate.body"))}</p></div>'
             )
         else:
-            empty = "В этой подборке пока пусто — загляните в каталог."
-            places = f'<p class="b-text">{_esc(empty)}</p>'
+            places = f'<p class="b-text">{_esc("В этой подборке пока пусто — загляните в каталог.")}</p>'
     from src.application.style_b import back_pill, brand_link, hero_html, share_html
 
     hero = hero_html(
@@ -1423,6 +1422,14 @@ def _b_state_note(item: Mapping[str, Any]) -> str:
     return str(live.get("text") or "").strip()
 
 
+_WINDOW_REST_KINDS = frozenset({"phone", "season_closed"})
+
+
+def _live_kind(item: Mapping[str, Any]) -> str:
+    live = item.get("live")
+    return str(live.get("kind") or "") if isinstance(live, Mapping) else ""
+
+
 def _window_miss_label(window: Mapping[str, Any] | None) -> str:
     if not window:
         return ""
@@ -1475,10 +1482,10 @@ def _b_selection_cards(
             )
             for i in view["items"]
         )
-    off_ids = {int(x) for x in (view.get("off_window_ids") or [])}
+    rest_ids = {int(x) for x in (view.get("window_rest_ids") or [])}
     window = view.get("window")
-    hits = [i for i in view["items"] if int(i["id"]) not in off_ids]
-    rest = [i for i in view["items"] if int(i["id"]) in off_ids]
+    hits = [i for i in view["items"] if int(i["id"]) not in rest_ids]
+    rest = [i for i in view["items"] if int(i["id"]) in rest_ids]
     parts: list[str] = []
     for item in hits:
         parts.append(
@@ -1553,10 +1560,9 @@ def _b_place_card(
         )
     off_extra = ""
     if off_window and window:
-        off_extra = (
-            f'<p class="b-card2__off">{_esc(_window_miss_label(window))}'
-            f'{_esc(t("selection.window.off_nearest"))}</p>'
-        )
+        # «· ближайший» — только когда на карточке есть сеанс, как offLabel в Mini App.
+        nearest = t("selection.window.off_nearest") if slots else ""
+        off_extra = f'<p class="b-card2__off">{_esc(_window_miss_label(window))}{_esc(nearest)}</p>'
     tickets: list[str] = []
     for idx, s in enumerate(slots[:MAX_SLOTS_PER_PLACE]):
         day = s.get("local_date")

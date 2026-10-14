@@ -51,7 +51,7 @@
     "selection.window.nearest_prefix": "Ближайший: {when}",
     "selection.window.break_sub": "{count} {noun} · их ближайшее время",
     "selection.empty.skate.title": "Сейчас нет массового катания",
-    "selection.empty.skate.body": "В этом городе нет будущих сеансов — но тренеры здесь есть.",
+    "selection.empty.skate.body": "В этом городе нет будущих сеансов.",
     "home.counter.when.tomorrow": "Завтра",
     "home.counter.when.weekend": "В эти выходные",
     "home.counter.when.day": "В этот день",
