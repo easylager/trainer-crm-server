@@ -519,6 +519,21 @@ async def record_public_contact_click(
     )
 
 
+def is_prefetch_navigation_request(request: Any) -> bool:
+    """True для prefetch/prerender (Sec-Purpose / Purpose) — просмотр не считаем."""
+    from starlette.requests import Request
+
+    if not isinstance(request, Request):
+        return False
+    for header in ("sec-purpose", "purpose"):
+        raw = (request.headers.get(header) or "").strip().lower()
+        if not raw:
+            continue
+        if "prefetch" in raw or "prerender" in raw:
+            return True
+    return False
+
+
 def public_page_view_attribution_payload(extra_payload: dict[str, Any] | None) -> dict[str, str]:
     """Допустимые ключи шаринга в ``public_page_view``: ``s``, ``i``, ``src``."""
     if not extra_payload:
@@ -576,6 +591,8 @@ async def record_public_page_view(
     from starlette.requests import Request
 
     if not isinstance(request, Request):
+        return
+    if is_prefetch_navigation_request(request):
         return
     from src.api.middleware.http_limits import client_ip_from_request
 

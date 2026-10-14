@@ -2081,9 +2081,22 @@ def shared_zovi_live_js(request: Request):
     )
 
 
+@app.get("/static/shared/public-link-prefetch.js")
+def shared_public_link_prefetch_js(request: Request):
+    """FEEL-A: prefetch по касанию ссылки на /, /c/, /p/."""
+    path = _SHARED_DIR / "public-link-prefetch.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/list-scroll-restore.js")
 def shared_list_scroll_restore_js(request: Request):
-    """Скролл списка /c/ и «Лёд сегодня» после возврата с /p/ (no-store убивает bfcache)."""
+    """Запасное восстановление скролла списка /c/ если bfcache недоступен."""
     path = _SHARED_DIR / "list-scroll-restore.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
