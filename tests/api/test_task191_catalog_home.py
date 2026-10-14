@@ -139,7 +139,7 @@ async def test_catalog_home_records_public_page_view(app_use_test_db, db_session
         assert home.status_code == 200
         resp = await client.post(
             "/api/public/catalog/page-view",
-            params={"surface": "catalog_home"},
+            params={"surface": "catalog_home", "path": "/"},
             headers={"User-Agent": "Mozilla/5.0 Task191CatalogHome"},
         )
     assert resp.status_code == 204

@@ -19,6 +19,12 @@
     if (cityId) q.set('city_id', cityId);
     if (arenaId) q.set('arena_id', arenaId);
     try {
+      var pathname = root.location.pathname || '';
+      if (pathname) q.set('path', pathname);
+    } catch (e) {
+      /* ignore */
+    }
+    try {
       var sp = new URLSearchParams(root.location.search || '');
       ['s', 'src', 'i'].forEach(function (k) {
         var v = sp.get(k);
