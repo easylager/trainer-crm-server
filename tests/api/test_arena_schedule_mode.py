@@ -1,4 +1,5 @@
 """TASK-204: arena schedule_mode on public API, SSR, admin, ice day."""
+
 from __future__ import annotations
 
 import uuid
@@ -13,7 +14,12 @@ from src.application.ice_city_day import get_city_ice_day
 from src.application.place_page import _b_schedule, load_place_view
 from src.application.public_web_cta import place_action_links
 from src.shared.arena_schedule_mode import PHONE_LINE, SEASON_CLOSED_LINE, season_closed_user_line
-from tests.api.test_public_arenas import _add_future_session, _insert_arena, _insert_city
+from tests.api.test_public_arenas import (
+    _add_future_session,
+    _insert_arena,
+    _insert_city,
+    _minsk_today,
+)
 
 
 async def _set_mode(
@@ -25,13 +31,11 @@ async def _set_mode(
     note: str | None = None,
 ) -> None:
     await db_session.execute(
-        text(
-            """
+        text("""
             UPDATE arena_profiles
             SET schedule_mode = :mode, reopen_date = :reopen, schedule_mode_note = :note
             WHERE arena_id = :id
-            """
-        ),
+            """),
         {"id": arena_id, "mode": mode, "reopen": reopen, "note": note},
     )
 
@@ -62,7 +66,7 @@ async def test_season_closed_excluded_from_ice_day(app_use_test_db, db_session) 
     open_arena = await _insert_arena(db_session, cid, name="Открытый")
     closed_arena = await _insert_arena(db_session, cid, name="Закрытый сезон")
     await _set_mode(db_session, closed_arena, mode="season_closed", note="ремонт")
-    target = date.today() + timedelta(days=1)
+    target = _minsk_today() + timedelta(days=1)
     await _add_future_session(db_session, open_arena, days_ahead=1, starts_at_local="19:00")
     await _add_future_session(db_session, closed_arena, days_ahead=1, starts_at_local="18:00")
     await db_session.commit()
@@ -144,9 +148,7 @@ async def test_admin_patch_schedule_mode(app_use_test_db, db_session) -> None:
 
     row = (
         await db_session.execute(
-            text(
-                "SELECT schedule_mode, reopen_date, schedule_mode_note FROM arena_profiles WHERE arena_id = :id"
-            ),
+            text("SELECT schedule_mode, reopen_date, schedule_mode_note FROM arena_profiles WHERE arena_id = :id"),
             {"id": arena_id},
         )
     ).one()
@@ -163,9 +165,7 @@ async def test_invalid_phone_not_shown_in_ssr_and_api(app_use_test_db, db_sessio
     cid = await _insert_city(db_session, name=f"Phone-{uuid.uuid4().hex[:6]}")
 
     # Арена с невалидным телефоном (было на проде: "unknown (только email/соцсети)")
-    invalid_id = await _insert_arena(
-        db_session, cid, name="Без телефона", phone="unknown (только email/соцсети)"
-    )
+    invalid_id = await _insert_arena(db_session, cid, name="Без телефона", phone="unknown (только email/соцсети)")
     await _set_mode(db_session, invalid_id, mode="phone")
 
     # Арена с коротким телефоном (6 цифр - граница)
@@ -249,4 +249,3 @@ async def test_invalid_phone_not_shown_in_ssr_and_api(app_use_test_db, db_sessio
 
     assert valid_id in items_by_id
     assert items_by_id[valid_id]["phone"] == "+375291234567"
-

@@ -1,4 +1,5 @@
 """TASK-051: public read-only Ice API (list, card, sessions, trainers, search)."""
+
 from __future__ import annotations
 
 import uuid
@@ -18,19 +19,16 @@ from tests.api.test_public_catalog_integration import _create_active_trainer_via
 from tests.api.test_webapp_client_miniapp_integration import _ensure_trainer_subscription_tier
 from tests.db_catalog_helpers import require_seed_service_id
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 async def _insert_city(db_session, *, name: str, country: str = "BY") -> int:
     ins = await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO cities (name, country, price_group, is_active, sort_order)
             VALUES (:name, :c, :pg, true, 9000)
             RETURNING id
-            """
-        ),
+            """),
         {
             "name": name,
             "c": country,
@@ -67,15 +65,13 @@ async def _insert_arena(
     created_by_trainer_id: int | None = None,
 ) -> int:
     ins = await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO arenas
                 (city_id, name, address, latitude, longitude, is_active, is_confirmed,
                  created_by_trainer_id)
             VALUES (:cid, :name, :addr, :lat, :lon, true, true, :created_by)
             RETURNING id
-            """
-        ),
+            """),
         {
             "cid": city_id,
             "name": name,
@@ -86,20 +82,16 @@ async def _insert_arena(
         },
     )
     arena_id = int(ins.scalar_one())
-    slug = await ensure_arena_profile(
-        db_session, arena_id, city_id=city_id, name=name, district=district
-    )
+    slug = await ensure_arena_profile(db_session, arena_id, city_id=city_id, name=name, district=district)
     await db_session.execute(
-        text(
-            """
+        text("""
             UPDATE arena_profiles
             SET district = :district,
                 phone = :phone,
                 website_url = :website,
                 opening_hours = CAST(:hours AS jsonb)
             WHERE arena_id = :id
-            """
-        ),
+            """),
         {
             "id": arena_id,
             "district": district,
@@ -111,16 +103,19 @@ async def _insert_arena(
     del slug
     if has_photo:
         await db_session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO media (owner_type, owner_id, storage_key, license, status)
                 VALUES ('arena', :id, :key, 'own', 'published')
-                """
-            ),
+                """),
             {"id": arena_id, "key": f"test/arena/{arena_id}.jpg"},
         )
     await db_session.flush()
     return arena_id
+
+
+def _minsk_today() -> date:
+    """Сайт считает «сегодня» по Минску; date.today() на UTC-раннере после 21:00 отстаёт на день."""
+    return datetime.now(ZoneInfo("Europe/Minsk")).date()
 
 
 async def _add_future_session(
@@ -133,7 +128,7 @@ async def _add_future_session(
     valid_until: datetime | None = None,
     observed_at: datetime | None = None,
 ) -> int:
-    local_date = date.today() + timedelta(days=days_ahead)
+    local_date = _minsk_today() + timedelta(days=days_ahead)
     created = await create_ice_session(
         db_session,
         arena_id,
@@ -148,14 +143,12 @@ async def _add_future_session(
     session_id = int(created["id"])
     if valid_until is not None or observed_at is not None:
         await db_session.execute(
-            text(
-                """
+            text("""
                 UPDATE ice_sessions
                 SET valid_until = COALESCE(:vu, valid_until),
                     observed_at = COALESCE(:obs, observed_at)
                 WHERE id = :id
-                """
-            ),
+                """),
             {"id": session_id, "vu": valid_until, "obs": observed_at},
         )
     await db_session.flush()
@@ -202,14 +195,10 @@ def _session_hhmm_from_feed(payload: dict) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_ice_list_city_bbox_near_keeps_arena_without_coords(
-    app_use_test_db, db_session
-) -> None:
+async def test_ice_list_city_bbox_near_keeps_arena_without_coords(app_use_test_db, db_session) -> None:
     """AC-001: city_id / bbox / near; arena without coords stays in the city list."""
     cid = await _insert_city(db_session, name=f"IceList-{uuid.uuid4().hex[:6]}")
-    with_coords = await _insert_arena(
-        db_session, cid, name="Каток с координатами", latitude=53.90, longitude=27.56
-    )
+    with_coords = await _insert_arena(db_session, cid, name="Каток с координатами", latitude=53.90, longitude=27.56)
     no_coords = await _insert_arena(
         db_session,
         cid,
@@ -256,16 +245,12 @@ async def test_ice_list_city_bbox_near_keeps_arena_without_coords(
 
 
 @pytest.mark.asyncio
-async def test_ice_list_carries_venue_icon_for_nophoto_plate(
-    app_use_test_db, db_session
-) -> None:
+async def test_ice_list_carries_venue_icon_for_nophoto_plate(app_use_test_db, db_session) -> None:
     """TASK-148 (AC-2): бесфотошную плашку клиент рисует иконкой типа, и иконку
     шлёт сервер — клиент собственного словаря типов не держит."""
     cid = await _insert_city(db_session, name=f"IceIcon-{uuid.uuid4().hex[:6]}")
     gym = await _insert_arena(db_session, cid, name="Зал без фото", has_photo=False)
-    await db_session.execute(
-        text("UPDATE arenas SET venue_type = 'gym' WHERE id = :id"), {"id": gym}
-    )
+    await db_session.execute(text("UPDATE arenas SET venue_type = 'gym' WHERE id = :id"), {"id": gym})
     ice = await _insert_arena(db_session, cid, name="Каток без фото", has_photo=False)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(
@@ -284,9 +269,7 @@ async def test_ice_list_carries_venue_icon_for_nophoto_plate(
 
 
 @pytest.mark.asyncio
-async def test_tier_is_computed_on_read_without_data_tier_column(
-    app_use_test_db, db_session
-) -> None:
+async def test_tier_is_computed_on_read_without_data_tier_column(app_use_test_db, db_session) -> None:
     """AC-002: sessions → A; cancel them → B; no stored data_tier column."""
     models = (REPO_ROOT / "src/infrastructure/db/models.py").read_text(encoding="utf-8")
     assert "data_tier" not in models
@@ -333,9 +316,7 @@ async def test_tier_is_computed_on_read_without_data_tier_column(
 
 
 @pytest.mark.asyncio
-async def test_skate_intent_lists_every_arena_tier_a_first(
-    app_use_test_db, db_session
-) -> None:
+async def test_skate_intent_lists_every_arena_tier_a_first(app_use_test_db, db_session) -> None:
     """Owner rule reversed 2026-09-17: intent=skate shows every arena, not just ones with a
     future public_skate|open_ice slot — Tier A (live slot) ranks above B (profile only).
     Coach/group intents were already tier-agnostic; this brings skate in line.
@@ -359,15 +340,9 @@ async def test_skate_intent_lists_every_arena_tier_a_first(
     )
     await _add_future_session(db_session, skate)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        skate_list = await client.get(
-            "/api/public/ice/arenas", params={"city_id": cid, "intent": "skate"}
-        )
-        coach_list = await client.get(
-            "/api/public/ice/arenas", params={"city_id": cid, "intent": "coach"}
-        )
-        group_list = await client.get(
-            "/api/public/ice/arenas", params={"city_id": cid, "intent": "group"}
-        )
+        skate_list = await client.get("/api/public/ice/arenas", params={"city_id": cid, "intent": "skate"})
+        coach_list = await client.get("/api/public/ice/arenas", params={"city_id": cid, "intent": "coach"})
+        group_list = await client.get("/api/public/ice/arenas", params={"city_id": cid, "intent": "group"})
     skate_items = skate_list.json()["items"]
     skate_ids = [it["id"] for it in skate_items]
     coach_ids = {it["id"] for it in coach_list.json()["items"]}
@@ -393,9 +368,7 @@ async def test_skate_intent_lists_every_arena_tier_a_first(
 
 
 @pytest.mark.asyncio
-async def test_expired_sessions_are_not_current_in_list_or_feed(
-    app_use_test_db, db_session
-) -> None:
+async def test_expired_sessions_are_not_current_in_list_or_feed(app_use_test_db, db_session) -> None:
     """AC-004: valid_until in the past or ends_at < now must not appear as current."""
     cid = await _insert_city(db_session, name=f"IceExp-{uuid.uuid4().hex[:6]}")
     expired_valid = await _insert_arena(db_session, cid, name="Просрочен valid_until")
@@ -418,9 +391,7 @@ async def test_expired_sessions_are_not_current_in_list_or_feed(
     await db_session.flush()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        listed = await client.get(
-            "/api/public/ice/arenas", params={"city_id": cid, "intent": "skate"}
-        )
+        listed = await client.get("/api/public/ice/arenas", params={"city_id": cid, "intent": "skate"})
         feed_expired = await client.get(f"/api/public/arenas/{expired_valid}/sessions")
         feed_past = await client.get(f"/api/public/arenas/{past_end}/sessions")
         feed_live = await client.get(f"/api/public/arenas/{live}/sessions")
@@ -453,9 +424,7 @@ async def test_expired_sessions_are_not_current_in_list_or_feed(
 
 
 @pytest.mark.asyncio
-async def test_started_session_is_not_current_on_ice_list_or_feed(
-    app_use_test_db, db_session
-) -> None:
+async def test_started_session_is_not_current_on_ice_list_or_feed(app_use_test_db, db_session) -> None:
     """PDEC-005: an in-progress MK slot is past for the vitrine (starts_at > now, UTC+3).
 
     Repro: 13:10 Europe/Minsk still showing 12:15 on Ice tab / hub because the
@@ -482,9 +451,7 @@ async def test_started_session_is_not_current_on_ice_list_or_feed(
     assert str(teaser["starts_at_local"])[:5] == upcoming.strftime("%H:%M")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        listed = await client.get(
-            "/api/public/ice/arenas", params={"city_id": cid, "intent": "skate"}
-        )
+        listed = await client.get("/api/public/ice/arenas", params={"city_id": cid, "intent": "skate"})
         feed_mixed = await client.get(f"/api/public/arenas/{mixed}/sessions")
         feed_live = await client.get(f"/api/public/arenas/{only_live}/sessions")
     assert listed.status_code == 200, listed.text
@@ -505,22 +472,14 @@ async def test_started_session_is_not_current_on_ice_list_or_feed(
 
 
 @pytest.mark.asyncio
-async def test_catalog_arena_ids_filter_accepts_forty_or_flags_truncation(
-    app_use_test_db, db_session
-) -> None:
+async def test_catalog_arena_ids_filter_accepts_forty_or_flags_truncation(app_use_test_db, db_session) -> None:
     """AC-005: 40 arena ids are applied, or the response marks truncation explicitly."""
     ids_40 = ",".join(str(i) for i in range(10_001, 10_041))
     ids_300 = ",".join(str(i) for i in range(1, 301))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        forty = await client.get(
-            "/api/public/trainers", params={"arena_ids": ids_40, "limit": 1}
-        )
-        many = await client.get(
-            "/api/public/trainers", params={"arena_ids": ids_300, "limit": 1}
-        )
-        groups = await client.get(
-            "/api/public/training-groups", params={"arena_ids": ids_40, "limit": 1}
-        )
+        forty = await client.get("/api/public/trainers", params={"arena_ids": ids_40, "limit": 1})
+        many = await client.get("/api/public/trainers", params={"arena_ids": ids_300, "limit": 1})
+        groups = await client.get("/api/public/training-groups", params={"arena_ids": ids_40, "limit": 1})
     assert forty.status_code == 200, forty.text
     body = forty.json()
     assert "arena_ids_truncated" in body
@@ -539,9 +498,7 @@ async def test_catalog_arena_ids_filter_accepts_forty_or_flags_truncation(
 
 
 @pytest.mark.asyncio
-async def test_arena_card_exposes_honest_freshness_and_source(
-    app_use_test_db, db_session
-) -> None:
+async def test_arena_card_exposes_honest_freshness_and_source(app_use_test_db, db_session) -> None:
     """AC-006: freshness/source present; missing source is null, not a fabricated date."""
     cid = await _insert_city(db_session, name=f"IceCard-{uuid.uuid4().hex[:6]}")
     with_source = await _insert_arena(
@@ -587,9 +544,7 @@ async def test_arena_card_exposes_honest_freshness_and_source(
 
 
 @pytest.mark.asyncio
-async def test_ice_list_of_sixty_arenas_is_not_n_plus_one(
-    app_use_test_db, db_session
-) -> None:
+async def test_ice_list_of_sixty_arenas_is_not_n_plus_one(app_use_test_db, db_session) -> None:
     """AC-007: 60 arenas in one city list must not query trainers/sessions per arena."""
     cid = await _insert_city(db_session, name=f"IceSixty-{uuid.uuid4().hex[:6]}")
     first_id = None
@@ -635,18 +590,12 @@ async def test_ice_list_of_sixty_arenas_is_not_n_plus_one(
 
 
 @pytest.mark.asyncio
-async def test_bbox_skips_ru_arenas_in_ice_discovery(
-    app_use_test_db, db_session
-) -> None:
+async def test_bbox_skips_ru_arenas_in_ice_discovery(app_use_test_db, db_session) -> None:
     """Ice V1 is BY-only: Moscow rinks stay out of the client Mini App even inside bbox."""
     by_city = await _insert_city(db_session, name=f"IceBY-{uuid.uuid4().hex[:6]}", country="BY")
     ru_city = await _insert_city(db_session, name=f"IceRU-{uuid.uuid4().hex[:6]}", country="RU")
-    by_arena = await _insert_arena(
-        db_session, by_city, name="Минский каток", latitude=53.90, longitude=27.56
-    )
-    ru_arena = await _insert_arena(
-        db_session, ru_city, name="Смоленский каток", latitude=54.78, longitude=32.05
-    )
+    by_arena = await _insert_arena(db_session, by_city, name="Минский каток", latitude=53.90, longitude=27.56)
+    ru_arena = await _insert_arena(db_session, ru_city, name="Смоленский каток", latitude=54.78, longitude=32.05)
     await _add_future_session(db_session, by_arena, price_adult_minor=850)
     await _add_future_session(db_session, ru_arena, price_adult_minor=40000)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -667,20 +616,14 @@ async def test_bbox_skips_ru_arenas_in_ice_discovery(
 
 
 @pytest.mark.asyncio
-async def test_ice_discovery_countries_env_widens_scope(
-    app_use_test_db, db_session, monkeypatch
-) -> None:
+async def test_ice_discovery_countries_env_widens_scope(app_use_test_db, db_session, monkeypatch) -> None:
     """ICE_DISCOVERY_COUNTRIES=BY,RU (local/staging override) shows both — the BY-only
     default from test_bbox_skips_ru_arenas_in_ice_discovery is unaffected when unset."""
     monkeypatch.setenv("ICE_DISCOVERY_COUNTRIES", "BY,RU")
     by_city = await _insert_city(db_session, name=f"IceBY-{uuid.uuid4().hex[:6]}", country="BY")
     ru_city = await _insert_city(db_session, name=f"IceRU-{uuid.uuid4().hex[:6]}", country="RU")
-    by_arena = await _insert_arena(
-        db_session, by_city, name="Минский каток", latitude=53.90, longitude=27.56
-    )
-    ru_arena = await _insert_arena(
-        db_session, ru_city, name="Московский каток", latitude=55.75, longitude=37.62
-    )
+    by_arena = await _insert_arena(db_session, by_city, name="Минский каток", latitude=53.90, longitude=27.56)
+    ru_arena = await _insert_arena(db_session, ru_city, name="Московский каток", latitude=55.75, longitude=37.62)
     await _add_future_session(db_session, by_arena, price_adult_minor=850)
     await _add_future_session(db_session, ru_arena, price_adult_minor=60000)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -699,9 +642,7 @@ async def test_ice_discovery_countries_env_widens_scope(
 
 
 @pytest.mark.asyncio
-async def test_tier_outranks_distance_and_bare_nearby_stays_hidden(
-    app_use_test_db, db_session
-) -> None:
+async def test_tier_outranks_distance_and_bare_nearby_stays_hidden(app_use_test_db, db_session) -> None:
     """EDGE-003: A at 8 km ranks above a closer arena. The closer one used to be Tier C
     ("100 m beats a live session") and stayed visible; since #201 ("Lifestyle") went live
     as a bare, trainer-created name-only card, a trainer-created Tier C — no phone/website/
@@ -776,9 +717,7 @@ async def test_trainers_on_arena_reuse_can_book(app_use_test_db, db_session) -> 
 
 
 @pytest.mark.asyncio
-async def test_ice_cities_omit_empty_and_count_skate_vs_trainers(
-    app_use_test_db, db_session
-) -> None:
+async def test_ice_cities_omit_empty_and_count_skate_vs_trainers(app_use_test_db, db_session) -> None:
     """Ice picker: no content → hidden; trainer-only cities stay with trainer_count."""
     empty_id = await _insert_city(db_session, name=f"IceEmpty-{uuid.uuid4().hex[:6]}")
     skate_id = await _insert_city(db_session, name=f"IceSkate-{uuid.uuid4().hex[:6]}")
@@ -787,9 +726,7 @@ async def test_ice_cities_omit_empty_and_count_skate_vs_trainers(
     await _add_future_session(db_session, skate_arena)
     sid = await require_seed_service_id(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(
-            client, db_session, city_id=coach_id, service_ids=[sid]
-        )
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=coach_id, service_ids=[sid])
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
         resp = await client.get("/api/public/ice/cities")
     assert resp.status_code == 200, resp.text
@@ -852,9 +789,7 @@ async def test_ice_cities_only_include_rink_or_trainer_cities(app_use_test_db, d
 
 
 @pytest.mark.asyncio
-async def test_ice_cities_hide_bare_trainer_arenas_but_keep_imported_places(
-    app_use_test_db, db_session
-) -> None:
+async def test_ice_cities_hide_bare_trainer_arenas_but_keep_imported_places(app_use_test_db, db_session) -> None:
     trainer_city = await _insert_city(db_session, name=f"IceTrainerBare-{uuid.uuid4().hex[:6]}")
     imported_city = await _insert_city(db_session, name=f"IceImportedBare-{uuid.uuid4().hex[:6]}")
     trainer_id = await _insert_bare_trainer(db_session)
@@ -890,23 +825,15 @@ async def test_ice_cities_hide_bare_trainer_arenas_but_keep_imported_places(
 
 
 @pytest.mark.asyncio
-async def test_ice_cities_bounds_span_all_geocoded_arenas_regardless_of_sessions(
-    app_use_test_db, db_session
-) -> None:
+async def test_ice_cities_bounds_span_all_geocoded_arenas_regardless_of_sessions(app_use_test_db, db_session) -> None:
     """Camera bounds must come from ALL geocoded arenas in the city, not just the
     ones with a live schedule — the Moscow/SPb "one live pin in a huge metro" bug.
     """
     cid = await _insert_city(db_session, name=f"IceBounds-{uuid.uuid4().hex[:6]}")
     # Spread across a wide metro area — think Moscow ↔ Zhukovsky/Sergiev Posad.
-    near = await _insert_arena(
-        db_session, cid, name="Каток в центре", latitude=55.75, longitude=37.62
-    )
-    far_ne = await _insert_arena(
-        db_session, cid, name="Каток на северо-востоке", latitude=56.30, longitude=38.90
-    )
-    far_sw = await _insert_arena(
-        db_session, cid, name="Каток на юго-западе", latitude=55.05, longitude=36.60
-    )
+    near = await _insert_arena(db_session, cid, name="Каток в центре", latitude=55.75, longitude=37.62)
+    far_ne = await _insert_arena(db_session, cid, name="Каток на северо-востоке", latitude=56.30, longitude=38.90)
+    far_sw = await _insert_arena(db_session, cid, name="Каток на юго-западе", latitude=55.05, longitude=36.60)
     # Only ONE of the three has a live session — the pin list would be tiny,
     # but the bounds must still span all three geocoded arenas.
     await _add_future_session(db_session, near)
@@ -927,9 +854,7 @@ async def test_ice_cities_bounds_span_all_geocoded_arenas_regardless_of_sessions
 
 
 @pytest.mark.asyncio
-async def test_ice_cities_bounds_null_when_no_geocoded_arenas(
-    app_use_test_db, db_session
-) -> None:
+async def test_ice_cities_bounds_null_when_no_geocoded_arenas(app_use_test_db, db_session) -> None:
     """A trainer-only city with zero geocoded arenas must not fabricate a box."""
     coach_cid = await _insert_city(db_session, name=f"IceBoundsNone-{uuid.uuid4().hex[:6]}")
     tr = await db_session.execute(
