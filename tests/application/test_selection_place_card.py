@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 
 from src.application.place_card_image import selection_story_board, selection_story_rows
-from src.application.selection_page import _place_html, _place_photo_url
+from src.application.selection_page import _place_html, _place_photo_url, compose_selection_share
 
 
 def test_place_card_uses_list_card_photo() -> None:
@@ -106,6 +106,41 @@ def test_story_board_leads_with_this_evening_and_points_at_the_rest() -> None:
     assert board["image_cta"] == "Все 6 сеансов — сканируй QR"
     assert board["text_cta"] == "Все 6 сеансов — по ссылке"
     assert "Пустой" not in str(board["rows"])
+
+
+def _weekend_view() -> dict:
+    sat, sun = date(2026, 10, 17), date(2026, 10, 18)
+    return {
+        "city": {"name": "Минск"},
+        "skating": True,
+        "session_count": 7,
+        "window": {"key": "weekend", "from": "2026-10-17T00:00:00+03:00", "to": "2026-10-19T00:00:00+03:00"},
+        "items": [
+            {"id": 1, "name": "ТЦ Замок"},
+            {"id": 2, "name": "ТЦ DiaMond city"},
+            {"id": 3, "name": "Ледовый дворец"},
+        ],
+        "slots": {
+            1: [{"local_date": sat, "starts_at_local": t} for t in ("10:15", "11:15", "12:15", "13:15")],
+            2: [{"local_date": sat, "starts_at_local": "13:45"}],
+            3: [{"local_date": sun, "starts_at_local": "09:00"}, {"local_date": sun, "starts_at_local": "18:00"}],
+        },
+    }
+
+
+def test_weekend_board_shows_every_place_before_repeating_one() -> None:
+    board = selection_story_board(_weekend_view(), today=date(2026, 10, 14))
+    assert board["rows"][:3] == [
+        ("ТЦ Замок", "Сб 10:15"),
+        ("ТЦ DiaMond city", "Сб 13:45"),
+        ("Ледовый дворец", "Вс 09:00"),
+    ]
+    assert len(board["rows"]) == 7
+
+
+def test_weekend_share_text_names_the_dates_once() -> None:
+    share = compose_selection_share(_weekend_view(), page_url="https://glide.example/c/minsk")
+    assert share["share_text"].count("Сб, 17 окт – Вс, 18 окт") == 1
 
 
 def test_story_rows_name_places_when_the_city_has_no_ice() -> None:

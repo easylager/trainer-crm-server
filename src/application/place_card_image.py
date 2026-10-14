@@ -24,6 +24,7 @@ from src.application.ice_city_day_og import _font
 from src.shared.venue_types import has_public_skating
 from src.application.ice_city_day import plural_ru
 from src.application.place_page import (
+    _WEEKDAYS_SHORT,
     _parse_iso_date,
     _services,
     _where,
@@ -473,6 +474,28 @@ def _pick_slice(
     return absolute_day_label(nxt), nxt, take(nxt)
 
 
+def _interleave_places(rows: list[tuple[date, str, str]]) -> list[tuple[date, str, str]]:
+    """Сначала по одному сеансу каждой площадки, потом вторые и т. д.
+
+    Строго по времени билет выходных начинался с четырёх строк одного ТЦ Замок,
+    и город выглядел так, будто лёд есть только там.
+    """
+    by_place: dict[str, list[tuple[date, str, str]]] = {}
+    for row in rows:
+        by_place.setdefault(row[2], []).append(row)
+    out: list[tuple[date, str, str]] = []
+    depth = 0
+    while len(out) < len(rows):
+        out.extend(sorted(group[depth] for group in by_place.values() if len(group) > depth))
+        depth += 1
+    return out
+
+
+def _row_when(row: tuple[date, str, str], *, with_day: bool) -> str:
+    day, hhmm, _name = row
+    return f"{_WEEKDAYS_SHORT[day.weekday()]} {hhmm}" if with_day else hhmm
+
+
 def _rest_note(rest: list[tuple[date, str, str]], hero_day: date) -> str:
     bits: list[str] = []
     for band, word in (("morning", "утром"), ("day", "днём"), ("evening", "вечером")):
@@ -545,9 +568,12 @@ def selection_story_board(
     else:
         image_cta = "Цены и адреса — сканируй QR"
         text_cta = "Цены и адреса — по ссылке"
+    hero = _interleave_places(hero)
+    # Окно «Сб–Вс» — два дня: «10:15» без дня не говорит, суббота это или воскресенье.
+    with_day = len({row[0] for row in hero}) > 1
     return {
         "headline": headline,
-        "rows": [(name, hhmm) for _day, hhmm, name in hero],
+        "rows": [(row[2], _row_when(row, with_day=with_day)) for row in hero],
         "note": _rest_note(rest, hero_day),
         "image_cta": image_cta,
         "text_cta": text_cta,
@@ -567,16 +593,24 @@ def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> by
         selection_share_title,
     )
 
-    window = view.get("window")
-    phrase = absolute_window_phrase(window) if window and view.get("skating") else ""
-    kicker = f"Карта льда · {phrase}" if phrase else "Карта льда"
     board = selection_story_board(view)
+    # Даты окна — ровно один раз. Раньше «Сб, 17 окт – Вс, 18 окт» стояло и в kicker,
+    # и в заголовке, и акцентной строкой. На картинке заголовок без дат; если акцентная
+    # строка уже и есть эти даты — kicker просто «Карта льда».
+    title = selection_share_title(view, with_window=False)
+    full_title = selection_share_title(view)
+    window = view.get("window")
+    phrase = absolute_window_phrase(window) if window and full_title != title else ""
+    if phrase and phrase not in str(board["headline"]):
+        kicker = f"Карта льда · {phrase}"
+    else:
+        kicker = "Карта льда"
     preview = [f"{name} {when}".strip() for name, when in board["rows"][:3]]
     if board["note"]:
         preview.append(str(board["note"]))
     lines = {
         "kicker": kicker.upper(),
-        "title": selection_share_title(view),
+        "title": title,
         "big": str(board["headline"]),
         "sub": " · ".join(bit for bit in preview if bit),
         "foot": "Расписание, цены и адреса — по ссылке",
