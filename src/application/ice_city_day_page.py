@@ -80,10 +80,6 @@ def _arena_html(arena: Mapping[str, Any], *, city_name: str = "") -> str:
     ]
     if where:
         parts.append(f'<p class="arena__where">{_esc(where)}</p>')
-    note = str(arena.get("stale_note") or "").strip()
-    if note:
-        # TASK-180: парсер давно не читал сайт катка — сеансы показываем, но честно.
-        parts.append(f'<p class="arena__stale">{_esc(note)}</p>')
     parts.append(f'<ul class="slots">{slots}</ul>')
     parts.append(_basis_note_html(sessions))
     parts.append("</article>")

@@ -151,7 +151,9 @@ body.b img { max-width: 100%; }
 
 /* ── Карта ────────────────────────────────────────────────────────────── */
 .b-map { margin: 0; padding: 12px 10px; border-radius: 20px; background: var(--g-dark); }
-.b-map svg { display: block; width: 100%; height: auto; }
+.b-map svg, .home-map {
+  display: block; width: 100%; height: auto; aspect-ratio: 600 / 520;
+}
 .b-map__legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 4px 8px 0; font-size: 13px; color: var(--g-on-dark-muted); }
 .b-map__legend span { display: inline-flex; align-items: center; gap: 6px; }
 .b-map__legend i { width: 10px; height: 10px; border-radius: 50%; background: var(--g-accent); }
@@ -163,6 +165,7 @@ body.b img { max-width: 100%; }
 .b-scroll {
   display: flex; gap: 10px; overflow-x: auto; padding: 0 16px 4px;
   scroll-snap-type: x mandatory; scrollbar-width: none;
+  min-height: 188px;
 }
 .b-scroll::-webkit-scrollbar { display: none; }
 .b-scroll > * { scroll-snap-align: start; }

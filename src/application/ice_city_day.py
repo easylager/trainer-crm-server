@@ -23,12 +23,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_session_use_cases import STATUS_ACTIVE
-from src.application.schedule_staleness import (
-    LEVEL_STALE,
-    load_arena_freshness,
-    stale_note,
-    staleness_level,
-)
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.ice_discovery_scope import (
     PUBLIC_ARENA_VISIBLE_SQL,
@@ -434,15 +428,8 @@ def _group_by_arena(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 async def _load_day_checked(
     session: AsyncSession, *, city_id: int, day: date, now: datetime
-) -> tuple[list[Mapping[str, Any]], dict[int, dict[str, Any]]]:
-    """Сеансы дня и свежесть расписания их арен (TASK-180).
-
-    Свежесть только помечает арену (``stale``), сеансы не снимает ни на каком уровне:
-    решение владельца, TASK-243.
-    """
-    rows = await _load_day(session, city_id=city_id, day=day, now=now)
-    fresh = await load_arena_freshness(session, {int(r["arena_id"]) for r in rows}, now=now)
-    return rows, fresh
+) -> list[Mapping[str, Any]]:
+    return await _load_day(session, city_id=city_id, day=day, now=now)
 
 
 async def get_city_ice_day(
@@ -459,27 +446,20 @@ async def get_city_ice_day(
     сказать «на сегодня сеансов нет», а не притворяться, что данные ещё грузятся.
     Поле ``is_today`` говорит, какой день в итоге показан, чтобы заголовок не врал.
 
-    TASK-180: у арены с устаревшим расписанием (> 6 ч) — ``stale_note`` (пустой).
     """
     tz_name = await _city_timezone(session, city_id)
     now = now or datetime.now(timezone.utc)
     today = _local_today(tz_name, now)
 
     day = on_date or today
-    rows, fresh = await _load_day_checked(session, city_id=city_id, day=day, now=now)
+    rows = await _load_day_checked(session, city_id=city_id, day=day, now=now)
     fell_through = False
     if not rows and on_date is None:
         day = today + timedelta(days=1)
-        rows, fresh = await _load_day_checked(
-            session, city_id=city_id, day=day, now=now
-        )
+        rows = await _load_day_checked(session, city_id=city_id, day=day, now=now)
         fell_through = True
 
     arenas = _group_by_arena(rows)
-    for arena in arenas:
-        arena_fresh = fresh.get(int(arena["arena_id"]))
-        arena["stale"] = staleness_level(arena_fresh) == LEVEL_STALE
-        arena["stale_note"] = stale_note(arena_fresh, now=now)
     sessions_total = sum(len(a["sessions"]) for a in arenas)
     prices = [
         int(s["price_adult_minor"])
@@ -500,7 +480,6 @@ async def get_city_ice_day(
         "arenas": arenas,
         "arena_count": len(arenas),
         "session_count": sessions_total,
-        "stale_arena_count": sum(1 for a in arenas if a["stale"]),
         "price_min_minor": min(prices) if prices else None,
         "price_max_minor": max(prices) if prices else None,
         "currency_code": currency,
