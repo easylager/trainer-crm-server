@@ -42,6 +42,7 @@ from src.application.place_links import (
     is_valid_start_param,
     parse_catalog_start_param,
     parse_place_deep_link,
+    parse_trainer_deep_link,
 )
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.ua_class import classify_user_agent  # noqa: F401  (re-export for telemetry)
@@ -308,6 +309,10 @@ async def resolve_entry_scope(
         place = parse_place_deep_link(sp)
         if place is not None:
             arena_id = place[0]
+        else:
+            coach = parse_trainer_deep_link(sp)
+            if coach is not None and coach[1] is not None:
+                arena_id = coach[1]
     if city_id is None and arena_id is None:
         target = parse_catalog_start_param(sp)
         if target is not None and target[0] is not None:

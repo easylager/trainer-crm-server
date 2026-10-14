@@ -26,6 +26,8 @@ PLACE_PATH_PREFIX = "/p"
 PLACE_START_PREFIX = "arena_"
 #: ``catalog_<city_id>`` или ``catalog_<city_id>_<intent>`` — отфильтрованный каталог.
 CATALOG_START_PREFIX = "catalog_"
+#: ``trainer_<id>`` или ``trainer_<id>_a_<arena_id>`` — карточка тренера; с катка «Назад» ведёт на каток.
+TRAINER_START_PREFIX = "trainer_"
 
 # Ограничения Telegram на start/startapp: до 64 символов, только [A-Za-z0-9_-].
 _START_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -157,6 +159,14 @@ def place_start_param(arena_id: int, session_id: int | None = None) -> str:
     return param
 
 
+def trainer_start_param(trainer_id: int, arena_id: int | None = None) -> str:
+    """``trainer_7`` или ``trainer_7_a_3`` — карточка тренера в мини-аппе, как тап по тренеру на катке."""
+    param = f"{TRAINER_START_PREFIX}{int(trainer_id)}"
+    if arena_id is not None and int(arena_id) > 0:
+        param += f"_a_{int(arena_id)}"
+    return param
+
+
 def catalog_start_param(city_id: int, intent: str | None = None, when: str | None = None) -> str:
     """``catalog_12`` / ``catalog_12_coach`` / ``catalog_12_skate_weekend`` / ``catalog_12_ohm_weekend``.
 
@@ -215,6 +225,18 @@ def parse_catalog_start_param(value: str | None) -> tuple[int | None, str | None
 
 
 _PLACE_DEEP_RE = re.compile(r"^arena_([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$")
+
+
+_TRAINER_DEEP_RE = re.compile(r"^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?$")
+
+
+def parse_trainer_deep_link(value: str | None) -> tuple[int, int | None] | None:
+    """``trainer_7`` → ``(7, None)``; ``trainer_7_a_3`` → ``(7, 3)``."""
+    match = _TRAINER_DEEP_RE.match((value or "").strip())
+    if match is None:
+        return None
+    arena_id = int(match.group(2)) if match.group(2) else None
+    return int(match.group(1)), arena_id
 
 
 def parse_place_deep_link(value: str | None) -> tuple[int, int | None] | None:

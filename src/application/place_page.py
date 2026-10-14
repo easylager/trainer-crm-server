@@ -380,8 +380,14 @@ async def load_place_view(
                     if int(slot["id"]) == int(session_id):
                         focus = slot
             focus_missing = focus is None
+    trainers: list[dict[str, Any]] = []
+    if int(card.get("trainer_count") or 0) > 0:
+        from src.application.site_trainers import load_site_trainers
+
+        trainers, _total = await load_site_trainers(session, arena_id=int(card["id"]))
     return {
         "card": card,
+        "trainers": trainers,
         "days": days,
         "ohm_days": ohm_days,
         "focus": focus,
@@ -1358,7 +1364,31 @@ def _b_arrive(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
     return section(t("hub.directions"), body, klass="b-sec--place")
 
 
-def _b_onsite(card: Mapping[str, Any], *, cta_url: str | None) -> str:
+def _b_trainers(view: Mapping[str, Any], *, base_url: str) -> str:
+    """Тренеры на этом месте (TASK-265), как в Mini App: тап — карточка тренера в Telegram."""
+    from src.application.place_links import public_telegram_cta_url, trainer_start_param
+    from src.application.style_b import section, trainer_rows_html
+
+    trainers = list(view.get("trainers") or [])
+    if not trainers:
+        return ""
+    card = view["card"]
+    arena_id = int(card["id"])
+    city_id = int(card.get("city_id") or 0) or None
+
+    def href_for(trainer: Mapping[str, Any]) -> str | None:
+        return public_telegram_cta_url(
+            base_url,
+            start_param=trainer_start_param(int(trainer["id"]), arena_id),
+            surface="place_page",
+            city_id=city_id,
+            arena_id=arena_id,
+        )
+
+    return section(t("place.trainers"), trainer_rows_html(trainers, href_for=href_for), klass="b-sec--place", sec_id="trainers")
+
+
+def _b_onsite(card: Mapping[str, Any], *, cta_url: str | None, trainers_listed: bool = False) -> str:
     from src.application.catalog_icons import icon_svg
     from src.application.style_b import section
 
@@ -1383,7 +1413,7 @@ def _b_onsite(card: Mapping[str, Any], *, cta_url: str | None) -> str:
     ]
     if chips:
         body += f'<div class="b-chips">{"".join(chips)}</div>'
-    n = int(card.get("trainer_count") or 0)
+    n = 0 if trainers_listed else int(card.get("trainer_count") or 0)
     if n > 0:
         word = plural_ru(n, "тренер", "тренера", "тренеров")
         verb = "работает" if n == 1 else "работают"
@@ -1494,7 +1524,8 @@ def render_place_body_b(
         _b_schedule(view, base_path=base_path, invite=invite, links=links),
         _b_ohm(view),
         _b_arrive(card, links),
-        _b_onsite(card, cta_url=cta_url),
+        _b_onsite(card, cta_url=cta_url, trainers_listed=bool(view.get("trainers"))),
+        _b_trainers(view, base_url=base_url),
         _b_rental(card),
     ]
     body = "".join(parts)

@@ -373,6 +373,11 @@ async def load_city_hub_view(
     center_count = await city_hockey_center_count(session, city_id=city_id)
     trainer_rows = (await session.execute(_TRAINERS_SQL, {"city_id": city_id})).mappings().all()
     trainer_count = sum(int(r["n"] or 0) for r in trainer_rows)
+    trainers: list[dict[str, Any]] = []
+    if trainer_count:
+        from src.application.site_trainers import CITY_TRAINERS_SHOWN, load_site_trainers
+
+        trainers, _total = await load_site_trainers(session, city_id=city_id, limit=CITY_TRAINERS_SHOWN)
     roles: list[str] = []
     for r in trainer_rows:
         label = specialist_role_display(str(r.get("specialist_role") or "")).strip()
@@ -414,6 +419,7 @@ async def load_city_hub_view(
         "shops_open": [p for p in shops if p["open_state"] in ("open", "soon")],
         "trainer_count": trainer_count,
         "trainer_roles": roles[:3],
+        "trainers": trainers,
         "hot_skate": hot_window_key(skate, now=now),
         "hot_ohm": hot_window_key(ohm, now=now),
         "variant": variant,
@@ -808,12 +814,38 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
             bits.append(open_line)
         rows.append(_b_route_row(href=_list_href(slug, t="shop"), icon="shop", title=t("route.shops"), line=_esc(" · ".join(bits))))
     trainers = int(view.get("trainer_count") or 0)
-    if trainers and coach_href:
+    trainers_href = "#trainers" if view.get("trainers") else coach_href
+    if trainers and trainers_href:
         line = f"{trainers} {plural_ru(trainers, 'тренер', 'тренера', 'тренеров')}"
-        rows.append(_b_route_row(href=coach_href, icon="person", title=t("route.trainers"), line=_esc(line)))
+        rows.append(_b_route_row(href=trainers_href, icon="person", title=t("route.trainers"), line=_esc(line)))
     if not rows:
         return ""
     return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>')
+
+
+def _b_trainers(view: Mapping[str, Any], *, base_url: str, coach_href: str) -> str:
+    """Тренеры города лицами (TASK-265); больше, чем показали, — «Все тренеры» в Telegram."""
+    from src.application.place_links import public_telegram_cta_url, trainer_start_param
+    from src.application.style_b import section, trainer_rows_html
+
+    trainers = list(view.get("trainers") or [])
+    if not trainers:
+        return ""
+    city_id = int(view["city"]["id"])
+
+    def href_for(trainer: Mapping[str, Any]) -> str | None:
+        return public_telegram_cta_url(
+            base_url,
+            start_param=trainer_start_param(int(trainer["id"])),
+            surface="selection_page",
+            city_id=city_id,
+        )
+
+    body = trainer_rows_html(trainers, href_for=href_for)
+    total = int(view.get("trainer_count") or 0)
+    if body and coach_href and total > len(trainers):
+        body += f'<a class="b-more" href="{_esc(coach_href)}">{_esc(t("hub.trainers_all"))}</a>'
+    return section(t("route.trainers"), body, sec_id="trainers")
 
 
 def _b_all_places(view: Mapping[str, Any]) -> str:
@@ -1077,6 +1109,7 @@ def _b_body(
                 _b_one_week(view),
                 _b_rink_arrive(rink, base_url=base_url, city_id=city_id),
                 _b_nearby(view, title=t("hub.nearby")),
+                _b_trainers(view, base_url=base_url, coach_href=coach_href),
                 share_block,
             ]
         )
@@ -1098,6 +1131,7 @@ def _b_body(
             blocks.append(_b_phone_block(view, r, base_url=base_url))
             blocks.append(_b_rink_arrive(r, base_url=base_url, city_id=city_id, show_phone_buttons=False))
         blocks.append(_b_nearby(view, title=t("hub.nearby_scheduled")))
+        blocks.append(_b_trainers(view, base_url=base_url, coach_href=coach_href))
         blocks.append(share_block)
         return "".join(blocks)
     hero = hero_html(
@@ -1121,6 +1155,7 @@ def _b_body(
             _b_routes(view, coach_href=coach_href),
             empty,
             _b_all_places(view),
+            _b_trainers(view, base_url=base_url, coach_href=coach_href),
             share_block,
         ]
     )

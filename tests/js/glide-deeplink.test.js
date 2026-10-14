@@ -45,6 +45,16 @@ describe('GlideDeepLink.deepLinkTarget', () => {
 describe('GlideDeepLink.readStartParam', () => {
   const G = load();
 
+  it('trainer_ открывает карточку тренера; с катка — с возвратом на каток (TASK-265)', () => {
+    assert.deepEqual(G.deepLinkTarget('trainer_7'), { key: 'catalog', path: 'catalog?trainer_id=7' });
+    assert.deepEqual(G.deepLinkTarget('trainer_7_a_3'), {
+      key: 'catalog',
+      path: 'catalog?from=arena&trainer_id=7&arena_id=3',
+    });
+    assert.equal(G.deepLinkTarget('trainer_0'), null);
+    assert.equal(G.deepLinkTarget('trainer_7_a_'), null);
+  });
+
   it('читает initDataUnsafe, hash и query', () => {
     assert.equal(
       G.readStartParam({
