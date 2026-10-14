@@ -36,12 +36,13 @@ def esc(value: Any) -> str:
 def b_photo_url(key: Any) -> str | None:
     """URL варианта фото по ключу хранилища: CDN, если настроен, иначе публичный прокси."""
     from src.application.photo_cdn import public_photo_url
-    from src.shared.config import Settings
+    from src.shared.config import get_settings
 
     raw = str(key or "").strip()
     if not raw:
         return None
-    return public_photo_url(raw, Settings().photo_cdn_base_url)
+    # get_settings(), не Settings(): конструктор перечитывает .env, а фото на странице десятки.
+    return public_photo_url(raw, get_settings().photo_cdn_base_url)
 
 
 def media_url(media: Mapping[str, Any] | None, *, size: str = "hero") -> str | None:
