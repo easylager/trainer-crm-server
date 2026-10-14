@@ -2390,6 +2390,10 @@ async def list_public_arena_trainers(
         body["can_book"] = availability["can_book"]
         body["open_groups_count"] = int(open_grp.get(body["id"], 0))
         out.append(body)
+    # «от N за занятие» — та же цифра, что на сайте (абонементы, тарифы, групповые).
+    from src.application.trainer_min_price import enrich_min_session_price
+
+    await enrich_min_session_price(session, out)
     groups, _groups_total = await list_open_training_groups_catalog(
         session, arena_id=int(row["id"]), limit=50, offset=0
     )

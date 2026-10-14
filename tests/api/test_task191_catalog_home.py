@@ -69,6 +69,9 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
     assert f"/c/{slug}" in home.text
     assert f"/ice/{slug}/today" not in home.text
     assert "Для тренеров" in home.text
+    # Вход для тренеров — наверху, в панели героя, а не только в подвале.
+    bar = re.search(r'<div class="b-hero__bar">(.*?)</div>', home.text, re.S)
+    assert bar and "/trainers" in bar.group(1) and "Для тренеров" in bar.group(1)
     assert _meta(home.text, "robots") == "index, follow"
 
     assert trainers.status_code == 200

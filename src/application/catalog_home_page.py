@@ -1342,7 +1342,8 @@ def render_catalog_home_page(
         photo_url=photo,
         photo_alt=f"Каток, {format_public_name(str(hero_city.get('name') or ''))}" if hero_city else "",
         toned=bool(hero_city.get("display_tone")) if hero_city else False,
-        bar_html=brand_link(),
+        # Тренеры — вторая аудитория: вход на их лендинг наверху, справа от марки (не только в подвале).
+        bar_html=brand_link() + f'<a class="b-pill b-pill--end" href="{_esc(trainers_url)}">Для тренеров</a>',
         variant="tall",
         photo_variants=hero_variants,
     )

@@ -42,20 +42,18 @@ def trainer_photo_url(trainer: Mapping[str, Any]) -> str | None:
 
 
 def trainer_line(trainer: Mapping[str, Any]) -> str:
-    """«Обучение катанию „с нуля“ · от 55 BYN» — первая услуга и самая низкая цена (arena-card-model.trainerSubtitle)."""
+    """«Обучение катанию „с нуля“ · от 41,87 BYN за занятие»: первая услуга и самое дешёвое занятие.
+
+    Цена — ``min_session_price_cents`` из ``trainer_min_price`` (абонементы, тарифы, групповые).
+    """
     services = list(trainer.get("services") or [])
     names = [str(s.get("service_name") or s.get("name") or "").strip() for s in services]
     names = [n for n in names if n]
-    best: tuple[int, str] | None = None
-    for s in services:
-        cents = s.get("price_cents")
-        if cents is None or int(cents) <= 0:
-            continue
-        if best is None or int(cents) < best[0]:
-            best = (int(cents), str(s.get("currency_code") or "BYN"))
     bits = names[:1]
-    if best is not None:
-        bits.append("от\u00a0" + format_price_minor(best[0], best[1]).replace(" ", "\u00a0"))
+    cents = trainer.get("min_session_price_cents")
+    if cents:
+        price = format_price_minor(int(cents), str(trainer.get("min_session_price_currency") or "BYN"))
+        bits.append("от\u00a0" + price.replace(" ", "\u00a0") + " за\u00a0занятие")
     return " · ".join(bits)
 
 
@@ -81,14 +79,16 @@ async def load_site_trainers(
     """(тренеры для строки, сколько всего). Порядок — как в каталоге Mini App."""
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
     from src.application.trainer_use_cases import list_active_trainers_for_client
+    from src.application.trainer_min_price import enrich_min_session_price
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
     items, total = await list_active_trainers_for_client(
         session, limit=limit, offset=0, arena_id=arena_id, city_id=city_id
     )
+    bodies = [sanitize_trainer_for_public_catalog(raw) for raw in items]
+    await enrich_min_session_price(session, bodies)
     out: list[dict[str, Any]] = []
-    for raw in items:
-        body = sanitize_trainer_for_public_catalog(raw)
+    for body in bodies:
         availability = await get_trainer_booking_availability(session, int(body["id"]))
         out.append(site_trainer_view(body, can_book=bool(availability.get("can_book"))))
     return out, int(total)

@@ -1116,7 +1116,9 @@
     var i;
     for (i = 0; i < services.length; i++) {
       var s = services[i];
-      if (s.name) names.push(s.name);
+      // API отдаёт service_name; name — старые полезные нагрузки и тесты.
+      var sName = s.service_name || s.name;
+      if (sName) names.push(sName);
       var p = s.price_cents != null ? Number(s.price_cents) : s.price_byn != null ? Number(s.price_byn) * 100 : NaN;
       if (!isNaN(p) && p > 0 && (minPrice == null || p < minPrice)) {
         minPrice = p;
@@ -1127,6 +1129,16 @@
     }
     var bits = [];
     if (names.length) bits.push(names[0]);
+    // TASK-265: сервер считает самое дешёвое занятие (абонемент на занятие, тарифы,
+    // групповые) — trainer_min_price.py; сайт показывает ту же строку.
+    if (trainer.min_session_price_cents != null && Number(trainer.min_session_price_cents) > 0) {
+      var best = formatMinor(
+        Number(trainer.min_session_price_cents),
+        priceCurrencyLabel(trainer.min_session_price_currency || 'BYN')
+      );
+      if (best) bits.push('от ' + best.withCurrency.replace('.', ',') + ' за занятие');
+      return bits.join(' · ');
+    }
     if (minPrice != null) {
       var fmt = formatMinor(minPrice, priceCurrencyLabel(minCur));
       if (fmt) bits.push('от ' + (fmt.withCurrency || fmt.amount));
