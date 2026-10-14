@@ -586,7 +586,7 @@ def render_city_hub_page(
             "itemListElement": elements,
         }
     )
-    from src.application.style_b import STYLE_VERSION, TOKENS_VERSION
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
 
     lang, og_locale = html_lang_for_country(str(city.get("country") or ""))
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -605,6 +605,7 @@ def render_city_hub_page(
             "__JSONLD__": ld,
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
+            "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": "",
             "__BODY__": body,
             **share_tail,

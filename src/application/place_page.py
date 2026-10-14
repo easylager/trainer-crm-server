@@ -991,7 +991,7 @@ def render_place_page(
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
     robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
 
-    from src.application.style_b import STYLE_VERSION, TOKENS_VERSION
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
 
     html = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
@@ -1008,6 +1008,7 @@ def render_place_page(
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
+        "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__CITY_LINK__": city_link,
         "__BODY__": body,
         "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite),

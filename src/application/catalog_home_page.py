@@ -1301,7 +1301,7 @@ def render_catalog_home_page(
     Герой с фото катка «вашего города», выбор времени, карточка «Ваш город», тёмная карта,
     сетка городов с фото и раскрывашка «ещё N городов по областям».
     """
-    from src.application.style_b import STYLE_VERSION, TOKENS_VERSION, b_photo_url, brand_link, hero_html
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, b_photo_url, brand_link, hero_html
 
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     cities = list(view.get("cities") or [])
@@ -1384,6 +1384,7 @@ def render_catalog_home_page(
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
+        "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__HERO__": hero,
         "__WHEN__": _b_when_nav(view),
         "__HERO_CITY__": _b_home_city_card(user_city),

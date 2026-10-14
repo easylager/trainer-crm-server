@@ -1189,7 +1189,7 @@ def render_selection_page(
             "itemListElement": elements,
         }
     )
-    from src.application.style_b import STYLE_VERSION, TOKENS_VERSION
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
 
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = (
@@ -1217,6 +1217,7 @@ def render_selection_page(
             "__JSONLD__": ld,
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
+            "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": city_link,
             "__BODY__": body,
             **catalog_list_share_tail(scripts=need_share_js, css=bool(share_pick)),

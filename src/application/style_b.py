@@ -27,6 +27,8 @@ def _file_version(rel: str) -> str:
 
 TOKENS_VERSION = _file_version("static/shared/glide-tokens.css")
 STYLE_VERSION = _file_version("static/share/style-b.css")
+# Отдельной ссылкой, не @import из style-b.css: импорт без ?v= шёл с no-store и ещё одним кругом до первой отрисовки.
+COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
 
 
 def esc(value: Any) -> str:
