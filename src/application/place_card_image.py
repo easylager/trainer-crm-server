@@ -497,14 +497,6 @@ def selection_story_board(
             "image_cta": "",
             "text_cta": "",
         }
-    if view.get("today_window_done"):
-        return {
-            "headline": selection_share_description(view),
-            "rows": [],
-            "note": "",
-            "image_cta": "",
-            "text_cta": "",
-        }
     sessions = _collect_sessions(view)
     if today is not None:
         sessions = [row for row in sessions if row[0] >= today]

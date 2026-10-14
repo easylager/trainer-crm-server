@@ -228,34 +228,6 @@ def home_weekend_window(now: datetime) -> TimeWindow:
     )
 
 
-def home_empty_today_should_shift(when: str | None, when_key: str) -> bool:
-    """Сдвиг периода, если «сегодня» пусто: только главная без ``?when=`` (не явный таб)."""
-    raw = (when or "").strip().lower()
-    return when_key == "today" and raw == ""
-
-
-def home_fallback_periods_after_empty_today(now: datetime) -> list[tuple[str, TimeWindow]]:
-    """Завтра, затем каждый из семи дат пикера после сегодня — по календарю Минска."""
-    today = _minsk_today(now)
-    out: list[tuple[str, TimeWindow]] = []
-    tomorrow = resolve_window("tomorrow", now)
-    if tomorrow is not None:
-        out.append(("tomorrow", tomorrow))
-    for day in home_picker_dates(now)[2:]:
-        out.append(("day", resolve_day_window(day, now)))
-    return out
-
-
-def home_shift_note_for_period(when_key: str, window: TimeWindow, *, today: date) -> str:
-    if when_key == "tomorrow":
-        return t("home.shift.after_today_tomorrow")
-    if when_key == "day" and window.local_date:
-        target = date.fromisoformat(window.local_date)
-        label = day_window_label(target, today)
-        return t("home.shift.after_today_day", day=label.lower())
-    return t("home.shift.after_today_tomorrow")
-
-
 def resolve_home_window(
     when: str | None,
     day: str | None = None,

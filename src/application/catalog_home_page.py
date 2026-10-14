@@ -25,9 +25,7 @@ from src.application.ice_city_day import (
 )
 from src.application.ice_session_use_cases import STATUS_ACTIVE
 from src.application.ice_time_windows import (
-    home_empty_today_should_shift,
     home_picker_dates,
-    home_shift_note_for_period,
     resolve_day_window,
     resolve_home_window,
     resolve_window,
@@ -544,29 +542,6 @@ def _upcoming_more_href(
     return None
 
 
-def _home_tile_when(
-    when: str | None,
-    when_key: str,
-    *,
-    selected_day: date | None,
-    today: date,
-    home_shift_note: str,
-) -> str | None:
-    """Окно для ссылок плиток: явный ``?when=`` или сдвиг главной без смены URL."""
-    link = _city_list_when(when, when_key, selected_day=selected_day, today=today)
-    if link:
-        return link
-    if not home_shift_note:
-        return None
-    if when_key == "tomorrow":
-        return "tomorrow"
-    if when_key == "weekend":
-        return "weekend"
-    if when_key == "day" and selected_day == today + timedelta(days=1):
-        return "tomorrow"
-    return None
-
-
 def _city_list_when(when: str | None, when_key: str, *, selected_day: date | None, today: date) -> str | None:
     """Окно, которое плитка города несёт в список. Только явно выбранное: без ``when``
     главная показывает умный дефолт, и плитка по-прежнему ведёт на страницу города.
@@ -1006,53 +981,6 @@ async def load_catalog_home_view(
         now=now,
         horizon_end=horizon_end,
     )
-    home_shift_note = ""
-    if home_empty_today_should_shift(when, when_key):
-        total_in_window = sum(int(c.get("session_count") or 0) for c in catalog_cities)
-        target_day = _nearest_skate_day_after_today(catalog_cities, today=today) if total_in_window == 0 else None
-        if target_day is not None:
-            if target_day == today + timedelta(days=1):
-                when_key = "tomorrow"
-                fallback_window = resolve_window("tomorrow", now)
-            else:
-                when_key = "day"
-                fallback_window = resolve_day_window(target_day, now)
-            if fallback_window is not None:
-                window = fallback_window
-                period_start, period_end = window.starts_at, window.ends_at
-                show_day_picker = False
-                selected_day = _selected_home_day(
-                    when_key, window.local_date, show_day_picker=show_day_picker, today=today
-                )
-                stats_rows = (
-                    (
-                        await session.execute(
-                            _CITY_STATS_SQL,
-                            {
-                                "city_ids": city_ids,
-                                "starts_at": period_start,
-                                "ends_at": period_end,
-                                "horizon_end": horizon_end,
-                                "now": now,
-                                "st": STATUS_ACTIVE,
-                                **public_scope_params(),
-                            },
-                        )
-                    )
-                    .mappings()
-                    .all()
-                )
-                catalog_cities = _fold_arena_rows(list(stats_rows))
-                city_groups = group_catalog_cities_by_country(catalog_cities)
-                catalog_cities = [city for _, group in city_groups for city in group]
-                await _attach_city_facts(
-                    session,
-                    catalog_cities,
-                    now=now,
-                    horizon_end=horizon_end,
-                )
-                home_shift_note = home_shift_note_for_period(when_key, window, today=today)
-
     public_slug_set = {str(c["slug"]) for c in catalog_cities}
     user_city = _resolve_user_city(catalog_cities, user_city_slug=user_city_slug, public_slug_set=public_slug_set)
     user_city_id = int(user_city["id"]) if user_city else None
@@ -1106,10 +1034,7 @@ async def load_catalog_home_view(
         "day_picker": _build_day_picker(now) if show_day_picker else [],
         "country": country,
         "when_key": when_key,
-        "city_when": _home_tile_when(
-            when, when_key, selected_day=selected_day, today=today, home_shift_note=home_shift_note
-        ),
-        "home_shift_note": home_shift_note,
+        "city_when": _city_list_when(when, when_key, selected_day=selected_day, today=today),
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": user_city_vm,
         "user_city_id": user_city_id,
@@ -1457,10 +1382,7 @@ def render_catalog_home_page(
     total_sessions = sum(int(c.get("session_count") or 0) for c in with_sessions)
     sole_name = str(with_sessions[0].get("name") or "") if len(with_sessions) == 1 else None
     counter_text = _counter_text(total_sessions, len(with_sessions), when_key, now=now, city_name=sole_name)
-    shift_note = str(view.get("home_shift_note") or "").strip()
-    if shift_note:
-        counter_text = f"{shift_note} · {counter_text}" if counter_text else shift_note
-    elif when_key == "today" and not total_sessions:
+    if when_key == "today" and not total_sessions:
         counter_text = _today_done_text(by_cities)
     counter_text = re.sub(r"(\d) ", "\\1\u00a0", counter_text)
 
