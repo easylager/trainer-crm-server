@@ -430,19 +430,19 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-tgbtn {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   min-height: 52px; padding: 0 18px; border-radius: 16px;
-  background: var(--g-tg); color: var(--g-on-tg) !important;
+  background: var(--g-tg-btn); color: var(--g-on-tg-btn) !important;
   font-size: 17px; font-weight: 700; text-decoration: none; white-space: nowrap;
   box-shadow: var(--g-shadow);
 }
-.b-tgbtn:active { background: var(--g-tg-pressed); }
-.b-tgbtn:focus-visible { outline: 3px solid var(--g-tg); outline-offset: 2px; }
+.b-tgbtn:active { background: var(--g-tg-btn-pressed); }
+.b-tgbtn:focus-visible { outline: 3px solid var(--g-tg-btn); outline-offset: 2px; }
 .b-tgbtn__icon { flex: 0 0 auto; width: 22px; height: 22px; }
 .b-tgbtn__short { display: none; }
 .b-tghint {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   font-size: 13px; color: var(--g-ink-2);
 }
-.b-tghint__icon { flex: 0 0 auto; width: 16px; height: 16px; color: var(--g-tg); }
+.b-tghint__icon { flex: 0 0 auto; width: 16px; height: 16px; color: var(--g-tg-btn); }
 .b-tgdock {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 9;
   padding: 12px 16px calc(10px + env(safe-area-inset-bottom, 0px));
