@@ -101,7 +101,6 @@
     "place.on_site": "На месте",
     "home.map.legend_on": "лёд сегодня",
     "home.map.legend_off": "сегодня нет",
-    "place.phone_schedule": "Время массового катания называют по телефону.",
     "place.site_schedule": "Время массового катания — на сайте катка",
     "place.day_empty": "Сеансов нет",
     "feed.time_by_phone": "Время — по телефону",

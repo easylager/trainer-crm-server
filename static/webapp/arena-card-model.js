@@ -45,15 +45,18 @@
     var digits = String(raw || '').replace(/\D/g, '');
     return digits.length >= 7 ? 'tel:' + String(raw || '').replace(/[^\d+]/g, '') : '';
   }
-  /** Нет сеансов: факт и способ узнать. Нет телефона и сайта — секции нет. */
+  /** Нет сеансов: телефон и часы, иначе сайт, иначе секции нет. */
   function scheduleAsk(card) {
     var callHref = callHrefFor(card);
-    if (callHref) {
+    var week = weekHours(card && card.opening_hours, new Date(), card && card.timezone);
+    var hasHours = week && week.rows && week.rows.length;
+    if (callHref || hasHours) {
       return {
         mode: 'phone',
-        banner: copyLine('place.phone_schedule', 'Время массового катания называют по телефону.'),
+        banner: null,
         showRibbon: false,
-        callHref: callHref,
+        callHref: callHref || undefined,
+        hoursWeek: hasHours ? week : null,
       };
     }
     var siteHref = safeHttpUrl(card && card.website_url);
