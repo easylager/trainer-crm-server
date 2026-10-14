@@ -504,3 +504,31 @@ body.b:not([data-client-shell]):has(.b-tgdock.is-floating) {
   padding-bottom: calc(8px + 44px + 10px + env(safe-area-inset-bottom, 0px));
 }
 body[data-client-shell] .tg-out { display: none !important; }
+
+/* ── Cross-document view transitions (публичка /, /c/, /p/) ─────────────
+   Прогрессивно: Chrome/Edge 126+, Safari 18.2+; иначе обычная навигация. */
+@view-transition {
+  navigation: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+}
+
+::view-transition-group(root),
+::view-transition-group(glide-when-strip) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+
+.vt-when-strip {
+  view-transition-name: glide-when-strip;
+}
+
+html::view-transition-old(root),
+html::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}

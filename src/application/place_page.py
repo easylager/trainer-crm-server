@@ -1147,12 +1147,15 @@ def _b_price_mode(slots: list[Mapping[str, Any]]) -> str:
 def _b_ticket(
     slot: Mapping[str, Any],
     *,
+    arena_id: int,
     base_path: str,
     invite: bool,
     focused: bool,
     common_price: str,
     nojs_share: Mapping[str, str] | None = None,
 ) -> str:
+    from src.shared.public_view_transitions import session_time_vt_style
+
     start = format_clock(str(slot.get("starts_at_local") or ""))
     end = format_clock(str(slot.get("ends_at_local") or ""))
     sub_bits = [f"до {end}"] if end else []
@@ -1163,9 +1166,10 @@ def _b_ticket(
     href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
     klass = "b-ticket b-ticket--picked" if focused else "b-ticket"
     sid = int(slot["id"])
+    vt = session_time_vt_style(arena_id, start)
     ticket = (
         f'<a class="{klass}" href="{_esc(href)}" rel="nofollow" data-session-id="{sid}">'
-        f'<span class="b-ticket__time">{_esc(start)}</span>{sub}</a>'
+        f'<span class="b-ticket__time"{vt}>{_esc(start)}</span>{sub}</a>'
     )
     if focused and nojs_share is not None:
         ticket += _nojs_messenger_row(nojs_share)
@@ -1239,9 +1243,11 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         if pick_id is not None and any(int(s["id"]) == pick_id for s in slots):
             page_url = base_path + place_query(session_id=pick_id, invite=invite)
             nojs_share = share_payload(view, page_url=page_url, invite=invite)
+        arena_id = int(card.get("id") or card.get("arena_id") or 0)
         tickets = "".join(
             _b_ticket(
                 s,
+                arena_id=arena_id,
                 base_path=base_path,
                 invite=invite,
                 focused=(pick_id == int(s["id"])),

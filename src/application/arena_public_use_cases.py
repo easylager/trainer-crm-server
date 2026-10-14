@@ -1271,6 +1271,69 @@ async def city_ohm_window_counts(
     }
 
 
+async def city_skate_window_counts(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Будущие сеансы массового катания по окнам today/tomorrow/weekend и всего."""
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+
+    now = now or datetime.now(timezone.utc)
+    tw_today = resolve_window("today", now)
+    tw_tomorrow = resolve_window("tomorrow", now)
+    tw_weekend = resolve_window("weekend", now)
+    params: dict[str, Any] = {
+        "city_id": int(city_id),
+        "now": now,
+        "st": STATUS_ACTIVE,
+        **public_scope_params(),
+    }
+    filters: list[str] = []
+    if tw_today:
+        params["today_from"] = tw_today.starts_at
+        params["today_to"] = tw_today.ends_at
+        filters.append("s.starts_at_utc >= :today_from AND s.starts_at_utc < :today_to")
+    if tw_tomorrow:
+        params["tomorrow_from"] = tw_tomorrow.starts_at
+        params["tomorrow_to"] = tw_tomorrow.ends_at
+        filters.append("s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to")
+    if tw_weekend:
+        params["weekend_from"] = tw_weekend.starts_at
+        params["weekend_to"] = tw_weekend.ends_at
+        filters.append("s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to")
+    today_filter = filters[0] if len(filters) > 0 else "false"
+    tomorrow_filter = filters[1] if len(filters) > 1 else "false"
+    weekend_filter = filters[2] if len(filters) > 2 else "false"
+    row = (
+        await session.execute(
+            text(f"""
+                SELECT
+                    COUNT(*) FILTER (WHERE {today_filter})::int AS today,
+                    COUNT(*) FILTER (WHERE {tomorrow_filter})::int AS tomorrow,
+                    COUNT(*) FILTER (WHERE {weekend_filter})::int AS weekend,
+                    COUNT(*)::int AS all
+                FROM ice_sessions s
+                JOIN arenas a ON a.id = s.arena_id
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE a.city_id = :city_id
+                  AND {PUBLIC_ARENA_VISIBLE_SQL}
+                  AND {_NOT_HOCKEY_CENTER_SQL}
+                  AND {_CURRENT_SESSION_SQL}
+                """),
+            params,
+        )
+    ).mappings().one()
+    return {
+        "today": int(row["today"] or 0),
+        "tomorrow": int(row["tomorrow"] or 0),
+        "weekend": int(row["weekend"] or 0),
+        "all": int(row["all"] or 0),
+    }
+
+
 async def city_hockey_center_count(session: AsyncSession, *, city_id: int) -> int:
     """Видимые хоккейные центры города. Это места, не сеансы ОХМ."""
     from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params

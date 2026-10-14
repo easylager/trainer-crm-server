@@ -1256,7 +1256,7 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
         f'<a href="{href}"' + (' aria-current="true"' if key == when_key else "") + f">{_esc(label)}</a>"
         for key, label, href in items
     )
-    nav = f'<nav class="b-when" aria-label="Когда">{links}</nav>'
+    nav = f'<nav class="b-when vt-when-strip" aria-label="Когда">{links}</nav>'
     if view.get("show_day_picker"):
         days = "".join(
             f'<a class="b-day" href="{_esc(item["href"])}"><span>{_esc(item["label"])}</span></a>'
