@@ -102,8 +102,13 @@ async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_
 
     older_block = _url_block(xml, older["path"])
     newer_block = _url_block(xml, newer["path"])
-    assert f"<lastmod>{_sitemap_lastmod(session_stamp)}</lastmod>" in older_block
-    assert f"<lastmod>{_sitemap_lastmod(profile_stamp)}</lastmod>" in newer_block
+    # Обе метки — в будущем (сеанс через 3 дня, профиль в 2099): lastmod не позже «сейчас».
+    assert session_stamp > datetime.now(timezone.utc) and profile_stamp > datetime.now(timezone.utc)
+    for block in (older_block, newer_block):
+        found = re.search(r"<lastmod>([^<]+)</lastmod>", block)
+        assert found
+        stamp = datetime.strptime(found.group(1), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        assert stamp <= datetime.now(timezone.utc)
     city_block = _url_block(xml, f"/c/{city_slug(older['city_name'])}")
     assert "<lastmod>" in city_block
     # TASK-266: старый адрес «Лёд сегодня» — 301 на список, в sitemap его нет.
@@ -301,3 +306,10 @@ async def test_ambiguous_bare_slug_is_404_on_every_public_route(app_use_test_db,
         for suffix in ("", "/sessions", "/trainers", "/share"):
             resp = await client.get(f"/api/public/arenas/{slug}{suffix}")
             assert resp.status_code == 404, (suffix, resp.status_code)
+
+
+def test_sitemap_lastmod_never_points_to_the_future() -> None:
+    now = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
+    assert _sitemap_lastmod(datetime(2026, 10, 27, 16, 0, tzinfo=timezone.utc), now=now) == "2026-10-14T12:00:00Z"
+    assert _sitemap_lastmod(datetime(2026, 10, 1, 9, 30, tzinfo=timezone.utc), now=now) == "2026-10-01T09:30:00Z"
+    assert _sitemap_lastmod(None, now=now) is None

@@ -322,8 +322,8 @@ async def _image(
     return Response(content=png, media_type="image/png", headers=cache)
 
 
-@router.get("/p/{city_ref}/{slug}/og.png")
-@router.get("/p/{city_ref}/{slug}/session/{session_id}/og.png")
+@router.api_route("/p/{city_ref}/{slug}/og.png", methods=["GET", "HEAD"])
+@router.api_route("/p/{city_ref}/{slug}/session/{session_id}/og.png", methods=["GET", "HEAD"])
 async def place_og_image(
     city_ref: str,
     slug: str,
@@ -337,8 +337,8 @@ async def place_og_image(
     return await _image(session, city_ref, slug, sid, i, story=False)
 
 
-@router.get("/p/{city_ref}/{slug}/story.png")
-@router.get("/p/{city_ref}/{slug}/session/{session_id}/story.png")
+@router.api_route("/p/{city_ref}/{slug}/story.png", methods=["GET", "HEAD"])
+@router.api_route("/p/{city_ref}/{slug}/session/{session_id}/story.png", methods=["GET", "HEAD"])
 async def place_story_image(
     city_ref: str,
     slug: str,
@@ -382,10 +382,13 @@ def _aware(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _sitemap_lastmod(value: datetime | None) -> str | None:
+def _sitemap_lastmod(value: datetime | None, *, now: datetime | None = None) -> str | None:
+    """Дата правки не бывает в будущем: самый поздний сеанс ещё не наступил, а
+    Google перестаёт верить lastmod всего файла, увидев дату из будущего."""
     if value is None:
         return None
-    return _aware(value).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = min(_aware(value), now or datetime.now(timezone.utc))
+    return stamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _newer(left: datetime | None, right: datetime | None) -> datetime | None:
@@ -445,10 +448,16 @@ async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
 @router.get("/robots.txt")
 async def robots() -> Response:
     # /webapp — оболочки мини-аппа без серверного контента; индексировать нечего.
+    # Но публичные страницы берут оттуда CSS/JS, а фото — из /api/public/photos/:
+    # без них Google рисует страницу без стилей и не видит фото катков. Правило
+    # с более длинным префиксом побеждает (так считают и Google, и Яндекс).
     content = "\n".join(
         [
             "User-agent: *",
             "Allow: /",
+            "Allow: /api/public/photos/",
+            "Allow: /webapp/*.css",
+            "Allow: /webapp/*.js",
             "Disallow: /api/",
             "Disallow: /webapp/",
             f"Sitemap: {_base()}/sitemap.xml",
@@ -691,7 +700,7 @@ async def _selection_image(
     return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
 
 
-@router.get("/c/{city_ref}/og.png")
+@router.api_route("/c/{city_ref}/og.png", methods=["GET", "HEAD"])
 async def selection_og_image(
     city_ref: str,
     t: str | None = None,
@@ -704,7 +713,7 @@ async def selection_og_image(
     return await _selection_image(session, city_ref, t, w, story=False, kind=kind, svc=svc, seg=seg)
 
 
-@router.get("/c/{city_ref}/story.png")
+@router.api_route("/c/{city_ref}/story.png", methods=["GET", "HEAD"])
 async def selection_story_image(
     city_ref: str,
     t: str | None = None,

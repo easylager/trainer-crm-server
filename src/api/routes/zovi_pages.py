@@ -101,7 +101,7 @@ async def zovi_status_page(code: str, key: str, request: Request, session: Async
     return HTMLResponse(html, headers=_PAGE_HEADERS)
 
 
-@router.get("/zovi/{code}/og.png")
+@router.api_route("/zovi/{code}/og.png", methods=["GET", "HEAD"])
 async def zovi_og_image(code: str, session: AsyncSession = Depends(get_session)) -> Response:
     invite = await _read(session, code)
     if invite is None:
@@ -110,7 +110,7 @@ async def zovi_og_image(code: str, session: AsyncSession = Depends(get_session))
     return Response(content=png, media_type="image/png", headers=_IMAGE_HEADERS)
 
 
-@router.get("/zovi/{code}/ticket.png")
+@router.api_route("/zovi/{code}/ticket.png", methods=["GET", "HEAD"])
 async def zovi_ticket_image(
     code: str,
     t: str | None = Query(None, description="попыток «нет», 0–10"),

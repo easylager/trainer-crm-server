@@ -43,6 +43,7 @@ from src.application.landing_manifest import inject_landing_html, polish_trainer
 from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.api.middleware.maintenance import MaintenanceModeMiddleware
+from src.api.middleware.security_headers import SecurityHeadersMiddleware
 from src.api.middleware.trainer_webapp_benchmark import TrainerWebappBenchmarkMiddleware
 from src.shared.catalog_entry import catalog_browse_redirect
 from src.shared.outage import (
@@ -97,6 +98,8 @@ app.add_middleware(
 # Epic D: gzip JSON/HTML/CSS/JS when client sends Accept-Encoding: gzip (nginx can add brotli in front).
 # Last added = outermost on the stack — compresses the final response body.
 app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
+# HSTS, nosniff, Referrer-Policy на всё; frame-ancestors на HTML сайта (не /webapp/).
+app.add_middleware(SecurityHeadersMiddleware)
 # Outermost: full wall time for trainer Mini App API (after gzip/CORS/body/rate-limit stack).
 app.add_middleware(TrainerWebappBenchmarkMiddleware)
 

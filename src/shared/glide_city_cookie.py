@@ -32,4 +32,6 @@ def apply_glide_city_cookie(response: Response, *, slug: str) -> None:
         path="/",
         samesite="lax",
         httponly=True,
+        # Сайт только по https (HSTS). localhost браузеры считают безопасным — dev не ломается.
+        secure=True,
     )

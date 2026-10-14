@@ -923,7 +923,9 @@ def _nojs_messenger_row(share: Mapping[str, str]) -> str:
         for label, href, blank in links
     )
     row += f'<button type="button" data-copy="{_esc(full)}">Скопировать</button>'
-    return f'<div class="place-share-fallback">{row}</div>'
+    # <noscript>: с JS браузер блок не рисует вовсе. Раньше он стоял ячейкой сетки
+    # билетов, пока отложенный place-share.js не скрывал его, — и билеты прыгали (CLS).
+    return f'<noscript><div class="place-share-fallback">{row}</div></noscript>'
 
 
 def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool, telegram_url: str | None = None) -> str:
