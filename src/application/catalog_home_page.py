@@ -671,8 +671,10 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
         parts.append(
             f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city" aria-label="{_esc(pt["name"])}">'
             f'<circle class="home-map__tap" cx="{x:.1f}" cy="{y:.1f}" r="{tap:.1f}" fill="transparent"/>'
+            f'<g class="home-map__vis">'
             f"{ring}"
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "#4a6273"}"/></a>'
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "#4a6273"}"/>'
+            f"</g></a>"
         )
     parts.append("</g>")
     parts.append('<g font-size="20" font-weight="600" fill="var(--g-on-photo)" pointer-events="none">')

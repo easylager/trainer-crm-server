@@ -424,6 +424,35 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-card2 .b-chip--hl { background: var(--g-accent-wash); }
 .b-toggle--off { color: #8396a4 !important; background: transparent; }
 
+/* ── Отклик нажатия (публичка): только transform, без layout ─────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .b-city,
+  .b-when a,
+  a.b-tile,
+  a.b-row,
+  a.b-slot,
+  a.b-table__row,
+  a.b-ticket,
+  a.b-card,
+  a.b-card2__thumb,
+  .home-map__vis {
+    transition: transform .1s ease;
+  }
+  .b-city:active,
+  .b-when a:active,
+  a.b-tile:active,
+  a.b-row:active,
+  a.b-slot:active,
+  a.b-table__row:active,
+  a.b-ticket:active,
+  a.b-card:active,
+  a.b-card2__thumb:active,
+  .home-map__city:active .home-map__vis {
+    transform: scale(0.98);
+  }
+  .home-map__vis { transform-box: fill-box; transform-origin: center; }
+}
+
 /* ── «Открыть в Telegram» (TASK-278, вариант A) ──────────────────────────
    Одна синяя кнопка внизу каждого экрана и тихая строка про карту под ней.
    Внутри Telegram (оболочка Mini App ставит data-client-shell) она не нужна. */
