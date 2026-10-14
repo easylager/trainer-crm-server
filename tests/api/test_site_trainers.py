@@ -13,6 +13,7 @@ from src.api.app import app
 from src.application.ice_city_day import city_slug
 from src.application.place_links import parse_trainer_deep_link, trainer_start_param
 from src.application.site_trainers import trainer_initial, trainer_line
+from src.application.trainer_min_price import load_pass_min_per_session, trainer_min_session_price
 from tests.api.test_public_arenas import _insert_arena
 from tests.api.test_public_catalog_integration import _create_active_trainer_via_api
 from tests.api.test_public_place_page import _place
@@ -32,16 +33,35 @@ def test_trainer_start_param_round_trip() -> None:
     assert parse_trainer_deep_link("arena_7") is None
 
 
-def test_trainer_line_first_service_and_lowest_price() -> None:
+def test_min_session_price_takes_cheapest_of_pass_tiers_group_and_single() -> None:
+    services = [
+        {
+            "service_name": "Обучение катанию «с нуля»",
+            "price_cents": 5500,
+            "currency_code": "BYN",
+            "group_price_cents": 2500,
+            "price_tiers": [{"tier_kind": "child", "price_cents": 4500}, {"tier_kind": "two_adults", "price_cents": 7000}],
+        }
+    ]
+    # Абонемент дешевле всего → он.
+    assert trainer_min_session_price({"services": services}, pass_min_cents=2000) == (2000, "BYN")
+    # Групповое дешевле абонемента и тарифов → групповое.
+    assert trainer_min_session_price({"services": services}, pass_min_cents=3812) == (2500, "BYN")
+    services_no_group = [{**services[0], "group_price_cents": None}]
+    # Детский тариф дешевле разовой цены.
+    assert trainer_min_session_price({"services": services_no_group}, pass_min_cents=None) == (4500, "BYN")
+    assert trainer_min_session_price({"services": [{"service_name": "ОФП", "price_cents": None}]}, pass_min_cents=None) is None
+    assert trainer_min_session_price({"services": [{"price_cents": 150000, "currency_code": "RUB"}]}, pass_min_cents=None) == (150000, "RUB")
+
+
+def test_trainer_line_shows_cheapest_session() -> None:
     trainer = {
-        "services": [
-            {"service_name": "Обучение катанию «с нуля»", "price_cents": 5500, "currency_code": "BYN"},
-            {"service_name": "ОФП", "price_cents": 4000, "currency_code": "BYN"},
-            {"service_name": "Без цены", "price_cents": None},
-        ]
+        "services": [{"service_name": "Обучение катанию «с нуля»", "price_cents": 5500}],
+        "min_session_price_cents": 4187,
+        "min_session_price_currency": "BYN",
     }
-    assert trainer_line(trainer) == "Обучение катанию «с нуля» · от 40 BYN"
-    assert trainer_line({"services": [{"service_name": "Фигурное катание", "price_cents": None}]}) == "Фигурное катание"
+    assert trainer_line(trainer) == "Обучение катанию «с нуля» · от\u00a041,87\u00a0BYN за\u00a0занятие"
+    assert trainer_line({"services": [{"service_name": "Фигурное катание"}], "min_session_price_cents": None}) == "Фигурное катание"
     assert trainer_line({}) == ""
 
 
@@ -76,6 +96,13 @@ async def _trainer_on(db_session, client: AsyncClient, place: dict, *, first_nam
         text("UPDATE trainer_services SET price_cents = 5500 WHERE trainer_id = :t"), {"t": tid}
     )
     await db_session.execute(
+        text(
+            "INSERT INTO trainer_pass_products (trainer_id, name, sessions_total, price_cents, is_active) "
+            "VALUES (:t, 'Детский 16 занятий', 16, 67000, true), (:t, 'Старый', 4, 1000, false)"
+        ),
+        {"t": tid},
+    )
+    await db_session.execute(
         text("INSERT INTO trainer_photos (trainer_id, file_key, file_key_list, sort_order) VALUES (:t, :fk, :fl, 0)"),
         {"t": tid, "fk": f"trainers/{tid}/a.jpg", "fl": f"trainers/{tid}/a_list.jpg"},
     )
@@ -96,7 +123,8 @@ async def test_place_page_lists_trainers_with_telegram_link_to_their_card(app_us
     body = section.group(1)
     assert f"{name} Тренерова" in body
     assert f"trainers/{tid}/a_list.jpg" in body
-    assert "от 55 BYN" in body
+    # 670 BYN / 16 = 41,875 → вниз до 41,87; неактивный абонемент (2,50 за занятие) не считается.
+    assert "от\u00a041,87\u00a0BYN за\u00a0занятие" in body
     assert f"startapp=trainer_{tid}_a_{place['arena_id']}" in body
     # Список заменяет счётчик «Здесь работает 1 тренер» в «На месте».
     assert "Здесь работает" not in html
@@ -127,3 +155,23 @@ async def test_city_page_shows_trainers_and_route_row_points_to_them(app_use_tes
     # Из города — карточка тренера без привязки к катку.
     assert f"startapp=trainer_{tid}&" in section.group(1)
     assert 'href="#trainers"' in html
+
+
+@pytest.mark.asyncio
+async def test_pass_min_per_session_floors_and_skips_inactive(app_use_test_db, db_session) -> None:
+    place = await _place(db_session)
+    async with _client() as client:
+        tid = await _trainer_on(db_session, client, place, first_name=f"Вера{uuid.uuid4().hex[:4]}")
+    assert await load_pass_min_per_session(db_session, [tid]) == {tid: 4187}
+    assert await load_pass_min_per_session(db_session, []) == {}
+
+
+@pytest.mark.asyncio
+async def test_arena_trainers_api_carries_the_same_price(app_use_test_db, db_session) -> None:
+    place = await _place(db_session)
+    async with _client() as client:
+        tid = await _trainer_on(db_session, client, place, first_name=f"Гена{uuid.uuid4().hex[:4]}")
+        data = (await client.get(f"/api/public/arenas/{place['arena_id']}/trainers")).json()
+    item = next(t for t in data["items"] if t["id"] == tid)
+    assert item["min_session_price_cents"] == 4187
+    assert item["min_session_price_currency"] == "BYN"

@@ -167,3 +167,20 @@ describe('центр (коллектив): тарифы — в валюте вл
     assert.equal(fns.centerTariffCurrency(null), 'BYN');
   });
 });
+
+describe('TASK-265: «от» — самое дешёвое занятие с сервера', () => {
+  it('берёт min_session_price_cents, запятая и «за занятие», имя услуги из service_name', () => {
+    const { trainerSubtitle } = loadArenaCardModel();
+    const line = trainerSubtitle({
+      services: [{ service_name: 'Обучение катанию «с нуля»', price_cents: 5500, currency_code: 'BYN' }],
+      min_session_price_cents: 4187,
+      min_session_price_currency: 'BYN',
+    });
+    assert.equal(line, 'Обучение катанию «с нуля» · от 41,87 BYN за занятие');
+  });
+
+  it('без поля — прежнее поведение', () => {
+    const { trainerSubtitle } = loadArenaCardModel();
+    assert.equal(trainerSubtitle({ services: [{ service_name: 'ОФП', price_cents: 4000 }] }), 'ОФП · от 40 BYN');
+  });
+});
