@@ -45,12 +45,6 @@ from src.application.ice_city_day import city_slug, format_price_minor, plural_r
 from src.application.ice_time_windows import WHEN_KEYS
 from src.application.place_links import catalog_start_param, join_public_origin, place_path, place_query
 from src.application.place_page import absolute_day_label
-from src.application.schedule_staleness import (
-    LEVEL_STALE,
-    load_arena_freshness,
-    stale_note,
-    staleness_level,
-)
 from src.shared.catalog_sharpening import SHARPENING_AMENITY_KEYS
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -262,24 +256,6 @@ def _selection_session_totals(counts: Mapping[int, int]) -> tuple[int, int]:
     return sessions, places
 
 
-async def _apply_schedule_freshness(
-    session: AsyncSession,
-    items: list[Mapping[str, Any]],
-    slots: dict[int, list[dict[str, Any]]],
-    now: datetime,
-) -> dict[int, str]:
-    """Пометки свежести (TASK-180) для мест с сеансами. Сеансы не снимаем ни на каком уровне."""
-    stale_notes: dict[int, str] = {}
-    if not items:
-        return stale_notes
-    fresh = await load_arena_freshness(session, [int(i["id"]) for i in items], now=now)
-    for item in items:
-        aid = int(item["id"])
-        if staleness_level(fresh.get(aid)) == LEVEL_STALE and slots.get(aid):
-            stale_notes[aid] = stale_note(fresh.get(aid), now=now)
-    return stale_notes
-
-
 async def load_selection_view(
     session: AsyncSession,
     *,
@@ -403,10 +379,6 @@ async def load_selection_view(
         if skating
         else {}
     )
-    # TASK-180: свежесть на момент ``now`` — см. ``_apply_schedule_freshness``.
-    stale_notes: dict[int, str] = {}
-    if skating and items:
-        stale_notes = await _apply_schedule_freshness(session, items, slots, now)
     # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
     window_empty = False
     if service_mode or centers:
@@ -429,7 +401,6 @@ async def load_selection_view(
                 now,
                 session_sql=session_sql,
             )
-            stale_notes = await _apply_schedule_freshness(session, items, slots, now)
             hits = [i for i in items if slots.get(int(i["id"]))]
         shown = hits or items
     else:
@@ -440,7 +411,6 @@ async def load_selection_view(
             slots = await _window_slots(
                 session, [int(i["id"]) for i in items], None, now, session_sql=session_sql
             )
-            stale_notes = await _apply_schedule_freshness(session, items, slots, now)
             nearest = [i for i in items if slots.get(int(i["id"]))]
             # Сначала места с ближайшим льдом — по времени первого сеанса.
             nearest.sort(
@@ -485,7 +455,6 @@ async def load_selection_view(
         "window_empty": window_empty,
         "items": shown_page,
         "slots": slots,
-        "stale_notes": stale_notes,
         "skating": skating,
         "session_count": session_total,
         # Места с сеансом в окне — по всей выборке: это число обещает заголовок.
@@ -846,7 +815,6 @@ def _place_html(
     *,
     city_name: str,
     slots: list[dict[str, Any]],
-    stale: str = "",
     more_anchor: str = "schedule",
     service_mode: bool = False,
     service_highlight_keys: frozenset[str] | None = None,
@@ -885,21 +853,19 @@ def _place_html(
         chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
     raw_line = str(item.get("live_line") or "").strip()
     line = "" if chips or not raw_line else f'<p class="muted">{_esc(raw_line)}</p>'
-    # TASK-180: > 6 ч — сеансы показываем, но над ними спокойная строка «могло измениться».
-    stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)
     name = _esc(format_public_name(str(item.get("name") or "")))
     name_html = f'<a href="{_esc(href)}">{name}</a>' if href else name
     if photo and href:
         media = (
             f'<a class="pick__media" href="{_esc(href)}" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
-            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" width="88" height="72" />'
             f"</a>"
         )
     elif photo:
         media = (
             f'<span class="pick__media" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
-            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" width="88" height="72" />'
             f"</span>"
         )
     else:
@@ -959,7 +925,7 @@ def _place_html(
         + f'<h2 class="pick__name">{name_html}</h2>'
         + (f'<p class="pick__where">{_esc(where)}</p>' if where else "")
         + "</div></div>"
-        + (stale_html + f'<div class="slots">{chips}</div>' if chips else line)
+        + (f'<div class="slots">{chips}</div>' if chips else line)
         + "</section>"
     )
 
@@ -981,7 +947,7 @@ def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
     if photo:
         media = (
             f'<span class="pick__media" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
-            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" width="88" height="72" />'
             f"</span>"
         )
     else:
@@ -1114,7 +1080,6 @@ def render_selection_page(
         if view.get("window_empty")
         else ""
     )
-    stale_notes = view.get("stale_notes") or {}
     service_mode = bool(view.get("svc"))
     centers_mode = view.get("seg") == SEG_CENTERS
     highlight = frozenset(view.get("service_filter_keys") or ())

@@ -56,12 +56,7 @@ from src.shared.arena_schedule_mode import (
     normalize_schedule_mode,
     season_closed_user_line,
 )
-from src.application.schedule_staleness import (
-    LEVEL_FRESH,
-    load_arena_freshness,
-    stale_note,
-    staleness_level,
-)
+from src.application.schedule_staleness import LEVEL_FRESH, load_arena_freshness, staleness_level
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
 from src.shared.public_display import (
@@ -259,22 +254,6 @@ def starts_in_label(slot: Mapping[str, Any], *, now: datetime) -> str:
     return f"Начнётся через {hours} ч {rest} мин"
 
 
-def ago_label(moment: datetime | None, *, now: datetime) -> str:
-    """«обновлено 3 часа назад» без ложной точности."""
-    if moment is None:
-        return ""
-    seconds = max(0, int((now - moment).total_seconds()))
-    if seconds < 3600:
-        return "обновлено меньше часа назад"
-    hours = seconds // 3600
-    if hours < 24:
-        return f"обновлено {hours} {plural_ru(hours, 'час', 'часа', 'часов')} назад"
-    days = hours // 24
-    if days == 1:
-        return "обновлено вчера"
-    return f"обновлено {days} {plural_ru(days, 'день', 'дня', 'дней')} назад"
-
-
 def _hhmm_in_interval(hhmm: str, open_: str, close: str) -> bool:
     if close > open_:
         return open_ <= hhmm < close
@@ -341,12 +320,8 @@ async def load_place_view(
             date_from=today,
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
-        # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API). Сеансы не
-        # снимаем ни на каком уровне — решение владельца (TASK-243).
         fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
         level = staleness_level(fresh)
-        if lookup_days:
-            schedule_note = stale_note(fresh, now=now)
 
     focus = None
     focus_missing = False

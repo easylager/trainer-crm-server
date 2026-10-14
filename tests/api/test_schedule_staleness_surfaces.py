@@ -133,7 +133,7 @@ async def test_ice_city_day_shows_very_stale_like_any_other(app_use_test_db, db_
     # Все четыре катка в списке дня и в счёте; пометок нет.
     assert set(by_id) == {ids["fresh"], ids["stale"], ids["very"], ids["manual"]}
     assert day["session_count"] == 4
-    assert all(a["stale_note"] == "" for a in by_id.values())
+    assert all("stale_note" not in a for a in by_id.values())
     # Флаг для внутреннего использования остаётся: 7 ч — stale (very — свой уровень).
     assert by_id[ids["stale"]]["stale"] is True
     assert "unconfirmed" not in day
