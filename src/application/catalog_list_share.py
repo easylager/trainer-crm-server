@@ -129,7 +129,10 @@ def catalog_list_share_tail(*, scripts: bool, css: bool = False) -> dict[str, st
     scripts_html = catalog_list_share_scripts_html() if scripts else ""
     if css and not scripts:
         scripts_html = catalog_list_share_css_html()
+    from src.application.style_b import telegram_dock_script_html
+
     return {
         "__PLACE_SHARE_BAR__": "",
         "__PLACE_SHARE_SCRIPTS__": scripts_html,
+        "__TG_DOCK_SCRIPT__": telegram_dock_script_html(),
     }

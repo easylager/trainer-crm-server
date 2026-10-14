@@ -29,6 +29,7 @@ TOKENS_VERSION = _file_version("static/shared/glide-tokens.css")
 STYLE_VERSION = _file_version("static/share/style-b.css")
 # Отдельной ссылкой, не @import из style-b.css: импорт без ?v= шёл с no-store и ещё одним кругом до первой отрисовки.
 COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
+DOCK_SCRIPT_VERSION = _file_version("static/share/tg-dock.js")
 
 
 def esc(value: Any) -> str:
@@ -358,10 +359,16 @@ def city_map_hint(places: list[Mapping[str, Any]]) -> str:
 
 
 def telegram_dock_html(href: str | None, *, hint: str = "") -> str:
-    """Плашка «Открыть в Telegram» внизу экрана (вариант A, TASK-278). Внутри Telegram её прячет CSS."""
+    """Плашка «Открыть в Telegram» (TASK-278): в потоке, после прокрутки — пилюля (tg-dock.js)."""
     if not href:
         return ""
     return (
         '<nav class="b-tgdock tg-out" aria-label="Telegram"><div class="b-tgdock__inner">'
-        f"{telegram_button_html(href)}{telegram_hint_html(hint)}</div></nav>"
+        f"{telegram_button_html(href, short=True)}{telegram_hint_html(hint)}</div></nav>"
     )
+
+
+def telegram_dock_script_html() -> str:
+    """Скрипт плашки Telegram — только вне Mini App."""
+    v = DOCK_SCRIPT_VERSION
+    return f'<script defer src="/static/share/tg-dock.js?v={esc(v)}"></script>'

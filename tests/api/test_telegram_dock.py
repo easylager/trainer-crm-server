@@ -80,6 +80,7 @@ async def test_home_and_list_pages_have_the_dock(app_use_test_db, db_session) ->
     async with _client() as client:
         home = (await client.get("/")).text
         listing = (await client.get(f"/c/{city_slug(name)}", params={"t": "ice"})).text
+    assert "tg-dock.js" in home
     assert "там карта всех катков" in _dock(home)
     assert "там все катки города на карте" in _dock(listing)
     assert "b-share__bot" not in listing
