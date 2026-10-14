@@ -216,6 +216,11 @@
   var dockEl = document.getElementById('placeShareDock');
   if (dockEl) dockEl.hidden = false;
   if (btn) {
+    btn.hidden = false;
+    // Рядом с «Позвать» Telegram сжимается до короткой кнопки (TASK-278).
+    if (btn.parentNode && btn.parentNode.classList) btn.parentNode.classList.add('has-invite');
+  }
+  if (btn) {
     btn.addEventListener('click', function () {
       openShare();
     });

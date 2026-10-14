@@ -571,6 +571,10 @@ def render_city_hub_page(
     has_share_pick = int(view.get("rink_count") or 0) > 0
     need_share_js = bool(view.get("upcoming")) or has_share_pick
     share_tail = catalog_list_share_tail(scripts=need_share_js, css=has_share_pick)
+    # TASK-278: «Открыть в Telegram» — плашкой внизу экрана; кнопки в блоке «Поделиться» больше нет.
+    from src.application.style_b import city_map_hint, telegram_dock_html
+
+    share_tail["__PLACE_SHARE_BAR__"] = telegram_dock_html(cta_url, hint=city_map_hint(list(view.get("places") or [])))
     elements = []
     for p in view.get("places") or []:
         if not p.get("slug"):
@@ -1077,7 +1081,7 @@ def _b_body(
     if int(view.get("rink_count") or 0) > 0:
         share_pick = catalog_selection_share_button(endpoint=city_hub_share_endpoint(view))
     share_block = share_pick + share_html(
-        share, telegram_url=cta_url, story_image_url=story_image_url, telegram_link_only=True
+        share, telegram_url=None, story_image_url=story_image_url, telegram_link_only=True
     )
     if variant == VARIANT_ONE and rinks:
         rink = rinks[0]

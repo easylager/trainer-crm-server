@@ -1170,8 +1170,13 @@ def render_selection_page(
         + f'<section class="b-sec b-cards">{places}</section>'
         + _b_pager(view, city_name=city_name)
         + share_pick
-        + share_html(share, telegram_url=cta_url, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
+        + share_html(share, telegram_url=None, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
     )
+    # TASK-278: «Открыть в Telegram» — плашкой внизу экрана, как на всех страницах.
+    from src.application.style_b import telegram_dock_html
+
+    share_tail = catalog_list_share_tail(scripts=need_share_js, css=bool(share_pick))
+    share_tail["__PLACE_SHARE_BAR__"] = telegram_dock_html(cta_url, hint=t("tg.map_city"))
     elements = []
     for item in view["items"]:
         slug = str(item.get("slug") or "").strip()
@@ -1225,7 +1230,7 @@ def render_selection_page(
             "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": city_link,
             "__BODY__": body,
-            **catalog_list_share_tail(scripts=need_share_js, css=bool(share_pick)),
+            **share_tail,
         },
     )
 

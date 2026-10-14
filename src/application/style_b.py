@@ -303,3 +303,57 @@ def trainer_rows_html(trainers: list[Mapping[str, Any]], *, href_for: Any) -> st
     if not rows:
         return ""
     return f'<div class="b-list">{"".join(rows)}</div>'
+
+
+_TG_PLANE_SVG = (
+    '<svg class="b-tgbtn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M21.5 4.5L2.5 11.8l6.2 2.1 2.2 6.4 3.3-4.1 5.4 4z"/><path d="M8.7 13.9l12.8-9.4"/></svg>'
+)
+_TG_MAP_SVG = (
+    '<svg class="b-tghint__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>'
+)
+
+
+def telegram_button_html(href: str, *, short: bool = False) -> str:
+    """Синяя «Открыть в Telegram» (TASK-278). ``short`` — ещё и «Telegram» для узкой кнопки рядом с «Позвать»."""
+    label = f'<span class="b-tgbtn__long">{esc(t("tg.open"))}</span>'
+    if short:
+        label += f'<span class="b-tgbtn__short">{esc(t("tg.open_short"))}</span>'
+    # aria-label: на узком экране рядом с «Позвать» остаётся только самолётик.
+    return f'<a class="b-tgbtn tg-out" href="{esc(href)}" aria-label="{esc(t("tg.open"))}">{_TG_PLANE_SVG}{label}</a>'
+
+
+def telegram_hint_html(text: str) -> str:
+    """Тихая строка под кнопкой: что ждёт в Telegram (карта). Пустая подпись — строки нет."""
+    if not text:
+        return ""
+    return f'<span class="b-tghint tg-out">{_TG_MAP_SVG}{esc(text)}</span>'
+
+
+def city_map_hint(places: list[Mapping[str, Any]]) -> str:
+    """«там все 10 катков на карте» — только если на карте действительно все катки города."""
+    from src.application.ice_city_day import plural_ru
+
+    rinks = [p for p in places if str(p.get("venue_type") or "ice") in ("ice", "outdoor")]
+    if not rinks:
+        return t("tg.map_all")
+    on_map = [p for p in rinks if p.get("latitude") is not None and p.get("longitude") is not None]
+    if len(on_map) != len(rinks):
+        return t("tg.map_all")
+    n = len(rinks)
+    if n == 1:
+        return t("tg.map_city_one")
+    return t("tg.map_city_n", n=n, word=plural_ru(n, "каток", "катка", "катков"))
+
+
+def telegram_dock_html(href: str | None, *, hint: str = "") -> str:
+    """Плашка «Открыть в Telegram» внизу экрана (вариант A, TASK-278). Внутри Telegram её прячет CSS."""
+    if not href:
+        return ""
+    return (
+        '<nav class="b-tgdock tg-out" aria-label="Telegram"><div class="b-tgdock__inner">'
+        f"{telegram_button_html(href)}{telegram_hint_html(hint)}</div></nav>"
+    )

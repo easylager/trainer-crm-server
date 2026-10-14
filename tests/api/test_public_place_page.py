@@ -518,10 +518,14 @@ async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db
     assert links_row
     assert "Билеты — на сайте катка" in links_row.group(1)
     assert ">Открытка</a>" in links_row.group(1)
-    # Без JS кнопке нечего открыть — док скрыт до скрипта, ссылки мессенджеров ниже.
-    assert 'id="placeShareDock" hidden' in html
+    # TASK-278: док виден и без JS — в нём «Открыть в Telegram»; «Позвать» ждёт скрипт
+    # (без JS ей нечего открыть — ссылки мессенджеров под выбранным сеансом).
+    assert 'id="placeShareDock" hidden' not in html
+    assert 'id="placeShareBtn" hidden' in html
     dock = html.split('id="placeShareDock"', 1)[1].split("</div></div>", 1)[0]
-    assert "В Telegram" not in dock and "place-share-dock__zovi" not in dock
+    assert 'class="b-tgbtn tg-out"' in dock and "open-telegram?startapp=arena_" in dock
+    assert "Открыть в Telegram" in dock and "в Telegram — карта всех катков" in html
+    assert "place-share-dock__zovi" not in dock
     assert "place-share-fallback" in html and "viber://forward?text=" in html
     assert "Позвать друзей" not in html and "b-invite" not in html and 'class="b-share"' not in html
     assert f"{place['path']}?s={sid}" in html
@@ -529,7 +533,7 @@ async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db
 
 
 def _share_button(html: str) -> str:
-    match = re.search(r'id="placeShareBtn">([^<]+)', html)
+    match = re.search(r'id="placeShareBtn"[^>]*>([^<]+)', html)
     assert match, html
     return match.group(1)
 
