@@ -226,14 +226,6 @@
     return '';
   }
 
-  function hasNoPublishedGrid(card) {
-    card = card || {};
-    if (normalizeMode(card.schedule_mode) === MODES.phone) return true;
-    var fresh = card.freshness;
-    if (!fresh || typeof fresh !== 'object') return false;
-    return !fresh.schedule_auto;
-  }
-
   return {
     MODES: MODES,
     PHONE_LINE: PHONE_LINE,
@@ -246,6 +238,5 @@
     phoneToTelHref: phoneToTelHref,
     isIceTodayEligible: isIceTodayEligible,
     liveKindForCard: liveKindForCard,
-    hasNoPublishedGrid: hasNoPublishedGrid,
   };
 });

@@ -54,7 +54,6 @@ from src.shared.arena_schedule_mode import (
     SCHEDULE_MODE_PHONE,
     SCHEDULE_MODE_SEASON_CLOSED,
     normalize_schedule_mode,
-    schedule_has_no_published_grid,
     season_closed_user_line,
 )
 from src.application.schedule_staleness import (
@@ -1203,20 +1202,26 @@ def _b_schedule_site_link(card: Mapping[str, Any]) -> str:
     )
 
 
+def _b_schedule_hours_block(card: Mapping[str, Any]) -> str:
+    rows = _b_hours_rows(card)
+    if not rows:
+        return ""
+    bits = [
+        f'<div class="b-info__row"><span class="b-info__key">{_esc(key)}</span>'
+        f'<span class="b-info__val">{_esc(value)}</span></div>'
+        for key, value in rows
+    ]
+    return f'<div class="b-info b-info--schedule">{"".join(bits)}</div>'
+
+
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
     from src.application.style_b import section
 
     call = _b_call(card, links)
+    hours = _b_schedule_hours_block(card)
+    if call or hours:
+        return section(title, f"{call}{hours}", klass="b-sec--place", sec_id="schedule")
     site_link = _b_schedule_site_link(card)
-    if schedule_has_no_published_grid(card):
-        if not call and not site_link:
-            return ""
-        body = f'<p class="b-text">{_esc(t("place.schedule_not_published"))}</p>'
-        body += call or site_link
-        return section(title, body, klass="b-sec--place", sec_id="schedule")
-    if call:
-        body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
-        return section(title, body, klass="b-sec--place", sec_id="schedule")
     if site_link:
         body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{site_link}'
         return section(title, body, klass="b-sec--place", sec_id="schedule")

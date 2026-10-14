@@ -142,14 +142,3 @@ def schedule_mode_public_fields(row: Mapping[str, Any]) -> dict[str, Any]:
 
 def is_schedule_mode_ice_today_eligible(mode: str) -> bool:
     return normalize_schedule_mode(mode) != SCHEDULE_MODE_SEASON_CLOSED
-
-
-def schedule_has_no_published_grid(card: Mapping[str, Any]) -> bool:
-    """Нет сетки ни в базе, ни на парсируемом сайте (phone / skip job)."""
-    mode = normalize_schedule_mode(card.get("schedule_mode"))
-    if mode == SCHEDULE_MODE_PHONE:
-        return True
-    freshness = card.get("freshness")
-    if not isinstance(freshness, Mapping):
-        return False
-    return not bool(freshness.get("schedule_auto"))

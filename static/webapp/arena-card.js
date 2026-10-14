@@ -1087,9 +1087,45 @@
     return html;
   }
 
+  function renderScheduleHoursWeek(week) {
+    if (!week || !week.rows || !week.rows.length) return '';
+    var status = week.status ? '<em class="arena-info__open">' + esc(week.status) + '</em>' : '';
+    if (week.uniform) {
+      return (
+        '<div class="arena-info arena-info--schedule">' +
+        '<small>Часы работы</small><b>Ежедневно ' +
+        esc(week.rows[0].value) +
+        '</b>' +
+        status +
+        '</div>'
+      );
+    }
+    return (
+      '<div class="arena-info arena-info--schedule">' +
+      '<small>Часы работы</small>' +
+      status +
+      '<ul class="arena-week">' +
+      week.rows
+        .map(function (r) {
+          return (
+            '<li class="' +
+            (r.today ? 'is-today' : '') +
+            (r.closed ? ' is-closed' : '') +
+            '"><span>' +
+            esc(r.label) +
+            '</span><span>' +
+            esc(r.value) +
+            '</span></li>'
+          );
+        })
+        .join('') +
+      '</ul></div>'
+    );
+  }
+
   function renderScheduleFact(feed) {
     feed = feed || {};
-    if (!feed.banner) return '';
+    var hoursHtml = renderScheduleHoursWeek(feed.hoursWeek);
     var action = '';
     if (feed.mode === 'phone' && feed.callHref) {
       action =
@@ -1107,18 +1143,17 @@
         '">' +
         esc(displayHost(feed.siteHref)) +
         '</a>';
-    } else {
-      return '';
     }
+    if (!feed.banner && !action && !hoursHtml) return '';
+    var intro = feed.banner ? '<div class="arena-closed">' + esc(feed.banner) + '</div>' : '';
     return (
       '<div class="arena-sec">' +
       '<p class="arena-h">' +
       esc(iceSectionTitle()) +
       '</p>' +
-      '<div class="arena-closed">' +
-      esc(feed.banner) +
-      '</div>' +
+      intro +
       action +
+      hoursHtml +
       '</div>'
     );
   }
