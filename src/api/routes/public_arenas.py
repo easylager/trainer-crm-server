@@ -368,6 +368,9 @@ async def get_public_selection_share(
     city_id: int = Query(...),
     venue_type: str | None = Query(None),
     when: str | None = Query(None),
+    kind: str | None = Query(None),
+    svc: str | None = Query(None),
+    seg: str | None = Query(None),
     record: bool = Query(True),
     channel: str | None = Query(None),
     share_context: str | None = Query(None),
@@ -383,6 +386,9 @@ async def get_public_selection_share(
     как у ``/ice/share``. Без секрета актёра — NULL.
     """
     from src.application.selection_page import (
+        clean_kind,
+        clean_seg,
+        clean_svc,
         clean_venue,
         clean_when,
         compose_selection_share,
@@ -401,14 +407,32 @@ async def get_public_selection_share(
         raise HTTPException(status_code=404, detail="City not found")
     city = {"id": int(row[0]), "name": str(row[1])}
     venue, window_key = clean_venue(venue_type), clean_when(when)
+    kind_key = clean_kind(kind)
+    svc_key = clean_svc(svc)
+    seg_key = clean_seg(seg)
     if window_key is None and (when or "").strip().lower() == "auto":
         from src.application.ice_time_windows import resolve_window
 
         resolved = resolve_window("auto")
         window_key = resolved.key if resolved else None
-    view = await load_selection_view(session, city=city, venue=venue, when=window_key)
+    view = await load_selection_view(
+        session,
+        city=city,
+        venue=venue,
+        when=window_key,
+        kind=kind_key,
+        svc=svc_key,
+        seg=seg_key,
+    )
     base = (Settings().webapp_base_url or "").rstrip("/")
-    page_url = base + selection_path(city_name=city["name"], venue=venue, when=window_key)
+    page_url = base + selection_path(
+        city_name=city["name"],
+        venue=venue,
+        when=window_key,
+        kind=kind_key,
+        svc=svc_key,
+        seg=seg_key,
+    )
     payload = compose_selection_share(view, page_url=page_url)
     if record:
         ch = (channel or "").strip().lower()
@@ -420,14 +444,36 @@ async def get_public_selection_share(
             city_id=city["id"],
             telegram_id=telegram_id,
             actor_hash=actor,
-            payload={"venue_type": venue, "when": window_key, "channel": ch if ch in _SHARE_CHANNELS else None},
+            payload={
+                "venue_type": venue,
+                "when": window_key,
+                "kind": kind_key,
+                "svc": svc_key,
+                "seg": seg_key,
+                "channel": ch if ch in _SHARE_CHANNELS else None,
+            },
         )
     # ?v= — хэш данных превью (число мест, сеансов и день): Telegram кэширует og-картинку по URL.
     image = base + selection_image_path(
-        city_name=city["name"], venue=venue, when=window_key, version=selection_image_version(view)
+        city_name=city["name"],
+        venue=venue,
+        when=window_key,
+        kind=kind_key,
+        svc=svc_key,
+        seg=seg_key,
+        version=selection_image_version(view),
     )
     story = image.replace("/og.png", "/story.png")
-    return {**payload, "og_image_url": image, "story_image_url": story, "venue_type": venue, "when": window_key}
+    return {
+        **payload,
+        "og_image_url": image,
+        "story_image_url": story,
+        "venue_type": venue,
+        "when": window_key,
+        "kind": kind_key,
+        "svc": svc_key,
+        "seg": seg_key,
+    }
 
 
 @router.get("/arenas/{arena_ref}/share")

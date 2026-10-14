@@ -23,7 +23,7 @@ def test_place_card_uses_list_card_photo() -> None:
     )
     assert 'class="pick__photo"' in html
     assert "/api/public/photos/arenas/3/x_card.jpg" in html
-    assert 'data-icon="❄️"' in html
+    assert "❄️" not in html
     assert "pick__icon" not in html
 
 
@@ -41,7 +41,8 @@ def test_place_card_without_photo_has_type_icon_not_empty_hole() -> None:
     )
     assert "pick__photo" not in html
     assert "pick__icon" in html
-    assert "❄️" in html
+    assert "<svg" in html
+    assert "❄️" not in html
 
 
 def test_place_photo_url_skips_javascript_and_empty() -> None:

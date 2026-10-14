@@ -57,9 +57,11 @@ from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.phone_guard import is_valid_public_phone, tel_href
 from src.application.photo_cdn import visible_photo_url
 from src.shared.public_display import (
+    format_clock,
     format_public_name,
     format_street_address,
     session_day_phrase,
+    short_day_word,
 )
 from src.shared.schedule_basis import public_basis_css_class
 from src.shared.venue_types import DEFAULT_HIDDEN_VENUE_TYPES, VENUE_TYPE_KEYS, has_public_skating
@@ -433,6 +435,22 @@ async def load_selection_view(
     else:
         hits = [i for i in items if slots.get(int(i["id"]))] if window else items
         window_empty = bool(window) and not hits
+        if window_empty and skating:
+            # В окне пусто — ближайшие сеансы теми же билетами, а не строкой из API.
+            slots = await _window_slots(
+                session, [int(i["id"]) for i in items], None, now, session_sql=session_sql
+            )
+            stale_notes = await _apply_schedule_freshness(session, items, slots, now)
+            nearest = [i for i in items if slots.get(int(i["id"]))]
+            # Сначала места с ближайшим льдом — по времени первого сеанса.
+            nearest.sort(
+                key=lambda i: (
+                    str(slots[int(i["id"])][0].get("local_date") or ""),
+                    str(slots[int(i["id"])][0].get("starts_at_local") or ""),
+                    int(i["id"]),
+                )
+            )
+            items = nearest + [i for i in items if not slots.get(int(i["id"]))]
         shown = hits or items
     shown_page = shown[:MAX_PLACES] if not service_mode else shown
     # Счёт для превью — по всей подборке, а не по странице: один агрегат вместо len(shown_page).
@@ -600,10 +618,11 @@ def selection_description(view: Mapping[str, Any]) -> str:
         n = int(view.get("total") or 0)
         noun = selection_count_noun(view)
         k = int(view.get("open_now_count") or 0)
-        return (
-            f"{n} {plural_ru(n, *noun)} · "
-            f"{k} {plural_ru(k, 'открыто', 'открыты', 'открыты')} сейчас"
-        )
+        head = f"{n} {plural_ru(n, *noun)}"
+        # Ночью «0 открыты сейчас» — шум: статус каждого места и так на карточке.
+        if not k:
+            return head
+        return f"{head} · {k} {plural_ru(k, 'открыто', 'открыты', 'открыты')} сейчас"
     n = selection_place_count(view)
     noun = selection_count_noun(view)
     bits = [f"{n} {plural_ru(n, *noun)}"]
@@ -859,27 +878,30 @@ def _place_html(
             chips += f'<span class="{_esc(slot_cls)}">{slot_inner}</span>'
     if rest > 0 and href:
         chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
-    line = "" if chips else f'<p class="muted">{_esc(item.get("live_line") or "")}</p>'
+    raw_line = str(item.get("live_line") or "").strip()
+    line = "" if chips or not raw_line else f'<p class="muted">{_esc(raw_line)}</p>'
     # TASK-180: > 6 ч — сеансы показываем, но над ними спокойная строка «могло измениться».
     stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)
-    icon = str(item.get("venue_icon") or "").strip()
     name = _esc(format_public_name(str(item.get("name") or "")))
     name_html = f'<a href="{_esc(href)}">{name}</a>' if href else name
     if photo and href:
         media = (
-            f'<a class="pick__media" href="{_esc(href)}" data-icon="{_esc(icon)}">'
+            f'<a class="pick__media" href="{_esc(href)}" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
             f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
             f"</a>"
         )
     elif photo:
         media = (
-            f'<span class="pick__media" data-icon="{_esc(icon)}">'
+            f'<span class="pick__media" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
             f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
             f"</span>"
         )
     else:
-        media = f'<span class="pick__icon" aria-hidden="true">{_esc(icon)}</span>' if icon else ""
+        from src.application.catalog_icons import icon_svg
+
+        mark = icon_svg({"ice": "skate", "outdoor": "skate", "shop": "shop"}.get(str(item.get("venue_type") or "ice"), "person"))
+        media = f'<span class="pick__icon" aria-hidden="true">{mark}</span>' if mark else ""
     if service_mode:
         vtype = str(item.get("venue_type") or "ice")
         pick_cls = "sec pick" + (" pick--rink" if vtype in ("ice", "outdoor") else "")
@@ -950,16 +972,18 @@ def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
     if str(live.get("kind") or "") != "session":
         line = str(live.get("text") or item.get("live_line") or "").strip()
     photo = _place_photo_url(item)
-    icon = str(item.get("venue_icon") or "").strip()
     name = _esc(format_public_name(str(item.get("name") or "")))
     if photo:
         media = (
-            f'<span class="pick__media" data-icon="{_esc(icon)}">'
+            f'<span class="pick__media" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
             f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
             f"</span>"
         )
     else:
-        media = f'<span class="pick__icon" aria-hidden="true">{_esc(icon)}</span>' if icon else ""
+        from src.application.catalog_icons import icon_svg
+
+        mark = icon_svg({"ice": "skate", "outdoor": "skate", "shop": "shop"}.get(str(item.get("venue_type") or "ice"), "person"))
+        media = f'<span class="pick__icon" aria-hidden="true">{mark}</span>' if mark else ""
     badge_html = f'<span class="badge">{_esc(badge)}</span>' if badge else ""
     line_html = f'<p class="pick__line">{_esc(line)}</p>' if line else ""
     inner = (
@@ -1075,16 +1099,13 @@ def render_selection_page(
     story_image_url: str | None = None,
     base_url: str = "",
 ) -> str:
-    from src.application.place_page import _share_html  # общий ряд «Поделиться»
-    from src.application.public_web_cta import render_generic_web_dock
-
     city_name = str(view["city"]["name"])
     title = selection_title(view)
     share_title = selection_share_title(view)
     description = selection_description(view)
     share_description = selection_share_description(view)
     note = (
-        f'<p class="plan__note pick__note">{_esc(view["window"]["label"])}: сеансов нет — показываем ближайшие.</p>'
+        f'<p class="b-rule">{_esc(view["window"]["label"])}: сеансов нет — показываем ближайшие.</p>'
         if view.get("window_empty")
         else ""
     )
@@ -1094,14 +1115,13 @@ def render_selection_page(
     highlight = frozenset(view.get("service_filter_keys") or ())
     more_anchor = "ohm" if view.get("kind") == KIND_OHM else "schedule"
     if centers_mode:
-        places = "".join(_center_card_html(i, city_name=city_name) for i in view["items"])
+        places = "".join(_b_center_card(i, city_name=city_name) for i in view["items"])
     else:
         places = "".join(
-            _place_html(
+            _b_place_card(
                 i,
                 city_name=city_name,
                 slots=view["slots"].get(int(i["id"]), []),
-                stale=stale_notes.get(int(i["id"]), ""),
                 more_anchor=more_anchor,
                 service_mode=service_mode,
                 service_highlight_keys=highlight,
@@ -1117,52 +1137,35 @@ def render_selection_page(
             empty = "Пока нет сеансов ОХМ в этом городе."
         else:
             empty = "В этой подборке пока пусто — загляните в каталог."
-        places = f'<section class="sec"><p class="muted">{_esc(empty)}</p></section>'
-    hero_type = _hero_kicker(view)
-    hero = (
-        '<header class="hero hero--ice">'
-        f'<p class="hero__type">{_esc(hero_type)}</p>'
-        f'<h1 class="hero__title">{_esc(title)}</h1>'
-        f'<p class="hero__where">{_esc(description)}</p>'
-        "</header>"
+        places = f'<p class="b-text">{_esc(empty)}</p>'
+    from src.application.style_b import back_pill, brand_link, hero_html, share_html
+
+    hero = hero_html(
+        title=_b_list_title(view),
+        kicker=_hero_kicker(view),
+        sub_html=_esc(description),
+        bar_html=back_pill(f"/c/{city_slug(city_name)}", format_public_name(city_name)) + brand_link(end=True),
+        variant="list",
     )
-    hockey_chips = ""
-    ohm_seg = ""
-    ohm_rule = ""
-    if view.get("kind") == KIND_OHM:
-        hockey_chips = _hockey_segment_chips_html(view, city_name=city_name)
-        if centers_mode:
-            ohm_rule = _centers_rule_html()
-        else:
-            ohm_seg = _ohm_seg_html(view, city_name=city_name)
-            ohm_rule = _ohm_rule_html()
-    chips = _service_chips_html(view, city_name=city_name) if service_mode else _filter_chips_html(
-        view, city_name=city_name
+    controls = _b_controls(view, city_name=city_name)
+    from src.application.catalog_list_share import (
+        catalog_list_share_tail,
+        catalog_selection_share_button,
+        selection_share_endpoint,
     )
-    pager = _pagination_html(view, city_name=city_name, canonical_base=canonical_url)
-    dock = render_generic_web_dock(
-        base_url=base_url,
-        surface="selection_page",
-        city_id=int(view["city"]["id"]),
-        city_name=city_name,
-        telegram_url=cta_url,
-    )
+
+    share_pick = ""
+    if view.get("items"):
+        share_pick = catalog_selection_share_button(endpoint=selection_share_endpoint(view))
+    need_share_js = bool(share_pick) or any((view.get("slots") or {}).values())
     body = (
         hero
-        + hockey_chips
-        + ohm_seg
-        + ohm_rule
-        + chips
-        + note
-        + places
-        + pager
-        + _share_html(
-            share,
-            venue_type="ice" if view.get("skating") else "shop",
-            telegram_link_only=True,
-            story_image_url=story_image_url or og_image_url,
-        )
-        + dock
+        + (f'<section class="b-sec">{controls}</section>' if controls else "")
+        + (f'<section class="b-sec">{note}</section>' if note else "")
+        + f'<section class="b-sec b-cards">{places}</section>'
+        + _b_pager(view, city_name=city_name)
+        + share_pick
+        + share_html(share, telegram_url=cta_url, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
     )
     elements = []
     for item in view["items"]:
@@ -1186,8 +1189,15 @@ def render_selection_page(
             "itemListElement": elements,
         }
     )
-    page = _TEMPLATE_PATH.read_text(encoding="utf-8")
-    city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city_name)} сегодня</a>' if city_page_url else ""
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+
+    page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
+    city_link = (
+        f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(format_public_name(city_name))} сегодня</a>'
+        # «Весь лёд» — про массовое катание; со списков заточки, ОХМ и центров ссылка не по теме.
+        if city_page_url and not view.get("svc") and not view.get("kind") and not view.get("seg")
+        else ""
+    )
     # ?t= и ?w= — та же подборка с фильтром. В индекс идёт только базовый /c/{город}.
     variant = bool(view.get("venue") or view.get("when") or view.get("svc"))
     page_no = int(view.get("page") or 1)
@@ -1205,11 +1215,12 @@ def render_selection_page(
             "__ROBOTS__": "noindex, follow" if (variant or page_no > 1) else "index, follow",
             "__HEAD_EXTRA__": _head_links_html(view, city_name=city_name, canonical_base=canonical_url),
             "__JSONLD__": ld,
-            "__BRAND__": _esc(t("brand.mark")),
-            "__CITY__": _esc(format_public_name(city_name)),
+            "__TOKENS_V__": TOKENS_VERSION,
+            "__STYLE_V__": STYLE_VERSION,
+            "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": city_link,
-            "__TRUST__": "",
             "__BODY__": body,
+            **catalog_list_share_tail(scripts=need_share_js, css=bool(share_pick)),
         },
     )
 
@@ -1241,3 +1252,275 @@ def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[s
         "share_text": text_value,
         "share_body": share_body_for_native_share_dialog(text_value, page_url),
     }
+
+
+# ── TASK-246 · стиль B для списков /c/{город}?… ─────────────────────────────────
+
+_B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
+
+
+def _selection_thumb_img_attrs(item: Mapping[str, Any]) -> tuple[str | None, str]:
+    """Квадрат 64×64 CSS (128×128 @2x): ``src`` — thumb, иначе card; ``srcset`` только если слот >128px."""
+    thumb = visible_photo_url(str(item.get("thumb") or ""))
+    card = visible_photo_url(str(item.get("card") or ""))
+    src = thumb or card
+    if not src:
+        return None, ""
+    if thumb and card and thumb != card:
+        return src, (
+            f' srcset="{_esc(thumb)} 320w, {_esc(card)} 800w"'
+            ' sizes="(min-width: 641px) 128px, 64px"'
+        )
+    return src, ""
+
+
+def _b_thumb(item: Mapping[str, Any], *, href: str) -> str:
+    from src.application.catalog_icons import rink_motif_svg
+
+    photo, extra = _selection_thumb_img_attrs(item)
+    inner = (
+        f'<img src="{_esc(photo)}"{extra} alt="" loading="lazy" decoding="async" width="128" height="128" />'
+        if photo
+        else rink_motif_svg(small=True)
+    )
+    if href:
+        return f'<a class="b-card2__thumb" href="{_esc(href)}" tabindex="-1" aria-hidden="true">{inner}</a>'
+    return f'<span class="b-card2__thumb" aria-hidden="true">{inner}</span>'
+
+
+def _b_card_head(item: Mapping[str, Any], *, city_name: str, href: str, extra: str = "") -> str:
+    name = _esc(format_public_name(str(item.get("name") or "")))
+    name_html = f'<a href="{_esc(href)}">{name}</a>' if href else name
+    where = _selection_where(item, city_name=city_name)
+    where_html = f'<span class="b-card2__where">{_esc(where)}</span>' if where else ""
+    return (
+        f'<div class="b-card2__head">{_b_thumb(item, href=href)}'
+        f'<div class="b-card2__titles"><h2 class="b-card2__name">{name_html}</h2>{where_html}{extra}</div></div>'
+    )
+
+
+# Строки состояния из ленты, которые говорят факт. «Расписание уточняется» (kind unknown) —
+# оговорка: на сайте её нет (решение владельца, craft-guide), карточка просто без строки.
+_B_FACT_LIVE_KINDS = frozenset({"phone", "season_closed", "closed", "place"})
+
+
+def _b_state_note(item: Mapping[str, Any]) -> str:
+    live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
+    if str(live.get("kind") or "") not in _B_FACT_LIVE_KINDS:
+        return ""
+    return str(live.get("text") or "").strip()
+
+
+def _b_place_card(
+    item: Mapping[str, Any],
+    *,
+    city_name: str,
+    slots: list[dict[str, Any]],
+    more_anchor: str,
+    service_mode: bool,
+    service_highlight_keys: frozenset[str],
+) -> str:
+    from src.application.catalog_icons import icon_svg
+
+    today = datetime.now(ZoneInfo("Europe/Minsk")).date()
+    slug = str(item.get("slug") or "")
+    href = place_path(city_name=city_name, slug=slug) if slug else ""
+    if service_mode:
+        open_st = item.get("open_state") if isinstance(item.get("open_state"), Mapping) else {}
+        state = str(open_st.get("state") or "unknown")
+        label = str(open_st.get("label") or "")
+        extra = f'<span class="b-open b-open--{_esc(state)}"><i></i>{_esc(label)}</span>' if label else ""
+        chips = "".join(
+            f'<span class="b-chip{" b-chip--hl" if key in service_highlight_keys else ""}">'
+            f"{_esc(AMENITY_LABELS_RU.get(key, key))}</span>"
+            for key in list(item.get("amenity_keys") or [])
+        )
+        buttons: list[str] = []
+        phone = str(item.get("phone") or "").strip()
+        if phone and is_valid_public_phone(phone):
+            buttons.append(f'<a class="b-btn" href="tel:{_esc(tel_href(phone))}">{icon_svg("phone")}Позвонить</a>')
+        route_href = _yandex_maps_href(item)
+        if route_href:
+            buttons.append(f'<a class="b-btn" href="{_esc(route_href)}" rel="noopener">{icon_svg("route")}Маршрут</a>')
+        return (
+            '<article class="b-card2">'
+            + _b_card_head(item, city_name=city_name, href=href, extra=extra)
+            + (f'<div class="b-chips">{chips}</div>' if chips else "")
+            + (f'<div class="b-btns">{"".join(buttons)}</div>' if buttons else "")
+            + "</article>"
+        )
+    tickets: list[str] = []
+    for s in slots[:MAX_SLOTS_PER_PLACE]:
+        day = s.get("local_date")
+        clock = format_clock(str(s.get("starts_at_local") or ""))
+        word = short_day_word(day, today=today) if hasattr(day, "year") else ""
+        price = format_price_minor(
+            s.get("price_adult_minor") if s.get("price_adult_minor") is not None else s.get("price_minor"),
+            str(s.get("currency_code") or "BYN"),
+        )
+        inner = (
+            (f'<span class="b-slot__day">{_esc(word)}</span>' if word else "")
+            + f'<b class="b-slot__time">{_esc(clock)}</b>'
+            + (f'<span class="b-slot__price">{_esc(price)}</span>' if price else "")
+        )
+        if href:
+            tickets.append(
+                f'<a class="b-slot" href="{_esc(href + place_query(session_id=int(s["id"])))}">{inner}</a>'
+            )
+        else:
+            tickets.append(f'<span class="b-slot">{inner}</span>')
+    rest = len(slots) - MAX_SLOTS_PER_PLACE
+    if rest > 0 and href:
+        tickets.append(f'<a class="b-slot b-slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>')
+    note = _b_state_note(item)
+    body = (
+        f'<div class="b-slots">{"".join(tickets)}</div>'
+        if tickets
+        else (f'<p class="b-note">{_esc(note)}</p>' if note else "")
+    )
+    if not slots or not href:
+        return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
+    first = slots[0]
+    sid = first.get("id")
+    if sid is None:
+        return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
+    from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
+
+    place_name = format_public_name(str(item.get("name") or ""))
+    label = invite_label_for_slot(first, today=today)
+    invite_href = href + place_query(session_id=int(sid))
+    invite = catalog_invite_link(
+        arena_ref=int(item["id"]),
+        session_id=int(sid),
+        invite_label=label,
+        place_name=place_name,
+        fallback_href=invite_href,
+        css_class="b-slot b-slot--invite",
+    )
+    if tickets:
+        body = f'<div class="b-slots">{invite}{"".join(tickets)}</div>'
+    else:
+        body = f'<div class="b-slots">{invite}</div>'
+    return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
+
+
+def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:
+    slug = str(item.get("slug") or "").strip()
+    href = str(item.get("public_path") or "").strip() or (place_path(city_name=city_name, slug=slug) if slug else "")
+    badge = str(item.get("center_badge") or "").strip()
+    live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
+    line = _b_state_note(item)
+    extra = (f'<span class="b-chip b-chip--sm">{_esc(badge)}</span>' if badge else "") + (
+        f'<span class="b-card2__where">{_esc(line)}</span>' if line else ""
+    )
+    return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href, extra=extra) + "</article>"
+
+
+def _b_chips_nav(items: list[tuple[str, str, bool]], *, label: str) -> str:
+    """Чипы-переключатели: (подпись с разметкой, href, активен)."""
+    parts = []
+    for text_html, href, on in items:
+        cls = "b-toggle b-toggle--on" if on else "b-toggle"
+        parts.append(f'<a class="{cls}" href="{_esc(href)}">{text_html}</a>')
+    return f'<nav class="b-toggles" aria-label="{_esc(label)}">{"".join(parts)}</nav>'
+
+
+def _b_controls(view: Mapping[str, Any], *, city_name: str) -> str:
+    out = ""
+    kind = view.get("kind")
+    if kind == KIND_OHM:
+        centers = view.get("seg") == SEG_CENTERS
+        if centers or int(view.get("center_count") or 0):
+            count = view.get("center_count")
+            centers_label = "Центры" if count is None else f"Центры <small>{int(count)}</small>"
+            out += _b_chips_nav(
+                [
+                    ("ОХМ", selection_path(city_name=city_name, venue=None, when=None if centers else view.get("when"), kind=KIND_OHM), not centers),
+                    (centers_label, selection_path(city_name=city_name, venue=None, when=None, kind=KIND_OHM, seg=SEG_CENTERS), centers),
+                ],
+                label=t("chip.hockey"),
+            )
+        if not centers:
+            counts = view.get("ohm_counts") or {}
+            active = str(view.get("when") or "all")
+            parts = []
+            for key, label in _OHM_SEG_KEYS:
+                n = int(counts.get(key, 0) or 0)
+                label = t("when.weekend") if key == "weekend" else label
+                inner = f"{_esc(label)} <small>{n if n else '—'}</small>"
+                if key == active:
+                    parts.append(f'<span class="b-toggle b-toggle--on" aria-current="true">{inner}</span>')
+                elif n <= 0:
+                    parts.append(f'<span class="b-toggle b-toggle--off">{inner}</span>')
+                else:
+                    when = key if key != "all" else None
+                    href = selection_path(city_name=city_name, venue=None, when=when, kind=KIND_OHM)
+                    parts.append(f'<a class="b-toggle" href="{_esc(href)}">{inner}</a>')
+            out += f'<nav class="b-toggles" aria-label="Когда">{"".join(parts)}</nav>'
+            out += (
+                '<p class="b-rule"><b>Любительский хоккей:</b> полная экипировка, детям — шлем с маской. '
+                "Записи нет — билет в кассе катка.</p>"
+            )
+        else:
+            out += '<p class="b-rule">По записи, не сеанс.</p>'
+        return out
+    if view.get("svc"):
+        active = str(view.get("svc") or "service")
+        items = [
+            (
+                _esc(label),
+                selection_path(city_name=city_name, venue=None, when=None, svc=key),
+                key == active or (key == "sharpening" and active == "service"),
+            )
+            for key, label in (("sharpening", "Заточка"), ("rental", "Прокат"))
+        ]
+        items.append(("Все места", selection_path(city_name=city_name, venue=None, when=None), False))
+        return _b_chips_nav(items, label="Услуга")
+    chips = list(view.get("filter_chips") or [])
+    if chips and not view.get("when"):
+        active = str(view.get("venue") or "")
+        items = [("Все", selection_path(city_name=city_name, venue=None, when=None, page=1), not active)]
+        for chip in chips:
+            key = str(chip.get("key") or "")
+            items.append(
+                (_esc(str(chip.get("label") or key)), selection_path(city_name=city_name, venue=key, when=None, page=1), active == key)
+            )
+        return _b_chips_nav(items, label="Тип места")
+    return ""
+
+
+def _b_pager(view: Mapping[str, Any], *, city_name: str) -> str:
+    pages = int(view.get("pages") or 1)
+    page = int(view.get("page") or 1)
+    if pages <= 1:
+        return ""
+    venue, when, kind, svc, seg = view.get("venue"), view.get("when"), view.get("kind"), view.get("svc"), view.get("seg")
+    path_venue = None if kind == KIND_OHM or svc else venue
+
+    def href(n: int) -> str:
+        return selection_path(city_name=city_name, venue=path_venue, when=when, kind=kind, svc=svc, seg=seg, page=n)
+
+    prev = f'<a class="b-btn" rel="prev" href="{_esc(href(page - 1))}">Назад</a>' if page > 1 else ""
+    nxt = f'<a class="b-btn" rel="next" href="{_esc(href(page + 1))}">Дальше</a>' if page < pages else ""
+    return (
+        f'<nav class="b-sec" aria-label="Страницы"><p class="b-note">Страница {page} из {pages}</p>'
+        f'<div class="b-btns">{prev}{nxt}</div></nav>'
+    )
+
+
+def _b_list_title(view: Mapping[str, Any]) -> str:
+    """Заголовок раздела без города: город — в пилюле «‹ Минск»."""
+    if view.get("kind") == KIND_OHM:
+        return t("chip.hockey")
+    svc = str(view.get("svc") or "")
+    if svc == "rental":
+        return "Прокат"
+    if svc:
+        return t("route.service")
+    venue = str(view.get("venue") or "")
+    if venue == "shop":
+        return t("route.shops")
+    if venue == "ice":
+        return t("route.skate")
+    window = view.get("window") or {}
+    return str(window.get("label") or "") or "Места"

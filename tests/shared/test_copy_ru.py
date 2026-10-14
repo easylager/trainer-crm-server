@@ -17,7 +17,7 @@ _JSON_PATH = _REPO_ROOT / "src" / "shared" / "copy_ru.json"
 _JS_PATH = _REPO_ROOT / "static" / "webapp" / "glide-copy.js"
 
 # AC-2: литералы палитры Glide не живут в шаблонах, только в токене.
-_PALETTE_LITERALS = ("#45b9bb", "#0d1b26", "#e1e8ec", "#f4f6f7")
+_PALETTE_LITERALS = ("#45b9bb", "#0d1b26", "#e1e8ec", "#f5f7f8")
 _PALETTE_TEMPLATES = (
     "static/share/place.html",
     "static/share/catalog-home.html",

@@ -256,7 +256,7 @@ async def test_one_number_across_hub_list_api_and_home(app_use_test_db, db_sessi
             params={"city_id": city_id, "intent": "skate", "limit": 50},
         )
     assert hub.status_code == service.status_code == sharpening.status_code == 200
-    assert "2 места" in hub.text
+    assert "2 места" in hub.text.replace("\u00a0", " ")
     for page in (service.text, sharpening.text):
         assert shop_sharp in page and rink_sharp in page
         assert track not in page

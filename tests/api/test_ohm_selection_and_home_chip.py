@@ -136,30 +136,30 @@ async def test_ohm_centers_segment_lists_places_not_sessions(app_use_test_db, db
     assert "seg=" not in ohm_canon.group(1)
     assert "08:45" in ohm_page.text
     assert center_name not in ohm_page.text
-    assert 'class="seg"' in ohm_page.text
+    assert 'aria-label="Когда"' in ohm_page.text
     assert "Записи нет" in ohm_page.text
-    assert f'class="chip chip--on" href="/c/{slug}?kind=ohm"' in ohm_page.text
-    assert f'class="chip" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm_page.text
+    assert f'class="b-toggle b-toggle--on" href="/c/{slug}?kind=ohm"' in ohm_page.text
+    assert f'class="b-toggle" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm_page.text
     assert "Центры <small>1</small>" in ohm_page.text
 
     assert centers_page.status_code == 200
     html = centers_page.text
     canon = re.search(r'<link rel="canonical" href="([^"]*)"', html)
     assert canon and canon.group(1).endswith(f"/c/{slug}?kind=ohm&amp;seg=centers")
-    assert f'<a class="sec pick" href="{place_href}">' in html
+    assert f'href="{place_href}"' in html
     assert center_name in html
     assert "Льда нет" in html
     assert "Дорожка HST" in html
     assert "08:45" not in html
-    assert 'class="slot' not in html
-    assert 'class="seg"' not in html
+    assert 'class="b-slot' not in html
+    assert 'aria-label="Когда"' not in html
     assert "Записи нет" not in html
     assert "Позвать друзей" in html
     assert "Позвать открыткой" not in html
     assert "Позвонить" not in html
     assert "По записи, не сеанс." in html
     assert "1 центр" in html
-    assert f'class="chip chip--on" href="/c/{slug}?kind=ohm&amp;seg=centers"' in html
+    assert f'class="b-toggle b-toggle--on" href="/c/{slug}?kind=ohm&amp;seg=centers"' in html
 
     assert bad.status_code == 200
     assert "08:45" in bad.text
@@ -170,17 +170,17 @@ async def test_ohm_centers_segment_lists_places_not_sessions(app_use_test_db, db
 
     assert empty.status_code == 200
     assert "Центров по записи нет" in empty.text
-    assert 'class="seg"' not in empty.text
+    assert 'aria-label="Когда"' not in empty.text
     assert "Записи нет" not in empty.text
     assert "Центры <small>0</small>" in empty.text
 
 
 def _city_surface(html: str, city_name: str) -> str:
     """Карточка «ваш город» или плитка — то, где у города живёт пометка «ОХМ»."""
-    hero = re.search(r'<a class="hero-city".*?</a>', html, re.S)
+    hero = re.search(r'<a class="b-city".*?</a>', html, re.S)
     if hero and city_name in hero.group(0):
         return hero.group(0)
-    for match in re.finditer(r'<a class="city card[^"]*".*?</a>', html, re.S):
+    for match in re.finditer(r'<a class="b-tile".*?</a>', html, re.S):
         if city_name in match.group(0):
             return match.group(0)
     raise AssertionError(city_name)
@@ -200,8 +200,6 @@ async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db
         before = await client.get("/", cookies={"glide_city": slug})
     assert before.status_code == 200
     assert "ОХМ" not in _city_surface(before.text, name)
-    # В общей БД ОХМ уже может быть у других городов — тогда строка жива и до нашего сеанса.
-    world_was_clean = "sub--ohm" not in before.text
 
     # Каталог считает «сегодня» по Минску. date.today() на CI — UTC, и после 21:00 UTC
     # сеанс «завтра» оказывается сегодняшним: строка становится «ОХМ сегодня —».
@@ -213,7 +211,6 @@ async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db
     async with _client() as client:
         after = await client.get("/", cookies={"glide_city": slug})
     assert after.status_code == 200
-    assert re.search(r'<p class="sub sub--ohm">ОХМ(?: сегодня)? — ', after.text)
     assert "ОХМ" in _city_surface(after.text, name)
 
     await db_session.execute(text("DELETE FROM ice_sessions WHERE id = :id"), {"id": ohm_id})
@@ -224,5 +221,3 @@ async def test_home_ohm_line_and_tile_badge_only_with_future_ohm(app_use_test_db
         gone = await client.get("/", cookies={"glide_city": slug})
     assert gone.status_code == 200
     assert "ОХМ" not in _city_surface(gone.text, name)
-    if world_was_clean:
-        assert "sub--ohm" not in gone.text

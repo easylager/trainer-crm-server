@@ -25,6 +25,7 @@ tier A/B/C в ``arena_public_use_cases``).
 from __future__ import annotations
 
 import html as html_lib
+import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -40,16 +41,14 @@ from src.application.arena_public_use_cases import (
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
 from src.application.arena_profile import (
-    WEEKDAY_SHORT_RU,
-    format_intervals_ru,
     has_known_hours,
-    hours_for_weekday,
     hours_groups,
     intervals_for_weekday,
     opening_hours_schema_org,
 )
 from src.application.ice_city_day import city_slug
 from src.application.place_links import join_public_origin, place_query
+from src.shared.phone_guard import is_valid_public_phone
 from src.shared.arena_schedule_mode import (
     PHONE_LINE,
     SCHEDULE_MODE_PHONE,
@@ -65,16 +64,17 @@ from src.application.schedule_staleness import (
 )
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
-from src.shared.phone_guard import is_valid_public_phone, tel_href
-from src.application.photo_cdn import visible_photo_url
 from src.shared.public_display import (
     display_host,
+    format_clock,
     format_phone_display,
+    invite_cta_when,
     format_place_address,
     format_public_name,
+    format_street_address,
     sentence_when,
+    short_day_word,
 )
-from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 from src.shared.venue_types import has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
@@ -84,8 +84,6 @@ SCHEDULE_DAYS = 7
 #: Сколько дней ищем выбранный сеанс (?s=). Шит «Поделиться» предлагает сеансы из ленты
 #: карточки (две недели) — сеанс через 10 дней не должен выглядеть «уже прошедшим».
 FOCUS_LOOKUP_DAYS = 14
-#: Сколько слотов дня показывать до «ещё N».
-_SLOTS_PER_DAY = 12
 
 _WEEKDAYS_SHORT = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 _WEEKDAYS_FULL = (
@@ -129,26 +127,18 @@ _MONTHS_PREP = (
 
 #: Услуги магазина — тайлы с короткой подписью, а не просто теги.
 _SHOP_SERVICES: tuple[tuple[str, str, str, str], ...] = (
-    ("retail", "🛒", "Розница", "Коньки, защита, форма"),
-    ("skate_sharpening", "🔧", "Заточка", "Лезвия под ваш стиль катания"),
-    ("skate_molding", "🔥", "Формовка", "Ботинок по форме стопы"),
-    ("blade_profiling", "📐", "Профилирование", "Профиль лезвия под игрока"),
-    ("foot_scan", "🦶", "3D-скан стопы", "Точный подбор размера"),
-    ("skate_rental", "🔁", "Прокат", "Коньки на время"),
-    ("repair", "🛠️", "Ремонт", "Коньки, клюшки, форма"),
+    ("retail", "shop", "Розница", "Коньки, защита, форма"),
+    ("skate_sharpening", "sharpen", "Заточка", "Лезвия под ваш стиль катания"),
+    ("skate_molding", "skate", "Формовка", "Ботинок по форме стопы"),
+    ("blade_profiling", "sharpen", "Профилирование", "Профиль лезвия под игрока"),
+    ("foot_scan", "person", "3D-скан стопы", "Точный подбор размера"),
+    ("skate_rental", "skate", "Прокат", "Коньки на время"),
+    ("repair", "repair", "Ремонт", "Коньки, клюшки, форма"),
 )
 _SHOP_DISCIPLINES: tuple[tuple[str, str], ...] = (
-    ("discipline_hockey", "🏒 Хоккей"),
-    ("discipline_figure", "⛸ Фигурное"),
-    ("discipline_roller", "🛼 Ролики"),
-)
-_AMENITY_CHIPS: tuple[tuple[str, str], ...] = (
-    ("skate_rental", "⛸ Прокат коньков"),
-    ("skate_sharpening", "🔧 Заточка на месте"),
-    ("locker_rooms", "🚪 Раздевалки"),
-    ("cafe", "☕ Кафе"),
-    ("parking", "🅿️ Парковка"),
-    ("accessibility", "♿ Доступная среда"),
+    ("discipline_hockey", "Хоккей"),
+    ("discipline_figure", "Фигурное"),
+    ("discipline_roller", "Ролики"),
 )
 _SCHEMA_TYPES = {
     "ice": "IceRink",
@@ -292,7 +282,7 @@ def _hhmm_in_interval(hhmm: str, open_: str, close: str) -> bool:
 
 
 def open_now_label(card: Mapping[str, Any], *, now: datetime) -> str:
-    """«Открыто до 22:00» / «Закроется в 19:00» / «Сегодня выходной»."""
+    """«открыто до 22:00» / «откроется в 10:00» / «Сегодня выходной»."""
     tz = ZoneInfo(str(card.get("timezone") or "Europe/Minsk"))
     local = now.astimezone(tz)
     hours = card.get("opening_hours")
@@ -304,10 +294,10 @@ def open_now_label(card: Mapping[str, Any], *, now: datetime) -> str:
     hhmm = local.strftime("%H:%M")
     for open_, close in intervals:
         if _hhmm_in_interval(hhmm, open_, close):
-            return f"Открыто до {close}"
+            return f"открыто до {format_clock(close)}"
     for open_, _close in intervals:
         if hhmm < open_:
-            return f"Откроется в {open_}"
+            return f"откроется в {format_clock(open_)}"
     return "Сегодня уже закрыто"
 
 
@@ -412,7 +402,8 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
     now: datetime = view["now"]
     if _skating(card):
         mode = normalize_schedule_mode(card.get("schedule_mode"))
-        if mode == SCHEDULE_MODE_PHONE:
+        # «По телефону» без рабочего номера — противоречие на одной странице (TASK-276).
+        if mode == SCHEDULE_MODE_PHONE and is_valid_public_phone(str(card.get("phone") or "")):
             return "closed", PHONE_LINE
         if mode == SCHEDULE_MODE_SEASON_CLOSED:
             reopen = _parse_iso_date(card.get("schedule_reopen_date"))
@@ -618,267 +609,11 @@ def _esc(value: Any) -> str:
     return html_lib.escape(str(value if value is not None else ""), quote=True)
 
 
-def _slot_chip(slot: Mapping[str, Any], *, focused: bool, base_path: str, invite: bool) -> str:
-    hhmm = str(slot.get("starts_at_local") or "")[:5]
-    price = slot_price(slot)
-    href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
-    basis_cls = public_basis_css_class(str(slot.get("schedule_basis") or "live"))
-    cls = "slot slot--focus" if focused else "slot"
-    if basis_cls:
-        cls += f" {basis_cls}"
-    price_html = f'<span class="slot__price">{_esc(price)}</span>' if price else ""
-    hint = basis_hint_ru(str(slot.get("schedule_basis") or "live"))
-    title_attr = f' title="{_esc(hint)}"' if hint else ""
-    # Слот — ссылка на ту же страницу с ?s=: выбрал сеанс — и делишься уже им.
-    return (
-        f'<a class="{cls}" href="{_esc(href)}#plan" rel="nofollow"{title_attr}>'
-        f'<span class="slot__time">{_esc(hhmm)}</span>{price_html}</a>'
-    )
-
-
-def _schedule_mode_call_html(card: Mapping[str, Any]) -> str:
-    phone = str(card.get("phone") or "").strip()
-    if phone and is_valid_public_phone(phone):
-        return f'<p class="sched__mode"><a href="tel:{_esc(tel_href(phone))}">{t("cta.call")}</a></p>'
-    return ""
-
-
-def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
-    card = view["card"]
-    if not _skating(card):
-        return ""
-    mode = normalize_schedule_mode(card.get("schedule_mode"))
-    if mode == SCHEDULE_MODE_PHONE:
-        return (
-            f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
-            f'<p class="sched__mode">{_esc(PHONE_LINE)}</p>' + _schedule_mode_call_html(card) + "</section>"
-        )
-    if mode == SCHEDULE_MODE_SEASON_CLOSED:
-        reopen = _parse_iso_date(card.get("schedule_reopen_date"))
-        line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
-        return (
-            f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
-            f'<p class="sched__mode">{_esc(line)}</p></section>'
-        )
-    if card.get("in_season") is False:
-        return ""
-    days = view.get("days") or []
-    focus = view.get("focus")
-    focus_id = int(focus["id"]) if focus is not None else None
-    note = str(view.get("schedule_note") or "").strip()
-    if not days:
-        phone = str(card.get("phone") or "").strip()
-        hint = (
-            "Расписание этого катка мы пока не получаем автоматически — позвоните, там подскажут."
-            if phone
-            else "Расписание этого катка мы пока не получаем автоматически."
-        )
-        return (
-            f'<section class="sec"><h2 class="sec__title">{t("kind.public_skate")}</h2>'
-            f'<p class="muted">{_esc(hint)}</p></section>'
-        )
-    phone = str(card.get("phone") or "").strip()
-    non_live = [
-        basis_hint_ru(str(s.get("schedule_basis") or "live")) for day in days for s in (day.get("sessions") or [])
-    ]
-    non_live = [h for h in non_live if h]
-    basis_note = ""
-    if non_live:
-        if phone and is_valid_public_phone(phone):
-            tel_link = f' <a href="tel:{_esc(tel_href(phone))}">{t("cta.call")}</a>'
-        else:
-            tel_link = ""
-        basis_note = f'<p class="schedule-basis">{_esc(non_live[0])}.{tel_link}</p>'
-    parts = [f'<section class="sec" id="schedule"><h2 class="sec__title">{t("kind.public_skate")}</h2>']
-    if note:
-        # TASK-180: > 6 ч без удачного прогона — сеансы показываем, но честно.
-        parts.append(f'<p class="sched__stale">{_esc(note)}</p>')
-    if basis_note:
-        parts.append(basis_note)
-    for day in days:
-        d = _parse_iso_date(day.get("local_date"))
-        if d is None:
-            continue
-        slots = list(day.get("sessions") or [])
-        chips = "".join(
-            _slot_chip(s, focused=(focus_id == int(s["id"])), base_path=base_path, invite=invite)
-            for s in slots[:_SLOTS_PER_DAY]
-        )
-        more = len(slots) - _SLOTS_PER_DAY
-        more_html = f'<span class="slot slot--more">ещё {more}</span>' if more > 0 else ""
-        parts.append(
-            '<div class="day">'
-            f'<p class="day__label">{_esc(day_heading(d, today=view["today"]))}</p>'
-            f'<div class="slots">{chips}{more_html}</div></div>'
-        )
-    parts.append("</section>")
-    return "".join(parts)
-
-
-def _ohm_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
-    days = view.get("ohm_days") or []
-    slots = [s for day in days for s in (day.get("sessions") or [])]
-    if not slots:
-        return ""
-    focus = view.get("focus")
-    focus_id = int(focus["id"]) if focus is not None else None
-    notes: list[str] = []
-    for slot in slots:
-        for key in ("age_note", "capacity_note", "price_note"):
-            note = str(slot.get(key) or "").strip()
-            if note and note not in notes:
-                notes.append(note)
-    parts = [f'<section class="sec" id="ohm"><h2 class="sec__title">{t("kind.hockey_practice")}</h2>']
-    for day in days:
-        d = _parse_iso_date(day.get("local_date"))
-        if d is None:
-            continue
-        day_slots = list(day.get("sessions") or [])
-        if not day_slots:
-            continue
-        chips = "".join(
-            _slot_chip(s, focused=(focus_id == int(s["id"])), base_path=base_path, invite=invite)
-            for s in day_slots[:_SLOTS_PER_DAY]
-        )
-        parts.append(
-            '<div class="day">'
-            f'<p class="day__label">{_esc(day_heading(d, today=view["today"]))}</p>'
-            f'<div class="slots">{chips}</div></div>'
-        )
-    if notes:
-        parts.append(f'<p class="hint">{_esc(" · ".join(notes))}</p>')
-    parts.append("</section>")
-    return "".join(parts)
-
-
-def _focus_html(view: Mapping[str, Any], *, invite: bool) -> str:
-    card = view["card"]
-    focus = view.get("focus")
-    if focus is None:
-        if view.get("focus_missing"):
-            nxt = view.get("next_slot")
-            tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
-            return (
-                '<section class="plan plan--gone" id="plan">'
-                f'<p class="plan__kicker">Сеанса из ссылки уже нет в расписании</p>'
-                f'<p class="plan__note">Расписание ниже — актуальное.{tail}</p>'
-                "</section>"
-            )
-        return ""
-    soon = starts_in_label(focus, now=view["now"])
-    kicker = "Тебя зовут кататься" if invite else "Выбранный сеанс"
-    prices = "".join(f"<li>{_esc(line)}</li>" for line in slot_price_lines(focus))
-    end = str(focus.get("ends_at_local") or "")[:5]
-    start = str(focus.get("starts_at_local") or "")[:5]
-    time_text = f"{start}–{end}" if start and end else start
-    d = _parse_iso_date(focus.get("local_date"))
-    day_text = day_heading(d, today=view["today"]) if d else ""
-    label = session_kind_label(focus)
-    return (
-        '<section class="plan" id="plan">'
-        f'<p class="plan__kicker">{_esc(kicker)}</p>'
-        f'<p class="plan__day">{_esc(day_text)}</p>'
-        f'<p class="plan__time">{_esc(time_text)}</p>'
-        + (f'<p class="plan__label">{_esc(label)}</p>' if label else "")
-        + (f'<p class="plan__soon">{_esc(soon)}</p>' if soon else "")
-        + (f'<ul class="plan__prices">{prices}</ul>' if prices else "")
-        + f'<p class="plan__where">{_esc(card.get("name"))}'
-        + (f" · {_esc(_where(card))}" if _where(card) else "")
-        + "</p></section>"
-    )
-
-
-def _services_html(card: Mapping[str, Any]) -> str:
-    if card.get("venue_type") != "shop":
-        return ""
-    amenities = card.get("amenities") or {}
-    tiles = [
-        f'<div class="tile"><span class="tile__icon">{icon}</span>'
-        f'<p class="tile__title">{_esc(title)}</p><p class="tile__sub">{_esc(sub)}</p></div>'
-        for key, icon, title, sub in _SHOP_SERVICES
-        if amenities.get(key) is True
-    ]
-    disciplines = [
-        f'<span class="chip">{_esc(label)}</span>' for key, label in _SHOP_DISCIPLINES if amenities.get(key) is True
-    ]
-    if not tiles and not disciplines:
-        return ""
-    for_whom = (
-        f'<p class="for-whom">Специализация</p><div class="chips">{"".join(disciplines)}</div>' if disciplines else ""
-    )
-    return (
-        '<section class="sec"><h2 class="sec__title">Что здесь можно сделать</h2>'
-        + (f'<div class="tiles">{"".join(tiles)}</div>' if tiles else "")
-        + for_whom
-        + "</section>"
-    )
-
-
-def _amenities_html(card: Mapping[str, Any]) -> str:
-    if card.get("venue_type") == "shop":
-        return ""
-    amenities = card.get("amenities") or {}
-    chips = [f'<span class="chip">{_esc(label)}</span>' for key, label in _AMENITY_CHIPS if amenities.get(key) is True]
-    if not chips:
-        return ""
-    return (
-        '<section class="sec"><h2 class="sec__title">Удобства</h2>'
-        f'<div class="chips">{"".join(chips)}</div></section>'
-    )
-
-
-def _fixed_hours_row(label: str, block: Any) -> str:
-    if not isinstance(block, Mapping):
-        return ""
-    open_ = str(block.get("open") or "").strip()
-    close = str(block.get("close") or "").strip()
-    if not open_ or not close:
-        return ""
-    return f'<p class="row"><span>{_esc(label)}</span><b>{_esc(f"{open_}–{close}")}</b></p>'
-
-
-def _hours_html(card: Mapping[str, Any]) -> str:
-    hours = card.get("opening_hours")
-    if not isinstance(hours, Mapping):
-        return ""
-    season_closed = _out_of_season(card)
-    rows = _fixed_hours_row("Комплекс", hours.get("complex")) + _fixed_hours_row("Касса", hours.get("kassa"))
-    if has_known_hours(hours):
-        rows += _hours_rows(hours, season_closed=season_closed)
-    if not rows:
-        return ""
-    if season_closed:
-        return (
-            '<section class="sec"><h2 class="sec__title">Часы в сезоне</h2>'
-            '<p class="muted">Сейчас приехать нельзя. '
-            "Ниже — часы на время, когда площадка открыта.</p>"
-            f"{rows}</section>"
-        )
-    return f'<section class="sec"><h2 class="sec__title">Когда можно приехать</h2>{rows}</section>'
-
-
 def _out_of_season(card: Mapping[str, Any]) -> bool:
     """Зимняя площадка вне сезона (``in_season``) или явный режим «сезон закрыт»."""
     if normalize_schedule_mode(card.get("schedule_mode")) == SCHEDULE_MODE_SEASON_CLOSED:
         return True
     return card.get("in_season") is False
-
-
-def _hours_rows(hours: Mapping[str, Any], *, season_closed: bool) -> str:
-    """Закрытый сезон — «ежедневно», не расписание этой недели."""
-    if season_closed:
-        groups = hours_groups(hours)
-        if groups and all(pair for _, pair in groups):
-            return "".join(
-                f'<p class="row"><span>{_esc(label)}</span>' f"<b>{_esc(pair[0])}–{_esc(pair[1])}</b></p>"
-                for label, pair in groups
-                if pair is not None
-            )
-    return "".join(
-        f'<p class="row"><span>{_esc(WEEKDAY_SHORT_RU[d])}</span>'
-        f'<b>{_esc(format_intervals_ru(intervals_for_weekday(hours, d)) if intervals_for_weekday(hours, d) else "выходной")}</b></p>'
-        for d in range(7)
-    )
 
 
 def _rental_section_title(card: Mapping[str, Any], hours: Mapping[str, Any]) -> str:
@@ -892,109 +627,9 @@ def _rental_section_title(card: Mapping[str, Any], hours: Mapping[str, Any]) -> 
     return "Прокат инвентаря"
 
 
-def _rental_catalog_html(card: Mapping[str, Any]) -> str:
-    hours = card.get("opening_hours") if isinstance(card.get("opening_hours"), Mapping) else {}
-    catalog = hours.get("rental_catalog")
-    if not isinstance(catalog, list) or not catalog:
-        return ""
-    items = []
-    for row in catalog:
-        if not isinstance(row, Mapping):
-            continue
-        label = str(row.get("label") or "").strip()
-        price = str(row.get("price") or "").strip()
-        if not label or not price:
-            continue
-        per = str(row.get("per") or "").strip()
-        note = str(row.get("note") or "").strip()
-        per_html = f'<span class="offer__per">/{_esc(per)}</span>' if per else ""
-        note_html = f'<p class="offer__note">{_esc(note)}</p>' if note else ""
-        items.append(
-            '<div class="offer">'
-            f'<div class="offer__top"><span class="offer__name">{_esc(label)}</span>'
-            f'<b class="offer__price">{_esc(price)}{per_html}</b></div>'
-            f"{note_html}</div>"
-        )
-    if not items:
-        return ""
-    title = _rental_section_title(card, hours)
-    note = str(hours.get("rental_note") or "").strip()
-    note_html = f'<p class="muted">{_esc(note)}</p>' if note else ""
-    return f'<section class="sec"><h2 class="sec__title">{_esc(title)}</h2>' + "".join(items) + note_html + "</section>"
-
-
-def _trainers_html(card: Mapping[str, Any], *, cta_url: str | None) -> str:
-    n = int(card.get("trainer_count") or 0)
-    if n <= 0 or card.get("venue_type") == "shop":
-        return ""
-    word = plural_ru(n, "тренер", "тренера", "тренеров")
-    verb = "работает" if n == 1 else "работают"
-    link = f' <a href="{_esc(cta_url)}">Записаться в Telegram</a>' if cta_url else ""
-    return (
-        '<section class="sec"><h2 class="sec__title">Тренеры</h2>'
-        f"<p>Здесь {verb} {n} {word} — индивидуальные и групповые занятия.{link}</p></section>"
-    )
-
-
-def _hero_photo_url(card: Mapping[str, Any]) -> str | None:
-    """Первое опубликованное фото места — во всю ширину шапки. Нет фото — шапка без него."""
-    hero = card.get("hero")
-    variants = hero.get("variants") if isinstance(hero, Mapping) else None
-    if not isinstance(variants, Mapping):
-        return None
-    url = str(variants.get("card") or variants.get("thumb") or variants.get("hero") or "").strip()
-    return visible_photo_url(url)
-
-
-def _maps_url(card: Mapping[str, Any]) -> str | None:
-    lat, lon = card.get("latitude"), card.get("longitude")
-    if lat is not None and lon is not None:
-        return f"https://yandex.ru/maps/?pt={float(lon)},{float(lat)}&z=16&l=map"
-    query = " ".join(x for x in (_city(card), str(card.get("address") or "")) if x).strip()
-    return f"https://yandex.ru/maps/?text={quote(query)}" if query else None
-
-
 def _display_host(url: str) -> str:
     """Домен без пути: «https://chizhovka-arena.by/tickets» → «chizhovka-arena.by»."""
     return display_host(url)
-
-
-def _contacts_html(card: Mapping[str, Any]) -> str:
-    rows: list[str] = []
-    address = format_place_address(str(card.get("address") or ""), city=_city(card))
-    maps = _maps_url(card)
-    if address:
-        addr_html = (
-            f'<a href="{_esc(maps)}" rel="noopener" target="_blank">{_esc(address)}</a>' if maps else _esc(address)
-        )
-        rows.append(f'<p class="row"><span>Адрес</span><b>{addr_html}</b></p>')
-    phone = str(card.get("phone") or "").strip()
-    if phone and is_valid_public_phone(phone):
-        rows.append(
-            f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel_href(phone))}">{_esc(format_phone_display(phone))}</a></b></p>'
-        )
-    site = safe_external_url(card.get("website_url"))
-    if site:
-        label = str(card.get("venue_site_label") or "Сайт")
-        rows.append(
-            f'<p class="row"><span>{_esc(label)}</span><b><a href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
-            f"{_esc(_display_host(site))}</a></b></p>"
-        )
-    instagram = str((card.get("social_urls") or {}).get("instagram") or "").strip()
-    if instagram.lower().startswith("https://"):
-        handle = instagram.rstrip("/").rsplit("/", 1)[-1]
-        rows.append(
-            f'<p class="row"><span>Instagram</span><b><a href="{_esc(instagram)}" rel="noopener nofollow" '
-            f'target="_blank">@{_esc(handle)}</a></b></p>'
-        )
-    tickets = safe_external_url(card.get("tickets_url"))
-    if tickets:
-        rows.append(
-            f'<p class="row"><span>Билеты</span><b><a href="{_esc(tickets)}" rel="noopener nofollow" target="_blank">Купить онлайн</a></b></p>'
-        )
-    if not rows:
-        return ""
-    return '<section class="sec"><h2 class="sec__title">Контакты</h2>' + "".join(rows) + "</section>"
 
 
 def zovi_entry_path(view: Mapping[str, Any]) -> str | None:
@@ -1112,7 +747,7 @@ def _share_html(
     zovi_path: str | None = None,
 ) -> str:
     """Ряд «Поделиться». Подборка в Telegram — только url (превью из og), без text=."""
-    del venue_type  # один блок «Позвать друзей» и на катке, и в подборке
+    del venue_type
     url = share["share_url"]
     body = share["share_body"]
     full = f"{body}\n{url}" if body else url
@@ -1146,12 +781,6 @@ def _share_html(
         + more_html
         + "</section>"
     )
-
-
-def _trust_html(view: Mapping[str, Any]) -> str:
-    """Свежесть и источник на публичной карточке не пишем. Ссылки «сообщить» здесь нет."""
-    del view
-    return ""
 
 
 def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> str:
@@ -1211,6 +840,122 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
     return json_for_script(place)
 
 
+_B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _share_asset_version() -> str:
+    """Один ?v= на css и js дока: правка скрипта тоже сбрасывает кэш."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    for rel in ("static/share/place-share.css", "static/share/place-share.js"):
+        path = _REPO_ROOT / rel
+        digest.update(rel.encode())
+        try:
+            digest.update(path.read_bytes())
+        except OSError:
+            digest.update(b"0")
+    return digest.hexdigest()[:10]
+
+
+PLACE_SHARE_VERSION = _share_asset_version()
+
+
+def _webapp_bundle_version() -> str:
+    try:
+        text = (_REPO_ROOT / "static" / "webapp" / "arena.html").read_text(encoding="utf-8")
+    except OSError:
+        return "0"
+    match = re.search(r"minsk-time\.js\?v=(\d+)", text)
+    return match.group(1) if match else "0"
+
+
+def _effective_pick_session(view: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    focus = view.get("focus")
+    if isinstance(focus, Mapping):
+        return focus
+    nxt = view.get("next_slot")
+    return nxt if isinstance(nxt, Mapping) else None
+
+
+def _nojs_messenger_row(share: Mapping[str, str]) -> str:
+    """Простые ссылки мессенджеров под выбранным билетом (без JS)."""
+    url = share["share_url"]
+    body = share.get("share_body") or ""
+    full = f"{body}\n{url}" if body else url
+    tg = f"https://t.me/share/url?url={quote(url, safe='')}"
+    if body:
+        tg += f"&text={quote(body, safe='')}"
+    links = (
+        ("Telegram", tg, True),
+        ("Viber", f"viber://forward?text={quote(full, safe='')}", False),
+        ("WhatsApp", f"https://wa.me/?text={quote(full, safe='')}", True),
+    )
+    row = "".join(
+        f'<a href="{_esc(href)}"' + (' rel="noopener" target="_blank"' if blank else "") + f">{_esc(label)}</a>"
+        for label, href, blank in links
+    )
+    row += f'<button type="button" data-copy="{_esc(full)}">Скопировать</button>'
+    return f'<div class="place-share-fallback">{row}</div>'
+
+
+def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool) -> str:
+    pick = _effective_pick_session(view)
+    if pick is None or not _skating(view["card"]):
+        return ""
+    when = invite_cta_when(
+        _parse_iso_date(pick.get("local_date")),
+        str(pick.get("starts_at_local") or ""),
+        today=view["today"],
+    )
+    label = f"Позвать на {when}" if when else "Позвать с собой"
+    return (
+        # hidden до скрипта: без JS кнопке нечего открыть — под выбранным сеансом свои ссылки.
+        '<div class="place-share-dock" id="placeShareDock" hidden>'
+        '<div class="place-share-dock__inner">'
+        f'<button type="button" class="place-share-dock__btn" id="placeShareBtn">{_esc(label)}</button>'
+        "</div></div>"
+    )
+
+
+def _place_share_scripts_html(
+    view: Mapping[str, Any], *, invite: bool, base_path: str, telegram_url: str | None
+) -> str:
+    pick = _effective_pick_session(view)
+    if pick is None or not _skating(view["card"]):
+        return ""
+    card = view["card"]
+    pick_day = _parse_iso_date(pick.get("local_date"))
+    boot = {
+        "ref": str(card["id"]),
+        "placeName": format_public_name(str(card.get("name") or "")),
+        "timezone": str(card.get("timezone") or "Europe/Minsk"),
+        "today": view["today"].isoformat(),
+        "days": view.get("days") or [],
+        "ohmDays": view.get("ohm_days") or [],
+        "sessionId": int(pick["id"]),
+        "focusDay": pick_day.isoformat() if pick_day else "",
+        "sessionMissing": bool(view.get("focus_missing")),
+        "invite": invite,
+        "basePath": base_path,
+        "telegramCta": telegram_url or "",
+    }
+    wv = _webapp_bundle_version()
+    pv = PLACE_SHARE_VERSION
+    return (
+        f'<script type="application/json" id="place-share-data">{json_for_script(boot)}</script>\n'
+        f'<script>window.__PLACE_SHARE__=JSON.parse(document.getElementById("place-share-data").textContent);</script>\n'
+        f'<link rel="stylesheet" href="/webapp/mini-app-share-sheet.css?v={_esc(wv)}" />\n'
+        f'<link rel="stylesheet" href="/static/share/place-share.css?v={_esc(pv)}" />\n'
+        f'<script defer src="/webapp/minsk-time.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/public-display-model.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/arena-card-model.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/webapp/mini-app-share-sheet.js?v={_esc(wv)}"></script>\n'
+        f'<script defer src="/static/share/place-share.js?v={_esc(pv)}"></script>'
+    )
+
+
 def render_place_page(
     view: Mapping[str, Any],
     *,
@@ -1227,68 +972,28 @@ def render_place_page(
 ) -> str:
     card = view["card"]
     title = page_title(view, invite=invite)
-    badge = status_badge(view)
-    vt = str(card.get("venue_type") or "ice")
-    icon = {"ice": "❄️", "gym": "🏋️", "choreo": "🩰", "pool": "🏊", "outdoor": "🌳", "shop": "🧰"}.get(vt, "📍")
-    badge_html = ""
-    if badge:
-        badge_html = "".join(
-            f'<p class="badge badge--{_esc(badge[0])}"><span class="badge__dot"></span>{_esc(line)}</p>'
-            for line in str(badge[1]).split("\n")
-            if line
-        )
-    where = _where(card)
-    photo = _hero_photo_url(card)
-    photo_html = (
-        f'<img class="hero__photo" src="{_esc(photo)}" alt="{_esc(card.get("name"))}" loading="eager" decoding="async" />'
-        if photo
-        else ""
-    )
-    hero = (
-        f'<header class="hero hero--{_esc(vt)}{" hero--photo" if photo else ""}">'
-        + photo_html
-        + f'<p class="hero__type">{icon} {_esc(card.get("venue_noun") or "")}</p>'
-        f'<h1 class="hero__title">{_esc(format_public_name(str(card.get("name") or "")))}</h1>'
-        + (f'<p class="hero__where">{_esc(where)}</p>' if where else "")
-        + badge_html
-        + "</header>"
-    )
-    description_text = str(card.get("short_description") or "").strip()
-    about = f'<p class="about">{_esc(description_text)}</p>' if description_text else ""
-    from src.application.public_web_cta import render_place_primary_actions
-
     base_url = join_public_origin(canonical_url, "/").rstrip("/") if canonical_url else ""
-    actions = render_place_primary_actions(
-        card,
+    body = render_place_body_b(
+        view,
+        base_path=base_path,
         base_url=base_url,
-        surface="place_page",
-        city_id=int(card.get("city_id") or 0) or None,
-        city_name=_city(card) or "",
-        telegram_url=cta_url,
-    )
-    body = "".join(
-        [
-            hero,
-            _focus_html(view, invite=invite),
-            about,
-            _schedule_html(view, base_path=base_path, invite=invite),
-            _ohm_html(view, base_path=base_path, invite=invite),
-            actions,
-            _services_html(card),
-            _hours_html(card),
-            _rental_catalog_html(card),
-            _amenities_html(card),
-            _trainers_html(card, cta_url=cta_url),
-            _contacts_html(card),
-            _share_html(share, venue_type=vt, story_image_url=story_image_url, zovi_path=zovi_entry_path(view)),
-        ]
+        invite=invite,
+        cta_url=cta_url,
+        share=share,
+        story_image_url=story_image_url,
     )
     city = _city(card)
-    city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city)} сегодня</a>' if city_page_url and city else ""
+    city_link = (
+        f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(format_public_name(city))} сегодня</a>'
+        if city_page_url and city
+        else ""
+    )
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
     robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
 
-    html = _TEMPLATE_PATH.read_text(encoding="utf-8")
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+
+    html = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
     replacements = {
         "__OG_TITLE__": _esc(title),
@@ -1301,14 +1006,496 @@ def render_place_page(
         "__ROBOTS__": robots,
         "__HEAD_EXTRA__": "",
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
-        "__BRAND__": _esc(t("brand.mark")),
-        "__CITY__": (
-            f'<a href="/c/{_esc(city_slug(city))}">{_esc(t("nav.back_city", city=format_public_name(city)))}</a>'
-            if city
-            else _esc("Беларусь")
-        ),
+        "__TOKENS_V__": TOKENS_VERSION,
+        "__STYLE_V__": STYLE_VERSION,
+        "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__CITY_LINK__": city_link,
-        "__TRUST__": _trust_html(view),
         "__BODY__": body,
+        "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite),
+        "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(
+            view, invite=invite, base_path=base_path, telegram_url=cta_url
+        ),
     }
-    return fill_placeholders(html, replacements)
+    page_html = fill_placeholders(html, replacements)
+    if _effective_pick_session(view) is not None and _skating(card):
+        page_html = page_html.replace("<body class=\"b\">", '<body class="b has-place-share">', 1)
+    return page_html
+
+
+# ── TASK-246 · стиль B «Лёд и свет» (доска «B · Место») ──────────────────────
+
+_B_AMENITIES: tuple[tuple[str, str, str], ...] = (
+    ("skate_rental", "skate", "Прокат коньков"),
+    ("skate_sharpening", "sharpen", "Заточка"),
+    ("locker_rooms", "locker", "Раздевалки"),
+    ("cafe", "cafe", "Кафе"),
+    ("parking", "parking", "Парковка"),
+    ("accessibility", "person", "Доступная среда"),
+)
+
+
+def _sentence(text: str) -> str:
+    """Заметка катка как предложение: с заглавной, без двойной точки."""
+    body = str(text or "").strip().rstrip(".;")
+    if not body:
+        return ""
+    return body[0].upper() + body[1:] + "."
+
+
+def _b_where(card: Mapping[str, Any]) -> str:
+    """«ул. Ташкентская, 19 · Заводской район» — без города: он в пилюле «‹ Минск»."""
+    street = format_street_address(str(card.get("address") or ""), city=_city(card))
+    district = str(card.get("district") or "").strip()
+    if district and _city(card) and district.casefold() == _city(card).casefold():
+        district = ""
+    return " · ".join(x for x in (street, district) if x)
+
+
+def _b_status(view: Mapping[str, Any]) -> str:
+    """Статус места строкой в герое: закрыто на сезон, только по телефону, открыто сейчас.
+
+    Ближайшие сеансы («Массовое катание: завтра, 9:00») здесь не повторяем — расписание ниже.
+    """
+    badge = status_badge(view)
+    if not badge or badge[0] in ("live", "soon"):
+        return ""
+    kind, text = badge
+    return f'<span class="b-hero__status b-hero__status--{_esc(kind)}"><i></i>{_esc(text)}</span>'
+
+
+def _b_hero(card: Mapping[str, Any], *, status_html: str = "") -> str:
+    from src.application.style_b import back_pill, brand_link, hero_html, media_url
+
+    hero_media = card.get("hero") if isinstance(card.get("hero"), Mapping) else None
+    photo = media_url(hero_media, size="card") or media_url(hero_media, size="hero")
+    photo_variants = None
+    if hero_media and isinstance(hero_media.get("variants"), Mapping):
+        photo_variants = hero_media.get("variants")
+    toned = bool(hero_media.get("display_tone")) if hero_media else False
+    city_name = _city(card)
+    bar = ""
+    if city_name:
+        bar = back_pill(f"/c/{city_slug(city_name)}", format_public_name(city_name))
+    bar += brand_link(end=True)
+    where = _b_where(card)
+    name = format_public_name(str(card.get("name") or ""))
+    return hero_html(
+        title=name,
+        sub_html=_esc(where) if where else "",
+        photo_url=photo,
+        photo_alt=name,
+        toned=toned,
+        bar_html=bar,
+        variant="place",
+        extra_html=status_html,
+        photo_variants=photo_variants,
+    )
+
+
+def _b_call(card: Mapping[str, Any], links: Mapping[str, Any], *, dark: bool = True) -> str:
+    tel = links.get("tel")
+    if not tel:
+        return ""
+    from src.application.catalog_icons import icon_svg
+
+    klass = "b-call b-call--dark" if dark else "b-call"
+    number = format_phone_display(str(card.get("phone") or "").split(";")[0])
+    return (
+        f'<a class="{klass}" href="{_esc(tel)}" data-catalog-phone-beacon="{_esc(links.get("tel_beacon"))}">'
+        f'{icon_svg("phone")}<span class="b-call__num">{_esc(number)}</span></a>'
+    )
+
+
+def _b_price_mode(slots: list[Mapping[str, Any]]) -> str:
+    counts: dict[str, int] = {}
+    for slot in slots:
+        price = slot_price(slot)
+        if price:
+            counts[price] = counts.get(price, 0) + 1
+    if not counts:
+        return ""
+    return max(counts.items(), key=lambda kv: kv[1])[0]
+
+
+def _b_ticket(
+    slot: Mapping[str, Any],
+    *,
+    base_path: str,
+    invite: bool,
+    focused: bool,
+    common_price: str,
+    nojs_share: Mapping[str, str] | None = None,
+) -> str:
+    start = format_clock(str(slot.get("starts_at_local") or ""))
+    end = format_clock(str(slot.get("ends_at_local") or ""))
+    sub_bits = [f"до {end}"] if end else []
+    price = slot_price(slot)
+    if price and price != common_price:
+        sub_bits.append(price)
+    sub = f'<span class="b-ticket__sub">{_esc(" · ".join(sub_bits))}</span>' if sub_bits else ""
+    href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
+    klass = "b-ticket b-ticket--picked" if focused else "b-ticket"
+    sid = int(slot["id"])
+    ticket = (
+        f'<a class="{klass}" href="{_esc(href)}" rel="nofollow" data-session-id="{sid}">'
+        f'<span class="b-ticket__time">{_esc(start)}</span>{sub}</a>'
+    )
+    if focused and nojs_share is not None:
+        ticket += _nojs_messenger_row(nojs_share)
+    return ticket
+
+
+def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    card = view["card"]
+    if not _skating(card):
+        return ""
+    title = t("kind.public_skate")
+    mode = normalize_schedule_mode(card.get("schedule_mode"))
+    days = list(view.get("days") or [])
+    if mode == SCHEDULE_MODE_SEASON_CLOSED:
+        reopen = _parse_iso_date(card.get("schedule_reopen_date"))
+        line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
+        return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
+    if card.get("in_season") is False:
+        return ""
+    if mode == SCHEDULE_MODE_PHONE or not days:
+        call = _b_call(card, links)
+        if call:
+            body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
+            return section(title, body, klass="b-sec--place", sec_id="schedule")
+        site = safe_external_url(card.get("website_url"))
+        if site:
+            host = _display_host(site)
+            link = (
+                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+                f"{_esc(host or site)}</a>"
+            )
+            body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{link}'
+            return section(title, body, klass="b-sec--place", sec_id="schedule")
+        return ""
+
+    today = view["today"]
+    focus = view.get("focus")
+    pick = _effective_pick_session(view)
+    focus_id = int(focus["id"]) if focus is not None else None
+    pick_id = int(pick["id"]) if pick is not None else None
+    by_date: dict[date, list[Mapping[str, Any]]] = {}
+    for day in days:
+        d = _parse_iso_date(day.get("local_date"))
+        if d is not None and day.get("sessions"):
+            by_date[d] = list(day.get("sessions") or [])
+    if not by_date:
+        return ""
+    all_slots = [s for slots in by_date.values() for s in slots]
+    common = _b_price_mode(all_slots)
+    default_day = min(by_date)
+    if focus_id is not None:
+        for d, slots in by_date.items():
+            if any(int(s["id"]) == focus_id for s in slots):
+                default_day = d
+    sched_bits: list[str] = []
+    for offset in range(SCHEDULE_DAYS):
+        d = today + timedelta(days=offset)
+        label = short_day_word(d, today=today)
+        slots = by_date.get(d, [])
+        n = len(slots)
+        day_klass = "b-day"
+        if d.weekday() >= 5:
+            day_klass += " b-day--end"
+        inner = f"<span>{_esc(label)}</span><b>{d.day}</b><i>{n if n else '—'}</i>"
+        if not n:
+            sched_bits.append(f'<span class="{day_klass} b-day--off">{inner}</span>')
+            continue
+        nojs_share = None
+        if pick_id is not None and any(int(s["id"]) == pick_id for s in slots):
+            page_url = base_path + place_query(session_id=pick_id, invite=invite)
+            nojs_share = share_payload(view, page_url=page_url, invite=invite)
+        tickets = "".join(
+            _b_ticket(
+                s,
+                base_path=base_path,
+                invite=invite,
+                focused=(pick_id == int(s["id"])),
+                common_price=common,
+                nojs_share=nojs_share if pick_id == int(s["id"]) else None,
+            )
+            for s in slots
+        )
+        frag = f"d-{d.isoformat()}"
+        if d == default_day:
+            day_klass += " b-day--current"
+        sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
+        sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
+    foot: list[str] = []
+    if links.get("tickets"):
+        href, blank = links["tickets"]
+        attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+        foot.append(f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>')
+    zovi = zovi_entry_path(view)
+    if zovi:
+        foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
+    links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
+    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{links_row}'
+    aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
+    return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
+
+
+def _b_ohm(view: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    days = [d for d in (view.get("ohm_days") or []) if d.get("sessions")]
+    if not days:
+        return ""
+    today = view["today"]
+    slots = [s for d in days for s in d.get("sessions") or []]
+    first = slots[0]
+    aside_bits: list[str] = []
+    price = _b_price_mode(slots)
+    if price:
+        aside_bits.append(price)
+    start, end = format_clock(str(first.get("starts_at_local") or "")), format_clock(str(first.get("ends_at_local") or ""))
+    try:
+        sh, sm = (int(x) for x in start.split(":"))
+        eh, em = (int(x) for x in end.split(":"))
+        minutes = (eh * 60 + em) - (sh * 60 + sm)
+        if minutes > 0:
+            aside_bits.append(f"{minutes} мин")
+    except ValueError:
+        pass
+    rows: list[str] = []
+    for day in days:
+        d = _parse_iso_date(day.get("local_date"))
+        if d is None:
+            continue
+        times = " · ".join(format_clock(str(s.get("starts_at_local") or "")) for s in day.get("sessions") or [])
+        rows.append(
+            f'<div class="b-table__row"><span class="b-table__day">{_esc(short_day_word(d, today=today))}</span>'
+            f'<span class="b-table__times">{_esc(times)}</span></div>'
+        )
+    notes: list[str] = []
+    for slot in slots:
+        for key in ("age_note", "capacity_note", "price_note"):
+            note = _sentence(str(slot.get(key) or ""))
+            if note and note not in notes:
+                notes.append(note)
+    notes_html = f'<p class="b-note">{_esc(" ".join(notes))}</p>' if notes else ""
+    aside = f'<span class="b-aside">{_esc(" · ".join(aside_bits))}</span>' if aside_bits else ""
+    body = f'<div class="b-table b-table--dark">{"".join(rows)}</div>{notes_html}'
+    return section(t("kind.hockey_practice"), body, aside_html=aside, klass="b-sec--place", sec_id="ohm")
+
+
+def _b_hours_rows(card: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Строки часов для таблицы «Как добраться»: «Открыто · каждый день 7:00–23:00», «Касса · 11:00–21:00»."""
+    hours = card.get("opening_hours")
+    if not isinstance(hours, Mapping):
+        return []
+    season_closed = _out_of_season(card)
+    rows: list[tuple[str, str]] = []
+    for key, label in (("complex", "Комплекс"), ("kassa", "Касса")):
+        block = hours.get(key)
+        if isinstance(block, Mapping) and block.get("open") and block.get("close"):
+            rows.append((label, f"{format_clock(str(block['open']))}–{format_clock(str(block['close']))}"))
+    groups = hours_groups(hours) if has_known_hours(hours) else []
+    if len(groups) == 1 and groups[0][0] == "Ежедневно" and groups[0][1] is not None:
+        pair = groups[0][1]
+        rows.append(("Открыто", f"каждый день {format_clock(pair[0])}–{format_clock(pair[1])}"))
+    else:
+        for label, pair in groups:
+            value = f"{format_clock(pair[0])}–{format_clock(pair[1])}" if pair is not None else "выходной"
+            rows.append((label.lower(), value))
+    if season_closed:
+        # Сезон закрыт: это часы на время сезона, а не «можно приехать на этой неделе».
+        rows = [("В сезоне" if key == "Открыто" else key, value) for key, value in rows]
+    return rows
+
+
+def _b_arrive(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
+    from src.application.catalog_icons import icon_svg
+    from src.application.style_b import section
+
+    buttons: list[str] = []
+    if links.get("tel"):
+        buttons.append(
+            f'<a class="b-btn" href="{_esc(links["tel"])}" data-catalog-phone-beacon="{_esc(links.get("tel_beacon"))}">'
+            f"{icon_svg('phone')}{_esc(t('cta.call'))}</a>"
+        )
+    if links.get("route"):
+        href, blank = links["route"]
+        attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+        buttons.append(f'<a class="b-btn" href="{_esc(href)}"{attrs}>{icon_svg("route")}{_esc(t("cta.route"))}</a>')
+    rows: list[str] = [
+        f'<div class="b-info__row"><span class="b-info__key">{_esc(key)}</span>'
+        f'<span class="b-info__val">{_esc(value)}</span></div>'
+        for key, value in _b_hours_rows(card)
+    ]
+    phone = str(card.get("phone") or "").strip()
+    if links.get("tel") and phone:
+        rows.append(
+            f'<a class="b-info__row" href="{_esc(links["tel"])}" data-catalog-phone-beacon="{_esc(links.get("tel_beacon"))}">'
+            f'<span class="b-info__key">Телефон</span><span class="b-info__val">'
+            f"{_esc(format_phone_display(phone.split(';')[0]))}</span></a>"
+        )
+    site = safe_external_url(card.get("website_url"))
+    if site:
+        rows.append(
+            f'<a class="b-info__row" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+            f'<span class="b-info__key">Сайт</span><span class="b-info__val">{_esc(_display_host(site))}</span></a>'
+        )
+    instagram = str((card.get("social_urls") or {}).get("instagram") or "").strip()
+    if instagram.lower().startswith("https://"):
+        handle = instagram.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0]
+        rows.append(
+            f'<a class="b-info__row" href="{_esc(instagram)}" rel="noopener nofollow" target="_blank">'
+            f'<span class="b-info__key">Instagram</span><span class="b-info__val">@{_esc(handle)}</span></a>'
+        )
+    body = ""
+    if buttons:
+        body += f'<div class="b-btns">{"".join(buttons)}</div>'
+    if rows:
+        body += f'<div class="b-info">{"".join(rows)}</div>'
+    return section(t("hub.directions"), body, klass="b-sec--place")
+
+
+def _b_onsite(card: Mapping[str, Any], *, cta_url: str | None) -> str:
+    from src.application.catalog_icons import icon_svg
+    from src.application.style_b import section
+
+    amenities = card.get("amenities") or {}
+    body = ""
+    if card.get("venue_type") == "shop":
+        chips = [
+            f'<span class="b-chip">{icon_svg(icon)}{_esc(title)}</span>'
+            for key, icon, title, _sub in _SHOP_SERVICES
+            if amenities.get(key) is True
+        ]
+        chips += [
+            f'<span class="b-chip">{_esc(label)}</span>' for key, label in _SHOP_DISCIPLINES if amenities.get(key) is True
+        ]
+        if chips:
+            body += f'<div class="b-chips">{"".join(chips)}</div>'
+        return section("Что здесь можно сделать", body, klass="b-sec--place")
+    chips = [
+        f'<span class="b-chip">{icon_svg(icon)}{_esc(label)}</span>'
+        for key, icon, label in _B_AMENITIES
+        if amenities.get(key) is True
+    ]
+    if chips:
+        body += f'<div class="b-chips">{"".join(chips)}</div>'
+    n = int(card.get("trainer_count") or 0)
+    if n > 0:
+        word = plural_ru(n, "тренер", "тренера", "тренеров")
+        verb = "работает" if n == 1 else "работают"
+        go = f'<span class="b-card__go">{_esc(t("cta.enroll"))}</span>' if cta_url else ""
+        tag = "a" if cta_url else "div"
+        href = f' href="{_esc(cta_url)}"' if cta_url else ""
+        body += (
+            f'<{tag} class="b-card"{href}><span><b>Здесь {verb} {n} {word}</b>'
+            f"<span>индивидуальные и групповые занятия</span></span>{go}</{tag}>"
+        )
+    return section(t("place.on_site"), body, klass="b-sec--place")
+
+
+def _b_rental(card: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    hours = card.get("opening_hours") if isinstance(card.get("opening_hours"), Mapping) else {}
+    catalog = hours.get("rental_catalog")
+    if not isinstance(catalog, list):
+        return ""
+    rows: list[str] = []
+    for row in catalog:
+        if not isinstance(row, Mapping):
+            continue
+        label = str(row.get("label") or "").strip()
+        price = str(row.get("price") or "").strip()
+        if not label or not price:
+            continue
+        per = str(row.get("per") or "").strip()
+        value = f"{price}/{per}" if per else price
+        rows.append(
+            f'<div class="b-info__row"><span class="b-info__key">{_esc(label)}</span>'
+            f'<span class="b-info__val">{_esc(value)}</span></div>'
+        )
+    if not rows:
+        return ""
+    note = str(hours.get("rental_note") or "").strip()
+    note_html = f'<p class="b-note">{_esc(_sentence(note))}</p>' if note else ""
+    body = f'<div class="b-info">{"".join(rows)}</div>{note_html}'
+    return section(_rental_section_title(card, hours), body, klass="b-sec--place")
+
+
+def _b_about(card: Mapping[str, Any]) -> str:
+    text = str(card.get("short_description") or "").strip()
+    if not text:
+        return ""
+    return f'<section class="b-sec b-sec--place"><p class="b-text">{_esc(text)}</p></section>'
+
+
+def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
+    """Сеанс из ссылки ``?s=`` — тёмный билет над расписанием."""
+    card = view["card"]
+    focus = view.get("focus")
+    if focus is None:
+        if not view.get("focus_missing"):
+            return ""
+        nxt = view.get("next_slot")
+        tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
+        return (
+            '<section class="b-sec" id="plan"><div class="b-plan b-plan--gone">'
+            f'<b>Сеанса из ссылки уже нет в расписании.</b><span>{tail.strip()}</span></div></section>'
+        )
+    kicker = "Тебя зовут кататься" if invite else "Выбранный сеанс"
+    d = _parse_iso_date(focus.get("local_date"))
+    day_text = day_heading(d, today=view["today"]) if d else ""
+    start = format_clock(str(focus.get("starts_at_local") or ""))
+    end = format_clock(str(focus.get("ends_at_local") or ""))
+    soon = starts_in_label(focus, now=view["now"])
+    prices = " · ".join(slot_price_lines(focus))
+    label = session_kind_label(focus)
+    time_text = f"{start}–{end}" if end else start
+    extra = " · ".join(x for x in (label, prices) if x)
+    place_name = format_public_name(str(card.get("name") or ""))
+    address = format_place_address(str(card.get("address") or ""), city=_city(card))
+    where = " · ".join(x for x in (place_name, address) if x)
+    return (
+        '<section class="b-sec" id="plan"><div class="b-plan">'
+        f'<span class="b-plan__kicker">{_esc(kicker)}</span>'
+        f'<span class="b-plan__day">{_esc(day_text)}</span>'
+        f'<span class="b-plan__time">{_esc(time_text)}</span>'
+        + (f'<span class="b-plan__line">{_esc(extra)}</span>' if extra else "")
+        + (f'<span class="b-plan__soon">{_esc(soon)}</span>' if soon else "")
+        + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
+        + "</div></section>"
+    )
+
+
+def render_place_body_b(
+    view: Mapping[str, Any],
+    *,
+    base_path: str,
+    base_url: str,
+    invite: bool,
+    cta_url: str | None,
+    share: Mapping[str, str],
+    story_image_url: str | None,
+) -> str:
+    from src.application.public_web_cta import phone_beacon_script, place_action_links
+
+    card = view["card"]
+    links = place_action_links(
+        card, base_url=base_url, surface="place_page", city_id=int(card.get("city_id") or 0) or None
+    )
+    parts = [
+        _b_hero(card, status_html=_b_status(view)),
+        _b_about(card),
+        _b_plan(view, invite=invite),
+        _b_schedule(view, base_path=base_path, invite=invite, links=links),
+        _b_ohm(view),
+        _b_arrive(card, links),
+        _b_onsite(card, cta_url=cta_url),
+        _b_rental(card),
+    ]
+    body = "".join(parts)
+    return body + phone_beacon_script(body)

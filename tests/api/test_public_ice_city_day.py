@@ -2,14 +2,14 @@
 TASK-096 S3 — шеринг-артефакт «Лёд сегодня в городе» (AC-003, AC-005, AC-007).
 
 Что здесь доказывается:
-  * публичная страница отдаётся без авторизации и несёт og-теги (иначе превью в чате
-    пустое, и пересылать нечего);
+  * старый адрес ``/ice/{город}/today`` ведёт 301 на список ``/c/{город}?t=ice&w=today``
+    (TASK-266), ссылка в шеринге — сразу на список;
   * og:image — настоящий PNG, а не 404 и не заглушка;
   * ``/api/public/ice/share/{city_id}`` отдаёт контракт ``share_url``/``share_body``/
     ``share_text`` — тот же, что у share-trainer, поэтому фронт не пишет свой обработчик;
   * каждое нажатие «Поделиться» пишет строку в ``client_share_events`` (DEC-005, G-P5
     «и это измеряется»);
-  * на странице нет выдуманных данных (AC-005): цены нет — значит поля нет, а не «0».
+  * в сводке нет выдуманных данных (AC-005): цены нет — значит поля нет, а не «0».
 """
 
 from __future__ import annotations
@@ -26,40 +26,7 @@ from sqlalchemy import text
 from src.api.app import app
 from src.application.ice_city_day import city_slug, summary_line
 from tests.api.test_public_arenas import _insert_arena, _insert_city
-from tests.api.test_schedule_staleness_surfaces import _job
 from src.application.ice_session_use_cases import create_ice_session
-
-_PHONE_GUARD_UNKNOWN = "unknown (только email/соцсети)"
-_PHONE_GUARD_SHORT = "123-456"
-_PHONE_GUARD_VALID = "+375 29 123-45-67"
-
-
-def _ice_day_arena_block(html: str, arena_name: str) -> str:
-    for block in re.findall(r'<article class="arena".*?</article>', html, re.DOTALL):
-        if arena_name in block:
-            return block
-    raise AssertionError(f"arena block for {arena_name!r} missing")
-
-
-def _assert_invalid_phone_ssr(fragment: str, raw_phone: str) -> None:
-    assert "tel:" not in fragment
-    assert raw_phone not in fragment
-    assert "уточните по телефону" not in fragment.lower()
-
-
-async def _very_stale_today_session(
-    db_session,
-    arena_id: int,
-    *,
-    observed_at: datetime,
-) -> None:
-    session_id, _ = await _add_today_session(db_session, arena_id)
-    await db_session.execute(
-        text("UPDATE ice_sessions SET observed_at = :obs WHERE id = :id"),
-        {"id": session_id, "obs": observed_at},
-    )
-    await _job(db_session, arena_id, last_ok_at=observed_at)
-
 
 def _minsk_now() -> datetime:
     """City day pages use Europe/Minsk; CI runners are often UTC — date.today() drifts."""
@@ -120,32 +87,24 @@ def test_city_slug_transliterates_and_normalizes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_public_page_opens_without_auth_and_carries_og_tags(
-    app_use_test_db, db_session
-) -> None:
-    """AC-003: получатель ссылки не ставит бота, чтобы увидеть расписание."""
+async def test_old_today_page_redirects_to_the_ice_today_list(app_use_test_db, db_session) -> None:
+    """TASK-266: «Лёд сегодня» — это список «Покататься → Сегодня»; старая ссылка из чата туда и ведёт."""
     name = f"Огтест{uuid.uuid4().hex[:6]}"
     cid = await _insert_city(db_session, name=name)
     arena = await _insert_arena(db_session, cid, name="Ледовый дворец «Проба»")
-    _session_id, starts_at_local = await _add_today_session(db_session, arena)
+    await _add_today_session(db_session, arena)
 
     slug = city_slug(name)
     async with _client() as client:
-        page = await client.get(f"/ice/{slug}/today")
+        resp = await client.get(f"/ice/{slug}/today", follow_redirects=False)
+        listing = await client.get(resp.headers["location"])
 
-    assert page.status_code == 200, page.text
-    html = page.text
-    assert 'property="og:title"' in html
-    assert 'property="og:description"' in html
-    assert 'property="og:image"' in html
-    assert f"/ice/{slug}/today/og.png" in html
-    assert 'name="twitter:card"' in html
-    # Расписание — в первом же ответе, а не подгружается скриптом.
-    assert "Ледовый дворец «Проба»" in html or "Ледовый дворец" in html
-    assert starts_at_local in html
-    assert "8.50 BYN" in html
-    # Ни одного незаменённого плейсхолдера шаблона.
-    assert "__" not in html.split("<style>")[0]
+    assert resp.status_code == 301
+    assert resp.headers["location"] == f"/c/{slug}?t=ice&w=today"
+    assert listing.status_code == 200, listing.text
+    assert "Проба" in listing.text
+    # На самом списке «Весь лёд … сегодня» вёл бы на себя.
+    assert "Весь лёд:" not in listing.text
 
 
 @pytest.mark.asyncio
@@ -156,7 +115,7 @@ async def test_page_by_city_id_redirects_to_canonical_slug(app_use_test_db, db_s
     async with _client() as client:
         resp = await client.get(f"/ice/{cid}/today", follow_redirects=False)
     assert resp.status_code == 301
-    assert resp.headers["location"] == f"/ice/{city_slug(name)}/today"
+    assert resp.headers["location"] == f"/c/{city_slug(name)}?t=ice&w=today"
 
 
 @pytest.mark.asyncio
@@ -167,25 +126,8 @@ async def test_unknown_city_is_404_not_empty_page(app_use_test_db, db_session) -
 
 
 @pytest.mark.asyncio
-async def test_empty_day_page_is_honest_and_has_an_exit(app_use_test_db, db_session) -> None:
-    """
-    AC-002/AC-005 на публичной странице: пустой день говорит «нет», а не изображает загрузку.
-
-    Кнопка «Открыть в Glide» — тот самый выход; без CLIENT_BOT_USERNAME её нет вовсе,
-    и это проверяется отдельно ниже.
-    """
-    name = f"Пустой{uuid.uuid4().hex[:6]}"
-    await _insert_city(db_session, name=name)
-    async with _client() as client:
-        page = await client.get(f"/ice/{city_slug(name)}/today")
-    assert page.status_code == 200
-    assert "массовых катаний в расписании нет" in page.text
-    assert "Загрузка" not in page.text
-
-
-@pytest.mark.asyncio
 async def test_city_day_page_hides_in_progress_slots(app_use_test_db, db_session) -> None:
-    """PDEC-005: 12:15 at 13:10 must not stay on the public day page either."""
+    """PDEC-005: 12:15 at 13:10 must not stay in the city day (share summary) either."""
     from src.application.ice_city_day import get_city_ice_day
     from tests.api.test_public_arenas import _add_minsk_session
 
@@ -210,16 +152,6 @@ async def test_city_day_page_hides_in_progress_slots(app_use_test_db, db_session
     assert started_hhmm not in times
     if upcoming.date() == now_minsk.date():
         assert upcoming_hhmm in times
-
-    async with _client() as client:
-        page = await client.get(f"/ice/{city_slug(name)}/today")
-    assert page.status_code == 200, page.text
-    # Время ищем в разметке слота, не во всём HTML: в JSON-LD есть UTC-суффиксы
-    # вида ``+00:00``, и при старте «идущего» сеанса ровно в полночь (``00:00``)
-    # сырой ``not in page.text`` даёт ложный fail.
-    assert f'<span class="slot__time">{started_hhmm}' not in page.text
-    if upcoming.date() == now_minsk.date():
-        assert f'<span class="slot__time">{upcoming_hhmm}' in page.text
 
 
 @pytest.mark.asyncio
@@ -255,7 +187,7 @@ async def test_share_endpoint_contract_matches_share_trainer(app_use_test_db, db
     body = resp.json()
     for key in ("share_url", "share_body", "share_text"):
         assert key in body and body[key], f"{key} пустой"
-    assert body["share_url"].endswith(f"/ice/{city_slug(name)}/today")
+    assert body["share_url"].endswith(f"/c/{city_slug(name)}?t=ice&w=today")
     # share_text начинается ссылкой, share_body её не дублирует — иначе Telegram
     # покажет URL дважды.
     assert body["share_text"].startswith(body["share_url"])
@@ -325,17 +257,11 @@ async def test_no_invented_data_when_price_is_unknown(app_use_test_db, db_sessio
     name = f"Безцен{uuid.uuid4().hex[:6]}"
     cid = await _insert_city(db_session, name=name)
     arena = await _insert_arena(db_session, cid, name="Каток без цен")
-    _session_id, starts_at_local = await _add_today_session(
-        db_session, arena, price_adult_minor=None
-    )
+    await _add_today_session(db_session, arena, price_adult_minor=None)
 
     async with _client() as client:
-        page = await client.get(f"/ice/{city_slug(name)}/today")
         share = await client.get(f"/api/public/ice/share/{cid}")
 
-    assert page.status_code == 200
-    assert "0 BYN" not in page.text
-    assert starts_at_local in page.text
     body = share.json()
     # Сводка честно молчит о ценах, но не молчит о сеансах.
     assert "BYN" not in body["summary"]
@@ -366,56 +292,13 @@ def test_summary_line_never_invents_urgency() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ice_today_og_is_absolute_and_the_page_stays_light(
-    app_use_test_db, db_session, monkeypatch
-) -> None:
-    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
-    monkeypatch.setenv("CLIENT_MINI_APP_SHORT_NAME", "")
-    monkeypatch.setenv("CLIENT_BOT_MAIN_MINI_APP", "true")
+async def test_ice_today_share_text_names_the_date_not_today(app_use_test_db, db_session) -> None:
+    """Пересланное сообщение читают и завтра: в тексте дата, а не «сегодня»."""
     name = f"Свет{uuid.uuid4().hex[:6]}"
     cid = await _insert_city(db_session, name=name)
     arena = await _insert_arena(db_session, cid, name="Каток света")
     await _add_today_session(db_session, arena)
     async with _client() as client:
-        page = await client.get(f"/ice/{city_slug(name)}/today")
         share = await client.get(f"/api/public/ice/share/{cid}")
-    assert page.status_code == 200
-    assert "prefers-color-scheme: dark" not in page.text
-    og = re.search(r'<meta property="og:title" content="([^"]*)"', page.text)
-    assert og and og.group(1).endswith(": лёд сегодня")
     assert "сегодня" not in share.json()["share_text"].lower()
     assert "завтра" not in share.json()["share_text"].lower()
-    assert f"startapp=catalog_{cid}_skate_today" in page.text
-    assert "/api/public/catalog/open-telegram" in page.text
-    assert "Лёд · " not in page.text
-
-
-@pytest.mark.asyncio
-async def test_ice_city_day_ssr_phone_guard(app_use_test_db, db_session) -> None:
-    """TASK-207/243: «очень старые» катки — в обычном списке дня; невалидные телефоны в SSR не попадают."""
-    now = datetime.now(timezone.utc).replace(microsecond=0)
-    stale_at = now - timedelta(hours=80)
-    city_label = f"Телдень{uuid.uuid4().hex[:6]}"
-    cid = await _insert_city(db_session, name=city_label)
-    cases = (
-        ("Каток без связи", _PHONE_GUARD_UNKNOWN),
-        ("Каток короткий", _PHONE_GUARD_SHORT),
-        ("Каток валидный", _PHONE_GUARD_VALID),
-    )
-    for arena_name, phone in cases:
-        arena_id = await _insert_arena(db_session, cid, name=arena_name, phone=phone)
-        await _very_stale_today_session(db_session, arena_id, observed_at=stale_at)
-    await db_session.commit()
-
-    async with _client() as client:
-        page = await client.get(f"/ice/{city_slug(city_label)}/today")
-    assert page.status_code == 200, page.text
-    html = page.text
-    assert 'class="unconfirmed' not in html
-    assert "не подтвержд" not in html.casefold()
-    for arena_name, phone in cases:
-        block = _ice_day_arena_block(html, arena_name)
-        assert 'class="slots"' in block, arena_name
-        if phone != _PHONE_GUARD_VALID:
-            _assert_invalid_phone_ssr(block, phone)
-    assert _PHONE_GUARD_UNKNOWN not in html and _PHONE_GUARD_SHORT not in html

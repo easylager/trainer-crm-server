@@ -74,6 +74,31 @@ describe('GlideDeepLink.readStartParam', () => {
   });
 });
 
+describe('GlideDeepLink.resolveArenaDeepLinkTarget (TASK-257)', () => {
+  const G = load();
+
+  it('без флага — arena?ref=42&s=9', async () => {
+    const target = await G.resolveArenaDeepLinkTarget('arena_42_s_9', { serverPlaceCard: false });
+    assert.deepEqual(target, { key: 'arena', path: 'arena?ref=42&s=9' });
+  });
+
+  it('с флагом — public_path?s=9', async () => {
+    const target = await G.resolveArenaDeepLinkTarget('arena_42_s_9', {
+      serverPlaceCard: true,
+      fetchPublicArenaCard: async () => ({ public_path: '/p/minsk/chizhovka-arena' }),
+    });
+    assert.deepEqual(target, { key: 'place', path: '/p/minsk/chizhovka-arena?s=9' });
+  });
+
+  it('с флагом без public_path — fallback arena?ref=', async () => {
+    const target = await G.resolveArenaDeepLinkTarget('arena_42_s_9', {
+      serverPlaceCard: true,
+      fetchPublicArenaCard: async () => ({}),
+    });
+    assert.deepEqual(target, { key: 'arena', path: 'arena?ref=42&s=9' });
+  });
+});
+
 describe('GlideDeepLink.maybeEarlyRedirect', () => {
   const G = load();
 
@@ -89,7 +114,7 @@ describe('GlideDeepLink.maybeEarlyRedirect', () => {
     };
   }
 
-  it('replace на карточку с сохранением hash', () => {
+  it('arena startapp не редиректит из head — ждёт session в shell (TASK-257)', () => {
     const storage = memStorage();
     let replaced = '';
     const loc = {
@@ -106,9 +131,8 @@ describe('GlideDeepLink.maybeEarlyRedirect', () => {
       sessionStorage: storage,
       Telegram: { WebApp: { initDataUnsafe: { start_param: 'arena_9_s_11' } } },
     });
-    assert.equal(ok, true);
-    assert.equal(replaced, '/webapp/arena?ref=9&s=11#tgWebAppData=abc');
-    assert.equal(storage.getItem(G.DEEP_LINK_FLAG), 'arena_9_s_11');
+    assert.equal(ok, false);
+    assert.equal(replaced, '');
   });
 
   it('не редиректит при уже использованном start_param', () => {

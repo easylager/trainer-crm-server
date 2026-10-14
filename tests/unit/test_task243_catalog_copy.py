@@ -1,13 +1,13 @@
 """TASK-243 AC-2/AC-3: хаб, 404 города и видимый текст без оговорок."""
 
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+
 
 from src.application.city_hub_page import (
-    _hero_sub,
-    _quick_html,
-    _roller_hall_count,
-    _trainers_route,
+    _b_counts_line,
+    _b_quick,
+    _b_routes,
     city_hub_description,
 )
 from src.application.ice_city_day import CITY_SLUG_ALIASES, render_unknown_city_html
@@ -49,16 +49,19 @@ def _hub_view(**extra):
     return view
 
 
+def _routes_html() -> str:
+    view = _hub_view(upcoming=[], today=date(2026, 10, 13), hot_skate=None)
+    return _b_routes(view, coach_href="/trainers").replace("\u00a0", " ")
+
+
 def test_a1_trainer_count_is_a_russian_phrase() -> None:
-    html = _trainers_route(_hub_view(), href="/trainers")
+    html = _routes_html()
     assert "3 тренера" in html
     assert "›" not in html
 
 
-def test_a2_roller_hint_only_when_count_is_zero() -> None:
-    places = [{"venue_type": "other", "name": "Лыжероллерная трасса"}]
-    assert _roller_hall_count(places) == 1
-    assert _roller_hall_count([{"venue_type": "ice", "name": "Чижовка"}]) == 0
+def test_a2_no_roller_hint_in_the_router() -> None:
+    assert "Лыжероллеров" not in _routes_html()
 
 
 def test_a3_description_uses_place_count_not_rink_count() -> None:
@@ -68,13 +71,13 @@ def test_a3_description_uses_place_count_not_rink_count() -> None:
 
 
 def test_a6_punctuation_sits_inside_the_same_node() -> None:
-    html = _hero_sub(_hub_view())
+    html = _b_counts_line(_hub_view(today=date(2026, 10, 13)))
     assert " ," not in visible_text(html)
     assert " ." not in visible_text(html)
 
 
 def test_a7_zero_window_is_inactive_dash() -> None:
-    html = _quick_html("minsk", {"today": 2, "tomorrow": 0, "weekend": 1}, hot=None, all_count=4, t="ice")
+    html = _b_quick("minsk", {"today": 2, "tomorrow": 0, "weekend": 1}, hot=None, all_count=4, t="ice")
     assert "Завтра <small>—</small>" in html
     assert "Завтра <small>0</small>" not in html
     assert "Все <small>4</small>" in html
@@ -139,6 +142,6 @@ def test_ac2_ice_today_visible_text() -> None:
     assert "17 сеансов сегодня" in text
     assert "2026-10-13" not in text
     assert "Каток ХК «Юность»" in text
-    assert "ул. Ташкентская 19" in text
+    assert "ул. Ташкентская, 19" in text
     assert "Минская область" not in text
     assert "Glide ·" not in text

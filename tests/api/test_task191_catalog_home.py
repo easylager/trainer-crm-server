@@ -112,7 +112,7 @@ async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_se
     assert home.status_code == 200
     # JSON-LD и скрипт карты. Имя города с «</script>» не должно добавить третье закрытие.
     assert home.text.count("</script>") == 2
-    assert "<img" not in home.text
+    assert "<img src=x" not in home.text
     ld = _json_ld(home.text)
     assert "@graph" in ld
     items = next(n for n in ld["@graph"] if n.get("@type") == "ItemList")["itemListElement"]
@@ -250,9 +250,9 @@ async def test_catalog_home_evening_block_shows_tomorrow_label(app_use_test_db, 
     async with _client() as client:
         home = await client.get("/", cookies={"glide_city": slug})
     assert home.status_code == 200
-    hero = re.search(r'<a class="hero-city".*?</a>', home.text, re.S)
+    hero = re.search(r'<a class="b-city".*?</a>', home.text, re.S)
     assert hero and name in hero.group(0)
-    assert "ближайший — <b>завтра 10:00</b>" in hero.group(0)
+    assert "ближайший завтра 10:00" in hero.group(0).replace("\u00a0", " ")
 
 
 @pytest.mark.asyncio
@@ -274,12 +274,11 @@ async def test_catalog_home_city_order_minsk_first_then_by_activity(app_use_test
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    hero = re.search(r'<a class="hero-city".*?<span class="name">([^<]+)</span>', home.text, re.S)
+    hero = re.search(r'<a class="b-city".*?<span class="b-city__name">([^<]+)</span>', home.text, re.S)
     assert hero and hero.group(1) == "Минск"
     tiles = re.findall(
-        r'<a class="city card[^"]*" href="[^"]+"><span class="n">([^<]+)</span><span class="f">(.*?)</span>',
-        home.text,
-        re.S,
+        r'<span class="b-tile__name">([^<]+)</span><span class="b-tile__line">([^<]*)</span>',
+        home.text.replace("\u00a0", " "),
     )
     names = [name for name, _fact in tiles]
     assert names and names[0] == "Минск"
@@ -315,19 +314,19 @@ async def test_catalog_home_ice_today_link_only_with_sessions_today(app_use_test
     assert home.status_code == 200
 
     def _fact(city_name: str) -> str | None:
-        for match in re.finditer(r'<a class="city card[^"]*".*?</a>', home.text, re.S):
-            tile = match.group(0)
-            name = re.search(r'<span class="n">([^<]*)</span>', tile)
-            if name and name.group(1) == city_name:
-                fact = re.search(r'<span class="f">(.*?)</span>(?=<span class="has">|</a>)', tile, re.S)
-                return fact.group(1) if fact else ""
+        for name, line in re.findall(
+            r'<span class="b-tile__name">([^<]*)</span><span class="b-tile__line">([^<]*)</span>',
+            home.text.replace("\u00a0", " "),
+        ):
+            if name == city_name:
+                return line
         return None
 
     with_fact = _fact(with_sessions)
     assert with_fact is not None, with_sessions
-    assert re.search(r"<b>\d+ сеанс", with_fact), with_fact
+    assert re.search(r"^\d+ сеанс", with_fact), with_fact
     without_fact = _fact(without)
-    assert without_fact is None or not re.search(r"<b>\d+ сеанс", without_fact)
+    assert without_fact is None or not re.search(r"^\d+ сеанс", without_fact)
     assert f"/ice/{slug_with}/today" not in home.text
     assert f"/ice/{slug_without}/today" not in home.text
 
@@ -350,12 +349,12 @@ async def test_catalog_home_country_groups_and_headline_when_ru_present(
         home = await client.get("/")
     assert home.status_code == 200
     # TASK-210: нейтральный заголовок согласно PDEC-019. RU — в подвале, не плиткой.
-    assert "<h1>Где покататься</h1>" in home.text
+    assert re.search(r'<h1 class="b-hero__title">Где<br>покататься</h1>', home.text)
     assert "Где покататься в Беларуси" in home.text
-    elsewhere = re.search(r'<p class="elsewhere">(.*?)</p>', home.text, re.S)
+    elsewhere = re.search(r'<span class="elsewhere">(.*?)</span>', home.text, re.S)
     assert elsewhere, "elsewhere"
     assert ru_name in elsewhere.group(1)
     assert by_name not in elsewhere.group(1)
-    tile_names = re.findall(r'<a class="city card[^"]*" href="[^"]+"><span class="n">([^<]+)</span>', home.text)
+    tile_names = re.findall(r'<span class="b-tile__name">([^<]+)</span>', home.text)
     assert ru_name not in tile_names
     assert by_name in home.text

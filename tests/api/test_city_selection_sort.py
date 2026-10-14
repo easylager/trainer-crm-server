@@ -12,7 +12,7 @@ from src.api.app import app
 from src.application.ice_city_day import city_slug
 from tests.api.test_public_arenas import _add_future_session, _insert_arena, _insert_city
 
-_NAME_RE = re.compile(r'<h2 class="pick__name"><a href="[^"]*">([^<]*)</a></h2>')
+_NAME_RE = re.compile(r'<h2 class="b-card2__name"><a href="[^"]*">([^<]*)</a></h2>')
 
 
 def _client() -> AsyncClient:

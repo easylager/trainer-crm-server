@@ -22,56 +22,13 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2" />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@400..700&display=swap" /></noscript>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=__TOKENS_V__" />
+  <link rel="stylesheet" href="/static/shared/glide-components.css?v=__COMPONENTS_V__" />
+  <link rel="stylesheet" href="/static/share/style-b.css?v=__STYLE_V__" />
   <style>
-    :root {
-      color-scheme: light;
-      --bg: #f6f8fa;
-      --surface: var(--g-surface);
-      --ink: var(--g-ink);
-      --muted: var(--g-muted);
-      --line: #e3e9ee;
-      --accent: var(--g-accent);
-      --accent-ink: var(--g-on-accent);
-      --accent-text: var(--g-accent-ink);
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--ink);
-      font-family: var(--g-font);
-      font-size: 16px;
-      line-height: 1.45;
-      -webkit-font-smoothing: antialiased;
-    }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 28px 20px 96px; }
-    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
-    .top__brand { font-weight: 700; color: var(--ink); text-decoration: none; }
-    .top__brand span { color: var(--muted); font-weight: 500; }
-    .top__trainers { font-size: 14px; font-weight: 600; color: var(--accent-text); text-decoration: none; }
-    .date { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text); }
-    h1 { margin: 6px 0 0; font-size: clamp(26px, 7vw, 34px); font-weight: 600; letter-spacing: -.01em; line-height: 1.12; }
-    .sub, .counter { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
-    .sub--ohm { margin-top: 2px; }
-    .small { font-size: 13px; }
-    .hero-city {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      margin: 16px 0 0; padding: 16px 18px; border-radius: 18px;
-      background: var(--surface); color: var(--ink); text-decoration: none;
-      border: 1px solid var(--line);
-      border-left: 4px solid var(--accent);
-    }
-    .hero-city:hover { background: var(--g-accent-wash); }
-    .hero-city .cap { display: block; font-size: 12px; color: var(--muted); }
-    .hero-city .name { display: block; margin-top: 2px; font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
-    .hero-city .live { display: block; margin-top: 4px; font-size: 14px; color: var(--muted); }
-    .hero-city .live b { font-weight: 600; color: var(--ink); }
-    .hero-city svg { flex-shrink: 0; color: var(--accent); }
-    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
-    .map { margin: 20px 0 0; padding: 8px; }
-    .map svg { width: 100%; height: auto; display: block; }
     .home-map__city {
       cursor: pointer;
       -webkit-touch-callout: none;
@@ -90,79 +47,29 @@
       padding: 6px 10px;
       border-radius: 8px;
       background: var(--g-ink);
-      color: #fff;
+      color: var(--g-on-photo);
       font: 600 14px/1.2 var(--g-font);
       white-space: nowrap;
       pointer-events: none;
       box-shadow: 0 6px 16px rgba(0, 0, 0, .18);
     }
     .home-map__hint.is-below { transform: translate(-50%, 10px); }
-    .hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
-    .head { display: flex; align-items: baseline; justify-content: space-between; margin: 28px 0 10px; }
-    .head h2.section { margin: 0; }
-    h2.section { margin: 28px 0 12px; font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
-    .cities { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    @media (min-width: 560px) { .cities { grid-template-columns: 1fr 1fr 1fr; } }
-    .city {
-      display: flex; flex-direction: column; gap: 4px; min-height: 96px;
-      padding: 14px 14px 12px; color: var(--ink); text-decoration: none;
-    }
-    .city .n { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
-    .city .n::after { content: " ›"; color: var(--accent-text); }
-    .city .f { font-size: 14px; color: #4a5f71; line-height: 1.35; }
-    .city .f b { color: var(--ink); font-weight: 600; }
-    .city .f__bit { white-space: nowrap; }
-    .city .has { margin-top: auto; padding-top: 6px; font-size: 12px; color: var(--muted); }
-    .city--quiet .f { color: var(--muted); }
-    details.more { margin-top: 8px; padding: 2px 14px; }
-    details.more summary {
-      min-height: 44px; display: flex; align-items: center; justify-content: space-between;
-      font-size: 17px; font-weight: 600; letter-spacing: -.01em; cursor: pointer; list-style: none;
-    }
-    details.more summary::-webkit-details-marker { display: none; }
-    details.more summary::after { content: "\2304"; color: var(--muted); font-size: 18px; }
-    details.more[open] summary::after { content: "\2303"; }
-    details.more p { margin: 0 0 12px; font-size: 14px; line-height: 1.7; color: #4a5f71; }
-    details.more p b { color: var(--ink); }
-    details.more a { color: var(--accent-text); text-decoration: none; }
-    .elsewhere { margin: 20px 0 0; font-size: 14px; color: var(--muted); }
-    .elsewhere a { color: var(--accent-text); font-weight: 600; text-decoration: none; }
-    .muted { color: var(--muted); }
-    .cta {
-      display: block;
-      margin: 28px 0 0;
-      padding: 15px 20px;
-      border-radius: 16px;
-      background: var(--accent);
-      color: var(--accent-ink);
-      font-size: 16px;
-      font-weight: 600;
-      text-align: center;
-      text-decoration: none;
-    }
-    .cta--secondary { background: transparent; color: var(--accent-text); border: 1px solid var(--accent); margin-top: 12px; }
-    footer { margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center; }
   </style>
 </head>
-<body>
-  <main class="wrap">
-    <header class="top">
-      <a class="top__brand" href="/">__BRAND__</a>
-      <a class="top__trainers" href="__TRAINERS_URL__">Для тренеров →</a>
-    </header>
-    <p class="date">__DATE__</p>
-    <h1>__PAGE_H1__</h1>
-    <p class="sub counter">__COUNTER_TEXT__</p>
-    __OHM_SUB__
-    __HERO_CITY__
+<body class="b">
+  <main class="b-page">
+    __HERO__
+    <section class="b-sec">
+      __WHEN__
+      __HERO_CITY__
+    </section>
     __MAP__
-
-    __CITIES_HEAD__
     __CITIES__
-    __ELSEWHERE__
-
-    <a class="cta cta--secondary" href="__CTA_URL__">Открыть в Telegram</a>
-    <footer></footer>
+    __CTA__
+    <footer class="b-foot">
+      <span>__FOOTER__</span>
+      <span class="b-foot__links">__ELSEWHERE__<a href="__TRAINERS_URL__">Для тренеров</a></span>
+    </footer>
   </main>
   <script>
     (function () {

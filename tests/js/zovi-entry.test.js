@@ -58,6 +58,13 @@ describe('варианты шита', () => {
     assert.equal(labels.includes('Открытка'), false);
   });
 
+  it('сеанс выбирается во всех трёх вариантах катка, у места без льда — нет', () => {
+    const picks = (sheetState) =>
+      Object.fromEntries(Array.from(sheet.variantsFor(sheetState), (variant) => [variant.id, variant.picksSession]));
+    assert.deepEqual(picks(ice), { invite: true, postcard: true, schedule: true });
+    assert.equal(picks({ venueType: 'shop' }).schedule, false);
+  });
+
   it('у подборки переключателя нет', () => {
     assert.deepEqual(labelsOf({ endpoint: '/api/public/ice/selection/share', venueType: 'ice' }), []);
   });

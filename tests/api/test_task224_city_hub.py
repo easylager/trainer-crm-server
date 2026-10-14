@@ -21,7 +21,7 @@ from src.application.catalog_home_page import (
     map_point_inside_country,
     render_map_svg,
 )
-from src.application.city_hub_page import _skate_route, city_hub_document_title, hot_window_key, open_state
+from src.application.city_hub_page import city_hub_document_title, hot_window_key, open_state
 from src.application.selection_page import _hero_kicker
 from src.application.ice_city_day import city_slug, invalidate_public_city_cache
 from src.application.ice_time_windows import resolve_window
@@ -48,10 +48,9 @@ async def _session(db_session, arena_id: int, *, day: date, hhmm: str, kind: str
 
 
 def _route(html: str, name: str) -> str:
-    for match in re.finditer(r'<article class="route">.*?</article>', html, re.S):
-        if f'<span class="name">{name}</span>' in match.group(0):
-            return match.group(0)
-    return ""
+    """Строка «Что нужно» стиля B по названию раздела."""
+    match = re.search(rf'<div class="b-row" data-route="{re.escape(name)}">.*?</svg></div>', html, re.S)
+    return match.group(0).replace("\u00a0", " ") if match else ""
 
 
 def _minsk_today() -> date:
@@ -147,9 +146,9 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
         by_id = await client.get(f"/c/{city_id}")
     assert hub.status_code == 200
     html = hub.text
-    assert f'<h1 class="hero__title">{name}</h1>' in html
-    assert "Что нужно?" in html
-    assert 'class="pick"' not in html, "хаб — не список мест"
+    assert re.search(rf'<h1 class="b-hero__title[^"]*">{re.escape(name)}(<br>| )на льду</h1>', html)
+    assert "Что нужно" in html
+    assert 'class="b-card2"' not in html, "хаб — не список мест"
 
     skate = _route(html, "Покататься")
     assert skate, html
@@ -157,18 +156,18 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert "2 катка" in skate
     assert f'href="/c/{slug}?t=ice&amp;w=tomorrow"' in skate and f"Завтра <small>{skate_tomorrow}</small>" in skate
     if skate_weekend:
-        assert f'href="/c/{slug}?t=ice&amp;w=weekend"' in skate and f"Сб–Вс <small>{skate_weekend}</small>" in skate
+        assert f'href="/c/{slug}?t=ice&amp;w=weekend"' in skate and f"В выходные <small>{skate_weekend}</small>" in skate
     assert "<span>Сегодня <small>—</small></span>" in skate, "ноль — не ссылка и не цифра"
     assert "ближайший" not in skate
 
     ohm = _route(html, "С клюшкой")
     assert ohm, html
-    assert f'href="/c/{slug}?kind=ohm"' in ohm and "seg=" not in ohm and "1 каток" in ohm
+    assert f'href="/c/{slug}?kind=ohm"' in ohm and "seg=" not in ohm and "ОХМ на 1 катке" in ohm
     if ohm_weekend:
-        assert f'href="/c/{slug}?w=weekend&amp;kind=ohm"' in ohm and f"Сб–Вс <small>{ohm_weekend}</small>" in ohm
-        assert "07:00" in ohm
+        assert f'href="/c/{slug}?w=weekend&amp;kind=ohm"' in ohm and f"В выходные <small>{ohm_weekend}</small>" in ohm
+        assert "7:00" in ohm
     else:
-        assert "<span>Сб–Вс <small>—</small></span>" in ohm
+        assert "<span>В выходные <small>—</small></span>" in ohm
     assert f"Все <small>{ohm_all}</small>" in ohm
 
     # Нет данных — нет плитки.
@@ -177,7 +176,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert not _route(html, "Тренеры")
 
     # «Ближайшее на льду» — ссылки на страницы мест; все места — списком (SEO).
-    assert "Ближайшее на льду" in html
+    assert "Ближайший лёд" in html
     assert f'href="/p/{slug}/' in html
     assert "Все места города" in html
     # Канон и редирект по id — как у подборки.
@@ -228,10 +227,10 @@ async def test_city_hub_service_and_shop_tiles_count_open_now(app_use_test_db, d
     assert service, html
     assert f'href="/c/{slug}?svc=service"' in service
     assert "2 места" in service
-    assert "<b>2 открыты сейчас</b>" in service
+    assert "2 открыты сейчас" in service
     shops = _route(html, "Магазины")
     assert shops and f'href="/c/{slug}?t=shop"' in shops
-    assert "<b>1 открыто сейчас</b>" in shops
+    assert "1 открыто сейчас" in shops
     assert not _route(html, "Покататься") or "Каток простой" not in _route(html, "Покататься")
     assert plain  # каток без сеансов — в «Все места города», но без плитки времени
     assert "Каток простой" in html
@@ -275,9 +274,9 @@ async def test_city_hub_with_params_is_still_the_list(app_use_test_db, db_sessio
         hub_src = await client.get(f"/c/{slug}", params={"src": "tg"})
     for resp in (weekend, ice, paged):
         assert resp.status_code == 200
-        assert 'class="pick' in resp.text, "список мест"
-        assert "Что нужно?" not in resp.text
-    assert hub_src.status_code == 200 and "Что нужно?" in hub_src.text, "?src= — не фильтр"
+        assert 'class="b-card2' in resp.text, "список мест"
+        assert "на льду" not in resp.text
+    assert hub_src.status_code == 200 and "на льду" in hub_src.text, "?src= — не фильтр"
 
 
 def test_open_state_and_hot_window() -> None:
@@ -365,20 +364,65 @@ async def test_city_hub_hockey_tile_for_centers_without_sessions(app_use_test_db
     assert "Пока нет сеансов ОХМ" in ohm.text
     assert center_name not in ohm.text
     assert "Центры <small>1</small>" in ohm.text
-    assert f'class="chip" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm.text
+    assert f'class="b-toggle" href="/c/{slug}?kind=ohm&amp;seg=centers"' in ohm.text
+
+
+@pytest.mark.asyncio
+async def test_one_rink_city_shows_the_week_not_the_router(app_use_test_db, db_session) -> None:
+    name = f"Кобрин {uuid.uuid4().hex[:4]}"
+    city_id = await _insert_city(db_session, name=name)
+    rink = await _insert_arena(db_session, city_id, name="Ледовый")
+    await _session(db_session, rink, day=_minsk_today() + timedelta(days=1), hhmm="12:30")
+    await db_session.commit()
+    invalidate_public_city_cache()
+    async with _client() as client:
+        resp = await client.get(f"/c/{city_slug(name)}")
+    assert resp.status_code == 200
+    assert "Неделя" in resp.text
+    assert "Что нужно" not in resp.text
+    assert "Завтра" in resp.text and "12:30" in resp.text
+    assert "/* task246-week */" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_phone_city_asks_to_call_and_invents_nothing(app_use_test_db, db_session) -> None:
+    name = f"Жлобин {uuid.uuid4().hex[:4]}"
+    city_id = await _insert_city(db_session, name=name)
+    rink = await _insert_arena(db_session, city_id, name="Дворец")
+    await db_session.execute(
+        text(
+            "UPDATE arena_profiles SET schedule_mode = 'phone', phone = '+375291112233' WHERE arena_id = :id"
+        ),
+        {"id": rink},
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+    async with _client() as client:
+        resp = await client.get(f"/c/{city_slug(name)}")
+    assert resp.status_code == 200
+    assert "называет время массового катания по телефону" in resp.text
+    assert "Что нужно" not in resp.text
+    assert "Неделя" not in resp.text
+    assert "b-motif" in resp.text
+    assert "+375 29 111-22-33" in resp.text
 
 
 def test_skate_route_without_sessions_says_so() -> None:
-    html = _skate_route(
+    from src.application.city_hub_page import _b_routes
+
+    html = _b_routes(
         {
             "slug": "gomel",
             "skate_counts": {"today": 0, "tomorrow": 0, "weekend": 0, "all": 0},
+            "ohm_counts": {"today": 0, "tomorrow": 0, "weekend": 0, "all": 0},
             "rink_count": 2,
             "upcoming": [],
+            "places": [],
             "today": date(2026, 10, 11),
             "hot_skate": None,
-        }
+        },
+        coach_href="",
     )
     assert "времени катания в расписании нет" in html
     assert "Сегодня" not in html
-    assert 'class="quick"' not in html
+    assert 'class="b-quick"' not in html

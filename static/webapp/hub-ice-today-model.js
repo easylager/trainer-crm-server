@@ -63,11 +63,15 @@
     return '';
   }
 
+  var PD =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./public-display-model.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.PublicDisplayModel
+        : null;
+
   function formatPrice(minor, currency) {
-    if (minor == null || minor === '' || isNaN(Number(minor))) return '';
-    var major = Number(minor) / 100;
-    var num = Number.isInteger(major) ? String(major) : major.toFixed(2);
-    return num + ' ' + (currency || 'BYN');
+    return PD.formatPriceMinor(minor, currency || 'BYN');
   }
 
   function hasStarted(session, now) {
@@ -83,6 +87,15 @@
     if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
       href += '&day=' + day;
       if (session.session_id != null) href += '&s=' + encodeURIComponent(String(session.session_id));
+    }
+    if (typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.arenaHref) {
+      var item = {
+        id: session.arena_id,
+        slug: session.arena_slug,
+        public_path: session.public_path,
+        live: { kind: 'session', session_id: session.session_id, local_date: day },
+      };
+      return CatalogPublicUrl.arenaHref(item, href);
     }
     return href;
   }

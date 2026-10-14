@@ -1,0 +1,118 @@
+/**
+ * Стиль B — переиспользуемые компоненты (TASK-249).
+ * Токены: glide-tokens.css. Раскладка страниц — static/share/style-b.css.
+ */
+
+/* ── Плитка места ─────────────────────────────────────────────────────── */
+.b-tile {
+  display: flex; flex-direction: column; min-width: 0;
+  background: var(--g-surface); border-radius: 18px; overflow: hidden;
+  color: var(--g-ink) !important; text-decoration: none; box-shadow: var(--g-shadow);
+}
+.b-tile__media { position: relative; height: 104px; background: var(--g-dark); overflow: hidden; }
+.b-tile__media img, .b-tile__media svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.b-tile__body { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 12px; min-width: 0; }
+.b-tile__name { font-size: 17px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.b-tile__line { font-size: 14px; color: var(--g-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Бейджи на плитках и фото ───────────────────────────────────────── */
+.b-badge {
+  position: absolute; left: 10px; top: 10px; z-index: 1;
+  font-size: 13px; font-weight: 600; color: var(--g-on-photo);
+  background: var(--g-dark); border-radius: 8px; padding: 3px 8px;
+}
+.b-badge--time {
+  top: auto; bottom: 10px;
+  font-family: var(--g-font-display); font-weight: 400; font-size: 26px; line-height: 1.1;
+  border-radius: 10px; padding: 4px 10px;
+}
+.b-badge--light { background: var(--g-surface); color: var(--g-ink); }
+
+/* ── Билет сеанса ─────────────────────────────────────────────────────── */
+.b-tickets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.b-ticket {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  padding: 16px; border-radius: 18px;
+  background: var(--g-surface); color: var(--g-ink) !important; text-decoration: none;
+  box-shadow: var(--g-shadow);
+}
+.b-ticket--dark { background: var(--g-dark); color: var(--g-on-photo) !important; box-shadow: none; }
+.b-ticket--picked { box-shadow: inset 0 0 0 2px var(--g-accent); }
+.b-ticket__time {
+  font-family: var(--g-font-display); font-weight: 400;
+  font-size: 32px; line-height: 1; font-variant-numeric: proportional-nums;
+}
+.b-ticket__sub { font-size: 14px; color: var(--g-ink-2); }
+.b-ticket--dark .b-ticket__sub { color: var(--g-on-dark-muted); }
+.b-ticket__go {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 6px;
+  font-size: 14px; font-weight: 600; color: var(--g-accent-ink);
+}
+.b-ticket--dark .b-ticket__go { color: var(--g-on-dark-accent); }
+.b-ticket__go .b-icon { width: 18px; height: 18px; }
+
+/* ── Кнопки ───────────────────────────────────────────────────────────── */
+.b-btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.b-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 52px; padding: 0 14px; border-radius: 14px;
+  background: var(--g-surface); border: 1px solid var(--g-line-strong);
+  color: var(--g-ink) !important; text-decoration: none;
+  font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.b-btn .b-icon { color: var(--g-accent-ink); }
+.b-btn--accent { background: var(--g-accent); border-color: var(--g-accent); color: var(--g-on-accent) !important; font-weight: 700; }
+.b-btn--accent .b-icon { color: var(--g-on-accent); }
+.b-btn--wide { min-height: 56px; font-size: 16px; }
+.b-call {
+  display: flex; align-items: center; gap: 14px;
+  min-height: 60px; padding: 8px 16px; border-radius: 16px;
+  background: var(--g-surface); border: 1px solid var(--g-line-strong);
+  color: var(--g-ink) !important; text-decoration: none;
+}
+.b-call--dark { background: var(--g-dark); border-color: var(--g-dark); color: var(--g-on-photo) !important; }
+.b-call .b-icon { width: 22px; height: 22px; color: var(--g-accent-ink); }
+.b-call--dark .b-icon { color: #7fd7d8; }
+.b-call__num { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.b-follow {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px; border-radius: 16px;
+  background: var(--g-accent-wash); color: var(--g-ink) !important; text-decoration: none;
+}
+.b-follow .b-icon { width: 24px; height: 24px; color: var(--g-accent-ink); }
+.b-follow b { display: block; font-size: 16px; }
+.b-follow span { font-size: 14px; color: #2f4352; }
+
+/* ── Чипы «На месте» ─────────────────────────────────────────────────── */
+.b-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.b-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 14px; border-radius: 999px;
+  background: var(--g-surface); font-size: 15px; font-weight: 500;
+}
+.b-chip .b-icon { color: var(--g-accent-ink); }
+.b-chip--hl { background: var(--g-accent-wash); }
+.b-chip--sm { min-height: 28px; padding: 0 10px; font-size: 13px; align-self: flex-start; }
+
+/* ── Строка-маршрут (список действий) ───────────────────────────────── */
+.b-row {
+  display: flex; align-items: center; gap: 14px;
+  min-height: 64px; padding: 6px 4px;
+  border-bottom: 1px solid #dfe7eb;
+  color: var(--g-ink) !important; text-decoration: none;
+}
+.b-row:last-child { border-bottom: 0; }
+.b-row__icon {
+  flex: 0 0 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--g-accent-wash); color: var(--g-accent-ink);
+}
+.b-row__icon .b-icon { width: 24px; height: 24px; }
+.b-row__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.b-row__title { font-size: 17px; font-weight: 600; }
+.b-row__line { font-size: 14px; color: var(--g-ink-2); }
+.b-row__go { color: var(--g-muted); width: 18px; height: 18px; }
+
+/* Время крупным шрифтом (Dela Gothic One) — пропорциональные цифры: моноширинная «1»
+   у этой гарнитуры шире соседей, и «11:00» читалось как «1 1:00». */
+.b-badge--time { font-variant-numeric: proportional-nums; }

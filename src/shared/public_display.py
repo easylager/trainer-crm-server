@@ -13,11 +13,40 @@ _WEEKDAYS_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 _SPB_LO = re.compile(r"^санкт-петербург\s*/\s*ло$", re.IGNORECASE)
 _OBLAST = re.compile(r"(область|обл\.?)$", re.IGNORECASE)
 _PROSPEKT_DOT = re.compile(r"пр-т\.")
+# «ул. Ташкентская 19» → «ул. Ташкентская, 19»: номер дома после улицы — через запятую.
+_HOUSE_NO_COMMA = re.compile(
+    r"^((?:ул\.|пр-т|просп\.|проспект|пер\.|бул\.|бульвар|пл\.|площадь|тракт|ш\.)\s+[^\d,]*[^\d\s,])\s+(\d[\w/-]*)$",
+    re.IGNORECASE,
+)
+# «Замковая площадь 11А» → «Замковая площадь, 11А».
+_HOUSE_NO_COMMA_TAIL = re.compile(
+    r"^([^\d,]*\s(?:площадь|улица|проспект|переулок|бульвар))\s+(\d[\w/-]*)$",
+    re.IGNORECASE,
+)
 _HK = re.compile(r"(?i)(?<!\w)хк(?!\w)")
 
 
 def _fold(value: str) -> str:
     return value.strip().casefold().replace("ё", "е")
+
+
+def format_minor_amount(minor: int | None) -> str:
+    """Сумма из minor без валюты: «10», «8,50» — для списков (пара ice-tab formatMinorAmount)."""
+    if minor is None:
+        return ""
+    major = int(minor) / 100.0
+    if major == int(major):
+        return str(int(major))
+    return f"{major:.2f}".replace(".", ",", 1)
+
+
+def format_clock(hhmm: str) -> str:
+    """«9:00», «12:15». Час без ведущего нуля. Минуты остаются двумя цифрами."""
+    raw = str(hhmm or "").strip()
+    match = re.match(r"^(\d{1,2}):(\d{2})", raw)
+    if not match:
+        return raw[:5]
+    return f"{int(match.group(1))}:{match.group(2)}"
 
 
 def short_day_word(day: date, *, today: date) -> str:
@@ -30,17 +59,53 @@ def short_day_word(day: date, *, today: date) -> str:
 
 
 def session_day_phrase(day: date, hhmm: str, *, today: date) -> str:
-    """«сегодня 12:45» / «завтра 08:30» / «чт 10:30»."""
-    clock = str(hhmm or "").strip()[:5]
+    """«сегодня 12:45» / «завтра 8:30» / «чт 10:30»."""
+    clock = format_clock(hhmm)
     word = short_day_word(day, today=today)
     return f"{word} {clock}".strip()
 
 
+def invite_cta_when(day: date | None, hhmm: str, *, today: date) -> str:
+    """Подпись кнопки «Позвать на …»: сегодня — только время, иначе день строчными.
+
+    «22:15», «завтра 12:15», «сб 10:15». Пустая строка, если времени нет.
+    """
+    clock = format_clock(hhmm)
+    if not clock:
+        return ""
+    if day is None or day == today:
+        return clock
+    word = short_day_word(day, today=today)
+    return f"{word} {clock}" if word else clock
+
+
 def sentence_when(day: date, hhmm: str, *, today: date) -> str:
-    """«сегодня, 14:00» / «завтра, 09:00» — день строчными в середине фразы."""
-    clock = str(hhmm or "").strip()[:5]
+    """«сегодня, 14:00» / «завтра, 9:00» — день строчными в середине фразы."""
+    clock = format_clock(hhmm)
     word = short_day_word(day, today=today)
     return f"{word}, {clock}" if clock else word
+
+
+# Коды городов Беларуси, в которых уверены (без них номер не делим — неверная группировка хуже
+# слитной). Четырёхзначные проверяются раньше трёхзначных с тем же началом.
+_BY_CITY_CODES = (
+    "1642",  # Кобрин
+    "1775",  # Жодино
+    "2334",  # Жлобин
+    "152",  # Гродно
+    "162",  # Брест
+    "163",  # Барановичи
+    "165",  # Пинск
+    "174",  # Солигорск
+    "176",  # Молодечно
+    "177",  # Борисов
+    "212",  # Витебск
+    "214",  # Полоцк, Новополоцк
+    "222",  # Могилёв
+    "225",  # Бобруйск
+    "232",  # Гомель
+    "236",  # Мозырь
+)
 
 
 def format_phone_display(phone: str) -> str:
@@ -53,7 +118,19 @@ def format_phone_display(phone: str) -> str:
         return raw
     digits = href[1:] if href.startswith("+") else href
     if digits.startswith("375") and len(digits) == 12:
-        return f"+375 {digits[3:5]} {digits[5:8]}-{digits[8:10]}-{digits[10:12]}"
+        code = digits[3:5]
+        # Мобильные (25, 29, 33, 44) и Минск (17) — код из двух цифр. У остальных городов код
+        # длиннее (Жлобин — 2334), и деление «23 343-52-59» было бы неправдой: оставляем подряд.
+        if code in ("25", "29", "33", "44", "17"):
+            return f"+375 {code} {digits[5:8]}-{digits[8:10]}-{digits[10:12]}"
+        rest = digits[3:]
+        for city in _BY_CITY_CODES:
+            if rest.startswith(city):
+                local = rest[len(city):]
+                # 6 цифр — «XX-XX-XX», 5 — «X-XX-XX».
+                head = local[:-4]
+                return f"+375 {city} {head}-{local[-4:-2]}-{local[-2:]}"
+        return f"+375 {rest}"
     if digits.startswith("7") and len(digits) == 11:
         return f"+7 {digits[1:4]} {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
     return href if href.startswith("+") else raw
@@ -98,7 +175,8 @@ def format_street_address(address: str, *, city: str = "", region: str = "") -> 
             continue
         if _OBLAST.search(folded):
             continue
-        kept.append(piece)
+        piece = _HOUSE_NO_COMMA.sub(r"\1, \2", piece)
+        kept.append(_HOUSE_NO_COMMA_TAIL.sub(r"\1, \2", piece))
     return ", ".join(kept)
 
 
@@ -134,8 +212,3 @@ def _guillemets(text: str) -> str:
         else:
             out.append(ch)
     return "".join(out)
-
-
-def is_roller_place(name: str) -> bool:
-    """Лыжероллерная трасса в каталоге лежит как ``other``. Считаем её по имени."""
-    return "лыжероллер" in _fold(str(name or ""))

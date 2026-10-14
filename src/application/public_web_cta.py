@@ -93,6 +93,49 @@ def contact_click_beacon_url(
     return f"/api/public/catalog/contact-click?{urlencode(params)}"
 
 
+def phone_beacon_script(body_html: str) -> str:
+    """Скрипт учёта звонков — один на страницу и только если на ней есть кнопка звонка.
+
+    Слушатель кликов один на документ: повтор на каждое место дал бы по событию на копию.
+    """
+    return _PHONE_BEACON_SCRIPT if "data-catalog-phone-beacon=" in body_html else ""
+
+
+def place_action_links(
+    card: Mapping[str, Any],
+    *,
+    base_url: str,
+    surface: str,
+    city_id: int | None,
+) -> dict[str, Any]:
+    """Ссылки действий места для стиля B: звонок (с маяком), маршрут и билеты (через прокси учёта).
+
+    Вёрстку делает вызывающий код. Ключа нет — действия нет. Скрипт маяка — ``phone_beacon_script``,
+    один на страницу.
+    """
+    arena_id = int(card["id"]) if card.get("id") is not None else None
+    out: dict[str, Any] = {}
+    tel = _tel_href(str(card.get("phone") or ""))
+    if tel:
+        out["tel"] = tel
+        out["tel_beacon"] = contact_click_beacon_url(
+            action=CONTACT_ACTION_PHONE, surface=surface, city_id=city_id, arena_id=arena_id
+        )
+    maps = _maps_href(card.get("latitude"), card.get("longitude"))
+    if maps:
+        proxied = public_outbound_url(
+            base_url, action=CONTACT_ACTION_DIRECTION, surface=surface, city_id=city_id, arena_id=arena_id
+        )
+        out["route"] = (proxied, False) if proxied else (maps, True)
+    tickets = safe_external_url(card.get("tickets_url"))
+    if tickets:
+        proxied = public_outbound_url(
+            base_url, action=CONTACT_ACTION_TICKETS, surface=surface, city_id=city_id, arena_id=arena_id
+        )
+        out["tickets"] = (proxied, False) if proxied else (tickets, True)
+    return out
+
+
 def render_place_primary_actions(
     card: Mapping[str, Any],
     *,

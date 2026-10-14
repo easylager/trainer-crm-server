@@ -35,6 +35,12 @@
       : typeof globalThis !== 'undefined'
         ? globalThis.GlideCopy
         : null;
+  var PD =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./public-display-model.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.PublicDisplayModel
+        : null;
 
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   /** Окно «Когда» между визитами в каталог (localStorage); sessionStorage — полный снимок вкладки. */
@@ -1682,9 +1688,7 @@
   }
 
   function formatMinorAmount(minor) {
-    if (minor == null || minor === '' || isNaN(Number(minor))) return '';
-    var major = Number(minor) / 100;
-    return Number.isInteger(major) ? String(major) : major.toFixed(2).replace(/\.00$/, '');
+    return PD.formatMinorAmount(minor);
   }
 
   function formatThreePrices(live) {
@@ -1715,15 +1719,15 @@
 
   /**
    * Попадает ли карточка в выбранное окно времени. Сервер кладёт в окно только сеанс;
-   * ближайший сеанс вне окна он помечает outside_window, а место без сеансов (зал,
-   * магазин, «расписание уточняется») в окно не попадает по определению.
+   * ближайший сеанс вне окна он помечает outside_window, а место без сеансов
+   * (зал, магазин, время только по телефону) в окно не попадает по определению.
    */
   function inWindow(item, win) {
     if (!win) return true;
     var live = (item && item.live) || {};
     var kind = String(live.kind || '');
-    /* Окно — про сеансы льда. Улица без расписания, магазин, «уточняется» — не
-       ответ на чип «Сегодня вечером»; на «Все» они остаются в основной ленте. */
+    /* Окно — про сеансы льда. Улица без расписания и магазин — не ответ
+       на чип «Сегодня вечером»; на «Все» они остаются в основной ленте. */
     if (kind === 'phone' || kind === 'season_closed') return false;
     if (kind !== 'session') return true;
     return !live.outside_window;
@@ -1829,10 +1833,16 @@
     if (kind === 'place' || kind === 'closed' || kind === 'phone' || kind === 'season_closed') {
       return String(live.text || '').trim();
     }
-    var tier = String(item.tier || '').toUpperCase();
-    if (tier === 'C') return 'Есть в справочнике · данных пока нет';
-    if (tier === 'B') return 'Расписание уточняется · есть телефон и сайт';
-    return String(live.text || item.live_line || 'Расписание уточняется').trim();
+    if (callablePhone(item)) return copyLabel('feed.time_by_phone', 'Время — по телефону');
+    return '';
+  }
+
+  function callablePhone(item) {
+    var raw = item && item.phone;
+    if (!raw && item && item.contacts) raw = item.contacts.phone;
+    var SM = scheduleModeApi();
+    if (SM && typeof SM.phoneToTelHref === 'function') return !!SM.phoneToTelHref(raw);
+    return String(raw || '').replace(/\D/g, '').length >= 7;
   }
 
   /**
@@ -2096,11 +2106,9 @@
     var hasA = items.some(function (it) {
       return String(it.tier || '').toUpperCase() === 'A';
     });
-    if (hasA) return total + ' ' + word + ' · сначала с актуальным расписанием';
+    if (hasA) return total + ' ' + word + ' · ' + copyLabel('feed.schedule_first', 'сначала с расписанием');
     if (total === 0) return 'Пока нет ' + noun[2] + ' · смените город или чип';
-    // «Расписание уточняется» — вопрос ко льду; у магазина и зала расписания нет.
-    if (noun[0] !== 'каток') return total + ' ' + word;
-    return total + ' ' + word + ' · расписание уточняется';
+    return total + ' ' + word;
   }
 
   /**
@@ -2400,6 +2408,7 @@
     formatMeta: formatMeta,
     formatDistanceKm: formatDistanceKm,
     liveTone: liveTone,
+    formatMinorAmount: formatMinorAmount,
     formatThreePrices: formatThreePrices,
     formatLiveLine: formatLiveLine,
     sessionDayLabel: sessionDayLabel,

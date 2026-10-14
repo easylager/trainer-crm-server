@@ -627,6 +627,11 @@ window.wireHubSlotMessageButtons = function (root) {
   var LEGACY_AUTH_DETAIL_EN =
     /missing\s+init\s+data|invalid\s+or\s+expired\s+init\s+data|invalid\s+or\s+expired\s+launch\s+params/i;
 
+  function isPublicPlaceRoute() {
+    var p = (global.location && global.location.pathname) || '';
+    return /^\/p\/[^/]+\/[^/]+/.test(p);
+  }
+
   /**
    * Turn known English API/auth snippets into neutral Russian for inline error slots.
    */
@@ -651,6 +656,7 @@ window.wireHubSlotMessageButtons = function (root) {
   }
 
   function showRecoverableOverlay() {
+    if (isPublicPlaceRoute()) return;
     if (overlayShown) return;
     overlayShown = true;
     var existing = document.getElementById(OVERLAY_ID);
@@ -711,6 +717,7 @@ window.wireHubSlotMessageButtons = function (root) {
   }
 
   function inspectUnauthorized(url, res, init) {
+    if (isPublicPlaceRoute()) return;
     if (!res || res.status !== 401 || !webappApiUrl(url)) return;
     if (!outgoingHasCredential(url, init)) return;
     var h = '';

@@ -325,6 +325,9 @@
   }
 
   function applyIceWhenFromClientSession(session) {
+    if (typeof CatalogPublicUrl !== 'undefined' && CatalogPublicUrl.applyClientSession) {
+      CatalogPublicUrl.applyClientSession(session);
+    }
     if (!session || state.urlWhenHydrated) return false;
     if (session.ice_when == null && !session.ice_when_day) return false;
     var restored = M.hydrateWhenFromSaved(
@@ -1317,11 +1320,12 @@
       '</span>' +
       (v.where ? '<span class="ice-board__where">' + esc(v.where) + '</span>' : '') +
       '</span>';
-    var facts = v.isSession
-      ? v.prices
-        ? '<span class="ice-board__prices">' + esc(v.prices) + '</span>'
-        : ''
-      : '<span class="ice-board__status">' + esc(v.status) + '</span>';
+    var facts = '';
+    if (v.isSession) {
+      facts = v.prices ? '<span class="ice-board__prices">' + esc(v.prices) + '</span>' : '';
+    } else if (v.status) {
+      facts = '<span class="ice-board__status">' + esc(v.status) + '</span>';
+    }
     if (v.callHref) {
       facts +=
         '<a class="ice-board__call" href="' + esc(v.callHref) + '" data-action="external">Позвонить</a>';

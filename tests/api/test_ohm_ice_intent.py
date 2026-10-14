@@ -84,7 +84,7 @@ async def test_intent_ohm_lists_only_arenas_with_hockey_practice(app_use_test_db
     assert ohm_items[0]["id"] == ohm_rink
     live = ohm_items[0].get("live") or {}
     assert live.get("session_id") == ohm_id
-    assert "08:45" in str(live.get("text") or "")
+    assert "8:45" in str(live.get("text") or "")  # часы без ведущего нуля (craft-guide, TASK-275)
 
     skate_ids = {int(i["id"]) for i in skate.json()["items"]}
     assert ohm_rink in skate_ids

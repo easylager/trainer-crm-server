@@ -108,7 +108,7 @@ async def test_page_views_store_class_not_ua(app_use_test_db, db_session, monkey
     async with _client() as client:
         for ua, ip in uas.items():
             r = await client.get(
-                f"/ice/{city_slug(name)}/today", headers={"user-agent": ua, "x-forwarded-for": ip}
+                f"/c/{city_slug(name)}?t=ice&w=today", headers={"user-agent": ua, "x-forwarded-for": ip}
             )
             assert r.status_code == 200, r.text
     rows = (
@@ -212,7 +212,7 @@ async def test_same_real_ip_is_one_actor_and_rate_limit_applies(app_use_test_db,
     async with _client() as client:
         for _ in range(100):
             r = await client.get(
-                f"/ice/{city_slug(name)}/today",
+                f"/c/{city_slug(name)}?t=ice&w=today",
                 headers={"user-agent": _HUMAN_UA, "x-forwarded-for": "203.0.113.50, 100.64.1.1"},
             )
             statuses.append(r.status_code)
@@ -240,7 +240,7 @@ async def test_rightmost_strategy_ignores_spoofed_left_xff(app_use_test_db, db_s
     async with _client() as client:
         for n in range(60):
             r = await client.get(
-                f"/ice/{city_slug(name)}/today",
+                f"/c/{city_slug(name)}?t=ice&w=today",
                 headers={"user-agent": _HUMAN_UA, "x-forwarded-for": f"198.51.100.{n}, 203.0.113.50"},
             )
             statuses.append(r.status_code)

@@ -15,17 +15,17 @@
 .route .t .name { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 .route .t .cnt { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .route .t .cnt::after { content: " ›"; color: var(--accent-text); font-weight: 600; }
-.route .live { margin-top: 4px; font-size: 14px; color: #4a5f71; line-height: 1.4; }
+.route .live { margin-top: 4px; font-size: 14px; color: var(--g-ink-2); line-height: 1.4; }
 .route .live .fact { color: var(--ink); }
 .route .live .fact b { color: inherit; font-weight: 600; }
 .route .live .price { color: inherit; font-weight: 400; }
 .route .live b { color: var(--ink); font-weight: 600; }
 .route .live .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
-.route .live .dot--off { background: #c9d5dc; }
+.route .live .dot--off { background: var(--g-line-strong); }
 .quick { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
 .quick a, .quick span { padding: 7px 11px; border-radius: 999px; font-size: 14px; font-weight: 500; background: var(--chip); color: var(--ink); text-decoration: none; }
-.quick span { color: #9aacb8; font-weight: 500; }
-.quick a.hot { background: var(--ink); color: #fff; font-weight: 600; }
+.quick span { color: var(--g-quiet); font-weight: 500; }
+.quick a.hot { background: var(--ink); color: var(--g-on-photo); font-weight: 600; }
 .quick a small, .quick span small { font-weight: 500; color: inherit; opacity: .75; margin-left: 3px; font-size: 12px; }
 .quick a.hot small { opacity: .8; }
 .next { display: flex; flex-direction: column; gap: 8px; }

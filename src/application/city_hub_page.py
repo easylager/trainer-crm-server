@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import html as html_lib
+import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -29,27 +30,48 @@ from src.application.arena_public_use_cases import (
     _OHM_SESSION_SQL,
     city_hockey_center_count,
 )
-from src.application.catalog_home_page import _USER_UPCOMING_SQL, _format_date_string, _session_card
+from src.application.catalog_home_page import _USER_UPCOMING_SQL, _session_card
 from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, format_price_minor, human_date, plural_ru
 from src.application.ice_time_windows import home_default_when_key, resolve_window
-from src.application.place_links import catalog_start_param, join_public_origin, place_path, public_telegram_cta_url
+from src.application.place_links import (
+    catalog_start_param,
+    join_public_origin,
+    place_path,
+    place_start_param,
+    public_telegram_cta_url,
+)
 from src.shared.catalog_sharpening import row_in_sharpening_section
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
+from src.application.style_b import b_photo_url
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
-from src.shared.public_display import format_public_name, is_roller_place
+from src.application.city_style_b import (
+    VARIANT_ONE,
+    VARIANT_PHONE,
+    choose_city_variant,
+    load_nearby,
+    city_origin,
+    load_week,
+    price_sentence,
+    week_days,
+)
+from src.shared.phone_guard import is_valid_public_phone, tel_href
+from src.shared.public_display import (
+    format_clock,
+    format_phone_display,
+    format_public_name,
+    format_street_address,
+)
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.specialist_roles import specialist_role_display
 from src.shared.venue_types import VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR, VENUE_TYPE_SHOP
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
-_CSS_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "city-hub.css"
 
 _UPCOMING_DAYS = 7
 _UPCOMING_LIMIT = 3
 _UPCOMING_FETCH = 24
 _WINDOW_KEYS = ("today", "tomorrow", "weekend")
-_WINDOW_LABELS = {"today": "Сегодня", "tomorrow": "Завтра", "weekend": "Сб–Вс"}
 _SOON_MINUTES = 60
 
 # Сеансы города по окнам, по аренам и по виду (МК / ОХМ) — один запрос.
@@ -101,10 +123,33 @@ _NEXT_OHM_SQL = text(
 _PLACES_SQL = text(
     f"""
     SELECT a.id, a.name, COALESCE(a.venue_type, 'ice') AS venue_type,
+           a.latitude, a.longitude,
            a.is_active, a.is_confirmed, a.created_by_trainer_id,
-           p.slug, p.opening_hours, p.amenities, p.phone,
+           p.slug, a.address, p.opening_hours, p.amenities, p.phone, p.website_url,
+           COALESCE(p.schedule_mode, 'auto') AS schedule_mode,
            p.season_start_month, p.season_end_month, p.status AS profile_status,
            c.country, c.is_active AS city_is_active,
+           (
+               SELECT m.width
+               FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+               ORDER BY m.sort_order, m.id
+               LIMIT 1
+           ) AS photo_width,
+           (
+               SELECT m.variants
+               FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+               ORDER BY m.sort_order, m.id
+               LIMIT 1
+           ) AS photo_variants,
+           (
+               SELECT COALESCE(m.display_tone, false)
+               FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+               ORDER BY m.sort_order, m.id
+               LIMIT 1
+           ) AS display_tone,
            EXISTS (
                SELECT 1 FROM media m
                WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
@@ -183,18 +228,6 @@ def open_state(opening_hours: Mapping[str, Any] | None, *, now: datetime, tz_nam
 
 def _is_rink(venue_type: str) -> bool:
     return venue_type in (VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR)
-
-
-def _is_hall(venue_type: str) -> bool:
-    return venue_type in ("gym", "choreo")
-
-
-def _roller_hall_count(places: list[Mapping[str, Any]]) -> int:
-    return sum(
-        1
-        for p in places
-        if _is_hall(str(p.get("venue_type") or "")) or is_roller_place(str(p.get("name") or ""))
-    )
 
 
 def hot_window_key(counts: Mapping[str, int], *, now: datetime) -> str | None:
@@ -302,12 +335,31 @@ async def load_city_hub_view(
     for row in place_rows:
         hours = _as_mapping(row.get("opening_hours"))
         state = open_state(hours, now=now, tz_name=str(row.get("tz") or DEFAULT_TIMEZONE))
+        raw_variants = row.get("photo_variants")
+        if isinstance(raw_variants, str):
+            raw_variants = json.loads(raw_variants)
+        variants = _as_mapping(raw_variants)
+        amenities = row.get("amenities")
+        if isinstance(amenities, str):
+            amenities = json.loads(amenities)
         places.append(
             {
                 "id": int(row["id"]),
                 "name": str(row["name"]),
                 "slug": str(row.get("slug") or ""),
                 "venue_type": str(row.get("venue_type") or "ice"),
+                "address": str(row.get("address") or ""),
+                "latitude": row.get("latitude"),
+                "longitude": row.get("longitude"),
+                "phone": str(row.get("phone") or ""),
+                "website_url": str(row.get("website_url") or ""),
+                "schedule_mode": str(row.get("schedule_mode") or "auto"),
+                "amenities": amenities if isinstance(amenities, Mapping) else {},
+                "photo_url": b_photo_url(variants.get("card")),
+                "photo_hero": b_photo_url(variants.get("hero") or variants.get("card")),
+                "photo_variants": dict(variants),
+                "photo_width": int(row.get("photo_width") or 0),
+                "display_tone": bool(row.get("display_tone")),
                 "in_sharpening": row_in_sharpening_section(row, month=sharpening_month),
                 "open_state": state["state"],
                 "open_close": state["close"],
@@ -329,6 +381,17 @@ async def load_city_hub_view(
 
     tz = ZoneInfo(DEFAULT_TIMEZONE)
     local_now = now.astimezone(tz)
+    variant = choose_city_variant(places)
+    week_rows: list[dict[str, Any]] = []
+    nearby: list[dict[str, Any]] = []
+    if variant == VARIANT_ONE:
+        rink = next(p for p in places if p["venue_type"] in ("ice", "outdoor"))
+        week_rows = await load_week(session, arena_id=int(rink["id"]), today=local_now.date(), now=now)
+    origin = city_origin(places)
+    if variant in (VARIANT_ONE, VARIANT_PHONE) and origin is not None:
+        nearby = await load_nearby(
+            session, city_id=city_id, origin=origin, today=local_now.date(), now=now
+        )
     return {
         "city": dict(city),
         "slug": city_slug(city_name),
@@ -353,6 +416,9 @@ async def load_city_hub_view(
         "trainer_roles": roles[:3],
         "hot_skate": hot_window_key(skate, now=now),
         "hot_ohm": hot_window_key(ohm, now=now),
+        "variant": variant,
+        "week_rows": week_rows,
+        "nearby": nearby,
     }
 
 
@@ -370,46 +436,9 @@ def _list_href(slug: str, **params: str | None) -> str:
     return f"/c/{slug}" + (("?" + urlencode(clean)) if clean else "")
 
 
-def _window_total(counts: Mapping[str, int]) -> int:
-    return sum(int(counts.get(key) or 0) for key in _WINDOW_KEYS)
-
-
-def _quick_chip(label: str, n: int, href: str | None, *, hot: bool = False) -> str:
-    """Ноль — неактивный чип «Завтра —», как пустой день в полосе Mini App."""
-    shown = str(n) if n > 0 else "—"
-    if n <= 0 or not href:
-        return f"<span>{_esc(label)} <small>{shown}</small></span>"
-    cls = ' class="hot"' if hot else ""
-    return f'<a{cls} href="{_esc(href)}">{_esc(label)} <small>{n}</small></a>'
-
-
-def _quick_html(slug: str, counts: Mapping[str, int], *, hot: str | None, all_count: int, **base: str) -> str:
-    parts = [
-        _quick_chip(
-            _WINDOW_LABELS[key],
-            int(counts.get(key) or 0),
-            _list_href(slug, w=key, **base),
-            hot=key == hot,
-        )
-        for key in _WINDOW_KEYS
-    ]
-    parts.append(_quick_chip("Все", int(all_count or 0), _list_href(slug, **base)))
-    return '<div class="quick">' + "".join(parts) + "</div>"
-
-
-def _route_html(*, href: str, name: str, count: str, live: str, dot_off: bool = False, quick: str = "") -> str:
-    dot = '<span class="dot dot--off"></span>' if dot_off else '<span class="dot"></span>'
-    live_html = f'<div class="live">{dot}{live}</div>' if live else ""
-    return (
-        '<article class="route">'
-        f'<a class="t" href="{_esc(href)}"><span class="name">{_esc(name)}</span><span class="cnt">{_esc(count)}</span></a>'
-        f"{live_html}{quick}</article>"
-    )
-
-
 def _session_when(card: Mapping[str, Any], *, today: date) -> tuple[str, str]:
     """(«22:15», «сегодня»/«завтра»/«сб, 11 окт»)."""
-    starts = str(card.get("starts_at_local") or "").strip()[:5]
+    starts = format_clock(str(card.get("starts_at_local") or ""))
     local_date = card.get("local_date")
     if isinstance(local_date, datetime):
         local_date = local_date.date()
@@ -434,167 +463,6 @@ def _price_bits(card: Mapping[str, Any]) -> str:
     if card.get("price_with_rental"):
         bits.append(str(card["price_with_rental"]))
     return " · ".join(bits)
-
-
-def _nearest_live(when: str, place: str, price: str) -> str:
-    """Время и место — цветом текста, цена — тише, в хвосте."""
-    fact = f'<span class="fact">ближайший <b>{_esc(when)} · {_esc(place)}</b></span>'
-    if not price:
-        return fact
-    return fact + f' · <span class="price">{_esc(price)}</span>'
-
-
-def _skate_route(view: Mapping[str, Any]) -> str:
-    slug = str(view["slug"])
-    counts = view["skate_counts"]
-    rinks = int(view.get("rink_count") or 0)
-    count = f"{rinks} {plural_ru(rinks, 'каток', 'катка', 'катков')}"
-    upcoming = list(view.get("upcoming") or [])
-    window_n = _window_total(counts)
-    all_n = int(counts.get("all") or 0)
-    # Ближайший сеанс уже в блоке «Ближайшее на льду» — в плитке его не повторяем.
-    live = "" if upcoming or window_n or all_n else t("hub.no_skate_times")
-    quick = "" if window_n == 0 and all_n == 0 else _quick_html(slug, counts, hot=view.get("hot_skate"), all_count=all_n, t="ice")
-    return _route_html(href=_list_href(slug, t="ice"), name=t("route.skate"), count=count, live=live, dot_off=not upcoming, quick=quick)
-
-
-def _ohm_route(view: Mapping[str, Any]) -> str:
-    counts = view["ohm_counts"]
-    sessions = int(counts.get("all") or 0)
-    centers = int(view.get("center_count") or 0)
-    if sessions <= 0 and centers <= 0:
-        return ""
-    slug = str(view["slug"])
-    if sessions <= 0:
-        count = f"{centers} {plural_ru(centers, 'центр', 'центра', 'центров')}"
-        return _route_html(
-            href=_list_href(slug, kind="ohm", seg="centers"),
-            name=t("chip.hockey"),
-            count=count,
-            live="",
-        )
-    n = int(view.get("ohm_arena_count") or 0)
-    count = f"{n} {plural_ru(n, 'каток', 'катка', 'катков')}"
-    live = ""
-    nxt = view.get("next_ohm")
-    if isinstance(nxt, Mapping):
-        hhmm, day = _session_when(nxt, today=view["today"])
-        when = f"{day} {hhmm}".strip() if day != "сегодня" else hhmm
-        price = format_price_minor(nxt.get("price_adult_minor"), str(nxt.get("currency_code") or "BYN"))
-        live = _nearest_live(when, str(nxt.get("arena_name") or ""), price)
-    quick = _quick_html(slug, counts, hot=view.get("hot_ohm"), all_count=int(counts.get("all") or 0), kind="ohm")
-    return _route_html(href=_list_href(slug, kind="ohm"), name=t("chip.hockey"), count=count, live=live, quick=quick)
-
-
-def _open_live(places: list[Mapping[str, Any]], open_places: list[Mapping[str, Any]]) -> tuple[str, bool]:
-    """«4 открыты сейчас · ближайшее до 23:00 — Чижовка-арена» / «часы — на карточках». Второе — «точка погасла»."""
-    if not places:
-        return "", True
-    k = len(open_places)
-    if k:
-        word = "открыто" if k == 1 else "открыты"
-        bits = [f"<b>{k} {word} сейчас</b>"]
-        with_close = sorted((p for p in open_places if p.get("open_close")), key=lambda p: str(p["open_close"]))
-        if with_close:
-            first = with_close[0]
-            bits.append(
-                _esc(
-                    t(
-                        "hub.open_until",
-                        name=format_public_name(str(first["name"])),
-                        time=str(first["open_close"]),
-                    )
-                )
-            )
-        return " · ".join(bits), False
-    known = [p for p in places if p.get("open_state") == "closed"]
-    if known and len(known) == len(places):
-        return "сейчас закрыто · часы — на карточках", True
-    return "часы работы — на карточках мест", True
-
-
-def _service_route(view: Mapping[str, Any]) -> str:
-    n = int(view.get("service_count") or 0)
-    if n <= 0:
-        return ""
-    slug = str(view["slug"])
-    service_places = [p for p in view.get("places") or [] if p.get("in_sharpening")]
-    live, off = _open_live(service_places, list(view.get("service_open") or []))
-    count = f"{n} {plural_ru(n, 'место', 'места', 'мест')}"
-    return _route_html(href=_list_href(slug, svc="service"), name=t("route.service"), count=count, live=live, dot_off=off)
-
-
-def _shops_route(view: Mapping[str, Any]) -> str:
-    n = int(view.get("shop_count") or 0)
-    if n <= 0:
-        return ""
-    slug = str(view["slug"])
-    shops = [p for p in view.get("places") or [] if p.get("venue_type") == VENUE_TYPE_SHOP]
-    live, off = _open_live(shops, list(view.get("shops_open") or []))
-    return _route_html(href=_list_href(slug, t="shop"), name=t("route.shops"), count=str(n), live=live, dot_off=off)
-
-
-def _trainers_route(view: Mapping[str, Any], *, href: str) -> str:
-    n = int(view.get("trainer_count") or 0)
-    if n <= 0 or not href:
-        return ""
-    count = f"{n} {plural_ru(n, 'тренер', 'тренера', 'тренеров')}"
-    roles = [str(r) for r in (view.get("trainer_roles") or []) if str(r).casefold() != "тренер"]
-    live = _esc(", ".join(roles)) if roles else ""
-    return _route_html(href=href, name=t("route.trainers"), count=count, live=live)
-
-
-def _upcoming_html(view: Mapping[str, Any]) -> str:
-    upcoming = list(view.get("upcoming") or [])
-    if not upcoming:
-        return ""
-    slug = str(view["slug"])
-    city_name = str(view["city"]["name"])
-    today_n = int(view["skate_counts"].get("today") or 0)
-    all_href = _list_href(slug, t="ice", w="today") if today_n else _list_href(slug, t="ice")
-    all_label = "Все сегодня →" if today_n else "Все →"
-    cards: list[str] = []
-    for card in upcoming:
-        hhmm, day = _session_when(card, today=view["today"])
-        arena_slug = str(card.get("arena_slug") or "").strip()
-        href = place_path(city_name=city_name, slug=arena_slug) if arena_slug else "#"
-        if card.get("session_id"):
-            href += f"?s={int(card['session_id'])}"
-        sub_bits = [b for b in (_price_bits(card),) if b]
-        cards.append(
-            f'<a class="next__item" href="{_esc(href)}">'
-            f'<span class="time">{_esc(hhmm)}<small>{_esc(day)}</small></span>'
-            f'<span class="what"><b>{_esc(format_public_name(str(card.get("arena_name") or "")))}</b>'
-            + (f"<span>{_esc(' · '.join(sub_bits))}</span>" if sub_bits else "")
-            + "</span></a>"
-        )
-    return (
-        '<section class="hub-sec">'
-        f'<div class="hub-head"><h2>Ближайшее на льду</h2><a href="{_esc(all_href)}">{all_label}</a></div>'
-        f'<div class="next">{"".join(cards)}</div></section>'
-    )
-
-
-def _places_html(view: Mapping[str, Any]) -> str:
-    places = list(view.get("places") or [])
-    if not places:
-        return ""
-    city_name = str(view["city"]["name"])
-    rinks = [p for p in places if _is_rink(p["venue_type"])]
-    others = [p for p in places if not _is_rink(p["venue_type"])]
-    parts: list[str] = []
-    for title, group in (("Катки", rinks), ("Магазины и другие места", others)):
-        if not group:
-            continue
-        links = ""
-        for p in group:
-            if p["slug"]:
-                href = place_path(city_name=city_name, slug=p["slug"])
-                links += f'<li><a href="{_esc(href)}">{_esc(format_public_name(p["name"]))}</a></li>'
-            else:
-                links += f"<li>{_esc(format_public_name(p['name']))}</li>"
-        parts.append(f'<h3 class="places__title">{title}</h3><ul class="places__list">{links}</ul>')
-    return '<section class="hub-sec hub-sec--places"><details class="places"><summary>Все места города</summary>' + "".join(parts) + "</details></section>"
 
 
 def city_hub_document_title(view: Mapping[str, Any]) -> str:
@@ -622,29 +490,6 @@ def city_hub_description(view: Mapping[str, Any]) -> str:
     if sessions:
         bits.append(f"{sessions} {plural_ru(sessions, 'сеанс', 'сеанса', 'сеансов')}")
     return " · ".join(bits)
-
-
-def _hero_sub(view: Mapping[str, Any]) -> str:
-    n = int(view.get("place_count") or 0)
-    head = f"{n} {plural_ru(n, 'место', 'места', 'мест')}."
-    today_n = int(view["skate_counts"].get("today") or 0)
-    tomorrow_n = int(view["skate_counts"].get("tomorrow") or 0)
-    weekend_n = int(view["skate_counts"].get("weekend") or 0)
-    # Знак препинания внутри того же узла, что и слово: иначе между </b> и «,» появляется пробел.
-    if today_n and tomorrow_n:
-        word = plural_ru(today_n, "сеанс", "сеанса", "сеансов")
-        tail = f" <b>Сегодня на льду ещё {today_n} {word}, завтра — {tomorrow_n}.</b>"
-    elif today_n:
-        word = plural_ru(today_n, "сеанс", "сеанса", "сеансов")
-        tail = f" <b>Сегодня на льду ещё {today_n} {word}.</b>"
-    elif tomorrow_n:
-        tail = f" Сегодня сеансов больше нет, <b>завтра — {tomorrow_n}.</b>"
-    elif weekend_n:
-        word = plural_ru(weekend_n, "сеанс", "сеанса", "сеансов")
-        tail = f" <b>В выходные — {weekend_n} {word}.</b>"
-    else:
-        tail = ""
-    return head + tail
 
 
 def city_hub_image_version(view: Mapping[str, Any]) -> str:
@@ -692,22 +537,11 @@ def render_city_hub_page(
     base_url: str = "",
     trainers_href: str | None = None,
 ) -> str:
-    from src.application.place_page import _share_html
-    from src.application.public_web_cta import render_generic_web_dock
-
     city = view["city"]
     city_name = str(city["name"])
     city_id = int(city["id"])
-    local_now = view["local_now"]
     title = city_hub_document_title(view)
     description = city_hub_description(view)
-    hero = (
-        '<header class="hero hero--ice hub-hero">'
-        f'<p class="hero__type">{_esc(_format_date_string(view["now"]))} · {local_now.strftime("%H:%M")}</p>'
-        f'<h1 class="hero__title">{_esc(format_public_name(city_name))}</h1>'
-        f'<p class="hero__where">{_hero_sub(view)}</p>'
-        "</header>"
-    )
     coach_href = trainers_href
     if coach_href is None:
         coach_href = public_telegram_cta_url(
@@ -716,49 +550,21 @@ def render_city_hub_page(
             surface="selection_page",
             city_id=city_id,
         )
-    routes = "".join(
-        x
-        for x in (
-            _skate_route(view) if int(view.get("rink_count") or 0) else "",
-            _ohm_route(view),
-            _service_route(view),
-            _shops_route(view),
-            _trainers_route(view, href=coach_href or ""),
-        )
-        if x
-    )
-    hint = ""
-    if routes and _roller_hall_count(list(view.get("places") or [])) == 0:
-        hint = f'<p class="hub-hint">{_esc(t("hub.no_rollers_halls"))}</p>'
-    if routes:
-        router = (
-            '<section class="hub-sec"><h2>Что нужно?</h2>'
-            f'<div class="router">{routes}</div>'
-            f"{hint}"
-            "</section>"
-        )
-    else:
-        router = '<section class="hub-sec"><p class="muted">В этом городе пока нет опубликованных мест.</p></section>'
-    dock = render_generic_web_dock(
+    body = _b_body(
+        view,
         base_url=base_url,
-        surface="selection_page",
-        city_id=city_id,
-        city_name=None,
-        telegram_url=cta_url,
+        cta_url=cta_url,
+        share=share,
+        story_image_url=story_image_url or og_image_url,
+        coach_href=coach_href or "",
     )
-    body = (
-        hero
-        + _upcoming_html(view)
-        + router
-        + _places_html(view)
-        + _share_html(
-            share,
-            venue_type="ice",
-            telegram_link_only=True,
-            story_image_url=story_image_url or og_image_url,
-        )
-        + dock
-    )
+    from src.application.catalog_list_share import catalog_list_share_tail
+    from src.application.public_web_cta import phone_beacon_script
+
+    body += phone_beacon_script(body)
+    has_share_pick = int(view.get("rink_count") or 0) > 0
+    need_share_js = bool(view.get("upcoming")) or has_share_pick
+    share_tail = catalog_list_share_tail(scripts=need_share_js, css=has_share_pick)
     elements = []
     for p in view.get("places") or []:
         if not p.get("slug"):
@@ -780,9 +586,10 @@ def render_city_hub_page(
             "itemListElement": elements,
         }
     )
-    css = _CSS_PATH.read_text(encoding="utf-8") if _CSS_PATH.exists() else ""
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+
     lang, og_locale = html_lang_for_country(str(city.get("country") or ""))
-    page = _TEMPLATE_PATH.read_text(encoding="utf-8")
+    page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     return fill_placeholders(
         page,
         {
@@ -794,12 +601,526 @@ def render_city_hub_page(
             "__LANG__": lang,
             "__OG_LOCALE__": og_locale,
             "__ROBOTS__": "index, follow",
-            "__HEAD_EXTRA__": f"<style>{css}</style>" if css else "",
+            "__HEAD_EXTRA__": "",
             "__JSONLD__": ld,
-            "__BRAND__": _esc(t("brand.mark")),
-            "__CITY__": '<a href="/" class="hub-back">‹ Все города</a>',
+            "__TOKENS_V__": TOKENS_VERSION,
+            "__STYLE_V__": STYLE_VERSION,
+            "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": "",
-            "__TRUST__": "",
             "__BODY__": body,
+            **share_tail,
         },
+    )
+
+
+# ── TASK-246 · стиль B «Лёд и свет» (доски «B · Лёд и свет», «B · Кобрин», «B · Жлобин») ─────
+
+_B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
+_WEEKDAYS_FULL = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
+_MONTHS_GEN = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+
+
+def _b_today_kicker(view: Mapping[str, Any]) -> str:
+    d = view["today"]
+    return f"{_WEEKDAYS_FULL[d.weekday()]}, {d.day} {_MONTHS_GEN[d.month - 1]}"
+
+
+def _b_counts_line(view: Mapping[str, Any]) -> str:
+    today_n = int(view["skate_counts"].get("today") or 0)
+    tomorrow_n = int(view["skate_counts"].get("tomorrow") or 0)
+    weekend_n = int(view["skate_counts"].get("weekend") or 0)
+    if today_n:
+        word = plural_ru(today_n, "сеанс", "сеанса", "сеансов")
+        line = f"Сегодня ещё {today_n} {word}"
+        return line + (f", завтра — {tomorrow_n}" if tomorrow_n else "")
+    if tomorrow_n:
+        word = plural_ru(tomorrow_n, "сеанс", "сеанса", "сеансов")
+        return f"Сегодня сеансов больше нет, завтра — {tomorrow_n} {word}"
+    if weekend_n:
+        word = plural_ru(weekend_n, "сеанс", "сеанса", "сеансов")
+        return f"В выходные — {weekend_n} {word}"
+    return ""
+
+
+def _b_bar(view: Mapping[str, Any]) -> str:
+    from src.application.style_b import brand_link, city_pill
+
+    return brand_link() + city_pill("/#cities", format_public_name(str(view["city"]["name"])))
+
+
+def _b_rinks(view: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return [p for p in view.get("places") or [] if _is_rink(str(p.get("venue_type") or "ice"))]
+
+
+def _b_upcoming(view: Mapping[str, Any]) -> str:
+    from src.application.style_b import section, tile_html
+
+    upcoming = list(view.get("upcoming") or [])
+    if not upcoming:
+        return ""
+    slug = str(view["slug"])
+    city_name = str(view["city"]["name"])
+    today_n = int(view["skate_counts"].get("today") or 0)
+    all_href = _list_href(slug, t="ice", w="today") if today_n else _list_href(slug, t="ice")
+    by_slug = {str(p.get("slug") or ""): p for p in view.get("places") or []}
+    tiles: list[str] = []
+    from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
+
+    for card in upcoming:
+        hhmm, day = _session_when(card, today=view["today"])
+        arena_slug = str(card.get("arena_slug") or "").strip()
+        href = place_path(city_name=city_name, slug=arena_slug) if arena_slug else "#"
+        session_id = card.get("session_id")
+        if session_id:
+            href += f"?s={int(session_id)}"
+        place = by_slug.get(arena_slug) or {}
+        name = format_public_name(str(card.get("arena_name") or ""))
+        badge = hhmm if day == "сегодня" else f"{day} {hhmm}"
+        pv = place.get("photo_variants")
+        tile = tile_html(
+            href=href,
+            name=name,
+            line=_price_bits(card) or day,
+            photo_url=place.get("photo_url"),
+            photo_alt=name,
+            toned=bool(place.get("display_tone")),
+            badge=badge,
+            badge_kind="time",
+            photo_variants=pv if isinstance(pv, Mapping) else None,
+        )
+        arena_ref = place.get("id")
+        if arena_ref is not None and session_id and href and href != "#":
+            local_date = card.get("local_date")
+            if hasattr(local_date, "year"):
+                label = invite_label_for_slot(
+                    {"local_date": local_date, "starts_at_local": card.get("starts_at_local")},
+                    today=view["today"],
+                )
+            else:
+                label = hhmm
+            invite = catalog_invite_link(
+                arena_ref=int(arena_ref),
+                session_id=int(session_id),
+                invite_label=label,
+                place_name=name,
+                fallback_href=href,
+                css_class="b-tile__invite",
+            )
+            tile = f'<div class="b-tile-wrap">{invite}{tile}</div>'
+        tiles.append(tile)
+    more = f'<a class="b-more" href="{_esc(all_href)}">{_esc("Весь день" if today_n else "Все")}</a>'
+    return section(
+        t("hub.nearest_ice"),
+        f'<div class="b-scroll">{"".join(tiles)}</div>',
+        aside_html=more,
+        klass="b-sec--flush",
+    )
+
+
+def _b_route_row(*, href: str, icon: str, title: str, line: str, quick: str = "") -> str:
+    """Строка «Что нужно». Ссылка — на всю строку; окна времени — отдельные ссылки поверх неё."""
+    from src.application.catalog_icons import icon_svg
+
+    line_html = f'<span class="b-row__line">{line}</span>' if line else ""
+    return (
+        f'<div class="b-row" data-route="{_esc(title)}"><span class="b-row__icon">{icon_svg(icon)}</span>'
+        f'<span class="b-row__body"><a class="b-row__title b-row__link" href="{_esc(href)}">{_esc(title)}</a>'
+        f"{line_html}{quick}</span>"
+        f'{icon_svg("chevron", extra_class="b-row__go")}</div>'
+    )
+
+
+def _b_quick(slug: str, counts: Mapping[str, int], *, all_count: int, hot: str | None, **base: str) -> str:
+    """Окна «Сегодня · Завтра · В выходные · Все» со счётчиками. Ноль — не ссылка: «Завтра —»."""
+    labels = {"today": t("when.today"), "tomorrow": t("when.tomorrow"), "weekend": t("when.weekend")}
+    parts: list[str] = []
+    for key in _WINDOW_KEYS:
+        n = int(counts.get(key) or 0)
+        if n <= 0:
+            parts.append(f"<span>{_esc(labels[key])} <small>—</small></span>")
+            continue
+        cls = ' class="hot"' if key == hot else ""
+        parts.append(f'<a{cls} href="{_esc(_list_href(slug, w=key, **base))}">{_esc(labels[key])} <small>{n}</small></a>')
+    if all_count > 0:
+        parts.append(f'<a href="{_esc(_list_href(slug, **base))}">Все <small>{all_count}</small></a>')
+    return f'<span class="b-quick">{"".join(parts)}</span>'
+
+
+def _b_open_line(places: list[Mapping[str, Any]], open_places: list[Mapping[str, Any]]) -> str:
+    k = len(open_places)
+    if not k:
+        return ""
+    word = "открыто" if k == 1 else "открыты"
+    return f"{k} {word} сейчас"
+
+
+def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
+    from src.application.style_b import section
+
+    slug = str(view["slug"])
+    rows: list[str] = []
+    rinks = int(view.get("rink_count") or 0)
+    if rinks:
+        counts = view["skate_counts"]
+        all_n = int(counts.get("all") or 0)
+        line = f"{rinks}\u00a0{plural_ru(rinks, 'каток', 'катка', 'катков')}"
+        quick = ""
+        if all_n:
+            quick = _b_quick(slug, counts, all_count=all_n, hot=view.get("hot_skate"), t="ice")
+        else:
+            line += " · " + t("hub.no_skate_times")
+        rows.append(_b_route_row(href=_list_href(slug, t="ice"), icon="skate", title=t("route.skate"), line=_esc(line), quick=quick))
+    ohm = view["ohm_counts"]
+    centers = int(view.get("center_count") or 0)
+    if int(ohm.get("all") or 0):
+        n = int(view.get("ohm_arena_count") or 0)
+        bits = [f"ОХМ на {n} {plural_ru(n, 'катке', 'катках', 'катках')}"]
+        nxt = view.get("next_ohm")
+        if isinstance(nxt, Mapping):
+            hhmm, day = _session_when(nxt, today=view["today"])
+            bits.append(f"ближайший в {hhmm}" if day == "сегодня" else f"ближайший {day} в {hhmm}")
+        quick = _b_quick(slug, ohm, all_count=int(ohm.get("all") or 0), hot=view.get("hot_ohm"), kind="ohm")
+        rows.append(
+            _b_route_row(
+                href=_list_href(slug, kind="ohm"), icon="stick", title=t("chip.hockey"), line=_esc(" · ".join(bits)), quick=quick
+            )
+        )
+    elif centers:
+        line = f"{centers} {plural_ru(centers, 'центр', 'центра', 'центров')} по записи"
+        rows.append(_b_route_row(href=_list_href(slug, kind="ohm", seg="centers"), icon="stick", title=t("chip.hockey"), line=_esc(line)))
+    service_n = int(view.get("service_count") or 0)
+    if service_n:
+        service_places = [p for p in view.get("places") or [] if p.get("in_sharpening")]
+        bits = [f"{service_n} {plural_ru(service_n, 'место', 'места', 'мест')}"]
+        open_line = _b_open_line(service_places, list(view.get("service_open") or []))
+        if open_line:
+            bits.append(open_line)
+        rows.append(_b_route_row(href=_list_href(slug, svc="service"), icon="sharpen", title=t("route.service"), line=_esc(" · ".join(bits))))
+    shop_n = int(view.get("shop_count") or 0)
+    if shop_n:
+        shops = [p for p in view.get("places") or [] if p.get("venue_type") == VENUE_TYPE_SHOP]
+        bits = [str(shop_n)]
+        open_line = _b_open_line(shops, list(view.get("shops_open") or []))
+        if open_line:
+            bits.append(open_line)
+        rows.append(_b_route_row(href=_list_href(slug, t="shop"), icon="shop", title=t("route.shops"), line=_esc(" · ".join(bits))))
+    trainers = int(view.get("trainer_count") or 0)
+    if trainers and coach_href:
+        line = f"{trainers} {plural_ru(trainers, 'тренер', 'тренера', 'тренеров')}"
+        rows.append(_b_route_row(href=coach_href, icon="person", title=t("route.trainers"), line=_esc(line)))
+    if not rows:
+        return ""
+    return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>')
+
+
+def _b_all_places(view: Mapping[str, Any]) -> str:
+    from src.application.catalog_icons import icon_svg
+
+    places = list(view.get("places") or [])
+    if len(places) < 2:
+        return ""
+    city_name = str(view["city"]["name"])
+    groups: list[str] = []
+    for title, group in (
+        ("Катки", [p for p in places if _is_rink(p["venue_type"])]),
+        ("Магазины и другие места", [p for p in places if not _is_rink(p["venue_type"])]),
+    ):
+        if not group:
+            continue
+        links = []
+        for p in group:
+            label = _esc(format_public_name(p["name"]))
+            if p.get("slug"):
+                links.append(f'<a href="{_esc(place_path(city_name=city_name, slug=p["slug"]))}">{label}</a>')
+            else:
+                links.append(label)
+        groups.append(f"<p><b>{title}:</b> {', '.join(links)}</p>")
+    return (
+        '<section class="b-sec"><details class="b-details">'
+        f'<summary>Все места города · {len(places)}{icon_svg("down")}</summary>'
+        f'<div class="b-details__body">{"".join(groups)}</div></details></section>'
+    )
+
+
+def _b_nearby(view: Mapping[str, Any], *, title: str) -> str:
+    from src.application.style_b import section, tile_html
+
+    items = list(view.get("nearby") or [])
+    if not items:
+        return ""
+    tiles = []
+    for item in items:
+        n = int(item.get("rink_count") or 0)
+        name = format_public_name(str(item.get("name") or ""))
+        line = f"{n} {plural_ru(n, 'каток', 'катка', 'катков')} · {item.get('when')} в {item.get('time')}"
+        tiles.append(
+            tile_html(
+                href=f"/c/{city_slug(str(item.get('name') or ''))}",
+                name=name,
+                line=line,
+                photo_url=item.get("photo_url"),
+                photo_alt=name,
+                toned=bool(item.get("display_tone")),
+                badge=str(item.get("distance") or ""),
+            )
+        )
+    more = f'<a class="b-more" href="/#cities">{_esc("Все города")}</a>'
+    return section(title, f'<div class="b-scroll">{"".join(tiles)}</div>', aside_html=more, klass="b-sec--flush")
+
+
+def _b_minutes_until(hhmm: str, now_local: datetime) -> int | None:
+    try:
+        h, m = (int(x) for x in hhmm.split(":")[:2])
+    except ValueError:
+        return None
+    return h * 60 + m - (now_local.hour * 60 + now_local.minute)
+
+
+def _b_soon(minutes: int) -> str:
+    if minutes < 60:
+        return f"через {minutes} мин"
+    h, m = divmod(minutes, 60)
+    return f"через {h} ч {m} мин" if m else f"через {h} ч"
+
+
+def _b_one_today(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    today = view["today"]
+    rows = [r for r in view.get("week_rows") or [] if r.get("local_date") == today]
+    local_now = view["local_now"]
+    tickets: list[str] = []
+    marked = False
+    href = place_path(city_name=str(view["city"]["name"]), slug=str(rink.get("slug") or "")) if rink.get("slug") else "#"
+    for row in rows:
+        start = format_clock(str(row.get("starts_at_local") or ""))
+        end = format_clock(str(row.get("ends_at_local") or ""))
+        minutes = _b_minutes_until(start, local_now)
+        if minutes is not None and minutes < 0:
+            continue
+        sub = [f"до {end}"] if end else []
+        klass = "b-ticket"
+        if not marked and minutes is not None:
+            marked = True
+            klass += " b-ticket--dark"
+            sub.append(_b_soon(minutes))
+        sub_html = f'<span class="b-ticket__sub">{_esc(" · ".join(sub))}</span>' if sub else ""
+        tickets.append(f'<a class="{klass}" href="{_esc(href)}"><span class="b-ticket__time">{_esc(start)}</span>{sub_html}</a>')
+    amenities = rink.get("amenities") if isinstance(rink.get("amenities"), Mapping) else {}
+    price = price_sentence(
+        list(view.get("week_rows") or []),
+        has_rental=bool(amenities.get("skate_rental")),
+        has_sharpening=bool(amenities.get("skate_sharpening")),
+    )
+    price_html = f'<p class="b-text">{_esc(price)}.</p>' if price else ""
+    if not tickets:
+        if not price_html:
+            return ""
+        body = f'<p class="b-text">Сегодня сеансов больше нет.</p>{price_html}'
+    else:
+        body = f'<div class="b-tickets">{"".join(tickets)}</div>{price_html}'
+    aside = f'<span class="b-aside">{_esc(_b_today_kicker(view))}</span>'
+    return section(t("hub.today"), body, aside_html=aside)
+
+
+def _b_one_week(view: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    days = [d for d in week_days(list(view.get("week_rows") or []), today=view["today"]) if d["date"] != view["today"]]
+    if not days:
+        return ""
+    rows = []
+    for d in days:
+        klass = "b-table__row b-table__row--end" if d["weekend"] else "b-table__row"
+        label = d["label"]
+        if label not in ("сегодня", "завтра"):
+            label = f"{label}, {d['date'].day}"
+        label = label[:1].upper() + label[1:]
+        times = d["collapsed"] or " · ".join(d["times"])
+        rows.append(
+            f'<div class="{klass}"><span class="b-table__day">{_esc(label)}</span>'
+            f'<span class="b-table__times">{_esc(times)}</span>'
+            f'<span class="b-table__count">{len(d["times"])}</span></div>'
+        )
+    return section(t("hub.week"), f'<div class="b-table">{"".join(rows)}</div>')
+
+
+def _b_rink_arrive(rink: Mapping[str, Any], *, base_url: str, city_id: int, show_phone_buttons: bool = True) -> str:
+    from src.application.catalog_icons import icon_svg
+    from src.application.public_web_cta import place_action_links
+    from src.application.style_b import section
+
+    links = place_action_links(rink, base_url=base_url, surface="selection_page", city_id=city_id)
+    street = format_street_address(str(rink.get("address") or ""))
+    head = ""
+    if street:
+        head = f'<div><b class="b-text" style="display:block;font-weight:600">{_esc(street)}</b>'
+        head += f'<span class="b-note">{_esc(format_public_name(str(rink.get("name") or "")))}</span></div>'
+    buttons = []
+    if show_phone_buttons and links.get("tel"):
+        buttons.append(
+            f'<a class="b-btn" href="{_esc(links["tel"])}" data-catalog-phone-beacon="{_esc(links.get("tel_beacon"))}">'
+            f'{icon_svg("phone")}{_esc(t("cta.call"))}</a>'
+        )
+    if links.get("route"):
+        href, blank = links["route"]
+        attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+        buttons.append(f'<a class="b-btn" href="{_esc(href)}"{attrs}>{icon_svg("route")}{_esc(t("cta.route"))}</a>')
+    if len(buttons) == 1:
+        btn_html = buttons[0]
+    else:
+        btn_html = f'<div class="b-btns">{"".join(buttons)}</div>' if buttons else ""
+    return section(t("hub.directions"), head + btn_html)
+
+
+def _b_phone_block(view: Mapping[str, Any], rink: Mapping[str, Any], *, base_url: str) -> str:
+    from src.application.catalog_icons import icon_svg
+    from src.application.public_web_cta import place_action_links
+    from src.application.style_b import section
+
+    city_id = int(view["city"]["id"])
+    links = place_action_links(rink, base_url=base_url, surface="selection_page", city_id=city_id)
+    name = format_public_name(str(rink.get("name") or ""))
+    calls: list[str] = []
+    numbers = [n.strip() for n in str(rink.get("phone") or "").split(";") if n.strip()]
+    for i, number in enumerate(numbers[:2]):
+        if not is_valid_public_phone(number):
+            continue
+        klass = "b-call b-call--dark" if i == 0 else "b-call"
+        calls.append(
+            f'<a class="{klass}" href="tel:{_esc(tel_href(number))}" data-catalog-phone-beacon="{_esc(links.get("tel_beacon"))}">'
+            f'{icon_svg("phone")}<span class="b-call__num">{_esc(format_phone_display(number))}</span></a>'
+        )
+    if not calls:
+        return ""
+    follow = ""
+    if rink.get("id") is not None:
+        href = public_telegram_cta_url(
+            base_url,
+            start_param=place_start_param(int(rink["id"])),
+            surface="selection_page",
+            city_id=city_id,
+            arena_id=int(rink["id"]),
+        )
+        if href:
+            follow = (
+                f'<a class="b-follow" href="{_esc(href)}">{icon_svg("bell")}<span>'
+                f'<b>{_esc(t("cta.follow_rink"))}</b><span>Напишем в Telegram, когда появится расписание</span></span></a>'
+            )
+    body = f'<p class="b-text">{_esc(t("hub.phone_when", name=name))}</p>' + "".join(calls) + follow
+    return section(t("hub.when_title"), body)
+
+
+def _b_body(
+    view: Mapping[str, Any],
+    *,
+    base_url: str,
+    cta_url: str | None,
+    share: Mapping[str, str],
+    story_image_url: str | None,
+    coach_href: str,
+) -> str:
+    from src.application.style_b import hero_html, share_html
+
+    city_name = format_public_name(str(view["city"]["name"]))
+    city_id = int(view["city"]["id"])
+    variant = str(view.get("variant") or "many")
+    rinks = _b_rinks(view)
+    with_photo = [p for p in rinks if p.get("photo_hero")]
+    # Герой — самое крупное фото крытого катка: уличный каток и маленький кадр — запасные.
+    with_photo.sort(key=lambda p: (str(p.get("venue_type")) != "ice", -int(p.get("photo_width") or 0)))
+    hero_place = with_photo[0] if with_photo else None
+    photo = hero_place.get("photo_hero") if hero_place else None
+    hero_variants = hero_place.get("photo_variants") if hero_place else None
+    if not isinstance(hero_variants, Mapping):
+        hero_variants = None
+    toned = bool(hero_place.get("display_tone")) if hero_place else False
+    alt = format_public_name(str(hero_place.get("name") or "")) if hero_place else ""
+    from src.application.catalog_list_share import catalog_selection_share_button, city_hub_share_endpoint
+
+    share_pick = ""
+    if int(view.get("rink_count") or 0) > 0:
+        share_pick = catalog_selection_share_button(endpoint=city_hub_share_endpoint(view))
+    share_block = share_pick + share_html(
+        share, telegram_url=cta_url, story_image_url=story_image_url, telegram_link_only=True
+    )
+    if variant == VARIANT_ONE and rinks:
+        rink = rinks[0]
+        rink_name = format_public_name(str(rink.get("name") or ""))
+        week_n = len(view.get("week_rows") or [])
+        sub = rink_name
+        if rink.get("slug"):
+            href = place_path(city_name=str(view["city"]["name"]), slug=str(rink["slug"]))
+            sub = f'<a href="{_esc(href)}">{_esc(rink_name)}</a>'
+        else:
+            sub = _esc(rink_name)
+        if week_n:
+            sub += f" · {week_n} {plural_ru(week_n, 'сеанс', 'сеанса', 'сеансов')} на этой неделе"
+        rv = rink.get("photo_variants")
+        hero = hero_html(
+            title=t("hub.on_ice", city=city_name),
+            title_break="на льду",
+            sub_html=sub,
+            photo_url=rink.get("photo_hero"),
+            photo_alt=rink_name,
+            toned=bool(rink.get("display_tone")),
+            bar_html=_b_bar(view),
+            photo_variants=rv if isinstance(rv, Mapping) else None,
+        )
+        return "".join(
+            [
+                hero,
+                _b_one_today(view, rink),
+                _b_one_week(view),
+                _b_rink_arrive(rink, base_url=base_url, city_id=city_id),
+                _b_nearby(view, title=t("hub.nearby")),
+                share_block,
+            ]
+        )
+    if variant == VARIANT_PHONE and rinks:
+        rink = rinks[0]
+        rv = rink.get("photo_variants")
+        hero = hero_html(
+            title=t("hub.on_ice", city=city_name),
+            title_break="на льду",
+            sub_html=_esc(format_public_name(str(rink.get("name") or ""))) if len(rinks) == 1 else "",
+            photo_url=rink.get("photo_hero"),
+            photo_alt=format_public_name(str(rink.get("name") or "")),
+            toned=bool(rink.get("display_tone")),
+            bar_html=_b_bar(view),
+            photo_variants=rv if isinstance(rv, Mapping) else None,
+        )
+        blocks = [hero]
+        for r in rinks:
+            blocks.append(_b_phone_block(view, r, base_url=base_url))
+            blocks.append(_b_rink_arrive(r, base_url=base_url, city_id=city_id, show_phone_buttons=False))
+        blocks.append(_b_nearby(view, title=t("hub.nearby_scheduled")))
+        blocks.append(share_block)
+        return "".join(blocks)
+    hero = hero_html(
+        title=t("hub.on_ice", city=city_name),
+            title_break="на льду",
+        sub_html=_esc(_b_counts_line(view)),
+        kicker=_b_today_kicker(view),
+        photo_url=photo,
+        photo_alt=alt,
+        toned=toned,
+        photo_variants=hero_variants,
+        bar_html=_b_bar(view),
+    )
+    empty = ""
+    if not view.get("places"):
+        empty = '<section class="b-sec"><p class="b-text">В этом городе пока нет опубликованных мест.</p></section>'
+    return "".join(
+        [
+            hero,
+            _b_upcoming(view),
+            _b_routes(view, coach_href=coach_href),
+            empty,
+            _b_all_places(view),
+            share_block,
+        ]
     )

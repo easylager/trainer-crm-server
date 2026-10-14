@@ -106,12 +106,12 @@ async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_
     assert f"<lastmod>{_sitemap_lastmod(profile_stamp)}</lastmod>" in newer_block
     city_block = _url_block(xml, f"/c/{city_slug(older['city_name'])}")
     assert "<lastmod>" in city_block
-    ice_block = _url_block(xml, f"/ice/{city_slug(older['city_name'])}/today")
-    assert "<lastmod>" in ice_block
+    # TASK-266: старый адрес «Лёд сегодня» — 301 на список, в sitemap его нет.
+    assert "/ice/" not in xml
 
 
 @pytest.mark.asyncio
-async def test_unknown_ice_city_is_html_404_and_empty_day_is_noindex(app_use_test_db, db_session) -> None:
+async def test_unknown_ice_city_is_html_404_and_known_one_moves_to_the_list(app_use_test_db, db_session) -> None:
     empty_name = f"Пустоград {uuid.uuid4().hex[:6]}"
     await _insert_city(db_session, name=empty_name)
     quiet_name = f"Тихий {uuid.uuid4().hex[:6]}"
@@ -121,8 +121,8 @@ async def test_unknown_ice_city_is_html_404_and_empty_day_is_noindex(app_use_tes
 
     async with _client() as client:
         missing = await client.get("/ice/nowhere/today")
-        empty = await client.get(f"/ice/{city_slug(empty_name)}/today")
-        quiet = await client.get(f"/ice/{city_slug(quiet_name)}/today")
+        empty = await client.get(f"/ice/{city_slug(empty_name)}/today", follow_redirects=False)
+        quiet = await client.get(f"/ice/{city_slug(quiet_name)}/today", follow_redirects=False)
 
     assert missing.status_code == 404
     assert missing.headers["content-type"].startswith("text/html")
@@ -131,10 +131,11 @@ async def test_unknown_ice_city_is_html_404_and_empty_day_is_noindex(app_use_tes
     assert _meta(missing.text, "robots") == "noindex"
     assert "Открыть каталог Glide" in missing.text
 
-    assert empty.status_code == 200
-    assert _meta(empty.text, "robots") == "noindex"
-    assert quiet.status_code == 200
-    assert _meta(quiet.text, "robots") == "noindex"
+    # TASK-266: пустой день живёт на списке — у него свои правила индекса.
+    assert empty.status_code == 301
+    assert empty.headers["location"] == f"/c/{city_slug(empty_name)}?t=ice&w=today"
+    assert quiet.status_code == 301
+    assert quiet.headers["location"] == f"/c/{city_slug(quiet_name)}?t=ice&w=today"
 
 
 @pytest.mark.asyncio
@@ -163,44 +164,25 @@ async def test_selection_variants_canonicalize_to_the_city_and_drop_out_of_index
 
 
 @pytest.mark.asyncio
-async def test_ice_today_jsonld_is_an_item_list_of_events_and_survives_markup(
-    app_use_test_db, db_session
-) -> None:
+async def test_ice_today_list_jsonld_survives_markup(app_use_test_db, db_session) -> None:
+    """Список «Лёд сегодня» (бывший /ice/{город}/today): имя места не ломает JSON-LD и разметку."""
     evil = '</script><img src=x onerror=alert(1)>'
     name = f"Разметск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     arena_id = await _insert_arena(db_session, city_id, name=evil)
-    sid, _starts = await _add_today_session(db_session, arena_id, price_adult_minor=50000)
-    await db_session.execute(
-        text("UPDATE ice_sessions SET currency_code = 'RUB' WHERE id = :id"),
-        {"id": sid},
-    )
+    await _add_today_session(db_session, arena_id, price_adult_minor=50000)
     await db_session.commit()
     slug = city_slug(name)
     async with _client() as client:
-        page = await client.get(f"/ice/{slug}/today")
+        page = await client.get(f"/c/{slug}?t=ice&w=today")
     assert page.status_code == 200, page.text
-    assert _meta(page.text, "robots") == "index, follow"
-    # JSON-LD must be a single block; page may also load list-scroll / other scripts.
     assert page.text.count('<script type="application/ld+json">') == 1
-    assert "<img" not in page.text
+    assert "<img src=x" not in page.text
     raw = re.search(r'<script type="application/ld\+json">(.*?)</script>', page.text, re.S)
     assert raw
     assert "<" not in raw.group(1) and ">" not in raw.group(1)
     ld = json.loads(raw.group(1))
     assert ld["@type"] == "ItemList"
-    events = _events(ld)
-    assert len(events) == 1
-    event = events[0]
-    assert event["@type"] == "Event"
-    assert event["location"]["@type"] == "Place"
-    assert event["location"]["name"] == evil
-    assert event["startDate"] and event["endDate"]
-    assert datetime.fromisoformat(event["endDate"]) > datetime.fromisoformat(event["startDate"])
-    assert event["offers"]["@type"] == "Offer"
-    assert event["offers"]["price"] == "500.00"
-    assert event["offers"]["priceCurrency"] == "RUB"
-    assert f"/p/{slug}/" in event["url"]
 
 
 @pytest.mark.asyncio
@@ -224,7 +206,7 @@ async def test_catalog_pages_use_country_locale(app_use_test_db, db_session, mon
         ).scalar_one()
         async with _client() as client:
             pages = [
-                await client.get(f"/ice/{slug}/today"),
+                await client.get(f"/c/{slug}?t=ice&w=today"),
                 await client.get(f"/p/{slug}/{arena_slug}"),
                 await client.get(f"/c/{slug}"),
             ]

@@ -34,7 +34,12 @@ from src.application.schedule_staleness import (
     staleness_level,
 )
 from src.application.selection_page import load_selection_view, render_selection_page
-from tests.api.test_public_arenas import _add_future_session, _insert_arena, _insert_city
+from tests.api.test_public_arenas import (
+    _add_future_session,
+    _insert_arena,
+    _insert_city,
+    _minsk_today,
+)
 
 MINSK = ZoneInfo("Europe/Minsk")
 
@@ -78,14 +83,12 @@ def test_notes_wording() -> None:
 
 async def _job(db_session, arena_id: int, *, last_ok_at: datetime) -> None:
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO ice_parser_jobs (arena_id, parser_key, is_enabled, cadence, next_run_at,
                                          config, created_at, last_ok_at)
             VALUES (:aid, 'stale180_v1', true, 'daily', now(), '{}'::jsonb,
                     now() - interval '30 days', :ok)
-            """
-        ),
+            """),
         {"aid": arena_id, "ok": last_ok_at},
     )
 
@@ -124,9 +127,7 @@ def _assert_no_freshness_words(html: str) -> None:
 async def test_ice_city_day_shows_very_stale_like_any_other(app_use_test_db, db_session) -> None:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     ids = await _city_with_arenas(db_session, now)
-    day = await get_city_ice_day(
-        db_session, city_id=ids["city"], on_date=date.today() + timedelta(days=2), now=now
-    )
+    day = await get_city_ice_day(db_session, city_id=ids["city"], on_date=_minsk_today() + timedelta(days=2), now=now)
     by_id = {a["arena_id"]: a for a in day["arenas"]}
 
     # Все четыре катка в списке дня и в счёте; пометок нет.
@@ -194,7 +195,7 @@ async def test_place_page_shows_very_stale_sessions(app_use_test_db, db_session)
         assert view["schedule_note"] == "", key
         html = render(view)
         assert 'class="sched__stale"' not in html, key
-        assert 'class="slot' in html, key
+        assert 'class="b-ticket' in html, key
         _assert_no_freshness_words(html)
     very = await load_place_view(db_session, str(ids["very"]), now=now)
     assert very is not None and very["schedule_level"] == LEVEL_VERY_STALE
@@ -233,14 +234,12 @@ async def test_hub_teaser_includes_very_stale(app_use_test_db, db_session) -> No
 
 
 @pytest.mark.asyncio
-async def test_city_day_today_with_only_very_stale_sessions_lists_them(
-    app_use_test_db, db_session
-) -> None:
+async def test_city_day_today_with_only_very_stale_sessions_lists_them(app_use_test_db, db_session) -> None:
     """Сегодня сеансы есть только у «забытого» катка — день сегодняшний, каток в списке.
 
     ``now`` — 06:00 по Минску того дня, где лежат сеансы, чтобы 13:00 был впереди.
     """
-    target = date.today() + timedelta(days=2)
+    target = _minsk_today() + timedelta(days=2)
     now = datetime(target.year, target.month, target.day, 6, 0, tzinfo=MINSK).astimezone(timezone.utc)
     cid = await _insert_city(db_session, name=f"Стейл-{uuid.uuid4().hex[:6]}")
     very = await _insert_arena(db_session, cid, name="Каток Забытый", phone="+375 17 123-45-67")
@@ -283,10 +282,8 @@ async def test_public_list_shows_very_stale_session(app_use_test_db, db_session)
         assert by_id[ids[key]]["live"]["kind"] == "session"
 
     # Окно на день сеансов: забытый каток — такое же попадание, как остальные.
-    day_iso = (date.today() + timedelta(days=2)).isoformat()
-    windowed = await list_public_ice_arenas(
-        db_session, city_id=ids["city"], intent="skate", day=day_iso
-    )
+    day_iso = (_minsk_today() + timedelta(days=2)).isoformat()
+    windowed = await list_public_ice_arenas(db_session, city_id=ids["city"], intent="skate", day=day_iso)
     assert windowed["window"]["hits"] == 4
 
 

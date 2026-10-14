@@ -45,13 +45,13 @@ def _freeze(monkeypatch, moment: datetime) -> None:
 def _counter(html: str) -> str:
     match = re.search(r'<p class="[^"]*\bcounter\b[^"]*">([^<]*)</p>', html)
     assert match, "counter"
-    return match.group(1)
+    return match.group(1).replace("\u00a0", " ")
 
 
 def _city_tile(html: str, city_name: str) -> str:
-    for match in re.finditer(r'<a class="city card[^"]*".*?</a>', html, re.S):
+    for match in re.finditer(r'<a class="b-tile".*?</a>', html.replace("\u00a0", " "), re.S):
         tile = match.group(0)
-        name = re.search(r'<span class="n">([^<]*)</span>', tile)
+        name = re.search(r'<span class="b-tile__name">([^<]*)</span>', tile)
         if name and html_lib.unescape(name.group(1)) == city_name:
             return tile
     raise AssertionError(city_name)
@@ -127,11 +127,11 @@ async def test_ac1_weekend_count_excludes_friday_and_sunday_evening_rolls_forwar
         midweek = await client.get("/")
 
     assert explicit.status_code == 200
-    assert _counter(explicit.text) == f"{name} — в эти выходные 2 катания"
-    assert _counter(default.text) == f"{name} — в эти выходные 2 катания"
+    assert _counter(explicit.text) == f"{name} — в эти выходные 2 сеанса"
+    assert _counter(default.text) == f"{name} — в эти выходные 2 сеанса"
     assert 'name="robots" content="noindex, follow"' in explicit.text
     assert 'rel="canonical"' in explicit.text
-    assert _counter(midweek.text) == f"{midweek_name} — сегодня 1 катание"
+    assert _counter(midweek.text) == f"{midweek_name} — сегодня 1 сеанс"
 
     sunday = _utc(2026, 10, 11, 19)
     _freeze(monkeypatch, sunday)
@@ -146,7 +146,7 @@ async def test_ac1_weekend_count_excludes_friday_and_sunday_evening_rolls_forwar
     async with _client() as client:
         rolled = await client.get("/")
     # Без сдвига на следующие выходные в окне остаётся только вс 20:00 — это 1, а не 2.
-    assert _counter(rolled.text) == f"{late_name} — в эти выходные 2 катания"
+    assert _counter(rolled.text) == f"{late_name} — в эти выходные 2 сеанса"
 
 
 @pytest.mark.asyncio
@@ -180,7 +180,7 @@ async def test_ac4_by_cities_stay_on_the_map_and_ru_does_not(app_use_test_db, db
     for slug in ("brest", "bobruysk", "grodno"):
         assert f'href="/c/{slug}" class="home-map__city"' in resp.text
     assert 'href="/c/tver" class="home-map__city"' not in resp.text
-    elsewhere = re.search(r'<p class="elsewhere">.*?</p>', resp.text, re.S)
+    elsewhere = re.search(r'<span class="elsewhere">.*?</span>', resp.text, re.S)
     assert elsewhere and 'href="/c/tver"' in elsewhere.group(0)
 
 
@@ -248,18 +248,24 @@ async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale
     cookies = await _hero_cookie(db_session)
     await db_session.commit()
     invalidate_public_city_cache()
-    slug = city_slug(name)
 
     async with _client() as client:
         client.cookies.set("glide_city", cookies["glide_city"])
         home = await client.get("/?when=today")
-        ice = await client.get(f"/ice/{slug}/today")
     assert home.status_code == 200
-    assert ice.status_code == 200
     from src.application.catalog_home_page import parse_city_session_count_from_home
+    from src.application.ice_city_day import get_city_ice_day
 
     assert parse_city_session_count_from_home(home.text, name) == 2
-    assert re.search(r"2 сеанса на ", ice.text)
+    # Страницы /ice/…/today больше нет (TASK-266): старый адрес ведёт в список, и он
+    # обязан сойтись с главной — закрытый каток без сеансов, старый с сеансами.
+    day = await get_city_ice_day(db_session, city_id=city_id)
+    assert day["session_count"] == 2
+    async with _client() as client:
+        listing = await client.get(f"/c/{city_slug(name)}?t=ice&w=today")
+    assert listing.status_code == 200
+    assert "Живой каток" in listing.text and "Старый каток" in listing.text
+    assert "Закрытый каток" not in listing.text
 
 
 @pytest.mark.asyncio
@@ -281,8 +287,7 @@ async def test_bad_day_falls_back_to_today_without_picker(app_use_test_db, db_se
     assert 'class="day-picker"' not in bad.text
     assert 'class="chips"' not in bad.text
     assert "chip--active" not in bad.text
-    assert '<p class="sub sub--ohm">ОХМ — ' in bad.text
-    assert _counter(bad.text) == f"{name} — сегодня 1 катание"
+    assert _counter(bad.text) == f"{name} — сегодня 1 сеанс"
 
 
 @pytest.mark.asyncio
@@ -321,7 +326,8 @@ async def test_when_query_works_without_js_switcher(app_use_test_db, db_session,
     await db_session.commit()
     invalidate_public_city_cache()
     prefixes = {
-        "today": "Сегодня в Беларуси",
+        # Без сеансов «сегодня» — «Сегодня сеансов нет…» (TASK-275), с сеансами — «Сегодня в Беларуси N…».
+        "today": "Сегодня",
         "tomorrow": "Завтра в Беларуси",
         "weekend": "В эти выходные в Беларуси",
     }
@@ -380,7 +386,7 @@ async def test_counter_ignores_ru_sessions(app_use_test_db, db_session, monkeypa
 
     async with _client() as client:
         resp = await client.get("/")
-    assert _counter(resp.text) == f"{by_name} — сегодня 1 катание"
+    assert _counter(resp.text) == f"{by_name} — сегодня 1 сеанс"
 
 
 @pytest.mark.asyncio
@@ -406,7 +412,7 @@ async def test_single_place_city_button_opens_the_place(app_use_test_db, db_sess
     async with _client() as client:
         resp = await client.get("/", cookies={"glide_city": slug})
     assert resp.status_code == 200
-    assert f'<a class="hero-city" href="/p/{slug}/{arena_slug}">' in resp.text
+    assert f'<a class="b-city" href="/p/{slug}/{arena_slug}">' in resp.text
     assert 'class="city-button"' not in resp.text
 
 

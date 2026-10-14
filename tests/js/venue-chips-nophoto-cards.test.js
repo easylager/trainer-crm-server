@@ -178,8 +178,8 @@ describe('бесфотошная карточка: иконка типа на п
     assert.match(iconBlock, /var\(--app-on-media\)/, 'иконка читается по цветной плашке');
   });
 
-  it('новые токены типов объявлены в theme.css рядом с рейкой venue', () => {
-    const css = read('theme.css');
+  it('новые токены типов объявлены в glide-tokens.css рядом с рейкой venue', () => {
+    const css = read('../shared/glide-tokens.css');
     assert.match(css, /--app-venue-trainer:\s*#0B6E70/);
     assert.match(css, /--app-venue-track:\s*#2A7FD4/);
     assert.match(css, /--app-venue-service:\s*#47535E/);

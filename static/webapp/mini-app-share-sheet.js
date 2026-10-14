@@ -37,6 +37,29 @@
     return global.Telegram && global.Telegram.WebApp;
   }
 
+  /** TASK-254: пустой WebApp без initData — сайт в браузере, не Mini App. */
+  function isTelegramMiniApp() {
+    var t = tg();
+    var initData = t && t.initData;
+    return !!(initData && String(initData).length > 0);
+  }
+
+  /** В браузере «Сторис» только при Web Share с файлом; в Telegram — как раньше. */
+  function browserStoryShareAvailable() {
+    var nav = global.navigator;
+    if (!nav || typeof nav.share !== 'function' || typeof nav.canShare !== 'function') return false;
+    try {
+      var probe = new File(['x'], 'probe.png', { type: 'image/png' });
+      return nav.canShare({ files: [probe] });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function storyChannelVisible() {
+    return isTelegramMiniApp() || browserStoryShareAvailable();
+  }
+
   function haptic() {
     try {
       var t = tg();
@@ -539,8 +562,16 @@
       }
       tryShareStoryFile(p).then(function (shared) {
         if (shared) {
-          toast('Ссылка в буфере — добавьте стикером в Instagram');
+          if (isTelegramMiniApp()) {
+            toast('Ссылка в буфере — добавьте стикером в Instagram');
+          } else {
+            toast('Ссылка скопирована');
+          }
           resolve('story_os');
+          return;
+        }
+        if (!isTelegramMiniApp()) {
+          resolve('story_fallback');
           return;
         }
         copyText(p.share_url, function () {
@@ -838,9 +869,15 @@
     return '<div class="gss-slot-picker">' + html + '</div>';
   }
 
+  function variantNeedsSession(variant, sheetState) {
+    if (!variant) return false;
+    var source = sheetState || state || {};
+    return typeof variant.needsSession === 'function' ? !!variant.needsSession(source) : !!variant.needsSession;
+  }
+
   function sessionPicker() {
     var variant = activeVariant();
-    if (!variant || !variant.needsSession) return '';
+    if (!variantNeedsSession(variant)) return '';
     if (variant.collapsesPicker && !state.zovi.pickOpen) {
       var picked = selectedPostcardSlot(state);
       if (picked) return pickedSlotSummary(picked);
@@ -892,10 +929,25 @@
     return (sheetState && sheetState.venueType ? sheetState.venueType : 'ice') === 'ice';
   }
 
-  var SHARE_NOTE =
-    '<p class="gss-note">В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис. Ссылку для стикера скопируйте сами.</p>';
+  var SHARE_NOTE_TELEGRAM =
+    'В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис. Ссылку для стикера скопируйте сами.';
+  var SHARE_NOTE_BROWSER =
+    'В чат — Telegram или «Ссылка». «В галерею» сохраняет вертикальную картинку для сторис.';
+
+  function shareNoteHtml() {
+    var text = isTelegramMiniApp() ? SHARE_NOTE_TELEGRAM : SHARE_NOTE_BROWSER;
+    return '<p class="gss-note">' + esc(text) + '</p>';
+  }
 
   function renderChannelsHtml(p) {
+    var storyBtn =
+      storyChannelVisible()
+        ? '<button type="button" class="gss-ch' +
+          (state.endpoint ? ' gss-ch--story' : '') +
+          '" data-ch="story"' +
+          (p ? '' : ' disabled') +
+          '>Сторис</button>'
+        : '';
     return (
       '<div class="gss-channels">' +
       '<button type="button" class="gss-ch gss-ch--tg" data-ch="telegram"' +
@@ -910,11 +962,7 @@
       '<button type="button" class="gss-ch gss-ch--wa" data-ch="whatsapp"' +
       (p ? '' : ' disabled') +
       '>WhatsApp</button>' +
-      '<button type="button" class="gss-ch' +
-      (state.endpoint ? ' gss-ch--story' : '') +
-      '" data-ch="story"' +
-      (p ? '' : ' disabled') +
-      '>Сторис</button>' +
+      storyBtn +
       '<button type="button" class="gss-ch gss-ch--image" data-ch="image"' +
       (p ? '' : ' disabled') +
       '>В галерею</button>' +
@@ -999,7 +1047,7 @@
   }
 
   function renderShareBottom(sheetState) {
-    return renderChannelsHtml(sheetState.payload) + SHARE_NOTE;
+    return renderChannelsHtml(sheetState.payload) + shareNoteHtml();
   }
 
   function humanError(detail) {
@@ -1187,7 +1235,11 @@
       rank: function (sheetState) {
         return isIcePlace(sheetState) ? 2 : 0;
       },
-      needsSession: false,
+      // Карточка катка показывает сеанс (session_id уходит в запрос) — значит, его можно сменить,
+      // как в «Погнали кататься» и «Открытке». У места без льда сеансов нет.
+      needsSession: function (sheetState) {
+        return isIcePlace(sheetState);
+      },
       shareInvite: false,
       available: function (sheetState) {
         return !sheetState.endpoint;
@@ -1563,10 +1615,17 @@
     _openStoryShare: openStoryShare,
     _openImageSave: openImageSave,
     _telegramShareHref: telegramShareHref,
+    _isTelegramMiniApp: isTelegramMiniApp,
+    _shareNoteHtml: shareNoteHtml,
+    _storyChannelVisible: storyChannelVisible,
     _resolveInitialSessionId: resolveInitialSessionId,
     variantsFor: function (sheetState) {
       return visibleVariants(sheetState).map(function (variant) {
-        return { id: variant.id, label: variant.label(sheetState) };
+        return {
+          id: variant.id,
+          label: variant.label(sheetState),
+          picksSession: variantNeedsSession(variant, sheetState),
+        };
       });
     },
     initialVariantId: initialVariantId,

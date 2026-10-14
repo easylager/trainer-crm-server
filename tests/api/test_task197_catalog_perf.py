@@ -100,7 +100,7 @@ async def test_public_json_lists_are_cached_and_view_pages_are_not(app_use_test_
         nearest = await client.get("/api/public/ice/nearest", params={"near": "53.9,27.56"})
         config = await client.get("/api/public/ice/map-config")
         selection = await client.get(f"/c/{slug}")
-        today = await client.get(f"/ice/{slug}/today")
+        today = await client.get(f"/c/{slug}?t=ice&w=today")
     for resp in (cities, ice_cities, services, arenas, sessions):
         assert resp.status_code == 200, resp.text
         assert resp.headers["cache-control"] == PUBLIC_JSON_LIST_CACHE

@@ -335,13 +335,13 @@ def _hhmm(value: Any) -> str:
 
 
 def format_price_minor(minor: int | None, currency: str) -> str:
-    """``850, "BYN"`` → ``"8.50 BYN"``. ``None`` → пустая строка, а не «0»."""
+    """``850, "BYN"`` → ``"8,50 BYN"`` (русская запятая). ``None`` → пустая строка, а не «0»."""
     if minor is None:
         return ""
     major = int(minor) / 100.0
     if major == int(major):
         return f"{int(major)} {currency}"
-    return f"{major:.2f} {currency}"
+    return f"{major:.2f} {currency}".replace(".", ",", 1)
 
 
 def plural_ru(n: int, one: str, few: str, many: str) -> str:
@@ -584,5 +584,6 @@ def compose_ice_city_day_share_message(
 
 
 def ice_city_day_page_url(*, base_url: str, city_name: str) -> str:
+    """«Лёд сегодня» в городе — список «Покататься → Сегодня» (TASK-266; ``/ice/…/today`` уводит сюда)."""
     base = (base_url or "").strip().rstrip("/")
-    return f"{base}/ice/{city_slug(city_name)}/today"
+    return f"{base}/c/{city_slug(city_name)}?t=ice&w=today"

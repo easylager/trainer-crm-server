@@ -278,6 +278,9 @@ class Settings(BaseSettings):
     booking_problem_rollout: str = "full"
     # JSON-массив internal trainer_id, например [12, 34] — при rollout=pilot.
     booking_problem_pilot_trainer_ids: list[int] | None = None
+    # TASK-257: comma-separated or JSON list of Telegram user ids that open server /p/… in the
+    # client Mini App instead of arena.html. Empty / unset — legacy arena?ref= for everyone.
+    catalog_mini_app_server_place_card_telegram_ids: list[int] | None = None
 
     # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
     # Full log: every update + inner gate/menu DB phase timings.

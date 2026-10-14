@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Сверка токенов темы между theme.css и двумя theme-JS (TASK-017, AC-003).
+Сверка токенов темы между glide-tokens.css (раньше theme.css, TASK-248) и двумя theme-JS (TASK-017, AC-003).
 
 Зачем. Оба theme-JS выставляют ~10 токенов инлайном на <html> с флагом
 `important`, поэтому при расхождении с theme.css выигрывает JS, а написанное
@@ -19,7 +19,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 WEBAPP = REPO / "static" / "webapp"
 
-THEME_CSS = WEBAPP / "theme.css"
+THEME_CSS = REPO / "static" / "shared" / "glide-tokens.css"
 THEME_JS = (
     WEBAPP / "mini-app-trainer-theme.js",
     WEBAPP / "client-mini-app-theme.js",
@@ -86,7 +86,10 @@ def normalize(value: str) -> str:
 
 def read_css_tokens() -> dict[tuple[str, str], str]:
     css = _strip_comments(THEME_CSS.read_text(encoding="utf-8"))
-    light = _declarations(_find_block(css, ":root"))
+    # В glide-tokens.css два блока :root (стиль B и Mini App) — сливаем все.
+    light: dict[str, str] = {}
+    for match in re.finditer(r":root\s*\{", css):
+        light.update(_declarations(_block_after(css, match.end() - 1)))
     dark = _declarations(_find_block(css, DARK_SELECTOR))
     # Тёмный блок переопределяет не всё — недостающее наследуется из :root.
     merged_dark = {**light, **dark}

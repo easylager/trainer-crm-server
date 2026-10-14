@@ -45,6 +45,7 @@ from src.application.training_group_use_cases import (
     list_open_training_groups_catalog,
 )
 from src.application.trainer_use_cases import list_active_trainers_for_client
+from src.shared.public_display import format_clock, short_day_word
 from src.shared.arena_schedule_mode import (
     PHONE_LINE,
     SCHEDULE_MODE_PHONE,
@@ -112,18 +113,28 @@ SEARCH_LIMIT = 8
 # PDEC-005: vitrine shows only slots that have not started. An in-progress
 # session is past — live line / pin / hub card all show start time, so
 # "12:45 сегодня" at 13:10 is a lie even if the ice is still open.
-_CURRENT_SESSION_SQL = """
+# Каток с закрытым сезоном (TASK-204) сеансов не показывает нигде: ни в ленте, ни в
+# списках, ни в счётчиках. Подзапрос по s.arena_id — фрагмент не зависит от алиасов
+# вызывающего запроса.
+_NOT_SEASON_CLOSED_SQL = """NOT EXISTS (
+        SELECT 1 FROM arena_profiles sc
+        WHERE sc.arena_id = s.arena_id AND sc.schedule_mode = 'season_closed'
+    )"""
+
+_CURRENT_SESSION_SQL = f"""
     s.status = :st
     AND s.kind IN ('public_skate', 'open_ice')
     AND s.starts_at_utc > :now
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
+    AND {_NOT_SEASON_CLOSED_SQL}
 """
 
-_OHM_SESSION_SQL = """
+_OHM_SESSION_SQL = f"""
     s.status = :st
     AND s.kind = 'hockey_practice'
     AND s.starts_at_utc > :now
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
+    AND {_NOT_SEASON_CLOSED_SQL}
 """
 
 # Хоккейный центр по записи — не сеанс ОХМ и не массовое катание.
@@ -348,11 +359,8 @@ def _format_price_minor(minor: int | None, currency: str) -> str:
 
 
 def _date_label(local_date: date, today: date) -> str:
-    if local_date == today:
-        return "Сегодня"
-    if local_date == today + timedelta(days=1):
-        return "Завтра"
-    return local_date.isoformat()
+    """Начало строки ленты: «Сегодня» / «Завтра» / «Пт». ISO-дату люди не видят (craft-guide)."""
+    return short_day_word(local_date, today=today).capitalize()
 
 
 def _completeness_score(row: Mapping[str, Any]) -> int:
@@ -390,8 +398,8 @@ _SHOP_SERVICE_LABELS = tuple((key, AMENITY_LABELS_RU[key]) for key in SHOP_SERVI
 def _place_line(item: Mapping[str, Any]) -> str:
     """Строка ленты для места без сеансов (магазин, зал): что тут есть и когда открыто.
 
-    «Расписание уточняется» у магазина — неверный вопрос к месту: расписания у него
-    не бывает. Говорим то, что знаем: услуги и часы. Не знаем — честно «уточняйте».
+    Вопрос «когда сеанс» у магазина неверный: расписания у него не бывает.
+    Говорим то, что знаем: услуги и часы.
     """
     bits: list[str] = []
     if normalize_venue_type(item.get("venue_type")) == VENUE_TYPE_SHOP:
@@ -421,8 +429,10 @@ def _place_line(item: Mapping[str, Any]) -> str:
     if amenities.get("skate_rental") is True and not rental_close:
         bits.append("прокат на месте")
     if not bits:
-        phone_hint = "часы работы уточняйте по телефону" if sanitize_public_phone(item.get("phone")) else "часы работы уточняются"
-        bits.append(phone_hint)
+        # Не знаем часов — не говорим «уточняются» (TASK-276): есть телефон — как узнать, нет — молчим.
+        if not sanitize_public_phone(item.get("phone")):
+            return ""
+        bits.append("часы — по телефону")
     line = " · ".join(bits)
     return line[:1].upper() + line[1:]
 
@@ -467,8 +477,8 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
         and not item.get("next_session_id")
         and not is_in_season(item.get("season_start_month"), item.get("season_end_month"), today.month)
     ):
-        # Q-014: вне сезона каток остаётся в ленте (он существует, и его страница в поиске),
-        # но говорит правду — «закрыт до ноября», а не «расписание уточняется».
+        # Q-014: вне сезона каток остаётся в ленте (он существует, и его страница в поиске)
+        # и говорит правду — «закрыт до ноября».
         start = item.get("season_start_month")
         text = (
             f"Сезон закрыт · откроется в {_MONTHS_PREP_RU[int(start) - 1]}" if start else "Сезон закрыт"
@@ -478,7 +488,7 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
         if not item.get("next_session_id"):
             return {
                 "kind": "unknown",
-                "text": "Расписание уточняется",
+                "text": "",
                 "currency_code": currency,
             }
         local_date = item["next_local_date"]
@@ -488,7 +498,7 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
         session_currency = item.get("next_currency_code") or currency
         price = _format_price_minor(item.get("next_price_adult_minor"), session_currency)
         more = max(0, int(item.get("future_session_count") or 0) - 1)
-        parts = [f"{_date_label(local_date, today)} {hhmm}".strip()]
+        parts = [f"{_date_label(local_date, today)} {format_clock(hhmm)}".strip()]
         if price:
             parts.append(price)
         if more:
@@ -1974,12 +1984,20 @@ LIMIT 4
         if alat is not None and alon is not None:
             nlat, nlon = near
             distance_km = haversine_km(nlat, nlon, float(alat), float(alon))
+    def _session_public_path(r: Mapping[str, Any]) -> str | None:
+        slug = r.get("arena_slug")
+        city_name = r.get("city_name")
+        if city_name and slug:
+            return place_path(city_name=str(city_name), slug=str(slug))
+        return None
+
     sessions = [
         {
             "session_id": int(r["session_id"]),
             "arena_id": int(r["arena_id"]),
             "arena_slug": r["arena_slug"],
             "arena_name": r["arena_name"],
+            "public_path": _session_public_path(r),
             "venue_type": normalize_venue_type(r["venue_type"]),
             "kind": r["kind"],
             "starts_at_utc": (
@@ -2000,10 +2018,12 @@ LIMIT 4
         }
         for r in rows
     ]
+    teaser_public_path = _session_public_path(row)
     return {
         "arena_id": int(row["arena_id"]),
         "arena_slug": row["arena_slug"],
         "arena_name": row["arena_name"],
+        "public_path": teaser_public_path,
         "arena_district": row["arena_district"],
         "city_id": int(row["city_id"]) if row["city_id"] is not None else None,
         "city_name": row["city_name"],

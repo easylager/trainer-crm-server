@@ -426,7 +426,6 @@ async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
     ]
     for city_name in order:
         stamp = city_stamp[city_name]
-        urls.append((ice_city_day_page_url(base_url=base, city_name=city_name), "daily", stamp))
         # Подборка города — ответ на «где покататься в <город>» (TASK-146).
         urls.append((f"{base}/c/{city_slug(city_name)}", "daily", stamp))
         urls.extend(by_city[city_name])
@@ -558,7 +557,10 @@ async def selection_page(
             city_id=int(city["id"]),
         ),
         share=compose_selection_share(view, page_url=base + path),
-        city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
+        # На самом списке «Лёд сегодня» ссылка вела бы на себя.
+        city_page_url=None
+        if path == ice_city_day_page_url(base_url="", city_name=city_name)
+        else ice_city_day_page_url(base_url=base, city_name=city_name),
         story_image_url=og_image.replace("/og.png", "/story.png"),
         base_url=base,
     )

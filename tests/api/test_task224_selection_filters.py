@@ -124,8 +124,8 @@ async def test_ohm_weekend_window_and_seg_counts(app_use_test_db, db_session) ->
     html = page.text
     assert sunday_slot in html
     assert "18:00" not in html
-    assert re.search(r'Сб–Вс[^<]*<small>\d+</small>', html)
-    assert re.search(r'<span class="on">\s*Сб–Вс', html) or 'class="on">Сб–Вс' in html
+    assert re.search(r'В выходные[^<]*<small>\d+</small>', html)
+    assert 'b-toggle--on" aria-current="true">В выходные' in html
 
 
 @pytest.mark.asyncio

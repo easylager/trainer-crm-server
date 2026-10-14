@@ -1168,6 +1168,19 @@ def webapp_opening_hours_js(request: Request):
     )
 
 
+@app.get("/webapp/public-display-model.js")
+def webapp_public_display_model_js(request: Request):
+    """TASK-250: время, день, цена — общие для public_display.py и Mini App models."""
+    path = _WEBAPP_DIR / "public-display-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/minsk-time.js")
 def webapp_minsk_time_js(request: Request):
     """TASK-184: календарь и «сейчас» каталога (Europe/Minsk / TZ арены)."""
@@ -1910,10 +1923,113 @@ def webapp_glide_copy_js(request: Request):
     )
 
 
+@app.get("/static/share/style-b.css")
+def share_style_b_css(request: Request):
+    """TASK-246: стили каталога. Версия в ``?v=`` — новая на каждую правку файла."""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "style-b.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/place-share.css")
+def share_place_share_css(request: Request):
+    """TASK-252: закреплённая кнопка «Позвать на …» на странице места."""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "place-share.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/place-share.js")
+def share_place_share_js(request: Request):
+    """TASK-252: выбор сеанса и GlideShareSheet на /p/…"""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "place-share.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/catalog-list-share.css")
+def share_catalog_list_share_css(request: Request):
+    """TASK-253: «Позвать» на плитках списка и хаба."""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "catalog-list-share.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/catalog-list-share.js")
+def share_catalog_list_share_js(request: Request):
+    """TASK-253: GlideShareSheet на списке /c/… и хабе города."""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "catalog-list-share.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/place-tg-shell.js")
+def share_place_tg_shell_js(request: Request):
+    """TASK-256: Mini App shell bootstrap на серверной /p/…"""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "place-tg-shell.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/place-tg-shell.css")
+def share_place_tg_shell_css(request: Request):
+    """TASK-256: отступы dock + tab bar на /p/… в Mini App."""
+    path = Path(__file__).resolve().parent.parent.parent / "static" / "share" / "place-tg-shell.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
 @app.get("/static/shared/glide-tokens.css")
 def shared_glide_tokens_css(request: Request):
     """TASK-209: общие дизайн-токены для static/share/* и static/webapp/*. Use ``?v=…`` for long cache."""
     path = _SHARED_DIR / "glide-tokens.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/shared/glide-components.css")
+def shared_glide_components_css(request: Request):
+    """TASK-249: общие компоненты стиля B для static/share/* и static/webapp/*. Use ``?v=…`` for long cache."""
+    path = _SHARED_DIR / "glide-components.css"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
     return FileResponse(
