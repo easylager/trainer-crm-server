@@ -23,10 +23,11 @@
   --g-on-accent: var(--glide-950);
   --g-accent-ink: var(--glide-700);
   --g-accent-wash: var(--glide-100);
-  /* Кнопка «Открыть в Telegram» (TASK-278): узнаваемый синий, белый текст ~5:1. */
-  --g-tg: #1873b8;
-  --g-tg-pressed: #12609b;
-  --g-on-tg: #ffffff;
+  /* Кнопка «Открыть в Telegram» (TASK-278): узнаваемый синий, белый текст ~5:1.
+     Не --g-tg: это фирменный синий иконки Telegram в «Поделиться» (ниже), и он светлее. */
+  --g-tg-btn: #1873b8;
+  --g-tg-btn-pressed: #12609b;
+  --g-on-tg-btn: #ffffff;
   --g-dark: #0d1b26;
   --g-dark-2: #1d2f3d;
   --g-on-dark-muted: #c3d2dc;
