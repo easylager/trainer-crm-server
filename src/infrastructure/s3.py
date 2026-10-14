@@ -1,6 +1,6 @@
 """
 Storage: S3 (presigned or proxy) or local dir when S3 not configured.
-Photos resized on upload: main 800px, list thumb 320px (JPEG 82%/80%) for faster catalog.
+Photos resized on upload: main 800px, list thumb 320px (progressive JPEG 82%/80%) for faster catalog.
 """
 import io
 import posixpath
@@ -44,26 +44,47 @@ def _ext_from_content_type(ct: str) -> str | None:
 
 
 def _resize_image(body: bytes, content_type: str, max_size: int, quality: int) -> bytes | None:
-    """Resize to max_size (longest side), JPEG quality. Returns bytes or None."""
+    """Fit into max_size (longest side), progressive JPEG at ``quality``. Returns bytes or None.
+
+    A small JPEG used to be stored as uploaded. Camera and editor exports at ~95%
+    went straight to the hero variant (up to 1.5 MB for 1500 px), which phones
+    with 3x screens load first. Now every variant is re-encoded; the original is
+    kept only when it is already a JPEG that fits and is smaller than the re-encode.
+    EXIF orientation is applied before the tag is dropped, or phone shots turn sideways.
+    """
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
     except ImportError:
         return None
     try:
-        img = Image.open(io.BytesIO(body)).convert("RGB")
+        img = Image.open(io.BytesIO(body))
+        img = ImageOps.exif_transpose(img).convert("RGB")
     except Exception:
         return None
     w, h = img.size
-    if w <= max_size and h <= max_size and content_type and "jpeg" in content_type.lower():
-        return body
-    if w > h:
-        nw, nh = max_size, max(1, int(h * max_size / w))
-    else:
-        nw, nh = max(1, int(w * max_size / h)), max_size
-    img = img.resize((nw, nh), Image.Resampling.LANCZOS)
+    fits = w <= max_size and h <= max_size
+    if not fits:
+        if w > h:
+            nw, nh = max_size, max(1, int(h * max_size / w))
+        else:
+            nw, nh = max(1, int(w * max_size / h)), max_size
+        img = img.resize((nw, nh), Image.Resampling.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, "JPEG", quality=quality, optimize=True)
-    return buf.getvalue()
+    img.save(buf, "JPEG", quality=quality, optimize=True, progressive=True)
+    encoded = buf.getvalue()
+    if fits and content_type and "jpeg" in content_type.lower() and len(body) <= len(encoded) and not _rotated(body):
+        return body
+    return encoded
+
+
+def _rotated(body: bytes) -> bool:
+    """True when the JPEG carries an EXIF rotation the stored copy would have to keep."""
+    try:
+        from PIL import Image
+
+        return Image.open(io.BytesIO(body)).getexif().get(0x0112) not in (None, 1)
+    except Exception:
+        return False
 
 
 def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, str | None]:
