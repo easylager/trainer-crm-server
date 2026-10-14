@@ -1167,7 +1167,7 @@ def render_selection_page(
         hero
         + (f'<section class="b-sec">{controls}</section>' if controls else "")
         + (f'<section class="b-sec">{note}</section>' if note else "")
-        + f'<section class="b-sec b-cards">{places}</section>'
+        + f'<section class="b-sec b-cards" data-glide-session-list-root>{places}</section>'
         + _b_pager(view, city_name=city_name)
         + share_pick
         + share_html(share, telegram_url=None, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
@@ -1199,6 +1199,7 @@ def render_selection_page(
             "itemListElement": elements,
         }
     )
+    from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
 
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -1231,6 +1232,10 @@ def render_selection_page(
             "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": city_link,
             "__BODY__": body,
+            "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(
+                surface="selection_page",
+                city_id=int(view["city"]["id"]),
+            ),
             **share_tail,
         },
     )

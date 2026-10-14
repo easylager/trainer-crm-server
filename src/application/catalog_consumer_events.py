@@ -519,6 +519,83 @@ async def record_public_contact_click(
     )
 
 
+def is_prefetch_navigation_request(request: Any) -> bool:
+    """True для prefetch/prerender (Sec-Purpose / Purpose) — просмотр не считаем."""
+    from starlette.requests import Request
+
+    if not isinstance(request, Request):
+        return False
+    for header in ("sec-purpose", "purpose"):
+        raw = (request.headers.get(header) or "").strip().lower()
+        if not raw:
+            continue
+        if "prefetch" in raw or "prerender" in raw:
+            return True
+    return False
+
+
+def normalize_public_page_path(raw: str | None) -> str | None:
+    """Путь страницы из beacon (``location.pathname``): только /, /c/…, /p/…."""
+    p = (raw or "").strip()
+    if not p.startswith("/") or "//" in p or ".." in p:
+        return None
+    if "?" in p or "#" in p:
+        return None
+    if p == "/":
+        return "/"
+    if p.startswith("/c/") and len(p) > len("/c/"):
+        return p
+    if p.startswith("/p/") and p.count("/") >= 3:
+        return p
+    return None
+
+
+async def resolve_public_page_view_scope(
+    session: AsyncSession,
+    *,
+    city_id: int | None,
+    arena_id: int | None,
+) -> tuple[int | None, int | None] | None:
+    """Проверка city/arena для page-view beacon. ``None`` — не писать событие (как scope_mismatch)."""
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+
+    cid = int(city_id) if city_id is not None and int(city_id) > 0 else None
+    aid = int(arena_id) if arena_id is not None and int(arena_id) > 0 else None
+
+    if cid is not None:
+        exists = (await session.execute(text("SELECT 1 FROM cities WHERE id = :id"), {"id": cid})).first()
+        if exists is None:
+            return None
+
+    if aid is not None:
+        row = (
+            await session.execute(
+                text(
+                    f"""
+                    SELECT a.city_id
+                    FROM arenas a
+                    JOIN cities c ON c.id = a.city_id
+                    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                    WHERE a.id = :id AND {PUBLIC_ARENA_VISIBLE_SQL}
+                    LIMIT 1
+                    """
+                ),
+                {"id": aid, **public_scope_params()},
+            )
+        ).first()
+        if row is None:
+            return None
+        arena_city = int(row[0])
+        if cid is not None and cid != arena_city:
+            return None
+        return arena_city, aid
+
+    if cid is not None:
+        return cid, None
+
+    return None, None
+
+
 def public_page_view_attribution_payload(extra_payload: dict[str, Any] | None) -> dict[str, str]:
     """Допустимые ключи шаринга в ``public_page_view``: ``s``, ``i``, ``src``."""
     if not extra_payload:
@@ -570,18 +647,21 @@ async def record_public_page_view(
     surface: str,
     city_id: int | None,
     arena_id: int | None = None,
+    page_path: str,
     extra_payload: dict[str, Any] | None = None,
 ) -> None:
-    """GET /p/, /c/, ice today — один просмотр на actor × арена в сутки (Минск)."""
+    """Просмотр публички (beacon POST); один actor × арена в сутки (Минск). Prefetch GET — skip."""
     from starlette.requests import Request
 
     if not isinstance(request, Request):
+        return
+    if is_prefetch_navigation_request(request):
         return
     from src.api.middleware.http_limits import client_ip_from_request
 
     user_agent = request.headers.get("user-agent")
     actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
-    body: dict[str, Any] = {"path": str(request.url.path), "ua_class": classify_user_agent(user_agent)}
+    body: dict[str, Any] = {"path": page_path, "ua_class": classify_user_agent(user_agent)}
     body.update(public_page_view_attribution_payload(extra_payload))
     await record_catalog_consumer_event(
         session,

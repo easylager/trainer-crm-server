@@ -1,8 +1,8 @@
 /**
  * Восстановление скролла списка после возврата с карточки места.
  *
- * Публичные /c/ и /ice/…/today отдают Cache-Control: no-store (учёт просмотров),
- * поэтому bfcache и штатный history.scrollRestoration не работают. Ключ —
+ * Запасной скролл списка, если bfcache недоступен (старый браузер, блокировка).
+ * При pageshow.persisted позицию не трогаем — страница уже восстановлена из памяти. Ключ —
  * pathname+search текущей страницы: скролл списка не попадёт на /p/.
  *
  * Используется из тестов; в шаблонах share — тот же алгоритм инлайном
@@ -49,10 +49,50 @@
     }
   }
 
+  function wirePublicListScrollRestore(storage, root) {
+    var g = root || (typeof globalThis !== 'undefined' ? globalThis : null);
+    if (!storage || !g || typeof g.addEventListener !== 'function' || !g.location) return;
+    var pathname = g.location.pathname;
+    var search = g.location.search;
+
+    function saveScroll() {
+      var y = (g.scrollY != null ? g.scrollY : g.pageYOffset) || 0;
+      save(storage, pathname, search, y);
+    }
+
+    function restoreScroll() {
+      var y = consume(storage, pathname, search);
+      if (!y) return;
+      var go = function () {
+        g.scrollTo(0, y);
+      };
+      go();
+      if (typeof g.requestAnimationFrame === 'function') {
+        g.requestAnimationFrame(function () {
+          g.requestAnimationFrame(go);
+        });
+      } else {
+        setTimeout(go, 0);
+      }
+    }
+
+    g.addEventListener('pagehide', saveScroll);
+    if (g.document && typeof g.document.addEventListener === 'function') {
+      g.document.addEventListener('visibilitychange', function () {
+        if (g.document.visibilityState === 'hidden') saveScroll();
+      });
+    }
+    g.addEventListener('pageshow', function (ev) {
+      if (ev.persisted) return;
+      restoreScroll();
+    });
+  }
+
   return {
     KEY_PREFIX: KEY_PREFIX,
     storageKey: storageKey,
     save: save,
     consume: consume,
+    wirePublicListScrollRestore: wirePublicListScrollRestore,
   };
 });
