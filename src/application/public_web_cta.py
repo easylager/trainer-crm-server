@@ -74,7 +74,7 @@ def public_outbound_url(
     return None
 
 
-PAGE_VIEW_BEACON_VERSION = "1"
+PAGE_VIEW_BEACON_VERSION = "2"
 
 
 def public_page_view_beacon_script(
@@ -83,7 +83,7 @@ def public_page_view_beacon_script(
     city_id: int | None = None,
     arena_id: int | None = None,
 ) -> str:
-    """``sendBeacon`` на pageshow (не persisted) — учёт просмотра публички."""
+    """``sendBeacon`` при разборе страницы (не на bfcache-возврате) — учёт просмотра публички."""
     attrs = [f'data-surface="{_esc(surface)}"']
     if city_id is not None and int(city_id) > 0:
         attrs.append(f'data-city-id="{int(city_id)}"')

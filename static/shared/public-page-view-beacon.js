@@ -1,6 +1,8 @@
 /**
  * Учёт просмотра /, /c/, /p/ через sendBeacon (FEEL-A).
- * HTML может прийти из prefetch без GET на origin; bfcache-возврат (pageshow.persisted) не шлём.
+ * Шлём сразу при разборе страницы, а не на pageshow: тот ждёт все картинки, и кто уходил
+ * раньше, просмотром не становился. Возврат из bfcache скрипт заново не выполняет — его
+ * не считаем. Пререндер Chrome ждём до показа страницы человеку.
  */
 (function (root) {
   'use strict';
@@ -43,8 +45,10 @@
     root.navigator.sendBeacon(beaconUrl());
   }
 
-  root.addEventListener('pageshow', function (ev) {
-    if (ev.persisted) return;
+  var doc = root.document;
+  if (doc && doc.prerendering) {
+    doc.addEventListener('prerenderingchange', send, { once: true });
+  } else {
     send();
-  });
+  }
 })(typeof globalThis !== 'undefined' ? globalThis : this);
