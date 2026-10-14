@@ -42,7 +42,8 @@ def _client(**kw) -> AsyncClient:
 def _assert_no_live_markup(html: str) -> None:
     assert "<img src=x" not in html, "адрес попал в разметку живым тегом"
     # Ни одного сырого JSON-LD вне его <script>: плейсхолдер не развернулся в атрибуте.
-    assert html.count('"@context"') == 1
+    # Хлебные крошки — отдельный блок BreadcrumbList, тоже внутри своего <script>.
+    assert html.count('"@context"') == 1 + html.count('"BreadcrumbList"')
     for m in re.finditer(r'<meta [^>]*content="([^"]*)"', html):
         assert "<" not in m.group(1) and '"@' not in m.group(1), m.group(0)
 

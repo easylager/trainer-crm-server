@@ -1212,6 +1212,7 @@ def render_selection_page(
         {
             "__OG_TITLE__": _esc(share_title),
             "__OG_DESCRIPTION__": _esc(share_description),
+            "__DESCRIPTION__": _esc(share_description),
             "__CANONICAL__": _esc(canonical_url),
             "__OG_URL__": _esc(share["share_url"]),
             "__OG_IMAGE__": _esc(og_image_url),
