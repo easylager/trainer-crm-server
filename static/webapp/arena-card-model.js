@@ -47,11 +47,12 @@
   }
   /** Нет сеансов: факт и способ узнать. Нет телефона и сайта — секции нет. */
   function scheduleAsk(card) {
+    var banner = copyLine('place.schedule_not_published', 'Расписание пока не публикуют.');
     var callHref = callHrefFor(card);
     if (callHref) {
       return {
         mode: 'phone',
-        banner: copyLine('place.phone_schedule', 'Время массового катания называют по телефону.'),
+        banner: banner,
         showRibbon: false,
         callHref: callHref,
       };
@@ -60,12 +61,12 @@
     if (siteHref) {
       return {
         mode: 'site',
-        banner: copyLine('place.site_schedule', 'Время массового катания — на сайте катка'),
+        banner: banner,
         showRibbon: false,
         siteHref: siteHref,
       };
     }
-    return { mode: 'none', banner: null, showRibbon: false };
+    return { mode: 'none', banner: banner, showRibbon: false };
   }
 
   var RuText = typeof globalThis !== 'undefined' ? globalThis.RuText : null;

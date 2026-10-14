@@ -985,7 +985,7 @@ describe('TASK-204 iceFeedView schedule_mode', () => {
       hasSessions: false,
     });
     assert.equal(feed.mode, 'phone');
-    assert.equal(feed.banner, 'Время массового катания называют по телефону.');
+    assert.equal(feed.banner, 'Расписание пока не публикуют.');
     assert.equal(feed.callHref, 'tel:+375291112233');
   });
 
@@ -996,7 +996,7 @@ describe('TASK-204 iceFeedView schedule_mode', () => {
       hasSessions: false,
     });
     assert.equal(phone.mode, 'phone');
-    assert.equal(phone.banner, 'Время массового катания называют по телефону.');
+    assert.equal(phone.banner, 'Расписание пока не публикуют.');
     assert.equal(phone.callHref, 'tel:+375291112233');
 
     const site = iceFeedView({
@@ -1004,7 +1004,7 @@ describe('TASK-204 iceFeedView schedule_mode', () => {
       hasSessions: false,
     });
     assert.equal(site.mode, 'site');
-    assert.equal(site.banner, 'Время массового катания — на сайте катка');
+    assert.equal(site.banner, 'Расписание пока не публикуют.');
     assert.equal(site.siteHref, 'https://rink.example/ice');
 
     const none = iceFeedView({
@@ -1012,7 +1012,7 @@ describe('TASK-204 iceFeedView schedule_mode', () => {
       hasSessions: false,
     });
     assert.equal(none.mode, 'none');
-    assert.equal(none.banner, null);
+    assert.equal(none.banner, 'Расписание пока не публикуют.');
   });
 
   it('season_closed mode before calendar season banner', () => {

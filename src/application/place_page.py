@@ -1191,6 +1191,25 @@ def _b_ticket(
     return ticket
 
 
+def _b_schedule_unpublished(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
+    """Нет сеансов в базе — факт без намёка, что сетка есть на сайте."""
+    from src.application.style_b import section
+
+    bits = [f'<p class="b-text">{_esc(t("place.schedule_not_published"))}</p>']
+    call = _b_call(card, links)
+    if call:
+        bits.append(call)
+    else:
+        site = safe_external_url(card.get("website_url"))
+        if site:
+            host = _display_host(site)
+            bits.append(
+                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+                f"{_esc(host or site)}</a>"
+            )
+    return section(title, "".join(bits), klass="b-sec--place", sec_id="schedule")
+
+
 def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
     from src.application.style_b import section
 
@@ -1207,20 +1226,7 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     if card.get("in_season") is False:
         return ""
     if mode == SCHEDULE_MODE_PHONE or not days:
-        call = _b_call(card, links)
-        if call:
-            body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
-            return section(title, body, klass="b-sec--place", sec_id="schedule")
-        site = safe_external_url(card.get("website_url"))
-        if site:
-            host = _display_host(site)
-            link = (
-                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
-                f"{_esc(host or site)}</a>"
-            )
-            body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{link}'
-            return section(title, body, klass="b-sec--place", sec_id="schedule")
-        return ""
+        return _b_schedule_unpublished(card, links, title=title)
 
     today = view["today"]
     focus = view.get("focus")
