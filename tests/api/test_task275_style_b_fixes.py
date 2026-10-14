@@ -99,5 +99,6 @@ async def test_list_with_empty_window_shows_nearest_as_tickets(app_use_test_db, 
     assert "b-slot__time" in body and "9:30" in body
     assert not _ISO_DATE.search(re.sub(r'(href|content|datetime)="[^"]*"', "", body))
     assert "уточняется" not in body
-    # Место со льдом раньше места без расписания.
-    assert body.index("Каток через три дня") < body.index("Каток без расписания")
+    assert "На сегодня всё" in body
+    assert "сеансов нет — показываем ближайшие" not in body
+    assert "Каток через три дня" in body

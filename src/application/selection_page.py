@@ -39,7 +39,12 @@ from src.application.arena_public_use_cases import (
     list_city_selection_places,
     list_public_ice_arenas,
 )
-from src.application.ice_time_windows import resolve_window
+from src.application.ice_time_windows import (
+    home_fallback_periods_after_empty_today,
+    home_shift_note_for_period,
+    resolve_window,
+    selection_today_should_shift,
+)
 from src.shared.copy_ru import t
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
@@ -291,6 +296,8 @@ async def load_selection_view(
     svc: str | None = None,
     seg: str | None = None,
     now: datetime | None = None,
+    list_day: str | None = None,
+    _allow_today_shift: bool = True,
 ) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     page = clean_page(page)
@@ -347,7 +354,12 @@ async def load_selection_view(
         when = None
         center_count = total
     elif ohm:
-        tw = resolve_window(when, now) if when else None
+        if list_day:
+            from src.application.ice_time_windows import resolve_list_window
+
+            tw = resolve_list_window(None, list_day, now)
+        else:
+            tw = resolve_window(when, now) if when else None
         if tw:
             window = tw.as_payload()
         catalog = await list_city_ohm_places(
@@ -363,7 +375,7 @@ async def load_selection_view(
         venue = KIND_OHM
         ohm_counts = await city_ohm_window_counts(session, city_id=int(city["id"]), now=now)
         center_count = await city_hockey_center_count(session, city_id=int(city["id"]))
-    elif when:
+    elif when or list_day:
         vtypes = city_selection_venue_types(venue)
         venue_param = ",".join(sorted(vtypes)) if vtypes else venue
         offset = (page - 1) * MAX_PLACES
@@ -372,7 +384,8 @@ async def load_selection_view(
             city_id=int(city["id"]),
             intent="skate",
             venue_type=venue_param,
-            when=when if skating else None,
+            when=when if skating and not list_day else None,
+            day=list_day,
             limit=MAX_PLACES,
             cursor=str(offset) if offset else None,
         )
@@ -500,6 +513,47 @@ async def load_selection_view(
     if service_mode:
         out["open_now_count"] = open_now_count
         out["service_filter_keys"] = SERVICE_AMENITY_KEYS[svc]
+    if (
+        _allow_today_shift
+        and selection_today_should_shift(when)
+        and not list_day
+        and out.get("window_empty")
+        and (ohm or skating)
+    ):
+        today = now.astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
+        for fallback_key, fw in home_fallback_periods_after_empty_today(now):
+            if fallback_key == "tomorrow":
+                shifted = await load_selection_view(
+                    session,
+                    city=city,
+                    venue=venue,
+                    when="tomorrow",
+                    page=page,
+                    kind=kind,
+                    svc=svc,
+                    seg=seg,
+                    now=now,
+                    _allow_today_shift=False,
+                )
+            else:
+                shifted = await load_selection_view(
+                    session,
+                    city=city,
+                    venue=venue,
+                    when=None,
+                    list_day=fw.local_date,
+                    page=page,
+                    kind=kind,
+                    svc=svc,
+                    seg=seg,
+                    now=now,
+                    _allow_today_shift=False,
+                )
+            if int(shifted.get("session_count") or 0) > 0 and not shifted.get("window_empty"):
+                shifted["period_shift_note"] = home_shift_note_for_period(fallback_key, fw, today=today)
+                if fallback_key == "tomorrow":
+                    shifted["when"] = "tomorrow"
+                return shifted
     return out
 
 
@@ -1109,11 +1163,13 @@ def render_selection_page(
     share_title = selection_share_title(view)
     description = selection_description(view)
     share_description = selection_share_description(view)
-    note = (
-        f'<p class="b-rule">{_esc(view["window"]["label"])}: сеансов нет — показываем ближайшие.</p>'
-        if view.get("window_empty")
-        else ""
-    )
+    shift_note = str(view.get("period_shift_note") or "").strip()
+    if shift_note:
+        note = f'<p class="b-rule">{_esc(shift_note)}</p>'
+    elif view.get("window_empty"):
+        note = f'<p class="b-rule">{_esc(view["window"]["label"])}: сеансов нет — показываем ближайшие.</p>'
+    else:
+        note = ""
     stale_notes = view.get("stale_notes") or {}
     service_mode = bool(view.get("svc"))
     centers_mode = view.get("seg") == SEG_CENTERS

@@ -336,7 +336,11 @@ async def test_when_query_works_without_js_switcher(app_use_test_db, db_session,
         for when, prefix in prefixes.items():
             resp = await client.get(f"/?when={when}")
             assert resp.status_code == 200, when
-            assert _counter(resp.text).startswith(prefix), _counter(resp.text)
+            counter = _counter(resp.text)
+            if when == "today":
+                assert counter.startswith(prefix) or counter.startswith("На сегодня всё"), counter
+            else:
+                assert counter.startswith(prefix), counter
             assert 'name="robots" content="noindex, follow"' in resp.text
             assert 'rel="canonical"' in resp.text
             assert 'class="day-picker"' not in resp.text
