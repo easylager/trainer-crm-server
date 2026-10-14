@@ -773,27 +773,6 @@ def _fold_arena_rows(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return cities
 
 
-def _nearest_skate_day_after_today(cities: list[Mapping[str, Any]], *, today: date) -> date | None:
-    """Первый календарный день после ``today``, где у кого-то из городов есть сеанс."""
-    best: date | None = None
-    for city in cities:
-        fact = city.get("next_skate")
-        if not isinstance(fact, Mapping):
-            continue
-        raw = fact.get("local_date")
-        if not raw:
-            continue
-        try:
-            day = date.fromisoformat(str(raw))
-        except ValueError:
-            continue
-        if day <= today:
-            continue
-        if best is None or day < best:
-            best = day
-    return best
-
-
 def _next_fact(row: Mapping[str, Any], *, now: datetime) -> dict[str, Any]:
     """Ближайший сеанс города: ЧЧ:ММ, день по-человечески («завтра», «сб»), дата."""
     local_date = row.get("local_date")

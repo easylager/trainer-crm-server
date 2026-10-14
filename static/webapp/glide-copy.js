@@ -45,8 +45,6 @@
     "home.counter.when.today": "Сегодня",
     "home.counter.today_done": "Сегодня сеансов нет, завтра лёд в {cities} {cities_word}",
     "home.counter.today_done_bare": "Сегодня сеансов нет",
-    "home.shift.after_today_tomorrow": "На сегодня всё — вот завтра",
-    "home.shift.after_today_day": "На сегодня всё — вот {day}",
     "selection.window.empty_caption": "{label} сеансов нет · показываем ближайшие",
     "selection.window.miss": "{label} нет",
     "selection.window.off_nearest": " · ближайший",
