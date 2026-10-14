@@ -23,7 +23,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_session_use_cases import STATUS_ACTIVE
-from src.application.schedule_staleness import LEVEL_STALE, load_arena_freshness, staleness_level
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.ice_discovery_scope import (
     PUBLIC_ARENA_VISIBLE_SQL,
@@ -461,10 +460,6 @@ async def get_city_ice_day(
         fell_through = True
 
     arenas = _group_by_arena(rows)
-    fresh = await load_arena_freshness(session, {int(a["arena_id"]) for a in arenas}, now=now)
-    for arena in arenas:
-        arena_fresh = fresh.get(int(arena["arena_id"]))
-        arena["stale"] = staleness_level(arena_fresh) == LEVEL_STALE
     sessions_total = sum(len(a["sessions"]) for a in arenas)
     prices = [
         int(s["price_adult_minor"])
@@ -485,7 +480,6 @@ async def get_city_ice_day(
         "arenas": arenas,
         "arena_count": len(arenas),
         "session_count": sessions_total,
-        "stale_arena_count": sum(1 for a in arenas if a["stale"]),
         "price_min_minor": min(prices) if prices else None,
         "price_max_minor": max(prices) if prices else None,
         "currency_code": currency,

@@ -56,7 +56,6 @@ from src.shared.arena_schedule_mode import (
     normalize_schedule_mode,
     season_closed_user_line,
 )
-from src.application.schedule_staleness import LEVEL_FRESH, load_arena_freshness, staleness_level
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
 from src.shared.public_display import (
@@ -302,7 +301,6 @@ async def load_place_view(
     today = now.astimezone(tz).date()
 
     lookup_days: list[dict[str, Any]] = []
-    level = LEVEL_FRESH
     schedule_note = ""
     schedule_mode = normalize_schedule_mode(card.get("schedule_mode"))
     if _skating(card) and schedule_mode == SCHEDULE_MODE_PHONE:
@@ -320,8 +318,6 @@ async def load_place_view(
             date_from=today,
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
-        fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
-        level = staleness_level(fresh)
 
     focus = None
     focus_missing = False
@@ -369,7 +365,6 @@ async def load_place_view(
         "focus_missing": focus_missing,
         "next_slot": next_slot,
         "session_count": len(all_slots),
-        "schedule_level": level,
         "schedule_note": schedule_note,
         "today": today,
         "now": now,

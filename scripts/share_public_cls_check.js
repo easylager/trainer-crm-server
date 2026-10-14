@@ -17,6 +17,41 @@ const PAGES = [
   { id: '/p/minsk/chizhovka', path: '/p/minsk/chizhovka' },
 ];
 
+const http = require('node:http');
+const https = require('node:https');
+const fs = require('node:fs');
+
+function rmDirWithRetries(dir, maxRetries = 5) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      return;
+    } catch (e) {
+      if (attempt === maxRetries - 1) throw e;
+    }
+  }
+}
+
+async function assertHttpOk(baseUrl, pagePath) {
+  const url = new URL(pagePath, baseUrl);
+  const lib = url.protocol === 'https:' ? https : http;
+  const status = await new Promise((resolve, reject) => {
+    const req = lib.request(url, { method: 'GET', timeout: 15000 }, (res) => {
+      res.resume();
+      resolve(res.statusCode || 0);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`timeout ${url}`));
+    });
+    req.end();
+  });
+  if (status !== 200) {
+    throw new Error(`HTTP ${status} for ${url}`);
+  }
+}
+
 const OBSERVER = `(() => {
   window.__cls = { value: 0, shifts: [] };
   try {
@@ -68,6 +103,9 @@ async function main() {
   const { proc, userDataDir, wsUrl } = await launchChrome();
   const cdp = await CDP.connect(wsUrl);
   try {
+    for (const page of PAGES) {
+      await assertHttpOk(baseUrl, page.path);
+    }
     console.log(`CLS (390×844, Slow 4G) base=${baseUrl}\n`);
     for (const page of PAGES) {
       const v = await measure(cdp, baseUrl, page.path);
@@ -76,7 +114,7 @@ async function main() {
   } finally {
     await cdp.close();
     proc.kill();
-    require('node:fs').rmSync(userDataDir, { recursive: true, force: true });
+    rmDirWithRetries(userDataDir);
   }
 }
 

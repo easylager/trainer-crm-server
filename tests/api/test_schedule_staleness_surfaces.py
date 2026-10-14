@@ -134,9 +134,9 @@ async def test_ice_city_day_shows_very_stale_like_any_other(app_use_test_db, db_
     assert set(by_id) == {ids["fresh"], ids["stale"], ids["very"], ids["manual"]}
     assert day["session_count"] == 4
     assert all("stale_note" not in a for a in by_id.values())
-    # Флаг для внутреннего использования остаётся: 7 ч — stale (very — свой уровень).
-    assert by_id[ids["stale"]]["stale"] is True
+    assert "stale" not in by_id[ids["stale"]]
     assert "unconfirmed" not in day
+    assert "stale_arena_count" not in day
 
     html = render_ice_city_day_page(
         city_name="Стейл", day=day, canonical_url="/ice/x/today", og_image_url="/og.png", cta_url=None
@@ -198,7 +198,7 @@ async def test_place_page_shows_very_stale_sessions(app_use_test_db, db_session)
         assert 'class="b-ticket' in html, key
         _assert_no_freshness_words(html)
     very = await load_place_view(db_session, str(ids["very"]), now=now)
-    assert very is not None and very["schedule_level"] == LEVEL_VERY_STALE
+    assert very is not None and "schedule_level" not in very
     assert card_lines(very, invite=False)["foot"] == "Расписание, цены и как добраться — по ссылке"
 
 
