@@ -98,6 +98,24 @@ def join_public_origin(canonical_url: str, path: str) -> str:
     return path
 
 
+def breadcrumb_script(canonical_url: str, crumbs: list[tuple[str, str]]) -> str:
+    """Отдельный блок BreadcrumbList: в выдаче вместо адреса — «glideclub.by › Минск › Замок».
+
+    Ставится в конец страницы, чтобы основная разметка места оставалась первой.
+    Без origin у канонического адреса (тесты) ссылки не абсолютные — блок не выводим.
+    """
+    from src.shared.html_template import json_for_script
+
+    items = []
+    for position, (name, path) in enumerate(crumbs, start=1):
+        url = path if path.startswith("http") else join_public_origin(canonical_url, path)
+        if not url.startswith("http"):
+            return ""
+        items.append({"@type": "ListItem", "position": position, "name": name, "item": url})
+    data = {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": items}
+    return f'<script type="application/ld+json">{json_for_script(data)}</script>'
+
+
 def place_page_url(
     *,
     base_url: str,

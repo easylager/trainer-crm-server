@@ -1081,7 +1081,9 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str) -> str:
                 "@type": "ListItem",
                 "position": n + 1,
                 "name": city.get("name"),
-                "url": join_public_origin(canonical_url, f"/c/{slug}"),
+                # У главной в каноническом адресе нет маркера /c/ — join_public_origin
+                # вернул бы корневой путь, а разметка ждёт полный адрес.
+                "url": f"{canonical_url.rstrip('/')}/c/{slug}",
             }
         )
     graph = [
@@ -1311,9 +1313,16 @@ def render_catalog_home_page(
     when_key = str(view.get("when_key") or "today")
 
     title = "Где покататься в Беларуси — катки и расписание массовых катаний | Glide"
-    description = (
-        "Где покататься: города с катками, расписание массовых катаний и ссылки на все места в каталоге Glide."
-    )
+    # Без счётчиков сеансов: поисковик держит описание неделями. Города — в порядке
+    # главной (Минск первым, дальше по активности).
+    by_names = [format_public_name(str(c.get("name") or "")) for c in cities if c.get("country") == "BY"]
+    description = "Расписание массовых катаний на катках Беларуси: где покататься сегодня, завтра и в выходные."
+    if by_names:
+        rest = len(by_names) - 4
+        listed = ", ".join(by_names[:4])
+        if rest > 0:
+            listed += f" и ещё {rest}\u00a0{plural_ru(rest, 'город', 'города', 'городов')}"
+        description += f" {listed} — цены и адреса."
     user_city = view.get("user_city") if isinstance(view.get("user_city"), Mapping) else None
     user_slug = str(user_city.get("slug") or "") if user_city else None
 

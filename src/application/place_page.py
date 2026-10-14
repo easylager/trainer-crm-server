@@ -553,6 +553,26 @@ def og_description(view: Mapping[str, Any]) -> str:
     return " · ".join(bits)
 
 
+def search_description(view: Mapping[str, Any]) -> str:
+    """meta description для поисковика — без дат и счётчиков.
+
+    og:description живёт в кэше мессенджера дни и честно называет ближайший сеанс.
+    Поисковик держит описание неделями: «Ср, 14 окт, 17:15» в ноябре читается как
+    заброшенный сайт. Здесь — то, что верно всю неделю: что за место и где оно.
+    """
+    card = view["card"]
+    if view.get("focus") is not None:
+        return og_description(view)
+    if _skating(card):
+        head = "Расписание массового катания на неделю, цены и как добраться"
+    elif card.get("venue_type") == "shop":
+        head = " · ".join(_services(card)) or "Магазин для катания"
+    else:
+        head = f"{card.get('venue_noun') or 'Место'}: адрес, телефон и как добраться"
+    where = _where(card).replace(" · ", ", ")
+    return f"{head}. {where}." if where else f"{head}."
+
+
 # ---------------------------------------------------------------------------
 # Сообщение для «Поделиться»
 # ---------------------------------------------------------------------------
@@ -1010,6 +1030,7 @@ def render_place_page(
     replacements = {
         "__OG_TITLE__": _esc(title),
         "__OG_DESCRIPTION__": _esc(og_description(view)),
+        "__DESCRIPTION__": _esc(search_description(view)),
         "__CANONICAL__": _esc(canonical_url),
         "__OG_URL__": _esc(share["share_url"]),
         "__OG_IMAGE__": _esc(og_image_url),
@@ -1028,6 +1049,17 @@ def render_place_page(
             view, invite=invite, base_path=base_path, telegram_url=cta_url
         ),
     }
+    if robots.startswith("index") and city:
+        from src.application.place_links import breadcrumb_script
+
+        replacements["__BODY__"] += breadcrumb_script(
+            canonical_url,
+            [
+                ("Glide", "/"),
+                (format_public_name(city), f"/c/{city_slug(city)}"),
+                (format_public_name(str(card.get("name") or "")), canonical_url),
+            ],
+        )
     page_html = fill_placeholders(html, replacements)
     if _effective_pick_session(view) is not None and _skating(card):
         page_html = page_html.replace("<body class=\"b\">", '<body class="b has-place-share">', 1)

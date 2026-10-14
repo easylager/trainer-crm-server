@@ -42,6 +42,7 @@ from src.application.place_links import (
 )
 from src.shared.catalog_sharpening import row_in_sharpening_section
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
+from src.shared.city_locative import city_locative
 from src.application.style_b import b_photo_url
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
@@ -276,6 +277,7 @@ async def load_city_hub_view(
     ohm = {k: 0 for k in (*_WINDOW_KEYS, "all")}
     skate_arenas: set[int] = set()
     ohm_arenas: set[int] = set()
+    skate_by_arena: dict[int, int] = {}
     for row in count_rows:
         aid = int(row["arena_id"])
         target = ohm if row.get("is_ohm") else skate
@@ -283,6 +285,8 @@ async def load_city_hub_view(
             target[key] += int(row.get(f"{key}_n") or 0)
         if int(row.get("all_n") or 0) > 0:
             (ohm_arenas if row.get("is_ohm") else skate_arenas).add(aid)
+            if not row.get("is_ohm"):
+                skate_by_arena[aid] = skate_by_arena.get(aid, 0) + int(row.get("all_n") or 0)
 
     upcoming_rows = (
         (
@@ -408,6 +412,7 @@ async def load_city_hub_view(
         "shop_count": len(shops),
         "service_count": len(service_places),
         "skate_counts": skate,
+        "skate_by_arena": skate_by_arena,
         "ohm_counts": ohm,
         "skate_arena_count": len(skate_arenas),
         "ohm_arena_count": len(ohm_arenas),
@@ -472,8 +477,15 @@ def _price_bits(card: Mapping[str, Any]) -> str:
 
 
 def city_hub_document_title(view: Mapping[str, Any]) -> str:
-    """Вкладка и og: только те разделы, которые на странице есть плиткой."""
+    """Вкладка, og и заголовок в выдаче.
+
+    Есть массовое катание — заголовок совпадает с запросом, которым город ищут:
+    «массовое катание минск», «каток минск расписание». Иначе — разделы страницы.
+    """
     city_name = format_public_name(str(view["city"]["name"]))
+    where = city_locative(str(view["city"]["name"]))
+    if where and int((view.get("skate_counts") or {}).get("all") or 0):
+        return f"Массовое катание в {where} — расписание катков | Glide"
     bits: list[str] = []
     if int(view.get("rink_count") or 0):
         bits.append("где покататься")
@@ -496,6 +508,59 @@ def city_hub_description(view: Mapping[str, Any]) -> str:
     if sessions:
         bits.append(f"{sessions} {plural_ru(sessions, 'сеанс', 'сеанса', 'сеансов')}")
     return " · ".join(bits)
+
+
+def city_hub_search_description(view: Mapping[str, Any]) -> str:
+    """meta description для поисковика: фраза, которая не устаревает в его кэше.
+
+    og:description остаётся счётом «N мест · M сеансов» — тем же, что в тексте шера.
+
+    Счётчик сеансов меняется каждый час, а поисковик перечитывает страницу раз
+    в несколько недель, поэтому здесь — что есть в городе, а не сколько сегодня.
+    Катки называем по числу сеансов: первыми те, где льда больше всего.
+    """
+    raw_city = str(view["city"]["name"])
+    city_name = format_public_name(raw_city)
+    where = city_locative(raw_city)
+    in_city = f"в {where}" if where else city_name
+    by_arena = view.get("skate_by_arena") or {}
+    rinks = [p for p in view.get("places") or [] if _is_rink(str(p.get("venue_type") or "ice"))]
+    live = sorted(
+        (p for p in rinks if int(by_arena.get(int(p["id"]), 0)) > 0),
+        key=lambda p: (-int(by_arena.get(int(p["id"]), 0)), str(p.get("name") or "")),
+    )
+    sentences: list[str] = []
+    if live:
+        names = [format_public_name(str(p.get("name") or "")) for p in live[:3]]
+        rest = len(rinks) - len(names)
+        listed = ", ".join(names)
+        if rest > 0:
+            listed += f" и\u00a0ещё {rest}\u00a0{plural_ru(rest, 'каток', 'катка', 'катков')}"
+        sentences.append(f"Массовое катание {in_city}: расписание сеансов на сегодня, завтра и выходные")
+        sentences.append(f"{listed} — цены и адреса")
+    elif rinks:
+        n = len(rinks)
+        sentences.append(f"{n}\u00a0{plural_ru(n, 'каток', 'катка', 'катков')} {in_city}: адреса, телефоны и часы работы")
+    # ОХМ — свой запрос («охм минск»): список ОХМ закрыт от индекса, поэтому слово
+    # должно быть хотя бы в сниппете города.
+    ohm_n = int(view.get("ohm_arena_count") or 0) if int((view.get("ohm_counts") or {}).get("all") or 0) else 0
+    if ohm_n:
+        sentences.append(
+            f"Открытые тренировки с клюшкой (ОХМ) — на {ohm_n}\u00a0{plural_ru(ohm_n, 'катке', 'катках', 'катках')}"
+        )
+    service_n = int(view.get("service_count") or 0)
+    if service_n:
+        sentences.append(f"Заточка коньков — {service_n}\u00a0{plural_ru(service_n, 'место', 'места', 'мест')}")
+    if not sentences:
+        return city_hub_description(view)
+    return ". ".join(sentences) + "."
+
+
+def _breadcrumbs(view: Mapping[str, Any], canonical_url: str) -> str:
+    from src.application.place_links import breadcrumb_script
+
+    name = format_public_name(str(view["city"]["name"]))
+    return breadcrumb_script(canonical_url, [("Glide", "/"), (name, canonical_url)])
 
 
 def city_hub_image_version(view: Mapping[str, Any]) -> str:
@@ -605,6 +670,7 @@ def render_city_hub_page(
         {
             "__OG_TITLE__": _esc(title),
             "__OG_DESCRIPTION__": _esc(description),
+            "__DESCRIPTION__": _esc(city_hub_search_description(view)),
             "__CANONICAL__": _esc(canonical_url),
             "__OG_URL__": _esc(share["share_url"]),
             "__OG_IMAGE__": _esc(og_image_url),
@@ -617,7 +683,7 @@ def render_city_hub_page(
             "__STYLE_V__": STYLE_VERSION,
             "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": "",
-            "__BODY__": body,
+            "__BODY__": body + _breadcrumbs(view, canonical_url),
             **share_tail,
         },
     )
