@@ -88,10 +88,13 @@ async def test_prefetch_get_does_not_record_public_page_view(app_use_test_db, db
         )
         assert prefetch.status_code == 200
 
+    # Только своё место: общая тестовая БД хранит просмотры других тестов.
     row = (
         await db_session.execute(
-            text("SELECT 1 FROM catalog_consumer_events WHERE kind = :k LIMIT 1"),
-            {"k": KIND_PUBLIC_PAGE_VIEW},
+            text(
+                "SELECT 1 FROM catalog_consumer_events WHERE kind = :k AND payload->>'path' = :path LIMIT 1"
+            ),
+            {"k": KIND_PUBLIC_PAGE_VIEW, "path": place["path"]},
         )
     ).first()
     assert row is None

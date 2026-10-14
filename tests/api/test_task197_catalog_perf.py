@@ -18,11 +18,11 @@ from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL
 from tests.api.test_public_arenas import _add_future_session, _insert_city
 from tests.api.test_public_place_page import _client, _place
 
-# Cold /p/: cities, slug, card, media, sessions, freshness for this arena,
-# the same window once more (page-view — sendBeacon, не GET).
+# Cold /p/: cities, slug, card, media, sessions, the same window once more.
+# Свежести расписания на странице больше нет, просмотр пишет sendBeacon, а не GET.
 # Warm drops only the cached city list.
-_PLACE_SQL_COLD = 7
-_PLACE_SQL_WARM = 6
+_PLACE_SQL_COLD = 6
+_PLACE_SQL_WARM = 5
 
 _CATALOG_WIDE_MARKERS = (
     "GROUP BY s.arena_id",
