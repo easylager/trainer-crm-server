@@ -33,7 +33,6 @@ from src.application.arena_public_use_cases import (
     STATUS_ACTIVE,
     city_hockey_center_count,
     city_ohm_window_counts,
-    city_skate_window_counts,
     city_selection_session_counts,
     city_selection_venue_types,
     list_city_ohm_places,
@@ -465,10 +464,6 @@ async def load_selection_view(
     }
     if ohm_counts is not None:
         out["ohm_counts"] = ohm_counts
-    if skating and not ohm and not service_mode and not centers:
-        out["skate_counts"] = await city_skate_window_counts(
-            session, city_id=int(city["id"]), now=now
-        )
     if center_count is not None:
         out["center_count"] = center_count
     if service_mode:
@@ -1348,7 +1343,7 @@ def _b_place_card(
         )
         from src.shared.public_view_transitions import session_time_vt_style
 
-        vt = session_time_vt_style(int(item["id"]), clock)
+        vt = session_time_vt_style(int(s["id"]))
         inner = (
             (f'<span class="b-slot__day">{_esc(word)}</span>' if word else "")
             + f'<b class="b-slot__time"{vt}>{_esc(clock)}</b>'
@@ -1416,44 +1411,8 @@ def _b_chips_nav(items: list[tuple[str, str, bool]], *, label: str) -> str:
     return f'<nav class="b-toggles" aria-label="{_esc(label)}">{"".join(parts)}</nav>'
 
 
-_SKATE_WHEN_KEYS = ("today", "tomorrow", "weekend")
-
-
-def _b_skate_when_nav(view: Mapping[str, Any], *, city_name: str) -> str:
-    counts = view.get("skate_counts") or {}
-    active = str(view.get("when") or "")
-    venue = view.get("venue")
-    path_venue = "ice" if venue in (None, "ice") else str(venue)
-    labels = {
-        "today": t("when.today"),
-        "tomorrow": t("when.tomorrow"),
-        "weekend": t("when.weekend"),
-    }
-    parts: list[str] = []
-    for key in _SKATE_WHEN_KEYS:
-        n = int(counts.get(key) or 0)
-        label = labels[key]
-        inner = f"{_esc(label)} <small>{n if n else '—'}</small>"
-        if key == active:
-            if n <= 0:
-                parts.append(f'<span class="off" aria-current="true">{inner}</span>')
-            else:
-                href = selection_path(city_name=city_name, venue=path_venue, when=key)
-                parts.append(f'<a href="{_esc(href)}" aria-current="true">{inner}</a>')
-        elif n <= 0:
-            parts.append(f'<span class="off">{inner}</span>')
-        else:
-            href = selection_path(city_name=city_name, venue=path_venue, when=key)
-            parts.append(f'<a href="{_esc(href)}">{inner}</a>')
-    return (
-        f'<nav class="b-when b-when--counts vt-when-strip" aria-label="Когда">{"".join(parts)}</nav>'
-    )
-
-
 def _b_controls(view: Mapping[str, Any], *, city_name: str) -> str:
     out = ""
-    if view.get("skating") and view.get("kind") != KIND_OHM and not view.get("svc"):
-        out += _b_skate_when_nav(view, city_name=city_name)
     kind = view.get("kind")
     if kind == KIND_OHM:
         centers = view.get("seg") == SEG_CENTERS
@@ -1502,7 +1461,7 @@ def _b_controls(view: Mapping[str, Any], *, city_name: str) -> str:
             for key, label in (("sharpening", "Заточка"), ("rental", "Прокат"))
         ]
         items.append(("Все места", selection_path(city_name=city_name, venue=None, when=None), False))
-        return out + _b_chips_nav(items, label="Услуга")
+        return _b_chips_nav(items, label="Услуга")
     chips = list(view.get("filter_chips") or [])
     if chips and not view.get("when"):
         active = str(view.get("venue") or "")
@@ -1512,8 +1471,8 @@ def _b_controls(view: Mapping[str, Any], *, city_name: str) -> str:
             items.append(
                 (_esc(str(chip.get("label") or key)), selection_path(city_name=city_name, venue=key, when=None, page=1), active == key)
             )
-        return out + _b_chips_nav(items, label="Тип места")
-    return out
+        return _b_chips_nav(items, label="Тип места")
+    return ""
 
 
 def _b_pager(view: Mapping[str, Any], *, city_name: str) -> str:

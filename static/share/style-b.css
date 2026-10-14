@@ -526,9 +526,3 @@ body[data-client-shell] .tg-out { display: none !important; }
 .vt-when-strip {
   view-transition-name: glide-when-strip;
 }
-
-html::view-transition-old(root),
-html::view-transition-new(root) {
-  animation-duration: 220ms;
-  animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-}
