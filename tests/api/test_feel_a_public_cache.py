@@ -1,4 +1,4 @@
-"""FEEL-A: bfcache-friendly Cache-Control и учёт просмотров без prefetch."""
+"""FEEL-A: bfcache-friendly Cache-Control и учёт просмотров через beacon."""
 
 from __future__ import annotations
 
@@ -52,6 +52,28 @@ async def test_place_page_cache_control(app_use_test_db, db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_html_get_does_not_record_public_page_view(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", "test-catalog-actor-secret-0123456789abcdef")
+    place = await _place(db_session)
+    await db_session.commit()
+    ua = f"Mozilla/5.0 FeelAHtml {uuid.uuid4().hex[:8]}"
+
+    async with _client() as client:
+        resp = await client.get(place["path"], headers={"User-Agent": ua})
+        assert resp.status_code == 200
+
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT 1 FROM catalog_consumer_events WHERE kind = :k AND payload->>'path' = :path LIMIT 1"
+            ),
+            {"k": KIND_PUBLIC_PAGE_VIEW, "path": place["path"]},
+        )
+    ).first()
+    assert row is None
+
+
+@pytest.mark.asyncio
 async def test_prefetch_get_does_not_record_public_page_view(app_use_test_db, db_session, monkeypatch) -> None:
     monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", "test-catalog-actor-secret-0123456789abcdef")
     place = await _place(db_session)
@@ -67,27 +89,31 @@ async def test_prefetch_get_does_not_record_public_page_view(app_use_test_db, db
 
     row = (
         await db_session.execute(
-            text(
-                "SELECT 1 FROM catalog_consumer_events "
-                "WHERE kind = :k AND payload->>'path' = :path AND payload->>'ua_class' IS NOT NULL "
-                "ORDER BY id DESC LIMIT 1"
-            ),
-            {"k": KIND_PUBLIC_PAGE_VIEW, "path": place["path"]},
+            text("SELECT 1 FROM catalog_consumer_events WHERE kind = :k LIMIT 1"),
+            {"k": KIND_PUBLIC_PAGE_VIEW},
         )
     ).first()
     assert row is None
 
 
 @pytest.mark.asyncio
-async def test_normal_get_records_public_page_view(app_use_test_db, db_session, monkeypatch) -> None:
+async def test_page_view_beacon_records_public_page_view(app_use_test_db, db_session, monkeypatch) -> None:
     monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", "test-catalog-actor-secret-0123456789abcdef")
     place = await _place(db_session)
     await db_session.commit()
-    ua = f"Mozilla/5.0 FeelANormal {uuid.uuid4().hex[:8]}"
+    ua = f"Mozilla/5.0 FeelABeacon {uuid.uuid4().hex[:8]}"
 
     async with _client() as client:
-        resp = await client.get(place["path"], headers={"User-Agent": ua})
-    assert resp.status_code == 200
+        resp = await client.post(
+            "/api/public/catalog/page-view",
+            params={
+                "surface": "place_page",
+                "city_id": place["city_id"],
+                "arena_id": place["arena_id"],
+            },
+            headers={"User-Agent": ua},
+        )
+    assert resp.status_code == 204
 
     row = (
         await db_session.execute(
@@ -95,7 +121,7 @@ async def test_normal_get_records_public_page_view(app_use_test_db, db_session, 
                 "SELECT surface, kind FROM catalog_consumer_events "
                 "WHERE kind = :k AND payload->>'path' = :path ORDER BY id DESC LIMIT 1"
             ),
-            {"k": KIND_PUBLIC_PAGE_VIEW, "path": place["path"]},
+            {"k": KIND_PUBLIC_PAGE_VIEW, "path": "/api/public/catalog/page-view"},
         )
     ).first()
     assert row is not None

@@ -1025,6 +1025,7 @@ def render_place_page(
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
     robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
 
+    from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
 
     html = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -1049,6 +1050,11 @@ def render_place_page(
         "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite, telegram_url=cta_url),
         "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(
             view, invite=invite, base_path=base_path, telegram_url=cta_url
+        ),
+        "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(
+            surface="place_page",
+            city_id=int(card.get("city_id") or 0) or None,
+            arena_id=int(card["id"]),
         ),
     }
     if robots.startswith("index") and city:

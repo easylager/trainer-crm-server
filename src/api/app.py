@@ -2081,6 +2081,19 @@ def shared_zovi_live_js(request: Request):
     )
 
 
+@app.get("/static/shared/public-page-view-beacon.js")
+def shared_public_page_view_beacon_js(request: Request):
+    """FEEL-A: sendBeacon просмотра публички на pageshow."""
+    path = _SHARED_DIR / "public-page-view-beacon.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/public-link-prefetch.js")
 def shared_public_link_prefetch_js(request: Request):
     """FEEL-A: prefetch по касанию ссылки на /, /c/, /p/."""

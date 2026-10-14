@@ -31,7 +31,6 @@ from src.application.ice_city_day import (
 )
 from src.application.place_card_image import render_place_card, share_display_path
 from src.application.arena_public_use_cases import resolve_merged_arena_id
-from src.application.catalog_consumer_events import record_public_page_view
 from src.application.png_render_cache import render_png_cached
 from src.application.place_links import (
     clean_share_src,
@@ -96,16 +95,10 @@ async def catalog_home_page(
         robots=robots,
     )
 
-    await record_public_page_view(
-        session,
-        request,
-        surface="catalog_home",
-        city_id=None,
-    )
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
 
 
-# TASK-189: просмотр на каждый полноценный GET /p/ и /c/ (prefetch — нет, см. record_public_page_view).
+# Просмотр /, /c/, /p/ — sendBeacon (см. public-page-view-beacon.js), не GET HTML (prefetch/bfcache).
 # private, no-cache: браузер может держать страницу в bfcache, но при прямом заходе сверяется с origin.
 _PAGE_CACHE = {"Cache-Control": "private, no-cache"}
 _IMAGE_CACHE = {"Cache-Control": "public, max-age=900"}
@@ -273,14 +266,6 @@ async def place_page(
         invite=invite,
         share_src=share_src,
         country=str(city.get("country") or ""),
-    )
-    await record_public_page_view(
-        session,
-        request,
-        surface="place_page",
-        city_id=int(city["id"]),
-        arena_id=int(card["id"]),
-        extra_payload={"s": session_id, "i": "1" if invite else None, "src": share_src},
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))
@@ -573,13 +558,6 @@ async def selection_page(
         story_image_url=og_image.replace("/og.png", "/story.png"),
         base_url=base,
     )
-    await record_public_page_view(
-        session,
-        request,
-        surface="selection_page",
-        city_id=int(city["id"]),
-        extra_payload={"src": share_src},
-    )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))
     return response
@@ -625,13 +603,6 @@ async def _city_hub(
         share=compose_city_hub_share(view, page_url=page_url),
         story_image_url=og_image.replace("/og.png", "/story.png"),
         base_url=base,
-    )
-    await record_public_page_view(
-        session,
-        request,
-        surface="selection_page",
-        city_id=int(city["id"]),
-        extra_payload={"src": share_src},
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=slug)

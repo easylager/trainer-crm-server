@@ -661,6 +661,7 @@ def render_city_hub_page(
             "itemListElement": elements,
         }
     )
+    from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
 
     lang, og_locale = html_lang_for_country(str(city.get("country") or ""))
@@ -684,6 +685,10 @@ def render_city_hub_page(
             "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": "",
             "__BODY__": body + _breadcrumbs(view, canonical_url),
+            "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(
+                surface="selection_page",
+                city_id=int(city["id"]),
+            ),
             **share_tail,
         },
     )

@@ -1330,6 +1330,7 @@ def render_catalog_home_page(
     Герой с фото катка «вашего города», выбор времени, карточка «Ваш город», тёмная карта,
     сетка городов с фото и раскрывашка «ещё N городов по областям».
     """
+    from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, b_photo_url, brand_link, hero_html
 
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -1430,6 +1431,7 @@ def render_catalog_home_page(
         "__FOOTER__": _esc(t("home.footer")),
         "__ELSEWHERE__": _b_elsewhere(cities),
         "__TRAINERS_URL__": _esc(trainers_url),
+        "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(surface="catalog_home"),
     }
     return fill_placeholders(template, values)
 

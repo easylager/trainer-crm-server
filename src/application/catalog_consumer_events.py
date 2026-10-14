@@ -587,7 +587,7 @@ async def record_public_page_view(
     arena_id: int | None = None,
     extra_payload: dict[str, Any] | None = None,
 ) -> None:
-    """GET /p/, /c/, ice today — один просмотр на actor × арена в сутки (Минск)."""
+    """Просмотр публички (beacon POST); один actor × арена в сутки (Минск). Prefetch GET — skip."""
     from starlette.requests import Request
 
     if not isinstance(request, Request):

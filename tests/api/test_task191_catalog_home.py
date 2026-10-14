@@ -57,10 +57,12 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
 
     assert home.status_code == 200
     assert home.headers["content-type"].startswith("text/html")
-    # JSON-LD и жест удержания на карте. Внешнего бандла Mini App нет.
-    assert home.text.lower().count("<script") == 2
+    # JSON-LD, карта, beacon просмотра, prefetch ссылок.
+    assert home.text.lower().count("<script") == 4
+    assert home.text.count("</script>") == 4
     assert home.text.count('<script type="application/ld+json">') == 1
-    assert "<script src=" not in home.text.lower()
+    assert "public-page-view-beacon.js" in home.text
+    assert "public-link-prefetch.js" in home.text
     assert "home-map__hint" in home.text
     assert "Зажмите точку — название." not in home.text
     assert "Размер точки" not in home.text
@@ -113,8 +115,8 @@ async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_se
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    # JSON-LD и скрипт карты. Имя города с «</script>» не должно добавить третье закрытие.
-    assert home.text.count("</script>") == 2
+    # JSON-LD, карта, beacon, prefetch. Имя города с «</script>» не ломает разметку.
+    assert home.text.count("</script>") == 4
     assert "<img src=x" not in home.text
     ld = _json_ld(home.text)
     assert "@graph" in ld
@@ -133,15 +135,22 @@ async def test_catalog_home_records_public_page_view(app_use_test_db, db_session
     invalidate_public_city_cache()
 
     async with _client() as client:
-        resp = await client.get("/", headers={"User-Agent": "Mozilla/5.0 Task191CatalogHome"})
-    assert resp.status_code == 200
+        home = await client.get("/")
+        assert home.status_code == 200
+        resp = await client.post(
+            "/api/public/catalog/page-view",
+            params={"surface": "catalog_home"},
+            headers={"User-Agent": "Mozilla/5.0 Task191CatalogHome"},
+        )
+    assert resp.status_code == 204
 
     row = (
         await db_session.execute(
             text(
                 "SELECT surface, kind FROM catalog_consumer_events "
-                "WHERE payload->>'path' = '/' ORDER BY id DESC LIMIT 1"
-            )
+                "WHERE surface = 'catalog_home' AND kind = :k ORDER BY id DESC LIMIT 1"
+            ),
+            {"k": KIND_PUBLIC_PAGE_VIEW},
         )
     ).first()
     assert row is not None
