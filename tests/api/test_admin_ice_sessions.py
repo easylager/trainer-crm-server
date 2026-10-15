@@ -256,6 +256,9 @@ async def test_rub_city_session_keeps_rub_currency(app_use_test_db, db_session) 
 
 
 def test_admin_dicts_has_ice_week_grid() -> None:
-    html = Path("static/webapp/admin-dicts.html").read_text(encoding="utf-8")
-    assert "ice-sessions" in html
-    assert "ice-week" in html
+    """Справочники ведут на отдельный экран расписания; API — в admin-ice-schedule-main.js."""
+    dicts_html = Path("static/webapp/admin-dicts.html").read_text(encoding="utf-8")
+    assert "/webapp/admin-ice-schedule" in dicts_html
+    assert "ice-week" in dicts_html
+    schedule_js = Path("static/webapp/admin-ice-schedule-main.js").read_text(encoding="utf-8")
+    assert "ice-sessions" in schedule_js
