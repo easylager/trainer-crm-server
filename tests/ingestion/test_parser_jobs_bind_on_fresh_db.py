@@ -187,7 +187,7 @@ async def _bind(async_url: str, expected: dict[str, tuple[str, str, int]]) -> No
     regional = build_regional_job_seeds()
     seeds = [*minsk, *regional]
     assert {seed.parser_key for seed in seeds} == set(expected)
-    assert len(seeds) == 42
+    assert len(seeds) == 43
     for seed in seeds:
         city_name, slug, _arena_id = expected[seed.parser_key]
         assert seed.config["city_name"] == city_name
