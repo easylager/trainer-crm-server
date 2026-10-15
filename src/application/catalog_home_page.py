@@ -605,7 +605,7 @@ def build_city_layout(catalog_cities: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def home_map_legend_labels(when_key: str) -> tuple[str, str]:
-    """Подписи легенды карты главной — в такт фильтру «Сегодня / Завтра / Выходные»."""
+    """Подписи легенды карты главной — в такт фильтру when (сегодня / завтра / выходные)."""
     key = when_key if when_key in ("today", "tomorrow", "weekend") else "today"
     return t(f"home.map.legend_on.{key}"), t(f"home.map.legend_off.{key}")
 
