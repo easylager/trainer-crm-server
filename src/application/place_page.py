@@ -1135,15 +1135,26 @@ def _b_call(card: Mapping[str, Any], links: Mapping[str, Any], *, dark: bool = T
     )
 
 
-def _b_price_mode(slots: list[Mapping[str, Any]]) -> str:
-    counts: dict[str, int] = {}
+def _b_price_floor(slots: list[Mapping[str, Any]]) -> tuple[str, str]:
+    """Цена в шапке блока и «базовая» цена билетов: ``("от 11 BYN", "11 BYN")``.
+
+    Раньше шапка брала самую частую цену недели: в DiaMond city выходные по 12 BYN
+    перевешивали будни по 11 — и над сегодняшними билетами по 11 стояло «12 BYN».
+    Теперь — минимум недели, с «от», если цены разные; билет пишет свою цену, только
+    когда она выше минимума.
+    """
+    priced: list[tuple[int, str]] = []
     for slot in slots:
-        price = slot_price(slot)
-        if price:
-            counts[price] = counts.get(price, 0) + 1
-    if not counts:
-        return ""
-    return max(counts.items(), key=lambda kv: kv[1])[0]
+        minor = slot.get("price_adult_minor")
+        if minor is None:
+            minor = slot.get("price_minor")
+        if minor is not None:
+            priced.append((int(minor), slot_price(slot)))
+    if not priced:
+        return "", ""
+    floor = min(priced)[1]
+    varies = len({label for _, label in priced}) > 1
+    return (f"от {floor}" if varies else floor), floor
 
 
 def _b_ticket(
@@ -1297,7 +1308,7 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     if not by_date:
         return ""
     all_slots = [s for slots in by_date.values() for s in slots]
-    common = _b_price_mode(all_slots)
+    aside_price, common = _b_price_floor(all_slots)
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
     foot: list[str] = []
     if links.get("tickets"):
@@ -1309,7 +1320,7 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
     body = f"<div data-glide-session-list-root>{strip}{links_row}</div>"
-    aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
+    aside = f'<span class="b-aside">{_esc(aside_price)}</span>' if aside_price else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
 
@@ -1326,9 +1337,9 @@ def _b_ohm(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
     slots = [s for d in sorted(by_date) for s in by_date[d]]
     first = slots[0]
     aside_bits: list[str] = []
-    price = _b_price_mode(slots)
-    if price:
-        aside_bits.append(price)
+    aside_price, price = _b_price_floor(slots)
+    if aside_price:
+        aside_bits.append(aside_price)
     start, end = format_clock(str(first.get("starts_at_local") or "")), format_clock(str(first.get("ends_at_local") or ""))
     try:
         sh, sm = (int(x) for x in start.split(":"))

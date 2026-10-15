@@ -868,3 +868,23 @@ async def test_plan_card_names_ohm_before_the_hall(app_use_test_db, db_session) 
 
     line = re.search(r'<span class="b-plan__line">([^<]+)</span>', resp.text)
     assert line and line.group(1).startswith("ОХМ · Большая арена"), line and line.group(1)
+
+
+@pytest.mark.asyncio
+async def test_schedule_price_is_the_week_floor_not_the_most_frequent(app_use_test_db, db_session) -> None:
+    """Будни по 11, выходные по 12 (их больше): в шапке «от 11 BYN», а не «12 BYN» над билетами по 11."""
+    place = await _place(db_session)
+    for hhmm in ("12:00", "12:45"):
+        await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local=hhmm, price_adult_minor=1100)
+    for hhmm in ("13:45", "14:45", "15:45"):
+        await _add_future_session(db_session, place["arena_id"], days_ahead=2, starts_at_local=hhmm, price_adult_minor=1200)
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"])
+
+    schedule = resp.text.split('id="schedule"', 1)[1].split("</section>", 1)[0]
+    assert '<span class="b-aside">от 11 BYN</span>' in schedule
+    # Билет пишет цену, только когда она выше минимума недели.
+    assert "до 12:45 · 11 BYN" not in schedule and "до 12:45</span>" in schedule
+    assert "· 12 BYN" in schedule
