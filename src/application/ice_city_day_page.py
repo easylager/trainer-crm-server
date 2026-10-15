@@ -81,10 +81,6 @@ def _arena_html(arena: Mapping[str, Any], *, city_name: str = "") -> str:
     ]
     if where:
         parts.append(f'<p class="arena__where">{_esc(where)}</p>')
-    note = str(arena.get("stale_note") or "").strip()
-    if note:
-        # TASK-180: парсер давно не читал сайт катка — сеансы показываем, но честно.
-        parts.append(f'<p class="arena__stale">{_esc(note)}</p>')
     parts.append(f'<ul class="slots">{slots}</ul>')
     parts.append(_basis_note_html(sessions))
     parts.append("</article>")
@@ -225,7 +221,10 @@ def render_ice_city_day_page(
     lang, og_locale = html_lang_for_country(country)
     # Пустой день и город без опубликованных сеансов — 200 для человека, но не для индекса.
     robots = "index, follow" if int(day.get("session_count") or 0) > 0 else "noindex"
+    from src.application.style_b import public_fonts_head_html
+
     values = {
+        "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__DESCRIPTION__": _esc(description),
         "__OG_TITLE__": _esc(og_title),
         "__OG_DESCRIPTION__": _esc(og_description),

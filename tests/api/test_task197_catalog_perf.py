@@ -18,11 +18,11 @@ from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL
 from tests.api.test_public_arenas import _add_future_session, _insert_city
 from tests.api.test_public_place_page import _client, _place
 
-# Cold /p/: cities, slug, card, media, sessions, freshness for this arena,
-# the same window once more, then one catalog_consumer_events insert.
+# Cold /p/: cities, slug, card, media, sessions, the same window once more.
+# Свежести расписания на странице больше нет, просмотр пишет sendBeacon, а не GET.
 # Warm drops only the cached city list.
-_PLACE_SQL_COLD = 8
-_PLACE_SQL_WARM = 7
+_PLACE_SQL_COLD = 6
+_PLACE_SQL_WARM = 5
 
 _CATALOG_WIDE_MARKERS = (
     "GROUP BY s.arena_id",
@@ -82,7 +82,7 @@ async def test_place_page_sql_does_not_scan_the_catalog(app_use_test_db, db_sess
         for marker in _CATALOG_WIDE_MARKERS:
             assert marker not in sql
     assert any("a.id = " in sql and "created_by_trainer_id" in sql for sql in cold_sql)
-    assert first.headers["cache-control"] == "private, no-store"
+    assert first.headers["cache-control"] == "private, no-cache"
 
 
 @pytest.mark.asyncio
@@ -109,9 +109,9 @@ async def test_public_json_lists_are_cached_and_view_pages_are_not(app_use_test_
     assert "no-store" in nearest.headers["cache-control"]
     assert config.headers["cache-control"] == "no-store"
     assert selection.status_code == 200
-    assert selection.headers["cache-control"] == "private, no-store"
+    assert selection.headers["cache-control"] == "private, no-cache"
     assert today.status_code == 200
-    assert today.headers["cache-control"] == "private, no-store"
+    assert today.headers["cache-control"] == "private, no-cache"
 
 
 @pytest.mark.asyncio

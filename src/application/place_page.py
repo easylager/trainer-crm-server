@@ -57,12 +57,6 @@ from src.shared.arena_schedule_mode import (
     normalize_schedule_mode,
     season_closed_user_line,
 )
-from src.application.schedule_staleness import (
-    LEVEL_FRESH,
-    load_arena_freshness,
-    stale_note,
-    staleness_level,
-)
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script, safe_external_url
 from src.shared.public_display import (
@@ -260,22 +254,6 @@ def starts_in_label(slot: Mapping[str, Any], *, now: datetime) -> str:
     return f"Начнётся через {hours} ч {rest} мин"
 
 
-def ago_label(moment: datetime | None, *, now: datetime) -> str:
-    """«обновлено 3 часа назад» без ложной точности."""
-    if moment is None:
-        return ""
-    seconds = max(0, int((now - moment).total_seconds()))
-    if seconds < 3600:
-        return "обновлено меньше часа назад"
-    hours = seconds // 3600
-    if hours < 24:
-        return f"обновлено {hours} {plural_ru(hours, 'час', 'часа', 'часов')} назад"
-    days = hours // 24
-    if days == 1:
-        return "обновлено вчера"
-    return f"обновлено {days} {plural_ru(days, 'день', 'дня', 'дней')} назад"
-
-
 def _hhmm_in_interval(hhmm: str, open_: str, close: str) -> bool:
     if close > open_:
         return open_ <= hhmm < close
@@ -324,7 +302,6 @@ async def load_place_view(
     today = now.astimezone(tz).date()
 
     lookup_days: list[dict[str, Any]] = []
-    level = LEVEL_FRESH
     schedule_note = ""
     schedule_mode = normalize_schedule_mode(card.get("schedule_mode"))
     if _skating(card) and schedule_mode == SCHEDULE_MODE_PHONE:
@@ -342,12 +319,6 @@ async def load_place_view(
             date_from=today,
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
-        # TASK-180: свежесть на момент ``now`` (тот же расчёт, что в API). Сеансы не
-        # снимаем ни на каком уровне — решение владельца (TASK-243).
-        fresh = (await load_arena_freshness(session, [int(card["id"])], now=now)).get(int(card["id"]))
-        level = staleness_level(fresh)
-        if lookup_days:
-            schedule_note = stale_note(fresh, now=now)
 
     focus = None
     focus_missing = False
@@ -395,7 +366,6 @@ async def load_place_view(
         "focus_missing": focus_missing,
         "next_slot": next_slot,
         "session_count": len(all_slots),
-        "schedule_level": level,
         "schedule_note": schedule_note,
         "today": today,
         "now": now,
@@ -492,10 +462,12 @@ def session_kind_label(slot: Mapping[str, Any] | None) -> str:
     if slot is None:
         return ""
     custom = str(slot.get("session_label") or "").strip()
-    if custom:
-        return custom
     key = _SESSION_KIND_COPY_KEYS.get(str(slot.get("kind") or "").strip())
-    return t(key) if key else ""
+    kind = t(key) if key else ""
+    # Зал («Большая арена») не говорит, что это ОХМ, — тип впереди: «ОХМ · Большая арена».
+    if custom and key == "kind.hockey_practice" and kind.lower() not in custom.lower():
+        return f"{kind} · {custom}"
+    return custom or kind
 
 
 def invite_share_hook(view: Mapping[str, Any]) -> str:
@@ -939,7 +911,9 @@ def _nojs_messenger_row(share: Mapping[str, str]) -> str:
         for label, href, blank in links
     )
     row += f'<button type="button" data-copy="{_esc(full)}">Скопировать</button>'
-    return f'<div class="place-share-fallback">{row}</div>'
+    # <noscript>: с JS браузер блок не рисует вовсе. Раньше он стоял ячейкой сетки
+    # билетов, пока отложенный place-share.js не скрывал его, — и билеты прыгали (CLS).
+    return f'<noscript><div class="place-share-fallback">{row}</div></noscript>'
 
 
 def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool, telegram_url: str | None = None) -> str:
@@ -1039,7 +1013,8 @@ def render_place_page(
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
     robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
 
-    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+    from src.application.public_web_cta import public_page_view_beacon_script
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
     html = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
@@ -1055,6 +1030,7 @@ def render_place_page(
         "__ROBOTS__": robots,
         "__HEAD_EXTRA__": "",
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
+        "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
@@ -1064,7 +1040,16 @@ def render_place_page(
         "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(
             view, invite=invite, base_path=base_path, telegram_url=cta_url
         ),
+        "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(
+            surface="place_page",
+            city_id=int(card.get("city_id") or 0) or None,
+            arena_id=int(card.get("id") or card.get("arena_id") or 0) or None,
+        ),
     }
+    from src.application.style_b import b_press_script_html, telegram_dock_script_html
+
+    replacements["__B_PRESS_SCRIPT__"] = b_press_script_html()
+    replacements["__TG_DOCK_SCRIPT__"] = telegram_dock_script_html()
     if robots.startswith("index") and city:
         from src.application.place_links import breadcrumb_script
 
@@ -1166,26 +1151,41 @@ def _b_call(card: Mapping[str, Any], links: Mapping[str, Any], *, dark: bool = T
     )
 
 
-def _b_price_mode(slots: list[Mapping[str, Any]]) -> str:
-    counts: dict[str, int] = {}
+def _b_price_floor(slots: list[Mapping[str, Any]]) -> tuple[str, str]:
+    """Цена в шапке блока и «базовая» цена билетов: ``("от 11 BYN", "11 BYN")``.
+
+    Раньше шапка брала самую частую цену недели: в DiaMond city выходные по 12 BYN
+    перевешивали будни по 11 — и над сегодняшними билетами по 11 стояло «12 BYN».
+    Теперь — минимум недели, с «от», если цены разные; билет пишет свою цену, только
+    когда она выше минимума.
+    """
+    priced: list[tuple[int, str]] = []
     for slot in slots:
-        price = slot_price(slot)
-        if price:
-            counts[price] = counts.get(price, 0) + 1
-    if not counts:
-        return ""
-    return max(counts.items(), key=lambda kv: kv[1])[0]
+        minor = slot.get("price_adult_minor")
+        if minor is None:
+            minor = slot.get("price_minor")
+        if minor is not None:
+            priced.append((int(minor), slot_price(slot)))
+    if not priced:
+        return "", ""
+    floor = min(priced)[1]
+    varies = len({label for _, label in priced}) > 1
+    return (f"от {floor}" if varies else floor), floor
 
 
 def _b_ticket(
     slot: Mapping[str, Any],
     *,
+    vt_session_id: int | None,
     base_path: str,
     invite: bool,
     focused: bool,
     common_price: str,
     nojs_share: Mapping[str, str] | None = None,
+    dark: bool = False,
 ) -> str:
+    from src.shared.public_view_transitions import session_time_vt_style
+
     start = format_clock(str(slot.get("starts_at_local") or ""))
     end = format_clock(str(slot.get("ends_at_local") or ""))
     sub_bits = [f"до {end}"] if end else []
@@ -1194,62 +1194,71 @@ def _b_ticket(
         sub_bits.append(price)
     sub = f'<span class="b-ticket__sub">{_esc(" · ".join(sub_bits))}</span>' if sub_bits else ""
     href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
-    klass = "b-ticket b-ticket--picked" if focused else "b-ticket"
+    klass = "b-ticket" + (" b-ticket--dark" if dark else "") + (" b-ticket--picked" if focused else "")
     sid = int(slot["id"])
+    vt = session_time_vt_style(sid) if vt_session_id is not None and sid == vt_session_id else ""
     ticket = (
         f'<a class="{klass}" href="{_esc(href)}" rel="nofollow" data-session-id="{sid}">'
-        f'<span class="b-ticket__time">{_esc(start)}</span>{sub}</a>'
+        f'<span class="b-ticket__time"{vt}>{_esc(start)}</span>{sub}</a>'
     )
     if focused and nojs_share is not None:
         ticket += _nojs_messenger_row(nojs_share)
     return ticket
 
 
-def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
+def _b_schedule_site_link(card: Mapping[str, Any]) -> str:
+    site = safe_external_url(card.get("website_url"))
+    if not site:
+        return ""
+    host = _display_host(site)
+    return (
+        f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+        f"{_esc(host or site)}</a>"
+    )
+
+
+def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
     from src.application.style_b import section
 
-    card = view["card"]
-    if not _skating(card):
-        return ""
-    title = t("kind.public_skate")
-    mode = normalize_schedule_mode(card.get("schedule_mode"))
-    days = list(view.get("days") or [])
-    if mode == SCHEDULE_MODE_SEASON_CLOSED:
-        reopen = _parse_iso_date(card.get("schedule_reopen_date"))
-        line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
-        return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
-    if card.get("in_season") is False:
-        return ""
-    if mode == SCHEDULE_MODE_PHONE or not days:
-        call = _b_call(card, links)
-        if call:
-            body = f'<p class="b-text">{_esc(t("place.phone_schedule"))}</p>{call}'
-            return section(title, body, klass="b-sec--place", sec_id="schedule")
-        site = safe_external_url(card.get("website_url"))
-        if site:
-            host = _display_host(site)
-            link = (
-                f'<a class="b-link" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
-                f"{_esc(host or site)}</a>"
-            )
-            body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{link}'
-            return section(title, body, klass="b-sec--place", sec_id="schedule")
-        return ""
+    call = _b_call(card, links)
+    if call:
+        return section(title, call, klass="b-sec--place", sec_id="schedule")
+    site_link = _b_schedule_site_link(card)
+    if site_link:
+        body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{site_link}'
+        return section(title, body, klass="b-sec--place", sec_id="schedule")
+    return ""
 
-    today = view["today"]
-    focus = view.get("focus")
-    pick = _effective_pick_session(view)
-    focus_id = int(focus["id"]) if focus is not None else None
-    pick_id = int(pick["id"]) if pick is not None else None
+
+def _sessions_by_date(days: list[Mapping[str, Any]]) -> dict[date, list[Mapping[str, Any]]]:
     by_date: dict[date, list[Mapping[str, Any]]] = {}
     for day in days:
         d = _parse_iso_date(day.get("local_date"))
         if d is not None and day.get("sessions"):
             by_date[d] = list(day.get("sessions") or [])
-    if not by_date:
-        return ""
-    all_slots = [s for slots in by_date.values() for s in slots]
-    common = _b_price_mode(all_slots)
+    return by_date
+
+
+def _b_day_strip(
+    view: Mapping[str, Any],
+    by_date: Mapping[date, list[Mapping[str, Any]]],
+    *,
+    frag_prefix: str,
+    base_path: str,
+    invite: bool,
+    common: str,
+    dark: bool = False,
+) -> str:
+    """Полоса дней недели и билеты дня — без JS (#якорь + :target), как в Mini App.
+
+    Одна функция для массового катания и ОХМ: у каждой полосы свой префикс якоря, выбор
+    сеанса общий — кнопка «Позвать» берёт любой билет со страницы.
+    """
+    today = view["today"]
+    focus = view.get("focus")
+    pick = _effective_pick_session(view)
+    focus_id = int(focus["id"]) if focus is not None else None
+    pick_id = int(pick["id"]) if pick is not None else None
     default_day = min(by_date)
     if focus_id is not None:
         for d, slots in by_date.items():
@@ -1275,19 +1284,48 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
         tickets = "".join(
             _b_ticket(
                 s,
+                vt_session_id=pick_id,
                 base_path=base_path,
                 invite=invite,
                 focused=(pick_id == int(s["id"])),
                 common_price=common,
                 nojs_share=nojs_share if pick_id == int(s["id"]) else None,
+                dark=dark,
             )
             for s in slots
         )
-        frag = f"d-{d.isoformat()}"
+        frag = f"{frag_prefix}-{d.isoformat()}"
         if d == default_day:
             day_klass += " b-day--current"
         sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
         sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
+    return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>'
+
+
+def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    card = view["card"]
+    if not _skating(card):
+        return ""
+    title = t("kind.public_skate")
+    mode = normalize_schedule_mode(card.get("schedule_mode"))
+    days = list(view.get("days") or [])
+    if mode == SCHEDULE_MODE_SEASON_CLOSED:
+        reopen = _parse_iso_date(card.get("schedule_reopen_date"))
+        line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
+        return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
+    if card.get("in_season") is False:
+        return ""
+    if not days:
+        return _b_schedule_when_empty(card, links, title=title)
+
+    by_date = _sessions_by_date(days)
+    if not by_date:
+        return ""
+    all_slots = [s for slots in by_date.values() for s in slots]
+    aside_price, common = _b_price_floor(all_slots)
+    strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
     foot: list[str] = []
     if links.get("tickets"):
         href, blank = links["tickets"]
@@ -1297,24 +1335,27 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>{links_row}'
-    aside = f'<span class="b-aside">{_esc(common)}</span>' if common else ""
+    body = f"<div data-glide-session-list-root>{strip}{links_row}</div>"
+    aside = f'<span class="b-aside">{_esc(aside_price)}</span>' if aside_price else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
 
-def _b_ohm(view: Mapping[str, Any]) -> str:
+def _b_ohm(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
+    """ОХМ — те же полоса дней и билеты, что у массового катания, только тёмные.
+
+    Сеанс ОХМ выбирается тапом и уходит в «Позвать», как в Mini App (``arenaOhmDayTabs``).
+    """
     from src.application.style_b import section
 
-    days = [d for d in (view.get("ohm_days") or []) if d.get("sessions")]
-    if not days:
+    by_date = _sessions_by_date([d for d in (view.get("ohm_days") or []) if d.get("sessions")])
+    if not by_date:
         return ""
-    today = view["today"]
-    slots = [s for d in days for s in d.get("sessions") or []]
+    slots = [s for d in sorted(by_date) for s in by_date[d]]
     first = slots[0]
     aside_bits: list[str] = []
-    price = _b_price_mode(slots)
-    if price:
-        aside_bits.append(price)
+    aside_price, price = _b_price_floor(slots)
+    if aside_price:
+        aside_bits.append(aside_price)
     start, end = format_clock(str(first.get("starts_at_local") or "")), format_clock(str(first.get("ends_at_local") or ""))
     try:
         sh, sm = (int(x) for x in start.split(":"))
@@ -1324,16 +1365,7 @@ def _b_ohm(view: Mapping[str, Any]) -> str:
             aside_bits.append(f"{minutes} мин")
     except ValueError:
         pass
-    rows: list[str] = []
-    for day in days:
-        d = _parse_iso_date(day.get("local_date"))
-        if d is None:
-            continue
-        times = " · ".join(format_clock(str(s.get("starts_at_local") or "")) for s in day.get("sessions") or [])
-        rows.append(
-            f'<div class="b-table__row"><span class="b-table__day">{_esc(short_day_word(d, today=today))}</span>'
-            f'<span class="b-table__times">{_esc(times)}</span></div>'
-        )
+    strip = _b_day_strip(view, by_date, frag_prefix="o", base_path=base_path, invite=invite, common=price, dark=True)
     notes: list[str] = []
     for slot in slots:
         for key in ("age_note", "capacity_note", "price_note"):
@@ -1342,7 +1374,7 @@ def _b_ohm(view: Mapping[str, Any]) -> str:
                 notes.append(note)
     notes_html = f'<p class="b-note">{_esc(" ".join(notes))}</p>' if notes else ""
     aside = f'<span class="b-aside">{_esc(" · ".join(aside_bits))}</span>' if aside_bits else ""
-    body = f'<div class="b-table b-table--dark">{"".join(rows)}</div>{notes_html}'
+    body = f"{strip}{notes_html}"
     return section(t("kind.hockey_practice"), body, aside_html=aside, klass="b-sec--place", sec_id="ohm")
 
 
@@ -1439,7 +1471,12 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str) -> str:
             arena_id=arena_id,
         )
 
-    return section(t("place.trainers"), trainer_rows_html(trainers, href_for=href_for), klass="b-sec--place", sec_id="trainers")
+    return section(
+        t("place.trainers"),
+        trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go")),
+        klass="b-sec--place",
+        sec_id="trainers",
+    )
 
 
 def _b_onsite(card: Mapping[str, Any], *, cta_url: str | None, trainers_listed: bool = False) -> str:
@@ -1518,38 +1555,50 @@ def _b_about(card: Mapping[str, Any]) -> str:
 
 
 def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
-    """Сеанс из ссылки ``?s=`` — тёмный билет над расписанием."""
+    """Тёмный билет «Выбранный сеанс» над расписанием.
+
+    По ссылке ``?s=`` сервер заполняет его сам. Без ``?s=`` кладётся скрытая заготовка:
+    place-share.js показывает и заполняет её по тапу на время — без JS её не видно.
+    """
     card = view["card"]
     focus = view.get("focus")
     if focus is None:
-        if not view.get("focus_missing"):
+        if view.get("focus_missing"):
+            nxt = view.get("next_slot")
+            tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
+            return (
+                '<section class="b-sec" id="plan"><div class="b-plan b-plan--gone">'
+                f"<b>Сеанса из ссылки уже нет в расписании.</b><span>{tail.strip()}</span></div></section>"
+            )
+        if not _skating(card) or not (view.get("days") or view.get("ohm_days")):
             return ""
-        nxt = view.get("next_slot")
-        tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
-        return (
-            '<section class="b-sec" id="plan"><div class="b-plan b-plan--gone">'
-            f'<b>Сеанса из ссылки уже нет в расписании.</b><span>{tail.strip()}</span></div></section>'
-        )
     kicker = "Тебя зовут кататься" if invite else "Выбранный сеанс"
-    d = _parse_iso_date(focus.get("local_date"))
-    day_text = day_heading(d, today=view["today"]) if d else ""
-    start = format_clock(str(focus.get("starts_at_local") or ""))
-    end = format_clock(str(focus.get("ends_at_local") or ""))
-    soon = starts_in_label(focus, now=view["now"])
-    prices = " · ".join(slot_price_lines(focus))
-    label = session_kind_label(focus)
-    time_text = f"{start}–{end}" if end else start
-    extra = " · ".join(x for x in (label, prices) if x)
+    day_text = time_text = extra = soon = ""
+    if focus is not None:
+        d = _parse_iso_date(focus.get("local_date"))
+        day_text = day_heading(d, today=view["today"]) if d else ""
+        start = format_clock(str(focus.get("starts_at_local") or ""))
+        end = format_clock(str(focus.get("ends_at_local") or ""))
+        soon = starts_in_label(focus, now=view["now"])
+        prices = " · ".join(slot_price_lines(focus))
+        extra = " · ".join(x for x in (session_kind_label(focus), prices) if x)
+        time_text = f"{start}–{end}" if end else start
     place_name = format_public_name(str(card.get("name") or ""))
     address = format_place_address(str(card.get("address") or ""), city=_city(card))
     where = " · ".join(x for x in (place_name, address) if x)
+
+    def span(cls: str, text: str) -> str:
+        hidden = "" if text else " hidden"
+        return f'<span class="b-plan__{cls}"{hidden}>{_esc(text)}</span>'
+
+    section_hidden = " hidden" if focus is None else ""
     return (
-        '<section class="b-sec" id="plan"><div class="b-plan">'
+        f'<section class="b-sec" id="plan"{section_hidden}><div class="b-plan">'
         f'<span class="b-plan__kicker">{_esc(kicker)}</span>'
-        f'<span class="b-plan__day">{_esc(day_text)}</span>'
-        f'<span class="b-plan__time">{_esc(time_text)}</span>'
-        + (f'<span class="b-plan__line">{_esc(extra)}</span>' if extra else "")
-        + (f'<span class="b-plan__soon">{_esc(soon)}</span>' if soon else "")
+        + span("day", day_text)
+        + span("time", time_text)
+        + span("line", extra)
+        + span("soon", soon)
         + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
         + "</div></section>"
     )
@@ -1576,7 +1625,7 @@ def render_place_body_b(
         _b_about(card),
         _b_plan(view, invite=invite),
         _b_schedule(view, base_path=base_path, invite=invite, links=links),
-        _b_ohm(view),
+        _b_ohm(view, base_path=base_path, invite=invite),
         _b_arrive(card, links),
         _b_onsite(card, cta_url=cta_url, trainers_listed=bool(view.get("trainers"))),
         _b_trainers(view, base_url=base_url),

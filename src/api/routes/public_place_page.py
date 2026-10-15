@@ -31,7 +31,6 @@ from src.application.ice_city_day import (
 )
 from src.application.place_card_image import render_place_card, share_display_path
 from src.application.arena_public_use_cases import resolve_merged_arena_id
-from src.application.catalog_consumer_events import record_public_page_view
 from src.application.png_render_cache import render_png_cached
 from src.application.place_links import (
     clean_share_src,
@@ -96,18 +95,12 @@ async def catalog_home_page(
         robots=robots,
     )
 
-    await record_public_page_view(
-        session,
-        request,
-        surface="catalog_home",
-        city_id=None,
-    )
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
 
 
-# TASK-189 считает просмотр на каждый заход на /p/ и /c/. Публичный кэш обошёл бы
-# origin и занизил счётчик. Картинки по-прежнему кэшируются: просмотр они не пишут.
-_PAGE_CACHE = {"Cache-Control": "private, no-store"}
+# Просмотр /, /c/, /p/ — sendBeacon (см. public-page-view-beacon.js), не GET HTML (prefetch/bfcache).
+# private, no-cache: браузер может держать страницу в bfcache, но при прямом заходе сверяется с origin.
+_PAGE_CACHE = {"Cache-Control": "private, no-cache"}
 _IMAGE_CACHE = {"Cache-Control": "public, max-age=900"}
 _IMAGE_CACHE_SESSION = {"Cache-Control": "public, max-age=300, stale-while-revalidate=60"}
 
@@ -146,7 +139,7 @@ _NOT_FOUND_HTML = """<!DOCTYPE html>
 <title>Место не найдено — Glide</title>
 <meta property="og:title" content="Glide — карта льда" />
 <meta property="og:description" content="Где покататься сегодня: катки, расписание и цены." />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+__PUBLIC_FONTS_HEAD__
 <style>body{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
 margin:0;padding:48px 20px;text-align:center}h1{font-weight:600;letter-spacing:-.01em}a{color:#0B6E70;font-weight:600}</style></head>
 <body><h1>Этого места больше нет в каталоге</h1>
@@ -160,7 +153,10 @@ def _catalog_home(base: str) -> str:
 
 def _not_found(home: str) -> HTMLResponse:
     # 404, а не 200: поисковик должен забыть адрес. Человеку — понятная страница с выходом.
-    return HTMLResponse(_NOT_FOUND_HTML.replace("__HOME__", home), status_code=404)
+    from src.application.style_b import public_fonts_head_html
+
+    html = _NOT_FOUND_HTML.replace("__PUBLIC_FONTS_HEAD__", public_fonts_head_html()).replace("__HOME__", home)
+    return HTMLResponse(html, status_code=404)
 
 
 async def _merged_redirect(session: AsyncSession, arena_id: int, request: Request) -> RedirectResponse | None:
@@ -274,14 +270,6 @@ async def place_page(
         share_src=share_src,
         country=str(city.get("country") or ""),
     )
-    await record_public_page_view(
-        session,
-        request,
-        surface="place_page",
-        city_id=int(city["id"]),
-        arena_id=int(card["id"]),
-        extra_payload={"s": session_id, "i": "1" if invite else None, "src": share_src},
-    )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))
     return response
@@ -322,8 +310,8 @@ async def _image(
     return Response(content=png, media_type="image/png", headers=cache)
 
 
-@router.get("/p/{city_ref}/{slug}/og.png")
-@router.get("/p/{city_ref}/{slug}/session/{session_id}/og.png")
+@router.api_route("/p/{city_ref}/{slug}/og.png", methods=["GET", "HEAD"])
+@router.api_route("/p/{city_ref}/{slug}/session/{session_id}/og.png", methods=["GET", "HEAD"])
 async def place_og_image(
     city_ref: str,
     slug: str,
@@ -337,8 +325,8 @@ async def place_og_image(
     return await _image(session, city_ref, slug, sid, i, story=False)
 
 
-@router.get("/p/{city_ref}/{slug}/story.png")
-@router.get("/p/{city_ref}/{slug}/session/{session_id}/story.png")
+@router.api_route("/p/{city_ref}/{slug}/story.png", methods=["GET", "HEAD"])
+@router.api_route("/p/{city_ref}/{slug}/session/{session_id}/story.png", methods=["GET", "HEAD"])
 async def place_story_image(
     city_ref: str,
     slug: str,
@@ -382,10 +370,13 @@ def _aware(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _sitemap_lastmod(value: datetime | None) -> str | None:
+def _sitemap_lastmod(value: datetime | None, *, now: datetime | None = None) -> str | None:
+    """Дата правки не бывает в будущем: самый поздний сеанс ещё не наступил, а
+    Google перестаёт верить lastmod всего файла, увидев дату из будущего."""
     if value is None:
         return None
-    return _aware(value).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = min(_aware(value), now or datetime.now(timezone.utc))
+    return stamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _newer(left: datetime | None, right: datetime | None) -> datetime | None:
@@ -445,10 +436,16 @@ async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
 @router.get("/robots.txt")
 async def robots() -> Response:
     # /webapp — оболочки мини-аппа без серверного контента; индексировать нечего.
+    # Но публичные страницы берут оттуда CSS/JS, а фото — из /api/public/photos/:
+    # без них Google рисует страницу без стилей и не видит фото катков. Правило
+    # с более длинным префиксом побеждает (так считают и Google, и Яндекс).
     content = "\n".join(
         [
             "User-agent: *",
             "Allow: /",
+            "Allow: /api/public/photos/",
+            "Allow: /webapp/*.css",
+            "Allow: /webapp/*.js",
             "Disallow: /api/",
             "Disallow: /webapp/",
             f"Sitemap: {_base()}/sitemap.xml",
@@ -564,13 +561,6 @@ async def selection_page(
         story_image_url=og_image.replace("/og.png", "/story.png"),
         base_url=base,
     )
-    await record_public_page_view(
-        session,
-        request,
-        surface="selection_page",
-        city_id=int(city["id"]),
-        extra_payload={"src": share_src},
-    )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))
     return response
@@ -587,21 +577,28 @@ async def _city_hub(
 ):
     """Маршрутизатор города (TASK-224): плитки-потребности, ближайшее на льду, все места."""
     from src.application.city_hub_page import (
-        city_hub_image_version,
+        city_hub_selection_preview_view,
         compose_city_hub_share,
         load_city_hub_view,
         render_city_hub_page,
     )
-    from src.application.selection_page import selection_image_path, selection_start_param
+    from src.application.selection_page import (
+        selection_image_path,
+        selection_image_version,
+        selection_share_description,
+        selection_start_param,
+    )
 
     city_name = str(city["name"])
     slug = city_slug(city_name)
     if city_ref != slug:
         return RedirectResponse(url=f"/c/{slug}", status_code=301)
     view = await load_city_hub_view(session, city=city)
+    preview = city_hub_selection_preview_view(view)
+    inventory_line = selection_share_description(preview)
     page_url = f"{base}/c/{slug}"
     og_image = base + selection_image_path(
-        city_name=city_name, venue=None, when=None, version=city_hub_image_version(view)
+        city_name=city_name, venue=None, when=None, version=selection_image_version(preview)
     )
     html = render_city_hub_page(
         view,
@@ -613,16 +610,10 @@ async def _city_hub(
             surface="selection_page",
             city_id=int(city["id"]),
         ),
-        share=compose_city_hub_share(view, page_url=page_url),
+        share=compose_city_hub_share(view, page_url=page_url, inventory_line=inventory_line),
         story_image_url=og_image.replace("/og.png", "/story.png"),
         base_url=base,
-    )
-    await record_public_page_view(
-        session,
-        request,
-        surface="selection_page",
-        city_id=int(city["id"]),
-        extra_payload={"src": share_src},
+        og_description=inventory_line,
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=slug)
@@ -691,7 +682,7 @@ async def _selection_image(
     return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
 
 
-@router.get("/c/{city_ref}/og.png")
+@router.api_route("/c/{city_ref}/og.png", methods=["GET", "HEAD"])
 async def selection_og_image(
     city_ref: str,
     t: str | None = None,
@@ -704,7 +695,7 @@ async def selection_og_image(
     return await _selection_image(session, city_ref, t, w, story=False, kind=kind, svc=svc, seg=seg)
 
 
-@router.get("/c/{city_ref}/story.png")
+@router.api_route("/c/{city_ref}/story.png", methods=["GET", "HEAD"])
 async def selection_story_image(
     city_ref: str,
     t: str | None = None,

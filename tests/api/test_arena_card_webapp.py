@@ -65,7 +65,8 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert "dayStrip" in page_js
     assert "Расписание уточняется" not in page_js
     assert "пока не получили" not in page_js
-    assert "Время массового катания называют по телефону." in page_js
+    # Каток «по телефону»: только кнопка звонка, без фразы-объяснения (решение владельца).
+    assert "Время массового катания называют по телефону." not in page_js
     assert "Время массового катания — на сайте катка" in page_js
     assert "Это ваш каток?" not in page_js
     assert "Забрать страницу" not in page_js
@@ -292,7 +293,7 @@ async def test_arena_card_level_b_payload_has_contacts_not_sessions(
     model_js = (REPO_ROOT / "static/webapp/arena-card-model.js").read_text(encoding="utf-8")
     assert "Расписание уточняется" not in js
     assert "пока не получили" not in js
-    assert "Время массового катания называют по телефону." in model_js
+    assert "Время массового катания называют по телефону." not in model_js
     assert "Время массового катания — на сайте катка" in model_js
     # С 8a00820f звонок — быстрое действие «Телефон» (copyPhone), сайт рядом в quick actions.
     model = (REPO_ROOT / "static/webapp/arena-card-model.js").read_text(encoding="utf-8")

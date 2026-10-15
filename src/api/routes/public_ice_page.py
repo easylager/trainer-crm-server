@@ -63,7 +63,7 @@ async def ice_city_day_page(
     return HTMLResponse(render_unknown_city_html(cities, home=home), status_code=404)
 
 
-@router.get("/ice/{city_ref}/today/og.png")
+@router.api_route("/ice/{city_ref}/today/og.png", methods=["GET", "HEAD"])
 async def ice_city_day_og(
     city_ref: str,
     session: AsyncSession = Depends(get_session),

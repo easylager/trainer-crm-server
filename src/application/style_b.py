@@ -29,6 +29,47 @@ TOKENS_VERSION = _file_version("static/shared/glide-tokens.css")
 STYLE_VERSION = _file_version("static/share/style-b.css")
 # Отдельной ссылкой, не @import из style-b.css: импорт без ?v= шёл с no-store и ещё одним кругом до первой отрисовки.
 COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
+DOCK_SCRIPT_VERSION = _file_version("static/share/tg-dock.js")
+PRESS_SCRIPT_VERSION = _file_version("static/share/b-press.js")
+FONT_V_PLACEHOLDER = "__FONT_V__"
+
+
+def _fonts_dir_version() -> str:
+    import hashlib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "static" / "fonts" / "glide-public"
+    digest = hashlib.sha256()
+    for path in sorted(root.glob("*.woff2")):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:10]
+
+
+PUBLIC_FONTS_ASSET_VERSION = _fonts_dir_version()
+
+
+def public_fonts_head_html() -> str:
+    """Self-hosted Golos Text + Dela Gothic One для публичных страниц стиля B."""
+    v = PUBLIC_FONTS_ASSET_VERSION
+    return (
+        f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v={v}" '
+        f'as="font" type="font/woff2" crossorigin />\n'
+        f'  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-lat.woff2?v={v}" '
+        f'as="font" type="font/woff2" crossorigin />\n'
+        # Основной текст тоже: без него на медленной сети абзацы перерисовывались из системного шрифта.
+        f'  <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v={v}" '
+        f'as="font" type="font/woff2" crossorigin />\n'
+        f'  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v={v}" />'
+    )
+
+
+def public_fonts_css_text() -> str:
+    """Текст glide-public-fonts.css с подставленным ?v= (тот же, что в preload и @font-face)."""
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "static" / "shared" / "glide-public-fonts.css"
+    return path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
 
 
 def esc(value: Any) -> str:
@@ -275,11 +316,19 @@ def share_html(
     )
 
 
-def trainer_rows_html(trainers: list[Mapping[str, Any]], *, href_for: Any) -> str:
-    """Тренеры строками (TASK-265): лицо, имя, занятие и цена «от», справа — «Записаться» или «Написать».
+def trainer_rows_html(
+    trainers: list[Mapping[str, Any]],
+    *,
+    href_for: Any,
+    cta: str | None = None,
+) -> str:
+    """Тренеры строками (TASK-265): лицо, имя, занятие и цена «от», справа — CTA.
 
     Вся строка — ссылка в Telegram на карточку тренера (``href_for(trainer)``), как тап по
     тренеру на карточке катка в Mini App. Без фото — первая буква имени, не пустой кружок.
+
+    ``cta`` — фиксированная подпись справа (например ``t("cta.go")`` на SSR-карточке места).
+    Иначе «Записаться» / «Написать» по ``can_book``.
     """
     rows: list[str] = []
     for trainer in trainers:
@@ -293,12 +342,12 @@ def trainer_rows_html(trainers: list[Mapping[str, Any]], *, href_for: Any) -> st
             ava = f'<span class="b-row__ava b-row__ava--mono" aria-hidden="true">{esc(trainer.get("initial") or "")}</span>'
         line = str(trainer.get("line") or "")
         line_html = f'<span class="b-row__line">{esc(line)}</span>' if line else ""
-        cta = t("cta.enroll") if trainer.get("can_book") else t("cta.write")
+        row_cta = cta if cta else (t("cta.enroll") if trainer.get("can_book") else t("cta.write"))
         rows.append(
             f'<div class="b-row b-row--coach">{ava}'
             f'<span class="b-row__body"><a class="b-row__title b-row__link" href="{esc(href)}">{esc(trainer.get("name"))}</a>'
             f"{line_html}</span>"
-            f'<span class="b-row__cta">{esc(cta)}</span></div>'
+            f'<span class="b-row__cta">{esc(row_cta)}</span></div>'
         )
     if not rows:
         return ""
@@ -359,10 +408,23 @@ def city_map_hint(places: list[Mapping[str, Any]]) -> str:
 
 
 def telegram_dock_html(href: str | None, *, hint: str = "") -> str:
-    """Плашка «Открыть в Telegram» внизу экрана (вариант A, TASK-278). Внутри Telegram её прячет CSS."""
+    """Плашка «Открыть в Telegram» (TASK-278): в потоке, после прокрутки — пилюля (tg-dock.js)."""
     if not href:
         return ""
     return (
-        '<nav class="b-tgdock tg-out" aria-label="Telegram"><div class="b-tgdock__inner">'
-        f"{telegram_button_html(href)}{telegram_hint_html(hint)}</div></nav>"
+        '<div class="b-tgdock-host tg-out"><div class="b-tgdock__spacer" aria-hidden="true"></div>'
+        '<nav class="b-tgdock" aria-label="Telegram"><div class="b-tgdock__inner">'
+        f"{telegram_button_html(href, short=True)}{telegram_hint_html(hint)}</div></nav></div>"
     )
+
+
+def telegram_dock_script_html() -> str:
+    """Скрипт плашки Telegram — только вне Mini App."""
+    v = DOCK_SCRIPT_VERSION
+    return f'<script defer src="/static/share/tg-dock.js?v={esc(v)}"></script>'
+
+
+def b_press_script_html() -> str:
+    """Отклик нажатия на публичке (iOS + защита от press при скролле)."""
+    v = PRESS_SCRIPT_VERSION
+    return f'<script defer src="/static/share/b-press.js?v={esc(v)}"></script>'

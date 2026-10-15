@@ -30,10 +30,13 @@ def _esc(value: str) -> str:
 
 
 def render_zovi_create_page(*, canonical_url: str) -> str:
+    from src.application.style_b import public_fonts_head_html
+
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     return inline_shared_assets(fill_placeholders(
         template,
         {
+            "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
             "__LANG__": "ru-BY",
             "__OG_LOCALE__": "ru_BY",
             "__OG_TITLE__": _esc(_OG_TITLE),

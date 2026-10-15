@@ -20,7 +20,7 @@ def _client() -> AsyncClient:
 
 
 def _dock(html: str) -> str:
-    match = re.search(r'<nav class="b-tgdock tg-out"[^>]*>(.*?)</nav>', html, re.S)
+    match = re.search(r'<nav class="b-tgdock"[^>]*>(.*?)</nav>', html, re.S)
     assert match, "нет плашки Telegram"
     return match.group(1)
 
@@ -74,6 +74,21 @@ async def test_city_without_coordinates_promises_no_number(app_use_test_db, db_s
 
 
 @pytest.mark.asyncio
+async def test_public_style_b_pages_use_self_hosted_fonts(app_use_test_db, db_session) -> None:
+    name = f"Шрифтск {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:4]}")
+    await db_session.commit()
+    async with _client() as client:
+        home = (await client.get("/")).text
+        city = (await client.get(f"/c/{city_slug(name)}")).text
+    for html in (home, city):
+        assert "fonts.googleapis.com" not in html
+        assert "/static/shared/glide-public-fonts.css" in html
+        assert "dela-gothic-one-cyr-lat.woff2" in html
+
+
+@pytest.mark.asyncio
 async def test_home_and_list_pages_have_the_dock(app_use_test_db, db_session) -> None:
     name = f"Спискск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
@@ -82,6 +97,7 @@ async def test_home_and_list_pages_have_the_dock(app_use_test_db, db_session) ->
     async with _client() as client:
         home = (await client.get("/")).text
         listing = (await client.get(f"/c/{city_slug(name)}", params={"t": "ice"})).text
+    assert "tg-dock.js" in home
     assert "там карта всех катков" in _dock(home)
     assert "там все катки города на карте" in _dock(listing)
     assert "b-share__bot" not in listing

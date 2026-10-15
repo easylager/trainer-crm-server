@@ -1638,6 +1638,7 @@ async def list_public_ice_arenas(
     day: str | None = None,
     service_keys: tuple[str, ...] | list[str] | None = None,
     hockey_segment: str | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     intent_value = parse_intent(intent)
     segment = (hockey_segment or "").strip().lower()
@@ -1656,7 +1657,7 @@ async def list_public_ice_arenas(
             offset = max(0, int(cursor))
         except ValueError as exc:
             raise IcePublicQueryError("cursor must be an integer offset") from exc
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
     # Окно времени — для сеансов льда: «где покататься» и ОХМ. У тренеров его нет.
     # Без when/day окно пустое: весь будущий hockey_practice, как на /c/?kind=ohm.
     window = (

@@ -45,11 +45,11 @@ def test_empty_window_falls_back_to_the_whole_selection() -> None:
         window_places=0,
         window={"label": "Сегодня вечером", "key": "today_evening"},
         window_empty=True,
+        skating=True,
     )
     assert selection_place_count(view) == 15
-    text = selection_share_description(view)
-    assert text.startswith("15 катков")
-    assert "сеансов нет — ближайшие" in text
+    # Как подпись в Mini App: пустое окно говорит о себе, а не о числе катков.
+    assert selection_share_description(view) == "Сегодня вечером сеансов нет · показываем ближайшие"
 
 
 def test_noun_comes_from_city_facets_not_the_page() -> None:

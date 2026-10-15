@@ -99,5 +99,6 @@ async def test_list_with_empty_window_shows_nearest_as_tickets(app_use_test_db, 
     assert "b-slot__time" in body and "9:30" in body
     assert not _ISO_DATE.search(re.sub(r'(href|content|datetime)="[^"]*"', "", body))
     assert "уточняется" not in body
-    # Место со льдом раньше места без расписания.
-    assert body.index("Каток через три дня") < body.index("Каток без расписания")
+    # Место со льдом раньше места без расписания — в самом списке, а не в JSON-LD шапки.
+    cards = body.split('b-cards"', 1)[1].split("</section>", 1)[0]
+    assert cards.index("Каток через три дня") < cards.index("Каток без расписания")

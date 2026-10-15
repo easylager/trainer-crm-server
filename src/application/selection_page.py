@@ -39,18 +39,17 @@ from src.application.arena_public_use_cases import (
     list_city_selection_places,
     list_public_ice_arenas,
 )
-from src.application.ice_time_windows import resolve_window
+from src.application.ice_time_windows import resolve_list_window, resolve_window
 from src.shared.copy_ru import t
+from src.application.city_place_counts import (
+    CityPlaceCounts,
+    city_place_count_noun,
+    city_place_counts_from_facets,
+)
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
 from src.application.place_links import catalog_start_param, join_public_origin, place_path, place_query
 from src.application.place_page import absolute_day_label
-from src.application.schedule_staleness import (
-    LEVEL_STALE,
-    load_arena_freshness,
-    stale_note,
-    staleness_level,
-)
 from src.shared.catalog_sharpening import SHARPENING_AMENITY_KEYS
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -207,8 +206,17 @@ async def _window_slots(
     """Сеансы мест в окне (или ближайшие, если окна нет) одним запросом."""
     if not arena_ids:
         return {}
-    start = datetime.fromisoformat(window["from"]) if window else now
-    end = datetime.fromisoformat(window["to"]) if window else None
+    if window:
+        win_from = datetime.fromisoformat(str(window["from"]))
+        if win_from.tzinfo is None:
+            win_from = win_from.replace(tzinfo=timezone.utc)
+        start = max(now, win_from)
+        end = datetime.fromisoformat(str(window["to"]))
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+    else:
+        start = now
+        end = None
     rows = (
         await session.execute(
             text(f"""
@@ -260,24 +268,6 @@ def _selection_session_totals(counts: Mapping[int, int]) -> tuple[int, int]:
         if int(n) > 0:
             places += 1
     return sessions, places
-
-
-async def _apply_schedule_freshness(
-    session: AsyncSession,
-    items: list[Mapping[str, Any]],
-    slots: dict[int, list[dict[str, Any]]],
-    now: datetime,
-) -> dict[int, str]:
-    """Пометки свежести (TASK-180) для мест с сеансами. Сеансы не снимаем ни на каком уровне."""
-    stale_notes: dict[int, str] = {}
-    if not items:
-        return stale_notes
-    fresh = await load_arena_freshness(session, [int(i["id"]) for i in items], now=now)
-    for item in items:
-        aid = int(item["id"])
-        if staleness_level(fresh.get(aid)) == LEVEL_STALE and slots.get(aid):
-            stale_notes[aid] = stale_note(fresh.get(aid), now=now)
-    return stale_notes
 
 
 async def load_selection_view(
@@ -375,9 +365,11 @@ async def load_selection_view(
             when=when if skating else None,
             limit=MAX_PLACES,
             cursor=str(offset) if offset else None,
+            now=now,
         )
         items = list(listing.get("items") or [])
-        window = listing.get("window")
+        tw = resolve_list_window(when, None, now) if skating and when else None
+        window = tw.as_payload() if tw else listing.get("window")
         total = int(listing.get("total") or len(items))
         pages = max(1, (total + MAX_PLACES - 1) // MAX_PLACES)
         filter_chips = []
@@ -403,12 +395,21 @@ async def load_selection_view(
         if skating
         else {}
     )
-    # TASK-180: свежесть на момент ``now`` — см. ``_apply_schedule_freshness``.
-    stale_notes: dict[int, str] = {}
-    if skating and items:
-        stale_notes = await _apply_schedule_freshness(session, items, slots, now)
-    # В окне — только места, где в окне есть лёд; пусто — честно показываем ближайшее.
+    # TASK-146 / Mini App: окно сортирует — в окне, затем ближайшее вне окна.
     window_empty = False
+    window_hits = 0
+    off_window_ids: set[int] = set()
+    window_rest_ids: list[int] = []
+
+    def _slot_sort_key(item: Mapping[str, Any]) -> tuple[str, str, int]:
+        aid = int(item["id"])
+        first = (slots.get(aid) or [{}])[0]
+        return (
+            str(first.get("local_date") or ""),
+            str(first.get("starts_at_local") or ""),
+            aid,
+        )
+
     if service_mode or centers:
         hits = items
         shown = items
@@ -429,29 +430,52 @@ async def load_selection_view(
                 now,
                 session_sql=session_sql,
             )
-            stale_notes = await _apply_schedule_freshness(session, items, slots, now)
             hits = [i for i in items if slots.get(int(i["id"]))]
-        shown = hits or items
+            shown = hits or items
+        else:
+            shown = hits or items
+    elif skating and window:
+        window_slots = slots
+        missing_ids = [int(i["id"]) for i in items if not window_slots.get(int(i["id"]))]
+        nearest_slots = (
+            await _window_slots(session, missing_ids, None, now, session_sql=session_sql)
+            if missing_ids
+            else {}
+        )
+        display_slots: dict[int, list[dict[str, Any]]] = {}
+        for item in items:
+            aid = int(item["id"])
+            if window_slots.get(aid):
+                display_slots[aid] = window_slots[aid]
+            elif nearest_slots.get(aid):
+                display_slots[aid] = nearest_slots[aid]
+                off_window_ids.add(aid)
+        slots = display_slots
+        hits = [i for i in items if int(i["id"]) in display_slots and int(i["id"]) not in off_window_ids]
+        hits.sort(key=_slot_sort_key)
+        rest = [i for i in items if int(i["id"]) in off_window_ids]
+        rest.sort(key=_slot_sort_key)
+        tail = [i for i in items if int(i["id"]) not in display_slots]
+        # В окне — только места с сеансом в окне. Ниже разделителя: сначала ближайший лёд,
+        # потом места без расписания (по телефону, закрытый сезон, без сеансов) — ответ
+        # на «Сегодня» не начинается с катка, где льда нет вовсе (TASK-275).
+        shown = hits + rest + tail
+        window_rest_ids = [int(i["id"]) for i in rest + tail]
+        window_hits = len(hits)
+        window_empty = window_hits == 0 and bool(rest or tail)
     else:
         hits = [i for i in items if slots.get(int(i["id"]))] if window else items
         window_empty = bool(window) and not hits
         if window_empty and skating:
-            # В окне пусто — ближайшие сеансы теми же билетами, а не строкой из API.
             slots = await _window_slots(
                 session, [int(i["id"]) for i in items], None, now, session_sql=session_sql
             )
-            stale_notes = await _apply_schedule_freshness(session, items, slots, now)
             nearest = [i for i in items if slots.get(int(i["id"]))]
-            # Сначала места с ближайшим льдом — по времени первого сеанса.
-            nearest.sort(
-                key=lambda i: (
-                    str(slots[int(i["id"])][0].get("local_date") or ""),
-                    str(slots[int(i["id"])][0].get("starts_at_local") or ""),
-                    int(i["id"]),
-                )
-            )
+            nearest.sort(key=_slot_sort_key)
             items = nearest + [i for i in items if not slots.get(int(i["id"]))]
-        shown = hits or items
+            shown = hits or items
+        else:
+            shown = hits or items
     shown_page = shown[:MAX_PLACES] if not service_mode else shown
     # Счёт для превью — по всей подборке, а не по странице: один агрегат вместо len(shown_page).
     if ohm:
@@ -483,15 +507,18 @@ async def load_selection_view(
         "filter_chips": filter_chips,
         "window": window,
         "window_empty": window_empty,
+        "window_hits": window_hits,
+        "off_window_ids": sorted(off_window_ids),
+        "window_rest_ids": window_rest_ids,
         "items": shown_page,
         "slots": slots,
-        "stale_notes": stale_notes,
         "skating": skating,
         "session_count": session_total,
         # Места с сеансом в окне — по всей выборке: это число обещает заголовок.
         "window_places": window_places,
         # Фасеты всего города: по ним выбирается слово «катков»/«мест», а не по странице.
         "venue_type_facets": facets,
+        "city_place_counts": city_place_counts_from_facets(facets).as_dict() if facets else None,
     }
     if ohm_counts is not None:
         out["ohm_counts"] = ohm_counts
@@ -563,6 +590,24 @@ def selection_share_title(view: Mapping[str, Any], *, with_window: bool = True) 
     return f"{city} · {topic.lower()}"
 
 
+def _whole_city_inventory(view: Mapping[str, Any]) -> bool:
+    if view.get("svc") or view.get("kind") == KIND_OHM or view.get("seg") == SEG_CENTERS:
+        return False
+    return view.get("venue") is None
+
+
+def _city_inventory_counts(view: Mapping[str, Any]) -> CityPlaceCounts | None:
+    raw = view.get("city_place_counts")
+    if not raw or not _whole_city_inventory(view):
+        return None
+    return CityPlaceCounts(
+        total=int(raw.get("total") or 0),
+        rinks=int(raw.get("rinks") or 0),
+        shops=int(raw.get("shops") or 0),
+        other=int(raw.get("other") or 0),
+    )
+
+
 def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
     """Слово при счётчике — по всему городу, а не по странице.
 
@@ -570,6 +615,9 @@ def selection_count_noun(view: Mapping[str, Any]) -> tuple[str, str, str]:
     «катков», есть залы или места — «мест». Раньше слово считалось по 12 карточкам
     страницы, и подборка «все места» называла катками город, где катков — половина.
     """
+    inventory = _city_inventory_counts(view)
+    if inventory is not None:
+        return city_place_count_noun(inventory)
     if view.get("seg") == SEG_CENTERS:
         return ("центр", "центра", "центров")
     if view.get("kind") == KIND_OHM:
@@ -607,15 +655,38 @@ def selection_place_count(view: Mapping[str, Any]) -> int:
     Без окна — вся выборка города. С ``?w=`` — места, у которых в окне есть сеанс:
     ровно то, что обещает заголовок. Пустое окно честно падает на всю выборку
     («сеансов нет — ближайшие»), иначе в превью стоял бы ноль при непустом списке.
+
+    Подборка без чипа — число всех мест города (катки, магазины, трасса), хотя в
+    ленте магазины скрыты до ``?t=shop``.
     """
     if view.get("when"):
-        in_window = int(view.get("window_places") or 0)
+        in_window = int(view.get("window_hits") or view.get("window_places") or 0)
         if in_window:
             return in_window
+    inventory = _city_inventory_counts(view)
+    if inventory is not None:
+        return inventory.total
     return int(view.get("total") or 0)
 
 
+def _selection_window_empty_caption(view: Mapping[str, Any]) -> str | None:
+    window = view.get("window")
+    if not window or not view.get("skating"):
+        return None
+    if int(view.get("window_hits") or 0) > 0:
+        return None
+    if not (view.get("items") or []):
+        return None
+    label = str(window.get("label") or "").strip()
+    if not label:
+        return None
+    return t("selection.window.empty_caption", label=label)
+
+
 def selection_description(view: Mapping[str, Any]) -> str:
+    empty_caption = _selection_window_empty_caption(view)
+    if empty_caption:
+        return empty_caption
     svc = view.get("svc")
     if svc:
         n = int(view.get("total") or 0)
@@ -632,8 +703,6 @@ def selection_description(view: Mapping[str, Any]) -> str:
     sessions = int(view.get("session_count") or 0)
     if sessions:
         bits.append(f"{sessions} {plural_ru(sessions, 'сеанс', 'сеанса', 'сеансов')}")
-    if view.get("window_empty"):
-        bits.append(f"{str(view['window']['label']).lower()} сеансов нет — ближайшие")
     return " · ".join(bits)
 
 
@@ -704,14 +773,10 @@ def selection_image_version(view: Mapping[str, Any]) -> str:
 
 def selection_share_description(view: Mapping[str, Any]) -> str:
     """og:description. Пустое окно называет даты, а не «сегодня вечером»."""
-    text = selection_description(view)
-    window = view.get("window")
-    if view.get("window_empty") and window:
-        live = f"{str(window['label']).lower()} сеансов нет — ближайшие"
-        phrase = absolute_window_phrase(window)
-        if phrase and live in text:
-            text = text.replace(live, f"{phrase}: сеансов нет — ближайшие")
-    return text
+    empty_caption = _selection_window_empty_caption(view)
+    if empty_caption:
+        return empty_caption
+    return selection_description(view)
 
 
 _LINK_VENUES = frozenset({"shop", "gym", "ice", "outdoor", "choreo", "pool", "other"})
@@ -846,7 +911,6 @@ def _place_html(
     *,
     city_name: str,
     slots: list[dict[str, Any]],
-    stale: str = "",
     more_anchor: str = "schedule",
     service_mode: bool = False,
     service_highlight_keys: frozenset[str] | None = None,
@@ -885,21 +949,19 @@ def _place_html(
         chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
     raw_line = str(item.get("live_line") or "").strip()
     line = "" if chips or not raw_line else f'<p class="muted">{_esc(raw_line)}</p>'
-    # TASK-180: > 6 ч — сеансы показываем, но над ними спокойная строка «могло измениться».
-    stale_html = f'<p class="pick__stale">{_esc(stale)}</p>' if stale and chips else ""
     photo = _place_photo_url(item)
     name = _esc(format_public_name(str(item.get("name") or "")))
     name_html = f'<a href="{_esc(href)}">{name}</a>' if href else name
     if photo and href:
         media = (
             f'<a class="pick__media" href="{_esc(href)}" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
-            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" width="88" height="72" />'
             f"</a>"
         )
     elif photo:
         media = (
             f'<span class="pick__media" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
-            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" width="88" height="72" />'
             f"</span>"
         )
     else:
@@ -959,7 +1021,7 @@ def _place_html(
         + f'<h2 class="pick__name">{name_html}</h2>'
         + (f'<p class="pick__where">{_esc(where)}</p>' if where else "")
         + "</div></div>"
-        + (stale_html + f'<div class="slots">{chips}</div>' if chips else line)
+        + (f'<div class="slots">{chips}</div>' if chips else line)
         + "</section>"
     )
 
@@ -981,7 +1043,7 @@ def _center_card_html(item: Mapping[str, Any], *, city_name: str) -> str:
     if photo:
         media = (
             f'<span class="pick__media" data-icon="{_esc(str(item.get("venue_type") or ""))}">'
-            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" width="88" height="72" />'
             f"</span>"
         )
     else:
@@ -1109,12 +1171,7 @@ def render_selection_page(
     share_title = selection_share_title(view)
     description = selection_description(view)
     share_description = selection_share_description(view)
-    note = (
-        f'<p class="b-rule">{_esc(view["window"]["label"])}: сеансов нет — показываем ближайшие.</p>'
-        if view.get("window_empty")
-        else ""
-    )
-    stale_notes = view.get("stale_notes") or {}
+    note = ""
     service_mode = bool(view.get("svc"))
     centers_mode = view.get("seg") == SEG_CENTERS
     highlight = frozenset(view.get("service_filter_keys") or ())
@@ -1122,16 +1179,12 @@ def render_selection_page(
     if centers_mode:
         places = "".join(_b_center_card(i, city_name=city_name) for i in view["items"])
     else:
-        places = "".join(
-            _b_place_card(
-                i,
-                city_name=city_name,
-                slots=view["slots"].get(int(i["id"]), []),
-                more_anchor=more_anchor,
-                service_mode=service_mode,
-                service_highlight_keys=highlight,
-            )
-            for i in view["items"]
+        places = _b_selection_cards(
+            view,
+            city_name=city_name,
+            more_anchor=more_anchor,
+            service_mode=service_mode,
+            service_highlight_keys=highlight,
         )
     if not places:
         if service_mode:
@@ -1141,8 +1194,17 @@ def render_selection_page(
         elif view.get("kind") == KIND_OHM:
             empty = "Пока нет сеансов ОХМ в этом городе."
         else:
-            empty = "В этой подборке пока пусто — загляните в каталог."
-        places = f'<p class="b-text">{_esc(empty)}</p>'
+            empty = ""
+        if empty:
+            places = f'<p class="b-text">{_esc(empty)}</p>'
+        elif view.get("skating"):
+            # Как formatEmptyList в Mini App, но только когда мест нет вовсе.
+            places = (
+                f'<div class="b-empty"><b>{_esc(t("selection.empty.skate.title"))}</b>'
+                f'<p>{_esc(t("selection.empty.skate.body"))}</p></div>'
+            )
+        else:
+            places = f'<p class="b-text">{_esc("В этой подборке пока пусто — загляните в каталог.")}</p>'
     from src.application.style_b import back_pill, brand_link, hero_html, share_html
 
     hero = hero_html(
@@ -1167,7 +1229,7 @@ def render_selection_page(
         hero
         + (f'<section class="b-sec">{controls}</section>' if controls else "")
         + (f'<section class="b-sec">{note}</section>' if note else "")
-        + f'<section class="b-sec b-cards">{places}</section>'
+        + f'<section class="b-sec b-cards" data-glide-session-list-root>{places}</section>'
         + _b_pager(view, city_name=city_name)
         + share_pick
         + share_html(share, telegram_url=None, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
@@ -1199,7 +1261,8 @@ def render_selection_page(
             "itemListElement": elements,
         }
     )
-    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION
+    from src.application.public_web_cta import public_page_view_beacon_script
+    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = (
@@ -1226,11 +1289,16 @@ def render_selection_page(
             "__ROBOTS__": "noindex, follow" if (variant or page_no > 1) else "index, follow",
             "__HEAD_EXTRA__": _head_links_html(view, city_name=city_name, canonical_base=canonical_url),
             "__JSONLD__": ld,
+            "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
             "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__CITY_LINK__": city_link,
             "__BODY__": body,
+            "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(
+                surface="selection_page",
+                city_id=int(view["city"]["id"]),
+            ),
             **share_tail,
         },
     )
@@ -1323,6 +1391,92 @@ def _b_state_note(item: Mapping[str, Any]) -> str:
     return str(live.get("text") or "").strip()
 
 
+def _window_miss_label(window: Mapping[str, Any] | None) -> str:
+    if not window:
+        return ""
+    label = str(window.get("label") or "").strip()
+    return t("selection.window.miss", label=label) if label else ""
+
+
+def _b_window_break(view: Mapping[str, Any], rest_count: int) -> str:
+    """«Сегодня нет · 2 катка · их ближайшее время». ``rest_count`` — места с ближайшим сеансом:
+    места без расписания тоже под разделителем, но ближайшего времени у них нет."""
+    window = view.get("window")
+    if not window:
+        return ""
+    title = _window_miss_label(window)
+    sub = ""
+    if rest_count > 0:
+        noun = selection_count_noun(view)
+        sub = " · " + t(
+            "selection.window.break_sub",
+            count=rest_count,
+            noun=plural_ru(rest_count, noun[0], noun[1], noun[2]),
+        )
+    return (
+        '<div class="b-window-break" role="separator">'
+        f'<span class="b-window-break__pill"><b>{_esc(title)}</b>{_esc(sub)}</span>'
+        "</div>"
+    )
+
+
+def _b_selection_cards(
+    view: Mapping[str, Any],
+    *,
+    city_name: str,
+    more_anchor: str,
+    service_mode: bool,
+    service_highlight_keys: frozenset[str],
+) -> str:
+    if service_mode:
+        return "".join(
+            _b_place_card(
+                i,
+                city_name=city_name,
+                slots=view["slots"].get(int(i["id"]), []),
+                more_anchor=more_anchor,
+                service_mode=True,
+                service_highlight_keys=service_highlight_keys,
+            )
+            for i in view["items"]
+        )
+    rest_ids = {int(x) for x in (view.get("window_rest_ids") or [])}
+    window = view.get("window")
+    hits = [i for i in view["items"] if int(i["id"]) not in rest_ids]
+    rest = [i for i in view["items"] if int(i["id"]) in rest_ids]
+    parts: list[str] = []
+    for item in hits:
+        parts.append(
+            _b_place_card(
+                item,
+                city_name=city_name,
+                slots=(view.get("slots") or {}).get(int(item["id"]), []),
+                more_anchor=more_anchor,
+                service_mode=False,
+                service_highlight_keys=service_highlight_keys,
+                off_window=False,
+                window=window,
+            )
+        )
+    if hits and rest and window:
+        off_ids = {int(x) for x in (view.get("off_window_ids") or [])}
+        parts.append(_b_window_break(view, sum(1 for i in rest if int(i["id"]) in off_ids)))
+    for item in rest:
+        parts.append(
+            _b_place_card(
+                item,
+                city_name=city_name,
+                slots=(view.get("slots") or {}).get(int(item["id"]), []),
+                more_anchor=more_anchor,
+                service_mode=False,
+                service_highlight_keys=service_highlight_keys,
+                off_window=True,
+                window=window,
+            )
+        )
+    return "".join(parts)
+
+
 def _b_place_card(
     item: Mapping[str, Any],
     *,
@@ -1331,6 +1485,8 @@ def _b_place_card(
     more_anchor: str,
     service_mode: bool,
     service_highlight_keys: frozenset[str],
+    off_window: bool = False,
+    window: Mapping[str, Any] | None = None,
 ) -> str:
     from src.application.catalog_icons import icon_svg
 
@@ -1361,18 +1517,29 @@ def _b_place_card(
             + (f'<div class="b-btns">{"".join(buttons)}</div>' if buttons else "")
             + "</article>"
         )
+    off_extra = ""
+    if off_window and window:
+        # «· ближайший» — только когда на карточке есть сеанс, как offLabel в Mini App.
+        nearest = t("selection.window.off_nearest") if slots else ""
+        off_extra = f'<p class="b-card2__off">{_esc(_window_miss_label(window))}{_esc(nearest)}</p>'
     tickets: list[str] = []
-    for s in slots[:MAX_SLOTS_PER_PLACE]:
+    for idx, s in enumerate(slots[:MAX_SLOTS_PER_PLACE]):
         day = s.get("local_date")
         clock = format_clock(str(s.get("starts_at_local") or ""))
         word = short_day_word(day, today=today) if hasattr(day, "year") else ""
+        if off_window and idx == 0:
+            # Время и так стоит в слоте рядом — в подписи только день: «Ближайший: сб · 19:15».
+            word = t("selection.window.nearest_prefix", when=word) if word else "Ближайший"
         price = format_price_minor(
             s.get("price_adult_minor") if s.get("price_adult_minor") is not None else s.get("price_minor"),
             str(s.get("currency_code") or "BYN"),
         )
+        from src.shared.public_view_transitions import session_time_vt_style
+
+        vt = session_time_vt_style(int(s["id"]))
         inner = (
             (f'<span class="b-slot__day">{_esc(word)}</span>' if word else "")
-            + f'<b class="b-slot__time">{_esc(clock)}</b>'
+            + f'<b class="b-slot__time"{vt}>{_esc(clock)}</b>'
             + (f'<span class="b-slot__price">{_esc(price)}</span>' if price else "")
         )
         if href:
@@ -1390,12 +1557,14 @@ def _b_place_card(
         if tickets
         else (f'<p class="b-note">{_esc(note)}</p>' if note else "")
     )
+    card_cls = "b-card2" + (" b-card2--off" if off_window else "")
+    head_block = _b_card_head(item, city_name=city_name, href=href) + off_extra
     if not slots or not href:
-        return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
+        return f'<article class="{card_cls}">' + head_block + body + "</article>"
     first = slots[0]
     sid = first.get("id")
     if sid is None:
-        return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
+        return f'<article class="{card_cls}">' + head_block + body + "</article>"
     from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
 
     place_name = format_public_name(str(item.get("name") or ""))
@@ -1413,7 +1582,7 @@ def _b_place_card(
         body = f'<div class="b-slots">{invite}{"".join(tickets)}</div>'
     else:
         body = f'<div class="b-slots">{invite}</div>'
-    return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href) + body + "</article>"
+    return f'<article class="{card_cls}">' + head_block + body + "</article>"
 
 
 def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:
@@ -1468,7 +1637,7 @@ def _b_controls(view: Mapping[str, Any], *, city_name: str) -> str:
                     when = key if key != "all" else None
                     href = selection_path(city_name=city_name, venue=None, when=when, kind=KIND_OHM)
                     parts.append(f'<a class="b-toggle" href="{_esc(href)}">{inner}</a>')
-            out += f'<nav class="b-toggles" aria-label="Когда">{"".join(parts)}</nav>'
+            out += f'<nav class="b-toggles vt-when-strip" aria-label="Когда">{"".join(parts)}</nav>'
             out += (
                 '<p class="b-rule"><b>Любительский хоккей:</b> полная экипировка, детям — шлем с маской. '
                 "Записи нет — билет в кассе катка.</p>"

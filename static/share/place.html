@@ -228,9 +228,6 @@
     .pick__name a { color: var(--ink); text-decoration: none; }
     .pick__name a::after { content: " ›"; color: var(--accent-text); }
     .pick__where { margin: 4px 0 0 !important; color: var(--muted); font-size: 14px; }
-    /* TASK-180: строка свежести расписания (сейчас всегда пустая, TASK-243). */
-    .pick__stale, .sched__stale { margin: 0 0 10px; color: var(--warn); font-size: 13px; }
-    .pick__stale a, .sched__stale a { color: var(--accent-text); }
     .pick__note { margin: 0 0 12px; padding: 12px 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
     .for-whom { margin: 14px 0 8px !important; font-size: 13px; color: var(--muted); }
     .chip { padding: 7px 12px; border-radius: 999px; background: var(--chip); font-size: 14px; font-weight: 500; color: var(--ink); text-decoration: none; }
@@ -302,39 +299,12 @@
     <footer>__CITY_LINK__</footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/static/shared/list-scroll-restore.js?v=1"></script>
+  <script src="/static/shared/list-scroll-restore.js?v=2"></script>
+  <script src="/static/shared/public-bfcache-session-refresh.js?v=1"></script>
   <script>
-    /*
-      JS страницы: «Скопировать», «Поделиться» и восстановление скролла списка.
-      Cache-Control: no-store (учёт просмотров) отключает bfcache — без sessionStorage
-      возврат /c/ → /p/ → назад всегда открывал список сверху. Без JS ссылки работают.
-    */
     (function () {
       var Api = window.GlideListScrollRestore;
-      if (Api) {
-        var path = location.pathname;
-        var search = location.search;
-        function saveListScroll() {
-          Api.save(sessionStorage, path, search, window.scrollY || window.pageYOffset || 0);
-        }
-        function restoreListScroll() {
-          var y = Api.consume(sessionStorage, path, search);
-          if (!y) return;
-          var go = function () { window.scrollTo(0, y); };
-          go();
-          if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(function () { requestAnimationFrame(go); });
-          } else {
-            setTimeout(go, 0);
-          }
-        }
-        window.addEventListener('pagehide', saveListScroll);
-        document.addEventListener('visibilitychange', function () {
-          if (document.visibilityState === 'hidden') saveListScroll();
-        });
-        if (document.readyState === 'complete') restoreListScroll();
-        else window.addEventListener('load', restoreListScroll);
-      }
+      if (Api && Api.wirePublicListScrollRestore) Api.wirePublicListScrollRestore(sessionStorage);
 
       var toast = document.getElementById('toast');
       function say(text) {
