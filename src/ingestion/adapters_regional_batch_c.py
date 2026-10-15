@@ -1,7 +1,7 @@
 """Batch C regional IceParser strategies. Extract only — persistence is elsewhere.
 
 Arenas: vitebsk-ds (29), mogilev-ds (43), orsha-arena (31), gorki-lds (32),
-ostrovets-lds (41). See .ai/parsers/<slug>.md for the reverse-engineering notes
+ostrovets-lds (41), raubichi-rcop (15). See data/parsers/<slug>.md for notes
 this module implements, and .ai/data/fixtures/<slug>/ for fixtures + hand
 extracted ground truth (expected.json).
 
@@ -27,8 +27,10 @@ from src.ingestion.seed_config_regional_batch_c import (
     PARSER_KEY_MOGILEV_DS,
     PARSER_KEY_ORSHA_ARENA,
     PARSER_KEY_OSTROVETS_LDS,
+    PARSER_KEY_RAUBICHI,
     PARSER_KEY_VITEBSK_DS,
 )
+from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE
 from src.ingestion.cpu_work import run_cpu_bound
 from src.ingestion.image_io import open_image_bytes
 from src.ingestion.source_io import fetch_http_bytes, load_source_text
@@ -713,3 +715,98 @@ def _ostrovets_prices(html: str) -> tuple[int | None, int | None, int | None]:
             elif label == "услуга предоставления" and len(row) >= 3 and row[2].strip().lower() == "коньков":
                 rental = parse_price_to_minor(row[-1], already_minor=False)
     return adult, child, rental
+
+
+# --------------------------------------------------------------------------
+# РЦОП Раубичи (arena_id 15) — rau.by/skates/ h5 grid
+# --------------------------------------------------------------------------
+
+_RAUBICHI_SCHEDULE_MARKER = "Расписание массовых катаний"
+_RAUBICHI_CLOSED_PHRASE = "не проводятся"
+_RAUBICHI_H5_SLOT = re.compile(r"<h5[^>]*wb-stl-custom135[^>]*>(.*?)</h5>", re.I | re.S)
+_RAUBICHI_H5_PRICE = re.compile(r"<h5[^>]*wb-stl-custom22[^>]*>(.*?)</h5>", re.I | re.S)
+_RAUBICHI_DATE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})$")
+_RAUBICHI_TIME = re.compile(r"^(\d{1,2}):(\d{2})$")
+
+
+def _raubichi_prices(html: str) -> tuple[int | None, int | None, int | None]:
+    adult = child = rental = None
+    for match in _RAUBICHI_H5_PRICE.finditer(html):
+        line = strip_tags(match.group(1)).strip()
+        low = line.lower()
+        if "руб" not in low:
+            continue
+        if "взрослый" in low:
+            adult = parse_price_to_minor(line, already_minor=False)
+        elif "детский" in low:
+            child = parse_price_to_minor(line, already_minor=False)
+        elif low.startswith("прокат"):
+            rental = parse_price_to_minor(line, already_minor=False)
+    return adult, child, rental
+
+
+def _raubichi_schedule_slots(
+    html: str,
+    *,
+    duration_minutes: int,
+) -> list[tuple[date, str, str]]:
+    marker_idx = html.find(_RAUBICHI_SCHEDULE_MARKER)
+    if marker_idx < 0:
+        return []
+    region = html[marker_idx:]
+    lines: list[str] = []
+    for match in _RAUBICHI_H5_SLOT.finditer(region):
+        line = strip_tags(match.group(1)).strip()
+        if line:
+            lines.append(line)
+    if not lines:
+        return []
+    has_date = any(_RAUBICHI_DATE.match(line) for line in lines)
+    if not has_date and any(_RAUBICHI_CLOSED_PHRASE in line.lower() for line in lines):
+        return []
+
+    current: date | None = None
+    slots: list[tuple[date, str, str]] = []
+    for line in lines:
+        date_match = _RAUBICHI_DATE.match(line)
+        if date_match:
+            current = date(
+                int(date_match.group(3)),
+                int(date_match.group(2)),
+                int(date_match.group(1)),
+            )
+            continue
+        time_match = _RAUBICHI_TIME.match(line)
+        if time_match and current is not None:
+            start = _fmt(int(time_match.group(1)), int(time_match.group(2)))
+            slots.append((current, start, _add_minutes(start, duration_minutes)))
+    return slots
+
+
+class RaubichiHtmlParser(IceParser):
+    parser_key = PARSER_KEY_RAUBICHI
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        html = await load_source_text(job, filename="skates.html", url_keys=("url",))
+        duration = int(job.config.get("default_duration_minutes") or 45)
+        adult, child, rental = _raubichi_prices(html)
+        slots: list[ExtractedSlot] = []
+        for local_date, start, end in _raubichi_schedule_slots(html, duration_minutes=duration):
+            slots.append(
+                ExtractedSlot(
+                    local_date=local_date.isoformat(),
+                    starts_at_local=start,
+                    ends_at_local=end,
+                    kind_raw="Массовое катание",
+                    price_adult=adult,
+                    price_child=child,
+                    price_rental=rental,
+                )
+            )
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=html,
+            slots=slots,
+            schedule_basis=SCHEDULE_BASIS_LIVE if slots else None,
+        )

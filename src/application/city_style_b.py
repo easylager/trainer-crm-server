@@ -27,7 +27,7 @@ VARIANT_PHONE = "phone"
 _WEEK_SQL = text(
     f"""
     /* task246-week */
-    SELECT s.local_date, s.starts_at_local, s.ends_at_local,
+    SELECT s.id, s.local_date, s.starts_at_local, s.ends_at_local,
            s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code
     FROM ice_sessions s
     JOIN arenas a ON a.id = s.arena_id
@@ -170,22 +170,27 @@ def price_sentence(rows: list[Mapping[str, Any]], *, has_rental: bool, has_sharp
 
 
 def week_days(rows: list[Mapping[str, Any]], *, today: date) -> list[dict[str, Any]]:
-    by_day: dict[date, list[str]] = {}
+    by_day: dict[date, list[dict[str, Any]]] = {}
     for row in rows:
         day = _as_date(row.get("local_date"))
         clock = _clock(row.get("starts_at_local"))
         if day is None or not clock:
             continue
-        by_day.setdefault(day, []).append(clock)
+        sid = row.get("id")
+        by_day.setdefault(day, []).append(
+            {"time": clock, "id": int(sid) if sid is not None else None},
+        )
     out: list[dict[str, Any]] = []
     for day in sorted(by_day):
-        times = by_day[day]
+        sessions = sorted(by_day[day], key=lambda item: item["time"])
+        times = [item["time"] for item in sessions]
         out.append(
             {
                 "date": day,
                 "weekend": day.weekday() >= 5,
                 "label": "сегодня" if day == today else "завтра" if day == today + timedelta(days=1) else _weekday(day),
                 "times": times,
+                "sessions": sessions,
                 "collapsed": collapse_even_grid(times),
             }
         )

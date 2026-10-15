@@ -1,7 +1,7 @@
 """Batch C regional arenas job.config (from .ai/parsers/<slug>.md dossiers).
 
-New arenas: vitebsk-ds (29), mogilev-ds (43), orsha-arena (31), gorki-lds (32),
-ostrovets-lds (41). Extract only — no ice_sessions writes, no DB access.
+Arenas: vitebsk-ds (29), mogilev-ds (43), orsha-arena (31), gorki-lds (32),
+ostrovets-lds (41), raubichi-rcop (15). Extract only — no ice_sessions writes, no DB access.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ PARSER_KEY_MOGILEV_DS = "mogilev_ds_v1"
 PARSER_KEY_ORSHA_ARENA = "orsha_arena_v1"
 PARSER_KEY_GORKI_LDS = "gorki_lds_v1"
 PARSER_KEY_OSTROVETS_LDS = "ostrovets_lds_v1"
+PARSER_KEY_RAUBICHI = "raubichi_html_v1"
 
 
 VITEBSK_DS_CONFIG: dict = {
@@ -94,6 +95,16 @@ OSTROVETS_LDS_CONFIG: dict = {
     "default_duration_minutes": 45,
     "empty_cell_marker": "нет катаний",
     "age_note": "дети до 14 лет",
+    "requires_by_egress": False,
+    "requires_auth": False,
+    "prices_already_minor": True,
+}
+
+RAUBICHI_CONFIG: dict = {
+    "url": "https://www.rau.by/skates/",
+    "timezone": "Europe/Minsk",
+    "kind": "public_skate",
+    "default_duration_minutes": 45,
     "requires_by_egress": False,
     "requires_auth": False,
     "prices_already_minor": True,

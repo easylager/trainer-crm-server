@@ -55,6 +55,7 @@ def default_registry() -> ParserRegistry:
         MogilevDsParser,
         OrshaArenaParser,
         OstrovetsLdsParser,
+        RaubichiHtmlParser,
         VitebskDsParser,
     )
     from src.ingestion.adapters_regional_batch_d import (
@@ -109,6 +110,7 @@ def default_registry() -> ParserRegistry:
         OrshaArenaParser(),
         GorkiLdsParser(),
         OstrovetsLdsParser(),
+        RaubichiHtmlParser(),
         BobruiskArenaParser(),
         MolodechnoSrcParser(),
         SoligorskSzkParser(),
@@ -162,6 +164,7 @@ from src.ingestion.adapters_regional_batch_c import (  # noqa: E402
     MogilevDsParser,
     OrshaArenaParser,
     OstrovetsLdsParser,
+    RaubichiHtmlParser,
     VitebskDsParser,
 )
 from src.ingestion.adapters_regional_batch_d import (  # noqa: E402

@@ -5,16 +5,59 @@
   "parser_key": "raubichi_html_v1",
   "timezone": "Europe/Minsk",
   "currency_code": "BYN",
-  "captured_at": "2026-09-05T23:55:00+03:00",
+  "captured_at": "2026-10-15T12:00:00+03:00",
   "source_files": [
     "skates.html"
   ],
-  "status": "empty",
-  "notes": "Page states «Массовые катания не проводятся». Prices on page (7/5/5) are not slots. Do not materialize a grid.",
-  "price_catalog_if_reopened": {
-    "adult_minor": 700,
-    "child_minor": 500,
-    "rental_minor": 500
-  },
-  "sessions": []
+  "notes": "rau.by/skates/: после «Расписание массовых катаний» — h5 с датой DD.MM.YYYY и временами HH:MM; сеанс 45 мин. Цены — h5 wb-stl-custom22 на той же странице.",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-17",
+      "starts_at_local": "16:30",
+      "ends_at_local": "17:15",
+      "price_adult_minor": 800,
+      "price_child_minor": 600,
+      "price_rental_minor": 600,
+      "session_label": null,
+      "age_note": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-17",
+      "starts_at_local": "17:45",
+      "ends_at_local": "18:30",
+      "price_adult_minor": 800,
+      "price_child_minor": 600,
+      "price_rental_minor": 600,
+      "session_label": null,
+      "age_note": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-18",
+      "starts_at_local": "16:30",
+      "ends_at_local": "17:15",
+      "price_adult_minor": 800,
+      "price_child_minor": 600,
+      "price_rental_minor": 600,
+      "session_label": null,
+      "age_note": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-10-18",
+      "starts_at_local": "17:45",
+      "ends_at_local": "18:30",
+      "price_adult_minor": 800,
+      "price_child_minor": 600,
+      "price_rental_minor": 600,
+      "session_label": null,
+      "age_note": null
+    }
+  ]
 }

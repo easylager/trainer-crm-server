@@ -1,23 +1,25 @@
-# Parser spec (skip): РЦОП Раубичи
+# Parser spec: РЦОП Раубичи
 
 - arena_id: 15
 - arena_slug: raubichi-rcop
 - city: Раубичи
 - parser_key: raubichi_html_v1
-- cadence: weekly
+- cadence: daily (seed script)
 - requires_by_egress: false
-- **status: skip / empty** — «Массовые катания не проводятся»
 
 ## Sources
 
 - https://www.rau.by/skates/
 
-## Finding (2026-09-05)
+## Extraction
 
-Явная фраза: «Расписание массовых катаний: Массовые катания не проводятся.» Прейскурант на той же странице: взр 7,00 / дет 5,00 / прокат 5,00 — не слоты.
+После заголовка «Расписание массовых катаний:» на странице идут центрированные `<h5 class="wb-stl-custom135">`:
+дата `DD.MM.YYYY`, затем строки `HH:MM` (несколько сеансов в день). Длительность сеанса — 45 минут (конфиг).
 
-Не материализовать сетку. Когда фраза снимется — weekly HTML, 700/500/500.
+Если после заголовка только фраза «Массовые катания не проводятся» без дат — `sessions: []` (см. `skates-closed.html`).
+
+Цены на той же странице в `<h5 class="wb-stl-custom22">`: взрослый / детский / прокат коньков (руб с запятой).
 
 ## Fixture
 
-`.ai/data/fixtures/raubichi-rcop/` — `skates.html` + `expected.json` (`sessions: []`).
+`data/fixtures/raubichi-rcop/` — `skates.html` (live snapshot), `skates-closed.html` (empty era), `expected.json`.

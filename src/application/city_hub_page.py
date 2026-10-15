@@ -41,6 +41,7 @@ from src.application.place_links import (
     catalog_start_param,
     join_public_origin,
     place_path,
+    place_query,
     place_start_param,
     public_telegram_cta_url,
 )
@@ -397,10 +398,21 @@ async def load_city_hub_view(
     local_now = now.astimezone(tz)
     variant = choose_city_variant(places)
     week_rows: list[dict[str, Any]] = []
+    one_rink_place_view: dict[str, Any] | None = None
     nearby: list[dict[str, Any]] = []
     if variant == VARIANT_ONE:
         rink = next(p for p in places if p["venue_type"] in ("ice", "outdoor"))
-        week_rows = await load_week(session, arena_id=int(rink["id"]), today=local_now.date(), now=now)
+        if rink.get("slug"):
+            from src.application.place_page import load_place_view
+
+            one_rink_place_view = await load_place_view(
+                session,
+                str(rink["slug"]),
+                city_id=city_id,
+                now=now,
+            )
+        if one_rink_place_view is None:
+            week_rows = await load_week(session, arena_id=int(rink["id"]), today=local_now.date(), now=now)
     origin = city_origin(places)
     if variant in (VARIANT_ONE, VARIANT_PHONE) and origin is not None:
         nearby = await load_nearby(
@@ -436,6 +448,7 @@ async def load_city_hub_view(
         "hot_ohm": hot_window_key(ohm, now=now),
         "variant": variant,
         "week_rows": week_rows,
+        "one_rink_place_view": one_rink_place_view,
         "nearby": nearby,
     }
 
@@ -1007,6 +1020,14 @@ def _b_soon(minutes: int) -> str:
     return f"через {h} ч {m} мин" if m else f"через {h} ч"
 
 
+def _b_place_session_href(view: Mapping[str, Any], rink: Mapping[str, Any], session_id: int) -> str | None:
+    slug = str(rink.get("slug") or "").strip()
+    if not slug or session_id <= 0:
+        return None
+    base = place_path(city_name=str(view["city"]["name"]), slug=slug)
+    return base + place_query(session_id=session_id)
+
+
 def _b_one_today(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
     from src.application.style_b import section
 
@@ -1015,13 +1036,17 @@ def _b_one_today(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
     local_now = view["local_now"]
     tickets: list[str] = []
     marked = False
-    href = place_path(city_name=str(view["city"]["name"]), slug=str(rink.get("slug") or "")) if rink.get("slug") else "#"
+    fallback_href = (
+        place_path(city_name=str(view["city"]["name"]), slug=str(rink.get("slug") or "")) if rink.get("slug") else "#"
+    )
     for row in rows:
         start = format_clock(str(row.get("starts_at_local") or ""))
         end = format_clock(str(row.get("ends_at_local") or ""))
         minutes = _b_minutes_until(start, local_now)
         if minutes is not None and minutes < 0:
             continue
+        sid = row.get("id")
+        href = _b_place_session_href(view, rink, int(sid)) if sid is not None else fallback_href
         sub = [f"до {end}"] if end else []
         klass = "b-ticket"
         if not marked and minutes is not None:
@@ -1029,7 +1054,11 @@ def _b_one_today(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
             klass += " b-ticket--dark"
             sub.append(_b_soon(minutes))
         sub_html = f'<span class="b-ticket__sub">{_esc(" · ".join(sub))}</span>' if sub else ""
-        tickets.append(f'<a class="{klass}" href="{_esc(href)}"><span class="b-ticket__time">{_esc(start)}</span>{sub_html}</a>')
+        sid_attr = f' data-session-id="{int(sid)}"' if sid is not None else ""
+        tickets.append(
+            f'<a class="{klass}" href="{_esc(href or "#")}"{sid_attr}>'
+            f'<span class="b-ticket__time">{_esc(start)}</span>{sub_html}</a>'
+        )
     amenities = rink.get("amenities") if isinstance(rink.get("amenities"), Mapping) else {}
     price = price_sentence(
         list(view.get("week_rows") or []),
@@ -1047,7 +1076,7 @@ def _b_one_today(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
     return section(t("hub.today"), body, aside_html=aside)
 
 
-def _b_one_week(view: Mapping[str, Any]) -> str:
+def _b_one_week(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
     from src.application.style_b import section
 
     days = [d for d in week_days(list(view.get("week_rows") or []), today=view["today"]) if d["date"] != view["today"]]
@@ -1060,10 +1089,24 @@ def _b_one_week(view: Mapping[str, Any]) -> str:
         if label not in ("сегодня", "завтра"):
             label = f"{label}, {d['date'].day}"
         label = label[:1].upper() + label[1:]
-        times = d["collapsed"] or " · ".join(d["times"])
+        sessions = [s for s in d.get("sessions") or [] if s.get("id") is not None]
+        if sessions:
+            ticket_bits: list[str] = []
+            for slot in sessions:
+                href = _b_place_session_href(view, rink, int(slot["id"]))
+                if not href:
+                    continue
+                ticket_bits.append(
+                    f'<a class="b-ticket b-ticket--week" href="{_esc(href)}" data-session-id="{int(slot["id"])}">'
+                    f'<span class="b-ticket__time">{_esc(slot["time"])}</span></a>'
+                )
+            times_html = f'<div class="b-tickets b-tickets--week">{"".join(ticket_bits)}</div>'
+        else:
+            times = d["collapsed"] or " · ".join(d["times"])
+            times_html = f'<span class="b-table__times">{_esc(times)}</span>'
         rows.append(
             f'<div class="{klass}"><span class="b-table__day">{_esc(label)}</span>'
-            f'<span class="b-table__times">{_esc(times)}</span>'
+            f'<div class="b-table__times">{times_html}</div>'
             f'<span class="b-table__count">{len(d["times"])}</span></div>'
         )
     return section(t("hub.week"), f'<div class="b-table">{"".join(rows)}</div>')
@@ -1171,7 +1214,11 @@ def _b_body(
     if variant == VARIANT_ONE and rinks:
         rink = rinks[0]
         rink_name = format_public_name(str(rink.get("name") or ""))
-        week_n = len(view.get("week_rows") or [])
+        place_view = view.get("one_rink_place_view")
+        if isinstance(place_view, Mapping):
+            week_n = int(place_view.get("session_count") or 0)
+        else:
+            week_n = len(view.get("week_rows") or [])
         sub = rink_name
         if rink.get("slug"):
             href = place_path(city_name=str(view["city"]["name"]), slug=str(rink["slug"]))
@@ -1191,11 +1238,26 @@ def _b_body(
             bar_html=_b_bar(view),
             photo_variants=rv if isinstance(rv, Mapping) else None,
         )
+        schedule_block = ""
+        if isinstance(place_view, Mapping) and rink.get("slug"):
+            from src.application.place_page import _b_schedule
+            from src.application.public_web_cta import place_action_links
+
+            place_base = place_path(city_name=str(view["city"]["name"]), slug=str(rink["slug"]))
+            card = place_view.get("card") if isinstance(place_view.get("card"), Mapping) else rink
+            links = place_action_links(
+                card,
+                base_url=base_url,
+                surface="selection_page",
+                city_id=city_id,
+            )
+            schedule_block = _b_schedule(place_view, base_path=place_base, invite=False, links=links)
+        else:
+            schedule_block = _b_one_today(view, rink) + _b_one_week(view, rink)
         return "".join(
             [
                 hero,
-                _b_one_today(view, rink),
-                _b_one_week(view),
+                schedule_block,
                 _b_rink_arrive(rink, base_url=base_url, city_id=city_id),
                 _b_nearby(view, title=t("hub.nearby")),
                 _b_trainers(view, base_url=base_url, coach_href=coach_href),
