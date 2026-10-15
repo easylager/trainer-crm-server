@@ -485,6 +485,98 @@
     }
   }
 
+  /** Телефон умеет «Сохранить изображение» в галерею. Компьютер — только файл. */
+  function phoneSavesToPhotos() {
+    var nav = global.navigator || {};
+    var ua = String(nav.userAgent || '');
+    if (/iPad|iPhone|iPod/.test(ua)) return true;
+    if (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1) return true;
+    return /Android/i.test(ua);
+  }
+
+  /**
+   * Картинка для «В галерею», уже скачанная к нажатию.
+   * share() после fetch теряет жест, и Safari вместо галереи молча уходит в «Файлы».
+   */
+  var galleryBlobs = {};
+
+  function prefetchGalleryImage(p) {
+    var img = cardImagePayload(p);
+    if (!img.fetchPath || !phoneSavesToPhotos() || galleryBlobs[img.fetchPath]) return;
+    galleryBlobs[img.fetchPath] = { blob: null };
+    fetch(img.fetchPath, { cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('http');
+        return r.blob();
+      })
+      .then(function (blob) {
+        if (galleryBlobs[img.fetchPath]) galleryBlobs[img.fetchPath].blob = blob;
+      })
+      .catch(function () {
+        delete galleryBlobs[img.fetchPath];
+      });
+  }
+
+  function readyGalleryBlob(fetchPath) {
+    var entry = galleryBlobs[fetchPath];
+    return entry && entry.blob ? entry.blob : null;
+  }
+
+  /**
+   * Системное меню с одним файлом: на телефоне верхний пункт — «Сохранить изображение».
+   * @returns {Promise<'shared'|'abort'|false>}
+   */
+  function tryShareImageFile(blob, fileName) {
+    return new Promise(function (resolve) {
+      var nav = global.navigator;
+      if (!phoneSavesToPhotos() || !nav || typeof nav.share !== 'function' || typeof nav.canShare !== 'function') {
+        resolve(false);
+        return;
+      }
+      var file;
+      try {
+        file = new File([blob], fileName || 'glide-story.png', { type: (blob && blob.type) || 'image/png' });
+      } catch (e) {
+        resolve(false);
+        return;
+      }
+      var payload = { files: [file] };
+      try {
+        if (!nav.canShare(payload)) {
+          resolve(false);
+          return;
+        }
+      } catch (e2) {
+        resolve(false);
+        return;
+      }
+      toast('«Сохранить изображение» — кадр попадёт в галерею');
+      nav.share(payload).then(
+        function () { resolve('shared'); },
+        function (err) { resolve(err && err.name === 'AbortError' ? 'abort' : false); }
+      );
+    });
+  }
+
+  function downloadBlob(blob, fileName) {
+    try {
+      var objectUrl = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = fileName || 'glide-share.png';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      global.setTimeout(function () {
+        URL.revokeObjectURL(objectUrl);
+      }, 2000);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** @returns {Promise<boolean>} */
   function tryBlobDownload(fetchPath, fileName) {
     return fetch(fetchPath, { cache: 'no-store' })
@@ -493,18 +585,7 @@
         return r.blob();
       })
       .then(function (blob) {
-        var objectUrl = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = objectUrl;
-        a.download = fileName || 'glide-share.png';
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        global.setTimeout(function () {
-          URL.revokeObjectURL(objectUrl);
-        }, 2000);
-        return true;
+        return downloadBlob(blob, fileName);
       })
       .catch(function () {
         return false;
@@ -512,8 +593,10 @@
   }
 
   /**
-   * Сохранить картинку карточки (вертикаль для сторис, если есть) в файлы / галерею.
-   * @returns {Promise<string>} image_tg | image_os | image_fallback | image_empty
+   * Сохранить картинку карточки (вертикаль для сторис, если есть).
+   * В мини-аппе — downloadFile, Telegram кладёт кадр в галерею.
+   * На сайте с телефона — системное «Сохранить изображение», не файл в «Файлы».
+   * @returns {Promise<string>} image_tg | image_os | image_abort | image_fallback | image_empty
    */
   function openImageSave(p) {
     return new Promise(function (resolve) {
@@ -528,18 +611,44 @@
         resolve('image_tg');
         return;
       }
-      tryBlobDownload(img.fetchPath, img.fileName).then(function (ok) {
-        if (ok) {
-          toast('Сохранено — проверьте «Файлы» или папку загрузок');
-          resolve('image_os');
+      function afterBlob(blob) {
+        if (!blob) {
+          copyText(p.share_url, function () {
+            openUrl(img.absolute);
+            toast('Ссылка в буфере — удержите картинку и «Сохранить в Фото»');
+            resolve('image_fallback');
+          });
           return;
         }
-        copyText(p.share_url, function () {
-          openUrl(img.absolute);
-          toast('Ссылка в буфере — удержите картинку и «Сохранить в Фото»');
-          resolve('image_fallback');
+        tryShareImageFile(blob, img.fileName).then(function (shared) {
+          if (shared === 'shared' || shared === 'abort') {
+            resolve(shared === 'abort' ? 'image_abort' : 'image_os');
+            return;
+          }
+          if (downloadBlob(blob, img.fileName)) {
+            toast('Сохранено — проверьте «Файлы» или папку загрузок');
+            resolve('image_os');
+            return;
+          }
+          copyText(p.share_url, function () {
+            openUrl(img.absolute);
+            toast('Ссылка в буфере — удержите картинку и «Сохранить в Фото»');
+            resolve('image_fallback');
+          });
         });
-      });
+      }
+      var cached = readyGalleryBlob(img.fetchPath);
+      if (cached) {
+        afterBlob(cached);
+        return;
+      }
+      fetch(img.fetchPath, { cache: 'no-store' })
+        .then(function (r) {
+          if (!r.ok) throw new Error('http');
+          return r.blob();
+        })
+        .then(afterBlob)
+        .catch(function () { afterBlob(null); });
     });
   }
 
@@ -658,7 +767,7 @@
     },
     image: function (p) {
       openImageSave(payloadForSrc(p, 'img')).then(function (channel) {
-        if (channel !== 'image_empty') track(channel);
+        if (channel !== 'image_empty' && channel !== 'image_abort') track(channel);
       });
     },
     system: function (p) {
@@ -1399,6 +1508,7 @@
       .then(function (data) {
         if (token !== state.token) return;
         state.payload = data;
+        prefetchGalleryImage(data);
         rememberPlace(data);
         preserveSheetScroll(paintPreviewBlock);
       })

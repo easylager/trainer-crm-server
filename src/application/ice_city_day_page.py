@@ -25,6 +25,7 @@ from src.application.ice_city_day import (
 from src.application.place_links import join_public_origin, place_path
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
+from src.shared.schema_org_event import enrich_ice_session_event
 from src.shared.public_display import format_public_name, format_street_address
 from src.shared.schedule_basis import public_basis_css_class
 
@@ -101,11 +102,25 @@ def _empty_html(city_name: str, day_label: str) -> str:
     )
 
 
+def _session_kind_label(slot: Mapping[str, Any]) -> str:
+    kind = str(slot.get("kind") or "public_skate").strip()
+    keys = {
+        "public_skate": "kind.public_skate",
+        "open_ice": "kind.public_skate",
+        "hockey_practice": "kind.hockey_practice",
+    }
+    key = keys.get(kind)
+    return t(key) if key else t("kind.public_skate")
+
+
 def _event_json(arena: Mapping[str, Any], slot: Mapping[str, Any], *, place_url: str) -> dict[str, Any]:
     """Один сеанс дня как schema.org Event: место, интервал, цена в валюте сеанса."""
+    arena_name = str(arena.get("name") or "")
+    kind_label = _session_kind_label(slot)
+    address = str(arena.get("address") or "").strip()
     event: dict[str, Any] = {
         "@type": "Event",
-        "name": f"Массовое катание — {arena.get('name')}",
+        "name": f"{kind_label} — {arena_name}",
         "startDate": slot.get("starts_at_utc"),
         "endDate": slot.get("ends_at_utc"),
         "eventStatus": "https://schema.org/EventScheduled",
@@ -113,11 +128,10 @@ def _event_json(arena: Mapping[str, Any], slot: Mapping[str, Any], *, place_url:
         "url": place_url,
         "location": {
             "@type": "Place",
-            "name": arena.get("name"),
+            "name": arena_name,
             "url": place_url,
         },
     }
-    address = str(arena.get("address") or "").strip()
     if address:
         event["location"]["address"] = address
     minor = slot.get("price_adult_minor")
@@ -128,6 +142,17 @@ def _event_json(arena: Mapping[str, Any], slot: Mapping[str, Any], *, place_url:
             "priceCurrency": slot.get("currency_code") or "BYN",
             "url": place_url,
         }
+    og_image = f"{place_url.rstrip('/')}/og.png"
+    enrich_ice_session_event(
+        event,
+        arena_name=arena_name,
+        page_url=place_url,
+        image_url=og_image,
+        short_description=None,
+        address=address or None,
+        session_label=kind_label,
+        slot=slot,
+    )
     return event
 
 

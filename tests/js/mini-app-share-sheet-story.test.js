@@ -286,6 +286,97 @@ describe('mini-app-share-sheet telegram selection (TASK-222)', () => {
   });
 });
 
+function imageSaveContext(userAgent, shareImpl) {
+  const anchors = [];
+  const shares = [];
+  const context = {
+    window: {},
+    document: {
+      createElement: () => {
+        const el = {
+          hidden: true,
+          className: '',
+          innerHTML: '',
+          download: '',
+          rel: '',
+          href: '',
+          click: () => anchors.push(el.download),
+          remove: () => {},
+          addEventListener: () => {},
+          querySelector: () => null,
+        };
+        return el;
+      },
+      body: { appendChild: () => {} },
+    },
+    fetch: () =>
+      Promise.resolve({
+        ok: true,
+        blob: () => Promise.resolve({ type: 'image/png' }),
+      }),
+    File: function File(_bits, name, opts) {
+      this.name = name;
+      this.type = opts && opts.type;
+    },
+    location: { href: 'https://glide.test/c/minsk' },
+    navigator: {
+      userAgent: userAgent,
+      share: (payload) => {
+        shares.push(payload);
+        return shareImpl ? shareImpl(payload) : Promise.resolve();
+      },
+      canShare: () => true,
+    },
+    URL: { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} },
+    requestAnimationFrame: (fn) => fn(),
+    setTimeout: (fn) => fn(),
+    clearTimeout: () => {},
+  };
+  context.window = context;
+  vm.runInNewContext(src, context);
+  return { context, anchors, shares };
+}
+
+const STORY_PAYLOAD = {
+  story_image_url: 'https://glide.test/c/minsk/story.png',
+  og_image_url: 'https://glide.test/c/minsk/og.png',
+  share_url: 'https://glide.test/c/minsk',
+};
+
+describe('mini-app-share-sheet save to gallery on the site', () => {
+  it('на телефоне вне Telegram отдаёт файл в системное меню, не в «Файлы»', async () => {
+    const { context, anchors, shares } = imageSaveContext(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+    );
+    const channel = await context.GlideShareSheet._openImageSave(STORY_PAYLOAD);
+    assert.equal(channel, 'image_os');
+    assert.equal(shares.length, 1);
+    assert.deepEqual(Object.keys(shares[0]), ['files']);
+    assert.equal(shares[0].files[0].name, 'glide-story.png');
+    assert.equal(anchors.length, 0);
+  });
+
+  it('отмена системного меню не скачивает файл', async () => {
+    const { context, anchors } = imageSaveContext(
+      'Mozilla/5.0 (Linux; Android 14)',
+      () => Promise.reject(Object.assign(new Error('cancel'), { name: 'AbortError' })),
+    );
+    const channel = await context.GlideShareSheet._openImageSave(STORY_PAYLOAD);
+    assert.equal(channel, 'image_abort');
+    assert.equal(anchors.length, 0);
+  });
+
+  it('на компьютере по-прежнему скачивает файл', async () => {
+    const { context, anchors, shares } = imageSaveContext(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    );
+    const channel = await context.GlideShareSheet._openImageSave(STORY_PAYLOAD);
+    assert.equal(channel, 'image_os');
+    assert.equal(shares.length, 0);
+    assert.deepEqual(anchors, ['glide-story.png']);
+  });
+});
+
 describe('mini-app-share-sheet story without caption (TASK-222)', () => {
   it('подборка: сторис уходит отрендеренным story.png без text', async () => {
     const calls = [];
