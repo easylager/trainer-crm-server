@@ -110,6 +110,12 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert ld["@type"] == "IceRink"
     assert ld["telephone"] == "+375 29 111-22-33"
     assert ld["event"][0]["offers"]["price"] == "8.50"
+    ev0 = ld["event"][0]
+    assert ev0.get("description")
+    assert ev0.get("image")
+    assert ev0["organizer"]["name"] == place["name"]
+    assert ev0["performer"]["name"] == place["name"]
+    assert "schema.org/InStock" in ev0["offers"]["availability"]
 
 
 @pytest.mark.asyncio
