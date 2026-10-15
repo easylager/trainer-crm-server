@@ -1,7 +1,9 @@
 """TASK-246: вариант города по данным, ровная неделя, время без ведущего нуля, мотив без текста."""
 
 from src.application.catalog_icons import icon_svg, rink_motif_svg
-from src.application.city_style_b import VARIANT_MANY, VARIANT_ONE, VARIANT_PHONE, choose_city_variant, price_sentence
+from datetime import date, timedelta
+
+from src.application.city_style_b import VARIANT_MANY, VARIANT_ONE, VARIANT_PHONE, choose_city_variant, price_sentence, week_days
 from src.application.week_grid import collapse_even_grid
 from src.shared.public_display import format_clock
 
@@ -23,6 +25,17 @@ def test_city_variant_follows_rink_count_and_schedule_mode() -> None:
     assert choose_city_variant([phone, phone]) == VARIANT_PHONE
     assert choose_city_variant([ice, phone]) == VARIANT_MANY
     assert choose_city_variant([shop]) == VARIANT_MANY
+
+
+def test_week_days_keeps_session_ids_for_links() -> None:
+    today = date(2026, 10, 15)
+    rows = [
+        {"id": 10, "local_date": today + timedelta(days=1), "starts_at_local": "11:00:00"},
+        {"id": 11, "local_date": today + timedelta(days=1), "starts_at_local": "12:00:00"},
+    ]
+    days = week_days(rows, today=today)
+    assert len(days) == 1
+    assert days[0]["sessions"] == [{"time": "11:00", "id": 10}, {"time": "12:00", "id": 11}]
 
 
 def test_even_week_grid_collapses_and_a_ragged_one_does_not() -> None:
