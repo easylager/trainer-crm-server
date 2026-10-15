@@ -781,3 +781,110 @@ async def test_every_script_the_client_pages_load_is_actually_served(app_use_tes
             for asset in set(assets):
                 resp = await client.get(f"/webapp/{asset}?v=1")
                 assert resp.status_code == 200, f"{page}: /webapp/{asset} → {resp.status_code}"
+
+
+async def _add_ohm_session(db_session, arena_id: int, *, days_ahead: int, starts_at_local: str) -> int:
+    from datetime import timedelta
+
+    from src.application.ice_session_use_cases import create_ice_session
+    from tests.api.test_public_arenas import _minsk_today
+
+    created = await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=_minsk_today() + timedelta(days=days_ahead),
+        starts_at_local=starts_at_local,
+        duration_minutes=60,
+        kind="hockey_practice",
+        price_adult_minor=1700,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    return int(created["id"])
+
+
+def _ohm_section(html: str) -> str:
+    return html.split('id="ohm"', 1)[1].split("</section>", 1)[0]
+
+
+@pytest.mark.asyncio
+async def test_ohm_sessions_are_pickable_tickets_like_public_skate(app_use_test_db, db_session) -> None:
+    """ОХМ — та же полоса дней и билеты, что у массового катания: сеанс можно выбрать и позвать."""
+    place = await _place(db_session)
+    await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="19:30")
+    ohm_id = await _add_ohm_session(db_session, place["arena_id"], days_ahead=2, starts_at_local="08:30")
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"])
+        picked = await client.get(place["path"], params={"s": ohm_id})
+
+    assert resp.status_code == 200
+    ohm = _ohm_section(resp.text)
+    assert 'class="b-sched"' in ohm and "b-table" not in ohm
+    # Свой якорь у полосы ОХМ: дни массового катания (#d-…) не перехватывают её.
+    assert 'href="#o-' in ohm and 'href="#d-' not in ohm
+    assert f'data-session-id="{ohm_id}"' in ohm
+    assert f'href="{place["path"]}?s={ohm_id}"' in ohm
+    assert "b-ticket--dark" in ohm
+    assert "8:30" in ohm
+
+    # Ссылка на сеанс ОХМ открывает его день в полосе ОХМ и отмечает билет выбранным.
+    ohm = _ohm_section(picked.text)
+    assert re.search(r'class="b-day[^"]*b-day--current" id="o-', ohm)
+    picked_ticket = (
+        rf'class="b-ticket b-ticket--dark b-ticket--picked" href="[^"]*" rel="nofollow" data-session-id="{ohm_id}"'
+    )
+    assert re.search(picked_ticket, ohm)
+
+
+@pytest.mark.asyncio
+async def test_plan_card_is_a_hidden_template_without_session_link(app_use_test_db, db_session) -> None:
+    """Без ``?s=`` блок «Выбранный сеанс» есть, но скрыт: его показывает тап по времени."""
+    place = await _place(db_session)
+    await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="19:30")
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"])
+
+    assert '<section class="b-sec" id="plan" hidden>' in resp.text
+    assert '<span class="b-plan__time" hidden></span>' in resp.text
+    assert "Выбранный сеанс" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_plan_card_names_ohm_before_the_hall(app_use_test_db, db_session) -> None:
+    """У ОХМ своё имя зала («Большая арена») не прячет тип: «ОХМ · Большая арена»."""
+    place = await _place(db_session)
+    ohm_id = await _add_ohm_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="11:15")
+    await db_session.execute(
+        text("UPDATE ice_sessions SET session_label = 'Большая арена' WHERE id = :id"), {"id": ohm_id}
+    )
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"], params={"s": ohm_id})
+
+    line = re.search(r'<span class="b-plan__line">([^<]+)</span>', resp.text)
+    assert line and line.group(1).startswith("ОХМ · Большая арена"), line and line.group(1)
+
+
+@pytest.mark.asyncio
+async def test_schedule_price_is_the_week_floor_not_the_most_frequent(app_use_test_db, db_session) -> None:
+    """Будни по 11, выходные по 12 (их больше): в шапке «от 11 BYN», а не «12 BYN» над билетами по 11."""
+    place = await _place(db_session)
+    for hhmm in ("12:00", "12:45"):
+        await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local=hhmm, price_adult_minor=1100)
+    for hhmm in ("13:45", "14:45", "15:45"):
+        await _add_future_session(db_session, place["arena_id"], days_ahead=2, starts_at_local=hhmm, price_adult_minor=1200)
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"])
+
+    schedule = resp.text.split('id="schedule"', 1)[1].split("</section>", 1)[0]
+    assert '<span class="b-aside">от 11 BYN</span>' in schedule
+    # Билет пишет цену, только когда она выше минимума недели.
+    assert "до 12:45 · 11 BYN" not in schedule and "до 12:45</span>" in schedule
+    assert "· 12 BYN" in schedule

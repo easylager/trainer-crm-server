@@ -57,7 +57,8 @@ async def test_ice_list_and_place_share_session_time_vt_by_session_id(
     name = f"VT ice {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     arena_id = await _insert_arena(db_session, city_id, name="Каток VT")
-    day = datetime.now(ZoneInfo("Europe/Minsk")).date()
+    # Завтра, а не сегодня: сеанс «сегодня в 10:15» после 10:15 по Минску уже в прошлом.
+    day = datetime.now(ZoneInfo("Europe/Minsk")).date() + timedelta(days=1)
     session_row = await create_ice_session(
         db_session,
         arena_id,
@@ -81,7 +82,7 @@ async def test_ice_list_and_place_share_session_time_vt_by_session_id(
     vt = f"glide-s-{session_id}"
 
     async with _client() as client:
-        listing = await client.get(f"/c/{slug}?t=ice&w=today")
+        listing = await client.get(f"/c/{slug}?t=ice&w=tomorrow")
         place = await client.get(f"/p/{slug}/{place_slug}?s={session_id}")
 
     assert listing.status_code == 200
