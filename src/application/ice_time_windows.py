@@ -173,8 +173,9 @@ def resolve_list_window(
 
 
 # Главная (TASK-210) спрашивает не «сегодня вечером», а «сегодня / завтра / выходные».
-# Пн–чт и пятница до 15:00 — «Сегодня». С пятницы 15:00, в субботу и в воскресенье —
-# «В выходные». В воскресенье с 18:00 эти выходные уже кончились: следующие Сб+Вс.
+# Пн–чт и пятница до 15:00 — «Сегодня», с 21:00 — «Завтра» (как ``auto_window_key``:
+# на карте иначе пусто, сеансы на сегодня уже прошли). С пятницы 15:00, в субботу и
+# в воскресенье — «В выходные». В воскресенье с 18:00 эти выходные уже кончились: следующие Сб+Вс.
 _HOME_WEEKEND_FROM = time(15, 0)
 _HOME_NEXT_WEEKEND_FROM = time(18, 0)
 HOME_PICKER_DAYS = 7
@@ -188,6 +189,8 @@ def home_default_when_key(now: datetime) -> str:
     clock = local.time()
     if (weekday == 4 and clock >= _HOME_WEEKEND_FROM) or weekday in (5, 6):
         return "weekend"
+    if clock >= _LATE:
+        return "tomorrow"
     return "today"
 
 

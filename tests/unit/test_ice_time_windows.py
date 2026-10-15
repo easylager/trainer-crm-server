@@ -112,6 +112,8 @@ def test_home_weekend_after_sunday_18_is_the_next_weekend() -> None:
 def test_home_default_when_and_picker_is_exactly_seven_dates() -> None:
     assert home_default_when_key(at(2026, 10, 9, 16)) == "weekend"
     assert home_default_when_key(at(2026, 10, 7, 12)) == "today"
+    assert home_default_when_key(at(2026, 10, 7, 21, 0)) == "tomorrow"
+    assert home_default_when_key(at(2026, 10, 7, 20, 59)) == "today"
     # Пятница 14:59 ещё «сегодня», ровно 15:00 — выходные. Сдвиг порога 15:00 → 16:00 ломает 15:00.
     assert home_default_when_key(at(2026, 10, 9, 14, 59)) == "today"
     assert home_default_when_key(at(2026, 10, 9, 15, 0)) == "weekend"

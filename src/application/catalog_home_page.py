@@ -604,6 +604,12 @@ def build_city_layout(catalog_cities: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def home_map_legend_labels(when_key: str) -> tuple[str, str]:
+    """Подписи легенды карты главной — в такт фильтру «Сегодня / Завтра / Выходные»."""
+    key = when_key if when_key in ("today", "tomorrow", "weekend") else "today"
+    return t(f"home.map.legend_on.{key}"), t(f"home.map.legend_off.{key}")
+
+
 def build_map_points(catalog_cities: list[dict[str, Any]]) -> list[dict[str, Any]]:
     points: list[dict[str, Any]] = []
     for city in catalog_cities:
@@ -1396,7 +1402,11 @@ def render_catalog_home_page(
     else:
         city_when = view.get("city_when")
         grid = "".join(_b_city_tile(c, when_key=when_key, city_when=city_when) for c in tiles)
-        head = "Сегодня в городах" if when_key == "today" else "Города"
+        head = {
+            "today": "Сегодня в городах",
+            "tomorrow": "Завтра в городах",
+            "weekend": "В выходные в городах",
+        }.get(when_key, "Города")
         cities_html = (
             f'<section class="b-sec" id="cities"><div class="b-sec__head"><h2 class="b-h2">{head}</h2></div>'
             f'<div class="b-grid2">{grid}</div>{_b_more_cities(rest)}</section>'
@@ -1405,11 +1415,12 @@ def render_catalog_home_page(
     map_svg = str(view.get("map_svg") or "")
     map_html = ""
     if map_svg:
+        legend_on, legend_off = home_map_legend_labels(when_key)
         map_html = (
             '<section class="b-sec"><div class="b-sec__head"><h2 class="b-h2">Лёд по всей Беларуси</h2></div>'
             f'<figure class="b-map">{map_svg}<figcaption class="b-map__legend">'
-            f'<span><i></i>{_esc(t("home.map.legend_on"))}</span>'
-            f'<span class="off"><i></i>{_esc(t("home.map.legend_off"))}</span></figcaption></figure></section>'
+            f'<span><i></i>{_esc(legend_on)}</span>'
+            f'<span class="off"><i></i>{_esc(legend_off)}</span></figcaption></figure></section>'
         )
     # TASK-278: «Открыть в Telegram» — плашкой внизу экрана, а не секцией в конце страницы.
     from src.application.style_b import (
