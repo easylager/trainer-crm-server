@@ -40,6 +40,7 @@ from src.application.arena_public_use_cases import (
 )
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
+from src.shared.schema_org_event import enrich_ice_session_event
 from src.application.arena_profile import (
     has_known_hours,
     hours_groups,
@@ -836,16 +837,21 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
     if schema_hours:
         place["openingHours"] = schema_hours[0] if len(schema_hours) == 1 else schema_hours
     events = []
+    arena_name = str(card.get("name") or "")
+    street = str(card.get("address") or "").strip()
     for day in view.get("days") or []:
         for slot in day.get("sessions") or []:
+            kind_label = session_kind_label(slot) or t("kind.public_skate")
+            slot_url = canonical_url + place_query(session_id=int(slot["id"]))
             event: dict[str, Any] = {
                 "@type": "Event",
-                "name": f"{t('kind.public_skate')} — {card.get('name')}",
+                "name": f"{kind_label} — {arena_name}",
                 "startDate": slot.get("starts_at_utc"),
                 "endDate": slot.get("ends_at_utc"),
                 "eventStatus": "https://schema.org/EventScheduled",
                 "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
-                "location": {"@type": "Place", "name": card.get("name"), "address": place["address"]},
+                "url": slot_url,
+                "location": {"@type": "Place", "name": arena_name, "address": place["address"]},
             }
             adult = slot.get("price_adult_minor")
             if adult is not None:
@@ -853,8 +859,18 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
                     "@type": "Offer",
                     "price": f"{int(adult) / 100:.2f}",
                     "priceCurrency": slot.get("currency_code") or "BYN",
-                    "url": canonical_url + place_query(session_id=int(slot["id"])),
+                    "url": slot_url,
                 }
+            enrich_ice_session_event(
+                event,
+                arena_name=arena_name,
+                page_url=slot_url,
+                image_url=image_url,
+                short_description=str(card.get("short_description") or "") or None,
+                address=street or None,
+                session_label=kind_label,
+                slot=slot,
+            )
             events.append(event)
             if len(events) >= 10:
                 break

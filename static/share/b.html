@@ -127,19 +127,13 @@
         });
       });
       /*
-        Сайт не пишет в «Фото» напрямую. Android: файл в «Загрузки», галерея его видит.
-        iPhone: системное меню, пункт «Сохранить изображение» кладёт кадр в галерею.
+        Телефон не пишет в «Фото» сам. Кадр готовим заранее, и по нажатию сразу
+        открываем «Сохранить изображение» — иначе после fetch жест пропадает
+        и Safari скачивает файл в «Файлы». Компьютер по-прежнему качает файл.
         Без JS остаётся обычная ссылка download.
       */
       var storyLink = document.querySelector('.share__story');
-      if (storyLink) {
-        storyLink.addEventListener('click', function (event) {
-          var href = storyLink.getAttribute('href') || '';
-          if (!href) return;
-          event.preventDefault();
-          saveStoryImage(href);
-        });
-      }
+      var storyBlob = null;
       function storyFetchPath(href) {
         try {
           var u = new URL(href, location.href);
@@ -148,9 +142,9 @@
           return href;
         }
       }
-      function isIos() {
+      function savesToPhotos() {
         var ua = navigator.userAgent || '';
-        return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        return /iPad|iPhone|iPod|Android/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       }
       function blobDownload(blob) {
         var objectUrl = URL.createObjectURL(blob);
@@ -162,30 +156,57 @@
         a.click();
         a.remove();
         setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2000);
-        say('Сохранено — проверьте «Загрузки» или галерею');
+        say('Сохранено — проверьте «Загрузки»');
+      }
+      function shareOrDownload(blob) {
+        var file;
+        try {
+          file = new File([blob], 'glide-story.png', { type: blob.type || 'image/png' });
+        } catch (e) {
+          blobDownload(blob);
+          return;
+        }
+        var nav = navigator;
+        if (savesToPhotos() && nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+          say('«Сохранить изображение» — кадр попадёт в галерею');
+          nav.share({ files: [file] }).catch(function (err) {
+            if (err && err.name === 'AbortError') return;
+            blobDownload(blob);
+          });
+          return;
+        }
+        blobDownload(blob);
       }
       function saveStoryImage(href) {
+        if (storyBlob) {
+          shareOrDownload(storyBlob);
+          return;
+        }
         fetch(storyFetchPath(href), { cache: 'no-store' })
           .then(function (r) {
             if (!r.ok) throw new Error('http');
             return r.blob();
           })
-          .then(function (blob) {
-            var file = new File([blob], 'glide-story.png', { type: blob.type || 'image/png' });
-            var nav = navigator;
-            if (isIos() && nav.share && nav.canShare && nav.canShare({ files: [file] })) {
-              nav.share({ files: [file] }).catch(function (err) {
-                if (err && err.name === 'AbortError') return;
-                blobDownload(blob);
-              });
-              return;
-            }
-            blobDownload(blob);
-          })
+          .then(shareOrDownload)
           .catch(function () {
             say('Удержите картинку и выберите «Сохранить в Фото»');
             window.location.href = href;
           });
+      }
+      if (storyLink) {
+        var storyHref = storyLink.getAttribute('href') || '';
+        if (storyHref && savesToPhotos()) {
+          fetch(storyFetchPath(storyHref), { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.blob() : null; })
+            .then(function (blob) { storyBlob = blob; })
+            .catch(function () {});
+        }
+        storyLink.addEventListener('click', function (event) {
+          var href = storyLink.getAttribute('href') || '';
+          if (!href) return;
+          event.preventDefault();
+          saveStoryImage(href);
+        });
       }
       if (navigator.share) {
         var row = document.querySelector('.share__row');

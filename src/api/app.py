@@ -366,6 +366,39 @@ def webapp_admin_dicts_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/admin-dicts-main.js")
+def webapp_admin_dicts_main_js(request: Request):
+    path = _WEBAPP_DIR / "admin-dicts-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/admin-ice-schedule")
+def webapp_admin_ice_schedule_page():
+    """Admin ice session editor (mass skate, OHM, week grid)."""
+    path = _WEBAPP_DIR / "admin-ice-schedule.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/admin-ice-schedule-main.js")
+def webapp_admin_ice_schedule_main_js(request: Request):
+    path = _WEBAPP_DIR / "admin-ice-schedule-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/admin-money")
 def webapp_admin_money_page():
     """Serve the admin Money tab Mini App (MRR/ARR, GMV, top payers, pending invoices, subscription mix)."""

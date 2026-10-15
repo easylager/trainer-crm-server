@@ -28,7 +28,9 @@ def _dock(html: str) -> str:
 def test_city_map_hint_counts_only_when_every_rink_is_on_the_map() -> None:
     rink = {"venue_type": "ice", "latitude": 53.9, "longitude": 27.5}
     shop = {"venue_type": "shop", "latitude": None, "longitude": None}
-    assert city_map_hint([rink, rink, shop]) == "там все 2 катка на карте"
+    assert city_map_hint([rink, rink, shop]) == "там все катки города на карте"
+    assert city_map_hint([rink] * 4) == "там все катки города на карте"
+    assert city_map_hint([rink] * 5) == "там все 5 катков на карте"
     assert city_map_hint([rink] * 10) == "там все 10 катков на карте"
     assert city_map_hint([rink]) == "там этот каток на карте"
     # Хоть один каток без координат — числа нет, обещание общее.
@@ -53,7 +55,7 @@ async def test_city_page_has_the_dock_and_no_second_telegram_button(app_use_test
         html = (await client.get(f"/c/{city_slug(name)}")).text
     dock = _dock(html)
     assert "open-telegram?startapp=catalog_" in dock
-    assert "там все 2 катка на карте" in dock
+    assert "там все катки города на карте" in dock
     assert "b-share__bot" not in html
     assert html.count('class="b-tgbtn tg-out"') == 1
 

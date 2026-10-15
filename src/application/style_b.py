@@ -333,8 +333,15 @@ def telegram_hint_html(text: str) -> str:
     return f'<span class="b-tghint tg-out">{_TG_MAP_SVG}{esc(text)}</span>'
 
 
+# «все 2 катка» звучит как оговорка. Число называем, когда его уже много.
+_MAP_COUNT_FROM = 5
+
+
 def city_map_hint(places: list[Mapping[str, Any]]) -> str:
-    """«там все 10 катков на карте» — только если на карте действительно все катки города."""
+    """«там все 10 катков на карте» — только если на карте действительно все катки города.
+
+    Один каток — «там этот каток». Два–четыре — без числа («там все катки города»).
+    """
     from src.application.ice_city_day import plural_ru
 
     rinks = [p for p in places if str(p.get("venue_type") or "ice") in ("ice", "outdoor")]
@@ -346,6 +353,8 @@ def city_map_hint(places: list[Mapping[str, Any]]) -> str:
     n = len(rinks)
     if n == 1:
         return t("tg.map_city_one")
+    if n < _MAP_COUNT_FROM:
+        return t("tg.map_city")
     return t("tg.map_city_n", n=n, word=plural_ru(n, "каток", "катка", "катков"))
 
 

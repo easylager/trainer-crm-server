@@ -5,67 +5,340 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Сейчас · Админ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=202610147"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610147" />
-  <link rel="stylesheet" href="theme.css?v=202610147" />
-  <link rel="stylesheet" href="admin-analytics-shared.css?v=202610147" />
+  <script src="mini-app-telegram-chrome.js?v=202610153"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610153" />
+  <link rel="stylesheet" href="theme.css?v=202610153" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=202610153" />
   <style>
     .pulse-action { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.12); }
     .pulse-action.danger { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); }
     .pulse-ok { font-size: 13px; color: var(--tg-theme-hint-color); padding: 8px 0 4px; }
     .plan-paid { color: #86efac; }
     .plan-trial { color: #fde68a; }
-    .cat-demand { margin-bottom: 22px; }
-    .cat-card { padding: 14px 14px 12px; }
-    .cat-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
-    .cat-hero .adm-kpi-value { font-size: 32px; font-variant-numeric: tabular-nums; }
-    .cat-hero-side { text-align: right; }
-    .cat-hero-side b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
-    .cat-mini {
-      margin-top: 2px;
-      font-size: 11px;
-      line-height: 1.3;
-      color: var(--tg-theme-hint-color);
-      min-height: 14px;
+
+    .cat-demand { margin-bottom: 18px; }
+    .cat-hero-banner {
+      border-radius: 16px;
+      padding: 18px 16px 16px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
+      background: linear-gradient(145deg, rgba(var(--accent-rgb), 0.22) 0%, rgba(var(--accent-rgb), 0.06) 55%, rgba(255,255,255,0.02) 100%);
     }
-    .cat-foot {
-      margin: 12px 0 0;
+    .cat-hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .cat-hero-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--tg-theme-hint-color);
+    }
+    .cat-hero-value {
+      margin-top: 6px;
+      font-size: 44px;
+      font-weight: 800;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+    .cat-hero-cap {
+      margin-top: 6px;
       font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    .cat-week-badge {
+      flex-shrink: 0;
+      text-align: right;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .cat-week-badge .adm-delta { display: block; font-size: 15px; }
+    .cat-week-badge small {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+    }
+
+    .cat-card { padding: 14px 14px 12px; }
+    .cat-block-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+    .cat-compare-row {
+      display: grid;
+      grid-template-columns: 52px 1fr 36px;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .cat-compare-row:last-child { margin-bottom: 0; }
+    .cat-compare-row.is-current .cat-compare-label { color: var(--tg-theme-text-color); font-weight: 600; }
+    .cat-compare-label { color: var(--tg-theme-hint-color); }
+    .cat-compare-track {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    .cat-compare-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.22);
+      min-width: 4px;
+      transition: width 0.2s ease;
+    }
+    .cat-compare-row.is-current .cat-compare-fill {
+      background: rgba(var(--accent-rgb), 0.85);
+    }
+    .cat-compare-num {
+      text-align: right;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cat-progress-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .cat-progress-head b { font-size: 15px; font-variant-numeric: tabular-nums; }
+    .cat-progress-track {
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    .cat-progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.5), rgba(var(--accent-rgb), 0.95));
+      min-width: 3px;
+    }
+    .cat-progress-foot {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+    }
+
+    .cat-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .cat-chip {
+      flex: 1 1 30%;
+      min-width: 92px;
+      padding: 10px 10px 9px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .cat-chip b {
+      display: block;
+      font-size: 20px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .cat-chip span {
+      display: block;
+      margin-top: 3px;
+      font-size: 11px;
+      line-height: 1.25;
+      color: var(--tg-theme-hint-color);
+    }
+
+    .cat-funnel { margin-top: 4px; }
+    .cat-funnel-step {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .cat-funnel-step:last-child { margin-bottom: 0; }
+    .cat-funnel-label { font-size: 13px; }
+    .cat-funnel-label small {
+      display: block;
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 1px;
+    }
+    .cat-funnel-num {
+      font-size: 18px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .cat-funnel-bar {
+      grid-column: 1 / -1;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    .cat-funnel-bar > i {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: rgba(56, 132, 255, 0.55);
+      min-width: 4px;
+    }
+    .cat-funnel-step:last-child .cat-funnel-bar > i {
+      background: rgba(var(--accent-rgb), 0.75);
+    }
+
+    .cat-arena-bar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px 10px;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+    .cat-arena-bar:last-child { margin-bottom: 0; }
+    .cat-arena-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cat-arena-name em {
+      font-style: normal;
+      color: var(--tg-theme-hint-color);
+    }
+    .cat-arena-num {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .cat-arena-track {
+      grid-column: 1 / -1;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      overflow: hidden;
+    }
+    .cat-arena-track i {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: rgba(var(--accent-rgb), 0.55);
+      min-width: 3px;
+    }
+
+    .cat-city-pill {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.14);
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .cat-city-pill span:last-child {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cat-site {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      background: rgba(255,255,255,0.04);
+      border: 1px dashed rgba(255,255,255,0.1);
+    }
+    .cat-site b { color: var(--tg-theme-text-color); font-variant-numeric: tabular-nums; }
+    .cat-foot {
+      margin: 10px 0 0;
+      font-size: 11px;
       line-height: 1.35;
       text-align: center;
       color: var(--tg-theme-hint-color);
     }
     .cat-divider {
       height: 1px;
-      margin: 12px 0;
+      margin: 14px 0;
       background: rgba(255,255,255,0.08);
     }
-    .cat-rows { display: flex; flex-direction: column; gap: 10px; }
-    .cat-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-      font-size: 14px;
+
+    .adm-platform-fold {
+      margin-top: 8px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(0,0,0,0.12);
+      overflow: hidden;
     }
-    .cat-row b { font-size: 16px; font-variant-numeric: tabular-nums; }
-    .cat-quiet { display: block; margin-top: 1px; font-size: 11px; color: var(--tg-theme-hint-color); }
-    .cat-arena { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: 13px; }
-    .cat-arena + .cat-arena { margin-top: 8px; }
+    .adm-platform-fold > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+    }
+    .adm-platform-fold > summary::-webkit-details-marker { display: none; }
+    .adm-platform-fold > summary::after {
+      content: '▸';
+      float: right;
+      opacity: 0.5;
+    }
+    .adm-platform-fold[open] > summary::after { content: '▾'; }
+    .adm-platform-fold__body { padding: 0 14px 14px; }
   </style>
 </head>
 <body>
   <div class="adm-header">
     <h1>Сейчас</h1>
-    <div class="adm-sub">Что происходит с системой сегодня</div>
+    <div class="adm-sub">Каталог в Telegram — неделя, месяц и что цепляет людей</div>
   </div>
   <div id="content">
     <div class="adm-loading">Загрузка…</div>
   </div>
-  <script src="admin-analytics-shared.js?v=202610147"></script>
+  <script src="admin-analytics-shared.js?v=202610153"></script>
   <script>
     (function () {
       var A = window.AdmAnalytics;
+
+      function pctWidth(value, max) {
+        var v = +value || 0;
+        var m = Math.max(+max || 0, v, 1);
+        return Math.max(4, Math.round(v * 100 / m));
+      }
+
+      function weekDelta(cur, prev) {
+        cur = +cur || 0;
+        prev = +prev || 0;
+        if (prev === 0 && cur === 0) {
+          return { cls: 'flat', text: '0%', sub: 'как неделю назад' };
+        }
+        if (prev === 0) {
+          return { cls: 'up', text: 'новые', sub: 'неделю назад 0' };
+        }
+        var pct = Math.round((cur - prev) * 1000 / prev) / 10;
+        var cls = A.deltaClass(pct);
+        var arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '•';
+        return { cls: cls, text: arrow + ' ' + A.formatPct(pct), sub: 'было ' + A.formatNum(prev) };
+      }
 
       function deltaLine(cur, prev) {
         cur = +cur || 0;
@@ -84,86 +357,188 @@
         return '—';
       }
 
+      function compareRow(label, value, max, isCurrent) {
+        var w = pctWidth(value, max);
+        return '<div class="cat-compare-row' + (isCurrent ? ' is-current' : '') + '">' +
+          '<span class="cat-compare-label">' + A.escapeHtml(label) + '</span>' +
+          '<div class="cat-compare-track"><div class="cat-compare-fill" style="width:' + w + '%"></div></div>' +
+          '<span class="cat-compare-num">' + A.formatNum(value) + '</span></div>';
+      }
+
       function renderCatalogDemand(pulse) {
         if (!pulse) return '';
+        var thisWeek = +pulse.minsk_telegram_this_week || 0;
+        var prevWeek = +pulse.minsk_telegram_prev_week || 0;
+        var monthN = +pulse.minsk_telegram_month || 0;
+        var goal = +pulse.minsk_month_goal || 300;
+        var monthPct = Math.min(100, Math.round(monthN * 1000 / Math.max(goal, 1)) / 10);
+        var weekMax = Math.max(thisWeek, prevWeek, 1);
+        var delta = weekDelta(thisWeek, prevWeek);
         var monthLeft = pulse.minsk_month_remaining > 0
-          ? 'до ' + A.formatNum(pulse.minsk_month_goal) + ' ещё ' + A.formatNum(pulse.minsk_month_remaining)
-          : 'цель ' + A.formatNum(pulse.minsk_month_goal) + ' пройдена';
+          ? 'ещё ' + A.formatNum(pulse.minsk_month_remaining) + ' до ' + A.formatNum(goal)
+          : 'цель ' + A.formatNum(goal) + ' достигнута';
+
         var html = '<div class="cat-demand">';
-        html += '<div class="adm-section-title">Каталог · спрос</div>';
+        html += '<div class="cat-hero-banner">';
+        html += '<div class="cat-hero-top">';
+        html += '<div><div class="cat-hero-title">' + A.escapeHtml(pulse.minsk_name || 'Минск') +
+          ' · уникальные в Telegram</div>';
+        html += '<div class="cat-hero-value">' + A.formatNum(thisWeek) + '</div>';
+        html += '<div class="cat-hero-cap">за эту неделю · с понедельника</div></div>';
+        html += '<div class="cat-week-badge"><span class="adm-delta ' + delta.cls + '">' +
+          A.escapeHtml(delta.text) + '</span><small>' + A.escapeHtml(delta.sub) + '</small></div>';
+        html += '</div></div>';
+
         html += '<div class="adm-card cat-card">';
-        html += '<div class="cat-hero">';
-        html += '<div><div class="adm-kpi-label">' + A.escapeHtml(pulse.minsk_name || 'Минск') +
-          ' · Telegram</div>' +
-          '<div class="adm-kpi-value">' + A.formatNum(pulse.minsk_telegram_this_week) + '</div>' +
-          '<div class="cat-mini">эта неделя, с понедельника</div></div>';
-        html += '<div class="cat-hero-side"><div class="cat-mini">прошлая неделя</div>' +
-          '<b>' + A.formatNum(pulse.minsk_telegram_prev_week) + '</b></div>';
-        html += '</div>';
-        html += '<div class="cat-foot">' + A.formatNum(pulse.minsk_telegram_month) + ' за ' +
-          A.escapeHtml(pulse.month_label || '') + ' · ' + monthLeft + '</div>';
+        html += '<div class="cat-block-title">Неделя к неделе</div>';
+        html += compareRow('прошлая', prevWeek, weekMax, false);
+        html += compareRow('эта', thisWeek, weekMax, true);
+
+        html += '<div class="cat-divider"></div>';
+        html += '<div class="cat-block-title">' + A.escapeHtml(pulse.month_label || 'Месяц') + ' · цель</div>';
+        html += '<div class="cat-progress-head"><span>аккаунтов в Telegram</span>' +
+          '<b>' + A.formatNum(monthN) + ' / ' + A.formatNum(goal) + '</b></div>';
+        html += '<div class="cat-progress-track"><div class="cat-progress-fill" style="width:' +
+          monthPct + '%"></div></div>';
+        html += '<div class="cat-progress-foot">' + monthLeft + '</div>';
 
         var cities = pulse.cities || [];
         if (cities.length) {
           html += '<div class="cat-divider"></div>';
-          html += '<div class="adm-kpi-label">Другие города</div>';
+          html += '<div class="cat-block-title">Другие города · эта неделя</div>';
           html += cities.map(function (c) {
-            return '<div class="cat-arena"><span>' + A.escapeHtml(c.city_name || 'Город') +
-              '</span><span class="adm-list-meta">' + A.formatNum(c.telegram_this_week) +
-              ' · было ' + A.formatNum(c.telegram_prev_week) + '</span></div>';
+            return '<div class="cat-city-pill"><span>' + A.escapeHtml(c.city_name || 'Город') +
+              '</span><span>' + A.formatNum(c.telegram_this_week) + ' · было ' +
+              A.formatNum(c.telegram_prev_week) + '</span></div>';
           }).join('');
         }
 
         html += '<div class="cat-divider"></div>';
-        html += '<div class="cat-row"><span>Уже были на прошлой неделе' +
-          '<span class="cat-quiet">из минских на этой</span></span>' +
-          '<b>' + A.formatNum(pulse.minsk_returning) + '</b></div>';
-        html += '<div class="cat-rows" style="margin-top:10px">';
-        html += '<div class="cat-row"><span>Поделились<span class="cat-quiet">аккаунты на этой неделе</span></span>' +
-          '<b>' + A.formatNum(pulse.share_people_7d) + '</b></div>';
-        var openHint = pulse.share_open_pct != null
-          ? pulse.share_open_pct + '% от поделившихся'
-          : 'аккаунты, без процента';
-        html += '<div class="cat-row"><span>Открыли ссылку<span class="cat-quiet">' + openHint + '</span></span>' +
-          '<b>' + A.formatNum(pulse.share_open_7d) + '</b></div>';
-        if ((+pulse.tickets_intent_actors_7d || 0) > 0) {
-          html += '<div class="cat-row"><span>Билеты на сайте<span class="cat-quiet">не продажа</span></span>' +
-            '<b>' + A.formatNum(pulse.tickets_intent_actors_7d) + '</b></div>';
-        }
+        html += '<div class="cat-chips">';
+        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.minsk_returning) + '</b>' +
+          '<span>вернулись с прошлой недели</span></div>';
+        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.share_people_7d) + '</b>' +
+          '<span>поделились</span></div>';
+        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.share_open_7d) + '</b>' +
+          '<span>открыли ссылку</span></div>';
         html += '</div>';
+
+        var shareN = +pulse.share_people_7d || 0;
+        var openN = +pulse.share_open_7d || 0;
+        if (shareN > 0 || openN > 0) {
+          var funnelMax = Math.max(shareN, openN, 1);
+          var openHint = pulse.share_open_pct != null
+            ? pulse.share_open_pct + '% от поделившихся'
+            : 'пока мало открытий для процента';
+          html += '<div class="cat-divider"></div>';
+          html += '<div class="cat-block-title">Виральность</div>';
+          html += '<div class="cat-funnel">';
+          html += '<div class="cat-funnel-step"><div class="cat-funnel-label">Поделились' +
+            '<small>разные аккаунты</small></div><div class="cat-funnel-num">' +
+            A.formatNum(shareN) + '</div><div class="cat-funnel-bar"><i style="width:' +
+            pctWidth(shareN, funnelMax) + '%"></i></div></div>';
+          html += '<div class="cat-funnel-step"><div class="cat-funnel-label">Открыли из чата' +
+            '<small>' + A.escapeHtml(openHint) + '</small></div><div class="cat-funnel-num">' +
+            A.formatNum(openN) + '</div><div class="cat-funnel-bar"><i style="width:' +
+            pctWidth(openN, funnelMax) + '%"></i></div></div>';
+          html += '</div>';
+        }
+
+        if ((+pulse.tickets_intent_actors_7d || 0) > 0) {
+          html += '<div class="cat-divider"></div>';
+          html += '<div class="cat-funnel-step" style="margin:0">';
+          html += '<div class="cat-funnel-label">Билеты на сайте<small>клик, не продажа</small></div>';
+          html += '<div class="cat-funnel-num">' + A.formatNum(pulse.tickets_intent_actors_7d) + '</div>';
+          html += '</div>';
+        }
 
         var arenas = pulse.top_arenas_7d || [];
         if (arenas.length) {
+          var arenaMax = Math.max.apply(null, arenas.map(function (a) { return +a.unique_actors || 0; }).concat([1]));
           html += '<div class="cat-divider"></div>';
-          html += '<div class="adm-kpi-label">Арены · Telegram</div>';
+          html += '<div class="cat-block-title">Где заходят · Telegram</div>';
           html += arenas.map(function (a) {
-            var place = a.city_name ? ' · ' + A.escapeHtml(a.city_name) : '';
-            return '<div class="cat-arena"><span>' + A.escapeHtml(a.arena_name || ('#' + a.arena_id)) +
-              place + '</span><span class="adm-list-meta">' + A.formatNum(a.unique_actors) + '</span></div>';
+            var n = +a.unique_actors || 0;
+            var city = a.city_name ? ' <em>· ' + A.escapeHtml(a.city_name) + '</em>' : '';
+            return '<div class="cat-arena-bar"><div class="cat-arena-name">' +
+              A.escapeHtml(a.arena_name || ('#' + a.arena_id)) + city + '</div>' +
+              '<div class="cat-arena-num">' + A.formatNum(n) + '</div>' +
+              '<div class="cat-arena-track"><i style="width:' + pctWidth(n, arenaMax) + '%"></i></div></div>';
           }).join('');
         }
+
         if ((+pulse.browsers_this_week || 0) > 0) {
-          html += '<div class="cat-foot">Браузеры на сайте за эту неделю: ' +
-            A.formatNum(pulse.browsers_this_week) + '. Это не люди. Служебные заходы на сайт здесь остаются.</div>';
+          html += '<div class="cat-site">Сайт в браузере: <b>' + A.formatNum(pulse.browsers_this_week) +
+            '</b> за неделю — не те же люди, что в Telegram. Служебные заходы тоже считаются.</div>';
         }
 
         if (!pulse.comparable_since) {
-          html += '<div class="cat-foot">Уникальные появятся после первых заходов нового формата.</div>';
+          html += '<div class="cat-foot">Счётчик появится после первых заходов нового формата.</div>';
         } else {
           var started = new Date(pulse.comparable_since);
           var ageDays = (Date.now() - started.getTime()) / 86400000;
           if (!isNaN(started.getTime()) && ageDays >= 0 && ageDays < 30) {
             html += '<div class="cat-foot">Ряд с ' + A.formatDate(pulse.comparable_since_date) +
-              '. Окна 7 и 30 дней пока короче.</div>';
+              ' · полные 7 и 30 дней наберутся постепенно.</div>';
           }
         }
         html += '</div></div>';
         return html;
       }
 
-      function render(d) {
-        var html = renderCatalogDemand(d.catalog_demand_pulse);
+      function renderActions(d) {
         var actionCount = d.action_count || 0;
+        var hasAction = false;
+        var mods = d.action_moderation || [];
+        if (mods.length) hasAction = true;
+        if ((d.support_new_count || 0) > 0) hasAction = true;
+        if ((d.action_expiring_paid || []).length) hasAction = true;
+        if ((d.action_sleeping_paid || []).length) hasAction = true;
+        if (!hasAction) return '';
+
+        var html = '<div class="adm-section"><div class="adm-section-title">Сделать сегодня · ' +
+          A.formatNum(actionCount) + '</div>';
+        if (mods.length) {
+          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Модерация · ' + mods.length + '</div>';
+          html += '<div class="adm-list-meta">Очередь /pending в боте</div>';
+          html += mods.map(function (t) {
+            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
+              ' <span class="adm-list-meta">#' + t.trainer_id +
+              (t.submitted_at ? ' · ' + A.formatDate(t.submitted_at) : '') + '</span></div>';
+          }).join('');
+          html += '</div>';
+        }
+        if ((d.support_new_count || 0) > 0) {
+          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Поддержка · ' +
+            A.formatNum(d.support_new_count) + '</div>';
+          html += '<div class="adm-list-meta">Ответить командой /support</div></div>';
+        }
+        var exp = d.action_expiring_paid || [];
+        if (exp.length) {
+          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Истекают платные ≤7 дн · ' + exp.length + '</div>';
+          html += exp.map(function (t) {
+            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
+              ' <span class="adm-list-meta">#' + t.trainer_id + ' · осталось ' + t.days_left + ' дн.</span></div>';
+          }).join('');
+          html += '</div>';
+        }
+        var sleep = d.action_sleeping_paid || [];
+        if (sleep.length) {
+          html += '<div class="adm-card pulse-action danger tight"><div class="adm-list-title">Платящие без записи >14 дн · ' + sleep.length + '</div>';
+          html += sleep.map(function (t) {
+            var since = t.days_since != null ? t.days_since + ' дн. назад' : 'записей не было';
+            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
+              ' <span class="adm-list-meta">#' + t.trainer_id + ' · ' + since + '</span></div>';
+          }).join('');
+          html += '</div>';
+        }
+        html += '</div>';
+        return html;
+      }
+
+      function renderPlatform(d) {
+        var html = '';
+
         html += '<div class="adm-kpi-grid">';
         html += '<div class="adm-kpi"><div class="adm-kpi-label">Занятия сегодня</div>' +
           '<div class="adm-kpi-value">' + A.formatNum(d.bookings_today) + '</div>' +
@@ -180,56 +555,7 @@
           ' · платных: ' + A.formatNum(d.active_paid_subscriptions) + '</div></div>';
         html += '</div>';
 
-        html += '<div class="adm-section"><div class="adm-section-title">Сделать сегодня';
-        if (actionCount) html += ' · ' + A.formatNum(actionCount);
-        html += '</div>';
-
-        var hasAction = false;
-        var mods = d.action_moderation || [];
-        if (mods.length) {
-          hasAction = true;
-          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Модерация · ' + mods.length + '</div>';
-          html += '<div class="adm-list-meta">Очередь /pending в боте</div>';
-          html += mods.map(function (t) {
-            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
-              ' <span class="adm-list-meta">#' + t.trainer_id +
-              (t.submitted_at ? ' · ' + A.formatDate(t.submitted_at) : '') + '</span></div>';
-          }).join('');
-          html += '</div>';
-        }
-        if ((d.support_new_count || 0) > 0) {
-          hasAction = true;
-          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Поддержка · ' +
-            A.formatNum(d.support_new_count) + '</div>' +
-            '<div class="adm-list-meta">Ответить командой /support</div></div>';
-        }
-        var exp = d.action_expiring_paid || [];
-        if (exp.length) {
-          hasAction = true;
-          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Истекают платные ≤7 дн · ' + exp.length + '</div>';
-          html += exp.map(function (t) {
-            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
-              ' <span class="adm-list-meta">#' + t.trainer_id + ' · осталось ' + t.days_left + ' дн.</span></div>';
-          }).join('');
-          html += '</div>';
-        }
-        var sleep = d.action_sleeping_paid || [];
-        if (sleep.length) {
-          hasAction = true;
-          html += '<div class="adm-card pulse-action danger tight"><div class="adm-list-title">Платящие без записи >14 дн · ' + sleep.length + '</div>';
-          html += sleep.map(function (t) {
-            var since = t.days_since != null ? t.days_since + ' дн. назад' : 'записей не было';
-            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
-              ' <span class="adm-list-meta">#' + t.trainer_id + ' · ' + since + '</span></div>';
-          }).join('');
-          html += '</div>';
-        }
-        if (!hasAction) {
-          html += '<div class="pulse-ok">Очереди нет: модерация, поддержка и платящие в порядке.</div>';
-        }
-        html += '</div>';
-
-        html += '<div class="adm-section"><div class="adm-section-title">Кто реально работает</div>';
+        html += '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">Кто реально работает</div>';
         var live = d.live_trainers || [];
         if (!live.length) {
           html += '<div class="adm-card"><div class="adm-empty">За 30 дней нет активных тренеров с записями или подпиской</div></div>';
@@ -253,6 +579,16 @@
         }
         html += '</div>';
 
+        return html;
+      }
+
+      function render(d) {
+        var html = renderCatalogDemand(d.catalog_demand_pulse);
+        html += renderActions(d);
+        html += '<details class="adm-platform-fold">';
+        html += '<summary>Платформа · занятия, деньги, тренеры</summary>';
+        html += '<div class="adm-platform-fold__body">' + renderPlatform(d) + '</div>';
+        html += '</details>';
         return html;
       }
 
