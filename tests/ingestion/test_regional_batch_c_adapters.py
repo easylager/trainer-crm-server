@@ -19,7 +19,9 @@ from src.ingestion.adapters_regional_batch_c import (
     MogilevDsParser,
     OrshaArenaParser,
     OstrovetsLdsParser,
+    RaubichiHtmlParser,
     VitebskDsParser,
+    _raubichi_schedule_slots,
 )
 from src.ingestion.seed_config_regional_batch_c import (
     GORKI_LDS_CONFIG,
@@ -30,9 +32,12 @@ from src.ingestion.seed_config_regional_batch_c import (
     PARSER_KEY_MOGILEV_DS,
     PARSER_KEY_ORSHA_ARENA,
     PARSER_KEY_OSTROVETS_LDS,
+    PARSER_KEY_RAUBICHI,
     PARSER_KEY_VITEBSK_DS,
+    RAUBICHI_CONFIG,
     VITEBSK_DS_CONFIG,
 )
+from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE
 from src.ingestion.types import ParserJob
 from tests.ingestion.tesseract_util import skip_unless_tesseract_rus
 
@@ -235,3 +240,32 @@ async def test_ostrovets_lds_skips_no_session_cells() -> None:
     assert drafts[0].price_child_minor == 400
     assert drafts[0].price_rental_minor == 500
     assert all(d.price_adult_minor == 600 for d in drafts)
+
+
+@pytest.mark.asyncio
+async def test_raubichi_matches_expected_fixture() -> None:
+    expected = _expected("raubichi-rcop")
+    job = _job(
+        arena_id=15,
+        parser_key=PARSER_KEY_RAUBICHI,
+        config=dict(RAUBICHI_CONFIG),
+        slug="raubichi-rcop",
+        job_id=106,
+    )
+    extraction = await RaubichiHtmlParser().extract(job)
+    gold_sessions = expected["sessions"]
+    assert len(extraction.slots) == len(gold_sessions) == 4
+    assert extraction.schedule_basis == SCHEDULE_BASIS_LIVE
+
+    by_key = {(s.local_date, s.starts_at_local): s for s in extraction.slots}
+    for gold in gold_sessions:
+        slot = by_key[(gold["local_date"], gold["starts_at_local"])]
+        assert slot.ends_at_local == gold["ends_at_local"]
+        assert slot.price_adult == gold["price_adult_minor"]
+        assert slot.price_child == gold["price_child_minor"]
+        assert slot.price_rental == gold["price_rental_minor"]
+
+
+def test_raubichi_closed_page_yields_no_slots() -> None:
+    html = (_FIXTURES / "raubichi-rcop" / "skates-closed.html").read_text(encoding="utf-8")
+    assert _raubichi_schedule_slots(html, duration_minutes=45) == []

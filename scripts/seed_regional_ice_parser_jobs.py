@@ -71,7 +71,9 @@ def build_regional_job_seeds() -> list[JobSeed]:
         PARSER_KEY_MOGILEV_DS,
         PARSER_KEY_ORSHA_ARENA,
         PARSER_KEY_OSTROVETS_LDS,
+        PARSER_KEY_RAUBICHI,
         PARSER_KEY_VITEBSK_DS,
+        RAUBICHI_CONFIG,
         VITEBSK_DS_CONFIG,
     )
     from src.ingestion.seed_config_regional_batch_d import (
@@ -101,6 +103,7 @@ def build_regional_job_seeds() -> list[JobSeed]:
         PARSER_KEY_ORSHA_ARENA: ORSHA_ARENA_CONFIG,
         PARSER_KEY_GORKI_LDS: GORKI_LDS_CONFIG,
         PARSER_KEY_OSTROVETS_LDS: OSTROVETS_LDS_CONFIG,
+        PARSER_KEY_RAUBICHI: RAUBICHI_CONFIG,
         PARSER_KEY_BOBRUISK_ARENA: BOBRUISK_ARENA_CONFIG,
         PARSER_KEY_MOLODECHNO_SRC: MOLODECHNO_SRC_CONFIG,
         PARSER_KEY_SOLIGORSK_SZK: SOLIGORSK_SZK_CONFIG,

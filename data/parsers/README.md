@@ -34,6 +34,7 @@
 | [molodechno-src](./molodechno-src.md) | 18 | `molodechno_src_v1` | daily | no | `data/fixtures/molodechno-src/` |
 | [soligorsk-szk](./soligorsk-szk.md) | 19 | `soligorsk_szk_html_v1` | weekly | no | `data/fixtures/soligorsk-szk/` |
 | [ostrovets-lds](./ostrovets-lds.md) | 41 | `ostrovets_html_v1` | weekly | no | `data/fixtures/ostrovets-lds/` |
+| [raubichi-rcop](./raubichi-rcop.md) | 15 | `raubichi_html_v1` | daily | no | `data/fixtures/raubichi-rcop/` |
 
 ### SPEC 2026-09-06 (Brest oblast)
 
@@ -46,7 +47,7 @@
 
 Skip: [bereza-lds](./bereza-lds.md) (26 phone), [pruzhany-sdyushor](./pruzhany-sdyushor.md) (27), [ivatsevichi-lds](./ivatsevichi-lds.md) (28), [ozerny-rink](./ozerny-rink.md) (39 duplicate of 22).
 
-Skip stubs (empty sessions): [zhodino-sdyushor](./zhodino-sdyushor.md) (20), [raubichi-rcop](./raubichi-rcop.md) (15), [silichi-rgc](./silichi-rgc.md) (16), [luninets-olimp](./luninets-olimp.md) (40).
+Skip stubs (empty sessions): [zhodino-sdyushor](./zhodino-sdyushor.md) (20), [silichi-rgc](./silichi-rgc.md) (16), [luninets-olimp](./luninets-olimp.md) (40).
 
 Already skipped Минск (не писать длинные спеки): 9 Олимпик, 12 лыжероллер, 13 JUSTSKATE, 14 Финт.
 

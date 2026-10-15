@@ -130,6 +130,7 @@ _PROD_BINDINGS: tuple[tuple[str, str, str, int], ...] = (
     ("ozerki_gcal_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-ozerki", 101),
     ("parnasarena_text_v1", "Санкт-Петербург/ЛО", "tsentr-ledovykh-vidov-sporta-parnas", 174),
     ("pinsk_volna_v1", "Пинск", "pinsk-volna", 24),
+    ("raubichi_html_v1", "Раубичи", "raubichi-rcop", 15),
     ("shansarena_html_v1", "Санкт-Петербург/ЛО", "ledovyy-kompleks-shans-arena", 100),
     ("shklov_arena_v1", "Шклов", "shklov-arena", 42),
     ("shuvalovskyled_html_v1", "Санкт-Петербург/ЛО", "shuvalovskiy-led", 196),
@@ -226,9 +227,9 @@ async def test_fresh_database_binds_every_parser_job() -> None:
         raise RuntimeError(BIND_DB)
     expected = _expected()
     _assert_seed_lists_match_prod_table(expected)
-    assert len(expected) == 42
+    assert len(expected) == 43
     assert len(arenas_by_parser_key(CAPITAL_ARENAS)) == 24
-    assert len(arenas_by_parser_key(REGIONAL_ARENAS)) == 18
+    assert len(arenas_by_parser_key(REGIONAL_ARENAS)) == 19
 
     base_sync = _sync_url_from_settings()
     parsed = urlparse(base_sync)

@@ -217,7 +217,8 @@ ARENAS: list[SeedArena] = [
         54.0628,
         27.7354,
         "raubichi-rcop",
-        False,
+        True,
+        "raubichi_html_v1",
     ),
     SeedArena(
         16,
