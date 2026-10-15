@@ -74,3 +74,6 @@ async def test_one_rink_city_hub_render_includes_session_query(app_use_test_db, 
         share={"share_url": "https://x/c/x", "share_text": "x", "share_body": "x"},
     )
     assert f"?s={sid}" in html
+    assert "data-glide-session-list-root" in html
+    assert 'class="b-sched"' in html
+    assert "b-ticket--week" not in html

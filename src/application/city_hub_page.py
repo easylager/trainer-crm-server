@@ -398,10 +398,21 @@ async def load_city_hub_view(
     local_now = now.astimezone(tz)
     variant = choose_city_variant(places)
     week_rows: list[dict[str, Any]] = []
+    one_rink_place_view: dict[str, Any] | None = None
     nearby: list[dict[str, Any]] = []
     if variant == VARIANT_ONE:
         rink = next(p for p in places if p["venue_type"] in ("ice", "outdoor"))
-        week_rows = await load_week(session, arena_id=int(rink["id"]), today=local_now.date(), now=now)
+        if rink.get("slug"):
+            from src.application.place_page import load_place_view
+
+            one_rink_place_view = await load_place_view(
+                session,
+                str(rink["slug"]),
+                city_id=city_id,
+                now=now,
+            )
+        if one_rink_place_view is None:
+            week_rows = await load_week(session, arena_id=int(rink["id"]), today=local_now.date(), now=now)
     origin = city_origin(places)
     if variant in (VARIANT_ONE, VARIANT_PHONE) and origin is not None:
         nearby = await load_nearby(
@@ -437,6 +448,7 @@ async def load_city_hub_view(
         "hot_ohm": hot_window_key(ohm, now=now),
         "variant": variant,
         "week_rows": week_rows,
+        "one_rink_place_view": one_rink_place_view,
         "nearby": nearby,
     }
 
@@ -1202,7 +1214,11 @@ def _b_body(
     if variant == VARIANT_ONE and rinks:
         rink = rinks[0]
         rink_name = format_public_name(str(rink.get("name") or ""))
-        week_n = len(view.get("week_rows") or [])
+        place_view = view.get("one_rink_place_view")
+        if isinstance(place_view, Mapping):
+            week_n = int(place_view.get("session_count") or 0)
+        else:
+            week_n = len(view.get("week_rows") or [])
         sub = rink_name
         if rink.get("slug"):
             href = place_path(city_name=str(view["city"]["name"]), slug=str(rink["slug"]))
@@ -1222,11 +1238,26 @@ def _b_body(
             bar_html=_b_bar(view),
             photo_variants=rv if isinstance(rv, Mapping) else None,
         )
+        schedule_block = ""
+        if isinstance(place_view, Mapping) and rink.get("slug"):
+            from src.application.place_page import _b_schedule
+            from src.application.public_web_cta import place_action_links
+
+            place_base = place_path(city_name=str(view["city"]["name"]), slug=str(rink["slug"]))
+            card = place_view.get("card") if isinstance(place_view.get("card"), Mapping) else rink
+            links = place_action_links(
+                card,
+                base_url=base_url,
+                surface="selection_page",
+                city_id=city_id,
+            )
+            schedule_block = _b_schedule(place_view, base_path=place_base, invite=False, links=links)
+        else:
+            schedule_block = _b_one_today(view, rink) + _b_one_week(view, rink)
         return "".join(
             [
                 hero,
-                _b_one_today(view, rink),
-                _b_one_week(view, rink),
+                schedule_block,
                 _b_rink_arrive(rink, base_url=base_url, city_id=city_id),
                 _b_nearby(view, title=t("hub.nearby")),
                 _b_trainers(view, base_url=base_url, coach_href=coach_href),

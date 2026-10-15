@@ -378,9 +378,10 @@ async def test_one_rink_city_shows_the_week_not_the_router(app_use_test_db, db_s
     async with _client() as client:
         resp = await client.get(f"/c/{city_slug(name)}")
     assert resp.status_code == 200
-    assert "Неделя" in resp.text
+    assert "Массовое катание" in resp.text
+    assert 'class="b-sched"' in resp.text
     assert "Что нужно" not in resp.text
-    assert "Завтра" in resp.text and "12:30" in resp.text
+    assert "завтра" in resp.text.lower() and "12:30" in resp.text
     assert "/* task246-week */" not in resp.text
 
 
