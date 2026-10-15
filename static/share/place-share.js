@@ -124,32 +124,67 @@
     return lines.join(' · ');
   }
 
+  /* Зал («Большая арена») не говорит, что это ОХМ: тип впереди, как на сервере. */
+  function planKindLabel(session) {
+    var label = M.iceKindLabel ? M.iceKindLabel(session) : '';
+    if (session.kind === 'hockey_practice' && session.session_label) {
+      var ohm = M.iceKindLabel(Object.assign({}, session, { session_label: '' }));
+      if (label.toLowerCase().indexOf(ohm.toLowerCase()) === -1) return ohm + ' · ' + label;
+    }
+    return label;
+  }
+
+  function pluralRu(n, one, few, many) {
+    var m10 = n % 10;
+    var m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+
+  /* «Начнётся через 40 минут» — те же правила, что starts_in_label на сервере. */
+  function planSoonLine(session) {
+    var starts = Date.parse(String(session.starts_at_utc || ''));
+    if (isNaN(starts)) return '';
+    var minutes = Math.floor((starts - Date.now()) / 60000);
+    if (minutes <= 0 || minutes > 180) return '';
+    if (minutes < 60) return 'Начнётся через ' + minutes + ' ' + pluralRu(minutes, 'минуту', 'минуты', 'минут');
+    var hours = Math.floor(minutes / 60);
+    var rest = minutes % 60;
+    if (rest < 10) return 'Начнётся через ' + hours + ' ' + pluralRu(hours, 'час', 'часа', 'часов');
+    return 'Начнётся через ' + hours + ' ч ' + rest + ' мин';
+  }
+
+  function setPlanText(plan, cls, text) {
+    var el = plan.querySelector('.b-plan__' + cls);
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
+  }
+
   function paintPlan(sessionId) {
-    var plan = document.querySelector('#plan .b-plan');
+    var section = document.getElementById('plan');
+    var plan = section && section.querySelector('.b-plan');
     if (!plan || plan.classList.contains('b-plan--gone')) return;
     var session = findSession(sessionId);
     if (!session) return;
-    var dayEl = plan.querySelector('.b-plan__day');
-    var timeEl = plan.querySelector('.b-plan__time');
-    if (dayEl) dayEl.textContent = planDayHeading(session.local_date);
     var start = PD.formatClock(String(session.starts_at_local || '').slice(0, 5));
     var end = PD.formatClock(String(session.ends_at_local || '').slice(0, 5));
-    if (timeEl) timeEl.textContent = end ? start + '–' + end : start;
-    var kind = M.iceKindLabel ? M.iceKindLabel(session) : '';
-    var extra = [kind, planPriceLine(session)].filter(Boolean).join(' · ');
-    var lineEl = plan.querySelector('.b-plan__line');
-    if (extra) {
-      if (!lineEl) {
-        lineEl = document.createElement('span');
-        lineEl.className = 'b-plan__line';
-        if (timeEl && timeEl.parentNode) timeEl.parentNode.insertBefore(lineEl, timeEl.nextSibling);
-      }
-      lineEl.textContent = extra;
-      lineEl.hidden = false;
-    } else if (lineEl) {
-      lineEl.textContent = '';
-      lineEl.hidden = true;
-    }
+    setPlanText(plan, 'day', planDayHeading(session.local_date));
+    setPlanText(plan, 'time', end ? start + '–' + end : start);
+    setPlanText(plan, 'line', [planKindLabel(session), planPriceLine(session)].filter(Boolean).join(' · '));
+    setPlanText(plan, 'soon', planSoonLine(session));
+  }
+
+  /* Тап на время показывает скрытый билет «Выбранный сеанс» над расписанием. Он
+     толкает всё ниже — докручиваем окно на ту же величину, чтобы тапнутое время
+     осталось под пальцем. */
+  function showPlan(anchorEl) {
+    var section = document.getElementById('plan');
+    if (!section || !section.hidden) return;
+    var before = anchorEl ? anchorEl.getBoundingClientRect().top : null;
+    section.hidden = false;
+    if (before != null) window.scrollBy(0, anchorEl.getBoundingClientRect().top - before);
   }
 
   function inviteLabel(sessionId) {
@@ -205,6 +240,7 @@
     var btn = document.getElementById('placeShareBtn');
     if (btn) btn.textContent = inviteLabel(sid);
     paintPlan(sid);
+    if (opts && opts.showPlan) showPlan(opts.anchor);
     if (!opts || !opts.skipUrl) syncUrl(sid);
     if (opts && opts.reveal) revealAboveDock();
   }
@@ -302,7 +338,7 @@
   document.querySelectorAll('.b-ticket[data-session-id]').forEach(function (el) {
     el.addEventListener('click', function (event) {
       event.preventDefault();
-      applyPick(el.getAttribute('data-session-id'), { reveal: true });
+      applyPick(el.getAttribute('data-session-id'), { reveal: true, showPlan: true, anchor: el });
     });
   });
 

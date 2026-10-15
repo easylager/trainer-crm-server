@@ -832,4 +832,39 @@ async def test_ohm_sessions_are_pickable_tickets_like_public_skate(app_use_test_
     # Ссылка на сеанс ОХМ открывает его день в полосе ОХМ и отмечает билет выбранным.
     ohm = _ohm_section(picked.text)
     assert re.search(r'class="b-day[^"]*b-day--current" id="o-', ohm)
-    assert re.search(rf'class="b-ticket b-ticket--dark b-ticket--picked" href="[^"]*" rel="nofollow" data-session-id="{ohm_id}"', ohm)
+    picked_ticket = (
+        rf'class="b-ticket b-ticket--dark b-ticket--picked" href="[^"]*" rel="nofollow" data-session-id="{ohm_id}"'
+    )
+    assert re.search(picked_ticket, ohm)
+
+
+@pytest.mark.asyncio
+async def test_plan_card_is_a_hidden_template_without_session_link(app_use_test_db, db_session) -> None:
+    """Без ``?s=`` блок «Выбранный сеанс» есть, но скрыт: его показывает тап по времени."""
+    place = await _place(db_session)
+    await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="19:30")
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"])
+
+    assert '<section class="b-sec" id="plan" hidden>' in resp.text
+    assert '<span class="b-plan__time" hidden></span>' in resp.text
+    assert "Выбранный сеанс" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_plan_card_names_ohm_before_the_hall(app_use_test_db, db_session) -> None:
+    """У ОХМ своё имя зала («Большая арена») не прячет тип: «ОХМ · Большая арена»."""
+    place = await _place(db_session)
+    ohm_id = await _add_ohm_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="11:15")
+    await db_session.execute(
+        text("UPDATE ice_sessions SET session_label = 'Большая арена' WHERE id = :id"), {"id": ohm_id}
+    )
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"], params={"s": ohm_id})
+
+    line = re.search(r'<span class="b-plan__line">([^<]+)</span>', resp.text)
+    assert line and line.group(1).startswith("ОХМ · Большая арена"), line and line.group(1)

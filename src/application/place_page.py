@@ -461,10 +461,12 @@ def session_kind_label(slot: Mapping[str, Any] | None) -> str:
     if slot is None:
         return ""
     custom = str(slot.get("session_label") or "").strip()
-    if custom:
-        return custom
     key = _SESSION_KIND_COPY_KEYS.get(str(slot.get("kind") or "").strip())
-    return t(key) if key else ""
+    kind = t(key) if key else ""
+    # Зал («Большая арена») не говорит, что это ОХМ, — тип впереди: «ОХМ · Большая арена».
+    if custom and key == "kind.hockey_practice" and kind.lower() not in custom.lower():
+        return f"{kind} · {custom}"
+    return custom or kind
 
 
 def invite_share_hook(view: Mapping[str, Any]) -> str:
@@ -1526,38 +1528,50 @@ def _b_about(card: Mapping[str, Any]) -> str:
 
 
 def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
-    """Сеанс из ссылки ``?s=`` — тёмный билет над расписанием."""
+    """Тёмный билет «Выбранный сеанс» над расписанием.
+
+    По ссылке ``?s=`` сервер заполняет его сам. Без ``?s=`` кладётся скрытая заготовка:
+    place-share.js показывает и заполняет её по тапу на время — без JS её не видно.
+    """
     card = view["card"]
     focus = view.get("focus")
     if focus is None:
-        if not view.get("focus_missing"):
+        if view.get("focus_missing"):
+            nxt = view.get("next_slot")
+            tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
+            return (
+                '<section class="b-sec" id="plan"><div class="b-plan b-plan--gone">'
+                f"<b>Сеанса из ссылки уже нет в расписании.</b><span>{tail.strip()}</span></div></section>"
+            )
+        if not _skating(card) or not (view.get("days") or view.get("ohm_days")):
             return ""
-        nxt = view.get("next_slot")
-        tail = f" Ближайший — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
-        return (
-            '<section class="b-sec" id="plan"><div class="b-plan b-plan--gone">'
-            f'<b>Сеанса из ссылки уже нет в расписании.</b><span>{tail.strip()}</span></div></section>'
-        )
     kicker = "Тебя зовут кататься" if invite else "Выбранный сеанс"
-    d = _parse_iso_date(focus.get("local_date"))
-    day_text = day_heading(d, today=view["today"]) if d else ""
-    start = format_clock(str(focus.get("starts_at_local") or ""))
-    end = format_clock(str(focus.get("ends_at_local") or ""))
-    soon = starts_in_label(focus, now=view["now"])
-    prices = " · ".join(slot_price_lines(focus))
-    label = session_kind_label(focus)
-    time_text = f"{start}–{end}" if end else start
-    extra = " · ".join(x for x in (label, prices) if x)
+    day_text = time_text = extra = soon = ""
+    if focus is not None:
+        d = _parse_iso_date(focus.get("local_date"))
+        day_text = day_heading(d, today=view["today"]) if d else ""
+        start = format_clock(str(focus.get("starts_at_local") or ""))
+        end = format_clock(str(focus.get("ends_at_local") or ""))
+        soon = starts_in_label(focus, now=view["now"])
+        prices = " · ".join(slot_price_lines(focus))
+        extra = " · ".join(x for x in (session_kind_label(focus), prices) if x)
+        time_text = f"{start}–{end}" if end else start
     place_name = format_public_name(str(card.get("name") or ""))
     address = format_place_address(str(card.get("address") or ""), city=_city(card))
     where = " · ".join(x for x in (place_name, address) if x)
+
+    def span(cls: str, text: str) -> str:
+        hidden = "" if text else " hidden"
+        return f'<span class="b-plan__{cls}"{hidden}>{_esc(text)}</span>'
+
+    section_hidden = " hidden" if focus is None else ""
     return (
-        '<section class="b-sec" id="plan"><div class="b-plan">'
+        f'<section class="b-sec" id="plan"{section_hidden}><div class="b-plan">'
         f'<span class="b-plan__kicker">{_esc(kicker)}</span>'
-        f'<span class="b-plan__day">{_esc(day_text)}</span>'
-        f'<span class="b-plan__time">{_esc(time_text)}</span>'
-        + (f'<span class="b-plan__line">{_esc(extra)}</span>' if extra else "")
-        + (f'<span class="b-plan__soon">{_esc(soon)}</span>' if soon else "")
+        + span("day", day_text)
+        + span("time", time_text)
+        + span("line", extra)
+        + span("soon", soon)
         + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
         + "</div></section>"
     )
