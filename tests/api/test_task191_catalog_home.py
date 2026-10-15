@@ -309,7 +309,16 @@ async def test_catalog_home_city_order_minsk_first_then_by_activity(app_use_test
 
 
 @pytest.mark.asyncio
-async def test_catalog_home_ice_today_link_only_with_sessions_today(app_use_test_db, db_session) -> None:
+async def test_catalog_home_ice_today_link_only_with_sessions_today(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    fixed_minsk = datetime(2026, 10, 7, 12, 0, tzinfo=ZoneInfo("Europe/Minsk"))
+    monkeypatch.setattr(
+        "src.application.catalog_home_page._utc_now",
+        lambda: fixed_minsk.astimezone(timezone.utc),
+    )
+    monkeypatch.setattr("tests.api.test_public_ice_city_day._minsk_now", lambda: fixed_minsk)
+
     with_sessions = f"Сеансы {uuid.uuid4().hex[:6]}"
     without = f"Без льда {uuid.uuid4().hex[:6]}"
     cid1 = await _insert_city(db_session, name=with_sessions)

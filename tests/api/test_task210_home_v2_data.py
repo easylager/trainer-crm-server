@@ -17,6 +17,7 @@ from src.application.ice_city_day import city_slug, invalidate_public_city_cache
 from src.application.ice_session_use_cases import create_ice_session
 from tests.api.test_public_arenas import _insert_arena, _insert_city
 from tests.api.test_public_ice_city_day import _add_today_session
+from tests.api.test_selection_window_mini_app import _freeze_modules
 
 _HOME_SQL_MAX = 8
 _MINSK = ZoneInfo("Europe/Minsk")
@@ -224,8 +225,17 @@ async def test_ac5_sql_budget_on_upcoming_path_with_cookie(app_use_test_db, db_s
 
 
 @pytest.mark.asyncio
-async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale(app_use_test_db, db_session) -> None:
+async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
     """Закрытый сезон не считаем; расписание старше 72 ч считаем как обычное (TASK-243)."""
+    fixed = _utc(2026, 10, 7, 12)
+    _freeze(monkeypatch, fixed)
+    monkeypatch.setattr(
+        "tests.api.test_public_ice_city_day._minsk_now",
+        lambda: datetime(2026, 10, 7, 12, 0, tzinfo=_MINSK),
+    )
+
     name = f"Счётчик {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     normal = await _insert_arena(db_session, city_id, name="Живой каток")
@@ -238,10 +248,10 @@ async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale
         text("UPDATE arena_profiles SET schedule_mode = 'season_closed' WHERE arena_id = :id"),
         {"id": closed},
     )
-    await _parser_job(db_session, stale, last_ok_at=datetime.now(timezone.utc) - timedelta(days=5))
+    await _parser_job(db_session, stale, last_ok_at=fixed - timedelta(days=5))
     await db_session.execute(
         text("UPDATE ice_sessions SET observed_at = :observed WHERE arena_id = :id"),
-        {"observed": datetime.now(timezone.utc) - timedelta(days=5), "id": stale},
+        {"observed": fixed - timedelta(days=5), "id": stale},
     )
     await db_session.commit()
     invalidate_public_city_cache()
@@ -259,8 +269,9 @@ async def test_today_counter_matches_ice_page_without_closed_but_with_very_stale
     assert parse_city_session_count_from_home(home.text, name) == 2
     # Страницы /ice/…/today больше нет (TASK-266): старый адрес ведёт в список, и он
     # обязан сойтись с главной — закрытый каток без сеансов, старый с сеансами.
-    day = await get_city_ice_day(db_session, city_id=city_id)
+    day = await get_city_ice_day(db_session, city_id=city_id, now=fixed)
     assert day["session_count"] == 2
+    _freeze_modules(monkeypatch, fixed, "src.application.selection_page", "src.application.arena_public_use_cases")
     async with _client() as client:
         listing = await client.get(f"/c/{city_slug(name)}?t=ice&w=today")
     assert listing.status_code == 200
