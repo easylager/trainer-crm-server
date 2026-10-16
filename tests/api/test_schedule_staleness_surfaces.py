@@ -116,7 +116,11 @@ _FORBIDDEN = ("не подтвержд", "не обновлял", "уточн", 
 
 
 def _assert_no_freshness_words(html: str) -> None:
-    """Видимый текст страницы (без style/script) — без слов о свежести расписания."""
+    """Видимый текст страницы (без style/script) — без слов о свежести расписания.
+
+    Общий футер сайта говорит «уточняйте у катка» — это не пометка свежести слота.
+    """
+    html = re.sub(r'(?is)<footer class="b-site-foot"[\s\S]*?</footer>', " ", html)
     visible = re.sub(r"<(style|script)\b.*?</\1>", " ", html, flags=re.S | re.I)
     low = visible.casefold()
     for bad in _FORBIDDEN:

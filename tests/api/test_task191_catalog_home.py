@@ -121,8 +121,9 @@ async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_se
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    # JSON-LD, карта, beacon, b-press, glide-motion. Имя города с «</script>» не ломает разметку.
-    assert home.text.count("</script>") == 5
+    # JSON-LD, is-ready, карта, beacon, b-press, glide-motion, b-when-swap.
+    # Имя города с «</script>» не ломает разметку.
+    assert home.text.count("</script>") == 7
     assert "<img src=x" not in home.text
     ld = _json_ld(home.text)
     assert "@graph" in ld
