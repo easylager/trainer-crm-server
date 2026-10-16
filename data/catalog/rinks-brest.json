@@ -1,5 +1,5 @@
 {
-  "_source": "https://katki.by/brest/ и главная https://katki.by/, снято 2026-10-10. Дома и координат страница не дала. Часы шапки и сетка сеансов хранятся раздельно. Фото — brest.jpg с главной, не шапка страницы.",
+  "_source": "https://katki.by/brest/ и главная https://katki.by/, снято 2026-10-10. Дома и координат страница не дала. Часы шапки и сетка сеансов хранятся раздельно. Фото катка на площади — кадр с ёлкой и бортами Приорбанк | Visa, поставлено в каталог 2026-10-16.",
   "_schema": "src/application/catalog_shops_import.py — ShopRecord; загрузка: scripts/load_catalog_shops.py --file data/catalog/rinks-brest.json",
   "city": "Брест",
   "shops": [
@@ -15,7 +15,7 @@
       "services": ["skate_rental"],
       "season": [12, 3],
       "photo": "photos/katki/brest.jpg",
-      "photo_attribution": "Кадр с сайта katki.by",
+      "photo_attribution": "Фото катка на площади Ленина, поставлено в каталог 2026-10-16",
       "hours": {
         "mon": ["08:00", "22:00"],
         "tue": ["08:00", "22:00"],

@@ -12,8 +12,8 @@
   document.addEventListener('touchstart', function () {}, { passive: true });
 
   var PRESS_SEL =
-    '.b-city,.b-when a,a.b-tile,a.b-row,a.b-slot,a.b-table__row,a.b-ticket,a.b-card,a.b-card2__thumb,.home-map__city';
-  var DELAY_MS = 80;
+    '.b-city,.b-when a,.b-toggle,.b-day,.b-btn,.b-pill,a.b-tile,a.b-row,a.b-slot,a.b-table__row,a.b-ticket,a.b-card,.b-card2,a.b-card2__thumb,.b-site-foot__tg,.home-map__city';
+  var DELAY_MS = 0;
   var FLASH_MS = 100;
   var MOVE_PX = 8;
   var PRESS_CLASS = 'b-press';

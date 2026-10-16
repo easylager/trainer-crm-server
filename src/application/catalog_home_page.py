@@ -679,12 +679,19 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
             if pt.get("has_ohm")
             else ""
         )
+        live = int(pt.get("session_count") or 0) > 0
+        pulse = (
+            f'<circle class="home-map__pulse" cx="{x:.1f}" cy="{y:.1f}" r="{r + 7:.1f}" fill="var(--g-accent)"/>'
+            if live
+            else ""
+        )
         parts.append(
-            f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city" aria-label="{_esc(pt["name"])}">'
+            f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city{" home-map__city--on" if live else ""}" '
+            f'aria-label="{_esc(pt["name"])}">'
             f'<circle class="home-map__tap" cx="{x:.1f}" cy="{y:.1f}" r="{tap:.1f}" fill="transparent"/>'
             f'<g class="home-map__vis">'
-            f"{ring}"
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if int(pt.get("session_count") or 0) else "#4a6273"}"/>'
+            f"{pulse}{ring}"
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{"var(--g-accent)" if live else "#4a6273"}"/>'
             f"</g></a>"
         )
     parts.append("</g>")
@@ -1199,6 +1206,33 @@ def _counter_text(
     )
 
 
+def _count_span(n: int) -> str:
+    return f'<span class="b-count" data-count="{int(n)}">{int(n)}</span>'
+
+
+def _counter_html(
+    session_count: int,
+    city_count: int,
+    when_key: str,
+    *,
+    now: datetime,
+    city_name: str | None = None,
+) -> str:
+    """Та же фраза, что ``_counter_text``, числа — в span для однократного набегания."""
+    when_text = _counter_when_text(when_key, now)
+    sessions_word = plural_ru(session_count, "сеанс", "сеанса", "сеансов")
+    if city_count == 1 and city_name:
+        label = when_text[:1].lower() + when_text[1:]
+        return (
+            f"{_esc(city_name)} — {_esc(label)} {_count_span(session_count)}\u00a0{_esc(sessions_word)}"
+        )
+    cities_word = plural_ru(city_count, "городе", "городах", "городах")
+    return (
+        f"{_esc(when_text)} в Беларуси {_count_span(session_count)}\u00a0{_esc(sessions_word)} "
+        f"в {_count_span(city_count)}\u00a0{_esc(cities_word)}"
+    )
+
+
 def _today_done_text(cities: list[Mapping[str, Any]]) -> str:
     """«0 сеансов в 0 городах» — правда, но бесполезная: говорим, что сегодня льда нет,
     и где он завтра. Счётчик считает оставшиеся сеансы — «нет» верно и днём, и вечером."""
@@ -1265,7 +1299,12 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
         f'<a href="{href}"' + (' aria-current="true"' if key == when_key else "") + f">{_esc(label)}</a>"
         for key, label, href in items
     )
-    nav = f'<nav class="b-when vt-when-strip" aria-label="Когда">{links}</nav>'
+    index = next((i for i, (key, _, _) in enumerate(items) if key == when_key), 0)
+    # Один ползунок на всех четырёх страницах: общее имя перехода сдвигает его под новый пункт.
+    nav = (
+        f'<nav class="b-when vt-when-strip" style="--when-i: {index}" aria-label="Когда">'
+        f'<span class="b-when__thumb" aria-hidden="true"></span>{links}</nav>'
+    )
     if view.get("show_day_picker"):
         days = "".join(
             f'<a class="b-day" href="{_esc(item["href"])}"><span>{_esc(item["label"])}</span></a>'
@@ -1369,10 +1408,12 @@ def render_catalog_home_page(
     with_sessions = [c for c in by_cities if int(c.get("session_count") or 0) > 0]
     total_sessions = sum(int(c.get("session_count") or 0) for c in with_sessions)
     sole_name = str(with_sessions[0].get("name") or "") if len(with_sessions) == 1 else None
-    counter_text = _counter_text(total_sessions, len(with_sessions), when_key, now=now, city_name=sole_name)
     if when_key == "today" and not total_sessions:
-        counter_text = _today_done_text(by_cities)
-    counter_text = re.sub(r"(\d) ", "\\1\u00a0", counter_text)
+        counter_html = _esc(_today_done_text(by_cities))
+    else:
+        counter_html = _counter_html(
+            total_sessions, len(with_sessions), when_key, now=now, city_name=sole_name
+        )
 
     hero_city = user_city
     if not (hero_city and hero_city.get("photo_hero_key")):
@@ -1385,7 +1426,7 @@ def render_catalog_home_page(
         title="Где покататься",
         title_break="покататься",
         kicker=_format_date_string(now).lower(),
-        sub_html=_esc(counter_text),
+        sub_html=counter_html,
         sub_class="counter",
         photo_url=photo,
         photo_alt=f"Каток, {format_public_name(str(hero_city.get('name') or ''))}" if hero_city else "",
@@ -1422,15 +1463,7 @@ def render_catalog_home_page(
             f'<span><i></i>{_esc(legend_on)}</span>'
             f'<span class="off"><i></i>{_esc(legend_off)}</span></figcaption></figure></section>'
         )
-    # TASK-278: «Открыть в Telegram» — плашкой внизу экрана, а не секцией в конце страницы.
-    from src.application.style_b import (
-        b_press_script_html,
-        public_fonts_head_html,
-        telegram_dock_html,
-        telegram_dock_script_html,
-    )
-
-    cta = telegram_dock_html(cta_url, hint=t("tg.map_all"))
+    from src.application.style_b import b_press_script_html, public_fonts_head_html, when_swap_script_html
     values = {
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,
@@ -1449,15 +1482,31 @@ def render_catalog_home_page(
         "__HERO_CITY__": _b_home_city_card(user_city, city_when=view.get("city_when")),
         "__MAP__": map_html,
         "__CITIES__": cities_html,
-        "__CTA__": cta,
+        "__CTA__": "",
         "__B_PRESS_SCRIPT__": b_press_script_html(),
-        "__TG_DOCK_SCRIPT__": telegram_dock_script_html(),
-        "__FOOTER__": _esc(t("home.footer")),
-        "__ELSEWHERE__": _b_elsewhere(cities),
-        "__TRAINERS_URL__": _esc(trainers_url),
+        "__WHEN_SWAP_SCRIPT__": when_swap_script_html(),
+        "__TG_DOCK_SCRIPT__": "",
+        "__SITE_FOOTER__": _catalog_site_footer(cities, trainers_url=trainers_url, telegram_href=cta_url),
         "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(surface="catalog_home"),
     }
     return fill_placeholders(template, values)
+
+
+def _catalog_site_footer(
+    cities: list[Mapping[str, Any]],
+    *,
+    trainers_url: str,
+    telegram_href: str | None,
+) -> str:
+    from src.application.public_site_footer import render_site_footer_html
+
+    elsewhere = _b_elsewhere(cities)
+    context = elsewhere if elsewhere else ""
+    return render_site_footer_html(
+        trainers_href=trainers_url,
+        context_html=context,
+        telegram_href=telegram_href,
+    )
 
 
 def _b_elsewhere(cities: list[Mapping[str, Any]]) -> str:

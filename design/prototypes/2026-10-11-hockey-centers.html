@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>С клюшкой: ОХМ и центры по записи — прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #45b9bb;
+    --brand-2: #7fd7d8;
+    --studio: #050607;
+    --studio-text: #eceae4;
+    --studio-hint: #9a968c;
+    --font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --bg: #0e141b;
+    --surface: #1d2733;
+    --ink: #f1f5f7;
+    --muted: #8aa0b3;
+    --line: #2b3744;
+    --accent: #7fd7d8;
+    --accent-ink: #04262a;
+    --warn: #ffcf86;
+    --warn-wash: #3a2d13;
+    --dry: #e7b3b3;
+    --dry-wash: #3a2224;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    font-family: var(--font);
+    background: var(--studio);
+    color: var(--studio-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 20px 64px;
+    display: grid;
+    grid-template-columns: minmax(280px, 420px) 1fr;
+    gap: 36px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; justify-items: center; }
+  }
+  .thesis { max-width: 420px; }
+  .kicker {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--brand-2);
+  }
+  h1 { margin: 10px 0 0; font-size: 26px; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; }
+  .lede { margin: 12px 0 0; font-size: 14px; line-height: 1.55; color: var(--studio-hint); }
+  .box {
+    margin: 14px 0 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--studio-hint);
+  }
+  .box strong { color: var(--studio-text); font-weight: 600; }
+  .box ul { margin: 8px 0 0; padding-left: 18px; }
+  .box li { margin-bottom: 6px; }
+  .people { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .people button {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.04);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .people button.is-on {
+    border-color: rgba(69,185,187,.55);
+    background: rgba(69,185,187,.16);
+    color: #dff6f6;
+  }
+  .log { margin-top: 12px; min-height: 2.8em; font-size: 13px; line-height: 1.45; color: var(--studio-hint); }
+  .log b { color: var(--studio-text); }
+
+  .phone {
+    width: 390px;
+    max-width: calc(100vw - 32px);
+    height: 780px;
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 28px;
+    overflow: hidden;
+    border: 1px solid #2a3036;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 80px rgba(0,0,0,.45);
+  }
+  .chrome {
+    padding: 18px 16px 0;
+    flex: none;
+  }
+  .city {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .title {
+    margin: 2px 0 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+  }
+  .modes {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+    overflow: auto;
+  }
+  .mode {
+    flex: none;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    background: transparent;
+  }
+  .mode.is-on { background: var(--surface); color: var(--ink); }
+  .sub {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .seg {
+    flex: 1;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: transparent;
+  }
+  .seg.is-on { border-color: rgba(127,215,216,.55); background: #163638; }
+  .seg b { display: block; font-size: 14px; font-weight: 700; }
+  .seg span { display: block; margin-top: 2px; font-size: 11px; line-height: 1.3; color: var(--muted); font-weight: 500; }
+  .hint {
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+  .scroll { flex: 1; overflow: auto; padding: 12px 16px 24px; }
+  .card {
+    background: var(--surface);
+    border-radius: 18px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .photo {
+    height: 132px;
+    display: flex;
+    align-items: flex-end;
+    padding: 10px;
+    background:
+      linear-gradient(180deg, transparent 30%, rgba(8,12,16,.72)),
+      var(--ph, #243140);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    background: var(--warn-wash);
+    color: var(--warn);
+  }
+  .badge.dry { background: var(--dry-wash); color: var(--dry); }
+  .badge.ice { background: #163638; color: var(--accent); }
+  .body { padding: 12px 14px 14px; }
+  .name { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
+  .addr { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .line { margin: 8px 0 0; font-size: 14px; line-height: 1.4; }
+  .hours { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  .btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.ghost { background: transparent; color: var(--accent); border: 1px solid #2f4c4c; }
+  .session .when {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 14px 0;
+  }
+  .session .when b { font-size: 22px; letter-spacing: -.03em; }
+  .session .when span { font-size: 14px; font-weight: 700; color: var(--accent); }
+  .offer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--line);
+  }
+  .offer:first-of-type { margin-top: 12px; }
+  .offer b { display: block; font-size: 15px; }
+  .offer span { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .offer em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--warn); white-space: nowrap; }
+  .linkrow {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-top: 8px;
+    padding: 12px;
+    border-radius: 14px;
+    background: #17212b;
+    border: 1px solid var(--line);
+  }
+  .linkrow b { display: block; font-size: 14px; }
+  .linkrow span { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+  .back {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0 0;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .note {
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="thesis">
+    <p class="kicker">Прототип · вкладка С клюшкой</p>
+    <h1>ОХМ остаётся сеансом. Центры — отдельный сегмент, у каждого свой лёд.</h1>
+    <p class="lede">Три места снимаются с «Покататься». Новой вкладки нет. HST — строка на карточке Lepshy, не категория. Заявку мы не принимаем: кнопка звонит в центр.</p>
+    <div class="box">
+      <strong>Что человек должен понять за секунду</strong>
+      <ul>
+        <li><strong>ОХМ</strong> — билет на настоящий лёд, свой комплект, время сеанса.</li>
+        <li><strong>Центры</strong> — не сеанс. Время берут по телефону.</li>
+        <li>Только Lepshy говорит «льда нет». Финт и Minikatok — синтетика, это другое покрытие.</li>
+      </ul>
+    </div>
+    <div class="people" id="views">
+      <button type="button" data-view="ohm" class="is-on">ОХМ</button>
+      <button type="button" data-view="centers">Центры · 3</button>
+      <button type="button" data-view="lepshy">Карточка Lepshy</button>
+    </div>
+    <p class="log" id="log"><b>ОХМ</b> — список сеансов, как сейчас. Сегмент «Центры · 3» виден сразу, не под длинной лентой.</p>
+  </div>
+
+  <div class="phone" id="phone">
+    <div class="chrome">
+      <div class="city">Минск</div>
+      <h2 class="title">Каталог</h2>
+      <div class="modes">
+        <span class="mode">Покататься</span>
+        <span class="mode is-on">С клюшкой</span>
+        <span class="mode">Заточка</span>
+        <span class="mode">Магазины</span>
+        <span class="mode">Тренеры</span>
+      </div>
+      <div class="sub" id="sub">
+        <button type="button" class="seg is-on" data-view="ohm"><b>ОХМ</b><span>билет на лёд</span></button>
+        <button type="button" class="seg" data-view="centers"><b>Центры · 3</b><span>по записи, не сеанс</span></button>
+      </div>
+      <p class="hint" id="hint">Открытая тренировка. Приходят со своим комплектом на арену.</p>
+    </div>
+    <div class="scroll" id="scroll"></div>
+  </div>
+</div>
+
+<script>
+var LOG = {
+  ohm: '<b>ОХМ</b> — список сеансов, как сейчас. Сегмент «Центры · 3» виден сразу, не под длинной лентой.',
+  centers: '<b>Центры</b> — три карточки, три разных покрытия. Общее только одно: нет сетки сеанса, звонят и бронируют.',
+  lepshy: '<b>Карточка Lepshy.</b> HST, бросковая и ОФП — что можно заказать, не расписание. Группы остаются в Instagram. Магазин на Ратомской — соседняя карточка, не это место.'
+};
+
+var VIEWS = {
+  ohm: function () {
+    return ''
+      + session('Чижовка-арена', 'Малая арена · сегодня', '08:15', '17 Br', 'Хоккей для любителей, 60 мин')
+      + session('ТЦ DiaMond city', 'Сегодня', '15:30', '14 Br', 'ОХМ, 45 мин');
+  },
+  centers: function () {
+    return ''
+      + center({
+          badge: 'Льда нет',
+          dry: true,
+          name: 'Lepshy Hockey Center',
+          addr: 'пр-т Победителей, 4А',
+          line: 'Дорожка HST, бросковая зона, зал ОФП.',
+          hours: 'Ежедневно 08:00–22:00 · по записи',
+          ph: '#3a2a28',
+          open: 'lepshy'
+        })
+      + center({
+          badge: 'Синтетика',
+          name: 'Хоккейный центр «Финт»',
+          addr: 'Октябрьская площадь, 1',
+          line: 'Бросковая зона 22×10 м. Час с человека.',
+          hours: 'Ежедневно 07:00–22:00 · по записи',
+          ph: '#2a3340'
+        })
+      + center({
+          badge: 'Синтетика',
+          name: 'Minikatok.by',
+          addr: 'ул. Ермака, 12',
+          line: 'Аренда площадки до 8 человек. Катание и хоккей, прокат на месте.',
+          hours: 'Ежедневно 10:00–22:00 · по записи',
+          ph: '#243848'
+        });
+  },
+  lepshy: function () {
+    return ''
+      + '<button type="button" class="back" data-view="centers">← Центры</button>'
+      + '<article class="card">'
+      + '  <div class="photo" style="--ph:#3a2a28"><span class="badge dry">Льда нет · сухой центр</span></div>'
+      + '  <div class="body">'
+      + '    <h3 class="name">Lepshy Hockey Center</h3>'
+      + '    <p class="addr">Минск, пр-т Победителей, 4А</p>'
+      + '    <p class="line">Тренировка на тренажёрах, не на арене. Слота в сетке нет: время берут в часы работы.</p>'
+      + '    <div class="offer"><div><b>Дорожка HST</b><span>Обычные коньки, пластиковое полотно. Слот под человека.</span></div><em>по записи</em></div>'
+      + '    <div class="offer"><div><b>Бросковая зона</b><span>Пластиковый лёд, отработка броска.</span></div><em>по записи</em></div>'
+      + '    <div class="offer"><div><b>Зал ОФП</b><span>Без коньков.</span></div><em>по записи</em></div>'
+      + '    <p class="note">Детские группы 4–9 лет и сборы центр публикует в Instagram. В каталог это не сеанс.</p>'
+      + '    <div class="row"><a class="btn primary" href="tel:+375291102035">Позвонить</a></div>'
+      + '    <p class="hours">+375 29 110-20-35 · ежедневно 08:00–22:00</p>'
+      + '    <button type="button" class="linkrow"><b>Форма и заточка</b><span>Lepshy Hockey, ул. Ратомская, 2 · магазин, не этот зал</span></button>'
+      + '  </div>'
+      + '</article>';
+  }
+};
+
+function session(name, where, time, price, line) {
+  return '<article class="card session">'
+    + '<div class="when"><b>' + time + '</b><span>' + price + '</span></div>'
+    + '<div class="body" style="padding-top:6px">'
+    + '<h3 class="name">' + name + '</h3>'
+    + '<p class="addr">' + where + '</p>'
+    + '<p class="line">' + line + '</p>'
+    + '<div class="row"><button class="btn ghost" type="button">Позвать</button></div>'
+    + '</div></article>';
+}
+
+function center(c) {
+  var badge = '<span class="badge' + (c.dry ? ' dry' : '') + '">' + c.badge + '</span>';
+  var open = c.open ? ' data-view="' + c.open + '"' : '';
+  return '<article class="card">'
+    + '<div class="photo" style="--ph:' + c.ph + '">' + badge + '</div>'
+    + '<div class="body">'
+    + '<h3 class="name">' + c.name + '</h3>'
+    + '<p class="addr">' + c.addr + '</p>'
+    + '<p class="line">' + c.line + '</p>'
+    + '<p class="hours">' + c.hours + '</p>'
+    + '<div class="row">'
+    + '<button class="btn primary" type="button">Позвонить</button>'
+    + '<button class="btn ghost" type="button"' + open + '>' + (c.open ? 'Карточка' : 'Карточка') + '</button>'
+    + '</div></div></article>';
+}
+
+var HINT = {
+  ohm: 'Открытая тренировка. Приходят со своим комплектом на арену.',
+  centers: 'Это не ОХМ. Покрытия разные — смотрите плашку на карточке. Время только по телефону.',
+  lepshy: 'Сухой центр. Дорожка, бросковая и зал — не сеансы на льду.'
+};
+
+function show(view) {
+  document.getElementById('scroll').innerHTML = VIEWS[view]();
+  document.getElementById('hint').textContent = HINT[view];
+  document.getElementById('log').innerHTML = LOG[view];
+  document.querySelectorAll('[data-view]').forEach(function (el) {
+    if (el.classList.contains('seg') || el.parentElement.id === 'views') {
+      el.classList.toggle('is-on', el.getAttribute('data-view') === view);
+    }
+  });
+  document.getElementById('scroll').scrollTop = 0;
+}
+
+document.body.addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-view]');
+  if (!btn) return;
+  show(btn.getAttribute('data-view'));
+});
+
+show('ohm');
+</script>
+</body>
+</html>

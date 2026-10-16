@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Превью · Сейчас (мок)</title>
+  <style>
+    :root {
+      --accent-rgb: 69, 185, 187;
+      --tg-theme-bg-color: #1a1a1a;
+      --tg-theme-text-color: #f5f5f5;
+      --tg-theme-hint-color: #9ca3af;
+      --tg-theme-secondary-bg-color: #2a2a2a;
+      --app-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0 auto;
+      max-width: 390px;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      padding: 16px;
+      padding-bottom: 32px;
+    }
+    .adm-header { margin-bottom: 16px; }
+    .adm-header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 700; }
+    .adm-sub { font-size: 12px; color: var(--tg-theme-hint-color); }
+    .adm-card {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 14px;
+      padding: 16px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .cat-hero-banner {
+      border-radius: 16px;
+      padding: 18px 16px 16px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
+      background: linear-gradient(145deg, rgba(var(--accent-rgb), 0.22) 0%, rgba(var(--accent-rgb), 0.06) 55%, rgba(255,255,255,0.02) 100%);
+    }
+    .cat-hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .cat-hero-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--tg-theme-hint-color); }
+    .cat-hero-value { margin-top: 6px; font-size: 44px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+    .cat-hero-cap { margin-top: 6px; font-size: 12px; color: var(--tg-theme-hint-color); }
+    .cat-week-badge { flex-shrink: 0; text-align: right; padding: 8px 10px; border-radius: 12px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08); }
+    .cat-week-badge .up { color: #34c759; font-weight: 600; font-size: 15px; }
+    .cat-week-badge small { display: block; margin-top: 4px; font-size: 11px; color: var(--tg-theme-hint-color); }
+    .cat-card { padding: 14px; }
+    .cat-block-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--tg-theme-hint-color); margin: 0 0 10px; }
+    .cat-compare-row { display: grid; grid-template-columns: 52px 1fr 36px; gap: 8px; align-items: center; font-size: 12px; margin-bottom: 8px; }
+    .cat-compare-row.is-current .cat-compare-label { color: var(--tg-theme-text-color); font-weight: 600; }
+    .cat-compare-label { color: var(--tg-theme-hint-color); }
+    .cat-compare-track { height: 10px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .cat-compare-fill { height: 100%; border-radius: 999px; background: rgba(255,255,255,0.22); }
+    .cat-compare-row.is-current .cat-compare-fill { background: rgba(var(--accent-rgb), 0.85); width: 100%; }
+    .cat-compare-row:first-of-type .cat-compare-fill { width: 79%; }
+    .cat-compare-num { text-align: right; font-weight: 700; }
+    .cat-divider { height: 1px; margin: 14px 0; background: rgba(255,255,255,0.08); }
+    .cat-progress-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+    .cat-progress-head b { font-size: 15px; }
+    .cat-progress-track { height: 12px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .cat-progress-fill { height: 100%; width: 7.7%; border-radius: 999px; background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.5), rgba(var(--accent-rgb), 0.95)); }
+    .cat-progress-foot { margin-top: 6px; font-size: 11px; color: var(--tg-theme-hint-color); }
+    .cat-city-pill { display: flex; justify-content: space-between; padding: 8px 10px; border-radius: 10px; background: rgba(0,0,0,0.14); font-size: 13px; margin-top: 6px; }
+    .cat-city-pill span:last-child { font-size: 12px; color: var(--tg-theme-hint-color); }
+    .cat-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .cat-chip { flex: 1 1 30%; min-width: 92px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.06); }
+    .cat-chip b { display: block; font-size: 20px; }
+    .cat-chip span { display: block; margin-top: 3px; font-size: 11px; color: var(--tg-theme-hint-color); }
+    .cat-funnel-step { margin-bottom: 10px; }
+    .cat-funnel-label { font-size: 13px; }
+    .cat-funnel-label small { display: block; font-size: 11px; color: var(--tg-theme-hint-color); }
+    .cat-funnel-bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.08); margin-top: 6px; overflow: hidden; }
+    .cat-funnel-bar i { display: block; height: 100%; border-radius: 999px; background: rgba(56, 132, 255, 0.55); }
+    .cat-funnel-step:last-child .cat-funnel-bar i { background: rgba(var(--accent-rgb), 0.75); width: 40%; }
+    .cat-funnel-step:first-child .cat-funnel-bar i { width: 100%; }
+    .cat-arena-bar { margin-bottom: 10px; font-size: 12px; }
+    .cat-arena-track { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.06); margin-top: 4px; overflow: hidden; }
+    .cat-arena-track i { display: block; height: 100%; border-radius: 999px; background: rgba(var(--accent-rgb), 0.55); }
+    .cat-site { margin-top: 12px; padding: 10px 12px; border-radius: 12px; font-size: 12px; color: var(--tg-theme-hint-color); background: rgba(255,255,255,0.04); border: 1px dashed rgba(255,255,255,0.1); }
+    .cat-foot { margin-top: 10px; font-size: 11px; text-align: center; color: var(--tg-theme-hint-color); }
+    .fold { margin-top: 12px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,0.12); font-size: 13px; color: var(--tg-theme-hint-color); }
+    .mock-tag { position: fixed; top: 8px; right: 8px; font-size: 10px; padding: 4px 8px; border-radius: 8px; background: #fde68a; color: #1a1a1a; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="mock-tag">МОК · ваши цифры</div>
+  <div class="adm-header">
+    <h1>Сейчас</h1>
+    <div class="adm-sub">Каталог в Telegram — неделя, месяц и что цепляет людей</div>
+  </div>
+
+  <div class="cat-hero-banner">
+    <div class="cat-hero-top">
+      <div>
+        <div class="cat-hero-title">Минск · уникальные в Telegram</div>
+        <div class="cat-hero-value">14</div>
+        <div class="cat-hero-cap">за эту неделю · с понедельника</div>
+      </div>
+      <div class="cat-week-badge">
+        <span class="up">▲ +27,3%</span>
+        <small>было 11</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="adm-card cat-card">
+    <div class="cat-block-title">Неделя к неделе</div>
+    <div class="cat-compare-row"><span class="cat-compare-label">прошлая</span><div class="cat-compare-track"><div class="cat-compare-fill"></div></div><span class="cat-compare-num">11</span></div>
+    <div class="cat-compare-row is-current"><span class="cat-compare-label">эта</span><div class="cat-compare-track"><div class="cat-compare-fill"></div></div><span class="cat-compare-num">14</span></div>
+
+    <div class="cat-divider"></div>
+    <div class="cat-block-title">октябрь · цель</div>
+    <div class="cat-progress-head"><span>аккаунтов в Telegram</span><b>23 / 300</b></div>
+    <div class="cat-progress-track"><div class="cat-progress-fill"></div></div>
+    <div class="cat-progress-foot">ещё 277 до 300</div>
+
+    <div class="cat-divider"></div>
+    <div class="cat-block-title">Другие города · эта неделя</div>
+    <div class="cat-city-pill"><span>Витебск</span><span>1 · было 0</span></div>
+
+    <div class="cat-divider"></div>
+    <div class="cat-chips">
+      <div class="cat-chip"><b>2</b><span>вернулись с прошлой недели</span></div>
+      <div class="cat-chip"><b>5</b><span>поделились</span></div>
+      <div class="cat-chip"><b>2</b><span>открыли ссылку</span></div>
+    </div>
+
+    <div class="cat-divider"></div>
+    <div class="cat-block-title">Виральность</div>
+    <div class="cat-funnel-step">
+      <div class="cat-funnel-label">Поделились<small>разные аккаунты</small></div>
+      <div class="cat-funnel-bar"><i></i></div>
+    </div>
+    <div class="cat-funnel-step">
+      <div class="cat-funnel-label">Открыли из чата<small>пока мало открытий для процента</small></div>
+      <div class="cat-funnel-bar"><i></i></div>
+    </div>
+
+    <div class="cat-divider"></div>
+    <div class="cat-block-title">Где заходят · Telegram</div>
+    <div class="cat-arena-bar"><div>СДЮШОР по фигурному катанию <em style="color:#9ca3af">· Минск</em></div><div class="cat-arena-track"><i style="width:100%"></i></div></div>
+    <div class="cat-arena-bar"><div>Минск Арена <em style="color:#9ca3af">· Минск</em></div><div class="cat-arena-track"><i style="width:50%"></i></div></div>
+    <div class="cat-arena-bar"><div>ТЦ Замок <em style="color:#9ca3af">· Минск</em></div><div class="cat-arena-track"><i style="width:50%"></i></div></div>
+
+    <div class="cat-site">Сайт в браузере: <b>138</b> за неделю — не те же люди, что в Telegram. Служебные заходы тоже считаются.</div>
+    <div class="cat-foot">Ряд с 06.10.2026 · полные 7 и 30 дней наберутся постепенно.</div>
+  </div>
+
+  <div class="fold">▸ Платформа · занятия, деньги, тренеры (свёрнуто)</div>
+</body>
+</html>

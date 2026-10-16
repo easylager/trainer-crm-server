@@ -99,7 +99,8 @@ def test_map_svg_links_every_city_with_tap_zone_and_ohm_ring() -> None:
     points = build_map_points(cities)
     assert [p["slug"] for p in points] == ["minsk", "gorki"], "RU не на карте Беларуси"
     svg = render_map_svg(points)
-    assert svg.count('class="home-map__city"') == 2
+    assert svg.count('class="home-map__city') == 2
+    assert "home-map__city--on" in svg and svg.count("home-map__pulse") == 1
     assert 'href="/c/minsk"' in svg and 'href="/c/gorki"' in svg
     assert svg.count('class="home-map__tap"') == 2
     assert f'r="{_MAP_TAP_RADIUS_MAJOR:.1f}"' in svg, "областной центр — зона ≥ 44px"

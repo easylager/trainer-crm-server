@@ -57,14 +57,18 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
 
     assert home.status_code == 200
     assert home.headers["content-type"].startswith("text/html")
-    # JSON-LD, карта, beacon просмотра, b-press, tg-dock.
-    assert home.text.lower().count("<script") == 5
-    assert home.text.count("</script>") == 5
+    # JSON-LD, is-ready фото, карта, beacon просмотра, b-press, glide-motion, b-when-swap.
+    # Кнопка Telegram — в футере.
+    assert home.text.lower().count("<script") == 7
+    assert home.text.count("</script>") == 7
     assert home.text.count('<script type="application/ld+json">') == 1
     assert "public-page-view-beacon.js" in home.text
     assert "public-link-prefetch.js" not in home.text
     assert "b-press.js" in home.text
-    assert "tg-dock.js" in home.text
+    assert "glide-motion.js" in home.text
+    assert "b-when-swap.js" in home.text
+    assert "tg-dock.js" not in home.text
+    assert "b-site-foot__tg" in home.text
     assert "home-map__hint" in home.text
     assert "Зажмите точку — название." not in home.text
     assert "Размер точки" not in home.text
@@ -117,7 +121,7 @@ async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_se
     async with _client() as client:
         home = await client.get("/")
     assert home.status_code == 200
-    # JSON-LD, карта, beacon, b-press, tg-dock. Имя города с «</script>» не ломает разметку.
+    # JSON-LD, карта, beacon, b-press, glide-motion. Имя города с «</script>» не ломает разметку.
     assert home.text.count("</script>") == 5
     assert "<img src=x" not in home.text
     ld = _json_ld(home.text)

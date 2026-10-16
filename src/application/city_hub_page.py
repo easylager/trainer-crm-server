@@ -627,6 +627,12 @@ def compose_city_hub_share(
     }
 
 
+def _city_hub_site_footer(*, trainers_href: str, telegram_href: str | None) -> str:
+    from src.application.public_site_footer import render_site_footer_html
+
+    return render_site_footer_html(trainers_href=trainers_href, telegram_href=telegram_href)
+
+
 def render_city_hub_page(
     view: Mapping[str, Any],
     *,
@@ -668,9 +674,7 @@ def render_city_hub_page(
     need_share_js = bool(view.get("upcoming")) or has_share_pick
     share_tail = catalog_list_share_tail(scripts=need_share_js, css=has_share_pick)
     # TASK-278: «Открыть в Telegram» — плашкой внизу экрана; кнопки в блоке «Поделиться» больше нет.
-    from src.application.style_b import city_map_hint, telegram_dock_html
-
-    share_tail["__PLACE_SHARE_BAR__"] = telegram_dock_html(cta_url, hint=city_map_hint(list(view.get("places") or [])))
+    share_tail["__PLACE_SHARE_BAR__"] = ""
     elements = []
     for p in view.get("places") or []:
         if not p.get("slug"):
@@ -715,7 +719,10 @@ def render_city_hub_page(
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
             "__COMPONENTS_V__": COMPONENTS_VERSION,
-            "__CITY_LINK__": "",
+            "__SITE_FOOTER__": _city_hub_site_footer(
+                trainers_href=trainers_href or "/trainers",
+                telegram_href=cta_url,
+            ),
             "__BODY__": body + _breadcrumbs(view, canonical_url),
             "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(
                 surface="selection_page",
@@ -780,7 +787,9 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
     all_href = _list_href(slug, t="ice", w="today") if today_n else _list_href(slug, t="ice")
     by_slug = {str(p.get("slug") or ""): p for p in view.get("places") or []}
     tiles: list[str] = []
+    seen_slugs: set[str] = set()
     from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
+    from src.shared.public_view_transitions import place_vt_name
 
     for card in upcoming:
         hhmm, day = _session_when(card, today=view["today"])
@@ -793,6 +802,10 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
         name = format_public_name(str(card.get("arena_name") or ""))
         badge = hhmm if day == "сегодня" else f"{day} {hhmm}"
         pv = place.get("photo_variants")
+        vt_name = ""
+        if arena_slug and arena_slug not in seen_slugs:
+            seen_slugs.add(arena_slug)
+            vt_name = place_vt_name(arena_slug)
         tile = tile_html(
             href=href,
             name=name,
@@ -803,6 +816,7 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
             badge=badge,
             badge_kind="time",
             photo_variants=pv if isinstance(pv, Mapping) else None,
+            vt_name=vt_name,
         )
         arena_ref = place.get("id")
         if arena_ref is not None and session_id and href and href != "#":

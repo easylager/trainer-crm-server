@@ -44,9 +44,9 @@ def _freeze(monkeypatch, moment: datetime) -> None:
 
 
 def _counter(html: str) -> str:
-    match = re.search(r'<p class="[^"]*\bcounter\b[^"]*">([^<]*)</p>', html)
+    match = re.search(r'<p class="[^"]*\bcounter\b[^"]*">(.*?)</p>', html, re.S)
     assert match, "counter"
-    return match.group(1).replace("\u00a0", " ")
+    return re.sub(r"<[^>]+>", "", match.group(1)).replace("\u00a0", " ")
 
 
 def _city_tile(html: str, city_name: str) -> str:
@@ -171,7 +171,7 @@ async def test_ac4_by_cities_stay_on_the_map_and_ru_does_not(app_use_test_db, db
     svg = str(view.get("map_svg") or "")
     assert 'class="home-map"' in svg
     for slug in ("brest", "bobruysk", "grodno"):
-        assert f'href="/c/{slug}" class="home-map__city"' in svg
+        assert f'href="/c/{slug}" class="home-map__city' in svg
     assert 'href="/c/tver"' not in svg
 
     async with _client() as client:
@@ -179,8 +179,8 @@ async def test_ac4_by_cities_stay_on_the_map_and_ru_does_not(app_use_test_db, db
     assert resp.status_code == 200
     assert '<svg class="home-map"' in resp.text
     for slug in ("brest", "bobruysk", "grodno"):
-        assert f'href="/c/{slug}" class="home-map__city"' in resp.text
-    assert 'href="/c/tver" class="home-map__city"' not in resp.text
+        assert f'href="/c/{slug}" class="home-map__city' in resp.text
+    assert 'href="/c/tver" class="home-map__city' not in resp.text
     elsewhere = re.search(r'<span class="elsewhere">.*?</span>', resp.text, re.S)
     assert elsewhere and 'href="/c/tver"' in elsewhere.group(0)
 

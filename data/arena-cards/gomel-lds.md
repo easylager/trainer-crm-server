@@ -23,7 +23,7 @@ unknown явно писать `unknown`, не выдумывать.
 ## Photos
 | file or URL | license (own\|operator\|permitted) | attribution | note |
 |---|---|---|---|
-| https://gomel.hockey.by/images/ADMIN/12.jpg | operator | официальный сайт ХК «Гомель», страница «История» https://gomel.hockey.by/clubs/istoriya/ | HTTP 200, image/jpeg, 271573 bytes, проверено `curl` 2026-09-07. Страница `/clubs/arena/` (найдена по аналогии с `lokomotiv.hockey.by/clubs/arena/`) фото не содержит — там только схема рассадки (`Схема арена.jpg`, битая ссылка); реальное фото дворца нашлось на странице истории клуба. |
+| unknown | unknown | — | 2026-10-15: `https://gomel.hockey.by/images/ADMIN/12.jpg` — не фото дворца, а эмблема ХК «Гомель» и силуэты кубков. Строка media id=3 на проде в статусе rejected, в герой не попадает. Герой — панорама зала (license own), загружена вручную в media, status published. |
 
 og:image главной https://gomel.hockey.by/upload/uf/cde/cdec29896c44b4d3d7608e62a4b3c46e.png по-прежнему логотип/маскот, не фото арены — не используется.
 

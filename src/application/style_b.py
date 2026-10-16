@@ -31,6 +31,8 @@ STYLE_VERSION = _file_version("static/share/style-b.css")
 COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
 DOCK_SCRIPT_VERSION = _file_version("static/share/tg-dock.js")
 PRESS_SCRIPT_VERSION = _file_version("static/share/b-press.js")
+WHEN_SWAP_SCRIPT_VERSION = _file_version("static/share/b-when-swap.js")
+MOTION_SCRIPT_VERSION = _file_version("static/share/glide-motion.js")
 FONT_V_PLACEHOLDER = "__FONT_V__"
 
 
@@ -157,6 +159,7 @@ def hero_html(
     extra_html: str = "",
     sub_class: str = "",
     photo_variants: Mapping[str, Any] | None = None,
+    vt_name: str = "",
 ) -> str:
     """Герой на всю ширину: фото (или разметка катка), градиент, панель сверху, текст снизу."""
     klass = "b-hero"
@@ -172,7 +175,8 @@ def hero_html(
         img_class = "b-hero__img b-toned" if toned else "b-hero__img"
         media = (
             f'<img class="{img_class}" src="{esc(src)}"{srcset_attrs} alt="{esc(photo_alt)}" '
-            'width="1600" height="900" fetchpriority="high" decoding="async" />'
+            'width="1600" height="900" fetchpriority="high" decoding="async" '
+            "onload=\"this.classList.add('is-ready')\" />"
         )
     else:
         media = rink_motif_svg(extra_class="b-hero__motif")
@@ -187,8 +191,9 @@ def hero_html(
         title_html = esc(title)
     sub_cls = f"b-hero__sub {sub_class}".strip()
     sub = f'<p class="{sub_cls}">{sub_html}</p>' if sub_html else ""
+    vt = f' style="view-transition-name: {esc(vt_name)}"' if vt_name else ""
     return (
-        f'<header class="{klass}">{media}<div class="b-hero__shade"></div>'
+        f'<header class="{klass}"{vt}>{media}<div class="b-hero__shade"></div>'
         f'<div class="b-hero__bar">{bar_html}</div>'
         f'<div class="b-hero__copy">{kicker_html}<h1 class="{title_class}">{title_html}</h1>{sub}{extra_html}</div>'
         "</header>"
@@ -229,6 +234,7 @@ def tile_html(
     badge: str = "",
     badge_kind: str = "",
     photo_variants: Mapping[str, Any] | None = None,
+    vt_name: str = "",
 ) -> str:
     """Карточка с фото (или разметкой катка) и двумя строками — для сеток и каруселей."""
     src = photo_url
@@ -240,7 +246,8 @@ def tile_html(
         wrap = " b-toned-wrap" if toned else ""
         media = (
             f'<span class="b-tile__media{wrap}"><img class="{img_class}" src="{esc(src)}"{srcset_attrs} '
-            f'alt="{esc(photo_alt)}" loading="lazy" decoding="async" width="460" height="240" />'
+            f'alt="{esc(photo_alt)}" loading="lazy" decoding="async" width="460" height="240" '
+            "onload=\"this.classList.add('is-ready')\" />"
         )
     else:
         media = f'<span class="b-tile__media">{rink_motif_svg(small=True)}'
@@ -250,8 +257,9 @@ def tile_html(
             kind += " b-badge--light"
         media += f'<span class="b-badge{kind}">{esc(badge)}</span>'
     media += "</span>"
+    vt = f' data-place-vt="{esc(vt_name)}"' if vt_name else ""
     return (
-        f'<a class="b-tile" href="{esc(href)}">{media}'
+        f'<a class="b-tile" href="{esc(href)}"{vt}>{media}'
         f'<span class="b-tile__body"><span class="b-tile__name">{esc(name)}</span>'
         f'<span class="b-tile__line">{esc(line)}</span></span></a>'
     )
@@ -424,7 +432,16 @@ def telegram_dock_script_html() -> str:
     return f'<script defer src="/static/share/tg-dock.js?v={esc(v)}"></script>'
 
 
+def when_swap_script_html() -> str:
+    """Переключатель «Когда» на главной без перезагрузки страницы."""
+    return f'<script defer src="/static/share/b-when-swap.js?v={esc(WHEN_SWAP_SCRIPT_VERSION)}"></script>'
+
+
 def b_press_script_html() -> str:
-    """Отклик нажатия на публичке (iOS + защита от press при скролле)."""
-    v = PRESS_SCRIPT_VERSION
-    return f'<script defer src="/static/share/b-press.js?v={esc(v)}"></script>'
+    """Отклик нажатия и лёгкие микровзаимодействия публички."""
+    press = PRESS_SCRIPT_VERSION
+    motion = MOTION_SCRIPT_VERSION
+    return (
+        f'<script defer src="/static/share/b-press.js?v={esc(press)}"></script>'
+        f'<script defer src="/static/share/glide-motion.js?v={esc(motion)}"></script>'
+    )

@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Каталог как билет — прототип Mini App, 2026-10-10</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #45b9bb;
+    --brand-2: #57d0d2;
+    --studio: #050607;
+    --studio-text: #eceae4;
+    --studio-hint: #9a968c;
+    --font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --paper: #0b0c0e;
+    --surface: #141618;
+    --card: #1a1d20;
+    --line: #262a2e;
+    --text: #e6e9ea;
+    --hint: #868d93;
+    --ok: #4fc98a;
+    --warn: #e0a15a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    font-family: var(--font);
+    background: var(--studio);
+    color: var(--studio-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+  a { color: inherit; text-decoration: none; }
+
+  .layout {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+    display: grid;
+    grid-template-columns: minmax(280px, 440px) 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; justify-items: center; }
+  }
+
+  .thesis { max-width: 440px; }
+  .kicker {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--brand-2);
+  }
+  h1 { margin: 10px 0 0; font-size: 26px; font-weight: 700; letter-spacing: -.03em; line-height: 1.12; }
+  h1 em { font-style: normal; color: var(--brand-2); }
+  .lede { margin: 12px 0 0; font-size: 14px; line-height: 1.55; color: var(--studio-hint); }
+  .box {
+    margin: 16px 0 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--studio-hint);
+  }
+  .box strong, .box b { color: var(--studio-text); font-weight: 600; }
+  .box ol, .box ul { margin: 8px 0 0; padding-left: 18px; }
+  .box li { margin-bottom: 7px; }
+  .box li:last-child { margin-bottom: 0; }
+  .taps {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(69,185,187,.14);
+    color: #dff6f6;
+    font-size: 11px; font-weight: 700;
+  }
+  .people { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .people button, .chrome-toggle button, .city-toggle button {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.04);
+    font-size: 12px; font-weight: 600;
+  }
+  .people button.is-on, .chrome-toggle button.is-on, .city-toggle button.is-on {
+    border-color: rgba(69,185,187,.55);
+    background: rgba(69,185,187,.14);
+    color: #dff6f6;
+  }
+  .chrome-toggle, .city-toggle { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .log {
+    margin-top: 12px;
+    min-height: 2.6em;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--studio-hint);
+  }
+  .log b { color: var(--studio-text); }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
+  .scene-label {
+    font-size: 12px; font-weight: 600; color: var(--studio-hint);
+    text-align: center; max-width: 390px; line-height: 1.45;
+  }
+  .scene-label b { color: var(--studio-text); }
+
+  .phone {
+    width: 390px;
+    max-width: calc(100vw - 32px);
+    height: 844px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 44px;
+    box-shadow: 0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0,0,0,.85);
+    background: var(--paper);
+    color: var(--text);
+  }
+  .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 118px; height: 30px; background: #000; border-radius: 16px; z-index: 40; pointer-events: none;
+  }
+  .status {
+    position: absolute; top: 14px; left: 28px; right: 28px; z-index: 30;
+    display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; pointer-events: none;
+  }
+  .app {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 54px 0 0;
+  }
+  .scroll { flex: 1; overflow: auto; padding: 0 0 8px; }
+  .scroll::-webkit-scrollbar { width: 0; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 16px 10px;
+  }
+  .iconbtn {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--hint); background: var(--surface); border: 1px solid var(--line);
+  }
+  .citypill {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 12px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line);
+    font-size: 14px; font-weight: 650;
+  }
+  .citypill small { color: var(--hint); font-weight: 500; }
+
+  .search-now {
+    flex: 1;
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line);
+    color: var(--hint); font-size: 14px;
+  }
+
+  .oval {
+    margin: 0 16px 10px;
+    padding: 4px;
+    display: flex; flex-wrap: wrap; gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+  }
+  .oval button {
+    padding: 8px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; color: var(--hint);
+  }
+  .oval button.is-on { background: #45b9bb; color: #062223; }
+
+  .kickers { margin: 0 16px 6px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--hint); }
+  .old-filters { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .old-filters .drop {
+    padding: 9px 12px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--surface);
+    font-size: 13px; font-weight: 600; color: var(--text);
+  }
+  .old-filters .drop span { color: var(--hint); margin-left: 4px; }
+
+  .head { padding: 2px 16px 8px; }
+  .date {
+    margin: 0;
+    font-size: 12px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--brand-2);
+  }
+  .title { margin: 6px 0 0; font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1.08; }
+  .sub { margin: 6px 0 0; font-size: 14px; line-height: 1.4; color: var(--hint); }
+  .sub b { color: var(--text); font-weight: 600; }
+
+  .ticket {
+    margin: 4px 16px 12px;
+    padding: 16px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #1c2224 0%, var(--card) 100%);
+    border: 1px solid #2c3438;
+    text-align: left;
+    width: calc(100% - 32px);
+  }
+  .ticket .row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .ticket .time { font-size: 32px; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+  .ticket .time small { display: block; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--brand-2); letter-spacing: 0; }
+  .ticket .price { font-size: 16px; font-weight: 650; text-align: right; }
+  .ticket .price span { display: block; margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--hint); }
+  .ticket .where { margin-top: 12px; font-size: 16px; font-weight: 650; }
+  .ticket .meta { margin-top: 3px; font-size: 13px; color: var(--hint); }
+  .ticket .act {
+    margin-top: 14px; display: flex; gap: 8px;
+  }
+  .ticket .act .cta, .ticket .act .ghost {
+    flex: 1; padding: 11px; border-radius: 12px;
+    font-size: 14px; font-weight: 700; text-align: center;
+  }
+  .ticket .act .cta { background: #45b9bb; color: #062223; }
+  .ticket .act .ghost { background: var(--surface); border: 1px solid var(--line); color: var(--text); font-weight: 600; }
+  .badge {
+    display: inline-block; margin-right: 6px; padding: 2px 8px; border-radius: 999px;
+    background: rgba(69,185,187,.14); color: var(--brand-2);
+    font-size: 11px; font-weight: 700;
+  }
+  .badge--ok { background: rgba(79,201,138,.14); color: var(--ok); }
+  .badge--warn { background: rgba(224,161,90,.14); color: var(--warn); }
+
+  .when {
+    padding: 0 16px 12px;
+    display: flex; gap: 6px; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .when::-webkit-scrollbar { display: none; }
+  .when button {
+    flex: 0 0 auto;
+    padding: 8px 13px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line);
+    font-size: 13px; font-weight: 600; color: var(--hint);
+  }
+  .when button.is-on { background: var(--text); color: #0b0c0e; border-color: var(--text); }
+  .when button small { font-weight: 500; opacity: .7; margin-left: 4px; }
+
+  .jobs {
+    padding: 0 16px 14px;
+    display: flex; flex-wrap: wrap; gap: 4px 14px;
+    font-size: 13px;
+  }
+  .jobs button { color: var(--hint); font-weight: 500; padding: 4px 0; }
+  .jobs button.is-on { color: var(--brand-2); font-weight: 700; }
+
+  .list { padding: 0 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .rowcard {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border-radius: 16px;
+    background: var(--card); border: 1px solid var(--line);
+    text-align: left; width: 100%;
+  }
+  .rowcard .tm { flex: 0 0 58px; }
+  .rowcard .tm b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
+  .rowcard .tm span { font-size: 11px; font-weight: 600; color: var(--brand-2); }
+  .rowcard .body { flex: 1; min-width: 0; }
+  .rowcard .body b { display: block; font-size: 15px; font-weight: 650; }
+  .rowcard .body span { display: block; margin-top: 2px; font-size: 12px; color: var(--hint); }
+  .rowcard .end { font-size: 13px; font-weight: 650; text-align: right; white-space: nowrap; }
+  .rowcard .end small { display: block; margin-top: 2px; font-size: 11px; font-weight: 500; color: var(--hint); }
+  .rowcard .open { font-size: 12px; font-weight: 700; color: var(--ok); white-space: nowrap; }
+  .rowcard .open.is-off { color: var(--hint); font-weight: 500; }
+
+  .chip {
+    display: inline-block; padding: 8px 12px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line);
+    font-size: 13px; font-weight: 600; color: var(--hint);
+  }
+  .chip.is-on { background: #45b9bb; color: #062223; border-color: transparent; }
+  .chip .n { opacity: .7; font-weight: 500; }
+
+  .tabbar {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    padding: 8px 8px 18px;
+    border-top: 1px solid var(--line);
+    background: rgba(11,12,14,.92);
+  }
+  .tabbar span {
+    text-align: center; font-size: 11px; font-weight: 600; color: var(--hint); padding: 6px;
+  }
+  .tabbar span.is-on { color: var(--brand-2); }
+
+  .sheet {
+    position: absolute; inset: 0; z-index: 50;
+    background: rgba(0,0,0,.55);
+    display: none; align-items: flex-end;
+  }
+  .sheet.is-on { display: flex; }
+  .sheet .panel {
+    width: 100%;
+    padding: 10px 16px 28px;
+    border-radius: 22px 22px 0 0;
+    background: var(--card);
+    border-top: 1px solid var(--line);
+  }
+  .grab { width: 40px; height: 4px; border-radius: 2px; background: #3a4046; margin: 4px auto 14px; }
+  .sheet h2 { margin: 0; font-size: 20px; }
+  .sheet p { margin: 6px 0 0; font-size: 14px; color: var(--hint); line-height: 1.4; }
+  .sheet .acts { margin-top: 16px; display: flex; gap: 8px; }
+  .sheet .acts button {
+    flex: 1; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 700;
+  }
+  .sheet .acts .cta { background: #45b9bb; color: #062223; }
+  .sheet .acts .ghost { background: var(--surface); border: 1px solid var(--line); font-weight: 600; }
+
+  .empty { padding: 24px 8px; text-align: center; color: var(--hint); font-size: 14px; line-height: 1.45; }
+  .empty b { color: var(--text); }
+
+  .hint-foot { padding: 4px 16px 16px; font-size: 12px; color: var(--hint); line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="thesis">
+    <p class="kicker">Mini App · вкладка «Лёд» · 2026-10-10</p>
+    <h1>Стране нужен не каталог отделов.<br>Нужен <em>билет на лёд</em>.</h1>
+    <p class="lede">
+      Овал из пяти категорий — оглавление наших баз. Человек открывает приложение с ситуацией:
+      свидание завтра, хоккей в субботу, тупые лезвия через час. Продукт отвечает ситуацией,
+      а не спрашивает, в какой таблице искать.
+    </p>
+    <div class="box">
+      <strong>Гипотезы, которые проверяет макет</strong>
+      <ol>
+        <li><b>Единица продукта — сеанс</b>, не тип места. Время, цена, прокат, «позвать» — на одном билете.</li>
+        <li><b>Первый экран не спрашивает отдел.</b> Открыл — видишь ближайший лёд в своём городе.</li>
+        <li><b>Второй ряд всегда один:</b> чипы следующего вопроса (когда / открыто / для кого). Никаких разных конструкторов.</li>
+        <li><b>ОХМ, заточка, коньки, тренер</b> — тихая строка, не равные вкладки. «Хоккей» как слово больше не врёт.</li>
+        <li><b>Прокат — бейдж сеанса</b>, не сосед заточки. «Розница» не существует: человек ищет коньки.</li>
+      </ol>
+    </div>
+    <div class="box">
+      <strong>Почему не пять равных плиток</strong>
+      <p style="margin:8px 0 0">Это уже пробовали 9 октября на сайте. Город стал маршрутизатором потребностей — и остался витриной инвентаря. «Часы» из макета 10 октября (один следующий сеанс крупно, остальное строками) здесь становится <b>самой вкладкой «Лёд»</b>.</p>
+    </div>
+    <div class="box">
+      <strong>Будь этим человеком — 1–2 тапа</strong>
+      <div class="people" id="people"></div>
+      <p class="log" id="log">Нажми человека слева — телефон сам пройдёт путь. Счётчик тапов считает только то, что нужно ему.</p>
+    </div>
+    <div class="box">
+      <strong>Сравнить с тем, что в проде</strong>
+      <div class="chrome-toggle" id="chromeToggle"></div>
+      <div class="city-toggle" id="cityToggle"></div>
+    </div>
+    <div class="box">
+      <strong>Что сознательно не кладём в шапку</strong>
+      <ul>
+        <li>Поиск как первое поле — это для того, кто уже знает имя катка.</li>
+        <li>Счётчики «Розница 11» — инвентаризация базы, не помощь.</li>
+        <li>Залы, бассейн, хореография — появятся строкой, когда в городе это живое.</li>
+      </ul>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <p class="scene-label" id="sceneLabel"></p>
+    <div class="phone" id="phone">
+      <div class="notch"></div>
+      <div class="status"><span>03:47</span><span>LTE</span></div>
+      <div class="app">
+        <div class="scroll" id="scroll"></div>
+        <div class="tabbar">
+          <span>Главная</span>
+          <span class="is-on">Лёд</span>
+          <span>Я</span>
+        </div>
+      </div>
+      <div class="sheet" id="sheet"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var JOBS = [
+    { id: "skate", label: "Покататься" },
+    { id: "ohm", label: "ОХМ" },
+    { id: "sharpen", label: "Заточить" },
+    { id: "skates", label: "Коньки" },
+    { id: "coach", label: "Тренер" }
+  ];
+  var PEOPLE = [
+    { id: "open", name: "Просто открыл", city: "minsk", job: "skate", when: "today", taps: 0, line: "Без тапа: ближайший сеанс уже на экране. Это и есть продукт для страны." },
+    { id: "date", name: "Свидание завтра", city: "minsk", job: "skate", when: "tomorrow", taps: 1, line: "1 тап — «Завтра». На билете цена и «с прокатом», потому что своих коньков нет." },
+    { id: "hockey", name: "Хоккей с друзьями", city: "minsk", job: "ohm", when: "weekend", taps: 2, line: "2 тапа: ОХМ, затем Сб–Вс. Слово «Хоккей» больше не врёт — это открытая тренировка." },
+    { id: "skates", name: "Хочу коньки", city: "minsk", job: "skates", when: "figure", taps: 2, line: "2 тапа: Коньки → Фигурное. Не «магазины / розница 11»." },
+    { id: "sharp", name: "Точить сейчас", city: "minsk", job: "sharpen", when: "now", taps: 2, line: "2 тапа: Заточить → Открыто сейчас. Позвонить с билета, не искать часы в карточке." },
+    { id: "kid", name: "Ребёнок с нуля", city: "minsk", job: "coach", when: "zero", taps: 2, line: "2 тапа: Тренер → С нуля. Возраст на карточке, не отдельный отдел «для кого»." },
+    { id: "brest", name: "Открыл в Бресте", city: "brest", job: "skate", when: "today", taps: 0, line: "Страна — это не плотность Минска. Один честный сеанс лучше пяти пустых отделов." }
+  ];
+
+  var DATA = {
+    minsk: {
+      name: "Минск",
+      skate: {
+        today: {
+          title: "Где лёд",
+          sub: "ещё <b>3 сеанса</b> сегодня · завтра 15",
+          hero: { time: "13:30", until: "до 14:30", place: "ТЦ DiaMond city", meta: "массовое катание", price: "12 BYN", extra: "дети 8 · прокат 10", badge: "с прокатом", cta: "Позвать", ghost: "Карточка" },
+          rows: [
+            { time: "16:00", until: "17:00", place: "Чижовка", meta: "массовое · с прокатом", price: "10", extra: "дети 7" },
+            { time: "18:30", until: "19:30", place: "ЛД «Юность»", meta: "массовое", price: "12", extra: "своих коньков" },
+            { time: "21:00", until: "22:00", place: "Замок", meta: "массовое · с прокатом", price: "10", extra: "дети 7" }
+          ]
+        },
+        tomorrow: {
+          title: "Завтра на льду",
+          sub: "воскресенье · <b>15 сеансов</b> · почти везде есть прокат",
+          hero: { time: "11:00", until: "12:30", place: "Минск-Арена", meta: "массовое катание", price: "14 BYN", extra: "дети 9 · прокат 10", badge: "с прокатом", cta: "Позвать", ghost: "Карточка" },
+          rows: [
+            { time: "12:00", until: "13:00", place: "DiaMond city", meta: "массовое · с прокатом", price: "12", extra: "дети 8" },
+            { time: "13:30", until: "14:30", place: "Замок", meta: "массовое · с прокатом", price: "10", extra: "дети 7" },
+            { time: "16:00", until: "17:00", place: "Led Life", meta: "массовое", price: "11", extra: "своих коньков" }
+          ]
+        },
+        weekend: {
+          title: "Сб и вс",
+          sub: "<b>27 сеансов</b> · удобно звать компанию одним экраном",
+          hero: { time: "11:00", until: "сб", place: "Минск-Арена", meta: "массовое", price: "14 BYN", extra: "прокат 10", badge: "с прокатом", cta: "Позвать", ghost: "Карточка" },
+          rows: [
+            { time: "12:00", until: "сб", place: "DiaMond city", meta: "массовое · с прокатом", price: "12", extra: "" },
+            { time: "11:00", until: "вс", place: "Чижовка", meta: "массовое · с прокатом", price: "10", extra: "" }
+          ]
+        }
+      },
+      ohm: {
+        today: { title: "ОХМ сегодня", sub: "открытых тренировок на сегодня нет", hero: null, rows: [], empty: "Сегодня ОХМ нет.<br><b>Ближайшее — сб 07:00</b> · СДЮШОР · 15 BYN" },
+        tomorrow: { title: "ОХМ завтра", sub: "воскресенье — пусто", hero: null, rows: [], empty: "Завтра ОХМ нет. На выходных — 4 катка." },
+        weekend: {
+          title: "ОХМ на выходных",
+          sub: "открытая тренировка · своя экипировка",
+          hero: { time: "07:00", until: "сб", place: "СДЮШОР", meta: "хоккей для любителей", price: "15 BYN", extra: "шлем детям · лимит мест", badge: "ОХМ", cta: "Позвать", ghost: "Условия" },
+          rows: [
+            { time: "08:45", until: "сб", place: "Чижовка", meta: "ОХМ · своя форма", price: "18", extra: "" },
+            { time: "21:00", until: "сб", place: "DiaMond", meta: "ОХМ", price: "20", extra: "" },
+            { time: "07:15", until: "вс", place: "ЛД МО", meta: "отработка", price: "15", extra: "" }
+          ]
+        }
+      },
+      sharpen: {
+        now: {
+          title: "Заточить сейчас",
+          sub: "<b>4 открыты</b> · до закрытия от 40 минут",
+          hero: { time: "открыто", until: "до 19:00", place: "HotIce", meta: "ул. Козлова, 14 · 12 мин", price: "по звонку", extra: "хоккей · формовка", badge: "открыто", cta: "Позвонить", ghost: "Маршрут" },
+          rows: [
+            { time: "", until: "", place: "Hockey Service", meta: "заточка · ремонт", price: "", extra: "до 20:00", open: true },
+            { time: "", until: "", place: "Чижовка · каток", meta: "заточка на месте", price: "", extra: "до 22:00", open: true },
+            { time: "", until: "", place: "Конёк.бел", meta: "закроется в 18:00", price: "", extra: "40 мин", open: true }
+          ]
+        },
+        evening: {
+          title: "Заточка вечером",
+          sub: "после 18:00 ещё трое",
+          hero: { time: "до 21:00", until: "", place: "Sport-Ice — Дворец", meta: "пр. Победителей", price: "", extra: "заточка на катке", badge: "вечером", cta: "Позвонить", ghost: "Маршрут" },
+          rows: [
+            { time: "", until: "", place: "Хет-Трик", meta: "до 20:00", price: "", extra: "", open: true }
+          ]
+        },
+        weekend: {
+          title: "Заточка в выходные",
+          sub: "сб до 18:00 у большинства",
+          hero: { time: "сб", until: "11–18", place: "HotIce", meta: "Козлова, 14", price: "", extra: "", badge: "сб", cta: "Позвонить", ghost: "Маршрут" },
+          rows: [
+            { time: "", until: "", place: "Фигурист.by", meta: "фигурное · сб 11–17", price: "", extra: "", open: false }
+          ]
+        }
+      },
+      skates: {
+        figure: {
+          title: "Купить коньки",
+          sub: "фигурные · примерка, не витрина",
+          hero: { time: "открыто", until: "до 20:00", place: "Фигурист.by", meta: "примерка · фигурное", price: "", extra: "не «розница»", badge: "фигурное", cta: "Позвонить", ghost: "Маршрут" },
+          rows: [
+            { time: "", until: "", place: "Figuristshop.by", meta: "фигурное · открыто до 19:00", price: "", extra: "", open: true },
+            { time: "", until: "", place: "Proskating.by", meta: "фигурное и хоккей", price: "", extra: "", open: true }
+          ]
+        },
+        hockey: {
+          title: "Купить коньки",
+          sub: "хоккейные",
+          hero: { time: "открыто", until: "до 21:00", place: "SportContinent", meta: "Притыцкого, 27 · ЛДС", price: "", extra: "хоккей · формовка", badge: "хоккей", cta: "Позвонить", ghost: "Маршрут" },
+          rows: [
+            { time: "", until: "", place: "Lepshy Hockey", meta: "хоккей", price: "", extra: "до 20:00", open: true },
+            { time: "", until: "", place: "CCMshop", meta: "хоккей", price: "", extra: "до 19:00", open: true }
+          ]
+        }
+      },
+      coach: {
+        zero: {
+          title: "Тренер с нуля",
+          sub: "взрослые и дети · пробное занятие",
+          hero: { time: "пробное", until: "40 BYN", place: "Анна К.", meta: "фигурное · Юность", price: "с 4 лет", extra: "группа и индивидуально", badge: "с нуля", cta: "Написать", ghost: "Профиль" },
+          rows: [
+            { time: "", until: "", place: "Игорь В.", meta: "хоккей · с нуля · Чижовка", price: "45 BYN", extra: "" },
+            { time: "", until: "", place: "Мария Л.", meta: "фигурное · техника", price: "50 BYN", extra: "" }
+          ]
+        },
+        hockey: {
+          title: "Тренер · хоккей",
+          sub: "не путать с ОХМ — это занятие, не открытый лёд",
+          hero: { time: "пробное", until: "45 BYN", place: "Игорь В.", meta: "хоккей · Чижовка", price: "дети 6+", extra: "", badge: "хоккей", cta: "Написать", ghost: "Профиль" },
+          rows: [
+            { time: "", until: "", place: "Павел С.", meta: "хоккей · ОФП", price: "40 BYN", extra: "" }
+          ]
+        }
+      }
+    },
+    brest: {
+      name: "Брест",
+      skate: {
+        today: {
+          title: "Где лёд",
+          sub: "сегодня <b>1 сеанс</b> · честно, без пустых отделов",
+          hero: { time: "18:00", until: "19:00", place: "ЛДС Бреста", meta: "массовое катание", price: "8 BYN", extra: "дети 6 · прокат 5", badge: "с прокатом", cta: "Позвать", ghost: "Карточка" },
+          rows: []
+        },
+        tomorrow: {
+          title: "Завтра на льду",
+          sub: "сеансов на завтра нет",
+          hero: null, rows: [], empty: "Завтра массового нет.<br>Ближайшее — <b>сб 16:00</b> · ЛДС Бреста."
+        },
+        weekend: {
+          title: "Сб и вс",
+          sub: "2 сеанса",
+          hero: { time: "16:00", until: "сб", place: "ЛДС Бреста", meta: "массовое · с прокатом", price: "8 BYN", extra: "дети 6", badge: "с прокатом", cta: "Позвать", ghost: "Карточка" },
+          rows: [
+            { time: "12:00", until: "вс", place: "ЛДС Бреста", meta: "массовое", price: "8", extra: "прокат 5" }
+          ]
+        }
+      }
+    }
+  };
+
+  var state = {
+    chrome: "ticket",
+    city: "minsk",
+    job: "skate",
+    when: "today",
+    person: "open",
+    sheet: null
+  };
+
+  function whenFor(job) {
+    if (job === "skate" || job === "ohm") {
+      return [
+        { id: "today", label: "Сегодня" },
+        { id: "tomorrow", label: "Завтра" },
+        { id: "weekend", label: "Сб–Вс" }
+      ];
+    }
+    if (job === "sharpen") {
+      return [
+        { id: "now", label: "Открыто сейчас" },
+        { id: "evening", label: "Сегодня вечером" },
+        { id: "weekend", label: "Сб–Вс" }
+      ];
+    }
+    if (job === "skates") {
+      return [
+        { id: "figure", label: "Фигурное" },
+        { id: "hockey", label: "Хоккей" }
+      ];
+    }
+    return [
+      { id: "zero", label: "С нуля" },
+      { id: "hockey", label: "Хоккей" }
+    ];
+  }
+
+  function defaultWhen(job) {
+    if (job === "sharpen") return "now";
+    if (job === "skates") return "figure";
+    if (job === "coach") return "zero";
+    return "today";
+  }
+
+  function pack() {
+    var city = DATA[state.city];
+    var job = city[state.job] || city.skate;
+    var block = job[state.when];
+    if (!block) {
+      var first = Object.keys(job)[0];
+      state.when = first;
+      block = job[first];
+    }
+    return { city: city, block: block };
+  }
+
+  function footNote() {
+    if (state.job === "coach") return "Напишите тренеру — слот и цену подтвердит он.";
+    if (state.job === "sharpen" || state.job === "skates") {
+      return "Часы и наличие — по телефону. Перед дорогой лучше позвонить.";
+    }
+    return "Расписание — с сайта катка. Цену и прокат лучше уточнить на месте.";
+  }
+
+  function tapWord(n) {
+    if (n === 0) return "0 тапов";
+    if (n === 1) return "1 тап";
+    return n + " тапа";
+  }
+
+  function searchPlaceholder() {
+    if (state.job === "coach") return "Имя тренера";
+    if (state.job === "skates") return "Магазин";
+    if (state.job === "sharpen") return "Заточка или прокат";
+    if (state.job === "ohm") return "Каток с ОХМ";
+    return "Каток, зал или трасса";
+  }
+
+  function renderNowFilters() {
+    var job = state.job;
+    if (job === "skates" || job === "shop") {
+      return (
+        '<p class="kickers">Что нужно</p>' +
+        '<div class="old-filters">' +
+          '<button class="chip">Все</button>' +
+          '<button class="chip">Заточка <span class="n">4</span></button>' +
+          '<button class="chip is-on">Розница <span class="n">11</span></button>' +
+          '<button class="chip">Формовка</button>' +
+        "</div>" +
+        '<p class="kickers">Когда удобно</p>' +
+        '<div class="old-filters">' +
+          '<button class="chip">● Открыто сейчас</button>' +
+          '<span class="drop">Любое время <span>▾</span></span>' +
+        "</div>"
+      );
+    }
+    if (job === "coach") {
+      return (
+        '<div class="old-filters">' +
+          '<button class="chip">Все</button>' +
+          '<button class="chip is-on">С нуля</button>' +
+          '<button class="chip">Техника</button>' +
+          '<button class="chip">Хоккей</button>' +
+          '<button class="chip">Ролики</button>' +
+          '<button class="chip">ОФП</button>' +
+        "</div>"
+      );
+    }
+    if (job === "ohm") {
+      return '<p class="kickers" style="margin-bottom:10px">открытая тренировка, ОХМ</p>';
+    }
+    if (job === "sharpen") {
+      return (
+        '<p class="kickers">заточка и прокат</p>' +
+        '<div class="old-filters">' +
+          '<span class="drop">Все места <span>▾</span></span>' +
+          '<span class="drop">Любое время <span>▾</span></span>' +
+        "</div>"
+      );
+    }
+    return (
+      '<div class="old-filters">' +
+        '<span class="drop">Все места <span>▾</span></span>' +
+        '<span class="drop">Любое время <span>▾</span></span>' +
+      "</div>"
+    );
+  }
+
+  function ticketHtml(h) {
+    if (!h) return "";
+    var time = h.time ? '<div class="time">' + h.time + (h.until ? "<small>" + h.until + "</small>" : "") + "</div>" : "";
+    var price = h.price
+      ? '<div class="price">' + h.price + (h.extra ? "<span>" + h.extra + "</span>" : "") + "</div>"
+      : "";
+    var badge = h.badge ? '<span class="badge' + (h.badge === "открыто" ? " badge--ok" : "") + '">' + h.badge + "</span>" : "";
+    return (
+      '<button type="button" class="ticket" data-open-sheet="hero">' +
+        '<div class="row">' + time + price + "</div>" +
+        '<div class="where">' + badge + h.place + "</div>" +
+        '<div class="meta">' + h.meta + "</div>" +
+        '<div class="act"><span class="cta">' + h.cta + '</span><span class="ghost">' + h.ghost + "</span></div>" +
+      "</button>"
+    );
+  }
+
+  function rowsHtml(block) {
+    if (block.empty && (!block.rows || !block.rows.length) && !block.hero) {
+      return '<div class="empty">' + block.empty + "</div>";
+    }
+    return (block.rows || [])
+      .map(function (r) {
+        var tm = r.time
+          ? '<div class="tm"><b>' + r.time + "</b>" + (r.until ? "<span>" + r.until + "</span>" : "") + "</div>"
+          : "";
+        var end = r.open === true
+          ? '<div class="open">открыто</div>'
+          : r.open === false
+            ? '<div class="open is-off">выходной</div>'
+            : r.price
+              ? '<div class="end">' + r.price + (r.extra ? "<small>" + r.extra + "</small>" : "") + "</div>"
+              : r.extra
+                ? '<div class="end"><small>' + r.extra + "</small></div>"
+                : "";
+        return (
+          '<button type="button" class="rowcard" data-open-sheet="row">' +
+            tm +
+            '<div class="body"><b>' + r.place + "</b><span>" + r.meta + "</span></div>" +
+            end +
+          "</button>"
+        );
+      })
+      .join("");
+  }
+
+  function renderTicket() {
+    var p = pack();
+    var block = p.block;
+    var whens = whenFor(state.job);
+    var jobs = JOBS.filter(function (j) {
+      if (state.city === "brest") return j.id === "skate";
+      return true;
+    });
+    return (
+      '<div class="topbar">' +
+        '<button type="button" class="iconbtn" aria-label="Поиск" title="Поиск">⌕</button>' +
+        '<button type="button" class="citypill" data-toggle-city>' + p.city.name + " <small>▾</small></button>" +
+        '<button type="button" class="iconbtn" aria-label="Карта">▣</button>' +
+      "</div>" +
+      '<div class="head">' +
+        '<p class="date">Суббота, 10 октября</p>' +
+        '<h2 class="title">' + block.title + "</h2>" +
+        '<p class="sub">' + block.sub + "</p>" +
+      "</div>" +
+      ticketHtml(block.hero) +
+      '<div class="when">' +
+        whens
+          .map(function (w) {
+            return (
+              '<button type="button" data-when="' + w.id + '" class="' + (state.when === w.id ? "is-on" : "") + '">' +
+              w.label +
+              "</button>"
+            );
+          })
+          .join("") +
+      "</div>" +
+      (jobs.length > 1
+        ? '<div class="jobs">' +
+          jobs
+            .map(function (j) {
+              return (
+                '<button type="button" data-job="' + j.id + '" class="' + (state.job === j.id ? "is-on" : "") + '">' +
+                j.label +
+                "</button>"
+              );
+            })
+            .join("") +
+          "</div>"
+        : "") +
+      '<div class="list">' + rowsHtml(block) + "</div>" +
+      '<p class="hint-foot">' + footNote() + "</p>"
+    );
+  }
+
+  function ovalJobId(id) {
+    if (id === "skates") return "skates";
+    return id;
+  }
+
+  function renderNow() {
+    var p = pack();
+    var block = p.block;
+    var oval = [
+      { id: "skate", label: "Покататься" },
+      { id: "ohm", label: "Хоккей" },
+      { id: "sharpen", label: "Заточка" },
+      { id: "skates", label: "Магазины" },
+      { id: "coach", label: "Тренеры" }
+    ];
+    if (state.city === "brest") oval = [{ id: "skate", label: "Покататься" }];
+    return (
+      '<div class="topbar">' +
+        '<div class="search-now">⌕ ' + searchPlaceholder() + "</div>" +
+      "</div>" +
+      (oval.length > 1
+        ? '<div class="oval">' +
+          oval
+            .map(function (j) {
+              var on = state.job === j.id || (j.id === "skates" && state.job === "skates");
+              return (
+                '<button type="button" data-job="' + j.id + '" class="' + (on ? "is-on" : "") + '">' +
+                j.label +
+                "</button>"
+              );
+            })
+            .join("") +
+          '<button type="button" class="citypill" data-toggle-city style="margin:2px">' +
+          p.city.name +
+          " <small>▾</small></button>" +
+        "</div>"
+        : "") +
+      renderNowFilters() +
+      '<div class="list" style="padding-top:4px">' +
+        (block.hero
+          ? '<button type="button" class="rowcard" data-open-sheet="hero">' +
+            (block.hero.time
+              ? '<div class="tm"><b>' + block.hero.time + "</b><span>" + (block.hero.until || "") + "</span></div>"
+              : "") +
+            '<div class="body"><b>' + block.hero.place + "</b><span>" + block.hero.meta + "</span></div>" +
+            '<div class="end">' + (block.hero.price || "") + "</div>" +
+          "</button>"
+          : "") +
+        rowsHtml(block) +
+      "</div>"
+    );
+  }
+
+  function sceneText() {
+    if (state.chrome === "now") {
+      return "<b>Как сейчас.</b> Овал отделов + разный второй ряд. Тот же Минск, та же база — но это справочник.";
+    }
+    var person = PEOPLE.filter(function (p) { return p.id === state.person; })[0];
+    if (person) return "<b>" + person.name + ".</b> " + person.line;
+    return "<b>Билет.</b> Открыл — видишь лёд. Остальное — тихая строка.";
+  }
+
+  function render() {
+    document.getElementById("scroll").innerHTML = state.chrome === "ticket" ? renderTicket() : renderNow();
+    document.getElementById("sceneLabel").innerHTML = sceneText();
+    document.getElementById("log").innerHTML = sceneText();
+    document.querySelectorAll("#people button").forEach(function (b) {
+      b.classList.toggle("is-on", b.getAttribute("data-person") === state.person && state.chrome === "ticket");
+    });
+    document.querySelectorAll("#chromeToggle button").forEach(function (b) {
+      b.classList.toggle("is-on", b.getAttribute("data-chrome") === state.chrome);
+    });
+    document.querySelectorAll("#cityToggle button").forEach(function (b) {
+      b.classList.toggle("is-on", b.getAttribute("data-city") === state.city);
+    });
+    renderSheet();
+  }
+
+  function renderSheet() {
+    var el = document.getElementById("sheet");
+    if (!state.sheet) {
+      el.className = "sheet";
+      el.innerHTML = "";
+      return;
+    }
+    var p = pack();
+    var h = p.block.hero || {};
+    el.className = "sheet is-on";
+    el.innerHTML =
+      '<div class="panel">' +
+        '<div class="grab"></div>' +
+        "<h2>" + (h.place || "Карточка") + "</h2>" +
+        "<p>" + (h.time ? h.time + " · " : "") + (h.meta || "") + (h.extra ? " · " + h.extra : "") + "</p>" +
+        '<div class="acts">' +
+          '<button type="button" class="cta">' + (h.cta || "Позвать") + "</button>" +
+          '<button type="button" class="ghost" data-close-sheet>Закрыть</button>' +
+        "</div>" +
+      "</div>";
+  }
+
+  function setPerson(id) {
+    var p = PEOPLE.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    state.chrome = "ticket";
+    state.person = id;
+    state.city = p.city;
+    state.job = p.job;
+    state.when = p.when;
+    state.sheet = null;
+    render();
+  }
+
+  document.getElementById("people").innerHTML = PEOPLE.map(function (p) {
+    return '<button type="button" data-person="' + p.id + '">' + p.name + '<span class="taps">' + tapWord(p.taps) + "</span></button>";
+  }).join("");
+
+  document.getElementById("chromeToggle").innerHTML =
+    '<button type="button" data-chrome="ticket">Билет</button>' +
+    '<button type="button" data-chrome="now">Как сейчас</button>';
+
+  document.getElementById("cityToggle").innerHTML =
+    '<button type="button" data-city="minsk">Минск</button>' +
+    '<button type="button" data-city="brest">Брест</button>';
+
+  document.getElementById("people").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-person]");
+    if (b) setPerson(b.getAttribute("data-person"));
+  });
+  document.getElementById("chromeToggle").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-chrome]");
+    if (!b) return;
+    state.chrome = b.getAttribute("data-chrome");
+    state.person = state.chrome === "now" ? "" : state.person || "open";
+    state.sheet = null;
+    render();
+  });
+  document.getElementById("cityToggle").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-city]");
+    if (!b) return;
+    state.city = b.getAttribute("data-city");
+    if (state.city === "brest") {
+      state.job = "skate";
+      if (["figure", "hockey", "now", "evening", "zero"].indexOf(state.when) >= 0) state.when = "today";
+    }
+    state.sheet = null;
+    render();
+  });
+
+  document.getElementById("phone").addEventListener("click", function (e) {
+    var job = e.target.closest("[data-job]");
+    if (job) {
+      state.job = job.getAttribute("data-job");
+      state.when = defaultWhen(state.job);
+      state.person = "";
+      state.sheet = null;
+      render();
+      return;
+    }
+    var when = e.target.closest("[data-when]");
+    if (when) {
+      state.when = when.getAttribute("data-when");
+      state.person = "";
+      state.sheet = null;
+      render();
+      return;
+    }
+    if (e.target.closest("[data-toggle-city]")) {
+      state.city = state.city === "minsk" ? "brest" : "minsk";
+      if (state.city === "brest") { state.job = "skate"; state.when = "today"; }
+      state.sheet = null;
+      render();
+      return;
+    }
+    if (e.target.closest("[data-close-sheet]") || e.target.classList.contains("sheet")) {
+      state.sheet = null;
+      render();
+      return;
+    }
+    if (e.target.closest("[data-open-sheet]")) {
+      state.sheet = "open";
+      render();
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

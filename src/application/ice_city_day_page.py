@@ -184,6 +184,13 @@ def _day_json_ld(day: Mapping[str, Any], *, city_name: str, canonical_url: str) 
     )
 
 
+def _ice_day_site_footer(day_stats: str, *, telegram_href: str | None) -> str:
+    from src.application.public_site_footer import render_site_footer_html
+
+    ctx = f'<p class="ice-day__stats">{_esc(day_stats)}</p>' if day_stats else ""
+    return render_site_footer_html(context_html=ctx, telegram_href=telegram_href)
+
+
 def render_ice_city_day_page(
     *,
     city_name: str,
@@ -221,10 +228,12 @@ def render_ice_city_day_page(
     lang, og_locale = html_lang_for_country(country)
     # Пустой день и город без опубликованных сеансов — 200 для человека, но не для индекса.
     robots = "index, follow" if int(day.get("session_count") or 0) > 0 else "noindex"
-    from src.application.style_b import public_fonts_head_html
+    from src.application.style_b import STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
     values = {
         "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
+        "__TOKENS_V__": TOKENS_VERSION,
+        "__STYLE_V__": STYLE_VERSION,
         "__DESCRIPTION__": _esc(description),
         "__OG_TITLE__": _esc(og_title),
         "__OG_DESCRIPTION__": _esc(og_description),
@@ -236,8 +245,8 @@ def render_ice_city_day_page(
         "__JSONLD__": _day_json_ld(day, city_name=city_name, canonical_url=canonical_url),
         "__BRAND__": _esc(t("brand.mark")),
         "__H1__": _esc(og_title),
-        "__FOOTER__": footer,
         "__BODY__": body,
+        "__SITE_FOOTER__": _ice_day_site_footer(footer, telegram_href=cta_url),
     }
     if cta_url:
         values["__CTA_URL__"] = _esc(cta_url)

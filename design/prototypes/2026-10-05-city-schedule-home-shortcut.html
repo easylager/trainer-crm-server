@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ярлык «Лёд · Минск» — /c/minsk на главный экран (прототип)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  /*
+    2026-10-05 · продуктовый дизайн, не продакшен.
+    Задача: дать клиенту ярлык на живую подборку /c/{город} (пример — Минск),
+    без обещания «одна кнопка = иконка» внутри Telegram на iOS.
+
+    Экраны (← →):
+      0 — Страница подборки + новая точка входа
+      1 — Шторка: встроенный браузер Telegram (iPhone)
+      2 — Шторка: Safari (iPhone)
+      3 — Android Chrome: системный «Установить»
+      4 — Результат на домашнем экране
+    T — переключить светлую/тёмную шторку (прод: страница /c светлая, шторка — как в TG).
+  */
+  :root {
+    --brand: #0f8f8a;
+    --brand-2: #45b9bb;
+    --on-fill: #04262a;
+    --studio: #050607;
+    --studio-text: #eceae4;
+    --studio-hint: #9a968c;
+    --font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 16px;
+    --r-pill: 999px;
+    --cut: 18px;
+    /* публичная /c/ — как static/share/place.html */
+    --pub-bg: #f4f6f7;
+    --pub-surface: #ffffff;
+    --pub-ink: #0d1b26;
+    --pub-muted: #5d7285;
+    --pub-line: #e1e8ec;
+    --pub-accent: #0f8f8a;
+    --pub-accent-ink: #ffffff;
+    --pub-wash: #e3f4f3;
+    --pub-chip: #eef3f5;
+  }
+  html[data-sheet-theme="dark"] {
+    --sheet-bg: #0b0c0e;
+    --sheet-card: #1a1d20;
+    --sheet-surface: #141618;
+    --sheet-line: #262a2e;
+    --sheet-text: #e6e9ea;
+    --sheet-hint: #868d93;
+    --sheet-teal: #57d0d2;
+    --sheet-wash: rgba(69, 185, 187, 0.13);
+    --scrim: rgba(0, 0, 0, 0.52);
+  }
+  html[data-sheet-theme="light"] {
+    --sheet-bg: #f4f6f7;
+    --sheet-card: #ffffff;
+    --sheet-surface: #eef3f5;
+    --sheet-line: #e1e8ec;
+    --sheet-text: #0d1b26;
+    --sheet-hint: #5d7285;
+    --sheet-teal: #0f8f8a;
+    --sheet-wash: #e3f4f3;
+    --scrim: rgba(7, 24, 26, 0.32);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    font-family: var(--font);
+    background: var(--studio);
+    color: var(--studio-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+  button:focus-visible { outline: 2px solid var(--brand-2); outline-offset: 3px; }
+
+  .layout {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+    display: grid;
+    grid-template-columns: minmax(260px, 400px) 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; justify-items: center; }
+  }
+
+  .thesis { max-width: 400px; }
+  .kicker {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--brand-2);
+  }
+  h1 {
+    margin: 10px 0 0;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.12;
+  }
+  h1 em { font-style: normal; color: var(--brand-2); }
+  .lede {
+    margin: 12px 0 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--studio-hint);
+  }
+  .rules {
+    margin: 18px 0 0;
+    padding: 14px 16px;
+    border-radius: var(--r-md);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--studio-hint);
+  }
+  .rules strong { color: var(--studio-text); font-weight: 600; }
+  .rules ul { margin: 8px 0 0; padding-left: 18px; }
+  .rules li { margin-bottom: 6px; }
+  .scene-nav {
+    margin-top: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .scene-nav button {
+    padding: 8px 12px;
+    border-radius: var(--r-pill);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .scene-nav button.is-on {
+    border-color: rgba(69, 185, 187, 0.55);
+    background: rgba(69, 185, 187, 0.14);
+    color: #dff6f6;
+  }
+  .scene-nav .ghost {
+    margin-left: auto;
+    font-weight: 500;
+    color: var(--studio-hint);
+  }
+  .navhint {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--studio-hint);
+  }
+  .navhint kbd {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 11px;
+  }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .scene-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--studio-hint);
+    text-align: center;
+    max-width: 390px;
+    line-height: 1.45;
+  }
+  .scene-label b { color: var(--studio-text); }
+
+  .phone {
+    width: 390px;
+    max-width: calc(100vw - 32px);
+    height: 844px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 44px;
+    box-shadow: 0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0, 0, 0, 0.85);
+    background: var(--pub-bg);
+  }
+  .notch {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 118px;
+    height: 30px;
+    background: #000;
+    border-radius: 16px;
+    z-index: 30;
+    pointer-events: none;
+  }
+  .status {
+    position: absolute;
+    top: 14px;
+    left: 28px;
+    right: 28px;
+    z-index: 25;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--pub-ink);
+    pointer-events: none;
+  }
+  html[data-sheet-theme="dark"] .phone--homescreen .status { color: #fff; }
+
+  /* ——— Публичная подборка /c/minsk ——— */
+  .pub-scroll {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    padding: 52px 16px 100px;
+    color: var(--pub-ink);
+  }
+  .pub-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    font-size: 14px;
+    color: var(--pub-muted);
+  }
+  .pub-brand { font-weight: 700; color: var(--pub-ink); }
+  .pub-brand span { color: var(--pub-accent); }
+  .pub-hero {
+    background: var(--pub-surface);
+    border: 1px solid var(--pub-line);
+    padding: 18px 18px 16px 21px;
+    clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+    margin-bottom: 12px;
+  }
+  .pub-hero .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pub-muted);
+  }
+  .pub-hero h2 {
+    margin: 6px 0 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  .pub-hero .meta { margin-top: 6px; font-size: 14px; color: var(--pub-muted); }
+  .pub-card {
+    background: var(--pub-surface);
+    border: 1px solid var(--pub-line);
+    border-radius: var(--r-md);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .pub-card b { display: block; font-size: 15px; }
+  .pub-card .slots {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pub-card .chip {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: var(--r-pill);
+    background: var(--pub-chip);
+    color: var(--pub-muted);
+  }
+  .pub-share {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--pub-line);
+  }
+  .pub-share .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pub-share .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--pub-line);
+    background: var(--pub-surface);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .pub-share .btn--cta {
+    border-color: transparent;
+    background: var(--pub-accent);
+    color: var(--pub-accent-ink);
+  }
+  .pub-share .btn--new {
+    width: 100%;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1.5px dashed rgba(15, 143, 138, 0.45);
+    background: var(--pub-wash);
+    color: var(--pub-accent);
+  }
+  .pub-share .btn--new svg { flex-shrink: 0; }
+  .pub-foot {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--pub-muted);
+    text-align: center;
+  }
+
+  /* ——— Шторка A2HS ——— */
+  .scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    z-index: 40;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    background: var(--sheet-card);
+    border-radius: 20px 20px 0 0;
+    padding: 10px 20px calc(24px + env(safe-area-inset-bottom, 0));
+    transform: translateY(105%);
+    transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    color: var(--sheet-text);
+    max-height: 88%;
+    overflow: auto;
+  }
+  .sheet.on { transform: translateY(0); }
+  .grab {
+    width: 36px;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--sheet-line);
+    margin: 4px auto 14px;
+  }
+  .sheet h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  .sheet .sub {
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--sheet-hint);
+  }
+  .sheet .sub code {
+    font-size: 12px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--sheet-surface);
+    color: var(--sheet-teal);
+  }
+  .env-tabs {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    padding: 4px;
+    border-radius: var(--r-md);
+    background: var(--sheet-surface);
+  }
+  .env-tabs button {
+    padding: 8px 6px;
+    border-radius: var(--r-sm);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--sheet-hint);
+  }
+  .env-tabs button.is-on {
+    background: var(--sheet-card);
+    color: var(--sheet-text);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+  .steps { margin: 16px 0 0; padding: 0; list-style: none; }
+  .steps li {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--sheet-line);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .steps li:first-child { border-top: none; padding-top: 0; }
+  .steps .n {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--sheet-wash);
+    color: var(--sheet-teal);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .steps strong { font-weight: 600; }
+  .steps .hint { display: block; margin-top: 4px; font-size: 12px; color: var(--sheet-hint); }
+  .ico-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    vertical-align: -5px;
+    margin: 0 2px;
+    border-radius: 6px;
+    background: var(--sheet-surface);
+    border: 1px solid var(--sheet-line);
+  }
+  .ico-inline svg { width: 14px; height: 14px; }
+  .callout {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    background: var(--sheet-wash);
+    border: 1px solid rgba(15, 143, 138, 0.25);
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--sheet-hint);
+  }
+  .callout b { color: var(--sheet-text); }
+  .sheet-actions {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sheet-actions .primary {
+    width: 100%;
+    padding: 14px;
+    border-radius: var(--r-md);
+    background: var(--brand-2);
+    color: var(--on-fill);
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .sheet-actions .secondary {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    color: var(--sheet-hint);
+  }
+  .fake-browser {
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: var(--r-md);
+    background: var(--sheet-surface);
+    border: 1px solid var(--sheet-line);
+  }
+  .fake-browser .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--sheet-hint);
+  }
+  .fake-browser .url {
+    flex: 1;
+    text-align: center;
+    padding: 6px 10px;
+    border-radius: var(--r-pill);
+    background: var(--sheet-card);
+    font-weight: 600;
+    color: var(--sheet-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fake-browser .pulse {
+    box-shadow: 0 0 0 2px var(--sheet-teal);
+    animation: pulse 1.4s ease infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(87, 208, 210, 0.5); }
+    50% { box-shadow: 0 0 0 4px rgba(87, 208, 210, 0.15); }
+  }
+  .android-banner {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--sheet-line);
+    background: var(--sheet-surface);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .android-banner img {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+  .android-banner b { display: block; font-size: 14px; }
+  .android-banner span { font-size: 12px; color: var(--sheet-hint); }
+  .android-banner .install {
+    margin-left: auto;
+    padding: 8px 14px;
+    border-radius: var(--r-pill);
+    background: var(--brand-2);
+    color: var(--on-fill);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  /* Декоративная «кнопка» — НЕ кликабельна (урок с Glide install) */
+  .deco-warn {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: var(--r-sm);
+    border: 1px dashed rgba(240, 162, 75, 0.5);
+    font-size: 11px;
+    line-height: 1.4;
+    color: #c4842f;
+    background: rgba(240, 162, 75, 0.08);
+  }
+
+  /* ——— Домашний экран ——— */
+  .phone--homescreen {
+    background: linear-gradient(165deg, #1a2744 0%, #0d1528 40%, #1b2838 100%);
+  }
+  .homescreen {
+    position: absolute;
+    inset: 0;
+    padding: 56px 22px 40px;
+  }
+  .hs-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px 12px;
+  }
+  .hs-app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+  }
+  .hs-app img, .hs-app .ph {
+    width: 60px;
+    height: 60px;
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  }
+  .hs-app .ph {
+    background: linear-gradient(145deg, #0f8f8a, #064f4c);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+  }
+  .hs-app span {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.92);
+    line-height: 1.2;
+    max-width: 72px;
+  }
+  .hs-app.is-target span { font-weight: 700; }
+  .hs-app.is-target img, .hs-app.is-target .ph {
+    outline: 3px solid var(--brand-2);
+    outline-offset: 2px;
+  }
+  .hs-caption {
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    bottom: 100px;
+    padding: 14px 16px;
+    border-radius: var(--r-lg);
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(12px);
+    font-size: 13px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.9);
+    text-align: center;
+  }
+
+  .scene { display: none; width: 100%; }
+  .scene.is-on { display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="thesis">
+    <p class="kicker">Публичная подборка · TASK-146+</p>
+    <h1>Ярлык <em>«Лёд · Минск»</em> на главный экран</h1>
+    <p class="lede">
+      Живая ссылка <code>/c/minsk</code> — то же расписание, что в шеринге из бота.
+      Иконка открывает страницу в браузере без Telegram; данные подтягиваются при каждом тапе.
+    </p>
+    <div class="rules">
+      <strong>Правила дизайна</strong>
+      <ul>
+        <li>Точка входа на <strong>странице подборки</strong> (под «Позвать друзей»), не в клиентском хабе.</li>
+        <li>Кнопка ведёт в <strong>шторку с шагами</strong>, а не имитирует системный Share.</li>
+        <li>Декоративные «Нажмите ↗» на иллюстрациях — <strong>без pointer-events</strong>; в копии явно: «это подсказка».</li>
+        <li>Имя ярлыка по умолчанию: <strong>Лёд · Минск</strong> (из <code>apple-mobile-web-app-title</code> / manifest).</li>
+        <li>Отдельно от иконки всего Glide / мини-приложения в Telegram.</li>
+      </ul>
+    </div>
+    <div class="scene-nav" id="sceneNav"></div>
+    <p class="navhint"><kbd>←</kbd> <kbd>→</kbd> между экранами · <kbd>T</kbd> тема шторки</p>
+  </aside>
+
+  <div class="stage" id="stage">
+    <!-- 0: страница -->
+    <div class="scene is-on" data-scene="0">
+      <p class="scene-label"><b>0.</b> Подборка открыта из чата / сторис — новая кнопка под шерингом</p>
+      <div class="phone" id="phonePage">
+        <div class="notch"></div>
+        <div class="status"><span>14:21</span><span>LTE</span></div>
+        <div class="pub-scroll">
+          <nav class="pub-top">
+            <span class="pub-brand">Glide<span> · карта льда</span></span>
+            <span>Минск</span>
+          </nav>
+          <section class="pub-hero">
+            <div class="tag">Подборка</div>
+            <h2>Минск · где покататься</h2>
+            <p class="meta">10 катков · 105 сеансов</p>
+          </section>
+          <article class="pub-card">
+            <b>ТЦ Замок</b>
+            <div class="slots">
+              <span class="chip">15:15 · 10 BYN</span>
+              <span class="chip">16:15 · 10 BYN</span>
+              <span class="chip">ещё 69</span>
+            </div>
+          </article>
+          <article class="pub-card">
+            <b>Чижовка-арена</b>
+            <div class="slots">
+              <span class="chip">19:15 · 10 BYN</span>
+              <span class="chip">09:30 завтра</span>
+            </div>
+          </article>
+          <section class="pub-share">
+            <div class="row">
+              <button type="button" class="btn">Telegram</button>
+              <button type="button" class="btn">Viber</button>
+              <button type="button" class="btn">Скопировать</button>
+            </div>
+            <button type="button" class="btn btn--new" id="openSheet">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="5" y="3" width="14" height="18" rx="3" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M9 7h6M12 17v-4M10 15h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+              Ярлык на главный экран
+            </button>
+            <p class="pub-foot">Открывает это же расписание одним тапом с рабочего стола</p>
+          </section>
+        </div>
+        <div class="scrim" id="scrim0"></div>
+        <div class="sheet" id="sheet0" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <!-- 1–3: только шторки (полноэкранный фокус) -->
+    <div class="scene" data-scene="1">
+      <p class="scene-label"><b>1.</b> Шторка: пользователь в <b>браузере Telegram</b> (iPhone)</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>14:21</span><span>LTE</span></div>
+        <div class="pub-scroll" style="filter: blur(2px); opacity: 0.65;"></div>
+        <div class="scrim on"></div>
+        <div class="sheet on" data-env-panel="telegram"></div>
+      </div>
+    </div>
+
+    <div class="scene" data-scene="2">
+      <p class="scene-label"><b>2.</b> Тот же сценарий в <b>Safari</b> — меньше шагов</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>14:22</span><span>LTE</span></div>
+        <div class="pub-scroll" style="filter: blur(2px); opacity: 0.65;"></div>
+        <div class="scrim on"></div>
+        <div class="sheet on" data-env-panel="safari"></div>
+      </div>
+    </div>
+
+    <div class="scene" data-scene="3">
+      <p class="scene-label"><b>3.</b> Android + Chrome: ближе к «одной кнопке» (<code>beforeinstallprompt</code>)</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>14:22</span><span>4G</span></div>
+        <div class="pub-scroll" style="filter: blur(2px); opacity: 0.65;"></div>
+        <div class="scrim on"></div>
+        <div class="sheet on" data-env-panel="android"></div>
+      </div>
+    </div>
+
+    <div class="scene" data-scene="4">
+      <p class="scene-label"><b>4.</b> Результат: тап по иконке → снова <code>/c/minsk</code>, актуальные сеансы</p>
+      <div class="phone phone--homescreen">
+        <div class="notch"></div>
+        <div class="status" style="color:#fff"><span>14:25</span><span>LTE</span></div>
+        <div class="homescreen">
+          <div class="hs-grid">
+            <div class="hs-app"><div class="ph">📷</div><span>Фото</span></div>
+            <div class="hs-app"><div class="ph">💬</div><span>Telegram</span></div>
+            <div class="hs-app is-target">
+              <img src="../../static/logos/01-icon/glide-icon-teal-square-512.png" alt="" width="60" height="60">
+              <span>Лёд · Минск</span>
+            </div>
+            <div class="hs-app"><div class="ph">🗓</div><span>Календарь</span></div>
+          </div>
+          <p class="hs-caption">
+            Иконка из <code>apple-touch-icon</code> · короткое имя из manifest.
+            Запись и профиль — по кнопке «Открыть в Telegram» на странице.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<template id="sheetTpl">
+  <div class="grab" aria-hidden="true"></div>
+  <h3>Ярлык «Лёд · Минск»</h3>
+  <p class="sub">Сохраните подборку на главный экран. Ссылка: <code>/c/minsk</code></p>
+  <div class="env-tabs" role="tablist">
+    <button type="button" data-env="telegram" role="tab">Telegram</button>
+    <button type="button" data-env="safari" role="tab">Safari</button>
+    <button type="button" data-env="android" role="tab">Android</button>
+  </div>
+  <div class="env-body"></div>
+  <div class="deco-warn">Иллюстрации со стрелкой «Нажмите» — только подсказка, не кнопка. Реальные действия — в панели браузера внизу экрана.</div>
+  <div class="sheet-actions">
+    <button type="button" class="primary" data-action="copy">Скопировать ссылку для ярлыка</button>
+    <button type="button" class="secondary" data-action="close">Понятно</button>
+  </div>
+</template>
+
+<script>
+(function () {
+  var SCENES = [
+    { id: 0, label: '0 · Страница /c' },
+    { id: 1, label: '1 · TG шторка' },
+    { id: 2, label: '2 · Safari' },
+    { id: 3, label: '3 · Android' },
+    { id: 4, label: '4 · Домой' }
+  ];
+  var sceneIdx = 0;
+  var sheetEnv = 'telegram';
+  var nav = document.getElementById('sceneNav');
+  var scenes = document.querySelectorAll('.scene');
+  var shareIcon = '<span class="ico-inline" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3v10M8 7l4-4 4 4M5 14v5a2 2 0 002 2h10a2 2 0 002-2v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+  var dotsIcon = '<span class="ico-inline" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span>';
+  var plusIcon = '<span class="ico-inline" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="1.6"/></svg></span>';
+
+  function envSteps(env) {
+    if (env === 'telegram') {
+      return '<ol class="steps">' +
+        '<li><span class="n">1</span><div>Внизу справа нажмите ' + dotsIcon + ' <strong>меню</strong><span class="hint">В панели браузера Telegram, не на странице Glide</span></div></li>' +
+        '<li><span class="n">2</span><div>Выберите <strong>«Открыть в Safari»</strong><span class="hint">Без Safari пункта «На экран „Домой“» не будет</span></div></li>' +
+        '<li><span class="n">3</span><div>В Safari — ' + shareIcon + ' <strong>Поделиться</strong> → ' + plusIcon + ' <strong>На экран «Домой»</strong></div></li>' +
+        '<li><span class="n">4</span><div>Имя: <strong>Лёд · Минск</strong> → «Добавить»</div></li>' +
+        '</ol>' +
+        '<div class="fake-browser"><div class="bar"><span>‹</span><span class="url">t.me / …</span><span class="pulse">' + dotsIcon + '</span></div></div>';
+    }
+    if (env === 'safari') {
+      return '<ol class="steps">' +
+        '<li><span class="n">1</span><div>Внизу по центру — ' + shareIcon + ' <strong>Поделиться</strong></div></li>' +
+        '<li><span class="n">2</span><div>Прокрутите → <strong>На экран «Домой»</strong></div></li>' +
+        '<li><span class="n">3</span><div>Проверьте имя <strong>Лёд · Минск</strong> и нажмите «Добавить»</div></li>' +
+        '</ol>' +
+        '<div class="callout"><b>Уже на столе?</b> Не показываем шторку снова, если <code>display-mode: standalone</code> или пользователь нажал «Не сейчас».</div>' +
+        '<div class="fake-browser"><div class="bar"><span>‹</span><span class="url">…/c/minsk</span><span class="pulse">' + shareIcon + '</span></div></div>';
+    }
+    return '<p class="sub" style="margin-top:12px">Если страница открыта в Chrome, можно предложить установку:</p>' +
+      '<div class="android-banner">' +
+      '<img src="../../static/logos/01-icon/glide-icon-teal-square-512.png" alt="" width="48" height="48">' +
+      '<div><b>Лёд · Минск</b><span>glide…/c/minsk</span></div>' +
+      '<button type="button" class="install">Установить</button></div>' +
+      '<div class="callout">Кнопка «Установить» на странице вызывает отложенный <code>beforeinstallprompt</code> — только Android + manifest со <code>start_url</code>.</div>';
+  }
+
+  function mountSheet(root, env) {
+    if (!root || root.dataset.mounted) return;
+    var tpl = document.getElementById('sheetTpl');
+    root.appendChild(tpl.content.cloneNode(true));
+    root.dataset.mounted = '1';
+    wireSheet(root, env || sheetEnv);
+  }
+
+  function wireSheet(root, env) {
+    var body = root.querySelector('.env-body');
+    var tabs = root.querySelectorAll('.env-tabs button');
+    function setEnv(e) {
+      sheetEnv = e;
+      tabs.forEach(function (b) { b.classList.toggle('is-on', b.getAttribute('data-env') === e); });
+      body.innerHTML = envSteps(e);
+    }
+    tabs.forEach(function (b) {
+      b.addEventListener('click', function () { setEnv(b.getAttribute('data-env')); });
+    });
+    setEnv(env);
+    root.querySelector('[data-action="close"]').addEventListener('click', function () {
+      closeSheet();
+      if (sceneIdx !== 0) goScene(0);
+    });
+    root.querySelector('[data-action="copy"]').addEventListener('click', function () {
+      var url = 'https://api-server-dcd9.up.railway.app/c/minsk';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).catch(function () {});
+      } else {
+        window.prompt('Скопируйте:', url);
+      }
+    });
+  }
+
+  function buildNav() {
+    SCENES.forEach(function (s) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = s.label;
+      b.dataset.idx = String(s.id);
+      b.addEventListener('click', function () { goScene(s.id); });
+      nav.appendChild(b);
+    });
+    var t = document.createElement('button');
+    t.type = 'button';
+    t.className = 'ghost';
+    t.textContent = 'T — тема шторки';
+    t.addEventListener('click', toggleSheetTheme);
+    nav.appendChild(t);
+  }
+
+  function goScene(idx) {
+    sceneIdx = idx;
+    scenes.forEach(function (el) {
+      el.classList.toggle('is-on', Number(el.getAttribute('data-scene')) === idx);
+    });
+    nav.querySelectorAll('button[data-idx]').forEach(function (b) {
+      b.classList.toggle('is-on', Number(b.dataset.idx) === idx);
+    });
+    document.querySelectorAll('[data-env-panel]').forEach(function (panel) {
+      mountSheet(panel, panel.getAttribute('data-env-panel'));
+    });
+  }
+
+  function openSheet() {
+    var scrim = document.getElementById('scrim0');
+    var sheet = document.getElementById('sheet0');
+    mountSheet(sheet, sheetEnv);
+    scrim.classList.add('on');
+    sheet.classList.add('on');
+    sheet.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeSheet() {
+    var scrim = document.getElementById('scrim0');
+    var sheet = document.getElementById('sheet0');
+    scrim.classList.remove('on');
+    sheet.classList.remove('on');
+    sheet.setAttribute('aria-hidden', 'true');
+  }
+
+  function toggleSheetTheme() {
+    var html = document.documentElement;
+    var next = html.getAttribute('data-sheet-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-sheet-theme', next);
+  }
+
+  document.getElementById('openSheet').addEventListener('click', openSheet);
+  document.getElementById('scrim0').addEventListener('click', closeSheet);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') goScene(Math.min(4, sceneIdx + 1));
+    if (e.key === 'ArrowLeft') goScene(Math.max(0, sceneIdx - 1));
+    if (e.key === 't' || e.key === 'T') toggleSheetTheme();
+  });
+
+  document.documentElement.setAttribute('data-sheet-theme', 'dark');
+  buildNav();
+  goScene(0);
+})();
+</script>
+</body>
+</html>

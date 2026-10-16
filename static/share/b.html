@@ -44,7 +44,10 @@
       function dropBrokenPhoto(e) {
         var img = e.target;
         if (!img || img.tagName !== 'IMG') return;
-        if (e.type === 'load' && img.naturalWidth > 0) return;
+        if (e.type === 'load' && img.naturalWidth > 0) {
+          img.classList.add('is-ready');
+          return;
+        }
         var box = img.closest('.b-hero, .b-tile__media, .b-card2__thumb');
         if (!box) return;
         var hero = box.classList.contains('b-hero');
@@ -57,6 +60,12 @@
       }
       window.addEventListener('error', dropBrokenPhoto, true);
       window.addEventListener('load', dropBrokenPhoto, true);
+      document.addEventListener('DOMContentLoaded', function () {
+        var imgs = document.querySelectorAll('.b-hero > img, .b-tile__media img, .b-card2__thumb img');
+        for (var i = 0; i < imgs.length; i++) {
+          if (imgs[i].complete && imgs[i].naturalWidth > 0) imgs[i].classList.add('is-ready');
+        }
+      });
     })();
   </script>
 </head>
@@ -65,8 +74,8 @@
   <template id="b-motif-small"><svg class="b-motif" viewBox="0 0 230 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><rect class="b-motif__line" x="-30" y="14" width="290" height="92" rx="40"/><line class="b-motif__mid" x1="115" y1="14" x2="115" y2="106"/><circle class="b-motif__mid" cx="115" cy="60" r="20"/></svg></template>
   <main class="b-page">
     __BODY__
-    <footer class="b-foot">__CITY_LINK__</footer>
   </main>
+  __SITE_FOOTER__
   __PLACE_SHARE_BAR__
   __PLACE_SHARE_SCRIPTS__
   __B_PRESS_SCRIPT__
@@ -80,6 +89,57 @@
     (function () {
       var Api = window.GlideListScrollRestore;
       if (Api && Api.wirePublicListScrollRestore) Api.wirePublicListScrollRestore(sessionStorage);
+
+      var times = document.querySelectorAll('.b-slot__time, .b-ticket__time');
+      for (var t = 0; t < times.length; t++) {
+        var timeName = times[t].style.viewTransitionName || '';
+        if (/^glide-s-\d+$/.test(timeName)) times[t].setAttribute('data-session-vt', timeName);
+        if (timeName) times[t].style.viewTransitionName = 'none';
+      }
+      var keptSession = '';
+      try { keptSession = sessionStorage.getItem('glide-session-vt') || ''; } catch (err) {}
+      var navEntry = performance.getEntriesByType('navigation')[0];
+      var restoreSession = /^glide-s-\d+$/.test(keptSession) && (
+        (navEntry && navEntry.type === 'back_forward')
+        || document.querySelector('.b-ticket__time[data-session-vt="' + keptSession + '"]')
+      );
+      if (restoreSession) {
+        var keptTime = document.querySelector('[data-session-vt="' + keptSession + '"]');
+        if (keptTime) keptTime.style.viewTransitionName = keptSession;
+      }
+
+      document.addEventListener('pointerdown', function (event) {
+        var time = event.target && event.target.closest && event.target.closest('[data-session-vt]');
+        if (time) {
+          var sessionName = time.getAttribute('data-session-vt') || '';
+          if (/^glide-s-\d+$/.test(sessionName)) {
+            var allTimes = document.querySelectorAll('[data-session-vt]');
+            for (var n = 0; n < allTimes.length; n++) {
+              allTimes[n].style.viewTransitionName = allTimes[n] === time ? sessionName : 'none';
+            }
+            try { sessionStorage.setItem('glide-session-vt', sessionName); } catch (err) {}
+          }
+        }
+        var card = event.target && event.target.closest && event.target.closest('[data-place-vt]');
+        if (!card) return;
+        var name = card.getAttribute('data-place-vt') || '';
+        if (!/^glide-place-[a-z0-9-]+$/.test(name)) return;
+        var named = document.querySelectorAll('[data-place-vt]');
+        for (var i = 0; i < named.length; i++) {
+          if (named[i] !== card) named[i].style.viewTransitionName = '';
+        }
+        card.style.viewTransitionName = name;
+        try { sessionStorage.setItem('glide-place-vt', name); } catch (err) {}
+      }, true);
+      (function () {
+        var nav = performance.getEntriesByType('navigation')[0];
+        if (!nav || nav.type !== 'back_forward') return;
+        var name = '';
+        try { name = sessionStorage.getItem('glide-place-vt') || ''; } catch (err) { return; }
+        if (!/^glide-place-[a-z0-9-]+$/.test(name)) return;
+        var backCard = document.querySelector('[data-place-vt="' + name + '"]');
+        if (backCard) backCard.style.viewTransitionName = name;
+      })();
 
       var toast = document.getElementById('toast');
       function say(text) {
