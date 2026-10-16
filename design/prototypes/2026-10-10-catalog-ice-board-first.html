@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ru" class="trainer-theme-dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Каталог — два ряда шапки (2026-10-10)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../static/webapp/theme.css">
+  <link rel="stylesheet" href="../../static/webapp/mini-app-client-theme.css">
+  <link rel="stylesheet" href="../../static/webapp/mini-app-components.css">
+  <link rel="stylesheet" href="../../static/webapp/ice-tab.css">
+  <style>
+    body.proto-doc {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Golos Text", var(--app-font-sans, system-ui, sans-serif);
+      background: #050607;
+      color: #eceae4;
+    }
+    .proto-doc a { color: inherit; text-decoration: none; }
+    .proto-layout {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px 16px 64px;
+      display: grid;
+      grid-template-columns: minmax(260px, 380px) 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .proto-layout { grid-template-columns: 1fr; justify-items: center; }
+    }
+    .proto-aside { max-width: 380px; font-size: 14px; line-height: 1.5; color: #9a968c; }
+    .proto-aside h1 { margin: 8px 0 0; font-size: 22px; color: #eceae4; letter-spacing: -.02em; }
+    .proto-aside h1 em { font-style: normal; color: #57d0d2; }
+    .proto-aside p { margin: 10px 0 0; }
+    .proto-aside ul { margin: 8px 0 0; padding-left: 18px; }
+    .proto-aside li { margin-bottom: 6px; }
+    .proto-aside b { color: #eceae4; }
+    .proto-kicker {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #57d0d2;
+    }
+    .proto-phone {
+      width: 390px;
+      max-width: calc(100vw - 24px);
+      border-radius: 40px;
+      overflow: hidden;
+      box-shadow: 0 0 0 1px #262a2e, 0 32px 64px -24px rgba(0,0,0,.75);
+      background: var(--tg-theme-bg-color, var(--glide-paper));
+    }
+    .proto-phone .ice-tab { margin: 0; max-width: none; }
+    .proto-note {
+      margin: 12px 0 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.03);
+      font-size: 12px;
+    }
+
+    .hdr-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .hdr-scroll {
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      flex: 1 1 auto;
+      min-width: 0;
+      padding-bottom: 2px;
+    }
+    .hdr-scroll::-webkit-scrollbar { display: none; }
+    .hdr-city { flex: 0 0 auto; }
+
+    .hdr-when[hidden],
+    .hdr-shoptime[hidden],
+    .hdr-sub[hidden],
+    .hdr-menu[hidden] { display: none !important; }
+
+    .hdr-date {
+      flex: 0 0 auto;
+    }
+    .hdr-menu {
+      position: fixed;
+      z-index: 20;
+      min-width: 196px;
+      padding: 6px;
+      border-radius: 14px;
+      border: 1px solid var(--glide-line);
+      background: #141618;
+      box-shadow: 0 16px 40px rgba(0,0,0,.45);
+    }
+    .hdr-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .hdr-menu button[aria-pressed="true"],
+    .hdr-menu button:hover { background: rgba(69,185,187,.14); }
+    .hdr-menu button small {
+      display: block;
+      font-weight: 500;
+      color: var(--glide-hint);
+      font-size: 12px;
+    }
+
+    /* Второй ряд: слова без рамки, подчёркивание, просадка как у категорий Airbnb. */
+    .hdr-folders {
+      position: relative;
+      display: flex;
+      gap: 18px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 2px 2px 0;
+    }
+    .hdr-folders::-webkit-scrollbar { display: none; }
+    .hdr-folder {
+      position: relative;
+      flex: 0 0 auto;
+      border: 0;
+      background: none;
+      color: var(--glide-hint);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      padding: 8px 0 12px;
+      cursor: pointer;
+      transition: transform .14s ease, color .14s ease;
+    }
+    .hdr-folder:active {
+      transform: scale(0.97) translateY(1px);
+    }
+    .hdr-folder.is-on {
+      color: var(--glide-ink-teal, #57d0d2);
+      font-weight: 650;
+    }
+    .hdr-folder small {
+      font-weight: 500;
+      opacity: .72;
+      margin-left: 4px;
+      font-size: 12px;
+    }
+    .hdr-underline {
+      position: absolute;
+      left: 0;
+      bottom: 4px;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--glide-ink-teal, #57d0d2);
+      width: 0;
+      transform: translateX(0);
+      transition: transform .22s ease, width .22s ease;
+      pointer-events: none;
+    }
+
+    [data-view] { display: none; }
+    [data-view].is-on { display: block; }
+  </style>
+</head>
+<body class="proto-doc ar-pilot ar-pilot--ice">
+  <div class="proto-layout">
+    <aside class="proto-aside">
+      <p class="proto-kicker">Вкладка «Лёд» · прототип</p>
+      <h1>Два ряда.<br><em>Дата не обрезана.</em></h1>
+      <p>
+        Верх — обведённые чипы. Низ — слова с подчёркиванием: тап чуть просаживает пункт, черта переезжает.
+        «Дата» открывает послезавтра и остальные будни. Выбранный день становится подписью этого чипа.
+      </p>
+      <ul>
+        <li><b>Покататься / ОХМ</b> — день сеанса.</li>
+        <li><b>Магазины</b> — «открыто» и часы, под ними услуги: заточка, розница, формовка, ремонт.</li>
+        <li><b>Тренер</b> — без даты, чипы услуг.</li>
+      </ul>
+      <p class="proto-note">
+        Это макет, не прод. Карточки — тот же <code>ice-board</code>.
+        Логика каталога в <code>ice-tab.js</code> пока не переключена.
+      </p>
+    </aside>
+
+    <div class="proto-phone">
+      <div id="iceRoot" class="ice-tab">
+        <div class="ice-sec ice-sec--hero">
+          <div class="ice-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <input type="search" id="q" placeholder="Каток, зал или трасса" aria-label="Поиск" readonly>
+          </div>
+
+          <div class="hdr-row hdr-when" id="whenRow">
+            <div class="hdr-scroll" role="group" aria-label="Когда">
+              <button type="button" class="ice-chip" data-when="today" aria-pressed="true">Сегодня</button>
+              <button type="button" class="ice-chip" data-when="tomorrow" aria-pressed="false">Завтра</button>
+              <button type="button" class="ice-chip" data-when="weekend" aria-pressed="false">Сб–Вс</button>
+              <div class="hdr-date">
+                <button type="button" class="ice-chip" id="dateBtn" data-when="date" aria-pressed="false" aria-expanded="false">Дата</button>
+                <div class="hdr-menu" id="dateMenu" hidden></div>
+              </div>
+            </div>
+            <button type="button" class="ice-citypill hdr-city"><span class="ice-citypill__name">Минск</span></button>
+          </div>
+
+          <div class="hdr-row hdr-shoptime" id="shopTimeRow" hidden>
+            <div class="hdr-scroll" role="group" aria-label="Когда удобно">
+              <button type="button" class="ice-chip" data-shop-when="open" aria-pressed="false">Открыто сейчас</button>
+              <button type="button" class="ice-chip" data-shop-when="evening" aria-pressed="false">Сегодня вечером</button>
+              <button type="button" class="ice-chip" data-shop-when="tomorrow" aria-pressed="false">Завтра</button>
+              <button type="button" class="ice-chip" data-shop-when="any" aria-pressed="true">Любое время</button>
+            </div>
+            <button type="button" class="ice-citypill hdr-city"><span class="ice-citypill__name">Минск</span></button>
+          </div>
+
+          <nav class="hdr-folders" id="folders" aria-label="Раздел">
+            <button type="button" class="hdr-folder is-on" data-folder="skate">Покататься</button>
+            <button type="button" class="hdr-folder" data-folder="ohm">ОХМ <small>4</small></button>
+            <button type="button" class="hdr-folder" data-folder="shop">Магазины <small>18</small></button>
+            <button type="button" class="hdr-folder" data-folder="coach">Тренер <small>6</small></button>
+            <span class="hdr-underline" id="underline" aria-hidden="true"></span>
+          </nav>
+
+          <div class="hdr-row hdr-sub" id="subRow" hidden>
+            <div class="hdr-scroll" id="subChips" role="group" aria-label="Уточнение"></div>
+          </div>
+        </div>
+
+        <div class="ice-sec" id="listSec">
+          <div data-view="skate" class="is-on">
+            <div class="ice-listhead"><p class="ice-eyebrow" id="skateEyebrow">Сегодня на льду · 3 сеанса</p></div>
+            <div class="ice-list">
+              <div class="ice-board-wrap">
+                <button type="button" class="ice-board__invite">Позвать</button>
+                <a class="ice-board ice-board--type-ice" href="#">
+                  <span class="ice-board__photo" style="background-image:url('../../data/arena-cards/photos/minsk-diamond/bannerled.png')">
+                    <span class="ice-board__scrim">
+                      <span class="ice-board__day" data-day>Сегодня</span>
+                      <span class="ice-board__time">13:30</span>
+                      <span class="ice-board__name">ТЦ DiaMond city</span>
+                      <span class="ice-board__where">массовое катание</span>
+                    </span>
+                  </span>
+                  <span class="ice-board__facts"><span class="ice-board__prices">12 BYN · дети 8 · прокат 10</span></span>
+                  <span class="ice-board__depth">ещё 2 сеанса<span class="ice-board__go" aria-hidden="true">→</span></span>
+                </a>
+              </div>
+              <div class="ice-board-wrap">
+                <a class="ice-board ice-board--type-ice" href="#">
+                  <span class="ice-board__photo" style="background-image:url('../../data/arena-cards/photos/arena-115/hockey-rink-interior.jpg')">
+                    <span class="ice-board__scrim">
+                      <span class="ice-board__day" data-day>Сегодня</span>
+                      <span class="ice-board__time">16:00</span>
+                      <span class="ice-board__name">Чижовка</span>
+                      <span class="ice-board__where">с прокатом</span>
+                    </span>
+                  </span>
+                  <span class="ice-board__facts"><span class="ice-board__prices">10 BYN · дети 7</span></span>
+                  <span class="ice-board__depth">ближайший после 13:30<span class="ice-board__go" aria-hidden="true">→</span></span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div data-view="ohm">
+            <div class="ice-listhead"><p class="ice-eyebrow" id="ohmEyebrow">ОХМ · выходные</p></div>
+            <div class="ice-list">
+              <div class="ice-board-wrap">
+                <button type="button" class="ice-board__invite">Позвать</button>
+                <a class="ice-board ice-board--type-ice" href="#">
+                  <span class="ice-board__photo" style="background-image:url('../../data/arena-cards/photos/arena-115/hockey-rink-interior.jpg')">
+                    <span class="ice-board__scrim">
+                      <span class="ice-board__day">Суббота</span>
+                      <span class="ice-board__time">07:00</span>
+                      <span class="ice-board__name">СДЮШОР</span>
+                      <span class="ice-board__where">хоккей для любителей</span>
+                    </span>
+                  </span>
+                  <span class="ice-board__facts"><span class="ice-board__prices">15 BYN · шлем детям</span></span>
+                  <span class="ice-board__depth">слот, не тренер «Хоккей»<span class="ice-board__go" aria-hidden="true">→</span></span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div data-view="shop">
+            <div class="ice-listhead"><p class="ice-eyebrow" id="shopEyebrow">Магазины · любое время</p></div>
+            <div class="ice-list">
+              <div class="ice-board-wrap">
+                <a class="ice-board ice-board--type-shop" href="#">
+                  <span class="ice-board__photo" style="background-image:url('../../data/catalog/photos/minsk/hotice.jpg')">
+                    <span class="ice-board__scrim">
+                      <span class="ice-board__time">открыто</span>
+                      <span class="ice-board__name">HotIce</span>
+                      <span class="ice-board__where">до 19:00 · 12 мин</span>
+                    </span>
+                  </span>
+                  <span class="ice-board__facts"><span class="ice-board__status" id="shopStatus">заточка · формовка · ремонт</span></span>
+                  <span class="ice-board__depth">услуга в чипах, не отдельный отдел<span class="ice-board__go" aria-hidden="true">→</span></span>
+                </a>
+              </div>
+              <div class="ice-board-wrap">
+                <a class="ice-board ice-board--type-shop" href="#">
+                  <span class="ice-board__photo" style="background-image:url('../../data/catalog/photos/minsk/figurist.jpg')">
+                    <span class="ice-board__scrim">
+                      <span class="ice-board__time">открыто</span>
+                      <span class="ice-board__name">Фигурист.by</span>
+                      <span class="ice-board__where">примерка · до 20:00</span>
+                    </span>
+                  </span>
+                  <span class="ice-board__facts"><span class="ice-board__status">розница · коньки и форма</span></span>
+                  <span class="ice-board__depth">коньки — часть розницы<span class="ice-board__go" aria-hidden="true">→</span></span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div data-view="coach">
+            <div class="ice-listhead"><p class="ice-eyebrow" id="coachEyebrow">Тренеры · все услуги</p></div>
+            <div class="ice-list">
+              <div class="ice-board-wrap">
+                <a class="ice-board ice-board--type-ice" href="#">
+                  <span class="ice-board__photo" style="background-image:url('../../data/arena-cards/photos/minsk-diamond/bannerled.png')">
+                    <span class="ice-board__scrim">
+                      <span class="ice-board__name">Анна Коваль</span>
+                      <span class="ice-board__where">фигурное · с нуля</span>
+                    </span>
+                  </span>
+                  <span class="ice-board__facts"><span class="ice-board__prices">от 40 BYN</span></span>
+                  <span class="ice-board__depth">Чижовка<span class="ice-board__go" aria-hidden="true">→</span></span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var folder = "skate";
+    var when = "today";
+    var dateLabel = "";
+    var shopWhen = "any";
+    var shopService = "";
+    var coachService = "";
+    var menuOpen = false;
+
+    var WEEK = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+    var WEEK_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+
+    function addDays(n) {
+      var d = new Date();
+      d.setDate(d.getDate() + n);
+      return d;
+    }
+    function shortDay(d) {
+      var name = WEEK[d.getDay()];
+      return name.charAt(0).toUpperCase() + name.slice(1) + " " + d.getDate();
+    }
+    function extraDays() {
+      var out = [];
+      for (var i = 2; i <= 6; i++) {
+        var d = addDays(i);
+        if (d.getDay() === 0 || d.getDay() === 6) continue;
+        out.push({ id: "d" + i, label: shortDay(d), sub: WEEK_FULL[d.getDay()] });
+      }
+      return out;
+    }
+
+    var q = document.getElementById("q");
+    var whenRow = document.getElementById("whenRow");
+    var shopTimeRow = document.getElementById("shopTimeRow");
+    var subRow = document.getElementById("subRow");
+    var subChips = document.getElementById("subChips");
+    var dateBtn = document.getElementById("dateBtn");
+    var dateMenu = document.getElementById("dateMenu");
+    var underline = document.getElementById("underline");
+
+    var SHOP = [
+      { id: "", label: "Все" },
+      { id: "sharpen", label: "Заточка" },
+      { id: "retail", label: "Розница" },
+      { id: "mold", label: "Формовка" },
+      { id: "repair", label: "Ремонт" },
+      { id: "profile", label: "Профиль" },
+      { id: "scan", label: "3D-подбор" }
+    ];
+    var COACH = [
+      { id: "", label: "Все" },
+      { id: "zero", label: "С нуля" },
+      { id: "tech", label: "Техника" },
+      { id: "hockey", label: "Хоккей" },
+      { id: "roller", label: "Ролики" },
+      { id: "ofp", label: "ОФП" }
+    ];
+
+    function placeUnderline() {
+      var on = document.querySelector(".hdr-folder.is-on");
+      if (!on || !underline) return;
+      underline.style.width = on.offsetWidth + "px";
+      underline.style.transform = "translateX(" + on.offsetLeft + "px)";
+    }
+    function placeMenu() {
+      if (!menuOpen) return;
+      var r = dateBtn.getBoundingClientRect();
+      dateMenu.style.top = (r.bottom + 6) + "px";
+      dateMenu.style.left = Math.max(12, r.left) + "px";
+    }
+
+    function renderMenu() {
+      var days = extraDays();
+      var html = days.map(function (d) {
+        var pressed = when === d.id ? "true" : "false";
+        return '<button type="button" data-pick="' + d.id + '" data-label="' + d.label + '" aria-pressed="' + pressed + '">' +
+          d.label + "<small>" + d.sub + "</small></button>";
+      }).join("");
+      html += '<button type="button" data-pick="any" data-label="Любое время" aria-pressed="' + (when === "any" ? "true" : "false") + '">Любое время</button>';
+      dateMenu.innerHTML = html;
+    }
+
+    function renderSub() {
+      var list = folder === "shop" ? SHOP : folder === "coach" ? COACH : [];
+      var current = folder === "shop" ? shopService : coachService;
+      subRow.hidden = !list.length;
+      subChips.innerHTML = list.map(function (item) {
+        var pressed = item.id === current ? "true" : "false";
+        return '<button type="button" class="ice-chip" data-sub="' + item.id + '" aria-pressed="' + pressed + '">' + item.label + "</button>";
+      }).join("");
+    }
+
+    function syncWhenChips() {
+      document.querySelectorAll("[data-when]").forEach(function (btn) {
+        var key = btn.getAttribute("data-when");
+        var on = key === "date" ? (when !== "today" && when !== "tomorrow" && when !== "weekend" && !!dateLabel) : key === when;
+        if (key === "date" && (when === "any" || when.indexOf("d") === 0)) on = true;
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      if (when === "today" || when === "tomorrow" || when === "weekend") {
+        dateBtn.textContent = "Дата";
+        dateLabel = "";
+      } else if (dateLabel) {
+        dateBtn.textContent = dateLabel;
+      }
+      dateBtn.setAttribute("aria-expanded", menuOpen ? "true" : "false");
+      dateMenu.hidden = !menuOpen;
+      if (menuOpen) placeMenu();
+    }
+
+    function paint() {
+      var iceTime = folder === "skate" || folder === "ohm";
+      whenRow.hidden = !iceTime;
+      shopTimeRow.hidden = folder !== "shop";
+      document.querySelectorAll("[data-view]").forEach(function (el) {
+        el.classList.toggle("is-on", el.getAttribute("data-view") === folder);
+      });
+      document.querySelectorAll(".hdr-folder").forEach(function (btn) {
+        btn.classList.toggle("is-on", btn.getAttribute("data-folder") === folder);
+      });
+      renderSub();
+      syncWhenChips();
+
+      var dayWord = dateBtn.textContent;
+      if (when === "today") dayWord = "Сегодня";
+      if (when === "tomorrow") dayWord = "Завтра";
+      if (when === "weekend") dayWord = "Сб–Вс";
+      if (when === "any") dayWord = "Любое время";
+
+      document.querySelectorAll("[data-view='skate'] [data-day]").forEach(function (el) {
+        el.textContent = dayWord;
+      });
+      var skateEyebrow = document.getElementById("skateEyebrow");
+      var ohmEyebrow = document.getElementById("ohmEyebrow");
+      if (skateEyebrow) skateEyebrow.textContent = dayWord + " на льду · 3 сеанса";
+      if (ohmEyebrow) ohmEyebrow.textContent = "ОХМ · " + dayWord.toLowerCase();
+
+      var shopNames = { "": "все услуги", sharpen: "заточка", retail: "розница", mold: "формовка", repair: "ремонт", profile: "профиль", scan: "3D-подбор" };
+      var shopWhenNames = { open: "открыто сейчас", evening: "сегодня вечером", tomorrow: "завтра", any: "любое время" };
+      var shopEyebrow = document.getElementById("shopEyebrow");
+      var shopStatus = document.getElementById("shopStatus");
+      if (shopEyebrow) shopEyebrow.textContent = "Магазины · " + (shopNames[shopService] || "все") + " · " + shopWhenNames[shopWhen];
+      if (shopStatus) shopStatus.textContent = shopService ? (shopNames[shopService] || "") : "заточка · формовка · ремонт · розница";
+
+      var coachNames = { "": "все услуги", zero: "с нуля", tech: "техника", hockey: "хоккей", roller: "ролики", ofp: "ОФП" };
+      var coachEyebrow = document.getElementById("coachEyebrow");
+      if (coachEyebrow) coachEyebrow.textContent = "Тренеры · " + (coachNames[coachService] || "все услуги");
+
+      if (q) {
+        if (folder === "ohm") q.placeholder = "Каток с ОХМ";
+        else if (folder === "shop") q.placeholder = "Магазин или мастерская";
+        else if (folder === "coach") q.placeholder = "Имя тренера";
+        else q.placeholder = "Каток, зал или трасса";
+      }
+      requestAnimationFrame(placeUnderline);
+    }
+
+    document.getElementById("folders").addEventListener("click", function (ev) {
+      var btn = ev.target.closest("[data-folder]");
+      if (!btn) return;
+      folder = btn.getAttribute("data-folder");
+      menuOpen = false;
+      if (folder === "ohm" && (when === "today" || when === "tomorrow")) {
+        when = "weekend";
+      }
+      paint();
+    });
+    document.getElementById("folders").addEventListener("scroll", placeUnderline);
+
+    whenRow.addEventListener("click", function (ev) {
+      var pick = ev.target.closest("[data-pick]");
+      if (pick) {
+        when = pick.getAttribute("data-pick");
+        dateLabel = pick.getAttribute("data-label") || "";
+        menuOpen = false;
+        paint();
+        return;
+      }
+      var chip = ev.target.closest("[data-when]");
+      if (!chip) return;
+      if (chip.getAttribute("data-when") === "date") {
+        menuOpen = !menuOpen;
+        renderMenu();
+        syncWhenChips();
+        return;
+      }
+      when = chip.getAttribute("data-when");
+      dateLabel = "";
+      menuOpen = false;
+      paint();
+    });
+
+    shopTimeRow.addEventListener("click", function (ev) {
+      var chip = ev.target.closest("[data-shop-when]");
+      if (!chip) return;
+      shopWhen = chip.getAttribute("data-shop-when");
+      shopTimeRow.querySelectorAll("[data-shop-when]").forEach(function (el) {
+        el.setAttribute("aria-pressed", el === chip ? "true" : "false");
+      });
+      paint();
+    });
+
+    subRow.addEventListener("click", function (ev) {
+      var chip = ev.target.closest("[data-sub]");
+      if (!chip) return;
+      if (folder === "shop") shopService = chip.getAttribute("data-sub");
+      if (folder === "coach") coachService = chip.getAttribute("data-sub");
+      paint();
+    });
+
+    document.addEventListener("click", function (ev) {
+      if (!menuOpen) return;
+      if (ev.target.closest(".hdr-date")) return;
+      menuOpen = false;
+      syncWhenChips();
+    });
+
+    window.addEventListener("resize", placeUnderline);
+    renderMenu();
+    paint();
+  })();
+  </script>
+</body>
+</html>

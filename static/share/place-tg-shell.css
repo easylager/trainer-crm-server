@@ -25,6 +25,7 @@ body.b.client-shell-body.tg-dark::after {
 
 body.b.tg-dark .b-when {
   background: var(--g-line);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 body.b.tg-dark .b-day--end {

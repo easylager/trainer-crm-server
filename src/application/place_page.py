@@ -238,6 +238,33 @@ def slot_price_lines(slot: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+SOON_MAX_MINUTES = 120
+
+
+def minutes_until_start(slot: Mapping[str, Any], *, now: datetime) -> int | None:
+    """Минуты до начала, если сеанс ещё впереди и не дальше двух часов."""
+    starts = _parse_iso_dt(slot.get("starts_at_utc"))
+    if starts is None:
+        return None
+    minutes = int((starts - now).total_seconds() // 60)
+    if minutes <= 0 or minutes > SOON_MAX_MINUTES:
+        return None
+    return minutes
+
+
+def soon_html(slot: Mapping[str, Any], *, now: datetime) -> str:
+    """Точка и «через N мин» у ближайшего сеанса. Дальше двух часов — пусто, остаётся время."""
+    minutes = minutes_until_start(slot, now=now)
+    starts = _parse_iso_dt(slot.get("starts_at_utc"))
+    if minutes is None or starts is None:
+        return ""
+    return (
+        f'<span class="b-soon" data-starts="{_esc(starts.isoformat())}">'
+        f'<i class="b-soon__dot" aria-hidden="true"></i>'
+        f'<span class="b-soon__label">через {minutes} мин</span></span>'
+    )
+
+
 def starts_in_label(slot: Mapping[str, Any], *, now: datetime) -> str:
     """«Начнётся через 40 минут» — только если до начала меньше трёх часов."""
     starts = _parse_iso_dt(slot.get("starts_at_utc"))
@@ -978,6 +1005,12 @@ def _place_share_scripts_html(
     )
 
 
+def _place_site_footer(city_link: str, *, telegram_href: str | None) -> str:
+    from src.application.public_site_footer import render_site_footer_html
+
+    return render_site_footer_html(context_html=city_link, telegram_href=telegram_href)
+
+
 def render_place_page(
     view: Mapping[str, Any],
     *,
@@ -1034,7 +1067,7 @@ def render_place_page(
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
-        "__CITY_LINK__": city_link,
+        "__SITE_FOOTER__": _place_site_footer(city_link, telegram_href=cta_url),
         "__BODY__": body,
         "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite, telegram_url=cta_url),
         "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(
@@ -1124,6 +1157,8 @@ def _b_hero(card: Mapping[str, Any], *, status_html: str = "") -> str:
     bar += brand_link(end=True)
     where = _b_where(card)
     name = format_public_name(str(card.get("name") or ""))
+    from src.shared.public_view_transitions import place_vt_name
+
     return hero_html(
         title=name,
         sub_html=_esc(where) if where else "",
@@ -1134,6 +1169,7 @@ def _b_hero(card: Mapping[str, Any], *, status_html: str = "") -> str:
         variant="place",
         extra_html=status_html,
         photo_variants=photo_variants,
+        vt_name=place_vt_name(str(card.get("slug") or "")),
     )
 
 
@@ -1183,6 +1219,7 @@ def _b_ticket(
     common_price: str,
     nojs_share: Mapping[str, str] | None = None,
     dark: bool = False,
+    soon: str = "",
 ) -> str:
     from src.shared.public_view_transitions import session_time_vt_style
 
@@ -1199,7 +1236,7 @@ def _b_ticket(
     vt = session_time_vt_style(sid) if vt_session_id is not None and sid == vt_session_id else ""
     ticket = (
         f'<a class="{klass}" href="{_esc(href)}" rel="nofollow" data-session-id="{sid}">'
-        f'<span class="b-ticket__time"{vt}>{_esc(start)}</span>{sub}</a>'
+        f'<span class="b-ticket__time"{vt}>{_esc(start)}</span>{soon}{sub}</a>'
     )
     if focused and nojs_share is not None:
         ticket += _nojs_messenger_row(nojs_share)
@@ -1255,6 +1292,18 @@ def _b_day_strip(
     сеанса общий — кнопка «Позвать» берёт любой билет со страницы.
     """
     today = view["today"]
+    now = view.get("now")
+    soon_id: int | None = None
+    soon_best: int | None = None
+    if isinstance(now, datetime):
+        for slots in by_date.values():
+            for slot in slots:
+                minutes = minutes_until_start(slot, now=now)
+                if minutes is None:
+                    continue
+                if soon_best is None or minutes < soon_best:
+                    soon_best = minutes
+                    soon_id = int(slot["id"])
     focus = view.get("focus")
     pick = _effective_pick_session(view)
     focus_id = int(focus["id"]) if focus is not None else None
@@ -1291,6 +1340,7 @@ def _b_day_strip(
                 common_price=common,
                 nojs_share=nojs_share if pick_id == int(s["id"]) else None,
                 dark=dark,
+                soon=soon_html(s, now=now) if isinstance(now, datetime) and soon_id == int(s["id"]) else "",
             )
             for s in slots
         )

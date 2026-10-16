@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Главная — города. Город — маршрутизатор (прототип 2026-10-09)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  /*
+    2026-10-09 · продуктовый дизайн, не продакшен.
+    Проблема: на главной два чипа «Лёд / Хоккей», хотя «Лёд» — это всё подряд
+    (катки, залы, магазины). Решение: главная выбирает город, город отвечает
+    на потребность одним тапом.
+
+    Экраны (← →):
+      0 — Главная: только города
+      1 — Минск: маршрутизатор
+      2 — Хоккей (ОХМ) · выходные  (2 тапа от главной)
+      3 — Заточка · открыто сейчас  (2 тапа от главной)
+  */
+  :root {
+    --brand: #0f8f8a;
+    --brand-2: #45b9bb;
+    --studio: #050607;
+    --studio-text: #eceae4;
+    --studio-hint: #9a968c;
+    --font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    /* публичный сайт — как static/share/*.html и design-v2 */
+    --bg: #f4f6f7;
+    --surface: #ffffff;
+    --ink: #0d1b26;
+    --ink-2: #4a5f71;
+    --muted: #5d7285;
+    --line: #e1e8ec;
+    --accent: #0f8f8a;
+    --accent-ink: #0b6f6b;
+    --wash: #e3f4f3;
+    --chip: #eef3f5;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; font-family: var(--font); background: var(--studio); color: var(--studio-text); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+  a { color: inherit; text-decoration: none; }
+
+  .layout { max-width: 1180px; margin: 0 auto; padding: 28px 20px 80px; display: grid; grid-template-columns: minmax(260px, 400px) 1fr; gap: 40px; align-items: start; }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; justify-items: center; } }
+
+  .thesis { max-width: 400px; }
+  .kicker { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--brand-2); }
+  h1 { margin: 10px 0 0; font-size: 26px; font-weight: 700; letter-spacing: -.03em; line-height: 1.12; }
+  h1 em { font-style: normal; color: var(--brand-2); }
+  .lede { margin: 12px 0 0; font-size: 14px; line-height: 1.55; color: var(--studio-hint); }
+  .rules { margin: 18px 0 0; padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); font-size: 13px; line-height: 1.5; color: var(--studio-hint); }
+  .rules strong { color: var(--studio-text); font-weight: 600; }
+  .rules ol, .rules ul { margin: 8px 0 0; padding-left: 18px; }
+  .rules li { margin-bottom: 6px; }
+  .rules li b { color: var(--studio-text); font-weight: 600; }
+  .rules .taps { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: rgba(69,185,187,.14); color: #dff6f6; font-size: 11px; font-weight: 700; }
+  .scene-nav { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .scene-nav button { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); font-size: 12px; font-weight: 600; }
+  .scene-nav button.is-on { border-color: rgba(69,185,187,.55); background: rgba(69,185,187,.14); color: #dff6f6; }
+  .navhint { margin-top: 14px; font-size: 12px; color: var(--studio-hint); }
+  .navhint kbd { display: inline-block; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(255,255,255,.12); font-size: 11px; }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .scene { display: none; width: 100%; }
+  .scene.is-on { display: flex; flex-direction: column; align-items: center; }
+  .scene-label { font-size: 12px; font-weight: 600; color: var(--studio-hint); text-align: center; max-width: 390px; line-height: 1.45; }
+  .scene-label b { color: var(--studio-text); }
+  .scene-label code { color: var(--brand-2); }
+
+  .phone { width: 390px; max-width: calc(100vw - 32px); height: 844px; position: relative; overflow: hidden; border-radius: 44px; box-shadow: 0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0,0,0,.85); background: var(--bg); color: var(--ink); }
+  .notch { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 118px; height: 30px; background: #000; border-radius: 16px; z-index: 30; pointer-events: none; }
+  .status { position: absolute; top: 14px; left: 28px; right: 28px; z-index: 25; display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; pointer-events: none; }
+  .scroll { position: absolute; inset: 0; overflow: auto; padding: 56px 0 40px; }
+
+  /* ——— общие элементы сайта ——— */
+  .top { display: flex; align-items: center; gap: 10px; padding: 6px 16px 12px; font-size: 14px; color: var(--muted); }
+  .top .brand { font-weight: 700; color: var(--ink); font-size: 18px; }
+  .top .brand span { color: var(--muted); font-weight: 500; font-size: 14px; }
+  .top .right { margin-left: auto; font-weight: 600; color: var(--accent-ink); }
+  .top .back { width: 36px; height: 36px; margin-left: -8px; display: flex; align-items: center; justify-content: center; border-radius: 10px; color: var(--ink); }
+  .top .crumb { font-size: 15px; }
+  .sec { padding: 10px 16px; }
+  .sec h2 { margin: 0 0 10px; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+  .sec .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .sec .head h2 { margin: 0; }
+  .sec .head a { font-size: 14px; font-weight: 600; color: var(--accent-ink); }
+  .date { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-ink); }
+  .h1 { margin: 6px 0 0; font-size: 32px; font-weight: 700; letter-spacing: -.02em; line-height: 1.08; }
+  .sub { margin: 8px 0 0; font-size: 15px; line-height: 1.45; color: var(--ink-2); }
+  .sub b { color: var(--ink); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .hint { margin: 10px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+  footer.foot { padding: 20px 16px 0; font-size: 13px; color: var(--muted); line-height: 1.5; border-top: 1px solid var(--line); margin: 16px 16px 0; padding-left: 0; padding-right: 0; }
+  footer.foot a { color: var(--accent-ink); font-weight: 600; }
+
+  /* ——— 0 · главная ——— */
+  .hero-city { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 16px 18px; border-radius: 18px; background: var(--accent); color: #fff; }
+  .hero-city .cap { font-size: 12px; opacity: .85; }
+  .hero-city .name { display: block; margin-top: 2px; font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+  .hero-city .live { display: block; margin-top: 4px; font-size: 14px; opacity: .95; }
+  .hero-city .live b { font-weight: 700; }
+  .hero-city svg { flex-shrink: 0; }
+  .map { margin: 12px 0 0; padding: 8px; }
+  .map svg { width: 100%; height: auto; display: block; }
+  .cities { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .city { padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 4px; min-height: 96px; }
+  .city .n { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+  .city .n::after { content: " ›"; color: var(--accent); }
+  .city .f { font-size: 13px; color: var(--ink-2); line-height: 1.35; }
+  .city .f b { color: var(--ink); font-weight: 600; }
+  .city .has { margin-top: auto; padding-top: 6px; font-size: 12px; color: var(--muted); }
+  .city--quiet .f { color: var(--muted); }
+  details.more { margin-top: 8px; padding: 2px 14px; }
+  details.more summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; cursor: pointer; list-style: none; }
+  details.more summary::after { content: "⌄"; color: var(--muted); font-size: 18px; }
+  details.more[open] summary::after { content: "⌃"; }
+  details.more p { margin: 0 0 12px; font-size: 14px; line-height: 1.7; color: var(--ink-2); }
+  details.more p b { color: var(--ink); }
+
+  /* ——— 1 · город-маршрутизатор ——— */
+  .router { display: flex; flex-direction: column; gap: 8px; }
+  .route { display: block; padding: 14px 16px; position: relative; }
+  .route .t { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .route .t .name { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+  .route .t .cnt { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .route .t .cnt::after { content: " ›"; color: var(--accent); font-weight: 700; }
+  .route .live { margin-top: 4px; font-size: 14px; color: var(--ink-2); line-height: 1.4; }
+  .route .live b { color: var(--ink); font-weight: 600; }
+  .route .live .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
+  .route .live .dot--off { background: #c9d5dc; }
+  .quick { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .quick a, .quick span { padding: 7px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--chip); color: var(--ink); }
+  .quick span { color: #9aacb8; font-weight: 500; }
+  .quick a.hot { background: var(--ink); color: #fff; }
+  .quick a.hot small { font-weight: 500; opacity: .8; }
+  .quick a small, .quick span small { font-weight: 500; color: inherit; opacity: .75; margin-left: 3px; }
+  .route--trainers .t .name::before { content: ""; }
+  .next { display: flex; flex-direction: column; gap: 8px; }
+  .next a { display: flex; gap: 14px; align-items: center; padding: 12px 14px; }
+  .next .time { flex: 0 0 58px; font-size: 20px; font-weight: 700; }
+  .next .time small { display: block; font-size: 12px; font-weight: 600; color: var(--accent-ink); }
+  .next .what { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .next .what b { font-size: 15px; font-weight: 600; }
+  .next .what span { font-size: 13px; color: var(--muted); }
+  .first { display: flex; gap: 14px; align-items: center; padding: 14px 16px; }
+  .first svg { flex-shrink: 0; }
+  .first b { display: block; font-size: 15px; font-weight: 600; }
+  .first span { font-size: 13px; color: var(--muted); }
+  .city-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .city-actions a { padding: 12px; text-align: center; font-size: 14px; font-weight: 600; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+
+  /* ——— 2 · ОХМ · выходные ——— */
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; background: #e6ecef; border-radius: 14px; margin-top: 12px; }
+  .seg a { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 42px; border-radius: 10px; font-size: 14px; }
+  .seg a small { font-size: 12px; color: var(--muted); }
+  .seg a.on { background: #fff; font-weight: 700; box-shadow: 0 1px 2px rgba(13,27,38,.12); }
+  .seg a.off { color: #9aacb8; }
+  .seg a.off small { color: #b7c4cc; }
+  .rule { margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: var(--wash); font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+  .rule b { color: var(--ink); font-weight: 600; }
+  .rink { padding: 14px 16px; }
+  .rink .name { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .rink .name b { font-size: 17px; font-weight: 700; }
+  .rink .name b::after { content: " ›"; color: var(--accent); }
+  .rink .name span { font-size: 13px; color: var(--muted); }
+  .slots { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .slot { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+  .slot .tm { flex: 0 0 76px; }
+  .slot .tm b { display: block; font-size: 18px; font-weight: 700; }
+  .slot .tm span { font-size: 12px; font-weight: 600; color: var(--accent-ink); }
+  .slot .pr { flex: 1; min-width: 0; font-size: 14px; }
+  .slot .pr b { font-weight: 600; }
+  .slot .pr span { display: block; font-size: 12px; color: var(--muted); }
+  .slot .inv { flex: 0 0 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 11px; background: var(--wash); color: var(--accent-ink); }
+  .share { display: flex; gap: 8px; }
+  .share a { flex: 1; padding: 11px; text-align: center; font-size: 13px; font-weight: 600; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+  .share a.cta { background: var(--accent); color: #fff; border-color: transparent; }
+
+  /* ——— 3 · заточка ——— */
+  .chips { margin-top: 12px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips a { flex: 0 0 auto; padding: 9px 14px; border-radius: 999px; background: var(--surface); border: 1px solid #c9d5dc; font-size: 14px; }
+  .chips a.on { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+  .shop { padding: 14px 16px; }
+  .shop .row1 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .shop .row1 b { font-size: 17px; font-weight: 700; }
+  .shop .open { font-size: 13px; font-weight: 600; color: var(--accent-ink); white-space: nowrap; }
+  .shop .open--soon { color: #b0771c; }
+  .shop .open--closed { color: var(--muted); font-weight: 500; }
+  .shop .meta { margin-top: 3px; font-size: 13px; color: var(--muted); }
+  .shop .svc { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .shop .svc span { padding: 4px 9px; border-radius: 999px; background: var(--chip); font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  .shop .svc span.hl { background: var(--wash); color: var(--accent-ink); }
+  .shop .act { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .shop .act a { padding: 10px; text-align: center; font-size: 13px; font-weight: 600; border-radius: 10px; border: 1px solid var(--line); }
+  .shop--rink { border-style: dashed; }
+  .shop--rink .row1 b::after { content: " · каток"; font-size: 12px; font-weight: 600; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="thesis">
+    <p class="kicker">Каталог · главная и город · 2026-10-09</p>
+    <h1>Главная — выбирает город.<br>Город — <em>отвечает на потребность</em>.</h1>
+    <p class="lede">
+      Сейчас на главной два чипа «Лёд / Хоккей», но «Лёд» — это всё: катки, залы, магазины.
+      Человек читает «Лёд» как «массовое катание» и не находит заточку.
+      Решение: главная ничего не фильтрует, а в городе каждая потребность — одна плитка и один тап.
+    </p>
+    <div class="rules">
+      <strong>Пять правил</strong>
+      <ol>
+        <li><b>Главная не фильтрует.</b> Только «ваш город» + карта + города. Никаких видов спорта наверху.</li>
+        <li><b>Плитка = потребность.</b> «Покататься», «Хоккей (ОХМ)», «Заточка и прокат», «Магазины», «Тренеры». Лыжероллеры, залы, школы — появятся как плитки, когда появятся данные. Пустых плиток нет.</li>
+        <li><b>Время — под плиткой, не над страницей.</b> «Сегодня 21 · Завтра 24 · Сб–Вс 27» — одним тапом в нужное окно. Глобальный переключатель времени на главной уходит.</li>
+        <li><b>Живая строка на каждой плитке.</b> Ближайший сеанс, «4 открыты сейчас», «24 тренера». Решение принимается до тапа.</li>
+        <li><b>Одни слова везде.</b> Сайт `/c/minsk` и вкладка «Лёд» в Mini App — одни плитки, одни подписи (copy_ru).</li>
+      </ol>
+    </div>
+    <div class="rules">
+      <strong>Пути — все в 2 тапа от главной</strong>
+      <ul>
+        <li>Нужна заточка сегодня → Минск → «Заточка и прокат» → открытые сейчас сверху, кнопка «Позвонить».<span class="taps">2 тапа</span></li>
+        <li>ОХМ на выходных → Минск → «Сб–Вс 5» под плиткой «Хоккей (ОХМ)» → слоты по каткам, «позвать».<span class="taps">2 тапа</span></li>
+        <li>С ребёнком сегодня вечером → Минск → «Сегодня 21» → список с ценой «дети».<span class="taps">2 тапа</span></li>
+        <li>Первый раз на коньках → Минск → карточка «Первый раз?» → прокат и что надеть.<span class="taps">2 тапа</span></li>
+        <li>Ищу тренера → Минск → «Тренеры».<span class="taps">2 тапа</span></li>
+        <li>Пришёл по ссылке друга на каток → «‹ Минск» ведёт в тот же маршрутизатор.<span class="taps">1 тап</span></li>
+      </ul>
+    </div>
+    <div class="scene-nav" id="sceneNav"></div>
+    <p class="navhint"><kbd>←</kbd> <kbd>→</kbd> между экранами</p>
+  </aside>
+
+  <div class="stage">
+
+    <!-- 0 · Главная -->
+    <div class="scene is-on" data-scene="0">
+      <p class="scene-label"><b>0.</b> Главная <code>/</code> — только города. Ваш город крупно, карта живая, остальные — плитками.</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>21:58</span><span>LTE</span></div>
+        <div class="scroll">
+          <nav class="top"><span class="brand">Glide<span> · каталог</span></span><a class="right" href="#trainers">Для тренеров →</a></nav>
+
+          <section class="sec">
+            <p class="date">Пятница, 9 октября</p>
+            <h1 class="h1">Где покататься</h1>
+            <p class="sub">Сегодня в Беларуси <b>31 сеанс</b> в 8 городах. Хоккей для любителей — в 4 городах.</p>
+            <a class="hero-city" href="#minsk">
+              <span>
+                <span class="cap">Ваш город · сменить</span>
+                <span class="name">Минск</span>
+                <span class="live">27 мест · <b>ближайший сеанс 18:00</b> · ОХМ в выходные</span>
+              </span>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </a>
+          </section>
+
+          <section class="sec">
+            <figure class="map card">
+              <svg viewBox="0 0 600 520" role="img" aria-label="Карта Беларуси: города с местами для катания">
+                <path d="M37,226 L82,222 L148,201 L166,147 L212,121 L224,90 L271,74 L307,45 L376,59 L423,63 L464,85 L464,128 L512,156 L489,212 L547,236 L572,288 L512,297 L541,324 L506,367 L518,394 L464,404 L447,440 L418,449 L371,457 L336,447 L283,439 L248,422 L189,422 L130,413 L82,413 L37,439 L43,394 L14,377 L55,341 L55,297 L31,270 Z" fill="#eaf3f3" stroke="#b9d3d2" stroke-width="2" stroke-linejoin="round"/>
+                <!-- размер точки = сеансов сегодня; кольцо = есть ОХМ -->
+                <circle cx="268" cy="207" r="40" fill="#0f8f8a" fill-opacity=".14"/>
+                <circle cx="268" cy="207" r="26" fill="none" stroke="#0f8f8a" stroke-width="2" stroke-dasharray="3 4"/>
+                <g fill="#0f8f8a">
+                  <circle cx="268" cy="207" r="12"/><circle cx="50" cy="226" r="9"/><circle cx="41" cy="363" r="6"/><circle cx="469" cy="333" r="6"/><circle cx="430" cy="207" r="5"/><circle cx="422" cy="95" r="5"/><circle cx="367" cy="372" r="4"/>
+                  <circle cx="177" cy="281" r="4"/><circle cx="181" cy="364" r="4"/><circle cx="135" cy="208" r="4"/><circle cx="226" cy="173" r="4"/>
+                </g>
+                <g font-family="Golos Text, sans-serif" font-size="22" font-weight="600" fill="#0d1b26">
+                  <text x="268" y="152" text-anchor="middle">Минск</text>
+                  <text x="66" y="212">Гродно</text>
+                  <text x="58" y="398">Брест</text>
+                  <text x="404" y="352">Гомель</text>
+                  <text x="440" y="226">Могилёв</text>
+                  <text x="400" y="128">Витебск</text>
+                </g>
+              </svg>
+            </figure>
+            <p class="hint" style="margin-top:6px">Размер точки — сеансов сегодня. Пунктирное кольцо — есть хоккей для любителей.</p>
+          </section>
+
+          <section class="sec">
+            <div class="head"><h2>Города</h2><span class="muted" style="font-size:13px">8 с расписанием</span></div>
+            <div class="cities">
+              <a class="city card" href="#grodno">
+                <span class="n">Гродно</span>
+                <span class="f"><b>10 сеансов</b> сегодня · 2 катка</span>
+                <span class="has">лёд · заточка</span>
+              </a>
+              <a class="city card" href="#brest">
+                <span class="n">Брест</span>
+                <span class="f"><b>1 сеанс</b> сегодня · 1 каток</span>
+                <span class="has">лёд</span>
+              </a>
+              <a class="city card" href="#gomel">
+                <span class="n">Гомель</span>
+                <span class="f">ближайший — <b>завтра 12:00</b></span>
+                <span class="has">лёд · тренеры</span>
+              </a>
+              <a class="city card" href="#mogilev">
+                <span class="n">Могилёв</span>
+                <span class="f">ближайший — <b>сб 13:00</b></span>
+                <span class="has">лёд · ОХМ</span>
+              </a>
+              <a class="city card city--quiet" href="#vitebsk">
+                <span class="n">Витебск</span>
+                <span class="f">1 каток · расписание по телефону</span>
+                <span class="has">лёд</span>
+              </a>
+              <a class="city card city--quiet" href="#baranovichi">
+                <span class="n">Барановичи</span>
+                <span class="f">1 каток</span>
+                <span class="has">лёд</span>
+              </a>
+            </div>
+            <details class="more card">
+              <summary>Ещё 23 города по областям</summary>
+              <p><b>Брестская:</b> Берёза, Кобрин, Пинск, Пружаны, Ивацевичи, Лунинец<br><b>Витебская:</b> Орша, Полоцк, Новополоцк<br><b>Гомельская:</b> Жлобин, Мозырь, Речица<br><b>Гродненская:</b> Лида, Слоним<br><b>Минская:</b> Борисов, Молодечно, Солигорск, Жодино<br><b>Могилёвская:</b> Бобруйск, Горки</p>
+            </details>
+          </section>
+
+          <footer class="foot">Сделано теми, кто сам катается. Расписание — с сайтов катков, цену уточняйте на месте.<br><a href="#spb">Санкт-Петербург</a></footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1 · Город -->
+    <div class="scene" data-scene="1">
+      <p class="scene-label"><b>1.</b> Город <code>/c/minsk</code> — маршрутизатор. Каждая плитка — потребность с живой строкой; время — под плиткой.</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>21:58</span><span>LTE</span></div>
+        <div class="scroll">
+          <nav class="top">
+            <a class="back" href="#home" aria-label="Все города"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></a>
+            <span class="crumb">Беларусь</span>
+            <span class="brand right" style="font-size:18px">Glide</span>
+          </nav>
+
+          <section class="sec">
+            <p class="date">Пятница, 9 октября · 21:58</p>
+            <h1 class="h1">Минск</h1>
+            <p class="sub">27 мест. <b>Сегодня на льду ещё 3 сеанса</b>, завтра — 24.</p>
+          </section>
+
+          <section class="sec">
+            <h2>Что нужно?</h2>
+            <div class="router">
+
+              <article class="route card">
+                <a class="t" href="#skate"><span class="name">Покататься</span><span class="cnt">9 катков</span></a>
+                <div class="live"><span class="dot"></span>ближайший <b>22:15 · ТЦ Замок</b> · 10 BYN, дети 7</div>
+                <div class="quick">
+                  <a href="#skate-today">Сегодня <small>3</small></a>
+                  <a href="#skate-tomorrow" class="hot">Завтра <small>24</small></a>
+                  <a href="#skate-weekend">Сб–Вс <small>27</small></a>
+                  <a href="#skate-day">День…</a>
+                </div>
+              </article>
+
+              <article class="route card">
+                <a class="t" href="#ohm"><span class="name">Хоккей (ОХМ)</span><span class="cnt">4 катка</span></a>
+                <div class="live"><span class="dot"></span>ближайший <b>сб 07:00 · led.by</b> · 18 BYN · полная экипировка</div>
+                <div class="quick">
+                  <span>Сегодня <small>0</small></span>
+                  <span>Завтра <small>0</small></span>
+                  <a href="#ohm-weekend" class="hot">Сб–Вс <small>5</small></a>
+                  <a href="#ohm-all">Все <small>20</small></a>
+                </div>
+              </article>
+
+              <article class="route card">
+                <a class="t" href="#sharpen"><span class="name">Заточка и прокат</span><span class="cnt">9 мест</span></a>
+                <div class="live"><span class="dot"></span><b>4 открыты сейчас</b> · ближайшая до 23:00 — Чижовка-арена</div>
+              </article>
+
+              <article class="route card">
+                <a class="t" href="#shops"><span class="name">Магазины</span><span class="cnt">13</span></a>
+                <div class="live"><span class="dot dot--off"></span>коньки, защита, клюшки · <b>2 открыты</b> до 22:00</div>
+              </article>
+
+              <article class="route card route--trainers">
+                <a class="t" href="#trainers"><span class="name">Тренеры</span><span class="cnt">24</span></a>
+                <div class="live"><span class="dot"></span>фигурное, хоккей, взрослые с нуля · <b>свободные окна на этой неделе</b></div>
+              </article>
+            </div>
+            <p class="hint">Лыжероллеры, залы и школы появятся здесь плитками, когда в Минске будут данные. Пустых плиток не показываем.</p>
+          </section>
+
+          <section class="sec">
+            <div class="head"><h2>Ближайшее на льду</h2><a href="#skate-today">Все сегодня →</a></div>
+            <div class="next">
+              <a class="card" href="#s1"><span class="time">22:15<small>сегодня</small></span><span class="what"><b>ТЦ Замок</b><span>10 BYN · дети 7 · с прокатом 15</span></span></a>
+              <a class="card" href="#s2"><span class="time">22:30<small>сегодня</small></span><span class="what"><b>Минск-Арена</b><span>12 BYN · с сайта катка</span></span></a>
+              <a class="card" href="#s3"><span class="time">10:00<small>завтра</small></span><span class="what"><b>Чижовка-арена</b><span>10 BYN · дети 7 · малая арена</span></span></a>
+            </div>
+          </section>
+
+          <section class="sec">
+            <a class="first card" href="#first-time">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0b6f6b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17h14a2 2 0 0 0 2-2v-1l-6-2-2-6H6v9"/><path d="M3 21h18"/></svg>
+              <span><b>Первый раз на коньках?</b><span>Где прокат, что надеть, можно ли за бортик</span></span>
+            </a>
+          </section>
+
+          <section class="sec">
+            <div class="city-actions">
+              <a href="#share-city">Поделиться городом</a>
+              <a href="#a2hs">Ярлык на экран</a>
+            </div>
+          </section>
+
+          <footer class="foot">Расписание берём с сайтов катков и проверяем каждый час. <a href="#report">Нашли ошибку?</a></footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 · ОХМ выходные -->
+    <div class="scene" data-scene="2">
+      <p class="scene-label"><b>2.</b> <code>/c/minsk?kind=ohm&amp;w=weekend</code> — второй тап: «Сб–Вс 5». Слоты по каткам, позвать друга, без записи и оплаты.</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>21:59</span><span>LTE</span></div>
+        <div class="scroll">
+          <nav class="top">
+            <a class="back" href="#minsk" aria-label="Назад к Минску"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></a>
+            <span class="crumb">Минск</span>
+            <span class="brand right" style="font-size:18px">Glide</span>
+          </nav>
+
+          <section class="sec">
+            <p class="date">Хоккей для любителей</p>
+            <h1 class="h1">ОХМ в выходные</h1>
+            <p class="sub"><b>5 сеансов</b> на 4 катках · сб 11 – вс 12 октября</p>
+            <div class="seg" role="tablist">
+              <a class="off" href="#ohm-today">Сегодня <small>0</small></a>
+              <a class="off" href="#ohm-tomorrow">Завтра <small>0</small></a>
+              <a class="on" href="#ohm-weekend">Сб–Вс <small>5</small></a>
+              <a href="#ohm-all">Все <small>20</small></a>
+            </div>
+            <div class="rule"><b>Любительский хоккей:</b> полная экипировка, детям — шлем с маской. Записи нет — билет в кассе катка.</div>
+          </section>
+
+          <section class="sec">
+            <div class="router">
+              <article class="rink card">
+                <div class="name"><b>led.by</b><span>Ледовый дворец · с сайта катка</span></div>
+                <div class="slots">
+                  <div class="slot"><span class="tm"><b>07:00</b><span>суббота</span></span><span class="pr"><b>18 BYN</b><span>большая арена · 60 мин</span></span><a class="inv" href="#inv1" aria-label="Позвать на 07:00"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M19 8v6M16 11h6"/></svg></a></div>
+                  <div class="slot"><span class="tm"><b>07:00</b><span>воскресенье</span></span><span class="pr"><b>18 BYN</b><span>большая арена · 60 мин</span></span><a class="inv" href="#inv2" aria-label="Позвать"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M19 8v6M16 11h6"/></svg></a></div>
+                </div>
+              </article>
+              <article class="rink card">
+                <div class="name"><b>DiaMond</b><span>ТТС · с сайта катка</span></div>
+                <div class="slots">
+                  <div class="slot"><span class="tm"><b>08:15</b><span>суббота</span></span><span class="pr"><b>16 BYN</b><span>до 30 человек · малая арена</span></span><a class="inv" href="#inv3" aria-label="Позвать"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M19 8v6M16 11h6"/></svg></a></div>
+                </div>
+              </article>
+              <article class="rink card">
+                <div class="name"><b>Чижовка-арена</b><span>с сайта катка</span></div>
+                <div class="slots">
+                  <div class="slot"><span class="tm"><b>07:30</b><span>воскресенье</span></span><span class="pr"><b>17 BYN</b><span>большая арена</span></span><a class="inv" href="#inv4" aria-label="Позвать"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M19 8v6M16 11h6"/></svg></a></div>
+                </div>
+              </article>
+              <article class="rink card">
+                <div class="name"><b>СДЮШОР</b><span>по фото афиши</span></div>
+                <div class="slots">
+                  <div class="slot"><span class="tm"><b>06:45</b><span>воскресенье</span></span><span class="pr"><b>15 BYN</b><span>от 16 лет</span></span><a class="inv" href="#inv5" aria-label="Позвать"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M19 8v6M16 11h6"/></svg></a></div>
+                </div>
+              </article>
+            </div>
+            <p class="hint">Кнопка с человечком — позвать друга на этот сеанс. Нажмите на каток — расписание на две недели.</p>
+          </section>
+
+          <section class="sec">
+            <div class="share"><a class="cta" href="#tg">Открыть в Telegram</a><a href="#share">Поделиться</a></div>
+          </section>
+          <footer class="foot">Расписание ОХМ — с сайтов катков. Условия допуска — на кассе.</footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 · Заточка -->
+    <div class="scene" data-scene="3">
+      <p class="scene-label"><b>3.</b> <code>/c/minsk?t=shop&amp;svc=sharpening</code> — второй тап: «Заточка и прокат». Открытые сейчас сверху, звонок в один тап.</p>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="status"><span>21:59</span><span>LTE</span></div>
+        <div class="scroll">
+          <nav class="top">
+            <a class="back" href="#minsk" aria-label="Назад к Минску"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></a>
+            <span class="crumb">Минск</span>
+            <span class="brand right" style="font-size:18px">Glide</span>
+          </nav>
+
+          <section class="sec">
+            <p class="date">Сервис · пятница 21:59</p>
+            <h1 class="h1">Заточка и прокат</h1>
+            <p class="sub"><b>4 открыты сейчас</b> из 9. Сначала — те, куда ещё успеете.</p>
+            <div class="chips">
+              <a class="on" href="#open">Открыто сейчас</a>
+              <a href="#sharp">Заточка</a>
+              <a href="#rent">Прокат</a>
+              <a href="#near">Ближе ко мне</a>
+              <a href="#all">Все 9</a>
+            </div>
+          </section>
+
+          <section class="sec">
+            <div class="router">
+              <article class="shop card shop--rink">
+                <div class="row1"><b>Чижовка-арена</b><span class="open">до 23:00</span></div>
+                <div class="meta">ул. Ташкентская, 19 · Заводской · 4,1 км</div>
+                <div class="svc"><span class="hl">Заточка 8 BYN</span><span>Прокат 5 BYN</span><span>Парковка</span></div>
+                <div class="act"><a href="tel:+375">Позвонить</a><a href="#route">Маршрут</a></div>
+              </article>
+              <article class="shop card">
+                <div class="row1"><b>[Мастерская]</b><span class="open">до 22:30</span></div>
+                <div class="meta">[адрес] · Центральный · 1,2 км</div>
+                <div class="svc"><span class="hl">Заточка</span><span>Профиль лезвия</span><span>Коньки</span></div>
+                <div class="act"><a href="tel:+375">Позвонить</a><a href="#route">Маршрут</a></div>
+              </article>
+              <article class="shop card shop--rink">
+                <div class="row1"><b>Минск-Арена</b><span class="open open--soon">до 22:00 · закрывается</span></div>
+                <div class="meta">пр. Победителей, 111 · 6,8 км</div>
+                <div class="svc"><span class="hl">Заточка</span><span>Прокат</span></div>
+                <div class="act"><a href="tel:+375">Позвонить</a><a href="#route">Маршрут</a></div>
+              </article>
+              <article class="shop card">
+                <div class="row1"><b>[Магазин]</b><span class="open open--closed">откроется завтра в 10:00</span></div>
+                <div class="meta">[адрес] · Фрунзенский · 3,5 км</div>
+                <div class="svc"><span>Заточка</span><span>Экипировка</span><span>Клюшки</span></div>
+                <div class="act"><a href="tel:+375">Позвонить</a><a href="#route">Маршрут</a></div>
+              </article>
+            </div>
+            <p class="hint">Часы и цены — с сайтов и по телефону. Перед дорогой лучше позвонить.</p>
+          </section>
+
+          <section class="sec">
+            <div class="share"><a class="cta" href="#tg">Открыть в Telegram</a><a href="#share">Поделиться</a></div>
+          </section>
+          <footer class="foot">Нет вашей мастерской? <a href="#add">Добавить место</a></footer>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  var SCENES = ['0 · Главная', '1 · Минск', '2 · ОХМ · выходные', '3 · Заточка'];
+  var idx = 0;
+  var nav = document.getElementById('sceneNav');
+  var scenes = document.querySelectorAll('.scene');
+  SCENES.forEach(function (label, i) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = label;
+    b.addEventListener('click', function () { go(i); });
+    nav.appendChild(b);
+  });
+  function go(i) {
+    idx = i;
+    scenes.forEach(function (el) { el.classList.toggle('is-on', Number(el.getAttribute('data-scene')) === i); });
+    nav.querySelectorAll('button').forEach(function (b, j) { b.classList.toggle('is-on', j === i); });
+  }
+  // навигация внутри макета: тапы по плиткам ведут на соответствующие экраны
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var h = a.getAttribute('href');
+    var map = { '#minsk': 1, '#home': 0, '#ohm': 2, '#ohm-weekend': 2, '#ohm-all': 2, '#sharpen': 3 };
+    if (map[h] !== undefined) { e.preventDefault(); go(map[h]); return; }
+    e.preventDefault();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') go(Math.min(SCENES.length - 1, idx + 1));
+    if (e.key === 'ArrowLeft') go(Math.max(0, idx - 1));
+  });
+  go(0);
+})();
+</script>
+</body>
+</html>

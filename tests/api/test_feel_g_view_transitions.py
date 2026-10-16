@@ -33,6 +33,7 @@ async def test_style_b_declares_cross_document_navigation() -> None:
     assert "navigation: none" in STYLE_B
     assert "vt-when-strip" in STYLE_B
     assert "glide-when-strip" in STYLE_B
+    assert "glide-when-thumb" in STYLE_B
     assert "html::view-transition-old(root)" not in STYLE_B
 
 
@@ -45,9 +46,14 @@ async def test_home_when_strip_has_view_transition_name(app_use_test_db, db_sess
 
     async with _client() as client:
         home = await client.get("/?when=today")
+        tomorrow = await client.get("/?when=tomorrow")
     assert home.status_code == 200
     assert 'class="b-when vt-when-strip"' in home.text
+    assert 'style="--when-i: 0"' in home.text
+    assert 'class="b-when__thumb"' in home.text
     assert 'aria-label="Когда"' in home.text
+    assert tomorrow.status_code == 200
+    assert 'style="--when-i: 1"' in tomorrow.text
 
 
 @pytest.mark.asyncio

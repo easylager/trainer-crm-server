@@ -22,7 +22,7 @@ def _client() -> AsyncClient:
 
 
 def _card_block(html: str, arena_name: str) -> str:
-    for block in re.findall(r'<article class="b-card2">.*?</article>', html, re.DOTALL):
+    for block in re.findall(r'<article class="b-card2[^"]*"[^>]*>.*?</article>', html, re.DOTALL):
         if arena_name in block:
             return block
     raise AssertionError(f"card for {arena_name!r} missing")

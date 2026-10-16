@@ -18,6 +18,7 @@ def test_hero_srcset_when_two_variants() -> None:
     assert "320w" in html and "800w" in html
     assert 'sizes="100vw"' in html
     assert 'src="https://cdn.example/card.jpg"' in html
+    assert "this.classList.add('is-ready')" in html
 
 
 def test_hero_single_variant_no_srcset() -> None:

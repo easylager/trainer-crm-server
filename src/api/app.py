@@ -2013,10 +2013,36 @@ def share_tg_dock_js(request: Request):
     )
 
 
+@app.get("/static/share/glide-motion.js")
+def share_glide_motion_js(request: Request):
+    """Публичка: появление блоков, счётчик, «через N мин»."""
+    path = _STATIC_DIR / "share" / "glide-motion.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/share/b-press.js")
 def share_b_press_js(request: Request):
     """Публичка: отклик нажатия (iOS touchstart + b-press без flash при скролле)."""
     path = _STATIC_DIR / "share" / "b-press.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/b-when-swap.js")
+def share_b_when_swap_js(request: Request):
+    """TASK-280: главная — переключатель «Когда» без перезагрузки страницы."""
+    path = _STATIC_DIR / "share" / "b-when-swap.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(

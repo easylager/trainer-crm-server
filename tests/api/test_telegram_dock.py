@@ -19,9 +19,9 @@ def _client() -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-def _dock(html: str) -> str:
-    match = re.search(r'<nav class="b-tgdock"[^>]*>(.*?)</nav>', html, re.S)
-    assert match, "нет плашки Telegram"
+def _footer_button(html: str) -> str:
+    match = re.search(r'<footer class="b-site-foot"[^>]*>(.*?)</footer>', html, re.S)
+    assert match, "нет футера"
     return match.group(1)
 
 
@@ -53,11 +53,12 @@ async def test_city_page_has_the_dock_and_no_second_telegram_button(app_use_test
     await db_session.commit()
     async with _client() as client:
         html = (await client.get(f"/c/{city_slug(name)}")).text
-    dock = _dock(html)
-    assert "open-telegram?startapp=catalog_" in dock
-    assert "там все катки города на карте" in dock
+    foot = _footer_button(html)
+    assert "open-telegram?startapp=catalog_" in foot
+    assert "Открыть в Telegram" in foot
+    assert "b-tgdock" not in html
     assert "b-share__bot" not in html
-    assert html.count('class="b-tgbtn tg-out"') == 1
+    assert html.count("b-site-foot__tg") == 1
 
 
 @pytest.mark.asyncio
@@ -70,7 +71,9 @@ async def test_city_without_coordinates_promises_no_number(app_use_test_db, db_s
     await db_session.commit()
     async with _client() as client:
         html = (await client.get(f"/c/{city_slug(name)}")).text
-    assert "там карта всех катков" in _dock(html)
+    foot = _footer_button(html)
+    assert "Открыть в Telegram" in foot
+    assert "open-telegram" in foot
 
 
 @pytest.mark.asyncio
@@ -97,7 +100,10 @@ async def test_home_and_list_pages_have_the_dock(app_use_test_db, db_session) ->
     async with _client() as client:
         home = (await client.get("/")).text
         listing = (await client.get(f"/c/{city_slug(name)}", params={"t": "ice"})).text
-    assert "tg-dock.js" in home
-    assert "там карта всех катков" in _dock(home)
-    assert "там все катки города на карте" in _dock(listing)
+    home_foot = _footer_button(home)
+    listing_foot = _footer_button(listing)
+    assert "Открыть в Telegram" in home_foot
+    assert "open-telegram" in home_foot
+    assert "Открыть в Telegram" in listing_foot
+    assert "b-tgdock" not in home and "b-tgdock" not in listing
     assert "b-share__bot" not in listing

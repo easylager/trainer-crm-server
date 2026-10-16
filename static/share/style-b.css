@@ -127,15 +127,65 @@ body.b img { max-width: 100%; }
 
 /* ── Выбор времени ────────────────────────────────────────────────────── */
 .b-when {
+  position: relative;
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
   padding: 4px; border-radius: 14px; background: #e3eaed;
+  /* Лоток утоплен в страницу: тень сверху внутри, блик по нижней кромке. */
+  box-shadow: inset 0 1px 3px rgba(13, 27, 38, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
+}
+.b-when__thumb {
+  position: absolute; z-index: 0; pointer-events: none;
+  top: 4px; bottom: 4px; left: 4px;
+  width: calc((100% - 20px) / 4);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #24333f 0%, var(--g-dark) 60%);
+  transform: translateX(calc(var(--when-i, 0) * (100% + 4px)));
+  view-transition-name: glide-when-thumb;
+  /* Клавиша: блик по верхней грани, торец 3px под ней, мягкая тень на лоток. */
+  --when-key: 3px;
+  translate: 0 calc(-1 * var(--when-key));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 var(--when-key) 0 #04090d,
+    0 calc(var(--when-key) + 2px) 6px rgba(13, 27, 38, 0.3);
+}
+/* Нажатие: клавиша садится на торец — сдвиг ровно на его высоту, тень сжимается. */
+.b-when:has(> a[aria-current="true"]:is(:active, .b-press)) .b-when__thumb {
+  --when-key: 0px;
+  background: var(--g-dark);
 }
 .b-when a {
+  position: relative; z-index: 1;
   display: flex; align-items: center; justify-content: center;
   min-height: 44px; border-radius: 10px;
   color: var(--g-ink) !important; text-decoration: none; font-size: 14px;
 }
-.b-when a[aria-current="true"] { background: var(--g-dark); color: var(--g-on-photo) !important; font-weight: 600; }
+.b-when a[aria-current="true"] { color: var(--g-on-photo) !important; font-weight: 600; translate: 0 -3px; }
+.b-when a[aria-current="true"]:is(:active, .b-press) { translate: 0 0; }
+/* Свободный пункт продавливается в лоток. */
+.b-when a:not([aria-current="true"]):is(:active, .b-press) {
+  translate: 0 1px;
+  background: rgba(13, 27, 38, 0.06);
+  box-shadow: inset 0 2px 3px rgba(13, 27, 38, 0.16);
+}
+@media (hover: hover) {
+  .b-when a:not([aria-current="true"]):hover:not(:active, .b-press) { background: rgba(255, 255, 255, 0.55); }
+}
+/* Вниз — мгновенно, под пальцем; плавно только отпускание. */
+@media (prefers-reduced-motion: no-preference) {
+  .b-when__thumb { transition: translate 120ms ease-out, box-shadow 120ms ease-out; }
+  .b-when a { transition: translate 120ms ease-out, background-color 120ms, box-shadow 120ms ease-out; }
+  .b-when:has(> a[aria-current="true"]:is(:active, .b-press)) .b-when__thumb,
+  .b-when a:is(:active, .b-press) { transition-duration: 0ms; }
+  /* Переключение без перезагрузки (b-when-swap.js): ползунок едет сам, до ответа сети. */
+  .b-when.is-live .b-when__thumb {
+    transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), translate 120ms ease-out, box-shadow 120ms ease-out;
+  }
+  .b-when.is-live a { transition: translate 120ms ease-out, background-color 120ms, box-shadow 120ms ease-out, color 160ms; }
+  main.b-page > :not(.b-hero, .b-sec) { transition: opacity 160ms; }
+}
+/* Сеть тянет дольше 180 мс — данные под полосой приглушаются, полоса остаётся живой. */
+main.b-page.is-swapping > :not(.b-hero, .b-sec) { opacity: 0.55; }
 
 /* ── Карточка «Ваш город» ─────────────────────────────────────────────── */
 .b-city {
@@ -157,6 +207,15 @@ body.b img { max-width: 100%; }
 .b-map__legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 4px 8px 0; font-size: 13px; color: var(--g-on-dark-muted); }
 .b-map__legend span { display: inline-flex; align-items: center; gap: 6px; }
 .b-map__legend i { width: 10px; height: 10px; border-radius: 50%; background: var(--g-accent); }
+.home-map__city:not(.home-map__city--on) .home-map__vis { opacity: 0.62; }
+.home-map__pulse { transform-box: fill-box; transform-origin: center; opacity: 0.35; }
+@media (prefers-reduced-motion: no-preference) {
+  .home-map__city--on .home-map__pulse { animation: glide-map-pulse 2.6s ease-in-out infinite; }
+}
+@keyframes glide-map-pulse {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.55; }
+}
 .b-map__legend .off i { background: #4a6273; }
 
 /* ── Плитки и карусели с фото ─────────────────────────────────────────── */
@@ -264,10 +323,199 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 .b-share__title { margin: 0; font-size: 17px; font-weight: 700; }
 .b-share__bot { margin-top: 6px; }
 
-/* ── Подвал ───────────────────────────────────────────────────────────── */
+/* ── Подвал (legacy, city link only) ─────────────────────────────────── */
 .b-foot { padding: 28px 16px 8px; display: flex; flex-direction: column; gap: 12px; font-size: 15px; color: var(--g-ink-2); }
 .b-foot__links { display: flex; flex-wrap: wrap; gap: 18px; }
 .b-foot:empty { display: none; }
+
+/* ── Сайт-футер: след лезвия на тёмном льду ──────────────────────────── */
+.b-site-foot {
+  position: relative;
+  margin-top: 48px;
+  color: var(--g-on-dark-muted);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.b-site-foot__blade {
+  display: block;
+  width: 100%;
+  height: 28px;
+  color: var(--g-dark-2);
+}
+.b-site-foot__scratch {
+  fill: none;
+  stroke: var(--g-on-photo);
+  stroke-width: 1;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.28;
+}
+.b-site-foot__scratch--mid { opacity: 0.16; }
+.b-site-foot__scratch--short { opacity: 0.1; }
+.b-site-foot__slab {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--g-dark);
+  background-image:
+    repeating-linear-gradient(
+      -14deg,
+      transparent 0 18px,
+      rgba(255, 255, 255, 0.068) 18px 19px
+    ),
+    linear-gradient(180deg, var(--g-dark-2) 0%, var(--g-dark) 38%);
+}
+.b-site-foot__mark {
+  position: absolute;
+  right: 4%;
+  bottom: 18px;
+  width: 148px;
+  height: 66px;
+  color: var(--g-on-photo);
+  opacity: 0.105;
+  pointer-events: none;
+}
+.b-site-foot__inner {
+  position: relative;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.b-site-foot__top {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+@media (min-width: 720px) {
+  .b-site-foot__blade { height: 52px; }
+  .b-site-foot__top {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.15fr) minmax(0, 1.25fr);
+    align-items: start;
+    gap: 32px;
+  }
+}
+.b-site-foot a.b-site-foot__logo {
+  display: inline-block;
+  margin: 0 0 12px;
+  font-family: var(--g-font-display);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--g-on-photo);
+  text-decoration: none;
+}
+.b-site-foot a.b-site-foot__logo:hover { color: var(--g-on-photo); }
+.b-site-foot__about {
+  margin: 0;
+  color: var(--g-on-dark-muted);
+  font-size: 15px;
+}
+.b-site-foot__context {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--g-on-dark-muted);
+}
+.b-site-foot__context .elsewhere { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.b-site-foot__context .ice-day__stats { margin: 0; }
+.b-site-foot a.b-site-foot__link,
+.b-site-foot__context a {
+  color: color-mix(in srgb, var(--g-on-photo) 78%, var(--g-on-dark-muted));
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+.b-site-foot a.b-site-foot__link:hover,
+.b-site-foot__context a:hover {
+  color: var(--g-on-photo);
+  text-decoration-color: var(--g-on-dark-accent);
+}
+.b-site-foot a.b-site-foot__tg {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 20px;
+  min-height: 44px;
+  padding: 0 22px;
+  white-space: nowrap;
+  border-radius: 14px;
+  background: var(--g-accent);
+  color: var(--g-on-accent);
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 18px rgba(13, 27, 38, 0.28);
+  transition: transform 280ms cubic-bezier(0.34, 1.4, 0.64, 1), background-color 0.2s ease, box-shadow 200ms ease;
+}
+.b-site-foot a.b-site-foot__tg:hover {
+  background: var(--g-accent-pressed);
+  color: var(--g-on-accent);
+  transform: translateY(-2px);
+}
+.b-site-foot a.b-site-foot__tg:active,
+.b-site-foot a.b-site-foot__tg.b-press {
+  transform: scale(0.97);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 6px rgba(13, 27, 38, 0.22);
+  transition-duration: 90ms;
+  transition-timing-function: ease-out;
+}
+.b-site-foot__label {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-quiet);
+}
+.b-site-foot__links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.b-site-foot__link { font-weight: 500; font-size: 15px; line-height: 1.35; }
+.b-site-foot__rule {
+  margin: 32px 0 16px;
+  border: 0;
+  border-top: 1px solid var(--g-dark-line);
+}
+.b-site-foot__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+@media (min-width: 720px) {
+  .b-site-foot__meta {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 18px;
+  }
+}
+.b-site-foot__copy,
+.b-site-foot__disclaimer {
+  margin: 0;
+  font-size: 13px;
+  color: var(--g-on-dark-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .b-site-foot a.b-site-foot__link,
+  .b-site-foot__context a,
+  .b-site-foot a.b-site-foot__tg { transition: none; }
+  .b-site-foot a.b-site-foot__tg:hover { transform: none; }
+}
+
+.b-page--legal { padding-bottom: 0; }
+.b-legal__kicker { margin: 0 0 8px; font-size: 14px; }
+.b-legal__kicker a { color: var(--g-accent-ink); font-weight: 700; text-decoration: none; }
+.b-legal__title { margin: 0 0 16px; font-size: 28px; line-height: 1.2; color: var(--g-ink); }
+.b-legal__body { max-width: 42rem; font-size: 16px; color: var(--g-ink-2); }
+.b-legal__body p { margin: 0 0 14px; }
+.b-legal__body strong { color: var(--g-ink); }
 
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -404,6 +652,51 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
   display: block; position: relative;
 }
 .b-card2__thumb img, .b-card2__thumb svg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.b-card2__thumb img { position: relative; }
+
+/* Пока jpg ещё не декодировался, под ним виден тёмный --g-dark. Серая льдина с
+   диагональным бликом закрывает миниатюру и плитку. Герой остаётся тёмным:
+   заголовок на нём белый и уже есть в HTML. Место без фото — разметка катка, не скелетон. */
+@keyframes b-ice-sheen {
+  from { background-position: 130% 0; }
+  to { background-position: -30% 0; }
+}
+.b-tile__media:has(img:not(.is-ready)),
+.b-card2__thumb:has(img:not(.is-ready)) {
+  background-color: #d5e1e8;
+  background-image: linear-gradient(
+    115deg,
+    transparent 36%,
+    rgba(255, 255, 255, .15) 46%,
+    rgba(255, 255, 255, .72) 50%,
+    rgba(255, 255, 255, .15) 54%,
+    transparent 64%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: b-ice-sheen 1.6s ease-in-out infinite;
+}
+.b-hero:has(> img:not(.is-ready)) {
+  background-image: linear-gradient(
+    115deg,
+    transparent 36%,
+    rgba(255, 255, 255, .04) 46%,
+    rgba(255, 255, 255, .28) 50%,
+    rgba(255, 255, 255, .04) 54%,
+    transparent 64%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: b-ice-sheen 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .b-tile__media:has(img:not(.is-ready)),
+  .b-card2__thumb:has(img:not(.is-ready)),
+  .b-hero:has(> img:not(.is-ready)) {
+    animation: none;
+    background-image: none;
+  }
+}
 .b-card2__titles { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .b-card2__name { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.25; }
 .b-card2__name a { color: var(--g-ink) !important; text-decoration: none; }
@@ -443,33 +736,94 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-card2 .b-chip--hl { background: var(--g-accent-wash); }
 .b-toggle--off { color: #8396a4 !important; background: transparent; }
 
-/* ── Отклик нажатия (публичка): b-press.js, transform как mini-app-trainer-stats.css:103–105 */
+/* ── Отклик нажатия: сразу сжимается, отпускание с лёгкой отдачей ───── */
 @media (prefers-reduced-motion: no-preference) {
   .b-city,
-  .b-when a,
+  .b-toggle,
+  .b-day,
+  .b-btn,
+  .b-pill,
   a.b-tile,
   a.b-row,
-  a.b-slot,
   a.b-table__row,
-  a.b-ticket,
   a.b-card,
+  .b-card2,
   a.b-card2__thumb,
   .home-map__vis {
-    transition: transform 0.12s ease;
+    transition: transform 280ms cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 200ms ease;
+    touch-action: manipulation;
   }
+  .b-city:active,
+  .b-toggle:active,
+  .b-day:active,
+  .b-btn:active,
+  .b-pill:active,
+  a.b-tile:active,
+  a.b-row:active,
+  a.b-table__row:active,
+  a.b-card:active,
+  .b-card2:active:not(:has(.b-slot:active, .b-card2__thumb:active)),
+  a.b-card2__thumb:active,
   .b-city.b-press,
-  .b-when a.b-press,
+  .b-toggle.b-press,
+  .b-day.b-press,
+  .b-btn.b-press,
+  .b-pill.b-press,
   a.b-tile.b-press,
   a.b-row.b-press,
-  a.b-slot.b-press,
   a.b-table__row.b-press,
-  a.b-ticket.b-press,
   a.b-card.b-press,
+  .b-card2.b-press,
   a.b-card2__thumb.b-press,
   .home-map__city.b-press .home-map__vis {
-    transform: scale(0.98);
+    transform: scale(0.97);
+    transition-duration: 90ms;
+    transition-timing-function: ease-out;
+  }
+  .b-card2:active,
+  .b-card2.b-press { box-shadow: 0 1px 1px rgba(13, 27, 38, 0.06); }
+  .b-card2[style*="view-transition-name"]:active,
+  .b-card2[style*="view-transition-name"].b-press,
+  a.b-tile[style*="view-transition-name"]:active,
+  a.b-tile[style*="view-transition-name"].b-press {
+    transform: none;
   }
   .home-map__vis { transform-box: fill-box; transform-origin: center; }
+  a.b-slot:active,
+  a.b-ticket:active { opacity: 0.72; }
+}
+
+.b-soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  color: var(--g-accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.b-ticket--dark .b-soon { color: var(--g-on-dark-accent); }
+.b-soon__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--g-accent);
+  flex: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .b-soon__dot { animation: glide-map-pulse 2.2s ease-in-out infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .b-reveal {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  .b-reveal.is-in {
+    opacity: 1;
+    transform: none;
+    transition: opacity 280ms ease, transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
 }
 
 /* ── «Открыть в Telegram» (TASK-278, вариант A) ──────────────────────────
@@ -537,6 +891,21 @@ body[data-client-shell] .tg-out { display: none !important; }
 ::view-transition-group(glide-when-strip) {
   animation-duration: 220ms;
   animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+::view-transition-group(glide-when-thumb) {
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+::view-transition-old(glide-when-thumb),
+::view-transition-new(glide-when-thumb) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+@media (prefers-reduced-motion: reduce) {
+  .b-hero,
+  .b-card2,
+  a.b-tile,
+  .b-when__thumb { view-transition-name: none !important; }
 }
 
 .vt-when-strip {

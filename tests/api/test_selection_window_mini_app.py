@@ -193,7 +193,7 @@ async def test_today_window_rink_without_sessions_stays_a_card(app_use_test_db, 
 
 @pytest.mark.asyncio
 async def test_home_keeps_today_tab_without_shift_note(app_use_test_db, db_session, monkeypatch) -> None:
-    fixed = _utc(2026, 10, 7, 22, 55)
+    fixed = _utc(2026, 10, 7, 20, 55)
     monkeypatch.setattr("src.application.catalog_home_page._utc_now", lambda: fixed)
     name = f"Главная {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
@@ -230,6 +230,37 @@ async def test_home_keeps_today_tab_without_shift_note(app_use_test_db, db_sessi
     assert home.status_code == 200
     assert "На сегодня всё — вот завтра" not in home.text
     assert 'href="/?when=tomorrow" aria-current="true"' not in home.text
+    assert 'href="/?when=today" aria-current="true"' in home.text
+
+
+@pytest.mark.asyncio
+async def test_home_defaults_to_tomorrow_after_nine_pm(app_use_test_db, db_session, monkeypatch) -> None:
+    fixed = _utc(2026, 10, 7, 22, 55)
+    monkeypatch.setattr("src.application.catalog_home_page._utc_now", lambda: fixed)
+    name = f"Вечер {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    arena_id = await _insert_arena(db_session, city_id, name="Каток")
+    today = fixed.astimezone(ZoneInfo("Europe/Minsk")).date()
+    await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=today + timedelta(days=1),
+        starts_at_local="11:00",
+        duration_minutes=60,
+        kind="public_skate",
+        price_adult_minor=500,
+        price_child_minor=None,
+        price_rental_minor=None,
+    )
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        home = await client.get("/")
+
+    assert home.status_code == 200
+    assert 'href="/?when=tomorrow" aria-current="true"' in home.text
+    assert "лёд завтра" in home.text
 
 
 @pytest.mark.asyncio

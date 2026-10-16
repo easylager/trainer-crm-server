@@ -25,7 +25,7 @@ _PHONE_GUARD_VALID = "+375 29 123-45-67"
 
 
 def _selection_pick_block(html: str, arena_name: str) -> str:
-    for block in re.findall(r'<article class="b-card2">.*?</article>', html, re.DOTALL):
+    for block in re.findall(r'<article class="b-card2[^"]*"[^>]*>.*?</article>', html, re.DOTALL):
         if arena_name in block:
             return block
     raise AssertionError(f"pick block for {arena_name!r} missing")

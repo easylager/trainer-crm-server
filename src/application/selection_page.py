@@ -1155,6 +1155,12 @@ def _hero_kicker(view: Mapping[str, Any]) -> str:
     return str(window.get("label") or "") or "Подборка"
 
 
+def _selection_site_footer(city_link: str, *, telegram_href: str | None) -> str:
+    from src.application.public_site_footer import render_site_footer_html
+
+    return render_site_footer_html(context_html=city_link, telegram_href=telegram_href)
+
+
 def render_selection_page(
     view: Mapping[str, Any],
     *,
@@ -1234,11 +1240,8 @@ def render_selection_page(
         + share_pick
         + share_html(share, telegram_url=None, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
     )
-    # TASK-278: «Открыть в Telegram» — плашкой внизу экрана, как на всех страницах.
-    from src.application.style_b import telegram_dock_html
-
     share_tail = catalog_list_share_tail(scripts=need_share_js, css=bool(share_pick))
-    share_tail["__PLACE_SHARE_BAR__"] = telegram_dock_html(cta_url, hint=t("tg.map_city"))
+    share_tail["__PLACE_SHARE_BAR__"] = ""
     elements = []
     for item in view["items"]:
         slug = str(item.get("slug") or "").strip()
@@ -1293,7 +1296,7 @@ def render_selection_page(
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
             "__COMPONENTS_V__": COMPONENTS_VERSION,
-            "__CITY_LINK__": city_link,
+            "__SITE_FOOTER__": _selection_site_footer(city_link, telegram_href=cta_url),
             "__BODY__": body,
             "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(
                 surface="selection_page",
@@ -1359,7 +1362,8 @@ def _b_thumb(item: Mapping[str, Any], *, href: str) -> str:
 
     photo, extra = _selection_thumb_img_attrs(item)
     inner = (
-        f'<img src="{_esc(photo)}"{extra} alt="" loading="lazy" decoding="async" width="128" height="128" />'
+        f'<img src="{_esc(photo)}"{extra} alt="" loading="lazy" decoding="async" width="128" height="128" '
+        "onload=\"this.classList.add('is-ready')\" />"
         if photo
         else rink_motif_svg(small=True)
     )
@@ -1456,6 +1460,7 @@ def _b_selection_cards(
                 service_highlight_keys=service_highlight_keys,
                 off_window=False,
                 window=window,
+                now=view.get("now"),
             )
         )
     if hits and rest and window:
@@ -1472,6 +1477,7 @@ def _b_selection_cards(
                 service_highlight_keys=service_highlight_keys,
                 off_window=True,
                 window=window,
+                now=view.get("now"),
             )
         )
     return "".join(parts)
@@ -1487,6 +1493,7 @@ def _b_place_card(
     service_highlight_keys: frozenset[str],
     off_window: bool = False,
     window: Mapping[str, Any] | None = None,
+    now: datetime | None = None,
 ) -> str:
     from src.application.catalog_icons import icon_svg
 
@@ -1537,9 +1544,15 @@ def _b_place_card(
         from src.shared.public_view_transitions import session_time_vt_style
 
         vt = session_time_vt_style(int(s["id"]))
+        soon = ""
+        if idx == 0 and not off_window and isinstance(now, datetime):
+            from src.application.place_page import soon_html
+
+            soon = soon_html(s, now=now)
         inner = (
             (f'<span class="b-slot__day">{_esc(word)}</span>' if word else "")
             + f'<b class="b-slot__time"{vt}>{_esc(clock)}</b>'
+            + soon
             + (f'<span class="b-slot__price">{_esc(price)}</span>' if price else "")
         )
         if href:
@@ -1557,14 +1570,17 @@ def _b_place_card(
         if tickets
         else (f'<p class="b-note">{_esc(note)}</p>' if note else "")
     )
+    from src.shared.public_view_transitions import place_vt_attr
+
     card_cls = "b-card2" + (" b-card2--off" if off_window else "")
+    vt = place_vt_attr(slug) if slug else ""
     head_block = _b_card_head(item, city_name=city_name, href=href) + off_extra
     if not slots or not href:
-        return f'<article class="{card_cls}">' + head_block + body + "</article>"
+        return f'<article class="{card_cls}"{vt}>' + head_block + body + "</article>"
     first = slots[0]
     sid = first.get("id")
     if sid is None:
-        return f'<article class="{card_cls}">' + head_block + body + "</article>"
+        return f'<article class="{card_cls}"{vt}>' + head_block + body + "</article>"
     from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
 
     place_name = format_public_name(str(item.get("name") or ""))
@@ -1582,7 +1598,7 @@ def _b_place_card(
         body = f'<div class="b-slots">{invite}{"".join(tickets)}</div>'
     else:
         body = f'<div class="b-slots">{invite}</div>'
-    return f'<article class="{card_cls}">' + head_block + body + "</article>"
+    return f'<article class="{card_cls}"{vt}>' + head_block + body + "</article>"
 
 
 def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:

@@ -48,6 +48,32 @@ from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scop
 router = APIRouter(tags=["public-place"])
 
 
+@router.get("/privacy", response_class=HTMLResponse)
+async def privacy_page() -> HTMLResponse:
+    from src.application.public_legal_page import render_legal_page
+
+    base = _base()
+    trainers = f"{base}/trainers" if base else "/trainers"
+    return HTMLResponse(
+        render_legal_page("privacy", trainers_href=trainers),
+        media_type="text/html",
+        headers=_PAGE_CACHE,
+    )
+
+
+@router.get("/terms", response_class=HTMLResponse)
+async def terms_page() -> HTMLResponse:
+    from src.application.public_legal_page import render_legal_page
+
+    base = _base()
+    trainers = f"{base}/trainers" if base else "/trainers"
+    return HTMLResponse(
+        render_legal_page("terms", trainers_href=trainers),
+        media_type="text/html",
+        headers=_PAGE_CACHE,
+    )
+
+
 @router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def catalog_home_page(
     request: Request,

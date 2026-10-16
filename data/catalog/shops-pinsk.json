@@ -1,0 +1,37 @@
+{
+  "_source": "1hockey.by, Пинск, карточка TASK-225, 2026-10-11. Часы и координаты назвал владелец 2026-10-10. Обложка — скриншот сайта, который он назначил; зал лежит отдельно в photos/pinsk/1hockey.webp и в импорт не входит (файл берёт одно фото).",
+  "_schema": "src/application/catalog_shops_import.py — ShopRecord",
+  "city": "Пинск",
+  "shops": [
+    {
+      "key": "1hockey",
+      "name": "1hockey.by",
+      "address": "ул. Иркутско-Пинской Дивизии, 61",
+      "lat": 52.122394,
+      "lon": 26.111818,
+      "phones": [
+        "+375 (29) 6-174-174"
+      ],
+      "website": "https://1hockey.by/",
+      "instagram": "hc_1hockey.by",
+      "description": "ООО «СЛБ-Систем Групп». Коньки CCM, клюшки, защита, вратарское, термобельё. Фигурные коньки: EDEA Motivo, Powerslide Playlife. В субботу и воскресенье зал закрыт, онлайн-заказы на сайте принимаются. Второй Instagram: https://www.instagram.com/1hockey.by",
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "hockey",
+        "figure"
+      ],
+      "photo": "photos/pinsk/1hockey-site.png",
+      "hours": {
+        "mon": ["09:00", "17:30"],
+        "tue": ["09:00", "17:30"],
+        "wed": ["09:00", "17:30"],
+        "thu": ["09:00", "17:30"],
+        "fri": ["09:00", "17:30"],
+        "sat": null,
+        "sun": null
+      }
+    }
+  ]
+}

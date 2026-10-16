@@ -62,11 +62,16 @@
     </section>
     __MAP__
     __CITIES__
-    <footer class="b-foot">
-      <span>__FOOTER__</span>
-      <span class="b-foot__links">__ELSEWHERE__<a href="__TRAINERS_URL__">Для тренеров</a></span>
-    </footer>
   </main>
+  __SITE_FOOTER__
+  <script>
+    (function () {
+      var imgs = document.querySelectorAll('.b-hero > img, .b-tile__media img');
+      for (var i = 0; i < imgs.length; i++) {
+        if (imgs[i].complete && imgs[i].naturalWidth > 0) imgs[i].classList.add('is-ready');
+      }
+    })();
+  </script>
   <script>
     (function () {
       var HOLD_MS = 450;
@@ -294,6 +299,7 @@
   </script>
   __PAGE_VIEW_BEACON__
   __B_PRESS_SCRIPT__
+  __WHEN_SWAP_SCRIPT__
   __TG_DOCK_SCRIPT__
 </body>
 

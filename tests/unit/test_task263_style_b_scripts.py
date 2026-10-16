@@ -71,6 +71,7 @@ def test_broken_photo_fallback_targets_style_b_media() -> None:
 
     # Слушатель в <head>, иначе ранняя ошибка ленивой картинки проходит мимо.
     assert "addEventListener('error', dropBrokenPhoto, true)" in head
+    assert "img.classList.add('is-ready')" in head
     assert "'.b-hero, .b-tile__media, .b-card2__thumb'" in head
     assert "classList.remove('b-toned-wrap')" in head
     assert ".hero__photo" not in page and ".pick__photo" not in page

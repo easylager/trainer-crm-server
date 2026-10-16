@@ -24,6 +24,8 @@ def visible_text(html: str) -> str:
 
 
 def assert_public_copy(html: str) -> None:
+    # Единый сайт-футер (TASK-279) — отдельная зона доверия, не режим расписания.
+    html = re.sub(r'(?is)<footer class="b-site-foot"[\s\S]*?</footer>', " ", html)
     text = visible_text(html)
     folded = text.casefold()
     for needle in _BANNED:
