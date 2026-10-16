@@ -2237,6 +2237,10 @@ async def get_public_arena_card(
         ),
     }
     _sanitize_public_profile_fields(card)
+    from src.application.ice_company.flag import city_enabled
+
+    if city_enabled(int(row["city_id"])):
+        card["ice_company"] = True
     return card
 
 

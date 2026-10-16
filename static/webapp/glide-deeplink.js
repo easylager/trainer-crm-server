@@ -112,6 +112,8 @@
       /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other|ohm|service))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(
         sp
       );
+    var company = /^company_([1-9][0-9]*)$/i.exec(sp);
+    if (company) return { key: 'ice-company', path: 'ice-company?s=' + company[1] };
     if (catalog) {
       var q = 'city_id=' + catalog[1];
       var intent = (catalog[2] || '').toLowerCase();

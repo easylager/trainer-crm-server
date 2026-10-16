@@ -554,6 +554,17 @@
     return when ? 'Позвать на ' + when : 'Позвать с собой';
   }
 
+  function companyButton() {
+    if (!state.card || state.card.ice_company !== true) return '';
+    var sid = resolvedShareSessionId();
+    if (!sid) return '';
+    return (
+      '<button type="button" class="arena-btn" data-action="ice-company" data-session="' +
+      esc(sid) +
+      '">Собрать компанию</button>'
+    );
+  }
+
   function renderShareBar() {
     if (!global.GlideShareSheet) return '';
     if (scheduleSlots().length) {
@@ -563,6 +574,7 @@
         esc(shareInviteCtaLabel()) +
         '</button>' +
         '<button type="button" class="arena-btn" data-action="share">Поделиться</button>' +
+        companyButton() +
         '</div>'
       );
     }
@@ -1764,6 +1776,11 @@
     }
     if (action === 'share' || action === 'share-invite') {
       openShare(action === 'share-invite');
+      return;
+    }
+    if (action === 'ice-company') {
+      var companySession = t.getAttribute('data-session') || resolvedShareSessionId();
+      if (companySession) shellNav('ice-company?s=' + encodeURIComponent(companySession));
       return;
     }
     if (action === 'report') openModal();

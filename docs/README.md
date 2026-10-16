@@ -46,6 +46,7 @@
 | [organization-role-surfaces.md](product-knowledge/organization-role-surfaces.md) | Организации: что видит каждая роль |
 | [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест и подборок, главная «только города» и хаб города `/c/{город}`, шеринг, /go, диплинки, окна времени, магазины |
 | [catalog-search-header.md](product-knowledge/catalog-search-header.md) | Шапка «Поиск»: сегмент рода, фильтр типа площадки, окно времени, пустое состояние |
+| [ice-company.md](product-knowledge/ice-company.md) | «Компания на лёд»: JSON API, флаг по city_id, тексты бота |
 
 ## strategy — куда идём
 
@@ -108,6 +109,7 @@
 | [2026-10-03-hub-composition-05-06.md](plans/2026-10-03-hub-composition-05-06.md) | TASK-149: хаб как экраны 05/06 — узкая композиция; 150 пакет не стартовать |
 | [2026-09-25-search-places-label.md](plans/2026-09-25-search-places-label.md) | Поиск: «Покататься» → «Где заниматься» |
 | [2026-10-11-trainer-pass-validity.md](plans/2026-10-11-trainer-pass-validity.md) | Срок абонемента тренера: с выдачи, снимок на экземпляре, подсказка по числу занятий |
+| [2026-10-16-ice-company-pdn-draft.md](plans/2026-10-16-ice-company-pdn-draft.md) | Черновик согласия и политики для компании на льду. ПРОВЕРИТЬ ЮРИСТОМ |
 
 ## ops — эксплуатация
 
