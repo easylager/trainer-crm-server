@@ -337,6 +337,7 @@
 }
 
 .gss-zf { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gss-zf--stack { grid-template-columns: 1fr; }
 .gss-zf__f { display: grid; gap: 4px; min-width: 0; }
 .gss-zf__f span { font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold); color: var(--glide-hint); }
 .gss-zf__f input {
@@ -364,6 +365,36 @@
 .gss-zdone__how { margin: -4px 0 0; font-size: var(--app-text-caption); line-height: 1.4; color: var(--glide-hint); }
 .gss-zlink--inline { padding: 0; font-size: inherit; }
 .gss-zdone__more { display: flex; justify-content: space-between; gap: 12px; }
+.gss-company-mins { display: flex; gap: 6px; }
+.gss-company-mins .gss-slot { flex: 1 1 0; min-height: 44px; text-align: center; }
+.gss-company-need {
+  margin: 8px 0 0;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.35;
+  color: var(--glide-ink, var(--g-ink));
+}
+.gss-company-who {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 0;
+  font-size: var(--app-text-body);
+}
+.gss-company-who b { font-weight: var(--app-weight-semibold); }
+.gss-company-card {
+  margin: 0 0 12px;
+  padding: 14px 16px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-card);
+  white-space: pre-line;
+  font-size: var(--app-text-body);
+  line-height: 1.4;
+}
+.gss-channels.gss-channels--2 { grid-template-columns: 1.4fr 1fr; }
+.gss-channels--2 .gss-ch { min-height: 48px; padding: 12px 8px; font-size: var(--app-text-body); }
 .gss-channels.gss-channels--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .gss-channels--3 .gss-ch { padding: 12px 4px; font-size: var(--app-text-caption); }
 

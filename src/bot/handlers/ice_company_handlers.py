@@ -9,18 +9,17 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.types import (
     CallbackQuery,
     ChosenInlineResult,
     InlineQuery,
     InlineQueryResultArticle,
+    InlineQueryResultPhoto,
     InputTextMessageContent,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
-from sqlalchemy import text
-
 from src.application.ice_company.copy import (
     TOAST_ATTENDED,
     TOAST_CANT,
@@ -35,8 +34,11 @@ from src.application.ice_company.delivery import AiogramSender
 from src.application.ice_company.lifecycle import (
     ACTION_STATUS,
     _edit_dirty,
+    button_rows,
     buttons_for,
     parse_callback,
+    remember_inline_card,
+    render_hash,
 )
 from src.application.ice_company.safety import TextRejected, clean_free_text
 from src.application.ice_company.service import (
@@ -53,6 +55,13 @@ from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
 router = Router(name="ice_company")
+
+
+def _telegram_name(raw: str | None) -> str:
+    try:
+        return clean_free_text(raw, max_len=20, required=False, field="Имя")
+    except TextRejected:
+        return ""
 
 _TOAST = {
     "g": TOAST_GOING,
@@ -73,13 +82,8 @@ async def on_company_callback(query: CallbackQuery) -> None:
         await query.answer()
         return
     code, action = parsed
-    toast = _TOAST.get(action, TOAST_ATTENDED)
-    await query.answer(toast)
     user_id = int(query.from_user.id)
-    try:
-        name = clean_free_text(query.from_user.first_name, max_len=20, required=False, field="Имя") or "Участник"
-    except TextRejected:
-        name = "Участник"
+    name = _telegram_name(query.from_user.first_name) or _telegram_name(query.from_user.username)
     async with async_session_factory() as session:
         try:
             if action == "r":
@@ -95,7 +99,7 @@ async def on_company_callback(query: CallbackQuery) -> None:
                     session,
                     code=code,
                     status=ACTION_STATUS.get(action, "going"),
-                    display_name=name,
+                    display_name=name or None,
                     participant_key=f"tg:{user_id}",
                     source="tg",
                     consent=True,
@@ -103,10 +107,22 @@ async def on_company_callback(query: CallbackQuery) -> None:
                     actor_hash=actor_for_telegram(user_id, None, None),
                 )
         except CompanyRejected as exc:
-            if exc.status_code == 409:
-                await query.answer(TOAST_CLOSED, show_alert=False)
+            toast = TOAST_CLOSED if exc.status_code == 409 else str(exc.detail or "Не получилось")
+            await query.answer(toast[:200], show_alert=False)
             logger.info("ice_company callback rejected status=%s", exc.status_code)
             return
+        inline_id = (query.inline_message_id or "").strip()
+        if inline_id:
+            company = await _load(session, code)
+            if company is not None:
+                await remember_inline_card(
+                    session,
+                    company_id=int(company["id"]),
+                    inline_message_id=inline_id,
+                )
+        else:
+            logger.info("ice_company callback has no inline_message_id code=%s", code)
+        await query.answer(_TOAST.get(action, TOAST_ATTENDED))
         sender = AiogramSender(query.bot, Settings())
         await _edit_dirty(
             session,
@@ -128,57 +144,66 @@ async def on_company_inline(query: InlineQuery) -> None:
         responses = await _responses(session, int(company["id"]))
         snap = snap_from(company, responses)
         settings = Settings()
-        from src.application.ice_company.service import _page_url
+        from src.application.ice_company.service import ice_slot_url
 
-        page = _page_url(settings, code)
+        page = ice_slot_url(company, settings)
         body = card_text(snap)
         markup_buttons = buttons_for(company, snap, page)
-    row = []
-    for button in markup_buttons:
-        if button.get("url"):
-            row.append(InlineKeyboardButton(text=button["text"], url=button["url"]))
-        elif button.get("data"):
-            row.append(InlineKeyboardButton(text=button["text"], callback_data=button["data"]))
-    await query.answer(
-        [
-            InlineQueryResultArticle(
-                id=f"k{code}",
-                title="Компания на лёд",
-                description=body.split("\n", 1)[0][:80],
-                input_message_content=InputTextMessageContent(message_text=body),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[row]),
-            )
-        ],
-        cache_time=1,
-        is_personal=True,
-    )
+    from src.application.ice_company.og import card_photo_url
+
+    rows = []
+    for group in button_rows(markup_buttons):
+        row = []
+        for button in group:
+            if button.get("url"):
+                row.append(InlineKeyboardButton(text=button["text"], url=button["url"]))
+            elif button.get("data"):
+                row.append(InlineKeyboardButton(text=button["text"], callback_data=button["data"]))
+        if row:
+            rows.append(row)
+    markup = InlineKeyboardMarkup(inline_keyboard=rows)
+    photo = card_photo_url(settings.webapp_base_url, code, render_hash(body, markup_buttons))
+    if photo:
+        result = InlineQueryResultPhoto(
+            id=f"k{code}",
+            photo_url=photo,
+            thumbnail_url=photo,
+            photo_width=1080,
+            photo_height=1080,
+            title="Компания на лёд",
+            description=body.split("\n", 1)[0][:80],
+            caption=body,
+            reply_markup=markup,
+        )
+    else:
+        result = InlineQueryResultArticle(
+            id=f"k{code}",
+            title="Компания на лёд",
+            description=body.split("\n", 1)[0][:80],
+            input_message_content=InputTextMessageContent(message_text=body),
+            reply_markup=markup,
+        )
+    await query.answer([result], cache_time=1, is_personal=True)
 
 
-@router.chosen_inline_result(F.result_id.regexp(r"^k[23456789abcdefghjkmnpqrstuvwxyz]{8}$"))
-async def on_company_chosen(result: ChosenInlineResult) -> None:
-    inline_id = result.inline_message_id
-    code = (result.result_id or "")[1:]
+@router.chosen_inline_result(F.result_id.regexp(r"^k?[23456789abcdefghjkmnpqrstuvwxyz]{8}$"))
+async def on_company_chosen(result: ChosenInlineResult, bot: Bot) -> None:
+    inline_id = (result.inline_message_id or "").strip()
+    raw = result.result_id or ""
+    code = raw[1:] if raw.startswith("k") else raw
     if not inline_id:
+        logger.info("ice_company chosen without inline_message_id code=%s", code)
         return
     async with async_session_factory() as session:
         company = await _load(session, code)
         if company is None:
             return
-        await session.execute(
-            text(
-                """
-                INSERT INTO ice_company_messages (company_id, inline_message_id, is_group)
-                SELECT :company_id, :inline_id, false
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM ice_company_messages
-                    WHERE company_id = :company_id AND inline_message_id = :inline_id
-                )
-                """
-            ),
-            {"company_id": company["id"], "inline_id": inline_id},
+        await remember_inline_card(session, company_id=int(company["id"]), inline_message_id=inline_id)
+        sender = AiogramSender(bot, Settings())
+        await _edit_dirty(
+            session,
+            sender,
+            settings=Settings(),
+            debounce_sec=0,
+            now=datetime.now(timezone.utc),
         )
-        await session.execute(
-            text("UPDATE ice_companies SET card_dirty = true WHERE id = :id"),
-            {"id": company["id"]},
-        )
-        await session.commit()

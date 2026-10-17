@@ -177,6 +177,45 @@ def _page_url(settings: Settings, code: str) -> str:
     return f"{base}{path}" if base else path
 
 
+def _session_id(source_ref: str) -> int | None:
+    prefix = "ice_session:"
+    if not str(source_ref).startswith(prefix):
+        return None
+    raw = str(source_ref)[len(prefix) :]
+    return int(raw) if raw.isdigit() and int(raw) > 0 else None
+
+
+def ice_slot_url(company: dict[str, Any], settings: Settings) -> str:
+    """«На лёд» открывает мини-приложение на этом сеансе.
+
+    Кнопка на карточке в чате — ссылка ``t.me/<бот>?startapp=arena_<id>_s_<сеанс>``.
+    Telegram открывает её как мини-приложение, если в BotFather задан Main Mini App.
+    Прямая кнопка web_app на таком сообщении не ставится: её принимает только личный чат с ботом.
+    """
+    from urllib.parse import urlencode
+
+    from src.application.place_links import place_start_param, telegram_open_link
+
+    arena_id = _arena_id(str(company.get("venue_ref") or ""))
+    session_id = _session_id(str(company.get("source_ref") or ""))
+    if arena_id:
+        link = telegram_open_link(
+            client_bot_username=settings.client_bot_username,
+            mini_app_short_name=settings.client_mini_app_short_name,
+            start_param=place_start_param(arena_id, session_id),
+            main_mini_app=settings.client_bot_main_mini_app,
+        )
+        if link:
+            return link
+    base = (settings.webapp_base_url or "").strip().rstrip("/")
+    if arena_id and base.lower().startswith("https://"):
+        params = {"ref": str(arena_id)}
+        if session_id is not None:
+            params["s"] = str(session_id)
+        return f"{base}/webapp/arena?" + urlencode(params)
+    return _page_url(settings, str(company["public_code"]))
+
+
 def public_view(
     company: dict[str, Any],
     rows: list[dict[str, Any]],
@@ -413,7 +452,7 @@ async def create_company(
                                 :code, :name, :organizer, :event_id, :version,
                                 :min_people, :max_people, 'open', :expires_at
                             )
-                            RETURNING id, created_at
+                            RETURNING id
                             """
                         ),
                         {
@@ -429,7 +468,6 @@ async def create_company(
                     )
                 ).mappings().one()
             company_id = int(inserted["id"])
-            created_at = inserted["created_at"]
             break
         except IntegrityError:
             code = ""
@@ -445,14 +483,6 @@ async def create_company(
             """
         ),
         {"company_id": company_id, "key": organizer, "name": label},
-    )
-    await _schedule_reminders(
-        session,
-        company_id,
-        created_at=created_at,
-        starts_at=event["starts_at"],
-        ends_at=event["ends_at"],
-        weekly_in_chat=False,
     )
     await _refresh_status(session, company_id)
     await _track(
@@ -616,9 +646,10 @@ async def respond(
         return view
     if status not in ("going", "maybe", "cant"):
         raise CompanyRejected("Ответ: иду, может быть или не могу.")
+    kept = existing["display_name"] if existing and source == "tg" else None
     try:
         label = clean_free_text(
-            display_name or (existing["display_name"] if existing else None),
+            kept or display_name or (existing["display_name"] if existing else None) or ("Участник" if source == "tg" else None),
             max_len=cfg.ice_company_display_name_max_len,
             required=True,
             field="Имя",

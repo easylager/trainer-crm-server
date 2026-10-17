@@ -7,9 +7,9 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
-from src.application.ice_company.lifecycle import BotBlocked, ChatMigrated, RateLimited
+from src.application.ice_company.lifecycle import BotBlocked, ChatMigrated, RateLimited, button_rows
 from src.application.ice_company.limiter import OutboundLimiter
 from src.shared.config import Settings
 
@@ -19,13 +19,17 @@ logger = logging.getLogger(__name__)
 def _markup(buttons: list[dict[str, str]]) -> InlineKeyboardMarkup | None:
     if not buttons:
         return None
-    row = []
-    for button in buttons:
-        if button.get("url"):
-            row.append(InlineKeyboardButton(text=button["text"], url=button["url"]))
-        elif button.get("data"):
-            row.append(InlineKeyboardButton(text=button["text"], callback_data=button["data"]))
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+    rows = []
+    for group in button_rows(buttons):
+        row = []
+        for button in group:
+            if button.get("url"):
+                row.append(InlineKeyboardButton(text=button["text"], url=button["url"]))
+            elif button.get("data"):
+                row.append(InlineKeyboardButton(text=button["text"], callback_data=button["data"]))
+        if row:
+            rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 class AiogramSender:
@@ -60,6 +64,22 @@ class AiogramSender:
         is_group = bool(ref.get("is_group")) or (isinstance(chat_id, int) and chat_id < 0)
         await self.limiter.acquire(int(chat_id) if chat_id is not None else None, is_group=is_group)
         markup = _markup(buttons)
+        photo = ref.get("photo_url")
+        if photo and ref.get("inline_message_id"):
+            try:
+                await self.bot.edit_message_media(
+                    media=InputMediaPhoto(media=str(photo), caption=text),
+                    inline_message_id=str(ref["inline_message_id"]),
+                    reply_markup=markup,
+                )
+                return
+            except TelegramRetryAfter as exc:
+                self.limiter.note_retry_after()
+                raise RateLimited(float(exc.retry_after)) from exc
+            except TelegramBadRequest as exc:
+                if "not modified" in str(exc).lower():
+                    return
+                logger.info("ice_company media edit skipped: %s", type(exc).__name__)
         try:
             if ref.get("inline_message_id"):
                 await self.bot.edit_message_text(

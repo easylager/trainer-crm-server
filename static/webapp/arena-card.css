@@ -676,6 +676,7 @@ a.arena-row {
   padding: 0 16px;
 }
 .arena-share--one { grid-template-columns: 1fr; }
+.arena-share--pair { grid-template-columns: 1fr 1fr; }
 .arena-share .arena-btn { margin: 0; }
 
 /* TASK-146: услуги магазина — плитки, как на публичной странице места. */

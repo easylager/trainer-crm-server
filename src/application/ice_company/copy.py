@@ -58,45 +58,62 @@ def clock(moment: datetime) -> str:
     return _local(moment).strftime("%H:%M")
 
 
-def _names(names: tuple[str, ...]) -> str:
+_KIND_LABELS = {
+    "public_skate": "Массовое катание",
+    "open_ice": "Массовое катание",
+    "hockey_practice": "ОХМ",
+}
+
+
+def kind_label(kind: str) -> str:
+    """Что это за сеанс. Пустая строка — тип ещё не назван, на карточку не выдумываем."""
+    return _KIND_LABELS.get(kind, "")
+
+
+_STILL = {1: "один", 2: "двое", 3: "трое", 4: "четверо", 5: "пятеро", 6: "шестеро", 7: "семеро"}
+
+
+def on_the_ice(names: tuple[str, ...]) -> str:
     if not names:
-        return ""
-    if len(names) <= 8:
-        return ", ".join(names)
-    head = ", ".join(names[:8])
-    return f"{head} и ещё {len(names) - 8}"
+        return "Лёд ещё пустой"
+    if len(names) == 1:
+        return f"На льду {names[0]}"
+    if len(names) == 2:
+        return f"На льду {names[0]} и {names[1]}"
+    if len(names) <= 4:
+        return "На льду " + ", ".join(names[:-1]) + " и " + names[-1]
+    return f"На льду {names[0]}, {names[1]} и ещё {len(names) - 2}"
+
+
+def still_line(missing: int) -> str:
+    word = _STILL.get(missing)
+    if word:
+        return f"Ещё {word} — и едем"
+    return f"Ещё {missing} — и едем"
 
 
 def card_text(snap: Snap) -> str:
-    when = short_when(snap.starts_at)
-    place_line = f"{snap.venue}, {when}"
+    when = f"{weekday_nom(snap.starts_at)}, {clock(snap.starts_at)}"
+    place = snap.venue
+    label = kind_label(snap.kind)
+    head = f"{label}\n" if label else ""
     if snap.cancelled:
-        return f"Сеанс отменён. Вот ближайшие другие\n{place_line}"
+        return f"{head}Сеанс сняли.\n{when}\n{place}"
     if snap.expired or snap.status == "expired":
-        return f"Не состоялась\n{place_line}"
+        return f"{head}Не собрались.\n{when}\n{place}"
     if snap.status == "cancelled":
-        return f"Сбор отменён\n{place_line}"
+        return f"{head}Сбор снят.\n{when}\n{place}"
     if snap.previous_starts_at is not None and snap.status != "confirmed":
-        moved = (
-            f"Время изменилось: {clock(snap.previous_starts_at)} → {clock(snap.starts_at)}. "
-            "Подтвердите ещё раз"
+        return (
+            f"{head}Время съехало: {clock(snap.previous_starts_at)} → {clock(snap.starts_at)}.\n"
+            "Подтвердите ещё раз.\n"
+            f"{place}"
         )
-        return f"{moved}\n{place_line}"
-    going_n = len(snap.going_names)
-    names = _names(snap.going_names)
-    if snap.status == "confirmed":
-        line = f"Едем. Идут {going_n}: {names}" if names else f"Едем. Идут {going_n}"
-        return f"{line}\n{place_line}"
-    title = "Катаемся" if snap.kind in ("public_skate", "open_ice") else "Собираемся"
-    head = f"{title} в {weekday_in(snap.starts_at)}"
-    who = f"Идут {going_n} из {snap.min_people}"
-    if names:
-        who = f"{who}: {names}"
-    lines = [head, place_line, who]
-    missing = snap.min_people - going_n
-    if missing > 0:
-        lines.append(f"Не хватает {missing}")
-    return "\n".join(lines)
+    who = on_the_ice(snap.going_names) + "."
+    if snap.status == "confirmed" or len(snap.going_names) >= snap.min_people:
+        return f"{head}Едем.\n{when}\n{place}\n{who}"
+    missing = snap.min_people - len(snap.going_names)
+    return f"{head}{when}\n{place}\n{who}\n{still_line(missing)}"
 
 
 def confirm_dm(snap: Snap) -> str:

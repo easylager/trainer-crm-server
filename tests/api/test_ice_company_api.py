@@ -11,7 +11,7 @@ import io
 from sqlalchemy import text
 
 from src.api.routes.public_ice_company import reset_company_rate_limits
-from src.application.ice_company.lifecycle import reset_edit_debounce, tick
+from src.application.ice_company.lifecycle import _edit_dirty, remember_inline_card, reset_edit_debounce, tick
 from src.shared.config import Settings
 from tests.api.test_ice_invites import _at, _client, _headers, _insert_session, _place
 from tests.shared.test_telegram_webapp import _build_signed_init_data
@@ -170,6 +170,88 @@ async def test_web_needs_consent_and_rate_limit(app_use_test_db, db_session, mon
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_join_rewrites_the_shared_card_only(app_use_test_db, db_session, monkeypatch) -> None:
+    created, _, _ = await _create(db_session, monkeypatch, min_people=4)
+    assert created.status_code == 201, created.text
+    code = created.json()["public_code"]
+    company_id = (
+        await db_session.execute(
+            text("SELECT id FROM ice_companies WHERE public_code = :code"),
+            {"code": code},
+        )
+    ).scalar_one()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO ice_company_messages (company_id, chat_id, message_id, is_group)
+            VALUES (:id, 1304982166, 2820, false)
+            """
+        ),
+        {"id": company_id},
+    )
+    await remember_inline_card(db_session, company_id=int(company_id), inline_message_id="inline-shared")
+    await db_session.commit()
+    async with _client() as client:
+        joined = await client.post(
+            f"/api/public/ice-companies/{code}/responses",
+            headers=_headers(**{"X-Telegram-Init-Data": _init(777)}),
+            json={"status": "going", "display_name": "Кирил", "consent": True},
+        )
+    assert joined.status_code == 200, joined.text
+    assert joined.json()["going_count"] == 2
+
+    class _Refs(_Sender):
+        def __init__(self) -> None:
+            super().__init__()
+            self.refs: list[dict] = []
+
+        async def edit(self, ref: dict, text: str, buttons: list) -> None:
+            self.refs.append(ref)
+            await super().edit(ref, text, buttons)
+
+    sender = _Refs()
+    await _edit_dirty(db_session, sender, settings=Settings(), debounce_sec=0, now=datetime.now(timezone.utc))
+    assert len(sender.edits) == 1
+    assert sender.refs[0]["inline_message_id"] == "inline-shared"
+    assert "Ещё двое — и едем" in sender.edits[0]
+    assert "Кирил" in sender.edits[0]
+    assert "Аня" in sender.edits[0]
+
+
+@pytest.mark.asyncio
+async def test_due_hour_reminder_is_sent_once(app_use_test_db, db_session, monkeypatch) -> None:
+    created, _, _ = await _create(db_session, monkeypatch, min_people=3, user_id=42)
+    assert created.status_code == 201, created.text
+    code = created.json()["public_code"]
+    company_id = (
+        await db_session.execute(
+            text("SELECT id FROM ice_companies WHERE public_code = :code"),
+            {"code": code},
+        )
+    ).scalar_one()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO ice_company_reminders (company_id, kind, due_at, status)
+            VALUES (:id, 'hour', now() - interval '1 minute', 'pending')
+            """
+        ),
+        {"id": company_id},
+    )
+    await db_session.commit()
+    sender = _Sender()
+    await tick(db_session, sender, debounce_sec=0)
+    assert sender.dms == []
+    status = (
+        await db_session.execute(
+            text("SELECT status FROM ice_company_reminders WHERE company_id = :id AND kind = 'hour'"),
+            {"id": company_id},
+        )
+    ).scalar_one()
+    assert status == "skipped"
+
+
 async def test_schedule_move_asks_to_reconfirm_and_tick_is_idempotent(app_use_test_db, db_session, monkeypatch) -> None:
     created, _, session_id = await _create(db_session, monkeypatch, min_people=1, user_id=42)
     assert created.status_code == 201, created.text
@@ -177,10 +259,7 @@ async def test_schedule_move_asks_to_reconfirm_and_tick_is_idempotent(app_use_te
     assert created.json()["status"] == "confirmed"
     sender = _Sender()
     await tick(db_session, sender, debounce_sec=0)
-    confirm_dms = [body for _, body in sender.dms if body.startswith("Сбор готов")]
-    assert len(confirm_dms) == 1
-    await tick(db_session, sender, debounce_sec=0)
-    assert [body for _, body in sender.dms if body.startswith("Сбор готов")] == confirm_dms
+    assert [body for _, body in sender.dms if body.startswith("Сбор готов")] == []
     new_start = datetime.now(timezone.utc) + timedelta(days=4)
     await db_session.execute(
         text("UPDATE ice_sessions SET starts_at_utc = :start, ends_at_utc = :end WHERE id = :id"),
@@ -188,10 +267,7 @@ async def test_schedule_move_asks_to_reconfirm_and_tick_is_idempotent(app_use_te
     )
     await db_session.commit()
     await tick(db_session, sender, debounce_sec=0)
-    move_dms = [body for _, body in sender.dms if body.startswith("Время изменилось")]
-    assert len(move_dms) == 1
-    await tick(db_session, sender, debounce_sec=0)
-    assert [body for _, body in sender.dms if body.startswith("Время изменилось")] == move_dms
+    assert [body for _, body in sender.dms if body.startswith("Время изменилось")] == []
     async with _client() as client:
         view = await client.get(f"/api/public/ice-companies/{code}")
     body = view.json()

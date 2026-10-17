@@ -7,9 +7,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from src.application.ice_company.copy import Snap, card_text, confirm_dm, together_line
+from src.application.ice_company.copy import Snap, card_text, confirm_dm, kind_label, together_line
 from src.application.ice_company.flag import city_enabled, enabled_city_ids
-from src.application.ice_company.lifecycle import parse_callback, render_hash
+from src.application.ice_company.lifecycle import button_rows, buttons_for, parse_callback, render_hash
+from src.application.ice_company.service import ice_slot_url
 from src.application.ice_company.limiter import OutboundLimiter
 from src.application.ice_company.reminders import SKIPPED, plan
 from src.application.ice_company.safety import TextRejected, callback_data, clean_free_text, escape_html, escape_markdown_v2
@@ -31,13 +32,34 @@ def _snap(**kwargs) -> Snap:
     return Snap(**base)
 
 
+def test_poster_is_a_rink() -> None:
+    import io
+
+    from PIL import Image
+
+    from src.application.ice_company.og import render_company_card
+
+    raw = render_company_card(_snap(going_names=("Аня", "Макс"), min_people=4))
+    assert raw.startswith(b"\x89PNG")
+    image = Image.open(io.BytesIO(raw))
+    assert image.size == (1080, 1080)
+    # Ночной угол и светлый лёд посередине площадки.
+    assert image.getpixel((12, 12))[0] < 40
+    ice = image.getpixel((180, 520))
+    assert ice[2] > 180 and ice[0] > 160
+
+
 def test_card_matches_the_agreed_wording() -> None:
     assert card_text(_snap()) == (
-        "Катаемся в субботу\nЧижовка-Арена, сб 19:00\nИдут 1 из 3: Аня\nНе хватает 2"
+        "Массовое катание\nСуббота, 19:00\nЧижовка-Арена\nНа льду Аня.\nЕщё двое — и едем"
     )
     confirmed = _snap(status="confirmed", going_names=("Аня", "Макс", "Оля"))
-    assert card_text(confirmed).split("\n", 1)[0] == "Едем. Идут 3: Аня, Макс, Оля"
+    assert card_text(confirmed).split("\n", 1)[0] == "Массовое катание"
+    assert "Едем." in card_text(confirmed)
+    assert "На льду Аня, Макс и Оля." in card_text(confirmed)
     assert confirm_dm(confirmed) == "Сбор готов. Суббота, 19:00, Чижовка-Арена"
+    assert kind_label("hockey_practice") == "ОХМ"
+    assert card_text(_snap(kind="hockey_practice")).startswith("ОХМ\n")
 
 
 def test_flag_is_off_until_a_city_is_listed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,6 +105,26 @@ def test_limiter_spaces_the_same_chat() -> None:
     limiter.mark(5, is_group=False)
     assert limiter.delay(5, is_group=False) == pytest.approx(1)
     assert limiter.delay(6, is_group=False) == 0
+
+
+def test_on_ice_opens_the_arena_slot() -> None:
+    company = {
+        "public_code": "abcdefgh",
+        "venue_ref": "arena:42",
+        "source_ref": "ice_session:9001",
+    }
+    settings = Settings(
+        webapp_base_url="https://glide.example",
+        client_bot_username="glidebot",
+        client_bot_main_mini_app=True,
+    )
+    url = ice_slot_url(company, settings)
+    assert url == "https://t.me/glidebot?startapp=arena_42_s_9001"
+    snap = _snap()
+    buttons = buttons_for(company, snap, url)
+    assert buttons[-1] == {"text": "На лёд", "url": url}
+    assert [button["text"] for button in buttons[:2]] == ["Иду", "Не могу"]
+    assert button_rows(buttons) == [buttons[:2], [buttons[2]]]
 
 
 def test_identical_card_hash_is_stable() -> None:

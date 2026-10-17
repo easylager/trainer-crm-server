@@ -15,8 +15,8 @@ from fastapi import Depends
 
 from src.api.deps import get_session
 from src.application.ice_company.codes import web_participant_key
-from src.application.ice_company.lifecycle import buttons_for
-from src.application.ice_company.og import render_company_og
+from src.application.ice_company.lifecycle import button_rows, buttons_for, render_hash
+from src.application.ice_company.og import card_photo_url, render_company_card
 from src.application.ice_company.page import render_company_page
 from src.application.ice_company.service import (
     CompanyRejected,
@@ -33,7 +33,6 @@ from src.application.ice_company.service import (
     _load,
     _responses,
 )
-from src.application.png_render_cache import render_png_cached
 from src.shared.client_ip import trusted_client_ip
 from src.shared.config import Settings
 from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_id
@@ -309,21 +308,24 @@ async def company_ics(code: str, session: AsyncSession = Depends(get_session)) -
     )
 
 
+async def _card_png(session: AsyncSession, code: str) -> bytes:
+    company = await _load(session, code)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Компания не найдена.")
+    responses = await _responses(session, int(company["id"]))
+    return render_company_card(snap_from(company, responses))
+
+
 @router.get("/k/{code}/og.png")
 async def company_og(code: str, session: AsyncSession = Depends(get_session)) -> Response:
-    view = await read_company(session, code)
-    if view is None:
-        raise HTTPException(status_code=404, detail="Компания не найдена.")
-    line = f"Идут {view['going_count']} из {view['min_people']}"
-    png = await render_png_cached(
-        "ice-company-og",
-        {"code": code, "v": view["event"]["version"], "g": view["going_count"]},
-        view["card_text"],
-        render_company_og,
-        title=view["name"] or view["event"]["venue_label"],
-        line=line,
-    )
-    return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=900"})
+    png = await _card_png(session, code)
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=120"})
+
+
+@router.get("/k/{code}/card.png")
+async def company_card(code: str, session: AsyncSession = Depends(get_session)) -> Response:
+    png = await _card_png(session, code)
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.post("/api/public/ice-companies/{code}/telegram-prepare")
@@ -343,13 +345,14 @@ async def prepare_telegram_share(
     responses = await _responses(session, int(company["id"]))
     snap = snap_from(company, responses)
     from src.application.ice_company.copy import card_text
-    from src.application.ice_company.service import _page_url
+    from src.application.ice_company.service import ice_slot_url
 
     settings = Settings()
-    page = _page_url(settings, code)
+    page = ice_slot_url(company, settings)
     text = card_text(snap)
     markup = buttons_for(company, snap, page)
-    prepared = await _save_prepared(settings.telegram_bot_token_client, user_id, code, text, markup)
+    photo = card_photo_url(settings.webapp_base_url, code, render_hash(text, markup))
+    prepared = await _save_prepared(settings.telegram_bot_token_client, user_id, code, text, markup, photo)
     from src.application.ice_company.service import _track
 
     await _track(
@@ -368,30 +371,54 @@ async def prepare_telegram_share(
     }
 
 
-async def _save_prepared(token: str, user_id: int, code: str, text: str, buttons: list[dict[str, str]]) -> str | None:
+async def _save_prepared(
+    token: str,
+    user_id: int,
+    code: str,
+    text: str,
+    buttons: list[dict[str, str]],
+    photo_url: str | None = None,
+) -> str | None:
     import aiohttp
 
     if not (token or "").strip():
         return None
     keyboard = []
-    for button in buttons:
-        if button.get("url"):
-            keyboard.append({"text": button["text"], "url": button["url"]})
-        elif button.get("data"):
-            keyboard.append({"text": button["text"], "callback_data": button["data"]})
+    for group in button_rows(buttons):
+        row = []
+        for button in group:
+            if button.get("url"):
+                row.append({"text": button["text"], "url": button["url"]})
+            elif button.get("data"):
+                row.append({"text": button["text"], "callback_data": button["data"]})
+        if row:
+            keyboard.append(row)
     payload = {
         "user_id": user_id,
         "allow_user_chats": True,
         "allow_group_chats": True,
         "allow_channel_chats": False,
         "allow_bot_chats": False,
-        "result": {
-            "type": "article",
-            "id": code,
-            "title": "Компания на лёд",
-            "input_message_content": {"message_text": text},
-            "reply_markup": {"inline_keyboard": [keyboard]},
-        },
+        "result": (
+            {
+                "type": "photo",
+                "id": code,
+                "photo_url": photo_url,
+                "thumbnail_url": photo_url,
+                "photo_width": 1080,
+                "photo_height": 1080,
+                "caption": text,
+                "reply_markup": {"inline_keyboard": keyboard},
+            }
+            if photo_url
+            else {
+                "type": "article",
+                "id": code,
+                "title": "Компания на лёд",
+                "input_message_content": {"message_text": text},
+                "reply_markup": {"inline_keyboard": keyboard},
+            }
+        ),
     }
     url = f"https://api.telegram.org/bot{token}/savePreparedInlineMessage"
     try:

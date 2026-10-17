@@ -568,13 +568,13 @@
   function renderShareBar() {
     if (!global.GlideShareSheet) return '';
     if (scheduleSlots().length) {
+      var company = companyButton();
       return (
-        '<div class="arena-share" id="arenaShareBar">' +
+        '<div class="arena-share' + (company ? ' arena-share--pair' : '') + '" id="arenaShareBar">' +
         '<button type="button" class="arena-btn arena-btn--pri" data-action="share-invite">' +
         esc(shareInviteCtaLabel()) +
         '</button>' +
-        '<button type="button" class="arena-btn" data-action="share">Поделиться</button>' +
-        companyButton() +
+        (company || '<button type="button" class="arena-btn" data-action="share">Поделиться</button>') +
         '</div>'
       );
     }
@@ -604,7 +604,7 @@
     );
   }
 
-  function openShare(invite) {
+  function openShare(mode) {
     if (!global.GlideShareSheet || !state.card) return;
     var isIce = skatingCard();
     var payload = isIce ? shareSheetPayload() : { slots: [], slotSections: [] };
@@ -621,7 +621,9 @@
       slotSections: payload.slotSections,
       sessionId: resolvedShareSessionId(),
       sessionMissing: fs.kind === 'gone',
-      invite: !!invite,
+      invite: mode === 'invite',
+      variant: mode === 'company' ? 'company' : '',
+      company: !!(state.card && state.card.ice_company === true),
       venueType: skatingCard() ? 'ice' : state.card.venue_type,
       context: 'arena_card',
       placeName: state.card.name || '',
@@ -1774,13 +1776,8 @@
       else paintRowsOnly();
       return;
     }
-    if (action === 'share' || action === 'share-invite') {
-      openShare(action === 'share-invite');
-      return;
-    }
-    if (action === 'ice-company') {
-      var companySession = t.getAttribute('data-session') || resolvedShareSessionId();
-      if (companySession) shellNav('ice-company?s=' + encodeURIComponent(companySession));
+    if (action === 'share' || action === 'share-invite' || action === 'ice-company') {
+      openShare(action === 'share-invite' ? 'invite' : action === 'ice-company' ? 'company' : 'schedule');
       return;
     }
     if (action === 'report') openModal();

@@ -1872,6 +1872,7 @@
     state.seasonFacet = (data && data.season_facet) || null;
     if (data && data.service_count != null) state.serviceCount = Number(data.service_count) || 0;
     state.window = (data && data.window) || null;
+    state.iceCompany = !!(data && data.ice_company);
     renderCatalogHeader();
   }
 
@@ -2957,6 +2958,7 @@
         sessionId: picked,
         slots: picked ? [{ id: picked, label: label || '' }] : [],
         invite: true,
+        company: !!state.iceCompany,
         context: 'ice_list',
         placeName: placeName || '',
       });
@@ -2987,6 +2989,7 @@
           slots: slots,
           slotSections: slotSections,
           invite: true,
+          company: !!state.iceCompany,
           context: 'ice_list',
           placeName: placeName || '',
         });

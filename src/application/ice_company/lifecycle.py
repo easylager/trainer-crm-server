@@ -34,6 +34,7 @@ from src.application.ice_company.service import (
     _load,
     _responses,
     _settings,
+    ice_slot_url,
     snap_from,
     sync_open_events,
 )
@@ -72,13 +73,23 @@ def reset_edit_debounce() -> None:
 def buttons_for(company: dict[str, Any], snap: Snap, page_url: str) -> list[dict[str, str]]:
     code = str(company["public_code"])
     if snap.cancelled or snap.expired or snap.status in ("cancelled", "expired"):
-        return [{"text": "Открыть", "url": page_url}]
+        return [{"text": "На лёд", "url": page_url}]
     return [
         {"text": "Иду", "data": callback_data(code, "g")},
-        {"text": "Может", "data": callback_data(code, "m")},
         {"text": "Не могу", "data": callback_data(code, "x")},
-        {"text": "Открыть", "url": page_url},
+        {"text": "На лёд", "url": page_url},
     ]
+
+
+def button_rows(buttons: list[dict[str, str]]) -> list[list[dict[str, str]]]:
+    """Ответы в одном ряду. «На лёд» отдельно: в общем ряду телефон оставляет «На»."""
+    actions = [button for button in buttons if not button.get("url")]
+    links = [button for button in buttons if button.get("url")]
+    rows: list[list[dict[str, str]]] = []
+    if actions:
+        rows.append(actions)
+    rows.extend([link] for link in links)
+    return rows
 
 
 def render_hash(body: str, buttons: list[dict[str, str]]) -> str:
@@ -121,7 +132,7 @@ async def tick(
             FROM ice_company_events e
             WHERE e.id = c.event_id
               AND c.status = 'open'
-              AND e.starts_at <= :now
+              AND e.ends_at <= :now
             RETURNING c.id
             """
         ),
@@ -130,16 +141,39 @@ async def tick(
     stats["expired"] = len(expired.all())
     await session.commit()
     stats["edits"] += await _edit_dirty(session, sender, settings=cfg, debounce_sec=debounce_sec, now=current)
-    stats["dms"] += await _confirm_dms(session, sender, settings=cfg)
-    stats["dms"] += await _join_dms(session, sender)
-    stats["dms"] += await _schedule_dms(session, sender)
-    stats["dms"] += await _cancel_dms(session, sender)
-    sent, skipped = await _reminders(session, sender, settings=cfg, now=current)
-    stats["dms"] += sent
-    stats["skipped"] += skipped
+    # Сбор живёт на карточке в чате. Личные «через час», «выезжаю», «были на льду» не шлём.
+    skipped_reminders = await session.execute(
+        text("UPDATE ice_company_reminders SET status = 'skipped' WHERE status = 'pending'")
+    )
+    stats["skipped"] += int(skipped_reminders.rowcount or 0)
     await _purge(session, now=current)
     await session.commit()
     return stats
+
+
+async def remember_inline_card(session: AsyncSession, *, company_id: int, inline_message_id: str) -> None:
+    """Карточка из inline-режима. Id приходит в callback и в chosen_inline_result."""
+    inline_id = (inline_message_id or "").strip()
+    if not inline_id:
+        return
+    await session.execute(
+        text(
+            """
+            INSERT INTO ice_company_messages (company_id, inline_message_id, is_group)
+            SELECT :company_id, CAST(:inline_id AS varchar(128)), false
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ice_company_messages
+                WHERE company_id = :company_id
+                  AND inline_message_id = CAST(:inline_id AS varchar(128))
+            )
+            """
+        ),
+        {"company_id": company_id, "inline_id": inline_id},
+    )
+    await session.execute(
+        text("UPDATE ice_companies SET card_dirty = true WHERE id = :id"),
+        {"id": company_id},
+    )
 
 
 async def _edit_dirty(
@@ -173,10 +207,13 @@ async def _edit_dirty(
                 continue
         responses = await _responses(session, int(company["id"]))
         snap = snap_from(company, responses)
-        page = _page(settings, company["public_code"])
+        page = ice_slot_url(company, settings)
         body = snap and card_text_of(snap)
         markup = buttons_for(company, snap, page)
         digest = render_hash(body, markup)
+        from src.application.ice_company.og import card_photo_url
+
+        photo = card_photo_url(settings.webapp_base_url, str(company["public_code"]), digest)
         refs = (
             await session.execute(
                 text("SELECT * FROM ice_company_messages WHERE company_id = :id"),
@@ -184,10 +221,15 @@ async def _edit_dirty(
             )
         ).mappings().all()
         for ref in refs:
+            if not ref["inline_message_id"]:
+                continue
             if ref["last_render_hash"] == digest:
                 continue
+            payload = dict(ref)
+            if photo:
+                payload["photo_url"] = photo
             try:
-                await sender.edit(dict(ref), body, markup)
+                await sender.edit(payload, body, markup)
             except ChatMigrated as exc:
                 await session.execute(
                     text("UPDATE ice_company_messages SET chat_id = :chat WHERE id = :id"),
@@ -530,6 +572,9 @@ async def _reminders(
             await _mark_reminder(session, int(row["id"]), "skipped")
             skipped += 1
             continue
+        if not await _mark_reminder(session, int(row["id"]), "sent"):
+            continue
+        await session.commit()
         code = str(company["public_code"])
         for person in targets:
             chat_id = _chat_id(str(person["participant_key"]))
@@ -554,22 +599,25 @@ async def _reminders(
                 continue
             if await _dm(sender, session, chat_id=chat_id, body=body, buttons=markup, company_id=int(company["id"])):
                 sent += 1
-        await _mark_reminder(session, int(row["id"]), "sent")
     await session.commit()
     return sent, skipped
 
 
-async def _mark_reminder(session: AsyncSession, reminder_id: int, status: str) -> None:
-    await session.execute(
+async def _mark_reminder(session: AsyncSession, reminder_id: int, status: str) -> bool:
+    # Один и тот же bind дважды даёт AmbiguousParameterError в asyncpg,
+    # транзакция откатывается, и тик шлёт то же напоминание снова.
+    result = await session.execute(
         text(
             """
             UPDATE ice_company_reminders
-            SET status = :status, sent_at = CASE WHEN :status = 'sent' THEN now() ELSE sent_at END
+            SET status = :status,
+                sent_at = CASE WHEN :is_sent THEN now() ELSE sent_at END
             WHERE id = :id AND status = 'pending'
             """
         ),
-        {"status": status, "id": reminder_id},
+        {"status": status, "is_sent": status == "sent", "id": reminder_id},
     )
+    return result.rowcount == 1
 
 
 async def _purge(session: AsyncSession, *, now: datetime) -> None:
