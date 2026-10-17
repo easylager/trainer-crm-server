@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from src.application.selection_page import (
+    _b_place_card,
     selection_count_noun,
     selection_description,
     selection_place_count,
     selection_share_description,
+    sessions_left_label,
 )
 
 _ELEVEN_PLACES = [{"id": n, "name": f"Каток {n}", "venue_type": "ice"} for n in range(11)]
@@ -23,6 +27,37 @@ def _view(**over):
     }
     view.update(over)
     return view
+
+
+def test_site_card_names_how_many_sessions_remain() -> None:
+    item = {
+        "id": 3,
+        "slug": "tts-zamok",
+        "name": "ТЦ Замок",
+        "venue_type": "ice",
+        "live": {"kind": "session", "more_count": 78},
+    }
+    assert sessions_left_label(item) == "Ещё 78 сеансов в расписании"
+    assert sessions_left_label({"live": {"more_count": 1}}) == "Ещё 1 сеанс в расписании"
+    assert sessions_left_label({"live": {"more_count": 0}}) == ""
+    html = _b_place_card(
+        item,
+        city_name="Минск",
+        slots=[
+            {
+                "id": 1,
+                "local_date": date(2026, 10, 17),
+                "starts_at_local": "22:15",
+                "price_adult_minor": 1100,
+                "currency_code": "BYN",
+            }
+        ],
+        more_anchor="schedule",
+        service_mode=False,
+        service_highlight_keys=frozenset(),
+    )
+    assert "Ещё 78 сеансов в расписании" in html
+    assert 'href="/p/minsk/tts-zamok#schedule"' in html
 
 
 def test_place_count_is_the_whole_selection_not_the_page() -> None:

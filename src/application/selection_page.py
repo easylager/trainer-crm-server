@@ -945,7 +945,10 @@ def _place_html(
             )
         else:
             chips += f'<span class="{_esc(slot_cls)}">{slot_inner}</span>'
-    if rest > 0 and href:
+    left = sessions_left_label(item)
+    if left and href:
+        chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">{_esc(left)}</a>'
+    elif rest > 0 and href:
         chips += f'<a class="slot slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>'
     raw_line = str(item.get("live_line") or "").strip()
     line = "" if chips or not raw_line else f'<p class="muted">{_esc(raw_line)}</p>'
@@ -1388,6 +1391,27 @@ def _b_card_head(item: Mapping[str, Any], *, city_name: str, href: str, extra: s
 _B_FACT_LIVE_KINDS = frozenset({"phone", "season_closed", "closed", "place"})
 
 
+def sessions_left_label(item: Mapping[str, Any]) -> str:
+    """«Ещё N сеансов в расписании» — та же строка, что под карточкой в ленте приложения.
+
+    ``more_count`` считает все будущие сеансы, кроме ближайшего. Число «ещё 60»
+    на сайте было другим: это сколько слотов не влезло в четыре чипа, и оно
+    обрезалось на 64.
+    """
+    live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
+    raw = live.get("more_count")
+    if raw is None:
+        return ""
+    try:
+        more = int(raw)
+    except (TypeError, ValueError):
+        return ""
+    if more <= 0:
+        return ""
+    word = plural_ru(more, "сеанс", "сеанса", "сеансов")
+    return f"Ещё {more} {word} в расписании"
+
+
 def _b_state_note(item: Mapping[str, Any]) -> str:
     live = item.get("live") if isinstance(item.get("live"), Mapping) else {}
     if str(live.get("kind") or "") not in _B_FACT_LIVE_KINDS:
@@ -1562,8 +1586,12 @@ def _b_place_card(
         else:
             tickets.append(f'<span class="b-slot">{inner}</span>')
     rest = len(slots) - MAX_SLOTS_PER_PLACE
-    if rest > 0 and href:
+    left = sessions_left_label(item)
+    if not left and rest > 0 and href:
         tickets.append(f'<a class="b-slot b-slot--more" href="{_esc(href)}#{_esc(more_anchor)}">ещё {rest}</a>')
+    left_html = (
+        f'<a class="b-left" href="{_esc(href)}#{_esc(more_anchor)}">{_esc(left)}</a>' if left and href else ""
+    )
     note = _b_state_note(item)
     body = (
         f'<div class="b-slots">{"".join(tickets)}</div>'
@@ -1576,11 +1604,11 @@ def _b_place_card(
     vt = place_vt_attr(slug) if slug else ""
     head_block = _b_card_head(item, city_name=city_name, href=href) + off_extra
     if not slots or not href:
-        return f'<article class="{card_cls}"{vt}>' + head_block + body + "</article>"
+        return f'<article class="{card_cls}"{vt}>' + head_block + body + left_html + "</article>"
     first = slots[0]
     sid = first.get("id")
     if sid is None:
-        return f'<article class="{card_cls}"{vt}>' + head_block + body + "</article>"
+        return f'<article class="{card_cls}"{vt}>' + head_block + body + left_html + "</article>"
     from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
 
     place_name = format_public_name(str(item.get("name") or ""))
@@ -1598,7 +1626,7 @@ def _b_place_card(
         body = f'<div class="b-slots">{invite}{"".join(tickets)}</div>'
     else:
         body = f'<div class="b-slots">{invite}</div>'
-    return f'<article class="{card_cls}"{vt}>' + head_block + body + "</article>"
+    return f'<article class="{card_cls}"{vt}>' + head_block + body + left_html + "</article>"
 
 
 def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:
