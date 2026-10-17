@@ -773,10 +773,17 @@ async def serve_photo(file_key: str) -> Response:
     """
     from starlette.concurrency import run_in_threadpool
 
-    result = await run_in_threadpool(s3.get_photo, file_key)
-    if not result:
-        raise HTTPException(status_code=404, detail="Not found")
-    body, content_type = result
+    from src.infrastructure.photo_bytes_cache import photo_bytes_cache
+
+    cached = photo_bytes_cache.get(file_key)
+    if cached is None:
+        result = await run_in_threadpool(s3.get_photo, file_key)
+        if not result:
+            raise HTTPException(status_code=404, detail="Not found")
+        body, content_type = result
+        photo_bytes_cache.put(file_key, body, content_type)
+    else:
+        body, content_type = cached
     # file_key is content-addressed by uuid in path; safe to cache aggressively at client/CDN.
     return Response(
         content=body,

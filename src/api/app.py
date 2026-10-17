@@ -2401,9 +2401,12 @@ async def _static_webapp_cache_align(request: Request, call_next):
     else no-store. Without this, Starlette StaticFiles default differs from versioned FileResponse routes.
     """
     response = await call_next(request)
-    if request.url.path.startswith("/static/webapp"):
+    path = request.url.path
+    if path.startswith("/static/webapp"):
         for k, v in _webapp_versioned_asset_cache_headers(request).items():
             response.headers[k] = v
+    elif path.startswith("/logos") or path == "/favicon.ico":
+        response.headers["Cache-Control"] = "public, max-age=604800"
     return response
 
 
