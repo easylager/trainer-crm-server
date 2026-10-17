@@ -1650,8 +1650,36 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
         + span("line", extra)
         + span("soon", soon)
         + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
+        + _company_link(view)
         + "</div></section>"
     )
+
+
+def _company_link(view: Mapping[str, Any]) -> str:
+    """Кнопка сбора компании только если город включён флагом. Иначе разметки нет."""
+    from src.application.ice_company.flag import city_enabled
+    from src.application.place_links import public_telegram_cta_url
+    from src.shared.config import Settings
+
+    card = view.get("card")
+    focus = view.get("focus")
+    if not isinstance(card, Mapping) or not isinstance(focus, Mapping) or focus.get("id") is None:
+        return ""
+    city_id = int(card.get("city_id") or 0)
+    if not city_enabled(city_id):
+        return ""
+    session_id = int(focus["id"])
+    url = public_telegram_cta_url(
+        Settings().webapp_base_url or "",
+        start_param=f"company_{session_id}",
+        surface="place_page",
+        city_id=city_id,
+        arena_id=int(card.get("id") or 0) or None,
+        session_id=session_id,
+    )
+    if not url:
+        return ""
+    return f'<a class="b-plan__company" href="{_esc(url)}">Собрать компанию</a>'
 
 
 def render_place_body_b(

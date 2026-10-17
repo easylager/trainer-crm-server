@@ -4,6 +4,7 @@ Photos resized on upload: main 800px, list thumb 320px (progressive JPEG 82%/80%
 """
 import io
 import posixpath
+import threading
 import uuid
 from pathlib import Path
 
@@ -273,24 +274,44 @@ def resolve_object_key_under_prefixes(
     return None
 
 
+_s3_client = None
+_s3_client_sig: tuple | None = None
+_s3_client_lock = threading.Lock()
+
+
 def _get_client():
+    """Один клиент на процесс: иначе каждое фото заново жмёт TLS до хранилища."""
+    global _s3_client, _s3_client_sig
     settings = Settings()
     if not all([settings.s3_endpoint, settings.s3_access_key, settings.s3_secret_key]):
         raise RuntimeError("S3 not configured: set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY")
-    import boto3
-    from botocore.config import Config
-    config = Config(
-        signature_version="s3v4",
-        s3={"addressing_style": "path" if settings.s3_path_style else "auto"},
+    sig = (
+        settings.s3_endpoint,
+        settings.s3_access_key,
+        settings.s3_region,
+        bool(settings.s3_path_style),
     )
-    return boto3.client(
-        "s3",
-        endpoint_url=settings.s3_endpoint,
-        aws_access_key_id=settings.s3_access_key,
-        aws_secret_access_key=settings.s3_secret_key,
-        config=config,
-        region_name=settings.s3_region,
-    )
+    with _s3_client_lock:
+        if _s3_client is not None and _s3_client_sig == sig:
+            return _s3_client
+        import boto3
+        from botocore.config import Config
+        config = Config(
+            signature_version="s3v4",
+            s3={"addressing_style": "path" if settings.s3_path_style else "auto"},
+            max_pool_connections=32,
+        )
+        client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3_endpoint,
+            aws_access_key_id=settings.s3_access_key,
+            aws_secret_access_key=settings.s3_secret_key,
+            config=config,
+            region_name=settings.s3_region,
+        )
+        _s3_client = client
+        _s3_client_sig = sig
+        return client
 
 
 def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) -> tuple[bytes, str] | None:

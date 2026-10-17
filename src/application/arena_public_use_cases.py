@@ -1748,8 +1748,11 @@ async def list_public_ice_arenas(
     await attach_arena_media_payloads(session, page)
     items = [_public_list_item(row, intent=intent_value, today=today) for row in page]
     next_cursor = str(offset + cap) if offset + cap < len(rows) else None
+    from src.application.ice_company.flag import city_enabled
+
     return {
         "items": items,
+        "ice_company": bool(city_id and city_enabled(int(city_id))),
         "total": len(rows),
         "intent": intent_value,
         "venue_type": sorted(venue_filter) if venue_filter else None,
@@ -2237,6 +2240,10 @@ async def get_public_arena_card(
         ),
     }
     _sanitize_public_profile_fields(card)
+    from src.application.ice_company.flag import city_enabled
+
+    if city_enabled(int(row["city_id"])):
+        card["ice_company"] = True
     return card
 
 

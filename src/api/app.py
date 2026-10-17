@@ -34,6 +34,7 @@ from src.api.routes.zovi_create_page import router as zovi_create_page_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
 from src.api.routes.zovi_pages import router as zovi_pages_router
+from src.api.routes.public_ice_company import router as public_ice_company_router
 from src.api.routes.catalog_entry import router as catalog_entry_router
 from src.api.routes.catalog_consumer_telemetry import router as catalog_consumer_telemetry_router
 from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
@@ -210,6 +211,16 @@ def webapp_catalog_page(request: Request):
 def webapp_arena_page():
     """TASK-052: public Ice Discovery arena card Mini App."""
     path = _WEBAPP_DIR / "arena.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/ice-company")
+@app.get("/webapp/ice-company.html")
+def webapp_ice_company_page():
+    """Сбор компании на сеанс. Кнопка на карточке есть только при флаге города."""
+    path = _WEBAPP_DIR / "ice-company.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
@@ -2370,6 +2381,7 @@ app.include_router(zovi_create_page_router)
 app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
 app.include_router(zovi_pages_router)
+app.include_router(public_ice_company_router)
 app.include_router(catalog_entry_router)
 app.include_router(catalog_consumer_telemetry_router)
 app.include_router(redirects_router)
@@ -2389,9 +2401,12 @@ async def _static_webapp_cache_align(request: Request, call_next):
     else no-store. Without this, Starlette StaticFiles default differs from versioned FileResponse routes.
     """
     response = await call_next(request)
-    if request.url.path.startswith("/static/webapp"):
+    path = request.url.path
+    if path.startswith("/static/webapp"):
         for k, v in _webapp_versioned_asset_cache_headers(request).items():
             response.headers[k] = v
+    elif path.startswith("/logos") or path == "/favicon.ico":
+        response.headers["Cache-Control"] = "public, max-age=604800"
     return response
 
 

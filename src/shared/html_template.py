@@ -29,7 +29,35 @@ def fill_placeholders(template: str, values: Mapping[str, str]) -> str:
         key = match.group(0)
         return values[key] if key in values else key
 
-    return _PLACEHOLDER_RE.sub(_sub, template)
+    return inject_lcp_preload(_PLACEHOLDER_RE.sub(_sub, template))
+
+
+_LCP_IMG_RE = re.compile(r'<img\b(?=[^>]*\bfetchpriority="high")[^>]*>', re.IGNORECASE)
+_ATTR_RE = re.compile(r'\b(src|srcset|sizes)="([^"]*)"')
+
+
+def inject_lcp_preload(html: str) -> str:
+    """Первая картинка героя начинает грузиться вместе со стилями, не после разбора всего тела."""
+    if 'rel="preload" as="image"' in html:
+        return html
+    match = _LCP_IMG_RE.search(html)
+    if not match:
+        return html
+    attrs = {name: value for name, value in _ATTR_RE.findall(match.group(0))}
+    src = attrs.get("src")
+    if not src:
+        return html
+    link = f'<link rel="preload" as="image" href="{src}" fetchpriority="high"'
+    if attrs.get("srcset"):
+        link += f' imagesrcset="{attrs["srcset"]}"'
+    if attrs.get("sizes"):
+        link += f' imagesizes="{attrs["sizes"]}"'
+    link += " />"
+    head = re.search(r"<head[^>]*>", html, re.IGNORECASE)
+    if not head:
+        return html
+    at = head.end()
+    return html[:at] + "\n  " + link + html[at:]
 
 
 def html_lang_for_country(country: str | None) -> tuple[str, str]:
