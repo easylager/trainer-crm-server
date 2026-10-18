@@ -6,7 +6,7 @@
 
 ## До merge
 
-1. На ветке поезда зелёный CI, `alembic heads` — один head, ревизия `0237_ice_companies` в истории.
+1. На ветке поезда зелёный CI, `alembic heads` — один head (`0244_minsk_load_characters`), ревизии `0237`–`0241` в истории.
 2. Юрист: черновик [`2026-10-16-ice-company-pdn-draft.md`](../plans/2026-10-16-ice-company-pdn-draft.md) — статус зафиксирован (ок / правки / блок рассылки).
 3. Список `city_id` для пилота снят с **прод**-таблицы `cities`, не с локального сида.
 
@@ -14,7 +14,7 @@
 
 4. `WEBAPP_BASE_URL` — публичный `https://` без хвоста `/`. От него `page_url`, `og.png`, `event.ics` на `/k/{code}`.
 5. `CLIENT_BOT_USERNAME`, Main Mini App на тот же домен — иначе `startapp=company_{session_id}` не откроет мини-апп (см. [`catalog-share-launch.md`](catalog-share-launch.md) §15).
-6. Миграция на проде: `alembic upgrade head` → есть таблицы `ice_companies`, `ice_company_events`, `ice_company_responses`, `ice_company_messages`, `ice_company_reminders`.
+6. Миграция на проде: `alembic upgrade head` → есть таблицы `ice_companies`, `ice_company_events`, `ice_company_responses`, `ice_company_messages` (`ice_company_reminders` убрана миграцией `0241`).
 7. Проверка CHECK аналитики (новые kind):
    ```sql
    SELECT pg_get_constraintdef(oid)
@@ -49,7 +49,7 @@
     ```sql
     SELECT kind, count(*)
     FROM catalog_consumer_events
-    WHERE kind LIKE 'company_%' OR kind IN ('card_shared', 'reminder_sent', 'outbound_429')
+    WHERE kind LIKE 'company_%' OR kind IN ('card_shared', 'outbound_429')
       AND occurred_at > now() - interval '1 hour'
     GROUP BY 1
     ORDER BY 1;
