@@ -383,6 +383,25 @@ async def check_due_results(
     return out
 
 
+async def run_tick(
+    session: AsyncSession,
+    fetch: Fetch,
+    *,
+    now: datetime,
+    alert: AlertSender,
+    calendar_due: bool,
+) -> dict[str, object]:
+    """Один проход цикла: календарь, если пора, затем итоги. Не коммитит."""
+    calendar = await sync_calendar(session, fetch, now=now) if calendar_due else None
+    results = await check_due_results(session, fetch, now=now, alert=alert)
+    return {
+        "calendar": calendar,
+        "checked": len(results),
+        "final": sum(1 for _, kind in results if kind == KIND_FINAL),
+        "review": sum(1 for _, kind in results if kind == KIND_REVIEW),
+    }
+
+
 async def send_review_alert(text_body: str) -> bool | None:
     from src.ingestion.alerts import send_ice_health_to_admins
 
@@ -411,6 +430,7 @@ __all__ = [
     "get_match",
     "list_matches",
     "match_url",
+    "run_tick",
     "send_review_alert",
     "set_manual_result",
     "sync_calendar",

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Матчи Динамо</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610191"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610191" />
+  <link rel="stylesheet" href="theme.css?v=202610191" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color, #1a1a1a);
+      color: var(--tg-theme-text-color, #f5f5f5);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: calc(32px + env(safe-area-inset-bottom, 0));
+    }
+    .header { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+    .link-back { color: var(--tg-theme-link-color, #38bdf8); font-size: 13px; text-decoration: none; }
+    h2 { margin: 18px 0 8px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--tg-theme-hint-color, #9ca3af); }
+    .empty { font-size: 14px; color: var(--tg-theme-hint-color, #9ca3af); margin: 0 0 8px; }
+    .card {
+      background: var(--tg-theme-secondary-bg-color, #111827);
+      border-radius: 14px;
+      padding: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      margin-bottom: 12px;
+    }
+    .teams { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+    .when, .meta, .reason { font-size: 13px; color: var(--tg-theme-hint-color, #9ca3af); margin: 0 0 4px; }
+    .reason { color: var(--tg-theme-text-color, #f5f5f5); }
+    form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 10px; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--tg-theme-hint-color, #9ca3af); }
+    input[type="number"], select {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(15, 23, 42, 0.8);
+      color: inherit;
+      font-size: 14px;
+      width: 88px;
+    }
+    select { width: auto; }
+    .btn {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--tg-theme-button-color, #2ea6ff);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    .err { flex-basis: 100%; margin: 0; font-size: 13px; color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Матчи Динамо</h1>
+    <a class="link-back" href="/webapp/admin-dicts">← Справочники</a>
+  </div>
+  <h2>На проверке</h2>
+  <div id="review"></div>
+  <h2>Последние</h2>
+  <div id="recent"></div>
+  <script src="/webapp/admin-hockey-main.js?v=202610191"></script>
+</body>
+</html>

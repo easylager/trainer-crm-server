@@ -17,6 +17,7 @@ from src.application.hockey_matches import (
     check_due_results,
     decide_result,
     match_url,
+    run_tick,
     set_manual_result,
     sync_calendar,
     get_match,
@@ -236,6 +237,66 @@ async def test_disagreement_alerts_once_then_manual_closes(db_session) -> None:
     )
     assert (row.status, row.result_source, row.review_reason) == ("final", "manual", None)
     assert await check_due_results(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 21, 10), alert=alert) == []
+
+
+def _window_pages() -> dict[str, str]:
+    pages = {
+        HCDINAMO_CALENDAR_URL: '<a href="/matches/1218869/">x</a><a href="/matches/1218873/">y</a><a href="/matches/1/">z</a>'
+    }
+    pages[match_url("1218869")] = _page("hcdinamo-match-final.html")
+    pages[match_url("1218873")] = _page("hcdinamo-match-upcoming.html")
+    pages[match_url("1")] = "<html>сломано</html>"
+    pages[HOCKEY_BY_URL] = _page("hockey-by-ticker.html")
+    return pages
+
+
+async def _silent(_body: str) -> bool:
+    return True
+
+
+@pytest.mark.asyncio
+async def test_run_tick_calendar_due_inserts_window(db_session) -> None:
+    pages = _window_pages()
+    counts = await run_tick(
+        db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0), alert=_silent, calendar_due=True
+    )
+    assert counts["calendar"]["inserted"] == 2 and counts["calendar"]["failed"] == 1
+    stored = (await db_session.execute(text("SELECT COUNT(*) FROM hockey_matches"))).scalar_one()
+    assert stored == 2
+
+
+@pytest.mark.asyncio
+async def test_run_tick_without_calendar_due_leaves_calendar(db_session) -> None:
+    pages = _window_pages()
+    await run_tick(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0), alert=_silent, calendar_due=True)
+    seen: list[str] = []
+
+    async def fetch(url: str) -> str:
+        seen.append(url)
+        if url == HCDINAMO_CALENDAR_URL:
+            raise AssertionError("календарь не должен запрашиваться")
+        return pages[url]
+
+    before = (await db_session.execute(text("SELECT COUNT(*) FROM hockey_matches"))).scalar_one()
+    counts = await run_tick(db_session, fetch, now=_minsk(2026, 10, 19, 12, 10), alert=_silent, calendar_due=False)
+    after = (await db_session.execute(text("SELECT COUNT(*) FROM hockey_matches"))).scalar_one()
+    assert counts["calendar"] is None
+    assert before == after == 2
+    assert HCDINAMO_CALENDAR_URL not in seen
+
+
+@pytest.mark.asyncio
+async def test_run_tick_publishes_played_match(db_session) -> None:
+    pages = {match_url("1218869"): _page("hcdinamo-match-final.html"), HOCKEY_BY_URL: _page("hockey-by-ticker.html")}
+    await upsert_calendar_match(db_session, _match("final", "1218869"), now=_minsk(2026, 10, 18, 12, 0))
+    counts = await run_tick(
+        db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=False
+    )
+    assert counts["final"] == 1 and counts["calendar"] is None
+    row = (
+        await db_session.execute(text("SELECT status, home_score, away_score, result_source FROM hockey_matches"))
+    ).one()
+    assert tuple(row) == ("final", 1, 4, "auto")
 
 
 @pytest.mark.asyncio

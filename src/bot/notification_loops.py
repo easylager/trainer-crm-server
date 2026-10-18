@@ -3313,3 +3313,44 @@ async def run_ice_forecast_loop(client_bot: Bot) -> None:
             await asyncio.sleep(DIGEST_LOOP_INTERVAL_SEC)
         except asyncio.CancelledError:
             break
+
+
+HOCKEY_MATCHES_INTERVAL_SEC = 10 * 60
+HOCKEY_CALENDAR_EVERY = timedelta(hours=6)
+
+
+async def run_hockey_matches_loop() -> None:
+    """Каждые 10 минут. Молчит, пока HOCKEY_MATCHES_ENABLED выключен. Календарь — не чаще раза в 6 часов."""
+    from src.application.hockey_matches import default_fetch, run_tick, send_review_alert
+    from src.shared.config import get_settings
+
+    logger.info("[hockey_matches_loop] started")
+    last_calendar: datetime | None = None
+    while True:
+        try:
+            settings = get_settings()
+            if settings.hockey_matches_enabled:
+                now = datetime.now(timezone.utc)
+                calendar_due = last_calendar is None or now - last_calendar >= HOCKEY_CALENDAR_EVERY
+                async with async_session_factory() as session:
+                    counts = await run_tick(
+                        session,
+                        default_fetch,
+                        now=now,
+                        alert=send_review_alert,
+                        calendar_due=calendar_due,
+                    )
+                    await session.commit()
+                if calendar_due:
+                    last_calendar = now
+                logger.info("[hockey_matches_loop] %s", counts)
+        except asyncio.CancelledError:
+            logger.info("[hockey_matches_loop] cancelled")
+            break
+        except Exception as e:
+            logger.exception("Hockey matches loop: %s", e)
+
+        try:
+            await asyncio.sleep(HOCKEY_MATCHES_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            break
