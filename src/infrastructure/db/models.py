@@ -549,6 +549,49 @@ class HockeyMatch(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeyPlayer(Base):
+    """Игрок «Кто кого»: ключ клиента Mini App и имя для таблиц (TASK-297)."""
+
+    __tablename__ = "hockey_players"
+    __table_args__ = (CheckConstraint("char_length(display_name) BETWEEN 1 AND 40", name="ck_hockey_players_name"),)
+
+    player_key: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=False)
+    display_name: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyPick(Base):
+    """Ход игрока на матч: сторона или точный счёт; очки после итога (TASK-297)."""
+
+    __tablename__ = "hockey_picks"
+    __table_args__ = (
+        UniqueConstraint("match_id", "player_key", name="uq_hockey_picks_match_player"),
+        Index("ix_hockey_picks_player", "player_key"),
+        CheckConstraint("side IN ('home', 'away')", name="ck_hockey_picks_side"),
+        CheckConstraint("(home_score IS NULL) = (away_score IS NULL)", name="ck_hockey_picks_score_pair"),
+        CheckConstraint(
+            "home_score IS NULL OR (home_score >= 0 AND away_score >= 0 AND home_score <> away_score"
+            " AND (side = 'home') = (home_score > away_score))",
+            name="ck_hockey_picks_score_side",
+        ),
+        CheckConstraint("points IS NULL OR points IN (0, 1, 5)", name="ck_hockey_picks_points"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("hockey_matches.id", ondelete="CASCADE"), nullable=False)
+    player_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    home_score: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+    away_score: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+    points: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class ClientBroadcastLog(Base):
     """One delivery attempt of a client broadcast. Repeat runs skip existing rows."""
 

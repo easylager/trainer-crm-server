@@ -406,9 +406,13 @@ async def run_tick(
             logger.warning("hockey calendar sync failed", exc_info=True)
             calendar_failed = True
     results = await check_due_results(session, fetch, now=now, alert=alert)
+    from src.application.hockey_game import score_finished_matches
+
+    scored = await score_finished_matches(session, now=now)
     return {
         "calendar": calendar,
         "calendar_failed": calendar_failed,
+        "scored_picks": scored,
         "checked": len(results),
         "final": sum(1 for _, kind in results if kind == KIND_FINAL),
         "review": sum(1 for _, kind in results if kind == KIND_REVIEW),

@@ -13,10 +13,11 @@ from sqlalchemy.exc import IntegrityError
 
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versions"
 MIGRATION_FILE = "0244_hockey_matches.py"
+DEPENDENT_FILE = "0245_hockey_picks.py"
 
 
-async def _run_migration_step(db_session, step: str) -> None:
-    migration = runpy.run_path(str(MIGRATIONS / MIGRATION_FILE))
+async def _run_migration_step(db_session, step: str, file: str = MIGRATION_FILE) -> None:
+    migration = runpy.run_path(str(MIGRATIONS / file))
     connection = await db_session.connection()
 
     def invoke(sync_connection) -> None:
@@ -36,6 +37,8 @@ async def _columns(db_session) -> list[str]:
 
 @pytest.mark.asyncio
 async def test_hockey_matches_roundtrip_and_final_guard(db_session) -> None:
+    # Ходы игры (0245) ссылаются на матчи — их снимаем первыми и возвращаем в конце.
+    await _run_migration_step(db_session, "downgrade", DEPENDENT_FILE)
     await _run_migration_step(db_session, "downgrade")
     assert await _columns(db_session) == []
 
@@ -58,3 +61,5 @@ async def test_hockey_matches_roundtrip_and_final_guard(db_session) -> None:
                 UPDATE hockey_matches SET status = 'final', home_score = 2, away_score = 2,
                     decided_in = 'regulation', result_source = 'auto' WHERE source_match_id = '1'
                 """))
+
+    await _run_migration_step(db_session, "upgrade", DEPENDENT_FILE)

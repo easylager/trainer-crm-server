@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.miniapp_auth.deps import get_admin_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
+from src.application.hockey_game import score_finished_matches
 from src.application.hockey_matches import STATUS_REVIEW, MatchRow, list_matches, set_manual_result
 
 router = APIRouter(tags=["webapp-admin-hockey"])
@@ -78,5 +79,7 @@ async def post_admin_hockey_result(
         raise HTTPException(status_code=404, detail="Матч не найден") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # Очки игроков — сразу, а не на следующем тике цикла.
+    await score_finished_matches(session, now=datetime.now(timezone.utc))
     await session.commit()
     return _match_out(row)
