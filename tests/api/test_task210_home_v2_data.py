@@ -489,6 +489,10 @@ async def test_home_internal_hrefs_resolve(app_use_test_db, db_session, monkeypa
         assert any(href.startswith("/p/") for href in hrefs)
         broken: list[str] = []
         for href in sorted(hrefs):
+            # Preload героя копирует src картинки в href. Это ключ объекта, не маршрут
+            # страницы: в общей тестовой базе кадр может быть опубликован без файла.
+            if href.startswith("/api/public/photos/"):
+                continue
             followed = await client.get(href)
             if followed.status_code not in range(200, 400):
                 broken.append(f"{followed.status_code} {href}")
