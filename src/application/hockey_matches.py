@@ -192,6 +192,13 @@ _DUE = text(f"""
     ORDER BY starts_at
     """)
 
+# Вышел за окно автоподтверждения без итога (цикл стоял или источники молчали) — только человек.
+_STALE = text(f"""
+    SELECT {_COLUMNS} FROM hockey_matches
+    WHERE status = 'scheduled' AND starts_at < :window_start
+    ORDER BY starts_at
+    """)
+
 
 @dataclass(frozen=True)
 class MatchRow:
@@ -232,6 +239,9 @@ async def upsert_calendar_match(session: AsyncSession, page: HcdinamoMatch, *, n
     }
     record = (await session.execute(_SELECT_BY_SOURCE, params)).one_or_none()
     if record is None:
+        # Давно сыгранный матч из окна календаря: ход на него не сделать, а подтвердить итог уже нечем.
+        if _utc(page.starts_at) < _utc(now) - AUTO_CONFIRM_WINDOW:
+            return "skipped"
         await session.execute(_INSERT, params)
         return "inserted"
     row = _row(record)
@@ -356,15 +366,24 @@ async def check_due_results(
     alert: AlertSender,
 ) -> list[tuple[int, str]]:
     """Один проход по матчам, которым пора иметь итог. Возвращает (id, решение)."""
+    out: list[tuple[int, str]] = []
+    window_start = _utc(now) - AUTO_CONFIRM_WINDOW
+    for record in (await session.execute(_STALE, {"window_start": window_start})).all():
+        stale = _row(record)
+        decision = Decision(KIND_REVIEW, reason="автоматически подтвердить итог уже нельзя: прошло больше 3 дней")
+        if await apply_decision(session, stale, decision, now=now):
+            delivered = await alert(format_review_alert(stale, decision.reason))
+            if delivered is not False:
+                await session.execute(_ALERTED, {"id": stale.id, "now": _utc(now)})
+        out.append((stale.id, decision.kind))
     rows = await due_for_result(session, now=now)
     if not rows:
-        return []
+        return out
     try:
         ticker = parse_hockey_by_ticker(await fetch(HOCKEY_BY_URL))
     except Exception:
         logger.warning("hockey results: hockey.by failed", exc_info=True)
         ticker = []
-    out: list[tuple[int, str]] = []
     for row in rows:
         try:
             page: HcdinamoMatch | None = parse_hcdinamo_match(

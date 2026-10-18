@@ -324,3 +324,27 @@ async def test_run_tick_calendar_failure_still_checks_results(db_session) -> Non
     counts = await run_tick(db_session, fetch, now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=True)
     assert counts["calendar_failed"] is True and counts["calendar"] is None
     assert counts["final"] == 1
+
+
+@pytest.mark.asyncio
+async def test_long_past_match_from_calendar_window_is_not_inserted(db_session) -> None:
+    # Живой прогон 2026-10-19: окно /matches/ отдаёт и матчи двухнедельной давности.
+    page = _match("final", "1218869")
+    assert await upsert_calendar_match(db_session, page, now=page.starts_at + timedelta(days=4)) == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_stale_scheduled_match_goes_to_review_with_one_alert(db_session) -> None:
+    page = _match("final", "1218869")
+    await upsert_calendar_match(db_session, page, now=page.starts_at - timedelta(days=1))
+    alerts: list[str] = []
+
+    async def alert(body: str) -> bool:
+        alerts.append(body)
+        return True
+
+    later = page.starts_at + timedelta(days=4)
+    first = await check_due_results(db_session, _fake_fetch({}), now=later, alert=alert)
+    second = await check_due_results(db_session, _fake_fetch({}), now=later + timedelta(minutes=10), alert=alert)
+    assert [k for _, k in first] == [KIND_REVIEW] and second == []
+    assert len(alerts) == 1 and "больше 3 дней" in alerts[0]
