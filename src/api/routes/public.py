@@ -385,6 +385,19 @@ async def trainer_start_from_landing(
     }
 
 
+@router.get("/cities/{city_id}/for-you")
+async def get_city_for_you(
+    city_id: int,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Подборка «Для вас» для страницы города и вкладки «Поиск». Выключенный город — пустой список."""
+    from src.application.city_picks import for_you
+
+    set_public_json_list_cache(response)
+    return {"items": await for_you(session, int(city_id))}
+
+
 @router.get("/arenas")
 async def get_arenas(
     city_id: int,

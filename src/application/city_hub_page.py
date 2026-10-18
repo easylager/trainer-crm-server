@@ -182,6 +182,12 @@ _TRAINERS_SQL = text(
 )
 
 
+async def _city_for_you(session: AsyncSession, city_id: int, *, now: datetime) -> list[dict[str, Any]]:
+    from src.application.city_picks import for_you
+
+    return await for_you(session, city_id, now=now)
+
+
 def _esc(value: Any) -> str:
     return html_lib.escape(str(value if value is not None else ""), quote=True)
 
@@ -439,6 +445,7 @@ async def load_city_hub_view(
         "upcoming": upcoming,
         "next_ohm": next_ohm,
         "places": places,
+        "for_you": await _city_for_you(session, city_id, now=now),
         "service_open": [p for p in service_places if p["open_state"] in ("open", "soon")],
         "shops_open": [p for p in shops if p["open_state"] in ("open", "soon")],
         "trainer_count": trainer_count,
