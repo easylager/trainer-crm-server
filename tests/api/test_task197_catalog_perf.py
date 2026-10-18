@@ -12,6 +12,7 @@ from sqlalchemy import event, text
 from src.api.app import app
 from src.api.public_list_cache import PUBLIC_JSON_LIST_CACHE
 from src.application.arena_public_use_cases import _ONE_ARENA_SQL
+from src.application.session_load import invalidate_session_load_cache
 from src.application.ice_city_day import city_slug, invalidate_public_city_cache, resolve_city_by_ref
 from src.application.selection_page import _WINDOW_SLOTS_PER_ARENA, _window_slots
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL
@@ -60,6 +61,8 @@ async def test_place_page_sql_does_not_scan_the_catalog(app_use_test_db, db_sess
     place = await _place(db_session)
     await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="19:30")
     await db_session.commit()
+    # Правила загрузки живут в кэше процесса 60 с. Полный прогон уже мог их прочитать.
+    invalidate_session_load_cache()
 
     bind, counts, before = _count_sql(db_session)
     try:

@@ -1,4 +1,5 @@
 """API tests for typical session load (TASK-290)."""
+
 from __future__ import annotations
 
 import uuid
@@ -28,18 +29,22 @@ def patch_admin_principal(user_id: int = 4242) -> Iterator[None]:
 
 
 async def _insert_arena_with_profile(db_session) -> tuple[int, str]:
+    # Миграции город не сеют: на пустой базе CI выбирать нечего.
     r = await db_session.execute(
-        text("SELECT id FROM cities WHERE country = 'BY' ORDER BY id LIMIT 1")
+        text("""
+            INSERT INTO cities (name, country, price_group, is_active, sort_order)
+            VALUES (:name, 'BY', 'default', true, 0)
+            RETURNING id
+            """),
+        {"name": f"LoadCity-{uuid.uuid4().hex[:8]}"},
     )
     cid = int(r.scalar_one())
     ins = await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO arenas (city_id, name, address, is_active, is_confirmed)
             VALUES (:cid, :name, 'ул. Ледовая, 1', true, true)
             RETURNING id
-            """
-        ),
+            """),
         {"cid": cid, "name": f"LoadArena-{uuid.uuid4().hex[:6]}"},
     )
     aid = int(ins.scalar_one())
@@ -59,15 +64,13 @@ async def test_public_skate_has_typical_load_fields(db_session) -> None:
     start = datetime.now(timezone.utc) + timedelta(days=14)
     end = start + timedelta(hours=1)
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO ice_sessions (
                 arena_id, kind, status, starts_at_utc, ends_at_utc,
                 local_date, starts_at_local, ends_at_local, currency_code
             )
             VALUES (:aid, 'public_skate', 'active', :start, :end, :day, '14:00', '15:00', 'BYN')
-            """
-        ),
+            """),
         {
             "aid": aid,
             "day": day,
@@ -97,15 +100,13 @@ async def test_admin_global_rule_changes_public_response(db_session) -> None:
     aid, slug = await _insert_arena_with_profile(db_session)
     day = date(2026, 10, 20)  # Monday
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO ice_sessions (
                 arena_id, kind, status, starts_at_utc, ends_at_utc,
                 local_date, starts_at_local, ends_at_local, currency_code
             )
             VALUES (:aid, 'public_skate', 'active', :start, :end, :day, '10:00', '11:00', 'BYN')
-            """
-        ),
+            """),
         {
             "aid": aid,
             "day": day,
@@ -157,15 +158,13 @@ async def test_city_day_sessions_carry_typical_load(db_session) -> None:
         day += timedelta(days=1)
     start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=11)
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO ice_sessions (
                 arena_id, kind, status, starts_at_utc, ends_at_utc,
                 local_date, starts_at_local, ends_at_local, currency_code
             )
             VALUES (:aid, 'public_skate', 'active', :start, :end, :day, '14:00', '15:00', 'BYN')
-            """
-        ),
+            """),
         {"aid": aid, "day": day, "start": start, "end": start + timedelta(hours=1)},
     )
     await db_session.commit()

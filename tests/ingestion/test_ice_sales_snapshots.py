@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -221,7 +222,18 @@ async def test_db_error_in_snapshot_keeps_session_usable(db_session, seed_city_i
         remaining=0,
         is_available=False,
     )
-    arena_id = int((await db_session.execute(text("SELECT id FROM arenas ORDER BY id LIMIT 1"))).scalar_one())
+    arena_id = int(
+        (
+            await db_session.execute(
+                text("""
+                    INSERT INTO arenas (city_id, name, address, is_active, is_confirmed)
+                    VALUES (:cid, :name, 'ул. Ледовая, 1', true, true)
+                    RETURNING id
+                    """),
+                {"cid": seed_city_id, "name": f"SnapshotArena-{uuid.uuid4().hex[:6]}"},
+            )
+        ).scalar_one()
+    )
     await try_record_korona_sales(
         SqlAlchemyKoronaSalesSnapshotStore(db_session),
         arena_id=arena_id,
