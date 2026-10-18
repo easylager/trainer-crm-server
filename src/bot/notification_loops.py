@@ -3280,3 +3280,36 @@ async def run_care_pulse_loop(trainer_bot: Bot, client_bot: Bot) -> None:
             await asyncio.sleep(CARE_PULSE_INTERVAL_SEC)
         except asyncio.CancelledError:
             break
+
+
+async def run_ice_forecast_loop(client_bot: Bot) -> None:
+    """Четверг 18:00–20:00 Europe/Minsk, 1 дек – 15 фев. Молчит, пока ICE_FORECAST_ENABLED выключен."""
+    from src.application.ice_forecast import ice_forecast_due, send_ice_forecast
+    from src.application.trainer_digest_use_cases import now_minsk
+    from src.shared.config import get_settings
+
+    logger.info("[ice_forecast_loop] started")
+    while True:
+        try:
+            now = now_minsk()
+            settings = get_settings()
+            if ice_forecast_due(now, enabled=settings.ice_forecast_enabled):
+                async with async_session_factory() as session:
+                    await send_ice_forecast(
+                        session,
+                        client_bot,
+                        "weekly",
+                        settings=settings,
+                        on=now.date(),
+                    )
+                    await session.commit()
+        except asyncio.CancelledError:
+            logger.info("[ice_forecast_loop] cancelled")
+            break
+        except Exception as e:
+            logger.exception("Ice forecast loop: %s", e)
+
+        try:
+            await asyncio.sleep(DIGEST_LOOP_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            break
