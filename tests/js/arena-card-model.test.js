@@ -1143,10 +1143,22 @@ describe('TASK-290: обычная загрузка на плитке и в по
     const { scheduleInviteHint } = loadModel();
     assert.equal(
       scheduleInviteHint(true, true),
-      'Время — для приглашения, полоска — насколько обычно людно. ↗ — билеты на сайте катка.'
+      'Время — для приглашения. Полоска — насколько обычно людно; на красные часы билет лучше взять заранее ↗'
     );
     assert.equal(scheduleInviteHint(true, false), 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.');
     assert.equal(scheduleInviteHint(false, true), 'Полоска под временем — насколько обычно людно в эти часы.');
     assert.equal(scheduleInviteHint(false, false), '');
+  });
+});
+
+describe('TASK-290: остаток мест только когда мало', () => {
+  it('«нет мест» и мало мест — показываем, много — нет', () => {
+    const { scarceCapacityNote } = loadModel();
+    assert.equal(scarceCapacityNote('нет мест'), 'нет мест');
+    assert.equal(scarceCapacityNote('23 места'), '23 места');
+    assert.equal(scarceCapacityNote('30 мест'), '30 мест');
+    assert.equal(scarceCapacityNote('110 мест'), '');
+    assert.equal(scarceCapacityNote(''), '');
+    assert.equal(scarceCapacityNote('по записи'), 'по записи');
   });
 });

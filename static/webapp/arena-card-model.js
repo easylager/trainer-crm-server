@@ -923,6 +923,19 @@
    * одна группа с сеткой времени; другой тип или другая цена — своя группа.
    * `next` — ближайший сеанс дня (подсвечивается), только среди будущих.
    */
+  /* Остаток мест — только когда он что-то говорит: «нет мест» или мало. «110 мест» на
+     будущий день — просто ещё не продали, и рядом с красной полоской он сбивает с толку. */
+  var SCARCE_SEATS = 30;
+
+  function scarceCapacityNote(note) {
+    var text = String(note || '').trim();
+    if (!text) return '';
+    if (/^нет мест/i.test(text)) return text;
+    var m = /^(\d+)\s/.exec(text);
+    if (!m) return text;
+    return Number(m[1]) <= SCARCE_SEATS ? text : '';
+  }
+
   function showtimesForDay(opts) {
     opts = opts || {};
     var list = upcomingSessions(opts.sessions, opts.now || new Date()).slice().sort(compareSessionsByStart);
@@ -952,7 +965,7 @@
         sessionId: s.id != null ? s.id : null,
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
-        capacity: s.capacity_note || '',
+        capacity: scarceCapacityNote(s.capacity_note),
         load: s.typical_load_level || '',
       });
     });
@@ -1283,7 +1296,7 @@
      Mini App нет места под слово, а подпись под временем занята остатком мест. */
   function scheduleInviteHint(hasTicketLinks, hasLoad) {
     if (hasTicketLinks && hasLoad) {
-      return 'Время — для приглашения, полоска — насколько обычно людно. ↗ — билеты на сайте катка.';
+      return 'Время — для приглашения. Полоска — насколько обычно людно; на красные часы билет лучше взять заранее ↗';
     }
     if (hasTicketLinks) {
       return 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.';
@@ -1354,6 +1367,7 @@
     shareSlotsGrouped: shareSlotsGrouped,
     shareSlotInviteLabel: shareSlotInviteLabel,
     scheduleInviteHint: scheduleInviteHint,
+    scarceCapacityNote: scarceCapacityNote,
     shopServicesView: shopServicesView,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,
