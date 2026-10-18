@@ -15,7 +15,7 @@
 | opening_hours | unknown | сетка МК только в кассе ABWS calendar, не как часы объекта | 2026-09-07 |
 | season | unknown | на object.html нет месяцев сезона | 2026-09-07 |
 | amenities | skate_rental: true; skate_sharpening: unknown; parking: true; locker_rooms: unknown; cafe: true; accessibility: true | skate_rental: ABWS service/138 «Прокат коньков на конькобежном стадионе». parking/cafe: ABWS `GET /api/v3/arena/home` objects id=7 «Паркинг», id=12 «Кафе, ресторан» того же комплекса. accessibility: описание object id=4 — физкультурно-оздоровительные услуги людям с инвалидностью | 2026-09-07 |
-| short_description | Конькобежный стадион МКСК «Минск-арена»: овал (service 139), хоккейная площадка внутри здания (service 55), прокат коньков (service 138). | ABWS object id=4; фото хоккейной площадки — operator | 2026-10-04 |
+| short_description | Конькобежный стадион МКСК «Минск-арена»: овал, хоккейная площадка внутри здания, прокат коньков. | ABWS object id=4; фото хоккейной площадки — operator | 2026-10-04 |
 | socials | Facebook https://www.facebook.com/arenaminsk/ ; Instagram https://www.instagram.com/minskarenaby/ | JSON-LD `sameAs` на https://minskarena.by/ (тот же оператор) | 2026-09-07 |
 
 unknown явно писать `unknown`, не выдумывать.
