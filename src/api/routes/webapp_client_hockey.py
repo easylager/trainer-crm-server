@@ -19,6 +19,7 @@ from src.application.hockey_game import (
     player_standing,
     standings,
 )
+from src.application.hockey_leagues import friends_picks
 from src.shared.telegram_webapp import parse_user_json_from_init_data
 
 router = APIRouter(tags=["webapp"])
@@ -70,7 +71,7 @@ def _player_name(display_name: str | None, init_raw: str) -> str:
     return f"{first.strip()} {initial}." if initial else first.strip()
 
 
-def _match_out(row: dict, *, now: datetime) -> dict:
+def _match_out(row: dict, *, now: datetime, friends: dict[str, list[str]]) -> dict:
     starts_at = _aware(row["starts_at"])
     played = row["status"] == "final"
     my_pick = None
@@ -94,6 +95,7 @@ def _match_out(row: dict, *, now: datetime) -> dict:
         ),
         "my_pick": my_pick,
         "sides": {"home": row["home_picks"], "away": row["away_picks"]},
+        "friends": friends,
     }
 
 
@@ -105,8 +107,12 @@ async def get_client_hockey_matches(
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
     rows = await player_matches(session, player_key, since=now - _MATCH_WINDOW, limit=_LIST_LIMIT)
+    friends = await friends_picks(session, player_key=player_key, match_ids=[int(row["id"]) for row in rows])
     me = await player_standing(session, player_key, now=now)
-    return {"items": [_match_out(row, now=now) for row in rows], "me": _standing_me(me)}
+    return {
+        "items": [_match_out(row, now=now, friends=friends[int(row["id"])]) for row in rows],
+        "me": _standing_me(me),
+    }
 
 
 @router.put("/client/hockey/matches/{match_id}/pick")
