@@ -1,6 +1,7 @@
 """Типичная загрузка сеанса по правилам дня и часа (TASK-290)."""
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, time as dt_time
@@ -28,6 +29,47 @@ LOAD_PLAN_LINES: dict[LoadLevel, str] = {
     LEVEL_MEDIUM: "Обычно народу в меру",
     LEVEL_BUSY: "Обычно людно — билет лучше взять заранее",
 }
+
+
+LOW_SEATS = 30
+_LIVE_SEATS_RE = re.compile(r"^(\d+)\s+мест[а-я]*$", re.IGNORECASE)
+
+
+def live_seats(note: object) -> tuple[int, str] | None:
+    """Живой остаток кассы из ``capacity_note`` («70 мест» / «нет мест») → (число, «23 места»).
+
+    Где он есть, квадрат сеанса показывает его вместо шкалы «обычно». Иные заметки
+    (у ОХМ «30–35 человек») остатком не считаются.
+    """
+    from src.application.ice_city_day import plural_ru
+
+    text = str(note or "").strip()
+    if text.lower() == "нет мест":
+        return 0, "нет мест"
+    match = _LIVE_SEATS_RE.match(text)
+    if not match:
+        return None
+    n = int(match.group(1))
+    return n, f"{n} {plural_ru(n, 'место', 'места', 'мест')}"
+
+
+def live_seats_plan_line(note: object) -> str:
+    seats = live_seats(note)
+    if seats is None:
+        return ""
+    n, label = seats
+    if n == 0:
+        return "Мест не осталось"
+    return f"Осталось {label}" + (" — лучше взять сейчас" if n <= LOW_SEATS else "")
+
+
+def live_seats_html(note: object) -> str:
+    seats = live_seats(note)
+    if seats is None:
+        return ""
+    n, label = seats
+    low = " b-seats--low" if n <= LOW_SEATS else ""
+    return f'<span class="b-seats{low}">{label}</span>'
 
 
 def load_meter_html(level: object) -> str:

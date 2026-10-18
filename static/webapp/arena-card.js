@@ -52,7 +52,19 @@
   }
 
   function slotTag(t) {
-    return t.capacity || (t.picked && LOAD_WORDS[t.load]) || (t.next ? 'Ближайший' : '');
+    if (t.seats) return t.seats.label;
+    return (t.picked && LOAD_WORDS[t.load]) || (t.next ? 'Ближайший' : '');
+  }
+
+  /* Живой остаток вместо полоски; мало мест — подпись акцентом. */
+  function slotBody(t) {
+    var tag = slotTag(t);
+    var tagCls = t.seats && t.seats.low ? ' class="arena-seats--low"' : '';
+    return (
+      '<b>' + esc(t.time) + '</b>' +
+      (t.seats ? '' : loadMeterHtml(t.load)) +
+      (tag ? '<small' + tagCls + '>' + esc(tag) + '</small>' : '')
+    );
   }
 
   function todayIso(now) {
@@ -1084,8 +1096,7 @@
           if (t.picked) timeCls += ' arena-time--picked';
           else if (t.next) timeCls += ' arena-time--next';
           /* Вместимость важнее «Ближайший»; выбор для приглашения — рамка, цвет и CTA сверху. */
-          var tag = slotTag(t);
-          var body = '<b>' + esc(t.time) + '</b>' + loadMeterHtml(t.load) + (tag ? '<small>' + esc(tag) + '</small>' : '');
+          var body = slotBody(t);
           var buy =
             t.ticketHref
               ? '<button type="button" class="arena-slot-buy" data-action="external" data-href="' +
@@ -1206,7 +1217,10 @@
     var hasLoad = daySessions.some(function (s) {
       return !!LOAD_LABELS[s.typical_load_level];
     });
-    var hint = M.scheduleInviteHint(hasTicketLinks, hasLoad);
+    var hasSeats = daySessions.some(function (s) {
+      return !!M.liveSeats(s.capacity_note);
+    });
+    var hint = M.scheduleInviteHint(hasTicketLinks, hasLoad, hasSeats);
     var focusGone = renderFocusGoneNotice(getFocusState());
     return (
       '<div class="arena-sec">' +
@@ -1300,8 +1314,7 @@
             var timeCls = 'arena-slot-time';
             if (t.picked) timeCls += ' arena-time--picked';
             else if (t.next) timeCls += ' arena-time--next';
-            var tag = slotTag(t);
-            var body = '<b>' + esc(t.time) + '</b>' + loadMeterHtml(t.load) + (tag ? '<small>' + esc(tag) + '</small>' : '');
+            var body = slotBody(t);
             if (t.sessionId == null) {
               return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span></div>';
             }

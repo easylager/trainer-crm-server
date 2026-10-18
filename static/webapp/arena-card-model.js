@@ -923,17 +923,20 @@
    * одна группа с сеткой времени; другой тип или другая цена — своя группа.
    * `next` — ближайший сеанс дня (подсвечивается), только среди будущих.
    */
-  /* Остаток мест — только когда он что-то говорит: «нет мест» или мало. «110 мест» на
-     будущий день — просто ещё не продали, и рядом с красной полоской он сбивает с толку. */
-  var SCARCE_SEATS = 30;
+  /* Живой остаток из кассы (парсер пишет «70 мест» / «нет мест» раз в ~15 минут). Где он
+     есть, плитка показывает только его: число понятнее полоски «обычно», а вместе они
+     говорили бы одно и то же. Другие заметки (у ОХМ «30–35 человек») — не остаток. */
+  var LOW_SEATS = 30;
 
-  function scarceCapacityNote(note) {
+  function liveSeats(note) {
     var text = String(note || '').trim();
-    if (!text) return '';
-    if (/^нет мест/i.test(text)) return text;
-    var m = /^(\d+)\s/.exec(text);
-    if (!m) return text;
-    return Number(m[1]) <= SCARCE_SEATS ? text : '';
+    if (/^нет мест$/i.test(text)) return { label: 'нет мест', low: true };
+    var m = /^(\d+)\s+мест[а-я]*$/i.exec(text);
+    if (!m) return null;
+    var n = Number(m[1]);
+    var word = n % 10 === 1 && n % 100 !== 11 ? 'место'
+      : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'места' : 'мест';
+    return { label: n + ' ' + word, low: n <= LOW_SEATS };
   }
 
   function showtimesForDay(opts) {
@@ -965,7 +968,7 @@
         sessionId: s.id != null ? s.id : null,
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
-        capacity: scarceCapacityNote(s.capacity_note),
+        seats: liveSeats(s.capacity_note),
         load: s.typical_load_level || '',
       });
     });
@@ -1294,7 +1297,12 @@
 
   /* Подсказка над временем. Полоска загрузки (TASK-290) объясняется здесь же: у плитки
      Mini App нет места под слово, а подпись под временем занята остатком мест. */
-  function scheduleInviteHint(hasTicketLinks, hasLoad) {
+  function scheduleInviteHint(hasTicketLinks, hasLoad, hasSeats) {
+    if (hasSeats) {
+      return hasTicketLinks
+        ? 'Время — для приглашения. Под временем — сколько билетов осталось, ↗ — купить.'
+        : 'Под временем — сколько билетов осталось.';
+    }
     if (hasTicketLinks && hasLoad) {
       return 'Время — для приглашения. Полоска — насколько обычно людно; на красные часы билет лучше взять заранее ↗';
     }
@@ -1367,7 +1375,7 @@
     shareSlotsGrouped: shareSlotsGrouped,
     shareSlotInviteLabel: shareSlotInviteLabel,
     scheduleInviteHint: scheduleInviteHint,
-    scarceCapacityNote: scarceCapacityNote,
+    liveSeats: liveSeats,
     shopServicesView: shopServicesView,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,

@@ -950,6 +950,7 @@ a.arena-row {
   letter-spacing: 0;
 }
 /* Обычная загрузка (TASK-290): та же полоска, что на сайте, в цветах Mini App. */
+.arena-slot-time small.arena-seats--low { color: var(--app-attention); font-weight: var(--app-weight-semibold); }
 .arena-load { display: inline-flex; gap: 2px; border-radius: 999px; overflow: hidden; margin: 2px 0 1px; }
 .arena-load i { width: 9px; height: 4px; background: var(--glide-line); }
 .arena-load[data-level="calm"] i:first-child { background: var(--app-ok); }

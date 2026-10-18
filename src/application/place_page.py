@@ -1234,9 +1234,10 @@ def _b_ticket(
     klass = "b-ticket" + (" b-ticket--dark" if dark else "") + (" b-ticket--picked" if focused else "")
     sid = int(slot["id"])
     vt = session_time_vt_style(sid) if vt_session_id is not None and sid == vt_session_id else ""
-    from src.application.session_load import load_meter_html
+    from src.application.session_load import live_seats_html, load_meter_html
 
-    meter = load_meter_html(slot.get("typical_load_level"))
+    # Живой остаток кассы важнее «обычно»: вместе они говорили бы одно и то же.
+    meter = live_seats_html(slot.get("capacity_note")) or load_meter_html(slot.get("typical_load_level"))
     ticket = (
         f'<a class="{klass}" href="{_esc(href)}" rel="nofollow" data-session-id="{sid}">'
         f'<span class="b-ticket__time"{vt}>{_esc(start)}</span>{meter}{soon}{sub}</a>'
@@ -1633,11 +1634,12 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
             )
         if not _skating(card) or not (view.get("days") or view.get("ohm_days")):
             return ""
-    from src.application.session_load import LOAD_PLAN_LINES, load_meter_html
+    from src.application.session_load import LOAD_PLAN_LINES, live_seats_plan_line, load_meter_html
 
     kicker = "Тебя зовут кататься" if invite else "Выбранный сеанс"
     day_text = time_text = extra = soon = ""
     level = focus.get("typical_load_level") if focus is not None else None
+    seats_line = live_seats_plan_line(focus.get("capacity_note")) if focus is not None else ""
     if focus is not None:
         d = _parse_iso_date(focus.get("local_date"))
         day_text = day_heading(d, today=view["today"]) if d else ""
@@ -1664,8 +1666,9 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
         + span("line", extra)
         + span("soon", soon)
         + (
-            f'<span class="b-plan__load"{"" if level in LOAD_PLAN_LINES else " hidden"}>'
-            f'{load_meter_html(level)}<span>{_esc(LOAD_PLAN_LINES.get(level, ""))}</span></span>'
+            f'<span class="b-plan__load"{"" if (seats_line or level in LOAD_PLAN_LINES) else " hidden"}>'
+            f'{"" if seats_line else load_meter_html(level)}'
+            f'<span>{_esc(seats_line or LOAD_PLAN_LINES.get(level, ""))}</span></span>'
         )
         + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
         + _company_link(view)
