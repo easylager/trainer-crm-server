@@ -88,22 +88,13 @@ describe('варианты шита', () => {
     assert.equal(sheet.initialVariantId({ variant: 'company', company: false }), 'schedule');
   });
 
-  it('на вкладке компании порог, название команды и ник из Telegram', () => {
+  it('на вкладке компании только название команды и ник из Telegram, без порога', () => {
     const html = sheet.companyBottomHtml({
       venueType: 'ice',
       sessionId: '9001',
-      companyForm: { min: '4', team: 'Пивной Олимп', you: 'Макс', error: '' },
+      companyForm: { team: 'Пивной Олимп', you: 'Макс', error: '' },
     });
-    assert.match(html, /Сколько человек нужно/);
-    assert.match(html, /data-gss-cmin="4"[^>]*aria-pressed="true"/);
-    assert.match(html, /С тобой ещё 3/);
-    const open = sheet.companyBottomHtml({
-      venueType: 'ice',
-      sessionId: '9001',
-      companyForm: { min: '1', team: '', you: 'Макс', error: '' },
-    });
-    assert.match(open, /Без порога/);
-    assert.match(open, /Порога нет/);
+    assert.doesNotMatch(html, /Сколько человек нужно|data-gss-cmin|порог/i);
     assert.match(html, /Название команды/);
     assert.match(html, /data-gss-c="team"[^>]*value="Пивной Олимп"/);
     assert.match(html, /Вы в списке «Иду» как <b>Макс<\/b>/);

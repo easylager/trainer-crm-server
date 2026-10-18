@@ -63,7 +63,7 @@ def read_avatar_bytes(file_key: str | None) -> bytes | None:
 def going_avatar_bytes(rows: Sequence[dict[str, Any]]) -> list[bytes | None]:
     out: list[bytes | None] = []
     for row in rows:
-        if row["status"] != "going" or row["needs_reconfirm"]:
+        if row["status"] != "going":
             continue
         out.append(read_avatar_bytes(row.get("avatar_file_key")))
     return out

@@ -1,4 +1,4 @@
-"""Компания на лёд: API, initData, лимиты, страница, перенос сеанса, напоминания."""
+"""Компания на лёд: API, initData, лимиты, страница, перенос сеанса."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ async def _enable(monkeypatch: pytest.MonkeyPatch, city_id: int) -> None:
     monkeypatch.setenv("ICE_COMPANY_CITY_IDS", str(city_id))
 
 
-async def _create(db_session, monkeypatch, *, min_people: int = 3, user_id: int = 501):
+async def _create(db_session, monkeypatch, *, user_id: int = 501):
     place = await _place(db_session)
     await _enable(monkeypatch, place["city_id"])
     session_id = await _insert_session(db_session, place["arena_id"], starts_at=_at(days=3))
@@ -55,7 +55,7 @@ async def _create(db_session, monkeypatch, *, min_people: int = 3, user_id: int 
         res = await client.post(
             "/api/public/ice-companies",
             headers=_headers(**{"X-Telegram-Init-Data": _init(user_id)}),
-            json={"session_id": session_id, "min_people": min_people, "display_name": "Аня"},
+            json={"session_id": session_id, "display_name": "Аня"},
         )
     return res, place, session_id
 
@@ -68,20 +68,20 @@ async def test_create_requires_fresh_init_data_and_city_flag(app_use_test_db, db
         off = await client.post(
             "/api/public/ice-companies",
             headers=_headers(**{"X-Telegram-Init-Data": _init(7)}),
-            json={"session_id": session_id, "min_people": 3, "display_name": "Аня"},
+            json={"session_id": session_id, "display_name": "Аня"},
         )
         assert off.status_code == 404
         await _enable(monkeypatch, place["city_id"])
         missing = await client.post(
             "/api/public/ice-companies",
             headers=_headers(),
-            json={"session_id": session_id, "min_people": 3, "display_name": "Аня"},
+            json={"session_id": session_id, "display_name": "Аня"},
         )
         assert missing.status_code == 401
         stale = await client.post(
             "/api/public/ice-companies",
             headers=_headers(**{"X-Telegram-Init-Data": _init(7, age_sec=90000)}),
-            json={"session_id": session_id, "min_people": 3, "display_name": "Аня"},
+            json={"session_id": session_id, "display_name": "Аня"},
         )
         assert stale.status_code == 401
         tampered = _init(7)
@@ -89,14 +89,44 @@ async def test_create_requires_fresh_init_data_and_city_flag(app_use_test_db, db
         forged = await client.post(
             "/api/public/ice-companies",
             headers=_headers(**{"X-Telegram-Init-Data": bad}),
-            json={"session_id": session_id, "min_people": 3, "display_name": "Аня"},
+            json={"session_id": session_id, "display_name": "Аня"},
         )
         assert forged.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_response_is_idempotent_and_confirms_at_threshold(app_use_test_db, db_session, monkeypatch) -> None:
-    created, _, _ = await _create(db_session, monkeypatch, min_people=2)
+async def test_create_without_threshold_fields(app_use_test_db, db_session, monkeypatch) -> None:
+    created, _, _ = await _create(db_session, monkeypatch)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert "min_people" not in body
+    assert "max_people" not in body
+    assert "needs_reconfirm" not in body
+    assert body["status"] == "open"
+
+
+@pytest.mark.asyncio
+async def test_repeat_and_weekly_are_gone(app_use_test_db, db_session, monkeypatch) -> None:
+    created, _, _ = await _create(db_session, monkeypatch)
+    code = created.json()["public_code"]
+    async with _client() as client:
+        weekly = await client.post(
+            f"/api/public/ice-companies/{code}/weekly",
+            headers=_headers(**{"X-Telegram-Init-Data": _init(501)}),
+            json={"enabled": True},
+        )
+        assert weekly.status_code == 404
+        repeat = await client.post(
+            f"/api/public/ice-companies/{code}/repeat",
+            headers=_headers(**{"X-Telegram-Init-Data": _init(501)}),
+            json={},
+        )
+        assert repeat.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_response_is_idempotent_and_marks_card_dirty(app_use_test_db, db_session, monkeypatch) -> None:
+    created, _, _ = await _create(db_session, monkeypatch)
     assert created.status_code == 201, created.text
     code = created.json()["public_code"]
     async with _client() as client:
@@ -106,8 +136,15 @@ async def test_response_is_idempotent_and_confirms_at_threshold(app_use_test_db,
             json={"status": "going", "display_name": "Макс", "consent": True},
         )
         assert first.status_code == 200, first.text
-        assert first.json()["status"] == "confirmed"
+        assert first.json()["status"] == "open"
         assert first.json()["going_count"] == 2
+        dirty = (
+            await db_session.execute(
+                text("SELECT card_dirty FROM ice_companies WHERE public_code = :code"),
+                {"code": code},
+            )
+        ).scalar_one()
+        assert dirty is True
         again = await client.post(
             f"/api/public/ice-companies/{code}/responses",
             headers=_headers(**{"X-Telegram-Init-Data": _init(777)}),
@@ -170,9 +207,8 @@ async def test_web_needs_consent_and_rate_limit(app_use_test_db, db_session, mon
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
 async def test_join_rewrites_the_shared_card_only(app_use_test_db, db_session, monkeypatch) -> None:
-    created, _, _ = await _create(db_session, monkeypatch, min_people=4)
+    created, _, _ = await _create(db_session, monkeypatch)
     assert created.status_code == 201, created.text
     code = created.json()["public_code"]
     company_id = (
@@ -214,54 +250,29 @@ async def test_join_rewrites_the_shared_card_only(app_use_test_db, db_session, m
     await _edit_dirty(db_session, sender, settings=Settings(), debounce_sec=0, now=datetime.now(timezone.utc))
     assert len(sender.edits) == 1
     assert sender.refs[0]["inline_message_id"] == "inline-shared"
-    assert "Ещё двое — и едем" in sender.edits[0]
+    assert "Двое — это уже не катание, а свидание" in sender.edits[0]
     assert "Кирил" in sender.edits[0]
     assert "Аня" in sender.edits[0]
 
 
 @pytest.mark.asyncio
-async def test_due_hour_reminder_is_sent_once(app_use_test_db, db_session, monkeypatch) -> None:
-    created, _, _ = await _create(db_session, monkeypatch, min_people=3, user_id=42)
+async def test_tick_only_sync_expire_edit_purge(app_use_test_db, db_session, monkeypatch) -> None:
+    created, _, _ = await _create(db_session, monkeypatch, user_id=42)
+    assert created.status_code == 201, created.text
+    sender = _Sender()
+    stats = await tick(db_session, sender, debounce_sec=0)
+    assert sender.dms == []
+    assert set(stats.keys()) == {"synced", "expired", "edits"}
+
+
+@pytest.mark.asyncio
+async def test_schedule_move_updates_card_without_reconfirm(app_use_test_db, db_session, monkeypatch) -> None:
+    created, _, session_id = await _create(db_session, monkeypatch, user_id=42)
     assert created.status_code == 201, created.text
     code = created.json()["public_code"]
-    company_id = (
-        await db_session.execute(
-            text("SELECT id FROM ice_companies WHERE public_code = :code"),
-            {"code": code},
-        )
-    ).scalar_one()
-    await db_session.execute(
-        text(
-            """
-            INSERT INTO ice_company_reminders (company_id, kind, due_at, status)
-            VALUES (:id, 'hour', now() - interval '1 minute', 'pending')
-            """
-        ),
-        {"id": company_id},
-    )
-    await db_session.commit()
     sender = _Sender()
     await tick(db_session, sender, debounce_sec=0)
     assert sender.dms == []
-    status = (
-        await db_session.execute(
-            text("SELECT status FROM ice_company_reminders WHERE company_id = :id AND kind = 'hour'"),
-            {"id": company_id},
-        )
-    ).scalar_one()
-    assert status == "skipped"
-
-
-async def test_schedule_move_asks_to_reconfirm_and_tick_is_idempotent(app_use_test_db, db_session, monkeypatch) -> None:
-    created, _, session_id = await _create(db_session, monkeypatch, min_people=1, user_id=42)
-    assert created.status_code == 201, created.text
-    code = created.json()["public_code"]
-    assert created.json()["status"] == "confirmed"
-    sender = _Sender()
-    await tick(db_session, sender, debounce_sec=0)
-    assert [body for _, body in sender.dms if body.startswith("Сбор готов")] == []
-    await tick(db_session, sender, debounce_sec=0)
-    assert [body for _, body in sender.dms if body.startswith("Сбор готов")] == []
     new_start = datetime.now(timezone.utc) + timedelta(days=4)
     await db_session.execute(
         text("UPDATE ice_sessions SET starts_at_utc = :start, ends_at_utc = :end WHERE id = :id"),
@@ -269,10 +280,10 @@ async def test_schedule_move_asks_to_reconfirm_and_tick_is_idempotent(app_use_te
     )
     await db_session.commit()
     await tick(db_session, sender, debounce_sec=0)
-    assert [body for _, body in sender.dms if body.startswith("Время изменилось")] == []
+    assert sender.dms == []
     async with _client() as client:
         view = await client.get(f"/api/public/ice-companies/{code}")
     body = view.json()
-    assert body["needs_reconfirm"] is True
-    assert "Подтвердите ещё раз" in body["card_text"]
+    assert "needs_reconfirm" not in body
+    assert "Подтвердите ещё раз" not in body["card_text"]
     assert body["event"]["version"] == 2

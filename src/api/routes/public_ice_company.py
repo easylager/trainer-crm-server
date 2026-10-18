@@ -27,10 +27,8 @@ from src.application.ice_company.service import (
     create_company,
     delete_own,
     read_company,
-    repeat_company,
     resolve_participant,
     respond,
-    set_weekly,
     snap_from,
     _load,
     _responses,
@@ -52,10 +50,8 @@ _hits: dict[str, deque[float]] = {}
 
 class CreateBody(BaseModel):
     session_id: int
-    min_people: int
     display_name: str = ""
     name: str = ""
-    max_people: int | None = None
     surface: str = "miniapp"
 
 
@@ -70,14 +66,6 @@ class RespondBody(BaseModel):
 
 class TokenBody(BaseModel):
     participant_token: str = ""
-
-
-class RepeatBody(BaseModel):
-    session_id: int | None = None
-
-
-class WeeklyBody(BaseModel):
-    enabled: bool = True
 
 
 def reset_company_rate_limits() -> None:
@@ -157,10 +145,8 @@ async def post_company(
             session,
             telegram_user_id=user_id,
             session_id=body.session_id,
-            min_people=body.min_people,
             display_name=organizer_name,
             name=body.name,
-            max_people=body.max_people,
             surface=(body.surface or "miniapp")[:16],
         )
     except CompanyRejected as exc:
@@ -239,28 +225,6 @@ async def post_response(
     return view
 
 
-@router.post("/api/public/ice-companies/{code}/repeat")
-async def post_repeat(
-    code: str,
-    body: RepeatBody,
-    request: Request,
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    user_id = _init_user(x_telegram_init_data or request.query_params.get("init_data"))
-    if user_id is None:
-        raise HTTPException(status_code=401, detail="Повторить может тот, кто собирал компанию.")
-    try:
-        return await repeat_company(
-            session,
-            code=code,
-            telegram_user_id=user_id,
-            session_id=body.session_id,
-        )
-    except CompanyRejected as exc:
-        raise _http(exc) from None
-
-
 @router.post("/api/public/ice-companies/{code}/cancel")
 async def post_cancel(
     code: str,
@@ -273,23 +237,6 @@ async def post_cancel(
         raise HTTPException(status_code=401, detail="Отменить может тот, кто собирал компанию.")
     try:
         return await cancel_company(session, code=code, telegram_user_id=user_id)
-    except CompanyRejected as exc:
-        raise _http(exc) from None
-
-
-@router.post("/api/public/ice-companies/{code}/weekly")
-async def post_weekly(
-    code: str,
-    body: WeeklyBody,
-    request: Request,
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    user_id = _init_user(x_telegram_init_data or request.query_params.get("init_data"))
-    if user_id is None:
-        raise HTTPException(status_code=401, detail="Это может сделать тот, кто собирал компанию.")
-    try:
-        return await set_weekly(session, code=code, telegram_user_id=user_id, enabled=body.enabled)
     except CompanyRejected as exc:
         raise _http(exc) from None
 

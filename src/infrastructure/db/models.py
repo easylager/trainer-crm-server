@@ -2196,7 +2196,6 @@ class IceCompanyEvent(Base):
     source_ref: Mapped[str] = mapped_column(String(64), nullable=False)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    previous_starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     venue_ref: Mapped[str] = mapped_column(String(64), nullable=False)
     venue_label: Mapped[str] = mapped_column(String(120), nullable=False)
     city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="RESTRICT"), nullable=False)
@@ -2215,13 +2214,8 @@ class IceCompany(Base):
             name="ck_ice_companies_public_code",
         ),
         CheckConstraint(
-            "status IN ('open', 'confirmed', 'cancelled', 'expired')",
+            "status IN ('open', 'cancelled', 'expired')",
             name="ck_ice_companies_status",
-        ),
-        CheckConstraint("min_people BETWEEN 1 AND 30", name="ck_ice_companies_min_people"),
-        CheckConstraint(
-            "max_people IS NULL OR max_people >= min_people",
-            name="ck_ice_companies_max_people",
         ),
         CheckConstraint("char_length(name) <= 40", name="ck_ice_companies_name"),
         Index("ix_ice_companies_organizer_status", "organizer_ref", "status"),
@@ -2236,18 +2230,8 @@ class IceCompany(Base):
         ForeignKey("ice_company_events.id", ondelete="CASCADE"), nullable=False
     )
     event_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    min_people: Mapped[int] = mapped_column(Integer, nullable=False)
-    max_people: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
-    weekly_in_chat: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     card_dirty: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
-    confirm_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    schedule_notice_pending: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
-    cancel_notice_pending: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -2275,12 +2259,7 @@ class IceCompanyResponse(Base):
     participant_key: Mapped[str] = mapped_column(String(80), nullable=False)
     display_name: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(8), nullable=False)
-    attended: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    reminders_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
-    needs_reconfirm: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    departing: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     source: Mapped[str] = mapped_column(String(8), nullable=False)
-    join_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     avatar_file_key: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
@@ -2305,27 +2284,3 @@ class IceCompanyMessage(Base):
     last_render_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     is_group: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
-
-class IceCompanyReminder(Base):
-    __tablename__ = "ice_company_reminders"
-    __table_args__ = (
-        UniqueConstraint("company_id", "kind", name="uq_ice_company_reminders_kind"),
-        CheckConstraint(
-            "kind IN ('day', 'hour', 'organizer_followup', 'after', 'weekly')",
-            name="ck_ice_company_reminders_kind",
-        ),
-        CheckConstraint(
-            "status IN ('pending', 'sent', 'skipped')",
-            name="ck_ice_company_reminders_status",
-        ),
-        Index("ix_ice_company_reminders_due", "status", "due_at"),
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    company_id: Mapped[int] = mapped_column(
-        ForeignKey("ice_companies.id", ondelete="CASCADE"), nullable=False
-    )
-    kind: Mapped[str] = mapped_column(String(32), nullable=False)
-    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False)

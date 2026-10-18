@@ -1,9 +1,4 @@
-"""Плакат компании для чата и превью ссылки. Квадрат 1080.
-
-Площадка — светлый лёд на ночном фоне: борта, синие и красная, точки вбрасывания.
-Имена стоят на льду, пустые места — пунктир. Тип сеанса отдельной плашкой,
-чтобы в чате было видно: массовое катание, ОХМ или следующий формат.
-"""
+"""Плакат компании для чата и превью ссылки. Квадрат 1080."""
 
 from __future__ import annotations
 
@@ -13,7 +8,7 @@ from collections.abc import Sequence
 from PIL import Image, ImageDraw, ImageFont
 
 from src.application.ice_city_day_og import _fit, _font
-from src.application.ice_company.copy import Snap, clock, kind_label, team_gathered, weekday_nom
+from src.application.ice_company.copy import Snap, clock, closed_headline, crowd_line, kind_label, weekday_nom
 from src.application.ice_company.safety import strip_emoji_for_poster
 
 CARD_SIZE = (1080, 1080)
@@ -27,7 +22,6 @@ _LINE_BLUE = (46, 108, 184)
 _LINE_RED = (196, 54, 54)
 _PLAYER = (14, 28, 36)
 
-# Доли льда, в стороне от синих, красной и центрального круга.
 _SPOTS: dict[int, tuple[tuple[float, float], ...]] = {
     1: ((0.22, 0.50),),
     2: ((0.20, 0.50), (0.80, 0.50)),
@@ -36,13 +30,12 @@ _SPOTS: dict[int, tuple[tuple[float, float], ...]] = {
     5: ((0.18, 0.28), (0.82, 0.28), (0.18, 0.74), (0.82, 0.74), (0.40, 0.78)),
     6: ((0.18, 0.26), (0.40, 0.22), (0.60, 0.22), (0.82, 0.26), (0.30, 0.78), (0.70, 0.78)),
 }
-_HOLE = (110, 140, 152)
 _ON_ICE = 6
-# Голова на льду: занятое место крупнее, чтобы аватар читался рядом с силуэтом «ждём».
 _SKATER_RADIUS = 28
 _SKATER_NAME_SIZE = 32
 _SKATER_INITIAL_SIZE = 28
 _SKATER_NAME_MAX_W = 200
+_DEFAULT_TEAM = "Компания на лёд"
 
 
 def card_photo_url(base: str, code: str, digest: str) -> str | None:
@@ -81,58 +74,48 @@ def render_company_card(snap: Snap, *, avatar_bytes: Sequence[bytes | None] = ()
     place_font = _font("Inter-Regular.ttf", 32)
     chip_font = _font("Inter-SemiBold.ttf", 28)
     name_font = _font("Inter-SemiBold.ttf", _SKATER_NAME_SIZE)
-    number_font = _font("Inter-Bold.ttf", 92)
-    word_font = _font("Inter-SemiBold.ttf", 36)
+    team_title_font = _font("Inter-Bold.ttf", 56)
+    crowd_font = _font("Inter-SemiBold.ttf", 30)
 
     pad = 64
-    team = strip_emoji_for_poster((snap.team_title or "").strip())
-    title_font = _font("Inter-Bold.ttf", 50)
-    y = 40
-    if team:
-        team_rows = _wrap(draw, team, title_font, CARD_SIZE[0] - pad * 2, 2)
-        for row in team_rows:
-            draw.text((pad, y), row, font=title_font, fill=_INK)
-            y += 56
-        y += 8
-    else:
-        draw.text((pad, y), weekday_nom(snap.starts_at).upper(), font=kicker_font, fill=_ACCENT)
-        y = 84
+    draw.text((pad, 40), weekday_nom(snap.starts_at).upper(), font=kicker_font, fill=_ACCENT)
     _draw_kind(draw, kind_label(snap.kind), chip_font, pad)
-    draw.text((pad, y), clock(snap.starts_at), font=time_font, fill=_INK)
-    venue_y = y + 108
+    draw.text((pad, 84), clock(snap.starts_at), font=time_font, fill=_INK)
+    venue_y = 192
     for row in _wrap(draw, snap.venue, place_font, 640, 1):
         draw.text((pad, venue_y), row, font=place_font, fill=_MUTED)
 
     rink_top = max(250, venue_y + 48)
-    rink = (pad, rink_top, CARD_SIZE[0] - pad, 860)
-    gathered = team_gathered(snap)
+    rink = (pad, rink_top, CARD_SIZE[0] - pad, 820)
+    going_n = len(snap.going_names)
+    glow = going_n >= 3 and closed_headline(snap) is None
     _draw_rink(image, rink)
-    if gathered:
+    if glow:
         _draw_gathered_glow(image, rink)
-    _draw_skaters(image, snap, name_font, rink, avatar_bytes=avatar_bytes, team_ready=gathered)
+    _draw_skaters(image, snap, name_font, rink, avatar_bytes=avatar_bytes, team_ready=glow)
 
-    missing = snap.min_people - len(snap.going_names)
-    closed = snap.cancelled or snap.expired or snap.status in ("cancelled", "expired")
-    tagline_font = _font("Inter-SemiBold.ttf", 30)
+    closed = closed_headline(snap)
+    bottom_y = 860
     if closed:
-        headline, word, color = ("Не собрались" if snap.expired or snap.status == "expired" else "Снято", "", _MUTED)
-        number_font = _font("Inter-Bold.ttf", 64)
-    elif gathered:
-        headline, word, color = ("Едем", "", _ACCENT)
-        number_font = _font("Inter-Bold.ttf", 72)
+        headline_font = _font("Inter-Bold.ttf", 64)
+        draw.text((pad, bottom_y), closed, font=headline_font, fill=_MUTED)
     else:
-        headline, word, color = (str(missing), "ещё", _INK)
-    draw.text((pad, 900), headline, font=number_font, fill=color)
-    if word:
-        gap = int(draw.textlength(headline, font=number_font)) + 18
-        draw.text((pad + gap, 948), word, font=word_font, fill=_ACCENT)
-    if gathered and not closed:
-        draw.text((pad, 978), "Команда в сборе", font=tagline_font, fill=_ACCENT)
-    extra = len(snap.going_names) - _ON_ICE
-    if extra > 0 and not closed:
+        team_raw = strip_emoji_for_poster((snap.team_title or "").strip()) or _DEFAULT_TEAM
+        team_rows = _wrap(draw, team_raw, team_title_font, CARD_SIZE[0] - pad * 2, 2)
+        y = bottom_y
+        for row in team_rows:
+            draw.text((pad, y), row, font=team_title_font, fill=_INK)
+            y += 62
+        line = crowd_line(going_n)
+        for row in _wrap(draw, line, crowd_font, CARD_SIZE[0] - pad * 2, 2):
+            draw.text((pad, y), row, font=crowd_font, fill=_ACCENT)
+            y += 36
+
+    extra = going_n - _ON_ICE
+    if extra > 0 and closed is None:
         more = f"и ещё {extra}"
         more_w = int(draw.textlength(more, font=place_font))
-        draw.text((CARD_SIZE[0] - pad - more_w, 940), more, font=place_font, fill=_MUTED)
+        draw.text((CARD_SIZE[0] - pad - more_w, 800), more, font=place_font, fill=_MUTED)
 
     buf = io.BytesIO()
     image.save(buf, format="PNG")
@@ -225,28 +208,21 @@ def _draw_skaters(
     team_ready: bool = False,
 ) -> None:
     names = list(snap.going_names)
+    if not names:
+        return
     faces = list(avatar_bytes[: len(names)])
     while len(faces) < len(names):
         faces.append(None)
-    holes = max(0, snap.min_people - len(names))
-    count = min(_ON_ICE, max(len(names), min(len(names) + holes, _ON_ICE), 1))
-    if not names and holes <= 0:
-        count = 0
+    count = min(_ON_ICE, len(names))
     shown = names[:count]
     shown_faces = faces[:count]
-    empty = count - len(shown)
     spots = _SPOTS[max(count, 1)][:count]
     left, top, right, bottom = rink
     inset = 26
     ice_left, ice_top = left + inset, top + inset
     ice_w, ice_h = (right - left) - inset * 2, (bottom - top) - inset * 2
     overlay = ImageDraw.Draw(image)
-    for (fx, fy), label, face in zip(
-        spots,
-        shown + [""] * empty,
-        shown_faces + [None] * empty,
-        strict=False,
-    ):
+    for (fx, fy), label, face in zip(spots, shown, shown_faces, strict=False):
         _skater(
             image,
             overlay,
@@ -271,13 +247,7 @@ def _skater(
     team_ready: bool,
 ) -> None:
     radius = _SKATER_RADIUS
-    shoulder_w = 54
     display = strip_emoji_for_poster(label)
-    if not label and not display:
-        draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=_HOLE, width=3)
-        plate = (cx - shoulder_w, cy + radius + 10, cx + shoulder_w, cy + radius + 52)
-        draw.rounded_rectangle(plate, radius=20, outline=_HOLE, width=3)
-        return
     if face:
         _paste_face(image, draw, cx, cy, radius, face)
     else:
@@ -320,5 +290,3 @@ def _paste_face(
     ring = (cx - radius - 2, cy - radius - 2, cx + radius + 2, cy + radius + 2)
     draw.ellipse(ring, outline=_INK, width=4)
     draw.ellipse(ring, outline=_PLAYER, width=2)
-
-
