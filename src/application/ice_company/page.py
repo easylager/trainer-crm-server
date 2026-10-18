@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from src.application.ice_company.copy import clock, kind_label, short_when, weekday_in
+from src.application.ice_company.copy import clock, crowd_line, kind_label, weekday_in
 from src.application.style_b import public_fonts_head_html
 
 _SKATE = frozenset({"public_skate", "open_ice"})
@@ -149,50 +149,42 @@ def _marks(view: dict[str, Any]) -> str:
             f'<span class="seat is-taken" role="listitem" data-name="{_esc(name)}">{_esc(name)}</span>'
             for name in going[:_MARKS]
         ) + "</div>"
-    slots = min(int(view["min_people"]), _MARKS)
-    shown = going[:slots]
+    shown = going[:_MARKS]
     parts: list[str] = []
     for name in shown:
         parts.append(
             f'<span class="seat is-taken" role="listitem" data-name="{_esc(name)}">{_esc(name)}</span>'
         )
-    empties = max(0, slots - len(shown))
-    if empties:
-        parts.append(
-            '<button type="button" class="seat is-next" data-status="going" aria-label="Занять место">Я</button>'
-        )
-        parts.extend('<span class="seat" aria-hidden="true"></span>' for _ in range(empties - 1))
-    else:
-        parts.append(
-            '<button type="button" class="seat is-next" data-status="going" aria-label="Занять место">Я</button>'
-        )
+    parts.append(
+        '<button type="button" class="seat is-next" data-status="going" aria-label="Занять место">Я</button>'
+    )
     extra = len(going) - len(shown)
     html_marks = '<div class="rink" role="list">' + "".join(parts) + "</div>"
     if extra > 0:
         html_marks += f'<p class="maybe">И ещё {extra}</p>'
-    elif int(view["min_people"]) > _MARKS:
-        html_marks += f'<p class="maybe">Нужно {int(view["min_people"])}</p>'
     return html_marks
 
 
 def _poster(view: dict[str, Any]) -> str:
-    going_n = int(view.get("going_count") or 0)
-    goal = int(view["min_people"])
-    count = f"{going_n} из {goal}"
+    line = str(view.get("crowd_line") or crowd_line(int(view.get("going_count") or 0)))
     if _closed(view):
-        word = "Не собрались" if view.get("status") == "expired" else "Сеанс снят"
-        return f'<p class="miss is-go"><b>{_esc(word)}</b><span>{_esc(count)}</span></p>'
-    if view.get("status") == "confirmed" or going_n >= goal:
-        return f'<p class="miss is-go"><b>Едем</b><span>{_esc(count)}</span></p>'
-    missing = goal - going_n
-    return f'<p class="miss"><b>{missing}</b><span>не хватает</span></p>'
+        if bool(view["event"].get("cancelled")):
+            word = "Сеанс сняли"
+        elif view.get("status") == "cancelled":
+            word = "Сбор снят"
+        elif int(view.get("going_count") or 0) >= 2:
+            word = "Покатались"
+        else:
+            word = "Сеанс прошёл"
+        return f'<p class="miss is-go"><b>{_esc(word)}</b><span>{_esc(line)}</span></p>'
+    return f'<p class="maybe">{_esc(line)}</p>'
 
 
 def _maybe_line(view: dict[str, Any]) -> str:
     names = [str(person["display_name"]) for person in view.get("maybe") or []]
     if not names:
         return ""
-    return f'<p class="maybe">Думают: {_esc(", ".join(names[:8]))}</p>'
+    return f'<p class="maybe">Может: {_esc(", ".join(names[:8]))}</p>'
 
 
 def render_company_page(view: dict[str, Any]) -> str:
@@ -203,11 +195,6 @@ def render_company_page(view: dict[str, Any]) -> str:
     venue = _esc(view["event"].get("venue_label") or "")
     kind = kind_label(str(view["event"].get("kind") or ""))
     kind_html = f'<p class="kicker">{_esc(kind)}</p>' if kind else ""
-    warn = ""
-    if view.get("needs_reconfirm") and not _closed(view):
-        warn = '<p class="warn">Время изменилось. Подтвердите ещё раз.</p>'
-    together = _esc(view.get("together_line") or "")
-    together_html = f'<p class="maybe">{together}</p>' if together else ""
     actions = '<p class="err" id="err" role="alert"></p>'
     if not _closed(view):
         actions += """
@@ -238,11 +225,9 @@ def render_company_page(view: dict[str, Any]) -> str:
 {kind_html}
 <h1>{_esc(headline)}</h1>
 <div class="when"><b>{_esc(clock(starts))}</b><span>{venue}</span></div>
-{warn}
 {_marks(view)}
 {_poster(view)}
 {_maybe_line(view)}
-{together_html}
 {actions}
 <p class="hp"><label>Сайт <input id="website" type="text" tabindex="-1" autocomplete="off"></label></p>
 <p class="tools">

@@ -1170,19 +1170,8 @@
     return renderChannelsHtml(sheetState.payload) + shareNoteHtml();
   }
 
-  var COMPANY_MINS = ['1', '2', '3', '4', '5', '6'];
-
-  function companyMinLabel(value) {
-    return value === '1' ? 'Без порога' : value;
-  }
-
   function companyFormOf(sheetState) {
     return (sheetState && sheetState.companyForm) || {};
-  }
-
-  function companyMin(form) {
-    var min = String(form.min == null || form.min === '' ? '1' : form.min);
-    return COMPANY_MINS.indexOf(min) >= 0 ? min : '1';
   }
 
   function renderCompanyBottom(sheetState) {
@@ -1201,21 +1190,7 @@
         '</div>'
       );
     }
-    var min = companyMin(form);
-    var missing = Math.max(0, Number(min) - 1);
     var you = String(form.you || '').trim();
-    var chips = COMPANY_MINS.map(function (n) {
-      var on = n === min;
-      var wide = n === '1' ? ' gss-slot--wide' : '';
-      return (
-        '<button type="button" class="gss-slot' + wide + (on ? ' is-on' : '') +
-        '" data-gss-cmin="' + n + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
-        esc(companyMinLabel(n)) + '</button>'
-      );
-    }).join('');
-    var needLine = min === '1'
-      ? '<p class="gss-company-need">Порога нет — зовите кого угодно.</p>'
-      : '<p class="gss-company-need">С тобой ещё ' + missing + '.</p>';
     var teamField =
       '<label class="gss-zf__f"><span>Название команды</span>' +
       '<input type="text" data-gss-c="team" maxlength="48" enterkeyhint="done" ' +
@@ -1224,9 +1199,6 @@
       ? '<p class="gss-company-who">Вы в списке «Иду» как <b>' + esc(you) + '</b> — из Telegram.</p>'
       : '';
     return (
-      '<p class="gss-slot-q">Сколько человек нужно</p>' +
-      '<div class="gss-company-mins" role="group" aria-label="Сколько человек нужно">' + chips + '</div>' +
-      needLine +
       teamField +
       youLine +
       '<p class="gss-zf__err" data-gss-cerr role="alert">' + esc(form.error || '') + '</p>' +
@@ -1275,7 +1247,6 @@
       return;
     }
     var team = String(form.team || '').trim();
-    var min = Number(companyMin(form));
     if (state.sessionId == null || String(state.sessionId).trim() === '') {
       form.error = 'Выбери сеанс.';
       paintCompany();
@@ -1293,7 +1264,6 @@
       headers: headers,
       body: JSON.stringify({
         session_id: Number(state.sessionId),
-        min_people: min,
         name: team,
         surface: 'miniapp',
       }),
@@ -1925,16 +1895,6 @@
       haptic();
       state.zovi.created = null;
       paintPostcardBottom();
-      return;
-    }
-    var companyMinBtn = ev.target.closest('[data-gss-cmin]');
-    if (companyMinBtn && state && state.companyForm && !state.companyForm.created) {
-      var nextMin = companyMinBtn.getAttribute('data-gss-cmin');
-      if (nextMin && nextMin !== companyMin(state.companyForm)) {
-        haptic();
-        state.companyForm.min = nextMin;
-        paintCompany();
-      }
       return;
     }
     var companyShare = ev.target.closest('[data-gss-cshare]');

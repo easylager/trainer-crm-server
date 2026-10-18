@@ -20,13 +20,10 @@ from aiogram.types import (
     InlineKeyboardMarkup,
 )
 from src.application.ice_company.copy import (
-    TOAST_ATTENDED,
     TOAST_CANT,
     TOAST_CLOSED,
-    TOAST_DEPARTING,
     TOAST_GOING,
     TOAST_MAYBE,
-    TOAST_QUIET,
     card_text,
 )
 from src.application.ice_company.delivery import AiogramSender
@@ -47,7 +44,6 @@ from src.application.ice_company.codes import tg_participant_key
 from src.application.ice_company.service import (
     CompanyRejected,
     actor_for_telegram,
-    repeat_company,
     respond,
     snap_from,
     _load,
@@ -70,11 +66,6 @@ _TOAST = {
     "g": TOAST_GOING,
     "m": TOAST_MAYBE,
     "x": TOAST_CANT,
-    "q": TOAST_QUIET,
-    "e": TOAST_DEPARTING,
-    "a": TOAST_ATTENDED,
-    "b": TOAST_ATTENDED,
-    "r": "Собираем ещё раз",
 }
 
 
@@ -89,26 +80,16 @@ async def on_company_callback(query: CallbackQuery) -> None:
     name = _telegram_name(query.from_user.first_name) or _telegram_name(query.from_user.username)
     async with async_session_factory() as session:
         try:
-            if action == "r":
-                await repeat_company(session, code=code, telegram_user_id=user_id, session_id=None)
-            else:
-                status_action = {
-                    "q": "quiet",
-                    "e": "depart",
-                    "a": "attended",
-                    "b": "missed",
-                }.get(action, "status")
-                await respond(
-                    session,
-                    code=code,
-                    status=ACTION_STATUS.get(action, "going"),
-                    display_name=name or None,
-                    participant_key=f"tg:{user_id}",
-                    source="tg",
-                    consent=True,
-                    action=status_action,
-                    actor_hash=actor_for_telegram(user_id, None, None),
-                )
+            await respond(
+                session,
+                code=code,
+                status=ACTION_STATUS.get(action, "going"),
+                display_name=name or None,
+                participant_key=f"tg:{user_id}",
+                source="tg",
+                consent=True,
+                actor_hash=actor_for_telegram(user_id, None, None),
+            )
         except CompanyRejected as exc:
             toast = TOAST_CLOSED if exc.status_code == 409 else str(exc.detail or "Не получилось")
             await query.answer(toast[:200], show_alert=False)
@@ -134,7 +115,7 @@ async def on_company_callback(query: CallbackQuery) -> None:
                 )
         else:
             logger.info("ice_company callback has no inline_message_id code=%s", code)
-        await query.answer(_TOAST.get(action, TOAST_ATTENDED))
+        await query.answer(_TOAST.get(action, TOAST_GOING))
         sender = AiogramSender(query.bot, Settings())
         await _edit_dirty(
             session,

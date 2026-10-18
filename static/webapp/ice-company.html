@@ -17,8 +17,7 @@ p.you { color: #4a5c68; font-size: .95rem; margin: .5rem 0 0; }
 <body>
 <main>
 <h1>Собрать компанию</h1>
-<p id="hint">Порог «нужно человек» — цель, не потолок. Поставьте 1, если порог не нужен.</p>
-<label>Нужно человек <input id="min" type="number" min="1" max="30" value="1"></label>
+<p id="hint">Назовите команду, если хотите — на карточке это главный мем.</p>
 <label>Название команды <input id="title" type="text" maxlength="48" placeholder="Необязательно"></label>
 <p class="you" id="you" hidden></p>
 <button type="button" id="go">Собрать</button>
@@ -51,7 +50,6 @@ p.you { color: #4a5c68; font-size: .95rem; margin: .5rem 0 0; }
       headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
       body: JSON.stringify({
         session_id: Number(sessionId),
-        min_people: Number(document.getElementById('min').value),
         name: document.getElementById('title').value,
         surface: 'miniapp'
       })

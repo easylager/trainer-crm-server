@@ -15,11 +15,7 @@ _SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 TOAST_GOING = "Записали, идёшь"
 TOAST_MAYBE = "Записали, может быть"
 TOAST_CANT = "Записали, не идёшь"
-TOAST_QUIET = "Больше не напомним"
-TOAST_DEPARTING = "Записали, выезжаешь"
-TOAST_ATTENDED = "Записали"
 TOAST_CLOSED = "Сбор уже закрыт"
-TOAST_RECONFIRM = "Записали, идёшь"
 
 
 @dataclass(frozen=True)
@@ -27,12 +23,10 @@ class Snap:
     kind: str
     venue: str
     starts_at: datetime
-    min_people: int
     status: str
     going_names: tuple[str, ...]
     team_title: str = ""
-    previous_starts_at: datetime | None = None
-    cancelled: bool = False
+    session_cancelled: bool = False
     expired: bool = False
 
 
@@ -71,12 +65,34 @@ def kind_label(kind: str) -> str:
     return _KIND_LABELS.get(kind, "")
 
 
-_STILL = {1: "один", 2: "двое", 3: "трое", 4: "четверо", 5: "пятеро", 6: "шестеро", 7: "семеро"}
+def crowd_line(going: int) -> str:
+    n = max(0, int(going))
+    if n == 0:
+        return "Лёд пока пустой"
+    if n == 1:
+        return "Пока один. Одному можно, но вдвоём веселее"
+    if n == 2:
+        return "Двое — это уже не катание, а свидание"
+    if n == 3:
+        return "Трое — это уже компания"
+    if n == 4:
+        return "Четверо — можно два на два"
+    if n == 5:
+        return "Пятеро — готовая хоккейная пятёрка"
+    if n == 6:
+        return "Шестеро — пятёрка и вратарь"
+    if n == 7:
+        return "Семеро — каток, считай, ваш"
+    if n == 8:
+        return "Восьмеро — каток, считай, ваш"
+    if n == 9:
+        return "Девятеро — каток, считай, ваш"
+    return f"{n} человек — это уже не компания, а выезд"
 
 
 def on_the_ice(names: tuple[str, ...]) -> str:
     if not names:
-        return "Лёд ещё пустой"
+        return ""
     if len(names) == 1:
         return f"На льду {names[0]}"
     if len(names) == 2:
@@ -86,17 +102,16 @@ def on_the_ice(names: tuple[str, ...]) -> str:
     return f"На льду {names[0]}, {names[1]} и ещё {len(names) - 2}"
 
 
-def still_line(missing: int) -> str:
-    word = _STILL.get(missing)
-    if word:
-        return f"Ещё {word} — и едем"
-    return f"Ещё {missing} — и едем"
-
-
-def team_gathered(snap: Snap) -> bool:
-    if snap.cancelled or snap.expired or snap.status in ("cancelled", "expired"):
-        return False
-    return snap.status == "confirmed" or len(snap.going_names) >= snap.min_people
+def closed_headline(snap: Snap) -> str | None:
+    if snap.session_cancelled:
+        return "Сеанс сняли"
+    if snap.status == "cancelled":
+        return "Сбор снят"
+    if snap.expired or snap.status == "expired":
+        if len(snap.going_names) >= 2:
+            return "Покатались"
+        return "Сеанс прошёл"
+    return None
 
 
 def card_text(snap: Snap) -> str:
@@ -106,77 +121,12 @@ def card_text(snap: Snap) -> str:
     team = (snap.team_title or "").strip()
     team_line = f"{team}\n" if team else ""
     head = f"{label}\n" if label else ""
-    if snap.cancelled:
-        return f"{head}{team_line}Сеанс сняли.\n{when}\n{place}"
-    if snap.expired or snap.status == "expired":
-        return f"{head}{team_line}Не собрались.\n{when}\n{place}"
-    if snap.status == "cancelled":
-        return f"{head}{team_line}Сбор снят.\n{when}\n{place}"
-    if snap.previous_starts_at is not None and snap.status != "confirmed":
-        return (
-            f"{head}{team_line}Время съехало: {clock(snap.previous_starts_at)} → {clock(snap.starts_at)}.\n"
-            "Подтвердите ещё раз.\n"
-            f"{place}"
-        )
-    who = on_the_ice(snap.going_names) + "."
-    if team_gathered(snap):
-        return f"{head}{team_line}Едем.\n{when}\n{place}\n{who}"
-    missing = snap.min_people - len(snap.going_names)
-    return f"{head}{team_line}{when}\n{place}\n{who}\n{still_line(missing)}"
-
-
-def confirm_dm(snap: Snap) -> str:
-    local = _local(snap.starts_at)
-    return f"Сбор готов. {weekday_nom(snap.starts_at)}, {local.strftime('%H:%M')}, {snap.venue}"
-
-
-def join_dm(name: str) -> str:
-    return f"К вам присоединился {name}"
-
-
-def day_reminder(snap: Snap) -> str:
-    return f"Завтра в {clock(snap.starts_at)} {snap.venue}. Идут {len(snap.going_names)}"
-
-
-def hour_going(snap: Snap) -> str:
-    return f"Через час едем. Идут {len(snap.going_names)}"
-
-
-def hour_maybe(snap: Snap) -> str:
-    return f"Идёшь сегодня в {clock(snap.starts_at)}?"
-
-
-def followup_dm() -> str:
-    return "Пока никто не ответил. Поменять время или позвать ещё чат?"
-
-
-def moved_dm(snap: Snap) -> str:
-    assert snap.previous_starts_at is not None
-    return (
-        f"Время изменилось: {clock(snap.previous_starts_at)} → {clock(snap.starts_at)}. "
-        "Подтвердите ещё раз"
-    )
-
-
-def cancel_dm() -> str:
-    return "Сеанс отменён. Вот ближайшие другие"
-
-
-def after_dm() -> str:
-    return "Были на льду?"
-
-
-def weekly_dm(snap: Snap, *, were: int, goal: int) -> str:
-    return f"Было {were} из {goal}. Повторить в {weekday_in(snap.starts_at)}?"
-
-
-def together_line(count: int) -> str:
-    n = abs(int(count))
-    mod10, mod100 = n % 10, n % 100
-    if mod10 == 1 and mod100 != 11:
-        word = "раз"
-    elif mod10 in (2, 3, 4) and mod100 not in (12, 13, 14):
-        word = "раза"
-    else:
-        word = "раз"
-    return f"Вы катались вместе {n} {word}"
+    closed = closed_headline(snap)
+    if closed:
+        return f"{head}{team_line}{closed}\n{when}\n{place}"
+    who = on_the_ice(snap.going_names)
+    lines = [head.rstrip("\n"), team_line.rstrip("\n"), when, place]
+    if who:
+        lines.append(f"{who}.")
+    lines.append(crowd_line(len(snap.going_names)))
+    return "\n".join(part for part in lines if part)
