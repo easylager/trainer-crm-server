@@ -2334,10 +2334,16 @@ async def public_arena_session_days(
         "schedule_basis",
     ]
     by_date: dict[str, list[dict[str, Any]]] = {}
+    from src.application.session_load import enrich_sessions_with_typical_load
+
+    serialized: list[dict[str, Any]] = []
     for raw in result.fetchall():
         mapped = dict(zip(keys, raw, strict=True))
         ser = serialize_ice_session(mapped)
         ser.pop("parser_key", None)
+        serialized.append(ser)
+    await enrich_sessions_with_typical_load(session, serialized)
+    for ser in serialized:
         day = ser["local_date"]
         by_date.setdefault(day, []).append(ser)
     return [{"local_date": d, "sessions": by_date[d]} for d in sorted(by_date)]

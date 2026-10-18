@@ -16,6 +16,15 @@
   var HINT_WEEKS_BACK = 16;
   var PRIMARY_KINDS = ['public_skate', 'hockey_practice'];
 
+  var LOAD_DAY_LABELS = {
+    mon_thu: 'Пн–чт',
+    fri: 'Пятница',
+    sat: 'Суббота',
+    sun: 'Воскресенье'
+  };
+  var LOAD_LEVELS = ['calm', 'medium', 'busy'];
+  var LOAD_LEVEL_LABELS = { calm: 'Свободно', medium: 'Средне', busy: 'Людно' };
+
   var state = {
     cities: [],
     arenas: [],
@@ -28,7 +37,9 @@
     editingSessionId: null,
     priceHints: {},
     activeKind: 'public_skate',
-    hintsLoading: false
+    hintsLoading: false,
+    globalLoadRules: null,
+    arenaLoad: null
   };
 
   function apiUrl(path) {
@@ -562,6 +573,153 @@
       .catch(function(err) { showAlert(err.message || String(err)); });
   }
 
+  function levelBtnClass(level) {
+    return 'lvl-btn on-' + level;
+  }
+
+  function renderLoadBand(band, onPick) {
+    var row = document.createElement('div');
+    row.className = 'load-band';
+    var time = document.createElement('span');
+    time.className = 'time';
+    time.textContent = band.starts_from + '–' + (band.starts_before || 'конец');
+    row.appendChild(time);
+    LOAD_LEVELS.forEach(function(lv) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lvl-btn' + (band.level === lv ? ' on-' + lv : '');
+      b.textContent = LOAD_LEVEL_LABELS[lv];
+      b.addEventListener('click', function() { onPick(lv); });
+      row.appendChild(b);
+    });
+    return row;
+  }
+
+  function renderGlobalLoadRules(data) {
+    var root = document.getElementById('loadRulesGlobal');
+    if (!root) return;
+    root.innerHTML = '';
+    var rules = (data && data.rules) || {};
+    Object.keys(LOAD_DAY_LABELS).forEach(function(dg) {
+      var block = document.createElement('div');
+      var title = document.createElement('div');
+      title.className = 'panel-title';
+      title.textContent = LOAD_DAY_LABELS[dg];
+      block.appendChild(title);
+      (rules[dg] || []).forEach(function(band) {
+        block.appendChild(renderLoadBand(band, function(level) {
+          var next = (rules[dg] || []).map(function(b) {
+            if (b.id === band.id) return Object.assign({}, b, { level: level });
+            return b;
+          });
+          sendJson('PUT', '/admin/session-load/global', {
+            day_group: dg,
+            intervals: next.map(function(b) {
+              return {
+                starts_from: b.starts_from,
+                starts_before: b.starts_before,
+                level: b.level
+              };
+            })
+          }).then(function(res) {
+            state.globalLoadRules = res;
+            renderGlobalLoadRules(res);
+            showToast('Общая шкала сохранена');
+          }).catch(function(err) { showAlert(err.message || String(err)); });
+        }));
+      });
+      root.appendChild(block);
+    });
+  }
+
+  function loadGlobalLoadRules() {
+    return getJson('/admin/session-load/global').then(function(data) {
+      state.globalLoadRules = data;
+      renderGlobalLoadRules(data);
+    });
+  }
+
+  function renderArenaLoad(data) {
+    var wrap = document.getElementById('loadRulesArena');
+    if (!wrap) return;
+    if (!state.arenaId) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    state.arenaLoad = data;
+    var sel = document.getElementById('arenaLoadCharacter');
+    if (sel) sel.value = data.load_character || 'steady';
+    var badge = document.getElementById('arenaLoadBadge');
+    if (badge) {
+      badge.textContent = data.has_custom_rules ? 'Своя шкала для этой арены' : 'Как у всех (общие правила)';
+    }
+    var bands = document.getElementById('loadRulesArenaBands');
+    if (!bands) return;
+    bands.innerHTML = '';
+    if (!data.has_custom_rules) return;
+    var byDay = {};
+    (data.rules || []).forEach(function(r) {
+      if (!byDay[r.day_group]) byDay[r.day_group] = [];
+      byDay[r.day_group].push(r);
+    });
+    Object.keys(LOAD_DAY_LABELS).forEach(function(dg) {
+      if (!byDay[dg] || !byDay[dg].length) return;
+      var title = document.createElement('div');
+      title.className = 'panel-title';
+      title.textContent = LOAD_DAY_LABELS[dg];
+      bands.appendChild(title);
+      byDay[dg].forEach(function(band) {
+        bands.appendChild(renderLoadBand(band, function(level) {
+          var next = byDay[dg].map(function(b) {
+            if (b.id === band.id) return Object.assign({}, b, { level: level });
+            return b;
+          });
+          sendJson('PUT', '/admin/arenas/' + state.arenaId + '/session-load/rules', {
+            day_group: dg,
+            intervals: next.map(function(b) {
+              return {
+                starts_from: b.starts_from,
+                starts_before: b.starts_before,
+                level: b.level
+              };
+            })
+          }).then(function(res) {
+            renderArenaLoad(res);
+            showToast('Шкала арены сохранена');
+          }).catch(function(err) { showAlert(err.message || String(err)); });
+        }));
+      });
+    });
+  }
+
+  function loadArenaLoad() {
+    if (!state.arenaId) {
+      renderArenaLoad({ load_character: 'steady', has_custom_rules: false, rules: [] });
+      return Promise.resolve();
+    }
+    return getJson('/admin/arenas/' + state.arenaId + '/session-load').then(renderArenaLoad);
+  }
+
+  document.getElementById('arenaLoadCharacter').addEventListener('change', function() {
+    if (!state.arenaId) return;
+    sendJson('PUT', '/admin/arenas/' + state.arenaId + '/session-load/character', {
+      load_character: this.value
+    }).then(function(res) {
+      renderArenaLoad(res);
+      showToast('Характер катка сохранён');
+    }).catch(function(err) { showAlert(err.message || String(err)); });
+  });
+  document.getElementById('btnResetArenaLoad').addEventListener('click', function() {
+    if (!state.arenaId) return;
+    sendJson('DELETE', '/admin/arenas/' + state.arenaId + '/session-load/rules')
+      .then(function(res) {
+        renderArenaLoad(res);
+        showToast('Своя шкала сброшена');
+      })
+      .catch(function(err) { showAlert(err.message || String(err)); });
+  });
+
   document.getElementById('citySelect').addEventListener('change', function() {
     state.cityId = Number(this.value) || null;
     state.arenaId = null;
@@ -573,6 +731,7 @@
     state.activeKind = 'public_skate';
     updateSubtitle();
     loadWeek();
+    loadArenaLoad();
   });
   document.getElementById('arenaSearch').addEventListener('input', function() {
     state.arenaQ = this.value;
@@ -631,6 +790,7 @@
   state.weekStart = mondayIso(new Date());
 
   loadCities().then(function() {
+    loadGlobalLoadRules();
     if (state.arenaId) {
       state.priceHints = readStoredHints(state.arenaId);
       var sel = document.getElementById('arenaSelect');

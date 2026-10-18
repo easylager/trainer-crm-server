@@ -237,6 +237,13 @@
     .sheet .actions button { flex: 1; padding: 10px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; }
     .sheet .btn-save { background: var(--tg-theme-button-color, #2ea6ff); color: #fff; }
     .sheet .btn-cancel { background: rgba(148, 163, 184, 0.35); color: inherit; }
+    .load-band { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; font-size: 12px; }
+    .load-band .time { min-width: 72px; color: var(--tg-theme-hint-color); }
+    .lvl-btn { border-radius: 8px; border: 1px solid rgba(148,163,184,0.4); padding: 4px 8px; cursor: pointer; font-size: 11px; }
+    .lvl-btn.on-calm { background: #22c55e; color: #052e16; border-color: #16a34a; }
+    .lvl-btn.on-medium { background: #eab308; color: #422006; border-color: #ca8a04; }
+    .lvl-btn.on-busy { background: #ef4444; color: #450a0a; border-color: #dc2626; }
+    .arena-load-badge { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -261,6 +268,24 @@
       <button type="button" id="btnToday">Сегодня</button>
     </div>
   </div>
+
+  <details class="panel" id="loadRulesPanel">
+    <summary class="panel-title" style="cursor:pointer;margin-bottom:0;">Обычная загрузка (день × час)</summary>
+    <div id="loadRulesGlobal" style="margin-top:10px;"></div>
+    <div id="loadRulesArena" hidden style="margin-top:12px;border-top:1px solid rgba(148,163,184,0.25);padding-top:10px;">
+      <div class="panel-title">Арена</div>
+      <div class="row">
+        <select id="arenaLoadCharacter" aria-label="Характер катка">
+          <option value="steady">Обычный</option>
+          <option value="quiet">Тише среднего</option>
+          <option value="hot">Люднее среднего</option>
+        </select>
+        <button type="button" id="btnResetArenaLoad">Сбросить свою шкалу</button>
+      </div>
+      <div class="arena-load-badge" id="arenaLoadBadge"></div>
+      <div id="loadRulesArenaBands"></div>
+    </div>
+  </details>
 
   <div class="panel" id="schedulePanel" hidden>
     <div class="week-nav">
