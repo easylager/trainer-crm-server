@@ -100,7 +100,7 @@ def render_company_card(snap: Snap, *, avatar_bytes: Sequence[bytes | None] = ()
     _draw_kind(draw, kind_label(snap.kind), chip_font, pad)
     draw.text((pad, y), clock(snap.starts_at), font=time_font, fill=_INK)
     venue_y = y + 108
-    for index, row in enumerate(_wrap(draw, snap.venue, place_font, 640, 1)):
+    for row in _wrap(draw, snap.venue, place_font, 640, 1):
         draw.text((pad, venue_y), row, font=place_font, fill=_MUTED)
 
     rink_top = max(250, venue_y + 48)
