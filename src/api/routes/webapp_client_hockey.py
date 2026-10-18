@@ -62,9 +62,12 @@ def _player_name(display_name: str | None, init_raw: str) -> str:
         return given
     user = parse_user_json_from_init_data(init_raw) or {}
     first = user.get("first_name")
-    if isinstance(first, str) and first.strip():
-        return first.strip()
-    return ""
+    if not isinstance(first, str) or not first.strip():
+        return ""
+    # «Андрей К.»: в общей таблице одних Андреев десятки, полная фамилия там не нужна.
+    last = user.get("last_name")
+    initial = last.strip()[:1].upper() if isinstance(last, str) and last.strip() else ""
+    return f"{first.strip()} {initial}." if initial else first.strip()
 
 
 def _match_out(row: dict, *, now: datetime) -> dict:

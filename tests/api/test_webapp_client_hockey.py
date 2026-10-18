@@ -218,3 +218,18 @@ async def test_standings_points_rank_and_is_me(app_use_test_db, db_session) -> N
         assert me_row["rank"] < other_row["rank"]
         assert body["me"] == {"rank": me_row["rank"], "points": 5, "exact": 1, "played": 1}
         assert sum(1 for item in body["items"] if item["is_me"]) == 1
+
+
+def test_player_name_from_init_data_uses_last_initial() -> None:
+    import json
+    from urllib.parse import urlencode
+
+    from src.api.routes.webapp_client_hockey import _player_name
+
+    def raw(user: dict) -> str:
+        return urlencode({"user": json.dumps(user, ensure_ascii=False)})
+
+    assert _player_name(None, raw({"first_name": "Андрей", "last_name": "козлов"})) == "Андрей К."
+    assert _player_name(None, raw({"first_name": "Андрей"})) == "Андрей"
+    assert _player_name("Саша", raw({"first_name": "Андрей", "last_name": "Козлов"})) == "Саша"
+    assert _player_name(None, "") == ""
