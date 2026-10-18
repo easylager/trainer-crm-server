@@ -24,7 +24,7 @@ from src.shared.config import Settings
 from src.shared.copy_ru import t
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.public_display import format_public_name
-from src.shared.venue_types import VENUE_TYPE_ICE, VENUE_TYPE_SHOP, normalize_venue_type, venue_type_noun
+from src.shared.venue_types import VENUE_TYPE_SHOP, has_public_skating, normalize_venue_type, venue_type_noun
 
 _CACHE_TTL_SEC = 300.0
 _CACHE: dict[int, tuple[float, list[dict[str, Any]]]] = {}
@@ -117,7 +117,8 @@ def choose_candidates(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     Точка расширения под личный сигнал. Сейчас: публичные места города кроме
     катков, с фото раньше, счёт уже посчитан на строке, при равенстве — имя.
     """
-    eligible = [dict(row) for row in rows if normalize_venue_type(row.get("venue_type")) != VENUE_TYPE_ICE]
+    # Катки — крытые и уличные — и так идут списком «Покататься» под подборкой.
+    eligible = [dict(row) for row in rows if not has_public_skating(row.get("venue_type"))]
     eligible = [row for row in eligible if str(row.get("slug") or "").strip()]
     eligible.sort(
         key=lambda row: (

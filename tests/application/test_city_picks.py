@@ -126,6 +126,7 @@ async def test_for_you_ranks_photo_score_and_breaks_a_third_of_the_same_kind(db_
     no_photo = await _place(db_session, city_id, name="Яхта", photo=False)
     gym = await _place(db_session, city_id, name="Гамма", venue_type="gym", photo=False)
     ice = await _place(db_session, city_id, name="Каток", venue_type="ice", photo=True)
+    outdoor = await _place(db_session, city_id, name="Уличный каток", venue_type="outdoor", photo=True)
     recent = _NOW - timedelta(days=1)
     await _event(db_session, city_id=city_id, arena_id=beta, kind="public_contact_click", at=recent)
     await _event(db_session, city_id=city_id, arena_id=beta, kind="public_contact_click", at=recent)
@@ -134,6 +135,7 @@ async def test_for_you_ranks_photo_score_and_breaks_a_third_of_the_same_kind(db_
         await _event(db_session, city_id=city_id, arena_id=no_photo, kind="public_page_view", at=recent)
     for _ in range(20):
         await _event(db_session, city_id=city_id, arena_id=ice, kind="public_page_view", at=recent)
+        await _event(db_session, city_id=city_id, arena_id=outdoor, kind="public_page_view", at=recent)
     await _event(
         db_session,
         city_id=city_id,
@@ -146,6 +148,7 @@ async def test_for_you_ranks_photo_score_and_breaks_a_third_of_the_same_kind(db_
     items = await for_you(db_session, city_id, now=_NOW)
     ids = [item["arena_id"] for item in items]
     assert ice not in ids
+    assert outdoor not in ids
     assert ids[0] == beta
     assert ids[1] == alpha
     assert ids[2] == gym
