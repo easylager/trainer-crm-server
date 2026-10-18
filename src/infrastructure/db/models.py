@@ -592,6 +592,40 @@ class HockeyPick(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeyLeague(Base):
+    """Лига друзей «Кто кого»: название, владелец, код приглашения (TASK-298)."""
+
+    __tablename__ = "hockey_leagues"
+    __table_args__ = (
+        UniqueConstraint("invite_code", name="uq_hockey_leagues_invite_code"),
+        CheckConstraint("char_length(btrim(name)) BETWEEN 1 AND 28", name="ck_hockey_leagues_name"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(28), nullable=False)
+    owner_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    invite_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyLeagueMember(Base):
+    """Участник лиги «Кто кого» (TASK-298)."""
+
+    __tablename__ = "hockey_league_members"
+    __table_args__ = (Index("ix_hockey_league_members_player", "player_key"),)
+
+    league_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    player_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
+    )
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class ClientBroadcastLog(Base):
     """One delivery attempt of a client broadcast. Repeat runs skip existing rows."""
 
