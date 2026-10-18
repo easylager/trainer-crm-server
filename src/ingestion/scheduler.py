@@ -13,6 +13,7 @@ from typing import Awaitable, Callable
 
 from src.application.ice_session_use_cases import IceSessionValidationError
 from src.ingestion.cpu_work import IngestTimeoutError
+from src.ingestion.ice_sales_snapshots import KoronaSalesSnapshotStore, try_record_korona_sales
 from src.ingestion.freshness import (
     ERROR_CODE_EMPTY_AFTER_FILTER,
     ERROR_CODE_EMPTY_SOURCE,
@@ -71,6 +72,7 @@ class IceIngestScheduler:
         normalizer: IceSessionNormalizer | None = None,
         validator: IceSessionValidator | None = None,
         publisher: IceSessionPublisher | None = None,
+        korona_sales_store: KoronaSalesSnapshotStore | None = None,
         by_egress_configured: bool = False,
         by_egress_proxy_url: str | None = None,
         rng: random.Random | None = None,
@@ -86,6 +88,7 @@ class IceIngestScheduler:
         self._normalizer = normalizer or IceSessionNormalizer()
         self._validator = validator or IceSessionValidator()
         self._publisher = publisher
+        self._korona_sales_store = korona_sales_store
         # TASK-083 / PDEC-004: worker-level proof a real BY egress path (VPS tunnel) is
         # wired up. job.config["requires_by_egress"] stays True forever once set — this
         # only says the flag is now satisfied on *this* worker, never mutate the flag.
@@ -163,7 +166,7 @@ class IceIngestScheduler:
         return record
 
     async def _execute_job_tick(self, job: ParserJob, now: datetime) -> ScrapeRunRecord:
-        record, drafts = await self._run_one(job, now)
+        record, drafts, korona_sales = await self._run_one(job, now)
         run_id = await self._recorder.record(record)
         if run_id is not None:
             record = replace(record, persisted_id=run_id)
@@ -202,6 +205,14 @@ class IceIngestScheduler:
                 await self._recorder.mark_publish_error(
                     run_id, error_code="publish_error", error_message=str(exc)
                 )
+        if record.status == RUN_STATUS_OK and korona_sales:
+            await try_record_korona_sales(
+                self._korona_sales_store,
+                arena_id=int(job.arena_id),
+                korona_sessions=korona_sales,
+                observed_at=record.finished_at,
+                timezone_name=publish_timezone(job.config),
+            )
         state = await self._next_state(job, record, now)
         await self._store.mark_attempted(
             job.id,
@@ -269,7 +280,8 @@ class IceIngestScheduler:
             shown = await counter(job.arena_id, now)
         return next_source_state(job.state, record, shown_sessions=shown)
 
-    async def _run_one(self, job: ParserJob, now: datetime) -> tuple[ScrapeRunRecord, list]:
+    async def _run_one(self, job: ParserJob, now: datetime) -> tuple[ScrapeRunRecord, list, list]:
+        """Запись прогона, черновики к публикации и счётчики продаж Korona (TASK-295)."""
         started = now
         empty: list = []
         if config_requires_by_egress(job.config) and not self._by_egress_configured:
@@ -283,6 +295,7 @@ class IceIngestScheduler:
                     error_code="requires_by_egress",
                 ),
                 empty,
+                empty,
             )
         parser = self._registry.get(job.parser_key)
         if parser is None:
@@ -295,6 +308,7 @@ class IceIngestScheduler:
                     error_message=f"unknown parser_key={job.parser_key!r}",
                     error_code="unknown_parser_key",
                 ),
+                empty,
                 empty,
             )
         proxy = self._by_egress_proxy_url if config_requires_by_egress(job.config) else None
@@ -320,6 +334,7 @@ class IceIngestScheduler:
                     error_code="validation_error",
                 ),
                 empty,
+                empty,
             )
         except IngestTimeoutError as exc:
             # Наш дедлайн на extract или дедлайн CPU-шага (OCR/PDF): сообщение уже точное.
@@ -333,6 +348,7 @@ class IceIngestScheduler:
                     error_message=str(exc),
                     error_code=ERROR_CODE_TIMEOUT,
                 ),
+                empty,
                 empty,
             )
         except TimeoutError as exc:
@@ -348,6 +364,7 @@ class IceIngestScheduler:
                     error_code=ERROR_CODE_TIMEOUT,
                 ),
                 empty,
+                empty,
             )
         except Exception as exc:  # noqa: BLE001 — one job must not block the queue
             logger.exception("parser %s failed for job %s", job.parser_key, job.id)
@@ -360,6 +377,7 @@ class IceIngestScheduler:
                     error_message=str(exc),
                     error_code="extract_error",
                 ),
+                empty,
                 empty,
             )
         status = RUN_STATUS_OK if validated else RUN_STATUS_EMPTY
@@ -393,6 +411,7 @@ class IceIngestScheduler:
                 error_message=error_message,
             ),
             validated,
+            list(extraction.korona_sales or []),
         )
 
     @staticmethod

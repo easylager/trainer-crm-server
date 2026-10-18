@@ -1,4 +1,5 @@
 """Korona Ticket rink SSR parser (TASK-156)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -28,6 +29,10 @@ def test_parse_rink_nuxt_fixture() -> None:
     sessions = parse_rink_nuxt_html(html)
     assert len(sessions) >= 10
     sample = next(s for s in sessions if s.starts_at_local == "13:15" and s.local_date == date(2026, 10, 4))
+    assert sample.count == 115
+    assert sample.bought == 40
+    assert sample.locked == 5
+    assert sample.ordered == 0
     assert sample.remaining == 70
     assert sample.ends_at_local == "14:00"
 

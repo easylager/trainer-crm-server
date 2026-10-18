@@ -460,6 +460,35 @@ class IceSession(Base):
     schedule_basis: Mapped[str] = mapped_column(String(16), nullable=False, server_default="live")
 
 
+class IceSalesSnapshot(Base):
+    """Point-in-time Korona ticket counters per arena session slot (TASK-295)."""
+
+    __tablename__ = "ice_sales_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_ice_sales_snapshots_session_observed",
+            "arena_id",
+            "local_date",
+            "starts_at_local",
+            "observed_at",
+        ),
+        CheckConstraint("capacity >= 0", name="ck_ice_sales_snapshots_capacity"),
+        CheckConstraint("sold >= 0", name="ck_ice_sales_snapshots_sold"),
+        CheckConstraint("held >= 0", name="ck_ice_sales_snapshots_held"),
+        CheckConstraint("source IN ('korona')", name="ck_ice_sales_snapshots_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    local_date: Mapped[date] = mapped_column(Date(), nullable=False)
+    starts_at_local: Mapped[time] = mapped_column(Time(), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    capacity: Mapped[int] = mapped_column(Integer(), nullable=False)
+    sold: Mapped[int] = mapped_column(Integer(), nullable=False)
+    held: Mapped[int] = mapped_column(Integer(), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+
+
 class IceCityInterest(Base):
     """Client tap on Ice tab «скоро добавим катки» for a city without map rinks."""
 

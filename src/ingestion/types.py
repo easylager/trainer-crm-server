@@ -99,6 +99,8 @@ class Extraction:
     slots: list[ExtractedSlot] = field(default_factory=list)
     observed_at: datetime | None = None
     schedule_basis: str | None = None
+    # TASK-295: счётчики продаж Korona у Замка; пишутся отдельно от ice_sessions.
+    korona_sales: list[Any] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

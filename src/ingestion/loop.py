@@ -44,6 +44,7 @@ async def run_ice_ingest_tick() -> IceIngestTickResult:
     # Импорты здесь, а не в начале цикла: ошибка импорта — это сбой тика (в лог, цикл жив),
     # а не тихая смерть задачи (TASK-176).
     from src.infrastructure.db.session import async_session_factory, engine
+    from src.ingestion.ice_sales_snapshots import SqlAlchemyKoronaSalesSnapshotStore
     from src.ingestion.publish import SqlAlchemyIceSessionPublisher
     from src.ingestion.scheduler_lock import run_with_ice_ingest_lock
     from src.ingestion.types import RUN_STATUS_OK
@@ -56,6 +57,7 @@ async def run_ice_ingest_tick() -> IceIngestTickResult:
                 recorder=SqlAlchemyScrapeRunRecorder(session),
                 registry=default_registry(),
                 publisher=SqlAlchemyIceSessionPublisher(session),
+                korona_sales_store=SqlAlchemyKoronaSalesSnapshotStore(session),
                 by_egress_proxy_url=get_settings().by_egress_proxy_url,
                 checkpoint=session.commit,
                 job_savepoint=session.begin_nested,
