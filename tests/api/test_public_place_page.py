@@ -570,7 +570,10 @@ async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db
     assert "place-share-zovi" not in html
     links_row = re.search(r'<div class="b-links">(.*?)</div>', html, re.S)
     assert links_row
-    assert "Билеты — на сайте катка" in links_row.group(1)
+    # Покупка — над полосой дней, не в нижнем ряду ссылок.
+    assert "Купить билет онлайн" not in links_row.group(1)
+    schedule = html.split('id="schedule"', 1)[1]
+    assert schedule.index('class="b-btn b-btn--wide b-buy"') < schedule.index('class="b-sched')
     assert ">Открытка</a>" in links_row.group(1)
     # TASK-278: док виден и без JS — в нём «Открыть в Telegram»; «Позвать» ждёт скрипт
     # (без JS ей нечего открыть — ссылки мессенджеров под выбранным сеансом).

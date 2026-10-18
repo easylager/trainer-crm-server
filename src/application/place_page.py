@@ -1379,16 +1379,24 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     all_slots = [s for slots in by_date.values() for s in slots]
     aside_price, common = _b_price_floor(all_slots)
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
-    foot: list[str] = []
+    # Где касса продаёт онлайн — покупка над расписанием: в сезон вечера и выходные
+    # разбирают, и кнопка нужна до выбора времени, а не после всей недели.
+    buy = ""
     if links.get("tickets"):
+        from src.application.catalog_icons import icon_svg
+
         href, blank = links["tickets"]
         attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
-        foot.append(f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>')
+        buy = (
+            f'<a class="b-btn b-btn--wide b-buy" href="{_esc(href)}"{attrs}>'
+            f'{_esc(t("place.tickets_buy"))}{icon_svg("external")}</a>'
+        )
+    foot: list[str] = []
     zovi = zovi_entry_path(view)
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = f"<div data-glide-session-list-root>{strip}{links_row}</div>"
+    body = f"{buy}<div data-glide-session-list-root>{strip}{links_row}</div>"
     aside = f'<span class="b-aside">{_esc(aside_price)}</span>' if aside_price else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
@@ -1710,10 +1718,11 @@ def render_place_body_b(
     )
     parts = [
         _b_hero(card, status_html=_b_status(view)),
-        _b_about(card),
         _b_plan(view, invite=invite),
         _b_schedule(view, base_path=base_path, invite=invite, links=links),
         _b_ohm(view, base_path=base_path, invite=invite),
+        # Описание — после времени: на страницу приходят за сеансом, а не за абзацем о катке.
+        _b_about(card),
         _b_arrive(card, links),
         _b_onsite(card, cta_url=cta_url, trainers_listed=bool(view.get("trainers"))),
         _b_trainers(view, base_url=base_url),
