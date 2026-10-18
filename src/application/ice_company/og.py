@@ -16,11 +16,13 @@ _BG = (14, 28, 36)
 _INK = (244, 247, 248)
 _MUTED = (155, 176, 188)
 _ACCENT = (127, 215, 216)
-_BOARD = (18, 42, 52)
-_ICE = (214, 236, 242)
-_LINE_BLUE = (46, 108, 184)
-_LINE_RED = (196, 54, 54)
-_PLAYER = (14, 28, 36)
+# Тёмная площадка в цветах сайта: --g-dark-line для разметки, лист чуть светлее фона.
+_SHEET = (17, 34, 45)
+_RINK_LINE = (44, 70, 89)
+# Бирюза поверх листа, как .b-motif__mid (55%) и __dot (70%) на сайте — уже смешанная.
+_RINK_MID = (78, 134, 139)
+_RINK_DOT = (94, 161, 164)
+_PLAYER = (29, 47, 61)
 
 _SPOTS: dict[int, tuple[tuple[float, float], ...]] = {
     1: ((0.22, 0.50),),
@@ -135,51 +137,37 @@ def _draw_kind(draw: ImageDraw.ImageDraw, label: str, font: ImageFont.FreeTypeFo
 
 
 def _draw_rink(image: Image.Image, rink: tuple[int, int, int, int]) -> None:
+    """Тёмная разметка катка, как обложки сайта (``rink_motif_svg``): линии в цвет
+    ``--g-dark-line``, центр — бирюзовым. Яркий белый лёд с красным и синим в ленте
+    чата спорил с лицами и названием команды."""
     left, top, right, bottom = rink
     width, height = right - left, bottom - top
     sheet = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     mask = Image.new("L", (width, height), 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, width - 1, height - 1), radius=86, fill=255)
     pen = ImageDraw.Draw(sheet)
-    pen.rounded_rectangle((0, 0, width - 1, height - 1), radius=86, fill=_BOARD)
-    inset = 18
-    pen.rounded_rectangle((inset, inset, width - 1 - inset, height - 1 - inset), radius=70, fill=_ICE)
-
-    ice_left, ice_top = inset + 8, inset + 8
-    ice_right, ice_bottom = width - inset - 8, height - inset - 8
-    ice_w = ice_right - ice_left
-    ice_h = ice_bottom - ice_top
+    pen.rounded_rectangle((0, 0, width - 1, height - 1), radius=86, fill=_SHEET, outline=_RINK_LINE, width=4)
 
     def x_at(fraction: float) -> int:
-        return int(ice_left + ice_w * fraction)
+        return int(width * fraction)
 
     def y_at(fraction: float) -> int:
-        return int(ice_top + ice_h * fraction)
+        return int(height * fraction)
 
-    for fraction in (1 / 3, 2 / 3):
-        x = x_at(fraction)
-        pen.line((x, ice_top, x, ice_bottom), fill=_LINE_BLUE, width=6)
-    pen.line((x_at(0.5), ice_top, x_at(0.5), ice_bottom), fill=_LINE_RED, width=6)
-    for fraction in (0.08, 0.92):
-        x = x_at(fraction)
-        pen.line((x, ice_top, x, ice_bottom), fill=_LINE_RED, width=3)
-
-    radius = 78
-    pen.ellipse(
-        (x_at(0.5) - radius, y_at(0.5) - radius, x_at(0.5) + radius, y_at(0.5) + radius),
-        outline=_LINE_RED,
-        width=4,
-    )
-    pen.ellipse((x_at(0.5) - 7, y_at(0.5) - 7, x_at(0.5) + 7, y_at(0.5) + 7), fill=_LINE_RED)
-
-    for fraction, start in ((0.08, 270), (0.92, 90)):
-        radius = 36
-        box = (x_at(fraction) - radius, y_at(0.5) - radius, x_at(fraction) + radius, y_at(0.5) + radius)
-        pen.arc(box, start, start + 180, fill=_LINE_RED, width=3)
-        goal_w, goal_h = 16, 54
-        gx = x_at(fraction) - goal_w if fraction < 0.5 else x_at(fraction)
-        gy = y_at(0.5) - goal_h // 2
-        pen.rectangle((gx, gy, gx + goal_w, gy + goal_h), outline=_LINE_RED, width=3)
+    for fraction in (0.3, 0.7):
+        pen.line((x_at(fraction), 0, x_at(fraction), height), fill=_RINK_LINE, width=4)
+    mid = _RINK_MID
+    pen.line((x_at(0.5), 0, x_at(0.5), height), fill=mid, width=6)
+    radius = 82
+    cx, cy = x_at(0.5), y_at(0.5)
+    pen.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=mid, width=6)
+    pen.ellipse((cx - 8, cy - 8, cx + 8, cy + 8), fill=_RINK_DOT)
+    for fx in (0.13, 0.87):
+        for fy in (0.27, 0.73):
+            r = 52
+            pen.ellipse(
+                (x_at(fx) - r, y_at(fy) - r, x_at(fx) + r, y_at(fy) + r), outline=_RINK_LINE, width=4
+            )
 
     image.paste(sheet, (left, top), mask)
 
@@ -256,16 +244,17 @@ def _skater(
         initial_font = _font("Inter-Bold.ttf", _SKATER_INITIAL_SIZE)
         initial_w = draw.textlength(initial, font=initial_font)
         draw.text((cx - initial_w / 2, cy - initial_font.size // 2), initial, font=initial_font, fill=_INK)
-    if team_ready:
-        halo = (cx - radius - 5, cy - radius - 5, cx + radius + 5, cy + radius + 5)
-        draw.ellipse(halo, outline=_ACCENT, width=5)
+    # На тёмном льду лицо держит бирюзовое кольцо; собравшимся (3+) — толще.
+    ring = 6 if team_ready else 3
+    halo = (cx - radius - ring, cy - radius - ring, cx + radius + ring, cy + radius + ring)
+    draw.ellipse(halo, outline=_ACCENT, width=ring)
     if not display:
         return
     name = _fit(draw, display, font, _SKATER_NAME_MAX_W)
     text_w = draw.textlength(name, font=font)
     box_w = text_w + 32
     box = (cx - box_w / 2, cy + radius + 10, cx + box_w / 2, cy + radius + 54)
-    draw.rounded_rectangle(box, radius=20, fill=_PLAYER)
+    draw.rounded_rectangle(box, radius=20, fill=_PLAYER, outline=_RINK_LINE, width=2)
     draw.text((box[0] + 16, box[1] + 8), name, font=font, fill=_INK)
 
 

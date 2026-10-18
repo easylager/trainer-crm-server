@@ -83,8 +83,11 @@ def test_poster_is_a_rink() -> None:
     image = Image.open(io.BytesIO(raw))
     assert image.size == (1080, 1080)
     assert image.getpixel((12, 12))[0] < 40
-    ice = image.getpixel((180, 520))
-    assert ice[2] > 180 and ice[0] > 160
+    # Тёмный лист катка, как обложки сайта, и бирюзовая центральная линия.
+    from src.application.ice_company.og import _RINK_MID, _SHEET
+
+    assert image.getpixel((180, 600))[:3] == _SHEET
+    assert image.getpixel((540, 760))[:3] == _RINK_MID
 
 
 def test_poster_renders_for_going_counts() -> None:
