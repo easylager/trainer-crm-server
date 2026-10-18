@@ -965,8 +965,13 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   display: flex; align-items: center; justify-content: center;
   font-weight: var(--app-weight-bold); color: var(--glide-ink-teal, var(--app-cta-fill)); background: var(--glide-brand-wash);
 }
-.ice-foryou__text { display: flex; flex-direction: column; line-height: 1.15; }
-.ice-foryou__text b { font-size: var(--app-text-body); font-weight: var(--app-weight-bold); white-space: nowrap; }
+/* Длинное имя («Ледовый дворец спорта Минской области») не растягивает пилюлю на экран. */
+.ice-foryou__pill { max-width: 220px; }
+.ice-foryou__text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.ice-foryou__text b {
+  font-size: var(--app-text-body); font-weight: var(--app-weight-bold);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .ice-foryou__text span { font-size: var(--app-text-caption); color: var(--glide-hint); }
 
 .ice-listhead {
