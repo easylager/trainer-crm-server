@@ -468,10 +468,15 @@ async def test_audience_minsk_booking_and_optout(db_session: AsyncSession) -> No
     await _session_city(db_session, empty_other_tg, None)
     await _booking_at(db_session, empty_other_id, other_arena)
 
+    # Открывал бот и выбрал Минск, но к тренеру не записывался — тоже аудитория каталога.
+    visitor_tg = unique_test_telegram_id()
+    await _session_city(db_session, visitor_tg, minsk)
+
     weekly = set(await fetch_forecast_audience(db_session, respect_optout=True))
     season = set(await fetch_forecast_audience(db_session, respect_optout=False))
 
     assert minsk_tg in weekly
+    assert visitor_tg in weekly
     assert empty_tg in weekly
     assert family_tg in weekly
     assert other_tg not in weekly

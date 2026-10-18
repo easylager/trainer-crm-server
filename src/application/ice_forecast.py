@@ -402,9 +402,9 @@ async def fetch_forecast_audience(
 ) -> list[int]:
     """Telegram-id клиентского бота с городом Минск.
 
-    Город берётся из client_sessions. Пустой город — только если у клиента
-    с этим telegram_id есть запись на арене Минска. Не-sandbox и члены
-    семейного доступа, как в fetch_audience_telegram_ids.
+    Пул: не-sandbox клиенты, члены семейного доступа и все, кто открывал клиентский
+    бот (client_sessions). Город — из client_sessions; пустой город — только если
+    у клиента с этим telegram_id есть запись на арене Минска.
     """
     rows = (
         await session.execute(
@@ -424,6 +424,11 @@ async def fetch_forecast_audience(
                     UNION
                     SELECT member_telegram_id
                     FROM client_family_access_members
+                    UNION
+                    -- Открывал клиентский бот, но к тренеру не записывался — это и есть
+                    -- аудитория каталога. Без них рассылка шла бы только тем, кто уже клиент.
+                    SELECT telegram_id
+                    FROM client_sessions
                 )
                 SELECT p.telegram_id
                 FROM pool p
@@ -441,6 +446,13 @@ async def fetch_forecast_audience(
                               AND c.is_sandbox = false
                               AND a.city_id = (SELECT id FROM minsk)
                         )
+                    )
+                )
+                -- Демо-клиент тренера (sandbox) рассылку не получает, даже если открывал бот.
+                AND NOT (
+                    EXISTS (SELECT 1 FROM clients sc WHERE sc.telegram_id = p.telegram_id AND sc.is_sandbox)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM clients rc WHERE rc.telegram_id = p.telegram_id AND NOT rc.is_sandbox
                     )
                 )
                 AND (
@@ -649,6 +661,9 @@ async def _write_log(
             "error": error[:500] if error else None,
         },
     )
+    # Сразу в журнал: упавший на середине прогон не должен прислать второе сообщение тем,
+    # кто его уже получил.
+    await session.commit()
 
 
 async def send_ice_forecast(
