@@ -287,6 +287,10 @@ class ArenaProfile(Base):
             "schedule_mode IN ('auto', 'phone', 'season_closed')",
             name="ck_arena_profiles_schedule_mode",
         ),
+        CheckConstraint(
+            "load_character IN ('quiet', 'steady', 'hot')",
+            name="ck_arena_profiles_load_character",
+        ),
     )
 
     arena_id: Mapped[int] = mapped_column(
@@ -307,6 +311,7 @@ class ArenaProfile(Base):
     season_start_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
     season_end_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
     schedule_mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="auto")
+    load_character: Mapped[str] = mapped_column(String(16), nullable=False, server_default="steady")
     reopen_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
     schedule_mode_note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
