@@ -391,11 +391,24 @@ async def run_tick(
     alert: AlertSender,
     calendar_due: bool,
 ) -> dict[str, object]:
-    """Один проход цикла: календарь, если пора, затем итоги. Не коммитит."""
-    calendar = await sync_calendar(session, fetch, now=now) if calendar_due else None
+    """Один проход цикла: календарь, если пора, затем итоги. Не коммитит.
+
+    Сбой календаря не мешает проверить итоги уже известных матчей: ``calendar_failed`` —
+    чтобы цикл повторил календарь на следующем тике, а не через 6 часов.
+    """
+    calendar: dict[str, int] | None = None
+    calendar_failed = False
+    if calendar_due:
+        try:
+            async with session.begin_nested():
+                calendar = await sync_calendar(session, fetch, now=now)
+        except Exception:
+            logger.warning("hockey calendar sync failed", exc_info=True)
+            calendar_failed = True
     results = await check_due_results(session, fetch, now=now, alert=alert)
     return {
         "calendar": calendar,
+        "calendar_failed": calendar_failed,
         "checked": len(results),
         "final": sum(1 for _, kind in results if kind == KIND_FINAL),
         "review": sum(1 for _, kind in results if kind == KIND_REVIEW),

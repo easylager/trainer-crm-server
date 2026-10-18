@@ -47,6 +47,10 @@
     return Number(parts.day) + ' ' + MONTHS[Number(parts.month) - 1] + ', ' + parts.hour + ':' + parts.minute;
   }
 
+  function isPast(iso) {
+    return new Date(iso).getTime() <= Date.now();
+  }
+
   function renderList(el, items, showReason) {
     el.innerHTML = '';
     if (!items.length) {
@@ -89,9 +93,13 @@
       card.appendChild(reason);
     }
 
+    // Итог ставим только сыгранному матчу: по нему игра начисляет очки.
+    if (!isPast(match.starts_at) || match.status === 'cancelled') return card;
+
     var form = document.createElement('form');
-    var home = numberField('Хозяева', match.home_score);
-    var away = numberField('Гости', match.away_score);
+    // Подписи — названия команд: так счёт не перевернуть, когда Динамо в гостях.
+    var home = numberField(match.home_team, match.home_score);
+    var away = numberField(match.away_team, match.away_score);
     var decided = document.createElement('label');
     decided.textContent = 'Как решён';
     var select = document.createElement('select');
@@ -106,7 +114,7 @@
     var button = document.createElement('button');
     button.type = 'submit';
     button.className = 'btn';
-    button.textContent = 'Сохранить итог';
+    button.textContent = match.status === 'final' ? 'Исправить итог' : 'Сохранить итог';
     var err = document.createElement('p');
     err.className = 'err';
     err.hidden = true;
@@ -119,6 +127,7 @@
       event.preventDefault();
       err.hidden = true;
       err.textContent = '';
+      button.disabled = true;
       request('POST', '/admin/hockey/matches/' + match.id + '/result', {
         home_score: Number(home.input.value),
         away_score: Number(away.input.value),
@@ -126,6 +135,7 @@
       }).then(function () {
         return load();
       }).catch(function (error) {
+        button.disabled = false;
         err.hidden = false;
         err.textContent = error.message;
       });
@@ -156,7 +166,8 @@
       request('GET', '/admin/hockey/matches?status=all')
     ]).then(function (pair) {
       renderList(reviewEl, pair[0].items || [], true);
-      renderList(recentEl, pair[1].items || [], false);
+      var recent = (pair[1].items || []).filter(function (m) { return m.status !== 'review'; });
+      renderList(recentEl, recent, false);
     }).catch(function (error) {
       recentEl.innerHTML = '';
       var fail = document.createElement('p');

@@ -309,3 +309,18 @@ async def test_manual_result_rejects_tie_and_unknown_match(db_session) -> None:
         await set_manual_result(
             db_session, 987654, home_score=2, away_score=2, decided_in="regulation", now=_minsk(2026, 10, 18, 21, 0)
         )
+
+
+@pytest.mark.asyncio
+async def test_run_tick_calendar_failure_still_checks_results(db_session) -> None:
+    await upsert_calendar_match(db_session, _match("final", "1218869"), now=_minsk(2026, 10, 18, 12, 0))
+    pages = {match_url("1218869"): _page("hcdinamo-match-final.html"), HOCKEY_BY_URL: _page("hockey-by-ticker.html")}
+
+    async def fetch(url: str) -> str:
+        if url == HCDINAMO_CALENDAR_URL:
+            raise TimeoutError("hcdinamo.by не ответил")
+        return pages[url]
+
+    counts = await run_tick(db_session, fetch, now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=True)
+    assert counts["calendar_failed"] is True and counts["calendar"] is None
+    assert counts["final"] == 1

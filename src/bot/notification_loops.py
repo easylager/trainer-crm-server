@@ -3341,7 +3341,7 @@ async def run_hockey_matches_loop() -> None:
                         calendar_due=calendar_due,
                     )
                     await session.commit()
-                if calendar_due:
+                if calendar_due and not counts["calendar_failed"]:
                     last_calendar = now
                 logger.info("[hockey_matches_loop] %s", counts)
         except asyncio.CancelledError:
