@@ -311,6 +311,10 @@ class Settings(BaseSettings):
     # По умолчанию выключено. Старт сезона этим флагом не управляется — его шлёт скрипт.
     ice_forecast_enabled: bool = False
 
+    # Подборка «Для вас». Пусто — ряда нет ни в одном городе. Закрепы при этом хранятся.
+    # FOR_YOU_CITY_IDS=2,12
+    for_you_city_ids: str = ""
+
     def resolved_trainer_subscription_checkout_mode(self) -> Literal["sandbox", "bepaid", "invoice"]:
         """How trainer-subscription Mini App should behave for paid checkout."""
         m = (self.trainer_subscription_checkout_mode or "auto").strip().lower()

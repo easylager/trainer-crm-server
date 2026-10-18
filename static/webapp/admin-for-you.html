@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Для вас</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610185"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610185" />
+  <link rel="stylesheet" href="theme.css?v=202610185" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color, #1a1a1a);
+      color: var(--tg-theme-text-color, #f5f5f5);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: calc(32px + env(safe-area-inset-bottom, 0));
+    }
+    .header { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+    .link-back { color: var(--tg-theme-link-color, #38bdf8); font-size: 13px; text-decoration: none; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 11px; margin-bottom: 4px; color: var(--tg-theme-hint-color, #9ca3af); }
+    select, input[type="text"] {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(15, 23, 42, 0.8);
+      color: inherit;
+      font-size: 14px;
+    }
+    .slot {
+      background: var(--tg-theme-secondary-bg-color, #111827);
+      border-radius: 14px;
+      padding: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      margin-bottom: 12px;
+    }
+    .slot h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--tg-theme-hint-color, #9ca3af); }
+    .line { font-size: 15px; margin-bottom: 10px; }
+    .hits { margin: 8px 0 0; padding: 0; list-style: none; }
+    .hits li { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid rgba(148, 163, 184, 0.2); font-size: 14px; }
+    .btn {
+      border: none;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--tg-theme-button-color, #2ea6ff);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--tg-theme-link-color, #38bdf8);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+    .note { font-size: 12px; color: var(--tg-theme-hint-color, #9ca3af); margin: 0 0 12px; }
+    .toast {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(24px + env(safe-area-inset-bottom, 0));
+      padding: 10px 16px; border-radius: 12px;
+      background: rgba(34, 197, 94, 0.95); color: #fff; font-size: 14px; font-weight: 500;
+      z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .toast.visible { opacity: 1; }
+    .toast.bad { background: rgba(239, 68, 68, 0.95); }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <div class="header">
+    <h1>Для вас</h1>
+    <a class="link-back" href="/webapp/admin-dicts">← Справочники</a>
+  </div>
+  <p class="note" id="flagNote"></p>
+  <div class="field">
+    <label for="citySelect">Город</label>
+    <select id="citySelect"><option value="">Загрузка…</option></select>
+  </div>
+  <div id="slots"></div>
+  <script src="/webapp/admin-for-you-main.js?v=202610186"></script>
+</body>
+</html>

@@ -258,6 +258,23 @@ class Arena(Base):
     )
 
 
+class CityPick(Base):
+    """Закреп места на позицию 1–3 подборки «Для вас» в городе."""
+
+    __tablename__ = "city_picks"
+    __table_args__ = (
+        UniqueConstraint("city_id", "arena_id", name="uq_city_picks_city_arena"),
+        CheckConstraint("position BETWEEN 1 AND 3", name="ck_city_picks_position"),
+    )
+
+    city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer(), primary_key=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class ArenaProfile(Base):
     """
     Ice Discovery vitrine for one arena (1:1). Not parser config (see ice_parser_jobs).

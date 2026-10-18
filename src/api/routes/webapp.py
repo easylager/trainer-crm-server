@@ -11104,9 +11104,11 @@ from src.api.routes.webapp_client_watches import router as _webapp_client_watche
 from src.api.routes.webapp_training_groups import router as _webapp_training_groups_router
 from src.api.routes.admin_ice_sessions import router as _admin_ice_sessions_router
 from src.api.routes.admin_session_load import router as _admin_session_load_router
+from src.api.routes.admin_city_picks import router as _admin_city_picks_router
 
 router.include_router(_webapp_client_trainer_edges_router)
 router.include_router(_webapp_client_watches_router)
 router.include_router(_webapp_training_groups_router)
 router.include_router(_admin_ice_sessions_router)
 router.include_router(_admin_session_load_router)
+router.include_router(_admin_city_picks_router)

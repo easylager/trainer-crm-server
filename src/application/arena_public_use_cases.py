@@ -1748,10 +1748,12 @@ async def list_public_ice_arenas(
     await attach_arena_media_payloads(session, page)
     items = [_public_list_item(row, intent=intent_value, today=today) for row in page]
     next_cursor = str(offset + cap) if offset + cap < len(rows) else None
+    from src.application.city_picks import for_you
     from src.application.ice_company.flag import city_enabled
 
     return {
         "items": items,
+        "for_you": await for_you(session, int(city_id), now=now) if city_id is not None else [],
         "ice_company": bool(city_id and city_enabled(int(city_id))),
         "total": len(rows),
         "intent": intent_value,
