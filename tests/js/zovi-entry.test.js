@@ -88,18 +88,27 @@ describe('варианты шита', () => {
     assert.equal(sheet.initialVariantId({ variant: 'company', company: false }), 'schedule');
   });
 
-  it('на вкладке компании порог и имя, без свободного названия', () => {
+  it('на вкладке компании порог, название команды и ник из Telegram', () => {
     const html = sheet.companyBottomHtml({
       venueType: 'ice',
       sessionId: '9001',
-      companyForm: { min: '4', name: 'Макс', error: '' },
+      companyForm: { min: '4', team: 'Пивной Олимп', you: 'Макс', error: '' },
     });
-    assert.match(html, /Сколько должно встать на лёд/);
+    assert.match(html, /Сколько человек нужно/);
     assert.match(html, /data-gss-cmin="4"[^>]*aria-pressed="true"/);
     assert.match(html, /С тобой ещё 3/);
-    assert.match(html, /Тебя увидят как <b>Макс<\/b>/);
+    const open = sheet.companyBottomHtml({
+      venueType: 'ice',
+      sessionId: '9001',
+      companyForm: { min: '1', team: '', you: 'Макс', error: '' },
+    });
+    assert.match(open, /Без порога/);
+    assert.match(open, /Порога нет/);
+    assert.match(html, /Название команды/);
+    assert.match(html, /data-gss-c="team"[^>]*value="Пивной Олимп"/);
+    assert.match(html, /Вы в списке «Иду» как <b>Макс<\/b>/);
     assert.match(html, />В чат</);
-    assert.equal(html.includes('Название'), false);
+    assert.equal(html.includes('Как записать тебя'), false);
     assert.equal(html.includes('data-ch='), false);
     assert.equal(html.includes('type="number"'), false);
   });
@@ -108,7 +117,8 @@ describe('варианты шита', () => {
     const html = sheet.companyBottomHtml({
       companyForm: {
         min: '3',
-        name: 'Макс',
+        team: 'Команда',
+        you: 'Макс',
         shared: true,
         created: { code: 'abc', pageUrl: 'https://x/k/abc', cardText: 'Катаемся в пятницу\nИдут 1 из 3: Макс' },
       },

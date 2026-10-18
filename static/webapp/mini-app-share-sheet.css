@@ -366,7 +366,8 @@
 .gss-zlink--inline { padding: 0; font-size: inherit; }
 .gss-zdone__more { display: flex; justify-content: space-between; gap: 12px; }
 .gss-company-mins { display: flex; gap: 6px; }
-.gss-company-mins .gss-slot { flex: 1 1 0; min-height: 44px; text-align: center; }
+.gss-company-mins .gss-slot { flex: 1 1 0; min-height: 44px; text-align: center; font-size: var(--app-text-caption); }
+.gss-company-mins .gss-slot--wide { flex: 1.35 1 0; }
 .gss-company-need {
   margin: 8px 0 0;
   font-size: var(--app-text-body);
@@ -375,12 +376,10 @@
   color: var(--glide-ink, var(--g-ink));
 }
 .gss-company-who {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 12px 0 0;
+  margin: 10px 0 0;
   font-size: var(--app-text-body);
+  line-height: 1.35;
+  color: var(--glide-hint);
 }
 .gss-company-who b { font-weight: var(--app-weight-semibold); }
 .gss-company-card {

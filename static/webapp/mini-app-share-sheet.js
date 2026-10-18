@@ -266,6 +266,16 @@
     return user ? cleanName(user.first_name) : '';
   }
 
+  function prefillOrganizerLabel() {
+    var t = tg();
+    var user = t && t.initDataUnsafe && t.initDataUnsafe.user;
+    if (user) {
+      var full = cleanName([user.first_name, user.last_name].filter(Boolean).join(' '));
+      if (full) return full;
+    }
+    return prefillFromName();
+  }
+
   function fetchPayload(extra) {
     return fetch(endpoint(extra), { cache: 'no-store', headers: shareRequestHeaders() }).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
@@ -1160,15 +1170,19 @@
     return renderChannelsHtml(sheetState.payload) + shareNoteHtml();
   }
 
-  var COMPANY_MINS = ['2', '3', '4', '5', '6'];
+  var COMPANY_MINS = ['1', '2', '3', '4', '5', '6'];
+
+  function companyMinLabel(value) {
+    return value === '1' ? 'Без порога' : value;
+  }
 
   function companyFormOf(sheetState) {
     return (sheetState && sheetState.companyForm) || {};
   }
 
   function companyMin(form) {
-    var min = String(form.min == null || form.min === '' ? '3' : form.min);
-    return COMPANY_MINS.indexOf(min) >= 0 ? min : '3';
+    var min = String(form.min == null || form.min === '' ? '1' : form.min);
+    return COMPANY_MINS.indexOf(min) >= 0 ? min : '1';
   }
 
   function renderCompanyBottom(sheetState) {
@@ -1188,26 +1202,33 @@
       );
     }
     var min = companyMin(form);
-    var missing = String(Math.max(0, Number(min) - 1));
-    var name = String(form.name || '').trim();
+    var missing = Math.max(0, Number(min) - 1);
+    var you = String(form.you || '').trim();
     var chips = COMPANY_MINS.map(function (n) {
       var on = n === min;
+      var wide = n === '1' ? ' gss-slot--wide' : '';
       return (
-        '<button type="button" class="gss-slot' + (on ? ' is-on' : '') +
-        '" data-gss-cmin="' + n + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + n + '</button>'
+        '<button type="button" class="gss-slot' + wide + (on ? ' is-on' : '') +
+        '" data-gss-cmin="' + n + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+        esc(companyMinLabel(n)) + '</button>'
       );
     }).join('');
-    var who = name && !form.editName
-      ? '<p class="gss-company-who"><span>Тебя увидят как <b>' + esc(name) + '</b></span>' +
-        '<button type="button" class="gss-zlink" data-gss-cname>Изменить</button></p>'
-      : '<label class="gss-zf__f"><span>Как записать тебя</span>' +
-        '<input type="text" data-gss-c="name" maxlength="20" autocomplete="given-name" enterkeyhint="done" placeholder="Макс" value="' +
-        esc(form.name || '') + '" /></label>';
+    var needLine = min === '1'
+      ? '<p class="gss-company-need">Порога нет — зовите кого угодно.</p>'
+      : '<p class="gss-company-need">С тобой ещё ' + missing + '.</p>';
+    var teamField =
+      '<label class="gss-zf__f"><span>Название команды</span>' +
+      '<input type="text" data-gss-c="team" maxlength="48" enterkeyhint="done" ' +
+      'placeholder="Необязательно" value="' + esc(form.team || '') + '" /></label>';
+    var youLine = you
+      ? '<p class="gss-company-who">Вы в списке «Иду» как <b>' + esc(you) + '</b> — из Telegram.</p>'
+      : '';
     return (
-      '<p class="gss-slot-q">Сколько должно встать на лёд</p>' +
+      '<p class="gss-slot-q">Сколько человек нужно</p>' +
       '<div class="gss-company-mins" role="group" aria-label="Сколько человек нужно">' + chips + '</div>' +
-      '<p class="gss-company-need">С тобой ещё ' + missing + '.</p>' +
-      who +
+      needLine +
+      teamField +
+      youLine +
       '<p class="gss-zf__err" data-gss-cerr role="alert">' + esc(form.error || '') + '</p>' +
       '<button type="button" class="gss-zovi__btn" data-variant-action="company"' +
       (form.busy ? ' disabled' : '') +
@@ -1253,14 +1274,8 @@
       paintCompany();
       return;
     }
-    var name = String(form.name || '').trim();
+    var team = String(form.team || '').trim();
     var min = Number(companyMin(form));
-    if (!name) {
-      form.editName = true;
-      form.error = 'Как тебя записать?';
-      paintCompany();
-      return;
-    }
     if (state.sessionId == null || String(state.sessionId).trim() === '') {
       form.error = 'Выбери сеанс.';
       paintCompany();
@@ -1279,7 +1294,7 @@
       body: JSON.stringify({
         session_id: Number(state.sessionId),
         min_people: min,
-        display_name: name,
+        name: team,
         surface: 'miniapp',
       }),
     })
@@ -1922,14 +1937,6 @@
       }
       return;
     }
-    if (ev.target.closest('[data-gss-cname]') && state && state.companyForm && !state.companyForm.created) {
-      haptic();
-      state.companyForm.editName = true;
-      paintCompany();
-      var nameInput = root.querySelector('[data-gss-c="name"]');
-      if (nameInput && nameInput.focus) nameInput.focus();
-      return;
-    }
     var companyShare = ev.target.closest('[data-gss-cshare]');
     if (companyShare && state && state.companyForm && state.companyForm.created) {
       if (companyShare.disabled) return;
@@ -2001,9 +2008,9 @@
       venueType: opts.venueType || 'ice',
       company: !!opts.company,
       companyForm: {
-        min: '3',
-        name: prefillFromName(),
-        editName: false,
+        min: '1',
+        team: '',
+        you: prefillOrganizerLabel(),
         busy: false,
         sharing: '',
         error: '',

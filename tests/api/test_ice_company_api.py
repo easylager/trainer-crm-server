@@ -122,7 +122,7 @@ async def test_response_is_idempotent_and_confirms_at_threshold(app_use_test_db,
         png = await client.get(f"/k/{code}/og.png")
         assert png.status_code == 200
         with Image.open(io.BytesIO(png.content)) as img:
-            assert img.size == (1200, 630)
+            assert img.size == (1080, 1080)
         ics = await client.get(f"/k/{code}/event.ics")
         assert "BEGIN:VEVENT" in ics.text
         honeypot = await client.post(
@@ -258,6 +258,8 @@ async def test_schedule_move_asks_to_reconfirm_and_tick_is_idempotent(app_use_te
     code = created.json()["public_code"]
     assert created.json()["status"] == "confirmed"
     sender = _Sender()
+    await tick(db_session, sender, debounce_sec=0)
+    assert [body for _, body in sender.dms if body.startswith("Сбор готов")] == []
     await tick(db_session, sender, debounce_sec=0)
     assert [body for _, body in sender.dms if body.startswith("Сбор готов")] == []
     new_start = datetime.now(timezone.utc) + timedelta(days=4)

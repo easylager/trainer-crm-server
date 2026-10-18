@@ -7,8 +7,9 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto
 
+from src.application.ice_company.keyboard import inline_button
 from src.application.ice_company.lifecycle import BotBlocked, ChatMigrated, RateLimited, button_rows
 from src.application.ice_company.limiter import OutboundLimiter
 from src.shared.config import Settings
@@ -23,10 +24,7 @@ def _markup(buttons: list[dict[str, str]]) -> InlineKeyboardMarkup | None:
     for group in button_rows(buttons):
         row = []
         for button in group:
-            if button.get("url"):
-                row.append(InlineKeyboardButton(text=button["text"], url=button["url"]))
-            elif button.get("data"):
-                row.append(InlineKeyboardButton(text=button["text"], callback_data=button["data"]))
+            row.append(inline_button(button))
         if row:
             rows.append(row)
     return InlineKeyboardMarkup(inline_keyboard=rows)

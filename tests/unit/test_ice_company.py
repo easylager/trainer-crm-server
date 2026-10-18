@@ -9,11 +9,19 @@ import pytest
 
 from src.application.ice_company.copy import Snap, card_text, confirm_dm, kind_label, together_line
 from src.application.ice_company.flag import city_enabled, enabled_city_ids
+from src.application.ice_company.copy import team_gathered
 from src.application.ice_company.lifecycle import button_rows, buttons_for, parse_callback, render_hash
 from src.application.ice_company.service import ice_slot_url
 from src.application.ice_company.limiter import OutboundLimiter
 from src.application.ice_company.reminders import SKIPPED, plan
-from src.application.ice_company.safety import TextRejected, callback_data, clean_free_text, escape_html, escape_markdown_v2
+from src.application.ice_company.safety import (
+    TextRejected,
+    callback_data,
+    clean_free_text,
+    escape_html,
+    escape_markdown_v2,
+    strip_emoji_for_poster,
+)
 from src.shared.config import Settings
 
 _MINSK = ZoneInfo("Europe/Minsk")
@@ -71,11 +79,28 @@ def test_flag_is_off_until_a_city_is_listed(monkeypatch: pytest.MonkeyPatch) -> 
     assert city_enabled(99, Settings()) is False
 
 
+def test_poster_strips_emoji_from_names() -> None:
+    from src.application.ice_company.og import render_company_card
+
+    assert strip_emoji_for_poster("Максим 🏒") == "Максим"
+    assert strip_emoji_for_poster("🔥 только огонь") == "только огонь"
+    raw = render_company_card(_snap(going_names=("Максим 🏒",), min_people=1))
+    assert raw.startswith(b"\x89PNG")
+
+
 def test_names_reject_links_and_escape() -> None:
     with pytest.raises(TextRejected):
         clean_free_text("https://evil.example", max_len=40, required=True, field="Имя")
+    assert clean_free_text("Котлеты на ребро 🧊", max_len=48, required=True, field="Имя") == "Котлеты на ребро 🧊"
+    with pytest.raises(TextRejected):
+        clean_free_text("<script>", max_len=40, required=True, field="Имя")
     assert escape_html("<Аня>") == "&lt;Аня&gt;"
     assert escape_markdown_v2("а_б") == "а\\_б"
+
+
+def test_team_title_on_card_caption() -> None:
+    snap = _snap(team_title="Пивной Олимп")
+    assert card_text(snap).startswith("Массовое катание\nПивной Олимп\n")
 
 
 def test_callback_data_fits_telegram() -> None:
@@ -123,8 +148,47 @@ def test_on_ice_opens_the_arena_slot() -> None:
     snap = _snap()
     buttons = buttons_for(company, snap, url)
     assert buttons[-1] == {"text": "На лёд", "url": url}
-    assert [button["text"] for button in buttons[:2]] == ["Иду", "Не могу"]
-    assert button_rows(buttons) == [buttons[:2], [buttons[2]]]
+    assert buttons[0] == {"text": "Иду", "data": "ic:abcdefgh:g", "style": "primary"}
+    assert buttons[1] == {"text": "Не могу", "data": "ic:abcdefgh:x", "style": "danger"}
+    assert buttons[2] == {"text": "В другой чат →", "switch_inline": "k:abcdefgh"}
+    assert button_rows(buttons) == [[buttons[0]], [buttons[1]], [buttons[2]], [buttons[3]]]
+
+
+def test_ticket_buttons_when_team_gathered() -> None:
+    company = {"public_code": "abcdefgh"}
+    url = "https://t.me/glidebot?startapp=arena_1"
+    ics = "https://glide.example/k/abcdefgh/event.ics"
+    snap = _snap(status="confirmed", going_names=("Аня", "Макс", "Оля"), min_people=3)
+    assert team_gathered(snap)
+    buttons = buttons_for(company, snap, url, calendar_url=ics)
+    assert [b["text"] for b in buttons] == ["В календарь", "На лёд", "В другой чат →"]
+    assert buttons[0]["url"] == ics
+
+
+def test_poster_renders_gathered_tagline() -> None:
+    from src.application.ice_company.og import render_company_card
+
+    raw = render_company_card(
+        _snap(status="confirmed", going_names=("Аня", "Макс", "Оля"), min_people=3),
+    )
+    assert raw.startswith(b"\x89PNG")
+
+
+def test_poster_pastes_avatar_on_ice() -> None:
+    import io
+
+    from PIL import Image
+
+    from src.application.ice_company.og import render_company_card
+
+    face = Image.new("RGB", (64, 64), (220, 40, 40))
+    buf = io.BytesIO()
+    face.save(buf, format="JPEG")
+    raw = render_company_card(
+        _snap(going_names=("Аня",), min_people=3),
+        avatar_bytes=[buf.getvalue()],
+    )
+    assert raw.startswith(b"\x89PNG")
 
 
 def test_identical_card_hash_is_stable() -> None:

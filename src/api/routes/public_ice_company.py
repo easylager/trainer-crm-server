@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
 
 from src.api.deps import get_session
-from src.application.ice_company.codes import web_participant_key
-from src.application.ice_company.lifecycle import button_rows, buttons_for, render_hash
+from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes
+from src.application.ice_company.codes import tg_participant_key, web_participant_key
+from src.application.ice_company.keyboard import inline_button_json
+from src.application.ice_company.lifecycle import button_rows, buttons_for, calendar_url_for, render_hash
 from src.application.ice_company.og import card_photo_url, render_company_card
 from src.application.ice_company.page import render_company_page
 from src.application.ice_company.service import (
@@ -35,7 +37,12 @@ from src.application.ice_company.service import (
 )
 from src.shared.client_ip import trusted_client_ip
 from src.shared.config import Settings
-from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_id
+from src.shared.telegram_webapp import (
+    InitDataAuthError,
+    display_name_from_telegram_user,
+    parse_user_json_from_init_data,
+    require_telegram_user_id,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ice-company"])
@@ -46,7 +53,7 @@ _hits: dict[str, deque[float]] = {}
 class CreateBody(BaseModel):
     session_id: int
     min_people: int
-    display_name: str
+    display_name: str = ""
     name: str = ""
     max_people: int | None = None
     surface: str = "miniapp"
@@ -136,22 +143,38 @@ async def post_company(
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    user_id = _init_user(x_telegram_init_data or request.query_params.get("init_data"))
+    init_raw = x_telegram_init_data or request.query_params.get("init_data") or ""
+    user_id = _init_user(init_raw)
     if user_id is None:
         raise HTTPException(status_code=401, detail="Собрать компанию можно из Telegram.")
+    organizer_name = (body.display_name or "").strip()
+    if not organizer_name:
+        organizer_name = display_name_from_telegram_user(parse_user_json_from_init_data(init_raw)) or ""
+    if not organizer_name:
+        raise HTTPException(status_code=422, detail="Не удалось подставить имя из Telegram.")
     try:
-        return await create_company(
+        view = await create_company(
             session,
             telegram_user_id=user_id,
             session_id=body.session_id,
             min_people=body.min_people,
-            display_name=body.display_name,
+            display_name=organizer_name,
             name=body.name,
             max_people=body.max_people,
             surface=(body.surface or "miniapp")[:16],
         )
     except CompanyRejected as exc:
         raise _http(exc) from None
+    company = await _load(session, str(view["public_code"]))
+    if company is not None:
+        await cache_telegram_avatar_with_token(
+            session,
+            Settings(),
+            company_id=int(company["id"]),
+            participant_key=tg_participant_key(user_id),
+            telegram_user_id=user_id,
+        )
+    return view
 
 
 @router.get("/api/public/ice-companies/{code}")
@@ -203,6 +226,16 @@ async def post_response(
         raise _http(exc) from None
     if issued:
         view = {**view, "participant_token": issued}
+    if user_id is not None and body.status == "going":
+        company = await _load(session, code)
+        if company is not None:
+            await cache_telegram_avatar_with_token(
+                session,
+                Settings(),
+                company_id=int(company["id"]),
+                participant_key=tg_participant_key(user_id),
+                telegram_user_id=user_id,
+            )
     return view
 
 
@@ -313,7 +346,8 @@ async def _card_png(session: AsyncSession, code: str) -> bytes:
     if company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена.")
     responses = await _responses(session, int(company["id"]))
-    return render_company_card(snap_from(company, responses))
+    snap = snap_from(company, responses)
+    return render_company_card(snap, avatar_bytes=going_avatar_bytes(responses))
 
 
 @router.get("/k/{code}/og.png")
@@ -350,7 +384,7 @@ async def prepare_telegram_share(
     settings = Settings()
     page = ice_slot_url(company, settings)
     text = card_text(snap)
-    markup = buttons_for(company, snap, page)
+    markup = buttons_for(company, snap, page, calendar_url=calendar_url_for(settings, code))
     photo = card_photo_url(settings.webapp_base_url, code, render_hash(text, markup))
     prepared = await _save_prepared(settings.telegram_bot_token_client, user_id, code, text, markup, photo)
     from src.application.ice_company.service import _track
@@ -387,10 +421,7 @@ async def _save_prepared(
     for group in button_rows(buttons):
         row = []
         for button in group:
-            if button.get("url"):
-                row.append({"text": button["text"], "url": button["url"]})
-            elif button.get("data"):
-                row.append({"text": button["text"], "callback_data": button["data"]})
+            row.append(inline_button_json(button))
         if row:
             keyboard.append(row)
     payload = {

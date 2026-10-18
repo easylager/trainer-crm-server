@@ -26,6 +26,7 @@ from src.application.ice_company.copy import (
     hour_maybe,
     join_dm,
     moved_dm,
+    team_gathered,
     weekly_dm,
 )
 from src.application.ice_company.safety import callback_data
@@ -70,26 +71,45 @@ def reset_edit_debounce() -> None:
     _last_edit.clear()
 
 
-def buttons_for(company: dict[str, Any], snap: Snap, page_url: str) -> list[dict[str, str]]:
-    code = str(company["public_code"])
-    if snap.cancelled or snap.expired or snap.status in ("cancelled", "expired"):
-        return [{"text": "На лёд", "url": page_url}]
+def response_action_buttons(code: str) -> list[dict[str, str]]:
+    """Ответ на сбор: цветные кнопки Bot API 9.4+ (primary / danger)."""
     return [
-        {"text": "Иду", "data": callback_data(code, "g")},
-        {"text": "Не могу", "data": callback_data(code, "x")},
-        {"text": "На лёд", "url": page_url},
+        {"text": "Иду", "data": callback_data(code, "g"), "style": "primary"},
+        {"text": "Не могу", "data": callback_data(code, "x"), "style": "danger"},
     ]
 
 
+def calendar_url_for(settings: Settings, code: str) -> str:
+    return _page(settings, code) + "/event.ics"
+
+
+def buttons_for(
+    company: dict[str, Any],
+    snap: Snap,
+    page_url: str,
+    *,
+    calendar_url: str | None = None,
+) -> list[dict[str, str]]:
+    code = str(company["public_code"])
+    if snap.cancelled or snap.expired or snap.status in ("cancelled", "expired"):
+        return [{"text": "На лёд", "url": page_url}]
+    if team_gathered(snap):
+        ticket: list[dict[str, str]] = []
+        if calendar_url:
+            ticket.append({"text": "В календарь", "url": calendar_url})
+        ticket.append({"text": "На лёд", "url": page_url})
+        ticket.append({"text": "В другой чат →", "switch_inline": f"k:{code}"})
+        return ticket
+    buttons = list(response_action_buttons(code))
+    if snap.going_names:
+        buttons.append({"text": "В другой чат →", "switch_inline": f"k:{code}"})
+    buttons.append({"text": "На лёд", "url": page_url})
+    return buttons
+
+
 def button_rows(buttons: list[dict[str, str]]) -> list[list[dict[str, str]]]:
-    """Ответы в одном ряду. «На лёд» отдельно: в общем ряду телефон оставляет «На»."""
-    actions = [button for button in buttons if not button.get("url")]
-    links = [button for button in buttons if button.get("url")]
-    rows: list[list[dict[str, str]]] = []
-    if actions:
-        rows.append(actions)
-    rows.extend([link] for link in links)
-    return rows
+    """Каждая кнопка — свой ряд: ответы крупнее, шаринг и ссылка не сливаются."""
+    return [[button] for button in buttons]
 
 
 def render_hash(body: str, buttons: list[dict[str, str]]) -> str:
@@ -141,7 +161,7 @@ async def tick(
     stats["expired"] = len(expired.all())
     await session.commit()
     stats["edits"] += await _edit_dirty(session, sender, settings=cfg, debounce_sec=debounce_sec, now=current)
-    # Сбор живёт на карточке в чате. Личные «через час», «выезжаю», «были на льду» не шлём.
+    # Единственный канал для участников — живая PNG-карточка в чате (edit_dirty). Личные DM не шлём.
     skipped_reminders = await session.execute(
         text("UPDATE ice_company_reminders SET status = 'skipped' WHERE status = 'pending'")
     )
@@ -209,7 +229,13 @@ async def _edit_dirty(
         snap = snap_from(company, responses)
         page = ice_slot_url(company, settings)
         body = snap and card_text_of(snap)
-        markup = buttons_for(company, snap, page)
+        code = str(company["public_code"])
+        markup = buttons_for(
+            company,
+            snap,
+            page,
+            calendar_url=calendar_url_for(settings, code),
+        )
         digest = render_hash(body, markup)
         from src.application.ice_company.og import card_photo_url
 
@@ -409,10 +435,7 @@ async def _schedule_dms(session: AsyncSession, sender: Sender) -> int:
             continue
         body = moved_dm(snap)
         code = str(company["public_code"])
-        buttons = [
-            {"text": "Иду", "data": callback_data(code, "g")},
-            {"text": "Не могу", "data": callback_data(code, "x")},
-        ]
+        buttons = response_action_buttons(code)
         for person in responses:
             if person["status"] not in ("going", "maybe") or not person["reminders_enabled"]:
                 continue

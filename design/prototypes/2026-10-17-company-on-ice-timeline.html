@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Компания на лёд — кто что видит</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #07090b;
+      --ink: #f2efe8;
+      --muted: #9a968c;
+      --line: rgba(255,255,255,.1);
+      --teal: #3dccc7;
+      --phone: #10161c;
+      --card: #161e26;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Golos Text", system-ui, sans-serif;
+    }
+    header.top {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 20px 8px;
+    }
+    .kicker {
+      margin: 0 0 8px;
+      color: var(--teal);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; font-weight: 600; letter-spacing: -.02em; }
+    .lede { margin: 0; max-width: 680px; color: var(--muted); line-height: 1.45; }
+    .rail {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 18px 20px 0;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+    }
+    .rail button {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .rail button[aria-current="step"] {
+      background: var(--ink);
+      color: #111;
+      border-color: var(--ink);
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 20px 48px;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .now h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+    .now .when { margin: 0 0 12px; color: var(--teal); font-size: 13px; font-weight: 600; }
+    .now p { margin: 0 0 12px; color: var(--muted); line-height: 1.45; }
+    .tasks { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tasks span {
+      font-size: 12px;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 8px;
+    }
+    .navs { display: flex; gap: 8px; margin-top: 18px; }
+    .navs button {
+      font: inherit;
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .stage {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    @media (max-width: 900px) {
+      .stage { grid-template-columns: 1fr; }
+    }
+    .who small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .phone {
+      background: var(--phone);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      min-height: 460px;
+      padding: 16px 14px 18px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    .phone.dim { opacity: .38; }
+    .bar { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-bottom: 12px; }
+    .ice {
+      height: 120px;
+      border-radius: 16px;
+      background:
+        linear-gradient(180deg, rgba(8,16,22,.15), rgba(8,16,22,.82)),
+        repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(255,255,255,.08) 19px),
+        linear-gradient(160deg, #8fd4e8, #1c4d62 55%, #0c2430);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .ice b { font-size: 22px; letter-spacing: -.03em; }
+    .ice span, .meta { color: #c9c4b8; font-size: 13px; }
+    .names { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .pill {
+      background: #fff;
+      color: #142028;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .pill.empty { background: transparent; color: transparent; border: 1.5px dashed rgba(255,255,255,.45); width: 28px; height: 22px; padding: 0; }
+    .cta, .ghost {
+      width: 100%;
+      margin-top: 10px;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px;
+      font: inherit;
+      font-weight: 600;
+    }
+    .cta { background: var(--teal); color: #062226; }
+    .ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+    .chat {
+      background: #1a2430;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .poster {
+      background: #0e1c24;
+      padding: 14px;
+      min-height: 210px;
+    }
+    .poster .day { color: var(--teal); font-size: 11px; letter-spacing: .16em; font-weight: 700; }
+    .poster .time { font-size: 40px; font-weight: 700; letter-spacing: -.04em; line-height: 1; margin: 4px 0; }
+    .rink {
+      margin-top: 12px;
+      border: 1px solid rgba(61,204,199,.45);
+      border-radius: 999px;
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .big { font-size: 42px; font-weight: 700; line-height: 1; margin-top: 8px; }
+    .big em { display: block; font-style: normal; color: var(--teal); font-size: 14px; font-weight: 600; }
+    .cap { padding: 10px 12px 12px; font-size: 14px; line-height: 1.35; }
+    .row { display: flex; gap: 6px; padding: 0 10px 10px; }
+    .row button {
+      flex: 1;
+      background: #243140;
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px;
+      font: inherit;
+      font-size: 13px;
+    }
+    .warn { margin-top: 10px; color: #f0c36a; font-size: 13px; line-height: 1.4; }
+    .quiet { margin-top: 8px; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <p class="kicker">Черновик · не решение</p>
+    <h1>Кто что видит</h1>
+    <p class="lede">Один проход, если отнестись к критике всерьёз. Слева время и зачем этот шаг. Справа три человека в один и тот же момент. Стрелки переключают шаг.</p>
+  </header>
+  <nav class="rail" id="rail" aria-label="Шаги"></nav>
+  <main>
+    <section class="now" id="now"></section>
+    <section class="stage" id="stage"></section>
+  </main>
+  <script>
+    const steps = [
+      {
+        t: "18:40",
+        title: "Сеанс уже показывает, кто на льду",
+        why: "Сбор не спрятан за карточкой арены. На плитке списка видно чужих, и можно встать, даже если своего чата нет.",
+        tasks: ["281", "284"],
+        frames: [
+          { who: "Макс", where: "список в приложении", dim: false, html: iceCard(["Аня", "Кирил"], "Я тоже") },
+          { who: "Аня", where: "тот же список", dim: true, html: iceCard(["Аня", "Кирил"], "Вы уже на льду") },
+          { who: "Кирил", where: "главная сайта", dim: false, html: iceCard(["Аня", "Кирил"], "Я тоже") }
+        ]
+      },
+      {
+        t: "18:41",
+        title: "Один жест, без порога",
+        why: "Макс на сайте, не в мини-приложении. Имя уже есть. «Сколько человек нужно» никто не выбирает заранее.",
+        tasks: ["282", "283"],
+        frames: [
+          { who: "Макс", where: "страница сеанса на сайте", dim: false, html: iceCard(["Аня", "Кирил", "Макс"], "Вы на льду") + '<p class="quiet">Дальше можно кинуть в чат. Можно не кидать: на сеансе вы уже есть.</p>' },
+          { who: "Аня", where: "ещё не открывала", dim: true, html: '<p class="quiet">Пока ничего нового.</p>' },
+          { who: "Кирил", where: "главная", dim: false, html: iceCard(["Аня", "Кирил", "Макс"], "Я тоже") }
+        ]
+      },
+      {
+        t: "18:42",
+        title: "В чат уходит каток, не схема",
+        why: "Приглашённые видят фото льда, время и имена. Квадратная схема без катка здесь не показывается.",
+        tasks: ["287"],
+        frames: [
+          { who: "Макс", where: "уже на льду", dim: true, html: '<p class="quiet">Карточка ушла в чат друзей.</p>' },
+          { who: "Чат друзей", where: "Telegram", dim: false, html: poster({ names: ["Аня", "Кирил", "Макс"], line: "ТЦ Замок, 20:15", foot: "На льду Аня, Кирил и Макс." }) },
+          { who: "Валерия", where: "ещё не видела ссылку", dim: true, html: '<p class="quiet">Пока ничего.</p>' }
+        ]
+      },
+      {
+        t: "18:50",
+        title: "Чат и незнакомцы видят одно и то же",
+        why: "Аня жмёт «Иду» в чате. Кирил, который просто открыл этот сеанс, видит то же пополнение и может встать сам.",
+        tasks: ["281"],
+        frames: [
+          { who: "Аня", where: "чат", dim: false, html: poster({ names: ["Аня", "Кирил", "Макс"], line: "Вы на льду", foot: "Имя уже было. Кнопка только подтверждает." }) },
+          { who: "Чат", where: "карточка обновилась у всех", dim: false, html: poster({ names: ["Аня", "Кирил", "Макс"], line: "20:15", foot: "Тот же пост, новые имена. Нового сообщения нет." }) },
+          { who: "Кирил", where: "сеанс на главной", dim: false, html: iceCard(["Аня", "Кирил", "Макс"], "Я тоже") }
+        ]
+      },
+      {
+        t: "19:05",
+        title: "Ссылка из Instagram не тупик",
+        why: "Валерия без Telegram встаёт на лёд на странице. Сразу после этого ей предлагают открыть Glide, а не оставляют на форме.",
+        tasks: ["285"],
+        frames: [
+          { who: "Валерия", where: "браузер, пост в Instagram", dim: false, html: iceCard(["Аня", "Кирил", "Макс", "Валерия"], "Открыть в Glide") + '<p class="quiet">Имя уже на льду. Дальше — этот сеанс в приложении, не вторая анкета.</p>' },
+          { who: "Чат", where: "карточка", dim: false, html: poster({ names: ["Аня", "Кирил", "Макс", "Валерия"], line: "20:15", foot: "Валерия встала, хотя её не было в чате." }) },
+          { who: "Макс", where: "сеанс", dim: false, html: iceCard(["Аня", "Кирил", "Макс", "Валерия"], "Вы на льду") }
+        ]
+      },
+      {
+        t: "19:20",
+        title: "«Едем» даёт дело, не только слово",
+        why: "Порог набран. Кроме подписи на карточке на сеансе лежит то, чего нет в сообщении «кто на 20:15»: кто на льду и как купить билет на этот слот.",
+        tasks: ["286"],
+        frames: [
+          { who: "Чат", where: "та же карточка", dim: false, html: poster({ names: ["Аня", "Кирил", "Макс", "Валерия", "Оля"], line: "Едем", foot: "Пятеро. Пост не заменили новым.", go: true }) },
+          { who: "Макс", where: "сеанс", dim: false, html: iceCard(["Аня", "Кирил", "Макс", "Валерия", "Оля"], "Билеты на 20:15") + '<p class="quiet">Кнопка ведёт на кассу этого сеанса, не в общий сайт катка.</p>' },
+          { who: "Валерия", where: "Glide, тот же сеанс", dim: false, html: iceCard(["Аня", "Кирил", "Макс", "Валерия", "Оля"], "Билеты на 20:15") }
+        ]
+      },
+      {
+        t: "другой вечер, 18:15",
+        title: "Не собрались — пока сеанс впереди",
+        why: "На льду один человек за два часа до старта. Карточка говорит это сейчас. Ждать конца сеанса не нужно. Снять сбор может тот, кто его начал.",
+        tasks: ["288"],
+        frames: [
+          { who: "Макс", where: "карточка в чате", dim: false, html: poster({ names: ["Макс"], line: "Похоже, не собрались", foot: "До 20:15 ещё два часа.", warn: true }) + '<button class="ghost">Снять сбор</button>' },
+          { who: "Чат", where: "видит то же", dim: false, html: poster({ names: ["Макс"], line: "Похоже, не собрались", foot: "Пустые места на плакате.", warn: true }) },
+          { who: "Кирил", where: "сеанс на главной", dim: false, html: iceCard(["Макс"], "Я тоже") + '<p class="warn">Пока один. Сеанс ещё можно набрать.</p>' }
+        ]
+      },
+      {
+        t: "другой сеанс",
+        title: "Много людей — это видно, не запрещено",
+        why: "Порог не потолок. Если на сеанс уже тридцать, карточка говорит, что будет тесно. Встать всё ещё можно.",
+        tasks: ["288"],
+        frames: [
+          { who: "Чат", where: "карточка", dim: false, html: poster({ names: ["Аня", "Кирил", "Макс"], line: "Вас 30", foot: "На сеансе тесно. Идущих больше, чем спокойно встаёт на лёд.", warn: true }) },
+          { who: "Макс", where: "сеанс", dim: false, html: iceCard(["Аня", "Кирил", "Макс"], "Я тоже") + '<p class="warn">Уже 30. Вместимость сеанса это не останавливает.</p>' },
+          { who: "Валерия", where: "ссылка", dim: false, html: iceCard(["Аня", "Кирил", "Макс"], "Я тоже") + '<p class="warn">Та же пометка, что в чате.</p>' }
+        ]
+      }
+    ];
+
+    function iceCard(names, button) {
+      const pills = names.map((n) => '<span class="pill">' + n + "</span>").join("");
+      return (
+        '<div class="ice"><span>сегодня</span><b>20:15</b><span>ТЦ Замок</span></div>' +
+        '<div class="names">' + pills + "</div>" +
+        '<button class="cta">' + button + "</button>"
+      );
+    }
+
+    function poster(opts) {
+      const pills = opts.names.slice(0, 4).map((n) => '<span class="pill">' + n + "</span>").join("");
+      const more = opts.names.length > 4 ? '<span class="pill">+' + (opts.names.length - 4) + "</span>" : "";
+      return (
+        '<div class="chat"><div class="poster">' +
+        '<div class="day">СУББОТА</div><div class="time">20:15</div><div class="meta">ТЦ Замок</div>' +
+        '<div class="rink">' + pills + more + "</div>" +
+        '<div class="big">' + opts.line + "</div>" +
+        "</div><div class=\"cap\">" + opts.foot + "</div>" +
+        (opts.go ? "" : '<div class="row"><button>Иду</button><button>Не могу</button></div>') +
+        "</div>"
+      );
+    }
+
+    let index = 0;
+    const rail = document.getElementById("rail");
+    const now = document.getElementById("now");
+    const stage = document.getElementById("stage");
+
+    function paint() {
+      const step = steps[index];
+      rail.innerHTML = steps.map((item, i) =>
+        '<button type="button" data-i="' + i + '"' + (i === index ? ' aria-current="step"' : "") + ">" + item.t + "</button>"
+      ).join("");
+      now.innerHTML =
+        '<p class="when">' + step.t + "</p><h2>" + step.title + "</h2><p>" + step.why + "</p>" +
+        '<div class="tasks">' + step.tasks.map((id) => "<span>TASK-" + id + "</span>").join("") + "</div>" +
+        '<div class="navs"><button type="button" id="prev">Назад</button><button type="button" id="next">Дальше</button></div>';
+      stage.innerHTML = step.frames.map((frame) =>
+        '<article class="who"><small>' + frame.who + " · " + frame.where + "</small>" +
+        '<div class="phone' + (frame.dim ? " dim" : "") + '"><div class="bar"><span>Glide</span><span>' + step.t + "</span></div>" +
+        frame.html + "</div></article>"
+      ).join("");
+    }
+
+    document.body.addEventListener("click", (event) => {
+      const jump = event.target.closest("[data-i]");
+      if (jump) { index = Number(jump.getAttribute("data-i")); paint(); return; }
+      if (event.target.id === "prev") { index = (index + steps.length - 1) % steps.length; paint(); }
+      if (event.target.id === "next") { index = (index + 1) % steps.length; paint(); }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight") { index = (index + 1) % steps.length; paint(); }
+      if (event.key === "ArrowLeft") { index = (index + steps.length - 1) % steps.length; paint(); }
+    });
+    paint();
+  </script>
+</body>
+</html>

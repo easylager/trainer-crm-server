@@ -24,7 +24,7 @@ from src.application.ice_company.codes import new_public_code, new_web_token, tg
 from src.application.ice_company.copy import Snap, card_text, together_line
 from src.application.ice_company.flag import city_enabled
 from src.application.ice_company.reminders import plan
-from src.application.ice_company.safety import TextRejected, clean_free_text
+from src.application.ice_company.safety import TextRejected, clean_free_text, clean_team_title
 from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -136,7 +136,8 @@ async def _responses(session: AsyncSession, company_id: int) -> list[dict[str, A
             text(
                 """
                 SELECT participant_key, display_name, status, attended, reminders_enabled,
-                       needs_reconfirm, departing, source, join_notified_at, updated_at
+                       needs_reconfirm, departing, source, join_notified_at, updated_at,
+                       avatar_file_key
                 FROM ice_company_responses
                 WHERE company_id = :id
                 ORDER BY updated_at, id
@@ -165,6 +166,7 @@ def snap_from(company: dict[str, Any], rows: list[dict[str, Any]]) -> Snap:
         min_people=int(company["min_people"]),
         status=status,
         going_names=_going_names(rows),
+        team_title=str(company.get("name") or ""),
         previous_starts_at=company["previous_starts_at"] if any(row["needs_reconfirm"] for row in rows) else None,
         cancelled=bool(company["event_cancelled"]) or status == "cancelled" and bool(company.get("cancel_notice_pending")),
         expired=status == "expired",
@@ -408,7 +410,7 @@ async def create_company(
         raise CompanyRejected("Верхняя цифра меньше порога.")
     try:
         label = clean_free_text(display_name, max_len=cfg.ice_company_display_name_max_len, required=True, field="Имя")
-        title = clean_free_text(name, max_len=cfg.ice_company_name_max_len, required=False, field="Название")
+        title = clean_team_title(name, max_len=cfg.ice_company_name_max_len, required=False)
     except TextRejected as exc:
         raise CompanyRejected(exc.detail) from exc
     organizer = tg_participant_key(telegram_user_id)

@@ -119,6 +119,20 @@ def parse_user_id_from_init_data(init_data: str) -> int | None:
         return None
 
 
+def display_name_from_telegram_user(user: dict | None, *, max_len: int = 40) -> str | None:
+    if not user:
+        return None
+    first = str(user.get("first_name") or "").strip()
+    last = str(user.get("last_name") or "").strip()
+    if first and last:
+        label = f"{first} {last}"
+    else:
+        label = first or last or str(user.get("username") or "").strip()
+    if not label:
+        return None
+    return label[:max_len]
+
+
 def parse_user_json_from_init_data(init_data: str) -> dict | None:
     """
     Parsed ``user`` object from init_data (first_name, last_name, username, id).

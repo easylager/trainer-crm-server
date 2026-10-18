@@ -30,6 +30,7 @@ class Snap:
     min_people: int
     status: str
     going_names: tuple[str, ...]
+    team_title: str = ""
     previous_starts_at: datetime | None = None
     cancelled: bool = False
     expired: bool = False
@@ -92,28 +93,36 @@ def still_line(missing: int) -> str:
     return f"Ещё {missing} — и едем"
 
 
+def team_gathered(snap: Snap) -> bool:
+    if snap.cancelled or snap.expired or snap.status in ("cancelled", "expired"):
+        return False
+    return snap.status == "confirmed" or len(snap.going_names) >= snap.min_people
+
+
 def card_text(snap: Snap) -> str:
     when = f"{weekday_nom(snap.starts_at)}, {clock(snap.starts_at)}"
     place = snap.venue
     label = kind_label(snap.kind)
+    team = (snap.team_title or "").strip()
+    team_line = f"{team}\n" if team else ""
     head = f"{label}\n" if label else ""
     if snap.cancelled:
-        return f"{head}Сеанс сняли.\n{when}\n{place}"
+        return f"{head}{team_line}Сеанс сняли.\n{when}\n{place}"
     if snap.expired or snap.status == "expired":
-        return f"{head}Не собрались.\n{when}\n{place}"
+        return f"{head}{team_line}Не собрались.\n{when}\n{place}"
     if snap.status == "cancelled":
-        return f"{head}Сбор снят.\n{when}\n{place}"
+        return f"{head}{team_line}Сбор снят.\n{when}\n{place}"
     if snap.previous_starts_at is not None and snap.status != "confirmed":
         return (
-            f"{head}Время съехало: {clock(snap.previous_starts_at)} → {clock(snap.starts_at)}.\n"
+            f"{head}{team_line}Время съехало: {clock(snap.previous_starts_at)} → {clock(snap.starts_at)}.\n"
             "Подтвердите ещё раз.\n"
             f"{place}"
         )
     who = on_the_ice(snap.going_names) + "."
-    if snap.status == "confirmed" or len(snap.going_names) >= snap.min_people:
-        return f"{head}Едем.\n{when}\n{place}\n{who}"
+    if team_gathered(snap):
+        return f"{head}{team_line}Едем.\n{when}\n{place}\n{who}"
     missing = snap.min_people - len(snap.going_names)
-    return f"{head}{when}\n{place}\n{who}\n{still_line(missing)}"
+    return f"{head}{team_line}{when}\n{place}\n{who}\n{still_line(missing)}"
 
 
 def confirm_dm(snap: Snap) -> str:

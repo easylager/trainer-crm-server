@@ -17,7 +17,6 @@ from aiogram.types import (
     InlineQueryResultArticle,
     InlineQueryResultPhoto,
     InputTextMessageContent,
-    InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
 from src.application.ice_company.copy import (
@@ -31,16 +30,20 @@ from src.application.ice_company.copy import (
     card_text,
 )
 from src.application.ice_company.delivery import AiogramSender
+from src.application.ice_company.keyboard import inline_button
 from src.application.ice_company.lifecycle import (
     ACTION_STATUS,
     _edit_dirty,
     button_rows,
     buttons_for,
+    calendar_url_for,
     parse_callback,
     remember_inline_card,
     render_hash,
 )
 from src.application.ice_company.safety import TextRejected, clean_free_text
+from src.application.ice_company.avatars import cache_telegram_avatar
+from src.application.ice_company.codes import tg_participant_key
 from src.application.ice_company.service import (
     CompanyRejected,
     actor_for_telegram,
@@ -111,9 +114,18 @@ async def on_company_callback(query: CallbackQuery) -> None:
             await query.answer(toast[:200], show_alert=False)
             logger.info("ice_company callback rejected status=%s", exc.status_code)
             return
+        company = await _load(session, code)
+        if company is not None and action == "g":
+            await cache_telegram_avatar(
+                session,
+                query.bot,
+                company_id=int(company["id"]),
+                participant_key=tg_participant_key(user_id),
+                telegram_user_id=user_id,
+            )
+            await session.commit()
         inline_id = (query.inline_message_id or "").strip()
         if inline_id:
-            company = await _load(session, code)
             if company is not None:
                 await remember_inline_card(
                     session,
@@ -148,17 +160,19 @@ async def on_company_inline(query: InlineQuery) -> None:
 
         page = ice_slot_url(company, settings)
         body = card_text(snap)
-        markup_buttons = buttons_for(company, snap, page)
+        markup_buttons = buttons_for(
+            company,
+            snap,
+            page,
+            calendar_url=calendar_url_for(settings, code),
+        )
     from src.application.ice_company.og import card_photo_url
 
     rows = []
     for group in button_rows(markup_buttons):
         row = []
         for button in group:
-            if button.get("url"):
-                row.append(InlineKeyboardButton(text=button["text"], url=button["url"]))
-            elif button.get("data"):
-                row.append(InlineKeyboardButton(text=button["text"], callback_data=button["data"]))
+            row.append(inline_button(button))
         if row:
             rows.append(row)
     markup = InlineKeyboardMarkup(inline_keyboard=rows)

@@ -2247,6 +2247,7 @@ class IceCompanyResponse(Base):
     departing: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     source: Mapped[str] = mapped_column(String(8), nullable=False)
     join_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    avatar_file_key: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

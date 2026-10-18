@@ -345,12 +345,32 @@ def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) 
         return None
 
 
+def upload_ice_company_avatar(file_key: str, body: bytes, content_type: str = "image/jpeg") -> bool:
+    norm_key = resolve_object_key_under_prefixes(file_key, ("ice-company/",))
+    if not norm_key or not body:
+        return False
+    settings = Settings()
+    ct = content_type or "image/jpeg"
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        path = root / norm_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        return True
+    client = _get_client()
+    try:
+        client.put_object(Bucket=settings.s3_bucket, Key=norm_key, Body=body, ContentType=ct)
+    except Exception:
+        return False
+    return True
+
+
 def get_photo(file_key: str) -> tuple[bytes, str] | None:
     """
     Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.
-    Allowed prefixes: trainers/, collectives/, arenas/.
+    Allowed prefixes: trainers/, collectives/, arenas/, ice-company/.
     """
-    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/", "arenas/"))
+    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/", "arenas/", "ice-company/"))
 
 
 def presign_get_url(file_key: str, expires_in: int | None = None) -> str | None:

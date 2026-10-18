@@ -300,8 +300,8 @@ class Settings(BaseSettings):
     ice_company_retention_days: int = 30
     ice_company_max_active_per_organizer: int = 5
     ice_company_max_responses: int = 50
-    ice_company_name_max_len: int = 40
-    ice_company_display_name_max_len: int = 20
+    ice_company_name_max_len: int = 48
+    ice_company_display_name_max_len: int = 24
     ice_company_web_rate_per_minute: int = 30
     ice_company_outbound_global_per_sec: float = 30
     ice_company_outbound_chat_per_sec: float = 1
