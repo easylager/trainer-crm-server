@@ -936,6 +936,39 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   }
 }
 
+/* TASK-291: «Для вас» — одна строка пилюль, ~64px; первая карточка катка остаётся на экране. */
+.ice-foryou { margin: 0 0 4px; }
+.ice-foryou[hidden] { display: none; }
+.ice-foryou__head {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 8px;
+  font-size: var(--app-text-kicker); font-weight: var(--app-weight-semibold); letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--glide-ink-teal, var(--app-cta-fill));
+}
+.ice-foryou__head svg { width: 13px; height: 13px; flex: none; }
+.ice-foryou__row {
+  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
+  margin: 0 -16px; padding: 0 16px; /* во всю ширину экрана, как у .ice-sec */
+}
+.ice-foryou__row::-webkit-scrollbar { display: none; }
+.ice-foryou__pill {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 4px 14px 4px 5px; border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line); background: var(--glide-surface);
+  color: var(--glide-text); text-decoration: none;
+}
+.ice-foryou__pill:active { background: var(--glide-brand-wash); }
+.ice-foryou__face {
+  width: 34px; height: 34px; border-radius: var(--app-radius-pill); object-fit: cover; flex: none;
+  background: var(--glide-line);
+}
+.ice-foryou__face--letter {
+  display: flex; align-items: center; justify-content: center;
+  font-weight: var(--app-weight-bold); color: var(--glide-ink-teal, var(--app-cta-fill)); background: var(--glide-brand-wash);
+}
+.ice-foryou__text { display: flex; flex-direction: column; line-height: 1.15; }
+.ice-foryou__text b { font-size: var(--app-text-body); font-weight: var(--app-weight-bold); white-space: nowrap; }
+.ice-foryou__text span { font-size: var(--app-text-caption); color: var(--glide-hint); }
+
 .ice-listhead {
   display: flex;
   flex-wrap: nowrap;

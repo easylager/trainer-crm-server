@@ -1000,6 +1000,31 @@ def _b_all_places(view: Mapping[str, Any]) -> str:
     )
 
 
+def _b_for_you(view: Mapping[str, Any]) -> str:
+    """TASK-291: «Для вас» — до трёх мест под «Что нужно», те же плитки, что «Рядом».
+
+    Места остаются в своих разделах: ряд — указатель, не новый каталог. Пусто — ряда нет.
+    """
+    from src.application.style_b import section, tile_html
+
+    items = list(view.get("for_you") or [])[:3]
+    if not items:
+        return ""
+    tiles = []
+    for item in items:
+        name = format_public_name(str(item.get("name") or ""))
+        tiles.append(
+            tile_html(
+                href=str(item.get("path") or ""),
+                name=name,
+                line=str(item.get("kind_label") or ""),
+                photo_url=item.get("photo_url"),
+                photo_alt=name,
+            )
+        )
+    return section("Для вас", f'<div class="b-scroll">{"".join(tiles)}</div>', klass="b-sec--flush")
+
+
 def _b_nearby(view: Mapping[str, Any], *, title: str) -> str:
     from src.application.style_b import section, tile_html
 
@@ -1325,6 +1350,7 @@ def _b_body(
             hero,
             _b_upcoming(view),
             _b_routes(view, coach_href=coach_href),
+            _b_for_you(view),
             empty,
             _b_all_places(view),
             _b_trainers(view, base_url=base_url, coach_href=coach_href),

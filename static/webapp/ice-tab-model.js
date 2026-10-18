@@ -2058,6 +2058,42 @@
     return coerceIntent(intent) === INTENTS.coach ? 'iceListCoach' : 'iceListSkate';
   }
 
+  /* TASK-291: «Для вас» — до трёх мест над лентой «Покататься». Пилюля: кружок с фото
+     (или первой буквой), имя и вид места. Пусто или не та вкладка — полосы нет. */
+  function showForYou(opts) {
+    opts = opts || {};
+    if (opts.intent !== INTENTS.skate || opts.scope === 'shop' || opts.placeService === 'service') return false;
+    return !!(opts.items && opts.items.length);
+  }
+
+  function forYouStripHtml(items) {
+    var list = (items || []).slice(0, 3);
+    if (!list.length) return '';
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    var pills = list.map(function (it) {
+      var name = String(it.name || '').trim();
+      var photo = String(it.photo_url || '').trim();
+      var face = photo
+        ? '<img class="ice-foryou__face" src="' + esc(photo) + '" alt="" loading="lazy" decoding="async">'
+        : '<span class="ice-foryou__face ice-foryou__face--letter" aria-hidden="true">' + esc(name.charAt(0)) + '</span>';
+      return (
+        '<a class="ice-foryou__pill" href="' + esc(arenaHref({ id: it.arena_id, slug: it.slug })) + '" data-for-you="' + esc(it.arena_id) + '">' +
+        face +
+        '<span class="ice-foryou__text"><b>' + esc(name) + '</b>' +
+        (it.kind_label ? '<span>' + esc(it.kind_label) + '</span>' : '') +
+        '</span></a>'
+      );
+    }).join('');
+    return (
+      '<p class="ice-foryou__head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.3 6L12 16.4 6.6 19.4l1.3-6L3.4 9.3l6-.7z"/></svg>Для вас</p>' +
+      '<div class="ice-foryou__row">' + pills + '</div>'
+    );
+  }
+
   function formatSortCaption(opts) {
     opts = opts || {};
     var total = Number(opts.total);
@@ -2422,6 +2458,8 @@
     formatEmptyList: formatEmptyList,
     formatEmptySearch: formatEmptySearch,
     formatSortCaption: formatSortCaption,
+    showForYou: showForYou,
+    forYouStripHtml: forYouStripHtml,
     listPaintMode: listPaintMode,
     listHostId: listHostId,
     groupSearchResults: groupSearchResults,

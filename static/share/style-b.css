@@ -224,6 +224,8 @@ main.b-page.is-swapping > :not(.b-hero, .b-sec) { opacity: 0.55; }
 .b-scroll {
   display: flex; gap: 10px; overflow-x: auto; padding: 0 16px 4px;
   scroll-snap-type: x mandatory; scrollbar-width: none;
+  /* Без него привязка ставит первую плитку к самому краю экрана, съедая отступ 16px. */
+  scroll-padding-inline: 16px;
   min-height: 188px;
 }
 .b-scroll::-webkit-scrollbar { display: none; }
