@@ -21,7 +21,8 @@ from tests.api.test_public_place_page import _client, _place
 # Cold /p/: cities, slug, card, media, sessions, the same window once more.
 # Свежести расписания на странице больше нет, просмотр пишет sendBeacon, а не GET.
 # Warm drops only the cached city list.
-_PLACE_SQL_COLD = 6
+# +1 к прежним 6: правила обычной загрузки (TASK-290), кэш процесса на 60 с — в тёплом прогоне их нет.
+_PLACE_SQL_COLD = 7
 _PLACE_SQL_WARM = 5
 
 _CATALOG_WIDE_MARKERS = (

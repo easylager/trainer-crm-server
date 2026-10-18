@@ -174,6 +174,35 @@
     setPlanText(plan, 'time', end ? start + '–' + end : start);
     setPlanText(plan, 'line', [planKindLabel(session), planPriceLine(session)].filter(Boolean).join(' · '));
     setPlanText(plan, 'soon', planSoonLine(session));
+    paintPlanLoad(plan, session.typical_load_level);
+  }
+
+  /* Слово к черточкам на квадрате: здесь человек и узнаёт, что они значат. Тексты — как в
+     src/application/session_load.py LOAD_PLAN_LINES. */
+  var LOAD_LINES = {
+    calm: 'Обычно свободно в это время',
+    medium: 'Обычно народу в меру',
+    busy: 'Обычно людно в это время',
+  };
+
+  function paintPlanLoad(plan, level) {
+    var row = plan.querySelector('.b-plan__load');
+    if (!row) return;
+    var text = LOAD_LINES[level] || '';
+    row.hidden = !text;
+    if (!text) return;
+    var meter = row.querySelector('.b-load');
+    if (!meter) {
+      meter = document.createElement('span');
+      meter.className = 'b-load';
+      meter.setAttribute('role', 'img');
+      meter.innerHTML = '<i></i><i></i><i></i>';
+      row.insertBefore(meter, row.firstChild);
+    }
+    meter.setAttribute('data-level', level);
+    meter.setAttribute('aria-label', text);
+    var word = row.querySelector(':scope > span:not(.b-load)');
+    if (word) word.textContent = text;
   }
 
   /* Тап на время показывает скрытый билет «Выбранный сеанс» над расписанием. Он

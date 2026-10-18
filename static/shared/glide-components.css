@@ -57,6 +57,24 @@
 .b-ticket--dark .b-ticket__go { color: var(--g-on-dark-accent); }
 .b-ticket__go .b-icon { width: 18px; height: 18px; }
 
+/* Обычная загрузка сеанса (TASK-290). Цвет и число делений, слово — в «Выбранном сеансе». */
+/* Одна полоска из трёх делений, а не три тире: тире читается как «нет данных». */
+.b-load { display: inline-flex; gap: 2px; flex: none; border-radius: 999px; overflow: hidden; }
+.b-load i { width: 10px; height: 5px; background: var(--g-load-off); }
+.b-load[data-level="calm"] i:first-child { background: var(--g-load-calm); }
+.b-load[data-level="medium"] i:nth-child(-n+2) { background: var(--g-load-medium); }
+.b-load[data-level="busy"] i { background: var(--g-load-busy); }
+.b-ticket { position: relative; }
+/* На уровне середины цифр времени: 16px отступ + половина строки 32px. */
+.b-ticket > .b-load { position: absolute; top: 30px; right: 16px; }
+.b-ticket--dark .b-load i, .b-plan .b-load i { background: var(--g-dark-line); }
+.b-ticket--dark .b-load[data-level="calm"] i:first-child,
+.b-plan .b-load[data-level="calm"] i:first-child { background: var(--g-load-calm); }
+.b-ticket--dark .b-load[data-level="medium"] i:nth-child(-n+2),
+.b-plan .b-load[data-level="medium"] i:nth-child(-n+2) { background: var(--g-load-medium); }
+.b-ticket--dark .b-load[data-level="busy"] i,
+.b-plan .b-load[data-level="busy"] i { background: var(--g-load-busy); }
+
 /* ── Кнопки ───────────────────────────────────────────────────────────── */
 .b-btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .b-btn {

@@ -34,6 +34,27 @@
       .replace(/"/g, '&quot;');
   }
 
+  /* Обычная загрузка сеанса (TASK-290): полоска из трёх делений под временем. Слово уровня
+     показывается на выбранной плитке, если касса не дала живой остаток — он важнее. */
+  var LOAD_WORDS = { calm: 'обычно свободно', medium: 'обычно в меру', busy: 'обычно людно' };
+  var LOAD_LABELS = {
+    calm: 'Обычно свободно в это время',
+    medium: 'Обычно народу в меру',
+    busy: 'Обычно людно в это время',
+  };
+
+  function loadMeterHtml(level) {
+    if (!LOAD_LABELS[level]) return '';
+    return (
+      '<span class="arena-load" data-level="' + level + '" role="img" aria-label="' + LOAD_LABELS[level] + '">' +
+      '<i></i><i></i><i></i></span>'
+    );
+  }
+
+  function slotTag(t) {
+    return t.capacity || (t.picked && LOAD_WORDS[t.load]) || (t.next ? 'Ближайший' : '');
+  }
+
   function todayIso(now) {
     now = now || new Date();
     var tz = state.card && state.card.timezone;
@@ -1063,8 +1084,8 @@
           if (t.picked) timeCls += ' arena-time--picked';
           else if (t.next) timeCls += ' arena-time--next';
           /* Вместимость важнее «Ближайший»; выбор для приглашения — рамка, цвет и CTA сверху. */
-          var tag = t.capacity || (t.next ? 'Ближайший' : '');
-          var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
+          var tag = slotTag(t);
+          var body = '<b>' + esc(t.time) + '</b>' + loadMeterHtml(t.load) + (tag ? '<small>' + esc(tag) + '</small>' : '');
           var buy =
             t.ticketHref
               ? '<button type="button" class="arena-slot-buy" data-action="external" data-href="' +
@@ -1182,6 +1203,10 @@
     var hasTicketLinks = daySessions.some(function (s) {
       return M.iceRowCta(s, state.card && state.card.tickets_url).href;
     });
+    var hasLoad = daySessions.some(function (s) {
+      return !!LOAD_LABELS[s.typical_load_level];
+    });
+    var hint = M.scheduleInviteHint(hasTicketLinks, hasLoad);
     var focusGone = renderFocusGoneNotice(getFocusState());
     return (
       '<div class="arena-sec">' +
@@ -1189,9 +1214,7 @@
       scheduleHeaderTools(tickets) +
       '</div>' +
       focusGone +
-      (M.scheduleInviteHint(hasTicketLinks)
-        ? '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>'
-        : '') +
+      (hint ? '<p class="arena-schedule-hint">' + esc(hint) + '</p>' : '') +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
       '</div>'
@@ -1277,8 +1300,8 @@
             var timeCls = 'arena-slot-time';
             if (t.picked) timeCls += ' arena-time--picked';
             else if (t.next) timeCls += ' arena-time--next';
-            var tag = t.capacity || (t.next ? 'Ближайший' : '');
-            var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
+            var tag = slotTag(t);
+            var body = '<b>' + esc(t.time) + '</b>' + loadMeterHtml(t.load) + (tag ? '<small>' + esc(tag) + '</small>' : '');
             if (t.sessionId == null) {
               return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span></div>';
             }

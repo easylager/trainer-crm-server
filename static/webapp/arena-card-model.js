@@ -953,6 +953,7 @@
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
         capacity: s.capacity_note || '',
+        load: s.typical_load_level || '',
       });
     });
     return { groups: groups, count: list.length };
@@ -1278,9 +1279,17 @@
     return '';
   }
 
-  function scheduleInviteHint(hasTicketLinks) {
+  /* Подсказка над временем. Полоска загрузки (TASK-290) объясняется здесь же: у плитки
+     Mini App нет места под слово, а подпись под временем занята остатком мест. */
+  function scheduleInviteHint(hasTicketLinks, hasLoad) {
+    if (hasTicketLinks && hasLoad) {
+      return 'Время — для приглашения, полоска — насколько обычно людно. ↗ — билеты на сайте катка.';
+    }
     if (hasTicketLinks) {
       return 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.';
+    }
+    if (hasLoad) {
+      return 'Полоска под временем — насколько обычно людно в эти часы.';
     }
     return '';
   }

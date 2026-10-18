@@ -62,6 +62,11 @@
   --g-vb: #7360f2;
   --g-wa: #25d366;
   --g-vk: #0077ff;
+  /* Обычная загрузка сеанса (TASK-290): три черточки, закрашено 1/2/3. */
+  --g-load-calm: #1fa85a;
+  --g-load-medium: #e2a13a;
+  --g-load-busy: #d8453b;
+  --g-load-off: #d6dfe4;
 }
 
 /*
@@ -89,6 +94,10 @@ body.tg-dark {
   --g-on-dark-accent: #9fd9d6;
   --g-warn-wash: #3a2d13;
   --g-warn-ink: #ffcf86;
+  --g-load-calm: #4fc98a;
+  --g-load-medium: #f0a24b;
+  --g-load-busy: #ff6b60;
+  --g-load-off: var(--g-line);
 }
 
 /* ═════════════ Mini App: ICE PAPER (светлая) и ARENA (тёмная) ═════════════ */

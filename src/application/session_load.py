@@ -22,6 +22,24 @@ LOAD_LABELS: dict[LoadLevel, str] = {
     LEVEL_BUSY: "Людно",
 }
 
+# Слово уровня живёт в «Выбранном сеансе» и в доступном имени; на квадрате — только черточки.
+LOAD_PLAN_LINES: dict[LoadLevel, str] = {
+    LEVEL_CALM: "Обычно свободно в это время",
+    LEVEL_MEDIUM: "Обычно народу в меру",
+    LEVEL_BUSY: "Обычно людно в это время",
+}
+
+
+def load_meter_html(level: object) -> str:
+    """Три черточки шкалы. Неизвестный уровень — пустая строка, без заглушки."""
+    if not isinstance(level, str) or level not in LOAD_PLAN_LINES:
+        return ""
+    return (
+        f'<span class="b-load" data-level="{level}" role="img" aria-label="{LOAD_PLAN_LINES[level]}">'
+        "<i></i><i></i><i></i></span>"
+    )
+
+
 TYPICAL_LOAD_SESSION_KINDS = frozenset({"public_skate", "open_ice", "hockey_practice"})
 
 DAY_MON_THU = "mon_thu"
@@ -221,38 +239,39 @@ async def load_session_load_context(session: AsyncSession) -> SessionLoadContext
     if _cache_ctx is not None and _cache_mono is not None and now - _cache_mono < _CACHE_TTL_SEC:
         return _cache_ctx
 
-    rule_rows = (
+    # Один запрос на правила и нестандартные характеры: страница места не платит лишним
+    # обращением к БД (TASK-197), а «steady» — значение по умолчанию и в выборку не входит.
+    rows = (
         await session.execute(
             text(
                 """
-                SELECT id, scope, character, arena_id, day_group,
+                SELECT 'rule' AS row_kind, id, scope, character, arena_id, day_group,
                        starts_from, starts_before, level, source
                 FROM session_load_rules
-                ORDER BY id
+                UNION ALL
+                SELECT 'character', NULL, NULL, load_character, arena_id, NULL,
+                       NULL::time, NULL::time, NULL, NULL
+                FROM arena_profiles
+                WHERE load_character <> 'steady'
                 """
             )
         )
     ).fetchall()
     rules = tuple(
         LoadRule(
-            id=int(r[0]),
-            scope=str(r[1]),
-            character=str(r[2]) if r[2] is not None else None,
-            arena_id=int(r[3]) if r[3] is not None else None,
-            day_group=str(r[4]),
-            starts_from=r[5],
-            starts_before=r[6],
-            level=str(r[7]),
-            source=str(r[8]),
+            id=int(r[1]),
+            scope=str(r[2]),
+            character=str(r[3]) if r[3] is not None else None,
+            arena_id=int(r[4]) if r[4] is not None else None,
+            day_group=str(r[5]),
+            starts_from=r[6],
+            starts_before=r[7],
+            level=str(r[8]),
+            source=str(r[9]),
         )
-        for r in rule_rows
+        for r in sorted((r for r in rows if r[0] == "rule"), key=lambda r: int(r[1]))
     )
-    char_rows = (
-        await session.execute(
-            text("SELECT arena_id, load_character FROM arena_profiles")
-        )
-    ).fetchall()
-    character_by_arena = {int(row[0]): str(row[1]) for row in char_rows}
+    character_by_arena = {int(r[4]): str(r[3]) for r in rows if r[0] == "character"}
     ctx = SessionLoadContext(rules=rules, character_by_arena=character_by_arena)
     _cache_mono = now
     _cache_ctx = ctx

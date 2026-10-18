@@ -577,6 +577,7 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 .b-plan__day { font-size: 16px; }
 .b-plan__time { font-family: var(--g-font-display); font-size: 34px; line-height: 1.05; font-variant-numeric: proportional-nums; }
 .b-plan__line, .b-plan__soon, .b-plan__where { font-size: 15px; color: var(--g-on-dark-muted); }
+.b-plan__load { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--g-on-dark-muted); }
 .b-plan--gone { gap: 6px; }
 #plan[hidden], .b-plan [hidden] { display: none; }
 

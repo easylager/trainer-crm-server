@@ -1120,3 +1120,33 @@ describe('massAccessView', () => {
     assert.match(v.rentalNote, /ФК «Минск»/);
   });
 });
+
+describe('TASK-290: обычная загрузка на плитке и в подсказке', () => {
+  it('плитка несёт уровень сеанса; без уровня — пусто', () => {
+    const { showtimesForDay } = loadModel();
+    const base = {
+      kind: 'public_skate', local_date: '2026-10-02', ends_at_local: '19:59:00',
+      starts_at_utc: '2026-10-02T16:15:00Z', ends_at_utc: '2026-10-02T16:59:00Z',
+      price_adult_minor: 1000, currency_code: 'BYN',
+    };
+    const v = showtimesForDay({
+      sessions: [
+        { ...base, id: 1, starts_at_local: '19:15:00', typical_load_level: 'busy' },
+        { ...base, id: 2, starts_at_local: '20:15:00', ends_at_local: '20:59:00', starts_at_utc: '2026-10-02T17:15:00Z', ends_at_utc: '2026-10-02T17:59:00Z' },
+      ],
+      now: new Date('2026-10-02T10:00:00Z'),
+    });
+    assert.deepEqual(v.groups[0].times.map((t) => t.load), ['busy', '']);
+  });
+
+  it('подсказка объясняет полоску, когда она есть', () => {
+    const { scheduleInviteHint } = loadModel();
+    assert.equal(
+      scheduleInviteHint(true, true),
+      'Время — для приглашения, полоска — насколько обычно людно. ↗ — билеты на сайте катка.'
+    );
+    assert.equal(scheduleInviteHint(true, false), 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.');
+    assert.equal(scheduleInviteHint(false, true), 'Полоска под временем — насколько обычно людно в эти часы.');
+    assert.equal(scheduleInviteHint(false, false), '');
+  });
+});
