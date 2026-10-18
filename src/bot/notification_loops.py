@@ -1670,11 +1670,13 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 "arena_name": s.get("arena_name"),
                                 "arena_address": s.get("arena_address"),
                                 "booked_for_name": s.get("booked_for_name"),
+                                "arena_tickets_url": s.get("arena_tickets_url"),
                             }
                         )
                     kind = p.get("kind") or ""
+                    is_soon = kind not in ("before_24h", "before_evening_prior")
                     text = msg.format_client_booking_reminder_text(
-                        is_soon=(kind not in ("before_24h", "before_evening_prior")),
+                        is_soon=is_soon,
                         sessions=sessions_payload,
                     )
                     arena_payload = {
@@ -1703,6 +1705,13 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 )
                             ]
                         )
+                    if not is_soon:
+                        for sess in sessions_payload:
+                            msg.append_client_booking_tickets_keyboard_row(
+                                kb_rows,
+                                arena_tickets_url=sess.get("arena_tickets_url"),
+                                arena_name=sess.get("arena_name"),
+                            )
                     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows) if kb_rows else None
                     try:
                         await client_bot.send_message(

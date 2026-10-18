@@ -67,10 +67,13 @@ async def notify_client_booking_confirmed_by_trainer(
         arena_address=info.get("arena_address"),
         trainer_first_booking_milestone=bool(info.get("first_booking_milestone")),
         expected_payment_class=expected_payment_class,
+        arena_tickets_url=info.get("arena_tickets_url"),
     )
     reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
         map_url=info.get("map_link"),
         trainer_telegram_id=info.get("trainer_telegram_id"),
+        arena_tickets_url=info.get("arena_tickets_url"),
+        arena_name=info.get("arena_name"),
     )
     try:
         await client_bot.send_message(
