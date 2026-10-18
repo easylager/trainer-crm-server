@@ -489,6 +489,47 @@ class IceSalesSnapshot(Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False)
 
 
+class ClientBroadcastLog(Base):
+    """One delivery attempt of a client broadcast. Repeat runs skip existing rows."""
+
+    __tablename__ = "client_broadcast_log"
+    __table_args__ = (
+        UniqueConstraint(
+            "telegram_id",
+            "campaign_key",
+            name="uq_client_broadcast_log_telegram_campaign",
+        ),
+        CheckConstraint(
+            "status IN ('sent', 'failed')",
+            name="ck_client_broadcast_log_status",
+        ),
+        Index("ix_client_broadcast_log_campaign", "campaign_key"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    campaign_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+
+
+class ClientBroadcastOptout(Base):
+    """Client asked not to receive a broadcast kind. Season-start ignores this table."""
+
+    __tablename__ = "client_broadcast_optouts"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('ice_forecast')",
+            name="ck_client_broadcast_optouts_kind",
+        ),
+    )
+
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class IceCityInterest(Base):
     """Client tap on Ice tab «скоро добавим катки» for a city without map rinks."""
 

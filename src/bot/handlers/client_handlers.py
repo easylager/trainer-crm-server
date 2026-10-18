@@ -3512,6 +3512,32 @@ async def client_relay_close_callback(callback: CallbackQuery) -> None:
     await on_client_bot_relay_close_callback(callback)
 
 
+@router.callback_query(lambda c: c.data == "ice_forecast:optout")
+async def ice_forecast_optout_callback(callback: CallbackQuery) -> None:
+    """Отписка от «Лёд на выходные»: тост и кнопка исчезает из этого сообщения."""
+    from src.application.ice_forecast import (
+        OPT_OUT_TOAST,
+        markup_without_optout,
+        record_ice_forecast_optout,
+    )
+    from src.infrastructure.db import async_session_factory
+
+    if callback.from_user is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        await record_ice_forecast_optout(session, int(callback.from_user.id))
+        await session.commit()
+    if callback.message is not None:
+        try:
+            await callback.message.edit_reply_markup(
+                reply_markup=markup_without_optout(callback.message.reply_markup)
+            )
+        except Exception:
+            logger.warning("ice_forecast opt-out: failed to edit markup", exc_info=True)
+    await callback.answer(OPT_OUT_TOAST)
+
+
 @router.message()
 async def fallback(message: Message) -> None:
     """Any other message: handle support state or direct to main menu."""

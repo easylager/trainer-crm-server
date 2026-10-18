@@ -307,6 +307,10 @@ class Settings(BaseSettings):
     ice_company_outbound_chat_per_sec: float = 1
     ice_company_outbound_group_per_min: int = 20
 
+    # «Лёд на выходные»: четверг 18:00–20:00 Europe/Minsk, 1 дек – 15 фев.
+    # По умолчанию выключено. Старт сезона этим флагом не управляется — его шлёт скрипт.
+    ice_forecast_enabled: bool = False
+
     def resolved_trainer_subscription_checkout_mode(self) -> Literal["sandbox", "bepaid", "invoice"]:
         """How trainer-subscription Mini App should behave for paid checkout."""
         m = (self.trainer_subscription_checkout_mode or "auto").strip().lower()
