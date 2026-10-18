@@ -103,9 +103,12 @@ def section_kind(row: Mapping[str, Any], *, month: int) -> tuple[str, str]:
     Заточка проверяется ``row_in_sharpening_section``. Остальные — тип площадки,
     подпись как в карточке каталога (``venue_type_noun``).
     """
+    venue = normalize_venue_type(row.get("venue_type"))
+    # Каток с услугой заточки — всё равно каток: подпись «Заточка» у Ледового дворца врала.
+    if has_public_skating(venue):
+        return venue, venue_type_noun(venue)
     if row_in_sharpening_section(row, month=month):
         return "service", t("route.service")
-    venue = normalize_venue_type(row.get("venue_type"))
     if venue == VENUE_TYPE_SHOP:
         return "shop", venue_type_noun(venue)
     return venue, venue_type_noun(venue)

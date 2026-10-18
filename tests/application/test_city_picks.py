@@ -227,3 +227,11 @@ async def test_flag_off_hides_picks_but_keeps_pins(db_session, monkeypatch) -> N
         )
     ).scalar_one()
     assert int(still) == shop
+
+
+def test_rink_with_sharpening_is_labelled_as_rink() -> None:
+    from src.application.city_picks import section_kind
+
+    kind, label = section_kind({"venue_type": "ice", "amenities": {"skate_sharpening": True}}, month=10)
+    assert kind == "ice"
+    assert label != "Заточка"
