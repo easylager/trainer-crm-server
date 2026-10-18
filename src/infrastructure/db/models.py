@@ -506,6 +506,49 @@ class IceSalesSnapshot(Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False)
 
 
+class HockeyMatch(Base):
+    """Матч Динамо-Минск для игры «Кто кого»: календарь и официальный итог (TASK-296)."""
+
+    __tablename__ = "hockey_matches"
+    __table_args__ = (
+        UniqueConstraint("source", "source_match_id", name="uq_hockey_matches_source_id"),
+        Index("ix_hockey_matches_status_starts", "status", "starts_at"),
+        CheckConstraint("source IN ('hcdinamo')", name="ck_hockey_matches_source"),
+        CheckConstraint("status IN ('scheduled', 'final', 'review', 'cancelled')", name="ck_hockey_matches_status"),
+        CheckConstraint(
+            "decided_in IS NULL OR decided_in IN ('regulation', 'ot', 'so')",
+            name="ck_hockey_matches_decided_in",
+        ),
+        CheckConstraint(
+            "result_source IS NULL OR result_source IN ('auto', 'manual')",
+            name="ck_hockey_matches_result_source",
+        ),
+        CheckConstraint(
+            "status <> 'final' OR (home_score IS NOT NULL AND away_score IS NOT NULL"
+            " AND home_score <> away_score AND decided_in IS NOT NULL AND result_source IS NOT NULL)",
+            name="ck_hockey_matches_final_result",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_match_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    home_team: Mapped[str] = mapped_column(String(64), nullable=False)
+    away_team: Mapped[str] = mapped_column(String(64), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="scheduled")
+    home_score: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    away_score: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    decided_in: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    result_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    review_alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class ClientBroadcastLog(Base):
     """One delivery attempt of a client broadcast. Repeat runs skip existing rows."""
 
