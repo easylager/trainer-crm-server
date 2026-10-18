@@ -7,6 +7,7 @@ import logging
 from typing import Any, Sequence
 
 from aiogram import Bot
+from aiogram.utils.token import TokenValidationError, validate_token
 from PIL import Image
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -130,8 +131,12 @@ async def cache_telegram_avatar_with_token(
     participant_key: str,
     telegram_user_id: int,
 ) -> None:
-    token = (settings or Settings()).telegram_bot_token_client
-    if not (token or "").strip():
+    token = ((settings or Settings()).telegram_bot_token_client or "").strip()
+    if not token:
+        return
+    try:
+        validate_token(token)
+    except TokenValidationError:
         return
     bot = Bot(token)
     try:
