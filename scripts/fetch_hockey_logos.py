@@ -28,6 +28,9 @@ from src.ingestion.hockey_sources import (
 )
 from src.ingestion.source_io import fetch_http_bytes
 
+# Логотипы, присланные клубом или владельцем: сайт отдаёт хуже, перекачка их не трогает даже с --force.
+MANUAL_LOGOS = frozenset({"sochi"})
+
 _UA = {"User-Agent": "Mozilla/5.0 (compatible; GlideBot/1.0)"}
 
 
@@ -87,6 +90,10 @@ async def main(*, force: bool = False) -> None:
     saved = skipped = 0
     for name in sorted(found):
         dest = logo_path(slug_for(name))
+        if slug_for(name) in MANUAL_LOGOS and dest.is_file():
+            skipped += 1
+            print(f"keep manual {name} → {dest.name}")
+            continue
         if not force and dest.is_file() and dest.stat().st_size > 0:
             skipped += 1
             print(f"skip {name} → {dest.name}")
