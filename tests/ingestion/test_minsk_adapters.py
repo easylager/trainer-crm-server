@@ -262,6 +262,45 @@ async def test_zamok_and_chizhovka_html_adapters_match_expected() -> None:
     assert hit.session_label == "Малая арена"
 
 
+def test_chizhovka_hyphen_times_are_sessions() -> None:
+    """Сайт с 19.10.2026 пишет новую неделю как «18-30 БА», не «18.30 БА»."""
+    from src.ingestion.adapters import _chizhovka_table_slots
+
+    html = """
+    <table>
+      <tr>
+        <td>Понедельник 19 октября</td><td>Вторник 20 октября</td><td>Среда 21 октября</td>
+        <td>Четверг 22 октября</td><td>Пятница 23 октября</td><td>Суббота 24 октября</td>
+        <td>Воскресенье 25 октября</td>
+      </tr>
+      <tr>
+        <td>18-30 БА</td><td>18-30 БА</td><td>10-30 МА</td><td></td><td></td><td></td><td></td>
+      </tr>
+      <tr>
+        <td></td><td></td><td>19-00 МА</td><td></td><td></td><td></td><td></td>
+      </tr>
+    </table>
+    """
+    slots = _chizhovka_table_slots(
+        html,
+        reference=date(2026, 10, 19),
+        duration_minutes=60,
+        keep_rink_labels={"МА", "БА"},
+        kind_raw="Массовое катание",
+        price_adult=1000,
+        price_child=700,
+        price_rental=500,
+        age_note="детский до 16 лет",
+    )
+    got = {(s.local_date, s.starts_at_local, s.session_label) for s in slots}
+    assert got == {
+        ("2026-10-19", "18:30", "Большая арена"),
+        ("2026-10-20", "18:30", "Большая арена"),
+        ("2026-10-21", "10:30", "Малая арена"),
+        ("2026-10-21", "19:00", "Малая арена"),
+    }
+
+
 @pytest.mark.asyncio
 async def test_ledby_html_adapter_matches_expected_sample() -> None:
     job = _ledby_job()

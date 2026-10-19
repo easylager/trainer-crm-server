@@ -65,8 +65,9 @@
 .b-load[data-level="medium"] i:nth-child(-n+2) { background: var(--g-load-medium); }
 .b-load[data-level="busy"] i { background: var(--g-load-busy); }
 .b-ticket { position: relative; }
-/* Живой остаток кассы — на месте шкалы, тем же углом. */
-.b-ticket > .b-seats { position: absolute; top: 24px; right: 16px; font-size: 13px; font-weight: 600; color: var(--g-ink-2); }
+/* Живой остаток кассы — своей строкой под временем.
+   Угол шкалы для этого текста узкий: «205 места» наезжало на «13:15». */
+.b-ticket > .b-seats { font-size: 13px; font-weight: 600; line-height: 1.2; color: var(--g-ink-2); }
 .b-ticket > .b-seats--low { color: var(--g-warn-ink); }
 .b-ticket--dark > .b-seats { color: var(--g-on-dark-muted); }
 /* На уровне середины цифр времени: 16px отступ + половина строки 32px. */

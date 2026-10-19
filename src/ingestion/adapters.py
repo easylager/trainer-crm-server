@@ -45,7 +45,8 @@ _DAY_DATE = re.compile(
     re.IGNORECASE,
 )
 _LED_TIME = re.compile(r"(\d{1,2}:\d{2})\s*\((\d+)\s*час", re.IGNORECASE)
-_CHIZ_CELL = re.compile(r"(\d{1,2})[.:](\d{2})\s*(МА|БА)", re.IGNORECASE)
+# Дефис — как сайт пишет новую неделю («18-30 БА»); точка и двоеточие — старые таблицы.
+_CHIZ_CELL = re.compile(r"(\d{1,2})[-.:](\d{2})\s*(МА|БА)", re.IGNORECASE)
 _CHIZ_RINK_LABELS = {"МА": "Малая арена", "БА": "Большая арена"}
 _CHIZ_HEADER = re.compile(
     r"(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)",
