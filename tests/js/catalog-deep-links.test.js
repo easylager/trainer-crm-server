@@ -34,6 +34,13 @@ describe('deepLinkTarget', () => {
     assert.equal(target('kk_'), null);
   });
 
+  it('кнопки карточек «Кто кого» ведут в игру с меткой карточки', () => {
+    assert.deepEqual(target('kkl_abcd2345'), { key: 'kto-kogo', path: 'kto-kogo?join=ABCD2345&from=league' });
+    assert.deepEqual(target('kkr_abcd2345'), { key: 'kto-kogo', path: 'kto-kogo?join=ABCD2345&from=result' });
+    assert.deepEqual(target('kkr'), { key: 'kto-kogo', path: 'kto-kogo?from=result' });
+    assert.equal(target('kkl'), null);
+  });
+
   it('arena_<id> ведёт на карточку места', () => {
     assert.deepEqual(target('arena_42'), { key: 'arena', path: 'arena?ref=42' });
   });

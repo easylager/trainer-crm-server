@@ -155,9 +155,18 @@
   }
 
   /** startapp=kk_<КОД> → код лиги или ''. */
+  /** Код лиги из ссылки: kk_КОД — приглашение, kkl_/kkr_КОД — кнопки карточек в чате. */
   function inviteCode(startParam) {
-    var m = /^kk_([A-Za-z0-9]{4,16})$/.exec(String(startParam || '').trim());
+    var m = /^kk[lr]?_([A-Za-z0-9]{4,16})$/.exec(String(startParam || '').trim());
     return m ? m[1].toUpperCase() : '';
+  }
+
+  /** С какой карточки в чате пришли: 'league' | 'result' | ''. */
+  function cardFrom(startParam, fromParam) {
+    if (fromParam === 'league' || fromParam === 'result') return fromParam;
+    var m = /^kk([lr])(?:_[A-Za-z0-9]{4,16})?$/.exec(String(startParam || '').trim());
+    if (!m) return '';
+    return m[1] === 'l' ? 'league' : 'result';
   }
 
   /** Сторона моего хода, если ход — точный счёт, тоже даёт сторону. */
@@ -180,6 +189,7 @@
     clampGoals: clampGoals,
     scoreError: scoreError,
     inviteCode: inviteCode,
+    cardFrom: cardFrom,
     pickSide: pickSide,
   };
 

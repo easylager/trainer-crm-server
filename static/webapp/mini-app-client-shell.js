@@ -1097,6 +1097,13 @@
     // «Кто кого»: приглашение в лигу друзей (TASK-298/299).
     var league = /^kk_([A-Za-z0-9]{4,16})$/.exec(sp);
     if (league) return { key: 'kto-kogo', path: 'kto-kogo?join=' + league[1].toUpperCase() };
+    // Кнопки карточек в чате (TASK-300): kkl_КОД — приглашение, kkr[_КОД] — итог «в точку!».
+    var fromCard = /^kk([lr])(?:_([A-Za-z0-9]{4,16}))?$/.exec(sp);
+    if (fromCard) {
+      var cardKind = fromCard[1] === 'l' ? 'league' : 'result';
+      if (fromCard[2]) return { key: 'kto-kogo', path: 'kto-kogo?join=' + fromCard[2].toUpperCase() + '&from=' + cardKind };
+      if (cardKind === 'result') return { key: 'kto-kogo', path: 'kto-kogo?from=result' };
+    }
     var company = /^company_([1-9][0-9]*)$/i.exec(sp);
     if (company) return { key: 'ice-company', path: 'ice-company?s=' + company[1] };
     var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other|ohm|service))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);

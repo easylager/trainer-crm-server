@@ -626,6 +626,25 @@ class HockeyLeagueMember(Base):
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeyCardEvent(Base):
+    """Карточка «Кто кого» в чате: отправили, открыли, вступили — без ключа игрока (TASK-300)."""
+
+    __tablename__ = "hockey_card_events"
+    __table_args__ = (
+        CheckConstraint("kind IN ('shared', 'opened', 'joined')", name="ck_hockey_card_events_kind"),
+        CheckConstraint("card IN ('result', 'league')", name="ck_hockey_card_events_card"),
+        Index("ix_hockey_card_events_created", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    card: Mapped[str] = mapped_column(String(8), nullable=False)
+    league_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    match_id: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    prepared: Mapped[Optional[bool]] = mapped_column(Boolean(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class ClientBroadcastLog(Base):
     """One delivery attempt of a client broadcast. Repeat runs skip existing rows."""
 

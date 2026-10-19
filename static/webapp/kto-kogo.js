@@ -36,6 +36,8 @@
     draftName: '',
     createError: '',
     busy: false,
+    sharing: false,
+    fromCard: '', // 'league' | 'result' — открыли с карточки в чате
     toast: '',
   };
 
@@ -625,6 +627,32 @@
     else window.open(url, '_blank');
   }
 
+  /**
+   * Карточка в чат (TASK-300): сервер готовит фото с кнопкой, Telegram даёт выбрать чат.
+   * Старый клиент или сбой — та же ссылка текстом через t.me/share, как раньше.
+   */
+  function shareCard(req, fallbackUrl, fallbackText) {
+    if (state.sharing) return;
+    state.sharing = true;
+    api('POST', '/client/hockey/share', req)
+      .then(function (r) {
+        state.sharing = false;
+        var canShare = tg && tg.shareMessage && (!tg.isVersionAtLeast || tg.isVersionAtLeast('8.0'));
+        if (r.prepared_message_id && canShare) {
+          try {
+            tg.shareMessage(r.prepared_message_id, function (sent) { if (sent) haptic('success'); });
+            return;
+          } catch (e) { /* ниже — запасной путь */ }
+        }
+        share(r.url, r.text);
+      })
+      .catch(function (e) {
+        state.sharing = false;
+        if (fallbackUrl) share(fallbackUrl, fallbackText);
+        else toast(e.message);
+      });
+  }
+
   function copy(inviteUrl) {
     if (!inviteUrl) return toast('Ссылка появится, когда бот будет настроен');
     var done = function () { toast('Ссылка скопирована'); };
@@ -644,7 +672,7 @@
         h('p', { class: 'kk-hero__title', style: 'font-size:28px', text: '«' + l.name + '» готова' }),
         h('p', { class: 'kk-hero__text', style: 'max-width:280px', text: 'Пока в лиге только ты. Позови друзей — очки за матчи пойдут и сюда, и в общую таблицу.' }),
       ]),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: function () { share(l.invite_url, inviteText(l.name)); }, text: 'Позвать в Telegram' }),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: function () { shareCard({ card: 'league', league_id: l.id }, l.invite_url, inviteText(l.name)); }, text: 'Позвать в Telegram' }),
       h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', onclick: function () { copy(l.invite_url); }, text: 'Скопировать ссылку' }),
       h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', onclick: function () { go('leagues'); }, text: 'К лигам' }),
     ]);
@@ -673,7 +701,7 @@
         h('h2', { class: 'kk-display', style: 'font-size:28px;line-height:1.1;margin:0;overflow-wrap:anywhere', text: t.name }),
         h('p', { class: 'kk-hint', style: 'font-weight:700', text: n + ' ' + M.plural(n, 'человек', 'человека', 'человек') + (me ? ' · ты ' + me.rank + '-й · ' + M.points(me.points) : '') }),
       ]),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', style: 'min-height:52px;font-size:16px', onclick: function () { share(t.invite_url, inviteText(t.name)); } }, [icon(I_INVITE), 'Позвать друзей']),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', style: 'min-height:52px;font-size:16px', onclick: function () { shareCard({ card: 'league', league_id: t.id }, t.invite_url, inviteText(t.name)); } }, [icon(I_INVITE), 'Позвать друзей']),
       n > 1 ? list(t.items) : h('p', { class: 'kk-hint', text: 'Пока в лиге только ты. Позови друзей — таблица оживёт после первого матча.' }),
     ]);
   }
@@ -801,7 +829,7 @@
   function joinLeague() {
     state.busy = true;
     render();
-    api('POST', '/client/hockey/leagues/join', { code: state.joinCode })
+    api('POST', '/client/hockey/leagues/join', { code: state.joinCode, from_card: state.fromCard || null })
       .then(function (l) {
         state.busy = false;
         state.created = l;
@@ -888,7 +916,7 @@
     function brag() {
       var league = (state.leagues || [])[0];
       var text = v.head + ' ' + m.home.name + ' — ' + m.away.name + ' ' + r.home_score + ':' + r.away_score + ', ' + v.sticker + '. А ты угадаешь?';
-      share(league ? league.invite_url : null, text);
+      shareCard({ card: 'result', match_id: m.id }, league ? league.invite_url : null, text);
     }
   }
 
@@ -977,6 +1005,8 @@
       ]));
       return;
     }
+    state.fromCard = M.cardFrom(startParam(), params.get('from'));
+    if (state.fromCard) api('POST', '/client/hockey/card-opened', { card: state.fromCard }).catch(function () {});
     if (code) openJoin(code);
     loadMatches()
       .then(function () {

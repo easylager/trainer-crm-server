@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
@@ -25,6 +25,7 @@ from src.application.hockey_leagues import (
     player_leagues,
     rename_league,
 )
+from src.application.hockey_share import record_card_event
 from src.application.place_links import telegram_open_link
 from src.shared.config import Settings
 
@@ -44,6 +45,8 @@ class CreateLeagueBody(BaseModel):
 class JoinLeagueBody(BaseModel):
     code: str
     display_name: str | None = None
+    # С какой карточки в чате пришёл: для воронки TASK-300.
+    from_card: Literal["result", "league"] | None = None
 
 
 class RenameLeagueBody(BaseModel):
@@ -161,6 +164,7 @@ async def post_client_hockey_league_join(
 ) -> dict:
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
+    already = {row.id for row in await player_leagues(session, player_key=player_key, now=now)}
     try:
         league = await join_by_code(
             session,
@@ -171,6 +175,8 @@ async def post_client_hockey_league_join(
         payload = await _created_out(session, league, player_key, now)
     except (LookupError, LeagueFull, TooManyLeagues) as exc:
         _raise_league(exc)
+    if body.from_card and league.id not in already:
+        await record_card_event(session, kind="joined", card=body.from_card, league_id=league.id)
     await session.commit()
     return payload
 

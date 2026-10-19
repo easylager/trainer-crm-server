@@ -78,4 +78,14 @@ describe('счёт и ссылки', () => {
     assert.equal(M.inviteCode('arena_12'), '');
     assert.equal(M.inviteCode('kk_'), '');
   });
+  it('ссылки с карточек в чате: код лиги и откуда пришли', () => {
+    assert.equal(M.inviteCode('kkl_abcd2345'), 'ABCD2345');
+    assert.equal(M.inviteCode('kkr_abcd2345'), 'ABCD2345');
+    assert.equal(M.inviteCode('kkr'), '');
+    assert.equal(M.cardFrom('kkl_abcd2345', null), 'league');
+    assert.equal(M.cardFrom('kkr', null), 'result');
+    assert.equal(M.cardFrom('kk_abcd2345', null), '');
+    assert.equal(M.cardFrom('', 'league'), 'league');
+    assert.equal(M.cardFrom('', 'hack'), '');
+  });
 });

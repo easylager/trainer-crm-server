@@ -10,6 +10,13 @@
 
 Шрифты скачаны из [github.com/rsms/inter](https://github.com/rsms/inter/releases).
 
+## Карточки «Кто кого» (TASK-300)
+
+- `Unbounded-wght.ttf` — игровой заголовочный шрифт, вариативный (жирность 800 выставляет код)
+- `GolosText-wght.ttf` — текст карточек, вариативный, как шрифт Mini App
+
+Оба — SIL Open Font License, из [github.com/google/fonts](https://github.com/google/fonts/tree/main/ofl).
+
 ## Fallback (Linux / Docker)
 
 Если Inter отсутствует, код попробует:

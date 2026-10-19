@@ -35,6 +35,7 @@ from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
 from src.api.routes.zovi_pages import router as zovi_pages_router
 from src.api.routes.public_ice_company import router as public_ice_company_router
+from src.api.routes.public_hockey_leagues import card_router as public_hockey_cards_router
 from src.api.routes.public_hockey_leagues import router as public_hockey_leagues_router
 from src.api.routes.catalog_entry import router as catalog_entry_router
 from src.api.routes.catalog_consumer_telemetry import router as catalog_consumer_telemetry_router
@@ -2439,6 +2440,7 @@ app.include_router(public_place_page_router)
 app.include_router(zovi_pages_router)
 app.include_router(public_ice_company_router)
 app.include_router(public_hockey_leagues_router)
+app.include_router(public_hockey_cards_router)
 app.include_router(catalog_entry_router)
 app.include_router(catalog_consumer_telemetry_router)
 app.include_router(redirects_router)
