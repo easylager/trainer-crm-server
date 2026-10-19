@@ -76,6 +76,9 @@ describe('скорость (AC-P2…P5)', () => {
       assert.ok(!homeHtml.includes(f), f);
     }
     assert.ok(homeHtml.indexOf('src="hub-home.js') < homeHtml.lastIndexOf('src="client-home-main.js'));
+    const parallelModel = homeHtml.indexOf('hub-bootstrap-parallel-model.js');
+    const mainJs = homeHtml.lastIndexOf('src="client-home-main.js');
+    assert.ok(parallelModel > 0 && parallelModel < mainJs, 'bootstrap parallel model before client-home-main');
   });
 
   it('фото «Ближайшего льда» — лениво; битое фото не рисует значок', () => {

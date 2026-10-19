@@ -1871,6 +1871,10 @@
         });
       }
 
+      function fetchHubBootstrap() {
+        return fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson(), cache: 'no-store' });
+      }
+
       function loadAll() {
         // TASK-149 (S1): приветствие по часу устройства сразу — не ждём bootstrap.
         setHubGreeting(defaultHubGreeting());
@@ -1884,21 +1888,54 @@
           return finishHubInitialLoading();
         }
 
-        /* Bootstrap API: wait for acting profile so X-Profile-Id is set (default child ≠ self). */
+        var switcher = window.ClientProfileSwitcher;
+        var parallelModel = window.HubBootstrapParallel;
         var profilesReady =
-          window.ClientProfileSwitcher && typeof ClientProfileSwitcher.init === 'function'
-            ? ClientProfileSwitcher.init()
-            : Promise.resolve();
+          switcher && typeof switcher.init === 'function' ? switcher.init() : Promise.resolve();
 
-        return profilesReady
-          .then(function () {
-            // Профили известны — имя перестало быть догадкой. Перерисовываем
-            // здесь, а не в applyHubState: ждать bootstrap незачем.
-            hubProfilesResolved = true;
-            setHubGreeting(defaultHubGreeting());
-            syncProfileSwitcherCompact();
-            return fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson(), cache: 'no-store' });
-          })
+        var storedProfileId =
+          switcher && typeof switcher.getStoredActiveProfileId === 'function'
+            ? switcher.getStoredActiveProfileId()
+            : null;
+        var parallelStart =
+          parallelModel && typeof parallelModel.shouldStartBootstrapParallel === 'function'
+            ? parallelModel.shouldStartBootstrapParallel(storedProfileId)
+            : storedProfileId != null;
+
+        var earlySentProfileId = null;
+        var earlyBootstrapPromise = null;
+        if (parallelStart) {
+          earlySentProfileId =
+            switcher && typeof switcher.getActiveProfileId === 'function'
+              ? switcher.getActiveProfileId()
+              : null;
+          earlyBootstrapPromise = fetchHubBootstrap();
+        }
+
+        profilesReady.then(function () {
+          hubProfilesResolved = true;
+          setHubGreeting(defaultHubGreeting());
+          syncProfileSwitcherCompact();
+        });
+
+        var hubDataPromise = profilesReady.then(function () {
+          var actingProfileId =
+            switcher && typeof switcher.getActiveProfileId === 'function'
+              ? switcher.getActiveProfileId()
+              : null;
+          var plan =
+            parallelModel && typeof parallelModel.bootstrapFetchPlan === 'function'
+              ? parallelModel.bootstrapFetchPlan(parallelStart, earlySentProfileId, actingProfileId)
+              : parallelStart
+                ? earlySentProfileId === actingProfileId
+                  ? 'use_early'
+                  : 'refetch'
+                : 'after_profiles';
+          if (plan === 'use_early') return earlyBootstrapPromise;
+          return fetchHubBootstrap();
+        });
+
+        return hubDataPromise
           .then(jsonOrThrow)
           .then(function(hub) {
             if (renderPendingReferralGate(hub.pending_referral)) {

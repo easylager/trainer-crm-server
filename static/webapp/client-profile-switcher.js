@@ -388,6 +388,10 @@
   var readyPromise = null;
 
   window.ClientProfileSwitcher = {
+    /** Saved device pick only — not default child until profiles load. */
+    getStoredActiveProfileId: function () {
+      return state.activeProfileId;
+    },
     getActiveProfileId: function () {
       return state.activeProfileId != null ? state.activeProfileId : state.defaultProfileId;
     },
