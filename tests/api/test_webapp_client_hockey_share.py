@@ -113,18 +113,18 @@ async def test_result_card_share_signed_image_and_miss(app_use_test_db, db_sessi
         body = r.json()
         assert body["prepared_message_id"] == "PM-1"
         assert body["url"] == "https://t.me/glide_test_bot?startapp=kkr"
-        assert body["text"] == "Кто кого: в точку! Динамо-Минск — ХК Сочи 3:2, +5"
+        assert body["text"] == "Кто кого: в точку! Динамо-Минск — ХК Сочи 3:2, +50"
         call = prepared[-1]
         assert call["user_id"] == ME
         assert call["button"] == {"text": "А ты угадаешь?", "url": body["url"]}
-        assert call["photo"].startswith(f"https://glide.test/kk/r/{match_id}/5/")
+        assert call["photo"].startswith(f"https://glide.test/kk/r/{match_id}/50/")
         assert await _events(db_session, "shared", "result") == before + 1
 
         png = await client.get(_path(call["photo"]))
         assert png.status_code == 200
         assert png.headers["content-type"] == "image/png"
         assert Image.open(io.BytesIO(png.content)).size == (1200, 630)
-        forged = await client.get(f"/kk/r/{match_id}/5/0000000000000000.png")
+        forged = await client.get(f"/kk/r/{match_id}/50/0000000000000000.png")
         assert forged.status_code == 404
 
         with patch_client_principal(FRIEND):

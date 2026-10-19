@@ -33,7 +33,8 @@ _DISPLAY = "Unbounded-wght.ttf"
 _TEXT = "GolosText-wght.ttf"
 
 _WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
-_VERDICT = {5: ("в точку!", "+5"), 1: ("есть победитель", "+1")}
+# Хвастаться — от победителя и выше; за 10 очков (только шайбы) карточки нет.
+_VERDICT = {50: ("в точку!", "+50"), 30: ("почти в точку", "+30"), 20: ("есть победитель", "+20")}
 
 
 def _font(name: str, size: int, weight: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -101,7 +102,7 @@ def _png(image: Image.Image) -> bytes:
 
 
 def _sticker(label: str, *, size: int, angle: float) -> Image.Image:
-    """Жёлтая наклейка «+5», чуть повёрнутая, как в игре."""
+    """Жёлтая наклейка «+50», чуть повёрнутая, как в игре."""
     font = _display(size)
     probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     left, top, right, bottom = probe.textbbox((0, 0), label, font=font)
@@ -226,7 +227,7 @@ def _secret(token: str) -> bytes:
 
 
 def result_card_sig(token: str, match_id: int, points: int) -> str:
-    """Подпись адреса карточки итога: чужие «+5» на нашем домене не нарисовать."""
+    """Подпись адреса карточки итога: чужие «+50» на нашем домене не нарисовать."""
     return hmac.new(_secret(token), f"{match_id}:{points}".encode(), hashlib.sha256).hexdigest()[:16]
 
 

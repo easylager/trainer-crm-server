@@ -130,11 +130,20 @@
     return n + NBSP + plural(n, 'очко', 'очка', 'очков');
   }
 
-  /** Как назвать исход моего хода после матча. */
+  /**
+   * Очки как в прогнозах FIFA (владелец, 2026-10-19): победитель — 20, разница шайб — 10,
+   * шайбы каждой команды — по 10, точный счёт — 50. Считает сервер; здесь только слова.
+   */
+  var EXACT = 50;
+  var RULES = 'Победитель — 20 очков, разница шайб — 10, шайбы каждой команды — по 10. Точный счёт — все 50.';
+
+  /** Как назвать исход моего хода после матча. Итоги бывают 0, 10, 20, 30, 50. */
   function verdict(pointsWon) {
-    if (pointsWon === 5) return { head: 'в точку!', sticker: '+5', tone: 'win' };
-    if (pointsWon === 1) return { head: 'есть победитель', sticker: '+1', tone: 'ok' };
-    return { head: 'в этот раз мимо', sticker: '0', tone: 'miss' };
+    if (pointsWon === 50) return { head: 'в точку!', sticker: '+50', tone: 'win', tail: 'точный счёт' };
+    if (pointsWon === 30) return { head: 'почти в точку', sticker: '+30', tone: 'ok', tail: 'победитель и ещё часть счёта' };
+    if (pointsWon === 20) return { head: 'есть победитель', sticker: '+20', tone: 'ok', tail: 'победитель угадан' };
+    if (pointsWon === 10) return { head: 'шайбы угаданы', sticker: '+10', tone: 'ok', tail: 'шайбы одной команды' };
+    return { head: 'в этот раз мимо', sticker: '0', tone: 'miss', tail: 'в этот раз мимо' };
   }
 
   function decidedLabel(d) {
@@ -185,6 +194,8 @@
     fansLine: fansLine,
     points: points,
     verdict: verdict,
+    EXACT: EXACT,
+    RULES: RULES,
     decidedLabel: decidedLabel,
     clampGoals: clampGoals,
     scoreError: scoreError,

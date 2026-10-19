@@ -256,7 +256,7 @@
       what.appendChild(el('span', 'hn__sub', m.home.name + ' — ' + m.away.name + ', ' + whenLabel(m.starts_at)));
       row.appendChild(what);
       var hasScore = pick.home_score != null;
-      row.appendChild(el('span', 'hn__chip', hasScore ? pick.home_score + ':' + pick.away_score : 'счёт +5'));
+      row.appendChild(el('span', 'hn__chip', hasScore ? pick.home_score + ':' + pick.away_score : 'счёт +50'));
       host.replaceChildren(row);
       return;
     }
@@ -283,7 +283,7 @@
     teams.appendChild(teamButton(m.away, 'away', onPick));
     root.appendChild(teams);
     var hint = el('span', 'hn__hint', 'Тапни за команду. Угадаешь точный счёт — ');
-    hint.appendChild(el('b', 'hn__plus', '+5'));
+    hint.appendChild(el('b', 'hn__plus', '+50'));
     root.appendChild(hint);
     host.replaceChildren(root);
   }
@@ -292,7 +292,8 @@
     var m = card.match;
     var r = m.result || {};
     var pts = card.points == null ? 0 : card.points;
-    var head = pts === 5 ? 'в точку!' : pts === 1 ? 'есть победитель' : 'в этот раз мимо';
+    // Те же слова, что KtoKogoModel.verdict: модель игры на главную не грузим ради одной строки.
+    var head = pts === 50 ? 'в точку!' : pts === 30 ? 'почти в точку' : pts === 20 ? 'есть победитель' : pts === 10 ? 'шайбы угаданы' : 'в этот раз мимо';
     var a = link(el('a', 'hn__card hn__card--dark'), 'kto-kogo?reveal=' + m.id);
     a.appendChild(el('span', 'hn__sticker' + (pts ? '' : ' hn__sticker--miss'), pts ? '+' + pts : '0'));
     var what = el('span', 'hn__what');

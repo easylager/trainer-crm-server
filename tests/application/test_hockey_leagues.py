@@ -88,7 +88,7 @@ async def test_league_table_is_season_points_of_members_with_zero_for_newcomers(
     await join_by_code(db_session, player_key=LESHA, display_name="Лёша", code=league.invite_code)
 
     rows = await league_table(db_session, league_id=league.id, player_key=KATYA, now=NOW)
-    assert [(r.display_name, r.points, r.rank) for r in rows] == [("Саша", 5, 1), ("Катя", 0, 2), ("Лёша", 0, 2)]
+    assert [(r.display_name, r.points, r.rank) for r in rows] == [("Саша", 50, 1), ("Катя", 0, 2), ("Лёша", 0, 2)]
     assert STRANGER not in [r.player_key for r in rows]
     # Те же очки, что в общей таблице.
     global_sasha = next(s for s in await standings(db_session, now=NOW) if s.player_key == SASHA)

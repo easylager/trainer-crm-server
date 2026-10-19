@@ -81,7 +81,7 @@ async def test_fresh_result_then_seen_then_stale(db_session) -> None:
     await score_finished_matches(db_session, now=NOW)
     card = await hub_card(db_session, SASHA, now=NOW)
     assert card["mode"] == "result"
-    assert card["points"] == 1
+    assert card["points"] == 20
     assert card["match"]["result"] == {"home_score": 1, "away_score": 4, "decided_in": "regulation"}
     assert card["place"] is None
 
@@ -176,7 +176,7 @@ async def test_place_is_the_best_league(db_session) -> None:
     )
     card = await hub_card(db_session, SASHA, now=NOW)
     assert card["mode"] == "result"
-    assert card["points"] == 1
+    assert card["points"] == 20
     assert card["place"] == {"league_name": strong.name, "rank": 1}
     assert card["match"]["away"]["short"] == "АБ"
 

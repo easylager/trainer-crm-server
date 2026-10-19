@@ -28,14 +28,14 @@ def _ink_columns(image: Image.Image, top: int, bottom: int, background: tuple[in
 
 
 def test_result_card_is_1200x630_and_only_for_points() -> None:
-    png = cards.render_result_card(home="ХК Сочи", away="Динамо-Минск", home_score=2, away_score=3, points=5)
+    png = cards.render_result_card(home="ХК Сочи", away="Динамо-Минск", home_score=2, away_score=3, points=50)
     assert _image(png).size == cards.CARD_SIZE == (1200, 630)
     winner = cards.render_result_card(
-        home="Шанхайские Драконы", away="Динамо-Минск", home_score=4, away_score=3, points=1
+        home="Шанхайские Драконы", away="Динамо-Минск", home_score=4, away_score=3, points=20
     )
     assert _image(winner).size == (1200, 630)
     with pytest.raises(ValueError):
-        cards.render_result_card(home="А", away="Б", home_score=1, away_score=0, points=0)
+        cards.render_result_card(home="А", away="Б", home_score=1, away_score=0, points=10)
 
 
 @pytest.mark.parametrize(
@@ -84,7 +84,7 @@ def test_league_card_version_follows_content() -> None:
 
 def test_captions() -> None:
     assert (
-        cards.result_caption(home="ХК Сочи", away="Динамо-Минск", home_score=2, away_score=3, points=5)
-        == "Кто кого: в точку! ХК Сочи — Динамо-Минск 2:3, +5"
+        cards.result_caption(home="ХК Сочи", away="Динамо-Минск", home_score=2, away_score=3, points=50)
+        == "Кто кого: в точку! ХК Сочи — Динамо-Минск 2:3, +50"
     )
     assert "«Двор»" in cards.league_caption("Двор")

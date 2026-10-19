@@ -16,8 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ingestion.hockey_sources import MINSK_TZ
 
-POINTS_WINNER = 1
-POINTS_EXACT = 5
+# Очки как в прогнозах FIFA (владелец, 2026-10-19): каждая угаданная часть счёта — отдельно,
+# точный счёт — сумма всех. Возможные итоги: 0, 10, 20, 30, 50.
+POINTS_WINNER = 20
+POINTS_DIFF = 10
+POINTS_GOALS = 10
+POINTS_EXACT = POINTS_WINNER + POINTS_DIFF + 2 * POINTS_GOALS
+POINTS_VALUES = (0, 10, 20, 30, 50)
 SIDE_HOME = "home"
 SIDE_AWAY = "away"
 MAX_GOALS = 20
@@ -103,11 +108,14 @@ _PICK_UPSERT = text("""
 # Пересчёт из итога: только где итога ещё не считали или итог поправили позже подсчёта.
 _SCORE_FINALS = text("""
     UPDATE hockey_picks AS p
-    SET points = CASE
-            WHEN p.home_score = m.home_score AND p.away_score = m.away_score THEN :exact
-            WHEN p.side = CASE WHEN m.home_score > m.away_score THEN 'home' ELSE 'away' END THEN :winner
-            ELSE 0
-        END,
+    SET points =
+            CASE WHEN p.side = CASE WHEN m.home_score > m.away_score THEN 'home' ELSE 'away' END
+                 THEN :winner ELSE 0 END
+            + CASE WHEN p.home_score IS NULL THEN 0 ELSE
+                  CASE WHEN p.home_score - p.away_score = m.home_score - m.away_score THEN :diff ELSE 0 END
+                + CASE WHEN p.home_score = m.home_score THEN :goals ELSE 0 END
+                + CASE WHEN p.away_score = m.away_score THEN :goals ELSE 0 END
+              END,
         scored_at = :now
     FROM hockey_matches AS m
     WHERE m.id = p.match_id
@@ -195,9 +203,30 @@ async def make_pick(
     return Pick(**row._mapping)
 
 
+def pick_points(
+    *, side: str, home_score: int | None, away_score: int | None, result_home: int, result_away: int
+) -> int:
+    """Очки хода — те же правила, что в SQL _SCORE_FINALS (для тестов и объяснений).
+
+    Победитель — 20; при счёте ещё разница шайб — 10, шайбы хозяев — 10, шайбы гостей — 10.
+    Шайбы засчитываются и при неугаданном победителе: угадавший часть не уходит с нулём.
+    """
+    winner = SIDE_HOME if result_home > result_away else SIDE_AWAY
+    points = POINTS_WINNER if side == winner else 0
+    if home_score is None or away_score is None:
+        return points
+    if home_score - away_score == result_home - result_away:
+        points += POINTS_DIFF
+    if home_score == result_home:
+        points += POINTS_GOALS
+    if away_score == result_away:
+        points += POINTS_GOALS
+    return points
+
+
 async def score_finished_matches(session: AsyncSession, *, now: datetime) -> int:
     """Начислить очки по всем сыгранным матчам, где их ещё нет или итог поправили. Сколько ходов задето."""
-    params = {"exact": POINTS_EXACT, "winner": POINTS_WINNER, "now": _utc(now)}
+    params = {"winner": POINTS_WINNER, "diff": POINTS_DIFF, "goals": POINTS_GOALS, "now": _utc(now)}
     result = await session.execute(_SCORE_FINALS, params)
     scored = getattr(result, "rowcount", 0) or 0
     await session.execute(_UNSCORE_CANCELLED, {"now": _utc(now)})
@@ -228,8 +257,12 @@ async def player_matches(
 
 
 __all__ = [
+    "POINTS_DIFF",
     "POINTS_EXACT",
+    "POINTS_GOALS",
+    "POINTS_VALUES",
     "POINTS_WINNER",
+    "pick_points",
     "Pick",
     "PicksClosed",
     "Standing",

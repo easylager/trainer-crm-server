@@ -52,12 +52,12 @@ class LeagueCard:
 
 
 async def result_card(session: AsyncSession, *, player_key: int, match_id: int) -> ResultCard | None:
-    """Итог моего хода, если есть чем похвастаться: матч сыгран, очки 1 или 5."""
+    """Итог моего хода, если есть чем похвастаться: матч сыгран и победитель угадан (20, 30 или 50)."""
     match = await get_match(session, match_id)
     if match is None or match.status != STATUS_FINAL:
         return None
     points = (await session.execute(_MY_POINTS, {"match_id": match_id, "player_key": player_key})).scalar_one_or_none()
-    if points not in (1, 5):
+    if points not in (20, 30, 50):
         return None
     return ResultCard(match=match, points=int(points))
 

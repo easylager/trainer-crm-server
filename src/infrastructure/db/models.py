@@ -575,7 +575,7 @@ class HockeyPick(Base):
             " AND (side = 'home') = (home_score > away_score))",
             name="ck_hockey_picks_score_side",
         ),
-        CheckConstraint("points IS NULL OR points IN (0, 1, 5)", name="ck_hockey_picks_points"),
+        CheckConstraint("points IS NULL OR points IN (0, 10, 20, 30, 50)", name="ck_hockey_picks_points"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)

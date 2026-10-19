@@ -357,7 +357,7 @@
       var has = mine.home_score != null;
       kids.push(h('button', { type: 'button', class: 'kk-btn-soft', onclick: function () { openScore(m); } }, [
         has ? 'Мой счёт ' + mine.home_score + ':' + mine.away_score : 'Угадать счёт',
-        h('span', { class: 'kk-chip', text: has ? 'изменить' : '+5' }),
+        h('span', { class: 'kk-chip', text: has ? 'изменить' : '+' + M.EXACT }),
       ]));
     }
     return h('article', { class: 'kk-card', 'aria-label': m.home.name + ' — ' + m.away.name }, kids);
@@ -383,7 +383,7 @@
       }, [badge(m[which], colors[which]), h('span', { class: 'kk-team', text: m[which].name })]);
     }
     var pts = mine.points;
-    var tail = pts === 5 ? 'ты угадал точный счёт' : pts === 1 ? 'ты угадал победителя' : pts === 0 ? 'в этот раз мимо' : 'считаем очки';
+    var tail = pts == null ? 'считаем очки' : M.verdict(pts).tail + (pts ? ' · +' + pts : '');
     return h('article', { class: 'kk-card', 'aria-label': m.home.name + ' — ' + m.away.name + ', ' + r.home_score + ':' + r.away_score }, [
       h('div', { class: 'kk-kicker', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] + ' · ' + M.decidedLabel(r.decided_in) }),
       h('div', { class: 'kk-halves kk-halves--result' }, [
@@ -443,7 +443,7 @@
     return sheet([
       h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:4px' }, [
         h('h2', { class: 'kk-display', style: 'font-size:20px;margin:0', text: 'Какой счёт?' }),
-        h('p', { class: 'kk-hint', text: 'угадаешь точно — 5 очков' }),
+        h('p', { class: 'kk-hint', text: 'точный счёт — 50 очков, близкий — тоже очки' }),
       ]),
       h('div', { class: 'kk-steppers' }, [stepper('home'), stepper('away')]),
       h('button', { type: 'button', class: 'kk-btn kk-btn--dark', disabled: !!err, onclick: saveScore, text: err || 'Готово' }),
@@ -803,7 +803,7 @@
           h('span', { style: 'font-size:16px;font-weight:800', text: next.home.name + ' — ' + next.away.name }),
           h('span', { style: 'font-size:13px;opacity:.75', text: M.whenLabel(next.starts_at, new Date()) }),
         ]) : null,
-        h('p', { class: 'kk-hero__text', style: 'font-size:14px', text: 'Тапаешь за команду или угадываешь счёт. После матча очки приходят сами: победитель — 1, точный счёт — 5.' }),
+        h('p', { class: 'kk-hero__text', style: 'font-size:14px', text: 'Тапаешь за команду или угадываешь счёт. После матча очки приходят сами. ' + M.RULES }),
       ] : [state.joinError ? h('p', { class: 'kk-hero__text', text: state.joinError }) : h('div', { class: 'kk-skeleton', style: 'opacity:.2' })]),
       h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', disabled: !p || state.busy, onclick: joinLeague, text: 'Вступить в лигу' }),
       h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', onclick: function () { go('matches'); }, text: 'Посмотреть матчи' }),
@@ -888,7 +888,7 @@
         friendsBlock(),
       ]),
       h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', style: 'background:rgba(255,255,255,.12);opacity:1', onclick: function () { go('table'); }, text: 'Таблица' }),
-      pts ? h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: brag, text: 'Похвастаться в чате' }) : h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: function () { go('matches'); }, text: 'Отыграться в следующем' }),
+      pts >= 20 ? h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: brag, text: 'Похвастаться в чате' }) : h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: function () { go('matches'); }, text: 'Отыграться в следующем' }),
     ]);
 
     // Друзья из лиг: за кого были. Очков друзей API пока не отдаёт — только сторона.

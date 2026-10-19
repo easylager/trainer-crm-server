@@ -58,11 +58,18 @@ describe('тексты', () => {
     assert.equal(M.fansLine(['Катя', 'Саша', 'Игорь'], false), 'Катя и' + NBSP + 'ещё' + NBSP + '2');
     assert.equal(M.fansLine([], false), '');
   });
-  it('итог: 5, 1, 0 — разные слова, без «в точку» на промахе', () => {
-    assert.equal(M.verdict(5).head, 'в точку!');
-    assert.equal(M.verdict(1).sticker, '+1');
+  it('итог по правилам FIFA: 50, 30, 20, 10, 0 — разные слова, без «в точку» мимо цели', () => {
+    assert.equal(M.EXACT, 50);
+    assert.equal(M.verdict(50).head, 'в точку!');
+    assert.equal(M.verdict(50).sticker, '+50');
+    assert.equal(M.verdict(30).head, 'почти в точку');
+    assert.equal(M.verdict(20).sticker, '+20');
+    assert.equal(M.verdict(10).head, 'шайбы угаданы');
     assert.equal(M.verdict(0).tone, 'miss');
-    assert.notEqual(M.verdict(0).head, 'в точку!');
+    for (const p of [0, 10, 20, 30]) assert.notEqual(M.verdict(p).head, 'в точку!');
+    // Род собеседника неизвестен — подписи без «угадал/угадала».
+    for (const p of [0, 10, 20, 30, 50]) assert.ok(!/угадал[аи]?\b/.test(M.verdict(p).tail), M.verdict(p).tail);
+    assert.match(M.RULES, /Победитель — 20/);
   });
 });
 

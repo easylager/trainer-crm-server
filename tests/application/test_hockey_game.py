@@ -8,9 +8,11 @@ import pytest
 from sqlalchemy import text
 
 from src.application.hockey_game import (
+    POINTS_VALUES,
     PicksClosed,
     make_pick,
     normalize_pick,
+    pick_points,
     player_matches,
     player_standing,
     score_finished_matches,
@@ -146,10 +148,39 @@ async def test_points_exact_winner_miss_and_idempotent(db_session) -> None:
     await _final(db_session, mid, 1, 4, at=NOW + timedelta(hours=5))
 
     assert await score_finished_matches(db_session, now=NOW + timedelta(hours=5)) == 4
-    assert [await _points(db_session, mid, p) for p in (SASHA, KATYA, LESHA, IGOR)] == [5, 1, 1, 0]
+    assert [await _points(db_session, mid, p) for p in (SASHA, KATYA, LESHA, IGOR)] == [50, 20, 20, 0]
     # Повторный прогон ничего не трогает.
     assert await score_finished_matches(db_session, now=NOW + timedelta(hours=6)) == 0
-    assert await _points(db_session, mid, SASHA) == 5
+    assert await _points(db_session, mid, SASHA) == 50
+
+
+@pytest.mark.parametrize(
+    ("pick", "result", "points"),
+    [
+        (("home", 3, 1), (3, 1), 50),  # точный
+        (("home", 3, 1), (4, 2), 30),  # победитель + разница
+        (("home", 3, 1), (3, 2), 30),  # победитель + шайбы хозяев
+        (("home", 3, 1), (2, 1), 30),  # победитель + шайбы гостей
+        (("home", 3, 1), (5, 0), 20),  # только победитель
+        (("away", 2, 3), (2, 1), 10),  # мимо, но шайбы хозяев
+        (("home", 3, 1), (1, 3), 0),
+        (("away", None, None), (1, 4), 20),  # тап без счёта
+        (("home", None, None), (1, 4), 0),
+    ],
+)
+def test_pick_points_fifa_rules(pick, result, points) -> None:
+    side, hs, as_ = pick
+    assert pick_points(side=side, home_score=hs, away_score=as_, result_home=result[0], result_away=result[1]) == points
+    assert points in POINTS_VALUES
+
+
+@pytest.mark.asyncio
+async def test_goals_count_even_when_the_winner_is_wrong(db_session) -> None:
+    mid = await _match(db_session, "s5", NOW + timedelta(hours=2))
+    await _pick(db_session, mid, SASHA, home_score=2, away_score=3)
+    await _final(db_session, mid, 2, 1, at=NOW + timedelta(hours=5))
+    await score_finished_matches(db_session, now=NOW + timedelta(hours=5))
+    assert await _points(db_session, mid, SASHA) == 10
 
 
 @pytest.mark.asyncio
@@ -162,7 +193,7 @@ async def test_corrected_result_rescores_without_double_points(db_session) -> No
     # Админ исправил итог позже подсчёта.
     await _final(db_session, mid, 2, 4, at=NOW + timedelta(hours=7))
     assert await score_finished_matches(db_session, now=NOW + timedelta(hours=7)) == 2
-    assert (await _points(db_session, mid, SASHA), await _points(db_session, mid, KATYA)) == (1, 5)
+    assert (await _points(db_session, mid, SASHA), await _points(db_session, mid, KATYA)) == (30, 50)
 
 
 @pytest.mark.asyncio
@@ -171,7 +202,7 @@ async def test_shootout_official_score_counts_as_exact(db_session) -> None:
     await _pick(db_session, mid, SASHA, home_score=1, away_score=2)
     await _final(db_session, mid, 1, 2, decided="so", at=NOW + timedelta(hours=5))
     await score_finished_matches(db_session, now=NOW + timedelta(hours=5))
-    assert await _points(db_session, mid, SASHA) == 5
+    assert await _points(db_session, mid, SASHA) == 50
 
 
 @pytest.mark.asyncio
@@ -204,11 +235,11 @@ async def test_standings_rank_by_points_then_exact_and_season(db_session) -> Non
         ),
         {"m": old, "p": IGOR},
     )
-    await _pick(db_session, a, SASHA, "Саша", home_score=3, away_score=1)  # 5
-    await _pick(db_session, a, KATYA, "Катя", side="home")  # 1
-    await _pick(db_session, b, KATYA, "Катя", side="home")  # 1
+    await _pick(db_session, a, SASHA, "Саша", home_score=3, away_score=1)  # 50
+    await _pick(db_session, a, KATYA, "Катя", side="home")  # 20
+    await _pick(db_session, b, KATYA, "Катя", side="home")  # 20
     await _pick(db_session, b, SASHA, "Саша", side="away")  # 0
-    await _pick(db_session, b, LESHA, "Лёша", side="home")  # 1
+    await _pick(db_session, b, LESHA, "Лёша", side="home")  # 20
     await _final(db_session, a, 3, 1, at=NOW + timedelta(hours=4))
     await _final(db_session, b, 2, 1, at=NOW + timedelta(hours=6))
     await _final(db_session, old, 4, 1, at=NOW + timedelta(hours=6))
@@ -217,13 +248,13 @@ async def test_standings_rank_by_points_then_exact_and_season(db_session) -> Non
     table = await standings(db_session, now=NOW)
     ours = [s for s in table if s.player_key in (SASHA, KATYA, LESHA, IGOR)]
     assert [(s.display_name, s.points, s.exact, s.played) for s in ours] == [
-        ("Саша", 5, 1, 2),
-        ("Катя", 2, 0, 2),
-        ("Лёша", 1, 0, 1),
+        ("Саша", 50, 1, 2),
+        ("Катя", 40, 0, 2),
+        ("Лёша", 20, 0, 1),
     ]
     assert ours[0].rank < ours[1].rank < ours[2].rank
     me = await player_standing(db_session, KATYA, now=NOW)
-    assert me is not None and (me.points, me.rank) == (2, ours[1].rank)
+    assert me is not None and (me.points, me.rank) == (40, ours[1].rank)
     assert await player_standing(db_session, IGOR, now=NOW) is None
 
 

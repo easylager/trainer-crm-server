@@ -216,13 +216,13 @@ async def test_standings_points_rank_and_is_me(app_use_test_db, db_session) -> N
         assert "player_key" not in table.text
         me_row = next(item for item in body["items"] if item["display_name"] == "Саша" and item["is_me"])
         other_row = next(item for item in body["items"] if item["display_name"] == "Катя")
-        assert me_row["points"] == 5
+        assert me_row["points"] == 50
         assert me_row["exact"] == 1
         assert me_row["played"] == 1
-        assert other_row["points"] == 1
+        assert other_row["points"] == 20
         assert other_row["is_me"] is False
         assert me_row["rank"] < other_row["rank"]
-        assert body["me"] == {"rank": me_row["rank"], "points": 5, "exact": 1, "played": 1}
+        assert body["me"] == {"rank": me_row["rank"], "points": 50, "exact": 1, "played": 1}
         assert sum(1 for item in body["items"] if item["is_me"]) == 1
 
 
