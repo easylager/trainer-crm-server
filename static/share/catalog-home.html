@@ -70,10 +70,6 @@
       for (var i = 0; i < imgs.length; i++) {
         if (imgs[i].complete && imgs[i].naturalWidth > 0) imgs[i].classList.add('is-ready');
       }
-    })();
-  </script>
-  <script>
-    (function () {
       if (!('onpageswap' in window)) return;
       window.addEventListener('pageswap', function (e) {
         if (!e.viewTransition) return;
@@ -84,7 +80,7 @@
         if (next.origin !== location.origin) return;
         if (next.pathname === '/' || next.pathname === '') return;
         var named = document.querySelectorAll('.vt-when-strip, .b-when__thumb');
-        for (var i = 0; i < named.length; i++) named[i].style.viewTransitionName = 'none';
+        for (var j = 0; j < named.length; j++) named[j].style.viewTransitionName = 'none';
       });
     })();
   </script>
