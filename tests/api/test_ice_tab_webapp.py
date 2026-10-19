@@ -147,7 +147,6 @@ def test_shell_second_tab_is_ice() -> None:
 def test_client_browse_ctas_open_ice_coaches() -> None:
     """TASK-084: Mini App 'find a trainer' CTAs must not open the old catalog funnel."""
     rels = (
-        "static/webapp/client-home-main.js",
         "static/webapp/client-saved-trainers-main.js",
         "static/webapp/client-stats-main.js",
         "static/webapp/client-requests-main.js",
@@ -158,6 +157,9 @@ def test_client_browse_ctas_open_ice_coaches() -> None:
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "catalog?tab=catalog" not in text, rel
         assert "ice?intent=coach" in text, rel
+    # TASK-303: на главной поиск тренера — строка «Тренеры» в «Что нужно» (ссылки собирает сервер).
+    home = (REPO_ROOT / "static/webapp/client-home-main.js").read_text(encoding="utf-8")
+    assert "catalog?tab=catalog" not in home
 
 
 def test_old_catalog_deep_links_still_wired() -> None:

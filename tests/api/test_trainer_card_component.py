@@ -42,7 +42,8 @@ async def test_trainer_card_component_is_served() -> None:
     assert css.status_code == 200
     assert ".tcard" in css.text
     assert page.status_code == 200
-    assert "mini-app-trainer-card.css" in page.text
+    # TASK-303: главная карточку тренера больше не рисует и её стилей не грузит.
+    assert "mini-app-trainer-card.css" not in page.text
 
 
 def test_card_has_single_source_of_truth() -> None:
@@ -70,14 +71,6 @@ def test_card_never_truncates_facts() -> None:
     assert "white-space: nowrap" not in card_css
 
 
-def test_services_are_whole_units_not_a_joined_line() -> None:
-    """AC-002: услуги — чипы и честный счётчик остатка, а не склейка через « · »."""
-    js = _code_only((_WEBAPP / "client-home-main.js").read_text(encoding="utf-8"))
-    assert "hubDiscoveryServiceChips" in js
-    assert "tcard__svc--more" in js
-    assert "labels.join(' · ')" not in js
-
-
 def test_placeholder_is_a_designed_object() -> None:
     """AC-004: у карточки без фото — инициалы и брендовая геометрия, не пустой блок.
 
@@ -90,10 +83,6 @@ def test_placeholder_is_a_designed_object() -> None:
     assert "--glide-ink-teal" in block
     assert "--app-ribbon-clip-avatar" in block
 
-    js = (_WEBAPP / "client-home-main.js").read_text(encoding="utf-8")
-    # Сбой загрузки фото ведёт к тому же плейсхолдеру, что и его отсутствие.
-    assert "tcard__media--empty" in js
-    assert "initials(name)" in js
 
 
 # ─── TASK-104: компактный вариант для карусели хаба ──────────────────────────
@@ -126,12 +115,6 @@ def test_compact_only_narrows_geometry() -> None:
     assert "display: none" in where_rule
 
 
-def test_hub_carousel_uses_the_compact_variant() -> None:
-    """TASK-104 AC-001: карусель хаба просит именно компактный вид."""
-    js = _code_only((_WEBAPP / "client-home-main.js").read_text(encoding="utf-8"))
-    assert 'class="tcard tcard--compact"' in js
-
-
 def test_ice_list_is_untouched_by_the_variant() -> None:
     """TASK-104 AC-002: список «Льда» рисует свой компонент и вариантом не задет.
 
@@ -143,3 +126,11 @@ def test_ice_list_is_untouched_by_the_variant() -> None:
     ice_js = _code_only((_WEBAPP / "ice-tab.js").read_text(encoding="utf-8"))
     assert "tcard--compact" not in ice_js
     assert "ice-acard" in ice_js
+
+
+def test_hub_no_longer_draws_the_trainer_carousel() -> None:
+    """TASK-303 (PDEC-023): у новой главной нет карусели тренеров — тренеры в «Что нужно»."""
+    js = _code_only((_WEBAPP / "client-home-main.js").read_text(encoding="utf-8"))
+    html = (_WEBAPP / "client-home.html").read_text(encoding="utf-8")
+    assert "tcard" not in js
+    assert "mini-app-trainer-card.css" not in html

@@ -3138,6 +3138,7 @@ async def get_client_hub_bootstrap(
         """TASK-303: шапка, «Ближайший лёд» и «Что нужно» — тот же вид, что у страницы города."""
         from src.application.city_hub_page import load_city_hub_view
         from src.application.hub_home import city_block
+        from src.application.place_links import place_start_param, telegram_open_link
 
         try:
             async with async_session_factory() as s:
@@ -3152,7 +3153,17 @@ async def get_client_hub_bootstrap(
                 )
                 if city is None:
                     return None
-                return city_block(await load_city_hub_view(s, city=city))
+                settings = Settings()
+
+                def invite(arena_id: int, session_id: int | None) -> str | None:
+                    return telegram_open_link(
+                        client_bot_username=settings.client_bot_username,
+                        mini_app_short_name=settings.client_mini_app_short_name,
+                        main_mini_app=settings.client_bot_main_mini_app,
+                        start_param=place_start_param(arena_id, session_id),
+                    )
+
+                return city_block(await load_city_hub_view(s, city=city), invite_link=invite)
         except Exception:
             logger.exception("client hub city block failed")
             return None

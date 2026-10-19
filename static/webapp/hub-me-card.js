@@ -335,9 +335,11 @@
       key: 'pass',
       label: label,
       value: String(remaining),
-      unit: total > 0 ? 'из ' + total : '',
+      unit: total > 0 ? 'из ' + total + ' осталось' : '',
       sub: sub,
       bar: total > 0 ? Math.max(4, Math.min(100, Math.round((remaining / total) * 100))) : null,
+      // До 12 занятий — сегментами: «сколько осталось» читается без подписи (TASK-303).
+      segments: total > 0 && total <= 12 ? { total: total, left: Math.min(remaining, total) } : null,
       warn: warn,
       action: 'open-pass',
       trainerId: idOrNull(pass.trainer_id),
@@ -380,19 +382,13 @@
    */
   function declined(input) {
     var t = obj(input.trainer);
-    return {
-      dative: firstName(t.nameDative),
-      genitive: firstName(t.nameGenitive),
-    };
+    return { dative: firstName(t.nameDative) };
   }
 
   function writeLabel(forms) {
     return forms.dative ? 'Написать ' + forms.dative : 'Написать тренеру';
   }
 
-  function allSlotsLabel(forms) {
-    return forms.genitive ? 'Все окна ' + forms.genitive : 'Все окна';
-  }
 
   function contact(username, telegramId) {
     var un = str(username).replace(/^@/, '');
@@ -538,34 +534,26 @@
     var dm = contact(t.username, t.telegramId);
     var canBook = t.canBook !== false;
     var pick = canBook ? buildPick(input.slots, 'Когда вам удобно', 'Все окна →', 'all-slots', now) : null;
-    var forms = declined(input);
     var trainerId = idOrNull(t.id);
     var isNotify = !!input.notify_when_slots;
 
     var view = emptyView(pick ? 'accent' : '', 'Ваш тренер');
     view.who = buildWho(name, t.photo, joinDot([t.arena_name, t.city_name]), trainerId, {
       hero: true,
-      dm: pick ? dm : null,
+      dm: dm,
     });
     view.trainerId = trainerId;
     view.pick = pick;
-    if (pick) {
-      view.actions.push({ style: 'ghost', label: allSlotsLabel(forms), action: 'all-slots', trainerId: trainerId });
-      return view;
-    }
+    // Вход «во все окна» — последний чип полосы; вторая кнопка туда же была бы дублем (TASK-303).
+    if (pick) return view;
     // Окон нет — честный ответ + колокольчик (выкл 🔔 / вкл 🔕), как в каталоге.
     if (trainerId) {
       view.notifyChip = { trainerId: trainerId, active: isNotify };
     }
-    if (isNotify) {
-      view.line = '🔕 Напоминания включены — сообщим, когда появятся свободные окна.';
-    } else {
-      view.line = 'Свободных окон в расписании нет. Нажмите 🔔 — напомним, когда появятся.';
-    }
-    if (dm) {
-      view.actions.push({ style: 'fill', label: writeLabel(forms), action: 'dm', dm: dm });
-    }
-    view.actions.push({ style: 'ghost', label: 'Все тренеры', action: 'all-trainers' });
+    // TASK-303: одна строка, без эмодзи; «Написать» — в строке тренера, тренеры — в «Что нужно».
+    view.line = isNotify
+      ? 'Окон пока нет — напомним, как только появятся.'
+      : 'Окон пока нет. Включите напоминание — сообщим, как появятся.';
     return view;
   }
 
@@ -596,11 +584,8 @@
     });
     view.trainerId = idOrNull(t.id);
     view.pick = buildPick(input.slots, 'Ближайшие окна', 'Все окна →', 'all-slots', now);
-    if (view.pick) {
-      view.actions.push({ style: 'ghost', label: allSlotsLabel(declined(input)), action: 'all-slots', trainerId: view.trainerId });
-    } else {
-      view.actions.push({ style: 'ghost', label: 'Найти тренера', action: 'all-trainers' });
-    }
+    // Окна есть — вход во все окна последним чипом; кнопка туда же была бы дублем (TASK-303).
+    if (!view.pick) view.actions.push({ style: 'ghost', label: 'Найти тренера', action: 'all-trainers' });
     return view;
   }
 
@@ -756,6 +741,10 @@
       '</div>';
   }
 
+  var ICON_MSG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>';
+  var ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
+  var ICON_BELL_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l1.5 2H8"/><path d="M10 20a2 2 0 0 0 4 0M3 3l18 18"/></svg>';
+
   function avatarHtml(who) {
     var cls = 'avatar' + (who.hero ? ' avatar--lg' : '');
     if (who.photo) {
@@ -790,7 +779,7 @@
       : body;
     var dm = who.dm
       ? '<button type="button" class="me__dm" data-me-action="dm"' + dmAttrs(who.dm) + '>' +
-        '<span class="me__dm-ic" aria-hidden="true">✉</span>' +
+        '<span class="me__dm-ic" aria-hidden="true">' + ICON_MSG + '</span>' +
         '<span class="me__dm-label">Написать</span></button>'
       : '';
     return '<div class="me__who' + (who.hero ? ' me__who--hero' : '') + '">' + main + dm + '</div>';
@@ -850,7 +839,7 @@
   function notifyChipHtml(chip) {
     if (!chip || !chip.trainerId) return '';
     var active = !!chip.active;
-    var icon = active ? '🔕' : '🔔';
+    var icon = active ? ICON_BELL_OFF : ICON_BELL;
     var label = active ? 'Подписан' : 'Напомнить';
     return '<button type="button" class="me__notify' +
       (active ? ' is-active' : ' wants-attention') +
@@ -884,6 +873,13 @@
     return html;
   }
 
+  function segmentsHtml(seg) {
+    var used = seg.total - seg.left;
+    var html = '';
+    for (var i = 0; i < seg.total; i++) html += '<i' + (i < used ? ' class="is-used"' : '') + '></i>';
+    return '<span class="me__w-seg" aria-hidden="true">' + html + '</span>';
+  }
+
   /** Нет ни одной ячейки — нет и всей полосы (а не пустая рамка). */
   function walletHtml(cells) {
     if (!cells || !cells.length) return '';
@@ -894,7 +890,9 @@
         '<span class="me__w-k">' + esc(c.label) + '</span>' +
         '<span class="me__w-v">' + esc(c.value) + (c.unit ? '<i>' + esc(c.unit) + '</i>' : '') + '</span>' +
         (c.sub ? '<span class="me__w-s">' + esc(c.sub) + '</span>' : '') +
-        (c.bar != null ? '<span class="me__w-bar"><i style="width:' + Number(c.bar) + '%"></i></span>' : '') +
+        (c.segments
+          ? segmentsHtml(c.segments)
+          : c.bar != null ? '<span class="me__w-bar"><i style="width:' + Number(c.bar) + '%"></i></span>' : '') +
         '</button>';
     });
     return '<div class="me__wallet">' + html + '</div>';

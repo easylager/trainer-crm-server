@@ -11,85 +11,14 @@ body.hub-body {
   padding: 0 0 calc(36px + env(safe-area-inset-bottom)) 0;
   overflow-x: hidden;
   /* Soft morning light — flat paper canvas */
-  background: var(--app-canvas-bg) !important;
+  /* TASK-303: фон — токен сайта (--g-bg), светлый и тёмный. */
+  background: var(--g-bg) !important;
 }
 
 .hub-shell {
   max-width: 540px;
   margin: 0 auto;
   position: relative;
-}
-
-/* ─── Hero zone ──────────────────────────────────────────────────────────── */
-
-/*
- * TASK-091 (AC-001, F-4). Приветственная зона занимала верхнюю треть экрана.
- * Осталась одна строка: имя + переключатель профиля.
- */
-.hub-hero {
-  padding: 14px 16px 10px;
-  margin-bottom: 8px;
-  position: relative;
-}
-
-/* Greeting + profile chip on one row — chip must not overlay the name (EPIC1). */
-/*
- * TASK-095 (AC-002): высота строки резервируется, потому что переключатель
- * профиля монтируется асинхронно. 38px — фактическая высота чипа (замер
- * getBoundingClientRect на стенде), а не подобранное на глаз число.
- */
-.hub-hero-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 38px;
-}
-
-.hub-hero-greeting {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  color: var(--tg-theme-text-color);
-  letter-spacing: -0.01em;
-  line-height: 1.3;
-  margin: 0;
-}
-
-/*
- * TASK-149 (S1). Приветствие — две строки в той же коробке: имя + подпись из фактов.
- * 14px × 1.3 + 2px + 12px × 1.3 ≈ 36px укладываются в min-height 38px у .hub-hero-top,
- * поэтому появление подписи высоту строки не меняет (TASK-091/095: ни пикселя CLS).
- * Подпись в одну строку без переноса: перенос выпихнул бы строку за зарезервированные 38px.
- */
-.hub-hero-greeting__hello {
-  display: block;
-}
-
-.hub-hero-greeting__sub {
-  display: block;
-  margin-top: 2px;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-regular);
-  letter-spacing: 0;
-  line-height: 1.3;
-  color: var(--tg-theme-hint-color);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hub-hero-greeting__sub[hidden] {
-  display: none;
-}
-
-.hub-hero-profile-switcher {
-  flex-shrink: 0;
-  max-width: min(46vw, 168px);
-}
-
-.hub-hero-profile-switcher:empty {
-  display: none;
 }
 
 /*
@@ -113,50 +42,6 @@ body.hub-body {
   white-space: nowrap;
 }
 
-/*
- * Сценарий booking-led. Приветствие больше не раздувается в заголовок: строка
- * одинаковая во всех сценариях, а сценарий называет кикер над карточкой.
- * Класс сохранён — на нём держится отступ зоны льда под своим временем.
- */
-/* Своё уже сказано: поиск (зона льда без фото) отступает от тихой строки «Ещё занятие». */
-.hub-body--booking-led .hub-ice-zone {
-  margin-top: 22px;
-}
-
-/* Week streak ribbon hidden for now (copy felt odd; revisit later). */
-.hub-streak-ribbon {
-  display: none !important;
-  flex-direction: column;
-  width: calc(100% - 36px);
-  max-width: 504px;
-  margin: 0 auto 14px;
-  padding: 12px 16px;
-  border-radius: var(--app-radius-lg);
-  border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
-  background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  font-size: var(--app-text-lead);
-  font-weight: var(--app-weight-semibold);
-  line-height: 1.35;
-  letter-spacing: -0.02em;
-  color: var(--tg-theme-text-color);
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  font-family: inherit;
-}
-.hub-streak-ribbon:active {
-  transform: scale(0.99);
-  opacity: 0.95;
-}
-.hub-streak-ribbon__cta {
-  display: block;
-  margin-top: 4px;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  color: var(--tg-theme-button-color);
-}
-
 /* ─── Штамп и строки «остальных записей» (TASK-160: рамку рисует .me) ──── */
 /* Рамка, крупное время и строка тренера уехали в «мою карточку»; здесь    */
 /* остались только штамп статуса и строки списка записей под карточкой.    */
@@ -172,32 +57,12 @@ body.hub-body {
   font-weight: var(--app-weight-semibold);
 }
 
-.hub-next-card-pill--ok {
-  background: var(--app-ok-wash);
-  color: var(--app-ok-ink);
-}
-
-.hub-next-card-pill--wait {
-  background: var(--app-attention-wash);
-  color: var(--app-attention-ink);
-}
-
-.hub-next-card-pill--soon {
-  background: color-mix(in srgb, var(--app-cta-fill) 16%, transparent);
-  color: var(--glide-ink-teal);
-}
-
 .hub-next-card-status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
   background: currentColor;
-}
-
-.hub-next-card-pill--wait .hub-next-card-status-dot,
-.hub-next-card-pill--soon .hub-next-card-status-dot {
-  animation: hub-pulse 2.8s ease-in-out infinite;
 }
 
 /* Следующие записи — строки списка под карточкой (контейнер — .rest, TASK-160). */
@@ -282,66 +147,6 @@ body.hub-body {
   50% { opacity: 1; transform: scale(1.3); }
 }
 
-/* ─── Section headings ───────────────────────────────────────────────────── */
-
-.hub-section-pad {
-  padding: 0 18px;
-}
-
-.hub-section-head {
-  margin: 0 0 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.hub-section-title {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  letter-spacing: -0.01em;
-  color: color-mix(in srgb, var(--tg-theme-text-color) 72%, var(--tg-theme-hint-color));
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.hub-section-title::before {
-  content: '';
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--app-cta-fill) 65%, var(--tg-theme-hint-color));
-  flex-shrink: 0;
-}
-
-.hub-section-link {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  color: var(--app-cta-fill);
-  cursor: pointer;
-  text-decoration: none;
-  border: none;
-  background: none;
-  font-family: inherit;
-  padding: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-section-link:active { opacity: 0.7; }
-
-/* ─── Upcoming booking list (compact, below hero) ─────────────────────── */
-
-.hub-section-wrap {
-  padding: 0 16px;
-  margin-bottom: 28px;
-}
-
-.hub-bookings-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .hub-booking-row {
   display: flex;
   align-items: flex-start;
@@ -368,17 +173,6 @@ body.hub-body {
   border-radius: var(--app-radius-xs) 0 0 var(--app-radius-xs);
 }
 
-.hub-booking-row--confirmed::before { background: var(--app-ok); }
-.hub-booking-row--pending::before { background: var(--app-attention); }
-
-.hub-booking-row--confirmed {
-  border-color: rgba(52, 199, 89, 0.2);
-}
-
-.hub-booking-row--pending {
-  border-color: rgba(255, 149, 0, 0.2);
-}
-
 .hub-booking-row:hover {
   transform: translateX(2px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
@@ -388,200 +182,6 @@ body.hub-body {
   transform: scale(0.985);
   opacity: 0.9;
 }
-
-.hub-booking-time-col {
-  flex-shrink: 0;
-  text-align: center;
-  min-width: 54px;
-}
-
-.hub-booking-time-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-}
-
-.hub-booking-time-block .hub-session-now-pill {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--app-radius-sm);
-  font-size: var(--app-text-kicker);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: 0.02em;
-  line-height: 1.2;
-  white-space: nowrap;
-  background: none;
-  color: var(--tg-theme-button-color);
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
-}
-
-.hub-is-dark .hub-booking-time-block .hub-session-now-pill {
-  background: none;
-  border-color: rgba(var(--accent-rgb), 0.42);
-}
-
-.hub-booking-time {
-  font-size: var(--app-text-lead);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: -0.02em;
-  color: var(--tg-theme-text-color);
-}
-
-.hub-booking-dur {
-  font-size: var(--app-text-kicker);
-  color: var(--tg-theme-hint-color);
-  margin-top: 2px;
-}
-
-.hub-booking-divider {
-  width: 1px;
-  align-self: stretch;
-  min-height: 32px;
-  background: rgba(128, 128, 128, 0.15);
-  flex-shrink: 0;
-}
-
-.hub-booking-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 1px;
-}
-
-.hub-booking-trainer {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  line-height: 1.35;
-  color: var(--tg-theme-text-color);
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.hub-booking-place {
-  font-size: var(--app-text-caption);
-  color: var(--tg-theme-hint-color);
-  line-height: 1.35;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.hub-booking-row-end {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-start;
-  padding-top: 1px;
-}
-
-.hub-booking-status {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  padding: 3px 8px;
-  border-radius: var(--app-radius-sm);
-  white-space: nowrap;
-}
-
-.hub-booking-status--inline {
-  align-self: flex-start;
-  margin-top: 4px;
-  font-size: var(--app-text-kicker);
-  padding: 2px 7px;
-}
-
-.hub-booking-status--confirmed {
-  background: rgba(52, 199, 89, 0.15);
-  color: var(--app-ok-ink);
-}
-
-.hub-booking-status--pending {
-  background: rgba(255, 149, 0, 0.15);
-  color: var(--app-attention-ink);
-}
-
-.hub-booking-msg-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--app-radius-sm);
-  border: 1px solid rgba(var(--accent-rgb), 0.3);
-  background: rgba(var(--accent-rgb), 0.08);
-  color: var(--app-cta-fill);
-  cursor: pointer;
-  font-family: inherit;
-  -webkit-appearance: none;
-  appearance: none;
-  transition: background 0.15s ease, transform 0.12s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-booking-msg-btn:hover { background: rgba(var(--accent-rgb), 0.18); }
-.hub-booking-msg-btn:active { transform: scale(0.88); }
-
-.hub-booking-msg-btn svg {
-  width: 13px;
-  height: 13px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.hub-day-chip {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: 0.05em;
-  color: var(--tg-theme-hint-color);
-  text-transform: uppercase;
-  margin-bottom: 8px;
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.hub-day-chip:first-child { margin-top: 0; }
-
-.hub-day-chip::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: rgba(128, 128, 128, 0.12);
-}
-
-.hub-bookings-cap {
-  text-align: center;
-  font-size: var(--app-text-caption);
-  color: var(--tg-theme-hint-color);
-  margin-top: 10px;
-}
-
-/* ─── Contextual quick pills (rebook only) ─────────────────────────────── */
-
-.hub-quick-strip {
-  display: flex;
-  gap: 8px;
-  padding: 0 16px;
-  margin-bottom: 24px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.hub-quick-strip[hidden] {
-  display: none !important;
-  margin-bottom: 0;
-}
-
-.hub-quick-strip::-webkit-scrollbar { display: none; }
 
 /* ─── Primary trainer living panel: slots + pass + history ──────────────── */
 /* Sits under the primary trainer card. Three optional sub-rows; the whole    */
@@ -706,248 +306,6 @@ body.hub-body {
   line-height: 1;
 }
 
-/* ─── Discovery: trainers carousel for new clients ──────────────────────── */
-/* Discovery: trainers carousel — new clients and sparse hub states (saved / past).     */
-
-.hub-discovery {
-  margin: 0 0 20px;
-  padding: 0;
-}
-
-.hub-discovery[hidden] {
-  display: none !important;
-  margin: 0;
-}
-
-.hub-discovery__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 18px;
-  margin-bottom: 10px;
-}
-
-.hub-discovery__title {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--tg-theme-hint-color);
-}
-
-.hub-discovery__link {
-  background: none;
-  border: none;
-  font: inherit;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  color: var(--glide-ink-teal);
-  cursor: pointer;
-  padding: 4px 6px;
-  margin: -4px -6px;
-}
-
-.hub-discovery__row {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  scroll-snap-type: x mandatory;
-  padding: 4px 18px;
-  /*
-   * Без scroll-padding привязка прижимает первую карточку к краю окна и съедает
-   * padding ряда — карточка оказывается левее заголовка секции. Отступ должен
-   * совпадать с горизонтальным padding выше.
-   */
-  scroll-padding-inline: 18px;
-}
-
-.hub-discovery__row::-webkit-scrollbar { display: none; }
-
-/*
- * Карточка тренера переехала в mini-app-trainer-card.css (TASK-092, DEC-001).
- *
- * Здесь она жила параллельной копией того же компонента из ice-tab.css, и копии
- * разошлись: в одной плейсхолдер показывал инициалы, в другой был пустой
- * прямоугольник. Именно расхождение и есть причина F-5, поэтому дубликат удалён,
- * а не поправлен. Ниже остаётся только обвязка секции — заголовок и лента.
- */
-
-.hub-quick-pill {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 16px;
-  border-radius: var(--app-radius-md);
-  background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid rgba(128, 128, 128, 0.12);
-  font: inherit;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  color: var(--tg-theme-text-color);
-  cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-quick-pill svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: var(--app-cta-fill);
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.hub-quick-pill:hover {
-  border-color: rgba(var(--accent-rgb), 0.4);
-  background: rgba(var(--accent-rgb), 0.06);
-}
-
-.hub-quick-pill:active {
-  transform: scale(0.94);
-  background: rgba(var(--accent-rgb), 0.1);
-}
-
-.hub-quick-pill--primary {
-  background: var(--app-cta-fill);
-  color: var(--app-cta-text);
-  border-color: transparent;
-  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.35);
-}
-
-.hub-quick-pill--primary svg { color: var(--app-cta-text); }
-
-.hub-quick-pill--primary:hover {
-  background: var(--glide-brand-pressed);
-  border-color: transparent;
-}
-
-/* Пока слот занят, «снова» — строка, не залитая кнопка. */
-.hub-quick-strip--quiet {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  overflow: visible;
-  margin: 0 16px;
-  padding: 0;
-}
-
-.hub-quick-link {
-  display: block;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--glide-ink-teal);
-  font: inherit;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Не второй заголовок секции — тихое действие под карточкой (прототип .again / .quiet). */
-.hub-quick-strip--quiet .hub-quick-link {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-bold);
-  line-height: 1.35;
-}
-
-/*
- * Личное (карточка + «Ещё занятие») от рынка: placeQuickStrip ставит полоску
- * вплотную перед #hubExplore — пауза только здесь, не margin collapse с карточкой.
- */
-#quickStrip.hub-quick-strip--quiet:not([hidden]) + #hubExplore:not([hidden]) {
-  padding-top: 24px;
-}
-
-.hub-quick-link:active {
-  opacity: 0.7;
-}
-
-/* ─── Acquisition hero (Scenario 2 — no trainer yet) ────────────────── */
-
-.hub-acq-hero {
-  margin: 0 16px 20px;
-  border-radius: var(--app-radius-xl);
-  background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid rgba(var(--accent-rgb), 0.2);
-  padding: 22px 20px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
-  position: relative;
-  overflow: hidden;
-}
-
-.hub-is-dark .hub-acq-hero {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  border-color: rgba(var(--accent-rgb), 0.3);
-}
-
-.hub-acq-hero::before {
-  content: '';
-  position: absolute;
-  bottom: -20%;
-  right: -10%;
-  width: 50%;
-  height: 80%;
-  background: none;
-  pointer-events: none;
-}
-
-.hub-acq-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 16px 0 0;
-}
-
-.hub-acq-step {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: var(--app-text-body);
-  color: var(--tg-theme-hint-color);
-}
-
-.hub-acq-step-num {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(var(--accent-rgb), 0.15);
-  color: var(--app-cta-fill);
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-bold);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-/* ─── Empty / no bookings state ────────────────────────────────────────── */
-
-.hub-empty-state {
-  text-align: center;
-  padding: 22px 16px;
-  color: var(--tg-theme-hint-color);
-  font-size: var(--app-text-body);
-  line-height: 1.6;
-}
-
-.hub-empty-icon {
-  font-size: var(--app-icon-xl);
-  margin-bottom: 8px;
-  opacity: 0.55;
-}
-
 /* ─── State / error panel ─────────────────────────────────────────────── */
 
 .state-panel {
@@ -962,426 +320,16 @@ body.hub-body {
 .state-panel.error { border-color: rgba(255, 59, 48, 0.35); color: var(--app-danger-ink); }
 .state-panel.loading { color: var(--tg-theme-hint-color); }
 
-/* ─── Footer aside: support (secondary — not booking cards) ───────────── */
-
-.hub-footer-aside {
-  margin: 32px 16px 28px;
-  padding-top: 20px;
-  border-top: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 26%, transparent);
-}
-
-.hub-footer-aside__kicker {
-  margin: 0 0 10px 2px;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: color-mix(in srgb, var(--tg-theme-hint-color) 88%, transparent);
-}
-
-.hub-is-dark .hub-footer-aside {
-  border-top-color: color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
-}
-
-/* ─── Footnote + поддержка (раскрывающийся блок) ─────────────────────── */
-
-.hub-footer-aside .hub-footnote {
-  margin: 0;
-  padding: 0;
-  border-radius: 0;
-  font-size: var(--app-text-caption);
-  line-height: 1.45;
-  color: var(--tg-theme-hint-color);
-  background: transparent;
-  border: none;
-  position: relative;
-  overflow: visible;
-  box-shadow: none;
-}
-
-.hub-footer-aside .hub-footnote::before {
-  display: none;
-}
-
-.hub-footer-aside .hub-footnote strong {
-  color: color-mix(in srgb, var(--tg-theme-text-color) 78%, var(--tg-theme-hint-color));
-  font-weight: var(--app-weight-semibold);
-}
-
-.hub-footer-aside .hub-footnote--collapsible {
-  padding: 0;
-}
-
-.hub-footer-aside .hub-footnote__toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 2px 2px 4px;
-  margin: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  border-radius: 0;
-  -webkit-tap-highlight-color: transparent;
-  position: relative;
-  z-index: 1;
-}
-
-.hub-footer-aside .hub-footnote__toggle:active {
-  opacity: 0.82;
-}
-
-.hub-footer-aside .hub-footnote__toggle-main {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.hub-footer-aside .hub-footnote__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-}
-
-.hub-footer-aside .hub-footnote__icon {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  color: color-mix(in srgb, var(--app-cta-fill) 85%, var(--tg-theme-text-color));
-  opacity: 0.9;
-}
-
-.hub-footer-aside .hub-footnote__title {
-  color: color-mix(in srgb, var(--tg-theme-text-color) 72%, var(--tg-theme-hint-color));
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  letter-spacing: -0.01em;
-}
-
-.hub-footer-aside .hub-footnote__teaser {
-  margin: 0;
-  padding-left: 20px;
-  font-size: var(--app-text-caption);
-  line-height: 1.4;
-  color: color-mix(in srgb, var(--tg-theme-hint-color) 92%, transparent);
-}
-
-.hub-footer-aside .hub-footnote--open .hub-footnote__teaser {
-  display: none;
-}
-
-.hub-footer-aside .hub-footnote__chevron {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  color: var(--tg-theme-hint-color);
-  opacity: 0.45;
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
-}
-
-.hub-footer-aside .hub-footnote--open .hub-footnote__chevron {
-  transform: rotate(180deg);
-  opacity: 0.65;
-  color: var(--tg-theme-hint-color);
-}
-
-.hub-footer-aside .hub-footnote__expand {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hub-footer-aside .hub-footnote--open .hub-footnote__expand {
-  grid-template-rows: 1fr;
-}
-
-.hub-footer-aside .hub-footnote__expand-inner {
-  overflow: hidden;
-  min-height: 0;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition:
-    opacity 0.32s ease 0.04s,
-    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 0;
-  margin-top: 0;
-}
-
-.hub-footer-aside .hub-footnote--open .hub-footnote__expand-inner {
-  opacity: 1;
-  transform: translateY(0);
-  margin-top: 10px;
-  padding: 12px 14px 14px;
-  border-radius: var(--app-radius-md);
-  background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 24%, transparent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hub-footer-aside .hub-footnote__expand,
-  .hub-footer-aside .hub-footnote__expand-inner,
-  .hub-footer-aside .hub-footnote__chevron,
-  .hub-footer-aside .hub-footnote__teaser {
-    transition: none !important;
-  }
-}
-
-.hub-footer-aside .hub-footnote__lead,
-.hub-footer-aside .hub-footnote__cta {
-  margin: 0;
-  font-size: var(--app-text-caption);
-  line-height: 1.45;
-  color: var(--tg-theme-hint-color);
-}
-
-.hub-footer-aside .hub-footnote--collapsible .hub-footnote__lead {
-  margin-top: 0;
-}
-
-.hub-footer-aside .hub-footnote__cta {
-  margin-top: 8px;
-  padding-top: 0;
-  border-top: none;
-  font-size: var(--app-text-kicker);
-}
-
-.hub-footer-aside .hub-support-form {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.hub-support-label {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  color: var(--tg-theme-text-color);
-}
-
-.hub-support-textarea {
-  width: 100%;
-  min-height: 64px;
-  padding: 8px 10px;
-  border-radius: var(--app-radius-sm);
-  font-size: var(--app-text-caption);
-  line-height: 1.4;
-  resize: vertical;
-  box-sizing: border-box;
-  background: var(--app-canvas-bg);
-  color: var(--tg-theme-text-color);
-  border: 1px solid rgba(128, 128, 128, 0.2);
-  font-family: inherit;
-}
-
-.hub-is-dark .hub-support-textarea {
-  background: var(--tg-theme-secondary-bg-color);
-  border-color: rgba(255, 255, 255, 0.14);
-}
-
-.hub-support-textarea::placeholder {
-  color: var(--tg-theme-hint-color);
-  opacity: 0.85;
-}
-
-.hub-support-hint {
-  margin: 0;
-  font-size: var(--app-text-kicker);
-  line-height: 1.4;
-  color: var(--tg-theme-hint-color);
-}
-
-.hub-support-submit {
-  margin-top: 2px;
-}
-
-.hub-support-status {
-  margin: 0;
-  min-height: 1.35em;
-  font-size: var(--app-text-caption);
-  line-height: 1.45;
-  color: var(--tg-theme-hint-color);
-}
-
-.hub-support-status.hub-support-status--ok {
-  color: var(--tg-theme-text-color);
-}
-
-.hub-support-status.hub-support-status--err {
-  color: var(--app-danger-ink);
-}
-
-.hub-is-dark .hub-support-status.hub-support-status--err {
-  color: var(--app-danger-ink);
-}
-
-/* ─── Skeleton loading ───────────────────────────────────────────────── */
-
-/*
- * AC-003: скелетон — часть системы поверхностей. Подложка берётся от карточки
- * (уровень 1 контракта TASK-088), а не от «вторичного фона Telegram»: иначе в
- * ICE PAPER плашки уходили в грязно-серый, которого нет в палитре.
- */
-.hub-skel-shimmer {
-  background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid));
-  animation: client-hub-skel-pulse 1.2s ease-in-out infinite;
-  border-radius: var(--app-radius-sm);
-}
-
 @keyframes client-hub-skel-pulse {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 0.9; }
 }
-
-/* Row-shaped skeleton for bookings list */
-.hub-bookings-skel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.hub-skel-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: var(--app-radius-lg);
-  border: 1px solid rgba(128, 128, 128, 0.1);
-  background: var(--tg-theme-secondary-bg-color);
-  min-height: 56px;
-  box-sizing: border-box;
-}
-
-.hub-skel-line {
-  flex-shrink: 0;
-  border-radius: var(--app-radius-pill);
-}
-
-.hub-skel-line--time { width: 44px; height: 16px; }
-.hub-skel-line--primary { width: 65%; height: 13px; }
-.hub-skel-line--secondary { width: 40%; height: 10px; margin-top: 7px; }
-
-/* ─── Скелетон первой загрузки (TASK-095) ──────────────────────────────── */
-/*
- * Правило: скелетон повторяет коробку реального компонента, а не рисует
- * «примерно похожие серые плашки». Где возможно, берутся ровно те же
- * aspect-ratio, радиусы и ширины, что у настоящих карточек — тогда совпадение
- * геометрии держится само, а не поддерживается вручную при каждой правке.
- */
-
-.hub-hero-skel {
-  display: none;
-  flex: 1;
-  min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.hub-skel-line--hero-greeting { width: 148px; height: 12px; opacity: 0.7; }
-
-.hub-initial-skel {
-  display: none;
-  flex-direction: column;
-  gap: var(--app-space-2);
-  margin: 0 0 20px;
-  padding: 0 16px;
-}
-
-.hub-skel-line--kicker { width: 132px; height: 10px; opacity: 0.55; margin: 4px 0; }
-
-/* Коробка карточки льда: та же, что у a.hub-ice-card. */
-/*
- * TASK-160 (S5). Скелетон обещает форму «Моей карточки» — той самой, что
- * приедет. Геометрия списана с `.me`, а не придумана: тот же радиус, те же
- * отступы 14px/15px, тот же gap 11px в строке лица, та же высота чипа.
- * Разойдутся эти числа — вернётся CLS, против которого писался TASK-095.
- */
-.hub-skel-me {
-  border: 1px solid var(--app-card-line);
-  border-radius: var(--app-radius-lg);
-  background: var(--app-card-bg);
-  overflow: hidden;
-}
-
-.hub-skel-me__pad {
-  padding: 14px 15px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-3);
-}
-
-.hub-skel-me__who {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 0;
-}
-
-.hub-skel-me__avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  flex: none;
-}
-
-/*
- * Резерв под полосу окон. Абонемент приходит из bootstrap синхронно, а окна —
- * из /client/slots асинхронно: без этой коробки карточка подпрыгивала бы на
- * величину полосы через ~300 мс после первой отрисовки.
- */
-.hub-skel-me__chips {
-  display: flex;
-  gap: var(--app-space-2);
-  overflow: hidden;
-}
-
-.hub-skel-me__chip {
-  flex: none;
-  width: 84px;
-  height: 46px;
-  border-radius: var(--app-radius-sm);
-}
-
-.hub-skel-icelines {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-2);
-  min-width: 0;
-}
-
-/* TASK-149: вместо карусели тренеров — сетка плиток «Куда катимся» (та же геометрия, что .hub-cg). */
-.hub-skel-tiles {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--app-space-2);
-}
-
-.hub-skel-tile {
-  height: 58px;
-  border-radius: var(--app-radius-lg);
-}
-
-/* Loading-state: skeleton on, real blocks + footnote off until fully ready. */
-body.hub-body--loading .hub-hero-greeting,
-body.hub-body--loading .hub-ice-zone {
-  display: none !important;
-}
-body.hub-body--loading .hub-hero-skel { display: flex; }
 body.hub-body--loading #hubInitialSkel { display: flex; }
 
 body.hub-body--loading #nextBookingBlock,
 body.hub-body--loading #myTrainerBlock,
 body.hub-body--loading #hubPrimaryPanel,
-body.hub-body--loading #hubDiscovery,
-body.hub-body--loading #hubExplore,
-body.hub-body--loading #quickStrip,
-body.hub-body--loading #upcomingSection,
-body.hub-body--loading #hubStreakRibbon,
-body.hub-body--loading #hubFooterAside {
+body.hub-body--loading #upcomingSection{
   display: none !important;
 }
 
@@ -1390,18 +338,10 @@ body.hub-body--loading #hubFooterAside {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
-
-body.hub-body--revealed .hub-hero-greeting,
-body.hub-body--revealed .hub-ice-zone,
 body.hub-body--revealed #nextBookingBlock,
 body.hub-body--revealed #myTrainerBlock,
 body.hub-body--revealed #hubPrimaryPanel,
-body.hub-body--revealed #hubDiscovery,
-body.hub-body--revealed #hubExplore,
-body.hub-body--revealed #quickStrip,
-body.hub-body--revealed #upcomingSection,
-body.hub-body--revealed #hubStreakRibbon,
-body.hub-body--revealed #hubFooterAside {
+body.hub-body--revealed #upcomingSection{
   animation: hub-initial-reveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 0.16s;
 }
@@ -1410,21 +350,12 @@ body.hub-body--revealed #myTrainerBlock       { animation-delay: 0.02s; }
 body.hub-body--revealed #hubPrimaryPanel      { animation-delay: 0.06s; }
 body.hub-body--revealed #nextBookingBlock    { animation-delay: 0.02s; }
 body.hub-body--revealed #upcomingSection     { animation-delay: 0.1s; }
-body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
-body.hub-body--revealed #hubExplore          { animation-delay: 0.12s; }
 
 @media (prefers-reduced-motion: reduce) {
-  body.hub-body--revealed .hub-hero-greeting,
-  body.hub-body--revealed .hub-ice-zone,
   body.hub-body--revealed #nextBookingBlock,
   body.hub-body--revealed #myTrainerBlock,
   body.hub-body--revealed #hubPrimaryPanel,
-  body.hub-body--revealed #hubDiscovery,
-  body.hub-body--revealed #hubExplore,
-  body.hub-body--revealed #quickStrip,
-  body.hub-body--revealed #upcomingSection,
-  body.hub-body--revealed #hubStreakRibbon,
-  body.hub-body--revealed #hubFooterAside {
+  body.hub-body--revealed #upcomingSection{
     animation: none !important;
   }
 }
@@ -1443,11 +374,6 @@ body.hub-body--revealed #hubExplore          { animation-delay: 0.12s; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hub-skel-shimmer {
-    animation: none !important;
-    background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid)) !important;
-    opacity: 0.88;
-  }
   .hub-bookings-mount {
     opacity: 1 !important;
     transform: none !important;
@@ -1457,200 +383,9 @@ body.hub-body--revealed #hubExplore          { animation-delay: 0.12s; }
   .hub-next-card-status-dot { animation: none !important; }
 }
 
-/* ─── Saved trainers strip (Priority 3 on intent engine) ─────────────────── */
-
-.hub-saved-section {
-  margin: 0 18px 16px;
-}
-
-.hub-saved-section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.hub-saved-section-title {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  color: var(--tg-theme-text-color);
-}
-
-.hub-saved-section-link {
-  background: none;
-  border: none;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: var(--tg-theme-button-color);
-  cursor: pointer;
-  padding: 0;
-  font-family: inherit;
-}
-
-.hub-saved-strip {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 2px;
-}
-.hub-saved-strip::-webkit-scrollbar { display: none; }
-
-.hub-saved-chip {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  min-width: 68px;
-  padding: 10px 12px;
-  background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid color-mix(in srgb, var(--glide-brand) 25%, transparent);
-  border-radius: var(--app-radius-md);
-  cursor: pointer;
-  font-family: inherit;
-  transition: transform 0.12s ease, background 0.12s ease;
-}
-.hub-saved-chip:active { transform: scale(0.95); }
-
-.hub-saved-chip-icon {
-  font-size: var(--app-icon-md);
-  line-height: 1;
-}
-
-.hub-saved-chip-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--app-radius-sm);
-  overflow: hidden;
-  flex-shrink: 0;
-  background: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
-}
-.hub-saved-chip-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.hub-saved-chip-label {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: var(--tg-theme-hint-color);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 64px;
-}
-
-/* ─── Sticky «Записаться» FAB — primary trainer, above client tab bar ───── */
-body.hub-body--loading .client-hub-book-fab.hub-book-fab {
-  display: none !important;
-}
-
-body.hub-body--book-fab-visible[data-client-shell="tabs"] {
-  padding-bottom: calc(var(--client-shell-tab-inset) + 54px);
-}
-
-.client-hub-book-fab.hub-book-fab {
-  position: fixed;
-  right: calc(16px + env(safe-area-inset-right, 0px));
-  bottom: calc(var(--client-tab-bar-height, 62px) + var(--client-tab-bar-margin, 18px) + env(safe-area-inset-bottom, 0px) + 14px);
-  z-index: 8500;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 20px 14px 18px;
-  border: none;
-  border-radius: var(--app-radius-lg);
-  background: var(--app-cta-fill);
-  color: var(--app-cta-text);
-  font: inherit;
-  font-size: var(--app-text-lead);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: -0.01em;
-  cursor: pointer;
-      box-shadow:
-        0 8px 28px rgba(0, 0, 0, 0.14),
-        0 2px 8px rgba(0, 0, 0, 0.1);
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  animation: client-hub-book-fab-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-  transition:
-    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.2s ease,
-    opacity 0.24s ease;
-}
-
-.client-hub-book-fab.hub-book-fab[hidden] {
-  display: none !important;
-}
-
-.client-hub-book-fab.hub-book-fab:active {
-  transform: scale(0.95);
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.12),
-    0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.client-hub-book-fab.hub-book-fab:focus-visible {
-  outline: 2px solid var(--glide-brand-pressed);
-  outline-offset: 3px;
-}
-
-.client-hub-book-fab .hub-book-fab__icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.client-hub-book-fab .hub-book-fab__label {
-  white-space: nowrap;
-}
-
 @keyframes client-hub-book-fab-in {
   from { opacity: 0; transform: translateY(14px) scale(0.92); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .client-hub-book-fab.hub-book-fab {
-    animation: none;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
- * TASK-091. ЛЁД НА ГЛАВНОЙ.
- *
- * Было (TASK-055): строка-тизер внизу первого экрана. Она сообщала факт, но
- * не продавала — читалась как примечание, а не как товар.
- * Стало: та же карточка, что на «Льду», в компактном исполнении. Кадр,
- * время-якорь, каток, условия. Один объект на двух экранах — узнаётся.
- * ═══════════════════════════════════════════════════════════════════════ */
-
-.hub-ice-zone {
-  display: flex;
-  flex-direction: column;
-  /*
-   * Было gap 8px и нулевой верх: заголовок «НА ЛЬДУ · ГОРОД» прилипал и к карточке
-   * сверху, и к кадру снизу, из-за чего три разных объекта читались одной массой.
-   * Надзаголовок набран прописными в 10px — у него маленькая оптическая высота,
-   * и 8px рядом с фотографией во всю ширину воспринимаются почти как ноль.
-   */
-  gap: var(--app-space-3);
-  margin: var(--app-space-3) 16px 20px;
-}
-
-.hub-ice-zone[hidden] {
-  display: none;
-}
-
-/* Слот занят записью или окном: фото льда не второй герой, поиск остаётся. */
-.hub-ice-zone--personal > .hub-sec-head,
-.hub-ice-zone--personal > #hubIceTeaser,
-.hub-ice-zone--personal > #hubIceSessions {
-  display: none;
 }
 
 .hub-sec-head {
@@ -1678,10 +413,6 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
   font-weight: var(--app-weight-medium);
   color: var(--glide-ink-teal);
   text-decoration: none;
-}
-
-.hub-ice-teaser-wrap[hidden] {
-  display: none;
 }
 
 a.hub-ice-card {
@@ -1801,233 +532,6 @@ a.hub-ice-card {
   color: var(--app-cta-fill);
 }
 
-/* AC-003: поиск — строка, а не CTA на 15% высоты экрана. */
-.hub-search {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  width: 100%;
-  box-sizing: border-box;
-  padding: 10px var(--app-space-3);
-  border-radius: var(--app-radius-md);
-  border: 1px solid var(--app-card-line);
-  background: var(--app-card-bg-solid);
-  font-family: inherit;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-medium);
-  color: var(--tg-theme-hint-color);
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-search:active {
-  opacity: 0.75;
-}
-
-.hub-search__ic {
-  width: var(--app-icon-sm);
-  height: var(--app-icon-sm);
-  flex: 0 0 auto;
-}
-
-/* ─── TASK-149 (S3): «Куда катимся» — одна навигация по рынку ─── */
-/* Светлые плитки: иконка типа на цветной плашке (--app-venue-*), название,
- * живой счётчик, строка ценности, шеврон. Сетка 2 колонки; при нечётном числе
- * плиток первая (--wide) занимает всю ширину. Новых цветов нет — только токены. */
-
-.hub-explore {
-  margin: 0 16px 20px;
-  padding: 0;
-}
-
-.hub-explore[hidden] {
-  display: none !important;
-  margin: 0;
-}
-
-.hub-explore__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--app-space-2);
-  margin-bottom: var(--app-space-2);
-}
-
-.hub-explore__title {
-  margin: 0;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-bold);
-  color: var(--tg-theme-text-color);
-}
-
-.hub-cg {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--app-space-2);
-}
-
-.hub-cg__tile {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 10px var(--app-space-3);
-  text-decoration: none;
-  color: inherit;
-  border: 1px solid var(--app-card-line);
-  border-radius: var(--app-radius-lg);
-  background: var(--app-card-bg);
-  box-shadow: var(--app-card-shadow);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-cg__tile:active {
-  opacity: 0.8;
-}
-
-.hub-cg__tile--wide {
-  grid-column: 1 / -1;
-}
-
-.hub-cg__ic {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--app-radius-md);
-  color: var(--app-on-media);
-}
-
-.hub-cg__ic--ice {
-  background: var(--app-venue-ice);
-}
-
-.hub-cg__ic--trainer {
-  background: var(--app-venue-trainer);
-}
-
-.hub-cg__ic--shop {
-  background: var(--app-venue-shop);
-}
-
-.hub-cg__svg {
-  width: var(--app-icon-sm);
-  height: var(--app-icon-sm);
-}
-
-.hub-cg__text {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  gap: 2px;
-}
-
-.hub-cg__name {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  line-height: 1.25;
-  color: var(--tg-theme-text-color);
-}
-
-.hub-cg__cnt {
-  margin-left: 2px;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-bold);
-  font-variant-numeric: tabular-nums;
-  color: var(--glide-ink-teal);
-}
-
-.hub-cg__sub {
-  font-size: var(--app-text-caption);
-  line-height: 1.3;
-  color: var(--tg-theme-hint-color);
-}
-
-.hub-cg__chev {
-  flex: none;
-  font-size: var(--app-text-body);
-  line-height: 1;
-  color: var(--tg-theme-hint-color);
-}
-
-/* ─── TASK-148 (AC-4) → TASK-149 (S2): строки ближайших сеансов внутри блока льда ─── */
-
-/* Карточка строк живёт в .hub-ice-zone (у зоны уже есть горизонтальные поля 16px и gap 12px),
- * поэтому собственных полей нет; отрицательный отступ придвигает её к герою (8px вместо 12px):
- * строки — продолжение героя, а не третий блок. */
-.hub-ice-today__card {
-  margin: calc(var(--app-space-2) - var(--app-space-3)) 0 0;
-  background: var(--app-card-bg);
-  border: 1px solid var(--app-card-line);
-  border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-card-shadow);
-  overflow: hidden;
-}
-
-.hub-ice-today__card[hidden] {
-  display: none;
-}
-
-.hub-ice-today__row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 11px 13px;
-  text-decoration: none;
-  color: inherit;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-ice-today__row:active {
-  background: var(--app-card-bg-solid);
-}
-
-.hub-ice-today__row + .hub-ice-today__row {
-  border-top: 1px solid var(--app-card-line);
-}
-
-.hub-ice-today__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--app-cta-fill);
-  flex: none;
-}
-
-.hub-ice-today__time {
-  flex: none;
-  width: 44px;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-bold);
-  font-variant-numeric: tabular-nums;
-  color: var(--glide-ink-teal);
-}
-
-.hub-ice-today__place {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  color: var(--tg-theme-text-color);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hub-ice-today__price {
-  flex: none;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  color: var(--tg-theme-text-color);
-}
-
-
-
 /* ═══════════════════════════════════════════════════════════════════════════
    TASK-160 — «Моя карточка»: одна рамка хаба на шесть заливок.
 
@@ -2059,15 +563,6 @@ a.hub-ice-card {
   border: 1px solid var(--glide-line);
   background: var(--glide-card);
   overflow: hidden;
-}
-
-/* Акцент — моё обязательство или живые окна; внимание — ожидание и сгорающий срок. */
-.me--accent {
-  border-color: rgba(var(--accent-rgb), 0.42);
-}
-
-.me--warn {
-  border-color: color-mix(in srgb, var(--app-attention) 42%, transparent);
 }
 
 .me__pad {
@@ -2569,21 +1064,6 @@ a.hub-ice-card {
   flex: none;
 }
 
-.me .pill--ok {
-  background: var(--app-ok-wash);
-  color: var(--app-ok-ink);
-}
-
-.me .pill--wait {
-  background: var(--app-attention-wash);
-  color: var(--app-attention-ink);
-}
-
-.me .pill--soon {
-  background: var(--glide-brand-wash);
-  color: var(--glide-ink-teal);
-}
-
 .me .btn-fill {
   display: block;
   width: 100%;
@@ -2615,4 +1095,25 @@ a.hub-ice-card {
   border: 1px solid var(--glide-line);
   background: var(--glide-surface);
   overflow: hidden;
+}
+
+
+/* Заливки карточки, которые модель собирает из кусков (me--{mod}, pill--{kind}). */
+.me--accent {
+  border-color: rgba(var(--accent-rgb), 0.42);
+}
+.me--warn {
+  border-color: color-mix(in srgb, var(--app-attention) 42%, transparent);
+}
+.me .pill--ok {
+  background: var(--app-ok-wash);
+  color: var(--app-ok-ink);
+}
+.me .pill--wait {
+  background: var(--app-attention-wash);
+  color: var(--app-attention-ink);
+}
+.me .pill--soon {
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
 }

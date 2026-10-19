@@ -1544,9 +1544,10 @@ async def test_webapp_client_home_page_served() -> None:
     assert "data-client-shell" in body
     assert "client-home-main.js" in body
     assert "mini-app-client-shell.js" in body
-    # Living-home containers: trainer panel (slots + pass + history) and new-client discovery
+    # TASK-303 (PDEC-023): шапка города, слот «сейчас», «Мои занятия», лёд и «Что нужно».
     assert 'id="hubPrimaryPanel"' in body
-    assert 'id="hubDiscovery"' in body
+    for block in ("hubHero", "hubNow", "hubMine", "hubNearest", "hubNeeds"):
+        assert f'id="{block}"' in body, block
 
 
 @pytest.mark.asyncio

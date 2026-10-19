@@ -19,6 +19,11 @@ def test_kto_kogo_page_served_with_versioned_assets() -> None:
 
 
 def test_home_page_loads_the_kto_kogo_row() -> None:
+    """TASK-303: «Кто кого» — карточка слота «сейчас» в hub-home.js, без отдельных файлов строки."""
     html = TestClient(app).get("/webapp/client-home").text
-    assert "/static/webapp/hub-kto-kogo.js?v=" in html
-    assert "/static/webapp/kto-kogo-model.js?v=" in html
+    assert "hub-home.js?v=" in html
+    assert "hub-kto-kogo.js" not in html
+    hub = TestClient(app).get("/webapp/hub-home.js")
+    assert hub.status_code == 200
+    assert "/api/webapp/client/hockey/matches/" in hub.text
+    assert "kto-kogo?reveal=" in hub.text

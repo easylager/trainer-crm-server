@@ -56,11 +56,11 @@ async def test_hub_and_catalog_assets_include_ice_links(app_use_test_db) -> None
         home_js = await client.get("/webapp/client-home-main.js")
         catalog_js = await client.get("/webapp/catalog-main.js")
     assert home.status_code == 200, home.text
-    assert "hubIceTeaser" in home.text
+    # TASK-303: лёд города — «Ближайший лёд» и слот; тизер нужен клиенту без города.
+    assert 'id="hubNearest"' in home.text
     assert "ice-teaser-model.js" in home.text
     assert 'id="myTrainerBlock"' in home.text
     assert 'id="hubPrimaryPanel"' in home.text
-    assert 'id="upcomingSection"' in home.text
     assert teaser_js.status_code == 200
     assert chips_js.status_code == 200
     # TASK-091: Главная рисует карточку льда, а не строку-тизер.

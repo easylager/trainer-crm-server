@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, time
 from typing import Any
 from urllib.parse import urlencode
@@ -141,7 +141,10 @@ def _needs(view: Mapping[str, Any], city_id: int) -> list[dict[str, Any]]:
     return rows
 
 
-def _upcoming(view: Mapping[str, Any]) -> list[dict[str, Any]]:
+InviteLink = Callable[[int, int | None], str | None]
+
+
+def _upcoming(view: Mapping[str, Any], invite_link: InviteLink | None) -> list[dict[str, Any]]:
     by_slug = {str(p.get("slug") or ""): p for p in view.get("places") or []}
     out = []
     for card in list(view.get("upcoming") or [])[:UPCOMING_LIMIT]:
@@ -159,12 +162,16 @@ def _upcoming(view: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "minutes_until": card.get("minutes_until"),
                 "href": _place_href(place.get("id"), card.get("session_id")),
                 "photo": _photo(place),
+                # «Позвать»: ссылка в Mini App прямо на этот сеанс (arena_<id>_s_<сеанс>).
+                "invite_url": invite_link(int(place["id"]), card.get("session_id"))
+                if invite_link and place.get("id") is not None
+                else None,
             }
         )
     return out
 
 
-def city_block(view: Mapping[str, Any]) -> dict[str, Any]:
+def city_block(view: Mapping[str, Any], *, invite_link: InviteLink | None = None) -> dict[str, Any]:
     """Всё, что главная берёт со страницы города, — готовыми строками и ссылками Mini App."""
     city = view["city"]
     city_id = int(city["id"])
@@ -177,7 +184,7 @@ def city_block(view: Mapping[str, Any]) -> dict[str, Any]:
         "kicker": _b_today_kicker(view),
         "counts_line": _b_counts_line(view),
         "hero_photo": _photo(hero_place) if hero_place else None,
-        "upcoming": _upcoming(view),
+        "upcoming": _upcoming(view, invite_link),
         "upcoming_href": _ice_href(city_id, intent="skate", when="today" if today_n else ""),
         "upcoming_more": "Весь день" if today_n else "Все",
         "needs": _needs(view, city_id),

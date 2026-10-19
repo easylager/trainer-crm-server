@@ -1508,6 +1508,32 @@ def webapp_hub_collections_model_js(request: Request):
     )
 
 
+@app.get("/webapp/hub-home.js")
+def webapp_hub_home_js(request: Request):
+    """TASK-303 главная клиента: шапка города, слот «сейчас», лёд и «Что нужно». Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "hub-home.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/hub-home.css")
+def webapp_hub_home_css(request: Request):
+    """TASK-303 стили главной клиента (направление А, PDEC-023). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "hub-home.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/hub-me-card.js")
 def webapp_hub_me_card_js(request: Request):
     """TASK-160 «моя карточка» хаба — чистая модель + рендер. Use ``?v=…`` for long cache."""
