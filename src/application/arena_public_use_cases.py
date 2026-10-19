@@ -1671,6 +1671,8 @@ async def list_public_ice_arenas(
     # Полный загруженный срез: раздел «Заточка» берёт места отсюда, а не из чипа
     # «Покататься» (тот прячет магазины и хоккейные центры).
     catalog_rows = rows
+    today = _today_minsk()
+    outdoor_live = outdoor_live_flag(rows, today=today) if intent_value == INTENT_SKATE else False
     if window is not None:
         _apply_window(rows)
     if near_pt is not None:
@@ -1696,7 +1698,6 @@ async def list_public_ice_arenas(
         rows = [r for r in rows if int(r.get("future_session_count") or 0) > 0 and not _is_hockey_center(r)]
     # Фасеты считаем до фильтра типа, но без закрытого сезона: «Все места» и «Лёд»
     # — только то, чем можно пользоваться сейчас. «Зимой» — отдельный счётчик.
-    today = _today_minsk()
     month = today.month
     season_facet_count = sum(1 for r in rows if _is_closed_season_row(r, month=month))
     usable_rows = [r for r in rows if not _is_closed_season_row(r, month=month)]
@@ -1769,6 +1770,7 @@ async def list_public_ice_arenas(
             if window is not None
             else None
         ),
+        "outdoor_live": outdoor_live,
     }
 
 
@@ -1864,6 +1866,25 @@ _WINDOW_FIELDS = (
     ("win_currency_code", "next_currency_code"),
     ("win_schedule_basis", "next_schedule_basis"),
 )
+
+
+def outdoor_live_flag(rows: list[Mapping[str, Any]], *, today: date) -> bool:
+    """Первый открытый каток в том же порядке, что лента ``venue_type=outdoor`` без окна.
+
+    Хаб раньше спрашивал это отдельным ``limit=1``. Считать надо до ``_apply_window``:
+    окно подменяет ``next_*``, а отдельный запрос окна не задавал.
+    """
+    month = today.month
+    picked = [
+        row
+        for row in rows
+        if not _is_hockey_center(row) and not _is_closed_season_row(row, month=month)
+        and normalize_venue_type(row.get("venue_type")) == VENUE_TYPE_OUTDOOR
+    ]
+    if not picked:
+        return False
+    picked.sort(key=_rank_tuple)
+    return _build_live(dict(picked[0]), intent=INTENT_SKATE, today=today).get("kind") == "session"
 
 
 def _apply_window(rows: list[dict[str, Any]]) -> None:

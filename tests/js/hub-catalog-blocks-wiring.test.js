@@ -162,14 +162,36 @@ describe('вызовы рендеров в client-home-main.js', () => {
     assert.match(body, /view\.isFar/);
   });
 
-  it('счётчики берутся из существующих публичных запросов, новых эндпоинтов нет', () => {
-    assert.match(homeMain, /\/api\/public\/ice\/arenas\?intent=skate&city_id=/);
-    assert.match(homeMain, /when=today_evening/);
-    assert.match(homeMain, /venue_type_facets/);
-    // Тренеры: тот же публичный список, что у «Поиска» (total).
-    assert.match(homeMain, /\/api\/public\/trainers\?order_by=rating&limit=1&city_id=/);
-    const endpoints = new Set([...homeMain.matchAll(/\/api\/public\/[a-z\/-]+/g)].map((m) => m[0].replace(/\/$/, '')));
-    assert.deepEqual([...endpoints].sort(), ['/api/public/ice/arenas', '/api/public/photos', '/api/public/trainers']);
+  it('счётчики «Куда катимся» — один список катков и один список тренеров, не три списка', () => {
+    const explore = fnBody('renderHubExplore');
+    const arenaCalls = explore.match(/\/api\/public\/ice\/arenas\?/g) || [];
+    assert.equal(arenaCalls.length, 1, 'три полных списка катков держат открытие хаба');
+    assert.match(explore, /when=today_evening&limit=1/);
+    assert.doesNotMatch(explore, /venue_type=outdoor/);
+    assert.match(explore, /venue_type_facets/);
+    assert.match(explore, /outdoor_live/);
+    assert.match(explore, /\/api\/public\/trainers\?order_by=rating&limit=1&city_id=/);
+  });
+
+  it('скелетон снимается после bootstrap, не после слотов и карусели', () => {
+    const apply = fnBody('finishHubApply');
+    assert.match(apply, /return Promise\.resolve\(\)/);
+    assert.doesNotMatch(apply, /return promise/);
+    assert.doesNotMatch(
+      homeMain,
+      /loadDiscoveryUnlessMarket\(\)\.then\(finishHubInitialLoading/
+    );
+  });
+
+  it('главная не блокирует первую отрисовку шрифтом Google', () => {
+    assert.ok(!homeHtml.includes('fonts.googleapis.com'), 'fonts.googleapis.com в client-home.html');
+    assert.match(homeHtml, /\/static\/shared\/glide-public-fonts\.css/);
+    const head = homeHtml.slice(0, homeHtml.indexOf('</head>'));
+    const blocking = [...head.matchAll(/<script(?![^>]*\bdefer\b)[^>]*src="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(blocking, [
+      'https://telegram.org/js/telegram-web-app.js',
+      'client-mini-app-theme.js?v=202610195',
+    ]);
   });
 
   it('плитки «Сервис» / «Заточка» / «Бесплатно» в хабе не существуют', () => {
@@ -191,7 +213,7 @@ describe('карусель #hubDiscovery не дублирует навигац�
   it('все сценарии берут карусель через loadDiscoveryUnlessMarket', () => {
     assert.match(homeMain, /if \(opts\.showDiscovery\) return loadDiscoveryUnlessMarket\(\);/);
     assert.match(homeMain, /return finishHubApply\(loadDiscoveryUnlessMarket\(\)\);/);
-    assert.match(homeMain, /return loadDiscoveryUnlessMarket\(\)\.then\(finishHubInitialLoading/);
+    assert.match(homeMain, /loadDiscoveryUnlessMarket\(\);/);
   });
 
   it('плитки, появившись, прячут карусель; карусель сама проверяет, не успели ли плитки', () => {

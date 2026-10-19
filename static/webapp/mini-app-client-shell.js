@@ -1183,7 +1183,14 @@
     reportCatalogPresence('miniapp_shell', readStartParam());
     return maybeOpenArenaDeepLinkWithSession(session).then(function (opened) {
       if (opened) return;
-      if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {
+      // На главной префетч каталога стартует после снятия скелетона: иначе он
+      // занимает соединения, пока хаб ещё ждёт bootstrap.
+      if (
+        state.mode === 'tabs' &&
+        pathnameKey() !== 'catalog' &&
+        pathnameKey() !== 'client-bookings' &&
+        pathnameKey() !== 'client-home'
+      ) {
         scheduleCatalogNavigationPrefetch();
       }
       global.navigateClientHome = function () {

@@ -133,7 +133,14 @@ async function openHub(browser, cfg) {
     if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
     if (p === '/api/webapp/client/slots') return json({ slots: cfg.slots || [] });
     if (p === '/api/public/ice/arenas') {
-      if (q.includes('when=today_evening')) return json({ items: [], window: { key: 'today_evening', hits: market.eveningHits } });
+      if (q.includes('when=today_evening')) {
+        return json({
+          items: [],
+          window: { key: 'today_evening', hits: market.eveningHits },
+          venue_type_facets: market.facets,
+          outdoor_live: !!market.outdoorLive,
+        });
+      }
       if (q.includes('venue_type=outdoor')) return json({ items: market.outdoorLive ? [{ id: 12, live: { kind: 'session' } }] : [] });
       if (q.includes('limit=4')) return json({ items: [] });
       return json({ items: [], venue_type_facets: market.facets, total: 0 });
