@@ -176,6 +176,24 @@
     });
   }
 
+  /** Скрыл строку игры на матче — вернуть её можно здесь, в самой игре («Ещё › Кто кого»). */
+  function loadPrefs() {
+    return api('GET', '/client/hockey/prefs').then(function (data) {
+      state.kkHidden = !!(data && data.kk_hidden);
+    }, function () { state.kkHidden = false; });
+  }
+
+  function showOnMatches() {
+    api('PUT', '/client/hockey/prefs', { kk_hidden: false })
+      .then(function () {
+        state.kkHidden = false;
+        haptic('success');
+        toast('Строка игры снова на матчах');
+        render();
+      })
+      .catch(function (e) { toast(e.message); });
+  }
+
   function loadStandings() {
     return api('GET', '/client/hockey/standings').then(function (data) {
       state.standings = data;
@@ -408,11 +426,18 @@
     }
     var now = Date.now();
     var nudged = false;
-    return orderMatches(state.matches).map(function (m) {
+    var cards = orderMatches(state.matches).map(function (m) {
       var ask = !nudged && m.open && !m.my_pick;
       if (ask) nudged = true;
       return matchCard(m, now, ask);
     });
+    if (state.kkHidden) {
+      cards.push(h('p', { class: 'kk-note', style: 'text-align:center' }, [
+        'На страницах матчей игра скрыта · ',
+        h('button', { type: 'button', class: 'kk-link-btn', onclick: showOnMatches, text: 'Вернуть' }),
+      ]));
+    }
+    return cards;
   }
 
   function empty(head, body, cta, onCta, art, second, onSecond) {
@@ -1018,7 +1043,7 @@
     state.fromCard = M.cardFrom(startParam(), params.get('from'));
     if (state.fromCard) api('POST', '/client/hockey/card-opened', { card: state.fromCard }).catch(function () {});
     if (code) openJoin(code);
-    loadMatches()
+    Promise.all([loadMatches(), loadPrefs()])
       .then(function () {
         state.loading = false;
         if (reveal && findMatch(reveal) && findMatch(reveal).result) {

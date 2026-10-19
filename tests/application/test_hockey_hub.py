@@ -127,7 +127,8 @@ async def test_three_misses_hide_the_upcoming_row(db_session) -> None:
     for index, hours in enumerate((30, 50, 70), start=1):
         missed = await _match(db_session, f"hub-miss-{index}", NOW - timedelta(hours=hours + 3))
         await _final(db_session, missed, at=NOW - timedelta(hours=hours))
-    await _match(db_session, "hub-still-soon", NOW + timedelta(hours=8))
+    # Выездной: пропуски прячут игру. Домашний — событие, его не прячут (тест ниже).
+    await _match(db_session, "hub-still-soon", NOW + timedelta(hours=8), home="Барыс", away="Динамо-Минск")
     await score_finished_matches(db_session, now=NOW)
     assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
 
@@ -197,3 +198,66 @@ async def test_pick_on_upcoming_overrides_three_misses(db_session) -> None:
     await score_finished_matches(db_session, now=NOW)
     card = await hub_card(db_session, SASHA, now=NOW)
     assert card["mode"] == "before" and card["my_pick"]["side"] == "home"
+
+
+# ---------- TASK-304: домашний матч — событие ----------
+
+
+async def _three_misses(db_session) -> None:
+    older = await _match(db_session, "ev-old", NOW - timedelta(days=10))
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=older, side="home", now=NOW - timedelta(days=11)
+    )
+    await _final(db_session, older, at=NOW - timedelta(days=9))
+    for index, hours in enumerate((30, 50, 70), start=1):
+        missed = await _match(db_session, f"ev-miss-{index}", NOW - timedelta(hours=hours + 3))
+        await _final(db_session, missed, at=NOW - timedelta(hours=hours))
+    await score_finished_matches(db_session, now=NOW)
+
+
+@pytest.mark.asyncio
+async def test_misses_do_not_hide_a_home_match_event(db_session, monkeypatch) -> None:
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    await _three_misses(db_session)
+    home = await _match(db_session, "ev-home-soon", NOW + timedelta(hours=8))
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["mode"] == "before" and card["match"]["id"] == home
+    assert card["event_href"] == f"client-match?id={home}"
+
+
+@pytest.mark.asyncio
+async def test_live_home_match_stays_in_the_slot_three_hours(db_session, monkeypatch) -> None:
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    live = await _match(db_session, "ev-live", NOW - timedelta(hours=1))
+    await _match(db_session, "ev-next", NOW + timedelta(hours=20))
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["mode"] == "live" and card["match"]["id"] == live and card["is_home"] is True
+    assert (await hub_card(db_session, SASHA, now=NOW + timedelta(hours=3)))["match"]["id"] != live
+
+
+@pytest.mark.asyncio
+async def test_live_away_match_is_not_an_event(db_session, monkeypatch) -> None:
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    await _match(db_session, "ev-live-away", NOW - timedelta(hours=1), home="Барыс", away="Динамо-Минск")
+    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
+
+
+@pytest.mark.asyncio
+async def test_hidden_game_keeps_home_event_and_drops_away_and_results(db_session, monkeypatch) -> None:
+    from src.application.hockey_event import set_kk_hidden
+
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    played = await _match(db_session, "ev-h-played", NOW - timedelta(hours=6))
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=played, side="away", now=NOW - timedelta(hours=8)
+    )
+    await _final(db_session, played, at=NOW - timedelta(hours=3))
+    await score_finished_matches(db_session, now=NOW)
+    away = await _match(db_session, "ev-h-away", NOW + timedelta(hours=5), home="Барыс", away="Динамо-Минск")
+    await set_kk_hidden(db_session, SASHA, True)
+    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None, "итог и выездной — это игра"
+    await db_session.execute(
+        text("UPDATE hockey_matches SET home_team = 'Динамо-Минск', away_team = 'Барыс' WHERE id = :i"), {"i": away}
+    )
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["mode"] == "before" and card["is_home"] is True

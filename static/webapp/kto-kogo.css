@@ -96,6 +96,7 @@ body.kk-dark .kk-half { background: color-mix(in srgb, var(--team) 26%, var(--kk
 .kk-fans { font-size: 12px; font-weight: 700; opacity: 0.85; min-height: 16px; }
 .kk-score-big { font-family: var(--kk-display); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .kk-note { text-align: center; font-size: 13px; font-weight: 700; color: var(--kk-muted); margin: 0; }
+.kk-link-btn { border: 0; background: none; padding: 8px 2px; min-height: 44px; font: inherit; color: var(--kk-hero); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .kk-lock { position: absolute; top: 12px; right: 12px; }
 
 .kk-btn-soft {

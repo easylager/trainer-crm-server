@@ -333,11 +333,17 @@ def webapp_client_support_page():
 
 @app.get("/webapp/client-match")
 def webapp_client_match_page():
-    """Client: домашний матч Динамо как событие — ответ, «кто из ваших», игра (TASK-304)."""
+    """Client: домашний матч Динамо как событие — ответ, «кто из ваших», игра (TASK-304).
+
+    `__FONT_V__` — как на главной: preload Dela Gothic совпадает с адресом из glide-public-fonts.css.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "client-match.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/webapp/client-stats")

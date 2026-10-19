@@ -41,6 +41,13 @@ describe('deepLinkTarget', () => {
     assert.equal(target('kkl'), null);
   });
 
+  it('kkm_<матч>[_<код>] из карточки матча ведёт на страницу ивента (TASK-304)', () => {
+    assert.deepEqual(target('kkm_42'), { key: 'client-match', path: 'client-match?id=42' });
+    assert.deepEqual(target('kkm_42_Ab3dEf7h'), { key: 'client-match', path: 'client-match?id=42&c=Ab3dEf7h' });
+    assert.equal(target('kkm_0'), null);
+    assert.equal(target('kkm_'), null);
+  });
+
   it('arena_<id> ведёт на карточку места', () => {
     assert.deepEqual(target('arena_42'), { key: 'arena', path: 'arena?ref=42' });
   });

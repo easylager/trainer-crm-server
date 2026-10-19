@@ -335,6 +335,57 @@
     return b;
   }
 
+  function teamLogo(team, cls) {
+    var logo = el('span', cls || 'hn__logo');
+    if (team && team.logo) {
+      var img = el('img');
+      img.src = team.logo;
+      img.alt = '';
+      logo.appendChild(img);
+    } else {
+      logo.textContent = (team && team.short) || '';
+    }
+    return logo;
+  }
+
+  var WD_TAG = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
+
+  /** Метка ивента в углу карточки: МАТЧ · ПТ → ● СЕГОДНЯ → ● ИДЁТ → ИТОГ 3:2 (холст TASK-304, экран 10). */
+  function eventTag(card, now) {
+    var m = card.match;
+    var r = m.result;
+    if (card.mode === 'live') return { text: 'ИДЁТ', dot: true, live: true };
+    if (r && r.home_score != null) return { text: 'ИТОГ ' + r.home_score + ':' + r.away_score, dot: false, live: false };
+    var p = minskParts(new Date(m.starts_at));
+    var n = minskParts(now || new Date());
+    if (p.y === n.y && p.m === n.m && p.d === n.d) return { text: 'СЕГОДНЯ', dot: true, live: false };
+    return { text: 'МАТЧ · ' + WD_TAG[p.wd], dot: false, live: false };
+  }
+
+  /** Домашний матч — ивент: вся карточка ведёт на его страницу, игра — уже там (TASK-304). */
+  function eventCard(card, host) {
+    var m = card.match;
+    var tag = eventTag(card);
+    var a = link(el('a', 'hn__card hn__ev'), card.event_href);
+    a.setAttribute('aria-label', m.home.name + ' — ' + m.away.name + ', ' + tag.text.toLowerCase());
+    var pair = el('span', 'hn__pair');
+    pair.appendChild(teamLogo(m.home, 'hn__logo hn__logo--round'));
+    pair.appendChild(teamLogo(m.away, 'hn__logo hn__logo--round'));
+    a.appendChild(pair);
+    var what = el('span', 'hn__what');
+    what.appendChild(el('span', 'hn__name hn__name--one', m.home.name + ' — ' + m.away.name));
+    var when = card.mode === 'live' ? 'идёт сейчас' : m.result ? whenLabel(m.starts_at).split(',')[0] : whenLabel(m.starts_at);
+    what.appendChild(el('span', 'hn__sub hn__name--one', when + ' · Минск-Арена'));
+    a.appendChild(what);
+    a.appendChild(icon('chevron', 'hn__go hn__go--ev'));
+    var t = el('span', 'hn__tag' + (tag.live ? ' hn__tag--live' : ''));
+    t.setAttribute('aria-hidden', 'true');
+    if (tag.dot) t.appendChild(el('span', 'hn__tag-dot'));
+    t.appendChild(doc.createTextNode(tag.text));
+    a.appendChild(t);
+    host.replaceChildren(a);
+  }
+
   function kkBefore(card, host) {
     var m = card.match;
     var pick = card.my_pick;
@@ -630,7 +681,8 @@
     paintHero(hero);
     var host = $('hubNow');
     var kind = now ? now.kind : 'none';
-    if (kind === 'kk_before') kkBefore(now.hockey, host);
+    if ((kind === 'kk_before' || kind === 'kk_result') && now.hockey && now.hockey.event_href) eventCard(now.hockey, host);
+    else if (kind === 'kk_before') kkBefore(now.hockey, host);
     else if (kind === 'kk_result') kkResult(now.hockey, host);
     else if (kind === 'ice') iceCard(now.session, host);
     else if (!city && hub && hub.ice_teaser) {
@@ -674,6 +726,7 @@
     mine: function () { return $('hubMine'); },
     // Для тестов.
     _whenLabel: whenLabel,
+    _eventTag: eventTag,
     _soonLabel: soonLabel,
     _shortKicker: shortKicker,
   };

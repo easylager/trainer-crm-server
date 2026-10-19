@@ -164,6 +164,35 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
 .hn__card--dark .hn__sub { color: var(--g-on-dark-muted); }
 .hn__head { font-size: 24px; line-height: 1; }
 .hn__go { margin-left: auto; color: var(--g-on-dark-accent); width: 20px; height: 20px; flex: none; }
+/* ── Домашний матч — ивент (TASK-304, холст экран 10) ─────────── */
+.hn__ev { position: relative; flex-direction: row; align-items: center; gap: 14px; padding: 18px 16px; margin-top: 10px; }
+.hn__pair { display: flex; flex: none; }
+.hn__logo--round { width: 42px; height: 42px; border-radius: 50%; box-shadow: 0 0 0 3px var(--g-surface); }
+.hn__logo--round img { width: 30px; height: 30px; }
+.hn__pair .hn__logo--round + .hn__logo--round { margin-left: -12px; }
+.hn__name--one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hn__go--ev { color: var(--g-muted); }
+/* Метка — наклейка на краю карточки, как «+50» в игре. Жёлтый — цвет игры (PDEC-022), здесь он метит матч. */
+.hn__tag {
+  position: absolute; right: 18px; top: -11px; height: 26px; padding: 0 9px; border-radius: 8px; overflow: hidden;
+  display: inline-flex; align-items: center; gap: 5px; background: #ffd23f; color: #0d1424;
+  font: 400 11px/1 var(--g-font-display); letter-spacing: .02em; white-space: nowrap;
+  animation: hn-tag-wobble 3.2s ease-in-out infinite;
+}
+.hn__tag::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .75) 50%, rgba(255, 255, 255, 0) 65%);
+  background-size: 220% 100%; animation: hn-tag-shine 2.8s ease-in-out infinite;
+}
+.hn__tag--live { background: #fff; box-shadow: 0 1px 4px rgba(13, 27, 38, .18); }
+.hn__tag-dot { width: 6px; height: 6px; border-radius: 50%; background: #e5372b; animation: hn-tag-pulse 1.4s ease-in-out infinite; }
+@keyframes hn-tag-wobble { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(-1deg); } }
+@keyframes hn-tag-shine { 0% { background-position: -120% 0; } 55%, 100% { background-position: 220% 0; } }
+@keyframes hn-tag-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.6); opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .hn__tag, .hn__tag::after, .hn__tag-dot { animation: none; }
+  .hn__tag { transform: rotate(-3deg); }
+}
 .hn__skel { height: 150px; border-radius: 22px; background: var(--g-surface); box-shadow: var(--g-shadow); }
 /* Карточка клиента (запись сегодня, выбор города) в слоте — та же тень и радиус. */
 .hn .me { border-radius: 22px; }

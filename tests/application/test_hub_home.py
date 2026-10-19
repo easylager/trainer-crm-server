@@ -129,3 +129,11 @@ def test_hero_has_fallback_photos_from_rinks_only() -> None:
     assert len(block["hero_photos"]) == 2, "каток без фото и магазин — не кандидаты"
     assert block["hero_photo"] == block["hero_photos"][0]
     assert block["hero_photo"]["card"].endswith("arenas/2/card.jpg"), "обложка — самый крупный крытый каток"
+
+
+def test_live_home_match_takes_the_slot_but_not_over_a_booking_today() -> None:
+    live = {"mode": "live", "match": {"id": 10}, "is_home": True, "event_href": "client-match?id=10"}
+    slot = now_slot(bookings=None, hockey=live, upcoming=ICE, now=NOW)
+    assert slot is not None and slot["kind"] == "kk_before" and slot["hockey"]["mode"] == "live"
+    booked = now_slot(bookings=_bookings(_booking()), hockey=live, upcoming=ICE, now=NOW)
+    assert booked is not None and booked["kind"] == "booking"

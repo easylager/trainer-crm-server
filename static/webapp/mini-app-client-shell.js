@@ -1122,6 +1122,11 @@
       if (fromCard[2]) return { key: 'kto-kogo', path: 'kto-kogo?join=' + fromCard[2].toUpperCase() + '&from=' + cardKind };
       if (cardKind === 'result') return { key: 'kto-kogo', path: 'kto-kogo?from=result' };
     }
+    // Домашний матч — ивент (TASK-304): kkm_<матч>[_<код компании>] — «Подробнее» и «Позвать» из чата.
+    var matchEvent = /^kkm_([1-9][0-9]*)(?:_([A-Za-z0-9]{4,16}))?$/.exec(sp);
+    if (matchEvent) {
+      return { key: 'client-match', path: 'client-match?id=' + matchEvent[1] + (matchEvent[2] ? '&c=' + matchEvent[2] : '') };
+    }
     var company = /^company_([1-9][0-9]*)$/i.exec(sp);
     if (company) return { key: 'ice-company', path: 'ice-company?s=' + company[1] };
     var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other|ohm|service))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);
