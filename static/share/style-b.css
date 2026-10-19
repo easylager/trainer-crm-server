@@ -572,16 +572,40 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 
 /* Сеанс из ссылки */
 .b-plan {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 18px; border-radius: 20px; background: var(--g-dark); color: var(--g-on-photo);
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 18px 18px 16px; border-radius: 20px; background: var(--g-dark); color: var(--g-on-photo);
 }
-.b-plan__kicker { font-size: 14px; color: var(--g-on-dark-accent); }
+.b-plan__head, .b-plan__mid, .b-plan__foot { display: flex; flex-direction: column; }
+.b-plan__head { gap: 4px; }
+.b-plan__mid { gap: 10px; }
+.b-plan__kicker { font-size: 14px; font-weight: 600; color: var(--g-on-dark-accent); }
 .b-plan__day { font-size: 16px; }
 .b-plan__time { font-family: var(--g-font-display); font-size: 34px; line-height: 1.05; font-variant-numeric: proportional-nums; }
-.b-plan__line, .b-plan__soon, .b-plan__where { font-size: 15px; color: var(--g-on-dark-muted); }
+.b-plan__kind { font-size: 16px; font-weight: 600; }
+.b-plan__prices {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 8px; margin: 0;
+}
+.b-plan__prices div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.b-plan__prices dt { font-size: 13px; font-weight: 400; color: var(--g-on-dark-muted); }
+.b-plan__prices dd { margin: 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.b-plan__note { margin: 0; font-size: 14px; color: var(--g-on-dark-muted); }
+.b-plan__status {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0;
+  font-size: 15px; font-weight: 600;
+}
+.b-plan__soon, .b-plan__load { color: var(--g-on-photo); }
+.b-plan__foot {
+  align-items: flex-start; gap: 8px;
+  padding-top: 14px; border-top: 1px solid var(--g-dark-line);
+}
+.b-plan__where { font-size: 14px; line-height: 1.4; color: var(--g-on-dark-muted); }
+.b-plan__company {
+  color: var(--g-on-dark-accent); font-size: 15px; font-weight: 600; text-decoration: none;
+}
 .b-buy { margin-bottom: 14px; }
 .b-buy .b-icon { width: 18px; height: 18px; }
-.b-plan__load { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--g-on-dark-muted); }
+.b-plan__load { display: flex; align-items: center; gap: 8px; }
 .b-plan--gone { gap: 6px; }
 #plan[hidden], .b-plan [hidden] { display: none; }
 

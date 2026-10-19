@@ -220,6 +220,22 @@ def slot_price(slot: Mapping[str, Any]) -> str:
     return format_price_minor(minor, currency)
 
 
+def slot_plan_prices(slot: Mapping[str, Any]) -> tuple[list[tuple[str, str]], str]:
+    """Цены билета колонками: подпись и сумма. Примечание — отдельно, не в сетке."""
+    currency = str(slot.get("currency_code") or "BYN")
+    parts: list[tuple[str, str]] = []
+    adult = slot.get("price_adult_minor")
+    if adult is None:
+        adult = slot.get("price_minor")
+    if adult is not None:
+        parts.append(("Взрослый", format_price_minor(adult, currency)))
+    if slot.get("price_child_minor") is not None:
+        parts.append(("Детский", format_price_minor(slot["price_child_minor"], currency)))
+    if slot.get("price_rental_minor") is not None:
+        parts.append(("Прокат", format_price_minor(slot["price_rental_minor"], currency)))
+    return parts, str(slot.get("price_note") or "").strip()
+
+
 def slot_price_lines(slot: Mapping[str, Any]) -> list[str]:
     currency = str(slot.get("currency_code") or "BYN")
     lines: list[str] = []
@@ -265,8 +281,18 @@ def soon_html(slot: Mapping[str, Any], *, now: datetime) -> str:
     )
 
 
+def plan_status_seats(note: object) -> str:
+    """Короткая подпись остатка в строке статуса. Предупреждение остаётся целиком."""
+    from src.application.session_load import live_seats_plan_line
+
+    line = live_seats_plan_line(note)
+    if line.startswith("Осталось ") and " — " not in line:
+        return line.removeprefix("Осталось ")
+    return line
+
+
 def starts_in_label(slot: Mapping[str, Any], *, now: datetime) -> str:
-    """«Начнётся через 40 минут» — только если до начала меньше трёх часов."""
+    """«Через 40 минут» — только если до начала меньше трёх часов."""
     starts = _parse_iso_dt(slot.get("starts_at_utc"))
     if starts is None:
         return ""
@@ -274,11 +300,11 @@ def starts_in_label(slot: Mapping[str, Any], *, now: datetime) -> str:
     if minutes <= 0 or minutes > 180:
         return ""
     if minutes < 60:
-        return f"Начнётся через {minutes} {plural_ru(minutes, 'минуту', 'минуты', 'минут')}"
+        return f"Через {minutes} {plural_ru(minutes, 'минуту', 'минуты', 'минут')}"
     hours, rest = divmod(minutes, 60)
     if rest < 10:
-        return f"Начнётся через {hours} {plural_ru(hours, 'час', 'часа', 'часов')}"
-    return f"Начнётся через {hours} ч {rest} мин"
+        return f"Через {hours} {plural_ru(hours, 'час', 'часа', 'часов')}"
+    return f"Через {hours} ч {rest} мин"
 
 
 def _hhmm_in_interval(hhmm: str, open_: str, close: str) -> bool:
@@ -1636,20 +1662,21 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
             )
         if not _skating(card) or not (view.get("days") or view.get("ohm_days")):
             return ""
-    from src.application.session_load import LOAD_PLAN_LINES, live_seats_plan_line, load_meter_html
+    from src.application.session_load import LOAD_PLAN_LINES, load_meter_html
 
     kicker = "Тебя зовут кататься" if invite else "Выбранный сеанс"
-    day_text = time_text = extra = soon = ""
+    day_text = time_text = kind_text = soon = note = ""
+    price_parts: list[tuple[str, str]] = []
     level = focus.get("typical_load_level") if focus is not None else None
-    seats_line = live_seats_plan_line(focus.get("capacity_note")) if focus is not None else ""
+    seats_line = plan_status_seats(focus.get("capacity_note")) if focus is not None else ""
     if focus is not None:
         d = _parse_iso_date(focus.get("local_date"))
         day_text = day_heading(d, today=view["today"]) if d else ""
         start = format_clock(str(focus.get("starts_at_local") or ""))
         end = format_clock(str(focus.get("ends_at_local") or ""))
         soon = starts_in_label(focus, now=view["now"])
-        prices = " · ".join(slot_price_lines(focus))
-        extra = " · ".join(x for x in (session_kind_label(focus), prices) if x)
+        kind_text = session_kind_label(focus)
+        price_parts, note = slot_plan_prices(focus)
         time_text = f"{start}–{end}" if end else start
     place_name = format_public_name(str(card.get("name") or ""))
     address = format_place_address(str(card.get("address") or ""), city=_city(card))
@@ -1659,21 +1686,33 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
         hidden = "" if text else " hidden"
         return f'<span class="b-plan__{cls}"{hidden}>{_esc(text)}</span>'
 
+    cells = "".join(f"<div><dt>{_esc(label)}</dt><dd>{_esc(value)}</dd></div>" for label, value in price_parts)
+    prices = f'<dl class="b-plan__prices"{"" if cells else " hidden"}>{cells}</dl>'
+    note_html = f'<p class="b-plan__note"{"" if note else " hidden"}>{_esc(note)}</p>'
+    load_on = bool(seats_line or level in LOAD_PLAN_LINES)
+    load = (
+        f'<span class="b-plan__load"{"" if load_on else " hidden"}>'
+        f'{"" if seats_line else load_meter_html(level)}'
+        f'<span>{_esc(seats_line or LOAD_PLAN_LINES.get(level, ""))}</span></span>'
+    )
+    status_on = bool(soon or load_on)
+    status = f'<p class="b-plan__status"{"" if status_on else " hidden"}>{span("soon", soon)}{load}</p>'
+    company = _company_link(view)
+    foot_bits = (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "") + company
+    foot = f'<footer class="b-plan__foot">{foot_bits}</footer>' if foot_bits else ""
     section_hidden = " hidden" if focus is None else ""
     return (
         f'<section class="b-sec" id="plan"{section_hidden}><div class="b-plan">'
-        f'<span class="b-plan__kicker">{_esc(kicker)}</span>'
+        f'<header class="b-plan__head"><span class="b-plan__kicker">{_esc(kicker)}</span>'
         + span("day", day_text)
         + span("time", time_text)
-        + span("line", extra)
-        + span("soon", soon)
-        + (
-            f'<span class="b-plan__load"{"" if (seats_line or level in LOAD_PLAN_LINES) else " hidden"}>'
-            f'{"" if seats_line else load_meter_html(level)}'
-            f'<span>{_esc(seats_line or LOAD_PLAN_LINES.get(level, ""))}</span></span>'
-        )
-        + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
-        + _company_link(view)
+        + "</header><div class=\"b-plan__mid\">"
+        + span("kind", kind_text)
+        + prices
+        + note_html
+        + status
+        + "</div>"
+        + foot
         + "</div></section>"
     )
 

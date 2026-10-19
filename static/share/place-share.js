@@ -107,21 +107,54 @@
     return wd + ', ' + Number(bits[2]) + ' ' + PLAN_MONTHS_GEN[Number(bits[1]) - 1];
   }
 
-  function planPriceLine(session) {
+  function planPriceParts(session) {
     session = session || {};
     var cur = session.currency_code || 'BYN';
-    var lines = [];
+    var parts = [];
     var adult = session.price_adult_minor != null ? session.price_adult_minor : session.price_minor;
-    if (adult != null) lines.push('Взрослый — ' + PD.formatPriceMinor(adult, cur));
-    if (session.price_child_minor != null) {
-      lines.push('Детский — ' + PD.formatPriceMinor(session.price_child_minor, cur));
-    }
-    if (session.price_rental_minor != null) {
-      lines.push('Прокат коньков — ' + PD.formatPriceMinor(session.price_rental_minor, cur));
-    }
-    var note = String(session.price_note || '').trim();
-    if (note) lines.push(note);
-    return lines.join(' · ');
+    if (adult != null) parts.push(['Взрослый', PD.formatPriceMinor(adult, cur)]);
+    if (session.price_child_minor != null) parts.push(['Детский', PD.formatPriceMinor(session.price_child_minor, cur)]);
+    if (session.price_rental_minor != null) parts.push(['Прокат', PD.formatPriceMinor(session.price_rental_minor, cur)]);
+    return parts;
+  }
+
+  function paintPlanPrices(plan, session) {
+    var dl = plan.querySelector('.b-plan__prices');
+    if (!dl) return;
+    var parts = planPriceParts(session);
+    dl.textContent = '';
+    parts.forEach(function (pair) {
+      var wrap = document.createElement('div');
+      var dt = document.createElement('dt');
+      var dd = document.createElement('dd');
+      dt.textContent = pair[0];
+      dd.textContent = pair[1];
+      wrap.appendChild(dt);
+      wrap.appendChild(dd);
+      dl.appendChild(wrap);
+    });
+    dl.hidden = !parts.length;
+    setPlanText(plan, 'note', String(session.price_note || '').trim());
+  }
+
+  function syncPlanStatus(plan) {
+    var status = plan.querySelector('.b-plan__status');
+    if (!status) return;
+    var soon = plan.querySelector('.b-plan__soon');
+    var load = plan.querySelector('.b-plan__load');
+    status.hidden = !((soon && !soon.hidden) || (load && !load.hidden));
+  }
+
+  /* Ссылка собрана под сеанс из адреса страницы. Смена времени подставляет новый id. */
+  function syncCompanyLink(plan, sessionId) {
+    var link = plan.querySelector('.b-plan__company');
+    if (!link || !sessionId) return;
+    var href = link.getAttribute('href') || '';
+    if (!href) return;
+    link.setAttribute(
+      'href',
+      href.replace(/company_\d+/, 'company_' + sessionId).replace(/([?&]s=)\d+/, '$1' + sessionId)
+    );
   }
 
   /* Зал («Большая арена») не говорит, что это ОХМ: тип впереди, как на сервере. */
@@ -142,17 +175,17 @@
     return many;
   }
 
-  /* «Начнётся через 40 минут» — те же правила, что starts_in_label на сервере. */
+  /* «Через 40 минут» — те же правила, что starts_in_label на сервере. */
   function planSoonLine(session) {
     var starts = Date.parse(String(session.starts_at_utc || ''));
     if (isNaN(starts)) return '';
     var minutes = Math.floor((starts - Date.now()) / 60000);
     if (minutes <= 0 || minutes > 180) return '';
-    if (minutes < 60) return 'Начнётся через ' + minutes + ' ' + pluralRu(minutes, 'минуту', 'минуты', 'минут');
+    if (minutes < 60) return 'Через ' + minutes + ' ' + pluralRu(minutes, 'минуту', 'минуты', 'минут');
     var hours = Math.floor(minutes / 60);
     var rest = minutes % 60;
-    if (rest < 10) return 'Начнётся через ' + hours + ' ' + pluralRu(hours, 'час', 'часа', 'часов');
-    return 'Начнётся через ' + hours + ' ч ' + rest + ' мин';
+    if (rest < 10) return 'Через ' + hours + ' ' + pluralRu(hours, 'час', 'часа', 'часов');
+    return 'Через ' + hours + ' ч ' + rest + ' мин';
   }
 
   function setPlanText(plan, cls, text) {
@@ -172,9 +205,12 @@
     var end = PD.formatClock(String(session.ends_at_local || '').slice(0, 5));
     setPlanText(plan, 'day', planDayHeading(session.local_date));
     setPlanText(plan, 'time', end ? start + '–' + end : start);
-    setPlanText(plan, 'line', [planKindLabel(session), planPriceLine(session)].filter(Boolean).join(' · '));
+    setPlanText(plan, 'kind', planKindLabel(session));
+    paintPlanPrices(plan, session);
     setPlanText(plan, 'soon', planSoonLine(session));
     paintPlanLoad(plan, session.typical_load_level, seatsPlanLine(session.capacity_note));
+    syncPlanStatus(plan);
+    syncCompanyLink(plan, sessionId);
   }
 
   /* Слово к черточкам на квадрате: здесь человек и узнаёт, что они значат. Тексты — как в
@@ -194,7 +230,9 @@
     var n = Number(m[1]);
     var word = n % 10 === 1 && n % 100 !== 11 ? 'место'
       : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'места' : 'мест';
-    return 'Осталось ' + n + ' ' + word + (n <= 30 ? ' — лучше взять сейчас' : '');
+    return n <= 30
+      ? 'Осталось ' + n + ' ' + word + ' — лучше взять сейчас'
+      : n + ' ' + word;
   }
 
   function paintPlanLoad(plan, level, seatsLine) {
