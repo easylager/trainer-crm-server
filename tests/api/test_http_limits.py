@@ -38,6 +38,7 @@ def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/api/upload/photo") == "upload"
     assert rate_limit_bucket_for_path("/api/trainers") == "default"
     # TASK-190: публичные страницы и PNG больше не "skip"
+    assert rate_limit_bucket_for_path("/api/public/glide-city") == "page"
     assert rate_limit_bucket_for_path("/p/minsk/olimp") == "page"
     assert rate_limit_bucket_for_path("/c/minsk") == "page"
     assert rate_limit_bucket_for_path("/ice/minsk/today") == "page"

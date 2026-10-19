@@ -858,11 +858,46 @@ CLIENT_BOOKING_CONFIRMED_BTN_MAP = "🗺 На карте"
 CLIENT_REMINDER_BTN_SHOW_ON_MAP = "🗺 На карте"
 CLIENT_BOOKING_CONFIRMED_BTN_DETAILS = "📋 Детали записи"
 CLIENT_BOOKING_CONFIRMED_BTN_WRITE_TRAINER = "📩 Написать тренеру"
+CLIENT_BOOKING_TICKETS_CONFIRMED_HINT = (
+    "🎟 Билет на лёд лучше взять заранее — онлайн, кнопка ниже."
+)
+CLIENT_BOOKING_TICKETS_REMINDER_HINT = (
+    "🎟 Билет на лёд уже есть? Если нет — ещё можно онлайн."
+)
 CLIENT_DECLINE_BTN_OTHER_TIME = "📅 Другое время"
 CLIENT_DECLINE_BTN_OTHER_TRAINERS = "🔍 Другие тренеры"
 CLIENT_REMINDER_BTN_SHOW_ON_MAP = "🗺 На карте"
 CLIENT_REMINDER_BTN_WRITE_TRAINER = "📩 Написать тренеру"
 CLIENT_PASS_ISSUED_BTN_TERMS = "📄 Условия"
+
+
+CLIENT_BOOKING_TICKETS_BTN = "🎟 Купить билет"
+_CLIENT_BOOKING_TICKETS_BTN_MAX = 40
+
+
+def client_booking_tickets_button_label(arena_name: str | None) -> str:
+    name = (arena_name or "").strip()
+    label = f"{CLIENT_BOOKING_TICKETS_BTN} · {name}" if name else CLIENT_BOOKING_TICKETS_BTN
+    return label if len(label) <= _CLIENT_BOOKING_TICKETS_BTN_MAX else CLIENT_BOOKING_TICKETS_BTN
+
+
+def format_client_booking_tickets_message_block(
+    *,
+    tickets_url: str | None,
+    for_reminder: bool,
+    is_soon: bool = False,
+) -> str:
+    """One line when the arena sells tickets online; empty without a URL or in the ~2 h reminder."""
+    if not (tickets_url or "").strip():
+        return ""
+    if for_reminder and is_soon:
+        return ""
+    hint = (
+        CLIENT_BOOKING_TICKETS_REMINDER_HINT
+        if for_reminder
+        else CLIENT_BOOKING_TICKETS_CONFIRMED_HINT
+    )
+    return f"\n{hint}\n"
 
 
 def build_client_booking_confirmed_inline_keyboard(
@@ -871,6 +906,8 @@ def build_client_booking_confirmed_inline_keyboard(
     trainer_telegram_id: int | None,
     booking_id: int | None = None,
     webapp_base_url: str | None = None,
+    arena_tickets_url: str | None = None,
+    arena_name: str | None = None,
 ):
     """Details (Mini App) and write trainer each on their own row (avoids Telegram truncating side-by-side labels); then map when URL known."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -900,9 +937,25 @@ def build_client_booking_confirmed_inline_keyboard(
         rows.append(
             [InlineKeyboardButton(text=CLIENT_BOOKING_CONFIRMED_BTN_MAP, url=map_url)]
         )
+    append_client_booking_tickets_keyboard_row(rows, arena_tickets_url=arena_tickets_url, arena_name=arena_name)
     if not rows:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def append_client_booking_tickets_keyboard_row(
+    rows: list,
+    *,
+    arena_tickets_url: str | None,
+    arena_name: str | None,
+) -> None:
+    """One url row per ticket link; a link already in ``rows`` is not repeated."""
+    from aiogram.types import InlineKeyboardButton
+
+    tickets = (arena_tickets_url or "").strip()
+    if not tickets or any(getattr(b, "url", None) == tickets for row in rows for b in row):
+        return
+    rows.append([InlineKeyboardButton(text=client_booking_tickets_button_label(arena_name), url=tickets)])
 
 
 def format_client_recurring_set_by_trainer_notification_html(
@@ -1247,6 +1300,7 @@ def format_client_booking_confirmed_by_trainer_text(
     client_phone: str | None = None,
     duration_minutes: int | None = None,
     expected_payment_class: str | None = None,
+    arena_tickets_url: str | None = None,
 ) -> str:
     """HTML for ParseMode.HTML; escapes user-controlled and venue strings."""
     parts: list[str] = []
@@ -1277,6 +1331,12 @@ def format_client_booking_confirmed_by_trainer_text(
         )
     )
     parts.append(_format_client_booking_confirmed_venue_block(arena_name, arena_address))
+    parts.append(
+        format_client_booking_tickets_message_block(
+            tickets_url=arena_tickets_url,
+            for_reminder=False,
+        )
+    )
     return "".join(parts)
 
 
@@ -1569,6 +1629,11 @@ def format_client_booking_reminder_text(
             address_line = ""
         else:
             address_line = "см. «Мои записи»\n"
+        tickets_block = format_client_booking_tickets_message_block(
+            tickets_url=s0.get("arena_tickets_url"),
+            for_reminder=True,
+            is_soon=is_soon,
+        )
         return (
             f"{title}\n\n"
             f"{booked_block}"
@@ -1576,7 +1641,8 @@ def format_client_booking_reminder_text(
             f"🎯 <b>{html.escape(service)}</b>\n"
             f"{pay_line}\n"
             f"📍 <b>{html.escape(arena)}</b>\n"
-            f"{address_line}\n"
+            f"{address_line}"
+            f"{tickets_block}\n"
             "Сначала напишите тренеру при вопросах — карта и полный адрес в <b>«Мои записях»</b>."
         )
 
@@ -1615,8 +1681,14 @@ def format_client_booking_reminder_text(
             f"• {dpart}{t} – <b>{dur}</b> мин · <b>{svc}</b> · {pay_line} · 📍 {ar}"
         )
     body = head + "\n".join(lines)
+    tickets_block = format_client_booking_tickets_message_block(
+        tickets_url=next((s.get("arena_tickets_url") for s in sessions if s.get("arena_tickets_url")), None),
+        for_reminder=True,
+        is_soon=is_soon,
+    )
     return (
-        f"{title}{body}\n\n"
+        f"{title}{body}\n"
+        f"{tickets_block}\n"
         "Сначала напишите тренеру при вопросах — карта и полный адрес в <b>«Мои записях»</b>."
     )
 # Group cohort RSVP (client bot)

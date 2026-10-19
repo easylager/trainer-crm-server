@@ -6,8 +6,9 @@
  * (/p/{city}/{slug}): у неё своё превью, и она открывается в любом мессенджере.
  *
  * Что внутри и почему:
- *  - переключатель варианта. У катка: «Погнали кататься», «Открытка», «Расписание».
- *    У остальных мест — «Место» и «Позвать с собой». Тексты ссылки приходят одним запросом;
+ *  - переключатель варианта. У катка: «Погнали кататься», «Компания», «Открытка», «Расписание».
+ *    «Компания» есть только когда сбор включён для города. У остальных мест — «Место» и «Позвать с собой».
+ *    Тексты ссылки приходят одним запросом;
  *  - выбор сеанса — делятся конкретным временем, а не «приходи как-нибудь»;
  *  - превью — та самая картинка, которую увидит друг. Человек видит результат до
  *    отправки — и охотнее отправляет;
@@ -263,6 +264,16 @@
     var t = tg();
     var user = t && t.initDataUnsafe && t.initDataUnsafe.user;
     return user ? cleanName(user.first_name) : '';
+  }
+
+  function prefillOrganizerLabel() {
+    var t = tg();
+    var user = t && t.initDataUnsafe && t.initDataUnsafe.user;
+    if (user) {
+      var full = cleanName([user.first_name, user.last_name].filter(Boolean).join(' '));
+      if (full) return full;
+    }
+    return prefillFromName();
   }
 
   function fetchPayload(extra) {
@@ -1159,6 +1170,233 @@
     return renderChannelsHtml(sheetState.payload) + shareNoteHtml();
   }
 
+  function companyFormOf(sheetState) {
+    return (sheetState && sheetState.companyForm) || {};
+  }
+
+  function renderCompanyBottom(sheetState) {
+    var form = companyFormOf(sheetState);
+    if (form.shared) {
+      var retry = form.shareFailed
+        ? '<button type="button" class="gss-zovi__btn" data-gss-cshare="telegram">Ещё раз в чат</button>'
+        : '';
+      return (
+        '<div class="gss-zdone">' +
+        '<p class="gss-zdone__t">Карточка в чате</p>' +
+        '<p class="gss-zdone__how">Там жмут «Иду». Кто откроет ссылку — встаёт на лёд.</p>' +
+        '<button type="button" class="gss-zlink" data-gss-cshare="copy">Скопировать ссылку</button>' +
+        retry +
+        '<p class="gss-zf__err" data-gss-cerr role="alert">' + esc(form.error || '') + '</p>' +
+        '</div>'
+      );
+    }
+    var you = String(form.you || '').trim();
+    var teamField =
+      '<label class="gss-zf__f"><span>Название команды</span>' +
+      '<input type="text" data-gss-c="team" maxlength="48" enterkeyhint="done" ' +
+      'placeholder="Необязательно" value="' + esc(form.team || '') + '" /></label>';
+    var youLine = you
+      ? '<p class="gss-company-who">Вы в списке «Иду» как <b>' + esc(you) + '</b> — из Telegram.</p>'
+      : '';
+    return (
+      teamField +
+      youLine +
+      '<p class="gss-zf__err" data-gss-cerr role="alert">' + esc(form.error || '') + '</p>' +
+      '<button type="button" class="gss-zovi__btn" data-variant-action="company"' +
+      (form.busy ? ' disabled' : '') +
+      '>' + (form.busy ? 'Ставим в чат…' : 'В чат') + '</button>'
+    );
+  }
+
+  function onCompanyInput(ev) {
+    var input = ev.target && ev.target.closest && ev.target.closest('[data-gss-c]');
+    if (!input || !state || !state.companyForm) return;
+    state.companyForm[input.getAttribute('data-gss-c')] = input.value;
+    if (state.companyForm.error) {
+      state.companyForm.error = '';
+      var err = root.querySelector('[data-gss-cerr]');
+      if (err) err.textContent = '';
+    }
+  }
+
+  function paintCompany() {
+    var host = root && root.querySelector('.gss-channels-host');
+    if (!host) return;
+    host.innerHTML = renderCompanyBottom(state);
+  }
+
+  function companyErrorText(body) {
+    var detail = body && body.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail.trim();
+    if (Array.isArray(detail) && detail[0]) return String(detail[0].msg || 'Не получилось');
+    return 'Не получилось';
+  }
+
+  function createCompany() {
+    var form = state && state.companyForm;
+    if (!form || form.busy) return;
+    var headers = shareRequestHeaders();
+    if (form.shared) return;
+    if (form.created) {
+      shareCompany('telegram');
+      return;
+    }
+    if (!headers['X-Telegram-Init-Data']) {
+      form.error = 'Собрать компанию можно из Telegram.';
+      paintCompany();
+      return;
+    }
+    var team = String(form.team || '').trim();
+    if (state.sessionId == null || String(state.sessionId).trim() === '') {
+      form.error = 'Выбери сеанс.';
+      paintCompany();
+      return;
+    }
+    haptic();
+    form.busy = true;
+    form.error = '';
+    paintCompany();
+    headers['Content-Type'] = 'application/json';
+    headers.Accept = 'application/json';
+    var sheetState = state;
+    fetch('/api/public/ice-companies', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({
+        session_id: Number(state.sessionId),
+        name: team,
+        surface: 'miniapp',
+      }),
+    })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          return { ok: res.ok, body: body };
+        });
+      })
+      .then(function (res) {
+        if (sheetState !== state) return;
+        form.busy = false;
+        if (!res.ok || !res.body || !res.body.public_code) {
+          form.error = companyErrorText(res.body);
+          paintCompany();
+          return;
+        }
+        var page = String(res.body.page_url || '');
+        if (page && page.charAt(0) === '/') page = global.location.origin + page;
+        form.created = {
+          code: res.body.public_code,
+          pageUrl: page,
+          cardText: res.body.card_text || '',
+        };
+        form.shared = false;
+        form.shareFailed = false;
+        form.busy = true;
+        shareCompany('telegram');
+      })
+      .catch(function () {
+        if (sheetState !== state) return;
+        form.busy = false;
+        form.error = 'Не получилось. Проверь связь и попробуй ещё раз.';
+        paintCompany();
+      });
+  }
+
+  function dropUnsharedCompany(sheetState, message) {
+    var form = sheetState && sheetState.companyForm;
+    var code = form && form.created && form.created.code;
+    if (form) {
+      form.created = null;
+      form.shared = false;
+      form.sharing = '';
+      form.busy = false;
+      form.shareFailed = false;
+      form.error = message || '';
+    }
+    if (sheetState === state) paintCompany();
+    if (!code) return;
+    fetch('/api/public/ice-companies/' + encodeURIComponent(code) + '/cancel', {
+      method: 'POST',
+      headers: shareRequestHeaders(),
+    }).catch(function () {});
+  }
+
+  function shareCompany(channel) {
+    var form = state && state.companyForm;
+    var created = form && form.created;
+    if (!form || !created || form.sharing) return;
+    if (channel === 'copy') {
+      var text = String(created.pageUrl || '').trim();
+      var done = function () { toast('Ссылка скопирована'); };
+      if (!text) {
+        form.error = 'Ссылка недоступна.';
+        paintCompany();
+        return;
+      }
+      haptic();
+      if (global.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { global.prompt('Скопируйте:', text); });
+      } else {
+        global.prompt('Скопируйте:', text);
+      }
+      return;
+    }
+    var headers = shareRequestHeaders();
+    if (!headers['X-Telegram-Init-Data']) {
+      form.error = 'Отправить карточку можно из Telegram.';
+      paintCompany();
+      return;
+    }
+    haptic();
+    form.sharing = 'telegram';
+    form.error = '';
+    paintCompany();
+    var sheetState = state;
+    fetch('/api/public/ice-companies/' + encodeURIComponent(created.code) + '/telegram-prepare', {
+      method: 'POST',
+      headers: headers,
+    })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          return { ok: res.ok, body: body };
+        });
+      })
+      .then(function (res) {
+        if (sheetState !== state) return;
+        if (!res.ok) {
+          dropUnsharedCompany(sheetState, 'Не получилось открыть чат.');
+          return;
+        }
+        var app = tg();
+        var prep = res.body || {};
+        if (prep.prepared_message_id && app && app.shareMessage) {
+          app.shareMessage(prep.prepared_message_id, function (ok) {
+            if (sheetState !== state) return;
+            if (!ok) {
+              dropUnsharedCompany(sheetState, '');
+              return;
+            }
+            form.busy = false;
+            form.sharing = '';
+            form.shared = true;
+            paintCompany();
+          });
+          return;
+        }
+        if (app && app.switchInlineQuery && prep.inline_query) {
+          form.busy = false;
+          form.sharing = '';
+          paintCompany();
+          app.switchInlineQuery(prep.inline_query, ['users', 'groups']);
+          return;
+        }
+        dropUnsharedCompany(sheetState, 'Не получилось открыть чат.');
+      })
+      .catch(function () {
+        if (sheetState !== state) return;
+        dropUnsharedCompany(sheetState, 'Не получилось открыть чат.');
+      });
+  }
+
   function humanError(detail) {
     var text = typeof detail === 'string' ? detail : '';
     return text.replace(/^(to_name|from_name):\s*/, '') || 'Не получилось создать открытку. Попробуй ещё раз.';
@@ -1274,6 +1512,11 @@
     });
   }
 
+  function onSheetInput(ev) {
+    onPostcardInput(ev);
+    onCompanyInput(ev);
+  }
+
   function onPostcardInput(ev) {
     var input = ev.target && ev.target.closest && ev.target.closest('[data-gss-z]');
     if (!input || !state || !state.zovi) return;
@@ -1312,12 +1555,40 @@
       renderBottom: renderShareBottom,
     },
     {
+      id: 'company',
+      label: function () {
+        return 'Компания';
+      },
+      rank: function () {
+        return 1;
+      },
+      needsSession: true,
+      shareInvite: null,
+      available: function (sheetState) {
+        return !sheetState.endpoint && isIcePlace(sheetState) && !!sheetState.company;
+      },
+      renderPreview: function () {
+        return '';
+      },
+      renderBottom: renderCompanyBottom,
+      onAction: createCompany,
+      onSession: function () {
+        if (!state.companyForm || !state.companyForm.created) return;
+        state.companyForm.created = null;
+        state.companyForm.busy = false;
+        state.companyForm.sharing = '';
+        state.companyForm.shareFailed = false;
+        state.companyForm.error = '';
+        paintCompany();
+      },
+    },
+    {
       id: 'postcard',
       label: function () {
         return 'Открытка';
       },
       rank: function () {
-        return 1;
+        return 2;
       },
       needsSession: true,
       shareInvite: null,
@@ -1342,7 +1613,7 @@
         return isIcePlace(sheetState) ? 'Расписание' : 'Место';
       },
       rank: function (sheetState) {
-        return isIcePlace(sheetState) ? 2 : 0;
+        return isIcePlace(sheetState) ? 3 : 0;
       },
       // Карточка катка показывает сеанс (session_id уходит в запрос) — значит, его можно сменить,
       // как в «Погнали кататься» и «Открытке». У места без льда сеансов нет.
@@ -1391,6 +1662,7 @@
   function initialVariantId(opts) {
     opts = opts || {};
     if (opts.endpoint) return null;
+    if (opts.variant === 'company' && opts.company) return 'company';
     return opts.invite ? 'invite' : 'schedule';
   }
 
@@ -1625,6 +1897,12 @@
       paintPostcardBottom();
       return;
     }
+    var companyShare = ev.target.closest('[data-gss-cshare]');
+    if (companyShare && state && state.companyForm && state.companyForm.created) {
+      if (companyShare.disabled) return;
+      shareCompany(companyShare.getAttribute('data-gss-cshare'));
+      return;
+    }
     var actionBtn = ev.target.closest('[data-variant-action]');
     if (actionBtn) {
       if (actionBtn.disabled) return;
@@ -1657,7 +1935,7 @@
       '</div>' +
       '<div class="gss-toast" role="status" aria-live="polite"></div>';
     root.addEventListener('click', onClick);
-    root.addEventListener('input', onPostcardInput);
+    root.addEventListener('input', onSheetInput);
     document.body.appendChild(root);
     return root;
   }
@@ -1688,6 +1966,17 @@
       sessionMissing: !!opts.sessionMissing,
       context: opts.context || 'arena_card',
       venueType: opts.venueType || 'ice',
+      company: !!opts.company,
+      companyForm: {
+        min: '1',
+        team: '',
+        you: prefillOrganizerLabel(),
+        busy: false,
+        sharing: '',
+        error: '',
+        shareFailed: false,
+        created: null,
+      },
       loadSlots: opts.loadSlots || null,
       payload: null,
       zovi: { to: '', from: prefillFromName(), created: null, busy: false, error: '', pickOpen: false },
@@ -1743,6 +2032,7 @@
     postcardVia: postcardVia,
     postcardInput: postcardInput,
     postcardBottomHtml: renderPostcardBottom,
+    companyBottomHtml: renderCompanyBottom,
     _previewFigureHtml: function (payload, selection) {
       var prev = state;
       state = selection

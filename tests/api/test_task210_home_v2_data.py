@@ -318,6 +318,7 @@ async def test_glide_city_cookie_set_on_city_and_place_pages(app_use_test_db, db
     async with _client() as client:
         city_page = await client.get(f"/c/{slug}")
         place_page = await client.get(f"/p/{slug}/{arena_slug}")
+    pin = f'data-glide-city="{slug}"'
     for resp, label in ((city_page, "city"), (place_page, "place")):
         assert resp.status_code == 200, label
         cookie = resp.headers.get("set-cookie", "")
@@ -326,6 +327,42 @@ async def test_glide_city_cookie_set_on_city_and_place_pages(app_use_test_db, db
         assert "Path=/" in cookie
         assert "samesite=lax" in cookie.lower()
         assert "httponly" in cookie.lower()
+        assert resp.headers["cache-control"] == "private, max-age=30, stale-while-revalidate=300"
+        assert "glide-city-pin.js" in resp.text
+        assert pin in resp.text
+
+
+@pytest.mark.asyncio
+async def test_glide_city_pin_sets_cookie_for_the_open_page(app_use_test_db, db_session) -> None:
+    name = f"Пин {uuid.uuid4().hex[:6]}"
+    await _insert_city(db_session, name=name)
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+
+    async with _client() as client:
+        ok = await client.post(
+            "/api/public/glide-city",
+            json={"slug": slug},
+            headers={"sec-fetch-site": "same-origin"},
+        )
+        missing = await client.post(
+            "/api/public/glide-city",
+            json={"slug": "no-such-city"},
+            headers={"sec-fetch-site": "same-origin"},
+        )
+        foreign = await client.post(
+            "/api/public/glide-city",
+            json={"slug": slug},
+            headers={"sec-fetch-site": "cross-site"},
+        )
+    assert ok.status_code == 204
+    assert ok.headers["cache-control"] == "no-store"
+    assert f"glide_city={slug}" in ok.headers.get("set-cookie", "").lower()
+    assert missing.status_code == 404
+    assert "set-cookie" not in missing.headers
+    assert foreign.status_code == 403
+    assert "set-cookie" not in foreign.headers
 
 
 @pytest.mark.asyncio
@@ -489,6 +526,10 @@ async def test_home_internal_hrefs_resolve(app_use_test_db, db_session, monkeypa
         assert any(href.startswith("/p/") for href in hrefs)
         broken: list[str] = []
         for href in sorted(hrefs):
+            # Preload героя копирует src картинки в href. Это ключ объекта, не маршрут
+            # страницы: в общей тестовой базе кадр может быть опубликован без файла.
+            if href.startswith("/api/public/photos/"):
+                continue
             followed = await client.get(href)
             if followed.status_code not in range(200, 400):
                 broken.append(f"{followed.status_code} {href}")

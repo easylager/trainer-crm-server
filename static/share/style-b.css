@@ -224,6 +224,8 @@ main.b-page.is-swapping > :not(.b-hero, .b-sec) { opacity: 0.55; }
 .b-scroll {
   display: flex; gap: 10px; overflow-x: auto; padding: 0 16px 4px;
   scroll-snap-type: x mandatory; scrollbar-width: none;
+  /* Без него привязка ставит первую плитку к самому краю экрана, съедая отступ 16px. */
+  scroll-padding-inline: 16px;
   min-height: 188px;
 }
 .b-scroll::-webkit-scrollbar { display: none; }
@@ -577,6 +579,9 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 .b-plan__day { font-size: 16px; }
 .b-plan__time { font-family: var(--g-font-display); font-size: 34px; line-height: 1.05; font-variant-numeric: proportional-nums; }
 .b-plan__line, .b-plan__soon, .b-plan__where { font-size: 15px; color: var(--g-on-dark-muted); }
+.b-buy { margin-bottom: 14px; }
+.b-buy .b-icon { width: 18px; height: 18px; }
+.b-plan__load { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--g-on-dark-muted); }
 .b-plan--gone { gap: 6px; }
 #plan[hidden], .b-plan [hidden] { display: none; }
 
@@ -712,6 +717,10 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-slot__time { font-family: var(--g-font-display); font-weight: 400; font-size: 20px; line-height: 1.1; font-variant-numeric: proportional-nums; }
 .b-slot__price { font-size: 13px; color: var(--g-ink-2); }
 .b-slot--more { justify-content: center; font-size: 14px; font-weight: 600; color: var(--g-accent-ink) !important; }
+.b-left {
+  display: block; margin-top: 8px; font-size: 14px; font-weight: 600;
+  color: var(--g-accent-ink) !important; text-decoration: none;
+}
 
 .b-toggles { display: flex; flex-wrap: wrap; gap: 8px; }
 .b-toggle {

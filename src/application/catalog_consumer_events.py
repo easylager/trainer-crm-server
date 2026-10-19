@@ -66,6 +66,17 @@ KIND_INVITE_OPEN = "invite_open"
 KIND_INVITE_NO_ATTEMPT = "invite_no_attempt"
 KIND_INVITE_YES = "invite_yes"
 KIND_INVITE_SEND_ANSWER = "invite_send_answer"
+# «Компания на лёд»: без имён, телефонов и telegram id. actor_hash — как у остальных событий каталога.
+KIND_COMPANY_CREATED = "company_created"
+KIND_CARD_SHARED = "card_shared"
+KIND_COMPANY_RESPONSE = "company_response"
+KIND_COMPANY_CONFIRMED = "company_confirmed"
+KIND_REPEAT_CLICKED = "repeat_clicked"
+KIND_REMINDER_SENT = "reminder_sent"
+KIND_COMPANY_UNSUBSCRIBED = "company_unsubscribed"
+KIND_BOT_BLOCKED = "bot_blocked"
+KIND_COMPANY_ATTENDED = "company_attended"
+KIND_OUTBOUND_429 = "outbound_429"
 
 INVITE_FUNNEL_KINDS = (
     KIND_INVITE_CREATE,
@@ -81,6 +92,16 @@ CATALOG_CONSUMER_KINDS = (
     KIND_MINIAPP_CATALOG_ENTRY,
     KIND_PUBLIC_CONTACT_CLICK,
     *INVITE_FUNNEL_KINDS,
+    KIND_COMPANY_CREATED,
+    KIND_CARD_SHARED,
+    KIND_COMPANY_RESPONSE,
+    KIND_COMPANY_CONFIRMED,
+    KIND_REPEAT_CLICKED,
+    KIND_REMINDER_SENT,
+    KIND_COMPANY_UNSUBSCRIBED,
+    KIND_BOT_BLOCKED,
+    KIND_COMPANY_ATTENDED,
+    KIND_OUTBOUND_429,
 )
 
 SURFACE_PLACE_PAGE = "place_page"

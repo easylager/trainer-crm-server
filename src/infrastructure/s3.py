@@ -4,6 +4,7 @@ Photos resized on upload: main 800px, list thumb 320px (progressive JPEG 82%/80%
 """
 import io
 import posixpath
+import threading
 import uuid
 from pathlib import Path
 
@@ -273,24 +274,44 @@ def resolve_object_key_under_prefixes(
     return None
 
 
+_s3_client = None
+_s3_client_sig: tuple | None = None
+_s3_client_lock = threading.Lock()
+
+
 def _get_client():
+    """Один клиент на процесс: иначе каждое фото заново жмёт TLS до хранилища."""
+    global _s3_client, _s3_client_sig
     settings = Settings()
     if not all([settings.s3_endpoint, settings.s3_access_key, settings.s3_secret_key]):
         raise RuntimeError("S3 not configured: set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY")
-    import boto3
-    from botocore.config import Config
-    config = Config(
-        signature_version="s3v4",
-        s3={"addressing_style": "path" if settings.s3_path_style else "auto"},
+    sig = (
+        settings.s3_endpoint,
+        settings.s3_access_key,
+        settings.s3_region,
+        bool(settings.s3_path_style),
     )
-    return boto3.client(
-        "s3",
-        endpoint_url=settings.s3_endpoint,
-        aws_access_key_id=settings.s3_access_key,
-        aws_secret_access_key=settings.s3_secret_key,
-        config=config,
-        region_name=settings.s3_region,
-    )
+    with _s3_client_lock:
+        if _s3_client is not None and _s3_client_sig == sig:
+            return _s3_client
+        import boto3
+        from botocore.config import Config
+        config = Config(
+            signature_version="s3v4",
+            s3={"addressing_style": "path" if settings.s3_path_style else "auto"},
+            max_pool_connections=32,
+        )
+        client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3_endpoint,
+            aws_access_key_id=settings.s3_access_key,
+            aws_secret_access_key=settings.s3_secret_key,
+            config=config,
+            region_name=settings.s3_region,
+        )
+        _s3_client = client
+        _s3_client_sig = sig
+        return client
 
 
 def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) -> tuple[bytes, str] | None:
@@ -324,12 +345,32 @@ def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) 
         return None
 
 
+def upload_ice_company_avatar(file_key: str, body: bytes, content_type: str = "image/jpeg") -> bool:
+    norm_key = resolve_object_key_under_prefixes(file_key, ("ice-company/",))
+    if not norm_key or not body:
+        return False
+    settings = Settings()
+    ct = content_type or "image/jpeg"
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        path = root / norm_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        return True
+    client = _get_client()
+    try:
+        client.put_object(Bucket=settings.s3_bucket, Key=norm_key, Body=body, ContentType=ct)
+    except Exception:
+        return False
+    return True
+
+
 def get_photo(file_key: str) -> tuple[bytes, str] | None:
     """
     Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.
-    Allowed prefixes: trainers/, collectives/, arenas/.
+    Allowed prefixes: trainers/, collectives/, arenas/, ice-company/.
     """
-    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/", "arenas/"))
+    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/", "arenas/", "ice-company/"))
 
 
 def presign_get_url(file_key: str, expires_in: int | None = None) -> str | None:

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Собрать компанию</title>
+<style>
+body { margin: 0; font: 18px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; background: #f4f6f7; color: #0d1b26; }
+main { max-width: 28rem; margin: 0 auto; padding: 1.25rem; }
+label { display: block; margin: .75rem 0; }
+input { width: 100%; box-sizing: border-box; font: inherit; padding: .7rem; border-radius: 12px; border: 1px solid #c9d5dc; }
+button { width: 100%; border: 0; border-radius: 12px; padding: .9rem; font: inherit; background: #0d1b26; color: #fff; }
+p.err { color: #8a3b2a; }
+p.you { color: #4a5c68; font-size: .95rem; margin: .5rem 0 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Собрать компанию</h1>
+<p id="hint">Назовите команду, если хотите — на карточке это главный мем.</p>
+<label>Название команды <input id="title" type="text" maxlength="48" placeholder="Необязательно"></label>
+<p class="you" id="you" hidden></p>
+<button type="button" id="go">Собрать</button>
+<p class="err" id="err"></p>
+</main>
+<script src="/static/webapp/mini-app-telegram-chrome.js?v=202610194"></script>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var sessionId = params.get('s');
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.ready) tg.ready();
+  var initData = tg && tg.initData || params.get('init_data') || '';
+  var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  if (u) {
+    var who = [u.first_name, u.last_name].filter(Boolean).join(' ');
+    if (who) {
+      document.getElementById('you').hidden = false;
+      document.getElementById('you').textContent = 'Вы в списке «Иду» как ' + who + '.';
+    }
+  }
+  document.getElementById('go').addEventListener('click', function () {
+    document.getElementById('err').textContent = '';
+    if (!initData) {
+      document.getElementById('err').textContent = 'Собрать компанию можно из Telegram.';
+      return;
+    }
+    fetch('/api/public/ice-companies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+      body: JSON.stringify({
+        session_id: Number(sessionId),
+        name: document.getElementById('title').value,
+        surface: 'miniapp'
+      })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          document.getElementById('err').textContent = (res.j && res.j.detail) || 'Не получилось';
+          return;
+        }
+        return fetch('/api/public/ice-companies/' + res.j.public_code + '/telegram-prepare', {
+          method: 'POST',
+          headers: { 'X-Telegram-Init-Data': initData }
+        }).then(function (r) { return r.json(); }).then(function (prep) {
+          if (prep.prepared_message_id && tg && tg.shareMessage) {
+            tg.shareMessage(prep.prepared_message_id, function (ok) {
+              if (!ok && tg.switchInlineQuery) tg.switchInlineQuery(prep.inline_query, ['users', 'groups', 'channels']);
+            });
+            return;
+          }
+          if (tg && tg.switchInlineQuery) tg.switchInlineQuery(prep.inline_query, ['users', 'groups']);
+          else location.href = res.j.page_url;
+        });
+      });
+  });
+})();
+</script>
+</body>
+</html>

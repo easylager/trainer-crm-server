@@ -2423,12 +2423,15 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
             client_phone=(info.get("client_phone") or "") or None,
             duration_minutes=info.get("duration_minutes"),
             expected_payment_class=expected_payment_class,
+            arena_tickets_url=info.get("arena_tickets_url"),
         )
         reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
             map_url=info.get("map_link"),
             trainer_telegram_id=info.get("trainer_telegram_id"),
             booking_id=int(info["id"]),
             webapp_base_url=settings.webapp_base_url,
+            arena_tickets_url=info.get("arena_tickets_url"),
+            arena_name=info.get("arena_name"),
         )
         sent = False
         try:

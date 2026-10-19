@@ -258,6 +258,23 @@ class Arena(Base):
     )
 
 
+class CityPick(Base):
+    """Закреп места на позицию 1–3 подборки «Для вас» в городе."""
+
+    __tablename__ = "city_picks"
+    __table_args__ = (
+        UniqueConstraint("city_id", "arena_id", name="uq_city_picks_city_arena"),
+        CheckConstraint("position BETWEEN 1 AND 3", name="ck_city_picks_position"),
+    )
+
+    city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer(), primary_key=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class ArenaProfile(Base):
     """
     Ice Discovery vitrine for one arena (1:1). Not parser config (see ice_parser_jobs).
@@ -287,6 +304,10 @@ class ArenaProfile(Base):
             "schedule_mode IN ('auto', 'phone', 'season_closed')",
             name="ck_arena_profiles_schedule_mode",
         ),
+        CheckConstraint(
+            "load_character IN ('quiet', 'steady', 'hot')",
+            name="ck_arena_profiles_load_character",
+        ),
     )
 
     arena_id: Mapped[int] = mapped_column(
@@ -307,6 +328,7 @@ class ArenaProfile(Base):
     season_start_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
     season_end_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
     schedule_mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="auto")
+    load_character: Mapped[str] = mapped_column(String(16), nullable=False, server_default="steady")
     reopen_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
     schedule_mode_note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
@@ -453,6 +475,76 @@ class IceSession(Base):
     confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
     # TASK-179: откуда расписание — live / projected / photo / manual (migration 0218).
     schedule_basis: Mapped[str] = mapped_column(String(16), nullable=False, server_default="live")
+
+
+class IceSalesSnapshot(Base):
+    """Point-in-time Korona ticket counters per arena session slot (TASK-295)."""
+
+    __tablename__ = "ice_sales_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_ice_sales_snapshots_session_observed",
+            "arena_id",
+            "local_date",
+            "starts_at_local",
+            "observed_at",
+        ),
+        CheckConstraint("capacity >= 0", name="ck_ice_sales_snapshots_capacity"),
+        CheckConstraint("sold >= 0", name="ck_ice_sales_snapshots_sold"),
+        CheckConstraint("held >= 0", name="ck_ice_sales_snapshots_held"),
+        CheckConstraint("source IN ('korona')", name="ck_ice_sales_snapshots_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    local_date: Mapped[date] = mapped_column(Date(), nullable=False)
+    starts_at_local: Mapped[time] = mapped_column(Time(), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    capacity: Mapped[int] = mapped_column(Integer(), nullable=False)
+    sold: Mapped[int] = mapped_column(Integer(), nullable=False)
+    held: Mapped[int] = mapped_column(Integer(), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+
+
+class ClientBroadcastLog(Base):
+    """One delivery attempt of a client broadcast. Repeat runs skip existing rows."""
+
+    __tablename__ = "client_broadcast_log"
+    __table_args__ = (
+        UniqueConstraint(
+            "telegram_id",
+            "campaign_key",
+            name="uq_client_broadcast_log_telegram_campaign",
+        ),
+        CheckConstraint(
+            "status IN ('sent', 'failed')",
+            name="ck_client_broadcast_log_status",
+        ),
+        Index("ix_client_broadcast_log_campaign", "campaign_key"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    campaign_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+
+
+class ClientBroadcastOptout(Base):
+    """Client asked not to receive a broadcast kind. Season-start ignores this table."""
+
+    __tablename__ = "client_broadcast_optouts"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('ice_forecast')",
+            name="ck_client_broadcast_optouts_kind",
+        ),
+    )
+
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class IceCityInterest(Base):
@@ -2143,3 +2235,110 @@ class TrainerHintDismissal(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     snooze_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# «Компания на лёд». Снимок сеанса живёт отдельно от ice_sessions: у сеанса нет version.
+class IceCompanyEvent(Base):
+    __tablename__ = "ice_company_events"
+    __table_args__ = (
+        UniqueConstraint("source_ref", name="uq_ice_company_events_source_ref"),
+        CheckConstraint(
+            "kind IN ('public_skate', 'open_ice', 'hockey_practice', 'hockey_match')",
+            name="ck_ice_company_events_kind",
+        ),
+        CheckConstraint("version >= 1", name="ck_ice_company_events_version"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    venue_ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    venue_label: Mapped[str] = mapped_column(String(120), nullable=False)
+    city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="RESTRICT"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    cancelled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class IceCompany(Base):
+    __tablename__ = "ice_companies"
+    __table_args__ = (
+        UniqueConstraint("public_code", name="uq_ice_companies_public_code"),
+        CheckConstraint(
+            "public_code ~ '^[23456789abcdefghjkmnpqrstuvwxyz]{8}$'",
+            name="ck_ice_companies_public_code",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'cancelled', 'expired')",
+            name="ck_ice_companies_status",
+        ),
+        CheckConstraint("char_length(name) <= 40", name="ck_ice_companies_name"),
+        Index("ix_ice_companies_organizer_status", "organizer_ref", "status"),
+        Index("ix_ice_companies_event_id", "event_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    public_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    name: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("''"))
+    organizer_ref: Mapped[str] = mapped_column(String(80), nullable=False)
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("ice_company_events.id", ondelete="CASCADE"), nullable=False
+    )
+    event_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    card_dirty: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class IceCompanyResponse(Base):
+    __tablename__ = "ice_company_responses"
+    __table_args__ = (
+        UniqueConstraint("company_id", "participant_key", name="uq_ice_company_responses_participant"),
+        CheckConstraint(
+            "status IN ('going', 'maybe', 'cant')",
+            name="ck_ice_company_responses_status",
+        ),
+        CheckConstraint(
+            "source IN ('tg', 'web', 'viber')",
+            name="ck_ice_company_responses_source",
+        ),
+        CheckConstraint("char_length(display_name) BETWEEN 1 AND 20", name="ck_ice_company_responses_name"),
+        Index("ix_ice_company_responses_company", "company_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("ice_companies.id", ondelete="CASCADE"), nullable=False
+    )
+    participant_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(8), nullable=False)
+    source: Mapped[str] = mapped_column(String(8), nullable=False)
+    avatar_file_key: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class IceCompanyMessage(Base):
+    __tablename__ = "ice_company_messages"
+    __table_args__ = (
+        CheckConstraint(
+            "inline_message_id IS NOT NULL OR (chat_id IS NOT NULL AND message_id IS NOT NULL)",
+            name="ck_ice_company_messages_target",
+        ),
+        Index("ix_ice_company_messages_company", "company_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("ice_companies.id", ondelete="CASCADE"), nullable=False
+    )
+    chat_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    message_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    inline_message_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    last_render_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    is_group: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+

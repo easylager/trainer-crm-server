@@ -174,6 +174,54 @@
     setPlanText(plan, 'time', end ? start + '–' + end : start);
     setPlanText(plan, 'line', [planKindLabel(session), planPriceLine(session)].filter(Boolean).join(' · '));
     setPlanText(plan, 'soon', planSoonLine(session));
+    paintPlanLoad(plan, session.typical_load_level, seatsPlanLine(session.capacity_note));
+  }
+
+  /* Слово к черточкам на квадрате: здесь человек и узнаёт, что они значат. Тексты — как в
+     src/application/session_load.py LOAD_PLAN_LINES. */
+  var LOAD_LINES = {
+    calm: 'Обычно свободно — можно без спешки',
+    medium: 'Обычно народу в меру',
+    busy: 'Обычно людно — билет лучше взять заранее',
+  };
+
+  /* Живой остаток кассы («70 мест» / «нет мест») — как live_seats_plan_line на сервере. */
+  function seatsPlanLine(note) {
+    var text = String(note || '').trim();
+    if (/^нет мест$/i.test(text)) return 'Мест не осталось';
+    var m = /^(\d+)\s+мест[а-я]*$/i.exec(text);
+    if (!m) return '';
+    var n = Number(m[1]);
+    var word = n % 10 === 1 && n % 100 !== 11 ? 'место'
+      : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'места' : 'мест';
+    return 'Осталось ' + n + ' ' + word + (n <= 30 ? ' — лучше взять сейчас' : '');
+  }
+
+  function paintPlanLoad(plan, level, seatsLine) {
+    var row = plan.querySelector('.b-plan__load');
+    if (!row) return;
+    var text = seatsLine || LOAD_LINES[level] || '';
+    row.hidden = !text;
+    if (!text) return;
+    var word = row.querySelector(':scope > span:not(.b-load)');
+    if (seatsLine) {
+      var old = row.querySelector('.b-load');
+      if (old) old.remove();
+      if (word) word.textContent = text;
+      return;
+    }
+    var meter = row.querySelector('.b-load');
+    if (!meter) {
+      meter = document.createElement('span');
+      meter.className = 'b-load';
+      meter.setAttribute('role', 'img');
+      meter.innerHTML = '<i></i><i></i><i></i>';
+      row.insertBefore(meter, row.firstChild);
+    }
+    meter.setAttribute('data-level', level);
+    meter.setAttribute('aria-label', text);
+    var word = row.querySelector(':scope > span:not(.b-load)');
+    if (word) word.textContent = text;
   }
 
   /* Тап на время показывает скрытый билет «Выбранный сеанс» над расписанием. Он

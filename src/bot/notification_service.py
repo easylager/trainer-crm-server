@@ -39,7 +39,9 @@ from src.bot.notification_loops import (
     run_trainer_booked_notifier_loop,
     run_weekly_sunday_digest_loop,
     run_care_pulse_loop,
+    run_ice_forecast_loop,
 )
+from src.bot.ice_company_loop import run_ice_company_loop
 from src.ingestion.loop import (
     run_ice_health_alert_loop,
     run_ice_source_alert_loop,
@@ -102,6 +104,8 @@ async def main() -> None:
         asyncio.create_task(run_trainer_booked_notifier_loop(client_bot), name="trainer_booked"),
         asyncio.create_task(run_booking_confirmed_notifier_loop(client_bot), name="booking_confirmed"),
         asyncio.create_task(run_inactive_client_loop(client_bot), name="inactive_client"),
+        asyncio.create_task(run_ice_company_loop(client_bot), name="ice_company"),
+        asyncio.create_task(run_ice_forecast_loop(client_bot), name="ice_forecast"),
     ]
     # Trainer-facing loops
     trainer_tasks = [

@@ -182,6 +182,12 @@ _TRAINERS_SQL = text(
 )
 
 
+async def _city_for_you(session: AsyncSession, city_id: int, *, now: datetime) -> list[dict[str, Any]]:
+    from src.application.city_picks import for_you
+
+    return await for_you(session, city_id, now=now)
+
+
 def _esc(value: Any) -> str:
     return html_lib.escape(str(value if value is not None else ""), quote=True)
 
@@ -439,6 +445,7 @@ async def load_city_hub_view(
         "upcoming": upcoming,
         "next_ohm": next_ohm,
         "places": places,
+        "for_you": await _city_for_you(session, city_id, now=now),
         "service_open": [p for p in service_places if p["open_state"] in ("open", "soon")],
         "shops_open": [p for p in shops if p["open_state"] in ("open", "soon")],
         "trainer_count": trainer_count,
@@ -698,6 +705,7 @@ def render_city_hub_page(
     )
     from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
+    from src.shared.glide_city_cookie import glide_city_pin_script
 
     lang, og_locale = html_lang_for_country(str(city.get("country") or ""))
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -728,6 +736,7 @@ def render_city_hub_page(
                 surface="selection_page",
                 city_id=int(city["id"]),
             ),
+            "__GLIDE_CITY_PIN__": glide_city_pin_script(city_slug(city_name)),
             **share_tail,
         },
     )
@@ -991,6 +1000,31 @@ def _b_all_places(view: Mapping[str, Any]) -> str:
         f'<summary>Все места города · {len(places)}{icon_svg("down")}</summary>'
         f'<div class="b-details__body">{"".join(groups)}</div></details></section>'
     )
+
+
+def _b_for_you(view: Mapping[str, Any]) -> str:
+    """TASK-291: «Для вас» — до трёх мест под «Что нужно», те же плитки, что «Рядом».
+
+    Места остаются в своих разделах: ряд — указатель, не новый каталог. Пусто — ряда нет.
+    """
+    from src.application.style_b import section, tile_html
+
+    items = list(view.get("for_you") or [])[:3]
+    if not items:
+        return ""
+    tiles = []
+    for item in items:
+        name = format_public_name(str(item.get("name") or ""))
+        tiles.append(
+            tile_html(
+                href=str(item.get("path") or ""),
+                name=name,
+                line=str(item.get("kind_label") or ""),
+                photo_url=item.get("photo_url"),
+                photo_alt=name,
+            )
+        )
+    return section("Для вас", f'<div class="b-scroll">{"".join(tiles)}</div>', klass="b-sec--flush")
 
 
 def _b_nearby(view: Mapping[str, Any], *, title: str) -> str:
@@ -1318,6 +1352,7 @@ def _b_body(
             hero,
             _b_upcoming(view),
             _b_routes(view, coach_href=coach_href),
+            _b_for_you(view),
             empty,
             _b_all_places(view),
             _b_trainers(view, base_url=base_url, coach_href=coach_href),

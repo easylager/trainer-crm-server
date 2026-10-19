@@ -83,7 +83,7 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     async with _client() as client:
         resp = await client.get(place["path"])
     assert resp.status_code == 200, resp.text
-    assert resp.headers["cache-control"] == "private, no-cache"
+    assert resp.headers["cache-control"] == "private, max-age=30, stale-while-revalidate=300"
     html = resp.text
     assert place["name"] in _meta(html, "og:title")
     assert "расписание массового катания" in _meta(html, "og:title")
@@ -570,7 +570,10 @@ async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db
     assert "place-share-zovi" not in html
     links_row = re.search(r'<div class="b-links">(.*?)</div>', html, re.S)
     assert links_row
-    assert "Билеты — на сайте катка" in links_row.group(1)
+    # Покупка — над полосой дней, не в нижнем ряду ссылок.
+    assert "Купить билет онлайн" not in links_row.group(1)
+    schedule = html.split('id="schedule"', 1)[1]
+    assert schedule.index('class="b-btn b-btn--wide b-buy"') < schedule.index('class="b-sched')
     assert ">Открытка</a>" in links_row.group(1)
     # TASK-278: док виден и без JS — в нём «Открыть в Telegram»; «Позвать» ждёт скрипт
     # (без JS ей нечего открыть — ссылки мессенджеров под выбранным сеансом).

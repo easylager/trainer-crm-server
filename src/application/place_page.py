@@ -1048,6 +1048,7 @@ def render_place_page(
 
     from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
+    from src.shared.glide_city_cookie import glide_city_pin_script
 
     html = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
@@ -1078,6 +1079,7 @@ def render_place_page(
             city_id=int(card.get("city_id") or 0) or None,
             arena_id=int(card.get("id") or card.get("arena_id") or 0) or None,
         ),
+        "__GLIDE_CITY_PIN__": glide_city_pin_script(city_slug(city) if city else ""),
     }
     from src.application.style_b import b_press_script_html, telegram_dock_script_html
 
@@ -1234,9 +1236,13 @@ def _b_ticket(
     klass = "b-ticket" + (" b-ticket--dark" if dark else "") + (" b-ticket--picked" if focused else "")
     sid = int(slot["id"])
     vt = session_time_vt_style(sid) if vt_session_id is not None and sid == vt_session_id else ""
+    from src.application.session_load import live_seats_html, load_meter_html
+
+    # Живой остаток кассы важнее «обычно»: вместе они говорили бы одно и то же.
+    meter = live_seats_html(slot.get("capacity_note")) or load_meter_html(slot.get("typical_load_level"))
     ticket = (
         f'<a class="{klass}" href="{_esc(href)}" rel="nofollow" data-session-id="{sid}">'
-        f'<span class="b-ticket__time"{vt}>{_esc(start)}</span>{soon}{sub}</a>'
+        f'<span class="b-ticket__time"{vt}>{_esc(start)}</span>{meter}{soon}{sub}</a>'
     )
     if focused and nojs_share is not None:
         ticket += _nojs_messenger_row(nojs_share)
@@ -1376,16 +1382,24 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     all_slots = [s for slots in by_date.values() for s in slots]
     aside_price, common = _b_price_floor(all_slots)
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
-    foot: list[str] = []
+    # Где касса продаёт онлайн — покупка над расписанием: в сезон вечера и выходные
+    # разбирают, и кнопка нужна до выбора времени, а не после всей недели.
+    buy = ""
     if links.get("tickets"):
+        from src.application.catalog_icons import icon_svg
+
         href, blank = links["tickets"]
         attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
-        foot.append(f'<a class="b-link" href="{_esc(href)}"{attrs}>{_esc(t("place.tickets_online"))}</a>')
+        buy = (
+            f'<a class="b-btn b-btn--wide b-buy" href="{_esc(href)}"{attrs}>'
+            f'{_esc(t("place.tickets_buy"))}{icon_svg("external")}</a>'
+        )
+    foot: list[str] = []
     zovi = zovi_entry_path(view)
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = f"<div data-glide-session-list-root>{strip}{links_row}</div>"
+    body = f"{buy}<div data-glide-session-list-root>{strip}{links_row}</div>"
     aside = f'<span class="b-aside">{_esc(aside_price)}</span>' if aside_price else ""
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
@@ -1622,8 +1636,12 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
             )
         if not _skating(card) or not (view.get("days") or view.get("ohm_days")):
             return ""
+    from src.application.session_load import LOAD_PLAN_LINES, live_seats_plan_line, load_meter_html
+
     kicker = "Тебя зовут кататься" if invite else "Выбранный сеанс"
     day_text = time_text = extra = soon = ""
+    level = focus.get("typical_load_level") if focus is not None else None
+    seats_line = live_seats_plan_line(focus.get("capacity_note")) if focus is not None else ""
     if focus is not None:
         d = _parse_iso_date(focus.get("local_date"))
         day_text = day_heading(d, today=view["today"]) if d else ""
@@ -1649,9 +1667,42 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
         + span("time", time_text)
         + span("line", extra)
         + span("soon", soon)
+        + (
+            f'<span class="b-plan__load"{"" if (seats_line or level in LOAD_PLAN_LINES) else " hidden"}>'
+            f'{"" if seats_line else load_meter_html(level)}'
+            f'<span>{_esc(seats_line or LOAD_PLAN_LINES.get(level, ""))}</span></span>'
+        )
         + (f'<span class="b-plan__where">{_esc(where)}</span>' if where else "")
+        + _company_link(view)
         + "</div></section>"
     )
+
+
+def _company_link(view: Mapping[str, Any]) -> str:
+    """Кнопка сбора компании только если город включён флагом. Иначе разметки нет."""
+    from src.application.ice_company.flag import city_enabled
+    from src.application.place_links import public_telegram_cta_url
+    from src.shared.config import Settings
+
+    card = view.get("card")
+    focus = view.get("focus")
+    if not isinstance(card, Mapping) or not isinstance(focus, Mapping) or focus.get("id") is None:
+        return ""
+    city_id = int(card.get("city_id") or 0)
+    if not city_enabled(city_id):
+        return ""
+    session_id = int(focus["id"])
+    url = public_telegram_cta_url(
+        Settings().webapp_base_url or "",
+        start_param=f"company_{session_id}",
+        surface="place_page",
+        city_id=city_id,
+        arena_id=int(card.get("id") or 0) or None,
+        session_id=session_id,
+    )
+    if not url:
+        return ""
+    return f'<a class="b-plan__company" href="{_esc(url)}">Собрать компанию</a>'
 
 
 def render_place_body_b(
@@ -1672,10 +1723,11 @@ def render_place_body_b(
     )
     parts = [
         _b_hero(card, status_html=_b_status(view)),
-        _b_about(card),
         _b_plan(view, invite=invite),
         _b_schedule(view, base_path=base_path, invite=invite, links=links),
         _b_ohm(view, base_path=base_path, invite=invite),
+        # Описание — после времени: на страницу приходят за сеансом, а не за абзацем о катке.
+        _b_about(card),
         _b_arrive(card, links),
         _b_onsite(card, cta_url=cta_url, trainers_listed=bool(view.get("trainers"))),
         _b_trainers(view, base_url=base_url),

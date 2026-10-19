@@ -12,6 +12,7 @@ from sqlalchemy import event, text
 from src.api.app import app
 from src.api.public_list_cache import PUBLIC_JSON_LIST_CACHE
 from src.application.arena_public_use_cases import _ONE_ARENA_SQL
+from src.application.session_load import invalidate_session_load_cache
 from src.application.ice_city_day import city_slug, invalidate_public_city_cache, resolve_city_by_ref
 from src.application.selection_page import _WINDOW_SLOTS_PER_ARENA, _window_slots
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL
@@ -21,7 +22,8 @@ from tests.api.test_public_place_page import _client, _place
 # Cold /p/: cities, slug, card, media, sessions, the same window once more.
 # Свежести расписания на странице больше нет, просмотр пишет sendBeacon, а не GET.
 # Warm drops only the cached city list.
-_PLACE_SQL_COLD = 6
+# +1 к прежним 6: правила обычной загрузки (TASK-290), кэш процесса на 60 с — в тёплом прогоне их нет.
+_PLACE_SQL_COLD = 7
 _PLACE_SQL_WARM = 5
 
 _CATALOG_WIDE_MARKERS = (
@@ -59,6 +61,8 @@ async def test_place_page_sql_does_not_scan_the_catalog(app_use_test_db, db_sess
     place = await _place(db_session)
     await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="19:30")
     await db_session.commit()
+    # Правила загрузки живут в кэше процесса 60 с. Полный прогон уже мог их прочитать.
+    invalidate_session_load_cache()
 
     bind, counts, before = _count_sql(db_session)
     try:
@@ -82,7 +86,7 @@ async def test_place_page_sql_does_not_scan_the_catalog(app_use_test_db, db_sess
         for marker in _CATALOG_WIDE_MARKERS:
             assert marker not in sql
     assert any("a.id = " in sql and "created_by_trainer_id" in sql for sql in cold_sql)
-    assert first.headers["cache-control"] == "private, no-cache"
+    assert first.headers["cache-control"] == "private, max-age=30, stale-while-revalidate=300"
 
 
 @pytest.mark.asyncio
@@ -109,9 +113,9 @@ async def test_public_json_lists_are_cached_and_view_pages_are_not(app_use_test_
     assert "no-store" in nearest.headers["cache-control"]
     assert config.headers["cache-control"] == "no-store"
     assert selection.status_code == 200
-    assert selection.headers["cache-control"] == "private, no-cache"
+    assert selection.headers["cache-control"] == "private, max-age=30, stale-while-revalidate=300"
     assert today.status_code == 200
-    assert today.headers["cache-control"] == "private, no-cache"
+    assert today.headers["cache-control"] == "private, max-age=30, stale-while-revalidate=300"
 
 
 @pytest.mark.asyncio

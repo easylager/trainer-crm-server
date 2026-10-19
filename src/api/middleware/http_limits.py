@@ -79,6 +79,9 @@ def rate_limit_bucket_for_path(path: str) -> str:
         return "skip"
     if path == "/api/public/ice/map-config":
         return "skip"
+    # Один запрос на показ /c/ и /p/. Делит бюджет со страницей, не с чтением каталога.
+    if path == "/api/public/glide-city":
+        return "page"
     # TASK-231: только создание. Чтение открытки и ответ остаются в public.
     if path == "/api/public/invites":
         return "invite"

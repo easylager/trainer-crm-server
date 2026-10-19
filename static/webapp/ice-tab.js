@@ -10,6 +10,7 @@
   var M = global.IceTabModel;
   var lastArenaListSig = '';
   var state = {
+    forYou: [],
     intent: 'skate',
     view: 'list',
     cityId: null,
@@ -1497,6 +1498,23 @@
     }
   }
 
+  function renderForYou() {
+    var host = $('iceForYou');
+    if (!host) return;
+    var show = M.showForYou({
+      intent: state.intent,
+      scope: M.catalogScope(state.intent, state.venueTypes),
+      placeService: state.placeService,
+      items: state.forYou,
+    });
+    var html = show ? M.forYouStripHtml(state.forYou) : '';
+    if (host.getAttribute('data-sig') !== html) {
+      host.innerHTML = html;
+      host.setAttribute('data-sig', html);
+    }
+    host.hidden = !html;
+  }
+
   function renderList() {
     var list = listEl();
     var cap = $('iceCaption');
@@ -1515,6 +1533,7 @@
     }
     setShareButton();
     renderSeasonFooter();
+    renderForYou();
     if (!list) return;
     var paint = M.listPaintMode({
       intent: state.intent,
@@ -1868,10 +1887,12 @@
       state.total = data && data.total != null ? data.total : incoming.length;
     }
     state.cursor = data && data.next_cursor;
+    if (data && Array.isArray(data.for_you)) state.forYou = data.for_you;
     state.venueFacets = (data && data.venue_type_facets) || [];
     state.seasonFacet = (data && data.season_facet) || null;
     if (data && data.service_count != null) state.serviceCount = Number(data.service_count) || 0;
     state.window = (data && data.window) || null;
+    state.iceCompany = !!(data && data.ice_company);
     renderCatalogHeader();
   }
 
@@ -2957,6 +2978,7 @@
         sessionId: picked,
         slots: picked ? [{ id: picked, label: label || '' }] : [],
         invite: true,
+        company: !!state.iceCompany,
         context: 'ice_list',
         placeName: placeName || '',
       });
@@ -2987,6 +3009,7 @@
           slots: slots,
           slotSections: slotSections,
           invite: true,
+          company: !!state.iceCompany,
           context: 'ice_list',
           placeName: placeName || '',
         });

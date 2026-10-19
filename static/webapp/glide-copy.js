@@ -119,7 +119,7 @@
     "place.day_empty": "Сеансов нет",
     "feed.time_by_phone": "Время — по телефону",
     "feed.schedule_first": "сначала с расписанием",
-    "place.tickets_online": "Билеты — на сайте катка ↗",
+    "place.tickets_buy": "Купить билет онлайн",
     "cta.enroll": "Записаться",
     "cta.go": "Перейти",
     "cta.write": "Написать",

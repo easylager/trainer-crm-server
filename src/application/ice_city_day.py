@@ -460,6 +460,20 @@ async def get_city_ice_day(
         fell_through = True
 
     arenas = _group_by_arena(rows)
+    from src.application.session_load import load_session_load_context, typical_load_fields
+
+    load_ctx = await load_session_load_context(session)
+    for arena in arenas:
+        for item in arena["sessions"]:
+            load = typical_load_fields(
+                load_ctx,
+                arena_id=arena["arena_id"],
+                kind=item["kind"],
+                local_date=day,
+                starts_at_local=item["starts_at_local"],
+            )
+            if load:
+                item.update(load)
     sessions_total = sum(len(a["sessions"]) for a in arenas)
     prices = [
         int(s["price_adult_minor"])

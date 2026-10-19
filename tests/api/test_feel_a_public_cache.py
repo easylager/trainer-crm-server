@@ -19,7 +19,7 @@ def _client() -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-_PUBLIC_CACHE = "private, no-cache"
+_PUBLIC_CACHE = "private, max-age=30, stale-while-revalidate=300"
 
 
 @pytest.mark.asyncio
@@ -29,6 +29,7 @@ async def test_catalog_home_cache_control(app_use_test_db, db_session) -> None:
         resp = await client.get("/")
     assert resp.status_code == 200
     assert resp.headers["cache-control"] == _PUBLIC_CACHE
+    assert "Cookie" in resp.headers["vary"]
 
 
 @pytest.mark.asyncio

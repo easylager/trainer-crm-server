@@ -34,6 +34,39 @@
       .replace(/"/g, '&quot;');
   }
 
+  /* Обычная загрузка сеанса (TASK-290): полоска из трёх делений под временем. Слово уровня
+     показывается на выбранной плитке, если касса не дала живой остаток — он важнее. */
+  var LOAD_WORDS = { calm: 'обычно свободно', medium: 'обычно в меру', busy: 'обычно людно' };
+  var LOAD_LABELS = {
+    calm: 'Обычно свободно — можно без спешки',
+    medium: 'Обычно народу в меру',
+    busy: 'Обычно людно — билет лучше взять заранее',
+  };
+
+  function loadMeterHtml(level) {
+    if (!LOAD_LABELS[level]) return '';
+    return (
+      '<span class="arena-load" data-level="' + level + '" role="img" aria-label="' + LOAD_LABELS[level] + '">' +
+      '<i></i><i></i><i></i></span>'
+    );
+  }
+
+  function slotTag(t) {
+    if (t.seats) return t.seats.label;
+    return (t.picked && LOAD_WORDS[t.load]) || (t.next ? 'Ближайший' : '');
+  }
+
+  /* Живой остаток вместо полоски; мало мест — подпись акцентом. */
+  function slotBody(t) {
+    var tag = slotTag(t);
+    var tagCls = t.seats && t.seats.low ? ' class="arena-seats--low"' : '';
+    return (
+      '<b>' + esc(t.time) + '</b>' +
+      (t.seats ? '' : loadMeterHtml(t.load)) +
+      (tag ? '<small' + tagCls + '>' + esc(tag) + '</small>' : '')
+    );
+  }
+
   function todayIso(now) {
     now = now || new Date();
     var tz = state.card && state.card.timezone;
@@ -554,15 +587,27 @@
     return when ? 'Позвать на ' + when : 'Позвать с собой';
   }
 
+  function companyButton() {
+    if (!state.card || state.card.ice_company !== true) return '';
+    var sid = resolvedShareSessionId();
+    if (!sid) return '';
+    return (
+      '<button type="button" class="arena-btn" data-action="ice-company" data-session="' +
+      esc(sid) +
+      '">Собрать компанию</button>'
+    );
+  }
+
   function renderShareBar() {
     if (!global.GlideShareSheet) return '';
     if (scheduleSlots().length) {
+      var company = companyButton();
       return (
-        '<div class="arena-share" id="arenaShareBar">' +
+        '<div class="arena-share' + (company ? ' arena-share--pair' : '') + '" id="arenaShareBar">' +
         '<button type="button" class="arena-btn arena-btn--pri" data-action="share-invite">' +
         esc(shareInviteCtaLabel()) +
         '</button>' +
-        '<button type="button" class="arena-btn" data-action="share">Поделиться</button>' +
+        (company || '<button type="button" class="arena-btn" data-action="share">Поделиться</button>') +
         '</div>'
       );
     }
@@ -592,7 +637,7 @@
     );
   }
 
-  function openShare(invite) {
+  function openShare(mode) {
     if (!global.GlideShareSheet || !state.card) return;
     var isIce = skatingCard();
     var payload = isIce ? shareSheetPayload() : { slots: [], slotSections: [] };
@@ -609,7 +654,9 @@
       slotSections: payload.slotSections,
       sessionId: resolvedShareSessionId(),
       sessionMissing: fs.kind === 'gone',
-      invite: !!invite,
+      invite: mode === 'invite',
+      variant: mode === 'company' ? 'company' : '',
+      company: !!(state.card && state.card.ice_company === true),
       venueType: skatingCard() ? 'ice' : state.card.venue_type,
       context: 'arena_card',
       placeName: state.card.name || '',
@@ -1049,8 +1096,7 @@
           if (t.picked) timeCls += ' arena-time--picked';
           else if (t.next) timeCls += ' arena-time--next';
           /* Вместимость важнее «Ближайший»; выбор для приглашения — рамка, цвет и CTA сверху. */
-          var tag = t.capacity || (t.next ? 'Ближайший' : '');
-          var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
+          var body = slotBody(t);
           var buy =
             t.ticketHref
               ? '<button type="button" class="arena-slot-buy" data-action="external" data-href="' +
@@ -1168,6 +1214,13 @@
     var hasTicketLinks = daySessions.some(function (s) {
       return M.iceRowCta(s, state.card && state.card.tickets_url).href;
     });
+    var hasLoad = daySessions.some(function (s) {
+      return !!LOAD_LABELS[s.typical_load_level];
+    });
+    var hasSeats = daySessions.some(function (s) {
+      return !!M.liveSeats(s.capacity_note);
+    });
+    var hint = M.scheduleInviteHint(hasTicketLinks, hasLoad, hasSeats);
     var focusGone = renderFocusGoneNotice(getFocusState());
     return (
       '<div class="arena-sec">' +
@@ -1175,9 +1228,7 @@
       scheduleHeaderTools(tickets) +
       '</div>' +
       focusGone +
-      (M.scheduleInviteHint(hasTicketLinks)
-        ? '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>'
-        : '') +
+      (hint ? '<p class="arena-schedule-hint">' + esc(hint) + '</p>' : '') +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
       '</div>'
@@ -1263,8 +1314,7 @@
             var timeCls = 'arena-slot-time';
             if (t.picked) timeCls += ' arena-time--picked';
             else if (t.next) timeCls += ' arena-time--next';
-            var tag = t.capacity || (t.next ? 'Ближайший' : '');
-            var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
+            var body = slotBody(t);
             if (t.sessionId == null) {
               return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span></div>';
             }
@@ -1762,8 +1812,8 @@
       else paintRowsOnly();
       return;
     }
-    if (action === 'share' || action === 'share-invite') {
-      openShare(action === 'share-invite');
+    if (action === 'share' || action === 'share-invite' || action === 'ice-company') {
+      openShare(action === 'share-invite' ? 'invite' : action === 'ice-company' ? 'company' : 'schedule');
       return;
     }
     if (action === 'report') openModal();

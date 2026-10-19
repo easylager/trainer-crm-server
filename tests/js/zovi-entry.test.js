@@ -77,6 +77,49 @@ describe('варианты шита', () => {
     assert.equal(byId.schedule, 'Расписание');
   });
 
+  it('«Собрать компанию» — вторая вкладка, только когда сбор включён', () => {
+    assert.deepEqual(labelsOf({ venueType: 'ice', company: true }), [
+      'Погнали кататься',
+      'Компания',
+      'Открытка',
+      'Расписание',
+    ]);
+    assert.equal(sheet.initialVariantId({ variant: 'company', company: true }), 'company');
+    assert.equal(sheet.initialVariantId({ variant: 'company', company: false }), 'schedule');
+  });
+
+  it('на вкладке компании только название команды и ник из Telegram, без порога', () => {
+    const html = sheet.companyBottomHtml({
+      venueType: 'ice',
+      sessionId: '9001',
+      companyForm: { team: 'Пивной Олимп', you: 'Макс', error: '' },
+    });
+    assert.doesNotMatch(html, /Сколько человек нужно|data-gss-cmin|порог/i);
+    assert.match(html, /Название команды/);
+    assert.match(html, /data-gss-c="team"[^>]*value="Пивной Олимп"/);
+    assert.match(html, /Вы в списке «Иду» как <b>Макс<\/b>/);
+    assert.match(html, />В чат</);
+    assert.equal(html.includes('Как записать тебя'), false);
+    assert.equal(html.includes('data-ch='), false);
+    assert.equal(html.includes('type="number"'), false);
+  });
+
+  it('после сбора карточка сразу в чате, ссылка отдельно', () => {
+    const html = sheet.companyBottomHtml({
+      companyForm: {
+        min: '3',
+        team: 'Команда',
+        you: 'Макс',
+        shared: true,
+        created: { code: 'abc', pageUrl: 'https://x/k/abc', cardText: 'Катаемся в пятницу\nИдут 1 из 3: Макс' },
+      },
+    });
+    assert.match(html, /Карточка в чате/);
+    assert.match(html, /data-gss-cshare="copy"/);
+    assert.equal(html.includes('Собрать компанию'), false);
+    assert.equal(html.includes('data-gss-cshare="telegram"'), false);
+  });
+
   const slotSections = [
     {
       dayLabel: 'Сегодня',

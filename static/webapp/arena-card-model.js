@@ -923,6 +923,22 @@
    * одна группа с сеткой времени; другой тип или другая цена — своя группа.
    * `next` — ближайший сеанс дня (подсвечивается), только среди будущих.
    */
+  /* Живой остаток из кассы (парсер пишет «70 мест» / «нет мест» раз в ~15 минут). Где он
+     есть, плитка показывает только его: число понятнее полоски «обычно», а вместе они
+     говорили бы одно и то же. Другие заметки (у ОХМ «30–35 человек») — не остаток. */
+  var LOW_SEATS = 30;
+
+  function liveSeats(note) {
+    var text = String(note || '').trim();
+    if (/^нет мест$/i.test(text)) return { label: 'нет мест', low: true };
+    var m = /^(\d+)\s+мест[а-я]*$/i.exec(text);
+    if (!m) return null;
+    var n = Number(m[1]);
+    var word = n % 10 === 1 && n % 100 !== 11 ? 'место'
+      : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'места' : 'мест';
+    return { label: n + ' ' + word, low: n <= LOW_SEATS };
+  }
+
   function showtimesForDay(opts) {
     opts = opts || {};
     var list = upcomingSessions(opts.sessions, opts.now || new Date()).slice().sort(compareSessionsByStart);
@@ -952,7 +968,8 @@
         sessionId: s.id != null ? s.id : null,
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
-        capacity: s.capacity_note || '',
+        seats: liveSeats(s.capacity_note),
+        load: s.typical_load_level || '',
       });
     });
     return { groups: groups, count: list.length };
@@ -1278,9 +1295,22 @@
     return '';
   }
 
-  function scheduleInviteHint(hasTicketLinks) {
+  /* Подсказка над временем. Полоска загрузки (TASK-290) объясняется здесь же: у плитки
+     Mini App нет места под слово, а подпись под временем занята остатком мест. */
+  function scheduleInviteHint(hasTicketLinks, hasLoad, hasSeats) {
+    if (hasSeats) {
+      return hasTicketLinks
+        ? 'Время — для приглашения. Под временем — сколько билетов осталось, ↗ — купить.'
+        : 'Под временем — сколько билетов осталось.';
+    }
+    if (hasTicketLinks && hasLoad) {
+      return 'Время — для приглашения. Полоска — насколько обычно людно; на красные часы билет лучше взять заранее ↗';
+    }
     if (hasTicketLinks) {
       return 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.';
+    }
+    if (hasLoad) {
+      return 'Полоска под временем — насколько обычно людно в эти часы.';
     }
     return '';
   }
@@ -1345,6 +1375,7 @@
     shareSlotsGrouped: shareSlotsGrouped,
     shareSlotInviteLabel: shareSlotInviteLabel,
     scheduleInviteHint: scheduleInviteHint,
+    liveSeats: liveSeats,
     shopServicesView: shopServicesView,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,

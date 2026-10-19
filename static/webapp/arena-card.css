@@ -676,6 +676,7 @@ a.arena-row {
   padding: 0 16px;
 }
 .arena-share--one { grid-template-columns: 1fr; }
+.arena-share--pair { grid-template-columns: 1fr 1fr; }
 .arena-share .arena-btn { margin: 0; }
 
 /* TASK-146: услуги магазина — плитки, как на публичной странице места. */
@@ -948,6 +949,13 @@ a.arena-row {
   text-transform: none;
   letter-spacing: 0;
 }
+/* Обычная загрузка (TASK-290): та же полоска, что на сайте, в цветах Mini App. */
+.arena-slot-time small.arena-seats--low { color: var(--app-attention); font-weight: var(--app-weight-semibold); }
+.arena-load { display: inline-flex; gap: 2px; border-radius: 999px; overflow: hidden; margin: 2px 0 1px; }
+.arena-load i { width: 9px; height: 4px; background: var(--glide-line); }
+.arena-load[data-level="calm"] i:first-child { background: var(--app-ok); }
+.arena-load[data-level="medium"] i:nth-child(-n+2) { background: var(--app-attention); }
+.arena-load[data-level="busy"] i { background: var(--app-danger); }
 /* «Ближайший» — как в прототипе: обычная плитка, акцент только на подписи (не CTA-заливка). */
 .arena-time--next small { color: var(--glide-ink-teal, var(--app-cta-fill)); }
 

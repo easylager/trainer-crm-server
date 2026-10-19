@@ -100,8 +100,11 @@ jobs:
 
     services:
       postgres:
-        # Docker Hub режет анонимные pull с раннеров GitHub. Это тот же официальный образ.
-        image: public.ecr.aws/docker/library/postgres:16-alpine
+        # Анонимный pull с раннеров упирается в чужую квоту. Логин — свой лимит Docker Hub.
+        image: postgres:16-alpine
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: trainer_crm
           POSTGRES_PASSWORD: trainer_crm_dev
@@ -153,8 +156,11 @@ jobs:
 
     services:
       postgres:
-        # Docker Hub режет анонимные pull с раннеров GitHub. Это тот же официальный образ.
-        image: public.ecr.aws/docker/library/postgres:16-alpine
+        # Анонимный pull с раннеров упирается в чужую квоту. Логин — свой лимит Docker Hub.
+        image: postgres:16-alpine
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: trainer_crm
           POSTGRES_PASSWORD: trainer_crm_dev

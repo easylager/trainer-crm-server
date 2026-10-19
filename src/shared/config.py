@@ -294,6 +294,27 @@ class Settings(BaseSettings):
     trainer_webapp_benchmark_log: BenchmarkLogFlag = False
     trainer_webapp_benchmark_slow_ms: int | None = None
 
+    # «Компания на лёд». Пустой список городов — фича выключена везде.
+    # ICE_COMPANY_CITY_IDS=12,34
+    ice_company_city_ids: str = ""
+    ice_company_retention_days: int = 30
+    ice_company_max_active_per_organizer: int = 5
+    ice_company_max_responses: int = 50
+    ice_company_name_max_len: int = 48
+    ice_company_display_name_max_len: int = 24
+    ice_company_web_rate_per_minute: int = 30
+    ice_company_outbound_global_per_sec: float = 30
+    ice_company_outbound_chat_per_sec: float = 1
+    ice_company_outbound_group_per_min: int = 20
+
+    # «Лёд на выходные»: четверг 18:00–20:00 Europe/Minsk, 1 дек – 15 фев.
+    # По умолчанию выключено. Старт сезона этим флагом не управляется — его шлёт скрипт.
+    ice_forecast_enabled: bool = False
+
+    # Подборка «Для вас». Пусто — ряда нет ни в одном городе. Закрепы при этом хранятся.
+    # FOR_YOU_CITY_IDS=2,12
+    for_you_city_ids: str = ""
+
     def resolved_trainer_subscription_checkout_mode(self) -> Literal["sandbox", "bepaid", "invoice"]:
         """How trainer-subscription Mini App should behave for paid checkout."""
         m = (self.trainer_subscription_checkout_mode or "auto").strip().lower()

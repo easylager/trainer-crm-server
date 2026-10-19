@@ -1764,3 +1764,35 @@ describe('ice-tab-model: счётчик «Показать N с заточкой
     assert.equal(M.formatEmptyShopFilters({ sharpeningCount: M.sharpeningShopCount([]) }).secondary, null);
   });
 });
+
+describe('TASK-291: полоса «Для вас»', () => {
+  const items = [
+    { arena_id: 224, slug: 'ccmshop', name: 'CCMshop', kind_label: 'Магазин', photo_url: '/api/public/photos/a.jpg' },
+    { arena_id: 225, slug: 'hockey-service', name: 'Hockey Service', kind_label: 'Заточка', photo_url: null },
+  ];
+
+  it('только на «Покататься» и только с местами', () => {
+    const M = loadModel();
+    assert.equal(M.showForYou({ intent: 'skate', scope: 'arenas', items }), true);
+    assert.equal(M.showForYou({ intent: 'ohm', scope: 'arenas', items }), false);
+    assert.equal(M.showForYou({ intent: 'skate', scope: 'shop', items }), false);
+    assert.equal(M.showForYou({ intent: 'skate', scope: 'places', placeService: 'service', items }), false);
+    assert.equal(M.showForYou({ intent: 'skate', scope: 'arenas', items: [] }), false);
+  });
+
+  it('пилюля ведёт в карточку места; без фото — первая буква; не больше трёх', () => {
+    const M = loadModel();
+    const html = M.forYouStripHtml(items.concat([items[0], items[0]]));
+    assert.equal((html.match(/class="ice-foryou__pill"/g) || []).length, 3);
+    assert.match(html, /href="arena\?ref=224"/);
+    assert.match(html, /<img class="ice-foryou__face" src="\/api\/public\/photos\/a\.jpg"/);
+    assert.match(html, /ice-foryou__face--letter" aria-hidden="true">H</);
+    assert.match(html, /<b>CCMshop<\/b><span>Магазин<\/span>/);
+    assert.equal(M.forYouStripHtml([]), '');
+  });
+
+  it('имя экранируется', () => {
+    const M = loadModel();
+    assert.doesNotMatch(M.forYouStripHtml([{ arena_id: 1, name: '<b>x</b>' }]), /<b><b>/);
+  });
+});

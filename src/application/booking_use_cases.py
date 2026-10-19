@@ -1515,7 +1515,9 @@ async def fetch_reminder_session_cards_map(
                    CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.longitude END,
                    t.telegram_id AS trainer_telegram_id,
                    b.trainer_id,
-                   """ + sql_client_booked_for_name("c") + """ AS booked_for_name
+                   """ + sql_client_booked_for_name("c") + """ AS booked_for_name,
+                   (""" + SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT + """) AS resolved_arena_id,
+                   COALESCE(ts.is_online, false) AS service_is_online
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN services srv ON srv.id = b.service_id
@@ -1550,7 +1552,13 @@ async def fetch_reminder_session_cards_map(
             "trainer_id": int(row[11]) if row[11] is not None else None,
             "duration_minutes": _booking_interval_duration_minutes(st, et),
             "booked_for_name": (row[12] or "").strip() or None if len(row) > 12 else None,
+            "resolved_arena_id": int(row[13]) if len(row) > 13 and row[13] is not None else None,
+            "service_is_online": bool(row[14]) if len(row) > 14 else False,
         }
+    from src.application.booking_arena_tickets import enrich_booking_notification_with_arena_tickets
+
+    for card in out.values():
+        await enrich_booking_notification_with_arena_tickets(session, card)
     return out
 
 
@@ -1747,7 +1755,9 @@ _PENDING_BOOKING_CONFIRMED_NOTIFY_SQL = """
            CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.address END AS arena_address,
            CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.latitude END,
            CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.longitude END,
-           (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
+           (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id,
+           (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
+           COALESCE(ts.is_online, false) AS service_is_online
     FROM bookings b
     JOIN clients c ON c.id = b.client_id
     JOIN slots s ON s.id = b.slot_id
@@ -1786,27 +1796,31 @@ async def get_pending_booking_confirmed_notifications(
         text(_PENDING_BOOKING_CONFIRMED_NOTIFY_SQL),
         {"lim": limit},
     )
+    from src.application.booking_arena_tickets import enrich_booking_notification_with_arena_tickets
+
     out: list[dict] = []
     for row in r.fetchall():
         ptk = normalize_price_tier_kind(row[8])
-        out.append(
-            {
-                "id": row[0],
-                "trainer_id": int(row[1]),
-                "client_telegram_id": row[2],
-                "slot_date": row[3],
-                "start_time": row[4],
-                "end_time": row[5],
-                "service_name": (row[6] or "").strip() or None,
-                "booking_price_cents": row[7],
-                "price_tier_label": price_tier_label_ru(ptk) if ptk else None,
-                "arena_name": (row[9] or "").strip() or None,
-                "arena_address": (row[10] or "").strip() or None,
-                "map_link": _map_link(row[11], row[12]),
-                "trainer_telegram_id": int(row[13]) if row[13] is not None else None,
-                "first_booking_milestone": False,
-            }
-        )
+        item = {
+            "id": row[0],
+            "trainer_id": int(row[1]),
+            "client_telegram_id": row[2],
+            "slot_date": row[3],
+            "start_time": row[4],
+            "end_time": row[5],
+            "service_name": (row[6] or "").strip() or None,
+            "booking_price_cents": row[7],
+            "price_tier_label": price_tier_label_ru(ptk) if ptk else None,
+            "arena_name": (row[9] or "").strip() or None,
+            "arena_address": (row[10] or "").strip() or None,
+            "map_link": _map_link(row[11], row[12]),
+            "trainer_telegram_id": int(row[13]) if row[13] is not None else None,
+            "first_booking_milestone": False,
+            "resolved_arena_id": int(row[14]) if row[14] is not None else None,
+            "service_is_online": bool(row[15]),
+        }
+        await enrich_booking_notification_with_arena_tickets(session, item)
+        out.append(item)
     return out
 
 
@@ -5178,7 +5192,9 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
                    ar.arena_city_name,
                    (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id,
                    COALESCE(b.is_sandbox, false) AS is_sandbox,
-                   COALESCE(c.is_sandbox, false) AS client_is_sandbox
+                   COALESCE(c.is_sandbox, false) AS client_is_sandbox,
+                   (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
+                   COALESCE(ts.is_online, false) AS service_is_online
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -5226,6 +5242,15 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         telegram_id=row2[3],
         phone=row2[4] or "",
     )
+    notify_ctx: dict = {
+        "slot_date": row2[8],
+        "start_time": row2[9],
+        "resolved_arena_id": int(row2[22]) if row2[22] is not None else None,
+        "service_is_online": bool(row2[23]),
+    }
+    from src.application.booking_arena_tickets import enrich_booking_notification_with_arena_tickets
+
+    await enrich_booking_notification_with_arena_tickets(session, notify_ctx)
     return {
         "id": row2[0],
         "slot_id": row2[1],
@@ -5252,6 +5277,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         "is_sandbox": bool(row2[20]),
         "client_is_sandbox": bool(row2[21]),
         "booked_via_guardian": bool(contact.get("booked_via_guardian")),
+        "arena_tickets_url": notify_ctx.get("arena_tickets_url"),
     }
 
 

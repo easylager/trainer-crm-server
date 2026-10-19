@@ -31,8 +31,24 @@ class KoronaRinkSession:
     local_date: date
     starts_at_local: str
     ends_at_local: str
+    count: int
+    bought: int
+    locked: int
+    ordered: int
     remaining: int
     is_available: bool
+
+    @property
+    def capacity(self) -> int:
+        return self.count
+
+    @property
+    def sold(self) -> int:
+        return self.bought
+
+    @property
+    def held(self) -> int:
+        return self.locked + self.ordered
 
 
 def remaining_seats(count: int, bought: int, locked: int, ordered: int) -> int:
@@ -79,6 +95,10 @@ def parse_rink_nuxt_html(html: str) -> list[KoronaRinkSession]:
                 local_date=local_date,
                 starts_at_local=starts_at_local,
                 ends_at_local=ends_at_local,
+                count=int(count),
+                bought=int(bought),
+                locked=int(locked),
+                ordered=int(ordered),
                 remaining=remaining,
                 is_available=is_available,
             )

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Шкала загрузки сеанса — куда её поставить</title>
+  <!--
+    Три варианта шкалы на списке города и странице катка, ?variant=a|b|c.
+    Вопрос: где живёт шкала, перегружает ли чип сеанса и совпадает ли с Glide.
+    Прототип. Не страница продукта.
+  -->
+  <style>
+    @font-face {
+      font-family: "Dela Gothic One";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("../../static/fonts/glide-public/dela-gothic-one-lat.woff2") format("woff2");
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: "Golos Text";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("../../static/fonts/glide-public/golos-text-cyr-lat.woff2") format("woff2");
+      unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+20BD;
+    }
+    @font-face {
+      font-family: "Golos Text";
+      font-style: normal;
+      font-weight: 500;
+      font-display: swap;
+      src: url("../../static/fonts/glide-public/golos-text-cyr-lat-500.woff2") format("woff2");
+      unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+20BD;
+    }
+    @font-face {
+      font-family: "Golos Text";
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url("../../static/fonts/glide-public/golos-text-cyr-lat-600.woff2") format("woff2");
+      unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+20BD;
+    }
+    @font-face {
+      font-family: "Golos Text";
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url("../../static/fonts/glide-public/golos-text-cyr-lat-700.woff2") format("woff2");
+      unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+20BD;
+    }
+    @font-face {
+      font-family: "Golos Text";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("../../static/fonts/glide-public/golos-text-lat.woff2") format("woff2");
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: "Golos Text";
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url("../../static/fonts/glide-public/golos-text-lat-600.woff2") format("woff2");
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: "Golos Text";
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url("../../static/fonts/glide-public/golos-text-lat-700.woff2") format("woff2");
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+
+    :root {
+      --g-bg: #f5f7f8;
+      --g-surface: #fff;
+      --g-ink: #0d1b26;
+      --g-ink-2: #4a5f71;
+      --g-line: #e1e8ec;
+      --g-accent: #45b9bb;
+      --g-accent-ink: #0b6e70;
+      --g-accent-wash: #d3efef;
+      --g-chip: #eef3f5;
+      --g-live: #12a150;
+      --g-shadow: 0 1px 2px rgba(13, 27, 38, .08);
+      --app-ok: #0f7048;
+      --app-attention: #c87a15;
+      --app-danger: #c4342a;
+      --lv-calm: var(--app-ok);
+      --lv-medium: var(--app-attention);
+      --lv-busy: var(--app-danger);
+      --desk: #d7e0e6;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--desk);
+      color: var(--g-ink);
+      font-family: "Golos Text", -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+    header.top {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 20px 0;
+    }
+    .kicker {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--g-accent-ink);
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; font-weight: 600; letter-spacing: -.02em; }
+    .lede { margin: 0; max-width: 720px; color: var(--g-ink-2); }
+
+    .desk {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 20px 120px;
+      display: grid;
+      grid-template-columns: 390px 390px minmax(240px, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 1100px) {
+      .desk { grid-template-columns: 390px 390px; }
+      .note { grid-column: 1 / -1; }
+    }
+    @media (max-width: 860px) {
+      .desk { grid-template-columns: minmax(0, 390px); }
+    }
+
+    .col h2 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #3d5160;
+    }
+    .phone {
+      background: var(--g-bg);
+      border-radius: 28px;
+      padding: 18px 16px 22px;
+      box-shadow: 0 10px 30px rgba(13, 27, 38, .08);
+    }
+
+    .b-card2 {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 18px;
+      background: var(--g-surface);
+      box-shadow: var(--g-shadow);
+    }
+    .b-card2 + .b-card2 { margin-top: 10px; }
+    .b-card2__head { display: flex; gap: 12px; align-items: center; min-width: 0; }
+    .thumb {
+      flex: 0 0 64px;
+      width: 64px;
+      height: 64px;
+      border-radius: 14px;
+      background:
+        linear-gradient(160deg, rgba(255,255,255,.18), transparent 42%),
+        linear-gradient(180deg, #1d2f3d, #0d1b26);
+    }
+    .b-card2__titles { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .b-card2__name { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.25; }
+    .b-card2__where { font-size: 14px; color: var(--g-ink-2); }
+    .b-open { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--g-ink-2); }
+    .b-open i { width: 8px; height: 8px; border-radius: 50%; background: var(--g-live); }
+
+    .b-slots, .slots {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .b-slot, .slot {
+      aspect-ratio: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      min-width: 0;
+      padding: 8px 4px 10px;
+      border-radius: 14px;
+      background: var(--g-chip);
+      color: inherit;
+      text-decoration: none;
+      border: 1px solid transparent;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+    }
+    .b-slot__day { font-size: 11px; color: var(--g-ink-2); line-height: 1; }
+    .b-slot__time, .slot__time {
+      font-family: "Dela Gothic One", "Arial Black", sans-serif;
+      font-weight: 400;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .b-slot__price, .slot__price { font-size: 11px; color: var(--g-ink-2); line-height: 1.1; }
+    .b-slot--more {
+      font-family: "Golos Text", sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--g-accent-ink);
+    }
+    .is-projected {
+      border-style: dashed;
+      border-color: rgba(69, 185, 187, .7);
+      background: var(--g-accent-wash);
+    }
+
+    .place-kicker { margin: 0; font-size: 13px; color: var(--g-ink-2); }
+    .place-title {
+      margin: 4px 0 12px;
+      font-family: "Dela Gothic One", "Arial Black", sans-serif;
+      font-size: 28px;
+      font-weight: 400;
+      line-height: 1.05;
+    }
+    .sec {
+      background: var(--g-surface);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: var(--g-shadow);
+    }
+    .sec + .sec { margin-top: 12px; }
+    .day__label { margin: 0 0 8px; font-weight: 600; }
+    .slots { display: flex; flex-wrap: wrap; gap: 8px; }
+    .slot.is-focus { border-color: var(--g-accent); background: var(--g-accent-wash); }
+
+    .meter {
+      display: flex;
+      gap: 2px;
+      width: 28px;
+      margin-top: 3px;
+    }
+    .meter i {
+      flex: 1;
+      height: 3px;
+      border-radius: 99px;
+      background: var(--g-line);
+    }
+    .meter[data-level="calm"] i:nth-child(-n+1) { background: var(--lv-calm); }
+    .meter[data-level="medium"] i:nth-child(-n+2) { background: var(--lv-medium); }
+    .meter[data-level="busy"] i { background: var(--lv-busy); }
+    .b-slot[data-foot]::after, .slot[data-foot]::after {
+      content: "";
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 7px;
+      height: 3px;
+      border-radius: 99px;
+      background: var(--edge);
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--g-ink-2);
+    }
+    .legend i {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 4px;
+      border-radius: 2px;
+      vertical-align: 0;
+    }
+    .legend i[data-level="calm"] { background: var(--lv-calm); }
+    .legend i[data-level="medium"] { background: var(--lv-medium); }
+    .legend i[data-level="busy"] { background: var(--lv-busy); }
+
+    .b-slot[data-level]:not([data-foot]), .slot[data-level]:not([data-foot]) {
+      box-shadow: inset 3px 0 0 var(--edge, transparent);
+    }
+    [data-level="calm"] { --edge: var(--lv-calm); }
+    [data-level="medium"] { --edge: var(--lv-medium); }
+    [data-level="busy"] { --edge: var(--lv-busy); }
+
+    .note {
+      background: var(--g-surface);
+      border-radius: 18px;
+      padding: 16px 16px 14px;
+      box-shadow: var(--g-shadow);
+    }
+    .note h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+    .note p { margin: 0 0 10px; color: var(--g-ink-2); font-size: 14px; }
+    .note dl { margin: 0; display: grid; gap: 8px; }
+    .note dt { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #3d5160; }
+    .note dd { margin: 2px 0 0; font-size: 14px; }
+
+    .admin {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 20px 28px;
+    }
+    .admin h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #3d5160; }
+    .admin-card {
+      background: var(--g-surface);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: var(--g-shadow);
+    }
+    .admin-card header { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 12px; }
+    .admin-card h3 { margin: 0; font-size: 17px; font-weight: 700; }
+    .admin-card p { margin: 0; font-size: 14px; color: var(--g-ink-2); }
+    .band {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 0;
+      border-top: 1px solid var(--g-line);
+    }
+    .band b { font-weight: 600; font-size: 14px; }
+    .band small { display: block; color: var(--g-ink-2); font-size: 13px; }
+    .picks { display: flex; gap: 4px; }
+    .picks button {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      padding: 0;
+      cursor: default;
+    }
+    .picks button[data-level="calm"] { background: var(--lv-calm); }
+    .picks button[data-level="medium"] { background: var(--lv-medium); }
+    .picks button[data-level="busy"] { background: var(--lv-busy); }
+    .picks button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #fff, 0 0 0 2px var(--g-ink); }
+
+    .switcher {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px;
+      border-radius: 999px;
+      background: #0d1b26;
+      color: #fff;
+      box-shadow: 0 10px 28px rgba(13, 27, 38, .28);
+    }
+    .switcher button {
+      width: 36px;
+      height: 36px;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(255,255,255,.12);
+      color: #fff;
+      font: inherit;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .switcher strong { min-width: 168px; text-align: center; font-size: 14px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <p class="kicker">Прототип · TASK-290</p>
+    <h1>Куда поставить шкалу загрузки</h1>
+    <p class="lede">Слот — квадрат со временем. Подписей уровней на карточке нет: зелёнее значит свободнее, краснее — люднее. Стрелки внизу меняют, где сидит шкала.</p>
+  </header>
+
+  <div class="desk">
+    <section class="col">
+      <h2>Список города</h2>
+      <div class="phone" id="city"></div>
+    </section>
+    <section class="col">
+      <h2>Страница катка</h2>
+      <div class="phone" id="place"></div>
+    </section>
+    <aside class="note" id="note"></aside>
+  </div>
+
+  <section class="admin">
+    <h2>Админка · та же шкала, не чип</h2>
+    <div class="admin-card">
+      <header>
+        <h3>Обычная загрузка</h3>
+        <p>Общая шкала · все арены</p>
+      </header>
+      <div id="bands"></div>
+    </div>
+  </section>
+
+  <nav class="switcher" aria-label="Вариант прототипа">
+    <button type="button" id="prev" aria-label="Предыдущий вариант">←</button>
+    <strong id="vlabel">A · Метр в чипе</strong>
+    <button type="button" id="next" aria-label="Следующий вариант">→</button>
+  </nav>
+
+  <script>
+    const LEVELS = { calm: "свободно", medium: "обычно", busy: "людно" };
+    const VARIANTS = [
+      { id: "a", name: "A · Черточки" },
+      { id: "b", name: "B · Кромка" },
+      { id: "c", name: "C · Полоска снизу" },
+    ];
+    const NOTES = {
+      a: {
+        title: "Три черточки под ценой",
+        lead: "Квадрат остаётся квадратом. Внутри время, цена и короткая шкала без слова.",
+        load: "Черточки занимают 28×3 px под ценой. Одна закрашенная — свободнее, три — люднее. Слов на карточке нет.",
+        fit: "Тот же чип #eef3f5 и время Dela. Цвета статусов: свободно #0F7048, обычно #C87A15, людно #C4342A. Точка «Открыто» остаётся кружком, не шкалой.",
+      },
+      b: {
+        title: "Кромка слева",
+        lead: "В квадрате только день, время и цена. Уровень — полоска 3px по левому краю.",
+        load: "Сетка не растёт. Без подписи остаётся только цвет: зелёный край свободнее, красный люднее. На сеансе «по фото» пунктир тила и кромка стоят вместе.",
+        fit: "Квадрат не меняет форму. Тил остаётся у «ещё» и у выбранного сеанса.",
+      },
+      c: {
+        title: "Полоска по низу квадрата",
+        lead: "Время по центру, уровень — короткая черта у нижнего края, в цвет уровня.",
+        load: "Квадрат тот же. Черта не спорит с пунктиром рамки: рамка про расписание, черта про загрузку.",
+        fit: "Ближе к черточкам варианта A, но одна черта вместо шкалы из трёх. Без числа закрашенных делений уровень читается только цветом.",
+      },
+    };
+
+    const city = [
+      {
+        name: "Чижовка-Арена",
+        where: "Минск · 2,4 км",
+        open: "Открыто до 22:00",
+        slots: [
+          { day: "Сб", time: "11:00", price: "18 BYN", level: "medium" },
+          { day: "Сб", time: "13:00", price: "22 BYN", level: "busy" },
+          { day: "Сб", time: "16:30", price: "22 BYN", level: "busy" },
+          { day: "Сб", time: "19:00", price: "20 BYN", level: "medium", projected: true },
+        ],
+        more: "ещё 3",
+      },
+      {
+        name: "Дворец спорта",
+        where: "Минск · 4,1 км",
+        open: "Открыто до 21:00",
+        slots: [
+          { day: "Сб", time: "12:00", price: "15 BYN", level: "busy" },
+          { day: "Сб", time: "15:00", price: "15 BYN", level: "busy" },
+          { day: "Сб", time: "18:00", price: "15 BYN", level: "medium" },
+        ],
+      },
+    ];
+
+    const placeDays = [
+      {
+        label: "Пятница, 17 октября",
+        slots: [
+          { time: "10:00", price: "16 BYN", level: "calm" },
+          { time: "12:30", price: "16 BYN", level: "calm" },
+          { time: "17:00", price: "20 BYN", level: "medium" },
+          { time: "19:30", price: "22 BYN", level: "busy" },
+        ],
+      },
+      {
+        label: "Суббота, 18 октября",
+        slots: [
+          { time: "11:00", price: "18 BYN", level: "medium" },
+          { time: "14:00", price: "22 BYN", level: "busy", focus: true },
+          { time: "17:00", price: "22 BYN", level: "busy", projected: true },
+          { time: "20:00", price: "20 BYN", level: "medium" },
+        ],
+      },
+    ];
+
+    const bands = [
+      ["Пн–пт", "до 16:00", "calm"],
+      ["Пн–пт", "16:00–19:00", "medium"],
+      ["Пн–пт", "с 19:00", "busy"],
+      ["Сб–вс", "до 12:00", "medium"],
+      ["Сб–вс", "12:00–18:00", "busy"],
+      ["Сб–вс", "с 18:00", "medium"],
+    ];
+
+    function meter(level) {
+      return '<span class="meter" data-level="' + level + '" aria-label="' + LEVELS[level] + '"><i></i><i></i><i></i></span>';
+    }
+    function flags(slot) {
+      return (slot.projected ? " is-projected" : "") + (slot.focus ? " is-focus" : "");
+    }
+
+    function cityCard(card, variant) {
+      const slots = card.slots.map(function (slot) {
+        const mark = variant === "a" ? "" : variant === "b"
+          ? ' data-level="' + slot.level + '"'
+          : ' data-level="' + slot.level + '" data-foot';
+        const extra = variant === "a" ? meter(slot.level) : "";
+        return '<a class="b-slot' + flags(slot) + '"' + mark
+          + ' aria-label="' + slot.time + ", " + LEVELS[slot.level] + '">'
+          + '<span class="b-slot__day">' + slot.day + "</span>"
+          + '<b class="b-slot__time">' + slot.time + "</b>"
+          + '<span class="b-slot__price">' + slot.price + "</span>"
+          + extra + "</a>";
+      }).join("");
+      const more = card.more ? '<a class="b-slot b-slot--more">' + card.more + "</a>" : "";
+      const body = '<div class="b-slots">' + slots + more + "</div>";
+      return '<article class="b-card2"><div class="b-card2__head"><div class="thumb"></div>'
+        + '<div class="b-card2__titles"><h3 class="b-card2__name">' + card.name + "</h3>"
+        + '<div class="b-card2__where">' + card.where + "</div>"
+        + '<div class="b-open"><i></i>' + card.open + "</div></div></div>"
+        + body + "</article>";
+    }
+
+    function placeDay(day, variant) {
+      const slots = day.slots.map(function (slot) {
+        const mark = variant === "a" ? "" : variant === "b"
+          ? ' data-level="' + slot.level + '"'
+          : ' data-level="' + slot.level + '" data-foot';
+        const extra = variant === "a" ? meter(slot.level) : "";
+        return '<a class="slot' + flags(slot) + '"' + mark
+          + ' aria-label="' + slot.time + ", " + LEVELS[slot.level] + '">'
+          + '<span class="slot__time">' + slot.time + "</span>"
+          + '<span class="slot__price">' + slot.price + "</span>"
+          + extra + "</a>";
+      }).join("");
+      const body = '<div class="slots">' + slots + "</div>";
+      return '<section class="sec"><h3 class="day__label">' + day.label + "</h3>" + body + "</section>";
+    }
+
+    function render(variant) {
+      document.getElementById("city").innerHTML = city.map(function (card) {
+        return cityCard(card, variant);
+      }).join("");
+      document.getElementById("place").innerHTML =
+        '<p class="place-kicker">Минск · массовое катание</p>'
+        + '<h3 class="place-title">Чижовка-Арена</h3>'
+        + placeDays.map(function (day) { return placeDay(day, variant); }).join("");
+      const note = NOTES[variant];
+      document.getElementById("note").innerHTML =
+        "<h2>" + note.title + "</h2><p>" + note.lead + "</p><dl>"
+        + "<dt>Перегруз</dt><dd>" + note.load + "</dd>"
+        + "<dt>Согласованность</dt><dd>" + note.fit + "</dd>"
+        + "<dt>Состояние</dt><dd>variant=" + variant
+        + " · подписей на карточке нет · слово только в aria-label · слот квадратный"
+        + " · цвета --app-ok, --app-attention, --app-danger</dd></dl>";
+    }
+
+    document.getElementById("bands").innerHTML = bands.map(function (band) {
+      const picks = ["calm", "medium", "busy"].map(function (level) {
+        const on = level === band[2] ? ' aria-pressed="true"' : ' aria-pressed="false"';
+        return '<button type="button" data-level="' + level + '"' + on + ' tabindex="-1" aria-label="' + LEVELS[level] + '"></button>';
+      }).join("");
+      return '<div class="band"><div><b>' + band[0] + "</b><small>" + band[1] + "</small></div>"
+        + '<div class="picks">' + picks + "</div></div>";
+    }).join("");
+
+    function currentId() {
+      const q = new URLSearchParams(location.search).get("variant");
+      return VARIANTS.some(function (v) { return v.id === q; }) ? q : "a";
+    }
+    function show(id, push) {
+      const item = VARIANTS.find(function (v) { return v.id === id; }) || VARIANTS[0];
+      render(item.id);
+      document.getElementById("vlabel").textContent = item.name;
+      const url = new URL(location.href);
+      url.searchParams.set("variant", item.id);
+      if (push) history.replaceState(null, "", url);
+    }
+    function step(dir) {
+      const i = VARIANTS.findIndex(function (v) { return v.id === currentId(); });
+      const next = VARIANTS[(i + dir + VARIANTS.length) % VARIANTS.length];
+      show(next.id, true);
+    }
+    document.getElementById("prev").addEventListener("click", function () { step(-1); });
+    document.getElementById("next").addEventListener("click", function () { step(1); });
+    document.addEventListener("keydown", function (event) {
+      const tag = event.target && event.target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (event.key === "ArrowLeft") step(-1);
+      if (event.key === "ArrowRight") step(1);
+    });
+    show(currentId(), true);
+  </script>
+</body>
+</html>

@@ -1670,11 +1670,13 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 "arena_name": s.get("arena_name"),
                                 "arena_address": s.get("arena_address"),
                                 "booked_for_name": s.get("booked_for_name"),
+                                "arena_tickets_url": s.get("arena_tickets_url"),
                             }
                         )
                     kind = p.get("kind") or ""
+                    is_soon = kind not in ("before_24h", "before_evening_prior")
                     text = msg.format_client_booking_reminder_text(
-                        is_soon=(kind not in ("before_24h", "before_evening_prior")),
+                        is_soon=is_soon,
                         sessions=sessions_payload,
                     )
                     arena_payload = {
@@ -1703,6 +1705,13 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 )
                             ]
                         )
+                    if not is_soon:
+                        for sess in sessions_payload:
+                            msg.append_client_booking_tickets_keyboard_row(
+                                kb_rows,
+                                arena_tickets_url=sess.get("arena_tickets_url"),
+                                arena_name=sess.get("arena_name"),
+                            )
                     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows) if kb_rows else None
                     try:
                         await client_bot.send_message(
@@ -3269,5 +3278,38 @@ async def run_care_pulse_loop(trainer_bot: Bot, client_bot: Bot) -> None:
 
         try:
             await asyncio.sleep(CARE_PULSE_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            break
+
+
+async def run_ice_forecast_loop(client_bot: Bot) -> None:
+    """Четверг 18:00–20:00 Europe/Minsk, 1 дек – 15 фев. Молчит, пока ICE_FORECAST_ENABLED выключен."""
+    from src.application.ice_forecast import ice_forecast_due, send_ice_forecast
+    from src.application.trainer_digest_use_cases import now_minsk
+    from src.shared.config import get_settings
+
+    logger.info("[ice_forecast_loop] started")
+    while True:
+        try:
+            now = now_minsk()
+            settings = get_settings()
+            if ice_forecast_due(now, enabled=settings.ice_forecast_enabled):
+                async with async_session_factory() as session:
+                    await send_ice_forecast(
+                        session,
+                        client_bot,
+                        "weekly",
+                        settings=settings,
+                        on=now.date(),
+                    )
+                    await session.commit()
+        except asyncio.CancelledError:
+            logger.info("[ice_forecast_loop] cancelled")
+            break
+        except Exception as e:
+            logger.exception("Ice forecast loop: %s", e)
+
+        try:
+            await asyncio.sleep(DIGEST_LOOP_INTERVAL_SEC)
         except asyncio.CancelledError:
             break

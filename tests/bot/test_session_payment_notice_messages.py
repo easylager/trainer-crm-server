@@ -395,3 +395,108 @@ def test_client_pushes_include_booked_for_child_name() -> None:
     )
     assert "Запись для" in cancelled
     assert "Лера" in cancelled
+
+
+def test_client_confirmed_shows_tickets_hint_and_button_when_url() -> None:
+    text = msg.format_client_booking_confirmed_by_trainer_text(
+        date="10.06",
+        day="Ср",
+        time="18:00",
+        trainer_name="Мария",
+        service_name="Персональная",
+        booking_price_cents=None,
+        price_tier_label=None,
+        arena_name="ТЦ Замок",
+        arena_address="ул. Тест",
+        arena_tickets_url="https://koronaticket.by/rink",
+    )
+    assert "ул. Тест\n\n🎟 Билет на лёд лучше взять заранее — онлайн, кнопка ниже.\n" in text
+    assert "Остаток" not in text
+    kb = msg.build_client_booking_confirmed_inline_keyboard(
+        map_url="https://yandex.by/maps/x",
+        trainer_telegram_id=1,
+        arena_tickets_url="https://koronaticket.by/rink",
+        arena_name="ТЦ Замок",
+    )
+    last = kb.inline_keyboard[-1][0]
+    assert last.text == "🎟 Купить билет · ТЦ Замок"
+    assert last.url == "https://koronaticket.by/rink"
+
+
+def test_client_tickets_button_label_falls_back_when_long() -> None:
+    assert msg.client_booking_tickets_button_label("Ледовый дворец спорта Минской области") == "🎟 Купить билет"
+    assert msg.client_booking_tickets_button_label(None) == "🎟 Купить билет"
+
+
+def test_client_confirmed_keyboard_unchanged_without_url() -> None:
+    with_none = msg.build_client_booking_confirmed_inline_keyboard(
+        map_url="https://yandex.by/maps/x", trainer_telegram_id=1, arena_tickets_url=None, arena_name="Зал"
+    )
+    legacy = msg.build_client_booking_confirmed_inline_keyboard(map_url="https://yandex.by/maps/x", trainer_telegram_id=1)
+    assert with_none.model_dump() == legacy.model_dump()
+
+
+def test_client_confirmed_omits_tickets_without_url() -> None:
+    text = msg.format_client_booking_confirmed_by_trainer_text(
+        date="10.06",
+        day="Ср",
+        time="18:00",
+        trainer_name="Мария",
+        service_name="Персональная",
+        booking_price_cents=None,
+        price_tier_label=None,
+        arena_name="Зал",
+        arena_address=None,
+        arena_tickets_url=None,
+    )
+    assert "Билет" not in text
+
+
+def test_client_reminder_tickets_only_tomorrow_not_2h() -> None:
+    session = {
+        "date": "10.06",
+        "day": "Ср",
+        "time": "18:00",
+        "duration": 60,
+        "service_name": "Персональная",
+        "booking_price_cents": None,
+        "expected_payment_class": None,
+        "arena_name": "ТЦ Замок",
+        "arena_address": "ул. Тест",
+        "arena_tickets_url": "https://koronaticket.by/rink",
+    }
+    tomorrow = msg.format_client_booking_reminder_text(is_soon=False, sessions=[session])
+    soon = msg.format_client_booking_reminder_text(is_soon=True, sessions=[session])
+    assert "ул. Тест\n\n🎟 Билет на лёд уже есть? Если нет — ещё можно онлайн.\n\nСначала" in tomorrow
+    assert "Билет" not in soon
+    assert "ул. Тест\n\nСначала" in soon
+
+
+def test_client_reminder_without_url_keeps_blank_line() -> None:
+    session = {
+        "date": "10.06", "day": "Ср", "time": "18:00", "duration": 60, "service_name": "Персональная",
+        "booking_price_cents": None, "expected_payment_class": None, "arena_name": "Зал", "arena_address": "ул. Тест",
+    }
+    text = msg.format_client_booking_reminder_text(is_soon=False, sessions=[session])
+    assert "ул. Тест\n\nСначала" in text
+    assert "Билет" not in text
+
+
+def test_client_reminder_multi_session_tickets_line_once() -> None:
+    base = {"date": "10.06", "day": "Ср", "duration": 60, "service_name": "Персональная",
+            "booking_price_cents": None, "expected_payment_class": None}
+    a = {**base, "time": "10:00", "arena_name": "ТЦ Замок", "arena_tickets_url": "https://koronaticket.by/rink"}
+    b = {**base, "time": "18:00", "arena_name": "Зал", "arena_tickets_url": None}
+    text = msg.format_client_booking_reminder_text(is_soon=False, sessions=[a, b])
+    assert text.count("Билет на лёд уже есть?") == 1
+    plain = msg.format_client_booking_reminder_text(is_soon=False, sessions=[{**a, "arena_tickets_url": None}, b])
+    assert "Билет" not in plain
+    assert "\n\nСначала" in plain
+
+
+def test_tickets_keyboard_row_dedupes_same_link() -> None:
+    rows: list = []
+    for _ in range(2):
+        msg.append_client_booking_tickets_keyboard_row(rows, arena_tickets_url="https://koronaticket.by/rink", arena_name="ТЦ Замок")
+    msg.append_client_booking_tickets_keyboard_row(rows, arena_tickets_url="https://chizhovka-arena.by/x", arena_name="Чижовка")
+    assert [r[0].url for r in rows] == ["https://koronaticket.by/rink", "https://chizhovka-arena.by/x"]

@@ -1748,8 +1748,13 @@ async def list_public_ice_arenas(
     await attach_arena_media_payloads(session, page)
     items = [_public_list_item(row, intent=intent_value, today=today) for row in page]
     next_cursor = str(offset + cap) if offset + cap < len(rows) else None
+    from src.application.city_picks import for_you
+    from src.application.ice_company.flag import city_enabled
+
     return {
         "items": items,
+        "for_you": await for_you(session, int(city_id), now=now) if city_id is not None else [],
+        "ice_company": bool(city_id and city_enabled(int(city_id))),
         "total": len(rows),
         "intent": intent_value,
         "venue_type": sorted(venue_filter) if venue_filter else None,
@@ -2237,6 +2242,10 @@ async def get_public_arena_card(
         ),
     }
     _sanitize_public_profile_fields(card)
+    from src.application.ice_company.flag import city_enabled
+
+    if city_enabled(int(row["city_id"])):
+        card["ice_company"] = True
     return card
 
 
@@ -2327,10 +2336,16 @@ async def public_arena_session_days(
         "schedule_basis",
     ]
     by_date: dict[str, list[dict[str, Any]]] = {}
+    from src.application.session_load import enrich_sessions_with_typical_load
+
+    serialized: list[dict[str, Any]] = []
     for raw in result.fetchall():
         mapped = dict(zip(keys, raw, strict=True))
         ser = serialize_ice_session(mapped)
         ser.pop("parser_key", None)
+        serialized.append(ser)
+    await enrich_sessions_with_typical_load(session, serialized)
+    for ser in serialized:
         day = ser["local_date"]
         by_date.setdefault(day, []).append(ser)
     return [{"local_date": d, "sessions": by_date[d]} for d in sorted(by_date)]

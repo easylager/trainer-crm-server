@@ -46,6 +46,7 @@
 | [organization-role-surfaces.md](product-knowledge/organization-role-surfaces.md) | Организации: что видит каждая роль |
 | [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест и подборок, главная «только города» и хаб города `/c/{город}`, шеринг, /go, диплинки, окна времени, магазины |
 | [catalog-search-header.md](product-knowledge/catalog-search-header.md) | Шапка «Поиск»: сегмент рода, фильтр типа площадки, окно времени, пустое состояние |
+| [ice-company.md](product-knowledge/ice-company.md) | «Компания на лёд»: JSON API, флаг по city_id, тексты бота |
 
 ## strategy — куда идём
 
@@ -108,6 +109,8 @@
 | [2026-10-03-hub-composition-05-06.md](plans/2026-10-03-hub-composition-05-06.md) | TASK-149: хаб как экраны 05/06 — узкая композиция; 150 пакет не стартовать |
 | [2026-09-25-search-places-label.md](plans/2026-09-25-search-places-label.md) | Поиск: «Покататься» → «Где заниматься» |
 | [2026-10-11-trainer-pass-validity.md](plans/2026-10-11-trainer-pass-validity.md) | Срок абонемента тренера: с выдачи, снимок на экземпляре, подсказка по числу занятий |
+| [2026-10-16-ice-company-pdn-draft.md](plans/2026-10-16-ice-company-pdn-draft.md) | Черновик согласия и политики для компании на льду. ПРОВЕРИТЬ ЮРИСТОМ |
+| [2026-10-18-release-18-10-26-pipeline.md](plans/2026-10-18-release-18-10-26-pipeline.md) | Релиз `release/18.10.26`: состав (компания, загрузка, «Для вас», билеты, рассылка), миграции 0237–0244, флаги, выкат |
 
 ## ops — эксплуатация
 
@@ -122,6 +125,7 @@
 | [ice-ingest-junost-instagram.md](instructions/ice-ingest-junost-instagram.md) | Юность: копипаст подписи IG → прод (`ingest_junost_from_caption.py`) |
 | [junost-caption-update.md](ops/junost-caption-update.md) | Юность: обновить подпись расписания через `set_junost_caption.py` (dry-run / `--apply`) |
 | [catalog-share-launch.md](ops/catalog-share-launch.md) | Чеклист выката шаринга каталога: env, фото, магазины, og, телеметрия 0212, 20 минут руками |
+| [ice-company-launch.md](ops/ice-company-launch.md) | Выкат «Собрать компанию»: env `ICE_COMPANY_CITY_IDS`, три сервиса, 20 минут руками |
 | [platform-processes-for-legal-by-v1.md](ops/platform-processes-for-legal-by-v1.md) | Описание процессов платформы для юристов (BY) |
 
 ## Остальное
