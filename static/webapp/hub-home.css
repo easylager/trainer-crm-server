@@ -39,7 +39,7 @@ html body.hh-body, html.trainer-theme-dark body.hh-body, html.trainer-theme-ligh
 .hh__body { display: flex; flex-direction: column; gap: 8px; }
 .hh__kicker { font-size: 14px; font-weight: 400; color: var(--g-on-dark-muted); min-height: 20px; }
 .hh__kicker #hubGreetingSub[hidden] { display: none; }
-.hh__title { margin: 0; font-size: 46px; line-height: .94; }
+.hh__title { margin: 0; font-size: 46px; line-height: .94; min-height: 1.88em; } /* две строки всегда: без прыжка */
 .hh__title--long { font-size: 38px; }
 .hh__line { font-size: 15px; font-weight: 400; color: #e6eef2; min-height: 20px; }
 .hh__skel { display: block; height: 14px; border-radius: 7px; background: rgba(255, 255, 255, .14); }
@@ -218,3 +218,8 @@ body.tg-dark .hn__card { box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 28px r
 .hh-body .me__wallet, .hh-body .me__w { background: transparent; }
 .hh-body .me__do--notify .me__notify { width: auto; flex: none; }
 .hh-body .hm .me, .hh-body #nextBookingBlock { margin-left: 0; margin-right: 0; }
+.hh-me-skel { height: 308px; border-radius: 20px; background: var(--g-surface); box-shadow: var(--g-shadow); }
+.hn__btns > :only-child { grid-column: 1 / -1; }
+.hn__main { display: flex; flex-direction: column; gap: 12px; color: inherit; text-decoration: none; }
+.hl__hit { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.hl__invite { z-index: 2; }

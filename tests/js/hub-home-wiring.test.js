@@ -107,9 +107,14 @@ describe('client-home-main.js раскладывает своё по новой 
     assert.match(fnBody('applyHubState'), /placeMeCard\(slotKind === 'booking' \? 'slot' : 'mine'\)/);
   });
 
-  it('без города карточка клиента встаёт в слот, только если нарисовалась', () => {
-    const apply = fnBody('applyHubState');
-    assert.equal((apply.match(/if \(!hasCity && paintMarketHero\(iceTeaser, hubMeta\)\) placeMeCard\('slot'\);/g) || []).length, 2);
+  it('без города слот — тизер льда по стране; его модели грузятся только тогда', () => {
+    assert.match(hubJs, /else if \(!city && hub && hub\.ice_teaser\)/);
+    assert.match(hubJs, /NO_CITY_SCRIPTS = \['minsk-time\.js', 'schedule-staleness-model\.js', 'ice-teaser-model\.js', 'catalog-geo-model\.js'\]/);
+    for (const f of ['ice-teaser-model.js', 'catalog-geo-model.js', 'minsk-time.js', 'schedule-staleness-model.js']) {
+      assert.ok(!homeHtml.includes('src="' + f), f + ' не в критическом пути');
+    }
+    assert.match(fnBody('attemptHubGeoRefine'), /needNoCityModels\(\)\.then\(attemptHubGeoRefine/);
+    assert.ok(!/paintMarketHero/.test(homeMain), 'карточка «лёд города» заменена слотом');
   });
 
   it('сбой и отсутствие initData — честная шапка, без старых зон', () => {

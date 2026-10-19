@@ -306,32 +306,36 @@
   }
 
   function iceCard(s, host) {
-    var a = link(el('a', 'hn__card'), s.href || 'ice');
+    // Корень — не ссылка: внутри две разные цели, а интерактив в интерактиве WebView путает.
+    var card = el('div', 'hn__card');
+    var main = link(el('a', 'hn__main'), s.href || 'ice');
     var soon = s.label ? s.label.toLowerCase() : soonLabel(s.day === 'сегодня' ? minutesUntil(s.time) : null);
-    a.appendChild(el('span', 'hn__live', 'Ближайший лёд' + (soon ? ' · ' + soon : s.day && s.day !== 'сегодня' ? ' · ' + s.day : '')));
+    main.appendChild(el('span', 'hn__live', 'Ближайший лёд' + (soon ? ' · ' + soon : s.day && s.day !== 'сегодня' ? ' · ' + s.day : '')));
     var big = el('span', 'hn__big');
     big.appendChild(el('span', 'hn__time hh-display', s.time));
     var what = el('span', 'hn__what');
     what.appendChild(el('span', 'hn__name', s.place));
     if (s.price) what.appendChild(el('span', 'hn__sub', s.price));
     big.appendChild(what);
-    a.appendChild(big);
-    var btns = el('span', 'hn__btns');
-    btns.appendChild(el('span', 'hn__btn', 'Подробнее'));
+    main.appendChild(big);
+    card.appendChild(main);
+    var btns = el('div', 'hn__btns');
+    btns.appendChild(link(el('a', 'hn__btn', 'Подробнее'), s.href || 'ice'));
     if (s.invite_url) {
       var inv = el('button', 'hn__btn hn__btn--soft');
       inv.type = 'button';
       inv.appendChild(icon('invite'));
       inv.appendChild(doc.createTextNode('Позвать'));
-      inv.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
+      inv.addEventListener('click', function () {
         share(s.invite_url, 'Поехали на лёд: ' + s.place + ', ' + (s.day && s.day !== 'сегодня' ? s.day + ' ' : '') + s.time);
       });
       btns.appendChild(inv);
+    } else if (s.pickCity) {
+      // Города нет: второй шаг рядом — выбрать свой, а не искать его в шапке.
+      btns.appendChild(link(el('a', 'hn__btn hn__btn--soft', 'Выбрать город'), 'ice'));
     }
-    a.appendChild(btns);
-    host.replaceChildren(a);
+    card.appendChild(btns);
+    host.replaceChildren(card);
   }
 
   /** Города нет: ближайший лёд по стране или честное «пока не в вашем городе» (IceTeaserModel). */
@@ -354,7 +358,47 @@
       host.replaceChildren(far);
       return;
     }
-    iceCard({ time: v.time, day: '', place: v.name + (v.city ? ', ' + v.city : ''), price: v.facts, href: v.href, invite_url: null, label: v.day }, host);
+    iceCard({ time: v.time, day: '', place: v.name + (v.city ? ', ' + v.city : ''), price: v.facts, href: v.href, invite_url: null, label: v.day, pickCity: true }, host);
+  }
+
+  /**
+   * Модели «города нет» (тизер льда по стране, геолокация) — только тому, у кого города нет.
+   * Клиенту с городом четыре файла в критическом пути не нужны (TASK-303, AC-P2).
+   */
+  var NO_CITY_SCRIPTS = ['minsk-time.js', 'schedule-staleness-model.js', 'ice-teaser-model.js', 'catalog-geo-model.js'];
+  var noCityPromise = null;
+
+  function assetVersion() {
+    var own = doc && doc.querySelector('script[src*="hub-home.js"]');
+    var m = own && /[?&]v=([^&]+)/.exec(own.getAttribute('src') || '');
+    return m ? m[1] : '';
+  }
+
+  function loadScript(name, v) {
+    return new Promise(function (resolve, reject) {
+      var tag = doc.createElement('script');
+      tag.src = name + (v ? '?v=' + v : '');
+      tag.onload = resolve;
+      tag.onerror = reject;
+      doc.head.appendChild(tag);
+    });
+  }
+
+  function needNoCityModels() {
+    if (!noCityPromise) {
+      var v = assetVersion();
+      noCityPromise = NO_CITY_SCRIPTS.reduce(function (chain, name) {
+        return chain.then(function () { return loadScript(name, v); });
+      }, Promise.resolve());
+    }
+    return noCityPromise;
+  }
+
+  var lastTeaserHub = null;
+
+  function showTeaser(teaser) {
+    var host = $('hubNow');
+    needNoCityModels().then(function () { teaserCard(teaser, host); }, function () { host.replaceChildren(); });
   }
 
   // ---------- «Ближайший лёд» и «Что нужно» ----------
@@ -376,7 +420,11 @@
     var row = $('hubNearestRow');
     row.replaceChildren();
     items.forEach(function (s) {
-      var card = link(el('a', 'hl__card'), s.href || 'ice');
+      // Ссылка накрывает карточку, «Позвать» — соседняя кнопка поверх: без кнопки внутри ссылки.
+      var card = el('div', 'hl__card');
+      var hit = link(el('a', 'hl__hit'), s.href || 'ice');
+      hit.setAttribute('aria-label', s.place + ', ' + (s.badge || s.time));
+      card.appendChild(hit);
       var ph = el('span', 'hl__photo');
       var src = s.photo && (s.photo.card || s.photo.thumb);
       if (src) {
@@ -393,9 +441,7 @@
       if (s.invite_url) {
         var inv = el('button', 'hl__invite', 'Позвать');
         inv.type = 'button';
-        inv.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
+        inv.addEventListener('click', function () {
           share(s.invite_url, 'Поехали на лёд: ' + s.place + ', ' + s.badge);
         });
         card.appendChild(inv);
@@ -480,7 +526,10 @@
     if (kind === 'kk_before') kkBefore(now.hockey, host);
     else if (kind === 'kk_result') kkResult(now.hockey, host);
     else if (kind === 'ice') iceCard(now.session, host);
-    else if (!city && hub && hub.ice_teaser) teaserCard(hub.ice_teaser, host);
+    else if (!city && hub && hub.ice_teaser) {
+      lastTeaserHub = hub;
+      showTeaser(hub.ice_teaser);
+    }
     else host.replaceChildren();
     nearest(city, kind === 'ice');
     needs(city);
@@ -506,6 +555,11 @@
     fail: fail,
     ready: ready,
     greetingText: greetingText,
+    needNoCityModels: needNoCityModels,
+    /** Геолокация уточнила ближайший лёд — перерисовать слот, если города всё ещё нет. */
+    refineTeaser: function (teaser) {
+      if (lastTeaserHub && teaser) showTeaser(teaser);
+    },
     slot: function () { return $('hubNow'); },
     mine: function () { return $('hubMine'); },
     // Для тестов.

@@ -224,9 +224,14 @@ def now_slot(
     hockey: Mapping[str, Any] | None,
     upcoming: Sequence[Mapping[str, Any]],
     now: datetime,
+    has_city: bool = True,
     tz_name: str = "Europe/Minsk",
 ) -> dict[str, Any] | None:
-    """Одна карточка «сейчас». Порядок — как на листе слота в макете (PDEC-023)."""
+    """Одна карточка «сейчас». Порядок — как на листе слота в макете (PDEC-023).
+
+    Без города матч не встаёт: новому человеку сначала нужен лёд и выбор города, а не Динамо-Минск.
+    Тогда None — главная показывает тизер льда по стране.
+    """
     local_now = now.astimezone(ZoneInfo(tz_name))
     booking = _booking_today(bookings, local_now=local_now)
     if booking is not None:
@@ -235,7 +240,7 @@ def now_slot(
             "booking": dict(booking),
             "minutes_until": _minutes_until(str(booking.get("start_time") or ""), local_now=local_now),
         }
-    mode = (hockey or {}).get("mode")
+    mode = (hockey or {}).get("mode") if has_city else None
     if mode in ("result", "before") and (hockey or {}).get("match"):
         return {"kind": "kk_result" if mode == "result" else "kk_before", "hockey": dict(hockey or {})}
     if upcoming:

@@ -53,17 +53,18 @@ async def test_hub_and_catalog_assets_include_ice_links(app_use_test_db) -> None
         catalog = await client.get("/webapp/catalog?trainer_id=1")
         teaser_js = await client.get("/webapp/ice-teaser-model.js")
         chips_js = await client.get("/webapp/trainer-arena-chips-model.js")
-        home_js = await client.get("/webapp/client-home-main.js")
+        home_js = await client.get("/webapp/hub-home.js")
         catalog_js = await client.get("/webapp/catalog-main.js")
     assert home.status_code == 200, home.text
     # TASK-303: лёд города — «Ближайший лёд» и слот; тизер нужен клиенту без города.
     assert 'id="hubNearest"' in home.text
-    assert "ice-teaser-model.js" in home.text
+    # Тизер льда по стране — только клиенту без города: hub-home.js грузит его по требованию.
+    assert "ice-teaser-model.js" not in home.text
     assert 'id="myTrainerBlock"' in home.text
     assert 'id="hubPrimaryPanel"' in home.text
     assert teaser_js.status_code == 200
     assert chips_js.status_code == 200
-    # TASK-091: Главная рисует карточку льда, а не строку-тизер.
+    # TASK-091 → TASK-303: карточку льда без города рисует слот главной (hub-home.js).
     assert "formatIceCard" in home_js.text
     assert "TrainerArenaChips" in catalog_js.text
     assert "trainer-arena-chips-model.js" in catalog.text

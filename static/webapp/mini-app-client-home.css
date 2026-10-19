@@ -326,12 +326,8 @@ body.hub-body {
 }
 body.hub-body--loading #hubInitialSkel { display: flex; }
 
-body.hub-body--loading #nextBookingBlock,
-body.hub-body--loading #myTrainerBlock,
-body.hub-body--loading #hubPrimaryPanel,
-body.hub-body--loading #upcomingSection{
-  display: none !important;
-}
+/* TASK-303: личные блоки во время загрузки не прячутся — их место держит скелет,
+   а display:none на 200 мс давал сдвиг всей ленты (CLS 0.14). */
 
 /* Premium reveal: one coordinated fade-up after ALL async sections resolve. */
 @keyframes hub-initial-reveal {

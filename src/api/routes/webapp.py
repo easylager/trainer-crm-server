@@ -3219,6 +3219,7 @@ async def get_client_hub_bootstrap(
                 hockey=home_hockey,
                 upcoming=(home_city or {}).get("upcoming") or [],
                 now=datetime.now(timezone.utc),
+                has_city=home_city is not None,
             ),
         },
         "platform": {

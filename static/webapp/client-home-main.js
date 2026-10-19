@@ -65,13 +65,6 @@
       /** Контакт основного тренера — чтобы окно собралось, когда придут слоты. */
       var hubPrimaryTrainer = null;
       /**
-       * TASK-160 (S4). Лёд города уже стоит заливкой «моей карточки» — зона
-       * #hubIceZone в этом состоянии показала бы тот же сеанс второй раз.
-       */
-      var hubIceInCard = false;
-      /* TASK-303: последний bootstrap — уточнение места по GPS перерисовывает по нему карточку. */
-      var hubLastMeta = null;
-      /**
        * У карточки есть своё главное действие (залитая кнопка или полоса чипов).
        * Правило прототипа: на экране ровно одна главная кнопка, поэтому нижний
        * FAB с тем же смыслом при этом не показывается.
@@ -1042,106 +1035,9 @@
 
       /* ── TASK-160 (S4): лёд города — заливка «моей карточки» ──────────── */
 
-      /**
-       * Карточка льда по данным тизера или null. Тот же гейт, что у строк
-       * сеансов (`renderIceTodaySessions`): нет сеанса / он уже начался / это
-       * «далёкая» карточка — героем лёд не становится.
-       *
-       * Плюс город обязателен. `is_country_fallback` значит «города у клиента
-       * нет, показываем ближайший сеанс по стране» — назвать такой сеанс «льдом
-       * сегодня в вашем городе» нельзя, это состояния «города нет» и «мы далеко»
-       * (TASK-162), а не «город есть, личного нет».
-       */
-      function iceTeaserHeroView(teaser) {
-        var model = window.IceTeaserModel;
-        if (!teaser || !model || typeof model.formatIceCard !== 'function') return null;
-        if (teaser.is_country_fallback) return null;
-        var view = model.formatIceCard(teaser, new Date());
-        if (!view || view.hidden || view.isFar) return null;
-        return view;
-      }
 
-      /**
-       * Сеансы для чипов «дальше на льду» — те же `ice_teaser.sessions`, из
-       * которых HubIceTodayModel строит строки: новых запросов состояние не
-       * вводит. Готовые строки взять нельзя (в них нет ни даты, ни id сеанса,
-       * а чипу нужно и то и другое), поэтому здесь тот же фильтр — без
-       * тизерного сеанса и без начавшихся — но в полях окна, которые ждёт модель.
-       */
-      function cityIceSlots(teaser, now) {
-        var model = window.HubIceTodayModel;
-        var sessions = Array.isArray(teaser && teaser.sessions) ? teaser.sessions : [];
-        var ownId = teaser && teaser.session_id != null ? String(teaser.session_id) : '';
-        var out = [];
-        sessions.forEach(function (raw) {
-          var ses = raw || {};
-          if (ses.session_id == null) return;
-          if (ownId && String(ses.session_id) === ownId) return;
-          var startMs = Date.parse(ses.starts_at_utc || '');
-          if (!isNaN(startMs) && startMs <= now.getTime()) return;
-          var href = model && typeof model.rowHref === 'function' ? model.rowHref(ses) : '';
-          if (!href) return;
-          out.push({
-            id: ses.session_id,
-            slot_date: ses.local_date,
-            start_time: ses.starts_at_local,
-            arena_id: ses.arena_id,
-            arena_name: ses.arena_name,
-            href: href,
-          });
-        });
-        return out;
-      }
 
-      /**
-       * Вход заливки «лёд города». Крупное время здесь — сеанс площадки, факт
-       * мира: в строке `who` арена, а не человек, и штампа «подтверждена» нет,
-       * поэтому спутать его с моей записью нечем (правило модели).
-       */
-      function buildMeCardCityIceInput(teaser, view, hubMeta) {
-        return {
-          kind: 'city-ice',
-          arena: {
-            id: teaser.arena_id,
-            name: view.name,
-            city_name: view.city,
-            start_time: view.time,
-            // Район вместо адреса: адреса арены в тизере нет, а выдумывать его
-            // нельзя. Нет и района — модель поставит в строку город.
-            address: view.where,
-            // Условия сеанса — готовая строка IceTeaserModel (вид катания + цена).
-            // Собирать её второй раз в хабе значит развести два источника одной
-            // подписи: на «Льду» и на Главной она обязана читаться одинаково.
-            kind_label: view.facts,
-          },
-          slots: cityIceSlots(teaser, new Date()),
-          passes: hubBootstrapPasses(hubMeta),
-          certificates: hubBootstrapCertificates(hubMeta),
-        };
-      }
 
-      /**
-       * Герой рынка: личного нет — карточку заполняет лёд города. Пустого хаба
-       * не существует, поэтому это та же рамка и тот же ритм, что у записи и у
-       * тренера: клиент, который завтра запишется, нового экрана не увидит.
-       *
-       * Возвращает true, когда карточка нарисована. Лёд рисоваться не обязан
-       * (нет города, нет сеансов, мы далеко) — тогда хаб остаётся на прежнем
-       * наполнении: зона льда со своим тизером и секции рынка под ней.
-       */
-      function paintMarketHero(teaser, hubMeta) {
-        var view = iceTeaserHeroView(teaser);
-        if (!view) return false;
-        var input = buildMeCardCityIceInput(teaser, view, hubMeta);
-        if (!renderMeCard(input, null)) return false;
-        var hrefs = {};
-        input.slots.forEach(function (slot) {
-          if (slot.id != null && slot.href) hrefs[String(slot.id)] = slot.href;
-        });
-        hubMeCardSessionHrefs = hrefs;
-        hubIceInCard = true;
-        return true;
-      }
 
       function catalogPrimaryServiceQuery() {
         if (primaryCatalogServiceId == null || primaryCatalogServiceId === '') return '';
@@ -1673,6 +1569,11 @@
        * by — the catalog's own auto-detect, which does set one.
        */
       function attemptHubGeoRefine() {
+        // Модели «города нет» грузятся по требованию: клиенту с городом они не нужны (TASK-303, AC-P2).
+        if (window.HubHome && !window.CatalogGeoModel) {
+          window.HubHome.needNoCityModels().then(attemptHubGeoRefine, function () {});
+          return;
+        }
         var G = window.CatalogGeoModel;
         if (!G) return;
         var already = G.readDeclinedFlag(window.localStorage, HUB_GEO_REFINED_FLAG);
@@ -1694,7 +1595,7 @@
               .then(function (r) { return r.json(); })
               .then(function (data) {
                 // TASK-303: без города слот — карточка клиента; уточнили место — перерисовываем её.
-                if (data && data.ice_teaser && paintMarketHero(data.ice_teaser, hubLastMeta)) placeMeCard('slot');
+                if (data && data.ice_teaser && window.HubHome) window.HubHome.refineTeaser(data.ice_teaser);
               })
               .catch(function () { /* keep the plain fallback card already on screen */ });
           },
@@ -1717,7 +1618,6 @@
 
 
       function applyHubState(bookingDays, requestItems, hubMeta) {
-        hubLastMeta = hubMeta;
         applyHubBootstrapFlags(hubMeta);
         hubPersonalSlot = false;
         hubPrimaryTrainer = null;
@@ -1825,7 +1725,6 @@
         if (hasSavedBookmarks && primaryTrainerId == null) {
           resetHubHeroLayout();
           /* TASK-303: сохранённые — в «Моих занятиях»; без города слот — выбор города. */
-          if (!hasCity && paintMarketHero(iceTeaser, hubMeta)) placeMeCard('slot');
           renderSavedTrainersSection(cs);
           renderPassShelf(hubMeta, null);
           showMine();
@@ -1849,7 +1748,6 @@
         hideMyTrainerBlock();
         /* TASK-303: личного нет — слот уже заполнил HubHome (лёд, матч).
            Без города слот — карточка клиента «выберите город» / «вы далеко». */
-        if (!hasCity && paintMarketHero(iceTeaser, hubMeta)) placeMeCard('slot');
         return finishHubApply(Promise.resolve());
       }
 
@@ -1867,6 +1765,9 @@
         if (!mine) return;
         var title = mine.querySelector('.hs__title');
         if (block.parentNode !== mine) mine.insertBefore(block, title ? title.nextSibling : mine.firstChild);
+        // Окна тренера приходят отдельным запросом: место под карточку держим сразу,
+        // иначе «Ближайший лёд» уезжает вниз на её высоту (CLS, TASK-303 AC-P4).
+        if (!block.firstChild) block.innerHTML = '<div class="hh-me-skel" aria-hidden="true"></div>';
         showMine();
       }
 

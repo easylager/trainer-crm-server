@@ -287,11 +287,18 @@ def webapp_client_saved_trainers_page():
 
 @app.get("/webapp/client-home")
 def webapp_client_home_page():
-    """Client hub: contextual hero, upcoming bookings, links to catalog / bookings / requests / passes."""
+    """Client hub (TASK-303): шапка города, слот «сейчас», «Мои занятия», лёд и «Что нужно».
+
+    В разметке `__FONT_V__` — версия своих шрифтов: preload обязан совпасть с адресом
+    из glide-public-fonts.css, иначе Dela Gothic качается второй раз и заголовок прыгает.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "client-home.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/webapp/client-family-access")

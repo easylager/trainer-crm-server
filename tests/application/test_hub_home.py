@@ -36,6 +36,12 @@ def test_finished_or_cancelled_booking_gives_way_to_the_game() -> None:
     assert slot is not None and slot["kind"] == "kk_before"
 
 
+def test_without_city_the_game_waits_for_the_city() -> None:
+    assert now_slot(bookings=None, hockey=KK_BEFORE, upcoming=[], now=NOW, has_city=False) is None
+    booked = now_slot(bookings=_bookings(_booking()), hockey=KK_BEFORE, upcoming=[], now=NOW, has_city=False)
+    assert booked is not None and booked["kind"] == "booking", "своя запись важнее города"
+
+
 def test_nearest_ice_when_nothing_else_and_none_without_ice() -> None:
     slot = now_slot(bookings=None, hockey={"mode": None}, upcoming=ICE, now=NOW)
     assert slot == {"kind": "ice", "session": ICE[0]}
