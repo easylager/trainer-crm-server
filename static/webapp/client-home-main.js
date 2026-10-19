@@ -347,10 +347,9 @@
        * TASK-149 (S3). Секция «Куда катимся» — единственная навигация по рынку
        * (заменила секцию-подборки и карусель «Места и тренеры» в роли второй навигации).
        * Плитки Катки / Тренеры / Магазины — каждая только при честном счётчике > 0;
-       * нет ни одной — секции нет. Счётчики — из публичных запросов, которые уже
-       * есть (фасеты и window.hits /api/public/ice/arenas, total /api/public/trainers
-       * с city_id — тот же список, что «Тренеры» во вкладке «Поиск»); новых
-       * эндпоинтов нет. Сбой любого запроса — соответствующей плитки нет.
+       * нет ни одной — секции нет. Один список катков (фасеты, окно «вечером» и
+       * outdoor_live — тот же первый открытый каток, что раньше отдавал отдельный
+       * запрос) и total тренеров. Сбой запроса — соответствующей плитки нет.
        * Возвращает Promise<boolean>: показана ли хотя бы одна плитка.
        */
       function renderHubExplore(cityId) {
@@ -371,17 +370,14 @@
             .catch(function () { return null; });
         };
         return Promise.all([
-          fetchJson(base + '&limit=1'),
           fetchJson(base + '&venue_type=ice,outdoor&when=today_evening&limit=1'),
-          fetchJson(base + '&venue_type=outdoor&limit=1'),
           fetchJson('/api/public/trainers?order_by=rating&limit=1&city_id=' + cityParam),
         ]).then(function (parts) {
-          var facets = (parts[0] && parts[0].venue_type_facets) || [];
-          var evening = parts[1] && parts[1].window ? Number(parts[1].window.hits) || 0 : null;
-          var outdoorLive = ((parts[2] && parts[2].items) || []).some(function (i) {
-            return i && i.live && String(i.live.kind) === 'session';
-          });
-          var trainersTotal = parts[3] && parts[3].total != null ? Number(parts[3].total) : null;
+          var listing = parts[0] || {};
+          var facets = listing.venue_type_facets || [];
+          var evening = listing.window ? Number(listing.window.hits) || 0 : null;
+          var outdoorLive = listing.outdoor_live === true;
+          var trainersTotal = parts[1] && parts[1].total != null ? Number(parts[1].total) : null;
           hubGreetingFacts.eveningHits = evening;
           paintHubGreetingSub();
           var tiles = model.buildTiles(
@@ -1663,8 +1659,8 @@
       var HUB_SKELETON_MIN_MS = 220;
 
       /**
-       * Drop skeleton only after bootstrap AND scenario-specific async work
-       * (primary panel slots, discovery carousel) are done. Idempotent.
+       * Скелетон снимается, когда bootstrap уже разложил героя. Слоты, плитки
+       * и карусель дорисовываются сами и не держат первую картинку.
        */
       function finishHubInitialLoading() {
         if (document.body.classList.contains('hub-body--revealed')) return;
@@ -1679,6 +1675,9 @@
             skel.removeAttribute('aria-busy');
           }
           syncClientHubBookFab();
+          if (window.ClientShell && typeof window.ClientShell.scheduleCatalogNavigationPrefetch === 'function') {
+            window.ClientShell.scheduleCatalogNavigationPrefetch();
+          }
         }, wait);
       }
 
@@ -2589,7 +2588,8 @@
 
         function finishHubApply(promise) {
           syncClientHubBookFab();
-          return promise;
+          if (promise && typeof promise.then === 'function') promise.then(function () {}, function () {});
+          return Promise.resolve();
         }
 
         var nextItem = findNextBooking(bookingDays);
@@ -2711,7 +2711,8 @@
           setHubSearchVisible(true);  // DEC-001: без данных работа клиента — «найти», строка остаётся
           hubMarketPromise = renderHubExplore(null);
           renderStreakRibbon(null);
-          return loadDiscoveryUnlessMarket().then(finishHubInitialLoading, finishHubInitialLoading);
+          loadDiscoveryUnlessMarket();
+          return finishHubInitialLoading();
         }
 
         /* Bootstrap API: wait for acting profile so X-Profile-Id is set (default child ≠ self). */
@@ -2737,9 +2738,6 @@
             var days = (hub.bookings || {}).days || [];
             var reqs = (hub.requests || {}).items || [];
             renderStreakRibbon(hub.activity || {});
-            if (window.ClientShell && typeof window.ClientShell.scheduleCatalogNavigationPrefetch === 'function') {
-              window.ClientShell.scheduleCatalogNavigationPrefetch();
-            }
             return applyHubState(days, reqs, hub);
           })
           .catch(function() {
