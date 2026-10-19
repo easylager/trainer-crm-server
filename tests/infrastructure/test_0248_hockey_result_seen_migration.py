@@ -1,4 +1,4 @@
-"""TASK-299: migration 0247 hockey_picks.result_seen_at upgrade/downgrade."""
+"""TASK-299: migration 0248 hockey_picks.result_seen_at upgrade/downgrade."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from alembic.operations import Operations
 from sqlalchemy import text
 
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versions"
-MIGRATION_FILE = "0247_hockey_result_seen.py"
+MIGRATION_FILE = "0248_hockey_result_seen.py"
 
 
 async def _run_migration_step(db_session, step: str) -> None:

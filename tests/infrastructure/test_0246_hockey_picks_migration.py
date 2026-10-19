@@ -1,4 +1,4 @@
-"""TASK-297: migration 0245 hockey_players / hockey_picks upgrade/downgrade и защита хода."""
+"""TASK-297: migration 0246 hockey_players / hockey_picks upgrade/downgrade и защита хода."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versions"
-MIGRATION_FILE = "0245_hockey_picks.py"
-DEPENDENT_FILE = "0246_hockey_leagues.py"
-SEEN_FILE = "0247_hockey_result_seen.py"
+MIGRATION_FILE = "0246_hockey_picks.py"
+DEPENDENT_FILE = "0247_hockey_leagues.py"
+SEEN_FILE = "0248_hockey_result_seen.py"
 
 
 async def _run_migration_step(db_session, step: str, file: str = MIGRATION_FILE) -> None:

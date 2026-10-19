@@ -1,9 +1,9 @@
 /*
- * Строка «Кто кого» на главной — «окно» в игру (PDEC-022): игровой шрифт и наклейка, вокруг Glide.
+ * Строка «Кто кого» на главной — «окно» в игру (PDEC-022): шрифт заголовков хаба (Dela Gothic, PDEC-022 поправка) и наклейка, вокруг Glide.
  * Нейтрали — токены главной (--tg-theme-*), чтобы строка жила и в светлой, и в тёмной теме.
  */
 .hub-kk { margin: 10px 16px 0; }
-.hub-kk__display { font-family: 'Unbounded', var(--app-font-sans, system-ui), sans-serif; font-weight: 800; }
+.hub-kk__display { font-family: 'Dela Gothic One', var(--app-font-sans, system-ui), sans-serif; font-weight: 400; }
 .hub-kk__row {
   display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 6px 14px 6px 6px;
   border-radius: 20px; background: var(--tg-theme-secondary-bg-color, #ffffff); color: var(--tg-theme-text-color, #0d1b26);
@@ -26,7 +26,7 @@
 .hub-kk__badge {
   width: 36px; height: 36px; border-radius: 18px; flex: none; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  background: var(--team); color: #ffffff; font-family: 'Unbounded', var(--app-font-sans, system-ui), sans-serif; font-weight: 800; font-size: 11px;
+  background: var(--team); color: #ffffff; font-family: 'Dela Gothic One', var(--app-font-sans, system-ui), sans-serif; font-weight: 400; font-size: 11px;
 }
 .hub-kk__badge--logo { background: #ffffff; padding: 3px; box-sizing: border-box; }
 .hub-kk__badge img { width: 100%; height: 100%; object-fit: contain; display: block; }
@@ -35,7 +35,7 @@
 .hub-kk__sticker {
   width: 48px; height: 48px; flex: none; border-radius: 15px; background: #ffd23f; color: #0d1424;
   display: flex; align-items: center; justify-content: center; transform: rotate(-6deg);
-  font-family: 'Unbounded', var(--app-font-sans, system-ui), sans-serif; font-weight: 800; font-size: 15px;
+  font-family: 'Dela Gothic One', var(--app-font-sans, system-ui), sans-serif; font-weight: 400; font-size: 15px;
 }
 .hub-kk__row--miss .hub-kk__sticker { background: rgba(255, 255, 255, 0.16); color: #ffffff; }
 .hub-kk__chev { font-size: 22px; line-height: 1; opacity: 0.8; }

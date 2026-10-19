@@ -1,7 +1,7 @@
 """Игра «Кто кого»: игроки и ходы на матчи Динамо-Минск (TASK-297).
 
-Revision ID: 0245_hockey_picks
-Revises: 0244_hockey_matches
+Revision ID: 0246_hockey_picks
+Revises: 0245_hockey_matches
 """
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0245_hockey_picks"
-down_revision = "0244_hockey_matches"
+revision = "0246_hockey_picks"
+down_revision = "0245_hockey_matches"
 branch_labels = None
 depends_on = None
 

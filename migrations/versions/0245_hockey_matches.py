@@ -1,6 +1,6 @@
 """Матчи Динамо-Минск для игры «Кто кого»: календарь и официальный итог (TASK-296).
 
-Revision ID: 0244_hockey_matches
+Revision ID: 0245_hockey_matches
 Revises: 0243_city_picks
 """
 
@@ -9,8 +9,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0244_hockey_matches"
-down_revision = "0243_city_picks"
+revision = "0245_hockey_matches"
+down_revision = "0244_minsk_load_characters"
 branch_labels = None
 depends_on = None
 

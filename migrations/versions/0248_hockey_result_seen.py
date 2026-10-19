@@ -1,7 +1,7 @@
 """Игра «Кто кого»: игрок открыл итог своего хода (TASK-299).
 
-Revision ID: 0247_hockey_result_seen
-Revises: 0246_hockey_leagues
+Revision ID: 0248_hockey_result_seen
+Revises: 0247_hockey_leagues
 """
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0247_hockey_result_seen"
-down_revision = "0246_hockey_leagues"
+revision = "0248_hockey_result_seen"
+down_revision = "0247_hockey_leagues"
 branch_labels = None
 depends_on = None
 

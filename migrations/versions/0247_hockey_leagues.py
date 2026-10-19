@@ -1,7 +1,7 @@
 """Игра «Кто кого»: лиги друзей и участники (TASK-298).
 
-Revision ID: 0246_hockey_leagues
-Revises: 0245_hockey_picks
+Revision ID: 0247_hockey_leagues
+Revises: 0246_hockey_picks
 """
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0246_hockey_leagues"
-down_revision = "0245_hockey_picks"
+revision = "0247_hockey_leagues"
+down_revision = "0246_hockey_picks"
 branch_labels = None
 depends_on = None
 

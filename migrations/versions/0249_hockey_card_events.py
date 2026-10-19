@@ -1,7 +1,7 @@
 """Игра «Кто кого»: события карточек в чате — отправили, открыли, вступили (TASK-300).
 
-Revision ID: 0248_hockey_card_events
-Revises: 0247_hockey_result_seen
+Revision ID: 0249_hockey_card_events
+Revises: 0248_hockey_result_seen
 """
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0248_hockey_card_events"
-down_revision = "0247_hockey_result_seen"
+revision = "0249_hockey_card_events"
+down_revision = "0248_hockey_result_seen"
 branch_labels = None
 depends_on = None
 
