@@ -322,6 +322,15 @@ def webapp_client_family_access_main_js(request: Request):
     )
 
 
+@app.get("/webapp/client-support")
+def webapp_client_support_page():
+    """Client: идеи, отзывы и поддержка — переехали с главной в «Ещё» (TASK-303)."""
+    path = _WEBAPP_DIR / "client-support.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/client-stats")
 def webapp_client_stats_page():
     """Client: completed-session stats and gentle rhythm hints (motivation, no leaderboards)."""

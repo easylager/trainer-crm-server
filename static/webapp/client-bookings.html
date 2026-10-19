@@ -34,6 +34,15 @@
     })();
   </script>
   <style>
+    .cb-streak {
+      margin: 4px 16px 12px; min-height: 48px; padding: 0 14px; border-radius: 16px; box-sizing: border-box;
+      display: flex; align-items: center; gap: 10px; text-decoration: none;
+      background: var(--tg-theme-secondary-bg-color, #fff); color: var(--tg-theme-text-color, #0d1b26);
+    }
+    .cb-streak[hidden] { display: none; }
+    .cb-streak__n { font: 800 20px/1 var(--app-font-sans, sans-serif); }
+    .cb-streak__t { flex: 1; font-size: 14px; font-weight: 600; }
+    .cb-streak svg { opacity: .55; }
     html.bookings-open-detail #screenList.active { display: none !important; }
     html.bookings-open-detail #screenDetail { display: block !important; }
   </style>
@@ -50,6 +59,12 @@
   </div>
 
   <div id="screenList" data-screen class="active">
+    <!-- TASK-303: серия недель уехала с главной сюда; строка есть, только когда серия идёт. -->
+    <a class="cb-streak" id="cbStreak" href="client-stats" hidden>
+      <span class="cb-streak__n" id="cbStreakN"></span>
+      <span class="cb-streak__t" id="cbStreakT"></span>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </a>
     <div class="cb-mode-tabs" id="cbModeTabs">
       <button type="button" class="cb-mode-tab active" data-mode="upcoming" id="cbTabUpcoming">Предстоящие</button>
       <button type="button" class="cb-mode-tab" data-mode="history" id="cbTabHistory">История</button>
@@ -1219,5 +1234,36 @@
     })();
   </script>
   <script src="mini-app-client-home.js?v=202610194"></script>
+  <script>
+    /* TASK-303: серия недель — тихой строкой над записями, тап ведёт в «Вашу активность». */
+    (function () {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      var initData = (tg && tg.initData) || '';
+      var row = document.getElementById('cbStreak');
+      if (!initData || !row) return;
+      function plural(n, one, few, many) {
+        var m10 = n % 10, m100 = n % 100;
+        if (m10 === 1 && m100 !== 11) return one;
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+        return many;
+      }
+      row.addEventListener('click', function (e) {
+        if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+          e.preventDefault();
+          window.ClientShell.navigate('client-stats');
+        }
+      });
+      fetch('/api/webapp/client/activity-stats?init_data=' + encodeURIComponent(initData), { headers: { 'X-Telegram-Init-Data': initData } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          var n = d ? Number(d.streak_weeks) || 0 : 0;
+          if (n < 2) return; // одна неделя — ещё не серия
+          document.getElementById('cbStreakN').textContent = String(n);
+          document.getElementById('cbStreakT').textContent = plural(n, 'неделя', 'недели', 'недель') + ' подряд с тренировками';
+          row.hidden = false;
+        })
+        .catch(function () { /* без серии — просто без строки */ });
+    })();
+  </script>
 </body>
 </html>

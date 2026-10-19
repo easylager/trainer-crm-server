@@ -57,6 +57,13 @@
       iconId: 'client-requests',
       hint: 'Запрос на подбор тренера и ответы специалистов',
     },
+    {
+      // TASK-303: сообщество и форма поддержки — с главной сюда.
+      path: 'client-support',
+      label: 'Идеи и поддержка',
+      iconId: 'client-support',
+      hint: 'Напишите, чего не хватает, — мы читаем каждое сообщение',
+    },
   ];
 
   function moreItemPlate(iconId) {
