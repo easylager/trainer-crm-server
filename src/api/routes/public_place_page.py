@@ -17,6 +17,7 @@ from typing import Any, Mapping
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,12 +126,37 @@ async def catalog_home_page(
 
 
 # Просмотр /, /c/, /p/ — sendBeacon (см. public-page-view-beacon.js), не GET HTML (prefetch/bfcache).
-# private: общий кэш нельзя. Главная рисует город из cookie glide_city, а /c/ и /p/ эту куку ставят.
+# private: общий кэш нельзя. Главная рисует город из cookie glide_city.
+# /c/ и /p/ ставят куку в ответе и ещё раз на pageshow (glide-city-pin.js):
+# повтор из HTTP-кэша и bfcache не исполняют Set-Cookie.
 # max-age=30 + stale-while-revalidate: повторный заход в том же браузере сразу показывает страницу
 # и тихо сверяется с сервером. bfcache по-прежнему жив (нет no-store).
 _PAGE_CACHE_VALUE = "private, max-age=30, stale-while-revalidate=300"
 _PAGE_CACHE = {"Cache-Control": _PAGE_CACHE_VALUE}
 _HOME_CACHE = {**_PAGE_CACHE, "Vary": "Cookie"}
+_PIN_NO_STORE = {"Cache-Control": "no-store"}
+
+
+class GlideCityPinBody(BaseModel):
+    slug: str = Field(min_length=1, max_length=80)
+
+
+@router.post("/api/public/glide-city", status_code=204)
+async def pin_glide_city(
+    body: GlideCityPinBody,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Кука города с открытой страницы. Только same-origin: чужой сайт город не подменяет."""
+    site = (request.headers.get("sec-fetch-site") or "").strip().lower()
+    if site != "same-origin":
+        return Response(status_code=403, headers=_PIN_NO_STORE)
+    city = await resolve_city_by_ref(session, body.slug)
+    if city is None:
+        return Response(status_code=404, headers=_PIN_NO_STORE)
+    response = Response(status_code=204, headers=_PIN_NO_STORE)
+    apply_glide_city_cookie(response, slug=city_slug(str(city["name"])))
+    return response
 _IMAGE_CACHE = {"Cache-Control": "public, max-age=900"}
 _IMAGE_CACHE_SESSION = {"Cache-Control": "public, max-age=300, stale-while-revalidate=60"}
 

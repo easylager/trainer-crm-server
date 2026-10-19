@@ -1048,6 +1048,7 @@ def render_place_page(
 
     from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
+    from src.shared.glide_city_cookie import glide_city_pin_script
 
     html = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     lang, og_locale = html_lang_for_country(country if country is not None else card.get("country"))
@@ -1078,6 +1079,7 @@ def render_place_page(
             city_id=int(card.get("city_id") or 0) or None,
             arena_id=int(card.get("id") or card.get("arena_id") or 0) or None,
         ),
+        "__GLIDE_CITY_PIN__": glide_city_pin_script(city_slug(city) if city else ""),
     }
     from src.application.style_b import b_press_script_html, telegram_dock_script_html
 

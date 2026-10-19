@@ -2252,6 +2252,19 @@ def shared_list_scroll_restore_js(request: Request):
     )
 
 
+@app.get("/static/shared/glide-city-pin.js")
+def shared_glide_city_pin_js(request: Request):
+    """Повторная установка glide_city на pageshow страниц города и катка."""
+    path = _SHARED_DIR / "glide-city-pin.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/public-bfcache-session-refresh.js")
 def shared_public_bfcache_session_refresh_js(request: Request):
     """FEEL-A: тихое обновление списка сеансов после долгого bfcache."""

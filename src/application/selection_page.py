@@ -1269,6 +1269,7 @@ def render_selection_page(
     )
     from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
+    from src.shared.glide_city_cookie import glide_city_pin_script
 
     page = _B_TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = (
@@ -1305,6 +1306,7 @@ def render_selection_page(
                 surface="selection_page",
                 city_id=int(view["city"]["id"]),
             ),
+            "__GLIDE_CITY_PIN__": glide_city_pin_script(city_slug(city_name)),
             **share_tail,
         },
     )
