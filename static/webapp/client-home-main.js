@@ -1101,37 +1101,34 @@
         if (skel) skel.remove();
       }
 
-      /** When bootstrap started — used for minimum skeleton display time. */
-      var hubLoadStartedAt = Date.now();
-      var HUB_SKELETON_MIN_MS = 220;
-
       /**
        * Скелетон снимается, когда bootstrap уже разложил героя. Слоты, плитки
        * и карусель дорисовываются сами и не держат первую картинку.
        */
       function finishHubInitialLoading() {
         if (document.body.classList.contains('hub-body--revealed')) return;
-        var wait = Math.max(0, HUB_SKELETON_MIN_MS - (Date.now() - hubLoadStartedAt));
-        setTimeout(function() {
-          if (document.body.classList.contains('hub-body--revealed')) return;
-          document.body.classList.remove('hub-body--loading');
-          document.body.classList.add('hub-body--revealed');
-          var skel = document.getElementById('hubInitialSkel');
-          if (skel) {
-            skel.setAttribute('aria-hidden', 'true');
-            skel.removeAttribute('aria-busy');
-          }
-          if (window.HubHome) window.HubHome.ready();
-          // Другие вкладки — после того как догрузилась сама главная (фото шапки в том числе):
-          // на медленной сети префетч иначе делит канал с первым экраном (TASK-303, AC-P2).
-          var prefetch = function () {
+        document.body.classList.remove('hub-body--loading');
+        document.body.classList.add('hub-body--revealed');
+        var skel = document.getElementById('hubInitialSkel');
+        if (skel) {
+          skel.setAttribute('aria-hidden', 'true');
+          skel.removeAttribute('aria-busy');
+        }
+        if (window.HubHome) window.HubHome.ready();
+        // Другие вкладки — после фото шапки: на медленной сети префетч иначе
+        // делит канал с первым экраном (TASK-303, AC-P2).
+        var prefetch = function () {
+          var heroReady = window.HubHome && typeof window.HubHome.whenHeroSettled === 'function'
+            ? window.HubHome.whenHeroSettled()
+            : Promise.resolve();
+          heroReady.then(function () {
             if (window.ClientShell && typeof window.ClientShell.scheduleCatalogNavigationPrefetch === 'function') {
               window.ClientShell.scheduleCatalogNavigationPrefetch();
             }
-          };
-          if (document.readyState === 'complete') prefetch();
-          else window.addEventListener('load', prefetch, { once: true });
-        }, wait);
+          });
+        };
+        if (document.readyState === 'complete') prefetch();
+        else window.addEventListener('load', prefetch, { once: true });
       }
 
       function clearNextBookingBlock() {
@@ -1875,7 +1872,6 @@
       }
 
       function loadAll() {
-        hubLoadStartedAt = Date.now();
         // TASK-149 (S1): приветствие по часу устройства сразу — не ждём bootstrap.
         setHubGreeting(defaultHubGreeting());
         wireAllBookingsLink();

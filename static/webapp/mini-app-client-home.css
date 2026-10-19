@@ -327,34 +327,8 @@ body.hub-body {
 body.hub-body--loading #hubInitialSkel { display: flex; }
 
 /* TASK-303: личные блоки во время загрузки не прячутся — их место держит скелет,
-   а display:none на 200 мс давал сдвиг всей ленты (CLS 0.14). */
-
-/* Premium reveal: one coordinated fade-up after ALL async sections resolve. */
-@keyframes hub-initial-reveal {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: none; }
-}
-body.hub-body--revealed #nextBookingBlock,
-body.hub-body--revealed #myTrainerBlock,
-body.hub-body--revealed #hubPrimaryPanel,
-body.hub-body--revealed #upcomingSection{
-  animation: hub-initial-reveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: 0.16s;
-}
-
-body.hub-body--revealed #myTrainerBlock       { animation-delay: 0.02s; }
-body.hub-body--revealed #hubPrimaryPanel      { animation-delay: 0.06s; }
-body.hub-body--revealed #nextBookingBlock    { animation-delay: 0.02s; }
-body.hub-body--revealed #upcomingSection     { animation-delay: 0.1s; }
-
-@media (prefers-reduced-motion: reduce) {
-  body.hub-body--revealed #nextBookingBlock,
-  body.hub-body--revealed #myTrainerBlock,
-  body.hub-body--revealed #hubPrimaryPanel,
-  body.hub-body--revealed #upcomingSection{
-    animation: none !important;
-  }
-}
+   а display:none на 200 мс давал сдвиг всей ленты (CLS 0.14).
+   После скелетона блоки стоят на месте: сдвиг на 8px читался как дёрганье. */
 
 /* Smooth reveal: JS sets --visible class after paint */
 .hub-bookings-mount {

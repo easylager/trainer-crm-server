@@ -13,7 +13,9 @@
   var doc = global.document;
   var tg = global.Telegram && global.Telegram.WebApp;
   var TZ = 'Europe/Minsk';
-  var CACHE_KEY = 'glide.hub.hero.v1';
+  // v2: в кэш попадает только фото, которое реально открылось. v1 хранил первый URL
+  // сразу и на следующем заходе шапка начинала с 404.
+  var CACHE_KEY = 'glide.hub.hero.v2';
   var GREETING = { morning: 'Доброе утро', day: 'Добрый день', evening: 'Добрый вечер', night: 'Доброй ночи' };
   var WD_SHORT = { понедельник: 'пн', вторник: 'вт', среда: 'ср', четверг: 'чт', пятница: 'пт', суббота: 'сб', воскресенье: 'вс' };
   var WEEKDAY_IN = ['в воскресенье', 'в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу'];
@@ -176,6 +178,95 @@
 
   // ---------- шапка ----------
 
+  var heroSettle = Promise.resolve();
+  var heroSettleResolve = function () {};
+  var heroProbeGen = 0;
+
+  function beginHeroSettle() {
+    heroSettle = new Promise(function (resolve) { heroSettleResolve = resolve; });
+  }
+
+  function finishHeroSettle() {
+    var resolve = heroSettleResolve;
+    heroSettleResolve = function () {};
+    resolve();
+  }
+
+  /**
+   * Фото остаётся скрытым, пока файл не открылся. Битый URL — следующее фото города.
+   * Прогрев других вкладок ждёт whenHeroSettled, чтобы не делить канал с шапкой.
+   * Кандидаты пробуем отдельной картинкой. Уже показанное фото не снимаем,
+   * пока запасное реально не открылось: иначе 404 первого катка гасит обложку.
+   */
+  // Каждая попытка — круг до сервера. Больше четырёх подряд на телефоне — секунды тёмной шапки.
+  var HERO_MAX_TRIES = 4;
+  // Прогрев вкладок не ждёт обложку дольше этого: фото — украшение, вкладки — дело.
+  var HERO_SETTLE_MAX_MS = 1500;
+
+  function armHeroPhoto(photo, list, onPhoto) {
+    list = list.slice(0, HERO_MAX_TRIES);
+    beginHeroSettle();
+    var gen = ++heroProbeGen;
+    var settled = false;
+    function settle(src) {
+      if (settled || gen !== heroProbeGen) return;
+      settled = true;
+      if (src && onPhoto) onPhoto(src);
+      finishHeroSettle();
+    }
+    var showing = !!(photo.classList.contains('is-in') && !photo.hidden && photo.naturalWidth);
+    function giveUp() {
+      if (!showing) {
+        photo.classList.remove('is-in');
+        photo.hidden = true;
+      }
+      settle(null);
+    }
+    function tryAt(i) {
+      if (gen !== heroProbeGen) return;
+      if (i >= list.length) {
+        giveUp();
+        return;
+      }
+      var probe = new global.Image();
+      // Шапка — самая крупная картинка экрана: пробный запрос идёт с тем же приоритетом, что и тег.
+      if (i === 0) probe.fetchPriority = 'high';
+      probe.onload = function () {
+        if (gen !== heroProbeGen) return;
+        if (!probe.naturalWidth) {
+          tryAt(i + 1);
+          return;
+        }
+        if (photo.getAttribute('src') !== list[i]) photo.src = list[i];
+        revealHeroPhoto(photo);
+        settle(list[i]);
+      };
+      probe.onerror = function () {
+        if (gen !== heroProbeGen) return;
+        tryAt(i + 1);
+      };
+      probe.src = list[i];
+    }
+    if (photo.getAttribute('src') === list[0] && photo.complete && photo.naturalWidth) {
+      photo.hidden = false;
+      photo.classList.add('is-in');
+      settle(list[0]);
+      return;
+    }
+    tryAt(0);
+  }
+
+  function revealHeroPhoto(photo) {
+    photo.hidden = false;
+    if (photo.classList.contains('is-in')) return;
+    photo.classList.remove('is-in');
+    if (typeof global.requestAnimationFrame === 'function') {
+      global.requestAnimationFrame(function () { photo.classList.add('is-in'); });
+    } else {
+      photo.classList.add('is-in');
+    }
+  }
+
   function paintHero(hero) {
     var title = $('hubHeroTitle');
     var line = $('hubHeroLine');
@@ -198,18 +289,11 @@
     if (pill) pill.textContent = hero.city || 'Город';
     var list = hero.photos && hero.photos.length ? hero.photos : hero.photo ? [hero.photo] : [];
     if (photo && list.length) {
-      var i = 0;
       // Файл не отдался — следующее фото города; кончились — тёмная плашка, а не значок битой картинки.
-      photo.onerror = function () {
-        i += 1;
-        if (i < list.length) photo.src = list[i];
-        else photo.hidden = true;
-      };
-      photo.onload = function () {
-        photo.hidden = false;
-        if (hero.onPhoto) hero.onPhoto(list[i]);
-      };
-      if (photo.getAttribute('src') !== list[0]) photo.src = list[0];
+      armHeroPhoto(photo, list, hero.onPhoto);
+    } else {
+      if (photo) photo.hidden = true;
+      finishHeroSettle();
     }
     var hh = $('hubHero');
     if (hh) hh.classList.remove('hh--loading');
@@ -217,9 +301,16 @@
 
   function heroFrom(city) {
     if (!city) return { city: '', line: 'Выберите город — покажем лёд рядом', kicker: '', photo: null };
-    var photos = (city.hero_photos && city.hero_photos.length ? city.hero_photos : city.hero_photo ? [city.hero_photo] : [])
-      .map(function (p) { return p.card || p.hero; })
-      .filter(Boolean);
+    var raw = city.hero_photos && city.hero_photos.length ? city.hero_photos : city.hero_photo ? [city.hero_photo] : [];
+    var photos = [];
+    raw.forEach(function (p) {
+      if (!p) return;
+      // card часто 404, хотя hero того же катка уже в кэше телефона. thumb не берём:
+      // растянутый на 300px шапки, он мылит обложку хуже, чем фон без фото.
+      [p.card, p.hero].forEach(function (src) {
+        if (src && photos.indexOf(src) < 0) photos.push(src);
+      });
+    });
     return { city: city.name, line: city.counts_line || '', kicker: shortKicker(city.kicker), photo: photos[0] || null, photos: photos };
   }
 
@@ -293,7 +384,7 @@
     teams.appendChild(teamButton(m.home, 'home', onPick));
     teams.appendChild(teamButton(m.away, 'away', onPick));
     root.appendChild(teams);
-    var hint = el('span', 'hn__hint', 'Тапни за команду. Угадаешь точный счёт — ');
+    var hint = el('span', 'hn__hint', 'Без хода очков не будет. Точный счёт — ');
     hint.appendChild(el('b', 'hn__plus', '+50'));
     root.appendChild(hint);
     host.replaceChildren(root);
@@ -533,8 +624,8 @@
     var hero = heroFrom(city);
     // В кэш — то фото, что действительно загрузилось: в следующий раз шапка не начнёт с битого.
     if (city) {
+      // Пишем после onload: первый URL часто 404, и кэш не должен начинать следующий заход с него.
       hero.onPhoto = function (src) { cacheWrite({ city: hero.city, line: hero.line, photo: src, cityId: city.id }); };
-      cacheWrite({ city: hero.city, line: hero.line, photo: hero.photo, cityId: city.id });
     }
     paintHero(hero);
     var host = $('hubNow');
@@ -568,6 +659,9 @@
   global.HubHome = {
     apply: apply,
     paintCached: paintCached,
+    whenHeroSettled: function () {
+      return Promise.race([heroSettle, new Promise(function (r) { global.setTimeout(r, HERO_SETTLE_MAX_MS); })]);
+    },
     fail: fail,
     ready: ready,
     greetingText: greetingText,

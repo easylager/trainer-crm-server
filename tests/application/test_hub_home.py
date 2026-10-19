@@ -70,7 +70,8 @@ def _view() -> dict:
                 "slug": "tts-zamok",
                 "venue_type": "ice",
                 "photo_hero": "x",
-                "photo_variants": {"card": "a/3_card.jpg"},
+                "photo_width": 1920,
+                "photo_variants": {"card": "arenas/3/card.jpg"},
             },
             {"id": 9, "slug": "no-photo", "venue_type": "ice", "photo_hero": None, "photo_variants": {}},
             {
@@ -78,14 +79,15 @@ def _view() -> dict:
                 "slug": "minsk-arena",
                 "venue_type": "ice",
                 "photo_hero": "y",
-                "photo_variants": {"card": "a/2_card.jpg"},
+                "photo_width": 3744,
+                "photo_variants": {"card": "arenas/2/card.jpg"},
             },
             {
                 "id": 7,
                 "slug": "shop",
                 "venue_type": "shop",
                 "photo_hero": "z",
-                "photo_variants": {"card": "a/7_card.jpg"},
+                "photo_variants": {"card": "arenas/7/card.jpg"},
             },
         ],
         "upcoming": [
@@ -126,3 +128,4 @@ def test_hero_has_fallback_photos_from_rinks_only() -> None:
     block = city_block(_view())
     assert len(block["hero_photos"]) == 2, "каток без фото и магазин — не кандидаты"
     assert block["hero_photo"] == block["hero_photos"][0]
+    assert block["hero_photo"]["card"].endswith("arenas/2/card.jpg"), "обложка — самый крупный крытый каток"

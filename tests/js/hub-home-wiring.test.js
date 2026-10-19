@@ -17,6 +17,7 @@ const homeHtml = fs.readFileSync(path.join(webapp, 'client-home.html'), 'utf8');
 const homeMain = fs.readFileSync(path.join(webapp, 'client-home-main.js'), 'utf8');
 const hubJs = fs.readFileSync(path.join(webapp, 'hub-home.js'), 'utf8');
 const hubCss = fs.readFileSync(path.join(webapp, 'hub-home.css'), 'utf8');
+const homeCss = fs.readFileSync(path.join(webapp, 'mini-app-client-home.css'), 'utf8');
 const HubHome = require(path.join(webapp, 'hub-home.js'));
 
 function fnBody(name) {
@@ -81,8 +82,17 @@ describe('скорость (AC-P2…P5)', () => {
     assert.match(hubJs, /img\.loading = 'lazy'/);
     assert.match(hubJs, /img\.onerror = function \(\) \{ img\.remove\(\); \}/);
     // Шапка: битое фото — следующее фото города, кончились — тёмная плашка.
-    assert.match(hubJs, /if \(i < list\.length\) photo\.src = list\[i\];\s+else photo\.hidden = true;/);
+    assert.match(hubJs, /new global\.Image\(\)/);
+    assert.match(hubJs, /if \(!showing\) \{\s+photo\.classList\.remove\('is-in'\);\s+photo\.hidden = true;\s+\}/);
     assert.match(hubJs, /city\.hero_photos/);
+    // Не больше четырёх попыток, без размытой миниатюры; вкладки ждут обложку не дольше 1,5 с.
+    assert.match(hubJs, /HERO_MAX_TRIES = 4/);
+    assert.match(hubJs, /\[p\.card, p\.hero\]\.forEach/);
+    assert.match(hubJs, /Promise\.race\(\[heroSettle/);
+    // Кэш шапки — только после onload. Старый ключ v1 запоминал первый URL ещё до 404.
+    assert.match(hubJs, /CACHE_KEY = 'glide\.hub\.hero\.v2'/);
+    const apply = hubJs.slice(hubJs.indexOf('function apply('), hubJs.indexOf('function paintCached('));
+    assert.ok(!/cacheWrite\(\{ city: hero\.city/.test(apply.replace(/hero\.onPhoto = function[\s\S]*?\};/, '')));
   });
 
   it('префетч других вкладок — после load, а не вместе с первым экраном', () => {
@@ -90,6 +100,23 @@ describe('скорость (AC-P2…P5)', () => {
     assert.match(finish, /window\.HubHome\.ready\(\)/);
     assert.match(finish, /document\.readyState === 'complete'/);
     assert.match(finish, /addEventListener\('load', prefetch, \{ once: true \}\)/);
+    assert.match(finish, /whenHeroSettled\(\)/);
+    assert.ok(!homeCss.includes('hub-initial-reveal'), 'блоки главной не выезжают после скелетона');
+  });
+
+  it('префетч поиска качает те же версии, что открывает вкладка', () => {
+    const iceHtml = fs.readFileSync(path.join(webapp, 'ice.html'), 'utf8');
+    const shell = fs.readFileSync(path.join(webapp, 'mini-app-client-shell.js'), 'utf8');
+    // Версию префетч берёт из адреса самого shell — вписанные руками ?v= не переживали бамп.
+    assert.ok(!/\?v=\d+/.test(shell), 'в shell нет вписанных версий');
+    assert.match(shell, /document\.currentScript/);
+    const shellV = /mini-app-client-shell\.js\?v=(\d+)/.exec(homeHtml)[1];
+    for (const file of ['ice-tab.js', 'ice-tab-model.js', 'ice-map-model.js', 'ice-map.js', 'ice-tab.css']) {
+      const v = new RegExp(file.replace('.', '\\.') + '\\?v=(\\d+)').exec(iceHtml);
+      assert.ok(v, file);
+      assert.equal(v[1], shellV, file + ': вкладка и главная на одной версии');
+      assert.ok(shell.includes("assetUrl(base, '" + file + "')"), file + ' прогревается');
+    }
   });
 
   it('скелет снимается после bootstrap, не после окон тренера', () => {

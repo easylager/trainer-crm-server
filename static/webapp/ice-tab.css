@@ -113,11 +113,14 @@ body.ar-pilot--ice .client-app-header {
   font-weight: var(--app-weight-medium, 500);
   padding: 8px 0 12px;
   cursor: pointer;
-  transition: transform .14s ease, color .14s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform .42s cubic-bezier(.22, 1.15, .36, 1), color .18s ease;
 }
 
 .hdr-folder:active {
-  transform: scale(0.97) translateY(1px);
+  transform: scale(0.96);
+  transition-duration: .07s;
 }
 
 .hdr-folder[aria-pressed='true'] {
@@ -140,7 +143,7 @@ body.ar-pilot--ice .client-app-header {
   width: 0;
   border-radius: var(--app-radius-xs);
   background: var(--glide-ink-teal);
-  transition: transform .22s ease, width .22s ease;
+  transition: transform .34s cubic-bezier(.22, 1, .36, 1), width .34s cubic-bezier(.22, 1, .36, 1);
   pointer-events: none;
 }
 
@@ -577,6 +580,12 @@ body.ice-view-map .ice-citypill--insearch {
   border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-md);
   padding: 9px 11px;
+  transition: border-color .2s ease, box-shadow .25s ease;
+}
+
+.ice-search:focus-within {
+  border-color: var(--glide-ink-teal, var(--app-cta-fill));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--glide-ink-teal, var(--app-cta-fill)) 18%, transparent);
 }
 
 .ice-search svg {
@@ -595,6 +604,7 @@ body.ice-view-map .ice-citypill--insearch {
   border: 0;
   background: transparent;
   font: inherit;
+  /* Зум iOS при фокусе уже снят maximum-scale=1 в ice.html — размер остаётся из шкалы. */
   font-size: var(--app-text-body);
   color: inherit;
   outline: none;
@@ -625,6 +635,14 @@ body.ice-view-map .ice-citypill--insearch {
   color: var(--glide-hint);
   background: var(--app-canvas-bg);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform .42s cubic-bezier(.22, 1.15, .36, 1), background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.ice-chip:active {
+  transform: scale(.96);
+  transition-duration: .07s;
 }
 
 .ice-chip[aria-pressed='true'] {
@@ -1023,6 +1041,16 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   background: var(--app-card-bg);
   box-shadow: var(--app-card-shadow);
   overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+  transition: transform .42s cubic-bezier(.22, 1.15, .36, 1);
+}
+
+.ice-board:active {
+  transform: scale(.975);
+  transition-duration: .07s;
 }
 
 .ice-board__photo {
@@ -1453,6 +1481,44 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   cursor: pointer;
   color: inherit;
   box-shadow: var(--app-card-shadow);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  animation: ice-hit-in .18s ease;
+  transition: transform .42s cubic-bezier(.22, 1.15, .36, 1), background-color .18s ease;
+}
+
+.ice-hit:active {
+  transform: scale(.975);
+  transition-duration: .07s;
+}
+
+@keyframes ice-hit-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ice-list-refresh {
+  from { opacity: .5; }
+  to { opacity: 1; }
+}
+
+#iceList.is-refresh { animation: ice-list-refresh .22s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hdr-folder,
+  .hdr-underline,
+  .ice-search,
+  .ice-chip,
+  .ice-board,
+  .ice-hit { transition: none; }
+  .ice-hit,
+  #iceList.is-refresh { animation: none; }
+}
+
+.ice-results__pending {
+  margin: 4px 0 0;
+  font-size: var(--app-text-body);
+  color: var(--glide-hint);
 }
 
 .ice-hit b {

@@ -163,6 +163,51 @@
     return '';
   }
 
+  /** Коротко, что поставил игрок: «3:1» или «ты за Динамо». Пусто без хода. */
+  function moveLine(pick, names) {
+    if (!pick || !pick.side) return '';
+    if (pick.home_score != null && pick.away_score != null) return 'твой счёт ' + pick.home_score + ':' + pick.away_score;
+    var team = pick.side === 'away' ? names && names.away : names && names.home;
+    return 'ты за' + NBSP + (team || '');
+  }
+
+  /**
+   * Строка под карточкой, пока итога нет.
+   * phase: 'open' — ход ещё можно сменить; 'live' — матч уже начался.
+   */
+  function stakeLine(pick, names, phase) {
+    var live = phase === 'live';
+    var move = moveLine(pick, names);
+    if (!move) return live ? 'ходы закрыты · этот матч без тебя' : '';
+    if (live) return move + ' · ждём сирену';
+    if (pick.home_score != null) return 'ход принят · ' + pick.home_score + ':' + pick.away_score + ' · в точку — 50';
+    return 'ход принят · ' + move;
+  }
+
+  /**
+   * Зачем тапнуть, пока хода нет. Друзья — уже сделанные ходы {home, away: имена}.
+   * Очки те же, что в правилах: победитель даёт 20.
+   */
+  function nudgeLine(friends, names) {
+    var home = (friends && friends.home) || [];
+    var away = (friends && friends.away) || [];
+    var n = home.length + away.length;
+    if (!n) return 'без хода очков не будет · победитель — 20';
+    if (n === 1) {
+      var who = home[0] || away[0];
+      var team = home.length ? names && names.home : names && names.away;
+      return who + ' уже за' + NBSP + (team || '') + ' · твой ход — 20';
+    }
+    var first = home[0] || away[0];
+    return first + ' и' + NBSP + 'ещё' + NBSP + (n - 1) + ' уже сделали ход · твой — 20';
+  }
+
+  /** Подсказка в шторке счёта: этот черновик, не правила целиком. */
+  function scoreHint(home, away) {
+    if (home === away) return 'В хоккее ничьих нет';
+    return home + ':' + away + ' · в точку — 50';
+  }
+
   /** startapp=kk_<КОД> → код лиги или ''. */
   /** Код лиги из ссылки: kk_КОД — приглашение, kkl_/kkr_КОД — кнопки карточек в чате. */
   function inviteCode(startParam) {
@@ -199,6 +244,10 @@
     decidedLabel: decidedLabel,
     clampGoals: clampGoals,
     scoreError: scoreError,
+    moveLine: moveLine,
+    stakeLine: stakeLine,
+    scoreHint: scoreHint,
+    nudgeLine: nudgeLine,
     inviteCode: inviteCode,
     cardFrom: cardFrom,
     pickSide: pickSide,

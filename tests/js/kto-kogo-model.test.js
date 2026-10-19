@@ -74,6 +74,28 @@ describe('тексты', () => {
 });
 
 describe('счёт и ссылки', () => {
+  it('ход звучит как ставка, без нового правила', () => {
+    const names = { home: 'Динамо-Минск', away: 'Спартак' };
+    const side = { side: 'home', home_score: null, away_score: null };
+    const score = { side: 'home', home_score: 3, away_score: 1 };
+    assert.equal(M.stakeLine(null, names, 'open'), '');
+    assert.equal(M.stakeLine(side, names, 'open'), 'ход принят · ты за' + NBSP + 'Динамо-Минск');
+    assert.equal(M.stakeLine(score, names, 'open'), 'ход принят · 3:1 · в точку — 50');
+    assert.equal(M.stakeLine(score, names, 'live'), 'твой счёт 3:1 · ждём сирену');
+    assert.equal(M.stakeLine(null, names, 'live'), 'ходы закрыты · этот матч без тебя');
+    assert.equal(M.moveLine(score, names), 'твой счёт 3:1');
+    assert.equal(M.scoreHint(3, 1), '3:1 · в точку — 50');
+    assert.equal(M.scoreHint(2, 2), 'В хоккее ничьих нет');
+    assert.equal(M.nudgeLine({ home: [], away: [] }, names), 'без хода очков не будет · победитель — 20');
+    assert.equal(
+      M.nudgeLine({ home: ['Катя'], away: [] }, names),
+      'Катя уже за' + NBSP + 'Динамо-Минск · твой ход — 20'
+    );
+    assert.equal(
+      M.nudgeLine({ home: ['Катя'], away: ['Саша'] }, names),
+      'Катя и' + NBSP + 'ещё' + NBSP + '1 уже сделали ход · твой — 20'
+    );
+  });
   it('черновик счёта 0…20', () => {
     assert.equal(M.clampGoals(-1), 0);
     assert.equal(M.clampGoals(25), 20);

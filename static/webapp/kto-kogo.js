@@ -216,6 +216,7 @@
     return api('PUT', '/client/hockey/matches/' + match.id + '/pick', body)
       .then(function (data) {
         match.my_pick = data && data.my_pick;
+        haptic('success');
         render();
       })
       .catch(function (e) {
@@ -305,7 +306,7 @@
     return open.concat(live, done);
   }
 
-  function matchCard(m, now) {
+  function matchCard(m, now, nudge) {
     var colors = M.pairColors(m.home, m.away);
     var mine = m.my_pick;
     var side = M.pickSide(mine);
@@ -320,7 +321,7 @@
         h('span', { class: 'kk-dot', 'aria-hidden': 'true' }),
         h('div', { class: 'kk-row-card__main' }, [
           h('span', { class: 'kk-row-card__title', text: m.home.name + ' — ' + m.away.name }),
-          h('span', { class: 'kk-row-card__sub', text: 'считаем очки — придут, как только сверим итог' }),
+          h('span', { class: 'kk-row-card__sub', text: (M.moveLine(mine, { home: m.home.name, away: m.away.name }) || 'ход не сделан') + ' · сверяем итог' }),
         ]),
       ]);
     }
@@ -350,14 +351,17 @@
         : [M.kicker(m.starts_at)]),
       h('div', { class: 'kk-halves' }, [half('home'), half('away')]),
     ];
+    var names = { home: m.home.name, away: m.away.name };
     if (started) {
-      var note = mine && mine.home_score != null ? 'твой счёт ' + mine.home_score + ':' + mine.away_score + ' · ' : '';
-      kids.push(h('p', { class: 'kk-note', text: note + (mine ? 'итог после финальной сирены' : 'на этот матч хода нет') }));
+      kids.push(h('p', { class: 'kk-note', text: M.stakeLine(mine, names, 'live') }));
+    } else if (nudge) {
+      kids.push(h('p', { class: 'kk-note', text: M.nudgeLine(friends, names) }));
     } else if (side) {
       var has = mine.home_score != null;
+      kids.push(h('p', { class: 'kk-note', text: M.stakeLine(mine, names, 'open') }));
       kids.push(h('button', { type: 'button', class: 'kk-btn-soft', onclick: function () { openScore(m); } }, [
-        has ? 'Мой счёт ' + mine.home_score + ':' + mine.away_score : 'Угадать счёт',
-        h('span', { class: 'kk-chip', text: has ? 'изменить' : '+' + M.EXACT }),
+        has ? 'Поменять счёт' : 'Угадать счёт',
+        h('span', { class: 'kk-chip', text: has ? 'счёт' : '+' + M.EXACT }),
       ]));
     }
     return h('article', { class: 'kk-card', 'aria-label': m.home.name + ' — ' + m.away.name }, kids);
@@ -369,7 +373,7 @@
       return h('div', { class: 'kk-row-card' }, [
         h('div', { class: 'kk-row-card__main' }, [
           h('span', { class: 'kk-row-card__title', text: m.home.name + ' — ' + m.away.name + ' · ' + r.home_score + ':' + r.away_score }),
-          h('span', { class: 'kk-row-card__sub', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] + ' · ты пропустил' }),
+          h('span', { class: 'kk-row-card__sub', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] + ' · этот матч без тебя' }),
         ]),
         h('span', { class: 'kk-list__pts', style: 'color:var(--kk-muted)', text: '0' }),
       ]);
@@ -383,7 +387,8 @@
       }, [badge(m[which], colors[which]), h('span', { class: 'kk-team', text: m[which].name })]);
     }
     var pts = mine.points;
-    var tail = pts == null ? 'считаем очки' : M.verdict(pts).tail + (pts ? ' · +' + pts : '');
+    var move = M.moveLine(mine, { home: m.home.name, away: m.away.name });
+    var tail = pts == null ? move + ' · считаем очки' : move + ' · ' + M.verdict(pts).tail + (pts ? ' · +' + pts : '');
     return h('article', { class: 'kk-card', 'aria-label': m.home.name + ' — ' + m.away.name + ', ' + r.home_score + ':' + r.away_score }, [
       h('div', { class: 'kk-kicker', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] + ' · ' + M.decidedLabel(r.decided_in) }),
       h('div', { class: 'kk-halves kk-halves--result' }, [
@@ -402,7 +407,12 @@
       return [empty('на этой неделе Динамо не играет', 'Следующий матч появится здесь, как только клуб поставит его в календарь. Пока — загляни в таблицу.', 'Открыть таблицу', function () { go('table'); }, ['#dce2ec', '#1747b5'])];
     }
     var now = Date.now();
-    return orderMatches(state.matches).map(function (m) { return matchCard(m, now); });
+    var nudged = false;
+    return orderMatches(state.matches).map(function (m) {
+      var ask = !nudged && m.open && !m.my_pick;
+      if (ask) nudged = true;
+      return matchCard(m, now, ask);
+    });
   }
 
   function empty(head, body, cta, onCta, art, second, onSecond) {
@@ -443,10 +453,10 @@
     return sheet([
       h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:4px' }, [
         h('h2', { class: 'kk-display', style: 'font-size:20px;margin:0', text: 'Какой счёт?' }),
-        h('p', { class: 'kk-hint', text: 'точный счёт — 50 очков, близкий — тоже очки' }),
+        h('p', { class: 'kk-hint', text: M.scoreHint(s.home, s.away) }),
       ]),
       h('div', { class: 'kk-steppers' }, [stepper('home'), stepper('away')]),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--dark', disabled: !!err, onclick: saveScore, text: err || 'Готово' }),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--dark', disabled: !!err, onclick: saveScore, text: err || 'Это мой ход' }),
     ]);
   }
 
@@ -868,7 +878,7 @@
     var homeWon = r.home_score > r.away_score;
     var colors = M.pairColors(m.home, m.away);
     var mine = m.my_pick;
-    var myLine = mine ? (mine.home_score != null ? 'у тебя было ' + mine.home_score + ':' + mine.away_score : 'ты был за ' + m[mine.side].name) : 'ты пропустил этот матч';
+    var myLine = M.moveLine(mine, { home: m.home.name, away: m.away.name }) || 'этот матч без тебя';
     return h('div', { class: 'kk-hero ' + (v.tone === 'miss' ? 'kk-hero--miss' : 'kk-hero--blue') }, [
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, [
         h('button', { type: 'button', class: 'kk-icon-btn', style: 'background:rgba(255,255,255,.14);color:#fff', 'aria-label': 'Закрыть', onclick: function () { go('matches'); } }, [icon(['M6 6l12 12', 'M18 6L6 18'])]),

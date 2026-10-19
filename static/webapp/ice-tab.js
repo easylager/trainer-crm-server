@@ -72,6 +72,7 @@
     uiPicker: false,
   };
   var searchTimer = null;
+  var searchAbort = null;
   var fetchGen = 0;
   var searchGen = 0;
   var lastSearchQuery = '';
@@ -1581,6 +1582,7 @@
       parkShareButton();
       lastArenaListSig = '';
       list.innerHTML = state.items.map(renderTrainerCard).join('') + loadMoreHtml();
+      markListRefresh(list);
       showActiveList();
       return;
     }
@@ -1645,7 +1647,15 @@
     /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
        а приглушённые места без нужных сеансов идут уже после неё. */
     placeShareBeforeBreak(list);
+    markListRefresh(list);
     showActiveList();
+  }
+
+  function markListRefresh(list) {
+    if (!list || !list.classList) return;
+    list.classList.remove('is-refresh');
+    void list.offsetWidth;
+    list.classList.add('is-refresh');
   }
 
   function placeShareBeforeBreak(list) {
@@ -2022,6 +2032,7 @@
       return fetch(url, {
         cache: 'no-store',
         headers: headers,
+        signal: opts.signal,
       }).then(function (r) {
         return r.ok ? r.json() : null;
       });
@@ -2854,6 +2865,12 @@
     });
   }
 
+  function cancelSearch() {
+    if (!searchAbort) return;
+    searchAbort.abort();
+    searchAbort = null;
+  }
+
   function showSearch(q) {
     var searchSec = $('iceSearchSec');
     var listSec = $('iceListSec');
@@ -2861,6 +2878,7 @@
     var query = String(q || '').trim();
     if (query.length < 2) {
       searchGen += 1;
+      cancelSearch();
       var clearedBox = $('iceSearchResults');
       if (clearedBox) clearedBox.innerHTML = '';
       if (searchSec) searchSec.hidden = true;
@@ -2873,7 +2891,22 @@
     searchGen += 1;
     var gen = searchGen;
     lastSearchQuery = query;
-    fetchJson(M.buildSearchUrl(query, 12, state.cityId))
+    cancelSearch();
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    searchAbort = ctrl;
+    // Секция поиска открывается сразу, не после ответа: иначе лента секунду стоит, потом прыгает.
+    if (searchSec) searchSec.hidden = false;
+    if (listSec) listSec.hidden = true;
+    if (mapSec) mapSec.hidden = true;
+    if (document.body) document.body.classList.remove('ice-view-map');
+    var pendingBox = $('iceSearchResults');
+    if (pendingBox && !pendingBox.querySelector('.ice-hit')) {
+      pendingBox.innerHTML = '<p class="ice-results__pending" role="status">Ищем…</p>';
+    }
+    fetchJson(M.buildSearchUrl(query, 12, state.cityId), {
+      signal: ctrl ? ctrl.signal : undefined,
+      timeoutMs: 8000,
+    })
       .then(function (data) {
         if (gen !== searchGen) return;
         var grouped = M.groupSearchResults(data || { groups: [] });
@@ -2931,8 +2964,9 @@
         // TASK-096 AC-002: «Ничего не найдено» was the one state in the app with no exit at all.
         renderEmpty(box, M.formatEmptySearch(query), 'search');
       })
-      .catch(function () {
+      .catch(function (err) {
         if (gen !== searchGen) return;
+        if (err && err.name === 'AbortError') return;
         var errBox = $('iceSearchResults');
         if (!errBox) return;
         if (searchSec) searchSec.hidden = false;
@@ -3088,7 +3122,18 @@
     var modeSeg = $('iceModeSeg');
     if (modeSeg && modeSeg.dataset.scrollWired !== '1') {
       modeSeg.dataset.scrollWired = '1';
-      modeSeg.addEventListener('scroll', placeFolderLine);
+      var folderLineFrame = 0;
+      modeSeg.addEventListener('scroll', function () {
+        if (folderLineFrame) return;
+        if (typeof global.requestAnimationFrame !== 'function') {
+          placeFolderLine();
+          return;
+        }
+        folderLineFrame = global.requestAnimationFrame(function () {
+          folderLineFrame = 0;
+          placeFolderLine();
+        });
+      }, { passive: true });
     }
     var hockeySeg = $('iceHockeySeg');
     if (hockeySeg) {
@@ -3347,7 +3392,7 @@
         var q = search.value;
         searchTimer = global.setTimeout(function () {
           showSearch(q);
-        }, 220);
+        }, 80);
       });
     }
 

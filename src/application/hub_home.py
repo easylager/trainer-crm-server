@@ -176,8 +176,11 @@ def city_block(view: Mapping[str, Any], *, invite_link: InviteLink | None = None
     city = view["city"]
     city_id = int(city["id"])
     rinks = [p for p in view.get("places") or [] if str(p.get("venue_type") or "ice") in _RINK_TYPES]
-    # Как на сайте — первый каток с фото; ещё два — запасные, если файл первого не отдался.
-    with_photo = [p for p in rinks if p.get("photo_hero")][:3]
+    # Как на сайте: крытый каток с самым крупным кадром (Минск-Арена), не первый по алфавиту.
+    # Дальше — запасные: у части катков файл в хранилище отсутствует, и клиент берёт следующий.
+    with_photo = [p for p in rinks if p.get("photo_hero")]
+    with_photo.sort(key=lambda p: (str(p.get("venue_type") or "") != "ice", -int(p.get("photo_width") or 0)))
+    with_photo = with_photo[:4]  # клиент делает не больше 4 попыток (HERO_MAX_TRIES)
     today_n = int(view["skate_counts"].get("today") or 0)
     return {
         "id": city_id,
