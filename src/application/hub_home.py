@@ -176,14 +176,16 @@ def city_block(view: Mapping[str, Any], *, invite_link: InviteLink | None = None
     city = view["city"]
     city_id = int(city["id"])
     rinks = [p for p in view.get("places") or [] if str(p.get("venue_type") or "ice") in _RINK_TYPES]
-    hero_place = next((p for p in rinks if p.get("photo_hero")), None)
+    # Как на сайте — первый каток с фото; ещё два — запасные, если файл первого не отдался.
+    with_photo = [p for p in rinks if p.get("photo_hero")][:3]
     today_n = int(view["skate_counts"].get("today") or 0)
     return {
         "id": city_id,
         "name": format_public_name(str(city["name"])),
         "kicker": _b_today_kicker(view),
         "counts_line": _b_counts_line(view),
-        "hero_photo": _photo(hero_place) if hero_place else None,
+        "hero_photo": _photo(with_photo[0]) if with_photo else None,
+        "hero_photos": [_photo(p) for p in with_photo],
         "upcoming": _upcoming(view, invite_link),
         "upcoming_href": _ice_href(city_id, intent="skate", when="today" if today_n else ""),
         "upcoming_more": "Весь день" if today_n else "Все",

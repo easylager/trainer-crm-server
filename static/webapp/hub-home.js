@@ -196,11 +196,20 @@
       sub.hidden = !hero.kicker;
     }
     if (pill) pill.textContent = hero.city || 'Город';
-    if (photo && hero.photo) {
-      // Не загрузилось — тёмная плашка, а не значок битой картинки.
-      photo.onerror = function () { photo.hidden = true; };
-      photo.onload = function () { photo.hidden = false; };
-      if (photo.getAttribute('src') !== hero.photo) photo.src = hero.photo;
+    var list = hero.photos && hero.photos.length ? hero.photos : hero.photo ? [hero.photo] : [];
+    if (photo && list.length) {
+      var i = 0;
+      // Файл не отдался — следующее фото города; кончились — тёмная плашка, а не значок битой картинки.
+      photo.onerror = function () {
+        i += 1;
+        if (i < list.length) photo.src = list[i];
+        else photo.hidden = true;
+      };
+      photo.onload = function () {
+        photo.hidden = false;
+        if (hero.onPhoto) hero.onPhoto(list[i]);
+      };
+      if (photo.getAttribute('src') !== list[0]) photo.src = list[0];
     }
     var hh = $('hubHero');
     if (hh) hh.classList.remove('hh--loading');
@@ -208,8 +217,10 @@
 
   function heroFrom(city) {
     if (!city) return { city: '', line: 'Выберите город — покажем лёд рядом', kicker: '', photo: null };
-    var photo = city.hero_photo || {};
-    return { city: city.name, line: city.counts_line || '', kicker: shortKicker(city.kicker), photo: photo.card || photo.hero || null };
+    var photos = (city.hero_photos && city.hero_photos.length ? city.hero_photos : city.hero_photo ? [city.hero_photo] : [])
+      .map(function (p) { return p.card || p.hero; })
+      .filter(Boolean);
+    return { city: city.name, line: city.counts_line || '', kicker: shortKicker(city.kicker), photo: photos[0] || null, photos: photos };
   }
 
   // ---------- слот «сейчас» ----------
@@ -520,8 +531,12 @@
     var city = home.city || null;
     var now = home.now || null;
     var hero = heroFrom(city);
+    // В кэш — то фото, что действительно загрузилось: в следующий раз шапка не начнёт с битого.
+    if (city) {
+      hero.onPhoto = function (src) { cacheWrite({ city: hero.city, line: hero.line, photo: src, cityId: city.id }); };
+      cacheWrite({ city: hero.city, line: hero.line, photo: hero.photo, cityId: city.id });
+    }
     paintHero(hero);
-    if (city) cacheWrite({ city: hero.city, line: hero.line, photo: hero.photo, cityId: city.id });
     var host = $('hubNow');
     var kind = now ? now.kind : 'none';
     if (kind === 'kk_before') kkBefore(now.hockey, host);

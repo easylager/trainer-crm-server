@@ -65,7 +65,28 @@ def _view() -> dict:
         "shops_open": [{}] * 11,
         "trainer_count": 3,
         "places": [
-            {"id": 3, "slug": "tts-zamok", "venue_type": "ice", "photo_hero": "x", "photo_variants": {}},
+            {
+                "id": 3,
+                "slug": "tts-zamok",
+                "venue_type": "ice",
+                "photo_hero": "x",
+                "photo_variants": {"card": "a/3_card.jpg"},
+            },
+            {"id": 9, "slug": "no-photo", "venue_type": "ice", "photo_hero": None, "photo_variants": {}},
+            {
+                "id": 2,
+                "slug": "minsk-arena",
+                "venue_type": "ice",
+                "photo_hero": "y",
+                "photo_variants": {"card": "a/2_card.jpg"},
+            },
+            {
+                "id": 7,
+                "slug": "shop",
+                "venue_type": "shop",
+                "photo_hero": "z",
+                "photo_variants": {"card": "a/7_card.jpg"},
+            },
         ],
         "upcoming": [
             {
@@ -99,3 +120,9 @@ def test_city_block_matches_the_city_page_with_mini_app_links() -> None:
     assert ohm["line"] == "ОХМ на 2 катках · ближайший завтра в 10:00"
     assert ohm["windows"][0]["href"] is None, "ноль — не ссылка"
     assert block["needs"][2]["line"] == "12 мест · 8 открыты сейчас"
+
+
+def test_hero_has_fallback_photos_from_rinks_only() -> None:
+    block = city_block(_view())
+    assert len(block["hero_photos"]) == 2, "каток без фото и магазин — не кандидаты"
+    assert block["hero_photo"] == block["hero_photos"][0]

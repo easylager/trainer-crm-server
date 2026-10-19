@@ -80,7 +80,9 @@ describe('скорость (AC-P2…P5)', () => {
   it('фото «Ближайшего льда» — лениво; битое фото не рисует значок', () => {
     assert.match(hubJs, /img\.loading = 'lazy'/);
     assert.match(hubJs, /img\.onerror = function \(\) \{ img\.remove\(\); \}/);
-    assert.match(hubJs, /photo\.onerror = function \(\) \{ photo\.hidden = true; \}/);
+    // Шапка: битое фото — следующее фото города, кончились — тёмная плашка.
+    assert.match(hubJs, /if \(i < list\.length\) photo\.src = list\[i\];\s+else photo\.hidden = true;/);
+    assert.match(hubJs, /city\.hero_photos/);
   });
 
   it('префетч других вкладок — после load, а не вместе с первым экраном', () => {

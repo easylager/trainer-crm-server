@@ -55,7 +55,6 @@ html body.hh-body, html.trainer-theme-dark body.hh-body, html.trainer-theme-ligh
 .hc { background: var(--g-surface); border-radius: 20px; box-shadow: var(--g-shadow); }
 
 /* ── Слот «сейчас» ────────────────────────────────────────────── */
-.hn { min-height: 120px; }
 .hn__card {
   display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 22px;
   background: var(--g-surface); color: var(--g-ink); text-decoration: none;
