@@ -875,8 +875,10 @@ async def test_plan_card_names_ohm_before_the_hall(app_use_test_db, db_session) 
     async with _client() as client:
         resp = await client.get(place["path"], params={"s": ohm_id})
 
-    line = re.search(r'<span class="b-plan__line">([^<]+)</span>', resp.text)
-    assert line and line.group(1).startswith("ОХМ · Большая арена"), line and line.group(1)
+    kind = re.search(r'<span class="b-plan__kind">([^<]+)</span>', resp.text)
+    assert kind and kind.group(1).startswith("ОХМ · Большая арена"), kind and kind.group(1)
+    assert 'class="b-plan__prices"' in resp.text
+    assert "b-plan__line" not in resp.text
 
 
 @pytest.mark.asyncio
