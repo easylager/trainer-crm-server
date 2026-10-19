@@ -15,7 +15,12 @@ html body.hh-body, html.trainer-theme-dark body.hh-body, html.trainer-theme-ligh
 /* ── Шапка города ─────────────────────────────────────────────── */
 .hh {
   position: relative; height: 300px; overflow: hidden; color: #fff;
-  background: var(--g-dark);
+  /* Без фото (не загрузилось, у города нет снимков) — не пустая плашка, а «лёд под светом»:
+     бирюза логотипа на тёмном, без файлов и запросов. Фото, когда есть, ложится сверху. */
+  background:
+    radial-gradient(120% 70% at 85% 0%, rgba(69, 185, 187, .38) 0%, rgba(69, 185, 187, 0) 60%),
+    radial-gradient(90% 60% at 0% 100%, rgba(127, 215, 216, .16) 0%, rgba(127, 215, 216, 0) 70%),
+    linear-gradient(180deg, #11283a 0%, var(--g-dark) 100%);
 }
 .hh__photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .hh__photo[hidden] { display: none; }
