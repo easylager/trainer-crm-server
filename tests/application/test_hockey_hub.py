@@ -179,3 +179,21 @@ async def test_place_is_the_best_league(db_session) -> None:
     assert card["points"] == 1
     assert card["place"] == {"league_name": strong.name, "rank": 1}
     assert card["match"]["away"]["short"] == "АБ"
+
+
+@pytest.mark.asyncio
+async def test_pick_on_upcoming_overrides_three_misses(db_session) -> None:
+    older = await _match(db_session, "hub-o2", NOW - timedelta(days=10))
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=older, side="home", now=NOW - timedelta(days=11)
+    )
+    await _final(db_session, older, at=NOW - timedelta(days=9))
+    for index, hours in enumerate((30, 50, 70), start=1):
+        missed = await _match(db_session, f"hub-m2-{index}", NOW - timedelta(hours=hours + 3))
+        await _final(db_session, missed, at=NOW - timedelta(hours=hours))
+    soon = await _match(db_session, "hub-soon-2", NOW + timedelta(hours=8))
+    # Сходил на ближайший матч из Telegram — вернулся, это уже не пропуск.
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=soon, side="home", now=NOW)
+    await score_finished_matches(db_session, now=NOW)
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["mode"] == "before" and card["my_pick"]["side"] == "home"

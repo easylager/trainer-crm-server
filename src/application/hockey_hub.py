@@ -188,7 +188,9 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
     mode = choose_mode(
         unseen_result=result is not None,
         upcoming=upcoming is not None,
-        suppress=suppress_upcoming(had_pick=had_pick, last_finals_picked=finals),
+        # Уже сходил на ближайший матч (например, из Telegram) — это не пропуск, строку показываем.
+        suppress=suppress_upcoming(had_pick=had_pick, last_finals_picked=finals)
+        and not (upcoming is not None and upcoming._mapping["pick_side"] is not None),
     )
     if mode == "result" and result is not None:
         pick = _pick(result._mapping)

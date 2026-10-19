@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import re
 import sys
 from pathlib import Path
 
@@ -38,6 +39,27 @@ def _absolute(src: str) -> str:
     return f"{HCDINAMO_BASE}/{src}"
 
 
+_RESIZED = re.compile(r"/upload/resize_cache/(iblock/.+?)/\d+_\d+_\d+/([^/]+)$")
+
+
+def original_url(url: str) -> str:
+    """У Битрикса ``/upload/resize_cache/iblock/<x>/59_59_1/<f>`` — уменьшенная копия ``/upload/iblock/<x>/<f>``.
+
+    Уменьшенная 59×59 размывается на экранах с плотностью ×3; оригинал — 200×200.
+    """
+    return _RESIZED.sub(r"/upload/\1/\2", url)
+
+
+async def _download(url: str) -> bytes:
+    original = original_url(url)
+    if original != url:
+        try:
+            return await fetch_http_bytes(original, headers=_UA)
+        except Exception:
+            print(f"original failed, using resized: {original}")
+    return await fetch_http_bytes(url, headers=_UA)
+
+
 def _write_png(dest: Path, data: bytes) -> None:
     from PIL import Image
 
@@ -58,22 +80,22 @@ async def collect_logo_srcs() -> dict[str, str]:
     return found
 
 
-async def main() -> None:
+async def main(*, force: bool = False) -> None:
     found = await collect_logo_srcs()
     if not found:
         raise SystemExit("hcdinamo: в окне календаря нет логотипов")
     saved = skipped = 0
     for name in sorted(found):
         dest = logo_path(slug_for(name))
-        if dest.is_file() and dest.stat().st_size > 0:
+        if not force and dest.is_file() and dest.stat().st_size > 0:
             skipped += 1
             print(f"skip {name} → {dest.name}")
             continue
-        _write_png(dest, await fetch_http_bytes(found[name], headers=_UA))
+        _write_png(dest, await _download(found[name]))
         saved += 1
         print(f"save {name} → {dest.name}")
     print(f"done saved={saved} skipped={skipped} teams={len(found)}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main(force="--force" in sys.argv))
