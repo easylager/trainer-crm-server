@@ -10,6 +10,7 @@ import pytest
 from src.ingestion.hockey_sources import (
     MINSK_TZ,
     parse_hcdinamo_calendar,
+    parse_hcdinamo_logo_index,
     parse_hcdinamo_match,
     parse_hockey_by_ticker,
 )
@@ -52,6 +53,23 @@ def test_upcoming_match_has_no_score() -> None:
     assert m.starts_at == datetime(2026, 10, 22, 19, 30, tzinfo=MINSK_TZ)
     assert m.home_score is None and m.away_score is None
     assert not m.looks_final
+
+
+def test_match_page_side_logos() -> None:
+    final = parse_hcdinamo_match(_page("hcdinamo-match-final.html"), source_match_id="1218869")
+    assert final.home_logo is not None and final.home_logo.endswith("dinamo_mn_2019.png")
+    assert final.away_logo is not None and "ak_bars" in final.away_logo
+    upcoming = parse_hcdinamo_match(_page("hcdinamo-match-upcoming.html"), source_match_id="1218873")
+    assert upcoming.home_logo is not None and upcoming.home_logo.endswith("Sochi_logo_2024_40.png")
+    assert upcoming.away_logo is not None and upcoming.away_logo.endswith("dinamo_mn_2019.png")
+
+
+def test_calendar_logo_index_names_match_alts() -> None:
+    logos = parse_hcdinamo_logo_index(_page("hcdinamo-calendar.html"))
+    assert logos["Динамо-Минск"].endswith("dinamo_mn_2019.png")
+    assert logos["Ак Барс"].endswith("ak_bars_2022-200x200.png")
+    assert logos["ХК Сочи"].endswith("Sochi_logo_2024_40.png")
+    assert "ЦСКА" in logos and "Шанхайские Драконы" in logos
 
 
 def test_unknown_markup_raises() -> None:

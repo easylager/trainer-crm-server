@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +19,9 @@ from src.application.hockey_game import (
     player_standing,
     standings,
 )
+from src.application.hockey_hub import hub_card, mark_result_seen
 from src.application.hockey_leagues import friends_picks
+from src.application.hockey_teams import team_card
 from src.shared.telegram_webapp import parse_user_json_from_init_data
 
 router = APIRouter(tags=["webapp"])
@@ -81,6 +83,8 @@ def _match_out(row: dict, *, now: datetime, friends: dict[str, list[str]]) -> di
         "id": row["id"],
         "home_team": row["home_team"],
         "away_team": row["away_team"],
+        "home": team_card(row["home_team"]),
+        "away": team_card(row["away_team"]),
         "starts_at": starts_at.isoformat(),
         "status": row["status"],
         "open": row["status"] == "scheduled" and now < starts_at,
@@ -113,6 +117,30 @@ async def get_client_hockey_matches(
         "items": [_match_out(row, now=now, friends=friends[int(row["id"])]) for row in rows],
         "me": _standing_me(me),
     }
+
+
+@router.get("/client/hockey/hub")
+async def get_client_hockey_hub(
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    return await hub_card(session, client_catalog_telegram_key(principal), now=datetime.now(timezone.utc))
+
+
+@router.post("/client/hockey/matches/{match_id}/seen", status_code=204)
+async def post_client_hockey_result_seen(
+    match_id: int,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    await mark_result_seen(
+        session,
+        player_key=client_catalog_telegram_key(principal),
+        match_id=match_id,
+        now=datetime.now(timezone.utc),
+    )
+    await session.commit()
+    return Response(status_code=204)
 
 
 @router.put("/client/hockey/matches/{match_id}/pick")

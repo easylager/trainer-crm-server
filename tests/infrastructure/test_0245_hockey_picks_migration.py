@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versions"
 MIGRATION_FILE = "0245_hockey_picks.py"
 DEPENDENT_FILE = "0246_hockey_leagues.py"
+SEEN_FILE = "0247_hockey_result_seen.py"
 
 
 async def _run_migration_step(db_session, step: str, file: str = MIGRATION_FILE) -> None:
@@ -37,7 +38,8 @@ async def _tables(db_session) -> list[str]:
 
 @pytest.mark.asyncio
 async def test_hockey_picks_roundtrip_and_score_side_guard(db_session) -> None:
-    # Лиги (0246) ссылаются на игроков — снимаем первыми, возвращаем в конце.
+    # Лиги (0246) ссылаются на игроков, «итог открыт» (0247) — колонка хода. Снимаем сверху.
+    await _run_migration_step(db_session, "downgrade", SEEN_FILE)
     await _run_migration_step(db_session, "downgrade", DEPENDENT_FILE)
     await _run_migration_step(db_session, "downgrade")
     assert await _tables(db_session) == []
@@ -69,3 +71,4 @@ async def test_hockey_picks_roundtrip_and_score_side_guard(db_session) -> None:
             )
 
     await _run_migration_step(db_session, "upgrade", DEPENDENT_FILE)
+    await _run_migration_step(db_session, "upgrade", SEEN_FILE)

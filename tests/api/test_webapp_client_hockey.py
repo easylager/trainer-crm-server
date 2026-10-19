@@ -88,6 +88,12 @@ async def test_matches_show_own_pick_open_result_and_sides(app_use_test_db, db_s
         assert own["result"] is None
         assert own["sides"] == {"home": 1, "away": 1}
         assert own["home_team"] == "Динамо-Минск"
+        assert own["away_team"] == "Барыс"
+        assert own["home"]["short"] == "ДМ"
+        assert own["home"]["color"].startswith("#")
+        assert own["home"]["logo"] == "/static/webapp/hockey-logos/dinamo-minsk.png"
+        assert own["away"]["short"] == "БР"
+        assert own["away"]["logo"] == "/static/webapp/hockey-logos/barys.png"
         assert _by_id(body, started)["open"] is False
         assert _by_id(body, started)["my_pick"] is None
         finished = _by_id(body, played)
@@ -218,6 +224,20 @@ async def test_standings_points_rank_and_is_me(app_use_test_db, db_session) -> N
         assert me_row["rank"] < other_row["rank"]
         assert body["me"] == {"rank": me_row["rank"], "points": 5, "exact": 1, "played": 1}
         assert sum(1 for item in body["items"] if item["is_me"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_seen_without_a_pick_is_204(app_use_test_db, db_session) -> None:
+    now = datetime.now(timezone.utc)
+    played = await _insert_match(db_session, starts_at=now - timedelta(hours=4))
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            seen = await client.post(f"/api/webapp/client/hockey/matches/{played}/seen")
+        assert seen.status_code == 204
+        assert seen.content == b""
+        still = await db_session.execute(text("SELECT COUNT(*) FROM hockey_picks WHERE match_id = :m"), {"m": played})
+        assert still.scalar_one() == 0
 
 
 def test_player_name_from_init_data_uses_last_initial() -> None:

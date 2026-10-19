@@ -46,6 +46,11 @@ _CALENDAR_LINK = re.compile(r'href="/matches/(\d+)/"')
 _MATCH_WRAP = re.compile(r'<div class="match_wrap">(.*?)<div class="periods_wrap">', re.S)
 _KICKOFF = re.compile(r"<p>\s*(\d{1,2}):(\d{2}),\s*(\d{1,2})\s+([а-яё]+)\s+(\d{4})\s*</p>")
 _CLUB_NAME = re.compile(r'<td class="club_name (l|r)">.*?<span class="name">(.*?)</span>', re.S)
+_CLUB_CELL = re.compile(r'<td class="club_name(?: ([lr]))?">(.*?)</td>', re.S)
+_IMG_SRC = re.compile(r'\bsrc="([^"]+)"')
+_NAMED_SPAN = re.compile(r'<span class="name">(.*?)</span>', re.S)
+_BARE_SPAN = re.compile(r"<span>(.*?)</span>", re.S)
+_IMG_ALT = re.compile(r'\balt="([^"]*)"')
 _SCORE_NUM = re.compile(r'<div class="num">\s*(\d+)\s*<span>:</span>\s*(\d+)\s*</div>')
 _INLINE_SCORE = re.compile(r'<div class="inline_score">(.*?)</div>', re.S)
 _PART = re.compile(r"<span[^>]*>\s*(\d+):(\d+)\s*</span>")
@@ -71,6 +76,8 @@ class HcdinamoMatch:
     home_score: int | None
     away_score: int | None
     parts: tuple[tuple[int, int], ...]
+    home_logo: str | None = None
+    away_logo: str | None = None
 
     @property
     def decided_in(self) -> str | None:
@@ -115,6 +122,40 @@ def _text(fragment: str) -> str:
     return strip_tags(fragment).strip()
 
 
+def _cell_name(cell: str) -> str:
+    named = _NAMED_SPAN.search(cell)
+    if named is not None and _text(named.group(1)):
+        return _text(named.group(1))
+    alt = _IMG_ALT.search(cell)
+    if alt is not None and alt.group(1).strip():
+        return alt.group(1).strip()
+    bare = _BARE_SPAN.search(cell)
+    return _text(bare.group(1)) if bare is not None else ""
+
+
+def parse_hcdinamo_logo_index(html: str) -> dict[str, str]:
+    """Имя команды → ``src`` логотипа. Календарь (``td.club_name``) и страница матча (``l`` / ``r``)."""
+    found: dict[str, str] = {}
+    for _side, cell in _CLUB_CELL.findall(html):
+        src = _IMG_SRC.search(cell)
+        name = _cell_name(cell)
+        if src is None or not name:
+            continue
+        found.setdefault(name, src.group(1))
+    return found
+
+
+def _side_logos(block: str) -> dict[str, str]:
+    logos: dict[str, str] = {}
+    for side, cell in _CLUB_CELL.findall(block):
+        if side not in {"l", "r"}:
+            continue
+        src = _IMG_SRC.search(cell)
+        if src is not None:
+            logos[side] = src.group(1)
+    return logos
+
+
 def parse_hcdinamo_calendar(html: str) -> list[str]:
     """Номера матчей из окна календаря, по порядку появления, без повторов."""
     seen: dict[str, None] = {}
@@ -154,6 +195,7 @@ def parse_hcdinamo_match(html: str, *, source_match_id: str) -> HcdinamoMatch:
         # До матча там «0:0» без частей — это не счёт.
         home_score, away_score = int(num.group(1)), int(num.group(2))
 
+    logos = _side_logos(block)
     return HcdinamoMatch(
         source_match_id=source_match_id,
         starts_at=starts_at,
@@ -162,6 +204,8 @@ def parse_hcdinamo_match(html: str, *, source_match_id: str) -> HcdinamoMatch:
         home_score=home_score,
         away_score=away_score,
         parts=parts,
+        home_logo=logos.get("l"),
+        away_logo=logos.get("r"),
     )
 
 
@@ -204,6 +248,7 @@ __all__ = [
     "HcdinamoMatch",
     "TickerResult",
     "parse_hcdinamo_calendar",
+    "parse_hcdinamo_logo_index",
     "parse_hcdinamo_match",
     "parse_hockey_by_ticker",
 ]
