@@ -1022,8 +1022,10 @@
         var target = dormantReturnTrainer(hubMeta);
         var paint = function (slots) {
           var view = renderMeCard(buildMeCardDormantInput(target, slots, hubMeta), null);
+          // Остальные тренеры — тихой строкой «Записаться снова» под карточкой (решение владельца 2026-10-19).
+          var rebook = renderRebookRow(view ? view.trainerId : null);
           // Сказать нечего — остаётся остаток абонемента, а нет и его — «Моих занятий» нет.
-          if (!view && !renderPassShelf(hubMeta, null)) hideMine();
+          if (!view && !renderPassShelf(hubMeta, null) && !rebook) hideMine();
           return Promise.resolve();
         };
         if (!target || !initData) return paint([]);
@@ -1153,6 +1155,11 @@
       function resetHubChromeForState(opts) {
         opts = opts || {};
         hidePrimaryPanel();
+        var rebook = document.getElementById('hubRebook');
+        if (rebook) {
+          rebook.hidden = true;
+          rebook.replaceChildren();
+        }
         if (!opts.keepHeroLayout) resetHubHeroLayout();
       }
 
@@ -1769,6 +1776,65 @@
         // иначе «Ближайший лёд» уезжает вниз на её высоту (CLS, TASK-303 AC-P4).
         if (!block.firstChild) block.innerHTML = '<div class="hh-me-skel" aria-hidden="true"></div>';
         showMine();
+      }
+
+      function trainerFirstNameForPill(displayName) {
+        var s = ((displayName || '') + '').trim();
+        if (!s) return 'Тренер';
+        return s.split(/\s+/)[0] || s;
+      }
+
+      function hubRepeatBookServiceId(trainerId) {
+        var tid = trainerId != null ? Number(trainerId) : NaN;
+        if (!isNaN(tid) && tid > 0 && lastBookingTrainerId != null) {
+          var lt = Number(lastBookingTrainerId);
+          if (!isNaN(lt) && lt === tid && lastBookingServiceId != null) {
+            var ls = Number(lastBookingServiceId);
+            if (!isNaN(ls) && ls > 0) return ls;
+          }
+        }
+        if (primaryCatalogServiceId == null || primaryCatalogServiceId === '') return null;
+        var pn = Number(primaryCatalogServiceId);
+        return !isNaN(pn) && pn > 0 ? pn : null;
+      }
+
+      function navigateToRebookTarget(t) {
+        var tid = t && t.trainer_id != null ? Number(t.trainer_id) : NaN;
+        if (isNaN(tid) || tid <= 0) return;
+        var sid = t.service_id != null ? Number(t.service_id) : hubRepeatBookServiceId(tid);
+        navigateTo(buildBookPathFromHubContext(tid, { serviceId: sid, fallbackServiceQuery: catalogPrimaryServiceQuery() }));
+      }
+
+      /**
+       * «Записаться снова» к остальным тренерам — строкой в «Моих занятиях», до двух кнопок.
+       * Тренер из карточки сюда не попадает: его окна уже в карточке. Возвращает, показана ли.
+       */
+      function renderRebookRow(cardTrainerId) {
+        var host = document.getElementById('hubRebook');
+        if (!host) return false;
+        var targets = (rebookTargets || []).filter(function (t) {
+          return t && t.trainer_id != null && Number(t.trainer_id) > 0 && String(t.trainer_id) !== String(cardTrainerId);
+        }).slice(0, 2);
+        host.replaceChildren();
+        if (!targets.length) {
+          host.hidden = true;
+          return false;
+        }
+        var head = document.createElement('span');
+        head.className = 'hh-rebook__head';
+        head.textContent = 'Записаться снова';
+        host.appendChild(head);
+        targets.forEach(function (t) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'hh-rebook__btn';
+          btn.textContent = 'Снова к ' + trainerFirstNameForPill(t.trainer_display_name);
+          btn.addEventListener('click', function () { navigateToRebookTarget(t); });
+          host.appendChild(btn);
+        });
+        host.hidden = false;
+        showMine();
+        return true;
       }
 
       /** Полка остатка (приоритет 3 и «карточке нечего сказать»). Возвращает, показана ли. */

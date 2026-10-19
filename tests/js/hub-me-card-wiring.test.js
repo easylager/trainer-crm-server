@@ -381,14 +381,28 @@ describe('S3: возврат — остаток или история, окна 
     assert.match(pick, /return targets\[0\]/);
   });
 
+  it('«давно не были»: остальные тренеры — строкой «Записаться снова» в «Моих занятиях»', () => {
+    const row = fnBody('renderRebookRow');
+    assert.match(row, /String\(t\.trainer_id\) !== String\(cardTrainerId\)/, 'тренер из карточки — не дублем');
+    assert.match(row, /\.slice\(0, 2\)/);
+    assert.match(row, /'Снова к ' \+ trainerFirstNameForPill/);
+    assert.match(row, /navigateToRebookTarget\(t\)/);
+    assert.ok(!/innerHTML/.test(row), 'имена — textContent');
+    const load = fnBody('loadAndRenderMeCardForDormant');
+    assert.match(load, /renderRebookRow\(view \? view\.trainerId : null\)/);
+    assert.match(load, /!rebook\) hideMine\(\)/);
+    assert.ok(homeHtml.includes('id="hubRebook"'));
+    assert.match(fnBody('resetHubChromeForState'), /hubRebook/);
+  });
+
   it('полосы «снова» и быстрых ссылок на главной нет (TASK-303)', () => {
-    assert.ok(!/mountQuickStripPills|renderQuickStrip|dormantRebookPills/.test(homeMain));
+    assert.ok(!/mountQuickStripPills|renderQuickStrip/.test(homeMain));
     assert.ok(!homeHtml.includes('id="quickStrip"'));
   });
 
   it('сказать нечего — карточки нет, остаток или ничего', () => {
     const load = fnBody('loadAndRenderMeCardForDormant');
-    assert.match(load, /if \(!view && !renderPassShelf\(hubMeta, null\)\) hideMine\(\)/);
+    assert.match(load, /if \(!view && !renderPassShelf\(hubMeta, null\) && !rebook\) hideMine\(\)/);
   });
 });
 

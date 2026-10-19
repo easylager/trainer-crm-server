@@ -223,3 +223,12 @@ body.tg-dark .hn__card { box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 28px r
 .hn__main { display: flex; flex-direction: column; gap: 12px; color: inherit; text-decoration: none; }
 .hl__hit { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
 .hl__invite { z-index: 2; }
+
+/* «Записаться снова» к остальным тренерам — тихая строка в «Моих занятиях». */
+.hh-rebook { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hh-rebook[hidden] { display: none; }
+.hh-rebook__head { width: 100%; font-size: 13px; font-weight: 600; color: var(--g-ink-2); }
+.hh-rebook__btn {
+  min-height: 40px; padding: 0 14px; border: 1px solid var(--g-line); border-radius: 12px;
+  background: var(--g-surface); color: var(--g-ink); font: 600 14px/1 var(--g-font); cursor: pointer;
+}
