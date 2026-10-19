@@ -74,6 +74,22 @@
   </script>
   <script>
     (function () {
+      if (!('onpageswap' in window)) return;
+      window.addEventListener('pageswap', function (e) {
+        if (!e.viewTransition) return;
+        var dest = e.activation && e.activation.entry && e.activation.entry.url;
+        if (!dest) return;
+        var next;
+        try { next = new URL(dest); } catch (err) { return; }
+        if (next.origin !== location.origin) return;
+        if (next.pathname === '/' || next.pathname === '') return;
+        var named = document.querySelectorAll('.vt-when-strip, .b-when__thumb');
+        for (var i = 0; i < named.length; i++) named[i].style.viewTransitionName = 'none';
+      });
+    })();
+  </script>
+  <script>
+    (function () {
       var HOLD_MS = 450;
       var MOVE_PX = 10;
       var LINGER_MS = 1500;
