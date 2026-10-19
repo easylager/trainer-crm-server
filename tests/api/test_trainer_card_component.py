@@ -8,6 +8,7 @@
 Поэтому тест держит именно то, что разъезжается: единый источник стилей и
 отсутствие приёмов, которые обрезают факты.
 """
+
 from __future__ import annotations
 
 import re
@@ -82,7 +83,6 @@ def test_placeholder_is_a_designed_object() -> None:
     assert "--glide-brand-wash" in block
     assert "--glide-ink-teal" in block
     assert "--app-ribbon-clip-avatar" in block
-
 
 
 # ─── TASK-104: компактный вариант для карусели хаба ──────────────────────────
