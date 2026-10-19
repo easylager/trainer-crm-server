@@ -198,7 +198,7 @@ def _booking_today(bookings: Mapping[str, Any] | None, *, local_now: datetime) -
                 end = time(23, 59)
             if end <= local_now.time().replace(tzinfo=None):
                 continue
-            return b
+            return dict(b)
     return None
 
 
