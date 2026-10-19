@@ -16,6 +16,7 @@ from fastapi import Depends
 from src.api.deps import get_session
 from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes
 from src.application.ice_company.codes import tg_participant_key, web_participant_key
+from src.application.ice_company.copy import MATCH_KIND
 from src.application.ice_company.keyboard import inline_button_json
 from src.application.ice_company.lifecycle import button_rows, buttons_for, calendar_url_for, render_hash
 from src.application.ice_company.og import card_photo_url, render_company_card
@@ -268,7 +269,8 @@ async def delete_me(
 @router.get("/k/{code}", response_class=HTMLResponse)
 async def company_page(code: str, session: AsyncSession = Depends(get_session)) -> HTMLResponse:
     view = await read_company(session, code)
-    if view is None:
+    # Компания на матч живёт в чате и Mini App; публичной страницы «на лёд» у неё нет.
+    if view is None or view["event"]["kind"] == MATCH_KIND:
         return HTMLResponse("Компания не найдена.", status_code=404, headers={"X-Robots-Tag": "noindex, nofollow"})
     return HTMLResponse(
         render_company_page(view),
@@ -290,7 +292,7 @@ async def company_ics(code: str, session: AsyncSession = Depends(get_session)) -
 
 async def _card_png(session: AsyncSession, code: str) -> bytes:
     company = await _load(session, code)
-    if company is None:
+    if company is None or company["event_kind"] == MATCH_KIND:
         raise HTTPException(status_code=404, detail="Компания не найдена.")
     responses = await _responses(session, int(company["id"]))
     snap = snap_from(company, responses)
@@ -332,8 +334,17 @@ async def prepare_telegram_share(
     page = ice_slot_url(company, settings)
     text = card_text(snap)
     markup = buttons_for(company, snap, page, calendar_url=calendar_url_for(settings, code))
-    photo = card_photo_url(settings.webapp_base_url, code, render_hash(text, markup))
-    prepared = await _save_prepared(settings.telegram_bot_token_client, user_id, code, text, markup, photo)
+    is_match = snap.kind == MATCH_KIND
+    photo = None if is_match else card_photo_url(settings.webapp_base_url, code, render_hash(text, markup))
+    prepared = await _save_prepared(
+        settings.telegram_bot_token_client,
+        user_id,
+        code,
+        text,
+        markup,
+        photo,
+        title="Звать на матч" if is_match else "Компания на лёд",
+    )
     from src.application.ice_company.service import _track
 
     await _track(
@@ -359,6 +370,7 @@ async def _save_prepared(
     text: str,
     buttons: list[dict[str, str]],
     photo_url: str | None = None,
+    title: str = "Компания на лёд",
 ) -> str | None:
     import aiohttp
 
@@ -392,7 +404,7 @@ async def _save_prepared(
             else {
                 "type": "article",
                 "id": code,
-                "title": "Компания на лёд",
+                "title": title,
                 "input_message_content": {"message_text": text},
                 "reply_markup": {"inline_keyboard": keyboard},
             }

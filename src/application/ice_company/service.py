@@ -17,7 +17,7 @@ from src.application.catalog_consumer_events import (
     telegram_actor_hash,
 )
 from src.application.ice_company.codes import new_public_code, new_web_token, tg_participant_key, web_participant_key
-from src.application.ice_company.copy import Snap, card_text, crowd_line
+from src.application.ice_company.copy import MATCH_KIND, Snap, card_text, crowd_line
 from src.application.ice_company.flag import city_enabled
 from src.application.ice_company.safety import TextRejected, clean_free_text, clean_team_title
 from src.shared.config import Settings
@@ -142,8 +142,12 @@ async def _responses(session: AsyncSession, company_id: int) -> list[dict[str, A
     return [dict(row) for row in rows]
 
 
+def _names_with(rows: list[dict[str, Any]], status: str) -> tuple[str, ...]:
+    return tuple(str(row["display_name"]) for row in rows if row["status"] == status)
+
+
 def _going_names(rows: list[dict[str, Any]]) -> tuple[str, ...]:
-    return tuple(str(row["display_name"]) for row in rows if row["status"] == "going")
+    return _names_with(rows, "going")
 
 
 def snap_from(company: dict[str, Any], rows: list[dict[str, Any]]) -> Snap:
@@ -157,6 +161,7 @@ def snap_from(company: dict[str, Any], rows: list[dict[str, Any]]) -> Snap:
         team_title=str(company.get("name") or ""),
         session_cancelled=bool(company["event_cancelled"]),
         expired=status == "expired",
+        maybe_names=_names_with(rows, "maybe"),
     )
 
 
@@ -174,11 +179,41 @@ def _session_id(source_ref: str) -> int | None:
     return int(raw) if raw.isdigit() and int(raw) > 0 else None
 
 
+def _match_id(source_ref: str) -> int | None:
+    prefix = "hockey_match:"
+    if not str(source_ref).startswith(prefix):
+        return None
+    raw = str(source_ref)[len(prefix) :]
+    return int(raw) if raw.isdigit() and int(raw) > 0 else None
+
+
+def match_page_url(company: dict[str, Any], settings: Settings) -> str:
+    """«Подробнее» на карточке матча: страница матча в Mini App, с кодом компании для ответа от друга."""
+    from src.application.place_links import match_start_param, telegram_open_link
+
+    code = str(company["public_code"])
+    match_id = _match_id(str(company.get("source_ref") or ""))
+    if match_id is None:
+        return _page_url(settings, code)
+    link = telegram_open_link(
+        client_bot_username=settings.client_bot_username,
+        mini_app_short_name=settings.client_mini_app_short_name,
+        start_param=match_start_param(match_id, code),
+        main_mini_app=settings.client_bot_main_mini_app,
+    )
+    if link:
+        return link
+    base = (settings.webapp_base_url or "").strip().rstrip("/")
+    return f"{base}/webapp/client-match?id={match_id}&c={code}" if base else _page_url(settings, code)
+
+
 def ice_slot_url(company: dict[str, Any], settings: Settings) -> str:
     from urllib.parse import urlencode
 
     from src.application.place_links import place_start_param, telegram_open_link
 
+    if company.get("event_kind") == MATCH_KIND:
+        return match_page_url(company, settings)
     arena_id = _arena_id(str(company.get("venue_ref") or ""))
     session_id = _session_id(str(company.get("source_ref") or ""))
     if arena_id:
@@ -248,89 +283,87 @@ async def read_company(
     return public_view(company, rows, settings=_settings(settings))
 
 
-async def _insert_event(session: AsyncSession, slot: dict[str, Any]) -> int:
-    source = f"ice_session:{int(slot['id'])}"
-    existing = (
-        await session.execute(
-            text("SELECT id, starts_at, venue_ref, cancelled, version FROM ice_company_events WHERE source_ref = :src"),
-            {"src": source},
-        )
-    ).mappings().first()
-    venue_ref = f"arena:{int(slot['arena_id'])}"
-    cancelled = str(slot["status"]) == "cancelled"
-    if existing is None:
-        row = (
-            await session.execute(
-                text(
-                    """
-                    INSERT INTO ice_company_events (
-                        kind, source_ref, starts_at, ends_at, venue_ref, venue_label, city_id,
-                        version, cancelled
-                    ) VALUES (
-                        :kind, :src, :starts, :ends, :venue, :label, :city, 1, :cancelled
-                    )
-                    RETURNING id
-                    """
-                ),
-                {
-                    "kind": slot["kind"],
-                    "src": source,
-                    "starts": slot["starts_at_utc"],
-                    "ends": slot["ends_at_utc"],
-                    "venue": venue_ref,
-                    "label": str(slot["arena_name"])[:120],
-                    "city": int(slot["city_id"]),
-                    "cancelled": cancelled,
-                },
-            )
-        ).first()
-        return int(row[0])
-    return int(existing["id"])
-
-
-async def create_company(
+async def _insert_event_row(
     session: AsyncSession,
     *,
-    telegram_user_id: int,
-    session_id: int,
-    display_name: str,
-    name: str = "",
-    surface: str = "miniapp",
-    now: datetime | None = None,
-    settings: Settings | None = None,
-) -> dict[str, Any]:
-    cfg = _settings(settings)
-    current = _now(now)
-    slot = await _session_row(session, session_id)
-    if slot is None or slot["kind"] not in _SKATE:
-        raise CompanyRejected("Сеанс не найден.", 404)
-    if not city_enabled(int(slot["city_id"]), cfg):
-        raise CompanyRejected("Сбор компании в этом городе пока выключен.", 404)
-    if str(slot["status"]) != "active" or slot["starts_at_utc"] <= current:
-        raise CompanyRejected("Этот сеанс уже нельзя собрать.", 422)
-    try:
-        label = clean_free_text(display_name, max_len=cfg.ice_company_display_name_max_len, required=True, field="Имя")
-        title = clean_team_title(name, max_len=cfg.ice_company_name_max_len, required=False)
-    except TextRejected as exc:
-        raise CompanyRejected(exc.detail) from exc
-    organizer = tg_participant_key(telegram_user_id)
-    active = (
+    kind: str,
+    source: str,
+    starts_at: datetime,
+    ends_at: datetime,
+    venue_ref: str,
+    venue_label: str,
+    city_id: int,
+    cancelled: bool,
+) -> int:
+    """Событие по ``source_ref``: есть — вернуть, нет — создать. Гонка двух вставок отдаёт одну строку."""
+    existing = (
+        await session.execute(
+            text("SELECT id FROM ice_company_events WHERE source_ref = :src"),
+            {"src": source},
+        )
+    ).first()
+    if existing is not None:
+        return int(existing[0])
+    row = (
         await session.execute(
             text(
                 """
-                SELECT COUNT(*) FROM ice_companies c
-                JOIN ice_company_events e ON e.id = c.event_id
-                WHERE c.organizer_ref = :ref
-                  AND c.status = 'open'
-                  AND e.starts_at > :now
+                INSERT INTO ice_company_events (
+                    kind, source_ref, starts_at, ends_at, venue_ref, venue_label, city_id,
+                    version, cancelled
+                ) VALUES (
+                    :kind, :src, :starts, :ends, :venue, :label, :city, 1, :cancelled
+                )
+                ON CONFLICT (source_ref) DO NOTHING
+                RETURNING id
                 """
             ),
-            {"ref": organizer, "now": current},
+            {
+                "kind": kind,
+                "src": source,
+                "starts": starts_at,
+                "ends": ends_at,
+                "venue": venue_ref,
+                "label": venue_label[:120],
+                "city": city_id,
+                "cancelled": cancelled,
+            },
         )
-    ).scalar()
-    if int(active or 0) >= cfg.ice_company_max_active_per_organizer:
-        raise CompanyRejected("Уже есть пять активных компаний.", 429)
-    event_id = await _insert_event(session, slot)
+    ).first()
+    if row is None:
+        row = (
+            await session.execute(
+                text("SELECT id FROM ice_company_events WHERE source_ref = :src"),
+                {"src": source},
+            )
+        ).one()
+    return int(row[0])
+
+
+async def _insert_event(session: AsyncSession, slot: dict[str, Any]) -> int:
+    return await _insert_event_row(
+        session,
+        kind=str(slot["kind"]),
+        source=f"ice_session:{int(slot['id'])}",
+        starts_at=slot["starts_at_utc"],
+        ends_at=slot["ends_at_utc"],
+        venue_ref=f"arena:{int(slot['arena_id'])}",
+        venue_label=str(slot["arena_name"]),
+        city_id=int(slot["city_id"]),
+        cancelled=str(slot["status"]) == "cancelled",
+    )
+
+
+async def _open_company(
+    session: AsyncSession,
+    *,
+    event_id: int,
+    organizer: str,
+    title: str,
+    label: str,
+    cfg: Settings,
+) -> str:
+    """Компания на событие и ответ организатора «иду». Возвращает код; commit — на вызывающем."""
     event = (
         await session.execute(
             text("SELECT version, starts_at, ends_at FROM ice_company_events WHERE id = :id"),
@@ -388,6 +421,54 @@ async def create_company(
         text("UPDATE ice_companies SET card_dirty = true WHERE id = :id"),
         {"id": company_id},
     )
+    return code
+
+
+async def create_company(
+    session: AsyncSession,
+    *,
+    telegram_user_id: int,
+    session_id: int,
+    display_name: str,
+    name: str = "",
+    surface: str = "miniapp",
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    cfg = _settings(settings)
+    current = _now(now)
+    slot = await _session_row(session, session_id)
+    if slot is None or slot["kind"] not in _SKATE:
+        raise CompanyRejected("Сеанс не найден.", 404)
+    if not city_enabled(int(slot["city_id"]), cfg):
+        raise CompanyRejected("Сбор компании в этом городе пока выключен.", 404)
+    if str(slot["status"]) != "active" or slot["starts_at_utc"] <= current:
+        raise CompanyRejected("Этот сеанс уже нельзя собрать.", 422)
+    try:
+        label = clean_free_text(display_name, max_len=cfg.ice_company_display_name_max_len, required=True, field="Имя")
+        title = clean_team_title(name, max_len=cfg.ice_company_name_max_len, required=False)
+    except TextRejected as exc:
+        raise CompanyRejected(exc.detail) from exc
+    organizer = tg_participant_key(telegram_user_id)
+    active = (
+        await session.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM ice_companies c
+                JOIN ice_company_events e ON e.id = c.event_id
+                WHERE c.organizer_ref = :ref
+                  AND c.status = 'open'
+                  AND e.starts_at > :now
+                  AND e.kind <> 'hockey_match'
+                """
+            ),
+            {"ref": organizer, "now": current},
+        )
+    ).scalar()
+    if int(active or 0) >= cfg.ice_company_max_active_per_organizer:
+        raise CompanyRejected("Уже есть пять активных компаний.", 429)
+    event_id = await _insert_event(session, slot)
+    code = await _open_company(session, event_id=event_id, organizer=organizer, title=title, label=label, cfg=cfg)
     await _track(
         session,
         kind="company_created",
@@ -396,6 +477,136 @@ async def create_company(
         payload={"surface": surface},
         actor_hash=telegram_actor_hash(telegram_user_id),
     )
+    await session.commit()
+    view = await read_company(session, code, viewer_key=organizer, settings=cfg)
+    assert view is not None
+    return view
+
+
+MATCH_DURATION = timedelta(hours=2, minutes=30)
+MATCH_VENUE_LABEL = "Минск-Арена"
+MATCH_TITLE_MAX = 40  # ice_companies.name: CHECK char_length(name) <= 40
+
+
+def match_title(home: str, away: str) -> str:
+    """«Динамо-Минск — СКА» в поле названия компании; длинное режем, а не отклоняем."""
+    title = f"{home} — {away}"
+    return title if len(title) <= MATCH_TITLE_MAX else title[: MATCH_TITLE_MAX - 1].rstrip() + "…"
+
+
+async def minsk_arena(session: AsyncSession) -> dict[str, Any] | None:
+    """Арена домашних матчей: по slug ``minsk-arena``, запасной путь — по названию."""
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT a.id, a.city_id, a.name, a.address
+                FROM arenas a
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                WHERE p.slug = 'minsk-arena' OR a.name IN ('Минск Арена', 'Минск-Арена')
+                ORDER BY (p.slug = 'minsk-arena') DESC NULLS LAST, a.id
+                LIMIT 1
+                """
+            )
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+async def _home_match_row(session: AsyncSession, match_id: int, home_team: str) -> dict[str, Any] | None:
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT id, source_match_id, home_team, away_team, starts_at, status
+                FROM hockey_matches
+                WHERE id = :id AND home_team = :home
+                """
+            ),
+            {"id": int(match_id), "home": home_team},
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+async def _my_open_match_company(session: AsyncSession, organizer: str, source: str) -> str | None:
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT c.public_code
+                FROM ice_companies c
+                JOIN ice_company_events e ON e.id = c.event_id
+                WHERE e.source_ref = :src AND c.organizer_ref = :ref AND c.status = 'open'
+                ORDER BY c.id
+                LIMIT 1
+                """
+            ),
+            {"src": source, "ref": organizer},
+        )
+    ).first()
+    return str(row[0]) if row else None
+
+
+async def create_match_company(
+    session: AsyncSession,
+    *,
+    telegram_user_id: int,
+    match_id: int,
+    home_team: str,
+    display_name: str,
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """Компания клиента на домашний матч. Одна на организатора и матч: повторный вызов отдаёт ту же."""
+    cfg = _settings(settings)
+    current = _now(now)
+    match = await _home_match_row(session, match_id, home_team)
+    if match is None:
+        raise CompanyRejected("Матч не найден.", 404)
+    starts_at = match["starts_at"]
+    if str(match["status"]) != "scheduled" or starts_at <= current:
+        raise CompanyRejected("Матч уже начался.", 409)
+    arena = await minsk_arena(session)
+    if arena is None:
+        raise CompanyRejected("Арена матчей не найдена.", 503)
+    try:
+        label = clean_free_text(display_name, max_len=cfg.ice_company_display_name_max_len, required=True, field="Имя")
+    except TextRejected as exc:
+        raise CompanyRejected(exc.detail) from exc
+    organizer = tg_participant_key(telegram_user_id)
+    source = f"hockey_match:{int(match['id'])}"
+    # Два одновременных запроса одного человека не должны завести две компании.
+    await session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"{organizer}|{source}"})
+    code = await _my_open_match_company(session, organizer, source)
+    if code is None:
+        event_id = await _insert_event_row(
+            session,
+            kind=MATCH_KIND,
+            source=source,
+            starts_at=starts_at,
+            ends_at=starts_at + MATCH_DURATION,
+            venue_ref=f"arena:{int(arena['id'])}",
+            venue_label=MATCH_VENUE_LABEL,
+            city_id=int(arena["city_id"]),
+            cancelled=False,
+        )
+        code = await _open_company(
+            session,
+            event_id=event_id,
+            organizer=organizer,
+            title=match_title(str(match["home_team"]), str(match["away_team"])),
+            label=label,
+            cfg=cfg,
+        )
+        await _track(
+            session,
+            kind="company_created",
+            city_id=int(arena["city_id"]),
+            arena_id=int(arena["id"]),
+            payload={"surface": "hockey_match"},
+            actor_hash=None,
+        )
     await session.commit()
     view = await read_company(session, code, viewer_key=organizer, settings=cfg)
     assert view is not None
@@ -431,6 +642,8 @@ async def respond(
         raise CompanyRejected("Нужно согласие, прежде чем ответить.", 422)
     if status not in ("going", "maybe", "cant"):
         raise CompanyRejected("Ответ: иду, может быть или не могу.")
+    if company["event_kind"] == MATCH_KIND and source != "tg":
+        raise CompanyRejected("На матч отвечают в Telegram.", 403)
     kept = existing["display_name"] if existing and source == "tg" else None
     try:
         label = clean_free_text(
@@ -643,8 +856,78 @@ async def sync_open_events(session: AsyncSession, *, now: datetime | None = None
             },
         )
         changed += 1
+    changed += await _sync_match_events(session, now=current)
     if changed:
         await session.commit()
+    return changed
+
+
+async def _sync_match_events(session: AsyncSession, *, now: datetime) -> int:
+    """Матч перенесли или отменили в расписании — компании на него узнают об этом."""
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT DISTINCT e.id, e.starts_at, e.cancelled,
+                       m.id AS match_id, m.starts_at AS match_starts_at, m.status AS match_status
+                FROM ice_company_events e
+                JOIN ice_companies c ON c.event_id = e.id
+                LEFT JOIN hockey_matches m ON m.id = CAST(split_part(e.source_ref, ':', 2) AS integer)
+                WHERE c.status = 'open'
+                  AND e.source_ref LIKE 'hockey_match:%'
+                """
+            )
+        )
+    ).mappings().all()
+    changed = 0
+    for event in rows:
+        if event["match_id"] is None or str(event["match_status"]) == "cancelled":
+            if event["cancelled"]:
+                continue
+            await session.execute(
+                text(
+                    """
+                    UPDATE ice_company_events
+                    SET cancelled = true, version = version + 1, updated_at = :now
+                    WHERE id = :id
+                    """
+                ),
+                {"id": event["id"], "now": now},
+            )
+            await session.execute(
+                text(
+                    """
+                    UPDATE ice_companies SET status = 'cancelled', card_dirty = true
+                    WHERE event_id = :id AND status = 'open'
+                    """
+                ),
+                {"id": event["id"]},
+            )
+            changed += 1
+            continue
+        if event["match_starts_at"] == event["starts_at"]:
+            continue
+        ends_at = event["match_starts_at"] + MATCH_DURATION
+        await session.execute(
+            text(
+                """
+                UPDATE ice_company_events
+                SET starts_at = :starts, ends_at = :ends, version = version + 1, updated_at = :now
+                WHERE id = :id
+                """
+            ),
+            {"starts": event["match_starts_at"], "ends": ends_at, "now": now, "id": event["id"]},
+        )
+        await session.execute(
+            text(
+                """
+                UPDATE ice_companies SET card_dirty = true, expires_at = :expires
+                WHERE event_id = :id AND status = 'open'
+                """
+            ),
+            {"id": event["id"], "expires": ends_at + timedelta(days=_settings(None).ice_company_retention_days)},
+        )
+        changed += 1
     return changed
 
 

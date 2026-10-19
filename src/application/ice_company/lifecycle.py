@@ -11,7 +11,7 @@ from typing import Any, Protocol
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.ice_company.copy import Snap, closed_headline
+from src.application.ice_company.copy import MATCH_KIND, Snap, closed_headline
 from src.application.ice_company.safety import callback_data
 from src.application.ice_company.service import (
     _load,
@@ -60,6 +60,14 @@ def response_action_buttons(code: str) -> list[dict[str, str]]:
     ]
 
 
+def match_action_buttons(code: str) -> list[dict[str, str]]:
+    return [
+        {"text": "Иду", "data": callback_data(code, "g"), "style": "primary"},
+        {"text": "Смотрю дома", "data": callback_data(code, "m")},
+        {"text": "Не смогу", "data": callback_data(code, "x"), "style": "danger"},
+    ]
+
+
 def calendar_url_for(settings: Settings, code: str) -> str:
     return _page(settings, code) + "/event.ics"
 
@@ -72,6 +80,11 @@ def buttons_for(
     calendar_url: str | None = None,
 ) -> list[dict[str, str]]:
     code = str(company["public_code"])
+    if snap.kind == MATCH_KIND:
+        # Матч: «Подробнее» ведёт на страницу матча в Mini App, «в другой чат» не нужен (зовут из страницы матча).
+        if closed_headline(snap) is not None:
+            return [{"text": "Подробнее", "url": page_url}]
+        return [*match_action_buttons(code), {"text": "Подробнее", "url": page_url}]
     if closed_headline(snap) is not None:
         return [{"text": "На лёд", "url": page_url}]
     buttons = list(response_action_buttons(code))
@@ -194,7 +207,12 @@ async def _edit_dirty(
         digest = render_hash(body, markup)
         from src.application.ice_company.og import card_photo_url
 
-        photo = card_photo_url(settings.webapp_base_url, str(company["public_code"]), digest)
+        # У матча карточка текстовая: плакат с катком и «лёд пока пустой» ему не подходит.
+        photo = (
+            None
+            if snap.kind == MATCH_KIND
+            else card_photo_url(settings.webapp_base_url, str(company["public_code"]), digest)
+        )
         refs = (
             await session.execute(
                 text("SELECT * FROM ice_company_messages WHERE company_id = :id"),

@@ -561,6 +561,16 @@ class HockeyPlayer(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeyPlayerPrefs(Base):
+    """Личные настройки игрока «Кто кого»: скрыть строку игры на матчах (TASK-304)."""
+
+    __tablename__ = "hockey_player_prefs"
+
+    player_key: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=False)
+    kk_hidden: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class HockeyPick(Base):
     """Ход игрока на матч: сторона или точный счёт; очки после итога (TASK-297)."""
 

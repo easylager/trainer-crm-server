@@ -17,6 +17,36 @@ TOAST_MAYBE = "Записали, может быть"
 TOAST_CANT = "Записали, не идёшь"
 TOAST_CLOSED = "Сбор уже закрыт"
 
+# Домашний матч Динамо зовёт друзей тем же движком (TASK-304); тексты у него свои.
+MATCH_KIND = "hockey_match"
+TOAST_MATCH_MAYBE = "Записали, смотришь дома"
+_TOASTS = {
+    "g": TOAST_GOING,
+    "m": TOAST_MAYBE,
+    "x": TOAST_CANT,
+}
+_MATCH_TOASTS = {**_TOASTS, "m": TOAST_MATCH_MAYBE}
+_MONTHS_GEN = (
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+
+
+def toast_for(kind: str, action: str) -> str:
+    """Тост на нажатие кнопки: у матча «Может» зовётся «Смотрю дома»."""
+    table = _MATCH_TOASTS if kind == MATCH_KIND else _TOASTS
+    return table.get(action, TOAST_GOING)
+
 
 @dataclass(frozen=True)
 class Snap:
@@ -28,6 +58,8 @@ class Snap:
     team_title: str = ""
     session_cancelled: bool = False
     expired: bool = False
+    # Ответ «может быть». Лёд его в карточке не показывает, матч — «Смотрит дома».
+    maybe_names: tuple[str, ...] = ()
 
 
 def _local(moment: datetime) -> datetime:
@@ -103,6 +135,14 @@ def on_the_ice(names: tuple[str, ...]) -> str:
 
 
 def closed_headline(snap: Snap) -> str | None:
+    if snap.kind == MATCH_KIND:
+        if snap.session_cancelled:
+            return "Матч отменён"
+        if snap.status == "cancelled":
+            return "Сбор снят"
+        if snap.expired or snap.status == "expired":
+            return "Матч прошёл"
+        return None
     if snap.session_cancelled:
         return "Сеанс сняли"
     if snap.status == "cancelled":
@@ -114,7 +154,37 @@ def closed_headline(snap: Snap) -> str | None:
     return None
 
 
+def match_when(moment: datetime) -> str:
+    """«пт, 23 октября, 19:30»."""
+    local = _local(moment)
+    return f"{_SHORT[local.weekday()]}, {local.day} {_MONTHS_GEN[local.month - 1]}, {local.strftime('%H:%M')}"
+
+
+def _names_line(names: tuple[str, ...]) -> str:
+    if len(names) <= 5:
+        return ", ".join(names)
+    return ", ".join(names[:4]) + f" и ещё {len(names) - 4}"
+
+
+def match_card_text(snap: Snap) -> str:
+    where = " · ".join(part for part in (snap.team_title.strip(), match_when(snap.starts_at), snap.venue) if part)
+    closed = closed_headline(snap)
+    if closed:
+        return f"{where}\n{closed}"
+    people = []
+    if snap.going_names:
+        people.append(f"Идут: {_names_line(snap.going_names)}")
+    if snap.maybe_names:
+        people.append(f"Смотрит дома: {_names_line(snap.maybe_names)}")
+    lines = ["Идём на матч?", where]
+    if people:
+        lines.append(" · ".join(people))
+    return "\n".join(lines)
+
+
 def card_text(snap: Snap) -> str:
+    if snap.kind == MATCH_KIND:
+        return match_card_text(snap)
     when = f"{weekday_nom(snap.starts_at)}, {clock(snap.starts_at)}"
     place = snap.venue
     label = kind_label(snap.kind)

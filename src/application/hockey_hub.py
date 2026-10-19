@@ -12,6 +12,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.hockey_event import enabled as hockey_enabled
+from src.application.hockey_event import event_href, is_home
 from src.application.hockey_game import POINTS_EXACT, season_start
 from src.application.hockey_teams import team_card
 
@@ -172,6 +174,15 @@ async def _best_place(session: AsyncSession, player_key: int, *, now: datetime) 
     return {"league_name": row.league_name, "rank": row.rank}
 
 
+def _event_fields(row) -> dict:
+    """Домашний матч — событие: слот ведёт на его страницу. Выездной остаётся прежним (TASK-304)."""
+    home = is_home(row["home_team"])
+    fields: dict = {"is_home": home}
+    if home and hockey_enabled():
+        fields["event_href"] = event_href(row["id"])
+    return fields
+
+
 async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> dict:
     now = _utc(now)
     result = (
@@ -200,9 +211,15 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
             "my_pick": pick,
             "points": None if pick is None else pick["points"],
             "place": await _best_place(session, player_key, now=now),
+            **_event_fields(result._mapping),
         }
     if mode == "before" and upcoming is not None:
-        return {"mode": "before", "match": _match(upcoming._mapping, now=now), "my_pick": _pick(upcoming._mapping)}
+        return {
+            "mode": "before",
+            "match": _match(upcoming._mapping, now=now),
+            "my_pick": _pick(upcoming._mapping),
+            **_event_fields(upcoming._mapping),
+        }
     return {"mode": None}
 
 

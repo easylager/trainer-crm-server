@@ -331,6 +331,15 @@ def webapp_client_support_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/client-match")
+def webapp_client_match_page():
+    """Client: домашний матч Динамо как событие — ответ, «кто из ваших», игра (TASK-304)."""
+    path = _WEBAPP_DIR / "client-match.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/client-stats")
 def webapp_client_stats_page():
     """Client: completed-session stats and gentle rhythm hints (motivation, no leaderboards)."""

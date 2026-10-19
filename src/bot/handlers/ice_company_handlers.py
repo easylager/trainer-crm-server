@@ -20,11 +20,10 @@ from aiogram.types import (
     InlineKeyboardMarkup,
 )
 from src.application.ice_company.copy import (
-    TOAST_CANT,
+    MATCH_KIND,
     TOAST_CLOSED,
-    TOAST_GOING,
-    TOAST_MAYBE,
     card_text,
+    toast_for,
 )
 from src.application.ice_company.delivery import AiogramSender
 from src.application.ice_company.keyboard import inline_button
@@ -61,12 +60,6 @@ def _telegram_name(raw: str | None) -> str:
         return clean_free_text(raw, max_len=20, required=False, field="Имя")
     except TextRejected:
         return ""
-
-_TOAST = {
-    "g": TOAST_GOING,
-    "m": TOAST_MAYBE,
-    "x": TOAST_CANT,
-}
 
 
 @router.callback_query(F.data.startswith("ic:"))
@@ -115,7 +108,8 @@ async def on_company_callback(query: CallbackQuery) -> None:
                 )
         else:
             logger.info("ice_company callback has no inline_message_id code=%s", code)
-        await query.answer(_TOAST.get(action, TOAST_GOING))
+        kind = str(company["event_kind"]) if company is not None else ""
+        await query.answer(toast_for(kind, action))
         sender = AiogramSender(query.bot, Settings())
         await _edit_dirty(
             session,
@@ -141,6 +135,7 @@ async def on_company_inline(query: InlineQuery) -> None:
 
         page = ice_slot_url(company, settings)
         body = card_text(snap)
+        is_match = snap.kind == MATCH_KIND
         markup_buttons = buttons_for(
             company,
             snap,
@@ -157,7 +152,9 @@ async def on_company_inline(query: InlineQuery) -> None:
         if row:
             rows.append(row)
     markup = InlineKeyboardMarkup(inline_keyboard=rows)
-    photo = card_photo_url(settings.webapp_base_url, code, render_hash(body, markup_buttons))
+    # У матча карточка текстовая, как и при правке: плакат с катком ему не подходит.
+    photo = None if is_match else card_photo_url(settings.webapp_base_url, code, render_hash(body, markup_buttons))
+    title = "Звать на матч" if is_match else "Компания на лёд"
     if photo:
         result = InlineQueryResultPhoto(
             id=f"k{code}",
@@ -165,7 +162,7 @@ async def on_company_inline(query: InlineQuery) -> None:
             thumbnail_url=photo,
             photo_width=1080,
             photo_height=1080,
-            title="Компания на лёд",
+            title=title,
             description=body.split("\n", 1)[0][:80],
             caption=body,
             reply_markup=markup,
@@ -173,7 +170,7 @@ async def on_company_inline(query: InlineQuery) -> None:
     else:
         result = InlineQueryResultArticle(
             id=f"k{code}",
-            title="Компания на лёд",
+            title=title,
             description=body.split("\n", 1)[0][:80],
             input_message_content=InputTextMessageContent(message_text=body),
             reply_markup=markup,
