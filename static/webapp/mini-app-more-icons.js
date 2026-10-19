@@ -9,6 +9,10 @@
 
   /** Inner SVG paths only — viewBox 0 0 24 24. */
   var PATHS = {
+    // Две половинки карточки матча — «кто кого».
+    'kto-kogo':
+      '<rect x="4.25" y="5.25" width="7" height="13.5" rx="2.6"/>' +
+      '<rect x="12.75" y="5.25" width="7" height="13.5" rx="2.6"/>',
     'client-saved':
       '<path d="M8.35 4.4h7.3c.55 0 1 .45 1 1v9.15L12 19.65l-4.65-5.1V5.4c0-.55.45-1 1-1z"/>',
     'client-activity':

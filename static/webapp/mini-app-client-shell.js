@@ -22,6 +22,12 @@
 
   var MORE_ITEMS = [
     {
+      path: 'kto-kogo',
+      label: 'Кто кого',
+      iconId: 'kto-kogo',
+      hint: 'Угадай матч Динамо-Минск с друзьями',
+    },
+    {
       path: 'client-saved-trainers',
       label: 'Сохранённые',
       iconId: 'client-saved',
@@ -1088,6 +1094,9 @@
           : 'catalog?trainer_id=' + coach[1],
       };
     }
+    // «Кто кого»: приглашение в лигу друзей (TASK-298/299).
+    var league = /^kk_([A-Za-z0-9]{4,16})$/.exec(sp);
+    if (league) return { key: 'kto-kogo', path: 'kto-kogo?join=' + league[1].toUpperCase() };
     var company = /^company_([1-9][0-9]*)$/i.exec(sp);
     if (company) return { key: 'ice-company', path: 'ice-company?s=' + company[1] };
     var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other|ohm|service))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);

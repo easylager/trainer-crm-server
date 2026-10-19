@@ -2451,6 +2451,16 @@ app.include_router(webapp_router)
 app.include_router(webhooks_router)
 
 
+@app.get("/webapp/kto-kogo")
+@app.get("/webapp/kto-kogo.html")
+def webapp_kto_kogo_page():
+    """Игра «Кто кого»: угадай матч Динамо-Минск с друзьями (TASK-299)."""
+    path = _WEBAPP_DIR / "kto-kogo.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.middleware("http")
 async def _static_webapp_cache_align(request: Request, call_next):
     """

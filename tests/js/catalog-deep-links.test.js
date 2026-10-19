@@ -29,6 +29,11 @@ function loadIceModel() {
 describe('deepLinkTarget', () => {
   const target = loadDeepLinkTarget();
 
+  it('kk_<код> ведёт во вход в лигу «Кто кого»', () => {
+    assert.deepEqual(target('kk_abcd2345'), { key: 'kto-kogo', path: 'kto-kogo?join=ABCD2345' });
+    assert.equal(target('kk_'), null);
+  });
+
   it('arena_<id> ведёт на карточку места', () => {
     assert.deepEqual(target('arena_42'), { key: 'arena', path: 'arena?ref=42' });
   });
