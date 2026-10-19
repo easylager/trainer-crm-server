@@ -1871,8 +1871,11 @@
         });
       }
 
-      function fetchHubBootstrap() {
-        return fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson(), cache: 'no-store' });
+      function fetchHubBootstrap(guessProfileId) {
+        var headers = headersJson();
+        // Догадка о профиле по умолчанию: патч fetch заголовок не ставит, пока профили не пришли.
+        if (guessProfileId != null) headers = Object.assign({}, headers, { 'X-Profile-Id': String(guessProfileId) });
+        return fetch(apiUrl('/client/hub/bootstrap'), { headers: headers, cache: 'no-store' });
       }
 
       function loadAll() {
@@ -1897,6 +1900,12 @@
           switcher && typeof switcher.getStoredActiveProfileId === 'function'
             ? switcher.getStoredActiveProfileId()
             : null;
+        // Выбранного профиля нет — берём профиль по умолчанию с прошлого открытия (у большинства он один).
+        var guessDefault = false;
+        if (storedProfileId == null && switcher && typeof switcher.getCachedDefaultProfileId === 'function') {
+          storedProfileId = switcher.getCachedDefaultProfileId();
+          guessDefault = storedProfileId != null;
+        }
         var parallelStart =
           parallelModel && typeof parallelModel.shouldStartBootstrapParallel === 'function'
             ? parallelModel.shouldStartBootstrapParallel(storedProfileId)
@@ -1905,11 +1914,14 @@
         var earlySentProfileId = null;
         var earlyBootstrapPromise = null;
         if (parallelStart) {
-          earlySentProfileId =
-            switcher && typeof switcher.getActiveProfileId === 'function'
+          earlySentProfileId = guessDefault
+            ? storedProfileId
+            : switcher && typeof switcher.getActiveProfileId === 'function'
               ? switcher.getActiveProfileId()
               : null;
-          earlyBootstrapPromise = fetchHubBootstrap();
+          earlyBootstrapPromise = fetchHubBootstrap(guessDefault ? storedProfileId : null);
+          // Ответ может не понадобиться (профиль сменился) — без «unhandled rejection» в консоли.
+          earlyBootstrapPromise.catch(function () {});
         }
 
         profilesReady.then(function () {

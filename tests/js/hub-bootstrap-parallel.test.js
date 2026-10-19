@@ -34,3 +34,21 @@ describe('HubBootstrapParallel', () => {
     assert.equal(m.bootstrapFetchPlan(true, 99, 12), 'refetch');
   });
 });
+
+describe('профиль по умолчанию с прошлого открытия', () => {
+  const fs = require('fs');
+  const webapp = path.resolve(__dirname, '../../static/webapp');
+  const switcher = fs.readFileSync(path.join(webapp, 'client-profile-switcher.js'), 'utf8');
+  const main = fs.readFileSync(path.join(webapp, 'client-home-main.js'), 'utf8');
+
+  it('запоминается после профилей и только для того же Telegram-аккаунта', () => {
+    assert.match(switcher, /writeCachedDefaultId\(state\.defaultProfileId\)/);
+    assert.match(switcher, /v\.u === uid/);
+  });
+
+  it('главная шлёт ранний bootstrap с этой догадкой, если выбранного профиля нет', () => {
+    assert.match(main, /storedProfileId == null && switcher && typeof switcher\.getCachedDefaultProfileId === 'function'/);
+    assert.match(main, /fetchHubBootstrap\(guessDefault \? storedProfileId : null\)/);
+    assert.match(main, /'X-Profile-Id': String\(guessProfileId\)/);
+  });
+});
