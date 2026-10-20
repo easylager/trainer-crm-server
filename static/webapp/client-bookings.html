@@ -3,27 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Мои записи</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <title>Записи</title>
+  <!-- TASK-306: вкладка «Записи» на языке хаба. Свои шрифты, без Google. -->
+  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=2026102015" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102015" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=2026102014"></script>
-  <script src="mini-app-phone-field.js?v=2026102014"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102014" />
-  <link rel="stylesheet" href="theme.css?v=2026102014" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026102014" />
-  <link rel="stylesheet" href="mini-app-components.css?v=2026102014" />
-  <script src="mini-app-telegram-chrome.js?v=2026102014"></script>
-  <script src="client-profile-switcher.js?v=2026102014"></script>
-  <link rel="stylesheet" href="mini-app-client-bookings.css?v=2026102014" />
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=2026102014" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=2026102014" />
-<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026102014" />
-  <script src="mini-app-empty-state.js?v=2026102014"></script>
-  <script src="mini-app-more-icons.js?v=2026102014"></script>
-  <script src="mini-app-client-shell.js?v=2026102014"></script>
+  <script src="client-mini-app-theme.js?v=2026102015"></script>
+  <script src="mini-app-phone-field.js?v=2026102015"></script>
+  <link rel="stylesheet" href="theme.css?v=2026102015" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026102015" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026102015" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=2026102015" />
+  <script src="mini-app-telegram-chrome.js?v=2026102015"></script>
+  <script src="client-profile-switcher.js?v=2026102015"></script>
+  <link rel="stylesheet" href="mini-app-client-bookings.css?v=2026102015" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=2026102015" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=2026102015" />
+  <script src="mini-app-empty-state.js?v=2026102015"></script>
+  <script src="mini-app-more-icons.js?v=2026102015"></script>
+  <script src="mini-app-client-shell.js?v=2026102015"></script>
   <script>
     (function () {
       try {
@@ -34,40 +33,37 @@
     })();
   </script>
   <style>
-    .cb-streak {
-      margin: 4px 16px 12px; min-height: 48px; padding: 0 14px; border-radius: 16px; box-sizing: border-box;
-      display: flex; align-items: center; gap: 10px; text-decoration: none;
-      background: var(--tg-theme-secondary-bg-color, #fff); color: var(--tg-theme-text-color, #0d1b26);
-    }
-    .cb-streak[hidden] { display: none; }
-    .cb-streak__n { font: 800 20px/1 var(--app-font-sans, sans-serif); }
-    .cb-streak__t { flex: 1; font-size: 14px; font-weight: 600; }
-    .cb-streak svg { opacity: .55; }
     html.bookings-open-detail #screenList.active { display: none !important; }
     html.bookings-open-detail #screenDetail { display: block !important; }
   </style>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#screenList" blocking="render" />
 </head>
-<body class="client-bookings-body ar-pilot ar-pilot--client-bookings" data-client-shell="tabs">
-  <div class="header client-app-header">
-    <span class="header-title client-app-header__title">Мои записи</span>
-    <div class="client-mini-nav">
-      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-      <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
-    </div>
-  </div>
+<body class="client-bookings-body ga-body" data-client-shell="tabs">
+  <script>
+    (function () {
+      // Токены сайта темнеют по body.tg-dark, тема Mini App ставит hub-is-dark на <html> — как на главной.
+      function syncDark() {
+        document.body.classList.toggle('tg-dark', document.documentElement.classList.contains('hub-is-dark'));
+      }
+      syncDark();
+      if (window.MutationObserver) {
+        new MutationObserver(syncDark).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      }
+    })();
+  </script>
+  <h1 class="ga-display cb-title">Записи</h1>
 
   <div id="screenList" data-screen class="active">
     <!-- TASK-303: серия недель уехала с главной сюда; строка есть, только когда серия идёт. -->
-    <a class="cb-streak" id="cbStreak" href="client-stats" hidden>
+    <a class="cb-streak ga-card ga-press" id="cbStreak" href="client-stats" hidden>
       <span class="cb-streak__n" id="cbStreakN"></span>
       <span class="cb-streak__t" id="cbStreakT"></span>
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
     </a>
-    <div class="cb-mode-tabs" id="cbModeTabs">
-      <button type="button" class="cb-mode-tab active" data-mode="upcoming" id="cbTabUpcoming">Предстоящие</button>
-      <button type="button" class="cb-mode-tab" data-mode="history" id="cbTabHistory">История</button>
+    <div class="cb-mode-tabs ga-seg" id="cbModeTabs" role="tablist" aria-label="Записи">
+      <button type="button" class="cb-mode-tab ga-seg__btn ga-press active" data-mode="upcoming" id="cbTabUpcoming" role="tab" aria-selected="true">Предстоящие</button>
+      <button type="button" class="cb-mode-tab ga-seg__btn ga-press" data-mode="history" id="cbTabHistory" role="tab" aria-selected="false">История</button>
     </div>
     <div class="filter-chips cb-trainer-chips" id="cbTrainerChips" style="display:none;"></div>
     <div id="listContent">
@@ -88,6 +84,7 @@
 
   <div id="screenDetail" data-screen>
     <div class="bd-screen-head">
+      <button type="button" class="cb-detail-back ga-press" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
       <div class="bd-screen-title">Детали записи</div>
     </div>
     <div class="booking-detail">
@@ -333,13 +330,14 @@
       function syncClientBookingsHeaderBack() {
         var btn = document.getElementById('btnBack');
         if (!btn) return;
+        // «Записи» — вкладка нижнего меню: «Назад» только из деталей записи.
         if (document.getElementById('screenDetail').classList.contains('active')) {
           btn.hidden = false;
           btn.onclick = navigateBackFromDetail;
           return;
         }
-        btn.hidden = !canBrowserGoBack();
-        btn.onclick = function() { window.history.back(); };
+        btn.hidden = true;
+        btn.onclick = null;
       }
 
       function showScreen(id) {
@@ -751,6 +749,44 @@
         return s;
       }
 
+      var CB_MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+
+      function minskIso(date) {
+        try {
+          return new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Europe/Minsk', year: 'numeric', month: '2-digit', day: '2-digit',
+          }).format(date);
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function shiftIso(iso, days) {
+        var p = String(iso || '').split('-');
+        if (p.length < 3) return '';
+        var dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+        if (isNaN(dt.getTime())) return '';
+        dt.setUTCDate(dt.getUTCDate() + days);
+        var m = dt.getUTCMonth() + 1;
+        var d = dt.getUTCDate();
+        return dt.getUTCFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+      }
+
+      function datePlate(iso) {
+        var p = String(iso || '').split('-');
+        if (p.length < 3) return { n: '—', m: '' };
+        var month = CB_MONTHS[parseInt(p[1], 10) - 1] || '';
+        return { n: String(parseInt(p[2], 10)), m: month };
+      }
+
+      function whenLead(iso, dayLabel) {
+        var today = minskIso(new Date());
+        if (iso && iso === today) return 'сегодня';
+        if (iso && today && iso === shiftIso(today, 1)) return 'завтра';
+        if (iso && today && iso === shiftIso(today, -1)) return 'вчера';
+        return dayLabel ? String(dayLabel).toLowerCase() : '';
+      }
+
       function getOpenBookingIdFromUrl() {
         return getBookingsNavCtx().openBookingId;
       }
@@ -786,19 +822,56 @@
         return total + ':' + firstDate + ':' + lastDate;
       }
 
+      function goBookingsPath(path) {
+        if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+          window.ClientShell.navigate(path);
+          return;
+        }
+        window.location.href = withInitDataParam(webappDirFromPath() + path);
+      }
+
+      function paintBookingsEmpty(listEl, spec) {
+        if (!listEl || !spec) return;
+        var icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+        var html = '<div class="ga-empty" role="status">';
+        html += '<div class="ga-empty__icon">' + icon + '</div>';
+        html += '<h2 class="ga-h2">' + escapeHtml(spec.title || '') + '</h2>';
+        if (spec.hint) html += '<p class="ga-empty__text">' + escapeHtml(spec.hint) + '</p>';
+        html += '<div class="ga-empty__actions">';
+        if (spec.ctaLabel) {
+          html += '<button type="button" class="ga-btn ga-btn--block ga-press" data-cb-empty="primary">' + escapeHtml(spec.ctaLabel) + '</button>';
+        }
+        if (spec.secondaryLabel) {
+          html += '<button type="button" class="ga-btn ga-btn--soft ga-btn--block ga-press" data-cb-empty="secondary">' + escapeHtml(spec.secondaryLabel) + '</button>';
+        }
+        html += '</div></div>';
+        listEl.innerHTML = html;
+        var primary = listEl.querySelector('[data-cb-empty="primary"]');
+        if (primary) {
+          primary.onclick = function () {
+            if (typeof spec.onCta === 'function') { spec.onCta(); return; }
+            if (spec.ctaPath) goBookingsPath(spec.ctaPath);
+          };
+        }
+        var secondary = listEl.querySelector('[data-cb-empty="secondary"]');
+        if (secondary) {
+          secondary.onclick = function () {
+            if (typeof spec.onSecondary === 'function') { spec.onSecondary(); return; }
+            if (spec.secondaryPath) goBookingsPath(spec.secondaryPath);
+          };
+        }
+      }
+
       function renderEmptyBookingsList() {
         var listEl = document.getElementById('listContent');
-        if (window.ClientShell && typeof window.ClientShell.renderEmptyState === 'function') {
-          window.ClientShell.renderEmptyState(listEl, {
-            icon: window.ClientShell.TAB_ICONS.bookings,
-            title: 'Пока нет записей',
-            hint: 'Выберите тренера на вкладке «Тренеры» — свободные слоты видны сразу.',
-            ctaLabel: 'Найти тренера',
-            ctaPath: 'ice?intent=coach',
-          });
-        } else {
-          listEl.innerHTML = '<div class="empty">У вас пока нет записей.</div>';
-        }
+        paintBookingsEmpty(listEl, {
+          title: 'Пока пусто',
+          hint: 'Найдите тренера или лёд в «Поиске» — свободные окна видны сразу.',
+          ctaLabel: 'Найти тренера',
+          ctaPath: 'ice?intent=coach',
+          secondaryLabel: 'Лёд рядом',
+          secondaryPath: 'ice',
+        });
         document.body.classList.add('bookings-body--revealed');
       }
 
@@ -865,11 +938,11 @@
           wrap.innerHTML = '';
           return;
         }
-        var html = '<button type="button" class="filter-chip' + (state.trainerFilter == null ? ' selected' : '') + '" data-trainer-id="">Все</button>';
+        var html = '<button type="button" class="filter-chip ga-chip ga-press' + (state.trainerFilter == null ? ' selected' : '') + '" data-trainer-id="" aria-pressed="' + (state.trainerFilter == null ? 'true' : 'false') + '">Все</button>';
         for (var i = 0; i < opts.length; i++) {
           var o = opts[i];
-          var sel = state.trainerFilter === o.trainer_id ? ' selected' : '';
-          html += '<button type="button" class="filter-chip' + sel + '" data-trainer-id="' + o.trainer_id + '">' + escapeHtml(o.trainer_name) + '</button>';
+          var on = state.trainerFilter === o.trainer_id;
+          html += '<button type="button" class="filter-chip ga-chip ga-press' + (on ? ' selected' : '') + '" data-trainer-id="' + o.trainer_id + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + escapeHtml(o.trainer_name) + '</button>';
         }
         wrap.innerHTML = html;
         wrap.style.display = 'flex';
@@ -947,34 +1020,27 @@
         var listEl = document.getElementById('listContent');
         var days = state.historyDays;
         if (!days.length) {
-          // MiniAppEmptyState refuses to paint without a CTA — missing exit left the
-          // history skeleton up forever for profiles with no past bookings (e.g. parent).
-          if (window.ClientShell && typeof window.ClientShell.renderEmptyState === 'function') {
-            if (state.trainerFilter != null) {
-              window.ClientShell.renderEmptyState(listEl, {
-                icon: window.ClientShell.TAB_ICONS.bookings,
-                title: 'Нет записей с выбранным тренером',
-                hint: 'Снимите фильтр или выберите другого тренера.',
-                ctaLabel: 'Показать всех',
-                onCta: function() {
-                  state.trainerFilter = null;
-                  renderTrainerChips();
-                  loadHistory(true);
-                },
-              });
-            } else {
-              window.ClientShell.renderEmptyState(listEl, {
-                icon: window.ClientShell.TAB_ICONS.bookings,
-                title: 'Пока нет прошедших записей',
-                hint: 'Здесь появятся ваши тренировки после первого посещения.',
-                ctaLabel: 'К предстоящим',
-                onCta: function() {
-                  switchMode('upcoming');
-                },
-              });
-            }
+          // Пустая история обязана иметь выход, иначе скелетон остаётся навсегда.
+          if (state.trainerFilter != null) {
+            paintBookingsEmpty(listEl, {
+              title: 'Нет записей с выбранным тренером',
+              hint: 'Снимите фильтр или выберите другого тренера.',
+              ctaLabel: 'Показать всех',
+              onCta: function() {
+                state.trainerFilter = null;
+                renderTrainerChips();
+                loadHistory(true);
+              },
+            });
           } else {
-            listEl.innerHTML = '<div class="empty">Пока нет прошедших записей.</div>';
+            paintBookingsEmpty(listEl, {
+              title: 'Пока нет прошедших записей',
+              hint: 'Здесь появятся ваши тренировки после первого посещения.',
+              ctaLabel: 'К предстоящим',
+              onCta: function() {
+                switchMode('upcoming');
+              },
+            });
           }
           return;
         }
@@ -982,19 +1048,12 @@
         for (var d = 0; d < days.length; d++) {
           var day = days[d];
           if (!day.bookings || !day.bookings.length) continue;
-          html += '<div class="cb-date-group">';
-          html += '<div class="cb-date-group-label">' + escapeHtml(formatDate(day.date));
-          if (day.day_label) {
-            html += ' <span class="cb-date-group-weekday">(' + escapeHtml(day.day_label) + ')</span>';
-          }
-          html += '</div>';
           for (var k = 0; k < day.bookings.length; k++) {
-            html += bookingCardHtml(day.bookings[k], { isHistory: true });
+            html += bookingCardHtml(day.bookings[k], { isHistory: true, date: day.date, dayLabel: day.day_label });
           }
-          html += '</div>';
         }
         if (state.historyHasMore) {
-          html += '<button type="button" class="btn-secondary btn-block cb-load-more" id="cbLoadMoreHistory">Показать ещё</button>';
+          html += '<button type="button" class="btn-secondary btn-block cb-load-more ga-btn ga-btn--soft ga-btn--block ga-press" id="cbLoadMoreHistory">Показать ещё</button>';
         }
         listEl.innerHTML = html;
         var moreBtn = document.getElementById('cbLoadMoreHistory');
@@ -1010,8 +1069,12 @@
       function switchMode(mode) {
         if (state.mode === mode) return;
         state.mode = mode;
-        document.getElementById('cbTabUpcoming').classList.toggle('active', mode === 'upcoming');
-        document.getElementById('cbTabHistory').classList.toggle('active', mode === 'history');
+        var tabUpcoming = document.getElementById('cbTabUpcoming');
+        var tabHistory = document.getElementById('cbTabHistory');
+        tabUpcoming.classList.toggle('active', mode === 'upcoming');
+        tabHistory.classList.toggle('active', mode === 'history');
+        tabUpcoming.setAttribute('aria-selected', mode === 'upcoming' ? 'true' : 'false');
+        tabHistory.setAttribute('aria-selected', mode === 'history' ? 'true' : 'false');
         if (mode === 'upcoming') {
           if (state.days.length === 0) {
             renderEmptyBookingsList();
@@ -1046,33 +1109,28 @@
         var statusText = meta.text;
         var arena = (b.arena_name || '').trim() || null;
         var address = (b.arena_address || '').trim() || null;
-        var mapLink = b.map_link || null;
-        var html = '';
-        html += '<div class="booking-card" data-id="' + b.id + '" onclick="openBookingDetail(' + b.id + ')">';
-        html += '<div class="booking-card-main">';
-        html += '<div class="time">' + escapeHtml(b.start_time || '') + ' · ' + (b.duration_minutes || 45) + ' мин</div>';
-        html += '<div class="trainer">' + escapeHtml(b.trainer_name || 'Тренер') + '</div>';
+        var plate = datePlate(opts.date);
+        var lead = whenLead(opts.date, opts.dayLabel);
+        var time = b.start_time || '';
+        var who = (b.trainer_name || 'Тренер').trim();
+        var when = (lead ? lead + ' ' : '') + time;
+        when = (when ? when + ' · ' : '') + who;
         var svc = (b.service_name || '').trim();
-        if (svc) {
-          var tierPart = (b.price_tier_label || '').trim();
-          html += '<div class="service-line">' + escapeHtml(svc) + (tierPart ? ' · ' + escapeHtml(tierPart) : '') + '</div>';
-        }
-        if (arena) html += '<div class="arena">' + escapeHtml(arena) + '</div>';
-        if (address) html += '<div class="address">' + escapeHtml(address) + '</div>';
-        html += '<div class="booking-card-meta">';
-        if (mapLink) {
-          html += '<a href="' + escapeHtml(mapLink) + '" class="map-link" target="_blank" rel="noopener" onclick="event.stopPropagation();">';
-          html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
-          html += 'На карте</a>';
-        }
-        html += '<span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span>';
+        var tierPart = (b.price_tier_label || '').trim();
+        if (svc && tierPart) svc = svc + ' · ' + tierPart;
+        else if (!svc) svc = tierPart;
+        var place = arena || address || '';
+        var sub = svc && place ? svc + ' · ' + place : (svc || place);
+        var showStatus = opts.isHistory ? statusClass !== 'completed' : statusClass !== 'confirmed';
+        var html = '';
+        html += '<div class="booking-card ga-card ga-press" data-id="' + b.id + '" onclick="openBookingDetail(' + b.id + ')">';
+        html += '<div class="cb-date" aria-hidden="true"><span class="cb-date__n">' + escapeHtml(plate.n) + '</span><span class="cb-date__m">' + escapeHtml(plate.m) + '</span></div>';
+        html += '<div class="booking-card-main">';
+        html += '<div class="cb-card__when">' + escapeHtml(when) + '</div>';
+        if (sub) html += '<div class="cb-card__sub">' + escapeHtml(sub) + '</div>';
+        if (showStatus) html += '<div class="cb-card__status cb-card__status--' + statusClass + '">' + escapeHtml(statusText) + '</div>';
         html += '</div>';
-        html += '</div>';
-        if (!opts.isHistory) {
-          html += '<button type="button" class="btn-cancel" data-id="' + b.id + '" aria-label="Отменить запись" onclick="event.stopPropagation();">';
-          html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
-          html += '</button>';
-        }
+        html += '<svg class="cb-card__go" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
         html += '</div>';
         return html;
       }
@@ -1087,25 +1145,16 @@
           var bookings = (day.bookings || []).filter(function(b) { return filterId == null || b.trainer_id === filterId; });
           if (!bookings.length) continue;
           anyCard = true;
-          html += '<div class="cb-date-group">';
-          html += '<div class="cb-date-group-label">' + escapeHtml(formatDate(day.date));
-          if (day.day_label) {
-            html += ' <span class="cb-date-group-weekday">(' + escapeHtml(day.day_label) + ')</span>';
-          }
-          html += '</div>';
           for (var k = 0; k < bookings.length; k++) {
-            html += bookingCardHtml(bookings[k]);
+            html += bookingCardHtml(bookings[k], { date: day.date, dayLabel: day.day_label });
           }
-          html += '</div>';
         }
         if (!anyCard) {
           // TASK-096 AC-002: этот путь рендера тоже упирался в текст без выхода. Фильтр по
           // тренеру снимается кнопкой, а полностью пустой список ведёт к выбору тренера.
           var listBox = document.getElementById('listContent');
-          var E = window.MiniAppEmptyState;
-          if (E && filterId != null) {
-            E.renderOrFallback(listBox, {
-              icon: E.ICONS.calendar,
+          if (filterId != null) {
+            paintBookingsEmpty(listBox, {
               title: 'С этим тренером записей нет',
               hint: 'У других тренеров записи могут быть — снимите фильтр, чтобы увидеть весь список.',
               ctaLabel: 'Показать все записи',
@@ -1114,23 +1163,17 @@
                 renderTrainerChips();
                 renderAllBookings();
               },
-              fallbackText: 'Нет записей с выбранным тренером.',
-            });
-          } else if (E) {
-            E.renderOrFallback(listBox, {
-              icon: E.ICONS.calendar,
-              title: 'Пока нет записей',
-              hint: 'Выберите тренера на вкладке «Лёд» — свободные слоты видны сразу.',
-              ctaLabel: 'Найти тренера',
-              ctaPath: 'ice?intent=coach',
-              fallbackText: 'У вас пока нет записей.',
             });
           } else {
-            listBox.innerHTML = filterId != null
-              ? '<div class="empty">Нет записей с выбранным тренером.</div>'
-              : '<div class="empty">У вас пока нет записей.</div>';
+            paintBookingsEmpty(listBox, {
+              title: 'Пока пусто',
+              hint: 'Найдите тренера или лёд в «Поиске» — свободные окна видны сразу.',
+              ctaLabel: 'Найти тренера',
+              ctaPath: 'ice?intent=coach',
+              secondaryLabel: 'Лёд рядом',
+              secondaryPath: 'ice',
+            });
           }
-          // Карточек нет — вешать на них обработчики не нужно, выходим до этого блока.
           return;
         }
         document.getElementById('listContent').innerHTML = html;
@@ -1233,7 +1276,7 @@
       loadBookings();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=2026102014"></script>
+  <script src="mini-app-client-home.js?v=2026102015"></script>
   <script>
     /* TASK-303: серия недель — тихой строкой над записями, тап ведёт в «Вашу активность». */
     (function () {
