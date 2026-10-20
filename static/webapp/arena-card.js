@@ -620,7 +620,7 @@
     var sid = resolvedShareSessionId();
     if (!sid) return '';
     return (
-      '<button type="button" class="ga-btn ga-btn--dark ga-press" data-action="ice-company" data-session="' +
+      '<button type="button" class="ga-btn ga-btn--dark ga-press" data-haptic="tap" data-action="ice-company" data-session="' +
       esc(sid) +
       '">' + icon('company') + 'Собрать компанию</button>'
     );
@@ -661,7 +661,7 @@
       '<div class="ga-actionbar arena-bar" id="arenaShareBar">' +
       '<span class="arena-bar__when" id="arenaBarWhen">' + esc(shareBarWhen()) + '</span>' +
       '<div class="ga-actionbar__row' + (company ? '' : ' arena-bar__row--one') + '">' +
-      '<button type="button" class="ga-btn ga-press" data-action="share-invite">' + icon('invite') +
+      '<button type="button" class="ga-btn ga-press" data-haptic="tap" data-action="share-invite">' + icon('invite') +
       '<span id="arenaBarInvite">' + esc(shareInviteCtaLabel()) + '</span></button>' +
       (company || '<button type="button" class="ga-btn ga-btn--soft ga-press" data-action="share">Поделиться</button>') +
       '</div>' +
@@ -1939,10 +1939,16 @@
         paintRowsOnly();
         paintTrainersOnly();
       }
-      try {
-        var tgw = global.Telegram && global.Telegram.WebApp;
-        if (tgw && tgw.HapticFeedback) tgw.HapticFeedback.selectionChanged();
-      } catch (eHap) { /* без вибрации */ }
+      // Новый выбор приподнимается один раз (ga-lift); при других перерисовках — уже стоит наверху.
+      var picked = document.querySelector('.arena-time--picked, .arena-slot--picked .arena-slot-time');
+      if (picked) picked.classList.add('ga-lift');
+      if (global.GlideTouch) global.GlideTouch.haptic('select');
+      else {
+        try {
+          var tgw = global.Telegram && global.Telegram.WebApp;
+          if (tgw && tgw.HapticFeedback) tgw.HapticFeedback.selectionChanged();
+        } catch (eHap) { /* без вибрации */ }
+      }
       return;
     }
     if (action === 'share' || action === 'share-invite' || action === 'ice-company') {

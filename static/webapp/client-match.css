@@ -59,10 +59,11 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-seg {
   min-height: 48px; border: 0; border-radius: var(--g-r-btn); background: var(--g-chip); color: var(--g-ink);
   font: 600 15px/1.15 var(--g-font); cursor: pointer; padding: 6px 8px;
-  transition: transform .42s cubic-bezier(.22, 1.15, .36, 1), background-color .18s ease, color .18s ease;
+  transition: transform .42s var(--ga-spring), background-color var(--ga-t-state) ease, color var(--ga-t-state) ease, box-shadow var(--ga-t-state) ease;
 }
-.cm-seg[aria-pressed='true'] { background: var(--g-ink); color: var(--g-bg); }
-.cm-seg:active, .cm-cta:active, .cm-kk__main:active { transform: scale(.975); transition-duration: .07s; }
+/* Выбранный ответ «утоплен», как нажатая клавиша. */
+.cm-seg[aria-pressed='true'] { background: var(--g-ink); color: var(--g-bg); box-shadow: inset 0 2px 5px rgba(0, 0, 0, .28); transform: scale(.985); }
+.cm-seg:active, .cm-cta:active, .cm-kk__main:active { transform: scale(.96); transition-duration: var(--ga-t-press); }
 .cm-seg:disabled { opacity: .6; cursor: default; }
 .cm-cta {
   min-height: 52px; border: 0; border-radius: var(--g-r-btn); background: var(--g-accent); color: var(--g-on-accent);

@@ -63,7 +63,8 @@
     return isTelegramMiniApp() || browserStoryShareAvailable();
   }
 
-  function haptic() {
+  function haptic(kind) {
+    if (global.GlideTouch) return global.GlideTouch.haptic(kind || 'select');
     try {
       var t = tg();
       if (t && t.HapticFeedback) t.HapticFeedback.selectionChanged();
@@ -1347,6 +1348,7 @@
         }
         var page = String(res.body.page_url || '');
         if (page && page.charAt(0) === '/') page = global.location.origin + page;
+        haptic('success');
         form.created = {
           code: res.body.public_code,
           pageUrl: page,
@@ -1517,6 +1519,7 @@
           paintPostcardBottom();
           return;
         }
+        haptic('success');
         z.created = {
           code: res.body.code,
           url: global.location.origin + res.body.invite_path,
@@ -1998,6 +2001,7 @@
     root.hidden = true;
     root.innerHTML =
       '<div class="gss-sheet" role="dialog" aria-modal="true" aria-label="Поделиться">' +
+      '<div class="gss-grab" aria-hidden="true"></div>' +
       '<div class="gss-head"><b>Поделиться</b>' +
       '<button type="button" class="gss-x" data-gss-close aria-label="Закрыть">✕</button></div>' +
       '<div class="gss-body"></div>' +
@@ -2005,8 +2009,51 @@
       '<div class="gss-toast" role="status" aria-live="polite"></div>';
     root.addEventListener('click', onClick);
     root.addEventListener('input', onSheetInput);
+    bindDrag(root.querySelector('.gss-sheet'));
     document.body.appendChild(root);
     return root;
+  }
+
+  /*
+   * Лист тянется пальцем за ручку и шапку (TASK-308): вниз — идёт за пальцем, вверх — упирается
+   * пружиной. Отпустили дальше 110 px или резким движением вниз — закрывается, иначе встаёт на место.
+   * Только transform; содержимое листа прокручивается как обычно — его не перехватываем.
+   */
+  function bindDrag(sheet) {
+    if (!sheet || !global.PointerEvent) return;
+    var drag = null;
+    sheet.addEventListener('pointerdown', function (e) {
+      if (e.button) return;
+      var t = e.target;
+      if (!t.closest('.gss-grab, .gss-head') || t.closest('button, a, input, textarea')) return;
+      drag = { id: e.pointerId, y0: e.clientY, y: e.clientY, t: e.timeStamp, v: 0, dy: 0 };
+      try { sheet.setPointerCapture(e.pointerId); } catch (eCap) { /* */ }
+      sheet.classList.add('is-drag');
+    });
+    sheet.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var raw = e.clientY - drag.y0;
+      var dt = Math.max(1, e.timeStamp - drag.t);
+      drag.v = (e.clientY - drag.y) / dt;
+      drag.y = e.clientY;
+      drag.t = e.timeStamp;
+      drag.dy = raw > 0 ? raw : -Math.sqrt(-raw) * 2;
+      sheet.style.transform = 'translateY(' + drag.dy + 'px)';
+    });
+    function end(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var gone = drag.dy > 110 || (drag.dy > 24 && drag.v > 0.6);
+      drag = null;
+      sheet.classList.remove('is-drag');
+      if (gone) {
+        sheet.style.transform = 'translateY(100%)';
+        close();
+      } else {
+        sheet.style.transform = '';
+      }
+    }
+    sheet.addEventListener('pointerup', end);
+    sheet.addEventListener('pointercancel', end);
   }
 
   function resolveInitialSessionId(opts) {
@@ -2072,7 +2119,12 @@
       state.zoviKb = null;
     }
     root.classList.remove('is-open');
-    global.setTimeout(function () { if (root) root.hidden = true; }, 180);
+    global.setTimeout(function () {
+      if (!root) return;
+      root.hidden = true;
+      var sh = root.querySelector('.gss-sheet');
+      if (sh) sh.style.transform = '';
+    }, 200);
   }
 
   global.GlideShareSheet = {

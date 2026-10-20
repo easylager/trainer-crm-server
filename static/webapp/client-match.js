@@ -29,6 +29,7 @@
   }
 
   function haptic(kind) {
+    if (global.GlideTouch) return global.GlideTouch.haptic(kind || 'tap');
     try {
       if (!tg || !tg.HapticFeedback) return;
       if (kind) tg.HapticFeedback.notificationOccurred(kind);
@@ -131,14 +132,20 @@
     crowdEl.textContent = crowd;
     crowdEl.hidden = !crowd;
     paintReaction(ev);
-    box.replaceChildren.apply(box, M.ANSWERS.map(function (a) {
-      var b = el('button', 'cm-seg', a.label);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', ev.my_status === a.status ? 'true' : 'false');
-      b.disabled = state.busy;
-      b.addEventListener('click', function () { answer(a); });
-      return b;
-    }));
+    // Кнопки строятся один раз и дальше только переключаются: так выбор «вдавливается» плавно,
+    // а не появляется заново. Пока ответ летит на сервер, кнопки не гаснут — answer() сам ждёт.
+    if (box.children.length !== M.ANSWERS.length) {
+      box.replaceChildren.apply(box, M.ANSWERS.map(function (a) {
+        var b = el('button', 'cm-seg', a.label);
+        b.type = 'button';
+        b.setAttribute('data-haptic', 'select');
+        b.addEventListener('click', function () { answer(a); });
+        return b;
+      }));
+    }
+    M.ANSWERS.forEach(function (a, i) {
+      box.children[i].setAttribute('aria-pressed', ev.my_status === a.status ? 'true' : 'false');
+    });
   }
 
   function paintReaction(ev) {
@@ -170,7 +177,6 @@
 
   function answer(a) {
     if (state.busy || !state.ev || state.ev.my_status === a.status) return;
-    haptic();
     var before = state.ev;
     // Сразу показываем выбор: ответ сервера придёт с обновлённым «Кто из ваших».
     state.ev = Object.assign({}, before, { my_status: a.status });
@@ -189,6 +195,7 @@
       .catch(function (e) {
         state.busy = false;
         state.ev = before;
+        haptic('error');
         paint(before);
         toast(e.status === 403 ? 'Ответить можно из Telegram' : e.message);
       });

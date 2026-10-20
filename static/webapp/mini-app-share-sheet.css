@@ -29,7 +29,22 @@
   opacity: 0;
   transition: transform 0.18s ease, opacity 0.18s ease;
 }
-.gss.is-open .gss-sheet { transform: none; opacity: 1; }
+/* Открытие — с пружиной (TASK-308), закрытие — быстрое, как было. */
+.gss.is-open .gss-sheet {
+  transform: none;
+  opacity: 1;
+  transition: transform var(--ga-t-move, 0.32s) var(--ga-spring, cubic-bezier(0.22, 1.15, 0.36, 1)), opacity 0.18s ease;
+}
+.gss .gss-sheet.is-drag { transition: none; }
+.gss-grab {
+  width: 40px;
+  height: 5px;
+  margin: -6px auto 8px;
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-line-strong);
+  touch-action: none;
+}
+.gss-head { touch-action: none; }
 
 .gss-head {
   display: flex;

@@ -20,9 +20,31 @@ html body.ga-body, html.trainer-theme-dark body.ga-body, html.trainer-theme-ligh
 .ga-kicker { font: 600 12px/1 var(--g-font); letter-spacing: .06em; text-transform: uppercase; color: var(--g-accent-ink); }
 .ga-muted { color: var(--g-muted); }
 
-/* ── Нажатие: мгновенное сжатие, отпуск — короткая пружина ────── */
-.ga-press { transition: transform .42s cubic-bezier(.22, 1.15, .36, 1), background-color .2s ease, color .2s ease, box-shadow .25s ease; }
-.ga-press:active { transform: scale(.97); transition-duration: .07s; }
+/*
+ * ── Движение (TASK-308): три длительности и одна пружина на всё приложение ──
+ * Касание — 70 мс, смена состояния — 180 мс, перемещение — 320 мс. Анимируем только transform,
+ * opacity и тень: они не перестраивают страницу, поэтому плавно даже на слабом телефоне.
+ */
+:root {
+  --ga-t-press: 70ms; --ga-t-state: 180ms; --ga-t-move: 320ms;
+  --ga-spring: cubic-bezier(.22, 1.15, .36, 1);
+  --ga-ease-out: cubic-bezier(.22, 1, .36, 1);
+}
+
+/* ── Нажатие: мгновенно вдавливается (сжатие + тень ближе), отпуск — пружина ── */
+.ga-press {
+  transition: transform .42s var(--ga-spring), background-color var(--ga-t-state) ease,
+    color var(--ga-t-state) ease, box-shadow .25s ease, filter var(--ga-t-state) ease;
+}
+.ga-press:active { transform: scale(.97); filter: brightness(.96); transition-duration: var(--ga-t-press); }
+.ga-btn.ga-press:active, .ga-card.ga-press:active { box-shadow: 0 1px 2px rgba(13, 27, 38, .10); }
+
+/* Выбранный вариант «утоплен», как нажатая клавиша: тень внутрь, а не наружу. */
+.ga-sunk { box-shadow: inset 0 2px 5px rgba(0, 0, 0, .28); }
+
+/* Предмет приподнимается при выборе (слот, билет): один раз, без повторов при перерисовке. */
+@keyframes ga-lift { 0% { transform: none; box-shadow: 0 0 0 rgba(13, 27, 38, 0); } 55% { transform: translateY(-4px) scale(1.03); } 100% { transform: translateY(-3px); } }
+.ga-lift { animation: ga-lift var(--ga-t-move) var(--ga-spring); }
 
 /* ── Карточка ────────────────────────────────────────────────── */
 .ga-card { background: var(--g-surface); border-radius: var(--g-r-lg); box-shadow: var(--g-shadow); }
@@ -69,6 +91,16 @@ body.tg-dark .ga-card--lift { box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 2
   font: 600 15px/1 var(--g-font); cursor: pointer;
 }
 .ga-seg__btn[aria-selected='true'], .ga-seg__btn.is-on { background: var(--g-surface); color: var(--g-ink); box-shadow: 0 1px 2px rgba(13, 27, 38, .12); }
+/* Сегмент с переезжающей подложкой (ga-touch.js): кнопки прозрачные, подложка едет под выбранную. */
+.ga-seg--slide { position: relative; }
+.ga-seg--slide .ga-seg__btn { position: relative; z-index: 1; transition: color var(--ga-t-state) ease; }
+.ga-seg--slide .ga-seg__btn[aria-selected='true'], .ga-seg--slide .ga-seg__btn.is-on { background: transparent; box-shadow: none; }
+.ga-seg__thumb {
+  position: absolute; top: 4px; bottom: 4px; left: 0; border-radius: 12px; pointer-events: none;
+  background: var(--g-surface); box-shadow: 0 1px 2px rgba(13, 27, 38, .12);
+  transition: transform var(--ga-t-move) var(--ga-spring), opacity var(--ga-t-state) ease;
+}
+.ga-seg--still .ga-seg__thumb { transition: none; }
 
 /* ── Нижняя панель действия (каток, матч): стеклом поверх ленты ── */
 .ga-actionbar {
@@ -99,6 +131,6 @@ body.tg-dark .ga-card--lift { box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 2
 .ga-empty__actions { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 300px; margin-top: 8px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .ga-press { transition: none; }
-  .ga-pop-a, .ga-pop-b, .ga-glow-a, .ga-glow-b { animation: none; }
+  .ga-press, .ga-seg__thumb { transition: none; }
+  .ga-pop-a, .ga-pop-b, .ga-glow-a, .ga-glow-b, .ga-lift { animation: none; }
 }
