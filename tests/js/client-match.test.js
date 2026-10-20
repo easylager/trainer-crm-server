@@ -156,3 +156,24 @@ describe('один движок шаринга: матч в общем шите 
     assert.equal(S.postcardInput({ match: { id: 7, day: 'ср, 21 октября', time: '19:30' }, placeName: 'Минск-Арена', zovi: {} }).place, 'Минск-Арена');
   });
 });
+
+describe('ответ «Ты пойдёшь?» ведёт к следующему шагу', () => {
+  const base = { tickets_url: 'https://hcdinamo.by/tickets/', kk: { hidden: false } };
+  it('иду → билеты и компания; дома → позвать и угадать; не смогу → следующий матч и игра', () => {
+    assert.deepEqual(M.reaction('going', base).actions.map((a) => a.id), ['tickets', 'company']);
+    assert.deepEqual(M.reaction('maybe', base).actions.map((a) => a.id), ['invite', 'game']);
+    const cant = M.reaction('cant', Object.assign({ next_home: { starts_at: '2026-10-30T16:00:00Z', away: { name: 'Трактор' }, event_href: 'client-match?id=10' } }, base));
+    assert.equal(cant.text, 'Жаль. Следующий домашний — пт, 30' + NBSP + 'октября, 19:00, Трактор.');
+    assert.deepEqual(cant.actions.map((a) => a.id), ['next', 'game']);
+    assert.equal(M.reaction(null, base), null);
+  });
+  it('скрывший игру не видит «Угадать счёт»; без ссылки на билеты — без «Билетов»', () => {
+    assert.deepEqual(M.reaction('maybe', { kk: { hidden: true } }).actions.map((a) => a.id), ['invite']);
+    assert.deepEqual(M.reaction('going', { kk: {} }).actions.map((a) => a.id), ['company']);
+  });
+  it('счётчик «из Glide» — от трёх человек', () => {
+    assert.equal(M.crowdLine({ going: 2 }), '');
+    assert.equal(M.crowdLine({ going: 12 }), 'Уже идут 12' + NBSP + 'человек из Glide');
+    assert.equal(M.crowdLine({ going: 21 }), 'Уже идёт 21' + NBSP + 'человек из Glide');
+  });
+});

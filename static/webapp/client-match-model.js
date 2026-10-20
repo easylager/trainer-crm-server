@@ -163,6 +163,48 @@
     };
   }
 
+  /** «Уже идут 12 человек из Glide» — только когда людей заметно: «идёт 1» звучит как пустой зал. */
+  function crowdLine(crowd) {
+    var n = crowd && Number(crowd.going);
+    if (!n || n < 3) return '';
+    return 'Уже ' + (n % 10 === 1 && n % 100 !== 11 ? 'идёт ' : 'идут ') + n + NBSP + plural(n, 'человек', 'человека', 'человек') + ' из Glide';
+  }
+
+  /**
+   * Что дальше после ответа (владелец 2026-10-20: у нажатия должен быть смысл).
+   * Иду → билет и компания; дома → позвать смотреть вместе и угадать счёт; не смогу → следующий
+   * домашний матч и игра. Действия: tickets | company | invite | game | next.
+   */
+  function reaction(status, ev) {
+    var kkOn = !(ev && ev.kk && ev.kk.hidden);
+    if (status === 'going') {
+      return {
+        text: 'Ты идёшь! Осталось взять билет и позвать своих.',
+        actions: [
+          ev && ev.tickets_url ? { id: 'tickets', label: 'Билеты' } : null,
+          { id: 'company', label: 'Собрать компанию', dark: true },
+        ].filter(Boolean),
+      };
+    }
+    if (status === 'maybe') {
+      return {
+        text: 'Смотреть вместе веселее — позови друзей, а счёт угадай заранее.',
+        actions: [{ id: 'invite', label: 'Позвать смотреть' }, kkOn ? { id: 'game', label: 'Угадать счёт', dark: true } : null].filter(Boolean),
+      };
+    }
+    if (status === 'cant') {
+      var next = ev && ev.next_home;
+      var when = next ? heroWhen(next.starts_at).replace(' · ', ', ') : '';
+      return {
+        text: next
+          ? 'Жаль. Следующий домашний — ' + when + ', ' + ((next.away && next.away.name) || '') + '.'
+          : 'Жаль. Итог матча увидишь в игре.',
+        actions: [next ? { id: 'next', label: 'К следующему матчу', href: next.event_href } : null, kkOn ? { id: 'game', label: 'Угадать счёт', dark: !next } : null].filter(Boolean),
+      };
+    }
+    return null;
+  }
+
   /** Подпись кнопки ответа и тост. */
   var ANSWERS = [
     { status: 'going', label: 'Иду', toast: 'Записали: идёшь' },
@@ -176,6 +218,8 @@
     who: who,
     kkRow: kkRow,
     joinNames: joinNames,
+    crowdLine: crowdLine,
+    reaction: reaction,
     ANSWERS: ANSWERS,
   };
   global.ClientMatchModel = api;

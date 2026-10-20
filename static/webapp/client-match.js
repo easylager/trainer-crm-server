@@ -126,6 +126,11 @@
     var bar = $('cmBar');
     if (bar) bar.hidden = started;
     if (started) return;
+    var crowd = M.crowdLine(ev.crowd);
+    var crowdEl = $('cmCrowd');
+    crowdEl.textContent = crowd;
+    crowdEl.hidden = !crowd;
+    paintReaction(ev);
     box.replaceChildren.apply(box, M.ANSWERS.map(function (a) {
       var b = el('button', 'cm-seg', a.label);
       b.type = 'button';
@@ -134,6 +139,33 @@
       b.addEventListener('click', function () { answer(a); });
       return b;
     }));
+  }
+
+  function paintReaction(ev) {
+    var host = $('cmReact');
+    var r = M.reaction(ev.my_status, ev);
+    host.hidden = !r;
+    if (!r) return host.replaceChildren();
+    var btns = el('div', 'cm-react__btns');
+    r.actions.forEach(function (act) {
+      var b = el('button', 'ga-btn ga-press' + (act.dark ? ' ga-btn--dark' : ' ga-btn--soft'), act.label);
+      b.type = 'button';
+      b.addEventListener('click', function () { reactionAction(act); });
+      btns.appendChild(b);
+    });
+    host.replaceChildren(el('p', 'cm-react__text', r.text), btns);
+  }
+
+  function reactionAction(act) {
+    haptic();
+    if (act.id === 'company') return openShare('company');
+    if (act.id === 'invite') return openShare('invite');
+    if (act.id === 'game') return go('kto-kogo');
+    if (act.id === 'next' && act.href) return go(act.href);
+    if (act.id === 'tickets' && state.ev && state.ev.tickets_url) {
+      if (tg && typeof tg.openLink === 'function') tg.openLink(state.ev.tickets_url);
+      else global.open(state.ev.tickets_url, '_blank', 'noopener');
+    }
   }
 
   function answer(a) {

@@ -14,6 +14,7 @@ from src.api.app import app
 from src.api.miniapp_auth.deps import get_client_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.api.routes import webapp_client_hockey_event as event_routes
+from src.application.hockey_event import event_view
 from src.application.hockey_hub import hub_card
 from src.application.ice_company import service as company_service
 from src.application.ice_company.codes import tg_participant_key
@@ -688,3 +689,33 @@ async def test_client_match_page_route_serves_the_stub() -> None:
         r = await client.get("/webapp/client-match")
     assert r.status_code == 200
     assert "<title>Матч</title>" in r.text
+
+
+@pytest.mark.asyncio
+async def test_event_counts_the_crowd_and_names_the_next_home_match(db_session, arena) -> None:
+    starts = datetime.now(timezone.utc) + timedelta(days=2)
+    match_id = await _match(db_session, starts_at=starts)
+    away_later = await _match(db_session, starts_at=starts + timedelta(days=1), home="СКА", away="Динамо-Минск")
+    next_home = await _match(db_session, starts_at=starts + timedelta(days=3), away="Трактор")
+    view = await create_match_company(
+        db_session, telegram_user_id=ME, match_id=match_id, home_team="Динамо-Минск", display_name="Макс"
+    )
+    # Друг ответил в двух компаниях — считается один раз, по последнему ответу.
+    other = await create_match_company(
+        db_session, telegram_user_id=STRANGER, match_id=match_id, home_team="Динамо-Минск", display_name="Дима"
+    )
+    for code, status in ((view["public_code"], "going"), (other["public_code"], "maybe")):
+        await respond(
+            db_session,
+            code=code,
+            status=status,
+            display_name="Аня",
+            participant_key=tg_participant_key(FRIEND),
+            source="tg",
+            consent=True,
+        )
+    ev = await event_view(db_session, player_key=ME, match_id=match_id, now=datetime.now(timezone.utc))
+    assert ev["crowd"] == {"going": 2, "maybe": 1}, "Макс и Дима идут (организаторы), Аня — дома"
+    assert ev["next_home"]["id"] == next_home and ev["next_home"]["id"] != away_later
+    assert ev["next_home"]["away"]["name"] == "Трактор"
+    assert ev["next_home"]["event_href"] == f"client-match?id={next_home}"

@@ -6,16 +6,16 @@
   <title>Матч</title>
   <!-- TASK-304: домашний матч Динамо — ивент. Язык нового хаба (PDEC-023): токены сайта, Dela Gothic, свои шрифты. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=2026102016" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102016" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=2026102018" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102018" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=2026102016"></script>
-  <link rel="stylesheet" href="theme.css?v=2026102016" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026102016" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=2026102016" />
-  <link rel="stylesheet" href="mini-app-share-sheet.css?v=2026102016" />
-  <link rel="stylesheet" href="/static/webapp/client-match.css?v=2026102016" />
-  <script defer src="mini-app-telegram-chrome.js?v=2026102016"></script>
+  <script src="client-mini-app-theme.js?v=2026102018"></script>
+  <link rel="stylesheet" href="theme.css?v=2026102018" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026102018" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=2026102018" />
+  <link rel="stylesheet" href="mini-app-share-sheet.css?v=2026102018" />
+  <link rel="stylesheet" href="/static/webapp/client-match.css?v=2026102018" />
+  <script defer src="mini-app-telegram-chrome.js?v=2026102018"></script>
 </head>
 <body class="cm-body ga-body">
   <header class="cm-hero" id="cmHero">
@@ -42,8 +42,9 @@
     <p class="cm-state" id="cmState" role="status" hidden></p>
 
     <section class="cm-card cm-rsvp" id="cmRsvp" aria-labelledby="cmRsvpTitle">
-      <h2 class="cm-h" id="cmRsvpTitle">Ты пойдёшь?</h2>
+      <div class="cm-row-head"><h2 class="cm-h" id="cmRsvpTitle">Ты пойдёшь?</h2><span class="cm-crowd" id="cmCrowd" hidden></span></div>
       <div class="cm-segs" id="cmSegs" role="group" aria-label="Ответ на матч"></div>
+      <div class="cm-react" id="cmReact" hidden aria-live="polite"></div>
     </section>
 
     <section class="cm-card cm-who" id="cmWho" hidden aria-labelledby="cmWhoTitle">
@@ -79,8 +80,8 @@
   </div>
   <div class="cm-toast" id="cmToast" role="status" aria-live="polite" hidden></div>
 
-  <script src="mini-app-share-sheet.js?v=2026102016"></script>
-  <script src="/static/webapp/client-match-model.js?v=2026102016"></script>
-  <script src="/static/webapp/client-match.js?v=2026102016"></script>
+  <script src="mini-app-share-sheet.js?v=2026102018"></script>
+  <script src="/static/webapp/client-match-model.js?v=2026102018"></script>
+  <script src="/static/webapp/client-match.js?v=2026102018"></script>
 </body>
 </html>

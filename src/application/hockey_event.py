@@ -91,6 +91,31 @@ _PICKS_OF = text("""
     WHERE match_id = :match_id AND player_key = ANY(:keys)
     """)
 
+# Сколько людей из Glide идут и смотрят дома: последний ответ каждого во всех компаниях матча.
+# Без имён — это видно и тому, кто никого не звал (TASK-304, владелец: блок ответа должен иметь смысл).
+_CROWD = text("""
+    WITH latest AS (
+        SELECT DISTINCT ON (r.participant_key) r.participant_key, r.status
+        FROM ice_companies c
+        JOIN ice_company_events e ON e.id = c.event_id
+        JOIN ice_company_responses r ON r.company_id = c.id
+        WHERE e.source_ref = :src AND c.status IN ('open', 'confirmed')
+        ORDER BY r.participant_key, r.updated_at DESC, r.id DESC
+    )
+    SELECT COUNT(*) FILTER (WHERE status = 'going') AS going,
+           COUNT(*) FILTER (WHERE status = 'maybe') AS maybe
+    FROM latest
+    """)
+
+# Следующий домашний матч — для «Не смогу»: куда позвать в следующий раз.
+_NEXT_HOME = text("""
+    SELECT id, away_team, starts_at
+    FROM hockey_matches
+    WHERE home_team = :home AND status = 'scheduled' AND starts_at > :after AND id <> :id
+    ORDER BY starts_at, id
+    LIMIT 1
+    """)
+
 _PREFS = text("SELECT kk_hidden FROM hockey_player_prefs WHERE player_key = :player_key")
 
 _PREFS_UPSERT = text("""
@@ -297,6 +322,11 @@ async def event_view(
         if key != me and (n := _key_number(key)) is not None and n in picks
     ][:2]
 
+    crowd = (await session.execute(_CROWD, {"src": f"hockey_match:{row.id}"})).one()
+    nxt = (
+        await session.execute(_NEXT_HOME, {"home": DINAMO, "after": max(now, starts_at), "id": row.id})
+    ).one_or_none()
+
     arena = await minsk_arena(session)
     final = row.status == "final"
     return {
@@ -327,6 +357,17 @@ async def event_view(
             "points": my_pick.points if my_pick else None,
             "company_names": company_names,
         },
+        "crowd": {"going": int(crowd.going or 0), "maybe": int(crowd.maybe or 0)},
+        "next_home": (
+            {
+                "id": nxt.id,
+                "away": team_card(nxt.away_team),
+                "starts_at": _utc(nxt.starts_at).isoformat(),
+                "event_href": event_href(nxt.id),
+            }
+            if nxt
+            else None
+        ),
         "tickets_url": tickets_url(row.source_match_id),
         "ice_after": (
             await _ice_after(session, arena, after=max(now, starts_at + MATCH_DURATION), settings=cfg) if arena else []

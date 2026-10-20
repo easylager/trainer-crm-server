@@ -82,6 +82,18 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-face--me { background: var(--g-accent); color: var(--g-on-accent); }
 .cm-who__line { font-size: 15px; line-height: 1.35; color: var(--g-ink-2); }
 
+/* Что дальше после ответа: мягко выезжает под кнопками. */
+.cm-crowd { font-size: 13px; font-weight: 600; color: var(--g-accent-ink); text-align: right; }
+.cm-react {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 16px; background: var(--g-accent-wash);
+  animation: cm-react-in .36s cubic-bezier(.22, 1, .36, 1);
+}
+.cm-react__text { margin: 0; font-size: 15px; line-height: 1.4; color: var(--g-ink); }
+.cm-react__btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
+.cm-react__btns .ga-btn { min-height: 44px; font-size: 15px; }
+.cm-react__btns .ga-btn--soft { background: var(--g-surface); }
+@keyframes cm-react-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
 /* ── Строка «КТО КОГО?» ────────────────────────────────────────── */
 .cm-kk { flex-direction: row; align-items: center; gap: 8px; padding: 14px 6px 14px 16px; }
 .cm-kk__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; color: inherit; text-decoration: none; transition: transform .42s cubic-bezier(.22, 1.15, .36, 1); }
@@ -147,4 +159,5 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 @media (prefers-reduced-motion: reduce) {
   .cm-status--live::before { animation: none; }
   .cm-seg, .cm-cta, .cm-kk__main { transition: none; }
+  .cm-react { animation: none; }
 }
