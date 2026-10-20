@@ -123,6 +123,8 @@
     var box = $('cmSegs');
     var started = !!(ev.match.result || M.status(ev.match).live || ev.match.status === 'cancelled');
     $('cmRsvp').hidden = started;
+    var bar = $('cmBar');
+    if (bar) bar.hidden = started;
     if (started) return;
     box.replaceChildren.apply(box, M.ANSWERS.map(function (a) {
       var b = el('button', 'cm-seg', a.label);
@@ -160,34 +162,25 @@
       });
   }
 
-  function invite() {
-    var btn = $('cmInvite');
-    if (btn.disabled) return;
-    btn.disabled = true;
+  /*
+   * «Позвать на матч» и «Собрать компанию» — общий шит шаринга, как у массового катания и ОХМ
+   * (решение владельца 2026-10-20: один движок на все события). Варианты: «Погнали?», «Компания»,
+   * «Открытка»; сеанс выбирать не нужно — это матч.
+   */
+  function openShare(variant) {
+    if (!global.GlideShareSheet || !state.ev) return toast('Обновите страницу — шаринг не загрузился');
     haptic();
-    api('POST', '/client/hockey/matches/' + matchId + '/invite', {})
-      .then(function (r) {
-        btn.disabled = false;
-        var canShare = tg && tg.shareMessage && (!tg.isVersionAtLeast || tg.isVersionAtLeast('8.0'));
-        if (r.prepared_message_id && canShare) {
-          try {
-            tg.shareMessage(r.prepared_message_id, function (sent) { if (sent) haptic('success'); });
-            return;
-          } catch (e) { /* ниже — запасной путь */ }
-        }
-        shareLink(r.url, r.text);
-      })
-      .catch(function (e) {
-        btn.disabled = false;
-        toast(e.status === 403 ? 'Позвать можно из Telegram' : e.message);
-      });
-  }
-
-  function shareLink(url, text) {
-    if (!url) return toast('Ссылка появится, когда бот будет настроен');
-    var target = 'https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text || '');
-    if (tg && typeof tg.openTelegramLink === 'function') tg.openTelegramLink(target);
-    else global.open(target, '_blank');
+    var m = state.ev.match;
+    var start = M.heroWhen(m.starts_at).split(' · ');
+    global.GlideShareSheet.open({
+      match: { id: m.id, day: start[0] || '', time: start[1] || '' },
+      invite: variant === 'invite',
+      variant: variant === 'company' ? 'company' : '',
+      company: true,
+      venueType: 'ice',
+      context: 'match_page',
+      placeName: (state.ev.arena && state.ev.arena.name) || 'Минск-Арена',
+    });
   }
 
   // ---------- кто из ваших ----------
@@ -371,7 +364,8 @@
       new global.MutationObserver(syncDark).observe(doc.documentElement, { attributes: true, attributeFilter: ['class'] });
     }
     $('cmBack').addEventListener('click', back);
-    $('cmInvite').addEventListener('click', invite);
+    $('cmInvite').addEventListener('click', function () { openShare('invite'); });
+    $('cmCompany').addEventListener('click', function () { openShare('company'); });
     if (!matchId) return fail('Матч не найден. Вернитесь на главную — там ближайший.');
     api('GET', '/client/hockey/matches/' + matchId + '/event')
       .then(function (ev) {

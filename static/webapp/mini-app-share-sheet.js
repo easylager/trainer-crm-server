@@ -19,6 +19,8 @@
  *
  * API:  GlideShareSheet.open({ ref, slots, sessionId, invite, context, venueType })
  *       slots — [{ id, label }], ближайшие сеансы (необязательно).
+ *       match — { id, time, day } — домашний матч (TASK-304): тот же шит, без выбора сеанса,
+ *       «Погнали?» вместо «Погнали кататься», без «Расписания». Один движок на все события.
  */
 (function (global) {
   'use strict';
@@ -79,11 +81,14 @@
         (tail ? '&' + tail : '');
     }
     var q = ['share_context=' + encodeURIComponent(state.context || 'arena_card')];
-    if (state.sessionId) q.push('session_id=' + encodeURIComponent(String(state.sessionId)));
+    if (state.sessionId && !state.match) q.push('session_id=' + encodeURIComponent(String(state.sessionId)));
     if (state.invite) q.push('invite=true');
     Object.keys(extra || {}).forEach(function (k) {
       q.push(k + '=' + encodeURIComponent(String(extra[k])));
     });
+    if (state.match) {
+      return '/api/public/hockey/matches/' + encodeURIComponent(String(state.match.id)) + '/share?' + q.join('&');
+    }
     return '/api/public/arenas/' + encodeURIComponent(String(state.ref)) + '/share?' + q.join('&');
   }
 
@@ -104,6 +109,7 @@
 
   function postcardReady(sheetState) {
     if (!sheetState || sheetState.endpoint) return false;
+    if (sheetState.match) return true;
     if ((sheetState.venueType || 'ice') !== 'ice') return false;
     return sheetState.sessionId != null && String(sheetState.sessionId).trim() !== '';
   }
@@ -168,6 +174,18 @@
   }
 
   function postcardInput(sheetState) {
+    if (sheetState && sheetState.match) {
+      var zm = sheetState.zovi || {};
+      // Открытка «Зови» знает «на хоккей» — матч зовёт туда же, со своим днём и временем.
+      return {
+        toName: zm.to || '',
+        fromName: zm.from || '',
+        kind: 'hockey_practice',
+        time: String(sheetState.match.time || ''),
+        day: String(sheetState.match.day || ''),
+        place: rinkName(sheetState),
+      };
+    }
     var picked = selectedPostcardSlot(sheetState);
     var row = picked && picked.row;
     var meta = row ? String(row.meta || '') : '';
@@ -992,6 +1010,7 @@
   function variantNeedsSession(variant, sheetState) {
     if (!variant) return false;
     var source = sheetState || state || {};
+    if (source.match) return false;
     return typeof variant.needsSession === 'function' ? !!variant.needsSession(source) : !!variant.needsSession;
   }
 
@@ -1247,7 +1266,7 @@
       return;
     }
     var team = String(form.team || '').trim();
-    if (state.sessionId == null || String(state.sessionId).trim() === '') {
+    if (!state.match && (state.sessionId == null || String(state.sessionId).trim() === '')) {
       form.error = 'Выбери сеанс.';
       paintCompany();
       return;
@@ -1262,11 +1281,11 @@
     fetch('/api/public/ice-companies', {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify({
-        session_id: Number(state.sessionId),
-        name: team,
-        surface: 'miniapp',
-      }),
+      body: JSON.stringify(
+        state.match
+          ? { match_id: Number(state.match.id), name: team, surface: 'miniapp' }
+          : { session_id: Number(state.sessionId), name: team, surface: 'miniapp' }
+      ),
     })
       .then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1407,7 +1426,8 @@
     var api = zoviApi();
     if (!api || z.busy || !postcardReady(state)) return;
     var built = api.inviteRequestBody({
-      sessionId: Number(state.sessionId),
+      // У матча сеанса нет: валидатор «Зови» требует id — даём матч, ниже ключ меняем на match_id.
+      sessionId: state.match ? Number(state.match.id) : Number(state.sessionId),
       toName: z.to,
       fromName: z.from,
       showPrice: false,
@@ -1430,6 +1450,10 @@
     headers.Accept = 'application/json';
     var forSession = String(state.sessionId);
     var sheetState = state;
+    if (state.match && built.body) {
+      delete built.body.session_id;
+      built.body.match_id = Number(state.match.id);
+    }
     fetch('/api/public/invites', { method: 'POST', headers: headers, body: JSON.stringify(built.body) })
       .then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1539,6 +1563,7 @@
     {
       id: 'invite',
       label: function (sheetState) {
+        if (sheetState && sheetState.match) return 'Погнали?';
         return isIcePlace(sheetState) ? 'Погнали кататься' : 'Позвать с собой';
       },
       rank: function (sheetState) {
@@ -1622,7 +1647,8 @@
       },
       shareInvite: false,
       available: function (sheetState) {
-        return !sheetState.endpoint;
+        // У матча нет «расписания» — делятся самим матчем.
+        return !sheetState.endpoint && !sheetState.match;
       },
       renderPreview: function (sheetState) {
         return renderPreviewFigureHtml(sheetState.payload);
@@ -1951,10 +1977,11 @@
 
   function open(opts) {
     opts = opts || {};
-    if ((opts.ref == null || opts.ref === '') && !opts.endpoint) return;
+    if ((opts.ref == null || opts.ref === '') && !opts.endpoint && !opts.match) return;
     ensureRoot();
     state = {
       ref: opts.ref,
+      match: opts.match || null,
       endpoint: opts.endpoint || null,
       slots: opts.slots || [],
       slotSections: opts.slotSections || null,

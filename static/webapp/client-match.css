@@ -46,7 +46,7 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-skel-line { display: block; height: 30px; width: 70%; border-radius: 8px; background: rgba(255, 255, 255, .1); }
 
 /* ── Тело ──────────────────────────────────────────────────────── */
-.cm { max-width: 560px; margin: 0 auto; padding: 16px 16px calc(32px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px; }
+.cm { max-width: 560px; margin: 0 auto; padding: 16px 16px calc(128px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px; }
 .cm-state { margin: 0; padding: 14px 16px; border-radius: var(--g-r-lg); background: var(--g-surface); color: var(--g-ink-2); font-size: 15px; line-height: 1.45; }
 .cm-card { background: var(--g-surface); border-radius: var(--g-r-lg); box-shadow: var(--g-shadow); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .cm-h { margin: 0; font: 600 17px/1.2 var(--g-font); }

@@ -134,3 +134,25 @@ describe('слот главной — домашний матч', () => {
     assert.match(hubCss, /prefers-reduced-motion: reduce\) \{\s+\.hn__tag, \.hn__tag::after, \.hn__tag-dot \{ animation: none; \}/);
   });
 });
+
+describe('один движок шаринга: матч в общем шите (решение владельца 2026-10-20)', () => {
+  it('на странице матча — «Позвать на матч» и «Собрать компанию» открывают GlideShareSheet с match', () => {
+    assert.match(pageHtml, /mini-app-share-sheet\.js/);
+    assert.match(pageJs, /GlideShareSheet\.open\(\{\s+match: \{ id: m\.id/);
+    assert.ok(!/\/client\/hockey\/matches\/' \+ matchId \+ '\/invite/.test(pageJs), 'своего «позвать» больше нет');
+  });
+
+  it('шит для матча: «Погнали?», «Компания», «Открытка» — без сеанса и «Расписания»', () => {
+    const sheetSrc = fs.readFileSync(path.join(webapp, 'mini-app-share-sheet.js'), 'utf8');
+    const sandbox = { window: { Telegram: null, requestAnimationFrame: () => {}, setTimeout, localStorage: null } };
+    sandbox.window.window = sandbox.window;
+    new Function('window', sheetSrc)(sandbox.window);
+    const S = sandbox.window.GlideShareSheet;
+    const variants = S.variantsFor({ match: { id: 7 }, venueType: 'ice', company: true });
+    assert.deepEqual(variants.map((v) => v.id), ['invite', 'company', 'postcard']);
+    assert.equal(variants[0].label, 'Погнали?');
+    assert.ok(variants.every((v) => v.picksSession === false));
+    assert.equal(S.postcardReady({ match: { id: 7 }, venueType: 'ice' }), true);
+    assert.equal(S.postcardInput({ match: { id: 7, day: 'ср, 21 октября', time: '19:30' }, placeName: 'Минск-Арена', zovi: {} }).place, 'Минск-Арена');
+  });
+});
