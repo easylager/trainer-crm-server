@@ -2097,7 +2097,7 @@ class ClientShareEvent(Base):
 # ---------------------------------------------------------------------------
 
 _INVITE_CODE_CHECK = "code ~ '^[23456789abcdefghjkmnpqrstuvwxyz]{8}$'"
-_INVITE_KIND_CHECK = "kind IN ('public_skate', 'open_ice', 'hockey_practice')"
+_INVITE_KIND_CHECK = "kind IN ('public_skate', 'open_ice', 'hockey_practice', 'hockey_match')"
 
 
 class IceInvite(Base):
@@ -2108,6 +2108,7 @@ class IceInvite(Base):
         UniqueConstraint("code", name="uq_ice_invites_code"),
         CheckConstraint(_INVITE_CODE_CHECK, name="ck_ice_invites_code"),
         CheckConstraint(_INVITE_KIND_CHECK, name="ck_ice_invites_kind"),
+        CheckConstraint("session_id IS NULL OR match_id IS NULL", name="ck_ice_invites_one_target"),
         CheckConstraint(
             "char_length(from_name) BETWEEN 1 AND 20",
             name="ck_ice_invites_from_name",
@@ -2119,6 +2120,7 @@ class IceInvite(Base):
         Index("ix_ice_invites_parent_code", "parent_code"),
         Index("ix_ice_invites_created_at", "created_at"),
         Index("ix_ice_invites_session_id", "session_id"),
+        Index("ix_ice_invites_match_id", "match_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -2126,6 +2128,10 @@ class IceInvite(Base):
     status_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     session_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("ice_sessions.id", ondelete="SET NULL"), nullable=True
+    )
+    # TASK-304: открытка на домашний матч Динамо вместо сеанса льда (одно из двух).
+    match_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("hockey_matches.id", ondelete="SET NULL"), nullable=True
     )
     arena_id: Mapped[int] = mapped_column(
         ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False
