@@ -443,9 +443,13 @@ def _newer(left: datetime | None, right: datetime | None) -> datetime | None:
     return left if _aware(left) >= _aware(right) else right
 
 
-@router.get("/sitemap.xml")
-async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
+@router.api_route("/sitemap.xml", methods=["GET", "HEAD"])
+async def sitemap(request: Request, session: AsyncSession = Depends(get_session)) -> Response:
     from xml.sax.saxutils import escape
+
+    sitemap_headers = {"Cache-Control": "public, max-age=3600"}
+    if request.method == "HEAD":
+        return Response(content=b"", media_type="application/xml", headers=sitemap_headers)
 
     base = _base()
     rows = (await session.execute(_SITEMAP_SQL, public_scope_params())).mappings().all()
@@ -466,31 +470,41 @@ async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
         site_stamp = _newer(site_stamp, stamp)
         freq = "daily" if row["venue_type"] == "ice" else "weekly"
         loc = place_page_url(base_url=base, city_name=city_name, slug=str(row["slug"]))
-        by_city[city_name].append((loc, freq, stamp))
-    urls: list[tuple[str, str, datetime | None]] = [
-        (f"{base}/", "daily", site_stamp),
-        (f"{base}/trainers", "weekly", site_stamp),
+        by_city[city_name].append((loc, freq, stamp, "0.7"))
+    urls: list[tuple[str, str, datetime | None, str | None]] = [
+        (f"{base}/", "daily", site_stamp, "1.0"),
+        (f"{base}/trainers", "weekly", site_stamp, "0.4"),
     ]
     for city_name in order:
         stamp = city_stamp[city_name]
         # Подборка города — ответ на «где покататься в <город>» (TASK-146).
-        urls.append((f"{base}/c/{city_slug(city_name)}", "daily", stamp))
+        urls.append((f"{base}/c/{city_slug(city_name)}", "daily", stamp, "0.9"))
         urls.extend(by_city[city_name])
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-    for loc, freq, stamp in urls:
+    for loc, freq, stamp, priority in urls:
         lastmod = _sitemap_lastmod(stamp)
-        extra = f"<lastmod>{escape(lastmod)}</lastmod>" if lastmod else ""
-        body.append(f"<url><loc>{escape(loc)}</loc>{extra}<changefreq>{freq}</changefreq></url>")
+        parts = [f"<loc>{escape(loc)}</loc>"]
+        if lastmod:
+            parts.append(f"<lastmod>{escape(lastmod)}</lastmod>")
+        parts.append(f"<changefreq>{freq}</changefreq>")
+        if priority:
+            parts.append(f"<priority>{priority}</priority>")
+        body.append(f"<url>{''.join(parts)}</url>")
     body.append("</urlset>")
     return Response(
         content="\n".join(body),
         media_type="application/xml",
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers=sitemap_headers,
     )
 
 
-@router.get("/robots.txt")
-async def robots() -> Response:
+_ROBOTS_CACHE = {"Cache-Control": "public, max-age=86400"}
+
+
+@router.api_route("/robots.txt", methods=["GET", "HEAD"])
+async def robots(request: Request) -> Response:
+    if request.method == "HEAD":
+        return Response(content=b"", media_type="text/plain", headers=_ROBOTS_CACHE)
     # /webapp — оболочки мини-аппа без серверного контента; индексировать нечего.
     # Но публичные страницы берут оттуда CSS/JS, а фото — из /api/public/photos/:
     # без них Google рисует страницу без стилей и не видит фото катков. Правило
@@ -508,7 +522,7 @@ async def robots() -> Response:
             "",
         ]
     )
-    return Response(content=content, media_type="text/plain", headers={"Cache-Control": "public, max-age=86400"})
+    return Response(content=content, media_type="text/plain", headers=_ROBOTS_CACHE)
 
 
 # ---------------------------------------------------------------------------

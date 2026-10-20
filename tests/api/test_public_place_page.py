@@ -86,7 +86,7 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert resp.headers["cache-control"] == "private, max-age=30, stale-while-revalidate=300"
     html = resp.text
     assert place["name"] in _meta(html, "og:title")
-    assert "расписание массового катания" in _meta(html, "og:title")
+    assert "Массовое катание" in _meta(html, "og:title")
     assert _meta(html, "og:image").endswith(place["path"] + "/og.png")
     # Telegram предпочитает twitter:* и показывает незаполненный плейсхолдер вместо og:title.
     assert _meta(html, "twitter:title") == _meta(html, "og:title")
@@ -223,7 +223,7 @@ async def test_link_to_a_past_session_says_so_and_shows_whats_next(app_use_test_
         resp = await client.get(place["path"], params={"s": "999999999"})
     assert resp.status_code == 200
     assert "Сеанса из ссылки уже нет в расписании" in resp.text
-    assert "расписание массового катания" in _meta(resp.text, "og:title")
+    assert "Массовое катание" in _meta(resp.text, "og:title")
     # «Сегодня/Завтра» считается по Минску, а фикстура — по дате контейнера; проверяем суть.
     assert re.search(r"Ближайший — [^<]*, 18:00", resp.text)
 
