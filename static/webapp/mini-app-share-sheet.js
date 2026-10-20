@@ -1193,29 +1193,66 @@
     return (sheetState && sheetState.companyForm) || {};
   }
 
-  /** «Так увидят в чате»: карточка компании с кнопками ответа — до того, как её отправили. */
+  var NOM_WEEKDAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+
+  function weekdayNom(iso) {
+    var parts = String(iso || '').split('-');
+    if (parts.length < 3 || !parts[0]) return '';
+    var date = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+    return isNaN(date.getTime()) ? '' : NOM_WEEKDAYS[date.getUTCDay()];
+  }
+
+  /*
+   * «Так увидят в чате» — повтор настоящей карточки (ice_company/copy.py, og.py, lifecycle.buttons_for):
+   * у катка картинка-постер и подпись, у матча только текст; кнопки — столбиком, как inline-клавиатура.
+   */
   function renderCompanyPreview(sheetState) {
     var form = companyFormOf(sheetState);
     var isMatch = !!(sheetState && sheetState.match);
     var name = String(form.team || '').trim();
-    var title = isMatch ? 'Идём на матч?' : (name || 'Едем на лёд?');
-    var matchLine = isMatch
-      ? (name || String(sheetState.match.title || '')) +
-        (sheetState.match.day ? ' · ' + sheetState.match.day : '') +
-        (sheetState.match.time ? ', ' + sheetState.match.time : '')
-      : '';
-    var what = isMatch ? matchLine : rinkName(sheetState);
-    var you = String(form.you || '').trim();
-    var answers = isMatch ? ['Иду', 'Смотрю дома', 'Не смогу'] : ['Иду', 'Может', 'Не смогу'];
+    var you = String(form.you || '').trim() || 'ты';
+    var lines;
+    var poster = '';
+    var buttons;
+    if (isMatch) {
+      var m = sheetState.match;
+      var when = [m.day, m.time].filter(Boolean).join(', ');
+      lines =
+        '<b>Идём на матч?</b>' +
+        '<span>' + esc([name, m.title, when, rinkName(sheetState)].filter(Boolean).join(' · ')) + '</span>' +
+        '<span class="gss-cprev__who">Идут: ' + esc(you) + '</span>';
+      buttons = ['Иду', 'Смотрю дома', 'Не смогу', 'Подробнее ↗'];
+    } else {
+      var picked = selectedPostcardSlot(sheetState);
+      var row = picked ? picked.row : {};
+      var meta = String(row.meta || '');
+      var kind = meta.indexOf('ОХМ') !== -1 ? 'ОХМ' : 'Массовое катание';
+      var day = picked ? weekdayNom(picked.section.localDate) || picked.section.dayLabel || '' : '';
+      var time = String(row.time || '');
+      var place = rinkName(sheetState);
+      poster =
+        '<span class="gss-cprev__poster" aria-hidden="true">' +
+        '<span class="gss-cprev__ptop"><em>' + esc(day.toUpperCase()) + '</em><i>' + esc(kind) + '</i></span>' +
+        '<b class="gss-cprev__ptime">' + esc(time || '—') + '</b>' +
+        '<span class="gss-cprev__prink"><span class="gss-cprev__pdot"></span></span>' +
+        '<b class="gss-cprev__pteam">' + esc(name || 'Компания на лёд') + '</b>' +
+        '</span>';
+      lines =
+        '<b>' + esc(kind) + '</b>' +
+        (name ? '<b>' + esc(name) + '</b>' : '') +
+        '<span>' + esc([day && time ? day + ', ' + time : time, place].filter(Boolean).join(' · ')) + '</span>' +
+        '<span class="gss-cprev__who">На льду ' + esc(you) + '.</span>' +
+        '<span class="gss-cprev__crowd">Пока один. Одному можно, но вдвоём веселее</span>';
+      buttons = ['Иду', 'Не могу', 'В другой чат →', 'На лёд ↗'];
+    }
     return (
       '<figure class="gss-cprev" aria-label="Так карточку увидят в чате">' +
-      '<span class="gss-cprev__card">' +
-      '<b class="gss-cprev__title">' + esc(title) + '</b>' +
-      (what ? '<span class="gss-cprev__what">' + esc(what) + '</span>' : '') +
-      '<span class="gss-cprev__who">Идут: ' + esc(you || 'ты') + '</span>' +
+      '<figcaption>Так увидят друзья в чате</figcaption>' +
+      '<span class="gss-cprev__msg">' +
+      poster +
+      '<span class="gss-cprev__text">' + lines + '</span>' +
       '</span>' +
-      '<span class="gss-cprev__btns">' + answers.map(function (a) { return '<i>' + esc(a) + '</i>'; }).join('') + '</span>' +
-      '<figcaption>Так увидят в чате</figcaption>' +
+      '<span class="gss-cprev__kb">' + buttons.map(function (a) { return '<i>' + esc(a) + '</i>'; }).join('') + '</span>' +
       '</figure>'
     );
   }
@@ -1245,17 +1282,10 @@
     /* Владелец 2026-10-20: вкладка «Компания», а поле просило «команду» — на матче это путают
        с клубами. Одно поле — подпись на карточке выше; пустое оставляем заголовок по умолчанию. */
     var teamField =
-      '<div class="gss-cname">' +
-      '<p class="gss-cname__lead">Это подпись на карточке выше. Друзья увидят её в чате и нажмут «Иду» прямо там.</p>' +
-      '<label class="gss-zf__f"><span>Название компании <em>по желанию</em></span>' +
+      '<label class="gss-zf__f gss-cname"><span>Название компании <em>по желанию — видно на карточке</em></span>' +
       '<input type="text" data-gss-c="team" maxlength="40" enterkeyhint="done" ' +
       'placeholder="' + esc(isMatch ? 'Например, «Офис на Динамо»' : 'Например, «Пятничный лёд»') +
-      '" value="' + esc(form.team || '') + '" /></label>' +
-      '<p class="gss-cname__hint">' +
-      (isMatch
-        ? 'Пусто — на карточке останутся команды матча.'
-        : 'Пусто — на карточке будет «Едем на лёд?».') +
-      '</p></div>';
+      '" value="' + esc(form.team || '') + '" /></label>';
     var youLine = you
       ? '<p class="gss-company-who">Вы в списке «Иду» как <b>' + esc(you) + '</b> — из Telegram.</p>'
       : '';
@@ -1636,6 +1666,7 @@
         return 1;
       },
       needsSession: true,
+      collapsesPicker: true,
       shareInvite: null,
       available: function (sheetState) {
         return !sheetState.endpoint && isIcePlace(sheetState) && !!sheetState.company;
@@ -2155,6 +2186,7 @@
     postcardInput: postcardInput,
     postcardBottomHtml: renderPostcardBottom,
     companyBottomHtml: renderCompanyBottom,
+    companyPreviewHtml: renderCompanyPreview,
     _previewFigureHtml: function (payload, selection) {
       var prev = state;
       state = selection

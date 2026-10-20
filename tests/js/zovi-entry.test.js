@@ -97,14 +97,38 @@ describe('варианты шита', () => {
     assert.doesNotMatch(html, /Сколько человек нужно|data-gss-cmin|порог|команд/i);
     // Владелец 2026-10-20: одно поле — подпись на карточке, не «команда».
     assert.match(html, /Название компании/);
-    assert.match(html, /gss-cname__lead/);
-    assert.match(html, /Это подпись на карточке выше/);
+    assert.match(html, /видно на карточке/);
     assert.match(html, /Отправить в чат/);
     assert.match(html, /data-gss-c="team"[^>]*value="Пивной Олимп"/);
     assert.match(html, /Вы в списке «Иду» как <b>Макс<\/b>/);
     assert.equal(html.includes('Как записать тебя'), false);
     assert.equal(html.includes('data-ch='), false);
     assert.equal(html.includes('type="number"'), false);
+  });
+
+  it('превью компании повторяет настоящую карточку: постер, подпись и кнопки столбиком', () => {
+    const ice = sheet.companyPreviewHtml({
+      venueType: 'ice',
+      placeName: 'ТЦ DiaMond city',
+      sessionId: '7',
+      slotSections: [{ localDate: '2026-10-23', dayLabel: 'пт', rows: [{ id: 7, time: '21:15', meta: '14 BYN · ОХМ' }] }],
+      companyForm: { team: '', you: 'Макс' },
+    });
+    assert.match(ice, /gss-cprev__poster/);
+    assert.match(ice, /ПЯТНИЦА/);
+    assert.match(ice, /21:15/);
+    assert.match(ice, /На льду Макс\./);
+    assert.match(ice, /<i>Иду<\/i><i>Не могу<\/i><i>В другой чат →<\/i><i>На лёд ↗<\/i>/);
+    assert.doesNotMatch(ice, /Может/);
+    const match = sheet.companyPreviewHtml({
+      match: { id: 11, title: 'Динамо-Минск — СКА', day: 'пт, 30 октября', time: '19:30' },
+      placeName: 'Минск-Арена',
+      companyForm: { team: 'Офис', you: 'Макс' },
+    });
+    assert.doesNotMatch(match, /gss-cprev__poster/);
+    assert.match(match, /Идём на матч\?/);
+    assert.match(match, /Офис · Динамо-Минск — СКА · пт, 30 октября, 19:30 · Минск-Арена/);
+    assert.match(match, /<i>Иду<\/i><i>Смотрю дома<\/i><i>Не смогу<\/i><i>Подробнее ↗<\/i>/);
   });
 
   it('после сбора карточка сразу в чате, ссылка отдельно', () => {
