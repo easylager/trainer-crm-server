@@ -174,7 +174,8 @@ body.ar-pilot--arena .client-app-header {
   gap: 6px;
 }
 
-.arena-amen span {
+.arena-amen > span,
+.arena-amen > a {
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
   padding: 4px 8px;

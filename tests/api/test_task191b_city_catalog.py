@@ -117,6 +117,52 @@ async def test_contact_click_beacon_records_phone(app_use_test_db, db_session, m
 
 
 @pytest.mark.asyncio
+async def test_contact_click_beacon_records_partner_show(app_use_test_db, db_session, monkeypatch) -> None:
+    from starlette.requests import Request
+
+    from src.api.routes.catalog_consumer_telemetry import public_contact_click_beacon
+
+    monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", "x" * 32)
+    city_id = await _insert_city(db_session, name=f"Партнёрск {uuid.uuid4().hex[:6]}")
+    aid = await _insert_arena(db_session, city_id, name="С партнёром")
+    await db_session.commit()
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/public/catalog/contact-click",
+        "headers": [(b"user-agent", b"Mozilla/5.0")],
+        "query_string": b"",
+    }
+    beacon = dict(surface="miniapp_arena", city_id=city_id, arena_id=aid, session=db_session)
+    no_slug = await public_contact_click_beacon(Request(scope), action="partner_show", partner=None, **beacon)
+    assert no_slug.status_code == 400
+    for action in ("partner_open", "partner_show"):
+        resp = await public_contact_click_beacon(
+            Request(scope), action=action, partner="mangal-house-zamok", **beacon
+        )
+        assert resp.status_code == 204
+    actions = (
+        await db_session.execute(
+            text("SELECT payload->>'action' FROM catalog_consumer_events WHERE arena_id = :a ORDER BY id"),
+            {"a": aid},
+        )
+    ).scalars().all()
+    # Открыл и показал на кассе — два события, второе не схлопнулось с первым.
+    assert actions == ["partner_open", "partner_show"]
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT kind, payload->>'action', payload->>'partner' FROM catalog_consumer_events "
+                "WHERE arena_id = :a ORDER BY id DESC LIMIT 1"
+            ),
+            {"a": aid},
+        )
+    ).first()
+    assert row is not None
+    assert tuple(row) == ("public_contact_click", "partner_show", "mangal-house-zamok")
+
+
+@pytest.mark.asyncio
 async def test_ice_arenas_public_path_opens_place_page(app_use_test_db, db_session) -> None:
     from src.application.place_links import place_path
 

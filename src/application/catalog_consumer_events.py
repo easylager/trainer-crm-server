@@ -516,8 +516,12 @@ async def record_public_contact_click(
     surface: str,
     city_id: int | None = None,
     arena_id: int | None = None,
+    partner: str | None = None,
 ) -> None:
-    """Клик «позвонить / билеты / маршрут» с SSR — demand-событие TASK-189."""
+    """Клик «позвонить / билеты / маршрут» с SSR — demand-событие TASK-189.
+
+    ``partner_open`` / ``partner_show`` — партнёр рядом с катком; slug партнёра в payload.
+    """
     from starlette.requests import Request
 
     if not isinstance(request, Request):
@@ -525,18 +529,42 @@ async def record_public_contact_click(
     from src.api.middleware.http_limits import client_ip_from_request
 
     act = (action or "").strip().lower()
-    if act not in ("phone", "tickets", "direction"):
+    partner_actions = ("partner_open", "partner_show")
+    if act not in ("phone", "tickets", "direction", *partner_actions):
+        return
+    slug = partner.strip().lower()[:64] if isinstance(partner, str) else ""
+    if act in partner_actions and not slug:
         return
     user_agent = request.headers.get("user-agent")
     actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
+    surf = (surface or "place_page").strip().lower()[:40]
+    # Открыл и показал на кассе — разные события; без своего ключа второе схлопнулось бы с первым.
+    partner_key = (
+        event_dedup_hash(
+            kind=KIND_PUBLIC_CONTACT_CLICK,
+            surface=surf,
+            actor_hash=actor,
+            day=catalog_event_day_minsk(),
+            city_id=city_id,
+            arena_id=arena_id,
+            variant=f"{act}:{slug}",
+        )
+        if act in partner_actions
+        else None
+    )
     await record_catalog_consumer_event(
         session,
         kind=KIND_PUBLIC_CONTACT_CLICK,
-        surface=(surface or "place_page").strip().lower()[:40],
+        surface=surf,
         actor_hash=actor,
         city_id=city_id,
         arena_id=arena_id,
-        payload={"action": act, "ua_class": classify_user_agent(user_agent)},
+        dedup_key=partner_key,
+        payload={
+            "action": act,
+            "ua_class": classify_user_agent(user_agent),
+            **({"partner": slug} if act in partner_actions else {}),
+        },
     )
 
 

@@ -722,10 +722,54 @@
     if (String(state.card.venue_type || '') === 'shop') return renderShopServices();
     var chips = M.amenityChips(state.card.amenities);
     if (!chips.length) return '';
+    var food = foodPartner();
     return (
       '<div class="arena-sec"><div class="arena-amen">' +
-      chips.map(function (c) { return '<span>' + esc(c) + '</span>'; }).join('') +
+      chips.map(function (c) {
+        // Чип «Кафе» при партнёре-кафе ведёт к блоку «После катка».
+        if (food && c === 'Кафе') {
+          return '<a href="#arenaPartners">' + esc(c) + '<span class="gp-chip-mark">' + esc(food.offer) + '</span></a>';
+        }
+        return '<span>' + esc(c) + '</span>';
+      }).join('') +
       '</div></div>'
+    );
+  }
+
+  function partnersList() {
+    var list = state.card && state.card.partners;
+    return Array.isArray(list) ? list : [];
+  }
+
+  function foodPartner() {
+    var list = partnersList();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].kind === 'food' || list[i].kind === 'coffee') return list[i];
+    }
+    return null;
+  }
+
+  /** «После катка»: партнёры рядом (src/application/arena_partners.py), шторка — partner-sheet.js. */
+  function renderPartners() {
+    var list = partnersList();
+    if (!list.length || !global.GlidePartners) return '';
+    var rows = list.map(function (p) {
+      var photo = (p.photos && p.photos[0]) || p.logo;
+      var media = photo
+        ? '<img class="gp-row__media" src="' + esc(photo) + '" alt="" width="64" height="64" loading="lazy" decoding="async" />'
+        : '<span class="gp-row__media"></span>';
+      var line = [p.line, p.where].filter(Boolean).join(' · ');
+      return (
+        '<button type="button" class="gp-row" data-partner="' + esc(p.slug) + '">' + media +
+        '<span class="gp-row__body"><span class="gp-row__name">' + esc(p.name) + '</span>' +
+        '<span class="gp-row__line">' + esc(line) + '</span>' +
+        '<span class="gp-row__offer">' + esc(p.offer) + ' с\u00a0Glide</span></span>' +
+        '<svg class="gp-row__chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>'
+      );
+    }).join('');
+    return (
+      '<div class="arena-sec" id="arenaPartners"><div class="gp-head-row"><p class="arena-h">После катка</p>' +
+      '<span class="gp-kicker">Партнёры Glide</span></div><div class="gp-list">' + rows + '</div></div>'
     );
   }
 
@@ -1613,6 +1657,7 @@
         // Тренер — сразу после расписания: человек только что выбрал время и думает, как выйти на лёд.
         renderTrainers() +
         renderAmenities() +
+        renderPartners() +
         renderMassAccess() +
         renderCenterOffer() +
         renderGroups() +
@@ -1831,6 +1876,27 @@
   }
 
   function onRootClick(ev) {
+    var toPartners = ev.target.closest('a[href="#arenaPartners"]');
+    if (toPartners) {
+      ev.preventDefault();
+      var block = document.getElementById('arenaPartners');
+      if (block) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    var partnerBtn = ev.target.closest('[data-partner]');
+    if (partnerBtn && global.GlidePartners) {
+      var slug = partnerBtn.getAttribute('data-partner');
+      var hit = partnersList().filter(function (p) { return p.slug === slug; })[0];
+      if (hit) {
+        global.GlidePartners.open(hit, {
+          surface: 'miniapp_arena',
+          arenaId: state.card.id,
+          cityId: state.card.city_id,
+          placeName: state.card.name || '',
+        });
+      }
+      return;
+    }
     var dayBtn = ev.target.closest('[data-day]');
     if (dayBtn && dayBtn.closest('#arenaDayTabs')) {
       state.day = dayBtn.getAttribute('data-day');

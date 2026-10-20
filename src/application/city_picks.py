@@ -62,7 +62,11 @@ _SCORES_SQL = text(
     """
     SELECT e.arena_id,
            COUNT(*) FILTER (WHERE e.kind = 'public_page_view')::int AS views,
-           COUNT(*) FILTER (WHERE e.kind = 'public_contact_click')::int AS clicks
+           -- Партнёр рядом (partner_*) — не интерес к катку: в счёт подборки не идёт.
+           COUNT(*) FILTER (
+               WHERE e.kind = 'public_contact_click'
+                 AND COALESCE(e.payload->>'action', '') NOT IN ('partner_open', 'partner_show')
+           )::int AS clicks
     FROM catalog_consumer_events e
     JOIN arenas a ON a.id = e.arena_id
     WHERE a.city_id = :city_id
