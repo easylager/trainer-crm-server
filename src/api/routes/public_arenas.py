@@ -14,7 +14,7 @@ from src.api.deps import get_session
 from src.api.catalog_share_actor import catalog_share_actor as _catalog_share_actor
 from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
-from src.api.public_list_cache import set_public_json_list_cache
+from src.api.public_list_cache import set_public_json_fresh_cache, set_public_json_list_cache
 from src.api.routes.public import _enrich_trainer_photo_urls
 from src.application.selection_page import SERVICE_AMENITY_KEYS, clean_svc
 from src.application.arena_public_use_cases import (
@@ -341,7 +341,8 @@ async def get_public_arena_trainers(
         raise HTTPException(status_code=404, detail="Arena not found")
     for trainer in payload["items"]:
         _enrich_trainer_photo_urls(trainer)
-    set_public_json_list_cache(response)
+    # В ответе окна тренеров: список остаётся тем же, но кэш короче общего (60 с, не 120+120).
+    set_public_json_fresh_cache(response)
     return payload
 
 
