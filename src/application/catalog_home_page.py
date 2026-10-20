@@ -1349,25 +1349,6 @@ def catalog_home_document_title() -> str:
     return f"Массовое катание — расписание катков по Беларуси | {_SERP_BRAND}"
 
 
-def catalog_home_seo_intro_html(cities: list[Mapping[str, Any]]) -> str:
-    """Текст на главной: общий запрос «массовое катание» — на корень, не на /p/ арены."""
-    by = [c for c in cities if c.get("country") == "BY" and c.get("slug")]
-    if not by:
-        return ""
-    links: list[str] = []
-    for city in by[:6]:
-        slug = _esc(str(city["slug"]))
-        name = _esc(format_public_name(str(city.get("name") or "")))
-        links.append(f'<a href="/c/{slug}">{name}</a>')
-    return (
-        '<section class="b-sec b-sec--place" id="mass-skate">'
-        '<h2 class="b-h2">Массовое катание в Беларуси</h2>'
-        '<p class="b-text">Актуальное расписание сеансов на катках — на сегодня, завтра и в выходные, '
-        "с ценами и адресами. Выберите город: "
-        f'{", ".join(links)}.</p></section>'
-    )
-
-
 def catalog_home_search_description(cities: list[Mapping[str, Any]]) -> str:
     """meta description: ключевые слова в начале, города — якорь доверия, без счётчиков сеансов."""
     by_names = [format_public_name(str(c.get("name") or "")) for c in cities if c.get("country") == "BY"]
@@ -1486,7 +1467,6 @@ def render_catalog_home_page(
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__HERO__": hero,
-        "__SEO_INTRO__": catalog_home_seo_intro_html(cities),
         "__WHEN__": _b_when_nav(view),
         "__HERO_CITY__": _b_home_city_card(user_city),
         "__MAP__": map_html,

@@ -68,17 +68,6 @@ def test_catalog_home_snippet_leads_with_mass_skating_keyword() -> None:
     assert "телефоны" in text
 
 
-def test_catalog_home_seo_intro_links_city_hubs() -> None:
-    from src.application.catalog_home_page import catalog_home_seo_intro_html
-
-    html = catalog_home_seo_intro_html(
-        [{"country": "BY", "name": "Минск", "slug": "minsk"}, {"country": "BY", "name": "Брест", "slug": "brest"}]
-    )
-    assert "Массовое катание в Беларуси" in html
-    assert 'href="/c/minsk"' in html
-    assert 'href="/c/brest"' in html
-
-
 def test_city_search_description_has_no_session_counts() -> None:
     text = city_hub_search_description(_hub()).replace(" ", " ")
     assert text == (
