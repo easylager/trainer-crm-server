@@ -2267,6 +2267,9 @@ async def get_public_arena_card(
 
     if city_enabled(int(row["city_id"])):
         card["ice_company"] = True
+    from src.application.arena_partners import partners_for_arena
+
+    card["partners"] = partners_for_arena(int(row["id"]), today=_today_minsk())
     return card
 
 

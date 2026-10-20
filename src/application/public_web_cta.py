@@ -13,6 +13,10 @@ from src.shared.phone_guard import is_valid_public_phone, tel_href
 CONTACT_ACTION_PHONE = "phone"
 CONTACT_ACTION_TICKETS = "tickets"
 CONTACT_ACTION_DIRECTION = "direction"
+# Партнёр рядом с катком (src/application/arena_partners.py): открыли шторку / показали экран на кассе.
+CONTACT_ACTION_PARTNER_OPEN = "partner_open"
+CONTACT_ACTION_PARTNER_SHOW = "partner_show"
+PARTNER_ACTIONS = frozenset({CONTACT_ACTION_PARTNER_OPEN, CONTACT_ACTION_PARTNER_SHOW})
 
 _ALLOWED_CONTACT_ACTIONS = frozenset(
     {CONTACT_ACTION_PHONE, CONTACT_ACTION_TICKETS, CONTACT_ACTION_DIRECTION}

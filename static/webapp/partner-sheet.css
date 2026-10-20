@@ -1,0 +1,202 @@
+/* Партнёр рядом с катком: строка блока «После катка», шторка, экран «Показать на кассе».
+   Один файл на сайт и Mini App — только токены --g-* из glide-tokens.css. */
+
+.gp-list {
+  display: flex;
+  flex-direction: column;
+  background: var(--g-surface);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-r-card, 18px);
+  overflow: hidden;
+}
+.gp-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  padding: 14px 16px;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--g-ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gp-row + .gp-row { border-top: 1px solid var(--g-line); }
+.gp-row:active { background: var(--g-chip); }
+.gp-row__media {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--g-chip);
+}
+.gp-row__body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.gp-row__name { font-weight: 600; font-size: 16px; line-height: 1.25; }
+.gp-row__line { font-size: 13px; line-height: 1.35; color: var(--g-muted); }
+.gp-row__offer {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: var(--g-r-pill, 999px);
+  background: var(--g-accent-wash);
+  color: var(--g-accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.gp-row__chev { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--g-quiet); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.gp-head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.gp-kicker { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--g-muted); white-space: nowrap; }
+.gp-chip-mark { margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--g-accent-ink); }
+/* Ссылки сайта по умолчанию бирюзовые (body.b a) — строка и чип остаются чернилами. */
+body a.gp-row, body.b a.gp-row,
+body a.b-chip, body.b a.b-chip, .arena-amen a { color: var(--g-ink); text-decoration: none; }
+
+/* ── Шторка ── */
+.gp {
+  position: fixed;
+  inset: auto 0 0 0;
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100dvh - 48px);
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 20px 20px 0 0;
+  background: var(--g-surface);
+  color: var(--g-ink);
+  font-family: var(--g-font);
+  overflow: auto;
+  box-sizing: border-box;
+}
+.gp::backdrop { background: rgba(13, 27, 38, .5); }
+.gp--counter { inset: 0; max-height: none; height: 100dvh; border-radius: 0; }
+.gp-icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.gp-card { position: relative; padding: 20px 0 calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
+.gp-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--g-muted);
+  cursor: pointer;
+}
+.gp-photos {
+  display: flex;
+  gap: 8px;
+  padding: 24px 16px 0;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+}
+.gp-photos::-webkit-scrollbar { display: none; }
+.gp-photos img {
+  width: 78%;
+  aspect-ratio: 7 / 5;
+  flex: none;
+  border-radius: 14px;
+  object-fit: cover;
+  scroll-snap-align: start;
+  background: var(--g-chip);
+}
+.gp-photos img:only-child { width: 100%; }
+.gp-head { display: flex; align-items: center; gap: 12px; padding: 18px 16px 0; }
+.gp-logo { width: 48px; height: 48px; flex: none; border-radius: 50%; object-fit: cover; }
+.gp-names { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gp-name { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.2; }
+.gp-line { margin: 0; font-size: 13px; color: var(--g-muted); }
+.gp-offer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 16px 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--g-bg);
+}
+.gp-offer__big { font-family: var(--g-font-display); font-weight: 400; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
+.gp-offer__text { display: flex; flex-direction: column; gap: 2px; font-size: 14px; line-height: 1.4; color: var(--g-muted); }
+.gp-offer__text strong { color: var(--g-ink); font-weight: 600; }
+.gp-facts { list-style: none; margin: 12px 16px 0; padding: 0; border: 1px solid var(--g-line); border-radius: 16px; }
+.gp-fact { display: flex; align-items: center; gap: 12px; padding: 12px 14px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.gp-fact + .gp-fact { border-top: 1px solid var(--g-line); }
+.gp-actions { display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 0; }
+.gp-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--g-r-btn, 14px);
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.gp-btn--main { min-height: 52px; background: var(--g-accent); color: var(--g-on-accent); font-weight: 700; font-size: 16px; }
+.gp-btn--main:active { background: var(--g-accent-pressed); }
+.gp-btn--quiet, body.b a.gp-btn--quiet { background: var(--g-chip); color: var(--g-ink); }
+
+/* ── Экран для кассы ── */
+.gp-counter {
+  min-height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: calc(8px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+}
+.gp-counter[hidden], .gp-card[hidden] { display: none; }
+.gp-counter__top { display: flex; justify-content: space-between; align-items: center; min-height: 44px; }
+.gp-counter__brand { font-family: var(--g-font-display); font-size: 18px; }
+.gp-counter__done {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--g-accent-ink);
+  font: inherit;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+}
+.gp-counter__mid { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; }
+.gp-counter__logo { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; }
+.gp-counter__for { font-size: 17px; color: var(--g-ink-2); }
+.gp-counter__big { font-family: var(--g-font-display); font-size: clamp(80px, 28vw, 120px); line-height: .9; letter-spacing: -.02em; }
+.gp-counter__code {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 18px 0;
+  border: 2px dashed var(--g-line-strong);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.gp-counter__kicker { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--g-muted); }
+.gp-counter__word { font-family: var(--g-font-display); font-size: 48px; letter-spacing: .12em; }
+.gp-counter__live { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--g-ink-2); font-variant-numeric: tabular-nums; }
+.gp-counter__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--g-live); animation: gp-pulse 2s ease-in-out infinite; }
+.gp-counter__foot { margin: 0; text-align: center; font-size: 13px; color: var(--g-muted); }
+@keyframes gp-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .gp-counter__dot { animation: none; } }

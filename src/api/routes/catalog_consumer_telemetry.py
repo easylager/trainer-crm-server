@@ -18,7 +18,12 @@ from src.application.catalog_consumer_events import (
     resolve_entry_scope,
     resolve_public_page_view_scope,
 )
-from src.application.public_web_cta import CONTACT_ACTION_DIRECTION, CONTACT_ACTION_PHONE, CONTACT_ACTION_TICKETS
+from src.application.public_web_cta import (
+    CONTACT_ACTION_DIRECTION,
+    CONTACT_ACTION_PHONE,
+    CONTACT_ACTION_TICKETS,
+    PARTNER_ACTIONS,
+)
 from src.shared.html_template import safe_external_url
 from src.application.place_links import clean_share_src, is_valid_start_param, telegram_open_link
 from src.shared.config import Settings
@@ -153,11 +158,15 @@ async def public_contact_click_beacon(
     surface: str = Query(..., min_length=1, max_length=40),
     city_id: int | None = Query(None),
     arena_id: int | None = Query(None),
+    partner: str | None = Query(None, max_length=64, description="slug партнёра для partner_*"),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
-    """Учёт клика «Позвонить» с SSR (``navigator.sendBeacon``); без JS клик не считается."""
+    """Учёт клика «Позвонить» и партнёра рядом (``navigator.sendBeacon``); без JS клик не считается."""
     act = action.strip().lower()
-    if act != CONTACT_ACTION_PHONE:
+    partner_slug = partner.strip() if isinstance(partner, str) else ""
+    if act != CONTACT_ACTION_PHONE and act not in PARTNER_ACTIONS:
+        return Response(status_code=400)
+    if act in PARTNER_ACTIONS and not partner_slug:
         return Response(status_code=400)
     await record_public_contact_click(
         session,
@@ -166,6 +175,7 @@ async def public_contact_click_beacon(
         surface=surface,
         city_id=city_id,
         arena_id=arena_id,
+        partner=partner_slug or None,
     )
     return Response(status_code=204)
 

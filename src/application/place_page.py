@@ -1610,8 +1610,9 @@ def _b_onsite(card: Mapping[str, Any], *, cta_url: str | None, trainers_listed: 
         if chips:
             body += f'<div class="b-chips">{"".join(chips)}</div>'
         return section("Что здесь можно сделать", body, klass="b-sec--place")
+    food = _food_partner(card)
     chips = [
-        f'<span class="b-chip">{icon_svg(icon)}{_esc(label)}</span>'
+        _b_amenity_chip(icon_svg(icon), label, food if key == "cafe" else None)
         for key, icon, label in _B_AMENITIES
         if amenities.get(key) is True
     ]
@@ -1629,6 +1630,73 @@ def _b_onsite(card: Mapping[str, Any], *, cta_url: str | None, trainers_listed: 
             f"<span>индивидуальные и групповые занятия</span></span>{go}</{tag}>"
         )
     return section(t("place.on_site"), body, klass="b-sec--place")
+
+
+def _food_partner(card: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    for partner in card.get("partners") or []:
+        if isinstance(partner, Mapping) and partner.get("kind") in ("food", "coffee"):
+            return partner
+    return None
+
+
+def _b_amenity_chip(icon_html: str, label: str, partner: Mapping[str, Any] | None) -> str:
+    """Чип «Кафе» при партнёре-кафе ведёт к блоку «После катка» и несёт его предложение."""
+    if partner is None:
+        return f'<span class="b-chip">{icon_html}{_esc(label)}</span>'
+    mark = f'<span class="gp-chip-mark">{_esc(partner.get("offer"))}</span>'
+    return f'<a class="b-chip" href="#partners">{icon_html}{_esc(label)}{mark}</a>'
+
+
+_PARTNER_CHEVRON = (
+    '<svg class="gp-row__chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg>'
+)
+
+
+def _b_partners(card: Mapping[str, Any]) -> str:
+    """«После катка»: партнёры рядом — строка открывает шторку partner-sheet.js.
+
+    Без JS строка ведёт на карту партнёра. Сразу после чипов «На месте»: лёд и тренеры выше.
+    """
+    from src.application.style_b import section
+
+    partners = [p for p in card.get("partners") or [] if isinstance(p, Mapping)]
+    if not partners:
+        return ""
+    rows: list[str] = []
+    for p in partners:
+        photo = (p.get("photos") or [None])[0] or p.get("logo")
+        media = (
+            f'<img class="gp-row__media" src="{_esc(photo)}" alt="" width="64" height="64" loading="lazy" decoding="async" />'
+            if photo
+            else '<span class="gp-row__media"></span>'
+        )
+        line = " · ".join(x for x in (str(p.get("line") or ""), str(p.get("where") or "")) if x)
+        href = p.get("maps_url") or "#partners"
+        rows.append(
+            f'<a class="gp-row" href="{_esc(href)}" data-partner="{_esc(p.get("slug"))}">{media}'
+            f'<span class="gp-row__body"><span class="gp-row__name">{_esc(p.get("name"))}</span>'
+            f'<span class="gp-row__line">{_esc(line)}</span>'
+            f'<span class="gp-row__offer">{_esc(p.get("offer"))} с&nbsp;Glide</span></span>{_PARTNER_CHEVRON}</a>'
+        )
+    aside = '<span class="gp-kicker">Партнёры Glide</span>'
+    body = f'<div class="gp-list">{"".join(rows)}</div>'
+    boot = {
+        "partners": partners,
+        "arenaId": card.get("id"),
+        "cityId": card.get("city_id"),
+        "placeName": format_public_name(str(card.get("name") or "")),
+    }
+    wv = _webapp_bundle_version()
+    assets = (
+        f'<script type="application/json" id="gp-data">{json_for_script(boot)}</script>'
+        f'<link rel="stylesheet" href="/static/webapp/partner-sheet.css?v={_esc(wv)}" />'
+        f'<script defer src="/static/webapp/partner-sheet.js?v={_esc(wv)}"></script>'
+        "<script>document.addEventListener('DOMContentLoaded',function(){"
+        "var d=JSON.parse(document.getElementById('gp-data').textContent);"
+        "if(window.GlidePartners)GlidePartners.bind(document.getElementById('partners'),d.partners,"
+        "{surface:'place_page',arenaId:d.arenaId,cityId:d.cityId,placeName:d.placeName});});</script>"
+    )
+    return section("После катка", body, aside_html=aside, klass="b-sec--place", sec_id="partners") + assets
 
 
 def _b_rental(card: Mapping[str, Any]) -> str:
@@ -1793,6 +1861,8 @@ def render_place_body_b(
         _b_about(card),
         _b_arrive(card, links),
         _b_onsite(card, cta_url=cta_url, trainers_listed=bool(view.get("trainers"))),
+        # Партнёр — сразу после чипов «На месте»: ответ на «куда потом», лёд и контакты не теснит.
+        _b_partners(card),
         _b_trainers(view, base_url=base_url),
         _b_rental(card),
     ]

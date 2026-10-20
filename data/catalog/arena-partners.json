@@ -1,0 +1,25 @@
+{
+  "_comment": "Партнёры рядом с катком: блок «После катка» на странице места и в карточке Mini App. Правила — в src/application/arena_partners.py.",
+  "partners": [
+    {
+      "slug": "mangal-house-zamok",
+      "arena_ids": [3],
+      "kind": "food",
+      "name": "Mangal House",
+      "line": "Мангал и гриль",
+      "where": "фудкорт, в этом же здании",
+      "hours": "Каждый день 10:00–22:00",
+      "offer": "−10%",
+      "offer_note": "по промокоду GLIDE",
+      "code": "GLIDE",
+      "maps_url": "https://yandex.ru/maps/-/CXRm54iS",
+      "logo": "partners/mangal-house/logo.jpg",
+      "photos": [
+        "partners/mangal-house/hall.jpg",
+        "partners/mangal-house/counter.jpg"
+      ],
+      "valid_from": "2026-10-21",
+      "valid_to": null
+    }
+  ]
+}
