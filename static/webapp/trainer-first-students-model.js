@@ -100,7 +100,35 @@
     return 'Добавить ещё';
   }
 
+  function plural(n, one, few, many) {
+    var m10 = n % 10;
+    var m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+
+  /** Шапка финальной карточки: «на неделе» — только если на неделю записаны все. */
+  function doneKicker(state) {
+    var students = (state && state.students) || [];
+    var n = Math.max((state && state.count) || 0, students.length);
+    var allBooked = students.length > 0 && students.length === n && students.every(function (s) { return !!s.next_label; });
+    var word = plural(n, 'ученик', 'ученика', 'учеников');
+    return allBooked ? n + ' ' + word + ' на неделе' : n + ' ' + word + ' в приложении';
+  }
+
+  /** Текст личной ссылки ученику. Обещаем только то, что уже есть: запись — если она стоит. */
+  function inviteMessage(student) {
+    if (student && student.next_label) {
+      return 'Ваша ближайшая тренировка — ' + student.next_label +
+        '. Откройте ссылку: бот напомнит о ней и покажет все ваши занятия.';
+    }
+    return 'Теперь веду расписание в Glide. Откройте ссылку: здесь будут ваши тренировки, а бот напомнит о каждой.';
+  }
+
   var api = {
+    doneKicker: doneKicker,
+    inviteMessage: inviteMessage,
     GOAL: GOAL,
     parseStudentLine: parseStudentLine,
     parseStudentList: parseStudentList,

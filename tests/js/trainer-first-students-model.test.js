@@ -67,3 +67,21 @@ describe('«Первые три ученика»: места и подписи',
     assert.equal(M.remaining(state(1, ['А'])), 2);
   });
 });
+
+describe('«Первые три ученика»: финал не обещает лишнего', () => {
+  const st = (rows, count) => ({ goal: 3, count: count || rows.length, students: rows });
+
+  it('«на неделе» — только когда записаны все', () => {
+    assert.equal(M.doneKicker(st([{ next_label: 'завтра 18:00' }, { next_label: 'чт 17:00' }, { next_label: 'пн 17:00' }])), '3 ученика на неделе');
+    assert.equal(M.doneKicker(st([{ next_label: 'завтра 18:00' }, {}, {}])), '3 ученика в приложении');
+    assert.equal(M.doneKicker(st([{}, {}, {}], 5)), '5 учеников в приложении');
+  });
+
+  it('ссылка ученику без записи не говорит, что его записали', () => {
+    const none = M.inviteMessage({ name: 'Лиза' });
+    assert.ok(!/запис/i.test(none), none);
+    const booked = M.inviteMessage({ name: 'Маша', next_label: 'завтра 18:00' });
+    assert.ok(booked.includes('завтра 18:00'));
+    assert.ok(!/записал/i.test(booked), 'без рода тренера');
+  });
+});

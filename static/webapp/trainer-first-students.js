@@ -133,7 +133,7 @@
     return (
       '<div class="tfs-card">' +
       '<div class="tfs-card__head">' +
-      '<span class="tfs-kicker">' + esc(students.length + ' ' + (students.length === 1 ? 'ученик' : 'ученика') + ' на неделе') + '</span>' +
+      '<span class="tfs-kicker">' + esc(M.doneKicker(state)) + '</span>' +
       '<button type="button" class="tfs-x" data-tfs="close" aria-label="Скрыть">×</button>' +
       '</div>' +
       '<ul class="tfs-works">' + works.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' +
@@ -189,7 +189,8 @@
       prefetchBindLinks();
       return;
     }
-    var body = 'Записал вас на тренировки — откройте ссылку, и бот будет напоминать о занятиях.';
+    var student = (state.students || []).filter(function (s) { return String(s.client_id) === String(clientId); })[0];
+    var body = M.inviteMessage(student);
     var opened = false;
     if (typeof global.openTelegramShareUrlFromMiniApp === 'function') {
       opened = !!global.openTelegramShareUrlFromMiniApp({ shareUrl: link, shareBody: body, fullMessage: body + '\n' + link });
