@@ -64,14 +64,29 @@
 .b-load[data-level="calm"] i:first-child { background: var(--g-load-calm); }
 .b-load[data-level="medium"] i:nth-child(-n+2) { background: var(--g-load-medium); }
 .b-load[data-level="busy"] i { background: var(--g-load-busy); }
-.b-ticket { position: relative; }
+.b-ticket { position: relative; container-type: inline-size; }
 /* Живой остаток кассы — своей строкой под временем.
    Угол шкалы для этого текста узкий: «205 места» наезжало на «13:15». */
 .b-ticket > .b-seats { font-size: 13px; font-weight: 600; line-height: 1.2; color: var(--g-ink-2); }
 .b-ticket > .b-seats--low { color: var(--g-warn-ink); }
 .b-ticket--dark > .b-seats { color: var(--g-on-dark-muted); }
-/* На уровне середины цифр времени: 16px отступ + половина строки 32px. */
-.b-ticket > .b-load { position: absolute; top: 30px; right: 16px; }
+/* Шкала в строке времени, не поверх цифр. Dela Gothic One широкий:
+   «10:30» на половине экрана заезжало на черточки, «9:00» — нет.
+   4em — самое широкое «20:00», 46px — шкала, зазор и запас. */
+.b-ticket:has(> .b-load) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  row-gap: 6px;
+  align-items: center;
+}
+.b-ticket:has(> .b-load) > .b-ticket__time {
+  font-size: clamp(16px, calc((100cqi - 46px) / 4), 32px);
+}
+.b-ticket:has(> .b-load) > .b-load { position: static; }
+.b-ticket:has(> .b-load) > :is(.b-ticket__sub, .b-soon, .b-seats, .b-ticket__go) {
+  grid-column: 1 / -1;
+}
 .b-ticket--dark .b-load i, .b-plan .b-load i { background: var(--g-dark-line); }
 .b-ticket--dark .b-load[data-level="calm"] i:first-child,
 .b-plan .b-load[data-level="calm"] i:first-child { background: var(--g-load-calm); }
