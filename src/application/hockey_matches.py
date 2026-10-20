@@ -337,7 +337,7 @@ def format_review_alert(row: MatchRow, reason: str | None) -> str:
         f"Кто кого: нет подтверждённого итога\n"
         f"{row.home_team} — {row.away_team}, {when}\n"
         f"{reason or 'причина не записана'}\n"
-        f"Введите счёт в админке: /webapp/admin-hockey"
+        "Ввести счёт: команда /hockey в этом боте"
     )
 
 
@@ -400,7 +400,7 @@ class LoopHealth:
         self.alerted.add(what)
         return (
             f"Кто кого: {what} не работает {self.fails[what]} раз подряд\n{reason}\n"
-            "Матчи и итоги не обновляются. Итог можно ввести вручную: /webapp/admin-hockey"
+            "Матчи и итоги не обновляются. Итог можно ввести вручную: команда /hockey в этом боте"
         )
 
 

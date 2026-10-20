@@ -56,8 +56,25 @@ async def test_newcomer_sees_upcoming_inside_48h(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_match_in_49h_is_not_on_the_home_row(db_session) -> None:
-    await _match(db_session, "hub-49", NOW + timedelta(hours=49))
+async def test_away_match_in_49h_is_not_on_the_home_row(db_session) -> None:
+    await _match(db_session, "hub-49", NOW + timedelta(hours=49), home="Барыс", away="Динамо-Минск")
+    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
+
+
+@pytest.mark.asyncio
+async def test_home_match_takes_the_slot_two_weeks_ahead_over_a_closer_away(db_session, monkeypatch) -> None:
+    """На домашний договариваются заранее: он в слоте за 14 дней, даже если выездной ближе."""
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    await _match(db_session, "hub-away", NOW + timedelta(hours=20), home="Барыс", away="Динамо-Минск")
+    home = await _match(db_session, "hub-home-13d", NOW + timedelta(days=13))
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["mode"] == "before" and card["match"]["id"] == home and card["event_href"]
+
+
+@pytest.mark.asyncio
+async def test_home_match_past_two_weeks_waits(db_session, monkeypatch) -> None:
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    await _match(db_session, "hub-home-15d", NOW + timedelta(days=15))
     assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
 
 

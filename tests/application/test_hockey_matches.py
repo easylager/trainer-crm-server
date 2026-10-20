@@ -379,7 +379,7 @@ def test_loop_health_alerts_once_after_three_failures_and_rearms() -> None:
     assert health.failed("календарь матчей", "timeout") is None
     assert health.failed("календарь матчей", "timeout") is None
     text_ = health.failed("календарь матчей", "timeout")
-    assert text_ and "3 раз подряд" in text_ and "admin-hockey" in text_
+    assert text_ and "3 раз подряд" in text_ and "/hockey" in text_
     assert health.failed("календарь матчей", "timeout") is None
     health.ok("календарь матчей")
     assert health.failed("календарь матчей", "timeout") is None

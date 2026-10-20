@@ -23,7 +23,10 @@ from src.application.hockey_game import POINTS_EXACT, season_start
 from src.application.hockey_teams import team_card
 
 RESULT_WINDOW = timedelta(hours=24)
+# Выездной матч — строка игры за двое суток. Домашний — событие, на него договариваются заранее:
+# он занимает слот главной за 14 дней (владелец 2026-10-20) и важнее выездного в это время.
 BEFORE_WINDOW = timedelta(hours=48)
+HOME_AHEAD = timedelta(days=14)
 MISSED_STREAK = 3
 LIVE_WINDOW = timedelta(hours=3)
 
@@ -109,6 +112,7 @@ _UPCOMING = text("""
     FROM hockey_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.status = 'scheduled' AND m.starts_at > :now AND m.starts_at <= :until
+      AND (CAST(:home AS text) IS NULL OR m.home_team = :home)
     ORDER BY m.starts_at, m.id
     LIMIT 1
     """)
@@ -242,9 +246,19 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
         bool(row.picked)
         for row in (await session.execute(_LAST_FINALS, {"player_key": player_key, "limit": MISSED_STREAK})).all()
     ]
-    upcoming = (
-        await session.execute(_UPCOMING, {"player_key": player_key, "now": now, "until": now + BEFORE_WINDOW})
-    ).one_or_none()
+    upcoming = None
+    if hockey_enabled():
+        upcoming = (
+            await session.execute(
+                _UPCOMING, {"player_key": player_key, "now": now, "until": now + HOME_AHEAD, "home": DINAMO}
+            )
+        ).one_or_none()
+    if upcoming is None:
+        upcoming = (
+            await session.execute(
+                _UPCOMING, {"player_key": player_key, "now": now, "until": now + BEFORE_WINDOW, "home": None}
+            )
+        ).one_or_none()
     mode = choose_mode(
         unseen_result=result is not None,
         upcoming=upcoming is not None,
@@ -278,6 +292,7 @@ async def mark_result_seen(session: AsyncSession, *, player_key: int, match_id: 
 
 __all__ = [
     "BEFORE_WINDOW",
+    "HOME_AHEAD",
     "LIVE_WINDOW",
     "MISSED_STREAK",
     "RESULT_WINDOW",

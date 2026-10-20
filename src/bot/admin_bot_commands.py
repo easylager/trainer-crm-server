@@ -8,6 +8,7 @@ ADMIN_BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="stats", description="Статистика платформы"),
     BotCommand(command="support", description="Обращения в поддержку"),
     BotCommand(command="dicts", description="Города и арены"),
+    BotCommand(command="hockey", description="Матчи «Кто кого»: итоги и счёт"),
     BotCommand(command="subscription_tiers", description="Тарифы подписки тренеров"),
     BotCommand(command="subscription_invoices", description="Счета по подписке (ERIP)"),
     BotCommand(command="grant_subscription", description="Выдать подписку тренеру"),

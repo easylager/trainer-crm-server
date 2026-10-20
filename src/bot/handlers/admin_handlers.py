@@ -632,6 +632,25 @@ async def cmd_dicts(message: Message) -> None:
     )
 
 
+@router.message(Command("hockey"))
+async def cmd_hockey(message: Message) -> None:
+    """Матчи «Кто кого»: проверить итоги и ввести счёт, если источники не сошлись."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    base = Settings().webapp_base_url or ""
+    url = f"{base.rstrip('/')}/webapp/admin-hockey" if base else ""
+    if not url:
+        await message.answer("Не настроен webapp_base_url. Укажите в .env.")
+        return
+    await message.answer(
+        "🏒 Матчи «Кто кого» — итоги и ручной ввод счёта",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть матчи", web_app=WebAppInfo(url=url))],
+        ]),
+    )
+
+
 @router.message(Command("subscription_tiers"))
 async def cmd_subscription_tiers(message: Message) -> None:
     """Open admin Mini App to edit subscription tier pricing."""
