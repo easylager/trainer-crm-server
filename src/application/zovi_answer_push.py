@@ -104,7 +104,7 @@ def answer_push_text(
         head = "<b>На твою открытку ответили «ДА»!</b>"
     else:
         head = f"<b>Ещё одно «ДА» — уже {_nth_word(nth)}</b>"
-    what = "Хоккей" if kind == "hockey_practice" else "Каток"
+    what = {"hockey_practice": "Хоккей", "hockey_match": "Матч"}.get(kind or "", "Каток")
     when = ", ".join(p for p in (day, time) if p)
     seconds = max(0, round(int(resist_ms) / 1000))
     lines = [

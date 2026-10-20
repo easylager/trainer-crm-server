@@ -88,3 +88,39 @@ def test_captions() -> None:
         == "Кто кого: в точку! ХК Сочи — Динамо-Минск 2:3, +50"
     )
     assert "«Двор»" in cards.league_caption("Двор")
+
+
+_BLUE = (23, 71, 181)
+
+
+@pytest.mark.parametrize("invite", [False, True])
+def test_match_card_sizes_for_feed_and_story(invite: bool) -> None:
+    start = datetime(2026, 10, 21, 16, 30, tzinfo=timezone.utc)
+    og = _image(cards.render_match_card(home="Динамо-Минск", away="СКА", starts_at=start, invite=invite))
+    story = _image(cards.render_match_card(home="Динамо-Минск", away="СКА", starts_at=start, invite=invite, story=True))
+    assert og.size == (1200, 630)
+    assert story.size == (1080, 1920) == cards.STORY_SIZE
+
+
+@pytest.mark.parametrize("story", [False, True])
+@pytest.mark.parametrize(
+    "away",
+    ["Шанхайские Драконы", "Суперлигачемпионовминскаяхоккейнаякоманда Очень Длинная", "ХК Сочи"],
+)
+def test_match_card_long_team_names_stay_inside_the_card(away: str, story: bool) -> None:
+    start = datetime(2026, 10, 21, 16, 30, tzinfo=timezone.utc)
+    image = _image(cards.render_match_card(home="Динамо-Минск", away=away, starts_at=start, story=story))
+    # Полоса названий команд: у ленты под логотипами, у истории — под каждым из двух.
+    bands = ((1100, 1500),) if story else ((410, 470),)
+    for top, bottom in bands:
+        ink = _ink_columns(image, top, bottom, _BLUE)
+        assert ink, "названия не нарисованы"
+        assert min(ink) >= 24 and max(ink) <= image.width - 24, "название вылезло за край"
+
+
+def test_match_card_version_follows_the_data() -> None:
+    start = datetime(2026, 10, 21, 16, 30, tzinfo=timezone.utc)
+    base = cards.match_card_version("Динамо-Минск", "СКА", start)
+    assert base == cards.match_card_version("Динамо-Минск", "СКА", start)
+    assert base != cards.match_card_version("Динамо-Минск", "ЦСКА", start)
+    assert base != cards.match_card_version("Динамо-Минск", "СКА", start.replace(hour=17))

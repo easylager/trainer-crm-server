@@ -20,6 +20,7 @@ from src.application.zovi_card_page import (
     activity,
     day_short,
     day_ticket,
+    match_title_of,
     ticket_who,
     verdict,
 )
@@ -182,7 +183,10 @@ def render_zovi_og(invite: Mapping[str, Any]) -> bytes:
     col = pad + int(draw.textlength(time_text, font=f_time)) + 32
     col_w = w - pad - col
     draw.text((col, top + 28), day_short(s.get("local_date")), font=f_day, fill=_ON_DARK_ACCENT)
-    place_lines = wrap_words(draw, str(arena.get("name") or ""), f_place, col_w, 2)
+    place = str(arena.get("name") or "")
+    if match_title_of(invite):
+        place = f"{match_title_of(invite)}, {place}"
+    place_lines = wrap_words(draw, place, f_place, col_w, 2)
     for i, line in enumerate(place_lines):
         draw.text((col, top + 72 + i * 40), line, font=f_place, fill=_ON_DARK_MUTED)
     return _png(img)
@@ -215,6 +219,11 @@ def ticket_place_lines(invite: Mapping[str, Any]) -> tuple[str, str]:
     extra = [str(arena["address"])] if arena.get("address") else []
     if s.get("price"):
         extra.append(str(s["price"]))
+    title = match_title_of(invite)
+    if title:
+        # Матч: команды первой строкой, Минск-Арена и адрес — под ними.
+        extra.insert(0, str(arena.get("name") or ""))
+        return title, " · ".join(extra)
     return str(arena.get("name") or ""), " · ".join(extra)
 
 

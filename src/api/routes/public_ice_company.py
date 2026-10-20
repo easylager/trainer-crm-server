@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
 
 from src.api.deps import get_session
+from src.application import hockey_event
+from src.application.hockey_matches import DINAMO
 from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes
 from src.application.ice_company.codes import tg_participant_key, web_participant_key
 from src.application.ice_company.copy import MATCH_KIND
@@ -26,6 +28,7 @@ from src.application.ice_company.service import (
     actor_for_telegram,
     cancel_company,
     create_company,
+    create_match_company,
     delete_own,
     read_company,
     resolve_participant,
@@ -50,7 +53,9 @@ _hits: dict[str, deque[float]] = {}
 
 
 class CreateBody(BaseModel):
-    session_id: int
+    # Ровно одно из двух: сеанс льда или домашний матч Динамо (TASK-304).
+    session_id: int | None = None
+    match_id: int | None = None
     display_name: str = ""
     name: str = ""
     surface: str = "miniapp"
@@ -136,20 +141,34 @@ async def post_company(
     user_id = _init_user(init_raw)
     if user_id is None:
         raise HTTPException(status_code=401, detail="Собрать компанию можно из Telegram.")
+    if (body.session_id is None) == (body.match_id is None):
+        raise HTTPException(status_code=422, detail="Нужен ровно один из session_id и match_id.")
+    if body.match_id is not None and not hockey_event.enabled():
+        raise HTTPException(status_code=404, detail="Не найдено")
     organizer_name = (body.display_name or "").strip()
     if not organizer_name:
         organizer_name = display_name_from_telegram_user(parse_user_json_from_init_data(init_raw)) or ""
     if not organizer_name:
         raise HTTPException(status_code=422, detail="Не удалось подставить имя из Telegram.")
     try:
-        view = await create_company(
-            session,
-            telegram_user_id=user_id,
-            session_id=body.session_id,
-            display_name=organizer_name,
-            name=body.name,
-            surface=(body.surface or "miniapp")[:16],
-        )
+        if body.match_id is not None:
+            view = await create_match_company(
+                session,
+                telegram_user_id=user_id,
+                match_id=body.match_id,
+                home_team=DINAMO,
+                display_name=organizer_name,
+            )
+        else:
+            assert body.session_id is not None
+            view = await create_company(
+                session,
+                telegram_user_id=user_id,
+                session_id=body.session_id,
+                display_name=organizer_name,
+                name=body.name,
+                surface=(body.surface or "miniapp")[:16],
+            )
     except CompanyRejected as exc:
         raise _http(exc) from None
     company = await _load(session, str(view["public_code"]))

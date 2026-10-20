@@ -50,6 +50,8 @@ def _esc(value: Any) -> str:
 
 
 def activity(kind: str | None) -> str:
+    if kind == "hockey_match":
+        return "на матч"
     return "на хоккей" if kind == "hockey_practice" else "на каток"
 
 
@@ -132,10 +134,21 @@ def og_description(invite: Mapping[str, Any]) -> str:
     """«Сб, 17 окт · 19:15 · Каток» — абсолютная дата: превью живёт в кэше Telegram днями."""
     s = invite["session"]
     parts = [day_short(s.get("local_date")), str(s.get("starts_at_local") or ""), str(s["arena"].get("name") or "")]
+    title = match_title_of(invite)
+    if title:
+        parts.insert(0, title)
     return " · ".join(p for p in parts if p)
 
 
+def match_title_of(invite: Mapping[str, Any]) -> str:
+    """«Динамо-Минск — СКА» у открытки на матч; у сеансовой открытки пусто."""
+    match = invite.get("match")
+    return str((match or {}).get("title") or "") if isinstance(match, Mapping) else ""
+
+
 def kind_label(kind: str | None) -> str:
+    if kind == "hockey_match":
+        return "Матч"
     return session_kind_label({"kind": kind or ""})
 
 
@@ -146,6 +159,7 @@ def image_version(invite: Mapping[str, Any]) -> str:
         invite.get("to_name"),
         invite.get("from_name"),
         invite.get("kind"),
+        match_title_of(invite),
         s.get("local_date"),
         s.get("starts_at_local"),
         s["arena"].get("name"),
@@ -202,7 +216,7 @@ def page_data(invite: Mapping[str, Any]) -> dict[str, Any]:
 
 def calendar_title(invite: Mapping[str, Any]) -> str:
     """«Каток с Максом» — и в .ics, и в ссылке на Google Календарь."""
-    what = "Хоккей" if invite.get("kind") == "hockey_practice" else "Каток"
+    what = {"hockey_practice": "Хоккей", "hockey_match": "Матч"}.get(str(invite.get("kind")), "Каток")
     return f"{what} с {decline(invite.get('from_name'), 'ins')}"
 
 
@@ -223,7 +237,9 @@ def _question_html(invite: Mapping[str, Any]) -> str:
 def _plan_html(invite: Mapping[str, Any]) -> str:
     s = invite["session"]
     arena = s["arena"]
-    meta = [f"{kind_label(str(invite.get('kind') or ''))} до {s.get('ends_at_local') or ''}".strip()]
+    title = match_title_of(invite)
+    # У матча «до 21:30» — выдуманное время конца: пишем сами команды.
+    meta = [title] if title else [f"{kind_label(str(invite.get('kind') or ''))} до {s.get('ends_at_local') or ''}".strip()]
     if arena.get("address"):
         meta.append(str(arena["address"]))
     if s.get("price"):
@@ -383,7 +399,14 @@ def render_status_page(
 ) -> str:
     s = invite["session"]
     plan = " · ".join(
-        p for p in (day_long(s.get("local_date")), str(s.get("starts_at_local") or ""), str(s["arena"].get("name") or "")) if p
+        p
+        for p in (
+            match_title_of(invite),
+            day_long(s.get("local_date")),
+            str(s.get("starts_at_local") or ""),
+            str(s["arena"].get("name") or ""),
+        )
+        if p
     )
     answered = bool(status.get("answers"))
     values = {

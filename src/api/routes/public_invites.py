@@ -15,6 +15,7 @@ from src.api.catalog_share_actor import catalog_share_actor
 from src.api.deps import get_session
 from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+from src.application import hockey_event
 from src.application.ice_invite_slots import list_invite_slots
 from src.application.zovi_answer_push import push_answer_soon
 from src.application.ice_invites import (
@@ -37,7 +38,9 @@ router = APIRouter(prefix="/api/public", tags=["public-invites"])
 
 
 class CreateInviteBody(BaseModel):
-    session_id: int
+    # Ровно одно из двух: сеанс льда или домашний матч Динамо (TASK-304).
+    session_id: int | None = None
+    match_id: int | None = None
     to_name: str | None = None
     from_name: str
     show_price: bool = False
@@ -89,11 +92,15 @@ async def post_public_invite(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
     _no_store(response)
+    if body.match_id is not None and not hockey_event.enabled():
+        # Матчи живут под флагом игры: выключен — как будто их нет.
+        raise HTTPException(status_code=404, detail="Не найдено")
     _, actor_hash = catalog_share_actor(principal, request)
     try:
         created = await create_invite(
             session,
             session_id=body.session_id,
+            match_id=body.match_id,
             to_name=body.to_name,
             from_name=body.from_name,
             show_price=body.show_price,

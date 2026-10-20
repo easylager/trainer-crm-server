@@ -92,7 +92,7 @@
     var data = input || {};
     var to = String(data.toName || '').trim();
     var from = String(data.fromName || '').trim();
-    var where = data.kind === HOCKEY ? 'на хоккей' : 'на каток';
+    var where = data.kind === 'hockey_match' ? 'на матч' : (data.kind === HOCKEY ? 'на хоккей' : 'на каток');
     return {
       kicker: from ? 'Приглашение на лёд от' : 'Приглашение на лёд',
       from: from ? decline(from, 'gen') : '',
