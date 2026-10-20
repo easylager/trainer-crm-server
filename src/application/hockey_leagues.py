@@ -288,7 +288,7 @@ async def league_table(session: AsyncSession, *, league_id: int, player_key: int
 # ---------- звания в таблице лиги (владелец 2026-10-20) ----------
 # Одно на человека: шутим над ходом, а не над человеком. Всё — из готовых ходов.
 # Если подходит несколько — берём самое яркое по этому порядку.
-TITLE_ORDER = ("cap", "dark_horse", "vanga", "streak", "optimist")
+TITLE_ORDER = ("cap", "scarf", "vanga", "streak", "optimist")
 STREAK_MIN = 3
 OPTIMIST_MARGIN = 3
 OPTIMIST_MIN_PICKS = 2
@@ -329,7 +329,7 @@ def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, di
 
     - cap «Кепка позора» — меньше всех очков за последний сыгранный матч лиги; если очки у всех
       равные — кепки нет. Висит, пока не сыграют следующий матч.
-    - dark_horse «Тёмная лошадка» — ход против Динамо на ближайший матч;
+    - scarf «В чужом шарфе» — ход против Динамо на ближайший матч;
     - vanga «Ванга» — единственный лидер лиги по точным счетам;
     - streak «Чуйка» — победитель угадан STREAK_MIN+ сыгранных матчей подряд;
     - optimist «Вечный оптимист» — в среднем ставит Динамо +OPTIMIST_MARGIN и больше.
@@ -353,7 +353,7 @@ def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, di
     if next_match_id is not None:
         for p in picks:
             if p["match_id"] == next_match_id and p["side"] and p["side"] != _dinamo_side(p["home_team"]):
-                give(p["player_key"], "dark_horse", "Тёмная лошадка")
+                give(p["player_key"], "scarf", "В чужом шарфе")
 
     exact: dict[int, int] = {}
     for p in scored:

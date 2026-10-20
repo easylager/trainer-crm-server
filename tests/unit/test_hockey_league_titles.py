@@ -1,4 +1,4 @@
-"""Звания лиги: «Кепка позора» и «Тёмная лошадка» — из готовых ходов."""
+"""Звания лиги: «Кепка позора», «В чужом шарфе» и остальные — из готовых ходов."""
 
 from __future__ import annotations
 
@@ -48,19 +48,19 @@ def test_no_cap_when_everyone_scored_the_same_or_played_alone() -> None:
     assert pick_titles([_p(1, 11, points=0)], next_match_id=None) == {}
 
 
-def test_dark_horse_bets_against_dinamo_on_the_next_match_home_and_away() -> None:
+def test_scarf_bets_against_dinamo_on_the_next_match_home_and_away() -> None:
     picks = [
         _p(1, 12, points=None, status="scheduled", side="away"),  # дома Динамо, ход за гостей
         _p(2, 12, points=None, status="scheduled", side="home"),
         _p(3, 13, points=None, status="scheduled", side="home", home="ХК Сочи"),  # не ближайший матч
     ]
     titles = pick_titles(picks, next_match_id=12)
-    assert titles == {1: {"id": "dark_horse", "label": "Тёмная лошадка", "detail": ""}}
+    assert titles == {1: {"id": "scarf", "label": "В чужом шарфе", "detail": ""}}
     away = [_p(4, 13, points=None, status="scheduled", side="home", home="ХК Сочи")]
-    assert pick_titles(away, next_match_id=13)[4]["id"] == "dark_horse"
+    assert pick_titles(away, next_match_id=13)[4]["id"] == "scarf"
 
 
-def test_cap_wins_over_dark_horse_for_one_person() -> None:
+def test_cap_wins_over_scarf_for_one_person() -> None:
     picks = [_p(1, 11, points=0), _p(2, 11, points=30), _p(1, 12, points=None, status="scheduled", side="away")]
     assert pick_titles(picks, next_match_id=12)[1]["id"] == "cap"
     assert pick_titles(picks, next_match_id=12)[1]["detail"] == "0 очков"

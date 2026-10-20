@@ -543,7 +543,8 @@
     return r.is_me ? 'Ты' : r.display_name;
   }
 
-  /* Звание в таблице лиги: «Кепка позора», «Тёмная лошадка» (hockey_leagues.pick_titles). */
+  /* Звание в таблице лиги (hockey_leagues.pick_titles). У «Кепки позора» и «В чужом шарфе» — значок на аватарке. */
+  var TITLE_MARK = { cap: '🧢', scarf: '🧣' };
   function titleTag(r) {
     var t = r && r.title;
     if (!t || !t.label) return null;
@@ -552,8 +553,9 @@
 
   function avaOf(r, size) {
     var a = ava(r.display_name, size, r.is_me);
-    if (!(r.title && r.title.id === 'cap')) return a;
-    return h('span', { class: 'kk-capwrap' }, [a, h('span', { class: 'kk-cap', 'aria-hidden': 'true', text: '🧢' })]);
+    var mark = r.title && TITLE_MARK[r.title.id];
+    if (!mark) return a;
+    return h('span', { class: 'kk-capwrap' }, [a, h('span', { class: 'kk-cap kk-cap--' + r.title.id, 'aria-hidden': 'true', text: mark })]);
   }
 
   function podium(top3) {
