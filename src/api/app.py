@@ -269,11 +269,18 @@ def webapp_client_requests_page():
 
 @app.get("/webapp/client-bookings")
 def webapp_client_bookings_page():
-    """Serve the client 'My bookings' Mini App (list by day, arena/address/map, cancel with reason)."""
+    """Client «Записи» (TASK-306): список, отмена, детали.
+
+    `__FONT_V__` — как на главной и матче: preload Dela Gothic совпадает с адресом
+    из glide-public-fonts.css.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "client-bookings.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/webapp/client-saved-trainers")
