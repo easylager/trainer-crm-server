@@ -242,7 +242,7 @@ async def test_answers_are_written_and_texts_do_not_mix_with_ice(db_session, are
     assert "На льду" not in body and "Лёд" not in body
 
     labels = [b["text"] for b in buttons_for(company, snap_from(company, rows), "https://x")]
-    assert labels == ["Иду", "Смотрю дома", "Не смогу", "Подробнее"]
+    assert labels == ["Иду", "Смотрю дома", "Не смогу", "В другой чат →", "Подробнее"]
 
 
 @pytest.mark.asyncio
@@ -391,7 +391,7 @@ async def test_bot_callback_maybe_on_match_company(db_session, arena, monkeypatc
     # Фото карточки матча — «Трибуна против дивана» по адресу карточки компании, если сайт на https.
     photo = edits[0][0].get("photo_url")
     assert photo is None or "/card.png?v=" in str(photo)
-    assert [b["text"] for b in edits[0][2]] == ["Иду", "Смотрю дома", "Не смогу", "Подробнее"]
+    assert [b["text"] for b in edits[0][2]] == ["Иду", "Смотрю дома", "Не смогу", "В другой чат →", "Подробнее"]
 
     # Лёд отвечает своим тостом на «Может»: тексты не перепутаны.
     from src.application.ice_company.copy import toast_for
@@ -536,7 +536,8 @@ async def test_invite_card_buttons_link_and_idempotence(app_use_test_db, db_sess
     assert body["url"] == f"https://t.me/glide_test_bot?startapp=kkm_{match_id}_{code}"
     buttons = prepared[0]["buttons"]
     assert [b.get("data") for b in buttons[:3]] == [f"ic:{code}:g", f"ic:{code}:m", f"ic:{code}:x"]
-    assert buttons[3] == {"text": "Подробнее", "url": body["url"]}
+    assert buttons[3] == {"text": "В другой чат →", "switch_inline": f"k:{code}"}
+    assert buttons[4] == {"text": "Подробнее", "url": body["url"]}
     assert prepared[0]["photo"] is None and prepared[0]["user_id"] == ME
     assert second.json()["url"] == body["url"], "та же компания"
     assert await _companies(db_session, match_id) == 1

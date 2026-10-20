@@ -84,7 +84,12 @@ def buttons_for(
         # Матч: «Подробнее» ведёт на страницу матча в Mini App, «в другой чат» не нужен (зовут из страницы матча).
         if closed_headline(snap) is not None:
             return [{"text": "Подробнее", "url": page_url}]
-        return [*match_action_buttons(code), {"text": "Подробнее", "url": page_url}]
+        # «В другой чат» — та же карточка в ещё одном чате: ответы общие, обе карточки обновляются.
+        return [
+            *match_action_buttons(code),
+            {"text": "В другой чат →", "switch_inline": f"k:{code}"},
+            {"text": "Подробнее", "url": page_url},
+        ]
     if closed_headline(snap) is not None:
         return [{"text": "На лёд", "url": page_url}]
     buttons = list(response_action_buttons(code))
@@ -95,7 +100,14 @@ def buttons_for(
 
 
 def button_rows(buttons: list[dict[str, str]]) -> list[list[dict[str, str]]]:
-    return [[button] for button in buttons]
+    """Ответы — каждый своей строкой; ссылки («В другой чат», «Подробнее») — парой в одной строке."""
+    rows: list[list[dict[str, str]]] = []
+    for button in buttons:
+        if not button.get("data") and rows and len(rows[-1]) == 1 and not rows[-1][0].get("data"):
+            rows[-1].append(button)
+        else:
+            rows.append([button])
+    return rows
 
 
 def render_hash(body: str, buttons: list[dict[str, str]]) -> str:

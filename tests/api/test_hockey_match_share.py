@@ -217,8 +217,8 @@ async def test_company_name_lands_on_the_match_card(app_use_test_db, db_session,
     assert res.status_code == 201, res.text
     view = res.json()
     assert view["name"] == "Офис на Динамо"
-    assert "Офис на Динамо" in view["card_text"]
-    assert view["card_text"].startswith("Идём на матч?")
+    # Своё название — первой строкой, крупно на картинке; команды остаются на картинке.
+    assert view["card_text"].startswith("Офис на Динамо — идём на матч?")
     async with _client() as client:
         again = await _post_company(client, 880_304_511, match_id=match_id, name="Сектор Б")
         kept = await _post_company(client, 880_304_511, match_id=match_id)

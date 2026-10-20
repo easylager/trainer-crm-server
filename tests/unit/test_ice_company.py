@@ -181,7 +181,8 @@ def test_on_ice_opens_the_arena_slot() -> None:
     assert buttons[0] == {"text": "Иду", "data": "ic:abcdefgh:g", "style": "primary"}
     assert buttons[1] == {"text": "Не могу", "data": "ic:abcdefgh:x", "style": "danger"}
     assert buttons[2] == {"text": "В другой чат →", "switch_inline": "k:abcdefgh"}
-    assert button_rows(buttons) == [[buttons[0]], [buttons[1]], [buttons[2]], [buttons[3]]]
+    # Ответы — строками, две ссылки («В другой чат», «На лёд») — парой внизу.
+    assert button_rows(buttons) == [[buttons[0]], [buttons[1]], [buttons[2], buttons[3]]]
 
 
 def test_poster_pastes_avatar_on_ice() -> None:

@@ -508,5 +508,6 @@
   font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold);
   background: var(--app-chip-bg); color: var(--glide-text);
 }
-.gss-cprev__kb i:first-child { background: var(--glide-brand-wash); color: var(--glide-ink-teal); }
+.gss-cprev__kbrow { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.gss-cprev__kb > i:first-child { background: var(--glide-brand-wash); color: var(--glide-ink-teal); }
 .gss-zf__f em { font-style: normal; font-weight: var(--app-weight-regular); color: var(--glide-hint); }

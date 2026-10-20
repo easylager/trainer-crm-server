@@ -20,7 +20,7 @@ from src.application.ice_company.avatars import cache_telegram_avatar_with_token
 from src.application.ice_company.codes import tg_participant_key, web_participant_key
 from src.application.hockey_cards import render_match_company_card
 from src.application.png_cache import bytes_key, cached_png
-from src.application.ice_company.copy import MATCH_KIND, closed_headline
+from src.application.ice_company.copy import MATCH_KIND, closed_headline, match_nickname
 from src.application.ice_company.keyboard import inline_button_json
 from src.application.ice_company.lifecycle import button_rows, buttons_for, calendar_url_for, render_hash
 from src.application.ice_company.og import company_photo, render_company_card
@@ -204,14 +204,24 @@ async def company_preview_png(
         if match is None or not Settings().hockey_matches_enabled:
             raise HTTPException(status_code=404, detail="Матч не найден.")
         who = strip_emoji_for_poster((you or "").strip()[:24]) or "Ты"
+        title = strip_emoji_for_poster((name or "").strip()[:40])
         png = await cached_png(
-            ("preview-match", match_id, str(match["home_team"]), str(match["away_team"]), match["starts_at"].isoformat(), who),
+            (
+                "preview-match",
+                match_id,
+                str(match["home_team"]),
+                str(match["away_team"]),
+                match["starts_at"].isoformat(),
+                who,
+                title,
+            ),
             lambda: render_match_company_card(
                 home=str(match["home_team"]),
                 away=str(match["away_team"]),
                 starts_at=match["starts_at"],
                 going=[(who, None)],
                 watching=[],
+                name=title,
             ),
         )
         return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
@@ -381,6 +391,7 @@ async def _card_png(session: AsyncSession, code: str) -> bytes:
         raise HTTPException(status_code=404, detail="Компания не найдена.")
     going, watching = _people(responses, "going"), _people(responses, "maybe")
     closed = closed_headline(snap)
+    title = strip_emoji_for_poster(match_nickname(str(company.get("name") or "")))
     key = (
         "match-card",
         str(match["home_team"]),
@@ -390,6 +401,7 @@ async def _card_png(session: AsyncSession, code: str) -> bytes:
         tuple(name for name, _ in watching),
         bytes_key(*(face for _, face in going + watching)),
         closed,
+        title,
     )
     return await cached_png(
         key,
@@ -400,6 +412,7 @@ async def _card_png(session: AsyncSession, code: str) -> bytes:
             going=going,
             watching=watching,
             closed=closed,
+            name=title,
         ),
     )
 

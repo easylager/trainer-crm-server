@@ -276,6 +276,7 @@ def render_match_company_card(
     going: Sequence[tuple[str, bytes | None]],
     watching: Sequence[tuple[str, bytes | None]],
     closed: str | None = None,
+    name: str = "",
 ) -> bytes:
     """Карточка компании на матч, 1200×630: «Трибуна против дивана» (владелец 2026-10-20).
 
@@ -288,9 +289,16 @@ def render_match_company_card(
     draw = ImageDraw.Draw(image)
     pad = _PAD
 
-    head = closed or "Идём на матч?"
-    head_font = _largest(draw, head, _display, (64, 58, 52, 46), 700)
-    draw.text((pad, 46), head, font=head_font, fill=_SOFT if closed else _YELLOW)
+    team = (name or "").strip()
+    if team and not closed:
+        # Название компании — главное на карточке: крупно жёлтым, «Идём на матч?» — над ним мелко.
+        draw.text((pad, 34), "Идём на матч?", font=_text(26, 700), fill=_SOFT)
+        name_font = _largest(draw, team, _display, (60, 54, 48, 42, 36), 700)
+        draw.text((pad, 66), _ellipsize(draw, team, name_font, 700), font=name_font, fill=_YELLOW)
+    else:
+        head = closed or "Идём на матч?"
+        head_font = _largest(draw, head, _display, (64, 58, 52, 46), 700)
+        draw.text((pad, 46), head, font=head_font, fill=_SOFT if closed else _YELLOW)
     when = match_when(starts_at)
     draw.text((width - pad, 54), when, font=_text(30, 700), fill=_WHITE, anchor="ra")
     draw.text((width - pad, 96), "Минск-Арена", font=_text(24, 700), fill=_SOFT, anchor="ra")

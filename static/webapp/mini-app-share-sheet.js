@@ -1225,15 +1225,16 @@
       var m = sheetState.match;
       var when = [m.day, m.time].filter(Boolean).join(', ');
       lines =
-        '<b>Идём на матч?</b>' +
-        '<span>' + esc([name, m.title, when, rinkName(sheetState)].filter(Boolean).join(' · ')) + '</span>' +
+        '<b>' + esc(name ? name + ' — идём на матч?' : 'Идём на матч?') + '</b>' +
+        '<span>' + esc([m.title, when, rinkName(sheetState)].filter(Boolean).join(' · ')) + '</span>' +
         '<span class="gss-cprev__who">Идут: ' + esc(you) + '</span>';
-      buttons = ['Иду', 'Смотрю дома', 'Не смогу', 'Подробнее ↗'];
+      buttons = ['Иду', 'Смотрю дома', 'Не смогу', 'В другой чат →', 'Подробнее ↗'];
       // «Трибуна против дивана» — тот же рисунок, что встанет фото карточки в чате (render_match_company_card).
       poster =
         '<img class="gss-cprev__img gss-cprev__img--wide" alt="" decoding="async" width="1200" height="630" src="' +
         esc('/api/public/ice-companies/preview.png?match_id=' + encodeURIComponent(String(m.id)) +
-          '&you=' + encodeURIComponent(String(form.you || '').trim())) + '" />';
+          '&you=' + encodeURIComponent(String(form.you || '').trim()) +
+          '&name=' + encodeURIComponent(name)) + '" />';
     } else {
       var picked = selectedPostcardSlot(sheetState);
       var row = picked ? picked.row : {};
@@ -1263,7 +1264,10 @@
       poster +
       '<span class="gss-cprev__text">' + lines + '</span>' +
       '</span>' +
-      '<span class="gss-cprev__kb">' + buttons.map(function (a) { return '<i>' + esc(a) + '</i>'; }).join('') + '</span>' +
+      // Как в Telegram (lifecycle.button_rows): ответы — строками, две ссылки — парой внизу.
+      '<span class="gss-cprev__kb">' + buttons.slice(0, -2).map(function (a) { return '<i>' + esc(a) + '</i>'; }).join('') +
+      '<span class="gss-cprev__kbrow"><i>' + esc(buttons[buttons.length - 2]) + '</i><i>' + esc(buttons[buttons.length - 1]) + '</i></span>' +
+      '</span>' +
       '</figure>'
     );
   }

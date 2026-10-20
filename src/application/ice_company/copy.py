@@ -166,17 +166,31 @@ def _names_line(names: tuple[str, ...]) -> str:
     return ", ".join(names[:4]) + f" и ещё {len(names) - 4}"
 
 
+# Компания на матч без своего названия зовётся командами — «Динамо-Минск — СКА» (service.match_title).
+MATCH_DEFAULT_PREFIX = "Динамо-Минск — "
+
+
+def match_nickname(team_title: str | None) -> str:
+    """Своё название компании («КУРКУМА») или пусто, если это команды по умолчанию."""
+    title = (team_title or "").strip()
+    return "" if title.startswith(MATCH_DEFAULT_PREFIX) else title
+
+
 def match_card_text(snap: Snap) -> str:
-    where = " · ".join(part for part in (snap.team_title.strip(), match_when(snap.starts_at), snap.venue) if part)
+    nick = match_nickname(snap.team_title)
+    # Своё название — первым словом: в чате его видно сразу. Без него — команды в строке с датой.
+    teams = "" if nick else snap.team_title.strip()
+    where = " · ".join(part for part in (teams, match_when(snap.starts_at), snap.venue) if part)
     closed = closed_headline(snap)
     if closed:
-        return f"{where}\n{closed}"
+        return f"{nick + ' · ' if nick else ''}{where}\n{closed}"
     people = []
     if snap.going_names:
         people.append(f"Идут: {_names_line(snap.going_names)}")
     if snap.maybe_names:
         people.append(f"Смотрит дома: {_names_line(snap.maybe_names)}")
-    lines = ["Идём на матч?", where]
+    head = f"{nick} — идём на матч?" if nick else "Идём на матч?"
+    lines = [head, where]
     if people:
         lines.append(" · ".join(people))
     return "\n".join(lines)
