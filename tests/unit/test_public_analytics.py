@@ -12,6 +12,7 @@ def test_public_analytics_metrika_snippet() -> None:
     assert "ym(46475025" in html
     assert "ssr:true" in html
     assert "webvisor:false" in html
+    assert "metrika/tag.js?id=46475025" in html
     assert "mc.yandex.ru/watch/46475025" in html
 
 

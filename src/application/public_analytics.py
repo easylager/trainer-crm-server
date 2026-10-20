@@ -43,16 +43,13 @@ def public_analytics_head_html(
     counter = _normalize_metrika_id(yandex_metrika_counter_id)
     if counter is not None:
         cid = str(counter)
+        tag_js = f"https://mc.yandex.ru/metrika/tag.js?id={cid}"
+        # Отдельный <script src> — как в кабинете Метрики: запрос виден в Network, очередь ym до загрузки tag.js.
         parts.append(
+            f'<script async src="{tag_js}"></script>\n'
             f"  <script>\n"
-            f"    (function(m,e,t,r,i,k,a){{m[i]=m[i]||function(){{(m[i].a=m[i].a||[]).push(arguments)}};\n"
-            f"    m[i].l=1*new Date();\n"
-            f"    for (var j = 0; j < document.scripts.length; j++) {{\n"
-            f"      if (document.scripts[j].src === r) {{ return; }}\n"
-            f"    }}\n"
-            f"    k=e.createElement(t);a=e.getElementsByTagName(t)[0];k.async=1;k.src=r;\n"
-            f"    a.parentNode.insertBefore(k,a)}})\n"
-            f'    (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");\n'
+            f"    window.ym = window.ym || function() {{ (window.ym.a = window.ym.a || []).push(arguments); }};\n"
+            f"    window.ym.l = window.ym.l || 1 * new Date();\n"
             f"    ym({cid}, \"init\", {{"
             f"ssr:true, clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:false"
             f"}});\n"

@@ -122,7 +122,7 @@ async def test_catalog_home_includes_yandex_metrika_when_configured(
     assert home.status_code == 200
     assert "ym(98765432" in home.text
     assert "webvisor:false" in home.text
-    assert "mc.yandex.ru/metrika/tag.js" in home.text
+    assert "metrika/tag.js?id=98765432" in home.text
     get_settings.cache_clear()
 
 
