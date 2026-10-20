@@ -28,6 +28,12 @@ def test_theme_includes_place_hero_view_transition() -> None:
     assert re.search(r"client-arena-hero", theme)
 
 
+def test_place_shell_hero_is_full_bleed() -> None:
+    css = (REPO / "static/share/place-tg-shell.css").read_text(encoding="utf-8")
+    assert "body.b.client-shell-body .b-hero" in css
+    assert "border-radius: 0" in css
+
+
 def test_place_tg_shell_applies_style_b_tg_dark() -> None:
     boot = (REPO / "static/share/place-tg-shell.js").read_text(encoding="utf-8")
     assert "tg-dark" in boot

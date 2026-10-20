@@ -1,5 +1,28 @@
 /* TASK-256: Mini App shell on /p/… — tab bar + «Позвать» dock (tokens only). */
 
+/*
+ * Обложка катка на всю ширину. mini-app-components.css даёт body padding: 12px,
+ * а с 641px герой ещё и карточка с полями — в мини-аппе это выглядит как врезка.
+ */
+body.b.client-shell-body,
+body.b[data-client-shell] {
+  padding-top: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body.b.client-shell-body .b-page,
+body.b[data-client-shell] .b-page {
+  padding-top: 0;
+}
+
+body.b.client-shell-body .b-hero,
+body.b[data-client-shell] .b-hero {
+  margin-left: 0;
+  margin-right: 0;
+  border-radius: 0;
+}
+
 body.b.has-place-share.client-shell-body {
   padding-bottom: calc(var(--place-share-dock-h) + var(--client-shell-tab-inset));
 }
