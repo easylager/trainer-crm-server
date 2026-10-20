@@ -1460,50 +1460,43 @@
     if (!items.length) return '';
     var after = selectedSessionEndLocal();
     var place = (state.card && state.card.name) || '';
+    var anyFit = false;
+    /* Вариант А (владелец 2026-10-20): фото-витрина. Вся карточка ведёт в профиль тренера —
+       окна больше не кнопки: запись по голому окну без контекста тренера не открывалась. */
     var cards = items.map(function (t) {
-      var cta = M.trainerCta(t);
+      var v = M.trainerPreview(t, { after: after });
+      if (v.fit) anyFit = true;
       var ava = photoUrl(t);
-      var wins = (t.windows || []).slice();
-      var fit = null;
-      if (after) {
-        fit = wins.filter(function (w) { return String(w.starts_at || '').slice(0, 16) >= after; })[0] || null;
-      }
-      var shown = fit ? wins.slice(wins.indexOf(fit), wins.indexOf(fit) + 3) : wins.slice(0, 3);
-      var line = fit
-        ? 'После твоего катания — свободно ' + (fit.day === 'сегодня' ? 'в ' : fit.day + ' в ') + fit.time
-        : shown.length ? 'Ближайшие окна здесь' : '';
-      var slots = shown.map(function (w) {
-        return (
-          '<button type="button" class="arena-win ga-press' + (w === fit ? ' arena-win--fit' : '') +
-          '" data-action="trainer" data-trainer="' + esc(t.id) + '" data-can-book="' + (t.can_book ? '1' : '0') + '">' +
-          '<b>' + esc(w.time) + '</b><small>' + esc(w.day) + '</small></button>'
-        );
-      }).join('');
       return (
-        '<article class="arena-coachcard">' +
-        '<button type="button" class="arena-coachcard__head" data-action="trainer" data-trainer="' + esc(t.id) +
+        '<button type="button" class="arena-coachcard ga-press" data-action="trainer" data-trainer="' + esc(t.id) +
         '" data-can-book="' + (t.can_book ? '1' : '0') + '">' +
+        '<span class="arena-coachcard__ph">' +
         (ava
           ? '<img class="arena-coachcard__ava" alt="" data-initial="' + esc(trainerInitial(t)) + '" src="' + esc(ava) + '">'
           : '<i class="arena-coachcard__ava arena-coachcard__ava--mono" aria-hidden="true">' + esc(trainerInitial(t)) + '</i>') +
-        '<span class="arena-coachcard__who"><b>' + esc(trainerName(t)) + '</b><span>' + esc(M.trainerSubtitle(t)) + '</span></span>' +
-        '</button>' +
-        (slots
-          ? '<div class="arena-coachcard__wins"><span class="arena-coachcard__line">' + esc(line) + '</span>' +
-            '<div class="arena-coachcard__slots">' + slots + '</div></div>'
-          : '') +
-        '<div class="arena-coachcard__foot">' +
-        '<button type="button" class="arena-coachcard__link" data-action="trainer" data-trainer="' + esc(t.id) +
-        '" data-can-book="' + (t.can_book ? '1' : '0') + '">' + (slots ? 'Профиль и отзывы' : esc(cta.label)) + '</button>' +
-        '</div>' +
-        '</article>'
+        (v.rate ? '<span class="arena-coachcard__rate"><i aria-hidden="true">★</i>' + esc(v.rate) + '</span>' : '') +
+        (v.fit ? '<span class="arena-coachcard__fit">' + esc(v.fit) + '</span>' : '') +
+        '</span>' +
+        '<span class="arena-coachcard__body">' +
+        '<b class="arena-coachcard__name">' + esc(trainerName(t)) + '</b>' +
+        (v.what ? '<span class="arena-coachcard__what">' + esc(v.what) + '</span>' : '') +
+        (v.facts ? '<span class="arena-coachcard__facts">' + esc(v.facts) + '</span>' : '') +
+        '<span class="arena-coachcard__price">' + (v.price ? '<b>' + esc(v.price) + '</b>' : '<b></b>') +
+        '<span>' + esc(v.fit ? 'Профиль →' : v.next) + '</span></span>' +
+        '</span>' +
+        '</button>'
       );
     }).join('');
+    // Заголовок — по выбранному сеансу: с клюшкой — про бросок, иначе — «научат здесь же».
+    var sid = resolvedShareSessionId();
+    var title = !sid ? 'Тренеры этого катка' : sessionInOhm(sid) ? 'Поставят бросок здесь же' : 'Научат здесь же';
+    var kick = (sid ? 'Тренеры этого катка' : place || 'Тренеры') + ' · ' + items.length;
     return (
       '<section class="arena-coaches" aria-labelledby="arenaCoachesTitle">' +
       '<div class="arena-coaches__head">' +
-      '<span class="ga-kicker arena-coaches__kick">' + esc('Тренеры здесь' + (place ? ', в ' + place : '')) + '</span>' +
-      '<h2 class="ga-h2" id="arenaCoachesTitle">Выйти на лёд уверенно</h2>' +
+      '<span class="ga-kicker arena-coaches__kick">' + esc(kick) + '</span>' +
+      '<h2 class="ga-h2" id="arenaCoachesTitle">' + esc(title) + '</h2>' +
+      (anyFit ? '<p class="arena-coaches__sub">Есть свободные окна сразу после твоего катания</p>' : '') +
       '</div>' +
       '<div class="arena-coaches__row">' + cards + '</div>' +
       '</section>'

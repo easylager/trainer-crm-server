@@ -1163,6 +1163,60 @@
     return bits.join(' · ');
   }
 
+  function yearsWord(n) {
+    var m10 = n % 10;
+    var m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'год';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'года';
+    return 'лет';
+  }
+
+  /**
+   * Превью тренера на карточке катка, вариант А (владелец 2026-10-20): фото-витрина.
+   * Только то, что есть: нет отзывов — нет рейтинга (без «0 отзывов»), нет цены — нет строки цены.
+   * `after` — конец выбранного сеанса «YYYY-MM-DDTHH:MM»: первое окно после него — «Свободен в 13:15» на фото.
+   */
+  function trainerPreview(trainer, opts) {
+    trainer = trainer || {};
+    opts = opts || {};
+    var p = trainer.profile || {};
+    var count = Number(p.rating_count) || 0;
+    var rate = count > 0 && p.rating_avg != null ? Number(p.rating_avg).toFixed(1).replace('.', ',') + ' · ' + count : '';
+    var names = (trainer.services || [])
+      .map(function (s) { return String(s.service_name || s.name || '').trim(); })
+      .filter(Boolean);
+    var facts = [];
+    var exp = Math.floor(Number(p.experience_years) || 0);
+    if (exp > 0) facts.push(exp + ' ' + yearsWord(exp) + ' на льду');
+    if (trainer.has_pass_products) facts.push('есть абонементы');
+    var price = '';
+    var cents = Number(trainer.min_session_price_cents);
+    if (cents > 0) {
+      var best = formatMinor(cents, priceCurrencyLabel(trainer.min_session_price_currency || 'BYN'));
+      if (best) price = 'от ' + String(best.withCurrency || best.amount).replace('.', ',');
+    }
+    var wins = trainer.windows || [];
+    var fit = null;
+    if (opts.after) {
+      for (var i = 0; i < wins.length; i++) {
+        if (String(wins[i].starts_at || '').slice(0, 16) >= opts.after) { fit = wins[i]; break; }
+      }
+    }
+    var next = '';
+    if (!fit && wins[0]) {
+      var day = String(wins[0].day || '');
+      next = (day ? day.charAt(0).toUpperCase() + day.slice(1) + ' ' : '') + String(wins[0].time || '');
+    }
+    return {
+      rate: rate,
+      fit: fit ? 'Свободен в ' + fit.time : '',
+      what: names.slice(0, 3).join(' · '),
+      facts: facts.join(' · '),
+      price: price,
+      next: next.trim() || 'Профиль →',
+    };
+  }
+
   /**
    * Массовое катание (days) и ОХМ (ohm_days) — в одном списке для share sheet.
    * Без merge каталог на вкладке «С клюшкой» подставлял первый сеанс МК вместо ОХМ.
@@ -1364,6 +1418,7 @@
     hoursForWeekday: hoursForWeekday,
     heroMetaLine: heroMetaLine,
     trainerSubtitle: trainerSubtitle,
+    trainerPreview: trainerPreview,
     parseLocalDate: parseLocalDate,
     ymd: ymd,
     dayTabFromIso: dayTabFromIso,
