@@ -238,11 +238,13 @@ def webapp_ice_company_page():
 @app.get("/webapp/ice")
 @app.get("/webapp/ice.html")
 def webapp_ice_tab_page():
-    """TASK-053: Ice tab arena list Mini App."""
+    """TASK-053: Ice tab arena list Mini App. TASK-306: свои шрифты — `__FONT_V__`, как на главной."""
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "ice.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    page_html = path.read_text(encoding="utf-8")
+    page_html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
     key = (Settings().yandex_maps_js_api_key or "").strip()
     if key:
         meta = f'  <meta name="ymaps-key" content="{html.escape(key, quote=True)}">\n'

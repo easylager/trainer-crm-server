@@ -1307,6 +1307,8 @@
         esc(v.venueIcon || v.initial) +
         '</span>' +
         badge;
+    /* TASK-306: на фото — только день, время и «Позвать», как у «Ближайшего льда» на главной;
+       название и адрес — под фото. Плашка .ice-board__scrim остаётся контейнером для дня и времени. */
     var scrim =
       '<span class="ice-board__scrim">' +
       (v.offWindow ? '<span class="ice-board__off">' + esc(v.offLabel) + '</span>' : '') +
@@ -1317,6 +1319,9 @@
           esc(v.time) +
           '</span>'
         : '') +
+      '</span>';
+    var head =
+      '<span class="ice-board__head">' +
       '<span class="ice-board__name">' +
       esc(v.name) +
       '</span>' +
@@ -1354,6 +1359,7 @@
       photo +
       scrim +
       '</span>' +
+      head +
       (facts ? '<span class="ice-board__facts">' + facts + '</span>' : '') +
       (v.depth
         ? '<span class="ice-board__depth' + (v.stale ? ' ice-board__depth--stale' : '') + '">' +
@@ -3653,6 +3659,29 @@
   }
 
   global.IceCatalog = { onTabRetap: onCatalogTabRetap };
+
+  /* TASK-306: токены сайта темнеют по body.tg-dark, а тема Mini App ставит hub-is-dark на <html>. */
+  function syncGlideDark() {
+    var b = document.body;
+    var h = document.documentElement;
+    if (!b || !b.classList || !h || !h.classList) return;
+    b.classList.toggle('tg-dark', h.classList.contains('hub-is-dark'));
+  }
+  /* Фото места не отдалось (файла нет в хранилище) — без значка битой картинки: остаётся фон карточки. */
+  document.addEventListener(
+    'error',
+    function (ev) {
+      var img = ev.target;
+      if (!img || img.tagName !== 'IMG' || !img.closest) return;
+      if (img.closest('.ice-board__photo') || img.closest('.ice-foryou') || img.closest('.ice-acard')) img.remove();
+    },
+    true
+  );
+  if (document.body) syncGlideDark();
+  else document.addEventListener('DOMContentLoaded', syncGlideDark);
+  if (global.MutationObserver && document.documentElement) {
+    new global.MutationObserver(syncGlideDark).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
