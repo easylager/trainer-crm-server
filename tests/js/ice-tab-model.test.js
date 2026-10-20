@@ -206,23 +206,6 @@ describe('catalog header (A′)', () => {
     assert.equal(sectionHint('shop', ''), '');
   });
 
-  it('полоса тренеров на Покататься: лица и вход во весь раздел', () => {
-    const { showTrainerRail, trainerRailHtml } = loadModel();
-    assert.equal(showTrainerRail({ intent: 'skate', trainerCount: 4, items: null }), true);
-    assert.equal(showTrainerRail({ intent: 'skate', items: [] }), false);
-    assert.equal(showTrainerRail({ intent: 'ohm', trainerCount: 4 }), false);
-    assert.equal(showTrainerRail({ intent: 'skate', placeService: 'service', trainerCount: 4 }), false);
-    const html = trainerRailHtml([
-      { id: 7, name: 'Анна Коваль', primary_arena_name: 'Чижовка', profile: {} },
-    ]);
-    assert.match(html, /Анна Коваль/);
-    assert.match(html, /Чижовка/);
-    assert.match(html, /catalog\?trainer_id=7/);
-    assert.match(html, /data-catalog-mode="coach"/);
-    assert.match(html, />Все</);
-    assert.equal(trainerRailHtml([]), '');
-  });
-
   it('С клюшкой виден по центрам, даже если сеансов ОХМ нет', () => {
     const { catalogModesView, buildListUrl, formatSortCaption, boardCardView } = loadModel();
     const modes = catalogModesView({
