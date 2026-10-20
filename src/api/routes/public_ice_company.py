@@ -30,6 +30,7 @@ from src.application.ice_company.service import (
     create_company,
     create_match_company,
     delete_own,
+    preview_snap,
     read_company,
     resolve_participant,
     respond,
@@ -182,6 +183,24 @@ async def post_company(
             telegram_user_id=user_id,
         )
     return view
+
+
+@router.get("/api/public/ice-companies/preview.png")
+async def company_preview_png(
+    session_id: int,
+    name: str = "",
+    you: str = "",
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Превью картинки компании до создания: тот же рисунок, что уйдёт в чат (лист шаринга, вкладка «Компания»)."""
+    snap = await preview_snap(session, session_id=session_id, display_name=you[:64], name=name[:64])
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Сеанс не найден.")
+    return Response(
+        content=render_company_card(snap),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @router.get("/api/public/ice-companies/{code}")

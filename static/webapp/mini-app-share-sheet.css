@@ -496,27 +496,7 @@
   border-radius: var(--app-radius-lg) var(--app-radius-lg) var(--app-radius-lg) var(--app-radius-sm);
   background: var(--app-chip-bg); color: var(--glide-text);
 }
-.gss-cprev__poster {
-  display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 14px;
-  background: var(--glide-deep); color: var(--glide-on-deep);
-}
-.gss-cprev__ptop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.gss-cprev__ptop em { font-style: normal; font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold); letter-spacing: 0.06em; color: var(--glide-brand); }
-.gss-cprev__ptop i {
-  font-style: normal; font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold);
-  padding: 3px 9px; border-radius: var(--app-radius-pill); box-shadow: inset 0 0 0 1.5px var(--glide-brand);
-}
-.gss-cprev__ptime { font-size: var(--app-text-display); line-height: 1; font-weight: var(--app-weight-bold); }
-.gss-cprev__prink {
-  position: relative; height: 54px; margin: 6px 0 4px; border-radius: var(--app-radius-lg);
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--glide-brand) 45%, transparent);
-  background: linear-gradient(90deg, transparent calc(50% - 0.75px), color-mix(in srgb, var(--glide-brand) 45%, transparent) calc(50% - 0.75px), color-mix(in srgb, var(--glide-brand) 45%, transparent) calc(50% + 0.75px), transparent calc(50% + 0.75px));
-}
-.gss-cprev__pdot {
-  position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--glide-brand) 45%, transparent);
-}
-.gss-cprev__pteam { font-size: var(--app-text-lead); line-height: 1.2; font-weight: var(--app-weight-bold); overflow-wrap: anywhere; }
+.gss-cprev__img { display: block; width: 100%; height: auto; aspect-ratio: 1; background: var(--glide-deep); }
 .gss-cprev__text { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px 12px; font-size: var(--app-text-body); line-height: 1.35; }
 .gss-cprev__text b { font-weight: var(--app-weight-bold); }
 .gss-cprev__who { color: var(--glide-ink-teal); font-weight: var(--app-weight-semibold); }

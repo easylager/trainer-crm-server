@@ -1202,6 +1202,13 @@
     return isNaN(date.getTime()) ? '' : NOM_WEEKDAYS[date.getUTCDay()];
   }
 
+  function companyPreviewSrc(sheetState) {
+    var form = companyFormOf(sheetState);
+    return '/api/public/ice-companies/preview.png?session_id=' + encodeURIComponent(String(sheetState.sessionId)) +
+      '&you=' + encodeURIComponent(String(form.you || '').trim()) +
+      '&name=' + encodeURIComponent(String(form.team || '').trim());
+  }
+
   /*
    * «Так увидят в чате» — повтор настоящей карточки (ice_company/copy.py, og.py, lifecycle.buttons_for):
    * у катка картинка-постер и подпись, у матча только текст; кнопки — столбиком, как inline-клавиатура.
@@ -1230,13 +1237,12 @@
       var day = picked ? weekdayNom(picked.section.localDate) || picked.section.dayLabel || '' : '';
       var time = String(row.time || '');
       var place = rinkName(sheetState);
-      poster =
-        '<span class="gss-cprev__poster" aria-hidden="true">' +
-        '<span class="gss-cprev__ptop"><em>' + esc(day.toUpperCase()) + '</em><i>' + esc(kind) + '</i></span>' +
-        '<b class="gss-cprev__ptime">' + esc(time || '—') + '</b>' +
-        '<span class="gss-cprev__prink"><span class="gss-cprev__pdot"></span></span>' +
-        '<b class="gss-cprev__pteam">' + esc(name || 'Компания на лёд') + '</b>' +
-        '</span>';
+      // Картинку рисует сервер тем же og.render_company_card, что уходит в чат: превью = оригинал.
+      if (sheetState && sheetState.sessionId) {
+        poster =
+          '<img class="gss-cprev__img" alt="" decoding="async" width="1080" height="1080" src="' +
+          esc(companyPreviewSrc(sheetState)) + '" />';
+      }
       lines =
         '<b>' + esc(kind) + '</b>' +
         (name ? '<b>' + esc(name) + '</b>' : '') +
@@ -1299,13 +1305,26 @@
     );
   }
 
+  var previewImgTimer = 0;
+
   function onCompanyInput(ev) {
     var input = ev.target && ev.target.closest && ev.target.closest('[data-gss-c]');
     if (!input || !state || !state.companyForm) return;
     state.companyForm[input.getAttribute('data-gss-c')] = input.value;
     if (input.getAttribute('data-gss-c') === 'team') {
       var preview = root.querySelector('.gss-preview-host');
-      if (preview) preview.innerHTML = renderCompanyPreview(state);
+      if (preview) {
+        // Текст — сразу, картинку перерисовываем после паузы в наборе: не дёргаем сервер на каждую букву.
+        var oldImg = preview.querySelector('.gss-cprev__img');
+        preview.innerHTML = renderCompanyPreview(state);
+        var fresh = preview.querySelector('.gss-cprev__img');
+        if (oldImg && fresh) {
+          var want = fresh.getAttribute('src');
+          fresh.parentNode.replaceChild(oldImg, fresh);
+          global.clearTimeout(previewImgTimer);
+          previewImgTimer = global.setTimeout(function () { oldImg.setAttribute('src', want); }, 450);
+        }
+      }
     }
     if (state.companyForm.error) {
       state.companyForm.error = '';

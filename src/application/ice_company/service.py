@@ -430,6 +430,37 @@ async def _open_company(
     return code
 
 
+async def preview_snap(
+    session: AsyncSession,
+    *,
+    session_id: int,
+    display_name: str,
+    name: str = "",
+    settings: Settings | None = None,
+) -> Snap | None:
+    """Карточка ещё не созданной компании — для превью в листе шаринга. В базу ничего не пишет."""
+    cfg = _settings(settings)
+    slot = await _session_row(session, session_id)
+    if slot is None or slot["kind"] not in _SKATE or not city_enabled(int(slot["city_id"]), cfg):
+        return None
+    try:
+        title = clean_team_title(name, max_len=40, required=False, field="Название компании")
+    except TextRejected:
+        title = ""
+    try:
+        label = clean_free_text(display_name, max_len=cfg.ice_company_display_name_max_len, required=False, field="Имя")
+    except TextRejected:
+        label = ""
+    return Snap(
+        kind=str(slot["kind"]),
+        venue=str(slot["arena_name"]),
+        starts_at=slot["starts_at_utc"],
+        status="open",
+        going_names=(label or "Ты",),
+        team_title=title,
+    )
+
+
 async def create_company(
     session: AsyncSession,
     *,

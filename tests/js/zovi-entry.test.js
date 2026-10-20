@@ -114,9 +114,9 @@ describe('варианты шита', () => {
       slotSections: [{ localDate: '2026-10-23', dayLabel: 'пт', rows: [{ id: 7, time: '21:15', meta: '14 BYN · ОХМ' }] }],
       companyForm: { team: '', you: 'Макс' },
     });
-    assert.match(ice, /gss-cprev__poster/);
-    assert.match(ice, /ПЯТНИЦА/);
-    assert.match(ice, /21:15/);
+    // Картинка — та же, что сервер пришлёт в чат (og.render_company_card).
+    assert.match(ice, /<img class="gss-cprev__img"[^>]*src="\/api\/public\/ice-companies\/preview\.png\?session_id=7&amp;you=%D0%9C%D0%B0%D0%BA%D1%81&amp;name="/);
+    assert.match(ice, /Пятница, 21:15 · ТЦ DiaMond city/);
     assert.match(ice, /На льду Макс\./);
     assert.match(ice, /<i>Иду<\/i><i>Не могу<\/i><i>В другой чат →<\/i><i>На лёд ↗<\/i>/);
     assert.doesNotMatch(ice, /Может/);
@@ -125,7 +125,7 @@ describe('варианты шита', () => {
       placeName: 'Минск-Арена',
       companyForm: { team: 'Офис', you: 'Макс' },
     });
-    assert.doesNotMatch(match, /gss-cprev__poster/);
+    assert.doesNotMatch(match, /gss-cprev__img/);
     assert.match(match, /Идём на матч\?/);
     assert.match(match, /Офис · Динамо-Минск — СКА · пт, 30 октября, 19:30 · Минск-Арена/);
     assert.match(match, /<i>Иду<\/i><i>Смотрю дома<\/i><i>Не смогу<\/i><i>Подробнее ↗<\/i>/);
