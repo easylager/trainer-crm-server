@@ -19,6 +19,7 @@ from src.application.hockey_matches import DINAMO
 from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes, read_avatar_bytes
 from src.application.ice_company.codes import tg_participant_key, web_participant_key
 from src.application.hockey_cards import render_match_company_card
+from src.application.png_cache import bytes_key, cached_png
 from src.application.ice_company.copy import MATCH_KIND, closed_headline
 from src.application.ice_company.keyboard import inline_button_json
 from src.application.ice_company.lifecycle import button_rows, buttons_for, calendar_url_for, render_hash
@@ -202,19 +203,23 @@ async def company_preview_png(
         match = await _home_match(session, match_id)
         if match is None or not Settings().hockey_matches_enabled:
             raise HTTPException(status_code=404, detail="Матч не найден.")
-        png = render_match_company_card(
-            home=str(match["home_team"]),
-            away=str(match["away_team"]),
-            starts_at=match["starts_at"],
-            going=[(strip_emoji_for_poster((you or "").strip()[:24]) or "Ты", None)],
-            watching=[],
+        who = strip_emoji_for_poster((you or "").strip()[:24]) or "Ты"
+        png = await cached_png(
+            ("preview-match", match_id, str(match["home_team"]), str(match["away_team"]), match["starts_at"].isoformat(), who),
+            lambda: render_match_company_card(
+                home=str(match["home_team"]),
+                away=str(match["away_team"]),
+                starts_at=match["starts_at"],
+                going=[(who, None)],
+                watching=[],
+            ),
         )
         return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
     snap = await preview_snap(session, session_id=session_id or 0, display_name=you[:64], name=name[:64])
     if snap is None:
         raise HTTPException(status_code=404, detail="Сеанс не найден.")
     return Response(
-        content=render_company_card(snap),
+        content=await cached_png(("preview-ice", snap), lambda: render_company_card(snap)),
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=300"},
     )
@@ -366,18 +371,36 @@ async def _card_png(session: AsyncSession, code: str) -> bytes:
     responses = await _responses(session, int(company["id"]))
     snap = snap_from(company, responses)
     if company["event_kind"] != MATCH_KIND:
-        return render_company_card(snap, avatar_bytes=going_avatar_bytes(responses))
+        avatars = going_avatar_bytes(responses)
+        return await cached_png(
+            ("ice-card", snap, bytes_key(*avatars)), lambda: render_company_card(snap, avatar_bytes=avatars)
+        )
     # Матч: «Трибуна против дивана» — «Иду» на трибуне, «Смотрю дома» на диване.
     match = await _home_match(session, _match_id(str(company["source_ref"])))
     if match is None:
         raise HTTPException(status_code=404, detail="Компания не найдена.")
-    return render_match_company_card(
-        home=str(match["home_team"]),
-        away=str(match["away_team"]),
-        starts_at=match["starts_at"],
-        going=_people(responses, "going"),
-        watching=_people(responses, "maybe"),
-        closed=closed_headline(snap),
+    going, watching = _people(responses, "going"), _people(responses, "maybe")
+    closed = closed_headline(snap)
+    key = (
+        "match-card",
+        str(match["home_team"]),
+        str(match["away_team"]),
+        match["starts_at"].isoformat(),
+        tuple(name for name, _ in going),
+        tuple(name for name, _ in watching),
+        bytes_key(*(face for _, face in going + watching)),
+        closed,
+    )
+    return await cached_png(
+        key,
+        lambda: render_match_company_card(
+            home=str(match["home_team"]),
+            away=str(match["away_team"]),
+            starts_at=match["starts_at"],
+            going=going,
+            watching=watching,
+            closed=closed,
+        ),
     )
 
 

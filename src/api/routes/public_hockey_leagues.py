@@ -19,6 +19,7 @@ from src.api.routes.public_arenas import _SHARE_CHANNELS
 from src.api.routes.webapp_client_hockey_leagues import invite_url_for_code
 from src.application import hockey_event
 from src.application.client_delight_metrics import record_client_share
+from src.application.png_cache import cached_png
 from src.application.hockey_cards import (
     check_result_card_sig,
     render_league_card,
@@ -112,12 +113,12 @@ async def get_result_card_png(
     if match is None or match.status != STATUS_FINAL or result_verdict(points) is None:
         raise HTTPException(status_code=404, detail="Карточка не найдена")
     assert match.home_score is not None and match.away_score is not None
-    png = render_result_card(
-        home=match.home_team,
-        away=match.away_team,
-        home_score=match.home_score,
-        away_score=match.away_score,
-        points=points,
+    home_score, away_score = match.home_score, match.away_score
+    png = await cached_png(
+        ("result", match.home_team, match.away_team, home_score, away_score, points),
+        lambda: render_result_card(
+            home=match.home_team, away=match.away_team, home_score=home_score, away_score=away_score, points=points
+        ),
     )
     return Response(content=png, media_type="image/png", headers=_IMMUTABLE)
 
@@ -128,7 +129,10 @@ async def get_league_card_png(code: str, session: AsyncSession = Depends(get_ses
     card = await league_card(session, code, now=datetime.now(timezone.utc))
     if card is None:
         raise HTTPException(status_code=404, detail="Лига не найдена")
-    png = render_league_card(name=card.name, members=card.members, names=card.names, next_match=card.next_match)
+    png = await cached_png(
+        ("league", card.name, card.members, tuple(card.names), card.next_match),
+        lambda: render_league_card(name=card.name, members=card.members, names=card.names, next_match=card.next_match),
+    )
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
 
 
@@ -150,7 +154,11 @@ async def _match_card(session: AsyncSession, match_id: int, *, invite: bool, sto
         row = await hockey_event._home_match(session, match_id)  # noqa: SLF001
     except hockey_event.MatchNotFound:
         raise HTTPException(status_code=404, detail="Матч не найден") from None
-    png = render_match_card(home=row.home_team, away=row.away_team, starts_at=row.starts_at, invite=invite, story=story)
+    # Ключ — команды, время и тон, а не версия из адреса: «/kk/m/11/любое.png» не рисуется заново.
+    png = await cached_png(
+        ("match", row.home_team, row.away_team, row.starts_at.isoformat(), invite, story),
+        lambda: render_match_card(home=row.home_team, away=row.away_team, starts_at=row.starts_at, invite=invite, story=story),
+    )
     # Версия в адресе меняется вместе с командами и временем, поэтому кэш на час безопасен;
     # старая ссылка из давно отправленного сообщения получает актуальную картинку, а не 404.
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
