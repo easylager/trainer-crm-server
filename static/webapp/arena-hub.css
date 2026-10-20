@@ -6,6 +6,9 @@
 
 /* Шапка «Каток / Назад» ушла: назад — круглой кнопкой на фото. Нижнего меню нет — внизу панель. */
 body.arena-hub .client-app-header { display: none; }
+/* Фото катка — во всю ширину и от самого верха: общий body-отступ 12px (mini-app-components.css)
+   здесь не нужен, у разделов свои поля 16px. Низ — отступ под панель оболочки (arena-card.css). */
+body.arena-hub { padding-top: 0; padding-left: 0; padding-right: 0; }
 body.arena-hub .arena-card { max-width: 560px; margin: 0 auto; padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px)); background: var(--g-bg); color: var(--g-ink); }
 body.arena-hub .arena-card svg[viewBox] { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
