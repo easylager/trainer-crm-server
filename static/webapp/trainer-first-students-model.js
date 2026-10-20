@@ -126,7 +126,66 @@
     return 'Теперь веду расписание в Glide. Откройте ссылку: здесь будут ваши тренировки, а бот напомнит о каждой.';
   }
 
+  /** Подводка карточки: что тренер получит. Утренняя сводка — правда для каждого с записью. */
+  function cardLead(state) {
+    if (state && state.can_book === false) {
+      return 'Достаточно имени — ученики будут в вашей базе. Записывать их на время можно с активной подпиской.';
+    }
+    return 'Достаточно имени. Поставим их в ваши окна, и утром будем присылать, кто сегодня придёт. Ученикам ничего ставить не нужно.';
+  }
+
+  function slotFieldLabel(state) {
+    if (state && state.can_book === false) return 'Записать на время можно с активной подпиской — пока добавим в список';
+    if (!((state && state.options) || []).length) return 'Свободных окон на две недели нет — добавим без записи';
+    return 'Ближайшая тренировка — из вашей недели';
+  }
+
+  /** «Что теперь работает» — только то, что включено у этого тренера прямо сейчас. */
+  function doneWorks(state) {
+    var students = (state && state.students) || [];
+    var out = [];
+    if (students.some(function (s) { return !!s.next_label; })) out.push('Утром пришлём, кто сегодня придёт');
+    out.push('Абонемент и оплату отметите в карточке ученика — остаток посчитаем сами');
+    out.push('В воскресенье — итог недели и план на следующую');
+    return out;
+  }
+
+  /** Ошибка сервера человеческими словами: 422 приходит списком полей, а не строкой. */
+  function errorText(err) {
+    var d = err && err.detail;
+    if (Array.isArray(d) && d.length) {
+      var first = d[0] || {};
+      var loc = first.loc || [];
+      var field = loc.length ? loc[loc.length - 1] : '';
+      var msg = String(first.msg || '').replace(/^Value error,\s*/i, '');
+      if (field === 'phone') return msg || 'Проверьте номер телефона, например +375 29 123-45-67.';
+      if (field === 'first_name') return 'Впишите имя ученика.';
+      return msg || 'Проверьте поля и попробуйте ещё раз.';
+    }
+    var text = (err && err.message) || '';
+    if (!text || /^(Unprocessable Entity|Internal Server Error|Bad Request|Ошибка)$/i.test(text)) {
+      return 'Не получилось сохранить. Попробуйте ещё раз.';
+    }
+    return text;
+  }
+
+  /** Услуга для окна: своя у окна, если шаблон её знает, иначе первая в списке (очные первыми). */
+  function defaultServiceId(state, slotId) {
+    var services = (state && state.services) || [];
+    if (!services.length) return null;
+    var opt = ((state && state.options) || []).filter(function (o) { return o.slot_id === slotId; })[0];
+    var own = opt && opt.service_id;
+    if (own != null && services.some(function (s) { return s.service_id === own; })) return own;
+    return services[0].service_id;
+  }
+
   var api = {
+    defaultServiceId: defaultServiceId,
+    cardLead: cardLead,
+    slotFieldLabel: slotFieldLabel,
+    doneWorks: doneWorks,
+    errorText: errorText,
+    plural: plural,
     doneKicker: doneKicker,
     inviteMessage: inviteMessage,
     GOAL: GOAL,

@@ -21,6 +21,8 @@ from src.application.client_profile_use_cases import sql_client_notify_telegram_
 from src.shared.notification_hours import NOTIFICATION_TZ
 
 FIRST_STUDENTS_GOAL = 3
+# Финальная карточка показывает всех перенесённых (вставка списка даёт больше трёх) — с запасом.
+STUDENTS_LIST_LIMIT = 10
 OPTIONS_HORIZON_DAYS = 14
 OPTIONS_LIMIT = 8
 
@@ -99,7 +101,7 @@ async def list_slot_options(
     r = await session.execute(
         text(
             """
-            SELECT s.id, s.slot_date, s.start_time
+            SELECT s.id, s.slot_date, s.start_time, s.service_id
             FROM slots s
             WHERE s.trainer_id = :tid
               AND s.status = 'available'
@@ -119,9 +121,30 @@ async def list_slot_options(
         },
     )
     return [
-        {"slot_id": int(row[0]), "label": slot_label(row[1], row[2], today=today)}
+        {
+            "slot_id": int(row[0]),
+            "label": slot_label(row[1], row[2], today=today),
+            "service_id": int(row[3]) if row[3] is not None else None,
+        }
         for row in r.fetchall()
     ]
+
+
+async def list_trainer_services(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]]:
+    """Услуги тренера для чипов «Занятие»: очные первыми — окно недели почти всегда на льду."""
+    r = await session.execute(
+        text(
+            """
+            SELECT s.id, s.name, COALESCE(ts.is_online, false)
+            FROM trainer_services ts
+            JOIN services s ON s.id = ts.service_id
+            WHERE ts.trainer_id = :tid
+            ORDER BY COALESCE(ts.is_online, false), s.sort_order, s.id
+            """
+        ),
+        {"tid": int(trainer_id)},
+    )
+    return [{"service_id": int(row[0]), "name": str(row[1]), "is_online": bool(row[2])} for row in r.fetchall()]
 
 
 async def list_first_students(
@@ -158,7 +181,7 @@ async def list_first_students(
             "tid": int(trainer_id),
             "today": today,
             "now_time": moment.time().replace(tzinfo=None),
-            "lim": FIRST_STUDENTS_GOAL,
+            "lim": STUDENTS_LIST_LIMIT,
         },
     )
     out: list[dict[str, Any]] = []
@@ -179,11 +202,18 @@ async def list_first_students(
 async def first_students_state(
     session: AsyncSession, trainer_id: int, *, now: datetime | None = None
 ) -> dict[str, Any]:
+    from src.application.subscription_tier_use_cases import trainer_has_crm_access
+
+    # Без CRM запись не создать (тот же гейт, что у расписания) — окна не предлагаем, чтобы лист
+    # не обещал то, что упадёт на сохранении. Ученика в базу добавить можно и так.
+    can_book = bool(await trainer_has_crm_access(session, trainer_id))
     return {
         "goal": FIRST_STUDENTS_GOAL,
         "count": await count_trainer_crm_clients(session, trainer_id),
         "students": await list_first_students(session, trainer_id, now=now),
-        "options": await list_slot_options(session, trainer_id, now=now),
+        "options": await list_slot_options(session, trainer_id, now=now) if can_book else [],
+        "services": await list_trainer_services(session, trainer_id),
+        "can_book": can_book,
     }
 
 

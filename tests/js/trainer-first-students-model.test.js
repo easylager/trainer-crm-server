@@ -85,3 +85,34 @@ describe('«Первые три ученика»: финал не обещает
     assert.ok(!/записал/i.test(booked), 'без рода тренера');
   });
 });
+
+describe('«Первые три ученика»: услуга, ошибки, обещания', () => {
+  const state = {
+    services: [{ service_id: 5, name: 'Индивидуально' }, { service_id: 9, name: 'Группа' }],
+    options: [{ slot_id: 1, service_id: 9 }, { slot_id: 2, service_id: null }, { slot_id: 3, service_id: 77 }],
+  };
+
+  it('услуга окна, иначе первая очная', () => {
+    assert.equal(M.defaultServiceId(state, 1), 9);
+    assert.equal(M.defaultServiceId(state, 2), 5);
+    assert.equal(M.defaultServiceId(state, 3), 5, 'услуги окна нет в профиле — не подставляем чужую');
+    assert.equal(M.defaultServiceId({ services: [] }, 1), null);
+  });
+
+  it('422 по телефону — человеческим текстом, а не «Unprocessable Entity»', () => {
+    const err = Object.assign(new Error('Unprocessable Entity'), {
+      detail: [{ loc: ['body', 'phone'], msg: 'Value error, Номер должен начинаться с +375 или +7' }],
+    });
+    assert.equal(M.errorText(err), 'Номер должен начинаться с +375 или +7');
+    assert.equal(M.errorText(new Error('Unprocessable Entity')), 'Не получилось сохранить. Попробуйте ещё раз.');
+    assert.equal(M.errorText(new Error('Слот уже занят')), 'Слот уже занят');
+  });
+
+  it('утреннюю сводку обещаем только с записью; без подписки — не обещаем окна', () => {
+    assert.ok(!M.doneWorks({ students: [{}] }).some((w) => /утром/i.test(w)));
+    assert.ok(M.doneWorks({ students: [{ next_label: 'завтра 18:00' }] })[0].startsWith('Утром'));
+    assert.ok(/подпиской/.test(M.cardLead({ can_book: false })));
+    assert.ok(!/окна/.test(M.cardLead({ can_book: false })));
+    assert.ok(/подпиской/.test(M.slotFieldLabel({ can_book: false })));
+  });
+});

@@ -241,3 +241,111 @@ async def test_other_trainers_window_is_refused(app_use_test_db, db_session) -> 
     assert res.json()["booking_id"] is None
     status = (await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": foreign})).scalar_one()
     assert status == "available"
+
+
+@pytest.mark.asyncio
+async def test_chosen_service_is_booked_and_foreign_one_refused(app_use_test_db, db_session) -> None:
+    """Две услуги в онбординге — запись идёт на выбранную, а не молча на первую."""
+    tg = _tg()
+    trainer_id, first_service = await _trainer_with_week(db_session, tg)
+    other = (
+        await db_session.execute(
+            text("SELECT id FROM services WHERE id <> :sid ORDER BY sort_order, id LIMIT 1"), {"sid": first_service}
+        )
+    ).scalar()
+    if other is None:
+        pytest.skip("need two services in DB")
+    await db_session.execute(
+        text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 6000)"),
+        {"tid": trainer_id, "sid": other},
+    )
+    await db_session.commit()
+    slot_id = await _slot(db_session, trainer_id, local_today() + timedelta(days=2), time(18, 0))
+    stranger = (
+        await db_session.execute(
+            text("SELECT id FROM services WHERE id NOT IN (:a, :b) ORDER BY id LIMIT 1"), {"a": first_service, "b": other}
+        )
+    ).scalar()
+
+    with _as_trainer(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            state = (await client.get(URL, headers=HDR)).json()
+            res = await client.post(
+                URL, headers=HDR, json={"first_name": "Маша", "slot_id": slot_id, "service_id": other}
+            )
+            refused = (
+                await client.post(URL, headers=HDR, json={"first_name": "Чужая", "slot_id": slot_id, "service_id": stranger})
+                if stranger is not None
+                else None
+            )
+    assert {s["service_id"] for s in state["services"]} == {first_service, other}
+    assert state["can_book"] is True
+    assert res.status_code == 200, res.text
+    booked_service = (
+        await db_session.execute(text("SELECT service_id FROM bookings WHERE id = :bid"), {"bid": res.json()["booking_id"]})
+    ).scalar_one()
+    assert booked_service == other
+    if refused is not None:
+        assert refused.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_without_crm_no_windows_are_offered(app_use_test_db, db_session) -> None:
+    """Подписка кончилась — запись не создать, поэтому лист не предлагает окна, но ученика добавить можно."""
+    tg = _tg()
+    trainer_id, _ = await _trainer_with_week(db_session, tg)
+    await db_session.execute(
+        text("UPDATE trainer_subscriptions SET expires_at = now() - interval '1 day', status = 'expired' WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    await db_session.commit()
+    await _slot(db_session, trainer_id, local_today() + timedelta(days=2), time(18, 0))
+    with _as_trainer(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            state = (await client.get(URL, headers=HDR)).json()
+            res = await client.post(URL, headers=HDR, json={"first_name": "Оля"})
+    assert state["can_book"] is False
+    assert state["options"] == []
+    assert res.status_code == 200
+    assert res.json()["state"]["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_weekly_keeps_the_chosen_service_every_week(app_use_test_db, db_session) -> None:
+    """Правило «каждую неделю» не хранит услугу — автозаписи раньше уходили на первую услугу тренера."""
+    tg = _tg()
+    trainer_id, first_service = await _trainer_with_week(db_session, tg)
+    other = (
+        await db_session.execute(
+            text("SELECT id FROM services WHERE id <> :sid ORDER BY sort_order, id LIMIT 1"), {"sid": first_service}
+        )
+    ).scalar()
+    if other is None:
+        pytest.skip("need two services in DB")
+    await db_session.execute(
+        text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 6000)"),
+        {"tid": trainer_id, "sid": other},
+    )
+    await db_session.commit()
+    day = local_today() + timedelta(days=1)
+    slot_id = await _slot(db_session, trainer_id, day, time(17, 0))
+    await _slot(db_session, trainer_id, day + timedelta(days=7), time(17, 0))
+    with _as_trainer(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            res = await client.post(
+                URL,
+                headers=HDR,
+                json={"first_name": "Маша", "slot_id": slot_id, "service_id": other, "weekly": True},
+            )
+    assert res.status_code == 200, res.text
+    assert res.json()["weekly"] is True, res.json()["warning"]
+    services = (
+        await db_session.execute(
+            text(
+                "SELECT DISTINCT service_id FROM bookings WHERE trainer_id = :tid AND client_id = :cid "
+                "AND status NOT IN ('cancelled', 'declined')"
+            ),
+            {"tid": trainer_id, "cid": res.json()["client_id"]},
+        )
+    ).scalars().all()
+    assert services == [other]

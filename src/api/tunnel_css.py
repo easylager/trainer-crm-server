@@ -29,6 +29,25 @@ _SCRIPT_RE = re.compile(
 _SCRIPT_CLOSE_RE = re.compile(r"</script", re.IGNORECASE)
 
 
+# Встроенный скрипт не умеет defer, поэтому его код выполняется в DOMContentLoaded. Но defer-скрипты
+# сами вешают обработчики на DOMContentLoaded (каталог тренера так запускает загрузку), а подписка,
+# сделанная во время этого события, уже не сработает — экран висел на «Загрузка». Пока такой скрипт
+# выполняется, его подписки на DOMContentLoaded копятся и запускаются после всех defer-скриптов.
+_DEFER_OPEN = (
+    "document.addEventListener('DOMContentLoaded',function(){"
+    "var __add=document.addEventListener;"
+    "document.addEventListener=function(t,f,o){if(t==='DOMContentLoaded'&&typeof f==='function')"
+    "{(window.__tunnelDcl=window.__tunnelDcl||[]).push(f);return;}return __add.call(document,t,f,o);};"
+    "try{\n"
+)
+_DEFER_CLOSE = "\n}finally{document.addEventListener=__add;}});"
+_DEFER_FLUSH = (
+    "document.addEventListener('DOMContentLoaded',function(){"
+    "(window.__tunnelDcl||[]).splice(0).forEach(function(f){"
+    "try{f.call(document,new Event('DOMContentLoaded'));}catch(e){setTimeout(function(){throw e;});}});});"
+)
+
+
 def tunnel_host(host: str) -> bool:
     name = host.split(":")[0].lower()
     return "ngrok" in name or name.endswith("trycloudflare.com")
@@ -87,10 +106,18 @@ def inline_tunnel_styles(html: str) -> str:
         js = _SCRIPT_CLOSE_RE.sub(lambda _m: "<\\/script", file.read_text(encoding="utf-8"))
         attrs = f"{match.group('attrs')} {match.group('after')}"
         if re.search(r"\bdefer\b", attrs, re.IGNORECASE):
-            js = "document.addEventListener('DOMContentLoaded',function(){\n" + js + "\n});"
+            deferred[0] += 1
+            js = _DEFER_OPEN + js + _DEFER_CLOSE
         return f"<script>{js}</script>"
 
-    return _SCRIPT_RE.sub(repl_js, _LINK_RE.sub(repl_css, html))
+    deferred = [0]
+    out = _SCRIPT_RE.sub(repl_js, _LINK_RE.sub(repl_css, html))
+    if not deferred[0]:
+        return out
+    # Сбор подписок — последним обработчиком DOMContentLoaded, как браузер после всех defer-скриптов.
+    flush = f"<script>{_DEFER_FLUSH}</script>"
+    close = out.lower().rfind("</body>")
+    return out[:close] + flush + out[close:] if close >= 0 else out + flush
 
 
 def _host_header(scope: Scope) -> str:

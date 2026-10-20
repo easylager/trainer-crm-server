@@ -2799,6 +2799,9 @@
           get: getJsonTrainer,
           post: postJsonTrainer,
           toast: hubToast,
+          notify: function(title, text, kind) {
+            showHubInlineToast(title, text, { kind: kind === 'warning' ? 'warning' : 'success' });
+          },
           shareLink: function() {
             runRhythmCandidateAction({ action: 'share_link' });
           },

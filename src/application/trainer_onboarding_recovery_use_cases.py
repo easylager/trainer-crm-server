@@ -110,6 +110,7 @@ def determine_onboarding_stage(
     has_real_booking: bool,
     has_schedule: bool = False,
     crm_clients_count: int = 0,
+    has_crm_access: bool = True,
 ) -> str | None:
     """
     Pure: map checklist flags to a stuck-stage id, or None if the trainer is not actionable right
@@ -123,7 +124,7 @@ def determine_onboarding_stage(
         return None
     # Неделя уже стоит, а в ней никого: из 12 таких тренеров (2026-10-20) ни один не вернулся
     # после «осталось заполнить анкету». Пустой календарь — следующий шаг, анкета подождёт.
-    if has_schedule and crm_clients_count == 0 and trainer_status in (
+    if has_schedule and crm_clients_count == 0 and has_crm_access and trainer_status in (
         TRAINER_STATUS_ACTIVE,
         TRAINER_STATUS_PENDING_PROFILE,
     ):
@@ -226,6 +227,7 @@ async def list_onboarding_candidates(session: AsyncSession) -> list[OnboardingCa
                 int(checklist.get("weekly_template_count") or 0) > 0 or checklist.get("has_future_slots")
             ),
             crm_clients_count=int(checklist.get("crm_clients_count") or 0),
+            has_crm_access=checklist.get("has_crm_subscription_access") is not False,
         )
         if stage is None:
             continue

@@ -24,6 +24,7 @@
   var mode = 'one';
   var busy = false;
   var lastAdded = '';
+  var lastWarning = false;
   var bindLinks = {};
 
   function esc(s) {
@@ -43,8 +44,10 @@
     } catch (e) {}
   }
 
-  function toast(msg) {
-    if (opts && typeof opts.toast === 'function') opts.toast(msg);
+  /* Встроенный тост хаба (не showAlert): подтверждение не должно требовать «ОК». */
+  function notify(title, text, kind) {
+    if (opts && typeof opts.notify === 'function') opts.notify(title, text, kind || 'success');
+    else if (opts && typeof opts.toast === 'function') opts.toast([title, text].filter(Boolean).join('. '));
   }
 
   function load() {
@@ -99,7 +102,7 @@
       (state.count > 0
         ? ''
         : '<h2 class="tfs-title">Перенесите троих своих учеников</h2>' +
-          '<p class="tfs-lead">Достаточно имени. Поставим им ближайшие тренировки, будем напоминать вам и считать абонементы. Ученикам ничего ставить не нужно.</p>') +
+          '<p class="tfs-lead">' + esc(M.cardLead(state)) + '</p>') +
       '<div class="tfs-seats">' + M.seats(state).map(seatHtml).join('') + '</div>' +
       '<button type="button" class="btn-block btn-primary tfs-cta" data-tfs="add">' + esc(M.addButtonLabel(state)) + '</button>' +
       '<div class="tfs-links">' +
@@ -112,11 +115,7 @@
 
   function doneHtml() {
     var students = state.students || [];
-    var booked = students.filter(function (s) { return !!s.next_label; });
-    var works = [];
-    if (booked.length) works.push('Перед тренировкой напомним вам, кто придёт');
-    works.push('Абонементы и оплаты — в карточке ученика, занятия посчитаем сами');
-    works.push('В воскресенье — итог недели: занятия и деньги');
+    var works = M.doneWorks(state);
     var noBot = students.filter(function (s) { return !s.has_bot; });
     var rows = noBot
       .map(function (s) {
@@ -185,7 +184,7 @@
     var entry = bindLinks[clientId];
     var link = entry && entry.link;
     if (!link) {
-      toast('Ссылка ещё готовится — нажмите через секунду.');
+      notify('Ссылка ещё готовится', 'Нажмите ещё раз через секунду.', 'warning');
       prefetchBindLinks();
       return;
     }
@@ -196,7 +195,7 @@
       opened = !!global.openTelegramShareUrlFromMiniApp({ shareUrl: link, shareBody: body, fullMessage: body + '\n' + link });
     }
     if (!opened && global.navigator && navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(link).then(function () { toast('Ссылка скопирована — вставьте её в чат с учеником.'); });
+      navigator.clipboard.writeText(link).then(function () { notify('Ссылка скопирована', 'Вставьте её в чат с учеником.'); });
     }
     if (btn) {
       btn.textContent = 'Отправлено';
@@ -244,18 +243,52 @@
     return chips.join('');
   }
 
+  /* Две и больше услуг — тренер выбирает, что это за занятие. По умолчанию — услуга самого окна
+     (если шаблон её знает), иначе первая очная: так запись сразу правильная, без похода в расписание. */
+  function serviceFieldHtml(hasOptions) {
+    var services = (state && state.services) || [];
+    if (services.length < 2) return '';
+    var first = ((state && state.options) || [])[0];
+    var def = M.defaultServiceId(state, first ? first.slot_id : null);
+    return (
+      '<div class="tfs-field" id="tfsSvcRow"' + (hasOptions ? '' : ' hidden') + '><span>Занятие</span>' +
+      '<div class="tfs-chips" id="tfsSvc">' +
+      services
+        .map(function (s) {
+          var on = s.service_id === def;
+          return (
+            '<button type="button" class="tfs-chip' + (on ? ' tfs-chip--on' : '') + '" data-tfs="svc" data-svc="' + esc(s.service_id) + '" aria-pressed="' + on + '">' +
+            esc(s.name) + '</button>'
+          );
+        })
+        .join('') +
+      '</div></div>'
+    );
+  }
+
+  function pickChip(groupSel, chip) {
+    var group = sheet.querySelector(groupSel);
+    if (!group) return;
+    group.querySelectorAll('.tfs-chip').forEach(function (c) {
+      var on = c === chip;
+      c.classList.toggle('tfs-chip--on', on);
+      c.setAttribute('aria-pressed', String(on));
+    });
+  }
+
   function oneFormHtml() {
     var hasOptions = !!((state && state.options) || []).length;
     return (
-      (lastAdded ? '<p class="tfs-added" role="status">' + esc(lastAdded) + '</p>' : '') +
+      (lastAdded ? '<p class="tfs-added' + (lastWarning ? ' tfs-added--warn' : '') + '" role="status">' + esc(lastAdded) + '</p>' : '') +
       '<h2 class="tfs-sheet__title" id="tfsSheetTitle">' + esc(M.sheetTitle(state)) + '</h2>' +
       '<form class="tfs-form" novalidate>' +
       '<label class="tfs-field"><span>Имя</span>' +
-      '<input id="tfsName" type="text" autocomplete="off" maxlength="64" placeholder="Маша Ковалёва" required /></label>' +
+      '<input id="tfsName" type="text" autocomplete="off" maxlength="64" placeholder="Имя и фамилия" required /></label>' +
       '<label class="tfs-field"><span>Телефон — если хотите звонить из приложения</span>' +
       '<input id="tfsPhone" type="tel" autocomplete="off" inputmode="tel" placeholder="+375 29 …" /></label>' +
-      '<div class="tfs-field"><span>' + (hasOptions ? 'Ближайшая тренировка — из вашей недели' : 'Свободных окон на две недели нет — добавим без записи') + '</span>' +
+      '<div class="tfs-field"><span>' + esc(M.slotFieldLabel(state)) + '</span>' +
       '<div class="tfs-chips" id="tfsChips">' + optionChips() + '</div></div>' +
+      serviceFieldHtml(hasOptions) +
       '<label class="tfs-toggle" id="tfsWeeklyRow"' + (hasOptions ? '' : ' hidden') + '><span>Каждую неделю в это время</span>' +
       '<input id="tfsWeekly" type="checkbox" checked /></label>' +
       '<p class="tfs-error" id="tfsError" hidden></p>' +
@@ -290,6 +323,7 @@
     if (!opts) return;
     mode = nextMode || 'one';
     lastAdded = '';
+    lastWarning = false;
     var go = function () {
       renderSheet();
       sheet.removeAttribute('hidden');
@@ -304,7 +338,7 @@
       return;
     }
     load().then(go, function () {
-      toast('Не получилось открыть. Проверьте связь и попробуйте ещё раз.');
+      notify('Не получилось открыть', 'Проверьте связь и попробуйте ещё раз.', 'warning');
     });
   }
 
@@ -332,25 +366,35 @@
   }
 
   function selectedSlot() {
-    var on = sheet.querySelector('.tfs-chip--on');
+    var on = sheet.querySelector('#tfsChips .tfs-chip--on');
     var v = on ? on.getAttribute('data-slot') : '';
     return v ? parseInt(v, 10) : null;
+  }
+
+  function selectedService() {
+    var on = sheet.querySelector('#tfsSvc .tfs-chip--on');
+    return on ? parseInt(on.getAttribute('data-svc'), 10) : null;
   }
 
   function onSheetClick(ev) {
     var el = ev.target.closest('[data-tfs]');
     if (!el || !sheet.contains(el)) return;
     var act = el.getAttribute('data-tfs');
-    if (act === 'slot') {
-      sheet.querySelectorAll('.tfs-chip').forEach(function (c) {
-        c.classList.remove('tfs-chip--on');
-        c.setAttribute('aria-pressed', 'false');
-      });
-      el.classList.add('tfs-chip--on');
-      el.setAttribute('aria-pressed', 'true');
+    if (act === 'svc') {
+      pickChip('#tfsSvc', el);
+      haptic('select');
+    } else if (act === 'slot') {
+      pickChip('#tfsChips', el);
       var withSlot = !!el.getAttribute('data-slot');
       var row = sheet.querySelector('#tfsWeeklyRow');
       if (row) row.hidden = !withSlot;
+      var svcRow = sheet.querySelector('#tfsSvcRow');
+      if (svcRow) svcRow.hidden = !withSlot;
+      if (withSlot) {
+        var own = M.defaultServiceId(state, parseInt(el.getAttribute('data-slot'), 10));
+        var svcChip = own != null && sheet.querySelector('#tfsSvc [data-svc="' + own + '"]');
+        if (svcChip) pickChip('#tfsSvc', svcChip);
+      }
       var btn = sheet.querySelector('#tfsSubmit');
       if (btn) btn.textContent = withSlot ? 'Добавить и записать' : 'Добавить';
       haptic('select');
@@ -403,6 +447,7 @@
       last_name: name.last,
       phone: (sheet.querySelector('#tfsPhone').value || '').trim() || null,
       slot_id: slotId,
+      service_id: slotId ? selectedService() : null,
       weekly: !!(slotId && weeklyEl && weeklyEl.checked),
     };
     setBusy(true);
@@ -413,14 +458,16 @@
         state = res.state;
         touched = true;
         haptic(res.warning ? 'warning' : 'success');
-        if (res.warning) toast(res.warning);
-        lastAdded = res.booked_label
-          ? '✓ ' + name.first + ' — ' + res.booked_label + (res.weekly ? ', каждую неделю' : '')
-          : '✓ ' + name.first + ' добавлен(а)';
+        lastWarning = !!res.warning;
+        lastAdded = res.warning
+          ? res.warning
+          : res.booked_label
+            ? '✓ ' + name.first + ' — ' + res.booked_label + (res.weekly ? ', каждую неделю' : '')
+            : '✓ ' + name.first + ' — в списке, без записи';
         if (state.count >= state.goal) {
           justFinished = true;
           close();
-          toast(lastAdded.replace('✓ ', ''));
+          notify(res.warning ? 'Ученик добавлен' : 'Готово', lastAdded.replace('✓ ', ''), res.warning ? 'warning' : 'success');
           return;
         }
         renderSheet();
@@ -430,7 +477,7 @@
       })
       .catch(function (err) {
         setBusy(false);
-        showError((err && err.message) || 'Не получилось сохранить. Попробуйте ещё раз.');
+        showError(M.errorText(err));
       });
   }
 
@@ -465,9 +512,10 @@
         return;
       }
       haptic(failed.length ? 'warning' : 'success');
-      toast(
-        'Добавили ' + added + (failed.length ? '. Не получилось: ' + failed.join(', ') : '') +
-        '. Время поставьте в расписании или здесь по одному.'
+      notify(
+        'Добавили ' + added + ' ' + M.plural(added, 'ученика', 'ученика', 'учеников'),
+        (failed.length ? 'Не получилось: ' + failed.join(', ') + '. ' : '') + 'Записать их на время можно в расписании.',
+        failed.length ? 'warning' : 'success'
       );
       if (state.count >= state.goal) justFinished = true;
       close();

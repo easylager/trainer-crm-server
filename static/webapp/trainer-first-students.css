@@ -161,6 +161,7 @@ button.tfs-seat:active { transform: scale(0.97); transition-duration: 70ms; }
   background: color-mix(in srgb, var(--app-cta-fill, var(--tg-theme-button-color)) 14%, transparent);
   color: var(--tg-theme-text-color);
 }
+.tfs-added--warn { background: color-mix(in srgb, #e0a100 18%, transparent); }
 .tfs-form { display: flex; flex-direction: column; gap: 12px; }
 .tfs-form .btn-block { margin: 0; }
 .tfs-field { display: flex; flex-direction: column; gap: 6px; }

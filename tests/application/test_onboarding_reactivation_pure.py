@@ -122,6 +122,23 @@ class TestDetermineOnboardingStage:
             == STAGE_NO_STUDENTS
         )
 
+    def test_no_students_needs_crm_to_pick_a_window(self):
+        """Без подписки окно не выбрать — пуш про учеников не обещает невозможного."""
+        assert (
+            determine_onboarding_stage(
+                trainer_status=TRAINER_STATUS_PENDING_PROFILE,
+                tt_minimal_complete=True,
+                profile_complete=False,
+                moderation_submitted=False,
+                has_moderation_feedback=False,
+                has_real_booking=False,
+                has_schedule=True,
+                crm_clients_count=0,
+                has_crm_access=False,
+            )
+            == STAGE_MISSING_FIELD
+        )
+
     def test_one_student_returns_to_the_old_stage(self):
         assert (
             determine_onboarding_stage(

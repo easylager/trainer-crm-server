@@ -8490,6 +8490,8 @@ class TrainerFirstStudentBody(BaseModel):
     #: По желанию: без номера клиент живёт только у этого тренера, бот привяжет личная ссылка.
     phone: str | None = None
     slot_id: int | None = Field(default=None, ge=1)
+    #: Что за занятие. Не задано — услуга окна, иначе первая очная услуга тренера.
+    service_id: int | None = Field(default=None, ge=1)
     weekly: bool = False
 
     @field_validator("phone", mode="before")
@@ -8532,11 +8534,16 @@ async def post_trainer_first_student(
     from src.application.trainer_first_students import (
         create_client_without_phone,
         first_students_state,
+        list_trainer_services,
     )
 
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    if body.service_id is not None:
+        own = {s["service_id"] for s in await list_trainer_services(session, int(trainer_id))}
+        if int(body.service_id) not in own:
+            raise HTTPException(status_code=400, detail="Такой услуги нет в вашем профиле.")
     try:
         if body.phone:
             client_id = await get_or_create_client_by_phone(
@@ -8560,7 +8567,7 @@ async def post_trainer_first_student(
     warning: str | None = None
     if body.slot_id is not None:
         slot = await get_slot(session, int(body.slot_id))
-        service_id = (slot or {}).get("service_id")
+        service_id = body.service_id or (slot or {}).get("service_id")
         if service_id is None:
             r_svc = await session.execute(
                 text(

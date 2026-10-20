@@ -743,13 +743,48 @@ async def materialize_recurring_rule_for_week(
         slot_id,
         trainer_id,
         cid,
-        service_id=service_id,
+        service_id=await _recurring_rule_service_id(session, trainer_id, rec, service_id),
         client_comment=None,
         client_request_id=None,
         created_by_trainer=True,
         recurring_client_slot_id=rid,
     )
     return bid is not None
+
+
+async def _recurring_rule_service_id(
+    session: AsyncSession, trainer_id: int, rec: dict, default_service_id: int
+) -> int:
+    """Услуга автозаписи — как у последней записи ученика на этот день недели и время.
+
+    Правило «каждую неделю» не хранит услугу, и автозаписи шли на первую услугу тренера: ученик,
+    записанный на «Совершенствование», со второй недели оказывался на «Обучении с нуля». Последняя
+    живая запись того же паттерна — та, из которой правило и создано. Нет такой или услуга уже не
+    в профиле — прежнее поведение.
+    """
+    st_raw = rec["start_time"]
+    st = st_raw.replace(second=0, microsecond=0) if hasattr(st_raw, "replace") else st_raw
+    r = await session.execute(
+        text(
+            """
+            SELECT b.service_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            WHERE b.trainer_id = :tid
+              AND b.client_id = :cid
+              AND b.service_id IS NOT NULL
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+              AND EXTRACT(ISODOW FROM s.slot_date) - 1 = :dow
+              AND s.start_time = :st
+            ORDER BY s.slot_date DESC, b.id DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": int(trainer_id), "cid": int(rec["client_id"]), "dow": int(rec["day_of_week"]), "st": st},
+    )
+    found = r.scalar()
+    return int(found) if found is not None else int(default_service_id)
 
 
 async def materialize_recurring_horizon(

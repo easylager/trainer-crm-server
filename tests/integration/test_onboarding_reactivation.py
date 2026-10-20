@@ -22,7 +22,6 @@ from src.application.trainer_onboarding_recovery_use_cases import (
     ONBOARDING_TRIAL_OVER_GRACE_DAYS,
     STAGE_EMPTY_FORM,
     STAGE_NO_BOOKING,
-    STAGE_NO_STUDENTS,
     compute_due_onboarding_nudges,
     list_onboarding_candidates,
     mark_onboarding_nudge_sent,
@@ -265,8 +264,8 @@ async def test_active_with_only_sandbox_booking_stays_a_candidate(
     candidates = await list_onboarding_candidates(db_session)
     mine = [c for c in candidates if c.trainer_id == tid]
     assert len(mine) == 1
-    # Слот записи — это уже неделя, а настоящих учеников нет: TASK-310 зовёт их перенести.
-    assert mine[0].stage == STAGE_NO_STUDENTS
+    # Подписки у тестового тренера нет — окно не выбрать, поэтому не «перенесите учеников» (TASK-310).
+    assert mine[0].stage == STAGE_NO_BOOKING
 
 
 @pytest.mark.asyncio
@@ -280,8 +279,8 @@ async def test_active_with_only_cancelled_booking_stays_a_candidate(
     candidates = await list_onboarding_candidates(db_session)
     mine = [c for c in candidates if c.trainer_id == tid]
     assert len(mine) == 1
-    # Слот записи — это уже неделя, а настоящих учеников нет: TASK-310 зовёт их перенести.
-    assert mine[0].stage == STAGE_NO_STUDENTS
+    # Подписки у тестового тренера нет — окно не выбрать, поэтому не «перенесите учеников» (TASK-310).
+    assert mine[0].stage == STAGE_NO_BOOKING
 
 
 @pytest.mark.asyncio
