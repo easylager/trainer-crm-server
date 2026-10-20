@@ -44,11 +44,39 @@ def test_locative_covers_tricky_names_and_falls_back_to_none() -> None:
 
 
 def test_city_title_matches_the_search_query() -> None:
-    assert city_hub_document_title(_hub()) == "Массовое катание в Минске — расписание катков | Glide"
+    assert city_hub_document_title(_hub()) == "Массовое катание в Минске — расписание катков | Glideclub"
 
 
 def test_city_title_without_sessions_keeps_the_sections() -> None:
-    assert city_hub_document_title(_hub(skate_counts={"all": 0})) == "Минск · где покататься, заточка | Glide"
+    assert city_hub_document_title(_hub(skate_counts={"all": 0})) == "Катки в Минске — массовое катание и расписание | Glideclub"
+
+
+def test_catalog_home_snippet_leads_with_mass_skating_keyword() -> None:
+    from src.application.catalog_home_page import catalog_home_document_title, catalog_home_search_description
+
+    assert catalog_home_document_title().startswith("Массовое катание")
+    text = catalog_home_search_description(
+        [
+            {"country": "BY", "name": "Минск"},
+            {"country": "BY", "name": "Брест"},
+            {"country": "BY", "name": "Гомель"},
+            {"country": "BY", "name": "Витебск"},
+        ]
+    ).replace("\u00a0", " ")
+    assert text.startswith("Массовое катание:")
+    assert "Минск, Брест, Гомель" in text
+    assert "телефоны" in text
+
+
+def test_catalog_home_seo_intro_links_city_hubs() -> None:
+    from src.application.catalog_home_page import catalog_home_seo_intro_html
+
+    html = catalog_home_seo_intro_html(
+        [{"country": "BY", "name": "Минск", "slug": "minsk"}, {"country": "BY", "name": "Брест", "slug": "brest"}]
+    )
+    assert "Массовое катание в Беларуси" in html
+    assert 'href="/c/minsk"' in html
+    assert 'href="/c/brest"' in html
 
 
 def test_city_search_description_has_no_session_counts() -> None:
@@ -81,8 +109,12 @@ def _place_view(**extra):
 
 
 def test_place_search_description_has_no_date_but_preview_still_does() -> None:
+    from src.application.place_page import page_title
+
     text = search_description(_place_view())
     assert text.startswith("Расписание массового катания на неделю, цены и как добраться. ")
+    assert page_title(_place_view()).startswith("Массовое катание — ")
+    assert page_title(_place_view()).endswith("| Glideclub")
     assert "пр-т Победителей, 65" in text
     assert not re.search(r"\d{1,2}:\d{2}|окт", text)
     assert "17:15" in og_description(_place_view())
@@ -91,7 +123,7 @@ def test_place_search_description_has_no_date_but_preview_still_does() -> None:
 def test_breadcrumbs_are_absolute_or_absent() -> None:
     html = breadcrumb_script(
         "https://glideclub.by/p/minsk/zamok",
-        [("Glide", "/"), ("Минск", "/c/minsk"), ("ТЦ Замок", "https://glideclub.by/p/minsk/zamok")],
+        [("Glideclub", "/"), ("Минск", "/c/minsk"), ("ТЦ Замок", "https://glideclub.by/p/minsk/zamok")],
     )
     data = json.loads(re.search(r">(.*)</script>", html).group(1))
     assert data["@type"] == "BreadcrumbList"

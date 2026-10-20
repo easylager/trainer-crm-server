@@ -1107,9 +1107,10 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str) -> str:
     graph = [
         {
             "@type": "WebSite",
-            "name": "Glide",
+            "name": "Glideclub",
+            "alternateName": ["Glide", "glideclub.by"],
             "url": canonical_url,
-            "description": "Катки, расписание массовых катаний и лёд сегодня",
+            "description": "Массовое катание: расписание катков по Беларуси",
         },
         {
             "@type": "ItemList",
@@ -1339,6 +1340,48 @@ def _b_more_cities(rest: list[Mapping[str, Any]]) -> str:
     )
 
 
+_SERP_BRAND = "Glideclub"
+
+
+def catalog_home_document_title() -> str:
+    """Заголовок в выдаче: запрос «массовое катание» — без города, чаще бьёт в корень."""
+    return f"Массовое катание — расписание катков по Беларуси | {_SERP_BRAND}"
+
+
+def catalog_home_seo_intro_html(cities: list[Mapping[str, Any]]) -> str:
+    """Текст на главной: общий запрос «массовое катание» — на корень, не на /p/ арены."""
+    by = [c for c in cities if c.get("country") == "BY" and c.get("slug")]
+    if not by:
+        return ""
+    links: list[str] = []
+    for city in by[:6]:
+        slug = _esc(str(city["slug"]))
+        name = _esc(format_public_name(str(city.get("name") or "")))
+        links.append(f'<a href="/c/{slug}">{name}</a>')
+    return (
+        '<section class="b-sec b-sec--place" id="mass-skate">'
+        '<h2 class="b-h2">Массовое катание в Беларуси</h2>'
+        '<p class="b-text">Актуальное расписание сеансов на катках — на сегодня, завтра и в выходные, '
+        "с ценами и адресами. Выберите город: "
+        f'{", ".join(links)}.</p></section>'
+    )
+
+
+def catalog_home_search_description(cities: list[Mapping[str, Any]]) -> str:
+    """meta description: ключевые слова в начале, города — якорь доверия, без счётчиков сеансов."""
+    by_names = [format_public_name(str(c.get("name") or "")) for c in cities if c.get("country") == "BY"]
+    head = (
+        "Массовое катание: актуальное расписание сеансов на сегодня, завтра и в выходные по всей Беларуси."
+    )
+    if not by_names:
+        return head
+    rest = len(by_names) - 3
+    listed = ", ".join(by_names[:3])
+    if rest > 0:
+        listed += f" и ещё {rest}\u00a0{plural_ru(rest, 'город', 'города', 'городов')}"
+    return f"{head} {listed} — цены, адреса, телефоны катков."
+
+
 def render_catalog_home_page(
     view: Mapping[str, Any],
     *,
@@ -1363,17 +1406,8 @@ def render_catalog_home_page(
     lang, og_locale = html_lang_for_country(country)
     when_key = str(view.get("when_key") or "today")
 
-    title = "Где покататься в Беларуси — катки и расписание массовых катаний | Glide"
-    # Без счётчиков сеансов: поисковик держит описание неделями. Города — в порядке
-    # главной (Минск первым, дальше по активности).
-    by_names = [format_public_name(str(c.get("name") or "")) for c in cities if c.get("country") == "BY"]
-    description = "Расписание массовых катаний на катках Беларуси: где покататься сегодня, завтра и в выходные."
-    if by_names:
-        rest = len(by_names) - 4
-        listed = ", ".join(by_names[:4])
-        if rest > 0:
-            listed += f" и ещё {rest}\u00a0{plural_ru(rest, 'город', 'города', 'городов')}"
-        description += f" {listed} — цены и адреса."
+    title = catalog_home_document_title()
+    description = catalog_home_search_description(cities)
     user_city = view.get("user_city") if isinstance(view.get("user_city"), Mapping) else None
     user_slug = str(user_city.get("slug") or "") if user_city else None
 
@@ -1450,6 +1484,7 @@ def render_catalog_home_page(
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__HERO__": hero,
+        "__SEO_INTRO__": catalog_home_seo_intro_html(cities),
         "__WHEN__": _b_when_nav(view),
         "__HERO_CITY__": _b_home_city_card(user_city),
         "__MAP__": map_html,

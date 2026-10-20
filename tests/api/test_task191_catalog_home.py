@@ -378,7 +378,8 @@ async def test_catalog_home_country_groups_and_headline_when_ru_present(
     assert home.status_code == 200
     # TASK-210: нейтральный заголовок согласно PDEC-019. RU — в подвале, не плиткой.
     assert re.search(r'<h1 class="b-hero__title">Где<br>покататься</h1>', home.text)
-    assert "Где покататься в Беларуси" in home.text
+    assert "Массовое катание в Беларуси" in home.text
+    assert "Массовое катание — расписание катков по Беларуси" in home.text
     elsewhere = re.search(r'<span class="elsewhere">(.*?)</span>', home.text, re.S)
     assert elsewhere, "elsewhere"
     assert ru_name in elsewhere.group(1)

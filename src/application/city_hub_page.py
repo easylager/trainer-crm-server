@@ -511,17 +511,20 @@ def city_hub_document_title(view: Mapping[str, Any]) -> str:
     """
     city_name = format_public_name(str(view["city"]["name"]))
     where = city_locative(str(view["city"]["name"]))
+    brand = "Glideclub"
     if where and int((view.get("skate_counts") or {}).get("all") or 0):
-        return f"Массовое катание в {where} — расписание катков | Glide"
+        return f"Массовое катание в {where} — расписание катков | {brand}"
+    if int(view.get("rink_count") or 0) and where:
+        return f"Катки в {where} — массовое катание и расписание | {brand}"
     bits: list[str] = []
     if int(view.get("rink_count") or 0):
-        bits.append("где покататься")
+        bits.append("катки")
     if int(view.get("service_count") or 0):
         bits.append("заточка")
     if int((view.get("ohm_counts") or {}).get("all") or 0) or int(view.get("center_count") or 0):
         bits.append(t("chip.hockey").lower())
     tail = ", ".join(bits) if bits else "места"
-    return f"{city_name} · {tail} | Glide"
+    return f"{city_name} · {tail} | {brand}"
 
 
 def city_hub_selection_preview_view(view: Mapping[str, Any]) -> dict[str, Any]:
@@ -608,7 +611,7 @@ def _breadcrumbs(view: Mapping[str, Any], canonical_url: str) -> str:
     from src.application.place_links import breadcrumb_script
 
     name = format_public_name(str(view["city"]["name"]))
-    return breadcrumb_script(canonical_url, [("Glide", "/"), (name, canonical_url)])
+    return breadcrumb_script(canonical_url, [("Glideclub", "/"), (name, canonical_url)])
 
 
 def compose_city_hub_share(
@@ -634,10 +637,14 @@ def compose_city_hub_share(
     }
 
 
-def _city_hub_site_footer(*, trainers_href: str, telegram_href: str | None) -> str:
+def _city_hub_site_footer(*, trainers_href: str, telegram_href: str | None, context_html: str = "") -> str:
     from src.application.public_site_footer import render_site_footer_html
 
-    return render_site_footer_html(trainers_href=trainers_href, telegram_href=telegram_href)
+    return render_site_footer_html(
+        trainers_href=trainers_href,
+        context_html=context_html,
+        telegram_href=telegram_href,
+    )
 
 
 def render_city_hub_page(
@@ -699,7 +706,7 @@ def render_city_hub_page(
         {
             "@context": "https://schema.org",
             "@type": "ItemList",
-            "name": f"{city_name} · места для катания",
+            "name": city_hub_document_title(view).split(" | ", 1)[0],
             "itemListElement": elements,
         }
     )
@@ -729,6 +736,7 @@ def render_city_hub_page(
             "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__SITE_FOOTER__": _city_hub_site_footer(
                 trainers_href=trainers_href or "/trainers",
+                context_html='<a href="/">Массовое катание по всей Беларуси</a>',
                 telegram_href=cta_url,
             ),
             "__BODY__": body + _breadcrumbs(view, canonical_url),

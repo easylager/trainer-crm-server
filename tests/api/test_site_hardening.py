@@ -33,6 +33,17 @@ async def test_robots_lets_google_load_page_photos_and_styles() -> None:
 
 
 @pytest.mark.asyncio
+async def test_robots_and_sitemap_support_head() -> None:
+    async with _client() as client:
+        robots_head = await client.head("/robots.txt")
+        sitemap_head = await client.head("/sitemap.xml")
+    assert robots_head.status_code == 200
+    assert sitemap_head.status_code == 200
+    assert robots_head.content == b""
+    assert sitemap_head.content == b""
+
+
+@pytest.mark.asyncio
 async def test_place_page_frames_only_in_telegram_and_cookie_is_secure(app_use_test_db, db_session) -> None:
     place = await _place(db_session)
     await db_session.commit()

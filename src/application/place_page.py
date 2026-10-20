@@ -543,7 +543,11 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
         return f"Погнали? {name}"
     vt = card.get("venue_type")
     if has_public_skating(vt):
-        return f"{name}, {city} — расписание массового катания" if city else name
+        # Ключевые слова в начале title; бренд как у домена — иначе Google режет до
+        # официального имени арены и сниппет тянет short_description из «О катке».
+        if city:
+            return f"Массовое катание — {name}, {city} | Glideclub"
+        return f"Массовое катание — {name} | Glideclub"
     if vt == "shop":
         services = ", ".join(s.lower() for s in _services(card))
         tail = f" — {services}" if services else " — магазин для катания"
@@ -1031,6 +1035,23 @@ def _place_share_scripts_html(
     )
 
 
+def _place_hub_footer_links(*, city: str, city_page_url: str | None, public_skate: bool) -> str:
+    """Внутренние ссылки: городской хаб и корень. «Массовое катание» — только у катков."""
+    if not city_page_url or not city:
+        return '<a href="/">Массовое катание по Беларуси</a>' if public_skate else '<a href="/">Каталог Glideclub</a>'
+    from src.shared.city_locative import city_locative
+
+    where = city_locative(city)
+    if public_skate:
+        hub = f"Массовое катание в {where}" if where else f"Массовое катание — {format_public_name(city)}"
+    else:
+        hub = f"Каталог в {where}" if where else f"Каталог — {format_public_name(city)}"
+    return (
+        f'<a href="{_esc(city_page_url)}">{_esc(hub)}</a>'
+        ' · <a href="/">Все города</a>'
+    )
+
+
 def _place_site_footer(city_link: str, *, telegram_href: str | None) -> str:
     from src.application.public_site_footer import render_site_footer_html
 
@@ -1064,10 +1085,10 @@ def render_place_page(
         story_image_url=story_image_url,
     )
     city = _city(card)
-    city_link = (
-        f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(format_public_name(city))} сегодня</a>'
-        if city_page_url and city
-        else ""
+    city_link = _place_hub_footer_links(
+        city=city,
+        city_page_url=city_page_url,
+        public_skate=has_public_skating(card.get("venue_type")),
     )
     # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
     robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
@@ -1117,7 +1138,7 @@ def render_place_page(
         replacements["__BODY__"] += breadcrumb_script(
             canonical_url,
             [
-                ("Glide", "/"),
+                ("Glideclub", "/"),
                 (format_public_name(city), f"/c/{city_slug(city)}"),
                 (format_public_name(str(card.get("name") or "")), canonical_url),
             ],
@@ -1641,7 +1662,8 @@ def _b_about(card: Mapping[str, Any]) -> str:
     text = str(card.get("short_description") or "").strip()
     if not text:
         return ""
-    return f'<section class="b-sec b-sec--place"><p class="b-text">{_esc(text)}</p></section>'
+    # Справочный текст с led.by — не для сниппета: Google любит его больше meta description.
+    return f'<section class="b-sec b-sec--place" data-nosnippet><p class="b-text">{_esc(text)}</p></section>'
 
 
 def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
