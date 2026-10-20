@@ -36,6 +36,7 @@ from src.application.place_links import (
     place_path,
     public_telegram_cta_url,
 )
+from src.application.public_analytics import public_analytics_head_html_from_settings
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.catalog_sharpening import SHARPENING_MONTH_PARAM, SHARPENING_SECTION_SQL
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
@@ -1480,6 +1481,7 @@ def render_catalog_home_page(
         "__ROBOTS__": _esc(robots),
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url),
         "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
+        "__PUBLIC_ANALYTICS_HEAD__": public_analytics_head_html_from_settings(),
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,

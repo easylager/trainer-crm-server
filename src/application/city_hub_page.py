@@ -710,6 +710,7 @@ def render_city_hub_page(
             "itemListElement": elements,
         }
     )
+    from src.application.public_analytics import public_analytics_head_html_from_settings
     from src.application.public_web_cta import public_page_view_beacon_script
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
     from src.shared.glide_city_cookie import glide_city_pin_script
@@ -731,6 +732,7 @@ def render_city_hub_page(
             "__HEAD_EXTRA__": "",
             "__JSONLD__": ld,
             "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
+            "__PUBLIC_ANALYTICS_HEAD__": public_analytics_head_html_from_settings(),
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
             "__COMPONENTS_V__": COMPONENTS_VERSION,

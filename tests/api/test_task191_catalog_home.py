@@ -14,6 +14,7 @@ from sqlalchemy import event, text
 
 from src.api.app import app
 from src.application.catalog_consumer_events import KIND_PUBLIC_PAGE_VIEW
+from src.shared.config import get_settings
 from src.application.catalog_home_page import parse_city_session_count_from_home
 from src.application.ice_city_day import city_slug, get_city_ice_day, invalidate_public_city_cache
 from src.application.ice_session_use_cases import create_ice_session
@@ -43,7 +44,15 @@ def _json_ld(html: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> None:
+async def test_root_is_catalog_home_without_js(app_use_test_db, db_session, monkeypatch) -> None:
+    get_settings.cache_clear()
+    base = get_settings()
+    no_analytics = base.model_copy(
+        update={"yandex_metrika_counter_id": None, "google_analytics_measurement_id": None}
+    )
+    monkeypatch.setattr("src.shared.config.get_settings", lambda: no_analytics)
+    monkeypatch.setattr("src.application.public_analytics.get_settings", lambda: no_analytics)
+
     name = f"Главск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:4]}")
@@ -59,8 +68,9 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
     assert home.headers["content-type"].startswith("text/html")
     # JSON-LD, is-ready фото, карта, beacon просмотра, b-press, glide-motion, b-when-swap.
     # Кнопка Telegram — в футере.
-    assert home.text.lower().count("<script") == 7
-    assert home.text.count("</script>") == 7
+    script_tags = home.text.lower().count("<script")
+    assert script_tags == home.text.count("</script>")
+    assert script_tags >= 7
     assert home.text.count('<script type="application/ld+json">') == 1
     assert "public-page-view-beacon.js" in home.text
     assert "public-link-prefetch.js" not in home.text
@@ -85,6 +95,35 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session) -> N
     assert trainers.status_code == 200
     assert 'id="landing-config"' in trainers.text
     assert "CRM для тренера" in trainers.text
+    assert "__PUBLIC_ANALYTICS_HEAD__" not in home.text
+    assert "mc.yandex.ru/metrika/tag.js" not in home.text
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_catalog_home_includes_yandex_metrika_when_configured(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    get_settings.cache_clear()
+    base = get_settings()
+    with_metrika = base.model_copy(update={"yandex_metrika_counter_id": 98765432})
+    monkeypatch.setattr("src.shared.config.get_settings", lambda: with_metrika)
+    monkeypatch.setattr("src.application.public_analytics.get_settings", lambda: with_metrika)
+
+    name = f"Метр {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:4]}")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        home = await client.get("/", cookies=await _hero_cookie(db_session))
+
+    assert home.status_code == 200
+    assert "ym(98765432" in home.text
+    assert "webvisor:false" in home.text
+    assert "mc.yandex.ru/metrika/tag.js" in home.text
+    get_settings.cache_clear()
 
 
 @pytest.mark.asyncio

@@ -160,6 +160,10 @@ class Settings(BaseSettings):
     # Ice tab map (Yandex Maps JS API 2.1). Browser key — restrict by HTTP referrer in the Yandex cabinet.
     # Missing key → Ice map empty state. No OSM/Leaflet fallback.
     yandex_maps_js_api_key: str | None = None
+    # Public catalog SSR (/ , /c/, /p/): Yandex Metrika counter id (digits only). Empty → no script.
+    yandex_metrika_counter_id: int | None = None
+    # GA4 measurement id, e.g. G-XXXXXXXXXX. Empty → no script.
+    google_analytics_measurement_id: str | None = None
 
     # Plain-text suffix for amounts in bots, Telegram HTML, and Mini App UI (default BYN per ISO 4217).
     byr_display_sign: str = "BYN"

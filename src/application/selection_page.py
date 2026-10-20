@@ -50,6 +50,7 @@ from src.application.ice_city_day import city_slug, format_price_minor, plural_r
 from src.application.ice_time_windows import WHEN_KEYS
 from src.application.place_links import catalog_start_param, join_public_origin, place_path, place_query
 from src.application.place_page import absolute_day_label
+from src.application.public_analytics import public_analytics_head_html_from_settings
 from src.shared.catalog_sharpening import SHARPENING_AMENITY_KEYS
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -1297,6 +1298,7 @@ def render_selection_page(
             "__HEAD_EXTRA__": _head_links_html(view, city_name=city_name, canonical_base=canonical_url),
             "__JSONLD__": ld,
             "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
+            "__PUBLIC_ANALYTICS_HEAD__": public_analytics_head_html_from_settings(),
             "__TOKENS_V__": TOKENS_VERSION,
             "__STYLE_V__": STYLE_VERSION,
             "__COMPONENTS_V__": COMPONENTS_VERSION,
