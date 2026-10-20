@@ -2429,8 +2429,8 @@ async def _trainer_windows_on_arena(
     Критерии «свободно и доступно для записи» те же, что в ``/client/slots`` без
     ``service_id``: слот ``available`` на одного (capacity = 1), без активной брони,
     не раньше чем за ``min_hours_before_booking`` рабочих часов, группа не в архиве.
-    Арена — только явная ``slots.arena_id``: слот без арены (онлайн) на карточку катка
-    не попадает.
+    Арена — ``COALESCE(slots.arena_id, trainers.primary_arena_id)``, как у
+    ``free_slots_14d`` на карточке: слот без арены относится к основной арене тренера.
 
     Время слота в базе — стенное по Минску (``NOTIFICATION_TZ``), как во всей записи;
     момент считаем оттуда, а ``starts_at``/``time``/``day`` отдаём в поясе арены.
@@ -2453,10 +2453,11 @@ async def _trainer_windows_on_arena(
                            PARTITION BY s.trainer_id ORDER BY s.slot_date, s.start_time, s.id
                        ) AS rn
                 FROM slots s
+                JOIN trainers t ON t.id = s.trainer_id
                 LEFT JOIN trainer_profiles tp ON tp.trainer_id = s.trainer_id
                 LEFT JOIN training_groups tg ON tg.id = s.training_group_id
                 WHERE s.trainer_id = ANY(:tids)
-                  AND s.arena_id = :aid
+                  AND COALESCE(s.arena_id, t.primary_arena_id) = :aid
                   AND s.status = 'available'
                   AND COALESCE(s.capacity, 1) = 1
                   AND s.slot_date >= :d_from AND s.slot_date <= :d_to

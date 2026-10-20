@@ -93,7 +93,6 @@ async def test_windows_only_free_future_slots_on_this_arena(app_use_test_db, db_
         later = await _slot(db_session, tid, days=3, hour=19, arena_id=arena)
         sooner = await _slot(db_session, tid, days=2, hour=10, arena_id=arena)
         await _slot(db_session, tid, days=2, hour=12, arena_id=other)
-        await _slot(db_session, tid, days=2, hour=13, arena_id=None)
         await _slot(db_session, tid, days=2, hour=14, arena_id=arena, status="booked")
         await _slot(db_session, tid, days=2, hour=15, arena_id=arena, status="cancelled")
         await _slot(db_session, tid, days=2, hour=16, arena_id=arena, capacity=3)
@@ -218,3 +217,27 @@ async def test_windows_are_one_query_for_all_trainers(app_use_test_db, db_sessio
         await db_session.commit()
         many = await _slot_queries(client)
     assert one == many == 1
+
+
+@pytest.mark.asyncio
+async def test_slot_without_arena_follows_trainer_primary_arena(app_use_test_db, db_session) -> None:
+    sid = await require_seed_service_id(db_session)
+    cid = await _insert_city(db_session, name=f"Win-{uuid.uuid4().hex[:6]}")
+    arena = await _insert_arena(db_session, cid, name="Каток окон")
+    other = await _insert_arena(db_session, cid, name="Другой каток")
+    await backfill_arena_profiles(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        here = await _bookable_trainer(client, db_session, cid, arena, sid, "Здесь")
+        away = await _bookable_trainer(client, db_session, cid, arena, sid, "Там")
+        await db_session.execute(
+            text("UPDATE trainers SET primary_arena_id = :a WHERE id = :t"), {"a": arena, "t": here}
+        )
+        await db_session.execute(
+            text("UPDATE trainers SET primary_arena_id = :a WHERE id = :t"), {"a": other, "t": away}
+        )
+        s_here = await _slot(db_session, here, days=2, hour=13, arena_id=None)
+        await _slot(db_session, away, days=2, hour=13, arena_id=None)
+        await db_session.commit()
+        resp = await _fetch(client, arena)
+    assert [w["slot_id"] for w in _item(resp, here)["windows"]] == [s_here]
+    assert _item(resp, away)["windows"] == []
