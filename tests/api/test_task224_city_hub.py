@@ -305,19 +305,19 @@ def test_city_hub_title_names_only_sections_on_the_page() -> None:
         city_hub_document_title(
             {"city": {"name": "Гомель"}, "rink_count": 2, "service_count": 2, "ohm_counts": {"all": 0}}
         )
-        == "Гомель · где покататься, заточка | Glide"
+        == "Катки в Гомеле — массовое катание и расписание | Glideclub"
     )
     assert (
         city_hub_document_title(
             {"city": {"name": "Минск"}, "rink_count": 12, "service_count": 14, "ohm_counts": {"all": 19}}
         )
-        == "Минск · где покататься, заточка, с клюшкой | Glide"
+        == "Катки в Минске — массовое катание и расписание | Glideclub"
     )
     assert (
         city_hub_document_title(
             {"city": {"name": "Минск"}, "rink_count": 0, "service_count": 0, "ohm_counts": {"all": 0}, "center_count": 2}
         )
-        == "Минск · с клюшкой | Glide"
+        == "Минск · с клюшкой | Glideclub"
     )
 
 
