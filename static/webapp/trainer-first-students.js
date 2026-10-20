@@ -1,8 +1,8 @@
 /**
  * «Первые три ученика» (TASK-310) — карточка хаба и лист «Ученик 1 из 3».
  *
- * Сразу после расписания хаб просит не «отправьте ссылку», а перенести своих учеников:
- * имя (телефон по желанию) и ближайшее окно этой же недели. Ученику ничего ставить не нужно,
+ * Сразу после расписания хаб просит не «отправьте ссылку», а добавить учеников, с которыми тренер уже занимается:
+ * имя (телефон по желанию) и ближайшее окно этой же недели. Ученику ничего устанавливать не нужно,
  * бот он подключит позже по личной ссылке. Хаб отдаёт сюда только транспорт (get/post),
  * тост и отбой — сама карточка ничего о trainer-home-main.js не знает.
  */
@@ -92,7 +92,7 @@
 
   function progressHtml() {
     var left = M.remaining(state);
-    var kicker = state.count > 0 ? (left === 1 ? 'Остался один' : 'Ещё ' + left) : 'После расписания · 2 минуты';
+    var kicker = state.count > 0 ? (left === 1 ? 'Остался один' : 'Ещё ' + left) : 'Следующий шаг';
     return (
       '<div class="tfs-card">' +
       '<div class="tfs-card__head">' +
@@ -101,13 +101,13 @@
       '</div>' +
       (state.count > 0
         ? ''
-        : '<h2 class="tfs-title">Перенесите троих своих учеников</h2>' +
+        : '<h2 class="tfs-title">Добавьте учеников, с которыми уже занимаетесь</h2>' +
           '<p class="tfs-lead">' + esc(M.cardLead(state)) + '</p>') +
       '<div class="tfs-seats">' + M.seats(state).map(seatHtml).join('') + '</div>' +
       '<button type="button" class="btn-block btn-primary tfs-cta" data-tfs="add">' + esc(M.addButtonLabel(state)) + '</button>' +
       '<div class="tfs-links">' +
       '<button type="button" class="tfs-link" data-tfs="paste">Вставить список из заметок</button>' +
-      '<button type="button" class="tfs-link tfs-link--quiet" data-tfs="share">или отправить ссылку</button>' +
+      '<button type="button" class="tfs-link tfs-link--quiet" data-tfs="share">Позвать по ссылке</button>' +
       '</div>' +
       '</div>'
     );

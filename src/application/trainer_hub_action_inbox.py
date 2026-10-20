@@ -381,14 +381,14 @@ def _build_hub_rhythm_inbox_candidates(
                 item_id="first_students",
                 kind="rhythm",
                 priority=88,
-                title="Перенесите троих своих учеников",
+                title="Добавьте учеников, с которыми уже занимаетесь",
                 subtitle=(
-                    "Достаточно имени. Поставим их в ваши окна, и утром будем присылать, "
-                    "кто сегодня придёт. Ученикам ничего ставить не нужно."
+                    "Впишите имя и выберите время — тренировка появится в расписании, "
+                    "а утром придёт сводка дня. Ученику ничего устанавливать не нужно."
                 ),
                 primary_label="Добавить ученика",
                 primary_action="first_students",
-                secondary_label="Отправить ссылку",
+                secondary_label="Позвать по ссылке",
                 secondary_action="share_link",
                 count=crm_clients,
                 dismissible=True,

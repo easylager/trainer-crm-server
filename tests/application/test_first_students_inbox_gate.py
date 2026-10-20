@@ -1,4 +1,4 @@
-"""Когда хаб зовёт «Перенесите троих учеников» (TASK-310) — гейт по ученикам, а не по записям."""
+"""Когда хаб зовёт «Добавьте учеников» (TASK-310) — гейт по ученикам, а не по записям."""
 from __future__ import annotations
 
 from src.application.trainer_hub_action_inbox import _build_hub_rhythm_inbox_candidates

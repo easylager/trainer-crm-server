@@ -1214,7 +1214,7 @@ def webapp_trainer_first_students_model_js(request: Request):
 
 @app.get("/webapp/trainer-first-students.js")
 def webapp_trainer_first_students_js(request: Request):
-    """Карточка «Перенесите троих учеников» и лист «Ученик 1 из 3» на хабе тренера (TASK-310)."""
+    """Карточка «Добавьте учеников» и лист «Ученик 1 из 3» на хабе тренера (TASK-310)."""
     path = _WEBAPP_DIR / "trainer-first-students.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")

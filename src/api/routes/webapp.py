@@ -8510,7 +8510,7 @@ async def get_trainer_first_students(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    """Карточка хаба «Перенесите троих учеников»: кто уже есть и какие окна предложить."""
+    """Карточка хаба «Добавьте учеников»: кто уже есть и какие окна предложить."""
     from src.application.trainer_first_students import first_students_state
 
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
