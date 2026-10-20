@@ -1475,7 +1475,7 @@
       var slots = shown.map(function (w) {
         return (
           '<button type="button" class="arena-win ga-press' + (w === fit ? ' arena-win--fit' : '') +
-          '" data-action="trainer-window" data-trainer="' + esc(t.id) + '" data-href="' + esc(w.href || '') + '">' +
+          '" data-action="trainer" data-trainer="' + esc(t.id) + '" data-can-book="' + (t.can_book ? '1' : '0') + '">' +
           '<b>' + esc(w.time) + '</b><small>' + esc(w.day) + '</small></button>'
         );
       }).join('');
@@ -1915,17 +1915,6 @@
     if (action === 'back') {
       if (global.history.length > 1) global.history.back();
       else shellNav('ice');
-      return;
-    }
-    if (action === 'trainer-window') {
-      var wTrainer = t.getAttribute('data-trainer');
-      var wHref = t.getAttribute('data-href');
-      if (wHref) {
-        if (global.BookingClient && typeof global.BookingClient.markArenaCatalogStack === 'function') {
-          global.BookingClient.markArenaCatalogStack(state.card && state.card.id);
-        }
-        shellNav(wHref);
-      } else if (wTrainer) goBooking(wTrainer);
       return;
     }
     if (action === 'pick-session') {

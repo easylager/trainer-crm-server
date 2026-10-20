@@ -2508,7 +2508,9 @@ async def _trainer_windows_on_arena(
                 "ends_at": ends.isoformat() if ends else None,
                 "time": format_clock(starts.strftime("%H:%M")),
                 "day": day,
-                "href": f"book?slot_id={int(slot_id)}",
+                # Окно ведёт в карточку тренера (владелец 2026-10-20): там весь контекст и запись.
+                # Прежний book?slot_id=… без trainer_id зависал на «Готовим форму записи».
+                "href": f"catalog?trainer_id={int(trainer_id)}",
             }
         )
     return {tid: wins for tid, wins in out.items() if wins}

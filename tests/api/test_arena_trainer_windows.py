@@ -115,7 +115,7 @@ async def test_windows_only_free_future_slots_on_this_arena(app_use_test_db, db_
         resp = await _fetch(client, arena)
     wins = _item(resp, tid)["windows"]
     assert [w["slot_id"] for w in wins] == [sooner, later]
-    assert wins[0]["href"] == f"book?slot_id={sooner}"
+    assert wins[0]["href"] == f"catalog?trainer_id={tid}"
     assert wins[0]["time"] == "10:00"
     assert wins[1]["time"] == "19:00"
     assert resp.headers["cache-control"] == PUBLIC_JSON_FRESH_CACHE
