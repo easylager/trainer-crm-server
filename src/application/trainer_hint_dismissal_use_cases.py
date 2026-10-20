@@ -29,6 +29,8 @@ DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS: dict[str, int] = {
     # «Отправьте ссылку ученику» — бывшая карточка «следующий шаг»; на хабе живёт
     # обычной строкой инбокса, и «не сейчас» для неё такое же, как для других growth-подсказок.
     "share_link": 3,
+    # «Перенесите троих учеников» (TASK-310) — тот же шаг, что ссылка, только руками тренера.
+    "first_students": 3,
     "referral_growth": 3,
     "open_loop_free_next": 3,
     "slots_next_week": 3,

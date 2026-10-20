@@ -1192,6 +1192,37 @@ def webapp_trainer_pending_inbox_js(request: Request):
     )
 
 
+@app.get("/webapp/trainer-first-students.css")
+def webapp_trainer_first_students_css(request: Request):
+    """«Первые три ученика» (TASK-310): карточка хаба и лист. Use ``?v=…`` for long-lived cache."""
+    path = _WEBAPP_DIR / "trainer-first-students.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(path, media_type="text/css", headers=_webapp_versioned_asset_cache_headers(request))
+
+
+@app.get("/webapp/trainer-first-students-model.js")
+def webapp_trainer_first_students_model_js(request: Request):
+    """Разбор вставленного списка учеников и места карточки (TASK-310)."""
+    path = _WEBAPP_DIR / "trainer-first-students-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path, media_type="application/javascript", headers=_webapp_versioned_asset_cache_headers(request)
+    )
+
+
+@app.get("/webapp/trainer-first-students.js")
+def webapp_trainer_first_students_js(request: Request):
+    """Карточка «Перенесите троих учеников» и лист «Ученик 1 из 3» на хабе тренера (TASK-310)."""
+    path = _WEBAPP_DIR / "trainer-first-students.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path, media_type="application/javascript", headers=_webapp_versioned_asset_cache_headers(request)
+    )
+
+
 @app.get("/webapp/trainer-client-relay-ui.js")
 def webapp_trainer_client_relay_ui_js(request: Request):
     """Relay message sheet → POST relay-messages; trainer-home, schedule-editor, trainer-clients."""

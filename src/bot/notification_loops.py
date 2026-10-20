@@ -117,6 +117,7 @@ from src.application.trainer_onboarding_recovery_use_cases import (
     STAGE_MISSING_FIELD,
     STAGE_NOT_SUBMITTED,
     STAGE_NO_BOOKING,
+    STAGE_NO_STUDENTS,
     STAGE_REJECTED_RESUBMIT,
     TRIAL_URGENCY_THRESHOLD_DAYS,
     DueOnboardingNudge,
@@ -2577,6 +2578,7 @@ _ONBOARDING_STAGE_BODY: dict[str, str] = {
     STAGE_NOT_SUBMITTED: msg.TRAINER_ONBOARDING_STAGE_NOT_SUBMITTED,
     STAGE_REJECTED_RESUBMIT: msg.TRAINER_ONBOARDING_STAGE_REJECTED_RESUBMIT,
     STAGE_NO_BOOKING: msg.TRAINER_ONBOARDING_STAGE_NO_BOOKING,
+    STAGE_NO_STUDENTS: msg.TRAINER_ONBOARDING_STAGE_NO_STUDENTS,
 }
 
 _ONBOARDING_STEP_INTRO: dict[str, str] = {
@@ -2628,7 +2630,28 @@ def _render_onboarding_nudge_text(
             else msg.TRAINER_ONBOARDING_TRIAL_DAYS_LEFT.format(days=trial_days_remaining)
         )
 
-    return intro + body + trial_suffix + msg.TRAINER_ONBOARDING_NUDGE_OUTRO
+    # Шаг «ученики» открывается кнопкой прямо на листе — подсказка про «Обзор» там лишняя.
+    outro = "" if nudge.stage == STAGE_NO_STUDENTS else msg.TRAINER_ONBOARDING_NUDGE_OUTRO
+    return intro + body + trial_suffix + outro
+
+
+def _onboarding_nudge_keyboard(nudge: DueOnboardingNudge) -> InlineKeyboardMarkup | None:
+    """Кнопка сразу на лист «Ученик 1 из 3» (TASK-310) — остальные шаги ведут через «Обзор»."""
+    if nudge.stage != STAGE_NO_STUDENTS:
+        return None
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_ONBOARDING_NO_STUDENTS_BTN,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-home?open=first_students"),
+                )
+            ]
+        ]
+    )
 
 
 async def run_onboarding_reactivation_loop(trainer_bot: Bot) -> None:
@@ -2664,6 +2687,7 @@ async def run_onboarding_reactivation_loop(trainer_bot: Bot) -> None:
                             chat_id=nudge.trainer_telegram_id,
                             text=text_msg,
                             parse_mode="HTML",
+                            reply_markup=_onboarding_nudge_keyboard(nudge),
                         )
                         # Persist after successful send so a Telegram error retries the step tomorrow.
                         await mark_onboarding_nudge_sent(

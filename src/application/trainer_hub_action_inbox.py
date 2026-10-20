@@ -18,6 +18,7 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
+from src.application.trainer_first_students import FIRST_STUDENTS_GOAL
 from src.shared.notification_hours import NOTIFICATION_TZ
 
 _SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
@@ -29,6 +30,7 @@ HUB_RHYTHM_URGENT_MIN_PRIORITY = 90
 HUB_RHYTHM_GROWTH_HINT_IDS = frozenset(
     {
         "share_link",
+        "first_students",
         "referral_growth",
         "open_loop_free_next_growth",
         "client_notes",
@@ -363,8 +365,35 @@ def _build_hub_rhythm_inbox_candidates(
     # секунды после первого экрана — до того, как тренер вообще получил свою первую запись.
     # Приглашать коллег имеет смысл только после того, как тренер сам увидел, что продукт
     # работает, а не сразу после того, как расписание создано.
+    # Расписание есть, своих учеников меньше трёх (TASK-310). Ссылка ждёт, что ученик придёт сам, —
+    # 12 из 33 тренеров скопировали её и ушли с пустым календарём. Поэтому первым идёт «перенесите
+    # своих»: тренер вписывает имя и ставит ближайшее окно, ссылка остаётся второй кнопкой.
+    crm_clients = _non_negative_int(d.get("crm_clients_count"))
+    if (
+        guidance_allowed
+        and crm_clients < FIRST_STUDENTS_GOAL
+        and _non_negative_int(d.get("real_bookings_count")) < FIRST_STUDENTS_GOAL
+    ):
+        out.append(
+            _inbox_item(
+                item_id="first_students",
+                kind="rhythm",
+                priority=88,
+                title="Перенесите троих своих учеников",
+                subtitle=(
+                    "Достаточно имени. Поставим им ближайшие тренировки, будем напоминать вам "
+                    "и считать абонементы — ученикам ничего ставить не нужно."
+                ),
+                primary_label="Добавить ученика",
+                primary_action="first_students",
+                secondary_label="Отправить ссылку",
+                secondary_action="share_link",
+                count=crm_clients,
+                dismissible=True,
+            )
+        )
     # Расписание есть, но никто ни разу не записывался. Одна задача, один глагол.
-    if guidance_allowed and not _onboarding_booking_step_done(d):
+    elif guidance_allowed and not _onboarding_booking_step_done(d):
         out.append(
             _inbox_item(
                 item_id="share_link",

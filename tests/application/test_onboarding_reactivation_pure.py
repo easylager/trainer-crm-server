@@ -8,6 +8,7 @@ from src.application.trainer_onboarding_recovery_use_cases import (
     STAGE_MISSING_FIELD,
     STAGE_NOT_SUBMITTED,
     STAGE_NO_BOOKING,
+    STAGE_NO_STUDENTS,
     STAGE_REJECTED_RESUBMIT,
     DueOnboardingNudge,
     _pick_due_step,
@@ -102,6 +103,53 @@ class TestDetermineOnboardingStage:
                 has_real_booking=False,
             )
             == STAGE_NO_BOOKING
+        )
+
+    @pytest.mark.parametrize("status", [TRAINER_STATUS_PENDING_PROFILE, TRAINER_STATUS_ACTIVE])
+    def test_no_students_beats_profile_homework_once_the_week_exists(self, status):
+        """TASK-310: неделя собрана, учеников ноль — зовём перенести их, а не дописывать анкету."""
+        assert (
+            determine_onboarding_stage(
+                trainer_status=status,
+                tt_minimal_complete=True,
+                profile_complete=False,
+                moderation_submitted=False,
+                has_moderation_feedback=False,
+                has_real_booking=False,
+                has_schedule=True,
+                crm_clients_count=0,
+            )
+            == STAGE_NO_STUDENTS
+        )
+
+    def test_one_student_returns_to_the_old_stage(self):
+        assert (
+            determine_onboarding_stage(
+                trainer_status=TRAINER_STATUS_PENDING_PROFILE,
+                tt_minimal_complete=True,
+                profile_complete=False,
+                moderation_submitted=False,
+                has_moderation_feedback=False,
+                has_real_booking=False,
+                has_schedule=True,
+                crm_clients_count=1,
+            )
+            == STAGE_MISSING_FIELD
+        )
+
+    def test_no_schedule_keeps_empty_form(self):
+        assert (
+            determine_onboarding_stage(
+                trainer_status=TRAINER_STATUS_PENDING_PROFILE,
+                tt_minimal_complete=False,
+                profile_complete=False,
+                moderation_submitted=False,
+                has_moderation_feedback=False,
+                has_real_booking=False,
+                has_schedule=False,
+                crm_clients_count=0,
+            )
+            == STAGE_EMPTY_FORM
         )
 
     def test_none_when_pending_profile_already_has_a_booking(self):
@@ -211,6 +259,20 @@ class TestRenderOnboardingNudgeText:
         assert "расписание" in text.lower()
         assert "Обзор" in text
         assert "заполни" not in text.lower()
+
+    def test_no_students_stage_asks_for_names_and_opens_the_sheet(self):
+        from src.bot.notification_loops import _onboarding_nudge_keyboard, _render_onboarding_nudge_text
+
+        nudge = _nudge(step=ONBOARDING_NUDGE_STEP_D1, stage=STAGE_NO_STUDENTS)
+        text = _render_onboarding_nudge_text(nudge, trial_days_remaining=None)
+        assert "своих учеников" in text
+        assert "Обзор" not in text
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("WEBAPP_BASE_URL", "https://example.test")
+            kb = _onboarding_nudge_keyboard(nudge)
+        assert kb is not None
+        assert kb.inline_keyboard[0][0].web_app.url == "https://example.test/webapp/trainer-home?open=first_students"
+        assert _onboarding_nudge_keyboard(_nudge(step=ONBOARDING_NUDGE_STEP_D1, stage=STAGE_EMPTY_FORM)) is None
 
     def test_empty_form_d3_uses_warming_intro_not_homework(self):
         from src.bot.notification_loops import _render_onboarding_nudge_text

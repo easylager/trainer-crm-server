@@ -71,6 +71,8 @@ STAGE_MISSING_FIELD = "missing_field"
 STAGE_REJECTED_RESUBMIT = "rejected_resubmit"
 STAGE_NOT_SUBMITTED = "not_submitted"
 STAGE_NO_BOOKING = "no_booking"
+# TASK-310: неделя собрана, а своих учеников в CRM нет — зовём перенести их, а не дописывать анкету.
+STAGE_NO_STUDENTS = "no_students"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +84,7 @@ class OnboardingCandidate:
     created_at: datetime
     stage: str
     missing_labels_ru: tuple[str, ...]
+    trainer_status: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +108,8 @@ def determine_onboarding_stage(
     moderation_submitted: bool,
     has_moderation_feedback: bool,
     has_real_booking: bool,
+    has_schedule: bool = False,
+    crm_clients_count: int = 0,
 ) -> str | None:
     """
     Pure: map checklist flags to a stuck-stage id, or None if the trainer is not actionable right
@@ -116,6 +121,13 @@ def determine_onboarding_stage(
     # отменённая запись молча гасит всю серию реактивации ровно тому, кому она нужнее всего.
     if has_real_booking:
         return None
+    # Неделя уже стоит, а в ней никого: из 12 таких тренеров (2026-10-20) ни один не вернулся
+    # после «осталось заполнить анкету». Пустой календарь — следующий шаг, анкета подождёт.
+    if has_schedule and crm_clients_count == 0 and trainer_status in (
+        TRAINER_STATUS_ACTIVE,
+        TRAINER_STATUS_PENDING_PROFILE,
+    ):
+        return STAGE_NO_STUDENTS
     if trainer_status == TRAINER_STATUS_ACTIVE:
         return STAGE_NO_BOOKING
     if trainer_status != TRAINER_STATUS_PENDING_PROFILE:
@@ -210,6 +222,10 @@ async def list_onboarding_candidates(session: AsyncSession) -> list[OnboardingCa
             moderation_submitted=bool(checklist.get("moderation_submitted")),
             has_moderation_feedback=has_feedback,
             has_real_booking=bool(checklist.get("has_real_booking")),
+            has_schedule=bool(
+                int(checklist.get("weekly_template_count") or 0) > 0 or checklist.get("has_future_slots")
+            ),
+            crm_clients_count=int(checklist.get("crm_clients_count") or 0),
         )
         if stage is None:
             continue
@@ -226,6 +242,7 @@ async def list_onboarding_candidates(session: AsyncSession) -> list[OnboardingCa
                 created_at=cand["created_at"],
                 stage=stage,
                 missing_labels_ru=labels,
+                trainer_status=str(checklist.get("trainer_status") or ""),
             )
         )
     return out
@@ -254,7 +271,11 @@ async def compute_due_onboarding_nudges(
         # trial actually runs out (per the *resolved* trial length, not a hardcoded offset) they'd
         # otherwise fall into permanent silence. STAGE_NO_BOOKING (trainer_status=active) is
         # excluded — that segment is out of this task's scope, see TASK-035 Decision.
-        if cand.stage != STAGE_NO_BOOKING and ONBOARDING_NUDGE_STEP_TRIAL_OVER not in sent:
+        # Активный тренер без учеников (TASK-310) — тот же сегмент, что STAGE_NO_BOOKING: вне TASK-035.
+        lead_mode_segment = cand.stage == STAGE_NO_BOOKING or (
+            cand.stage == STAGE_NO_STUDENTS and cand.trainer_status == TRAINER_STATUS_ACTIVE
+        )
+        if not lead_mode_segment and ONBOARDING_NUDGE_STEP_TRIAL_OVER not in sent:
             trial_expired_days_ago = await get_trial_expired_days_ago(
                 session, cand.trainer_id, now=moment
             )
@@ -384,6 +405,7 @@ __all__ = [
     "STAGE_REJECTED_RESUBMIT",
     "STAGE_NOT_SUBMITTED",
     "STAGE_NO_BOOKING",
+    "STAGE_NO_STUDENTS",
     "determine_onboarding_stage",
     "list_onboarding_candidates",
     "compute_due_onboarding_nudges",

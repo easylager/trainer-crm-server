@@ -53,6 +53,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.booking_use_cases import count_trainer_fill_slots_invite_candidates
 from src.application.client_profile_use_cases import sql_client_notify_telegram_id
+from src.application.trainer_first_students import count_trainer_crm_clients
 from src.application.collective_use_cases import (
     STUDIO_ACCESS_MODE_ADMIN_ONLY,
     get_effective_studio_access_mode,
@@ -194,6 +195,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "has_crm_subscription_access": False,
         "arena_count": 0,
         "real_bookings_count": 0,
+        "crm_clients_count": 0,
         "arena_work_format": None,
         # «Не сейчас» на приглашении в каталог — ответ тренера, а не состояние вкладки.
         "catalog_invite_dismissed": False,
@@ -598,6 +600,8 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     out["fill_slots_invite_candidates_count"] = await count_trainer_fill_slots_invite_candidates(
         session, trainer_id
     )
+    # «Первые три ученика» (TASK-310): сколько своих учеников тренер уже перенёс — тот же охват CRM.
+    out["crm_clients_count"] = await count_trainer_crm_clients(session, trainer_id)
 
     out["capabilities"] = await _capabilities_for_trainer(
         session, trainer_id, effective_studio_access_mode

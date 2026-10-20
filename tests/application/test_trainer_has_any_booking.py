@@ -187,7 +187,8 @@ async def test_share_link_hint_still_shown_with_only_sandbox_or_cancelled_bookin
     assert checklist["has_real_booking"] is False
 
     hints = {x["id"] for x in _build_hub_rhythm_inbox_candidates(checklist)}
-    assert "share_link" in hints
+    # TASK-310: шаг «без настоящей записи» теперь «перенесите учеников», ссылка — его вторая кнопка.
+    assert "first_students" in hints
 
 
 async def test_referral_growth_not_nudged_for_sandbox_only_booking(db_session) -> None:

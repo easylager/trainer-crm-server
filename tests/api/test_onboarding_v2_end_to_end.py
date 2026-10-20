@@ -209,8 +209,9 @@ async def test_the_first_screen_never_demands_a_profile(app_use_test_db, db_sess
     assert data["schedule_unlocked"] is True
     assert data["slots_locked_reason"] is None
     hint_ids = {x["id"] for x in _build_hub_rhythm_inbox_candidates(data)}
-    assert "share_link" in hint_ids, (
-        "следующий шаг после расписания — отдать ссылку ученику, а не заполнять анкету"
+    # TASK-310: после расписания — перенести своих учеников (ссылка — вторая кнопка той же строки).
+    assert "first_students" in hint_ids, (
+        "следующий шаг после расписания — поставить в неделю своих учеников, а не заполнять анкету"
     )
 
 

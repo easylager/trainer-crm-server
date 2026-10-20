@@ -372,6 +372,7 @@
        */
       var HUB_SERVER_DISMISSIBLE_HINT_IDS = [
         'share_link',
+        'first_students',
         'referral_growth',
         'open_loop_free_next',
         'slots_next_week',
@@ -1383,6 +1384,11 @@
             );
             return;
           }
+          var students = ev.target.closest('#hubDayZeroStudentsBtn');
+          if (students) {
+            if (mountHubFirstStudents()) window.TrainerFirstStudents.open('one');
+            return;
+          }
           var share = ev.target.closest('#hubDayZeroShareBtn');
           if (share) {
             runHubHintAction('__share_link__');
@@ -2201,6 +2207,12 @@
           navigateTo('trainer-onboarding');
           return;
         }
+        if (cand.action === 'first_students') {
+          ensureTrainerSectionsAccess(function() {
+            if (mountHubFirstStudents()) window.TrainerFirstStudents.open('one');
+          });
+          return;
+        }
         if (cand.action === 'share_link') {
           ensureTrainerSectionsAccess(function() {
             var headBtn = document.getElementById('hubShareBookingLinkBtn');
@@ -2736,6 +2748,8 @@
             return 'Пригласите коллег в каталог';
           case 'share_link':
             return 'Отправьте ссылку ученику';
+          case 'first_students':
+            return 'Перенесите своих учеников';
           default:
             break;
         }
@@ -2760,6 +2774,72 @@
         return 'Ещё ' + hidden.length + ': ' + tail;
       }
 
+      /* ---------- «Первые три ученика» (TASK-310) ---------- */
+      var hubFirstStudentsMounted = false;
+      var hubFirstStudentsUrlChecked = false;
+
+      function getJsonTrainer(path) {
+        return fetch(apiUrlWithQuery(path), { headers: headersJson() }).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) {
+              var detail = data && data.detail;
+              throw new Error((detail && typeof detail === 'object' ? detail.message : detail) || 'Ошибка');
+            }
+            return data;
+          });
+        });
+      }
+
+      function mountHubFirstStudents() {
+        if (!window.TrainerFirstStudents) return false;
+        if (hubFirstStudentsMounted) return true;
+        hubFirstStudentsMounted = true;
+        window.TrainerFirstStudents.mount({
+          host: document.getElementById('hubFirstStudents'),
+          get: getJsonTrainer,
+          post: postJsonTrainer,
+          toast: hubToast,
+          shareLink: function() {
+            runRhythmCandidateAction({ action: 'share_link' });
+          },
+          dismiss: function() {
+            dismissHubInboxRhythmItem('first_students');
+          },
+          onChanged: function() {
+            /* Ученик в CRM и, возможно, в окне — день ноль закончился, неделя и счётчики устарели. */
+            if (hubDayZeroResult) {
+              hubDayZeroResult = null;
+              syncHubDayCanvas();
+            }
+            loadOnboardingChecklist();
+            if (typeof loadBookings === 'function') loadBookings();
+          },
+        });
+        return true;
+      }
+
+      function syncHubFirstStudents(visible) {
+        if (!mountHubFirstStudents()) return;
+        window.TrainerFirstStudents.sync(visible);
+      }
+
+      /** Пуш онбординга ведёт сюда с ?open=first_students — лист открывается сразу, один раз. */
+      function openHubFirstStudentsFromUrlOnce() {
+        if (hubFirstStudentsUrlChecked) return;
+        hubFirstStudentsUrlChecked = true;
+        try {
+          var params = new URLSearchParams(window.location.search || '');
+          if (params.get('open') !== 'first_students') return;
+          params.delete('open');
+          var ns = params.toString();
+          window.history.replaceState({}, '', window.location.pathname + (ns ? '?' + ns : '') + (window.location.hash || ''));
+        } catch (e) {
+          return;
+        }
+        trackHubGuidanceEvent('hint_clicked', 'first_students', 'push');
+        if (mountHubFirstStudents()) window.TrainerFirstStudents.open('one');
+      }
+
       function renderHubActionInbox() {
         var host = document.getElementById('hubActionInbox');
         if (!host) return;
@@ -2772,16 +2852,26 @@
           syncHubInboxShellBadges();
           return;
         }
+        openHubFirstStudentsFromUrlOnce();
 
         if (shouldShowHubDayZero()) {
           host.setAttribute('hidden', '');
           host.innerHTML = '';
           hubActiveRhythmHintIds = [];
+          syncHubFirstStudents(false);
           syncHubInboxShellBadges();
           return;
         }
 
-        var items = buildHubInboxItems();
+        /* «Перенесите троих учеников» (TASK-310) — не строка, а своя карточка над инбоксом:
+           места под учеников и лист «Ученик 1 из 3». Сервер решает, показывать ли её. */
+        var firstStudentsRow = null;
+        var items = buildHubInboxItems().filter(function(it) {
+          if (it.id !== 'first_students') return true;
+          firstStudentsRow = it;
+          return false;
+        });
+        syncHubFirstStudents(!!firstStudentsRow);
         hubActiveRhythmHintIds = items.filter(function(it) {
           return it.kind === 'rhythm';
         }).map(function(it) {

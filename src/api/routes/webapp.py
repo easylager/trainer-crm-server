@@ -40,7 +40,7 @@ from src.application.trainer_custom_service_use_cases import MAX_CUSTOM_SERVICES
 from src.shared.byr_currency_display import BYR_SIGN
 from src.shared.currency import resolve_trainer_currency, resolve_trainer_price_group
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
-from src.shared.profile_phone import coerce_required_phone
+from src.shared.profile_phone import coerce_optional_phone_for_profile, coerce_required_phone
 from src.application.booking_problem_notifications import send_booking_problem_telegram_notifications
 from src.application.booking_problem_rollout import booking_problem_api_allowed_for_trainer
 from src.application.booking_payment_notice import (
@@ -8477,6 +8477,147 @@ async def post_trainer_booking(
         "booking_id": booking_id,
         "first_booking_milestone": first_booking_milestone,
         "share_catalog_tip": share_catalog_tip,
+    }
+
+
+class TrainerFirstStudentBody(BaseModel):
+    """«Первые три ученика» (TASK-310): ученик + ближайшее окно одним запросом."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    first_name: str = Field(min_length=1, max_length=64)
+    last_name: str = Field(default="", max_length=64)
+    #: По желанию: без номера клиент живёт только у этого тренера, бот привяжет личная ссылка.
+    phone: str | None = None
+    slot_id: int | None = Field(default=None, ge=1)
+    weekly: bool = False
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def _optional_phone(cls, v: object) -> str | None:
+        return coerce_optional_phone_for_profile(v)
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def _strip_names(cls, v: object) -> str:
+        return "" if v is None else str(v).strip()
+
+
+@router.get("/trainer/first-students")
+async def get_trainer_first_students(
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Карточка хаба «Перенесите троих учеников»: кто уже есть и какие окна предложить."""
+    from src.application.trainer_first_students import first_students_state
+
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    return await first_students_state(session, int(trainer_id))
+
+
+@router.post("/trainer/first-students")
+async def post_trainer_first_student(
+    body: TrainerFirstStudentBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Добавить своего ученика и сразу поставить его в окно своей недели.
+
+    Клиент сохраняется первым и отдельно: если окно успели занять, ученик всё равно остаётся
+    в CRM, а ответ говорит, что не получилось. Запись и «каждую неделю» — те же маршруты,
+    что у расписания: напоминания, уведомления и откат закрепления у них уже свои.
+    """
+    from src.application.trainer_first_students import (
+        create_client_without_phone,
+        first_students_state,
+    )
+
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    try:
+        if body.phone:
+            client_id = await get_or_create_client_by_phone(
+                session,
+                body.phone,
+                first_name=body.first_name,
+                last_name=body.last_name or None,
+            )
+        else:
+            client_id = await create_client_without_phone(
+                session, first_name=body.first_name, last_name=body.last_name or None
+            )
+        await link_trainer_client_roster(session, trainer_id, client_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await session.commit()
+
+    booking_id: int | None = None
+    booked_label: str | None = None
+    weekly_set = False
+    warning: str | None = None
+    if body.slot_id is not None:
+        slot = await get_slot(session, int(body.slot_id))
+        service_id = (slot or {}).get("service_id")
+        if service_id is None:
+            r_svc = await session.execute(
+                text(
+                    """
+                    SELECT ts.service_id FROM trainer_services ts
+                    JOIN services s ON s.id = ts.service_id
+                    WHERE ts.trainer_id = :tid
+                    ORDER BY COALESCE(ts.is_online, false), s.sort_order, s.id
+                    LIMIT 1
+                    """
+                ),
+                {"tid": trainer_id},
+            )
+            service_id = r_svc.scalar()
+        if service_id is None:
+            warning = "Ученик добавлен. Чтобы записать его, добавьте услугу в профиле."
+        else:
+            try:
+                booked = await post_trainer_booking(
+                    TrainerCreateBookingBody(
+                        slot_id=int(body.slot_id), client_id=int(client_id), service_id=int(service_id)
+                    ),
+                    principal=principal,
+                    session=session,
+                )
+                booking_id = int(booked["booking_id"])
+            except HTTPException as e:
+                await session.rollback()
+                warning = f"Ученик добавлен, но записать не получилось: {e.detail}"
+        if booking_id is not None and slot:
+            from src.application.trainer_first_students import local_today, slot_label
+
+            booked_label = slot_label(slot["slot_date"], slot["start_time"], today=local_today())
+            if body.weekly:
+                in_this_week = slot["slot_date"] < this_week_monday() + timedelta(days=7)
+                try:
+                    await post_trainer_client_recurring_from_booking(
+                        int(client_id),
+                        TrainerClientRecurringFromBookingBody(
+                            booking_id=booking_id,
+                            first_week="this_week" if in_this_week else "next_week",
+                        ),
+                        principal=principal,
+                        session=session,
+                    )
+                    weekly_set = True
+                except HTTPException as e:
+                    await session.rollback()
+                    warning = f"Записали на {booked_label}, но «каждую неделю» не сохранилось: {e.detail}"
+    state = await first_students_state(session, int(trainer_id))
+    return {
+        "client_id": int(client_id),
+        "booking_id": booking_id,
+        "booked_label": booked_label,
+        "weekly": weekly_set,
+        "warning": warning,
+        "state": state,
     }
 
 
