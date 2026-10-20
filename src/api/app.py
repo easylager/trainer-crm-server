@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.tunnel_css import TunnelCssMiddleware
 from src.api.routes import (
     public_router,
     redirects_router,
@@ -98,6 +99,8 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=[MINIAPP_AUTH_ERROR_HEADER, "X-Ice-Studio-Outage"],
 )
+# Внутри gzip: на ngrok/trycloudflare HTML уходит уже со стилями внутри, сжатие снаружи.
+app.add_middleware(TunnelCssMiddleware)
 # Epic D: gzip JSON/HTML/CSS/JS when client sends Accept-Encoding: gzip (nginx can add brotli in front).
 # Last added = outermost on the stack — compresses the final response body.
 app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
