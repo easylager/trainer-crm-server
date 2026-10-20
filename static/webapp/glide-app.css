@@ -1,0 +1,104 @@
+/*
+ * Язык нового хаба для экранов Mini App (TASK-306, PDEC-023): одни кнопки, таблетки,
+ * сегменты, карточки и заголовки на главной, ивенте матча, катке, «Поиске» и «Записях».
+ * Цвета — только токены сайта (--g-*, glide-tokens.css); тёмная тема — body.tg-dark.
+ * Шрифты — свои (glide-public-fonts.css): Dela Gothic в заголовках и времени, Golos — текст.
+ *
+ * Классы с префиксом ga- — чтобы не столкнуться со старыми стилями страниц при переходе.
+ */
+
+/* Фон и текст страницы. Тема клиента красит body через !important — перекрываем так же. */
+html body.ga-body, html.trainer-theme-dark body.ga-body, html.trainer-theme-light body.ga-body {
+  background: var(--g-bg) !important; color: var(--g-ink); font-family: var(--g-font);
+}
+.ga-body [hidden] { display: none !important; }
+.ga-body button, .ga-body a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+
+/* ── Типографика ─────────────────────────────────────────────── */
+.ga-display { margin: 0; font: 400 30px/1 var(--g-font-display); letter-spacing: -.01em; }
+.ga-h2 { margin: 0; font: 400 22px/1.1 var(--g-font-display); letter-spacing: -.01em; }
+.ga-kicker { font: 600 12px/1 var(--g-font); letter-spacing: .06em; text-transform: uppercase; color: var(--g-accent-ink); }
+.ga-muted { color: var(--g-muted); }
+
+/* ── Нажатие: мгновенное сжатие, отпуск — короткая пружина ────── */
+.ga-press { transition: transform .42s cubic-bezier(.22, 1.15, .36, 1), background-color .2s ease, color .2s ease, box-shadow .25s ease; }
+.ga-press:active { transform: scale(.97); transition-duration: .07s; }
+
+/* ── Карточка ────────────────────────────────────────────────── */
+.ga-card { background: var(--g-surface); border-radius: var(--g-r-lg); box-shadow: var(--g-shadow); }
+.ga-card--lift { box-shadow: 0 1px 2px rgba(13, 27, 38, .06), 0 10px 28px rgba(13, 27, 38, .10); }
+body.tg-dark .ga-card--lift { box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 28px rgba(0, 0, 0, .35); }
+
+/* ── Кнопки ──────────────────────────────────────────────────── */
+.ga-btn {
+  min-height: 50px; padding: 0 16px; border: 0; border-radius: var(--g-r-btn);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: 700 16px/1 var(--g-font); text-decoration: none; cursor: pointer;
+  background: var(--g-accent); color: var(--g-on-accent);
+}
+.ga-btn svg { width: 18px; height: 18px; flex: none; }
+.ga-btn--dark { background: var(--g-ink); color: var(--g-bg); }
+.ga-btn--soft { background: var(--g-chip); color: var(--g-ink); font-weight: 600; }
+.ga-btn--block { display: flex; width: 100%; }
+.ga-btn:disabled { opacity: .55; cursor: default; }
+
+/* Круглая кнопка на фото (назад, поделиться, избранное). */
+.ga-round {
+  width: 44px; height: 44px; flex: none; border: 0; border-radius: 50%;
+  background: rgba(13, 27, 38, .45); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.ga-round svg { width: 20px; height: 20px; }
+/* Таблетка на фото: Маршрут · Позвонить · Сайт. */
+.ga-onphoto {
+  height: 36px; padding: 0 12px; border-radius: var(--g-r-pill); background: rgba(255, 255, 255, .16); color: #fff;
+  display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1 var(--g-font); text-decoration: none; border: 0; cursor: pointer;
+}
+.ga-onphoto svg { width: 16px; height: 16px; }
+
+/* ── Таблетки-фильтры ────────────────────────────────────────── */
+.ga-chip {
+  flex: none; height: 38px; padding: 0 14px; border: 0; border-radius: var(--g-r-pill);
+  background: var(--g-chip); color: var(--g-ink); font: 600 14px/38px var(--g-font); cursor: pointer; white-space: nowrap;
+}
+.ga-chip[aria-pressed='true'], .ga-chip.is-on { background: var(--g-ink); color: var(--g-bg); }
+
+/* ── Сегменты (Предстоящие / История) ─────────────────────────── */
+.ga-seg { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--g-seg); }
+.ga-seg__btn {
+  flex: 1; min-height: 40px; border: 0; border-radius: 12px; background: transparent; color: var(--g-ink-2);
+  font: 600 15px/1 var(--g-font); cursor: pointer;
+}
+.ga-seg__btn[aria-selected='true'], .ga-seg__btn.is-on { background: var(--g-surface); color: var(--g-ink); box-shadow: 0 1px 2px rgba(13, 27, 38, .12); }
+
+/* ── Нижняя панель действия (каток, матч): стеклом поверх ленты ── */
+.ga-actionbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--g-surface) 94%, transparent);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  box-shadow: 0 -8px 24px rgba(13, 27, 38, .08);
+  display: flex; flex-direction: column; gap: 10px; max-width: 560px; margin: 0 auto;
+}
+.ga-actionbar__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+/* Подпрыгивание подписи при смене выбора: два одинаковых кадра — чтобы перезапускать класс. */
+@keyframes ga-pop-a { 0% { transform: translateY(6px); opacity: .2; } 60% { transform: translateY(-1px); opacity: 1; } 100% { transform: none; } }
+@keyframes ga-pop-b { 0% { transform: translateY(6px); opacity: .2; } 60% { transform: translateY(-1px); opacity: 1; } 100% { transform: none; } }
+@keyframes ga-glow-a { 0% { box-shadow: 0 0 0 0 rgba(69, 185, 187, .55); } 100% { box-shadow: 0 0 0 12px rgba(69, 185, 187, 0); } }
+@keyframes ga-glow-b { 0% { box-shadow: 0 0 0 0 rgba(69, 185, 187, .55); } 100% { box-shadow: 0 0 0 12px rgba(69, 185, 187, 0); } }
+.ga-pop-a { display: inline-block; animation: ga-pop-a .38s cubic-bezier(.22, 1, .36, 1); }
+.ga-pop-b { display: inline-block; animation: ga-pop-b .38s cubic-bezier(.22, 1, .36, 1); }
+.ga-glow-a { animation: ga-glow-a .7s ease-out; }
+.ga-glow-b { animation: ga-glow-b .7s ease-out; }
+
+/* ── Пустое состояние ────────────────────────────────────────── */
+.ga-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 36px 12px 0; }
+.ga-empty__icon { width: 64px; height: 64px; border-radius: 20px; background: var(--g-accent-wash); color: var(--g-accent-ink); display: flex; align-items: center; justify-content: center; }
+.ga-empty__icon svg { width: 30px; height: 30px; }
+.ga-empty__text { margin: 0; max-width: 280px; font-size: 15px; line-height: 1.45; color: var(--g-ink-2); }
+.ga-empty__actions { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 300px; margin-top: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ga-press { transition: none; }
+  .ga-pop-a, .ga-pop-b, .ga-glow-a, .ga-glow-b { animation: none; }
+}
