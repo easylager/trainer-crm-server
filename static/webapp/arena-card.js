@@ -191,8 +191,10 @@
       '" title="' +
       esc(hint) +
       '"><span class="arena-watch-btn__icon" aria-hidden="true">' +
-      (on ? '🔕' : '🔔') +
-      '</span></button>'
+      // TASK-306: колокольчик контуром, а не эмодзи; включён — заливка плашки.
+      '<svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/>' +
+      (on ? '<path d="M4 4l16 16"/>' : '') +
+      '</svg></span></button>'
     );
   }
 
@@ -200,7 +202,7 @@
     var watch = iceWatchBtnHtml();
     var ticket =
       tickets
-        ? '<a class="arena-cta arena-cta--link" href="' +
+        ? '<a class="arena-cta arena-cta--link ga-press" href="' +
           esc(tickets.href) +
           '" data-action="external" data-href="' +
           esc(tickets.href) +
@@ -478,6 +480,22 @@
     });
   }
 
+  /** Фото тренера не отдалось — буква имени, а не значок битой картинки. */
+  function bindAvatarFallbacks(scope) {
+    if (!scope) return;
+    [].forEach.call(scope.querySelectorAll('img.arena-coachcard__ava'), function (img) {
+      if (img.__avaBound) return;
+      img.__avaBound = true;
+      img.addEventListener('error', function () {
+        var mono = document.createElement('i');
+        mono.className = 'arena-coachcard__ava arena-coachcard__ava--mono';
+        mono.setAttribute('aria-hidden', 'true');
+        mono.textContent = img.getAttribute('data-initial') || '';
+        img.replaceWith(mono);
+      });
+    });
+  }
+
   function prefetchUrlFor(card) {
     var rec = readHeroPrefetch();
     if (!card || !rec) return '';
@@ -505,12 +523,21 @@
         (rest.length ? ' data-fallbacks="' + esc(rest.join('\n')) + '"' : '') +
         '>'
       : '';
+    /* TASK-306: «назад» и «поделиться» — круглыми кнопками на фото (шапка «Каток / Назад» ушла),
+       Маршрут · Позвонить · Сайт — таблетками под названием, как на холсте. */
+    var shareRound = global.GlideShareSheet
+      ? '<button type="button" class="ga-round ga-press" data-action="share" aria-label="Поделиться">' + icon('share') + '</button>'
+      : '';
     return (
       '<div class="' +
       cls +
       '">' +
       imgHtml +
       (hero.mode === 'photo' ? '<span class="arena-hero__shade"></span>' : '<span class="arena-hero__glare"></span>') +
+      '<span class="arena-hero__top">' +
+      '<button type="button" class="ga-round ga-press" data-action="back" aria-label="Назад">' + icon('back') + '</button>' +
+      shareRound +
+      '</span>' +
       '<span class="arena-hero__txt">' +
       '<h1>' +
       esc(card.name || 'Арена') +
@@ -518,6 +545,7 @@
       '<span class="arena-hero__meta">' +
       esc(M.heroMetaLine(card)) +
       '</span>' +
+      renderQuickActions() +
       '</span>' +
       galleryHtml +
       '</div>'
@@ -592,27 +620,53 @@
     var sid = resolvedShareSessionId();
     if (!sid) return '';
     return (
-      '<button type="button" class="arena-btn" data-action="ice-company" data-session="' +
+      '<button type="button" class="ga-btn ga-btn--dark ga-press" data-action="ice-company" data-session="' +
       esc(sid) +
-      '">Собрать компанию</button>'
+      '">' + icon('company') + 'Собрать компанию</button>'
     );
   }
 
+  /** Строка над кнопками панели: «Сегодня, 10:15 · Массовое катание». */
+  function shareBarWhen() {
+    var sid = resolvedShareSessionId();
+    if (!sid) return '';
+    var label = M.shareSlotInviteLabel(combinedScheduleDays(), todayIso(), sid, todayIso());
+    if (!label) return '';
+    var isToday = /^\d{1,2}:\d{2}$/.test(label);
+    var kind = sessionInOhm(sid) ? ohmChipTitle() : iceSectionTitle();
+    return (isToday ? 'Сегодня, ' + label : capitalize(label)) + (kind ? ' · ' + kind : '');
+  }
+
+  function sessionInOhm(sid) {
+    var days = ohmScheduleDays();
+    var i;
+    var j;
+    for (i = 0; i < days.length; i++) {
+      var list = days[i].sessions || [];
+      for (j = 0; j < list.length; j++) if (String(list[j].id) === String(sid)) return true;
+    }
+    return false;
+  }
+
+  /*
+   * TASK-306: «Позвать на …» и «Собрать компанию» — панелью внизу экрана. Тап по времени
+   * меняет подпись, она мягко подпрыгивает, «Позвать» один раз светится — кнопка говорит
+   * о выборе человека, а не об абстрактном «поделиться».
+   */
   function renderShareBar() {
     if (!global.GlideShareSheet) return '';
-    if (scheduleSlots().length) {
-      var company = companyButton();
-      return (
-        '<div class="arena-share' + (company ? ' arena-share--pair' : '') + '" id="arenaShareBar">' +
-        '<button type="button" class="arena-btn arena-btn--pri" data-action="share-invite">' +
-        esc(shareInviteCtaLabel()) +
-        '</button>' +
-        (company || '<button type="button" class="arena-btn" data-action="share">Поделиться</button>') +
-        '</div>'
-      );
-    }
-    // Без сеансов «Поделиться» живёт в ряду быстрых действий.
-    return '';
+    if (!scheduleSlots().length) return '';
+    var company = companyButton();
+    return (
+      '<div class="ga-actionbar arena-bar" id="arenaShareBar">' +
+      '<span class="arena-bar__when" id="arenaBarWhen">' + esc(shareBarWhen()) + '</span>' +
+      '<div class="ga-actionbar__row' + (company ? '' : ' arena-bar__row--one') + '">' +
+      '<button type="button" class="ga-btn ga-press" data-action="share-invite">' + icon('invite') +
+      '<span id="arenaBarInvite">' + esc(shareInviteCtaLabel()) + '</span></button>' +
+      (company || '<button type="button" class="ga-btn ga-btn--soft ga-press" data-action="share">Поделиться</button>') +
+      '</div>' +
+      '</div>'
+    );
   }
 
   function fetchShareSlots() {
@@ -856,6 +910,10 @@
     site: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     insta: '<rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.5"/><circle cx="17" cy="7" r="0.6"/>',
     share: '<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>',
+    back: '<path d="M15 18l-6-6 6-6"/>',
+    invite: '<path d="M21 4L3 11l6 2 2 6 3-4 5 4z"/>',
+    company: '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c3 .2 6 2.4 6 5.5"/>',
+    buy: '<path d="M7 17L17 7M9 7h8v8"/>',
   };
 
   function icon(id) {
@@ -881,7 +939,7 @@
     var items = M.quickActions(state.card).map(function (a) {
       if (a.id === 'copyPhone') {
         return (
-          '<button type="button" class="arena-qa" data-action="copy-phone" data-copy-phone="' +
+          '<button type="button" class="ga-onphoto ga-press" data-action="copy-phone" data-copy-phone="' +
           esc(a.phone || '') +
           '">' +
           icon(a.id) +
@@ -891,7 +949,7 @@
         );
       }
       return (
-        '<a class="arena-qa" href="' +
+        '<a class="ga-onphoto ga-press" href="' +
         esc(a.href) +
         '" data-action="external" data-href="' +
         esc(a.href) +
@@ -902,12 +960,9 @@
         '</span></a>'
       );
     });
-    // У катка с сеансами «Поделиться» стоит рядом с «Позвать с собой»; у остальных — здесь.
-    if (!scheduleSlots().length && global.GlideShareSheet) {
-      items.push('<button type="button" class="arena-qa" data-action="share">' + icon('share') + '<span>Поделиться</span></button>');
-    }
+    // «Поделиться» теперь всегда круглой кнопкой на фото — здесь только то, ради чего открывают место.
     if (!items.length) return '';
-    return '<div class="arena-qas arena-qas--' + items.length + '">' + items.join('') + '</div>';
+    return '<span class="arena-hero__chips">' + items.join('') + '</span>';
   }
 
   function scheduleDays() {
@@ -1029,6 +1084,14 @@
     );
   }
 
+  /** «Сегодня» → «Сег», «Завтра» → «Зав»: семь дней в ряд без обрезанного «Сегод…». */
+  function shortDayTop(top) {
+    var low = String(top || '').toLowerCase();
+    if (low === 'сегодня') return 'Сег';
+    if (low === 'завтра') return 'Зав';
+    return top;
+  }
+
   function renderDayStrip(days) {
     return (
       '<div class="arena-strip" id="arenaDayTabs" role="tablist">' +
@@ -1038,11 +1101,86 @@
           (d.count ? '' : ' arena-strip__day--empty') +
           (d.weekend ? ' arena-strip__day--weekend' : '') +
           '" data-day="' + esc(d.iso) + '" aria-pressed="' + (state.day === d.iso ? 'true' : 'false') + '">' +
-          '<span>' + esc(d.top) + '</span><b>' + esc(d.num) + '</b>' +
+          '<span>' + esc(shortDayTop(d.top)) + '</span><b>' + esc(d.num) + '</b>' +
           '<i>' + (d.count ? esc(String(d.count)) : '—') + '</i>' +
           '</button>'
         );
       }).join('') +
+      '</div>'
+    );
+  }
+
+  /** Подпись дня для «билета»: «СЕГОДНЯ», «ЗАВТРА», «ЧТ, 22». */
+  function ticketDayLabel(days, iso) {
+    var d = (days || []).filter(function (x) { return x.iso === iso; })[0];
+    if (!d) return '';
+    var top = String(d.top || '');
+    var low = top.toLowerCase();
+    return (low === 'сегодня' || low === 'завтра' ? top : top + ', ' + d.num).toUpperCase();
+  }
+
+  /*
+   * TASK-306: выбранный сеанс — «билет» над сеткой: время крупно, загрузка, цены и «Купить билет».
+   * В сетке остаётся только время с загрузкой — без ↗ у каждой плитки: купить можно из «билета»,
+   * а главные кнопки «Позвать» и «Собрать компанию» — в панели внизу.
+   */
+  function showGroupHtml(g, sectionTitle, dayLabel) {
+    var ownTitle = g.title && g.title !== sectionTitle ? g.title : '';
+    var hasPick = g.times.some(function (t) { return t.picked; });
+    var head = '';
+    // Длительность уже в «билете» — над ним её не повторяем.
+    if (ownTitle || (g.duration && !hasPick)) {
+      head =
+        '<div class="arena-show__head">' +
+        (ownTitle ? '<b>' + esc(ownTitle) + '</b>' : '') +
+        (g.duration && !hasPick ? '<span>' + esc(g.duration) + '</span>' : '') +
+        '</div>';
+    }
+    var picked = g.times.filter(function (t) { return t.picked; })[0] || null;
+    var pricesLine = !picked && g.prices.length
+      ? '<p class="arena-show__line">' + g.prices.map(function (p) { return esc(p.label) + ' ' + esc(p.value); }).join(' · ') + '</p>'
+      : '';
+    var ticket = '';
+    if (picked) {
+      var tag = slotTag(picked);
+      var low = picked.seats && picked.seats.low;
+      ticket =
+        '<div class="arena-ticket">' +
+        '<div class="arena-ticket__top"><span class="arena-ticket__lead">' +
+        '<span class="arena-ticket__kick">' + esc([dayLabel, g.duration ? g.duration.toUpperCase() : ''].filter(Boolean).join(' · ')) + '</span>' +
+        '<b class="arena-ticket__time">' + esc(picked.time) + '</b></span>' +
+        (tag ? '<span class="arena-ticket__seats' + (low ? ' arena-seats--low' : '') + '">' + esc(tag) + '</span>' : loadMeterHtml(picked.load)) +
+        '</div>' +
+        (g.prices.length
+          ? '<div class="arena-ticket__prices">' + g.prices.map(function (p) {
+              return '<span><small>' + esc(p.label) + '</small><b>' + esc(p.value) + '</b></span>';
+            }).join('') + '</div>'
+          : '') +
+        (picked.ticketHref
+          ? '<button type="button" class="ga-btn ga-btn--dark ga-btn--block ga-press" data-action="external" data-href="' +
+            esc(picked.ticketHref) + '">Купить билет' + icon('buy') + '</button>'
+          : '') +
+        (g.note ? '<p class="arena-ticket__note">' + esc(g.note) + '</p>' : '') +
+        '</div>';
+    }
+    var grid = g.times.map(function (t) {
+      var slotCls = 'arena-slot arena-slot--no-buy';
+      if (t.picked) slotCls += ' arena-slot--picked';
+      var timeCls = 'arena-slot-time ga-press';
+      if (t.picked) timeCls += ' arena-time--picked';
+      else if (t.next) timeCls += ' arena-time--next';
+      var body = slotBody(t);
+      if (t.sessionId == null) return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span></div>';
+      return (
+        '<div class="' + slotCls + '">' +
+        '<button type="button" class="' + timeCls + '" data-action="pick-session" data-session-id="' + esc(t.sessionId) +
+        '" aria-pressed="' + (t.picked ? 'true' : 'false') + '">' + body + '</button></div>'
+      );
+    }).join('');
+    return (
+      '<div class="arena-show">' + head + pricesLine + ticket +
+      '<div class="arena-times">' + grid + '</div>' +
+      (g.note && !picked ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
       '</div>'
     );
   }
@@ -1055,7 +1193,7 @@
       now: new Date(),
       ticketsUrl: state.card && state.card.tickets_url,
       markNext: iso === todayIso(),
-      pickedId: sharePickedId(),
+      pickedId: resolvedShareSessionId(),
     });
     var lessons = ribbonForIso(iso).filter(function (r) { return r.nature === 'lesson'; });
     var html = '';
@@ -1067,65 +1205,9 @@
         '</div>';
     }
     var sectionTitle = iceSectionTitle();
+    var dayLabel = ticketDayLabel(strip(), iso);
     view.groups.forEach(function (g) {
-      /* Заголовок блока уже говорит «Массовое катание». На карточке слота остаётся
-         только своё имя (малая/большая арена, «Свободный лёд»), без повтора. */
-      var ownTitle = g.title && g.title !== sectionTitle ? g.title : '';
-      var head = '';
-      if (ownTitle || g.duration) {
-        head =
-          '<div class="arena-show__head">' +
-          (ownTitle ? '<b>' + esc(ownTitle) + '</b>' : '') +
-          (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') +
-          '</div>';
-      }
-      html +=
-        '<div class="arena-show">' +
-        head +
-        (g.prices.length
-          ? '<div class="arena-show__prices">' + g.prices.map(function (p) {
-              return '<span><small>' + esc(p.label) + '</small>' + esc(p.value) + '</span>';
-            }).join('') + '</div>'
-          : '') +
-        '<div class="arena-times">' +
-        g.times.map(function (t) {
-          var slotCls = 'arena-slot';
-          if (t.picked) slotCls += ' arena-slot--picked';
-          if (!t.ticketHref) slotCls += ' arena-slot--no-buy';
-          var timeCls = 'arena-slot-time';
-          if (t.picked) timeCls += ' arena-time--picked';
-          else if (t.next) timeCls += ' arena-time--next';
-          /* Вместимость важнее «Ближайший»; выбор для приглашения — рамка, цвет и CTA сверху. */
-          var body = slotBody(t);
-          var buy =
-            t.ticketHref
-              ? '<button type="button" class="arena-slot-buy" data-action="external" data-href="' +
-                esc(t.ticketHref) +
-                '" title="Билеты на сайте" aria-label="Билеты на сайте">↗</button>'
-              : '';
-          if (t.sessionId != null) {
-            return (
-              '<div class="' +
-              slotCls +
-              '">' +
-              '<button type="button" class="' +
-              timeCls +
-              '" data-action="pick-session" data-session-id="' +
-              esc(t.sessionId) +
-              '" aria-pressed="' +
-              (t.picked ? 'true' : 'false') +
-              '">' +
-              body +
-              '</button>' +
-              buy +
-              '</div>'
-            );
-          }
-          return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span>' + buy + '</div>';
-        }).join('') +
-        '</div>' +
-        (g.note ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
-        '</div>';
+      html += showGroupHtml(g, sectionTitle, dayLabel);
     });
     if (lessons.length) {
       html += '<p class="arena-h arena-h--sub">Занятия с тренером</p><div class="arena-rows">' + lessons.map(rowHtml).join('') + '</div>';
@@ -1261,7 +1343,7 @@
       now: new Date(),
       ticketsUrl: state.card && state.card.tickets_url,
       markNext: iso === todayIso(),
-      pickedId: sharePickedId(),
+      pickedId: resolvedShareSessionId(),
     });
     if (!view.count) {
       var next = ohmStrip().filter(function (d) { return d.count && d.iso > iso; })[0];
@@ -1281,62 +1363,9 @@
     }
     var html = '';
     var sectionTitle = ohmChipTitle();
+    var ohmDayLabel = ticketDayLabel(ohmStrip(), iso);
     view.groups.forEach(function (g) {
-      /* Заголовок раздела уже говорит «ОХМ». Повторять его на карточке без
-         своего имени (площадки, дискотеки) нечего: это тот же сеанс. */
-      var ownTitle = g.title && g.title !== sectionTitle ? g.title : '';
-      var head = '';
-      if (ownTitle || g.duration) {
-        head =
-          '<div class="arena-show__head">' +
-          (ownTitle ? '<b>' + esc(ownTitle) + '</b>' : '') +
-          (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') +
-          '</div>';
-      }
-      html +=
-        '<div class="arena-show">' +
-        head +
-        (g.prices.length
-          ? '<div class="arena-show__prices">' +
-            g.prices
-              .map(function (p) {
-                return '<span><small>' + esc(p.label) + '</small>' + esc(p.value) + '</span>';
-              })
-              .join('') +
-            '</div>'
-          : '') +
-        '<div class="arena-times">' +
-        g.times
-          .map(function (t) {
-            var slotCls = 'arena-slot';
-            if (t.picked) slotCls += ' arena-slot--picked';
-            if (!t.ticketHref) slotCls += ' arena-slot--no-buy';
-            var timeCls = 'arena-slot-time';
-            if (t.picked) timeCls += ' arena-time--picked';
-            else if (t.next) timeCls += ' arena-time--next';
-            var body = slotBody(t);
-            if (t.sessionId == null) {
-              return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span></div>';
-            }
-            return (
-              '<div class="' +
-              slotCls +
-              '">' +
-              '<button type="button" class="' +
-              timeCls +
-              '" data-action="pick-session" data-session-id="' +
-              esc(t.sessionId) +
-              '" aria-pressed="' +
-              (t.picked ? 'true' : 'false') +
-              '">' +
-              body +
-              '</button></div>'
-            );
-          })
-          .join('') +
-        '</div>' +
-        (g.note ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
-        '</div>';
+      html += showGroupHtml(g, sectionTitle, ohmDayLabel);
     });
     return html;
   }
@@ -1391,6 +1420,31 @@
     );
   }
 
+  /** Конец выбранного сеанса по местному времени катка: «2026-10-20T11:00». */
+  function selectedSessionEndLocal() {
+    var sid = resolvedShareSessionId();
+    if (!sid) return '';
+    var lists = [];
+    var byDate = sessionsByDate();
+    Object.keys(byDate).forEach(function (k) { lists.push(byDate[k] || []); });
+    ohmScheduleDays().forEach(function (d) { lists.push(d.sessions || []); });
+    var i;
+    var j;
+    for (i = 0; i < lists.length; i++) {
+      for (j = 0; j < lists[i].length; j++) {
+        var x = lists[i][j];
+        if (String(x.id) === String(sid)) return String(x.ends_at_local || x.starts_at_local || '').slice(0, 16);
+      }
+    }
+    return '';
+  }
+
+  /*
+   * TASK-306: тренеры — отдельный тёмный блок после расписания, а не список внизу.
+   * У каждого — ближайшие свободные окна на этом катке (`windows` из /arenas/{ref}/trainers);
+   * первое окно после выбранного сеанса подсвечено: «после твоего катания — свободно в 13:00».
+   * Окон нет — карточка ведёт в профиль тренера, как раньше («Записаться» / «Написать»).
+   */
   function renderTrainers() {
     if (state.trainersError) {
       return (
@@ -1404,39 +1458,56 @@
     }
     var items = (state.trainers && state.trainers.items) || [];
     if (!items.length) return '';
-    var html =
-      '<div class="arena-sec"><p class="arena-h">Тренеры на этой арене<span class="arena-new">НОВОЕ</span></p>';
-    var i;
-    for (i = 0; i < items.length; i++) {
-      var t = items[i];
+    var after = selectedSessionEndLocal();
+    var place = (state.card && state.card.name) || '';
+    var cards = items.map(function (t) {
       var cta = M.trainerCta(t);
       var ava = photoUrl(t);
-      html +=
-        '<button type="button" class="arena-coach" data-action="trainer" data-trainer="' +
-        esc(t.id) +
-        '" data-can-book="' +
-        (t.can_book ? '1' : '0') +
-        '">' +
+      var wins = (t.windows || []).slice();
+      var fit = null;
+      if (after) {
+        fit = wins.filter(function (w) { return String(w.starts_at || '').slice(0, 16) >= after; })[0] || null;
+      }
+      var shown = fit ? wins.slice(wins.indexOf(fit), wins.indexOf(fit) + 3) : wins.slice(0, 3);
+      var line = fit
+        ? 'После твоего катания — свободно ' + (fit.day === 'сегодня' ? 'в ' : fit.day + ' в ') + fit.time
+        : shown.length ? 'Ближайшие окна здесь' : '';
+      var slots = shown.map(function (w) {
+        return (
+          '<button type="button" class="arena-win ga-press' + (w === fit ? ' arena-win--fit' : '') +
+          '" data-action="trainer-window" data-trainer="' + esc(t.id) + '" data-href="' + esc(w.href || '') + '">' +
+          '<b>' + esc(w.time) + '</b><small>' + esc(w.day) + '</small></button>'
+        );
+      }).join('');
+      return (
+        '<article class="arena-coachcard">' +
+        '<button type="button" class="arena-coachcard__head" data-action="trainer" data-trainer="' + esc(t.id) +
+        '" data-can-book="' + (t.can_book ? '1' : '0') + '">' +
         (ava
-          ? '<img class="arena-coach__ava" alt="" src="' + esc(ava) + '">'
-          : '<i class="arena-coach__ava arena-coach__ava--mono" aria-hidden="true">' +
-            esc(trainerInitial(t)) +
-            '</i>') +
-        '<span class="arena-coach__b"><b>' +
-        esc(trainerName(t)) +
-        '</b><span>' +
-        esc(M.trainerSubtitle(t)) +
-        '</span></span>' +
-        '<span class="arena-cta arena-cta--' +
-        cta.kind +
-        '">' +
-        esc(cta.label) +
-        '</span>' +
-        '</button>';
-    }
-    html +=
-      '<p class="arena-sub">Тренер без онлайн-записи показывается честно — «Написать», а не мёртвая кнопка.</p></div>';
-    return html;
+          ? '<img class="arena-coachcard__ava" alt="" data-initial="' + esc(trainerInitial(t)) + '" src="' + esc(ava) + '">'
+          : '<i class="arena-coachcard__ava arena-coachcard__ava--mono" aria-hidden="true">' + esc(trainerInitial(t)) + '</i>') +
+        '<span class="arena-coachcard__who"><b>' + esc(trainerName(t)) + '</b><span>' + esc(M.trainerSubtitle(t)) + '</span></span>' +
+        '</button>' +
+        (slots
+          ? '<div class="arena-coachcard__wins"><span class="arena-coachcard__line">' + esc(line) + '</span>' +
+            '<div class="arena-coachcard__slots">' + slots + '</div></div>'
+          : '') +
+        '<div class="arena-coachcard__foot">' +
+        '<button type="button" class="arena-coachcard__link" data-action="trainer" data-trainer="' + esc(t.id) +
+        '" data-can-book="' + (t.can_book ? '1' : '0') + '">' + (slots ? 'Профиль и отзывы' : esc(cta.label)) + '</button>' +
+        '</div>' +
+        '</article>'
+      );
+    }).join('');
+    return (
+      '<section class="arena-coaches" aria-labelledby="arenaCoachesTitle">' +
+      '<div class="arena-coaches__head">' +
+      '<span class="ga-kicker arena-coaches__kick">' + esc('Тренеры здесь' + (place ? ', в ' + place : '')) + '</span>' +
+      '<h2 class="ga-h2" id="arenaCoachesTitle">Выйти на лёд уверенно</h2>' +
+      '</div>' +
+      '<div class="arena-coaches__row">' + cards + '</div>' +
+      '</section>'
+    );
   }
 
   function renderGroups() {
@@ -1544,18 +1615,19 @@
     try {
       root.innerHTML =
         renderHero() +
-        renderShareBar() +
-        renderQuickActions() +
         renderIceSection() +
         renderOhmSection() +
+        // Тренер — сразу после расписания: человек только что выбрал время и думает, как выйти на лёд.
+        renderTrainers() +
         renderAmenities() +
         renderMassAccess() +
         renderCenterOffer() +
-        renderTrainers() +
         renderGroups() +
         renderInfo() +
-        renderFreshness();
+        renderFreshness() +
+        renderShareBar();
       bindHeroFallbacks(root);
+      bindAvatarFallbacks(root);
     } catch (err) {
       if (global.console && global.console.error) {
         global.console.error('arena-card paint failed', err);
@@ -1593,11 +1665,49 @@
     }
   }
 
+  var barTick = 0;
+
+  function paintTrainersOnly() {
+    var box = root && root.querySelector('.arena-coaches');
+    if (!box) return;
+    var holder = document.createElement('div');
+    holder.innerHTML = renderTrainers();
+    var next = holder.firstElementChild;
+    if (!next) return;
+    // Лента тренеров могла быть прокручена — не сбрасываем.
+    var row = box.querySelector('.arena-coaches__row');
+    var left = row ? row.scrollLeft : 0;
+    box.replaceWith(next);
+    bindAvatarFallbacks(next);
+    var nextRow = next.querySelector('.arena-coaches__row');
+    if (nextRow) nextRow.scrollLeft = left;
+  }
+
   function paintShareBar() {
     var bar = document.getElementById('arenaShareBar');
     if (!bar) return;
+    var label = document.getElementById('arenaBarInvite');
+    var when = document.getElementById('arenaBarWhen');
+    var next = shareInviteCtaLabel();
+    var changed = label && label.textContent !== next;
+    if (label) label.textContent = next;
+    if (when) when.textContent = shareBarWhen();
+    var company = bar.querySelector('[data-action="ice-company"]');
+    if (company) company.setAttribute('data-session', resolvedShareSessionId() || '');
+    if (!changed) return;
+    // Два одинаковых кадра: смена класса перезапускает анимацию на каждом выборе.
+    barTick += 1;
+    var odd = barTick % 2 === 1;
+    [label, when].forEach(function (n) {
+      if (!n) return;
+      n.classList.remove('ga-pop-a', 'ga-pop-b');
+      n.classList.add(odd ? 'ga-pop-a' : 'ga-pop-b');
+    });
     var pri = bar.querySelector('[data-action="share-invite"]');
-    if (pri) pri.textContent = shareInviteCtaLabel();
+    if (pri) {
+      pri.classList.remove('ga-glow-a', 'ga-glow-b');
+      pri.classList.add(odd ? 'ga-glow-a' : 'ga-glow-b');
+    }
   }
 
   var REPORT_FIELDS = [
@@ -1802,6 +1912,22 @@
       openExternal(t.getAttribute('data-href'));
       return;
     }
+    if (action === 'back') {
+      if (global.history.length > 1) global.history.back();
+      else shellNav('ice');
+      return;
+    }
+    if (action === 'trainer-window') {
+      var wTrainer = t.getAttribute('data-trainer');
+      var wHref = t.getAttribute('data-href');
+      if (wHref) {
+        if (global.BookingClient && typeof global.BookingClient.markArenaCatalogStack === 'function') {
+          global.BookingClient.markArenaCatalogStack(state.card && state.card.id);
+        }
+        shellNav(wHref);
+      } else if (wTrainer) goBooking(wTrainer);
+      return;
+    }
     if (action === 'pick-session') {
       var sid = t.getAttribute('data-session-id');
       if (!sid) return;
@@ -1809,7 +1935,14 @@
       var pickDay = t.getAttribute('data-local-date');
       if (pickDay) state.day = pickDay;
       if (pickDay) paint();
-      else paintRowsOnly();
+      else {
+        paintRowsOnly();
+        paintTrainersOnly();
+      }
+      try {
+        var tgw = global.Telegram && global.Telegram.WebApp;
+        if (tgw && tgw.HapticFeedback) tgw.HapticFeedback.selectionChanged();
+      } catch (eHap) { /* без вибрации */ }
       return;
     }
     if (action === 'share' || action === 'share-invite' || action === 'ice-company') {
@@ -1993,6 +2126,19 @@
     state: state,
   };
 
+  /* Токены сайта темнеют по body.tg-dark, а тема Mini App ставит hub-is-dark на <html> — как на главной. */
+  (function syncGlideDark() {
+    var sync = function () {
+      var b = document.body;
+      var h = document.documentElement;
+      if (!b || !b.classList || !h || !h.classList) return;
+      b.classList.toggle('tg-dark', h.classList.contains('hub-is-dark'));
+    };
+    sync();
+    if (global.MutationObserver && document.documentElement) {
+      new global.MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    }
+  })();
   bindChrome();
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', load);

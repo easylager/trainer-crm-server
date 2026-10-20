@@ -211,11 +211,18 @@ def webapp_catalog_page(request: Request):
 @app.get("/webapp/arena")
 @app.get("/webapp/arena.html")
 def webapp_arena_page():
-    """TASK-052: public Ice Discovery arena card Mini App."""
+    """TASK-052: public Ice Discovery arena card Mini App.
+
+    TASK-306: свои шрифты вместо Google — `__FONT_V__` подставляется, как на главной,
+    чтобы preload Dela Gothic совпал с адресом из glide-public-fonts.css.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "arena.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/webapp/ice-company")

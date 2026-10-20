@@ -33,7 +33,9 @@ describe('arena card ice section heading', () => {
   });
 
   it('drops the slot title when it only repeats the section name', () => {
-    const body = fnBody('renderShowtimes');
+    // TASK-306: группа сеансов рисуется общей showGroupHtml для массового катания и ОХМ.
+    assert.match(fnBody('renderShowtimes'), /showGroupHtml\(g, sectionTitle, dayLabel\)/);
+    const body = fnBody('showGroupHtml');
     assert.ok(body.includes('g.title !== sectionTitle'));
     assert.ok(!body.includes("'<b>' + esc(g.title) + '</b>'"));
   });
