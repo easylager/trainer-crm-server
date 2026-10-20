@@ -94,7 +94,10 @@
     var from = String(data.fromName || '').trim();
     var where = data.kind === 'hockey_match' ? 'на матч' : (data.kind === HOCKEY ? 'на хоккей' : 'на каток');
     return {
-      kicker: from ? 'Приглашение на лёд от' : 'Приглашение на лёд',
+      // Матч — не «лёд»: зовут на игру Динамо (TASK-304).
+      kicker: data.kind === 'hockey_match'
+        ? (from ? 'Приглашение на матч от' : 'Приглашение на матч')
+        : (from ? 'Приглашение на лёд от' : 'Приглашение на лёд'),
       from: from ? decline(from, 'gen') : '',
       name: to,
       ask: to ? ', пойдёшь со мной ' + where + '?' : 'Пойдёшь со мной ' + where + '?',

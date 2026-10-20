@@ -205,7 +205,7 @@
     var m = state.ev.match;
     var start = M.heroWhen(m.starts_at).split(' · ');
     global.GlideShareSheet.open({
-      match: { id: m.id, day: start[0] || '', time: start[1] || '' },
+      match: { id: m.id, day: start[0] || '', time: start[1] || '', title: m.home.name + ' — ' + m.away.name },
       invite: variant === 'invite',
       variant: variant === 'company' ? 'company' : '',
       company: true,

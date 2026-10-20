@@ -176,14 +176,14 @@
   function postcardInput(sheetState) {
     if (sheetState && sheetState.match) {
       var zm = sheetState.zovi || {};
-      // Открытка «Зови» знает «на хоккей» — матч зовёт туда же, со своим днём и временем.
+      // Открытка «Зови» на матч: «Пойдёшь со мной на матч?», команды вместо названия катка.
       return {
         toName: zm.to || '',
         fromName: zm.from || '',
-        kind: 'hockey_practice',
+        kind: 'hockey_match',
         time: String(sheetState.match.time || ''),
         day: String(sheetState.match.day || ''),
-        place: rinkName(sheetState),
+        place: String(sheetState.match.title || '') || rinkName(sheetState),
       };
     }
     var picked = selectedPostcardSlot(sheetState);
@@ -210,9 +210,9 @@
   var ZOVI_FROM_KEY = 'zovi_from';
   /* Открытка грузится по требованию: бюджет веса каталога (test_webapp_page_weight_budget). */
   var ZOVI_SCRIPTS = [
-    '/static/shared/zovi-model.js?v=15',
-    '/static/shared/zovi-create.js?v=15',
-    '/static/shared/zovi-live.js?v=15',
+    '/static/shared/zovi-model.js?v=16',
+    '/static/shared/zovi-create.js?v=16',
+    '/static/shared/zovi-live.js?v=16',
   ];
   var zoviLoading = null;
 
