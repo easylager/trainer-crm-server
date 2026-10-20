@@ -31,6 +31,12 @@ def patch_client_principal(user_id: int) -> Iterator[None]:
         app.dependency_overrides.pop(get_client_miniapp_principal, None)
 
 
+@pytest.fixture(autouse=True)
+def _league_bot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI не читает локальный .env: без имени бота ссылки приглашения нет."""
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "GlideTestBot")
+
+
 def _code(invite_url: str) -> str:
     return invite_url.split("kk_", 1)[1].split("&", 1)[0].split("?", 1)[0]
 

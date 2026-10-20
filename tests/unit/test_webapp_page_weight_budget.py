@@ -16,10 +16,11 @@ _WEBAPP = _REPO / "static" / "webapp"
 _ATTR = re.compile(r"""(?:src|href)=["']([^"']+)["']""", re.I)
 
 # Gzip level 9, mtime 0. Re-measure after intentional UI growth (TASK-197 → TASK-222
-# share sheet, then the «Зимой» list, the season reminder, TASK-243 copy keys).
+# share sheet, then the «Зимой» list, the season reminder, TASK-243 copy keys,
+# then the hub-language search page and the match share sheet).
 # A page may shrink; growth past +5% fails CI.
 _BASELINE_GZIP = {
-    "ice.html": 221_384,
+    "ice.html": 240_347,
     "catalog.html": 200_158,
 }
 

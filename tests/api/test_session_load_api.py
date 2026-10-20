@@ -98,7 +98,11 @@ async def test_public_skate_has_typical_load_fields(db_session) -> None:
 @pytest.mark.asyncio
 async def test_admin_global_rule_changes_public_response(db_session) -> None:
     aid, slug = await _insert_arena_with_profile(db_session)
-    day = date(2026, 10, 20)  # Monday
+    # Прошедший сеанс публичная лента уже не отдаёт. Берём ближайший будущий понедельник.
+    day = date.today() + timedelta(days=2)
+    while day.weekday() != 0:
+        day += timedelta(days=1)
+    start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=7)
     await db_session.execute(
         text("""
             INSERT INTO ice_sessions (
@@ -110,8 +114,8 @@ async def test_admin_global_rule_changes_public_response(db_session) -> None:
         {
             "aid": aid,
             "day": day,
-            "start": datetime(2026, 10, 20, 7, 0, tzinfo=timezone.utc),
-            "end": datetime(2026, 10, 20, 8, 0, tzinfo=timezone.utc),
+            "start": start,
+            "end": start + timedelta(hours=1),
         },
     )
     await db_session.commit()
