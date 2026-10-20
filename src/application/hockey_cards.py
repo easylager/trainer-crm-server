@@ -15,9 +15,11 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from src.application.hockey_teams import TEAMS, UNKNOWN_COLOR, logo_path, short_from_name
 from src.ingestion.hockey_sources import MINSK_TZ
 
 CARD_SIZE = (1200, 630)
+STORY_SIZE = (1080, 1920)
 _PAD = 72
 
 _BLUE = (23, 71, 181)
@@ -151,6 +153,85 @@ def render_result_card(*, home: str, away: str, home_score: int, away_score: int
     return _png(image)
 
 
+def _hex(color: str) -> tuple[int, int, int]:
+    value = color.lstrip("#")
+    return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
+
+
+def _team_badge(draw: ImageDraw.ImageDraw, image: Image.Image, team: str, *, cx: int, cy: int, size: int) -> None:
+    """Логотип команды в белом круге; нет логотипа — круг цвета команды с короткими буквами."""
+    box = (cx - size // 2, cy - size // 2, cx + size // 2, cy + size // 2)
+    known = TEAMS.get(team)
+    path = logo_path(known.slug) if known else None
+    if path is not None and path.is_file():
+        draw.ellipse(box, fill=_WHITE)
+        logo = Image.open(path).convert("RGBA")
+        inner = int(size * 0.72)
+        logo.thumbnail((inner, inner), Image.Resampling.LANCZOS)
+        image.paste(logo, (cx - logo.width // 2, cy - logo.height // 2), logo)
+        return
+    draw.ellipse(box, fill=_hex(known.color if known else UNKNOWN_COLOR))
+    short = known.short if known else short_from_name(team)
+    draw.text((cx, cy), short, font=_display(int(size * 0.34)), fill=_WHITE, anchor="mm")
+
+
+def _match_card_title(invite: bool) -> str:
+    return "Погнали?" if invite else "Идём на матч?"
+
+
+def match_card_version(home: str, away: str, starts_at: datetime) -> str:
+    """Меняется вместе с картинкой (команды, время) — Telegram кэширует фото по адресу."""
+    raw = "\x1f".join([home, away, starts_at.astimezone(MINSK_TZ).isoformat()])
+    return hashlib.sha256(raw.encode()).hexdigest()[:12]
+
+
+def render_match_card(*, home: str, away: str, starts_at: datetime, invite: bool = False, story: bool = False) -> bytes:
+    """Открытка-превью домашнего матча: «Идём на матч?» / «Погнали?», команды, дата, Минск-Арена.
+
+    ``story=False`` — 1200×630 для ленты и превью ссылки, ``story=True`` — 1080×1920 для историй.
+    """
+    size = STORY_SIZE if story else CARD_SIZE
+    width, height = size
+    image = Image.new("RGB", size, _BLUE)
+    draw = ImageDraw.Draw(image)
+    pad = _PAD
+    inner = width - 2 * pad
+    head = _match_card_title(invite)
+    when = match_when(starts_at)
+    place = "Минск-Арена"
+
+    if story:
+        head_font = _largest(draw, head, _display, (150, 132, 116, 104, 92), inner)
+        draw.text((pad, 180), "кто кого", font=_display(46), fill=(197, 210, 238))
+        draw.text((pad, 270), head, font=head_font, fill=_YELLOW)
+        badge, centers = 340, (650, 1230)
+        draw.text((width // 2, (centers[0] + centers[1]) // 2 + 10), "—", font=_display(90), fill=_WHITE, anchor="mm")
+        slots = ((width // 2, centers[0], home), (width // 2, centers[1], away))
+        name_gap, name_w, name_sizes = badge // 2 + 64, inner, (64, 56, 48, 42)
+        when_y, place_y = 1620, 1710
+        when_sizes, place_size = (86, 76, 66, 58), 54
+    else:
+        head_font = _largest(draw, head, _display, (96, 88, 80, 72), inner)
+        draw.text((pad, 52), head, font=head_font, fill=_YELLOW)
+        badge = 190
+        slots = ((width // 4 + 20, 300, home), (3 * width // 4 - 20, 300, away))
+        draw.text((width // 2, 300), "—", font=_display(72), fill=_WHITE, anchor="mm")
+        name_gap, name_w, name_sizes = badge // 2 + 38, 470, (38, 34, 30, 27)
+        when_y, place_y = 508, 566
+        when_sizes, place_size = (50, 46, 42, 38), 34
+
+    for cx, cy, team in slots:
+        _team_badge(draw, image, team, cx=cx, cy=cy, size=badge)
+        font = _largest(draw, team, lambda s: _text(s, 800), name_sizes, name_w)
+        label = _ellipsize(draw, team, font, name_w)
+        draw.text((cx, cy + name_gap), label, font=font, fill=_WHITE, anchor="mm")
+
+    when_font = _largest(draw, when, _display, when_sizes, inner)
+    draw.text((width // 2, when_y), when, font=when_font, fill=_WHITE, anchor="mm")
+    draw.text((width // 2, place_y), place, font=_text(place_size, 700), fill=(197, 210, 238), anchor="mm")
+    return _png(image)
+
+
 def _initial(name: str) -> str:
     name = (name or "").strip()
     return name[:1].upper() if name else "·"
@@ -253,11 +334,14 @@ def league_caption(name: str) -> str:
 __all__ = [
     "CARD_SIZE",
     "check_result_card_sig",
+    "STORY_SIZE",
     "league_caption",
     "league_card_version",
+    "match_card_version",
     "match_when",
     "people_label",
     "render_league_card",
+    "render_match_card",
     "render_result_card",
     "result_caption",
     "result_card_sig",

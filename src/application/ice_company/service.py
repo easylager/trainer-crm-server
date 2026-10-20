@@ -264,7 +264,13 @@ def public_view(
             "version": int(company["live_version"]),
             "cancelled": bool(company["event_cancelled"]),
         },
-        "page_url": _page_url(settings, company["public_code"]),
+        # Компания на матч живёт в Mini App: ссылка-приглашение ведёт на страницу матча с кодом
+        # (``kkm_<матч>_<код>``), а не на ``/k/<код>`` — публичной страницы у неё нет.
+        "page_url": (
+            match_page_url(company, settings)
+            if company.get("event_kind") == MATCH_KIND
+            else _page_url(settings, company["public_code"])
+        ),
         "calendar_url": _page_url(settings, company["public_code"]) + "/event.ics",
     }
 
