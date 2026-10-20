@@ -63,16 +63,16 @@ async def test_share_has_every_key_the_sheet_reads_and_both_tones(app_use_test_d
         invited = (await client.get(SHARE.format(match_id), params={"record": "false", "invite": "true"})).json()
     assert _SHARE_KEYS <= set(plain) and _SHARE_KEYS <= set(invited)
     link = f"https://t.me/glide_test_bot?startapp=kkm_{match_id}"
-    assert plain["share_url"] == invited["share_url"] == link
-    where = "Динамо-Минск — СКА, ср, 2 декабря, 19:30 · Минск-Арена"
-    assert invited["invite_share_body"] == f"Погнали? {where}"
-    assert "Погнали" not in plain["place_share_body"] and "Погнали" not in plain["place_share_text"]
-    assert plain["place_share_body"] == "Динамо-Минск — СКА\nср, 2 декабря, 19:30 · Минск-Арена"
-    # Выбранный тон — в share_*, оба — в invite_*/place_*.
+    page = f"https://glide.test/kk/m/{match_id}"
+    # В чат — только ссылка на страницу с открыткой. Текст не клеим: он уже на картинке.
+    assert plain["share_url"] == plain["share_text"] == page
+    assert invited["share_url"] == invited["share_text"] == f"{page}?i=1"
+    assert plain["share_body"] == invited["share_body"] == ""
+    assert plain["place_share_body"] == invited["invite_share_body"] == ""
+    assert "Погнали" not in plain["share_text"] and "Погнали" not in invited["share_body"]
     assert plain["share_body"] == plain["place_share_body"]
     assert invited["share_body"] == invited["invite_share_body"]
-    assert invited["share_text"].startswith(link + "\n\n")
-    assert plain["invite_share_body"] == invited["invite_share_body"]
+    assert plain["app_url"] == invited["app_url"] == link
     assert plain["match_id"] == match_id and plain["share_context"] == "match_page"
     for body in (plain, invited):
         assert (
@@ -131,7 +131,29 @@ async def test_share_without_bot_falls_back_to_the_miniapp_page(
     await db_session.commit()
     async with _client() as client:
         body = (await client.get(SHARE.format(match_id), params={"record": "false"})).json()
-    assert body["share_url"] == f"https://glide.test/webapp/client-match?id={match_id}"
+    assert body["share_url"] == f"https://glide.test/kk/m/{match_id}"
+    assert body["app_url"] == f"https://glide.test/webapp/client-match?id={match_id}"
+    assert body["share_body"] == ""
+
+
+@pytest.mark.asyncio
+async def test_match_share_page_previews_the_card_and_opens_the_app(
+    app_use_test_db, db_session, arena
+) -> None:
+    match_id = await _match(db_session, starts_at=START)
+    await db_session.commit()
+    async with _client() as client:
+        page = await client.get(f"/kk/m/{match_id}", params={"i": 1})
+        bot = await client.get(f"/kk/m/{match_id}", headers={"User-Agent": "TelegramBot (like TwitterBot)"})
+        missing = await client.get("/kk/m/999999999")
+    assert page.status_code == 200
+    assert "og:image" in page.text and f"/kk/m/{match_id}/" in page.text and ".png" in page.text
+    assert "Погнали?" in page.text
+    assert f"startapp=kkm_{match_id}" in page.text
+    assert 'http-equiv="refresh"' in page.text
+    assert bot.status_code == 200
+    assert "og:image" in bot.text and "http-equiv" not in bot.text and "location.replace" not in bot.text
+    assert missing.status_code == 404
 
 
 # ---------- открытка-превью ----------
@@ -184,6 +206,25 @@ async def test_company_for_a_match_by_public_path(app_use_test_db, db_session, a
     assert view["page_url"] == f"https://t.me/glide_test_bot?startapp=kkm_{match_id}_{view['public_code']}"
     assert "/k/" not in view["page_url"]
     assert await _companies(db_session, match_id) == 1
+
+
+@pytest.mark.asyncio
+async def test_company_name_lands_on_the_match_card(app_use_test_db, db_session, arena) -> None:
+    match_id = await _match(db_session)
+    await db_session.commit()
+    async with _client() as client:
+        res = await _post_company(client, 880_304_511, match_id=match_id, name="Офис на Динамо")
+    assert res.status_code == 201, res.text
+    view = res.json()
+    assert view["name"] == "Офис на Динамо"
+    assert "Офис на Динамо" in view["card_text"]
+    assert view["card_text"].startswith("Идём на матч?")
+    async with _client() as client:
+        again = await _post_company(client, 880_304_511, match_id=match_id, name="Сектор Б")
+        kept = await _post_company(client, 880_304_511, match_id=match_id)
+    assert again.status_code == 201 and again.json()["public_code"] == view["public_code"]
+    assert again.json()["name"] == "Сектор Б"
+    assert kept.json()["name"] == "Сектор Б"
 
 
 @pytest.mark.asyncio

@@ -719,3 +719,15 @@ async def test_event_counts_the_crowd_and_names_the_next_home_match(db_session, 
     assert ev["next_home"]["id"] == next_home and ev["next_home"]["id"] != away_later
     assert ev["next_home"]["away"]["name"] == "Трактор"
     assert ev["next_home"]["event_href"] == f"client-match?id={next_home}"
+
+
+@pytest.mark.asyncio
+async def test_event_says_a_company_is_waiting_before_anyone_answers(db_session, arena) -> None:
+    match_id = await _match(db_session)
+    now = datetime.now(timezone.utc)
+    assert (await event_view(db_session, player_key=ME, match_id=match_id, now=now))["company_open"] is False
+    await create_match_company(
+        db_session, telegram_user_id=ME, match_id=match_id, home_team="Динамо-Минск", display_name="Макс"
+    )
+    ev = await event_view(db_session, player_key=ME, match_id=match_id, now=now)
+    assert ev["company_open"] is True and ev["people"] == []

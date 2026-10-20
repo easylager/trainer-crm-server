@@ -88,17 +88,20 @@ describe('варианты шита', () => {
     assert.equal(sheet.initialVariantId({ variant: 'company', company: false }), 'schedule');
   });
 
-  it('на вкладке компании только название команды и ник из Telegram, без порога', () => {
+  it('на вкладке компании — как это работает, название компании и ник из Telegram, без порога', () => {
     const html = sheet.companyBottomHtml({
       venueType: 'ice',
       sessionId: '9001',
       companyForm: { team: 'Пивной Олимп', you: 'Макс', error: '' },
     });
-    assert.doesNotMatch(html, /Сколько человек нужно|data-gss-cmin|порог/i);
-    assert.match(html, /Название команды/);
+    assert.doesNotMatch(html, /Сколько человек нужно|data-gss-cmin|порог|команд/i);
+    // Владелец 2026-10-20: одно поле — подпись на карточке, не «команда».
+    assert.match(html, /Название компании/);
+    assert.match(html, /gss-cname__lead/);
+    assert.match(html, /Это подпись на карточке выше/);
+    assert.match(html, /Отправить в чат/);
     assert.match(html, /data-gss-c="team"[^>]*value="Пивной Олимп"/);
     assert.match(html, /Вы в списке «Иду» как <b>Макс<\/b>/);
-    assert.match(html, />В чат</);
     assert.equal(html.includes('Как записать тебя'), false);
     assert.equal(html.includes('data-ch='), false);
     assert.equal(html.includes('type="number"'), false);

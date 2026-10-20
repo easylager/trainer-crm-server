@@ -452,7 +452,10 @@ async def create_company(
         raise CompanyRejected("Этот сеанс уже нельзя собрать.", 422)
     try:
         label = clean_free_text(display_name, max_len=cfg.ice_company_display_name_max_len, required=True, field="Имя")
-        title = clean_team_title(name, max_len=cfg.ice_company_name_max_len, required=False)
+        # В базе имя не длиннее 40 (ck_ice_companies_name). Длиннее — ответ, а не 500.
+        title = clean_team_title(
+            name, max_len=min(cfg.ice_company_name_max_len, 40), required=False, field="Название компании"
+        )
     except TextRejected as exc:
         raise CompanyRejected(exc.detail) from exc
     organizer = tg_participant_key(telegram_user_id)
@@ -561,6 +564,7 @@ async def create_match_company(
     match_id: int,
     home_team: str,
     display_name: str,
+    name: str = "",
     now: datetime | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
@@ -578,6 +582,7 @@ async def create_match_company(
         raise CompanyRejected("Арена матчей не найдена.", 503)
     try:
         label = clean_free_text(display_name, max_len=cfg.ice_company_display_name_max_len, required=True, field="Имя")
+        nickname = clean_team_title(name, max_len=MATCH_TITLE_MAX, required=False, field="Название компании")
     except TextRejected as exc:
         raise CompanyRejected(exc.detail) from exc
     organizer = tg_participant_key(telegram_user_id)
@@ -601,7 +606,7 @@ async def create_match_company(
             session,
             event_id=event_id,
             organizer=organizer,
-            title=match_title(str(match["home_team"]), str(match["away_team"])),
+            title=nickname or match_title(str(match["home_team"]), str(match["away_team"])),
             label=label,
             cfg=cfg,
         )
@@ -612,6 +617,13 @@ async def create_match_company(
             arena_id=int(arena["id"]),
             payload={"surface": "hockey_match"},
             actor_hash=None,
+        )
+    elif nickname:
+        # Ответ «Иду» уже завёл компанию без подписи. Пустое имя её не затирает:
+        # тот же вызов делает и RSVP, у него названия нет.
+        await session.execute(
+            text("UPDATE ice_companies SET name = :name WHERE public_code = :code AND status = 'open'"),
+            {"name": nickname, "code": code},
         )
     await session.commit()
     view = await read_company(session, code, viewer_key=organizer, settings=cfg)

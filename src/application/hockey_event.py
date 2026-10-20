@@ -322,6 +322,10 @@ async def event_view(
         if key != me and (n := _key_number(key)) is not None and n in picks
     ][:2]
 
+    # Компания уже собрана, но ответов ещё нет — страница показывает «ждём ответов», а не пустоту.
+    my_companies = (
+        (await session.execute(_MY_OTHER_COMPANIES, {"src": f"hockey_match:{row.id}", "me": me})).scalars().all()
+    )
     crowd = (await session.execute(_CROWD, {"src": f"hockey_match:{row.id}"})).one()
     nxt = (
         await session.execute(_NEXT_HOME, {"home": DINAMO, "after": max(now, starts_at), "id": row.id})
@@ -358,6 +362,7 @@ async def event_view(
             "company_names": company_names,
         },
         "crowd": {"going": int(crowd.going or 0), "maybe": int(crowd.maybe or 0)},
+        "company_open": bool(my_companies),
         "next_home": (
             {
                 "id": nxt.id,

@@ -1522,6 +1522,59 @@
     host.hidden = !html;
   }
 
+  /* Лица тренеров на вкладке «Покататься». Грузим один раз на город,
+     после ленты катков, чтобы поиск льда не ждал людей. */
+  var trainerRail = { cityId: null, items: null, inflight: false };
+
+  function renderTrainerRail() {
+    var host = $('iceTrainerRail');
+    if (!host) return;
+    var scope = M.catalogScope(state.intent, state.venueTypes);
+    var show = M.showTrainerRail({
+      intent: state.intent,
+      scope: scope,
+      placeService: state.placeService,
+      trainerCount: cityCountsForModes().trainerCount,
+      items: trainerRail.cityId === state.cityId ? trainerRail.items : null,
+    });
+    if (!show) {
+      host.hidden = true;
+      return;
+    }
+    if (trainerRail.cityId !== state.cityId || trainerRail.items == null) {
+      host.hidden = true;
+      if (!trainerRail.inflight || trainerRail.cityId !== state.cityId) fetchTrainerRail();
+      return;
+    }
+    var html = M.trainerRailHtml(trainerRail.items);
+    if (host.getAttribute('data-sig') !== html) {
+      host.innerHTML = html;
+      host.setAttribute('data-sig', html);
+    }
+    host.hidden = !html;
+  }
+
+  function fetchTrainerRail() {
+    var cityId = state.cityId;
+    if (cityId == null || cityId === '') return;
+    trainerRail.cityId = cityId;
+    trainerRail.items = null;
+    trainerRail.inflight = true;
+    fetchJson(M.buildTrainersUrl({ cityId: cityId, limit: 8 }))
+      .then(function (data) {
+        if (trainerRail.cityId !== cityId) return;
+        trainerRail.inflight = false;
+        trainerRail.items = (data && data.items) || [];
+        renderTrainerRail();
+      })
+      .catch(function () {
+        if (trainerRail.cityId !== cityId) return;
+        trainerRail.inflight = false;
+        trainerRail.items = [];
+        renderTrainerRail();
+      });
+  }
+
   function renderList() {
     var list = listEl();
     var cap = $('iceCaption');
@@ -1541,6 +1594,7 @@
     setShareButton();
     renderSeasonFooter();
     renderForYou();
+    renderTrainerRail();
     if (!list) return;
     var paint = M.listPaintMode({
       intent: state.intent,
@@ -3238,6 +3292,18 @@
           persist();
           loadArenas();
         }
+      });
+    }
+
+    var trainerRailHost = $('iceTrainerRail');
+    if (trainerRailHost && modeSeg) {
+      trainerRailHost.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-catalog-mode]');
+        if (!btn) return;
+        var chip = modeSeg.querySelector(
+          '[data-catalog-mode="' + (btn.getAttribute('data-catalog-mode') || '') + '"]'
+        );
+        if (chip) chip.click();
       });
     }
 

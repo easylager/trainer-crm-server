@@ -160,7 +160,7 @@ describe('catalog header (A′)', () => {
     });
     assert.deepEqual(
       modes.map((m) => m.id),
-      ['places', 'shop', 'coach']
+      ['places', 'coach', 'shop']
     );
     assert.equal(modes.find((m) => m.id === 'coach').active, true);
     assert.equal(modes.find((m) => m.id === 'shop').active, false);
@@ -178,7 +178,7 @@ describe('catalog header (A′)', () => {
     assert.equal(modes.find((m) => m.id === 'coach').label, 'Тренеры');
   });
 
-  it('catalogModesView: С клюшкой и Заточка — разделы в одном порядке с сайтом', () => {
+  it('catalogModesView: Тренеры вторые, чтобы чип был на первом экране', () => {
     const { catalogModesView, sectionHint } = loadModel();
     const modes = catalogModesView({
       facets: [{ key: 'ice', count: 4 }, { key: 'shop', count: 2 }],
@@ -192,11 +192,11 @@ describe('catalog header (A′)', () => {
     });
     assert.deepEqual(
       modes.map((m) => m.id),
-      ['places', 'ohm', 'service', 'shop', 'coach']
+      ['places', 'coach', 'ohm', 'service', 'shop']
     );
     assert.deepEqual(
       modes.map((m) => m.label),
-      ['Покататься', 'С клюшкой', 'Заточка', 'Магазины', 'Тренеры']
+      ['Покататься', 'Тренеры', 'С клюшкой', 'Заточка', 'Магазины']
     );
     assert.equal(modes.find((m) => m.id === 'service').active, true);
     assert.equal(modes.find((m) => m.id === 'places').active, false);
@@ -204,6 +204,23 @@ describe('catalog header (A′)', () => {
     assert.equal(sectionHint('places', 'service'), 'заточка коньков');
     assert.equal(sectionHint('places', ''), 'каток, зал или трасса');
     assert.equal(sectionHint('shop', ''), '');
+  });
+
+  it('полоса тренеров на Покататься: лица и вход во весь раздел', () => {
+    const { showTrainerRail, trainerRailHtml } = loadModel();
+    assert.equal(showTrainerRail({ intent: 'skate', trainerCount: 4, items: null }), true);
+    assert.equal(showTrainerRail({ intent: 'skate', items: [] }), false);
+    assert.equal(showTrainerRail({ intent: 'ohm', trainerCount: 4 }), false);
+    assert.equal(showTrainerRail({ intent: 'skate', placeService: 'service', trainerCount: 4 }), false);
+    const html = trainerRailHtml([
+      { id: 7, name: 'Анна Коваль', primary_arena_name: 'Чижовка', profile: {} },
+    ]);
+    assert.match(html, /Анна Коваль/);
+    assert.match(html, /Чижовка/);
+    assert.match(html, /catalog\?trainer_id=7/);
+    assert.match(html, /data-catalog-mode="coach"/);
+    assert.match(html, />Все</);
+    assert.equal(trainerRailHtml([]), '');
   });
 
   it('С клюшкой виден по центрам, даже если сеансов ОХМ нет', () => {

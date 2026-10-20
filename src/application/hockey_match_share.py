@@ -1,9 +1,9 @@
 """Домашний матч Динамо в общем движке шаринга (TASK-304): «Погнали?», «Компания», «Открытка».
 
-Лист шаринга карточки катка (``GlideShareSheet``) берёт из ответа ``/arenas/{ref}/share`` ссылку, тексты
-двух тонов и адреса картинок. Здесь те же данные для матча, чтобы страница матча открывала тот же лист.
-
-У матча нет публичной страницы на сайте, поэтому ссылка — вход в Mini App ``startapp=kkm_<матч>``.
+Лист шаринга берёт ссылку, пустое тело и адреса картинок. В чат уходит только ссылка:
+подпись уже нарисована на открытке, второй текст её дублирует. Превью Telegram берёт
+с публичной страницы ``/kk/m/<id>`` — у ``t.me/...?startapp=`` картинки нет.
+Страница сразу открывает Mini App.
 """
 
 from __future__ import annotations
@@ -14,9 +14,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application import hockey_event
-from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.hockey_cards import match_card_version
-from src.application.ice_company.service import MATCH_VENUE_LABEL
 from src.application.place_links import match_start_param, telegram_open_link
 from src.ingestion.hockey_sources import MINSK_TZ
 from src.shared.config import Settings
@@ -36,8 +34,6 @@ _MONTHS_GEN = (
     "ноября",
     "декабря",
 )
-
-INVITE_HOOK = "Погнали?"
 
 
 def when_phrase(starts_at: datetime) -> str:
@@ -61,6 +57,18 @@ def match_link(match_id: int, settings: Settings) -> str:
     return f"{base}{path}" if base else path
 
 
+def match_page_url(settings: Settings, *, match_id: int, invite: bool) -> str | None:
+    """Публичная страница матча ``/kk/m/<id>``: у неё превью-картинка, и она сразу ведёт в Mini App.
+
+    Ссылка ``t.me/<бот>?startapp=…`` превью не даёт — в чате видно только ссылку и текст.
+    Без внешнего адреса страницы нет — тогда делимся ссылкой в Mini App напрямую.
+    """
+    base = (settings.webapp_base_url or "").strip().rstrip("/")
+    if not base.startswith("https://"):
+        return None
+    return f"{base}/kk/m/{int(match_id)}" + ("?i=1" if invite else "")
+
+
 def card_image_url(settings: Settings, *, match_id: int, version: str, invite: bool, story: bool) -> str:
     """Открытка матча. Версия — в адресе (Telegram кэширует фото по адресу), тон — в query."""
     base = (settings.webapp_base_url or "").strip().rstrip("/")
@@ -68,20 +76,9 @@ def card_image_url(settings: Settings, *, match_id: int, version: str, invite: b
     return f"{base}/kk/m/{int(match_id)}/{name}" + ("?i=1" if invite else "")
 
 
-def _texts(*, url: str, home: str, away: str, starts_at: datetime) -> tuple[dict[str, str], dict[str, str]]:
-    title = f"{home} — {away}"
-    where = f"{when_phrase(starts_at)} · {MATCH_VENUE_LABEL}"
-    invite_text = f"{url}\n\n{INVITE_HOOK} {title}, {where}"
-    plain_text = f"{url}\n\n{title}\n{where}"
-
-    def pack(text: str) -> dict[str, str]:
-        return {
-            "share_url": url,
-            "share_text": text,
-            "share_body": share_body_for_native_share_dialog(text, url),
-        }
-
-    return pack(invite_text), pack(plain_text)
+def _link_only(url: str) -> dict[str, str]:
+    """Сообщение — сама ссылка. Тон («Погнали?» / команды) живёт на открытке, не в тексте."""
+    return {"share_url": url, "share_text": url, "share_body": ""}
 
 
 async def match_share_payload(
@@ -96,8 +93,9 @@ async def match_share_payload(
     cfg = settings or Settings()  # type: ignore[call-arg]
     row = await hockey_event._home_match(session, match_id)  # noqa: SLF001 — одна выборка домашнего матча на модуль
     starts_at = row.starts_at if row.starts_at.tzinfo else row.starts_at.replace(tzinfo=timezone.utc)
-    url = match_link(int(row.id), cfg)
-    invited, plain = _texts(url=url, home=row.home_team, away=row.away_team, starts_at=starts_at)
+    app_link = match_link(int(row.id), cfg)
+    invited = _link_only(match_page_url(cfg, match_id=int(row.id), invite=True) or app_link)
+    plain = _link_only(match_page_url(cfg, match_id=int(row.id), invite=False) or app_link)
     version = match_card_version(row.home_team, row.away_team, starts_at)
     chosen = invited if invite else plain
     return {
@@ -112,4 +110,5 @@ async def match_share_payload(
         "story_image_url": card_image_url(cfg, match_id=int(row.id), version=version, invite=invite, story=True),
         "share_context": share_context,
         "match_id": int(row.id),
+        "app_url": app_link,
     }

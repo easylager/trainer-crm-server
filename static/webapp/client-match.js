@@ -220,7 +220,18 @@
   function paintWho(ev) {
     var w = M.who(ev.people);
     var box = $('cmWho');
-    box.hidden = !w;
+    var waiting = !w && !!ev.company_open;
+    box.hidden = !w && !waiting;
+    box.classList.toggle('cm-who--wait', waiting);
+    if (waiting) {
+      // Компания собрана, ответов ещё нет: показываем, что карточка в чате и ответы появятся здесь.
+      $('cmWhoTitle').textContent = 'Твоя компания';
+      $('cmWhoCount').textContent = 'ждём ответов';
+      $('cmFaces').replaceChildren(el('span', 'cm-face cm-face--me', 'Я'));
+      $('cmWhoLine').textContent = 'Карточка в чате. Кто нажмёт «Иду» — появится здесь.';
+      return;
+    }
+    $('cmWhoTitle').textContent = 'Кто из ваших';
     if (!w) return;
     $('cmWhoCount').textContent = w.count;
     $('cmWhoLine').textContent = w.line;
@@ -399,6 +410,14 @@
     $('cmInvite').addEventListener('click', function () { openShare('invite'); });
     $('cmCompany').addEventListener('click', function () { openShare('company'); });
     if (!matchId) return fail('Матч не найден. Вернитесь на главную — там ближайший.');
+    // Вернулся из чата (отправил карточку, друзья ответили) — обновляем «Кто из ваших» без перезагрузки.
+    doc.addEventListener('visibilitychange', function () {
+      if (doc.visibilityState !== 'visible' || !state.ev || state.busy) return;
+      api('GET', '/client/hockey/matches/' + matchId + '/event').then(function (ev) {
+        state.ev = ev;
+        paint(ev);
+      }, function () { /* старые данные остаются */ });
+    });
     api('GET', '/client/hockey/matches/' + matchId + '/event')
       .then(function (ev) {
         state.ev = ev;

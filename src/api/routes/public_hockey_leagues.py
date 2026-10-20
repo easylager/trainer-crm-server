@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import html
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.catalog_share_actor import catalog_share_actor
@@ -22,7 +26,8 @@ from src.application.hockey_cards import (
     render_result_card,
     result_verdict,
 )
-from src.application.hockey_match_share import match_share_payload
+from src.application.hockey_match_share import card_image_url, match_link, match_share_payload, when_phrase
+from src.application.hockey_cards import match_card_version
 from src.application.hockey_leagues import league_preview
 from src.application.hockey_matches import STATUS_FINAL, get_match
 from src.application.hockey_share import league_card
@@ -127,6 +132,17 @@ async def get_league_card_png(code: str, session: AsyncSession = Depends(get_ses
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
 
 
+# Только краулеры превью. «WhatsApp» и «Viber» в UA есть и у живого браузера внутри мессенджера —
+# их не держим на странице, иначе человек не попадёт в приложение.
+_PREVIEW_BOTS = ("telegrambot", "twitterbot", "facebookexternalhit", "slackbot", "vkshare", "discordbot")
+
+
+def _preview_bot(request: Request) -> bool:
+    """Краулер превью не уводим на t.me: иначе он снимет картинку уже с чужой страницы."""
+    agent = (request.headers.get("user-agent") or "").lower()
+    return any(bot in agent for bot in _PREVIEW_BOTS)
+
+
 async def _match_card(session: AsyncSession, match_id: int, *, invite: bool, story: bool) -> Response:
     if not hockey_event.enabled():
         raise HTTPException(status_code=404, detail="Матч не найден")
@@ -138,6 +154,62 @@ async def _match_card(session: AsyncSession, match_id: int, *, invite: bool, sto
     # Версия в адресе меняется вместе с командами и временем, поэтому кэш на час безопасен;
     # старая ссылка из давно отправленного сообщения получает актуальную картинку, а не 404.
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
+
+
+@card_router.get("/kk/m/{match_id}")
+async def get_match_share_page(
+    match_id: int,
+    request: Request,
+    i: int = Query(0),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    """Страница-превью матча для ссылки в чате: картинка «Погнали?» в превью и сразу вход в Mini App.
+
+    Её открывает Telegram, чтобы собрать превью, и друг — по тапу; друг сразу уходит в приложение.
+    """
+    if not hockey_event.enabled():
+        raise HTTPException(status_code=404, detail="Матч не найден")
+    try:
+        row = await hockey_event._home_match(session, match_id)  # noqa: SLF001
+    except hockey_event.MatchNotFound:
+        raise HTTPException(status_code=404, detail="Матч не найден") from None
+    cfg = Settings()  # type: ignore[call-arg]
+    starts_at = row.starts_at if row.starts_at.tzinfo else row.starts_at.replace(tzinfo=timezone.utc)
+    invite = i == 1
+    title = f"{row.home_team} — {row.away_team}"
+    head = f"Погнали? {title}" if invite else title
+    where = f"{when_phrase(starts_at)} · Минск-Арена"
+    image = card_image_url(
+        cfg,
+        match_id=int(row.id),
+        version=match_card_version(row.home_team, row.away_team, starts_at),
+        invite=invite,
+        story=False,
+    )
+    go = match_link(int(row.id), cfg)
+    e = html.escape
+    hop = ""
+    if not _preview_bot(request):
+        hop = (
+            f'<meta http-equiv="refresh" content="0; url={e(go)}">'
+            f"<script>location.replace({json.dumps(go)});</script>"
+        )
+    page = f"""<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{e(head)}</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="{e(head)}">
+<meta property="og:description" content="{e(where)}">
+<meta property="og:image" content="{e(image)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+{hop}
+<style>body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1747b5;color:#fff;font:600 18px/1.4 system-ui,sans-serif;text-align:center}}a{{color:#ffd23f}}</style>
+</head><body><p>{e(head)}<br>{e(where)}<br><a href="{e(go)}">Открыть в Glide</a></p>
+</body></html>"""
+    return HTMLResponse(page, headers={"Cache-Control": "public, max-age=300"})
 
 
 @card_router.get("/kk/m/{match_id}/{version}.story.png")

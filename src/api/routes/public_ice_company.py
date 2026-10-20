@@ -158,6 +158,7 @@ async def post_company(
                 match_id=body.match_id,
                 home_team=DINAMO,
                 display_name=organizer_name,
+                name=body.name,
             )
         else:
             assert body.session_id is not None

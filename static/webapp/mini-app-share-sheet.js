@@ -740,7 +740,8 @@
   }
 
   function telegramLinkOnly() {
-    return !!(state && state.endpoint);
+    // Подборка и матч — только ссылка: превью-картинка страницы говорит сама (владелец 2026-10-20).
+    return !!(state && (state.endpoint || state.match));
   }
 
   /**
@@ -1113,13 +1114,11 @@
   }
 
   function renderPreviewFigureHtml(p) {
-    // Подборка: текст дублирует то, что уже нарисовано на og/story — только картинки.
+    // Подборка и матч: слова уже нарисованы на открытке, подпись под картинкой их дублирует.
+    var body = String((p && p.share_body) || '').trim();
     var caption = '';
-    if (!state || !state.endpoint) {
-      caption =
-        '<figcaption>' +
-        esc(p ? p.share_body : 'Готовим карточку…') +
-        '</figcaption>';
+    if (body && (!state || (!state.endpoint && !state.match))) {
+      caption = '<figcaption>' + esc(body) + '</figcaption>';
     }
     return '<figure class="gss-preview">' + renderPreview(p) + caption + '</figure>';
   }
@@ -1193,6 +1192,33 @@
     return (sheetState && sheetState.companyForm) || {};
   }
 
+  /** «Так увидят в чате»: карточка компании с кнопками ответа — до того, как её отправили. */
+  function renderCompanyPreview(sheetState) {
+    var form = companyFormOf(sheetState);
+    var isMatch = !!(sheetState && sheetState.match);
+    var name = String(form.team || '').trim();
+    var title = isMatch ? 'Идём на матч?' : (name || 'Едем на лёд?');
+    var matchLine = isMatch
+      ? (name || String(sheetState.match.title || '')) +
+        (sheetState.match.day ? ' · ' + sheetState.match.day : '') +
+        (sheetState.match.time ? ', ' + sheetState.match.time : '')
+      : '';
+    var what = isMatch ? matchLine : rinkName(sheetState);
+    var you = String(form.you || '').trim();
+    var answers = isMatch ? ['Иду', 'Смотрю дома', 'Не смогу'] : ['Иду', 'Может', 'Не смогу'];
+    return (
+      '<figure class="gss-cprev" aria-label="Так карточку увидят в чате">' +
+      '<span class="gss-cprev__card">' +
+      '<b class="gss-cprev__title">' + esc(title) + '</b>' +
+      (what ? '<span class="gss-cprev__what">' + esc(what) + '</span>' : '') +
+      '<span class="gss-cprev__who">Идут: ' + esc(you || 'ты') + '</span>' +
+      '</span>' +
+      '<span class="gss-cprev__btns">' + answers.map(function (a) { return '<i>' + esc(a) + '</i>'; }).join('') + '</span>' +
+      '<figcaption>Так увидят в чате</figcaption>' +
+      '</figure>'
+    );
+  }
+
   function renderCompanyBottom(sheetState) {
     var form = companyFormOf(sheetState);
     if (form.shared) {
@@ -1202,7 +1228,11 @@
       return (
         '<div class="gss-zdone">' +
         '<p class="gss-zdone__t">Карточка в чате</p>' +
-        '<p class="gss-zdone__how">Там жмут «Иду». Кто откроет ссылку — встаёт на лёд.</p>' +
+        '<p class="gss-zdone__how">' +
+        (sheetState && sheetState.match
+          ? 'Там жмут «Иду» или «Смотрю дома» — карточка сама покажет, кто идёт на матч.'
+          : 'Там жмут «Иду». Кто откроет ссылку — встаёт на лёд.') +
+        '</p>' +
         '<button type="button" class="gss-zlink" data-gss-cshare="copy">Скопировать ссылку</button>' +
         retry +
         '<p class="gss-zf__err" data-gss-cerr role="alert">' + esc(form.error || '') + '</p>' +
@@ -1210,10 +1240,21 @@
       );
     }
     var you = String(form.you || '').trim();
+    var isMatch = !!(sheetState && sheetState.match);
+    /* Владелец 2026-10-20: вкладка «Компания», а поле просило «команду» — на матче это путают
+       с клубами. Одно поле — подпись на карточке выше; пустое оставляем заголовок по умолчанию. */
     var teamField =
-      '<label class="gss-zf__f"><span>Название команды</span>' +
-      '<input type="text" data-gss-c="team" maxlength="48" enterkeyhint="done" ' +
-      'placeholder="Необязательно" value="' + esc(form.team || '') + '" /></label>';
+      '<div class="gss-cname">' +
+      '<p class="gss-cname__lead">Это подпись на карточке выше. Друзья увидят её в чате и нажмут «Иду» прямо там.</p>' +
+      '<label class="gss-zf__f"><span>Название компании <em>по желанию</em></span>' +
+      '<input type="text" data-gss-c="team" maxlength="40" enterkeyhint="done" ' +
+      'placeholder="' + esc(isMatch ? 'Например, «Офис на Динамо»' : 'Например, «Пятничный лёд»') +
+      '" value="' + esc(form.team || '') + '" /></label>' +
+      '<p class="gss-cname__hint">' +
+      (isMatch
+        ? 'Пусто — на карточке останутся команды матча.'
+        : 'Пусто — на карточке будет «Едем на лёд?».') +
+      '</p></div>';
     var youLine = you
       ? '<p class="gss-company-who">Вы в списке «Иду» как <b>' + esc(you) + '</b> — из Telegram.</p>'
       : '';
@@ -1223,7 +1264,7 @@
       '<p class="gss-zf__err" data-gss-cerr role="alert">' + esc(form.error || '') + '</p>' +
       '<button type="button" class="gss-zovi__btn" data-variant-action="company"' +
       (form.busy ? ' disabled' : '') +
-      '>' + (form.busy ? 'Ставим в чат…' : 'В чат') + '</button>'
+      '>' + (form.busy ? 'Ставим в чат…' : 'Отправить в чат') + '</button>'
     );
   }
 
@@ -1231,6 +1272,10 @@
     var input = ev.target && ev.target.closest && ev.target.closest('[data-gss-c]');
     if (!input || !state || !state.companyForm) return;
     state.companyForm[input.getAttribute('data-gss-c')] = input.value;
+    if (input.getAttribute('data-gss-c') === 'team') {
+      var preview = root.querySelector('.gss-preview-host');
+      if (preview) preview.innerHTML = renderCompanyPreview(state);
+    }
     if (state.companyForm.error) {
       state.companyForm.error = '';
       var err = root.querySelector('[data-gss-cerr]');
@@ -1592,9 +1637,7 @@
       available: function (sheetState) {
         return !sheetState.endpoint && isIcePlace(sheetState) && !!sheetState.company;
       },
-      renderPreview: function () {
-        return '';
-      },
+      renderPreview: renderCompanyPreview,
       renderBottom: renderCompanyBottom,
       onAction: createCompany,
       onSession: function () {

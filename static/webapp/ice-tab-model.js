@@ -306,8 +306,10 @@
   }
 
   /**
-   * Верхний сегмент — те же пять слов, что плитки города на сайте, в том же порядке:
-   * Покататься · С клюшкой · Заточка · Магазины · Тренеры. Пустой раздел не показываем.
+   * Верхний сегмент. «Тренеры» сразу за «Покататься»: на телефоне в ряд
+   * влезают четыре слова, и пятый чип человек просто не видит.
+   * Покататься · Тренеры · С клюшкой · Заточка · Магазины.
+   * Пустой раздел не показываем.
    *
    * «Магазины» нельзя вешать только на venue_type_facets ответа arenas: вкладка
    * «Тренеры» фасеты не привозит, и после возврата с карточки тренера сегмент
@@ -332,6 +334,11 @@
         active: scope === 'places' && !serviceOn,
       });
     }
+    var trainers = Number(opts.trainerCount);
+    if (isNaN(trainers)) trainers = 0;
+    if (trainers > 0) {
+      modes.push({ id: 'coach', label: copyLabel('route.trainers', 'Тренеры'), active: scope === 'coach' });
+    }
     var ohmN = Number(opts.ohmCount);
     var centerN = Number(opts.centerCount);
     if ((!isNaN(ohmN) && ohmN > 0) || (!isNaN(centerN) && centerN > 0)) {
@@ -349,11 +356,6 @@
     if (!(shops > 0)) shops = Number(opts.shopCount) || 0;
     if (shops > 0) {
       modes.push({ id: 'shop', label: copyLabel('route.shops', 'Магазины'), active: scope === 'shop' });
-    }
-    var trainers = Number(opts.trainerCount);
-    if (isNaN(trainers)) trainers = 0;
-    if (trainers > 0) {
-      modes.push({ id: 'coach', label: copyLabel('route.trainers', 'Тренеры'), active: scope === 'coach' });
     }
     return modes;
   }
@@ -2066,6 +2068,45 @@
     return !!(opts.items && opts.items.length);
   }
 
+  /* Полоса лиц на «Покататься». Чип «Тренеры» человек может и не нажать —
+     здесь он видит людей, к которым можно записаться, не уходя с катков. */
+  function showTrainerRail(opts) {
+    opts = opts || {};
+    if (opts.intent !== INTENTS.skate) return false;
+    if (opts.scope === 'shop' || opts.scope === 'ohm' || opts.scope === 'coach') return false;
+    if (opts.placeService === 'service') return false;
+    if (opts.items) return opts.items.length > 0;
+    return Number(opts.trainerCount) > 0;
+  }
+
+  function trainerRailHtml(items) {
+    var list = (items || []).slice(0, 6);
+    if (!list.length) return '';
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    var pills = list.map(function (item) {
+      var card = trainerCardView(item);
+      var face = card.thumb
+        ? '<img class="ice-foryou__face" src="' + esc(card.thumb) + '" alt="" loading="lazy" decoding="async">'
+        : '<span class="ice-foryou__face ice-foryou__face--letter" aria-hidden="true">' + esc(card.initial) + '</span>';
+      var price = formatTrainerPriceFrom(item);
+      var sub = price || (item && item.primary_arena_name) || '';
+      return (
+        '<a class="ice-foryou__pill" href="' + esc(card.href) + '">' +
+        face +
+        '<span class="ice-foryou__text"><b>' + esc(card.name) + '</b>' +
+        (sub ? '<span>' + esc(sub) + '</span>' : '') +
+        '</span></a>'
+      );
+    }).join('');
+    pills +=
+      '<button type="button" class="ice-foryou__pill" data-catalog-mode="coach">' +
+      '<span class="ice-foryou__text"><b>Все</b></span></button>';
+    return '<p class="ice-foryou__head">Тренеры</p><div class="ice-foryou__row">' + pills + '</div>';
+  }
+
   function forYouStripHtml(items) {
     var list = (items || []).slice(0, 3);
     if (!list.length) return '';
@@ -2459,6 +2500,8 @@
     formatEmptySearch: formatEmptySearch,
     formatSortCaption: formatSortCaption,
     showForYou: showForYou,
+    showTrainerRail: showTrainerRail,
+    trainerRailHtml: trainerRailHtml,
     forYouStripHtml: forYouStripHtml,
     listPaintMode: listPaintMode,
     listHostId: listHostId,

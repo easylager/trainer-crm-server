@@ -975,6 +975,9 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   color: var(--glide-text); text-decoration: none;
 }
 .ice-foryou__pill:active { background: var(--glide-brand-wash); }
+button.ice-foryou__pill {
+  font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
 .ice-foryou__face {
   width: 34px; height: 34px; border-radius: var(--app-radius-pill); object-fit: cover; flex: none;
   background: var(--glide-line);

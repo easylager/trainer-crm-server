@@ -81,6 +81,8 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-face + .cm-face { margin-left: -10px; }
 .cm-face--me { background: var(--g-accent); color: var(--g-on-accent); }
 .cm-who__line { font-size: 15px; line-height: 1.35; color: var(--g-ink-2); }
+.cm-who--wait .cm-count { color: var(--g-accent-ink); }
+.cm-bar .ga-btn { font-size: 15px; padding: 0 10px; white-space: nowrap; }
 
 /* Что дальше после ответа: мягко выезжает под кнопками. */
 .cm-crowd { font-size: 13px; font-weight: 600; color: var(--g-accent-ink); text-align: right; }
