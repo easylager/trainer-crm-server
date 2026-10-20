@@ -291,7 +291,7 @@ async def league_table(session: AsyncSession, *, league_id: int, player_key: int
 TITLE_ORDER = ("cap", "scarf", "vanga", "streak", "optimist")
 VANGA_MIN = 2
 STREAK_MIN = 3
-OPTIMIST_MARGIN = 3
+OPTIMIST_MARGIN = 2
 OPTIMIST_MIN_PICKS = 2
 
 _TITLE_PICKS = text("""

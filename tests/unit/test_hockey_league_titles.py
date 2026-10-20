@@ -97,8 +97,15 @@ def test_streak_counts_winners_from_the_latest_match_back() -> None:
     assert 1 not in pick_titles(broken, next_match_id=None)
 
 
-def test_optimist_puts_dinamo_three_goals_up_on_average_home_or_away() -> None:
+def test_optimist_puts_dinamo_two_goals_up_on_average_home_or_away() -> None:
     picks = [_s(1, 20, 5, 1), _s(1, 21, 0, 3, home="ХК Сочи"), _s(2, 20, 2, 1), _s(2, 21, 1, 2, home="ХК Сочи")]
     titles = pick_titles(picks, next_match_id=None)
     assert titles[1]["id"] == "optimist"
     assert 2 not in titles
+
+
+def test_optimist_starts_at_exactly_two_goals_on_average() -> None:
+    exactly_two = [_s(5, 30, 3, 1), _s(5, 31, 4, 2)]
+    assert pick_titles(exactly_two, next_match_id=None)[5]["id"] == "optimist"
+    just_under = [_s(6, 30, 3, 1), _s(6, 31, 2, 1)]
+    assert 6 not in pick_titles(just_under, next_match_id=None)
