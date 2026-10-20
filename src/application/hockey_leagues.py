@@ -15,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.hockey_game import DEFAULT_PLAYER_NAME, POINTS_EXACT, season_start
+from src.application.hockey_game import DEFAULT_PLAYER_NAME, POINTS_EXACT, POINTS_WINNER, season_start
 
 NAME_MAX = 28
 MAX_MEMBERS = 100
@@ -283,6 +283,126 @@ async def league_table(session: AsyncSession, *, league_id: int, player_key: int
     await _member_league(session, league_id, player_key, lock=False)
     params = {"league_id": league_id, "exact": POINTS_EXACT, "season_start": season_start(_utc(now))}
     return [LeagueRow(**r._mapping) for r in (await session.execute(_LEAGUE_TABLE, params)).all()]
+
+
+# ---------- звания в таблице лиги (владелец 2026-10-20) ----------
+# Одно на человека: шутим над ходом, а не над человеком. Всё — из готовых ходов.
+# Если подходит несколько — берём самое яркое по этому порядку.
+TITLE_ORDER = ("cap", "dark_horse", "vanga", "streak", "optimist")
+STREAK_MIN = 3
+OPTIMIST_MARGIN = 3
+OPTIMIST_MIN_PICKS = 2
+
+_TITLE_PICKS = text("""
+    SELECT p.player_key, m.id AS match_id, m.starts_at, m.status, m.home_team, p.side, p.points,
+           p.home_score AS pick_home, p.away_score AS pick_away
+    FROM hockey_picks AS p
+    JOIN hockey_matches AS m ON m.id = p.match_id
+    WHERE p.player_key IN (SELECT player_key FROM hockey_league_members WHERE league_id = :league_id)
+      AND m.starts_at >= :season_start
+    ORDER BY m.starts_at, m.id
+    """)
+
+_NEXT_MATCH = text("""
+    SELECT id FROM hockey_matches WHERE status = 'scheduled' AND starts_at > :now
+    ORDER BY starts_at, id LIMIT 1
+    """)
+
+
+def _dinamo_side(home_team: str) -> str:
+    from src.application.hockey_matches import DINAMO
+
+    return "home" if home_team == DINAMO else "away"
+
+
+def _plural(n: int, one: str, few: str, many: str) -> str:
+    m10, m100 = n % 10, n % 100
+    if m10 == 1 and m100 != 11:
+        return one
+    if 2 <= m10 <= 4 and not 12 <= m100 <= 14:
+        return few
+    return many
+
+
+def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, dict[str, str]]:
+    """Звания участников лиги по их ходам за сезон (чистая функция, ходы — по времени матча).
+
+    - cap «Кепка позора» — меньше всех очков за последний сыгранный матч лиги; если очки у всех
+      равные — кепки нет. Висит, пока не сыграют следующий матч.
+    - dark_horse «Тёмная лошадка» — ход против Динамо на ближайший матч;
+    - vanga «Ванга» — единственный лидер лиги по точным счетам;
+    - streak «Чуйка» — победитель угадан STREAK_MIN+ сыгранных матчей подряд;
+    - optimist «Вечный оптимист» — в среднем ставит Динамо +OPTIMIST_MARGIN и больше.
+    """
+    found: dict[int, dict[str, dict[str, str]]] = {}
+
+    def give(player: int, key: str, label: str, detail: str = "") -> None:
+        found.setdefault(player, {})[key] = {"id": key, "label": label, "detail": detail}
+
+    scored = [p for p in picks if p["status"] == "final" and p["points"] is not None]
+    if scored:
+        last_match = scored[-1]["match_id"]
+        last = [p for p in scored if p["match_id"] == last_match]
+        if len(last) >= 2:
+            low = min(p["points"] for p in last)
+            if low < max(p["points"] for p in last):
+                for p in last:
+                    if p["points"] == low:
+                        give(p["player_key"], "cap", "Кепка позора", f"{low} {_plural(low, 'очко', 'очка', 'очков')}")
+
+    if next_match_id is not None:
+        for p in picks:
+            if p["match_id"] == next_match_id and p["side"] and p["side"] != _dinamo_side(p["home_team"]):
+                give(p["player_key"], "dark_horse", "Тёмная лошадка")
+
+    exact: dict[int, int] = {}
+    for p in scored:
+        if p["points"] == POINTS_EXACT:
+            exact[p["player_key"]] = exact.get(p["player_key"], 0) + 1
+    if exact:
+        best = max(exact.values())
+        leaders = [k for k, v in exact.items() if v == best]
+        if len(leaders) == 1:
+            give(leaders[0], "vanga", "Ванга", f"{best} {_plural(best, 'точный', 'точных', 'точных')}")
+
+    by_player: dict[int, list[dict]] = {}
+    for p in scored:
+        by_player.setdefault(p["player_key"], []).append(p)
+    for player, rows in by_player.items():
+        run = 0
+        for p in reversed(rows):
+            if p["points"] < POINTS_WINNER:
+                break
+            run += 1
+        if run >= STREAK_MIN:
+            give(player, "streak", "Чуйка", f"{run} подряд")
+
+    margins: dict[int, list[int]] = {}
+    for p in picks:
+        if p.get("pick_home") is None or p.get("pick_away") is None:
+            continue
+        dinamo_home = _dinamo_side(p["home_team"]) == "home"
+        ours, theirs = (p["pick_home"], p["pick_away"]) if dinamo_home else (p["pick_away"], p["pick_home"])
+        margins.setdefault(p["player_key"], []).append(ours - theirs)
+    for player, values in margins.items():
+        if len(values) >= OPTIMIST_MIN_PICKS and sum(values) / len(values) >= OPTIMIST_MARGIN:
+            give(player, "optimist", "Вечный оптимист")
+
+    return {player: next(titles[k] for k in TITLE_ORDER if k in titles) for player, titles in found.items()}
+
+
+async def league_titles(session: AsyncSession, *, league_id: int, now: datetime) -> dict[int, dict[str, str]]:
+    now = _utc(now)
+    picks = [
+        dict(r._mapping)
+        for r in (
+            await session.execute(_TITLE_PICKS, {"league_id": league_id, "season_start": season_start(now)})
+        ).all()
+    ]
+    if not picks:
+        return {}
+    next_id = (await session.execute(_NEXT_MATCH, {"now": now})).scalar_one_or_none()
+    return pick_titles(picks, next_match_id=next_id)
 
 
 async def player_leagues(session: AsyncSession, *, player_key: int, now: datetime) -> list[LeagueSummary]:

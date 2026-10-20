@@ -158,6 +158,17 @@ body.kk-dark .kk-half { background: color-mix(in srgb, var(--team) 26%, var(--kk
 .kk-list li.kk-me { background: var(--kk-me); }
 .kk-list__pos { font-family: var(--kk-display); font-weight: 800; font-size: 14px; width: 36px; color: var(--kk-muted); font-variant-numeric: tabular-nums; }
 .kk-list__name { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kk-list__who { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.kk-list__who .kk-list__name { flex: none; max-width: 100%; }
+/* Звания лиги: плашка под именем, у «Кепки позора» — кепка над аватаркой. */
+.kk-title { display: inline-block; max-width: 100%; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kk-title--cap { background: var(--kk-dark-fill); color: var(--kk-on-dark); }
+.kk-title--dark_horse { background: var(--kk-danger); color: var(--kk-on-dark); }
+.kk-title--vanga { background: var(--kk-sticker); color: var(--kk-on-sticker); }
+.kk-title--streak { background: var(--kk-hero); color: var(--kk-on-dark); }
+.kk-title--optimist { background: var(--kk-me); color: var(--kk-ink); }
+.kk-capwrap { position: relative; display: inline-flex; flex: none; }
+.kk-cap { position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(-12deg); font-size: 18px; line-height: 1; pointer-events: none; }
 .kk-list__meta { font-size: 12px; font-weight: 700; color: var(--kk-muted); }
 .kk-list__pts { font-family: var(--kk-display); font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
 .kk-hint { font-size: 13px; font-weight: 600; color: var(--kk-muted); line-height: 1.45; margin: 0; }

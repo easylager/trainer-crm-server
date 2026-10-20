@@ -543,14 +543,28 @@
     return r.is_me ? 'Ты' : r.display_name;
   }
 
+  /* Звание в таблице лиги: «Кепка позора», «Тёмная лошадка» (hockey_leagues.pick_titles). */
+  function titleTag(r) {
+    var t = r && r.title;
+    if (!t || !t.label) return null;
+    return h('span', { class: 'kk-title kk-title--' + t.id, text: t.label + (t.detail ? ' · ' + t.detail : '') });
+  }
+
+  function avaOf(r, size) {
+    var a = ava(r.display_name, size, r.is_me);
+    if (!(r.title && r.title.id === 'cap')) return a;
+    return h('span', { class: 'kk-capwrap' }, [a, h('span', { class: 'kk-cap', 'aria-hidden': 'true', text: '🧢' })]);
+  }
+
   function podium(top3) {
     var order = [top3[1], top3[0], top3[2]];
     return h('div', { class: 'kk-podium' }, order.map(function (r, i) {
       if (!r) return h('div');
       var place = i === 1 ? 1 : i === 0 ? 2 : 3;
       return h('div', { class: 'kk-podium__col' }, [
-        ava(r.display_name, place === 1 ? 60 : 48, r.is_me),
+        avaOf(r, place === 1 ? 60 : 48),
         h('span', { class: 'kk-podium__name', text: nameOf(r) }),
+        titleTag(r),
         h('div', { class: 'kk-podium__block kk-podium__block--' + place }, [
           h('span', { class: 'kk-display', style: 'font-size:22px', text: String(r.rank) }),
           h('span', { style: 'font-size:13px;font-weight:700', text: M.points(r.points) }),
@@ -564,8 +578,11 @@
     return h('ol', { class: 'kk-list' }, rows.map(function (r) {
       return h('li', { class: r.is_me ? 'kk-me' : '' }, [
         h('span', { class: 'kk-list__pos', text: String(r.rank) }),
-        ava(r.display_name, 34, r.is_me),
-        h('span', { class: 'kk-list__name', style: r.is_me ? 'font-weight:800' : '', text: nameOf(r) }),
+        avaOf(r, 34),
+        h('span', { class: 'kk-list__who' }, [
+          h('span', { class: 'kk-list__name', style: r.is_me ? 'font-weight:800' : '', text: nameOf(r) }),
+          titleTag(r),
+        ]),
         r.exact ? h('span', { class: 'kk-list__meta', text: r.exact + ' ' + M.plural(r.exact, 'точный', 'точных', 'точных') }) : null,
         h('span', { class: 'kk-list__pts', text: String(r.points) }),
       ]);

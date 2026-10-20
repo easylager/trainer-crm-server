@@ -112,6 +112,8 @@ async def test_create_list_join_and_table_hides_player_key(app_use_test_db) -> N
             assert "player_key" not in table.text
             assert {row["display_name"] for row in body["items"]} == {"Саша", "Катя"}
             assert _mine(body["items"])["display_name"] == "Катя"
+            # Звания лиги приходят в строке; без сыгранных матчей и ходов против Динамо — пусто.
+            assert all("title" in row and row["title"] is None for row in body["items"])
 
         with patch_client_principal(ME):
             owner_table = await client.get(f"/api/webapp/client/hockey/leagues/{league['id']}")

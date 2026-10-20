@@ -21,6 +21,7 @@ from src.application.hockey_leagues import (
     create_league,
     join_by_code,
     league_table,
+    league_titles,
     leave_league,
     player_leagues,
     rename_league,
@@ -90,7 +91,7 @@ def _summary_out(row: LeagueSummary) -> dict:
     }
 
 
-def _table_row(row: LeagueRow, player_key: int) -> dict:
+def _table_row(row: LeagueRow, player_key: int, titles: dict | None = None) -> dict:
     return {
         "rank": row.rank,
         "display_name": row.display_name,
@@ -98,6 +99,7 @@ def _table_row(row: LeagueRow, player_key: int) -> dict:
         "exact": row.exact,
         "played": row.played,
         "is_me": row.player_key == player_key,
+        "title": (titles or {}).get(row.player_key),
     }
 
 
@@ -196,12 +198,13 @@ async def get_client_hockey_league(
     summary = next(
         item for item in await player_leagues(session, player_key=player_key, now=now) if item.id == league_id
     )
+    titles = await league_titles(session, league_id=league_id, now=now)
     return {
         "id": summary.id,
         "name": summary.name,
         "is_owner": summary.is_owner,
         "invite_url": invite_url_for_code(summary.invite_code),
-        "items": [_table_row(row, player_key) for row in rows],
+        "items": [_table_row(row, player_key, titles) for row in rows],
     }
 
 
