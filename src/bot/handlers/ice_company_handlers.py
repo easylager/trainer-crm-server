@@ -142,7 +142,7 @@ async def on_company_inline(query: InlineQuery) -> None:
             page,
             calendar_url=calendar_url_for(settings, code),
         )
-    from src.application.ice_company.og import card_photo_url
+    from src.application.ice_company.og import company_photo
 
     rows = []
     for group in button_rows(markup_buttons):
@@ -152,16 +152,15 @@ async def on_company_inline(query: InlineQuery) -> None:
         if row:
             rows.append(row)
     markup = InlineKeyboardMarkup(inline_keyboard=rows)
-    # У матча карточка текстовая, как и при правке: плакат с катком ему не подходит.
-    photo = None if is_match else card_photo_url(settings.webapp_base_url, code, render_hash(body, markup_buttons))
+    photo, size = company_photo(settings.webapp_base_url, company, code, render_hash(body, markup_buttons))
     title = "Звать на матч" if is_match else "Компания на лёд"
     if photo:
         result = InlineQueryResultPhoto(
             id=f"k{code}",
             photo_url=photo,
             thumbnail_url=photo,
-            photo_width=1080,
-            photo_height=1080,
+            photo_width=size[0],
+            photo_height=size[1],
             title=title,
             description=body.split("\n", 1)[0][:80],
             caption=body,

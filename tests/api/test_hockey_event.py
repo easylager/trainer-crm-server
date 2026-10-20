@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -386,7 +388,8 @@ async def test_bot_callback_maybe_on_match_company(db_session, arena, monkeypatc
     assert len(edits) == 1
     assert edits[0][0]["inline_message_id"] == "inline-1"
     assert "Смотрит дома: Дима" in edits[0][1]
-    assert "photo_url" not in edits[0][0]
+    # Фото карточки матча — открытка матча (команды с логотипами), не плакат катка.
+    assert "/k/" not in str(edits[0][0].get("photo_url") or "")
     assert [b["text"] for b in edits[0][2]] == ["Иду", "Смотрю дома", "Не смогу", "Подробнее"]
 
     # Лёд отвечает своим тостом на «Может»: тексты не перепутаны.
@@ -644,7 +647,7 @@ async def test_hub_slot_marks_home_match_only(db_session, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_edit_dirty_uses_text_card_for_match(db_session, arena) -> None:
+async def test_edit_dirty_uses_match_picture_for_match(db_session, arena) -> None:
     match_id = await _match(db_session)
     view = await create_match_company(
         db_session, telegram_user_id=ME, match_id=match_id, home_team="Динамо-Минск", display_name="Макс"
@@ -660,8 +663,15 @@ async def test_edit_dirty_uses_text_card_for_match(db_session, arena) -> None:
         async def edit(self, ref, text_, buttons):
             refs.append(ref)
 
-    await _edit_dirty(db_session, _Sender(), settings=Settings(), debounce_sec=0, now=datetime.now(timezone.utc))
-    assert len(refs) == 1 and "photo_url" not in refs[0]
+    await _edit_dirty(
+        db_session,
+        _Sender(),
+        settings=Settings(webapp_base_url="https://glide.test"),  # type: ignore[call-arg]
+        debounce_sec=0,
+        now=datetime.now(timezone.utc),
+    )
+    assert len(refs) == 1
+    assert re.fullmatch(r"https://glide\.test/kk/m/\d+/[0-9a-f]{16}\.png", refs[0]["photo_url"])
 
 
 @pytest.mark.asyncio

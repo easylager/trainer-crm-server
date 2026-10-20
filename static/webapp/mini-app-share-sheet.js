@@ -1229,6 +1229,10 @@
         '<span>' + esc([name, m.title, when, rinkName(sheetState)].filter(Boolean).join(' · ')) + '</span>' +
         '<span class="gss-cprev__who">Идут: ' + esc(you) + '</span>';
       buttons = ['Иду', 'Смотрю дома', 'Не смогу', 'Подробнее ↗'];
+      // Та же открытка, что встанет фото карточки в чате (og.company_photo → /kk/m/<id>/<версия>.png).
+      poster =
+        '<img class="gss-cprev__img gss-cprev__img--wide" alt="" decoding="async" width="1200" height="630" src="/kk/m/' +
+        encodeURIComponent(String(m.id)) + '/preview.png" />';
     } else {
       var picked = selectedPostcardSlot(sheetState);
       var row = picked ? picked.row : {};

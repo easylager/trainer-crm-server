@@ -205,14 +205,9 @@ async def _edit_dirty(
         code = str(company["public_code"])
         markup = buttons_for(company, snap, page, calendar_url=calendar_url_for(settings, code))
         digest = render_hash(body, markup)
-        from src.application.ice_company.og import card_photo_url
+        from src.application.ice_company.og import company_photo
 
-        # У матча карточка текстовая: плакат с катком и «лёд пока пустой» ему не подходит.
-        photo = (
-            None
-            if snap.kind == MATCH_KIND
-            else card_photo_url(settings.webapp_base_url, str(company["public_code"]), digest)
-        )
+        photo, _ = company_photo(settings.webapp_base_url, company, str(company["public_code"]), digest)
         refs = (
             await session.execute(
                 text("SELECT * FROM ice_company_messages WHERE company_id = :id"),

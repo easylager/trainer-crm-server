@@ -258,8 +258,8 @@ async def test_match_company_telegram_prepare_and_cancel(app_use_test_db, db_ses
 
     sent: list[dict] = []
 
-    async def fake(token, user_id, code, text_, buttons, photo=None, title=""):
-        sent.append({"code": code, "text": text_, "photo": photo, "title": title, "buttons": buttons})
+    async def fake(token, user_id, code, text_, buttons, photo=None, title="", size=(1080, 1080)):
+        sent.append({"code": code, "text": text_, "photo": photo, "title": title, "buttons": buttons, "size": size})
         return "PM-7"
 
     monkeypatch.setattr(routes, "_save_prepared", fake)
@@ -275,7 +275,10 @@ async def test_match_company_telegram_prepare_and_cancel(app_use_test_db, db_ses
         )
         cancelled = await client.post(f"/api/public/ice-companies/{code}/cancel", headers=_headers(**init))
     assert prepared.status_code == 200 and prepared.json()["prepared_message_id"] == "PM-7"
-    assert sent[0]["title"] == "Звать на матч" and sent[0]["photo"] is None
+    assert sent[0]["title"] == "Звать на матч"
+    # Фото — открытка матча 1200×630 (если адрес сайта https), не плакат катка /k/<код>/card.png.
+    assert sent[0]["photo"] is None or "/kk/m/" in sent[0]["photo"]
+    assert sent[0]["size"] == (1200, 630)
     assert sent[0]["text"].startswith("Идём на матч?")
     assert any(f"kkm_{match_id}_{code}" in str(b.get("url")) for b in sent[0]["buttons"])
     assert stranger.status_code in (403, 404)

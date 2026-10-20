@@ -21,7 +21,7 @@ from src.application.ice_company.codes import tg_participant_key, web_participan
 from src.application.ice_company.copy import MATCH_KIND
 from src.application.ice_company.keyboard import inline_button_json
 from src.application.ice_company.lifecycle import button_rows, buttons_for, calendar_url_for, render_hash
-from src.application.ice_company.og import card_photo_url, render_company_card
+from src.application.ice_company.og import company_photo, render_company_card
 from src.application.ice_company.page import render_company_page
 from src.application.ice_company.service import (
     CompanyRejected,
@@ -374,7 +374,7 @@ async def prepare_telegram_share(
     text = card_text(snap)
     markup = buttons_for(company, snap, page, calendar_url=calendar_url_for(settings, code))
     is_match = snap.kind == MATCH_KIND
-    photo = None if is_match else card_photo_url(settings.webapp_base_url, code, render_hash(text, markup))
+    photo, size = company_photo(settings.webapp_base_url, company, code, render_hash(text, markup))
     prepared = await _save_prepared(
         settings.telegram_bot_token_client,
         user_id,
@@ -382,6 +382,7 @@ async def prepare_telegram_share(
         text,
         markup,
         photo,
+        size=size,
         title="Звать на матч" if is_match else "Компания на лёд",
     )
     from src.application.ice_company.service import _track
@@ -410,6 +411,7 @@ async def _save_prepared(
     buttons: list[dict[str, str]],
     photo_url: str | None = None,
     title: str = "Компания на лёд",
+    size: tuple[int, int] = (1080, 1080),
 ) -> str | None:
     import aiohttp
 
@@ -434,8 +436,8 @@ async def _save_prepared(
                 "id": code,
                 "photo_url": photo_url,
                 "thumbnail_url": photo_url,
-                "photo_width": 1080,
-                "photo_height": 1080,
+                "photo_width": size[0],
+                "photo_height": size[1],
                 "caption": text,
                 "reply_markup": {"inline_keyboard": keyboard},
             }

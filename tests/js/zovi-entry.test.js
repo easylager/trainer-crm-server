@@ -125,7 +125,7 @@ describe('варианты шита', () => {
       placeName: 'Минск-Арена',
       companyForm: { team: 'Офис', you: 'Макс' },
     });
-    assert.doesNotMatch(match, /gss-cprev__img/);
+    assert.match(match, /<img class="gss-cprev__img gss-cprev__img--wide"[^>]*src="\/kk\/m\/11\/preview\.png"/);
     assert.match(match, /Идём на матч\?/);
     assert.match(match, /Офис · Динамо-Минск — СКА · пт, 30 октября, 19:30 · Минск-Арена/);
     assert.match(match, /<i>Иду<\/i><i>Смотрю дома<\/i><i>Не смогу<\/i><i>Подробнее ↗<\/i>/);

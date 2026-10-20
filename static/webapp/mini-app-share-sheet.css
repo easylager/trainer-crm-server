@@ -497,6 +497,7 @@
   background: var(--app-chip-bg); color: var(--glide-text);
 }
 .gss-cprev__img { display: block; width: 100%; height: auto; aspect-ratio: 1; background: var(--glide-deep); }
+.gss-cprev__img--wide { aspect-ratio: 1200 / 630; }
 .gss-cprev__text { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px 12px; font-size: var(--app-text-body); line-height: 1.35; }
 .gss-cprev__text b { font-weight: var(--app-weight-bold); }
 .gss-cprev__who { color: var(--glide-ink-teal); font-weight: var(--app-weight-semibold); }
