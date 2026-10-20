@@ -16,13 +16,15 @@ from fastapi import Depends
 from src.api.deps import get_session
 from src.application import hockey_event
 from src.application.hockey_matches import DINAMO
-from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes
+from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes, read_avatar_bytes
 from src.application.ice_company.codes import tg_participant_key, web_participant_key
-from src.application.ice_company.copy import MATCH_KIND
+from src.application.hockey_cards import render_match_company_card
+from src.application.ice_company.copy import MATCH_KIND, closed_headline
 from src.application.ice_company.keyboard import inline_button_json
 from src.application.ice_company.lifecycle import button_rows, buttons_for, calendar_url_for, render_hash
 from src.application.ice_company.og import company_photo, render_company_card
 from src.application.ice_company.page import render_company_page
+from src.application.ice_company.safety import strip_emoji_for_poster
 from src.application.ice_company.service import (
     CompanyRejected,
     actor_for_telegram,
@@ -35,7 +37,9 @@ from src.application.ice_company.service import (
     resolve_participant,
     respond,
     snap_from,
+    _home_match_row,
     _load,
+    _match_id,
     _responses,
 )
 from src.shared.client_ip import trusted_client_ip
@@ -187,13 +191,26 @@ async def post_company(
 
 @router.get("/api/public/ice-companies/preview.png")
 async def company_preview_png(
-    session_id: int,
+    session_id: int | None = None,
+    match_id: int | None = None,
     name: str = "",
     you: str = "",
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """Превью картинки компании до создания: тот же рисунок, что уйдёт в чат (лист шаринга, вкладка «Компания»)."""
-    snap = await preview_snap(session, session_id=session_id, display_name=you[:64], name=name[:64])
+    if match_id is not None:
+        match = await _home_match(session, match_id)
+        if match is None or not Settings().hockey_matches_enabled:
+            raise HTTPException(status_code=404, detail="Матч не найден.")
+        png = render_match_company_card(
+            home=str(match["home_team"]),
+            away=str(match["away_team"]),
+            starts_at=match["starts_at"],
+            going=[(strip_emoji_for_poster((you or "").strip()[:24]) or "Ты", None)],
+            watching=[],
+        )
+        return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
+    snap = await preview_snap(session, session_id=session_id or 0, display_name=you[:64], name=name[:64])
     if snap is None:
         raise HTTPException(status_code=404, detail="Сеанс не найден.")
     return Response(
@@ -329,13 +346,39 @@ async def company_ics(code: str, session: AsyncSession = Depends(get_session)) -
     )
 
 
+async def _home_match(session: AsyncSession, match_id: int | None) -> dict | None:
+    return await _home_match_row(session, match_id, DINAMO) if match_id else None
+
+
+def _people(responses: list[dict], status: str) -> list[tuple[str, bytes | None]]:
+    # Эмодзи в имени шрифт карточки не рисует (квадратик) — на картинке без них, в подписи остаются.
+    return [
+        (strip_emoji_for_poster(str(row["display_name"])) or "·", read_avatar_bytes(row.get("avatar_file_key")))
+        for row in responses
+        if row["status"] == status
+    ]
+
+
 async def _card_png(session: AsyncSession, code: str) -> bytes:
     company = await _load(session, code)
-    if company is None or company["event_kind"] == MATCH_KIND:
+    if company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена.")
     responses = await _responses(session, int(company["id"]))
     snap = snap_from(company, responses)
-    return render_company_card(snap, avatar_bytes=going_avatar_bytes(responses))
+    if company["event_kind"] != MATCH_KIND:
+        return render_company_card(snap, avatar_bytes=going_avatar_bytes(responses))
+    # Матч: «Трибуна против дивана» — «Иду» на трибуне, «Смотрю дома» на диване.
+    match = await _home_match(session, _match_id(str(company["source_ref"])))
+    if match is None:
+        raise HTTPException(status_code=404, detail="Компания не найдена.")
+    return render_match_company_card(
+        home=str(match["home_team"]),
+        away=str(match["away_team"]),
+        starts_at=match["starts_at"],
+        going=_people(responses, "going"),
+        watching=_people(responses, "maybe"),
+        closed=closed_headline(snap),
+    )
 
 
 @router.get("/k/{code}/og.png")

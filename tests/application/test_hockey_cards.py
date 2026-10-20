@@ -124,3 +124,23 @@ def test_match_card_version_follows_the_data() -> None:
     assert base == cards.match_card_version("Динамо-Минск", "СКА", start)
     assert base != cards.match_card_version("Динамо-Минск", "ЦСКА", start)
     assert base != cards.match_card_version("Динамо-Минск", "СКА", start.replace(hour=17))
+
+
+@pytest.mark.parametrize("going", [1, 3, 6, 11])
+def test_match_company_card_seats_follow_the_company(going: int) -> None:
+    """Трибуна против дивана: места по числу пришедших плюс свободное «+», больше шести — «+N»."""
+    start = datetime(2026, 10, 21, 16, 30, tzinfo=timezone.utc)
+    names = ["Макс", "Александра-Мария", "Дима", "Катя", "Аня", "Вова", "Лена", "Паша", "Оля", "Рома", "Юля"]
+    image = _image(
+        cards.render_match_company_card(
+            home="Динамо-Минск",
+            away="Суперлигачемпионовминскаяхоккейнаякоманда Очень Длинная",
+            starts_at=start,
+            going=[(n, None) for n in names[:going]],
+            watching=[("Оля", None), ("Рома", None), ("Юля", None), ("Федя", None)],
+        )
+    )
+    assert image.size == (1200, 630)
+    # Команды строкой под заголовком — внутри карточки.
+    ink = _ink_columns(image, 140, 172, _BLUE)
+    assert ink and min(ink) >= 24 and max(ink) <= image.width - 24

@@ -277,8 +277,14 @@ async def test_match_company_telegram_prepare_and_cancel(app_use_test_db, db_ses
     assert prepared.status_code == 200 and prepared.json()["prepared_message_id"] == "PM-7"
     assert sent[0]["title"] == "Звать на матч"
     # Фото — открытка матча 1200×630 (если адрес сайта https), не плакат катка /k/<код>/card.png.
-    assert sent[0]["photo"] is None or "/kk/m/" in sent[0]["photo"]
+    assert sent[0]["photo"] is None or f"/k/{code}/card.png" in sent[0]["photo"]
     assert sent[0]["size"] == (1200, 630)
+    # Сама картинка — «Трибуна против дивана», без авторизации; превью до создания — тоже.
+    async with _client() as client:
+        card = await client.get(f"/k/{code}/card.png")
+        preview = await client.get("/api/public/ice-companies/preview.png", params={"match_id": match_id, "you": "Аня"})
+    assert card.status_code == 200 and Image.open(io.BytesIO(card.content)).size == (1200, 630)
+    assert preview.status_code == 200 and Image.open(io.BytesIO(preview.content)).size == (1200, 630)
     assert sent[0]["text"].startswith("Идём на матч?")
     assert any(f"kkm_{match_id}_{code}" in str(b.get("url")) for b in sent[0]["buttons"])
     assert stranger.status_code in (403, 404)

@@ -232,6 +232,124 @@ def render_match_card(*, home: str, away: str, starts_at: datetime, invite: bool
     return _png(image)
 
 
+_DEEP = (15, 47, 134)
+_SOFT = (169, 189, 242)
+_SOFA = (214, 90, 71)
+_SOFA_DEEP = (184, 68, 47)
+STAND_SEATS = 6
+SOFA_SEATS = 3
+
+
+def _face(
+    image: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    *,
+    cx: int,
+    cy: int,
+    radius: int,
+    name: str,
+    avatar: bytes | None,
+    fill: tuple[int, int, int],
+    ink: tuple[int, int, int],
+) -> None:
+    """Кружок человека: аватар из Telegram, если есть, иначе первая буква имени."""
+    box = (cx - radius, cy - radius, cx + radius, cy + radius)
+    if avatar:
+        try:
+            face = Image.open(io.BytesIO(avatar)).convert("RGB").resize((radius * 2, radius * 2), Image.Resampling.LANCZOS)
+            mask = Image.new("L", face.size, 0)
+            ImageDraw.Draw(mask).ellipse((0, 0, face.width - 1, face.height - 1), fill=255)
+            image.paste(face, (box[0], box[1]), mask)
+            draw.ellipse(box, outline=fill, width=max(3, radius // 10))
+            return
+        except Exception:  # noqa: BLE001 — битый аватар рисуем буквой
+            pass
+    draw.ellipse(box, fill=fill)
+    draw.text((cx, cy + 1), _initial(name), font=_display(int(radius * 0.9)), fill=ink, anchor="mm")
+
+
+def render_match_company_card(
+    *,
+    home: str,
+    away: str,
+    starts_at: datetime,
+    going: Sequence[tuple[str, bytes | None]],
+    watching: Sequence[tuple[str, bytes | None]],
+    closed: str | None = None,
+) -> bytes:
+    """Карточка компании на матч, 1200×630: «Трибуна против дивана» (владелец 2026-10-20).
+
+    «Иду» — место на трибуне, «Смотрю дома» — место на диване у телевизора. Ходят небольшими
+    компаниями: мест на трибуне столько, сколько пришло, плюс одно свободное «+» — для следующего;
+    больше ``STAND_SEATS`` — последнее место «+N».
+    """
+    width, height = CARD_SIZE
+    image = Image.new("RGB", CARD_SIZE, _BLUE)
+    draw = ImageDraw.Draw(image)
+    pad = _PAD
+
+    head = closed or "Идём на матч?"
+    head_font = _largest(draw, head, _display, (64, 58, 52, 46), 700)
+    draw.text((pad, 46), head, font=head_font, fill=_SOFT if closed else _YELLOW)
+    when = match_when(starts_at)
+    draw.text((width - pad, 54), when, font=_text(30, 700), fill=_WHITE, anchor="ra")
+    draw.text((width - pad, 96), "Минск-Арена", font=_text(24, 700), fill=_SOFT, anchor="ra")
+
+    # Команды строкой: два маленьких логотипа и названия.
+    y_teams = 156
+    _team_badge(draw, image, home, cx=pad + 26, cy=y_teams, size=52)
+    teams = f"{home} — {away}"
+    teams_font = _largest(draw, teams, lambda sz: _text(sz, 800), (32, 29, 26, 23), width - 2 * pad - 150)
+    label = _ellipsize(draw, teams, teams_font, width - 2 * pad - 150)
+    draw.text((pad + 66, y_teams), label, font=teams_font, fill=_WHITE, anchor="lm")
+    _team_badge(draw, image, away, cx=int(pad + 66 + _width(draw, label, teams_font) + 44), cy=y_teams, size=52)
+
+    # Трибуна: слева, места в один ряд.
+    stand = (pad, 222, 790, height - 52)
+    draw.rounded_rectangle(stand, radius=28, fill=_DEEP)
+    shown = list(going)[:STAND_SEATS]
+    extra = max(0, len(going) - STAND_SEATS)
+    count = len(shown) + 1
+    inner_w = stand[2] - stand[0] - 48
+    gap = 18
+    radius = int(min(52, (inner_w - gap * (count - 1)) / count / 2))
+    row_w = count * radius * 2 + gap * (count - 1)
+    x = (stand[0] + stand[2] - row_w) // 2 + radius
+    cy = stand[1] + 140
+    name_font = _text(22, 700)
+    for name, avatar in shown:
+        _face(image, draw, cx=x, cy=cy, radius=radius, name=name, avatar=avatar, fill=_YELLOW, ink=_BLUE)
+        short = _ellipsize(draw, name, name_font, radius * 2 + gap - 4)
+        draw.text((x, cy + radius + 24), short, font=name_font, fill=_WHITE, anchor="mm")
+        x += radius * 2 + gap
+    free = (x - radius, cy - radius, x + radius, cy + radius)
+    draw.ellipse(free, outline=_SOFT, width=4)
+    draw.text((x, cy + 1), f"+{extra}" if extra else "+", font=_display(int(radius * (0.6 if extra else 0.9))), fill=_SOFT, anchor="mm")
+    stand_label = f"Трибуна · {len(going)}"
+    draw.text(((stand[0] + stand[2]) // 2, stand[3] - 46), stand_label, font=_text(28, 800), fill=_SOFT, anchor="mm")
+
+    # Диван: справа, телевизор и до трёх человек.
+    left, right = 850, width - pad
+    mid = (left + right) // 2
+    draw.rounded_rectangle((mid - 70, 236, mid + 70, 322), radius=14, outline=_WHITE, width=6)
+    draw.line((mid - 30, 338, mid + 30, 338), fill=_WHITE, width=6)
+    sofa_top = 386
+    draw.rounded_rectangle((left + 16, sofa_top, right - 16, sofa_top + 70), radius=22, fill=_SOFA)
+    draw.rounded_rectangle((left, sofa_top + 50, right, sofa_top + 118), radius=22, fill=_SOFA_DEEP)
+    sitting = list(watching)[:SOFA_SEATS]
+    if sitting:
+        r = 30
+        step = r * 2 + 10
+        sx = mid - (len(sitting) - 1) * step // 2
+        for name, avatar in sitting:
+            _face(image, draw, cx=sx, cy=sofa_top + 30, radius=r, name=name, avatar=avatar, fill=_WHITE, ink=_SOFA_DEEP)
+            sx += step
+    sofa_label = f"Диван · {len(watching)}"
+    draw.text((mid, stand[3] - 46), sofa_label, font=_text(28, 800), fill=_SOFT, anchor="mm")
+
+    return _png(image)
+
+
 def _initial(name: str) -> str:
     name = (name or "").strip()
     return name[:1].upper() if name else "·"

@@ -97,7 +97,7 @@ async def on_company_callback(query: CallbackQuery) -> None:
             await query.answer(toast_for(kind, action))
         except TelegramBadRequest:
             logger.info("ice_company callback answer expired code=%s", code)
-        if company is not None and action == "g":
+        if company is not None and action in ("g", "m"):
             await cache_telegram_avatar(
                 session,
                 query.bot,

@@ -125,7 +125,7 @@ describe('варианты шита', () => {
       placeName: 'Минск-Арена',
       companyForm: { team: 'Офис', you: 'Макс' },
     });
-    assert.match(match, /<img class="gss-cprev__img gss-cprev__img--wide"[^>]*src="\/kk\/m\/11\/preview\.png"/);
+    assert.match(match, /<img class="gss-cprev__img gss-cprev__img--wide"[^>]*src="\/api\/public\/ice-companies\/preview\.png\?match_id=11&amp;you=%D0%9C%D0%B0%D0%BA%D1%81"/);
     assert.match(match, /Идём на матч\?/);
     assert.match(match, /Офис · Динамо-Минск — СКА · пт, 30 октября, 19:30 · Минск-Арена/);
     assert.match(match, /<i>Иду<\/i><i>Смотрю дома<\/i><i>Не смогу<\/i><i>Подробнее ↗<\/i>/);

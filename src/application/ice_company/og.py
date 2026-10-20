@@ -51,20 +51,13 @@ MATCH_PHOTO_SIZE = (1200, 630)
 
 
 def company_photo(base: str, company: dict, code: str, digest: str) -> tuple[str | None, tuple[int, int]]:
-    """Фото карточки компании в чате и его размер.
+    """Фото карточки компании в чате и его размер: ``/k/<код>/card.png?v=<digest>``.
 
-    Лёд — плакат с катком (``/k/<код>/card.png``). Матч — открытка матча «Идём на матч?»
-    (``/kk/m/<id>/<версия>.png``, команды с логотипами): плакат катка с «лёд пока пустой» ему не подходит.
+    Лёд — плакат с катком, 1080². Матч — «Трибуна против дивана», 1200×630 (render_match_company_card).
     Версия в адресе меняется вместе с текстом — иначе Telegram отвечает «not modified» и подпись не обновится.
     """
-    ref = str(company.get("source_ref") or "")
-    if not ref.startswith("hockey_match:"):
-        return card_photo_url(base, code, digest), CARD_SIZE
-    raw = ref[len("hockey_match:") :]
-    root = (base or "").strip().rstrip("/")
-    if not raw.isdigit() or not root.startswith("https://"):
-        return None, MATCH_PHOTO_SIZE
-    return f"{root}/kk/m/{int(raw)}/{digest[:16]}.png", MATCH_PHOTO_SIZE
+    is_match = str(company.get("source_ref") or "").startswith("hockey_match:")
+    return card_photo_url(base, code, digest), (MATCH_PHOTO_SIZE if is_match else CARD_SIZE)
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_w: int, lines: int) -> list[str]:

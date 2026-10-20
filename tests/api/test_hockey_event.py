@@ -388,8 +388,9 @@ async def test_bot_callback_maybe_on_match_company(db_session, arena, monkeypatc
     assert len(edits) == 1
     assert edits[0][0]["inline_message_id"] == "inline-1"
     assert "Смотрит дома: Дима" in edits[0][1]
-    # Фото карточки матча — открытка матча (команды с логотипами), не плакат катка.
-    assert "/k/" not in str(edits[0][0].get("photo_url") or "")
+    # Фото карточки матча — «Трибуна против дивана» по адресу карточки компании, если сайт на https.
+    photo = edits[0][0].get("photo_url")
+    assert photo is None or "/card.png?v=" in str(photo)
     assert [b["text"] for b in edits[0][2]] == ["Иду", "Смотрю дома", "Не смогу", "Подробнее"]
 
     # Лёд отвечает своим тостом на «Может»: тексты не перепутаны.
@@ -671,11 +672,11 @@ async def test_edit_dirty_uses_match_picture_for_match(db_session, arena) -> Non
         now=datetime.now(timezone.utc),
     )
     assert len(refs) == 1
-    assert re.fullmatch(r"https://glide\.test/kk/m/\d+/[0-9a-f]{16}\.png", refs[0]["photo_url"])
+    assert re.fullmatch(r"https://glide\.test/k/[0-9a-z]+/card\.png\?v=[0-9a-f]{16}", refs[0]["photo_url"])
 
 
 @pytest.mark.asyncio
-async def test_match_company_has_no_public_ice_page_or_poster(app_use_test_db, db_session, arena) -> None:
+async def test_match_company_has_no_public_ice_page_but_a_stand_card(app_use_test_db, db_session, arena) -> None:
     match_id = await _match(db_session)
     view = await create_match_company(
         db_session, telegram_user_id=ME, match_id=match_id, home_team="Динамо-Минск", display_name="Макс"
@@ -684,7 +685,8 @@ async def test_match_company_has_no_public_ice_page_or_poster(app_use_test_db, d
     await db_session.commit()
     async with _client() as client:
         assert (await client.get(f"/k/{code}")).status_code == 404
-        assert (await client.get(f"/k/{code}/card.png")).status_code == 404
+        card = await client.get(f"/k/{code}/card.png")
+        assert card.status_code == 200 and card.headers["content-type"] == "image/png"  # «Трибуна против дивана»
         assert (await client.get(f"/k/{code}/event.ics")).status_code == 200
         web = await client.post(
             f"/api/public/ice-companies/{code}/responses",
