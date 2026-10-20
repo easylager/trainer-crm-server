@@ -14,7 +14,10 @@ from src.application.hockey_matches import (
     KIND_FINAL,
     KIND_REVIEW,
     KIND_WAIT,
+    CalendarEmpty,
+    LoopHealth,
     check_due_results,
+    result_window_open,
     decide_result,
     match_url,
     run_tick,
@@ -348,3 +351,35 @@ async def test_stale_scheduled_match_goes_to_review_with_one_alert(db_session) -
     second = await check_due_results(db_session, _fake_fetch({}), now=later + timedelta(minutes=10), alert=alert)
     assert [k for _, k in first] == [KIND_REVIEW] and second == []
     assert len(alerts) == 1 and "больше 3 дней" in alerts[0]
+
+
+@pytest.mark.asyncio
+async def test_empty_calendar_in_season_is_a_failure_and_off_season_is_quiet(db_session) -> None:
+    pages = {HCDINAMO_CALENDAR_URL: "<html>новая вёрстка без ссылок</html>"}
+    with pytest.raises(CalendarEmpty):
+        await sync_calendar(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0))
+    counts = await sync_calendar(db_session, _fake_fetch(pages), now=_minsk(2026, 7, 1, 12, 0))
+    assert counts["inserted"] == 0
+    tick = await run_tick(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0), alert=_silent, calendar_due=True)
+    assert tick["calendar_failed"] is True and "вёрстка" in str(tick["calendar_error"])
+
+
+@pytest.mark.asyncio
+async def test_result_window_drives_the_fast_loop(db_session) -> None:
+    await upsert_calendar_match(db_session, _match("final", "1218869"), now=_minsk(2026, 10, 18, 12, 0))
+    start = (await get_match(db_session, await _row(db_session, "1218869"))).starts_at
+    assert await result_window_open(db_session, now=start + timedelta(hours=1)) is False
+    assert await result_window_open(db_session, now=start + timedelta(hours=2)) is True
+    assert await result_window_open(db_session, now=start + timedelta(hours=3)) is True
+    assert await result_window_open(db_session, now=start + timedelta(hours=4)) is False
+
+
+def test_loop_health_alerts_once_after_three_failures_and_rearms() -> None:
+    health = LoopHealth()
+    assert health.failed("календарь матчей", "timeout") is None
+    assert health.failed("календарь матчей", "timeout") is None
+    text_ = health.failed("календарь матчей", "timeout")
+    assert text_ and "3 раз подряд" in text_ and "admin-hockey" in text_
+    assert health.failed("календарь матчей", "timeout") is None
+    health.ok("календарь матчей")
+    assert health.failed("календарь матчей", "timeout") is None

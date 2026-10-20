@@ -46,9 +46,13 @@ STATUS_CANCELLED = "cancelled"
 RESULT_AUTO = "auto"
 RESULT_MANUAL = "manual"
 
-# Матч КХЛ с перерывами идёт около 2,5 часа; раньше двух часов итог не ищем.
-RESULT_CHECK_AFTER = timedelta(hours=2)
-REVIEW_AFTER = timedelta(hours=4)
+# Матч КХЛ в основное время с перерывами — 2 ч 05–2 ч 20, с овертаймом и буллитами — до 2 ч 45.
+# Итог публикуется только при совпадении двух источников, поэтому искать рано безопасно.
+RESULT_CHECK_AFTER = timedelta(hours=1, minutes=50)
+# Не подтвердилось к этому сроку (≈30 мин после самых долгих буллитов) — зовём человека.
+REVIEW_AFTER = timedelta(hours=3, minutes=15)
+# Сезон КХЛ: сентябрь–апрель. Пустой календарь в сезон — сломанный разбор, а не перерыв.
+SEASON_MONTHS = frozenset({9, 10, 11, 12, 1, 2, 3, 4})
 # Лента hockey.by держит матчи за пару дней — дальше автоматом не подтвердить.
 AUTO_CONFIRM_WINDOW = timedelta(days=3)
 
@@ -341,6 +345,8 @@ async def sync_calendar(session: AsyncSession, fetch: Fetch, *, now: datetime) -
     """Окно календаря hcdinamo.by → строки матчей. Ошибка одной страницы не роняет остальные."""
     counts: dict[str, int] = {"inserted": 0, "moved": 0, "unchanged": 0, "skipped": 0, "failed": 0}
     ids = parse_hcdinamo_calendar(await fetch(HCDINAMO_CALENDAR_URL))
+    if not ids and _utc(now).astimezone(MINSK_TZ).month in SEASON_MONTHS:
+        raise CalendarEmpty("календарь hcdinamo.by пуст в сезон — похоже, сменилась вёрстка")
     for source_match_id in ids:
         try:
             page = parse_hcdinamo_match(await fetch(match_url(source_match_id)), source_match_id=source_match_id)
@@ -350,6 +356,52 @@ async def sync_calendar(session: AsyncSession, fetch: Fetch, *, now: datetime) -
             continue
         counts[await upsert_calendar_match(session, page, now=now)] += 1
     return counts
+
+
+class CalendarEmpty(RuntimeError):
+    """Календарь разобран, но матчей нет — в сезон это поломка разбора."""
+
+
+_HOT = text("""
+    SELECT 1 FROM hockey_matches
+    WHERE status IN ('scheduled', 'review') AND starts_at <= :hot_from AND starts_at >= :hot_to
+    LIMIT 1
+    """)
+
+
+async def result_window_open(session: AsyncSession, *, now: datetime) -> bool:
+    """Идёт окно поиска итога (от RESULT_CHECK_AFTER до REVIEW_AFTER) — цикл ходит чаще."""
+    now = _utc(now)
+    params = {"hot_from": now - RESULT_CHECK_AFTER, "hot_to": now - REVIEW_AFTER}
+    return (await session.execute(_HOT, params)).first() is not None
+
+
+class LoopHealth:
+    """Сбои цикла подряд → одно сообщение админам; после успеха снова взводится.
+
+    Без этого сломанный календарь молчит: новые матчи просто не появляются, а алерт
+    «нет итога» есть только у матчей, которые уже в базе.
+    """
+
+    def __init__(self, threshold: int = 3) -> None:
+        self.threshold = threshold
+        self.fails: dict[str, int] = {}
+        self.alerted: set[str] = set()
+
+    def ok(self, what: str) -> None:
+        self.fails[what] = 0
+        self.alerted.discard(what)
+
+    def failed(self, what: str, reason: str) -> str | None:
+        """Текст алерта, если сбоев подряд стало ``threshold`` и о них ещё не сообщали."""
+        self.fails[what] = self.fails.get(what, 0) + 1
+        if self.fails[what] < self.threshold or what in self.alerted:
+            return None
+        self.alerted.add(what)
+        return (
+            f"Кто кого: {what} не работает {self.fails[what]} раз подряд\n{reason}\n"
+            "Матчи и итоги не обновляются. Итог можно ввести вручную: /webapp/admin-hockey"
+        )
 
 
 async def due_for_result(session: AsyncSession, *, now: datetime) -> list[MatchRow]:
@@ -417,13 +469,15 @@ async def run_tick(
     """
     calendar: dict[str, int] | None = None
     calendar_failed = False
+    calendar_error = ""
     if calendar_due:
         try:
             async with session.begin_nested():
                 calendar = await sync_calendar(session, fetch, now=now)
-        except Exception:
+        except Exception as exc:
             logger.warning("hockey calendar sync failed", exc_info=True)
             calendar_failed = True
+            calendar_error = str(exc) or type(exc).__name__
     results = await check_due_results(session, fetch, now=now, alert=alert)
     from src.application.hockey_game import score_finished_matches
 
@@ -431,6 +485,7 @@ async def run_tick(
     return {
         "calendar": calendar,
         "calendar_failed": calendar_failed,
+        "calendar_error": calendar_error,
         "scored_picks": scored,
         "checked": len(results),
         "final": sum(1 for _, kind in results if kind == KIND_FINAL),
