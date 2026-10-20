@@ -26,6 +26,9 @@ from src.shared.notification_hours import NOTIFICATION_TZ
 INVITE_CODE_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"
 INVITE_CODE_LENGTH = 8
 INVITE_KINDS = ("public_skate", "open_ice", "hockey_practice")
+# Открытка на домашний матч Динамо (TASK-304). Это вид приглашения, а не вид сеанса льда:
+# в ``INVITE_KINDS`` его нет, чтобы список сеансов (/zovi) и проверка сеанса его не принимали.
+MATCH_INVITE_KIND = "hockey_match"
 _INVITE_KIND_SET = frozenset(INVITE_KINDS)
 _CODE_RE = re.compile(rf"^[{re.escape(INVITE_CODE_ALPHABET)}]{{{INVITE_CODE_LENGTH}}}$")
 _CODE_ATTEMPTS = 8
@@ -107,11 +110,11 @@ _LOAD_SESSION_FOR_CREATE = f"""
 
 _INSERT_INVITE = """
 INSERT INTO ice_invites (
-    code, status_key_hash, session_id, arena_id, kind,
+    code, status_key_hash, session_id, match_id, arena_id, kind,
     starts_at_utc, ends_at_utc, to_name, from_name, show_price,
     parent_code, creator_actor_hash, creator_telegram_id, created_at
 ) VALUES (
-    :code, :status_key_hash, :session_id, :arena_id, :kind,
+    :code, :status_key_hash, :session_id, :match_id, :arena_id, :kind,
     :starts_at_utc, :ends_at_utc, :to_name, :from_name, :show_price,
     :parent_code, :creator_actor_hash, :creator_telegram_id, :created_at
 )
@@ -126,6 +129,7 @@ SELECT
     i.kind,
     i.show_price,
     i.session_id,
+    i.match_id,
     i.arena_id,
     i.starts_at_utc,
     i.ends_at_utc,
@@ -133,6 +137,9 @@ SELECT
     i.status_key_hash,
     (i.creator_telegram_id IS NOT NULL) AS creator_notified,
     s.status AS session_status,
+    m.home_team AS match_home,
+    m.away_team AS match_away,
+    m.status AS match_status,
     s.price_adult_minor,
     s.currency_code,
     a.name AS arena_name,
@@ -144,6 +151,7 @@ JOIN arenas a ON a.id = i.arena_id
 JOIN cities c ON c.id = a.city_id
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
 LEFT JOIN ice_sessions s ON s.id = i.session_id
+LEFT JOIN hockey_matches m ON m.id = i.match_id
 WHERE i.code = :code
 """
 
@@ -226,7 +234,8 @@ def validate_answer_payload(
 async def create_invite(
     session: AsyncSession,
     *,
-    session_id: int,
+    session_id: int | None = None,
+    match_id: int | None = None,
     to_name: str | None,
     from_name: str,
     show_price: bool,
@@ -235,18 +244,26 @@ async def create_invite(
     creator_telegram_id: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, str]:
+    """Открытка на сеанс льда (``session_id``) или на домашний матч Динамо (``match_id``) — ровно одно."""
+    if (session_id is None) == (match_id is None):
+        raise InviteRejected("Нужен ровно один из session_id и match_id.")
     moment = _as_utc(now or datetime.now(timezone.utc))
     # Кого зовут — обязательно: открытка обращается к человеку по имени (решение владельца 2026-10-12).
     to_value = normalize_invite_name(to_name, field="to_name", required=True)
     from_value = normalize_invite_name(from_name, field="from_name", required=True)
     if from_value is None:
         raise InviteRejected(f"from_name: укажите имя — от 1 до {NAME_MAX_LENGTH} символов.")
-    slot = await _load_session_for_create(session, session_id=session_id, now=moment)
+    if match_id is not None:
+        slot = await _load_match_for_create(session, match_id=match_id, now=moment)
+    else:
+        assert session_id is not None
+        slot = await _load_session_for_create(session, session_id=session_id, now=moment)
     parent = await _existing_parent_code(session, parent_code)
     status_key = secrets.token_urlsafe(24)
     params = {
         "status_key_hash": sha256_hex(status_key),
-        "session_id": int(slot["id"]),
+        "session_id": int(slot["id"]) if match_id is None else None,
+        "match_id": int(slot["id"]) if match_id is not None else None,
         "arena_id": int(slot["arena_id"]),
         "kind": str(slot["kind"]),
         "starts_at_utc": _as_utc(slot["starts_at_utc"]),
@@ -300,11 +317,13 @@ async def get_invite(
         "kind": row["kind"],
         "state": state,
         "session": _snapshot_session(row),
+        "match": _match_payload(row),
         "next_session": None,
         # Ответ уйдёт создателю пушем сам (открытку собрали в Telegram).
         "creator_notified": bool(row["creator_notified"]),
     }
-    if state in ("gone", "past"):
+    # «Следующий сеанс» — подсказка для льда; у матча её нет (следующий матч — другое приглашение).
+    if state in ("gone", "past") and row["kind"] != MATCH_INVITE_KIND:
         payload["next_session"] = await _next_session(session, row, now=moment)
     mine = await _my_answer(session, invite_id=int(row["id"]), device_token=device_token)
     if mine is not None:
@@ -515,6 +534,10 @@ def _attach_price(
 
 
 def _invite_state(row: Mapping[Any, Any], *, now: datetime) -> str:
+    if row["kind"] == MATCH_INVITE_KIND:
+        if row["match_id"] is None or row["match_status"] != "scheduled":
+            return "gone"
+        return "past" if _as_utc(row["starts_at_utc"]) <= now else "ok"
     session_id = row["session_id"]
     status = row["session_status"]
     if session_id is None or status != _STATUS_ACTIVE:
@@ -537,6 +560,24 @@ def _snapshot_session(row: Mapping[Any, Any]) -> dict[str, Any]:
         currency=row["currency_code"],
     )
     return payload
+
+
+def _match_payload(row: Mapping[Any, Any]) -> dict[str, Any] | None:
+    """Матч, на который зовёт открытка. ``None`` — открытка на сеанс льда."""
+    if row["kind"] != MATCH_INVITE_KIND:
+        return None
+    from src.application.place_links import match_start_param
+
+    match_id = int(row["match_id"]) if row["match_id"] is not None else None
+    home, away = row["match_home"], row["match_away"]
+    return {
+        "id": match_id,
+        "home": home,
+        "away": away,
+        "title": f"{home} — {away}" if home and away else None,
+        # ``startapp`` страницы матча в Mini App; ссылку t.me собирает тот, кто знает бота.
+        "start_param": match_start_param(match_id) if match_id is not None else None,
+    }
 
 
 def _arena_payload(row: Mapping[Any, Any]) -> dict[str, Any]:
@@ -599,6 +640,40 @@ async def _load_session_for_create(session: AsyncSession, *, session_id: int, no
     if not raw["arena_visible"]:
         raise InviteRejected("session_id: каток скрыт.")
     raise InviteRejected("session_id: сеанс не найден.")
+
+
+async def _load_match_for_create(session: AsyncSession, *, match_id: int, now: datetime) -> Mapping[Any, Any]:
+    """Домашний матч Динамо, который ещё не начался, и арена матчей. ``id`` — id матча."""
+    from src.application.hockey_matches import DINAMO
+    from src.application.ice_company.service import MATCH_DURATION, minsk_arena
+
+    if match_id <= 0:
+        raise InviteRejected("match_id: матч не найден.")
+    row = (
+        (
+            await session.execute(
+                text("SELECT id, starts_at, status FROM hockey_matches WHERE id = :id AND home_team = :home"),
+                {"id": int(match_id), "home": DINAMO},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise InviteRejected("match_id: матч не найден.")
+    if str(row["status"]) != "scheduled" or _as_utc(row["starts_at"]) <= now:
+        raise InviteRejected("match_id: матч уже начался.")
+    arena = await minsk_arena(session)
+    if arena is None:
+        raise InviteRejected("match_id: арена матчей не найдена.", 503)
+    starts = _as_utc(row["starts_at"])
+    return {
+        "id": int(row["id"]),
+        "arena_id": int(arena["id"]),
+        "kind": MATCH_INVITE_KIND,
+        "starts_at_utc": starts,
+        "ends_at_utc": starts + MATCH_DURATION,
+    }
 
 
 async def _existing_parent_code(session: AsyncSession, raw: str | None) -> str | None:

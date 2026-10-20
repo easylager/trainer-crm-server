@@ -53,16 +53,17 @@ function bookingBranch() {
 }
 
 describe('подключение модуля', () => {
-  it('hub-me-card.js подключён рядом с моделями хаба и до client-home-main.js', () => {
+  it('hub-me-card.js и hub-home.js подключены до client-home-main.js', () => {
     const meCard = homeHtml.indexOf('hub-me-card.js');
-    const collections = homeHtml.indexOf('hub-collections-model.js');
-    const iceToday = homeHtml.indexOf('hub-ice-today-model.js');
+    const hubHome = homeHtml.indexOf('src="hub-home.js');
     // preload в <head> не считается: важен тег <script>, который грузит код.
     const mainJs = homeHtml.lastIndexOf('src="client-home-main.js');
     assert.ok(meCard > -1, 'hub-me-card.js не подключён в client-home.html');
-    assert.ok(collections > -1 && iceToday > -1);
-    assert.ok(meCard < mainJs, 'модель должна грузиться до client-home-main.js');
-    assert.ok(meCard > iceToday, 'модель стоит в блоке моделей хаба');
+    assert.ok(hubHome > -1, 'hub-home.js не подключён в client-home.html');
+    assert.ok(meCard < mainJs && hubHome < mainJs, 'модели должны грузиться до client-home-main.js');
+    // TASK-303: модели старых зон главной больше не грузятся.
+    assert.ok(!homeHtml.includes('hub-collections-model.js'));
+    assert.ok(!homeHtml.includes('hub-ice-today-model.js'));
   });
 
   it('ru-person-name.js подключён: без него падежей в подписях быть не может', () => {
@@ -103,13 +104,12 @@ describe('applyHubState: ветка записи рисует «мою карт�
     assert.ok(!homeHtml.includes('id="meCard"'), 'новый контейнер карточке не нужен');
   });
 
-  it('состояния S4 не тронуты: сохранённые и чистый старт', () => {
+  it('сохранённые и чистый старт: секция и остаток в «Моих занятиях», без рынка поверх', () => {
     const apply = fnBody('applyHubState');
-    // DEC-002: полоска-кружки заменена секцией строк под карточкой-героем.
     assert.match(apply, /renderSavedTrainersSection\(cs\)/);
-    assert.ok(!/renderSavedTrainersStrip/.test(apply));
-    assert.match(apply, /renderHubSecondaryFill\(hubMeta/);
-    assert.match(apply, /loadDiscoveryUnlessMarket\(\)/);
+    assert.match(apply, /renderPassShelf\(hubMeta, null\)/);
+    // TASK-303: рынок (лёд, «Что нужно») рисует HubHome, карусели и «Куда катимся» нет.
+    assert.ok(!/loadDiscoveryUnlessMarket|renderHubExplore|renderHubSecondaryFill/.test(apply));
     // Ветка записи по-прежнему одна.
     assert.equal(apply.split('renderMeCardForBooking').length - 1, 1);
   });
@@ -275,14 +275,12 @@ describe('S3: старые рендеры состояний тренера уд
     }
   });
 
-  it('то, что нужно S4, оставлено живым и с вызовами', () => {
-    // Полка остатка для «сохранённых» (приоритет 3) ещё не переведена на карточку:
-    // её панель, её рендер и её контейнер обязаны остаться рабочими.
-    for (const fn of ['renderHubSecondaryFill', 'renderPrimaryPassPanel', 'buildPrimaryPassHtml']) {
+  it('полка остатка жива и с вызовами', () => {
+    for (const fn of ['renderPassShelf', 'renderPrimaryPassPanel', 'buildPrimaryPassHtml']) {
       assert.match(homeMain, new RegExp('function ' + fn + '\\('), fn);
       assert.ok(homeMain.split(fn).length - 1 >= 2, fn + ' остался без вызовов');
     }
-    assert.ok(homeHtml.includes('id="hubPrimaryPanel"'), 'контейнер полки остатка нужен S4');
+    assert.ok(homeHtml.includes('id="hubPrimaryPanel"'), 'контейнер полки остатка нужен');
   });
 });
 
@@ -324,19 +322,19 @@ describe('S3: «тренер есть» — одна рамка на «окна 
     assert.match(load, /fetchTrainerSlots\(trainer\.id\)/);
   });
 
-  it('полоса окон решает судьбу льда и нижнего FAB', () => {
+  it('полоса окон отмечает личный слот, зоны льда и FAB больше нет', () => {
     const paint = fnBody('paintMeCardForTrainerSync');
     assert.match(paint, /hubOpenWindowShown = !!view\.pick/);
     assert.match(paint, /hubPersonalSlot = !!view\.pick/);
-    assert.match(paint, /syncClientHubBookFab\(\)/);
-    assert.match(paint, /placeIceZone\('top'\)/);
-    assert.match(paint, /placeIceZone\('below-trainer'\)/);
+    assert.ok(!/placeIceZone|syncClientHubBookFab/.test(homeMain), 'TASK-303: зона льда и FAB удалены');
+    assert.ok(!homeHtml.includes('hubBookFab'));
   });
 
-  it('имени нет — карточки нет, но хаб остаётся живым', () => {
+  it('имени нет — карточки нет, остаток абонемента остаётся', () => {
     const paint = fnBody('paintMeCardForTrainerSync');
     assert.match(paint, /if \(!view\)/);
-    assert.match(paint, /renderHubSecondaryFill\(hubMeta, \{/);
+    assert.match(paint, /renderPassShelf\(hubMeta, trainer\.id\)/);
+    assert.match(paint, /hideMine\(\)/);
   });
 
   it('падежи готовит хаб, модель в глобалы не лезет', () => {
@@ -383,19 +381,28 @@ describe('S3: возврат — остаток или история, окна 
     assert.match(pick, /return targets\[0\]/);
   });
 
-  it('остальные тренеры — тихая строка под карточкой, а не вторая рамка', () => {
-    const pills = fnBody('dormantRebookPills');
-    assert.match(pills, /String\(t\.trainer_id\) !== String\(cardTrainerId\)/);
-    assert.match(pills, /quiet: true/);
-    assert.match(pills, /navigateToRebookTarget\(t\)/);
-    assert.match(fnBody('loadAndRenderMeCardForDormant'), /mountQuickStripPills\(dormantRebookPills\(view\.trainerId\)\)/);
+  it('«давно не были»: остальные тренеры — строкой «Записаться снова» в «Моих занятиях»', () => {
+    const row = fnBody('renderRebookRow');
+    assert.match(row, /String\(t\.trainer_id\) !== String\(cardTrainerId\)/, 'тренер из карточки — не дублем');
+    assert.match(row, /\.slice\(0, 2\)/);
+    assert.match(row, /'Снова к ' \+ trainerFirstNameForPill/);
+    assert.match(row, /navigateToRebookTarget\(t\)/);
+    assert.ok(!/innerHTML/.test(row), 'имена — textContent');
+    const load = fnBody('loadAndRenderMeCardForDormant');
+    assert.match(load, /renderRebookRow\(view \? view\.trainerId : null\)/);
+    assert.match(load, /!rebook\) hideMine\(\)/);
+    assert.ok(homeHtml.includes('id="hubRebook"'));
+    assert.match(fnBody('resetHubChromeForState'), /hubRebook/);
   });
 
-  it('сказать нечего — карточки нет, хаб остаётся на прежнем наполнении', () => {
+  it('полосы «снова» и быстрых ссылок на главной нет (TASK-303)', () => {
+    assert.ok(!/mountQuickStripPills|renderQuickStrip/.test(homeMain));
+    assert.ok(!homeHtml.includes('id="quickStrip"'));
+  });
+
+  it('сказать нечего — карточки нет, остаток или ничего', () => {
     const load = fnBody('loadAndRenderMeCardForDormant');
-    assert.match(load, /if \(!view\)/);
-    assert.match(load, /renderQuickStrip\('has-past', null\)/);
-    assert.match(load, /renderHubSecondaryFill\(hubMeta/);
+    assert.match(load, /if \(!view && !renderPassShelf\(hubMeta, null\) && !rebook\) hideMine\(\)/);
   });
 });
 
@@ -474,8 +481,7 @@ describe('S3: CSS — долг S1 закрыт, мёртвые стили убр
     ]) {
       assert.ok(!homeCss.includes(cls), 'мёртвый CSS остался: ' + cls);
     }
-    // Живое рядом не задето: штамп и строки списка записей, полка остатка.
-    assert.match(homeCss, /\.hub-next-card-pill--ok\s*\{/);
+    // Живое рядом не задето: строки списка записей, полка остатка.
     assert.match(homeCss, /\.hub-next-card-line\s*\{/);
     assert.match(homeCss, /\.hub-primary-panel__pass\s*\{/);
   });
@@ -497,14 +503,10 @@ describe('S3: CSS — долг S1 закрыт, мёртвые стили убр
     assert.ok(load.indexOf('setHubGreeting') < load.indexOf('profilesReady'));
   });
 
-  it('карточка держит ритм хаба и не прилипает к секции под ней', () => {
-    // Отступ на контейнере, а не на .me: .rest обязан остаться продолжением
-    // карточки (9px), а не отъехать на общий межсекционный интервал.
-    const rule = homeCss.match(/#nextBookingBlock:not\(:empty\)\s*\{[^}]*\}/);
-    assert.ok(rule, 'у блока карточки нет собственного отступа — он прилипнет к «Куда катимся»');
-    assert.match(rule[0], /margin:\s*0\s+16px\s+20px/);
-    // Тот же ритм, что у соседей по хабу.
-    assert.match(homeCss, /\.hub-explore\s*\{[^}]*margin:\s*0\s+16px\s+20px/);
+  it('карточка держит ритм главной: поля 16px и шаг секций из hub-home.css', () => {
+    const hubCss = fs.readFileSync(path.join(webapp, 'hub-home.css'), 'utf8');
+    assert.match(hubCss, /\.hm \{[^}]*padding: 0 16px;[^}]*gap: 28px/);
+    assert.match(hubCss, /\.hh-body \.hm \.me, \.hh-body #nextBookingBlock \{ margin-left: 0; margin-right: 0; \}/);
   });
 
   it('эмодзи из имени не протекает в подпись действия, но остаётся в заголовке', () => {

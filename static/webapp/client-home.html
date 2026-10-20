@@ -4,272 +4,98 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Главная</title>
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610195" />
-  <link rel="stylesheet" href="/static/shared/glide-components.css?v=202610195" />
+  <!-- TASK-303: заголовки главной — Dela Gothic; без preload шрифт приходит после текста и строки прыгают. -->
+  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=2026102030" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102030" />
+  <link rel="stylesheet" href="/static/shared/glide-components.css?v=2026102030" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202610195"></script>
-<link rel="stylesheet" href="theme.css?v=202610195" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610195" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610195" />
-  <script defer src="glide-deeplink.js?v=202610195"></script>
-  <script defer src="mini-app-telegram-chrome.js?v=202610195"></script>
-  <link rel="preload" href="client-home-main.js?v=202610195" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-card.css?v=202610195" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202610195" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610195" />
-<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610195" />
-  <script defer src="mini-app-empty-state.js?v=202610195"></script>
-  <script defer src="mini-app-more-icons.js?v=202610195"></script>
-  <script defer src="mini-app-client-shell.js?v=202610195"></script>
-  <script defer src="client-profile-switcher.js?v=202610195"></script>
-  <script defer src="mini-app-client-home.js?v=202610195"></script>
+  <script src="client-mini-app-theme.js?v=2026102030"></script>
+<link rel="stylesheet" href="theme.css?v=2026102030" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026102030" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026102030" />
+  <script defer src="glide-deeplink.js?v=2026102030"></script>
+  <script defer src="mini-app-telegram-chrome.js?v=2026102030"></script>
+  <link rel="preload" href="client-home-main.js?v=2026102030" as="script" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=2026102030" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=2026102030" />
+  <link rel="stylesheet" href="hub-home.css?v=2026102030" />
+  <script defer src="mini-app-empty-state.js?v=2026102030"></script>
+  <script defer src="mini-app-more-icons.js?v=2026102030"></script>
+  <script defer src="mini-app-client-shell.js?v=2026102030"></script>
+  <script defer src="client-profile-switcher.js?v=2026102030"></script>
+  <script defer src="mini-app-client-home.js?v=2026102030"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#hubShell" blocking="render" />
 </head>
-<body class="hub-body hub-body--loading ar-pilot ar-pilot--client-home" data-client-shell="tabs">
+<body class="hub-body hh-body hub-body--loading ar-pilot ar-pilot--client-home" data-client-shell="tabs">
   <div class="hub-shell" id="hubShell">
 
     <!--
-      TASK-091 (AC-001). Приветствие — ОДНА строка, разделённая с переключателем
-      профиля. Блоков `greeting` + `title` + `sub`, говоривших одно и то же,
-      больше нет: приветствие показывают, когда показать нечего, а у нас есть
-      лёд, запись и тренеры. Место отдано данным ниже.
-
-      TASK-095 (AC-002). Строка идентичности имеет зарезервированную высоту, а
-      скелетон живёт ВНУТРИ неё, а не под ней. Раньше переключатель профиля
-      монтировался асинхронно, строка вырастала с 0 до 38px и уносила вниз весь
-      экран — это давало 0.0138 CLS из измеренных 0.0218.
-
-      TASK-149 (S1). Приветствие — «{Утро|День|Вечер|Ночь}, {Имя}» + подпись из
-      фактов (город, «N катков вечером»). Подпись живёт ВНУТРИ той же строки:
-      имя + одна строка подписи укладываются в её 38px (min-height), поэтому
-      появление подписи высоту строки не меняет. Погоды и оценок («лёд держит»)
-      нет — таких данных у нас нет.
+      TASK-303 (PDEC-023): главная — продолжение страницы города на сайте. Шапка как
+      glideclub.by/c/{город}: фото катка, «{Город} на льду», счётчики. Высота шапки
+      зарезервирована (300px), до bootstrap — прошлый город из кэша или тёмная плашка.
     -->
-    <div class="hub-hero" id="hubHero">
-      <div class="hub-hero-top">
-        <div class="hub-hero-greeting" id="hubGreeting">
-          <span class="hub-hero-greeting__hello" id="hubGreetingHello">Рады вас видеть</span>
-          <span class="hub-hero-greeting__sub" id="hubGreetingSub" hidden></span>
+    <header class="hh hh--loading" id="hubHero">
+      <img class="hh__photo" id="hubHeroPhoto" alt="" fetchpriority="high" decoding="async" hidden>
+      <div class="hh__shade" aria-hidden="true"></div>
+      <div class="hh__in">
+        <div class="hh__top">
+          <a class="hh__city" id="hubCityPill" href="ice">
+            <span id="hubCityLabel">Город</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </a>
+          <div id="clientProfileSwitcherMount" class="hh__profile"></div>
         </div>
-        <div class="hub-hero-skel" aria-hidden="true">
-          <div class="hub-skel-line hub-skel-line--hero-greeting hub-skel-shimmer"></div>
-        </div>
-        <div id="clientProfileSwitcherMount" class="hub-hero-profile-switcher"></div>
-      </div>
-    </div>
-
-    <!-- Error / loading panel -->
-    <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
-
-    <!--
-      TASK-095 (AC-001). Скелетон — это обещание конкретной формы.
-
-      TASK-160 (S5). Форма сменилась: верх хаба — одна карточка во всех
-      состояниях, и скелетон обязан обещать ЕЁ, а не прежние «карточка льда +
-      поиск + плитки». Скелетон, обещающий не ту форму, и есть источник CLS,
-      против которого писался TASK-095.
-
-      Коробки повторяют `.me`: тот же радиус (--app-radius-lg), те же отступы
-      (14px 15px), та же высота строки статуса, крупного времени и лица.
-      Полоса чипов зарезервирована здесь же: окна приезжают из /client/slots
-      асинхронно, позже bootstrap, и без резерва карточка прыгала бы.
-    -->
-    <div id="hubInitialSkel" class="hub-initial-skel" role="status" aria-busy="true" aria-label="Загрузка главной">
-      <div class="hub-skel-me">
-        <div class="hub-skel-me__pad">
-          <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
-          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer"></div>
-          <div class="hub-skel-me__who">
-            <div class="hub-skel-me__avatar hub-skel-shimmer"></div>
-            <div class="hub-skel-icelines">
-              <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
-              <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
-            </div>
-          </div>
-          <div class="hub-skel-me__chips">
-            <div class="hub-skel-me__chip hub-skel-shimmer"></div>
-            <div class="hub-skel-me__chip hub-skel-shimmer"></div>
-            <div class="hub-skel-me__chip hub-skel-shimmer"></div>
-          </div>
+        <div class="hh__body">
+          <span class="hh__kicker" id="hubGreeting"><span id="hubGreetingHello">Рады вас видеть</span><span id="hubGreetingSub" hidden></span></span>
+          <h1 class="hh__title hh-display" id="hubHeroTitle"><span class="hh__skel hh__skel--title"></span></h1>
+          <span class="hh__line" id="hubHeroLine"></span>
         </div>
       </div>
-      <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
-      <div class="hub-skel-tiles">
-        <div class="hub-skel-tile hub-skel-shimmer"></div>
-        <div class="hub-skel-tile hub-skel-shimmer"></div>
-      </div>
-    </div>
+    </header>
 
-    <!-- ── SCENARIO 3: NEXT BOOKING HERO CARD ──────────────────────────── -->
-    <div id="nextBookingBlock"></div>
+    <main class="hm">
+      <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
-    <!--
-      TASK-091 (AC-002, AC-005). Лёд города — завершённая единица данных, и он
-      стоит НАД сгибом, а не строкой-тизером в хвосте. Для клиента с основным
-      тренером зона уезжает ниже панели тренера (placeIceZone в client-home-main.js):
-      порядок Intent Engine не меняется, меняется только то, что показано первым.
-    -->
-    <!--
-      TASK-149 (S2). ОДИН блок льда: кикер («На льду · Город» — текст отдаёт
-      IceTeaserModel, слово «сейчас» там нет: герой-сеанс по данным ещё не начался),
-      герой-тизер, 2–3 строки ближайших сеансов (#hubIceSessions, HubIceTodayModel),
-      ссылка «Весь лёд», затем поиск. Прежняя отдельная секция «Сегодня на льду» внизу
-      страницы убрана — это был второй блок с тем же смыслом.
-    -->
-    <div id="hubIceZone" class="hub-ice-zone" hidden>
-      <div class="hub-sec-head">
-        <p class="hub-kicker" id="hubIceKicker">На льду</p>
-        <a class="hub-sec-link" id="hubIceAll" href="ice">Весь лёд</a>
-      </div>
-      <div id="hubIceTeaser" class="hub-ice-teaser-wrap"></div>
-      <div id="hubIceSessions" class="hub-ice-today__card" hidden aria-label="Ближайшие сеансы"></div>
-      <!--
-        AC-003: поиск остаётся доступным, но перестаёт быть главным объектом
-        первого экрана — строка вместо кнопки на 15% высоты.
-      -->
-      <button type="button" class="hub-search" id="hubSearchRow">
-        <span class="hub-search__ic" aria-hidden="true"></span>
-        <span class="hub-search__text">Найти тренера или каток</span>
-      </button>
-    </div>
+      <!-- Слот «сейчас»: одна карточка по приоритету (лист «Слот» в макете). -->
+      <section class="hn" id="hubNow" aria-live="polite">
+        <div id="hubInitialSkel" class="hn__skel" role="status" aria-busy="true" aria-label="Загрузка главной"></div>
+      </section>
 
-    <!-- ── SCENARIO 1: точка вставки зоны льда ───────────────────────── -->
-    <!--
-      TASK-160 (S3): карточка тренера стала заливкой «моей карточки» и рисуется
-      в #nextBookingBlock. Пустой блок остался анкером для placeIceZone —
-      ничего, кроме порядка секций, он больше не держит.
-    -->
-    <div id="myTrainerBlock" style="display:none;"></div>
+      <section class="hs" id="hubMine" hidden>
+        <h2 class="hs__title hh-display">Мои занятия</h2>
+        <div id="nextBookingBlock"></div>
+        <div id="myTrainerBlock" style="display:none;"></div>
+        <section id="hubPrimaryPanel" class="hub-primary-panel" hidden></section>
+        <div class="hh-rebook" id="hubRebook" hidden></div>
+      </section>
 
-    <!--
-      Полка остатка. Окна и строка истории уехали в «мою карточку» (TASK-160 S3);
-      здесь остался только остаток абонемента для состояний, которые ещё не
-      переведены на карточку (сохранённые тренеры).
-    -->
-    <section id="hubPrimaryPanel" class="hub-primary-panel" hidden></section>
-
-    <!--
-      Discovery for new clients without primary trainer: real trainers carousel.
-      TASK-149 (DEC-004): НЕ вторая навигация по рынку. Карусель показывается только
-      когда «Куда катимся» нечего показать (нет города / пустой рынок) — иначе скрыта.
-    -->
-    <section id="hubDiscovery" class="hub-discovery" hidden></section>
-
-    <!-- ── CONTEXTUAL QUICK PILLS (rebook only — no tab duplicates) ─── -->
-    <div class="hub-quick-strip" id="quickStrip" hidden></div>
-
-    <!-- Удержание, а не товар: серия недель уехала под контент (решение владельца 2026-09-08) -->
-    <button type="button" id="hubStreakRibbon" class="hub-streak-ribbon" style="display:none;" aria-label="Ваша активность и серия недель"></button>
-
-    <!--
-      Следующие записи рисуются внутри карточки слота (renderUpcomingList).
-      Секция остаётся якорем для полоски «снова» в состояниях без записи.
-    -->
-    <div id="upcomingSection" style="display:none;">
-      <div class="hub-section-wrap">
-        <div class="hub-section-head">
-          <span class="hub-section-title">Все записи</span>
-          <button type="button" class="hub-section-link" id="btnAllBookings">Смотреть все</button>
+      <section class="hs" id="hubNearest" hidden aria-labelledby="hubNearestTitle">
+        <div class="hs__head">
+          <h2 class="hs__title hh-display" id="hubNearestTitle">Ближайший лёд</h2>
+          <a class="hs__more" id="hubNearestMore" href="ice">Весь день</a>
         </div>
-        <div id="bookingsBlock">
-          <div class="hub-bookings-skel" role="status" aria-busy="true" aria-label="Загрузка записей">
-            <div class="hub-skel-row">
-              <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
-              <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-                <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
-                <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
-              </div>
-            </div>
-            <div class="hub-skel-row">
-              <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
-              <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-                <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
-                <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+        <div class="hl" id="hubNearestRow"></div>
+      </section>
 
-    <!--
-      TASK-149 (S3). «Куда катимся» — ЕДИНСТВЕННАЯ навигация по рынку; заменила
-      и секцию-подборки (TASK-148), и карусель «Места и тренеры» в роли второй навигации.
-      Монтируется только при данных: плитка — при честном счётчике > 0, секция —
-      при >= 1 плитке. Стоит после персональных блоков и не участвует в переносе
-      зоны льда (placeIceZone): у своего клиента рынок ниже записи.
-    -->
-    <section id="hubExplore" class="hub-explore" hidden aria-label="Куда катимся"></section>
-
-    <aside class="hub-footer-aside" id="hubFooterAside" aria-label="Сообщество и поддержка">
-      <p class="hub-footer-aside__kicker">Наше комьюнити</p>
-      <div class="hub-footnote hub-footnote--collapsible" id="hubFootnote">
-      <button type="button" class="hub-footnote__toggle" id="hubFootnoteToggle" aria-expanded="false" aria-controls="hubFootnoteExpand">
-        <span class="hub-footnote__toggle-main">
-          <span class="hub-footnote__head">
-            <svg class="hub-footnote__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-            <strong class="hub-footnote__title">Развиваем платформу вместе</strong>
-          </span>
-          <span class="hub-footnote__teaser">Рады идеям, отзывам и просто пообщаться</span>
-        </span>
-        <svg class="hub-footnote__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <div class="hub-footnote__expand" id="hubFootnoteExpand" aria-hidden="true">
-        <div class="hub-footnote__expand-inner">
-          <p class="hub-footnote__lead">
-            Мы создаём этот проект рука об руку с вашими тренерами, чтобы детям и родителям было по-настоящему уютно и удобно. Поделитесь, чего вам не хватает, или напишите нам доброе слово — мы читаем каждое сообщение! 💛
-          </p>
-          <form id="hubSupportForm" class="hub-support-form" autocomplete="off">
-            <label for="hubSupportMessage" class="hub-support-label">Ваше сообщение</label>
-            <textarea
-              id="hubSupportMessage"
-              class="hub-support-textarea input"
-              name="message"
-              rows="2"
-              maxlength="4000"
-              placeholder="Идея, отзыв или нужна помощь? Напишите сюда"
-              aria-describedby="hubSupportHint"
-            ></textarea>
-            <p id="hubSupportHint" class="hub-support-hint">До 4000 символов.</p>
-            <button type="submit" id="hubSupportSubmit" class="btn-block btn-primary hub-support-submit">Отправить</button>
-            <p id="hubSupportStatus" class="hub-support-status" role="status" aria-live="polite"></p>
-          </form>
-          <p class="hub-footnote__cta">
-            Если нужна системная помощь — загляните в <strong>/guide</strong> в боте.
-          </p>
-        </div>
-      </div>
-      </div>
-    </aside>
+      <section class="hs" id="hubNeeds" hidden aria-labelledby="hubNeedsTitle">
+        <h2 class="hs__title hh-display" id="hubNeedsTitle">Чем займёмся?</h2>
+        <div class="hc hw" id="hubNeedsList"></div>
+      </section>
+    </main>
 
   </div>
 
-  <button type="button" id="hubBookFab" class="hub-book-fab client-hub-book-fab" hidden aria-label="Записаться к основному тренеру">
-    <svg class="hub-book-fab__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2"/>
-      <path d="M16 2v4M8 2v4M3 10h18"/>
-      <path d="M12 14v4M10 16h4"/>
-    </svg>
-    <span class="hub-book-fab__label">Записаться</span>
-  </button>
-
-  <script src="ru-text.js?v=202610195"></script>
-  <script src="minsk-time.js?v=202610195"></script>
-  <script src="schedule-staleness-model.js?v=202610195"></script>
-  <script src="catalog-public-url.js?v=202610195"></script>
-  <script src="ice-teaser-model.js?v=202610195"></script>
-  <script src="hub-collections-model.js?v=202610195"></script>
-  <script src="public-display-model.js?v=202610195"></script>
-  <script src="hub-ice-today-model.js?v=202610195"></script>
+  <script src="ru-text.js?v=2026102030"></script>
+  <script src="catalog-public-url.js?v=2026102030"></script>
   <!-- TASK-160: «моя карточка» хаба — чистая модель + рендер, без DOM. -->
-  <script src="hub-me-card.js?v=202610195"></script>
+  <script src="hub-me-card.js?v=2026102030"></script>
   <!-- Падежи имени для подписей карточки; модуля нет — формы безпадежные. -->
-  <script src="ru-person-name.js?v=202610195"></script>
-  <script src="catalog-geo-model.js?v=202610195"></script>
-  <script defer src="client-home-main.js?v=202610195"></script>
+  <script src="ru-person-name.js?v=2026102030"></script>
+  <script src="hub-home.js?v=2026102030"></script>
+  <script src="hub-bootstrap-parallel-model.js?v=2026102030"></script>
+  <script defer src="client-home-main.js?v=2026102030"></script>
 </body>
 </html>

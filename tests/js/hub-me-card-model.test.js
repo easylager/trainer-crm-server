@@ -197,13 +197,18 @@ describe('правило 1: крупное время — обязательст
 /* ── 2. Кошелёк честный ───────────────────────────────────────────────── */
 
 describe('правило 2: ячейка кошелька только при положительном остатке', () => {
-  it('активный абонемент с остатком рендерится ячейкой с полосой', () => {
+  it('активный абонемент: «2 из 4 осталось» и сегменты, у длинного — полоса', () => {
     const out = html({ kind: 'trainer', trainer: trainer(), slots: slots(1), passes: [pass({ sessions_remaining: 2 })] });
     assert.ok(out.includes('class="me__wallet"'));
     assert.ok(out.includes('me__w-k">Абонемент<'));
-    assert.ok(out.includes('me__w-v">2<i>из 4</i>'));
-    assert.ok(out.includes('me__w-bar'));
+    assert.ok(out.includes('me__w-v">2<i>из 4 осталось</i>'));
+    // TASK-303: до 12 занятий — сегменты; использованные помечены, оставшиеся — нет.
+    assert.ok(out.includes('<span class="me__w-seg" aria-hidden="true"><i class="is-used"></i><i class="is-used"></i><i></i><i></i></span>'), out);
+    assert.ok(!out.includes('me__w-bar'));
     assert.ok(out.includes('до 30 ноя'));
+    const long = html({ kind: 'trainer', trainer: trainer(), slots: slots(1), passes: [pass({ sessions_remaining: 9, sessions_total: 20 })] });
+    assert.ok(long.includes('me__w-bar'));
+    assert.ok(!long.includes('me__w-seg'));
   });
 
   it('активированный сертификат с остатком рендерится ячейкой', () => {
@@ -489,7 +494,8 @@ describe('лицо тренера — вложенная кнопка, откр�
     // Сам контейнер — просто flex-обёртка: атрибут действия живёт на кнопке.
     assert.ok(!/class="me__who( me__who--hero)?"[^>]*data-me-trainer-id/.test(out), out);
     assert.ok(out.includes('<div class="me__who me__who--hero"><button'), out);
-    assert.equal((out.match(/data-me-trainer-id/g) || []).length, 2, 'лицо и кнопка «Все окна»');
+    // TASK-303: вход «во все окна» — чип полосы, второй кнопки с id тренера нет.
+    assert.equal((out.match(/data-me-trainer-id/g) || []).length, 1, 'только лицо');
   });
 
   it('нет id тренера — лицо остаётся неинтерактивным (арена, тренер без id)', () => {
@@ -565,12 +571,12 @@ describe('правило 6: нет поля — нет строки', () => {
     assert.ok(!html({ kind: 'trainer', trainer: trainer(), slots: slots(1), passes: [pass({ sessions_total: 0, sessions_remaining: 3 })] }).includes('me__w-bar'));
   });
 
-  it('нет контакта тренера — залитой кнопки «написать» нет', () => {
+  it('нет контакта тренера — «Написать» нет ни в строке, ни кнопкой', () => {
     const noContact = trainer({ username: '', telegramId: null, canBook: false });
     const out = html({ kind: 'trainer', trainer: noContact, slots: [] });
     assert.ok(!out.includes('btn-fill'));
     assert.ok(!out.includes('me__dm'));
-    assert.ok(out.includes('btn-ghost'));
+    assert.ok(out.includes('data-me-action="notify-slots"'), 'напоминание остаётся');
   });
 
   it('заливка far не обещает рассылки, которой нет', () => {
@@ -784,27 +790,27 @@ describe('штамп записи: та же логика, что у nextCardSta
 /* ── Падежи имени ─────────────────────────────────────────────────────── */
 
 describe('падежи: готовые формы от вызывающего, иначе безпадежный фолбэк', () => {
-  it('есть nameDative — «Написать Александру»', () => {
-    const { buildView } = loadModel();
-    const view = buildView(
-      { kind: 'trainer', trainer: trainer({ nameDative: 'Александру Гаевскому' }), slots: [] },
-      NOW
-    );
-    assert.equal(view.actions[0].label, 'Написать Александру');
-    const out = html({ kind: 'trainer', trainer: trainer({ nameDative: 'Александру' }), slots: [] });
-    assert.ok(out.includes('>Написать Александру</button>'));
+  it('есть nameDative — запись ждёт ответа: «Написать Александру»', () => {
+    const out = html({
+      kind: 'booking',
+      booking: booking({ status: 'pending' }),
+      trainer: trainer({ nameDative: 'Александру Гаевскому' }),
+    });
+    assert.ok(out.includes('>Написать Александру</button>'), out);
   });
 
-  it('есть nameGenitive — «Все окна Александра»', () => {
+  it('у тренера «Написать» — в строке тренера, без отдельной кнопки и без «Все тренеры»', () => {
     const { buildView } = loadModel();
-    const view = buildView(
-      { kind: 'trainer', trainer: trainer({ nameGenitive: 'Александра Гаевского' }), slots: slots(2) },
-      NOW
-    );
-    assert.equal(view.actions[0].label, 'Все окна Александра');
+    const view = buildView({ kind: 'trainer', trainer: trainer({ nameDative: 'Александру' }), slots: [] }, NOW);
+    assert.deepEqual(view.actions, []);
+    assert.ok(view.who.dm, 'конверт в строке тренера');
+    const out = html({ kind: 'trainer', trainer: trainer(), slots: slots(2) });
+    assert.ok(out.includes('class="me__dm"'), 'и при окнах тоже');
+    assert.ok(out.includes('>Все окна →</button>'));
+    assert.ok(!out.includes('Все тренеры'));
   });
 
-  it('падежи работают и в записи, и в возврате', () => {
+  it('падеж — в записи; в возврате вход во все окна чипом', () => {
     const { buildView } = loadModel();
     const pendingView = buildView(
       { kind: 'booking', booking: booking({ status: 'pending' }), trainer: { nameDative: 'Александру' } },
@@ -820,23 +826,15 @@ describe('падежи: готовые формы от вызывающего, �
       },
       NOW
     );
-    assert.equal(dormantView.actions[0].label, 'Все окна Александра');
+    // TASK-303: при окнах вход «во все окна» — последний чип, дубля-кнопки нет.
+    assert.deepEqual(dormantView.actions, []);
+    assert.equal(dormantView.pick.allLabel, 'Все окна →');
   });
 
   it('нет форм — безпадежный фолбэк, а не кривой падеж', () => {
-    const { buildView } = loadModel();
-    assert.equal(
-      buildView({ kind: 'trainer', trainer: trainer(), slots: [] }, NOW).actions[0].label,
-      'Написать тренеру'
-    );
-    assert.equal(
-      buildView({ kind: 'trainer', trainer: trainer(), slots: slots(2) }, NOW).actions[0].label,
-      'Все окна'
-    );
-    // Пустые и мусорные формы к падежу не приводят.
     for (const bad of ['', '   ', null, undefined, 'Тренер']) {
-      const view = buildView({ kind: 'trainer', trainer: trainer({ nameDative: bad }), slots: [] }, NOW);
-      assert.equal(view.actions[0].label, 'Написать тренеру', `nameDative=${String(bad)}`);
+      const out = html({ kind: 'booking', booking: booking({ status: 'pending' }), trainer: trainer({ nameDative: bad }) });
+      assert.ok(out.includes('>Написать тренеру</button>'), `nameDative=${String(bad)}`);
     }
   });
 
@@ -870,26 +868,23 @@ describe('happy path: trainer', () => {
     assert.ok(!out.includes('btn-fill'), 'выбор времени и есть действие — заливки тут нет');
   });
 
-  it('окон нет: честный текст, «написать» и чип 🔔 «Напомнить»', () => {
+  it('окон нет: честная строка без эмодзи, «Написать» в строке и «Напомнить»', () => {
     const out = html({ kind: 'trainer', trainer: trainer(), slots: [] });
     assert.ok(!out.includes('me--accent'));
-    assert.ok(out.includes('Свободных окон в расписании нет.'));
-    assert.ok(out.includes('Нажмите 🔔'));
-    assert.ok(out.includes('btn-fill'));
-    assert.ok(out.includes('Написать тренеру'));
-    assert.ok(out.includes('me__do--pair'));
+    assert.ok(out.includes('Окон пока нет. Включите напоминание'));
+    assert.ok(!/[🔔🔕✉]/u.test(out), 'иконки — svg, не эмодзи');
+    assert.ok(out.includes('class="me__dm"'));
+    assert.ok(!out.includes('btn-fill'));
     assert.ok(out.includes('data-me-action="notify-slots"'));
     assert.ok(out.includes('me__notify wants-attention'));
-    assert.ok(out.includes('🔔'));
     assert.ok(out.includes('Напомнить'));
-    assert.ok(out.includes('Все тренеры'));
+    assert.ok(!out.includes('Все тренеры'));
   });
 
-  it('окон нет + подписка: чип 🔕 «Подписан», без pulse', () => {
+  it('окон нет + подписка: «Подписан», без pulse', () => {
     const out = html({ kind: 'trainer', trainer: trainer(), slots: [], notify_when_slots: true });
-    assert.ok(out.includes('Напоминания включены'));
+    assert.ok(out.includes('напомним, как только появятся'));
     assert.ok(out.includes('me__notify is-active'));
-    assert.ok(out.includes('🔕'));
     assert.ok(out.includes('Подписан'));
     assert.ok(!out.includes('wants-attention'));
   });

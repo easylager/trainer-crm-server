@@ -160,7 +160,7 @@ describe('catalog header (A′)', () => {
     });
     assert.deepEqual(
       modes.map((m) => m.id),
-      ['places', 'shop', 'coach']
+      ['places', 'coach', 'shop']
     );
     assert.equal(modes.find((m) => m.id === 'coach').active, true);
     assert.equal(modes.find((m) => m.id === 'shop').active, false);
@@ -178,7 +178,7 @@ describe('catalog header (A′)', () => {
     assert.equal(modes.find((m) => m.id === 'coach').label, 'Тренеры');
   });
 
-  it('catalogModesView: С клюшкой и Заточка — разделы в одном порядке с сайтом', () => {
+  it('catalogModesView: Тренеры вторые, чтобы чип был на первом экране', () => {
     const { catalogModesView, sectionHint } = loadModel();
     const modes = catalogModesView({
       facets: [{ key: 'ice', count: 4 }, { key: 'shop', count: 2 }],
@@ -192,11 +192,11 @@ describe('catalog header (A′)', () => {
     });
     assert.deepEqual(
       modes.map((m) => m.id),
-      ['places', 'ohm', 'service', 'shop', 'coach']
+      ['places', 'coach', 'ohm', 'service', 'shop']
     );
     assert.deepEqual(
       modes.map((m) => m.label),
-      ['Покататься', 'С клюшкой', 'Заточка', 'Магазины', 'Тренеры']
+      ['Покататься', 'Тренеры', 'С клюшкой', 'Заточка', 'Магазины']
     );
     assert.equal(modes.find((m) => m.id === 'service').active, true);
     assert.equal(modes.find((m) => m.id === 'places').active, false);

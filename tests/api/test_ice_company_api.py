@@ -106,6 +106,26 @@ async def test_create_without_threshold_fields(app_use_test_db, db_session, monk
 
 
 @pytest.mark.asyncio
+async def test_preview_png_draws_the_chat_card_without_a_company(app_use_test_db, db_session, monkeypatch) -> None:
+    place = await _place(db_session)
+    await _enable(monkeypatch, place["city_id"])
+    session_id = await _insert_session(db_session, place["arena_id"], starts_at=_at(days=3))
+    before = (await db_session.execute(text("SELECT COUNT(*) FROM ice_companies"))).scalar_one()
+    async with _client() as client:
+        res = await client.get(
+            "/api/public/ice-companies/preview.png",
+            params={"session_id": session_id, "you": "Аня", "name": "Пятничный лёд"},
+        )
+        missing = await client.get("/api/public/ice-companies/preview.png", params={"session_id": 999999})
+    assert res.status_code == 200, res.text
+    assert res.headers["content-type"] == "image/png"
+    assert Image.open(io.BytesIO(res.content)).size == (1080, 1080)
+    assert missing.status_code == 404
+    after = (await db_session.execute(text("SELECT COUNT(*) FROM ice_companies"))).scalar_one()
+    assert after == before
+
+
+@pytest.mark.asyncio
 async def test_repeat_and_weekly_are_gone(app_use_test_db, db_session, monkeypatch) -> None:
     created, _, _ = await _create(db_session, monkeypatch)
     code = created.json()["public_code"]

@@ -70,7 +70,7 @@ from src.shared.ice_discovery_scope import (
     public_city_scope_sql,
     public_scope_params,
 )
-from src.shared.notification_hours import NOTIFICATION_TZ
+from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
 from src.shared.phone_guard import sanitize_public_phone
 from src.shared.venue_types import (
     DEFAULT_HIDDEN_VENUE_TYPES,
@@ -2409,6 +2409,111 @@ async def list_public_arena_sessions(
     }
 
 
+# Сколько ближайших окон тренера отдаём на карточке катка и на сколько дней вперёд смотрим.
+TRAINER_WINDOWS_LIMIT = 6
+TRAINER_WINDOWS_DAYS = 7
+# Запас строк на тренера: часть отсеет правило «не раньше чем за N рабочих часов».
+_TRAINER_WINDOWS_FETCH = 40
+
+
+async def _trainer_windows_on_arena(
+    session: AsyncSession,
+    arena_id: int,
+    trainer_ids: list[int],
+    *,
+    timezone_name: str,
+    now: datetime | None = None,
+) -> dict[int, list[dict[str, Any]]]:
+    """Ближайшие свободные окна тренеров именно на этой арене — один запрос на всех.
+
+    Критерии «свободно и доступно для записи» те же, что в ``/client/slots`` без
+    ``service_id``: слот ``available`` на одного (capacity = 1), без активной брони,
+    не раньше чем за ``min_hours_before_booking`` рабочих часов, группа не в архиве.
+    Арена — ``COALESCE(slots.arena_id, trainers.primary_arena_id)``, как у
+    ``free_slots_14d`` на карточке: слот без арены относится к основной арене тренера.
+
+    Время слота в базе — стенное по Минску (``NOTIFICATION_TZ``), как во всей записи;
+    момент считаем оттуда, а ``starts_at``/``time``/``day`` отдаём в поясе арены.
+    """
+    if not trainer_ids:
+        return {}
+    moment = now if now is not None else datetime.now(timezone.utc)
+    slot_tz = ZoneInfo(NOTIFICATION_TZ)
+    view_tz = ZoneInfo(timezone_name)
+    now_slot = moment.astimezone(slot_tz)
+    horizon = moment + timedelta(days=TRAINER_WINDOWS_DAYS)
+    result = await session.execute(
+        text(
+            """
+            SELECT q.id, q.trainer_id, q.slot_date, q.start_time, q.end_time, q.min_hours
+            FROM (
+                SELECT s.id, s.trainer_id, s.slot_date, s.start_time, s.end_time,
+                       COALESCE(tp.min_hours_before_booking, 3) AS min_hours,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY s.trainer_id ORDER BY s.slot_date, s.start_time, s.id
+                       ) AS rn
+                FROM slots s
+                JOIN trainers t ON t.id = s.trainer_id
+                LEFT JOIN trainer_profiles tp ON tp.trainer_id = s.trainer_id
+                LEFT JOIN training_groups tg ON tg.id = s.training_group_id
+                WHERE s.trainer_id = ANY(:tids)
+                  AND COALESCE(s.arena_id, t.primary_arena_id) = :aid
+                  AND s.status = 'available'
+                  AND COALESCE(s.capacity, 1) = 1
+                  AND s.slot_date >= :d_from AND s.slot_date <= :d_to
+                  AND ((s.slot_date + s.start_time) AT TIME ZONE :slot_tz) > :now
+                  AND ((s.slot_date + s.start_time) AT TIME ZONE :slot_tz) <= :horizon
+                  AND (s.training_group_id IS NULL OR (tg.id IS NOT NULL AND tg.status != 'archived'))
+                  AND NOT EXISTS (
+                      SELECT 1 FROM bookings b
+                      WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')
+                  )
+            ) q
+            WHERE q.rn <= :fetch
+            ORDER BY q.trainer_id, q.slot_date, q.start_time, q.id
+            """
+        ),
+        {
+            "tids": trainer_ids,
+            "aid": arena_id,
+            "slot_tz": NOTIFICATION_TZ,
+            "now": moment,
+            "horizon": horizon,
+            "d_from": now_slot.date(),
+            "d_to": horizon.astimezone(slot_tz).date(),
+            "fetch": _TRAINER_WINDOWS_FETCH,
+        },
+    )
+    today = moment.astimezone(view_tz).date()
+    out: dict[int, list[dict[str, Any]]] = {}
+    for slot_id, trainer_id, slot_date, start_time, end_time, min_hours in result.fetchall():
+        bucket = out.setdefault(int(trainer_id), [])
+        if len(bucket) >= TRAINER_WINDOWS_LIMIT:
+            continue
+        if working_hours_between(now_slot, slot_date, start_time) < int(min_hours):
+            continue
+        starts = datetime.combine(slot_date, start_time, tzinfo=slot_tz).astimezone(view_tz)
+        ends: datetime | None = None
+        if end_time:
+            ends = datetime.combine(slot_date, end_time, tzinfo=slot_tz).astimezone(view_tz)
+            if ends <= starts:
+                ends = None
+        day = short_day_word(starts.date(), today=today)
+        if (starts.date() - today).days >= TRAINER_WINDOWS_DAYS:
+            day = f"{day}, {starts.day:02d}.{starts.month:02d}"
+        bucket.append(
+            {
+                "slot_id": int(slot_id),
+                "starts_at": starts.isoformat(),
+                "ends_at": ends.isoformat() if ends else None,
+                "time": format_clock(starts.strftime("%H:%M")),
+                "day": day,
+                "href": f"book?slot_id={int(slot_id)}",
+            }
+        )
+    return {tid: wins for tid, wins in out.items() if wins}
+
+
 async def list_public_arena_trainers(
     session: AsyncSession, arena_ref: str, *, city_id: int | None = None
 ) -> dict[str, Any] | None:
@@ -2427,6 +2532,15 @@ async def list_public_arena_trainers(
         body["can_book"] = availability["can_book"]
         body["open_groups_count"] = int(open_grp.get(body["id"], 0))
         out.append(body)
+    # Окна — одним запросом на всех тренеров арены; без записи окон нет.
+    windows = await _trainer_windows_on_arena(
+        session,
+        int(row["id"]),
+        [int(t["id"]) for t in out if t["can_book"]],
+        timezone_name=str(row.get("timezone") or NOTIFICATION_TZ),
+    )
+    for body in out:
+        body["windows"] = windows.get(int(body["id"]), [])
     # «от N за занятие» — та же цифра, что на сайте (абонементы, тарифы, групповые).
     from src.application.trainer_min_price import enrich_min_session_price
 

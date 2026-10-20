@@ -3313,3 +3313,72 @@ async def run_ice_forecast_loop(client_bot: Bot) -> None:
             await asyncio.sleep(DIGEST_LOOP_INTERVAL_SEC)
         except asyncio.CancelledError:
             break
+
+
+HOCKEY_MATCHES_INTERVAL_SEC = 10 * 60
+# Пока идёт окно поиска итога — каждые 2 минуты: клиент видит счёт почти сразу после источников.
+HOCKEY_RESULT_WINDOW_INTERVAL_SEC = 2 * 60
+HOCKEY_CALENDAR_EVERY = timedelta(hours=6)
+
+
+async def run_hockey_matches_loop() -> None:
+    """Каждые 10 минут, в окно итога — каждые 2. Молчит, пока HOCKEY_MATCHES_ENABLED выключен.
+
+    Календарь — не чаще раза в 6 часов (после сбоя — на следующем тике). Три сбоя подряд
+    календаря или всего прохода — одно сообщение админам.
+    """
+    from src.application.hockey_matches import (
+        LoopHealth,
+        default_fetch,
+        result_window_open,
+        run_tick,
+        send_review_alert,
+    )
+    from src.shared.config import get_settings
+
+    logger.info("[hockey_matches_loop] started")
+    last_calendar: datetime | None = None
+    health = LoopHealth()
+    while True:
+        delay = HOCKEY_MATCHES_INTERVAL_SEC
+        try:
+            settings = get_settings()
+            if settings.hockey_matches_enabled:
+                now = datetime.now(timezone.utc)
+                calendar_due = last_calendar is None or now - last_calendar >= HOCKEY_CALENDAR_EVERY
+                async with async_session_factory() as session:
+                    counts = await run_tick(
+                        session,
+                        default_fetch,
+                        now=now,
+                        alert=send_review_alert,
+                        calendar_due=calendar_due,
+                    )
+                    await session.commit()
+                    if await result_window_open(session, now=now):
+                        delay = HOCKEY_RESULT_WINDOW_INTERVAL_SEC
+                if calendar_due and not counts["calendar_failed"]:
+                    last_calendar = now
+                    health.ok("календарь матчей")
+                elif counts["calendar_failed"]:
+                    text = health.failed("календарь матчей", str(counts.get("calendar_error") or ""))
+                    if text:
+                        await send_review_alert(text)
+                health.ok("цикл матчей")
+                logger.info("[hockey_matches_loop] %s", counts)
+        except asyncio.CancelledError:
+            logger.info("[hockey_matches_loop] cancelled")
+            break
+        except Exception as e:
+            logger.exception("Hockey matches loop: %s", e)
+            try:
+                text = health.failed("цикл матчей", f"{type(e).__name__}: {e}")
+                if text:
+                    await send_review_alert(text)
+            except Exception:
+                logger.warning("[hockey_matches_loop] alert failed", exc_info=True)
+
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            break

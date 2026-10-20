@@ -1,191 +1,124 @@
 /**
- * Client «Мои записи» — list, detail, cancel modal (split from client-bookings.html).
+ * Client «Записи» — list, detail, cancel modal (TASK-306: list on the hub language).
  */
-body.client-bookings-body {
-  font-family: var(--app-font-sans);
-  background: var(--app-canvas-bg);
-  color: var(--tg-theme-text-color);
+html body.client-bookings-body.ga-body,
+html.trainer-theme-dark body.client-bookings-body.ga-body,
+html.trainer-theme-light body.client-bookings-body.ga-body {
+  padding-top: 20px;
+  padding-left: 16px;
+  padding-right: 16px;
+  background: var(--g-bg) !important;
+  color: var(--g-ink);
+  font-family: var(--g-font);
 }
 
-.client-bookings-body .client-app-header {
-  padding-left: 0;
-  padding-right: 0;
+.cb-title {
+  margin: 0 0 16px;
 }
 
-.cb-date-group {
-  margin-top: 22px;
+.cb-streak {
+  margin: 0 0 12px;
+  min-height: 64px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--g-ink);
 }
-
-.cb-date-group:first-child {
-  margin-top: 0;
+.cb-streak__n {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--g-r-btn);
+  background: var(--g-accent-wash);
+  color: var(--g-accent-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 400 22px/1 var(--g-font-display);
 }
+.cb-streak__t { flex: 1; font: 600 15px/1.3 var(--g-font); }
+.cb-streak svg { flex: none; color: var(--g-muted); }
 
-.cb-date-group-label {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--tg-theme-text-color);
-  opacity: 0.82;
-  margin-bottom: 10px;
-  padding: 4px 0 4px 12px;
-  border-left: 3px solid var(--tg-theme-button-color);
-  line-height: 1.35;
-}
+.cb-mode-tabs { margin: 0 0 12px; }
 
-.cb-date-group-weekday {
-  font-weight: var(--app-weight-semibold);
-  letter-spacing: 0.04em;
+.cb-trainer-chips {
+  margin: 0 0 12px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
 }
 
 .booking-card {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 14px 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
   margin-bottom: 10px;
-  border-radius: var(--app-radius-lg);
-  background: var(--tg-theme-secondary-bg-color);
   width: 100%;
   text-align: left;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  border: 1px solid transparent;
+  border: 0;
+  color: inherit;
 }
 
-.booking-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.cb-date {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: var(--g-r-md);
+  background: var(--g-accent-wash);
+  color: var(--g-accent-ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
-
-.booking-card:active {
-  transform: translateY(0);
-  opacity: 0.95;
-}
+.cb-date__n { font: 400 22px/1 var(--g-font-display); }
+.cb-date__m { font: 600 11px/1 var(--g-font); letter-spacing: .02em; }
 
 .booking-card-main { flex: 1; min-width: 0; }
-.booking-card .time { font-weight: var(--app-weight-semibold); font-size: var(--app-text-body); margin-bottom: 4px; }
-.booking-card .trainer { font-size: var(--app-text-body); color: var(--tg-theme-hint-color); margin-bottom: 4px; }
-.booking-card .service-line {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  color: var(--tg-theme-text-color);
-  margin-bottom: 6px;
-  line-height: 1.35;
+.cb-card__when {
+  font: 700 16px/1.25 var(--g-font);
+  color: var(--g-ink);
 }
-.booking-card .arena { font-size: var(--app-text-body); margin-bottom: 2px; }
-.booking-card .address { font-size: var(--app-text-caption); color: var(--tg-theme-hint-color); margin-bottom: 0; }
-
-.booking-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+.cb-card__sub {
+  margin-top: 2px;
+  font: 400 14px/1.35 var(--g-font);
+  color: var(--g-muted);
 }
-
-.booking-card .map-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: var(--app-text-caption);
-  line-height: 1.2;
-  color: var(--tg-theme-button-color);
-  text-decoration: none;
-  font-weight: var(--app-weight-semibold);
-  padding: 5px 10px;
-  border-radius: var(--app-radius-sm);
-  background: rgba(var(--accent-rgb), 0.12);
-  border: 1px solid rgba(var(--accent-rgb), 0.22);
-  margin: 0;
-  flex-shrink: 0;
+.cb-card__status {
+  margin-top: 4px;
+  font: 600 12px/1.2 var(--g-font);
+  color: var(--g-muted);
 }
+.cb-card__status--pending { color: var(--g-accent-ink); }
+.cb-card__status--cancelled,
+.cb-card__status--declined,
+.cb-card__status--no_show,
+.cb-card__status--payment_dispute,
+.cb-card__status--trainer_removed { color: var(--app-danger); }
+.cb-card__go { flex: none; color: var(--g-muted); }
 
-.booking-card .map-link svg { flex-shrink: 0; }
-.booking-card .map-link:active { opacity: 0.85; }
+.cb-load-more { margin: 4px 0 8px; }
 
-.booking-card .badge {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  line-height: 1.2;
-  padding: 5px 10px;
-  border-radius: var(--app-radius-sm);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  flex-shrink: 0;
-}
-
-.booking-card .badge.pending { background: var(--app-attention-wash); color: var(--app-attention-ink); }
-.booking-card .badge.confirmed { background: var(--app-ok-wash); color: var(--app-ok-ink); }
-.booking-card .badge.completed { background: var(--glide-brand-wash); color: var(--glide-ink-teal); }
-.booking-card .badge.cancelled,
-.booking-card .badge.declined,
-.booking-card .badge.trainer_removed { background: var(--glide-line); color: var(--glide-hint); }
-.booking-card .badge.no_show,
-.booking-card .badge.payment_dispute { background: var(--app-danger-wash); color: var(--app-danger-ink); }
-
-.cb-mode-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  margin: 0 0 12px;
-  background: rgba(var(--accent-rgb), 0.06);
-  border-radius: var(--app-radius-md);
-}
-
-.cb-mode-tab {
-  flex: 1;
-  padding: 8px 12px;
-  border: none;
-  border-radius: var(--app-radius-sm);
-  background: transparent;
-  color: var(--tg-theme-hint-color);
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.cb-mode-tab.active {
-  background: var(--app-card-bg);
-  color: var(--tg-theme-text-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-
-.cb-trainer-chips {
-  margin: 0 0 12px;
-}
-
-.cb-load-more {
-  margin: 4px 0 4px;
-}
-
-.booking-card .btn-cancel {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  color: var(--tg-theme-hint-color);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.cb-detail-back {
+  margin: 0 0 8px;
   padding: 0;
+  border: 0;
+  background: none;
+  color: var(--g-accent-ink);
+  font: 600 15px/1 var(--g-font);
+  cursor: pointer;
 }
-
-.booking-card .btn-cancel svg { width: 20px; height: 20px; }
-.booking-card .btn-cancel:active { opacity: 0.6; }
-.booking-card .btn-cancel:hover { color: var(--app-danger); }
 
 .client-bookings-body .loading,
 .client-bookings-body .error {
   text-align: center;
   padding: 24px;
-  color: var(--tg-theme-hint-color);
+  color: var(--g-muted);
 }
 
 .client-bookings-body .error { color: var(--app-danger); }
@@ -268,14 +201,14 @@ body.client-bookings-body {
 }
 
 .cb-booking-skel-card {
-  padding: 14px 16px;
+  padding: 12px;
   margin-bottom: 10px;
-  border-radius: var(--app-radius-lg);
-  background: var(--tg-theme-secondary-bg-color);
-  border: 1px solid transparent;
+  border-radius: var(--g-r-lg, 16px);
+  background: var(--g-surface);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 76px;
 }
 
 .cb-booking-skel-card .client-skel-line--wide { width: 46%; height: 14px; border-radius: var(--app-radius-pill); }
@@ -285,7 +218,7 @@ body.client-bookings-body {
 .cb-booking-skel-card:nth-child(2) .client-skel-line--mid { width: 64%; }
 
 body.bookings-body--revealed .booking-card,
-body.bookings-body--revealed .client-empty-state {
+body.bookings-body--revealed .ga-empty {
   animation: cb-content-in 0.24s ease both;
 }
 
@@ -302,7 +235,7 @@ body.bookings-body--revealed .client-empty-state {
 
 @media (prefers-reduced-motion: reduce) {
   body.bookings-body--revealed .booking-card,
-  body.bookings-body--revealed .client-empty-state {
+  body.bookings-body--revealed .ga-empty {
     animation: none !important;
   }
 }

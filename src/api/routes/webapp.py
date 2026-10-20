@@ -35,6 +35,7 @@ from aiogram.exceptions import (
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
+from src.application.hub_home import now_slot
 from src.application.trainer_custom_service_use_cases import MAX_CUSTOM_SERVICES_PER_TRAINER
 from src.shared.byr_currency_display import BYR_SIGN
 from src.shared.currency import resolve_trainer_currency, resolve_trainer_price_group
@@ -3133,8 +3134,53 @@ async def get_client_hub_bootstrap(
             logger.exception("client hub certificates failed")
             return []
 
-    bookings, requests, client_session, activity, passes, certificates = await asyncio.gather(
-        _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates()
+    async def _home_city() -> dict[str, Any] | None:
+        """TASK-303: шапка, «Ближайший лёд» и «Что нужно» — тот же вид, что у страницы города."""
+        from src.application.city_hub_page import load_city_hub_view
+        from src.application.hub_home import city_block
+        from src.application.place_links import place_start_param, telegram_open_link
+
+        try:
+            async with async_session_factory() as s:
+                row = await read_client_bot_session(telegram_id, s)
+                city_id = (row or {}).get("city_id")
+                if city_id is None:
+                    return None
+                city = (
+                    (await s.execute(text("SELECT * FROM cities WHERE id = :id"), {"id": int(city_id)}))
+                    .mappings()
+                    .first()
+                )
+                if city is None:
+                    return None
+                settings = Settings()
+
+                def invite(arena_id: int, session_id: int | None) -> str | None:
+                    return telegram_open_link(
+                        client_bot_username=settings.client_bot_username,
+                        mini_app_short_name=settings.client_mini_app_short_name,
+                        main_mini_app=settings.client_bot_main_mini_app,
+                        start_param=place_start_param(arena_id, session_id),
+                    )
+
+                return city_block(await load_city_hub_view(s, city=city), invite_link=invite)
+        except Exception:
+            logger.exception("client hub city block failed")
+            return None
+
+    async def _home_hockey() -> dict[str, Any] | None:
+        """TASK-303: «Кто кого» в слоте «сейчас». Сбой игры не трогает главную."""
+        from src.application.hockey_hub import hub_card
+
+        try:
+            async with async_session_factory() as s:
+                return await hub_card(s, telegram_id, now=datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("client hub hockey card failed")
+            return None
+
+    bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey = await asyncio.gather(
+        _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(), _home_hockey()
     )
     ice_teaser = None
     try:
@@ -3166,6 +3212,16 @@ async def get_client_hub_bootstrap(
         "ice_teaser": ice_teaser,
         "mini_app_server_place_card": mini_app_server_place_card_enabled(telegram_id),
         "pending_referral": await _pending_referral_payload(telegram_id, session),
+        "home": {
+            "city": home_city,
+            "now": now_slot(
+                bookings=bookings,
+                hockey=home_hockey,
+                upcoming=(home_city or {}).get("upcoming") or [],
+                now=datetime.now(timezone.utc),
+                has_city=home_city is not None,
+            ),
+        },
         "platform": {
             "vertical_key": "ice",
             "ui": {
@@ -11099,16 +11155,26 @@ async def get_trainer_referred_list(
     return await list_referred_trainers(session, trainer_id, limit=limit)
 
 
+from src.api.routes.webapp_client_hockey import router as _webapp_client_hockey_router
+from src.api.routes.webapp_client_hockey_event import router as _webapp_client_hockey_event_router
+from src.api.routes.webapp_client_hockey_leagues import router as _webapp_client_hockey_leagues_router
+from src.api.routes.webapp_client_hockey_share import router as _webapp_client_hockey_share_router
 from src.api.routes.webapp_client_trainer_edges import router as _webapp_client_trainer_edges_router
 from src.api.routes.webapp_client_watches import router as _webapp_client_watches_router
 from src.api.routes.webapp_training_groups import router as _webapp_training_groups_router
 from src.api.routes.admin_ice_sessions import router as _admin_ice_sessions_router
 from src.api.routes.admin_session_load import router as _admin_session_load_router
 from src.api.routes.admin_city_picks import router as _admin_city_picks_router
+from src.api.routes.admin_hockey import router as _admin_hockey_router
 
 router.include_router(_webapp_client_trainer_edges_router)
 router.include_router(_webapp_client_watches_router)
+router.include_router(_webapp_client_hockey_router)
+router.include_router(_webapp_client_hockey_event_router)
+router.include_router(_webapp_client_hockey_leagues_router)
+router.include_router(_webapp_client_hockey_share_router)
 router.include_router(_webapp_training_groups_router)
 router.include_router(_admin_ice_sessions_router)
 router.include_router(_admin_session_load_router)
 router.include_router(_admin_city_picks_router)
+router.include_router(_admin_hockey_router)

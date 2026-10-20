@@ -1,0 +1,226 @@
+/*
+ * «Кто кого» — игровой слой поверх Glide (PDEC-022, TASK-299).
+ * Нейтрали — из glide-tokens; своё только у игры: заголовочный шрифт, жёлтая наклейка очков,
+ * цвета команд (из данных), крупные скругления. Тёмная тема — body.kk-dark (colorScheme Telegram).
+ */
+.kk {
+  --kk-bg: #f2f5fa;
+  --kk-surface: #ffffff;
+  --kk-surface-2: #f2f5fa;
+  --kk-ink: #0d1424;
+  --kk-muted: #4b5568;
+  --kk-line: #eef1f6;
+  --kk-me: #e7eefc;
+  --kk-sticker: #ffd23f;
+  --kk-on-sticker: #0d1424;
+  --kk-dark-fill: #0d1424;
+  --kk-on-dark: #ffffff;
+  --kk-danger: #b42318;
+  --kk-hero: #1747b5;
+  --kk-scrim: rgba(13, 20, 36, 0.45);
+  --kk-display: 'Unbounded', var(--app-font-sans, system-ui), sans-serif;
+  --kk-text: var(--app-font-sans, 'Golos Text', system-ui), sans-serif;
+  --kk-r-card: 28px;
+  --kk-r-half: 22px;
+  --kk-r-btn: 20px;
+}
+
+body.kk-dark .kk {
+  --kk-bg: #0b1220;
+  --kk-surface: #151f33;
+  --kk-surface-2: #0b1220;
+  --kk-ink: #eef2f8;
+  --kk-muted: #9aa6ba;
+  --kk-line: #22304a;
+  --kk-me: #1d2c4d;
+  --kk-dark-fill: #eef2f8;
+  --kk-on-dark: #0b1220;
+  --kk-danger: #ff8a7a;
+  --kk-scrim: rgba(0, 0, 0, 0.6);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: #f2f5fa; }
+body.kk-dark { background: #0b1220; }
+button, input { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+.kk {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--kk-bg);
+  color: var(--kk-ink);
+  font-family: var(--kk-text);
+  display: flex;
+  flex-direction: column;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.kk-display { font-family: var(--kk-display); font-weight: 800; letter-spacing: -0.02em; }
+
+/* Шапка */
+.kk-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 16px 10px; }
+.kk-logo { font-family: var(--kk-display); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; margin: 0; }
+.kk-pill { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 12px 4px 4px; border: 0; border-radius: 22px; background: var(--kk-surface); cursor: pointer; font-size: 13px; font-weight: 700; }
+.kk-pill__pts { background: var(--kk-sticker); color: var(--kk-on-sticker); border-radius: 16px; padding: 3px 10px; font-family: var(--kk-display); font-weight: 800; font-size: 15px; }
+
+.kk-main { flex: 1; padding: 4px 16px 112px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Карточка матча */
+.kk-card { background: var(--kk-surface); border-radius: var(--kk-r-card); padding: 10px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+.kk-kicker { text-align: center; font-size: 12px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; color: var(--kk-muted); display: flex; justify-content: center; align-items: center; gap: 6px; }
+.kk-kicker__live { width: 8px; height: 8px; border-radius: 4px; background: #e2502c; }
+.kk-halves { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.kk-halves--result { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
+.kk-half {
+  min-height: 128px; border: 0; border-radius: var(--kk-r-half); padding: 12px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 6px;
+  text-align: left; cursor: pointer; background: color-mix(in srgb, var(--team) 12%, var(--kk-surface));
+  color: var(--kk-ink); transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+}
+body.kk-dark .kk-half { background: color-mix(in srgb, var(--team) 26%, var(--kk-surface)); }
+.kk-half[aria-pressed='true'] { background: var(--team); color: #ffffff; transform: scale(1.02); }
+.kk-half--dim { opacity: 0.45; }
+.kk-half:disabled { cursor: default; }
+.kk-half--small { min-height: 0; }
+.kk-badge {
+  width: 40px; height: 40px; border-radius: 20px; flex: none; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--team); color: #ffffff; font-family: var(--kk-display); font-weight: 800; font-size: 12px;
+}
+.kk-badge--logo { background: #ffffff; padding: 3px; }
+.kk-badge img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.kk-half[aria-pressed='true'] .kk-badge:not(.kk-badge--logo) { background: #ffffff; color: var(--team); }
+.kk-team { font-size: 15px; font-weight: 800; line-height: 1.15; }
+.kk-fans { font-size: 12px; font-weight: 700; opacity: 0.85; min-height: 16px; }
+.kk-score-big { font-family: var(--kk-display); font-weight: 800; font-size: 28px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.kk-note { text-align: center; font-size: 13px; font-weight: 700; color: var(--kk-muted); margin: 0; }
+.kk-link-btn { border: 0; background: none; padding: 8px 2px; min-height: 44px; font: inherit; color: var(--kk-hero); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.kk-lock { position: absolute; top: 12px; right: 12px; }
+
+.kk-btn-soft {
+  min-height: 44px; border: 0; border-radius: 18px; background: var(--kk-surface-2); color: var(--kk-ink);
+  font-size: 14px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.kk-chip { background: var(--kk-sticker); color: var(--kk-on-sticker); border-radius: 10px; padding: 2px 8px; font-size: 12px; font-weight: 800; }
+.kk-sticker {
+  position: absolute; top: -10px; right: 14px; background: var(--kk-sticker); color: var(--kk-on-sticker);
+  border-radius: 14px; padding: 5px 11px; font-family: var(--kk-display); font-weight: 800; font-size: 15px; transform: rotate(7deg);
+}
+.kk-row-card { background: var(--kk-surface); border-radius: var(--kk-r-card); padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+.kk-row-card__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.kk-row-card__title { font-size: 15px; font-weight: 800; }
+.kk-row-card__sub { font-size: 13px; font-weight: 600; color: var(--kk-muted); }
+.kk-dot { width: 10px; height: 10px; border-radius: 5px; background: var(--kk-sticker); flex: none; }
+
+/* Кнопки */
+.kk-btn {
+  min-height: 56px; border: 0; border-radius: var(--kk-r-btn); width: 100%;
+  font-size: 17px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none;
+}
+.kk-btn--dark { background: var(--kk-dark-fill); color: var(--kk-on-dark); }
+.kk-btn--sticker { background: var(--kk-sticker); color: var(--kk-on-sticker); }
+.kk-btn--ghost { background: transparent; color: var(--kk-muted); min-height: 48px; font-size: 15px; font-weight: 700; }
+.kk-btn--danger { background: transparent; color: var(--kk-danger); min-height: 48px; font-size: 15px; }
+.kk-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Нижнее меню игры */
+.kk-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: var(--kk-surface);
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 6px 8px calc(14px + env(safe-area-inset-bottom, 0px)); border-radius: 24px 24px 0 0;
+}
+.kk-nav button { min-height: 48px; border: 0; background: transparent; font-size: 14px; font-weight: 700; color: var(--kk-muted); cursor: pointer; }
+.kk-nav button[aria-current='page'] { color: var(--kk-ink); font-weight: 800; }
+
+/* Таблицы */
+.kk-h2 { font-family: var(--kk-display); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; margin: 0; }
+.kk-seg { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.kk-seg::-webkit-scrollbar { display: none; }
+.kk-seg button { flex: none; min-height: 40px; padding: 0 14px; border: 0; border-radius: 20px; background: var(--kk-surface); font-size: 14px; font-weight: 800; color: var(--kk-muted); cursor: pointer; white-space: nowrap; }
+.kk-seg button[aria-selected='true'] { background: var(--kk-dark-fill); color: var(--kk-on-dark); }
+.kk-podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
+.kk-podium__col { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.kk-podium__name { font-size: 14px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kk-podium__block { width: 100%; border-radius: 20px 20px 8px 8px; background: var(--kk-surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.kk-podium__block--1 { height: 108px; background: var(--kk-sticker); color: var(--kk-on-sticker); }
+.kk-podium__block--2 { height: 84px; }
+.kk-podium__block--3 { height: 66px; }
+.kk-ava {
+  border-radius: 50%; background: var(--kk-dark-fill); color: var(--kk-on-dark); flex: none;
+  display: flex; align-items: center; justify-content: center; font-weight: 800;
+}
+.kk-ava--me { background: var(--kk-hero); color: #ffffff; }
+.kk-list { background: var(--kk-surface); border-radius: var(--kk-r-card); padding: 6px 0; margin: 0; list-style: none; }
+.kk-list li { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--kk-line); }
+.kk-list li:first-child { border-top: 0; }
+.kk-list li.kk-me { background: var(--kk-me); }
+.kk-list__pos { font-family: var(--kk-display); font-weight: 800; font-size: 14px; width: 36px; color: var(--kk-muted); font-variant-numeric: tabular-nums; }
+.kk-list__name { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kk-list__meta { font-size: 12px; font-weight: 700; color: var(--kk-muted); }
+.kk-list__pts { font-family: var(--kk-display); font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+.kk-hint { font-size: 13px; font-weight: 600; color: var(--kk-muted); line-height: 1.45; margin: 0; }
+
+/* Лиги */
+.kk-league { width: 100%; border: 0; background: var(--kk-surface); border-radius: 24px; padding: 16px; display: flex; align-items: center; gap: 14px; text-align: left; cursor: pointer; }
+.kk-league__mark { width: 52px; height: 52px; border-radius: 18px; background: var(--kk-hero); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--kk-display); font-weight: 800; font-size: 16px; flex: none; }
+.kk-league__name { font-size: 16px; font-weight: 800; }
+.kk-league__sub { font-size: 13px; font-weight: 600; color: var(--kk-muted); }
+.kk-add { width: 100%; min-height: 84px; border: 2px dashed color-mix(in srgb, var(--kk-muted) 45%, transparent); border-radius: 24px; background: transparent; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: 800; cursor: pointer; }
+.kk-field { min-height: 60px; border: 0; border-radius: 20px; background: var(--kk-surface); padding: 0 18px; font-size: 20px; font-weight: 800; width: 100%; }
+.kk-ideas { display: flex; flex-wrap: wrap; gap: 8px; }
+.kk-ideas button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 20px; background: var(--kk-surface); font-size: 14px; font-weight: 700; cursor: pointer; }
+.kk-icon-btn { width: 44px; height: 44px; border: 0; border-radius: 22px; background: var(--kk-surface); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.kk-err { color: var(--kk-danger); font-size: 14px; font-weight: 700; margin: 0; }
+
+/* Полноэкранные: приглашение, «ты в лиге», итог */
+.kk-hero { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; padding: 22px 20px calc(28px + env(safe-area-inset-bottom, 0px)); gap: 18px; color: #ffffff; }
+.kk-hero--dark { background: #0d1424; }
+.kk-hero--blue { background: var(--kk-hero); }
+.kk-hero--miss { background: #3b4252; }
+.kk-hero__body { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+.kk-hero__brand { font-family: var(--kk-display); font-weight: 800; font-size: 16px; color: #ffd23f; }
+.kk-hero__title { font-family: var(--kk-display); font-weight: 800; font-size: 34px; line-height: 1.08; letter-spacing: -0.02em; margin: 0; overflow-wrap: anywhere; }
+.kk-hero__text { font-size: 15px; font-weight: 600; opacity: 0.85; line-height: 1.45; margin: 0; }
+.kk-hero__box { background: rgba(255, 255, 255, 0.1); border-radius: 24px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.kk-hero .kk-btn--ghost { color: #ffffff; opacity: 0.85; }
+.kk-faces { display: flex; }
+.kk-faces .kk-ava { width: 48px; height: 48px; font-size: 15px; border: 3px solid #0d1424; margin-left: -12px; background: #1747b5; color: #fff; }
+.kk-faces .kk-ava:first-child { margin-left: 0; }
+.kk-result-card { background: #ffffff; color: #0d1424; border-radius: 32px; padding: 22px 18px; display: flex; flex-direction: column; gap: 14px; position: relative; }
+.kk-result-card .kk-sticker { top: -26px; padding: 10px 16px; font-size: 26px; transform: rotate(8deg); }
+.kk-result-teams { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; }
+.kk-result-team { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; font-size: 14px; font-weight: 800; }
+.kk-result-team--lost { opacity: 0.55; }
+.kk-friends { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.kk-friend { background: rgba(255, 255, 255, 0.12); border-radius: 20px; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.kk-friend span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
+
+/* Шторки */
+.kk-sheet { position: fixed; inset: 0; z-index: 20; background: var(--kk-scrim); display: flex; flex-direction: column; justify-content: flex-end; }
+.kk-sheet__scrim { flex: 1; border: 0; background: transparent; cursor: pointer; }
+.kk-sheet__panel { background: var(--kk-surface); border-radius: 32px 32px 0 0; padding: 22px 20px calc(26px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 18px; }
+.kk-sheet__menu { padding: 10px 0 calc(26px + env(safe-area-inset-bottom, 0px)); gap: 0; }
+.kk-sheet__menu button { min-height: 56px; border: 0; border-top: 1px solid var(--kk-line); background: transparent; text-align: left; padding: 0 24px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.kk-sheet__menu button:first-of-type { border-top: 0; }
+.kk-steppers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.kk-stepper { display: flex; flex-direction: column; align-items: center; gap: 10px; border-radius: 24px; padding: 14px 8px; background: color-mix(in srgb, var(--team) 12%, var(--kk-surface)); }
+.kk-stepper__num { font-family: var(--kk-display); font-weight: 800; font-size: 64px; line-height: 1; color: var(--team); font-variant-numeric: tabular-nums; }
+body.kk-dark .kk-stepper__num { color: var(--kk-ink); }
+.kk-stepper__btns { display: flex; gap: 8px; }
+.kk-stepper__btns button { width: 48px; height: 48px; border: 0; border-radius: 24px; background: var(--kk-surface); font-size: 24px; font-weight: 800; cursor: pointer; }
+
+.kk-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 24px 0; }
+.kk-empty__art { display: flex; justify-content: center; }
+.kk-empty__art span { width: 64px; height: 88px; border-radius: 20px; margin: 0 3px; transform: rotate(-6deg); }
+.kk-empty__text { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.kk-empty__head { font-family: var(--kk-display); font-weight: 800; font-size: 22px; line-height: 1.2; max-width: 300px; margin: 0; }
+.kk-skeleton { height: 210px; border-radius: var(--kk-r-card); background: var(--kk-surface); opacity: 0.6; }
+
+.kk-toast { position: fixed; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--kk-dark-fill); color: var(--kk-on-dark); border-radius: 16px; padding: 12px 16px; font-size: 14px; font-weight: 700; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kk-half { transition: none; }
+  .kk-half[aria-pressed='true'] { transform: none; }
+}

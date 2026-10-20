@@ -72,6 +72,7 @@
     uiPicker: false,
   };
   var searchTimer = null;
+  var searchAbort = null;
   var fetchGen = 0;
   var searchGen = 0;
   var lastSearchQuery = '';
@@ -1306,6 +1307,8 @@
         esc(v.venueIcon || v.initial) +
         '</span>' +
         badge;
+    /* TASK-306: на фото — только день, время и «Позвать», как у «Ближайшего льда» на главной;
+       название и адрес — под фото. Плашка .ice-board__scrim остаётся контейнером для дня и времени. */
     var scrim =
       '<span class="ice-board__scrim">' +
       (v.offWindow ? '<span class="ice-board__off">' + esc(v.offLabel) + '</span>' : '') +
@@ -1316,6 +1319,9 @@
           esc(v.time) +
           '</span>'
         : '') +
+      '</span>';
+    var head =
+      '<span class="ice-board__head">' +
       '<span class="ice-board__name">' +
       esc(v.name) +
       '</span>' +
@@ -1353,6 +1359,7 @@
       photo +
       scrim +
       '</span>' +
+      head +
       (facts ? '<span class="ice-board__facts">' + facts + '</span>' : '') +
       (v.depth
         ? '<span class="ice-board__depth' + (v.stale ? ' ice-board__depth--stale' : '') + '">' +
@@ -1513,9 +1520,30 @@
       host.setAttribute('data-sig', html);
     }
     host.hidden = !html;
+    // Высоту «Для вас» помним до следующего открытия (резерв в ice.html, пока идёт загрузка).
+    if (!state.loading && state.loadedIntent === state.intent) {
+      try {
+        window.localStorage.setItem('ice_foryou_h_v1', String(html ? host.offsetHeight || 0 : 0));
+      } catch (e) { /* без памяти или песочница */ }
+    }
   }
 
+  /*
+   * Пока нет первого списка, под папки разделов и полосу фильтров держится место (ice-hub.css,
+   * body.ice-booting): иначе они появляются после ответа сервера и список прыгает вниз (CLS 0.17).
+   */
+  function releaseBoot() {
+    try {
+      if (document.body && document.body.classList) document.body.classList.remove('ice-booting');
+    } catch (e) { /* песочница тестов */ }
+  }
+  if (typeof window.setTimeout === 'function') window.setTimeout(releaseBoot, 8000);
+
   function renderList() {
+    if (!state.loading) {
+      if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(releaseBoot);
+      else releaseBoot();
+    }
     var list = listEl();
     var cap = $('iceCaption');
     if (cap) {
@@ -1581,6 +1609,7 @@
       parkShareButton();
       lastArenaListSig = '';
       list.innerHTML = state.items.map(renderTrainerCard).join('') + loadMoreHtml();
+      markListRefresh(list);
       showActiveList();
       return;
     }
@@ -1645,7 +1674,15 @@
     /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
        а приглушённые места без нужных сеансов идут уже после неё. */
     placeShareBeforeBreak(list);
+    markListRefresh(list);
     showActiveList();
+  }
+
+  function markListRefresh(list) {
+    if (!list || !list.classList) return;
+    list.classList.remove('is-refresh');
+    void list.offsetWidth;
+    list.classList.add('is-refresh');
   }
 
   function placeShareBeforeBreak(list) {
@@ -2022,6 +2059,7 @@
       return fetch(url, {
         cache: 'no-store',
         headers: headers,
+        signal: opts.signal,
       }).then(function (r) {
         return r.ok ? r.json() : null;
       });
@@ -2854,6 +2892,12 @@
     });
   }
 
+  function cancelSearch() {
+    if (!searchAbort) return;
+    searchAbort.abort();
+    searchAbort = null;
+  }
+
   function showSearch(q) {
     var searchSec = $('iceSearchSec');
     var listSec = $('iceListSec');
@@ -2861,6 +2905,7 @@
     var query = String(q || '').trim();
     if (query.length < 2) {
       searchGen += 1;
+      cancelSearch();
       var clearedBox = $('iceSearchResults');
       if (clearedBox) clearedBox.innerHTML = '';
       if (searchSec) searchSec.hidden = true;
@@ -2873,7 +2918,22 @@
     searchGen += 1;
     var gen = searchGen;
     lastSearchQuery = query;
-    fetchJson(M.buildSearchUrl(query, 12, state.cityId))
+    cancelSearch();
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    searchAbort = ctrl;
+    // Секция поиска открывается сразу, не после ответа: иначе лента секунду стоит, потом прыгает.
+    if (searchSec) searchSec.hidden = false;
+    if (listSec) listSec.hidden = true;
+    if (mapSec) mapSec.hidden = true;
+    if (document.body) document.body.classList.remove('ice-view-map');
+    var pendingBox = $('iceSearchResults');
+    if (pendingBox && !pendingBox.querySelector('.ice-hit')) {
+      pendingBox.innerHTML = '<p class="ice-results__pending" role="status">Ищем…</p>';
+    }
+    fetchJson(M.buildSearchUrl(query, 12, state.cityId), {
+      signal: ctrl ? ctrl.signal : undefined,
+      timeoutMs: 8000,
+    })
       .then(function (data) {
         if (gen !== searchGen) return;
         var grouped = M.groupSearchResults(data || { groups: [] });
@@ -2931,8 +2991,9 @@
         // TASK-096 AC-002: «Ничего не найдено» was the one state in the app with no exit at all.
         renderEmpty(box, M.formatEmptySearch(query), 'search');
       })
-      .catch(function () {
+      .catch(function (err) {
         if (gen !== searchGen) return;
+        if (err && err.name === 'AbortError') return;
         var errBox = $('iceSearchResults');
         if (!errBox) return;
         if (searchSec) searchSec.hidden = false;
@@ -3088,7 +3149,18 @@
     var modeSeg = $('iceModeSeg');
     if (modeSeg && modeSeg.dataset.scrollWired !== '1') {
       modeSeg.dataset.scrollWired = '1';
-      modeSeg.addEventListener('scroll', placeFolderLine);
+      var folderLineFrame = 0;
+      modeSeg.addEventListener('scroll', function () {
+        if (folderLineFrame) return;
+        if (typeof global.requestAnimationFrame !== 'function') {
+          placeFolderLine();
+          return;
+        }
+        folderLineFrame = global.requestAnimationFrame(function () {
+          folderLineFrame = 0;
+          placeFolderLine();
+        });
+      }, { passive: true });
     }
     var hockeySeg = $('iceHockeySeg');
     if (hockeySeg) {
@@ -3347,7 +3419,7 @@
         var q = search.value;
         searchTimer = global.setTimeout(function () {
           showSearch(q);
-        }, 220);
+        }, 80);
       });
     }
 
@@ -3608,6 +3680,29 @@
   }
 
   global.IceCatalog = { onTabRetap: onCatalogTabRetap };
+
+  /* TASK-306: токены сайта темнеют по body.tg-dark, а тема Mini App ставит hub-is-dark на <html>. */
+  function syncGlideDark() {
+    var b = document.body;
+    var h = document.documentElement;
+    if (!b || !b.classList || !h || !h.classList) return;
+    b.classList.toggle('tg-dark', h.classList.contains('hub-is-dark'));
+  }
+  /* Фото места не отдалось (файла нет в хранилище) — без значка битой картинки: остаётся фон карточки. */
+  document.addEventListener(
+    'error',
+    function (ev) {
+      var img = ev.target;
+      if (!img || img.tagName !== 'IMG' || !img.closest) return;
+      if (img.closest('.ice-board__photo') || img.closest('.ice-foryou') || img.closest('.ice-acard')) img.remove();
+    },
+    true
+  );
+  if (document.body) syncGlideDark();
+  else document.addEventListener('DOMContentLoaded', syncGlideDark);
+  if (global.MutationObserver && document.documentElement) {
+    new global.MutationObserver(syncGlideDark).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

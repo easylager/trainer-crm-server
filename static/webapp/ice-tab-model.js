@@ -306,8 +306,10 @@
   }
 
   /**
-   * Верхний сегмент — те же пять слов, что плитки города на сайте, в том же порядке:
-   * Покататься · С клюшкой · Заточка · Магазины · Тренеры. Пустой раздел не показываем.
+   * Верхний сегмент. «Тренеры» сразу за «Покататься»: на телефоне в ряд
+   * влезают четыре слова, и пятый чип человек просто не видит.
+   * Покататься · Тренеры · С клюшкой · Заточка · Магазины.
+   * Пустой раздел не показываем.
    *
    * «Магазины» нельзя вешать только на venue_type_facets ответа arenas: вкладка
    * «Тренеры» фасеты не привозит, и после возврата с карточки тренера сегмент
@@ -332,6 +334,11 @@
         active: scope === 'places' && !serviceOn,
       });
     }
+    var trainers = Number(opts.trainerCount);
+    if (isNaN(trainers)) trainers = 0;
+    if (trainers > 0) {
+      modes.push({ id: 'coach', label: copyLabel('route.trainers', 'Тренеры'), active: scope === 'coach' });
+    }
     var ohmN = Number(opts.ohmCount);
     var centerN = Number(opts.centerCount);
     if ((!isNaN(ohmN) && ohmN > 0) || (!isNaN(centerN) && centerN > 0)) {
@@ -349,11 +356,6 @@
     if (!(shops > 0)) shops = Number(opts.shopCount) || 0;
     if (shops > 0) {
       modes.push({ id: 'shop', label: copyLabel('route.shops', 'Магазины'), active: scope === 'shop' });
-    }
-    var trainers = Number(opts.trainerCount);
-    if (isNaN(trainers)) trainers = 0;
-    if (trainers > 0) {
-      modes.push({ id: 'coach', label: copyLabel('route.trainers', 'Тренеры'), active: scope === 'coach' });
     }
     return modes;
   }

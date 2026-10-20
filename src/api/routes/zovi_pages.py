@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.application.ice_invites import InviteRejected, get_invite, get_invite_status
+from src.application.place_links import telegram_open_link
 from src.application.png_render_cache import render_png_cached
 from src.application.zovi_card_image import render_zovi_og, render_zovi_ticket
 from src.shared.config import Settings
@@ -46,6 +47,22 @@ def _origin(request: Request) -> str:
     if base:
         return base
     return f"{request.url.scheme}://{request.url.netloc}"
+
+
+def _exit_url(invite: dict[str, Any], origin: str) -> str:
+    """Куда ведёт «в каталог»: у открытки на матч — на страницу матча в Mini App, иначе на главную."""
+    match = invite.get("match") or {}
+    if match.get("start_param"):
+        cfg = Settings()  # type: ignore[call-arg]
+        link = telegram_open_link(
+            client_bot_username=cfg.client_bot_username,
+            mini_app_short_name=cfg.client_mini_app_short_name,
+            main_mini_app=cfg.client_bot_main_mini_app,
+            start_param=str(match["start_param"]),
+        )
+        if link:
+            return link
+    return f"{origin}/"
 
 
 async def _read(session: AsyncSession, code: str) -> dict[str, Any] | None:
@@ -76,7 +93,7 @@ async def zovi_card_page(code: str, request: Request, session: AsyncSession = De
         invite,
         page_url=page_url,
         og_image_url=f"{page_url}/og.png?v={image_version(invite)}",
-        catalog_url=f"{origin}/",
+        catalog_url=_exit_url(invite, origin),
     )
     return HTMLResponse(html, headers=_PAGE_HEADERS)
 

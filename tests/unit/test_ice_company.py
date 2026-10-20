@@ -204,3 +204,31 @@ def test_poster_pastes_avatar_on_ice() -> None:
 def test_identical_card_hash_is_stable() -> None:
     buttons = [{"text": "Иду", "data": "ic:abcdefgh:g"}]
     assert render_hash("Едем", buttons) == render_hash("Едем", buttons)
+
+
+def test_match_card_text_and_toasts() -> None:
+    from src.application.ice_company.copy import match_when, toast_for
+
+    friday = datetime(2026, 10, 23, 19, 30, tzinfo=_MINSK)
+    assert match_when(friday) == "пт, 23 октября, 19:30"
+    snap = _snap(
+        kind="hockey_match",
+        venue="Минск-Арена",
+        starts_at=friday,
+        team_title="Динамо-Минск — СКА",
+        going_names=("Макс", "Аня"),
+        maybe_names=("Дима",),
+    )
+    assert card_text(snap) == (
+        "Идём на матч?\n"
+        "Динамо-Минск — СКА · пт, 23 октября, 19:30 · Минск-Арена\n"
+        "Идут: Макс, Аня · Смотрит дома: Дима"
+    )
+    assert card_text(_snap(kind="hockey_match", venue="Минск-Арена", starts_at=friday, going_names=())).count("\n") == 1
+    assert closed_headline(_snap(kind="hockey_match", expired=True, status="expired")) == "Матч прошёл"
+    assert closed_headline(_snap(kind="hockey_match", session_cancelled=True)) == "Матч отменён"
+    assert toast_for("hockey_match", "m") == "Записали, смотришь дома"
+    assert toast_for("public_skate", "m") == "Записали, может быть"
+    assert toast_for("hockey_match", "x") == toast_for("public_skate", "x") == "Записали, не идёшь"
+    many = _snap(kind="hockey_match", going_names=tuple(f"Игрок{i}" for i in range(7)))
+    assert "Идут: Игрок0, Игрок1, Игрок2, Игрок3 и ещё 3" in card_text(many)

@@ -5,6 +5,17 @@
   'use strict';
 
   var SHELL_VERSION = '202610051';
+  // Версия ассетов — та же, с которой загружен этот скрипт (bump_webapp_assets.py держит её
+  // общей). Префетч с вписанной руками версией качал файлы, которые вкладка уже не просит.
+  var ASSET_V = (function () {
+    var cur = global.document && global.document.currentScript;
+    var m = cur && /[?&]v=(\d+)/.exec(cur.src || '');
+    return m ? m[1] : '';
+  })();
+
+  function assetUrl(base, file) {
+    return base + file + (ASSET_V ? '?v=' + ASSET_V : '');
+  }
 
   var CATALOG_WARM_KEY = 'tcb_catalog_warm_v1';
   var CATALOG_WARM_TTL_MS = 90000;
@@ -21,6 +32,12 @@
   };
 
   var MORE_ITEMS = [
+    {
+      path: 'kto-kogo',
+      label: 'Кто кого',
+      iconId: 'kto-kogo',
+      hint: 'Угадай матч Динамо-Минск с друзьями',
+    },
     {
       path: 'client-saved-trainers',
       label: 'Сохранённые',
@@ -50,6 +67,13 @@
       label: 'Мои заявки',
       iconId: 'client-requests',
       hint: 'Запрос на подбор тренера и ответы специалистов',
+    },
+    {
+      // TASK-303: сообщество и форма поддержки — с главной сюда.
+      path: 'client-support',
+      label: 'Идеи и поддержка',
+      iconId: 'client-support',
+      hint: 'Напишите, чего не хватает, — мы читаем каждое сообщение',
     },
   ];
 
@@ -768,11 +792,11 @@
   function prefetchIceAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'ice-tab.js?v=2026101120', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=2026101126', as: 'script' },
-      { href: base + 'ice-map-model.js?v=2026100723', as: 'script' },
-      { href: base + 'ice-map.js?v=2026100722', as: 'script' },
-      { href: base + 'ice-tab.css?v=2026101120', as: 'style' },
+      { href: assetUrl(base, 'ice-tab.js'), as: 'script' },
+      { href: assetUrl(base, 'ice-tab-model.js'), as: 'script' },
+      { href: assetUrl(base, 'ice-map-model.js'), as: 'script' },
+      { href: assetUrl(base, 'ice-map.js'), as: 'script' },
+      { href: assetUrl(base, 'ice-tab.css'), as: 'style' },
     ];
     assets.forEach(function (spec) {
       if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
@@ -787,9 +811,9 @@
   function prefetchCatalogAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'catalog-main.js?v=2026100590', as: 'script' },
-      { href: base + 'mini-app-catalog.css?v=202605273', as: 'style' },
-      { href: base + 'mini-app-phone-field.js?v=202606281', as: 'script' },
+      { href: assetUrl(base, 'catalog-main.js'), as: 'script' },
+      { href: assetUrl(base, 'mini-app-catalog.css'), as: 'style' },
+      { href: assetUrl(base, 'mini-app-phone-field.js'), as: 'script' },
     ];
     assets.forEach(function (spec) {
       if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
@@ -868,7 +892,7 @@
 
   function prefetchBookingsAssets() {
     var base = webappBasePath();
-    var href = base + 'mini-app-client-bookings.css?v=202605279';
+    var href = assetUrl(base, 'mini-app-client-bookings.css');
     if (document.querySelector('link[rel="prefetch"][href="' + href + '"]')) return;
     var link = document.createElement('link');
     link.rel = 'prefetch';
@@ -883,7 +907,7 @@
     var assets = [
       base + 'book',
       base + 'mini-app-client-nav.css',
-      base + 'mini-app-phone-field.js?v=202606281',
+      assetUrl(base, 'mini-app-phone-field.js'),
     ];
     assets.forEach(function (href) {
       if (document.querySelector('link[rel="prefetch"][href="' + href + '"]')) return;
@@ -1087,6 +1111,21 @@
           ? 'catalog?from=arena&trainer_id=' + coach[1] + '&arena_id=' + coach[2]
           : 'catalog?trainer_id=' + coach[1],
       };
+    }
+    // «Кто кого»: приглашение в лигу друзей (TASK-298/299).
+    var league = /^kk_([A-Za-z0-9]{4,16})$/.exec(sp);
+    if (league) return { key: 'kto-kogo', path: 'kto-kogo?join=' + league[1].toUpperCase() };
+    // Кнопки карточек в чате (TASK-300): kkl_КОД — приглашение, kkr[_КОД] — итог «в точку!».
+    var fromCard = /^kk([lr])(?:_([A-Za-z0-9]{4,16}))?$/.exec(sp);
+    if (fromCard) {
+      var cardKind = fromCard[1] === 'l' ? 'league' : 'result';
+      if (fromCard[2]) return { key: 'kto-kogo', path: 'kto-kogo?join=' + fromCard[2].toUpperCase() + '&from=' + cardKind };
+      if (cardKind === 'result') return { key: 'kto-kogo', path: 'kto-kogo?from=result' };
+    }
+    // Домашний матч — ивент (TASK-304): kkm_<матч>[_<код компании>] — «Подробнее» и «Позвать» из чата.
+    var matchEvent = /^kkm_([1-9][0-9]*)(?:_([A-Za-z0-9]{4,16}))?$/.exec(sp);
+    if (matchEvent) {
+      return { key: 'client-match', path: 'client-match?id=' + matchEvent[1] + (matchEvent[2] ? '&c=' + matchEvent[2] : '') };
     }
     var company = /^company_([1-9][0-9]*)$/i.exec(sp);
     if (company) return { key: 'ice-company', path: 'ice-company?s=' + company[1] };

@@ -14,3 +14,12 @@ PUBLIC_JSON_LIST_CACHE = "public, max-age=120, stale-while-revalidate=120"
 
 def set_public_json_list_cache(response: Response) -> None:
     response.headers["Cache-Control"] = PUBLIC_JSON_LIST_CACHE
+
+
+# Окна тренеров на карточке катка меняются с каждой бронью — держим их не дольше минуты,
+# без stale-while-revalidate: иначе устаревшее окно живёт ещё две минуты сверху.
+PUBLIC_JSON_FRESH_CACHE = "public, max-age=60"
+
+
+def set_public_json_fresh_cache(response: Response) -> None:
+    response.headers["Cache-Control"] = PUBLIC_JSON_FRESH_CACHE

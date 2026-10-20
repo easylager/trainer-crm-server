@@ -29,6 +29,25 @@ function loadIceModel() {
 describe('deepLinkTarget', () => {
   const target = loadDeepLinkTarget();
 
+  it('kk_<код> ведёт во вход в лигу «Кто кого»', () => {
+    assert.deepEqual(target('kk_abcd2345'), { key: 'kto-kogo', path: 'kto-kogo?join=ABCD2345' });
+    assert.equal(target('kk_'), null);
+  });
+
+  it('кнопки карточек «Кто кого» ведут в игру с меткой карточки', () => {
+    assert.deepEqual(target('kkl_abcd2345'), { key: 'kto-kogo', path: 'kto-kogo?join=ABCD2345&from=league' });
+    assert.deepEqual(target('kkr_abcd2345'), { key: 'kto-kogo', path: 'kto-kogo?join=ABCD2345&from=result' });
+    assert.deepEqual(target('kkr'), { key: 'kto-kogo', path: 'kto-kogo?from=result' });
+    assert.equal(target('kkl'), null);
+  });
+
+  it('kkm_<матч>[_<код>] из карточки матча ведёт на страницу ивента (TASK-304)', () => {
+    assert.deepEqual(target('kkm_42'), { key: 'client-match', path: 'client-match?id=42' });
+    assert.deepEqual(target('kkm_42_Ab3dEf7h'), { key: 'client-match', path: 'client-match?id=42&c=Ab3dEf7h' });
+    assert.equal(target('kkm_0'), null);
+    assert.equal(target('kkm_'), null);
+  });
+
   it('arena_<id> ведёт на карточку места', () => {
     assert.deepEqual(target('arena_42'), { key: 'arena', path: 'arena?ref=42' });
   });

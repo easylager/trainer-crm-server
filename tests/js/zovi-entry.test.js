@@ -88,20 +88,47 @@ describe('варианты шита', () => {
     assert.equal(sheet.initialVariantId({ variant: 'company', company: false }), 'schedule');
   });
 
-  it('на вкладке компании только название команды и ник из Telegram, без порога', () => {
+  it('на вкладке компании — как это работает, название компании и ник из Telegram, без порога', () => {
     const html = sheet.companyBottomHtml({
       venueType: 'ice',
       sessionId: '9001',
       companyForm: { team: 'Пивной Олимп', you: 'Макс', error: '' },
     });
-    assert.doesNotMatch(html, /Сколько человек нужно|data-gss-cmin|порог/i);
-    assert.match(html, /Название команды/);
+    assert.doesNotMatch(html, /Сколько человек нужно|data-gss-cmin|порог|команд/i);
+    // Владелец 2026-10-20: одно поле — подпись на карточке, не «команда».
+    assert.match(html, /Название компании/);
+    assert.match(html, /видно на карточке/);
+    assert.match(html, /Отправить в чат/);
     assert.match(html, /data-gss-c="team"[^>]*value="Пивной Олимп"/);
     assert.match(html, /Вы в списке «Иду» как <b>Макс<\/b>/);
-    assert.match(html, />В чат</);
     assert.equal(html.includes('Как записать тебя'), false);
     assert.equal(html.includes('data-ch='), false);
     assert.equal(html.includes('type="number"'), false);
+  });
+
+  it('превью компании повторяет настоящую карточку: постер, подпись и кнопки столбиком', () => {
+    const ice = sheet.companyPreviewHtml({
+      venueType: 'ice',
+      placeName: 'ТЦ DiaMond city',
+      sessionId: '7',
+      slotSections: [{ localDate: '2026-10-23', dayLabel: 'пт', rows: [{ id: 7, time: '21:15', meta: '14 BYN · ОХМ' }] }],
+      companyForm: { team: '', you: 'Макс' },
+    });
+    // Картинка — та же, что сервер пришлёт в чат (og.render_company_card).
+    assert.match(ice, /<img class="gss-cprev__img"[^>]*src="\/api\/public\/ice-companies\/preview\.png\?session_id=7&amp;you=%D0%9C%D0%B0%D0%BA%D1%81&amp;name="/);
+    assert.match(ice, /Пятница, 21:15 · ТЦ DiaMond city/);
+    assert.match(ice, /На льду Макс\./);
+    assert.match(ice, /<i>Иду<\/i><i>Не могу<\/i><i>В другой чат →<\/i><i>На лёд ↗<\/i>/);
+    assert.doesNotMatch(ice, /Может/);
+    const match = sheet.companyPreviewHtml({
+      match: { id: 11, title: 'Динамо-Минск — СКА', day: 'пт, 30 октября', time: '19:30' },
+      placeName: 'Минск-Арена',
+      companyForm: { team: 'Офис', you: 'Макс' },
+    });
+    assert.match(match, /<img class="gss-cprev__img gss-cprev__img--wide"[^>]*src="\/api\/public\/ice-companies\/preview\.png\?match_id=11&amp;you=%D0%9C%D0%B0%D0%BA%D1%81"/);
+    assert.match(match, /Идём на матч\?/);
+    assert.match(match, /Офис · Динамо-Минск — СКА · пт, 30 октября, 19:30 · Минск-Арена/);
+    assert.match(match, /<i>Иду<\/i><i>Смотрю дома<\/i><i>Не смогу<\/i><i>Подробнее ↗<\/i>/);
   });
 
   it('после сбора карточка сразу в чате, ссылка отдельно', () => {

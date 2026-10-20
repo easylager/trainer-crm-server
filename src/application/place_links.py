@@ -28,6 +28,8 @@ PLACE_START_PREFIX = "arena_"
 CATALOG_START_PREFIX = "catalog_"
 #: ``trainer_<id>`` или ``trainer_<id>_a_<arena_id>`` — карточка тренера; с катка «Назад» ведёт на каток.
 TRAINER_START_PREFIX = "trainer_"
+#: ``kkm_<match_id>`` или ``kkm_<match_id>_<код компании>`` — страница домашнего матча Динамо (TASK-304).
+MATCH_START_PREFIX = "kkm_"
 
 # Ограничения Telegram на start/startapp: до 64 символов, только [A-Za-z0-9_-].
 _START_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -174,6 +176,14 @@ def place_start_param(arena_id: int, session_id: int | None = None) -> str:
     param = f"{PLACE_START_PREFIX}{int(arena_id)}"
     if session_id is not None and int(session_id) > 0:
         param += f"_s_{int(session_id)}"
+    return param
+
+
+def match_start_param(match_id: int, company_code: str | None = None) -> str:
+    """``kkm_12`` или ``kkm_12_k3x9abcd`` — страница домашнего матча, из приглашения — с кодом компании."""
+    param = f"{MATCH_START_PREFIX}{int(match_id)}"
+    if company_code:
+        param += f"_{company_code}"
     return param
 
 

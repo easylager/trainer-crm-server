@@ -46,6 +46,41 @@
     }
   }
 
+  // Профиль по умолчанию с прошлого открытия — только как догадка для раннего bootstrap главной
+  // (TASK-305). Привязан к Telegram-аккаунту: на общем телефоне чужой id не подхватится.
+  var DEFAULT_KEY = 'cw_default_profile_v1';
+
+  function telegramUserId() {
+    try {
+      var user = JSON.parse(new URLSearchParams(initData).get('user') || 'null');
+      return user && user.id != null ? String(user.id) : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function readCachedDefaultId() {
+    var uid = telegramUserId();
+    if (!uid) return null;
+    try {
+      var v = JSON.parse(window.localStorage.getItem(DEFAULT_KEY) || 'null');
+      return v && v.u === uid && Number(v.id) > 0 ? Number(v.id) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeCachedDefaultId(id) {
+    var uid = telegramUserId();
+    if (!uid) return;
+    try {
+      if (id == null) window.localStorage.removeItem(DEFAULT_KEY);
+      else window.localStorage.setItem(DEFAULT_KEY, JSON.stringify({ u: uid, id: id }));
+    } catch (e) {
+      /* без памяти — bootstrap просто подождёт профили */
+    }
+  }
+
   /* ── fetch patch ──────────────────────────────────────────────────── */
   // Always attach X-Profile-Id for the acting profile (active ?? default), including when
   // that profile is the account default. Omitting the header when active === default made
@@ -92,6 +127,7 @@
       .then(function (data) {
         state.profiles = data.items || [];
         state.defaultProfileId = data.default_profile_id != null ? Number(data.default_profile_id) : null;
+        writeCachedDefaultId(state.defaultProfileId);
         // A stale/foreign id from a previous account or a removed profile — fall back to default
         // rather than silently tagging every request with an id the server will reject anyway.
         if (state.activeProfileId != null && !state.profiles.some(function (p) { return p.client_id === state.activeProfileId; })) {
@@ -388,6 +424,14 @@
   var readyPromise = null;
 
   window.ClientProfileSwitcher = {
+    /** Saved device pick only — not default child until profiles load. */
+    getStoredActiveProfileId: function () {
+      return state.activeProfileId;
+    },
+    /** Профиль по умолчанию с прошлого открытия этого же Telegram-аккаунта; до загрузки профилей — догадка. */
+    getCachedDefaultProfileId: function () {
+      return readCachedDefaultId();
+    },
     getActiveProfileId: function () {
       return state.activeProfileId != null ? state.activeProfileId : state.defaultProfileId;
     },

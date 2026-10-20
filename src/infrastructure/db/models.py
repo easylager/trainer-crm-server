@@ -506,6 +506,155 @@ class IceSalesSnapshot(Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False)
 
 
+class HockeyMatch(Base):
+    """Матч Динамо-Минск для игры «Кто кого»: календарь и официальный итог (TASK-296)."""
+
+    __tablename__ = "hockey_matches"
+    __table_args__ = (
+        UniqueConstraint("source", "source_match_id", name="uq_hockey_matches_source_id"),
+        Index("ix_hockey_matches_status_starts", "status", "starts_at"),
+        CheckConstraint("source IN ('hcdinamo')", name="ck_hockey_matches_source"),
+        CheckConstraint("status IN ('scheduled', 'final', 'review', 'cancelled')", name="ck_hockey_matches_status"),
+        CheckConstraint(
+            "decided_in IS NULL OR decided_in IN ('regulation', 'ot', 'so')",
+            name="ck_hockey_matches_decided_in",
+        ),
+        CheckConstraint(
+            "result_source IS NULL OR result_source IN ('auto', 'manual')",
+            name="ck_hockey_matches_result_source",
+        ),
+        CheckConstraint(
+            "status <> 'final' OR (home_score IS NOT NULL AND away_score IS NOT NULL"
+            " AND home_score <> away_score AND decided_in IS NOT NULL AND result_source IS NOT NULL)",
+            name="ck_hockey_matches_final_result",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_match_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    home_team: Mapped[str] = mapped_column(String(64), nullable=False)
+    away_team: Mapped[str] = mapped_column(String(64), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="scheduled")
+    home_score: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    away_score: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    decided_in: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    result_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    review_alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyPlayer(Base):
+    """Игрок «Кто кого»: ключ клиента Mini App и имя для таблиц (TASK-297)."""
+
+    __tablename__ = "hockey_players"
+    __table_args__ = (CheckConstraint("char_length(display_name) BETWEEN 1 AND 40", name="ck_hockey_players_name"),)
+
+    player_key: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=False)
+    display_name: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyPlayerPrefs(Base):
+    """Личные настройки игрока «Кто кого»: скрыть строку игры на матчах (TASK-304)."""
+
+    __tablename__ = "hockey_player_prefs"
+
+    player_key: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=False)
+    kk_hidden: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyPick(Base):
+    """Ход игрока на матч: сторона или точный счёт; очки после итога (TASK-297)."""
+
+    __tablename__ = "hockey_picks"
+    __table_args__ = (
+        UniqueConstraint("match_id", "player_key", name="uq_hockey_picks_match_player"),
+        Index("ix_hockey_picks_player", "player_key"),
+        CheckConstraint("side IN ('home', 'away')", name="ck_hockey_picks_side"),
+        CheckConstraint("(home_score IS NULL) = (away_score IS NULL)", name="ck_hockey_picks_score_pair"),
+        CheckConstraint(
+            "home_score IS NULL OR (home_score >= 0 AND away_score >= 0 AND home_score <> away_score"
+            " AND (side = 'home') = (home_score > away_score))",
+            name="ck_hockey_picks_score_side",
+        ),
+        CheckConstraint("points IS NULL OR points IN (0, 10, 20, 30, 50)", name="ck_hockey_picks_points"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("hockey_matches.id", ondelete="CASCADE"), nullable=False)
+    player_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    home_score: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+    away_score: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+    points: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyLeague(Base):
+    """Лига друзей «Кто кого»: название, владелец, код приглашения (TASK-298)."""
+
+    __tablename__ = "hockey_leagues"
+    __table_args__ = (
+        UniqueConstraint("invite_code", name="uq_hockey_leagues_invite_code"),
+        CheckConstraint("char_length(btrim(name)) BETWEEN 1 AND 28", name="ck_hockey_leagues_name"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(28), nullable=False)
+    owner_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    invite_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyLeagueMember(Base):
+    """Участник лиги «Кто кого» (TASK-298)."""
+
+    __tablename__ = "hockey_league_members"
+    __table_args__ = (Index("ix_hockey_league_members_player", "player_key"),)
+
+    league_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    player_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
+    )
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyCardEvent(Base):
+    """Карточка «Кто кого» в чате: отправили, открыли, вступили — без ключа игрока (TASK-300)."""
+
+    __tablename__ = "hockey_card_events"
+    __table_args__ = (
+        CheckConstraint("kind IN ('shared', 'opened', 'joined')", name="ck_hockey_card_events_kind"),
+        CheckConstraint("card IN ('result', 'league')", name="ck_hockey_card_events_card"),
+        Index("ix_hockey_card_events_created", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    card: Mapped[str] = mapped_column(String(8), nullable=False)
+    league_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    match_id: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    prepared: Mapped[Optional[bool]] = mapped_column(Boolean(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class ClientBroadcastLog(Base):
     """One delivery attempt of a client broadcast. Repeat runs skip existing rows."""
 
@@ -1948,7 +2097,7 @@ class ClientShareEvent(Base):
 # ---------------------------------------------------------------------------
 
 _INVITE_CODE_CHECK = "code ~ '^[23456789abcdefghjkmnpqrstuvwxyz]{8}$'"
-_INVITE_KIND_CHECK = "kind IN ('public_skate', 'open_ice', 'hockey_practice')"
+_INVITE_KIND_CHECK = "kind IN ('public_skate', 'open_ice', 'hockey_practice', 'hockey_match')"
 
 
 class IceInvite(Base):
@@ -1959,6 +2108,7 @@ class IceInvite(Base):
         UniqueConstraint("code", name="uq_ice_invites_code"),
         CheckConstraint(_INVITE_CODE_CHECK, name="ck_ice_invites_code"),
         CheckConstraint(_INVITE_KIND_CHECK, name="ck_ice_invites_kind"),
+        CheckConstraint("session_id IS NULL OR match_id IS NULL", name="ck_ice_invites_one_target"),
         CheckConstraint(
             "char_length(from_name) BETWEEN 1 AND 20",
             name="ck_ice_invites_from_name",
@@ -1970,6 +2120,7 @@ class IceInvite(Base):
         Index("ix_ice_invites_parent_code", "parent_code"),
         Index("ix_ice_invites_created_at", "created_at"),
         Index("ix_ice_invites_session_id", "session_id"),
+        Index("ix_ice_invites_match_id", "match_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -1977,6 +2128,10 @@ class IceInvite(Base):
     status_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     session_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("ice_sessions.id", ondelete="SET NULL"), nullable=True
+    )
+    # TASK-304: открытка на домашний матч Динамо вместо сеанса льда (одно из двух).
+    match_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("hockey_matches.id", ondelete="SET NULL"), nullable=True
     )
     arena_id: Mapped[int] = mapped_column(
         ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Матч</title>
+  <!-- TASK-304: домашний матч Динамо — ивент. Язык нового хаба (PDEC-023): токены сайта, Dela Gothic, свои шрифты. -->
+  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=2026102030" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102030" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="client-mini-app-theme.js?v=2026102030"></script>
+  <link rel="stylesheet" href="theme.css?v=2026102030" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026102030" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=2026102030" />
+  <link rel="stylesheet" href="mini-app-share-sheet.css?v=2026102030" />
+  <link rel="stylesheet" href="/static/webapp/client-match.css?v=2026102030" />
+  <script defer src="mini-app-telegram-chrome.js?v=2026102030"></script>
+</head>
+<body class="cm-body ga-body">
+  <header class="cm-hero" id="cmHero">
+    <svg class="cm-hero__rink" viewBox="0 0 390 280" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      <rect x="-60" y="60" width="510" height="300" rx="140" fill="none" stroke="#7FD7D8" stroke-opacity=".2" stroke-width="3"/>
+      <line x1="195" y1="60" x2="195" y2="280" stroke="#ff6b6b" stroke-opacity=".32" stroke-width="3"/>
+      <circle cx="195" cy="210" r="56" fill="none" stroke="#7FD7D8" stroke-opacity=".2" stroke-width="3"/>
+    </svg>
+    <div class="cm-hero__top">
+      <button type="button" class="cm-round" id="cmBack" aria-label="Назад">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="cm-status" id="cmStatus" hidden></span>
+    </div>
+    <div class="cm-hero__body">
+      <span class="cm-kicker">Матч · КХЛ</span>
+      <h1 class="cm-title" id="cmTitle"><span class="cm-skel-line"></span></h1>
+      <div class="cm-score" id="cmScore" hidden></div>
+      <span class="cm-when" id="cmWhen">&nbsp;</span>
+    </div>
+  </header>
+
+  <main class="cm" id="cmMain" aria-busy="true">
+    <p class="cm-state" id="cmState" role="status" hidden></p>
+
+    <section class="cm-card cm-rsvp" id="cmRsvp" aria-labelledby="cmRsvpTitle">
+      <div class="cm-row-head"><h2 class="cm-h" id="cmRsvpTitle">Ты пойдёшь?</h2><span class="cm-crowd" id="cmCrowd" hidden></span></div>
+      <div class="cm-segs" id="cmSegs" role="group" aria-label="Ответ на матч"></div>
+      <div class="cm-react" id="cmReact" hidden aria-live="polite"></div>
+    </section>
+
+    <section class="cm-card cm-who" id="cmWho" hidden aria-labelledby="cmWhoTitle">
+      <div class="cm-row-head"><h2 class="cm-h" id="cmWhoTitle">Кто из ваших</h2><span class="cm-count" id="cmWhoCount"></span></div>
+      <div class="cm-who__body"><span class="cm-faces" id="cmFaces"></span><span class="cm-who__line" id="cmWhoLine"></span></div>
+    </section>
+
+    <div id="cmKk"></div>
+
+    <nav class="cm-card cm-links" aria-label="Как попасть на матч">
+      <a class="cm-link" id="cmTickets" href="#" hidden>Билеты <span class="cm-link__end">сайт клуба <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
+      <a class="cm-link" id="cmRoute" href="#" hidden>Как добраться <span class="cm-link__end"><span id="cmAddress">Минск-Арена</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></a>
+    </nav>
+
+    <section class="cm-ice" id="cmIce" hidden aria-labelledby="cmIceTitle">
+      <h2 class="cm-h2" id="cmIceTitle">Сами на лёд</h2>
+      <div class="cm-ice__list" id="cmIceList"></div>
+    </section>
+  </main>
+
+  <!-- TASK-304: те же «Позвать» и «Собрать компанию», что на катке, — общий шит шаринга (решение владельца). -->
+  <div class="ga-actionbar cm-bar" id="cmBar" hidden>
+    <div class="ga-actionbar__row">
+      <button type="button" class="ga-btn ga-press" id="cmInvite">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z"/></svg>
+        Позвать на матч
+      </button>
+      <button type="button" class="ga-btn ga-btn--dark ga-press" id="cmCompany">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c3 .2 6 2.4 6 5.5"/></svg>
+        Собрать компанию
+      </button>
+    </div>
+  </div>
+  <div class="cm-toast" id="cmToast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/static/webapp/ga-touch.js?v=2026102030"></script>
+  <script src="mini-app-share-sheet.js?v=2026102030"></script>
+  <script src="/static/webapp/client-match-model.js?v=2026102030"></script>
+  <script src="/static/webapp/client-match.js?v=2026102030"></script>
+</body>
+</html>

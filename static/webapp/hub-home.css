@@ -1,0 +1,328 @@
+/*
+ * Главная клиента — направление А «Сайт в кармане» (TASK-303, PDEC-023).
+ * Тот же язык, что glideclub.by/c/{город}: фото-шапка, Dela Gothic, карточки и «Что нужно».
+ * Цвета — только токены сайта (--g-*); тёмная тема приходит с body.tg-dark из glide-tokens.css.
+ * Шрифты свои (glide-public-fonts.css), веса 400/600/700 — без лишних файлов.
+ */
+
+/* Тема клиента (mini-app-client-theme.css) красит body через !important — на главной фон из токенов сайта. */
+html body.hh-body, html.trainer-theme-dark body.hh-body, html.trainer-theme-light body.hh-body {
+  background: var(--g-bg) !important; color: var(--g-ink); font-family: var(--g-font);
+}
+.hh-body .hub-shell { padding: 0 0 calc(104px + env(safe-area-inset-bottom, 0px)); max-width: 560px; margin: 0 auto; }
+.hh-display { font-family: var(--g-font-display); font-weight: 400; letter-spacing: -.01em; }
+
+/* ── Шапка города ─────────────────────────────────────────────── */
+.hh {
+  position: relative; height: 300px; overflow: hidden; color: #fff;
+  /* Без фото (не загрузилось, у города нет снимков) — не пустая плашка, а «лёд под светом»:
+     бирюза логотипа на тёмном, без файлов и запросов. Фото, когда есть, ложится сверху. */
+  background:
+    radial-gradient(120% 70% at 85% 0%, rgba(69, 185, 187, .38) 0%, rgba(69, 185, 187, 0) 60%),
+    radial-gradient(90% 60% at 0% 100%, rgba(127, 215, 216, .16) 0%, rgba(127, 215, 216, 0) 70%),
+    linear-gradient(180deg, #11283a 0%, var(--g-dark) 100%);
+}
+.hh__photo {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
+  opacity: 0; transition: opacity .55s cubic-bezier(.22, 1, .36, 1);
+}
+.hh__photo.is-in { opacity: 1; }
+.hh__photo[hidden] { display: none; }
+.hh__shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgba(13, 27, 38, .55) 0%, rgba(13, 27, 38, .05) 34%, rgba(13, 27, 38, .92) 100%);
+}
+.hh__in {
+  position: relative; height: 100%; box-sizing: border-box; padding: 14px 16px 56px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.hh__top { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 38px; }
+.hh__city {
+  min-height: 36px; padding: 0 10px 0 14px; border: 0; border-radius: var(--g-r-pill);
+  background: rgba(13, 27, 38, .55); color: #fff; font: 600 14px/1 var(--g-font);
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer; text-decoration: none;
+}
+.hh__city svg { width: 16px; height: 16px; }
+.hh__profile { flex: none; }
+.hh__body { display: flex; flex-direction: column; gap: 8px; }
+.hh__kicker { font-size: 14px; font-weight: 400; color: var(--g-on-dark-muted); min-height: 20px; }
+.hh__kicker #hubGreetingSub[hidden] { display: none; }
+.hh__title { margin: 0; font-size: 46px; line-height: .94; min-height: 1.88em; } /* две строки всегда: без прыжка */
+.hh__title--long { font-size: 38px; }
+.hh__line { font-size: 15px; font-weight: 400; color: #e6eef2; min-height: 20px; }
+.hh__skel { display: block; height: 14px; border-radius: 7px; background: rgba(255, 255, 255, .14); }
+.hh__skel--title { height: 40px; width: 70%; border-radius: 10px; }
+
+/* ── Лента под шапкой ─────────────────────────────────────────── */
+.hm { position: relative; margin-top: -36px; padding: 0 16px; display: flex; flex-direction: column; gap: 28px; }
+.hm > [hidden] { display: none !important; }
+.hs { display: flex; flex-direction: column; gap: 12px; }
+.hs__head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.hs__title { margin: 0; font-size: 22px; line-height: 1.1; }
+.hs__more { font-size: 15px; font-weight: 700; color: var(--g-accent-ink); text-decoration: none; }
+.hc { background: var(--g-surface); border-radius: 20px; box-shadow: var(--g-shadow); }
+
+/* ── Слот «сейчас» ────────────────────────────────────────────── */
+.hn__card {
+  display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 22px;
+  background: var(--g-surface); color: var(--g-ink); text-decoration: none;
+  box-shadow: 0 1px 2px rgba(13, 27, 38, .06), 0 10px 28px rgba(13, 27, 38, .10);
+}
+body.tg-dark .hn__card { box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 28px rgba(0, 0, 0, .35); }
+.hn__card--dark { background: var(--g-dark); color: #fff; flex-direction: row; align-items: center; gap: 14px; padding: 18px 16px; }
+.hn__row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.hn__title { font-size: 20px; line-height: 1; }
+.hn__when { font-size: 13px; font-weight: 600; color: var(--g-muted); }
+.hn__live { font-size: 13px; font-weight: 600; color: var(--g-accent-ink); display: flex; align-items: center; gap: 6px; }
+.hn__live::before { content: ''; width: 8px; height: 8px; border-radius: 4px; background: var(--g-live); }
+.hn__big { display: flex; align-items: center; gap: 14px; }
+.hn__time { font-size: 44px; line-height: .9; }
+.hn__what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hn__name { font-size: 17px; font-weight: 700; }
+.hn__sub { font-size: 14px; color: var(--g-muted); }
+.hn__btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.hn__btn {
+  min-height: 44px; border: 0; border-radius: 14px; font: 700 15px/1 var(--g-font); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
+  background: var(--g-accent); color: var(--g-on-accent);
+}
+.hn__btn--soft { background: var(--g-chip); color: var(--g-ink); font-weight: 600; }
+.hn__btn svg { width: 18px; height: 18px; }
+.hn__hint { font-size: 13px; color: var(--g-muted); }
+.hn__plus { background: #ffd23f; color: #0d1424; border-radius: 6px; padding: 1px 6px; font-weight: 700; }
+.hn__teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.hn__team {
+  min-height: 64px; border: 1px solid var(--g-line); border-radius: 16px; background: var(--g-surface); color: var(--g-ink);
+  padding: 8px 10px; display: flex; align-items: center; gap: 10px; font: 600 15px/1.2 var(--g-font); text-align: left; cursor: pointer;
+}
+/* Нажатие мгновенное, отпуск — короткая пружина. Без серой вспышки и без 300 мс на двойной тап. */
+.hh__city,
+.hn__card,
+.hl__card,
+.hs__more,
+.hw__row,
+.hn__team {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.hh__city,
+a.hn__card,
+.hl__card,
+.hs__more,
+.hn__team {
+  transition: transform .42s cubic-bezier(.22, 1.15, .36, 1), background-color .2s ease;
+}
+.hh__city:active,
+a.hn__card:active,
+.hl__card:active,
+.hs__more:active,
+.hn__team:active {
+  transform: scale(.975);
+  transition-duration: .07s;
+}
+.hw__row { transition: background-color .2s ease; }
+.hw__row:has(a:active) { background: rgba(13, 27, 38, .04); }
+body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
+
+@keyframes glide-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+/* backwards, не forwards: иначе transform остаётся занят и нажатие перестаёт сжиматься. */
+.hn__card,
+.hl__card {
+  animation: glide-rise .4s cubic-bezier(.22, 1, .36, 1) backwards;
+}
+.hl__card:nth-child(2) { animation-delay: .04s; }
+.hl__card:nth-child(3) { animation-delay: .08s; }
+.hl__card:nth-child(4) { animation-delay: .12s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hh__photo,
+  .hh__city,
+  a.hn__card,
+  .hl__card,
+  .hs__more,
+  .hn__team,
+  .hw__row { transition: none; }
+  .hn__card,
+  .hl__card { animation: none; }
+  .hh__photo.is-in { opacity: 1; }
+}
+.hn__logo {
+  width: 44px; height: 44px; flex: none; border-radius: 12px; background: #fff;
+  box-shadow: inset 0 0 0 1px #e1e8ec; display: flex; align-items: center; justify-content: center;
+  font: 400 13px/1 var(--g-font-display); color: #0d1b26;
+}
+.hn__logo img { width: 36px; height: 36px; object-fit: contain; }
+.hn__chip { margin-left: auto; background: #ffd23f; color: #0d1424; border-radius: 10px; padding: 5px 9px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.hn__sticker {
+  width: 58px; height: 58px; flex: none; border-radius: 16px; background: #ffd23f; color: #0d1424;
+  display: flex; align-items: center; justify-content: center; font: 400 22px/1 var(--g-font-display); transform: rotate(-6deg);
+}
+.hn__sticker--miss { background: rgba(255, 255, 255, .16); color: #fff; }
+.hn__card--dark .hn__sub { color: var(--g-on-dark-muted); }
+.hn__head { font-size: 24px; line-height: 1; }
+.hn__go { margin-left: auto; color: var(--g-on-dark-accent); width: 20px; height: 20px; flex: none; }
+/* ── Домашний матч — ивент (TASK-304, холст экран 10) ─────────── */
+.hn__ev { position: relative; flex-direction: row; align-items: center; gap: 14px; padding: 18px 16px; margin-top: 10px; }
+.hn__pair { display: flex; flex: none; }
+.hn__logo--round { width: 42px; height: 42px; border-radius: 50%; box-shadow: 0 0 0 3px var(--g-surface); }
+.hn__logo--round img { width: 30px; height: 30px; }
+.hn__pair .hn__logo--round + .hn__logo--round { margin-left: -12px; }
+.hn__name--one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hn__go--ev { color: var(--g-muted); }
+/* Метка — наклейка на краю карточки, как «+50» в игре. Жёлтый — цвет игры (PDEC-022), здесь он метит матч. */
+.hn__tag {
+  position: absolute; right: 18px; top: -11px; height: 26px; padding: 0 9px; border-radius: 8px; overflow: hidden;
+  display: inline-flex; align-items: center; gap: 5px; background: #ffd23f; color: #0d1424;
+  font: 400 11px/1 var(--g-font-display); letter-spacing: .02em; white-space: nowrap;
+  animation: hn-tag-wobble 3.2s ease-in-out infinite;
+}
+.hn__tag::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .75) 50%, rgba(255, 255, 255, 0) 65%);
+  background-size: 220% 100%; animation: hn-tag-shine 2.8s ease-in-out infinite;
+}
+.hn__tag--live { background: #fff; box-shadow: 0 1px 4px rgba(13, 27, 38, .18); }
+.hn__tag-dot { width: 6px; height: 6px; border-radius: 50%; background: #e5372b; animation: hn-tag-pulse 1.4s ease-in-out infinite; }
+@keyframes hn-tag-wobble { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(-1deg); } }
+@keyframes hn-tag-shine { 0% { background-position: -120% 0; } 55%, 100% { background-position: 220% 0; } }
+@keyframes hn-tag-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.6); opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .hn__tag, .hn__tag::after, .hn__tag-dot { animation: none; }
+  .hn__tag { transform: rotate(-3deg); }
+}
+.hn__skel { height: 150px; border-radius: 22px; background: var(--g-surface); box-shadow: var(--g-shadow); }
+/* Карточка клиента (запись сегодня, выбор города) в слоте — та же тень и радиус. */
+.hn .me { border-radius: 22px; }
+
+/* ── Ближайший лёд ────────────────────────────────────────────── */
+/* proximity, не mandatory: жёсткий snap на iOS забирает вертикальный жест, если палец начал на ленте. */
+.hl {
+  display: flex; gap: 10px; margin: 0 -16px; padding: 2px 16px 6px; overflow-x: auto;
+  scroll-snap-type: x proximity; overscroll-behavior-x: contain; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.hl::-webkit-scrollbar { display: none; }
+.hl__card {
+  position: relative; width: 208px; flex: none; scroll-snap-align: start; border-radius: 18px; overflow: hidden;
+  background: var(--g-surface); box-shadow: var(--g-shadow); color: var(--g-ink); text-decoration: none; display: flex; flex-direction: column;
+}
+.hl__photo { position: relative; height: 124px; background: var(--g-dark-2); display: block; }
+.hl__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hl__time {
+  position: absolute; left: 10px; bottom: 10px; background: var(--g-dark); color: #fff; border-radius: 10px;
+  padding: 5px 9px 4px; font: 400 20px/1 var(--g-font-display);
+}
+.hl__invite {
+  position: absolute; right: 8px; top: 8px; z-index: 1; min-height: 32px; padding: 0 11px; border: 0; border-radius: var(--g-r-pill);
+  background: rgba(255, 255, 255, .94); color: #0d1b26; font: 700 13px/1 var(--g-font); cursor: pointer;
+}
+.hl__text { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 2px; }
+.hl__name { font-size: 16px; font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hl__price { font-size: 13px; color: var(--g-muted); }
+
+/* ── Что нужно ────────────────────────────────────────────────── */
+.hw { display: flex; flex-direction: column; }
+.hw__row { position: relative; padding: 14px 14px 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
+.hw__row + .hw__row { border-top: 1px solid var(--g-line); }
+.hw__link { position: absolute; inset: 0; z-index: 0; border-radius: inherit; }
+.hw__icon {
+  width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--g-accent-wash); color: var(--g-accent-ink);
+  display: flex; align-items: center; justify-content: center;
+}
+.hw__icon svg { width: 22px; height: 22px; }
+.hw__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 1px; }
+.hw__title { font-size: 16px; font-weight: 700; color: var(--g-ink); }
+.hw__line { font-size: 13px; color: var(--g-muted); }
+.hw__chips { position: relative; z-index: 1; display: flex; gap: 6px; flex-wrap: wrap; padding-top: 8px; }
+.hw__chip {
+  min-height: 34px; padding: 0 11px; border-radius: var(--g-r-pill); background: var(--g-chip); color: var(--g-ink);
+  font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; text-decoration: none;
+}
+.hw__chip small { font-size: 12px; opacity: .72; }
+.hw__chip--hot { background: var(--g-ink); color: var(--g-bg); }
+.hw__chip--off { color: var(--g-muted); }
+.hw__go { width: 18px; height: 18px; margin-top: 11px; flex: none; color: var(--g-muted); }
+
+/* ── Мои занятия: карточка клиента в общем языке ──────────────── */
+.hs .me { border-radius: 20px; }
+
+/* Карточка клиента (hub-me-card.js) в языке макета А: без капса, «Написать» таблеткой, сегменты абонемента. */
+.hh-body .me {
+  background: var(--g-surface); color: var(--g-ink); border: 0; border-radius: 20px;
+  box-shadow: var(--g-shadow); overflow: hidden;
+}
+.hh-body .me--accent, .hh-body .me--warn { box-shadow: var(--g-shadow); }
+.hh-body .me__pad { padding: 14px 14px 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.hh-body .me__status, .hh-body .me__status .k {
+  text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: var(--g-accent-ink);
+}
+.hh-body .me__head { font: 400 20px/1.1 var(--g-font-display); color: var(--g-ink); }
+.hh-body .me__when b { font-family: var(--g-font-display); font-weight: 400; }
+.hh-body .me__who { display: flex; align-items: center; gap: 12px; }
+.hh-body .me__who-link { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-align: left; }
+.hh-body .me .avatar, .hh-body .me .avatar--lg {
+  width: 48px; height: 48px; border-radius: 24px; background: var(--g-accent-wash); color: var(--g-accent-ink);
+  font: 700 17px/1 var(--g-font);
+}
+.hh-body .me__who-t b, .hh-body .me__who--hero .me__who-t b { font-size: 16px; font-weight: 700; }
+.hh-body .me__who-t span { font-size: 13px; color: var(--g-muted); }
+.hh-body .me__dm {
+  min-height: 40px; padding: 0 14px; border: 0; border-radius: 12px; flex: none;
+  background: var(--g-accent-wash); color: var(--g-accent-ink); font: 700 14px/1 var(--g-font);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.hh-body .me__dm-ic { display: inline-flex; }
+.hh-body .me__dm-ic svg, .hh-body .me__notify-ic svg { width: 16px; height: 16px; }
+.hh-body .me__dm-label { display: inline; }
+.hh-body .me__line { font-size: 14px; line-height: 1.4; color: var(--g-ink-2); }
+.hh-body .me__pick-h .k { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: var(--g-ink-2); }
+.hh-body .me__chips { gap: 8px; }
+.hh-body .me__chip {
+  min-height: 40px; padding: 0 12px; border: 1px solid var(--g-line); border-radius: 12px;
+  background: var(--g-surface); color: var(--g-ink); font: 600 14px/1 var(--g-font);
+}
+.hh-body .me__chip em { font-style: normal; font-weight: 400; color: var(--g-muted); margin-right: 4px; }
+.hh-body .me__chip--all { border-color: transparent; background: transparent; color: var(--g-accent-ink); font-weight: 700; }
+.hh-body .me__notify {
+  min-height: 40px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--g-chip); color: var(--g-ink);
+  font: 600 14px/1 var(--g-font); display: inline-flex; align-items: center; gap: 6px; box-shadow: none; animation: none;
+}
+.hh-body .me__notify.is-active { background: var(--g-accent-wash); color: var(--g-accent-ink); }
+.hh-body .me__do--notify { display: flex; }
+.hh-body .me .btn-fill { background: var(--g-accent); color: var(--g-on-accent); border-radius: 14px; min-height: 44px; font-weight: 700; }
+.hh-body .me .btn-ghost { background: var(--g-chip); color: var(--g-ink); border: 0; border-radius: 14px; min-height: 44px; font-weight: 600; }
+.hh-body .me__wallet { border-top: 1px solid var(--g-line); padding: 0; display: flex; flex-direction: column; }
+.hh-body .me__w {
+  display: grid; grid-template-columns: 1fr auto; align-items: baseline; row-gap: 8px; column-gap: 12px;
+  padding: 14px 16px 16px; border: 0; background: transparent; color: var(--g-ink); text-align: left; width: 100%;
+}
+.hh-body .me__w + .me__w { border-top: 1px solid var(--g-line); }
+.hh-body .me__w-k { text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 600; color: var(--g-ink); }
+.hh-body .me__w-v { font: 400 18px/1 var(--g-font-display); color: var(--g-ink); }
+.hh-body .me__w-v i { font: 400 14px/1 var(--g-font); font-style: normal; color: var(--g-ink-2); margin-left: 4px; }
+.hh-body .me__w-s { grid-column: 1 / -1; font-size: 13px; color: var(--g-muted); }
+.hh-body .me__w-seg { grid-column: 1 / -1; display: flex; gap: 4px; }
+.hh-body .me__w-seg i { flex: 1; height: 6px; border-radius: 3px; background: var(--g-accent); }
+.hh-body .me__w-seg i.is-used { background: var(--g-line-strong); }
+.hh-body .me__w-bar { grid-column: 1 / -1; }
+.hh-body .me__foot { border-top: 1px solid var(--g-line); color: var(--g-accent-ink); font-weight: 700; }
+.hh-body .me__wallet, .hh-body .me__w { background: transparent; }
+.hh-body .me__do--notify .me__notify { width: auto; flex: none; }
+.hh-body .hm .me, .hh-body #nextBookingBlock { margin-left: 0; margin-right: 0; }
+.hh-me-skel { height: 308px; border-radius: 20px; background: var(--g-surface); box-shadow: var(--g-shadow); }
+.hn__btns > :only-child { grid-column: 1 / -1; }
+.hn__main { display: flex; flex-direction: column; gap: 12px; color: inherit; text-decoration: none; }
+.hl__hit { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.hl__invite { z-index: 2; }
+
+/* «Записаться снова» к остальным тренерам — тихая строка в «Моих занятиях». */
+.hh-rebook { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hh-rebook[hidden] { display: none; }
+.hh-rebook__head { width: 100%; font-size: 13px; font-weight: 600; color: var(--g-ink-2); }
+.hh-rebook__btn {
+  min-height: 40px; padding: 0 14px; border: 1px solid var(--g-line); border-radius: 12px;
+  background: var(--g-surface); color: var(--g-ink); font: 600 14px/1 var(--g-font); cursor: pointer;
+}

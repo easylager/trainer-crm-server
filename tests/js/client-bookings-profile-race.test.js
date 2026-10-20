@@ -51,8 +51,14 @@ assert.match(shellJs, /profile_id/, 'warm cache payload must store acting profil
 
 assert.match(
   homeMain,
-  /ClientProfileSwitcher\.init[\s\S]*\/client\/hub\/bootstrap/,
-  'hub bootstrap must wait for acting profile'
+  /getStoredActiveProfileId/,
+  'hub must read stored profile before bootstrap plan'
 );
+assert.match(
+  homeMain,
+  /HubBootstrapParallel[\s\S]*bootstrapFetchPlan/,
+  'hub bootstrap timing must use shared parallel model'
+);
+assert.match(homeMain, /earlyBootstrapPromise/, 'hub may start bootstrap before profiles resolve');
 
 console.log('ok: profile-scoped bookings fetch guards');

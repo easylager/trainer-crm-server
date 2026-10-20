@@ -14,23 +14,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
 
 from src.api.deps import get_session
-from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes
+from src.application import hockey_event
+from src.application.hockey_matches import DINAMO
+from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes, read_avatar_bytes
 from src.application.ice_company.codes import tg_participant_key, web_participant_key
+from src.application.hockey_cards import render_match_company_card
+from src.application.png_cache import bytes_key, cached_png
+from src.application.ice_company.copy import MATCH_KIND, closed_headline
 from src.application.ice_company.keyboard import inline_button_json
 from src.application.ice_company.lifecycle import button_rows, buttons_for, calendar_url_for, render_hash
-from src.application.ice_company.og import card_photo_url, render_company_card
+from src.application.ice_company.og import company_photo, render_company_card
 from src.application.ice_company.page import render_company_page
+from src.application.ice_company.safety import strip_emoji_for_poster
 from src.application.ice_company.service import (
     CompanyRejected,
     actor_for_telegram,
     cancel_company,
     create_company,
+    create_match_company,
     delete_own,
+    preview_snap,
     read_company,
     resolve_participant,
     respond,
     snap_from,
+    _home_match_row,
     _load,
+    _match_id,
     _responses,
 )
 from src.shared.client_ip import trusted_client_ip
@@ -49,7 +59,9 @@ _hits: dict[str, deque[float]] = {}
 
 
 class CreateBody(BaseModel):
-    session_id: int
+    # Ровно одно из двух: сеанс льда или домашний матч Динамо (TASK-304).
+    session_id: int | None = None
+    match_id: int | None = None
     display_name: str = ""
     name: str = ""
     surface: str = "miniapp"
@@ -135,20 +147,35 @@ async def post_company(
     user_id = _init_user(init_raw)
     if user_id is None:
         raise HTTPException(status_code=401, detail="Собрать компанию можно из Telegram.")
+    if (body.session_id is None) == (body.match_id is None):
+        raise HTTPException(status_code=422, detail="Нужен ровно один из session_id и match_id.")
+    if body.match_id is not None and not hockey_event.enabled():
+        raise HTTPException(status_code=404, detail="Не найдено")
     organizer_name = (body.display_name or "").strip()
     if not organizer_name:
         organizer_name = display_name_from_telegram_user(parse_user_json_from_init_data(init_raw)) or ""
     if not organizer_name:
         raise HTTPException(status_code=422, detail="Не удалось подставить имя из Telegram.")
     try:
-        view = await create_company(
-            session,
-            telegram_user_id=user_id,
-            session_id=body.session_id,
-            display_name=organizer_name,
-            name=body.name,
-            surface=(body.surface or "miniapp")[:16],
-        )
+        if body.match_id is not None:
+            view = await create_match_company(
+                session,
+                telegram_user_id=user_id,
+                match_id=body.match_id,
+                home_team=DINAMO,
+                display_name=organizer_name,
+                name=body.name,
+            )
+        else:
+            assert body.session_id is not None
+            view = await create_company(
+                session,
+                telegram_user_id=user_id,
+                session_id=body.session_id,
+                display_name=organizer_name,
+                name=body.name,
+                surface=(body.surface or "miniapp")[:16],
+            )
     except CompanyRejected as exc:
         raise _http(exc) from None
     company = await _load(session, str(view["public_code"]))
@@ -161,6 +188,41 @@ async def post_company(
             telegram_user_id=user_id,
         )
     return view
+
+
+@router.get("/api/public/ice-companies/preview.png")
+async def company_preview_png(
+    session_id: int | None = None,
+    match_id: int | None = None,
+    name: str = "",
+    you: str = "",
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Превью картинки компании до создания: тот же рисунок, что уйдёт в чат (лист шаринга, вкладка «Компания»)."""
+    if match_id is not None:
+        match = await _home_match(session, match_id)
+        if match is None or not Settings().hockey_matches_enabled:
+            raise HTTPException(status_code=404, detail="Матч не найден.")
+        who = strip_emoji_for_poster((you or "").strip()[:24]) or "Ты"
+        png = await cached_png(
+            ("preview-match", match_id, str(match["home_team"]), str(match["away_team"]), match["starts_at"].isoformat(), who),
+            lambda: render_match_company_card(
+                home=str(match["home_team"]),
+                away=str(match["away_team"]),
+                starts_at=match["starts_at"],
+                going=[(who, None)],
+                watching=[],
+            ),
+        )
+        return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
+    snap = await preview_snap(session, session_id=session_id or 0, display_name=you[:64], name=name[:64])
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Сеанс не найден.")
+    return Response(
+        content=await cached_png(("preview-ice", snap), lambda: render_company_card(snap)),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @router.get("/api/public/ice-companies/{code}")
@@ -268,7 +330,8 @@ async def delete_me(
 @router.get("/k/{code}", response_class=HTMLResponse)
 async def company_page(code: str, session: AsyncSession = Depends(get_session)) -> HTMLResponse:
     view = await read_company(session, code)
-    if view is None:
+    # Компания на матч живёт в чате и Mini App; публичной страницы «на лёд» у неё нет.
+    if view is None or view["event"]["kind"] == MATCH_KIND:
         return HTMLResponse("Компания не найдена.", status_code=404, headers={"X-Robots-Tag": "noindex, nofollow"})
     return HTMLResponse(
         render_company_page(view),
@@ -288,13 +351,57 @@ async def company_ics(code: str, session: AsyncSession = Depends(get_session)) -
     )
 
 
+async def _home_match(session: AsyncSession, match_id: int | None) -> dict | None:
+    return await _home_match_row(session, match_id, DINAMO) if match_id else None
+
+
+def _people(responses: list[dict], status: str) -> list[tuple[str, bytes | None]]:
+    # Эмодзи в имени шрифт карточки не рисует (квадратик) — на картинке без них, в подписи остаются.
+    return [
+        (strip_emoji_for_poster(str(row["display_name"])) or "·", read_avatar_bytes(row.get("avatar_file_key")))
+        for row in responses
+        if row["status"] == status
+    ]
+
+
 async def _card_png(session: AsyncSession, code: str) -> bytes:
     company = await _load(session, code)
     if company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена.")
     responses = await _responses(session, int(company["id"]))
     snap = snap_from(company, responses)
-    return render_company_card(snap, avatar_bytes=going_avatar_bytes(responses))
+    if company["event_kind"] != MATCH_KIND:
+        avatars = going_avatar_bytes(responses)
+        return await cached_png(
+            ("ice-card", snap, bytes_key(*avatars)), lambda: render_company_card(snap, avatar_bytes=avatars)
+        )
+    # Матч: «Трибуна против дивана» — «Иду» на трибуне, «Смотрю дома» на диване.
+    match = await _home_match(session, _match_id(str(company["source_ref"])))
+    if match is None:
+        raise HTTPException(status_code=404, detail="Компания не найдена.")
+    going, watching = _people(responses, "going"), _people(responses, "maybe")
+    closed = closed_headline(snap)
+    key = (
+        "match-card",
+        str(match["home_team"]),
+        str(match["away_team"]),
+        match["starts_at"].isoformat(),
+        tuple(name for name, _ in going),
+        tuple(name for name, _ in watching),
+        bytes_key(*(face for _, face in going + watching)),
+        closed,
+    )
+    return await cached_png(
+        key,
+        lambda: render_match_company_card(
+            home=str(match["home_team"]),
+            away=str(match["away_team"]),
+            starts_at=match["starts_at"],
+            going=going,
+            watching=watching,
+            closed=closed,
+        ),
+    )
 
 
 @router.get("/k/{code}/og.png")
@@ -332,8 +439,18 @@ async def prepare_telegram_share(
     page = ice_slot_url(company, settings)
     text = card_text(snap)
     markup = buttons_for(company, snap, page, calendar_url=calendar_url_for(settings, code))
-    photo = card_photo_url(settings.webapp_base_url, code, render_hash(text, markup))
-    prepared = await _save_prepared(settings.telegram_bot_token_client, user_id, code, text, markup, photo)
+    is_match = snap.kind == MATCH_KIND
+    photo, size = company_photo(settings.webapp_base_url, company, code, render_hash(text, markup))
+    prepared = await _save_prepared(
+        settings.telegram_bot_token_client,
+        user_id,
+        code,
+        text,
+        markup,
+        photo,
+        size=size,
+        title="Звать на матч" if is_match else "Компания на лёд",
+    )
     from src.application.ice_company.service import _track
 
     await _track(
@@ -359,6 +476,8 @@ async def _save_prepared(
     text: str,
     buttons: list[dict[str, str]],
     photo_url: str | None = None,
+    title: str = "Компания на лёд",
+    size: tuple[int, int] = (1080, 1080),
 ) -> str | None:
     import aiohttp
 
@@ -383,8 +502,8 @@ async def _save_prepared(
                 "id": code,
                 "photo_url": photo_url,
                 "thumbnail_url": photo_url,
-                "photo_width": 1080,
-                "photo_height": 1080,
+                "photo_width": size[0],
+                "photo_height": size[1],
                 "caption": text,
                 "reply_markup": {"inline_keyboard": keyboard},
             }
@@ -392,7 +511,7 @@ async def _save_prepared(
             else {
                 "type": "article",
                 "id": code,
-                "title": "Компания на лёд",
+                "title": title,
                 "input_message_content": {"message_text": text},
                 "reply_markup": {"inline_keyboard": keyboard},
             }

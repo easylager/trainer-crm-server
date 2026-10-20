@@ -19,6 +19,8 @@
  *
  * API:  GlideShareSheet.open({ ref, slots, sessionId, invite, context, venueType })
  *       slots — [{ id, label }], ближайшие сеансы (необязательно).
+ *       match — { id, time, day } — домашний матч (TASK-304): тот же шит, без выбора сеанса,
+ *       «Погнали?» вместо «Погнали кататься», без «Расписания». Один движок на все события.
  */
 (function (global) {
   'use strict';
@@ -61,7 +63,8 @@
     return isTelegramMiniApp() || browserStoryShareAvailable();
   }
 
-  function haptic() {
+  function haptic(kind) {
+    if (global.GlideTouch) return global.GlideTouch.haptic(kind || 'select');
     try {
       var t = tg();
       if (t && t.HapticFeedback) t.HapticFeedback.selectionChanged();
@@ -79,11 +82,14 @@
         (tail ? '&' + tail : '');
     }
     var q = ['share_context=' + encodeURIComponent(state.context || 'arena_card')];
-    if (state.sessionId) q.push('session_id=' + encodeURIComponent(String(state.sessionId)));
+    if (state.sessionId && !state.match) q.push('session_id=' + encodeURIComponent(String(state.sessionId)));
     if (state.invite) q.push('invite=true');
     Object.keys(extra || {}).forEach(function (k) {
       q.push(k + '=' + encodeURIComponent(String(extra[k])));
     });
+    if (state.match) {
+      return '/api/public/hockey/matches/' + encodeURIComponent(String(state.match.id)) + '/share?' + q.join('&');
+    }
     return '/api/public/arenas/' + encodeURIComponent(String(state.ref)) + '/share?' + q.join('&');
   }
 
@@ -104,6 +110,7 @@
 
   function postcardReady(sheetState) {
     if (!sheetState || sheetState.endpoint) return false;
+    if (sheetState.match) return true;
     if ((sheetState.venueType || 'ice') !== 'ice') return false;
     return sheetState.sessionId != null && String(sheetState.sessionId).trim() !== '';
   }
@@ -168,6 +175,18 @@
   }
 
   function postcardInput(sheetState) {
+    if (sheetState && sheetState.match) {
+      var zm = sheetState.zovi || {};
+      // Открытка «Зови» на матч: «Пойдёшь со мной на матч?», команды вместо названия катка.
+      return {
+        toName: zm.to || '',
+        fromName: zm.from || '',
+        kind: 'hockey_match',
+        time: String(sheetState.match.time || ''),
+        day: String(sheetState.match.day || ''),
+        place: String(sheetState.match.title || '') || rinkName(sheetState),
+      };
+    }
     var picked = selectedPostcardSlot(sheetState);
     var row = picked && picked.row;
     var meta = row ? String(row.meta || '') : '';
@@ -192,9 +211,9 @@
   var ZOVI_FROM_KEY = 'zovi_from';
   /* Открытка грузится по требованию: бюджет веса каталога (test_webapp_page_weight_budget). */
   var ZOVI_SCRIPTS = [
-    '/static/shared/zovi-model.js?v=15',
-    '/static/shared/zovi-create.js?v=15',
-    '/static/shared/zovi-live.js?v=15',
+    '/static/shared/zovi-model.js?v=16',
+    '/static/shared/zovi-create.js?v=16',
+    '/static/shared/zovi-live.js?v=16',
   ];
   var zoviLoading = null;
 
@@ -722,7 +741,8 @@
   }
 
   function telegramLinkOnly() {
-    return !!(state && state.endpoint);
+    // Подборка и матч — только ссылка: превью-картинка страницы говорит сама (владелец 2026-10-20).
+    return !!(state && (state.endpoint || state.match));
   }
 
   /**
@@ -992,6 +1012,7 @@
   function variantNeedsSession(variant, sheetState) {
     if (!variant) return false;
     var source = sheetState || state || {};
+    if (source.match) return false;
     return typeof variant.needsSession === 'function' ? !!variant.needsSession(source) : !!variant.needsSession;
   }
 
@@ -1094,13 +1115,11 @@
   }
 
   function renderPreviewFigureHtml(p) {
-    // Подборка: текст дублирует то, что уже нарисовано на og/story — только картинки.
+    // Подборка и матч: слова уже нарисованы на открытке, подпись под картинкой их дублирует.
+    var body = String((p && p.share_body) || '').trim();
     var caption = '';
-    if (!state || !state.endpoint) {
-      caption =
-        '<figcaption>' +
-        esc(p ? p.share_body : 'Готовим карточку…') +
-        '</figcaption>';
+    if (body && (!state || (!state.endpoint && !state.match))) {
+      caption = '<figcaption>' + esc(body) + '</figcaption>';
     }
     return '<figure class="gss-preview">' + renderPreview(p) + caption + '</figure>';
   }
@@ -1174,6 +1193,81 @@
     return (sheetState && sheetState.companyForm) || {};
   }
 
+  var NOM_WEEKDAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+
+  function weekdayNom(iso) {
+    var parts = String(iso || '').split('-');
+    if (parts.length < 3 || !parts[0]) return '';
+    var date = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+    return isNaN(date.getTime()) ? '' : NOM_WEEKDAYS[date.getUTCDay()];
+  }
+
+  function companyPreviewSrc(sheetState) {
+    var form = companyFormOf(sheetState);
+    return '/api/public/ice-companies/preview.png?session_id=' + encodeURIComponent(String(sheetState.sessionId)) +
+      '&you=' + encodeURIComponent(String(form.you || '').trim()) +
+      '&name=' + encodeURIComponent(String(form.team || '').trim());
+  }
+
+  /*
+   * «Так увидят в чате» — повтор настоящей карточки (ice_company/copy.py, og.py, lifecycle.buttons_for):
+   * у катка картинка-постер и подпись, у матча только текст; кнопки — столбиком, как inline-клавиатура.
+   */
+  function renderCompanyPreview(sheetState) {
+    var form = companyFormOf(sheetState);
+    var isMatch = !!(sheetState && sheetState.match);
+    var name = String(form.team || '').trim();
+    var you = String(form.you || '').trim() || 'ты';
+    var lines;
+    var poster = '';
+    var buttons;
+    if (isMatch) {
+      var m = sheetState.match;
+      var when = [m.day, m.time].filter(Boolean).join(', ');
+      lines =
+        '<b>Идём на матч?</b>' +
+        '<span>' + esc([name, m.title, when, rinkName(sheetState)].filter(Boolean).join(' · ')) + '</span>' +
+        '<span class="gss-cprev__who">Идут: ' + esc(you) + '</span>';
+      buttons = ['Иду', 'Смотрю дома', 'Не смогу', 'Подробнее ↗'];
+      // «Трибуна против дивана» — тот же рисунок, что встанет фото карточки в чате (render_match_company_card).
+      poster =
+        '<img class="gss-cprev__img gss-cprev__img--wide" alt="" decoding="async" width="1200" height="630" src="' +
+        esc('/api/public/ice-companies/preview.png?match_id=' + encodeURIComponent(String(m.id)) +
+          '&you=' + encodeURIComponent(String(form.you || '').trim())) + '" />';
+    } else {
+      var picked = selectedPostcardSlot(sheetState);
+      var row = picked ? picked.row : {};
+      var meta = String(row.meta || '');
+      var kind = meta.indexOf('ОХМ') !== -1 ? 'ОХМ' : 'Массовое катание';
+      var day = picked ? weekdayNom(picked.section.localDate) || picked.section.dayLabel || '' : '';
+      var time = String(row.time || '');
+      var place = rinkName(sheetState);
+      // Картинку рисует сервер тем же og.render_company_card, что уходит в чат: превью = оригинал.
+      if (sheetState && sheetState.sessionId) {
+        poster =
+          '<img class="gss-cprev__img" alt="" decoding="async" width="1080" height="1080" src="' +
+          esc(companyPreviewSrc(sheetState)) + '" />';
+      }
+      lines =
+        '<b>' + esc(kind) + '</b>' +
+        (name ? '<b>' + esc(name) + '</b>' : '') +
+        '<span>' + esc([day && time ? day + ', ' + time : time, place].filter(Boolean).join(' · ')) + '</span>' +
+        '<span class="gss-cprev__who">На льду ' + esc(you) + '.</span>' +
+        '<span class="gss-cprev__crowd">Пока один. Одному можно, но вдвоём веселее</span>';
+      buttons = ['Иду', 'Не могу', 'В другой чат →', 'На лёд ↗'];
+    }
+    return (
+      '<figure class="gss-cprev" aria-label="Так карточку увидят в чате">' +
+      '<figcaption>Так увидят друзья в чате</figcaption>' +
+      '<span class="gss-cprev__msg">' +
+      poster +
+      '<span class="gss-cprev__text">' + lines + '</span>' +
+      '</span>' +
+      '<span class="gss-cprev__kb">' + buttons.map(function (a) { return '<i>' + esc(a) + '</i>'; }).join('') + '</span>' +
+      '</figure>'
+    );
+  }
+
   function renderCompanyBottom(sheetState) {
     var form = companyFormOf(sheetState);
     if (form.shared) {
@@ -1183,7 +1277,11 @@
       return (
         '<div class="gss-zdone">' +
         '<p class="gss-zdone__t">Карточка в чате</p>' +
-        '<p class="gss-zdone__how">Там жмут «Иду». Кто откроет ссылку — встаёт на лёд.</p>' +
+        '<p class="gss-zdone__how">' +
+        (sheetState && sheetState.match
+          ? 'Там жмут «Иду» или «Смотрю дома» — карточка сама покажет, кто идёт на матч.'
+          : 'Там жмут «Иду». Кто откроет ссылку — встаёт на лёд.') +
+        '</p>' +
         '<button type="button" class="gss-zlink" data-gss-cshare="copy">Скопировать ссылку</button>' +
         retry +
         '<p class="gss-zf__err" data-gss-cerr role="alert">' + esc(form.error || '') + '</p>' +
@@ -1191,10 +1289,14 @@
       );
     }
     var you = String(form.you || '').trim();
+    var isMatch = !!(sheetState && sheetState.match);
+    /* Владелец 2026-10-20: вкладка «Компания», а поле просило «команду» — на матче это путают
+       с клубами. Одно поле — подпись на карточке выше; пустое оставляем заголовок по умолчанию. */
     var teamField =
-      '<label class="gss-zf__f"><span>Название команды</span>' +
-      '<input type="text" data-gss-c="team" maxlength="48" enterkeyhint="done" ' +
-      'placeholder="Необязательно" value="' + esc(form.team || '') + '" /></label>';
+      '<label class="gss-zf__f gss-cname"><span>Название компании <em>по желанию — видно на карточке</em></span>' +
+      '<input type="text" data-gss-c="team" maxlength="40" enterkeyhint="done" ' +
+      'placeholder="' + esc(isMatch ? 'Например, «Офис на Динамо»' : 'Например, «Пятничный лёд»') +
+      '" value="' + esc(form.team || '') + '" /></label>';
     var youLine = you
       ? '<p class="gss-company-who">Вы в списке «Иду» как <b>' + esc(you) + '</b> — из Telegram.</p>'
       : '';
@@ -1204,14 +1306,31 @@
       '<p class="gss-zf__err" data-gss-cerr role="alert">' + esc(form.error || '') + '</p>' +
       '<button type="button" class="gss-zovi__btn" data-variant-action="company"' +
       (form.busy ? ' disabled' : '') +
-      '>' + (form.busy ? 'Ставим в чат…' : 'В чат') + '</button>'
+      '>' + (form.busy ? 'Ставим в чат…' : 'Отправить в чат') + '</button>'
     );
   }
+
+  var previewImgTimer = 0;
 
   function onCompanyInput(ev) {
     var input = ev.target && ev.target.closest && ev.target.closest('[data-gss-c]');
     if (!input || !state || !state.companyForm) return;
     state.companyForm[input.getAttribute('data-gss-c')] = input.value;
+    if (input.getAttribute('data-gss-c') === 'team') {
+      var preview = root.querySelector('.gss-preview-host');
+      if (preview) {
+        // Текст — сразу, картинку перерисовываем после паузы в наборе: не дёргаем сервер на каждую букву.
+        var oldImg = preview.querySelector('.gss-cprev__img');
+        preview.innerHTML = renderCompanyPreview(state);
+        var fresh = preview.querySelector('.gss-cprev__img');
+        if (oldImg && fresh) {
+          var want = fresh.getAttribute('src');
+          fresh.parentNode.replaceChild(oldImg, fresh);
+          global.clearTimeout(previewImgTimer);
+          previewImgTimer = global.setTimeout(function () { oldImg.setAttribute('src', want); }, 450);
+        }
+      }
+    }
     if (state.companyForm.error) {
       state.companyForm.error = '';
       var err = root.querySelector('[data-gss-cerr]');
@@ -1247,7 +1366,7 @@
       return;
     }
     var team = String(form.team || '').trim();
-    if (state.sessionId == null || String(state.sessionId).trim() === '') {
+    if (!state.match && (state.sessionId == null || String(state.sessionId).trim() === '')) {
       form.error = 'Выбери сеанс.';
       paintCompany();
       return;
@@ -1262,11 +1381,11 @@
     fetch('/api/public/ice-companies', {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify({
-        session_id: Number(state.sessionId),
-        name: team,
-        surface: 'miniapp',
-      }),
+      body: JSON.stringify(
+        state.match
+          ? { match_id: Number(state.match.id), name: team, surface: 'miniapp' }
+          : { session_id: Number(state.sessionId), name: team, surface: 'miniapp' }
+      ),
     })
       .then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1283,6 +1402,7 @@
         }
         var page = String(res.body.page_url || '');
         if (page && page.charAt(0) === '/') page = global.location.origin + page;
+        haptic('success');
         form.created = {
           code: res.body.public_code,
           pageUrl: page,
@@ -1407,7 +1527,8 @@
     var api = zoviApi();
     if (!api || z.busy || !postcardReady(state)) return;
     var built = api.inviteRequestBody({
-      sessionId: Number(state.sessionId),
+      // У матча сеанса нет: валидатор «Зови» требует id — даём матч, ниже ключ меняем на match_id.
+      sessionId: state.match ? Number(state.match.id) : Number(state.sessionId),
       toName: z.to,
       fromName: z.from,
       showPrice: false,
@@ -1430,6 +1551,10 @@
     headers.Accept = 'application/json';
     var forSession = String(state.sessionId);
     var sheetState = state;
+    if (state.match && built.body) {
+      delete built.body.session_id;
+      built.body.match_id = Number(state.match.id);
+    }
     fetch('/api/public/invites', { method: 'POST', headers: headers, body: JSON.stringify(built.body) })
       .then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1448,6 +1573,7 @@
           paintPostcardBottom();
           return;
         }
+        haptic('success');
         z.created = {
           code: res.body.code,
           url: global.location.origin + res.body.invite_path,
@@ -1539,6 +1665,7 @@
     {
       id: 'invite',
       label: function (sheetState) {
+        if (sheetState && sheetState.match) return 'Погнали?';
         return isIcePlace(sheetState) ? 'Погнали кататься' : 'Позвать с собой';
       },
       rank: function (sheetState) {
@@ -1563,13 +1690,12 @@
         return 1;
       },
       needsSession: true,
+      collapsesPicker: true,
       shareInvite: null,
       available: function (sheetState) {
         return !sheetState.endpoint && isIcePlace(sheetState) && !!sheetState.company;
       },
-      renderPreview: function () {
-        return '';
-      },
+      renderPreview: renderCompanyPreview,
       renderBottom: renderCompanyBottom,
       onAction: createCompany,
       onSession: function () {
@@ -1622,7 +1748,8 @@
       },
       shareInvite: false,
       available: function (sheetState) {
-        return !sheetState.endpoint;
+        // У матча нет «расписания» — делятся самим матчем.
+        return !sheetState.endpoint && !sheetState.match;
       },
       renderPreview: function (sheetState) {
         return renderPreviewFigureHtml(sheetState.payload);
@@ -1929,6 +2056,7 @@
     root.hidden = true;
     root.innerHTML =
       '<div class="gss-sheet" role="dialog" aria-modal="true" aria-label="Поделиться">' +
+      '<div class="gss-grab" aria-hidden="true"></div>' +
       '<div class="gss-head"><b>Поделиться</b>' +
       '<button type="button" class="gss-x" data-gss-close aria-label="Закрыть">✕</button></div>' +
       '<div class="gss-body"></div>' +
@@ -1936,8 +2064,51 @@
       '<div class="gss-toast" role="status" aria-live="polite"></div>';
     root.addEventListener('click', onClick);
     root.addEventListener('input', onSheetInput);
+    bindDrag(root.querySelector('.gss-sheet'));
     document.body.appendChild(root);
     return root;
+  }
+
+  /*
+   * Лист тянется пальцем за ручку и шапку (TASK-308): вниз — идёт за пальцем, вверх — упирается
+   * пружиной. Отпустили дальше 110 px или резким движением вниз — закрывается, иначе встаёт на место.
+   * Только transform; содержимое листа прокручивается как обычно — его не перехватываем.
+   */
+  function bindDrag(sheet) {
+    if (!sheet || !global.PointerEvent) return;
+    var drag = null;
+    sheet.addEventListener('pointerdown', function (e) {
+      if (e.button) return;
+      var t = e.target;
+      if (!t.closest('.gss-grab, .gss-head') || t.closest('button, a, input, textarea')) return;
+      drag = { id: e.pointerId, y0: e.clientY, y: e.clientY, t: e.timeStamp, v: 0, dy: 0 };
+      try { sheet.setPointerCapture(e.pointerId); } catch (eCap) { /* */ }
+      sheet.classList.add('is-drag');
+    });
+    sheet.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var raw = e.clientY - drag.y0;
+      var dt = Math.max(1, e.timeStamp - drag.t);
+      drag.v = (e.clientY - drag.y) / dt;
+      drag.y = e.clientY;
+      drag.t = e.timeStamp;
+      drag.dy = raw > 0 ? raw : -Math.sqrt(-raw) * 2;
+      sheet.style.transform = 'translateY(' + drag.dy + 'px)';
+    });
+    function end(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var gone = drag.dy > 110 || (drag.dy > 24 && drag.v > 0.6);
+      drag = null;
+      sheet.classList.remove('is-drag');
+      if (gone) {
+        sheet.style.transform = 'translateY(100%)';
+        close();
+      } else {
+        sheet.style.transform = '';
+      }
+    }
+    sheet.addEventListener('pointerup', end);
+    sheet.addEventListener('pointercancel', end);
   }
 
   function resolveInitialSessionId(opts) {
@@ -1951,10 +2122,11 @@
 
   function open(opts) {
     opts = opts || {};
-    if ((opts.ref == null || opts.ref === '') && !opts.endpoint) return;
+    if ((opts.ref == null || opts.ref === '') && !opts.endpoint && !opts.match) return;
     ensureRoot();
     state = {
       ref: opts.ref,
+      match: opts.match || null,
       endpoint: opts.endpoint || null,
       slots: opts.slots || [],
       slotSections: opts.slotSections || null,
@@ -2002,7 +2174,12 @@
       state.zoviKb = null;
     }
     root.classList.remove('is-open');
-    global.setTimeout(function () { if (root) root.hidden = true; }, 180);
+    global.setTimeout(function () {
+      if (!root) return;
+      root.hidden = true;
+      var sh = root.querySelector('.gss-sheet');
+      if (sh) sh.style.transform = '';
+    }, 200);
   }
 
   global.GlideShareSheet = {
@@ -2033,6 +2210,7 @@
     postcardInput: postcardInput,
     postcardBottomHtml: renderPostcardBottom,
     companyBottomHtml: renderCompanyBottom,
+    companyPreviewHtml: renderCompanyPreview,
     _previewFigureHtml: function (payload, selection) {
       var prev = state;
       state = selection

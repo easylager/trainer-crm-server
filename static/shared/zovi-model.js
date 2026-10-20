@@ -32,6 +32,7 @@
 
   /* Вид сеанса → что зовут делать. ОХМ — хоккей, остальное — каток. */
   function activity(kind) {
+    if (kind === 'hockey_match') return 'на матч';
     return kind === 'hockey_practice' ? 'на хоккей' : 'на каток';
   }
 

@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.tunnel_css import TunnelCssMiddleware
 from src.api.routes import (
     public_router,
     redirects_router,
@@ -35,6 +36,8 @@ from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
 from src.api.routes.zovi_pages import router as zovi_pages_router
 from src.api.routes.public_ice_company import router as public_ice_company_router
+from src.api.routes.public_hockey_leagues import card_router as public_hockey_cards_router
+from src.api.routes.public_hockey_leagues import router as public_hockey_leagues_router
 from src.api.routes.catalog_entry import router as catalog_entry_router
 from src.api.routes.catalog_consumer_telemetry import router as catalog_consumer_telemetry_router
 from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
@@ -96,6 +99,8 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=[MINIAPP_AUTH_ERROR_HEADER, "X-Ice-Studio-Outage"],
 )
+# Внутри gzip: на ngrok/trycloudflare HTML уходит уже со стилями внутри, сжатие снаружи.
+app.add_middleware(TunnelCssMiddleware)
 # Epic D: gzip JSON/HTML/CSS/JS when client sends Accept-Encoding: gzip (nginx can add brotli in front).
 # Last added = outermost on the stack — compresses the final response body.
 app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
@@ -209,11 +214,18 @@ def webapp_catalog_page(request: Request):
 @app.get("/webapp/arena")
 @app.get("/webapp/arena.html")
 def webapp_arena_page():
-    """TASK-052: public Ice Discovery arena card Mini App."""
+    """TASK-052: public Ice Discovery arena card Mini App.
+
+    TASK-306: свои шрифты вместо Google — `__FONT_V__` подставляется, как на главной,
+    чтобы preload Dela Gothic совпал с адресом из glide-public-fonts.css.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "arena.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/webapp/ice-company")
@@ -229,11 +241,13 @@ def webapp_ice_company_page():
 @app.get("/webapp/ice")
 @app.get("/webapp/ice.html")
 def webapp_ice_tab_page():
-    """TASK-053: Ice tab arena list Mini App."""
+    """TASK-053: Ice tab arena list Mini App. TASK-306: свои шрифты — `__FONT_V__`, как на главной."""
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "ice.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    page_html = path.read_text(encoding="utf-8")
+    page_html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
     key = (Settings().yandex_maps_js_api_key or "").strip()
     if key:
         meta = f'  <meta name="ymaps-key" content="{html.escape(key, quote=True)}">\n'
@@ -267,11 +281,18 @@ def webapp_client_requests_page():
 
 @app.get("/webapp/client-bookings")
 def webapp_client_bookings_page():
-    """Serve the client 'My bookings' Mini App (list by day, arena/address/map, cancel with reason)."""
+    """Client «Записи» (TASK-306): список, отмена, детали.
+
+    `__FONT_V__` — как на главной и матче: preload Dela Gothic совпадает с адресом
+    из glide-public-fonts.css.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "client-bookings.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/webapp/client-saved-trainers")
@@ -285,11 +306,18 @@ def webapp_client_saved_trainers_page():
 
 @app.get("/webapp/client-home")
 def webapp_client_home_page():
-    """Client hub: contextual hero, upcoming bookings, links to catalog / bookings / requests / passes."""
+    """Client hub (TASK-303): шапка города, слот «сейчас», «Мои занятия», лёд и «Что нужно».
+
+    В разметке `__FONT_V__` — версия своих шрифтов: preload обязан совпасть с адресом
+    из glide-public-fonts.css, иначе Dela Gothic качается второй раз и заголовок прыгает.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "client-home.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/webapp/client-family-access")
@@ -311,6 +339,30 @@ def webapp_client_family_access_main_js(request: Request):
         media_type="application/javascript",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
+
+
+@app.get("/webapp/client-support")
+def webapp_client_support_page():
+    """Client: идеи, отзывы и поддержка — переехали с главной в «Ещё» (TASK-303)."""
+    path = _WEBAPP_DIR / "client-support.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/client-match")
+def webapp_client_match_page():
+    """Client: домашний матч Динамо как событие — ответ, «кто из ваших», игра (TASK-304).
+
+    `__FONT_V__` — как на главной: preload Dela Gothic совпадает с адресом из glide-public-fonts.css.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
+    path = _WEBAPP_DIR / "client-match.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/webapp/client-stats")
@@ -404,6 +456,27 @@ def webapp_admin_for_you_page():
 @app.get("/webapp/admin-for-you-main.js")
 def webapp_admin_for_you_main_js(request: Request):
     path = _WEBAPP_DIR / "admin-for-you-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/admin-hockey")
+def webapp_admin_hockey_page():
+    """Ручной ввод итога матча Динамо-Минск."""
+    path = _WEBAPP_DIR / "admin-hockey.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/admin-hockey-main.js")
+def webapp_admin_hockey_main_js(request: Request):
+    path = _WEBAPP_DIR / "admin-hockey-main.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
@@ -1485,6 +1558,32 @@ def webapp_hub_collections_model_js(request: Request):
     )
 
 
+@app.get("/webapp/hub-home.js")
+def webapp_hub_home_js(request: Request):
+    """TASK-303 главная клиента: шапка города, слот «сейчас», лёд и «Что нужно». Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "hub-home.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/hub-home.css")
+def webapp_hub_home_css(request: Request):
+    """TASK-303 стили главной клиента (направление А, PDEC-023). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "hub-home.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/hub-me-card.js")
 def webapp_hub_me_card_js(request: Request):
     """TASK-160 «моя карточка» хаба — чистая модель + рендер. Use ``?v=…`` for long cache."""
@@ -1502,6 +1601,19 @@ def webapp_hub_me_card_js(request: Request):
 def webapp_hub_ice_today_model_js(request: Request):
     """TASK-148 (AC-4) hub «Сегодня на льду» view-model (pure). Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "hub-ice-today-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/hub-bootstrap-parallel-model.js")
+def webapp_hub_bootstrap_parallel_model_js(request: Request):
+    """TASK-305 (AC-1) hub bootstrap vs profiles timing (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "hub-bootstrap-parallel-model.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
@@ -1663,19 +1775,6 @@ def webapp_client_requests_main_js(request: Request):
     return FileResponse(
         path,
         media_type="application/javascript",
-        headers=_webapp_versioned_asset_cache_headers(request),
-    )
-
-
-@app.get("/webapp/mini-app-trainer-card.css")
-def webapp_trainer_card_css(request: Request):
-    """Единый компонент карточки тренера (TASK-092). Use ``?v=…`` for long cache."""
-    path = _WEBAPP_DIR / "mini-app-trainer-card.css"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="CSS file not found")
-    return FileResponse(
-        path,
-        media_type="text/css",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
 
@@ -2416,6 +2515,8 @@ app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
 app.include_router(zovi_pages_router)
 app.include_router(public_ice_company_router)
+app.include_router(public_hockey_leagues_router)
+app.include_router(public_hockey_cards_router)
 app.include_router(catalog_entry_router)
 app.include_router(catalog_consumer_telemetry_router)
 app.include_router(redirects_router)
@@ -2426,6 +2527,16 @@ webapp_router.include_router(webapp_trainer_catalog_router)
 webapp_router.include_router(webapp_trainer_profile_router)
 app.include_router(webapp_router)
 app.include_router(webhooks_router)
+
+
+@app.get("/webapp/kto-kogo")
+@app.get("/webapp/kto-kogo.html")
+def webapp_kto_kogo_page():
+    """Игра «Кто кого»: угадай матч Динамо-Минск с друзьями (TASK-299)."""
+    path = _WEBAPP_DIR / "kto-kogo.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
 
 
 @app.middleware("http")

@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import (
     CallbackQuery,
     ChosenInlineResult,
@@ -20,11 +21,10 @@ from aiogram.types import (
     InlineKeyboardMarkup,
 )
 from src.application.ice_company.copy import (
-    TOAST_CANT,
+    MATCH_KIND,
     TOAST_CLOSED,
-    TOAST_GOING,
-    TOAST_MAYBE,
     card_text,
+    toast_for,
 )
 from src.application.ice_company.delivery import AiogramSender
 from src.application.ice_company.keyboard import inline_button
@@ -62,12 +62,6 @@ def _telegram_name(raw: str | None) -> str:
     except TextRejected:
         return ""
 
-_TOAST = {
-    "g": TOAST_GOING,
-    "m": TOAST_MAYBE,
-    "x": TOAST_CANT,
-}
-
 
 @router.callback_query(F.data.startswith("ic:"))
 async def on_company_callback(query: CallbackQuery) -> None:
@@ -96,7 +90,14 @@ async def on_company_callback(query: CallbackQuery) -> None:
             logger.info("ice_company callback rejected status=%s", exc.status_code)
             return
         company = await _load(session, code)
-        if company is not None and action == "g":
+        kind = str(company["event_kind"]) if company is not None else ""
+        # Сразу гасим «часики» на кнопке: аватар и правка карточки — уже после. Если Telegram
+        # нажатие уже забыл (бот долго не отвечал), ответ записан — карточку всё равно обновляем.
+        try:
+            await query.answer(toast_for(kind, action))
+        except TelegramBadRequest:
+            logger.info("ice_company callback answer expired code=%s", code)
+        if company is not None and action in ("g", "m"):
             await cache_telegram_avatar(
                 session,
                 query.bot,
@@ -115,7 +116,6 @@ async def on_company_callback(query: CallbackQuery) -> None:
                 )
         else:
             logger.info("ice_company callback has no inline_message_id code=%s", code)
-        await query.answer(_TOAST.get(action, TOAST_GOING))
         sender = AiogramSender(query.bot, Settings())
         await _edit_dirty(
             session,
@@ -141,13 +141,14 @@ async def on_company_inline(query: InlineQuery) -> None:
 
         page = ice_slot_url(company, settings)
         body = card_text(snap)
+        is_match = snap.kind == MATCH_KIND
         markup_buttons = buttons_for(
             company,
             snap,
             page,
             calendar_url=calendar_url_for(settings, code),
         )
-    from src.application.ice_company.og import card_photo_url
+    from src.application.ice_company.og import company_photo
 
     rows = []
     for group in button_rows(markup_buttons):
@@ -157,15 +158,16 @@ async def on_company_inline(query: InlineQuery) -> None:
         if row:
             rows.append(row)
     markup = InlineKeyboardMarkup(inline_keyboard=rows)
-    photo = card_photo_url(settings.webapp_base_url, code, render_hash(body, markup_buttons))
+    photo, size = company_photo(settings.webapp_base_url, company, code, render_hash(body, markup_buttons))
+    title = "Звать на матч" if is_match else "Компания на лёд"
     if photo:
         result = InlineQueryResultPhoto(
             id=f"k{code}",
             photo_url=photo,
             thumbnail_url=photo,
-            photo_width=1080,
-            photo_height=1080,
-            title="Компания на лёд",
+            photo_width=size[0],
+            photo_height=size[1],
+            title=title,
             description=body.split("\n", 1)[0][:80],
             caption=body,
             reply_markup=markup,
@@ -173,7 +175,7 @@ async def on_company_inline(query: InlineQuery) -> None:
     else:
         result = InlineQueryResultArticle(
             id=f"k{code}",
-            title="Компания на лёд",
+            title=title,
             description=body.split("\n", 1)[0][:80],
             input_message_content=InputTextMessageContent(message_text=body),
             reply_markup=markup,
