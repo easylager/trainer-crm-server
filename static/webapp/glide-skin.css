@@ -1,0 +1,94 @@
+/*
+ * Старые экраны клиента на языке нового хаба (абонементы, сертификаты, заявки, запись, «Ещё»…).
+ * Разметку и логику не трогаем: старые стили строятся на токенах --app-* / --glide-* / --tg-theme-*,
+ * поэтому здесь эти токены перенаправлены на токены хаба (--g-*, glide-tokens.css), а скошенные углы
+ * (--app-ribbon-clip-*) выключены. Подключается после стилей страницы, вместе с glide-app.css,
+ * body получает классы «ga-body glide-skin». Тёмная тема — body.tg-dark (ставит ga-touch.js).
+ */
+
+body.glide-skin {
+  /* Без скосов: всё скругляется, как на главной. */
+  --app-cut-sm: 0px; --app-cut-md: 0px; --app-cut-lg: 0px; --app-ribbon-cut: 0px; --app-ribbon-cut-sm: 0px;
+  --app-ribbon-clip-container: none; --app-ribbon-clip-btn: none; --app-ribbon-clip-sm: none; --app-ribbon-clip-avatar: none;
+
+  /* Поверхности — плоские, без градиентов «ленты». */
+  --app-bg: var(--g-bg); --app-canvas-bg: var(--g-bg); --glide-bg: var(--g-bg); --glide-paper: var(--g-bg);
+  --app-surface: var(--g-surface); --glide-surface: var(--g-surface); --glide-card: var(--g-surface);
+  --app-card-bg: var(--g-surface); --app-card-bg-solid: var(--g-surface); --app-surface-container: var(--g-surface);
+  --app-surface-row-top: var(--g-surface); --app-surface-row-bot: var(--g-surface);
+  --app-surface-card-top: var(--g-surface); --app-surface-card-bot: var(--g-surface);
+  --app-surface-header-top: transparent; --app-surface-header-bot: transparent;
+  --app-float-bg: var(--g-surface);
+
+  /* Линии и тени — мягче: карточку отделяет тень, а не рамка. */
+  --glide-line: var(--g-line); --glide-line-soft: var(--g-line); --app-card-line: transparent; --app-hairline: var(--g-line);
+  --app-chip-line: transparent; --app-float-line: transparent;
+  --app-card-shadow: var(--g-shadow); --glide-shadow-card: var(--g-shadow); --app-lift: none;
+  --app-btn-shadow-cta: none; --app-btn-shadow-surface: none; --glide-shadow-cta: none; --app-cta-glow: none; --app-cta-inset: none;
+
+  /* Радиусы — шкала хаба. */
+  --app-radius-sm: 12px; --app-radius-md: 16px; --app-radius-lg: 22px; --app-radius-xl: 28px; --app-btn-radius: var(--g-r-btn);
+
+  /* Текст и акцент. */
+  --app-font-sans: var(--g-font);
+  --glide-text: var(--g-ink); --glide-ink: var(--g-ink); --app-text: var(--g-ink); --glide-hint: var(--g-muted); --app-muted: var(--g-muted);
+  --app-cta-fill: var(--g-accent); --app-cta-text: var(--g-on-accent); --app-accent: var(--g-accent); --app-accent-text: var(--g-accent-ink);
+  --glide-ink-teal: var(--g-accent-ink); --glide-brand-wash: var(--g-accent-wash);
+  --app-chip-bg: var(--g-chip); --app-chip-text: var(--g-ink);
+
+  /* Цвета темы Telegram, на которых построены старые экраны. */
+  --tg-theme-bg-color: var(--g-bg); --tg-theme-secondary-bg-color: var(--g-surface);
+  --tg-theme-text-color: var(--g-ink); --tg-theme-hint-color: var(--g-muted);
+  --tg-theme-button-color: var(--g-accent); --tg-theme-button-text-color: var(--g-on-accent);
+  --tg-theme-link-color: var(--g-accent-ink);
+}
+html body.glide-skin, html.trainer-theme-dark body.glide-skin, html.trainer-theme-light body.glide-skin {
+  background: var(--g-bg) !important; color: var(--g-ink); font-family: var(--g-font);
+}
+
+/* Шапка: заголовок шрифтом сайта, «Назад» и «Главная» — круглые таблетки. */
+body.glide-skin .client-app-header, body.glide-skin > .header {
+  background: transparent !important; box-shadow: none !important; border: 0 !important; clip-path: none !important;
+  padding: 16px 16px 6px; min-height: 0;
+}
+body.glide-skin .client-app-header::before, body.glide-skin .client-app-header::after,
+body.glide-skin > .header::before, body.glide-skin > .header::after { display: none; }
+body.glide-skin .client-app-header__title, body.glide-skin .header-title {
+  font: 400 24px/1.1 var(--g-font-display); letter-spacing: -.01em; color: var(--g-ink);
+}
+body.glide-skin .btn-app-back, body.glide-skin .btn-app-home {
+  height: 40px; padding: 0 16px; border: 0 !important; border-radius: var(--g-r-pill); background: var(--g-chip) !important; color: var(--g-ink) !important;
+  font: 600 14px/40px var(--g-font); clip-path: none !important; box-shadow: none !important;
+}
+
+/* Кнопки: главная — бирюзовая, остальные — мягкие; нажатие — пружина. */
+body.glide-skin .btn-primary {
+  min-height: 52px; border: 0; border-radius: var(--g-r-btn); background: var(--g-accent); color: var(--g-on-accent);
+  font: 700 16px/1.2 var(--g-font); clip-path: none; box-shadow: none;
+}
+body.glide-skin .btn-secondary {
+  min-height: 52px; border: 0; border-radius: var(--g-r-btn); background: var(--g-chip); color: var(--g-ink);
+  font: 600 16px/1.2 var(--g-font); clip-path: none; box-shadow: none;
+}
+body.glide-skin .btn-primary, body.glide-skin .btn-secondary, body.glide-skin .btn-app-back, body.glide-skin .btn-app-home {
+  transition: transform .42s var(--ga-spring, cubic-bezier(.22, 1.15, .36, 1)), background-color .18s ease;
+}
+body.glide-skin .btn-primary:active, body.glide-skin .btn-secondary:active,
+body.glide-skin .btn-app-back:active, body.glide-skin .btn-app-home:active { transform: scale(.97); transition-duration: 70ms; }
+
+/* Поля ввода — мягкая заливка без рамки, фокус — бирюзовое кольцо. */
+body.glide-skin input[type='text'], body.glide-skin input[type='tel'], body.glide-skin input[type='email'],
+body.glide-skin input[type='number'], body.glide-skin input[type='date'], body.glide-skin input[type='search'],
+body.glide-skin select, body.glide-skin textarea {
+  border: 0; border-radius: 14px; background: var(--g-chip); color: var(--g-ink); font-family: var(--g-font); box-shadow: none;
+}
+body.glide-skin input:focus, body.glide-skin select:focus, body.glide-skin textarea:focus { outline: none; box-shadow: 0 0 0 2px var(--g-accent); }
+
+/* Отдельные экраны: свои рамки поверх токенов. */
+body.glide-skin .st-widget { border: 0; box-shadow: var(--g-shadow); background: var(--g-surface); }
+body.glide-skin .st-btn { border-radius: var(--g-r-btn); }
+body.glide-skin .st-btn-secondary { border: 0; background: var(--g-chip); color: var(--g-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  body.glide-skin .btn-primary, body.glide-skin .btn-secondary, body.glide-skin .btn-app-back, body.glide-skin .btn-app-home { transition: none; }
+}
