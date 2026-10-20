@@ -30,6 +30,17 @@ def _tg() -> int:
     return 5_430_000_000 + (uuid.uuid4().int % 4_000_000_000)
 
 
+@pytest.fixture(autouse=True)
+def _no_telegram_pushes() -> Iterator[None]:
+    """Запись шлёт пуши через aiogram Bot — в CI токены фиктивные, и Bot падает ещё при создании."""
+    from unittest.mock import AsyncMock
+
+    with patch("src.api.routes.webapp._notify_client_trainer_booked_after_create", new=AsyncMock()), patch(
+        "src.api.routes.webapp._send_trainer_post_booking_feedback", new=AsyncMock()
+    ):
+        yield
+
+
 @contextmanager
 def _as_trainer(telegram_id: int) -> Iterator[None]:
     fake = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=telegram_id)
