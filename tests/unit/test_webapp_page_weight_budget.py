@@ -17,10 +17,11 @@ _ATTR = re.compile(r"""(?:src|href)=["']([^"']+)["']""", re.I)
 
 # Gzip level 9, mtime 0. Re-measure after intentional UI growth (TASK-197 → TASK-222
 # share sheet, then the «Зимой» list, the season reminder, TASK-243 copy keys,
-# then the hub-language search page and the match share sheet).
+# then the hub-language search page and the match share sheet; the share sheet now loads
+# on demand on ice.html, which took the page back under its pre-epic size).
 # A page may shrink; growth past +5% fails CI.
 _BASELINE_GZIP = {
-    "ice.html": 240_347,
+    "ice.html": 217_955,
     "catalog.html": 200_158,
 }
 

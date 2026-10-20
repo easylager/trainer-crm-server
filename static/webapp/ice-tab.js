@@ -1520,9 +1520,30 @@
       host.setAttribute('data-sig', html);
     }
     host.hidden = !html;
+    // Высоту «Для вас» помним до следующего открытия (резерв в ice.html, пока идёт загрузка).
+    if (!state.loading && state.loadedIntent === state.intent) {
+      try {
+        window.localStorage.setItem('ice_foryou_h_v1', String(html ? host.offsetHeight || 0 : 0));
+      } catch (e) { /* без памяти или песочница */ }
+    }
   }
 
+  /*
+   * Пока нет первого списка, под папки разделов и полосу фильтров держится место (ice-hub.css,
+   * body.ice-booting): иначе они появляются после ответа сервера и список прыгает вниз (CLS 0.17).
+   */
+  function releaseBoot() {
+    try {
+      if (document.body && document.body.classList) document.body.classList.remove('ice-booting');
+    } catch (e) { /* песочница тестов */ }
+  }
+  if (typeof window.setTimeout === 'function') window.setTimeout(releaseBoot, 8000);
+
   function renderList() {
+    if (!state.loading) {
+      if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(releaseBoot);
+      else releaseBoot();
+    }
     var list = listEl();
     var cap = $('iceCaption');
     if (cap) {

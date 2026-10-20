@@ -74,3 +74,9 @@ body.ice-hub .ice-board__invite {
 }
 body.ice-hub .ice-board__invite::before { content: none; }
 body.ice-hub .ice-board--off .ice-board__time { height: auto; padding: 4px 10px; font-size: 16px; line-height: 1.2; }
+
+/* Загрузка: место под папки разделов и полосу фильтров, пока их не заполнил первый ответ
+   (ice-tab.js снимает ice-booting после первого списка). Без этого список съезжал на 76 px. */
+body.ice-booting #iceModeSeg[hidden] { display: block !important; visibility: hidden; height: 38px; }
+body.ice-booting #iceFilterBand { min-height: 38px; }
+html.ice-foryou-expected body.ice-booting #iceForYou[hidden] { display: block !important; visibility: hidden; height: var(--ice-foryou-h, 0px); }
