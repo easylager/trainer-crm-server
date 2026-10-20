@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import (
     CallbackQuery,
     ChosenInlineResult,
@@ -89,6 +90,13 @@ async def on_company_callback(query: CallbackQuery) -> None:
             logger.info("ice_company callback rejected status=%s", exc.status_code)
             return
         company = await _load(session, code)
+        kind = str(company["event_kind"]) if company is not None else ""
+        # Сразу гасим «часики» на кнопке: аватар и правка карточки — уже после. Если Telegram
+        # нажатие уже забыл (бот долго не отвечал), ответ записан — карточку всё равно обновляем.
+        try:
+            await query.answer(toast_for(kind, action))
+        except TelegramBadRequest:
+            logger.info("ice_company callback answer expired code=%s", code)
         if company is not None and action == "g":
             await cache_telegram_avatar(
                 session,
@@ -108,8 +116,6 @@ async def on_company_callback(query: CallbackQuery) -> None:
                 )
         else:
             logger.info("ice_company callback has no inline_message_id code=%s", code)
-        kind = str(company["event_kind"]) if company is not None else ""
-        await query.answer(toast_for(kind, action))
         sender = AiogramSender(query.bot, Settings())
         await _edit_dirty(
             session,
