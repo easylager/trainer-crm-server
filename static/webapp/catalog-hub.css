@@ -1,0 +1,98 @@
+/*
+ * Карточка тренера (catalog.html) на языке нового хаба — как каток, матч и «Поиск» (TASK-306).
+ * Слой поверх mini-app-catalog.css: разметка и логика те же, меняется только вид.
+ * Скошенные углы прежнего языка (--app-ribbon-clip-*) здесь сброшены.
+ */
+
+body.catalog-hub {
+  --app-ribbon-clip-container: none; --app-ribbon-clip-btn: none; --app-ribbon-clip-sm: none; --app-ribbon-clip-avatar: none;
+}
+html body.catalog-hub, html.trainer-theme-dark body.catalog-hub, html.trainer-theme-light body.catalog-hub {
+  background: var(--g-bg) !important; color: var(--g-ink); font-family: var(--g-font);
+}
+
+/* Шапка: имя тренера шрифтом сайта и круглая «Назад». */
+body.catalog-hub .client-app-header {
+  background: transparent; box-shadow: none; border: 0; clip-path: none; padding: 16px 16px 6px; min-height: 0;
+  display: flex; align-items: center; gap: 12px;
+}
+body.catalog-hub .client-app-header::before, body.catalog-hub .client-app-header::after { display: none; }
+body.catalog-hub .client-app-header__title {
+  flex: 1; min-width: 0; margin: 0; font: 400 24px/1.1 var(--g-font-display); letter-spacing: -.01em; color: var(--g-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body.catalog-hub .btn-app-back, body.catalog-hub .btn-app-home {
+  height: 40px; padding: 0 16px; border: 0; border-radius: var(--g-r-pill); background: var(--g-chip); color: var(--g-ink);
+  font: 600 14px/40px var(--g-font); clip-path: none; box-shadow: none;
+}
+
+/* «Каталог / Мой тренер» — сегменты, как «Предстоящие / История». */
+body.catalog-hub .catalog-tabs {
+  display: flex; gap: 4px; padding: 4px; border: 0; border-radius: 14px; background: var(--g-seg); box-shadow: none; clip-path: none;
+}
+body.catalog-hub .catalog-tabs .tab-btn {
+  flex: 1; min-height: 40px; border: 0; border-radius: 12px; background: transparent; color: var(--g-ink-2);
+  font: 600 15px/1 var(--g-font); box-shadow: none; clip-path: none;
+}
+body.catalog-hub .catalog-tabs .tab-btn.active { background: var(--g-surface); color: var(--g-ink); box-shadow: 0 1px 2px rgba(13, 27, 38, .12); }
+
+/* Фото и имя. */
+body.catalog-hub .trainer-detail-photo-wrap { border: 0; border-radius: var(--g-r-lg); box-shadow: none; clip-path: none; background: var(--g-chip); }
+body.catalog-hub .trainer-detail-photo-placeholder { background: var(--g-chip); }
+body.catalog-hub .trainer-detail-name { font: 400 30px/1.05 var(--g-font-display); letter-spacing: -.01em; color: var(--g-ink); }
+
+/* Блоки: арены, онлайн-запись — карточки без рамок. */
+body.catalog-hub .trainer-detail-stat,
+body.catalog-hub .trainer-detail-slots,
+body.catalog-hub .trainer-detail-about-wrap > *,
+body.catalog-hub .summary-card {
+  border: 0; border-radius: 20px; background: var(--g-surface); box-shadow: var(--g-shadow); clip-path: none;
+}
+body.catalog-hub .trainer-arena-chips__eyebrow,
+body.catalog-hub .trainer-detail-services-title,
+body.catalog-hub .slots-title {
+  font: 600 12px/1 var(--g-font); letter-spacing: .06em; text-transform: uppercase; color: var(--g-muted);
+}
+body.catalog-hub .trainer-arena-chip {
+  border: 0; border-radius: var(--g-r-pill); background: var(--g-chip); color: var(--g-ink); font: 600 13px/1 var(--g-font); clip-path: none;
+}
+body.catalog-hub .trainer-arena-chip:first-child { background: var(--g-accent-wash); color: var(--g-accent-ink); }
+
+/* Услуги и цены — список карточек, цена акцентом. */
+body.catalog-hub .trainer-detail-service {
+  border: 0; border-radius: 16px; background: var(--g-surface); box-shadow: var(--g-shadow); color: var(--g-ink); clip-path: none;
+}
+body.catalog-hub .trainer-detail-service-name { font: 600 15px/1.3 var(--g-font); color: var(--g-ink); }
+body.catalog-hub .trainer-detail-service-price { font: 700 15px/1.3 var(--g-font); color: var(--g-accent-ink); white-space: nowrap; }
+body.catalog-hub .trainer-detail-service--catalog-selected { box-shadow: inset 0 0 0 2px var(--g-accent); background: var(--g-surface); }
+
+/* Действия: главная — бирюзовая, остальные — мягкие. */
+body.catalog-hub .btn-primary,
+body.catalog-hub .catalog-trainer-sticky-cta .btn-primary {
+  min-height: 52px; border: 0; border-radius: var(--g-r-btn); background: var(--g-accent); color: var(--g-on-accent);
+  font: 700 16px/1 var(--g-font); clip-path: none; box-shadow: none;
+}
+body.catalog-hub .btn-secondary {
+  min-height: 52px; border: 0; border-radius: var(--g-r-btn); background: var(--g-chip); color: var(--g-ink);
+  font: 600 16px/1 var(--g-font); clip-path: none; box-shadow: none;
+}
+body.catalog-hub .trainer-action-chip {
+  border: 0; border-radius: 16px; background: var(--g-surface); color: var(--g-ink); box-shadow: var(--g-shadow);
+  font: 600 14px/1 var(--g-font); clip-path: none;
+}
+body.catalog-hub .trainer-action-chip.is-active { background: var(--g-accent-wash); color: var(--g-accent-ink); }
+body.catalog-hub .trainer-share-wide-btn { color: var(--g-accent-ink); font: 600 14px/1 var(--g-font); }
+body.catalog-hub .chips-hint { color: var(--g-muted); }
+
+/* Нижняя панель «Записаться» — стеклом поверх ленты, как на катке. */
+body.catalog-hub .catalog-trainer-sticky-cta {
+  background: color-mix(in srgb, var(--g-surface) 94%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  box-shadow: 0 -8px 24px rgba(13, 27, 38, .08); border: 0; clip-path: none;
+}
+body.catalog-hub .btn-primary:active, body.catalog-hub .btn-secondary:active, body.catalog-hub .trainer-action-chip:active,
+body.catalog-hub .trainer-detail-service--clickable:active, body.catalog-hub .catalog-tabs .tab-btn:active {
+  transform: scale(.97); transition: transform var(--ga-t-press, 70ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  body.catalog-hub .btn-primary:active, body.catalog-hub .btn-secondary:active, body.catalog-hub .trainer-action-chip:active { transform: none; }
+}

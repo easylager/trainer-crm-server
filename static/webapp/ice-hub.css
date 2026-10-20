@@ -80,3 +80,25 @@ body.ice-hub .ice-board--off .ice-board__time { height: auto; padding: 4px 10px;
 body.ice-booting #iceModeSeg[hidden] { display: block !important; visibility: hidden; height: 38px; }
 body.ice-booting #iceFilterBand { min-height: 38px; }
 html.ice-foryou-expected body.ice-booting #iceForYou[hidden] { display: block !important; visibility: hidden; height: var(--ice-foryou-h, 0px); }
+
+/* ── Карточка тренера в списке — как «Тренеры этого катка» на карточке катка ── */
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']) {
+  grid-template-columns: 72px minmax(0, 1fr) 12px; gap: 14px; padding: 12px; border: 0; border-radius: 22px;
+  background: var(--g-surface); color: var(--g-ink); box-shadow: var(--g-shadow);
+}
+body.ice-hub .ice-acard:not([class*='ice-acard--type-'])::after { color: var(--g-muted); }
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']) .ice-acard__ph {
+  height: 72px; border: 0; border-radius: 20px; background: var(--g-accent-wash);
+}
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']) .ice-acard__mono { font: 400 24px/1 var(--g-font-display); color: var(--g-accent-ink); }
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']) .ice-acard__body { display: flex; flex-direction: column; gap: 3px; min-width: 0; justify-content: center; }
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']) .ice-acard__name { font: 700 17px/1.2 var(--g-font); color: var(--g-ink); }
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']) .ice-acard__spec { font: 600 14px/1.3 var(--g-font); color: var(--g-ink-2); }
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']) .ice-acard__meta { font: 400 13px/1.3 var(--g-font); color: var(--g-muted); }
+/* «Записаться · 32 слота» — таблетка, как окно тренера на катке. */
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']) .ice-live {
+  align-self: flex-start; margin-top: 5px; height: 28px; padding: 0 10px; border-radius: var(--g-r-pill);
+  background: var(--g-accent-wash); color: var(--g-accent-ink); font: 600 13px/28px var(--g-font);
+}
+body.ice-hub .ice-acard:not([class*='ice-acard--type-']):active { transform: scale(.98); transition: transform var(--ga-t-press, 70ms); }
+@media (prefers-reduced-motion: reduce) { body.ice-hub .ice-acard:active { transform: none; } }

@@ -65,6 +65,18 @@
     for (var i = 0; i < list.length; i += 1) enhanceSeg(list[i]);
   }
 
+  // Тёмная тема языка хаба (--g-*) включается body.tg-dark; признак ставит client-mini-app-theme.js на html.
+  function syncDark() {
+    var b = doc.body;
+    var h = doc.documentElement;
+    if (b && b.classList && h && h.classList) b.classList.toggle('tg-dark', h.classList.contains('hub-is-dark'));
+  }
+  if (doc.body) syncDark();
+  else doc.addEventListener('DOMContentLoaded', syncDark);
+  if (global.MutationObserver && doc.documentElement) {
+    new global.MutationObserver(syncDark).observe(doc.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+
   doc.addEventListener('touchstart', function () {}, { passive: true });
   doc.addEventListener('click', function (e) {
     var t = e.target && e.target.closest ? e.target.closest('[data-haptic]') : null;
