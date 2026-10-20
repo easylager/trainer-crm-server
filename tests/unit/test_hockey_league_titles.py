@@ -84,6 +84,8 @@ def test_vanga_is_the_single_leader_in_exact_scores() -> None:
     ]
     titles = pick_titles(picks, next_match_id=None)
     assert titles[1] == {"id": "vanga", "label": "Ванга", "detail": "2 точных"}
+    one = pick_titles([_p(1, 10, points=50), _p(2, 10, points=20)], next_match_id=None)
+    assert all(t["id"] != "vanga" for t in one.values()), "один точный — ещё не Ванга"
     tie = pick_titles([_p(1, 10, points=50), _p(2, 10, points=50)], next_match_id=None)
     assert all(t["id"] != "vanga" for t in tie.values())
 

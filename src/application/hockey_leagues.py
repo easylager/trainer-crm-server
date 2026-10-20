@@ -289,6 +289,7 @@ async def league_table(session: AsyncSession, *, league_id: int, player_key: int
 # Одно на человека: шутим над ходом, а не над человеком. Всё — из готовых ходов.
 # Если подходит несколько — берём самое яркое по этому порядку.
 TITLE_ORDER = ("cap", "scarf", "vanga", "streak", "optimist")
+VANGA_MIN = 2
 STREAK_MIN = 3
 OPTIMIST_MARGIN = 3
 OPTIMIST_MIN_PICKS = 2
@@ -330,7 +331,7 @@ def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, di
     - cap «Кепка позора» — меньше всех очков за последний сыгранный матч лиги; если очки у всех
       равные — кепки нет. Висит, пока не сыграют следующий матч.
     - scarf «В чужом шарфе» — ход против Динамо на ближайший матч;
-    - vanga «Ванга» — единственный лидер лиги по точным счетам;
+    - vanga «Ванга» — единственный лидер лиги по точным счетам, от VANGA_MIN точных;
     - streak «Чуйка» — победитель угадан STREAK_MIN+ сыгранных матчей подряд;
     - optimist «Вечный оптимист» — в среднем ставит Динамо +OPTIMIST_MARGIN и больше.
     """
@@ -362,7 +363,7 @@ def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, di
     if exact:
         best = max(exact.values())
         leaders = [k for k, v in exact.items() if v == best]
-        if len(leaders) == 1:
+        if len(leaders) == 1 and best >= VANGA_MIN:
             give(leaders[0], "vanga", "Ванга", f"{best} {_plural(best, 'точный', 'точных', 'точных')}")
 
     by_player: dict[int, list[dict]] = {}
