@@ -10,6 +10,7 @@ from src.application.booking_use_cases import (
     link_trainer_client_roster,
     resolve_welcome_session_city_service,
 )
+from src.application.client_profile_use_cases import default_profile_for_account
 from src.application.client_session_use_cases import (
     clear_pending_referral,
     get_pending_referral,
@@ -84,7 +85,10 @@ async def bind_client_invite_trainer_context(
     else:
         city_id, service_id = await get_trainer_default_city_and_service(session, trainer_id)
 
-    resolved_client_id = client_id
+    # Тренер — тому профилю, на котором откроется «Главная» (часто это ребёнок),
+    # а не строке аккаунта: иначе родитель видит хаб без тренера.
+    default_profile = await default_profile_for_account(session, telegram_id)
+    resolved_client_id = default_profile["client_id"] if default_profile else client_id
     if resolved_client_id is None:
         resolved_client_id = await get_client_id_by_telegram_id(session, telegram_id)
 

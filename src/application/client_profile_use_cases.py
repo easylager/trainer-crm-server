@@ -209,6 +209,41 @@ async def resolve_acting_client_id(
     return legacy_id
 
 
+async def default_profile_for_account(
+    session: AsyncSession, account_telegram_id: int
+) -> dict[str, Any] | None:
+    """
+    Profile the client hub opens on (``client_profile_links.is_default``), or None.
+
+    Invite binds the trainer to this profile: a parent whose default is the child must
+    see the trainer on «Главная» right away, not behind the profile switcher.
+    ``profile_count`` lets the welcome copy say whom the trainer was added for.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT l.profile_client_id, c.first_name,
+                   (SELECT count(*) FROM client_profile_links a
+                    WHERE a.account_telegram_id = :tid) AS profile_count
+            FROM client_profile_links l
+            JOIN clients c ON c.id = l.profile_client_id
+            WHERE l.account_telegram_id = :tid AND l.is_default
+            ORDER BY l.id ASC
+            LIMIT 1
+            """
+        ),
+        {"tid": account_telegram_id},
+    )
+    row = r.fetchone()
+    if row is None:
+        return None
+    return {
+        "client_id": int(row[0]),
+        "first_name": (row[1] or "").strip(),
+        "profile_count": int(row[2] or 0),
+    }
+
+
 async def list_accessible_profiles(
     session: AsyncSession, account_telegram_id: int
 ) -> list[dict[str, Any]]:

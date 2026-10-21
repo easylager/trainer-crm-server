@@ -165,3 +165,49 @@ async def test_bind_invite_skips_notify_when_roster_already_exists(
     )
 
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_bind_invite_goes_to_default_child_profile(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Родитель, у которого «Главная» открывается на ребёнке: тренер — ребёнку."""
+    from src.application.client_profile_use_cases import default_profile_for_account
+    from src.application.client_trainer_edge_use_cases import get_primary_edge as get_primary_trainer_edge
+
+    monkeypatch.setattr(
+        "src.application.client_invite_use_cases.notify_trainer_client_registered_from_invite",
+        lambda **_: _noop(),
+    )
+    trainer_id = await _seed_trainer(db_session)
+    parent_id = await _seed_client_with_phone(db_session, telegram_id=800008)
+    r = await db_session.execute(
+        text("INSERT INTO clients (first_name, is_sandbox) VALUES ('Арина', false) RETURNING id")
+    )
+    child_id = int(r.scalar_one())
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_profile_links (account_telegram_id, profile_client_id, role, is_default)
+            VALUES (800008, :parent, 'self', false), (800008, :child, 'guardian', true)
+            """
+        ),
+        {"parent": parent_id, "child": child_id},
+    )
+    await db_session.commit()
+
+    await bind_client_invite_trainer_context(
+        800008, trainer_id, db_session, client_id=parent_id
+    )
+
+    child_primary = await get_primary_trainer_edge(child_id, db_session)
+    assert child_primary is not None and int(child_primary["trainer_id"]) == trainer_id
+    assert await get_primary_trainer_edge(parent_id, db_session) is None
+    assert await trainer_client_roster_link_exists(db_session, trainer_id, child_id)
+    profile = await default_profile_for_account(db_session, 800008)
+    assert profile == {"client_id": child_id, "first_name": "Арина", "profile_count": 2}
+
+
+async def _noop() -> None:
+    return None

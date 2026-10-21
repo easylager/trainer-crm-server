@@ -47,6 +47,7 @@ from src.application.client_invite_use_cases import (
     bind_client_invite_trainer_context as _bind_client_invite_trainer_context,
     client_invite_needs_registration_form,
 )
+from src.application.client_profile_use_cases import default_profile_for_account
 from src.application.client_username_enrich import sync_client_telegram_username_from_client_bot
 from src.application.client_use_cases import (
     apply_certificate_recipient_to_client,
@@ -1129,6 +1130,13 @@ async def cmd_start(message: Message) -> None:
             await _bind_client_invite_trainer_context(
                 telegram_id, trainer_id_ref, db_session, client_id=client_id
             )
+            bound_profile = await default_profile_for_account(db_session, telegram_id)
+        if bound_profile and bound_profile["profile_count"] > 1 and bound_profile["first_name"]:
+            registered_text = msg.CLIENT_UNIVERSAL_INVITE_REGISTERED_FOR.format(
+                name=name, profile=html.escape(bound_profile["first_name"])
+            )
+        else:
+            registered_text = msg.CLIENT_UNIVERSAL_INVITE_REGISTERED.format(name=name)
         if base_is_https:
             home_url = f"{base}/webapp/client-home"
             keyboard = InlineKeyboardMarkup(
@@ -1142,7 +1150,7 @@ async def cmd_start(message: Message) -> None:
                 ]
             )
             await message.answer(
-                msg.CLIENT_UNIVERSAL_INVITE_REGISTERED.format(name=name),
+                registered_text,
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard,
             )
