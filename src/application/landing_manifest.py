@@ -100,6 +100,76 @@ def _landing_seo_urls(settings: Settings, manifest: dict[str, Any]) -> tuple[str
     return canonical_url, og_image
 
 
+_LANDING_LANG = {"by": "ru-BY", "ru": "ru-RU"}
+
+
+def _landing_site_head_html() -> str:
+    """Шрифты сайта и стили его подвала: лендинг — часть glideclub.by, а не отдельный сайт.
+
+    style-b.css целиком привязан к ``body.b`` и классам ``b-*`` — на разметку лендинга не влияет,
+    а у пришедших с главной уже лежит в кэше под тем же ``?v=``.
+    """
+    from src.application.style_b import STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
+
+    return (
+        public_fonts_head_html()
+        + "\n"
+        + f'  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v={TOKENS_VERSION}" />\n'
+        + f'  <link rel="stylesheet" href="/static/share/style-b.css?v={STYLE_VERSION}" />'
+    )
+
+
+def _landing_site_footer_html() -> str:
+    """Общий подвал сайта + ссылка обратно в каталог: со страницы тренеров есть путь на главную."""
+    from src.application.public_site_footer import render_site_footer_html
+
+    return render_site_footer_html(
+        context_html='<a href="/">Расписание катков по Беларуси</a>',
+        show_telegram_button=False,
+    )
+
+
+def _landing_jsonld_script(settings: Settings, manifest: dict[str, Any], canonical_url: str) -> str:
+    """JSON-LD: продукт для тренера и его место на сайте (крошки от главной)."""
+    base = _landing_public_base(settings)
+    home = f"{base}/" if base else "/"
+    seo = manifest.get("seo") or {}
+    name = str(seo.get("title") or "Glide — CRM для тренера на льду")
+    description = str(
+        seo.get("description")
+        or "Glide — CRM для тренера на льду в Telegram. Ссылка на запись, расписание, клиенты и каталог."
+    )
+    data = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "SoftwareApplication",
+                "name": "Glide для тренеров",
+                "applicationCategory": "BusinessApplication",
+                "operatingSystem": "Telegram",
+                "url": canonical_url,
+                "description": description,
+                "publisher": {"@type": "Organization", "name": "Glide", "url": home},
+            },
+            {
+                "@type": "WebPage",
+                "name": name,
+                "url": canonical_url,
+                "isPartOf": {"@type": "WebSite", "name": "Glideclub", "url": home},
+            },
+            {
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                    {"@type": "ListItem", "position": 1, "name": "Glide", "item": home},
+                    {"@type": "ListItem", "position": 2, "name": "Для тренеров", "item": canonical_url},
+                ],
+            },
+        ],
+    }
+    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    return f'  <script type="application/ld+json">{payload}</script>\n'
+
+
 def inject_landing_html(html: str, settings: Settings | None = None) -> str:
     """SSR: data attributes on <html>, SEO URLs, JSON bootstrap before </head>."""
     s = settings or Settings()
@@ -154,8 +224,17 @@ def inject_landing_html(html: str, settings: Settings | None = None) -> str:
             1,
         )
 
+    head_end = html.find(">", html.find("<html"))
+    html = (
+        html[:head_end].replace(' lang="ru"', f' lang="{_LANDING_LANG.get(market, "ru")}"', 1)
+        + html[head_end:]
+    )
+    html = html.replace("__LANDING_SITE_HEAD__", _landing_site_head_html(), 1)
+    html = html.replace("__SITE_FOOTER__", _landing_site_footer_html(), 1)
+
     bootstrap = (
         f'  <script id="landing-config" type="application/json">{cfg_json}</script>\n'
+        + _landing_jsonld_script(s, m, canonical_url)
     )
     marker = "</head>"
     if marker not in html:

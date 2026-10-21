@@ -81,6 +81,11 @@
     }, 6000);
   }
 
+  function joinPath(cfg) {
+    var ref = new URLSearchParams(window.location.search).get('ref') || '';
+    return (cfg.join_url || '/join') + (ref ? '?ref=' + encodeURIComponent(ref) : '');
+  }
+
   function startTelegram(btn) {
     var cfg = window.__landingCfg || {};
     var hero = cfg.hero || {};
@@ -90,18 +95,23 @@
       return;
     }
 
-    var ref = new URLSearchParams(window.location.search).get('ref') || '';
-    var joinPath = (cfg.join_url || '/join') + (ref ? '?ref=' + encodeURIComponent(ref) : '');
     if (btn) {
-      btn.disabled = true;
+      btn.setAttribute('aria-disabled', 'true');
       btn.textContent = hero.cta_loading || 'Открываем Telegram…';
     }
-    window.location.href = joinPath;
+    window.location.href = joinPath(cfg);
   }
 
+  /* CTA — настоящие ссылки на /join (видны поисковику и работают без JS);
+     скрипт добавляет ?ref= и подпись «Открываем Telegram…». */
   function bindCtas() {
+    var cfg = window.__landingCfg || {};
     document.querySelectorAll('.js-landing-cta').forEach(function (btn) {
-      btn.addEventListener('click', function () {
+      if (btn.tagName === 'A') btn.setAttribute('href', joinPath(cfg));
+      btn.addEventListener('click', function (e) {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+        e.preventDefault();
+        if (btn.getAttribute('aria-disabled') === 'true') return;
         startTelegram(btn);
       });
     });

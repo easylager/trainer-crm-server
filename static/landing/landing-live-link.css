@@ -20,7 +20,9 @@
   --on-teal:#04262A;
   --teal-wash:rgba(69,185,187,.12);
   --shadow-surface:0 1px 3px rgba(16, 24, 28,.05), 0 20px 44px -28px rgba(16, 24, 28,.45);
-  --sans:'DM Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  /* Шрифты сайта (glide-public-fonts.css): Golos Text — текст, Dela Gothic One — заголовки. */
+  --sans:'Golos Text',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --display:'Dela Gothic One','Arial Black',sans-serif;
   --ease:cubic-bezier(.22,.61,.36,1);
   --slow:cubic-bezier(.33,.9,.28,1);
 }

@@ -2466,6 +2466,9 @@ def landing_asset(asset_path: str, request: Request):
     """Static assets for Glide landing (CSS/JS/images). Use ``?v=`` for long cache."""
     if ".." in asset_path or asset_path.startswith("/"):
         raise HTTPException(status_code=404, detail="Not found")
+    if asset_path.lower().endswith(".html"):
+        # Сырой шаблон с плейсхолдерами — дубль /trainers для поисковика.
+        return RedirectResponse(url="/trainers", status_code=301)
     path = (_LANDING_DIR / asset_path).resolve()
     try:
         path.relative_to(_LANDING_DIR.resolve())

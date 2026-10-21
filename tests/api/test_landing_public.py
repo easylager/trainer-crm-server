@@ -96,6 +96,36 @@ async def test_landing_trainers_injects_config_script(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_landing_trainers_is_part_of_the_site(monkeypatch):
+    """Лендинг тренера — страница glideclub.by: путь на главную, общий подвал и шрифты, JSON-LD."""
+    s = _landing_settings(trainer_bot_username="IceProTestBot", webapp_base_url="https://glideclub.by")
+    monkeypatch.setattr("src.application.landing_manifest.Settings", lambda: s)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/trainers")
+        raw = await client.get("/landing/index.html", follow_redirects=False)
+    body = resp.text
+    assert "__" + "SITE_FOOTER__" not in body and "__LANDING_SITE_HEAD__" not in body
+    assert '<a class="logo" id="logoBox" href="/"' in body
+    assert 'class="b-site-foot"' in body
+    assert '<a href="/">Расписание катков по Беларуси</a>' in body
+    assert "b-site-foot__tg" not in body  # кнопка клиентского бота тренеру не нужна
+    # Кнопки — ссылки, а не <button>: поисковик видит путь регистрации.
+    assert body.count('class="cta cta--') == 3
+    assert body.count('href="/join">Начать в Telegram</a>') == 3
+    assert "fonts.googleapis.com" not in body
+    assert "/static/shared/glide-public-fonts.css" in body
+    assert 'lang="ru-BY">' in body.split("<head>", 1)[0]
+    assert body.count("<h1") == 1
+    assert "Всё рабочее пространство тренера — в одном месте</h2>" in body
+    assert body.count("в одном месте</h2>") == 1
+    ld_raw = body.split('<script type="application/ld+json">', 1)[1].split("</script>", 1)[0]
+    graph = json.loads(ld_raw)["@graph"]
+    crumbs = next(n for n in graph if n["@type"] == "BreadcrumbList")["itemListElement"]
+    assert [c["item"] for c in crumbs] == ["https://glideclub.by/", "https://glideclub.by/trainers"]
+    assert raw.status_code == 301 and raw.headers["location"] == "/trainers"
+
+
+@pytest.mark.asyncio
 async def test_trainer_start_happy_path(db_session, monkeypatch):
     s = _landing_settings(trainer_bot_username="IceProTestBot", landing_trainer_start_max_requests=20)
     monkeypatch.setattr("src.api.routes.public.Settings", lambda: s)

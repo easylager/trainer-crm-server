@@ -34,8 +34,13 @@ def render_site_footer_html(
     trainers_href: str = "/trainers",
     context_html: str = "",
     telegram_href: str | None = None,
+    show_telegram_button: bool = True,
 ) -> str:
-    """HTML футера для подстановки в ``__SITE_FOOTER__``."""
+    """HTML футера для подстановки в ``__SITE_FOOTER__``.
+
+    ``show_telegram_button=False`` — на лендинге тренера: кнопка ведёт в клиентского бота,
+    а у тренера свой вход (CTA страницы).
+    """
     year = datetime.now(timezone.utc).year
     profile = public_telegram_href()
     mail = SUPPORT_EMAIL
@@ -67,7 +72,7 @@ def render_site_footer_html(
         ctx = f'<div class="b-site-foot__context">{context_html}</div>'
 
     button = ""
-    if button_href:
+    if button_href and show_telegram_button:
         button = (
             f'<a class="b-site-foot__tg tg-out" href="{_esc(button_href)}">{_esc(open_label)}</a>'
         )

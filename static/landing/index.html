@@ -20,16 +20,15 @@
   <meta name="twitter:description" content="Telegram вместо отдельного CRM. Живая ссылка на запись — ученик сам выбирает слот.">
   <link rel="icon" href="/logos/01-icon/glide-icon-teal-on-black.png" type="image/png">
   <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-on-black.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/landing/landing-live-link.css?v=202609037">
-  <link rel="stylesheet" href="/landing/landing-live-link-prod.css?v=202609037">
+  <!-- Шрифты и подвал — общие с сайтом (landing_manifest.inject_landing_html). -->
+__LANDING_SITE_HEAD__
+  <link rel="stylesheet" href="/landing/landing-live-link.css?v=202610213">
+  <link rel="stylesheet" href="/landing/landing-live-link-prod.css?v=202610213">
 </head>
 <body>
 <a class="skip" href="#hero">К содержимому</a>
 <header class="masthead">
-  <div class="logo" id="logoBox">
+  <a class="logo" id="logoBox" href="/" aria-label="Glide — расписание катков">
     <!--
       Ночью шапка тёмная, а на светлом варианте логотипа словесный знак чёрный —
       на тёмном он пропадает. Меняем файл, а не красим фильтром: инверсия увела бы
@@ -43,8 +42,8 @@
            src="/logos/02-horizontal-full/glide-horizontal-teal-icon-black-text-on-white.png"
            alt="Glide">
     </picture>
-  </div>
-  <button type="button" class="cta cta--sm js-landing-cta" id="mastheadCta">Начать в Telegram</button>
+  </a>
+  <a class="cta cta--sm js-landing-cta" id="mastheadCta" href="/join">Начать в Telegram</a>
 </header>
 
 <!-- ══════════════════════════ HERO ══════════════════════════════════════ -->
@@ -52,9 +51,9 @@
 
   <div class="hero__copy">
     <p class="eyebrow" id="heroEyebrow">Glide · тренерам на льду</p>
-    <h1 id="heroTitle">CRM для тренера на льду</h1>
+    <h1 id="heroTitle">CRM для тренера на&nbsp;льду</h1>
     <p class="lede" id="heroLede">Telegram вместо отдельного CRM. Ссылка — вместо переписки «когда можно?». Каталог&nbsp;Glide и аналитика — в одном боте. 14 дней бесплатно.</p>
-    <button type="button" class="cta cta--lg js-landing-cta" id="heroCta">Начать в Telegram</button>
+    <a class="cta cta--lg js-landing-cta" id="heroCta" href="/join">Начать в Telegram</a>
     <p class="invite"><b>Отправьте ссылку</b> — дальше ученик сам.</p>
 
     <div class="beats" aria-hidden="true">
@@ -95,7 +94,7 @@
     <div class="mini" id="mini">
       <div class="mini__grab"><i></i></div>
       <div class="mini__head">
-        <h2 class="mini__title">Выберите время</h2>
+        <p class="mini__title">Выберите время</p>
         <p class="mini__sub">Фигурное катание · Минск-Арена</p>
       </div>
       <div class="mini__body">
@@ -169,7 +168,7 @@
     <div class="sched">
       <div class="sched__head">
         <div>
-          <h2 class="sched__title">Моё расписание</h2>
+          <p class="sched__title">Моё расписание</p>
           <span class="sched__week">16–22 июня</span>
         </div>
         <button type="button" class="sched__share" id="shareBtn"
@@ -190,7 +189,7 @@
       <section class="inbox" id="inbox" aria-live="polite">
         <div class="inbox__card">
           <div class="inbox__head">
-            <h3 class="inbox__title">Сейчас важно</h3>
+            <p class="inbox__title">Сейчас важно</p>
             <span class="inbox__count">1</span>
           </div>
           <ul class="inbox__list">
@@ -258,7 +257,7 @@
     <!-- real modal content, trainer-home.html:732-749 -->
     <div class="invite-sheet" id="inviteSheet" aria-hidden="true">
       <div class="invite-sheet__grab"></div>
-      <h3 class="invite-sheet__title">Пригласительная ссылка</h3>
+      <p class="invite-sheet__title">Пригласительная ссылка</p>
       <div class="invite-sheet__link" id="demoInviteLink">t.me/…</div>
       <div class="invite-sheet__btn" id="inviteCopy">Скопировать ссылку</div>
     </div>
@@ -349,7 +348,8 @@
 <!-- ══════════════════ ROADMAP — мобильная swipe-карусель ═══════════════════ -->
 <section class="rmc" id="rmc" aria-hidden="true">
   <p class="rmc__eyebrow">Рабочее пространство</p>
-  <h2 class="rmc__title">Всё рабочее пространство тренера — в одном месте</h2>
+  <!-- Не h2: тот же заголовок уже есть в десктопной секции выше. -->
+  <p class="rmc__title">Всё рабочее пространство тренера — в одном месте</p>
   <div class="rmc__progress">
     <span class="rmc__bar"><span class="rmc__fill" id="rmcFill"></span></span>
     <span class="rmc__label" id="rmcLabel">1/9 · Запись</span>
@@ -395,16 +395,13 @@
   <div class="close__inner">
     <h2 class="close__title" id="closeTitle">Готовы выйти на лёд с Glide?</h2>
     <p class="close__sub" id="closeSub">14 дней бесплатно · без карты · только Telegram</p>
-    <button type="button" class="cta cta--lg js-landing-cta" id="bandCta">Начать в Telegram</button>
+    <a class="cta cta--lg js-landing-cta" id="bandCta" href="/join">Начать в Telegram</a>
   </div>
 </section>
-<footer class="foot" id="footer">
-  <p class="foot__brand" id="footerBrand">Glide</p>
-  <p class="foot__geo" id="footerGeo">Беларусь</p>
-</footer>
+__SITE_FOOTER__
 <p class="landing-error" id="landingError" hidden role="alert"></p>
 
-<script src="/landing/landing-live-link-main.js?v=202609037" defer></script>
-<script src="/landing/landing-live-link-demo.js?v=202609037" defer></script>
+<script src="/landing/landing-live-link-main.js?v=202610213" defer></script>
+<script src="/landing/landing-live-link-demo.js?v=202610213" defer></script>
 </body>
 </html>
