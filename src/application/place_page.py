@@ -1318,16 +1318,33 @@ def _b_schedule_site_link(card: Mapping[str, Any]) -> str:
     )
 
 
+def _b_buy(links: Mapping[str, Any]) -> str:
+    """Wide ticket button. ``links['tickets']`` is ``(href, open_in_new_tab)``."""
+    pair = links.get("tickets")
+    if not pair:
+        return ""
+    from src.application.catalog_icons import icon_svg
+
+    href, blank = pair
+    attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+    return (
+        f'<a class="b-btn b-btn--wide b-buy" href="{_esc(href)}"{attrs}>'
+        f'{_esc(t("place.tickets_buy"))}{icon_svg("external")}</a>'
+    )
+
+
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
     from src.application.style_b import section
 
+    buy = _b_buy(links)
     call = _b_call(card, links)
     if call:
-        return section(title, call, klass="b-sec--place", sec_id="schedule")
+        return section(title, f"{buy}{call}", klass="b-sec--place", sec_id="schedule")
     site_link = _b_schedule_site_link(card)
-    if site_link:
-        body = f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>{site_link}'
-        return section(title, body, klass="b-sec--place", sec_id="schedule")
+    if buy or site_link:
+        # Пока сеансов нет, касса всё равно открыта: кнопка покупки важнее отсылки «смотрите на сайте».
+        note = "" if buy else f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>'
+        return section(title, f"{buy}{note}{site_link}", klass="b-sec--place", sec_id="schedule")
     return ""
 
 
@@ -1442,16 +1459,7 @@ def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links:
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
     # Где касса продаёт онлайн — покупка над расписанием: в сезон вечера и выходные
     # разбирают, и кнопка нужна до выбора времени, а не после всей недели.
-    buy = ""
-    if links.get("tickets"):
-        from src.application.catalog_icons import icon_svg
-
-        href, blank = links["tickets"]
-        attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
-        buy = (
-            f'<a class="b-btn b-btn--wide b-buy" href="{_esc(href)}"{attrs}>'
-            f'{_esc(t("place.tickets_buy"))}{icon_svg("external")}</a>'
-        )
+    buy = _b_buy(links)
     foot: list[str] = []
     zovi = zovi_entry_path(view)
     if zovi:

@@ -1,0 +1,51 @@
+{
+  "currentCityId": 11,
+  "data": [
+    {
+      "id": 1385106,
+      "name": "Массовое катание в Витебском дворце спорта",
+      "duration": 60,
+      "slug": "massovoe-katanie-v-vitebskom-dvortse-sporta",
+      "minPrice": 700,
+      "maxPrice": 800,
+      "objects": [
+        {
+          "id": 124,
+          "name": "Ледовый Дворец Витебск",
+          "sessions": [
+            {
+              "id": 1769799,
+              "minPrice": 700,
+              "maxPrice": 800,
+              "objectId": 124,
+              "isSaleOpen": true,
+              "dateStr": "23.10.2026",
+              "timeStr": "22:00",
+              "timezone": "+0300"
+            },
+            {
+              "id": 1769800,
+              "minPrice": 700,
+              "maxPrice": 800,
+              "objectId": 124,
+              "isSaleOpen": true,
+              "dateStr": "24.10.2026",
+              "timeStr": "20:30",
+              "timezone": "+0300"
+            },
+            {
+              "id": 1769801,
+              "minPrice": 700,
+              "maxPrice": 800,
+              "objectId": 124,
+              "isSaleOpen": true,
+              "dateStr": "25.10.2026",
+              "timeStr": "21:00",
+              "timezone": "+0300"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

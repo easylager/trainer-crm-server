@@ -152,6 +152,17 @@ def test_opening_hours_strip_dossier_markers(cards, loader) -> None:
     assert vitebsk["kassa"] == {"open": "11:00", "close": "21:00"}
     assert "daily" not in vitebsk
     assert vitebsk.get("note") == "касса МК без выходных"
+    assert vitebsk["rental_title"] == "Прокат коньков"
+    assert vitebsk["rental_catalog"] == [
+        {"label": "до 34 размера", "price": "5,00 BYN"},
+        {"label": "от 35 размера", "price": "10,00 BYN"},
+    ]
+    assert vitebsk["rental_note"] == "Выдача коньков открывается за 1 час до начала сеанса."
+    assert cards["vitebsk-ds"].website_url == "https://hc-vitebsk.by/"
+    assert cards["vitebsk-ds"].tickets_url == (
+        "https://24afisha.by/ru/vitebsk/event/massovoe-katanie-v-vitebskom-dvortse-sporta"
+    )
+    assert cards["vitebsk-ds"].amenities.get("skate_rental") is True
     arena = cards["minskarena"].opening_hours
     assert arena.get("note") == "Администрация: Пн–Чт 9:00–18:00, Пт 9:00–16:45"
     assert cards["vitebsk-ds"].district is None

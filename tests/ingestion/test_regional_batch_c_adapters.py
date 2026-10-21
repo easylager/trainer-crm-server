@@ -22,6 +22,8 @@ from src.ingestion.adapters_regional_batch_c import (
     RaubichiHtmlParser,
     VitebskDsParser,
     _raubichi_schedule_slots,
+    fetch_afisha_schedule,
+    vitebsk_schedule_url,
 )
 from src.ingestion.seed_config_regional_batch_c import (
     GORKI_LDS_CONFIG,
@@ -66,20 +68,18 @@ def _expected(slug: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_vitebsk_ds_matches_expected_fixture() -> None:
-    """AC: 7 slots, all public_skate, stale Apr/May 2026 grid preserved verbatim."""
+    """24afisha schedule: day, start, 60 min, adult price, per-session buy link."""
     expected = _expected("vitebsk-ds")
-    vitebsk_config = dict(VITEBSK_DS_CONFIG)
-    vitebsk_config["run_date"] = str(expected["captured_at"])[:10]
     job = _job(
         arena_id=29,
         parser_key=PARSER_KEY_VITEBSK_DS,
-        config=vitebsk_config,
+        config=VITEBSK_DS_CONFIG,
         slug="vitebsk-ds",
         job_id=101,
     )
     extraction = await VitebskDsParser().extract(job)
     gold_sessions = expected["sessions"]
-    assert len(extraction.slots) == len(gold_sessions) == 7
+    assert len(extraction.slots) == len(gold_sessions) == 3
 
     by_key = {(s.local_date, s.starts_at_local): s for s in extraction.slots}
     for gold in gold_sessions:
@@ -88,11 +88,44 @@ async def test_vitebsk_ds_matches_expected_fixture() -> None:
         assert slot.price_adult == gold["price_adult_minor"]
         assert slot.price_child is None
         assert slot.price_rental is None
+        assert slot.external_url == gold["external_url"]
+        assert slot.source_id == gold["source_id"]
         assert "массов" in slot.kind_raw.lower()
 
-    # Spot-check the CMS typo fix (201:15 → 20:15) survives extraction.
-    thursday = by_key[("2026-04-30", "20:15")]
-    assert thursday.ends_at_local == "21:15"
+    friday = by_key[("2026-10-23", "22:00")]
+    assert friday.ends_at_local == "23:00"
+    assert friday.price_adult == 700
+
+
+@pytest.mark.asyncio
+async def test_vitebsk_replays_afisha_clearance_cookie(monkeypatch) -> None:
+    """The first GET is an HTML verification page; the cookie unlocks the JSON."""
+    seen: list[dict | None] = []
+
+    async def fake_fetch(url: str, *, headers: dict | None = None) -> str:
+        seen.append(headers)
+        if len(seen) == 1:
+            return '<html><script>document.cookie="hg-security=abc123; path=/; Secure"</script></html>'
+        return '{"data":[]}'
+
+    monkeypatch.setattr(
+        "src.ingestion.adapters_regional_batch_c.fetch_http_text",
+        fake_fetch,
+    )
+    payload = await fetch_afisha_schedule("https://api.24afisha.by/api/v2/schedule/events/1385106")
+    assert payload == {"data": []}
+    assert seen[1] is not None
+    assert seen[1]["Cookie"] == "hg-security=abc123"
+
+
+def test_vitebsk_schedule_url_ignores_stale_club_page() -> None:
+    """Jobs seeded before the switch still store hockey.by in config.url."""
+    url = vitebsk_schedule_url(
+        {"url": "https://vitebsk.hockey.by/clubs/arena/massovoe-katanie/?clear_cache=Y"}
+    )
+    assert url.startswith("https://api.24afisha.by/api/v2/schedule/events/1385106")
+    assert "cityId=11" in url
+    assert "ignoreEndTime=1" in url
 
 
 @pytest.mark.asyncio
