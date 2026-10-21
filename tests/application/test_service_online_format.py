@@ -9,6 +9,7 @@ from src.application.booking_use_cases import (
     BOOKING_ARENA_UNSPECIFIED_LABEL,
     BOOKING_ONLINE_PLACE_LABEL,
     ServiceOnlineFormatMismatch,
+    confirm_booking,
     create_booking,
     create_trainer_quick_booking,
     fetch_trainer_booked_notification_payload,
@@ -16,7 +17,11 @@ from src.application.booking_use_cases import (
 )
 from src.bot import messages as bot_msg
 from src.application.trainer_custom_service_use_cases import add_trainer_custom_service
-from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
+from src.application.trainer_schedule_use_cases import (
+    list_slots,
+    replace_slots_for_day,
+    trainer_offers_online_sessions,
+)
 from src.application.trainer_use_cases import create_trainer, sync_trainer_online_enabled_from_services
 from tests.conftest import belarus_test_phone, unique_test_telegram_id
 from tests.db_catalog_helpers import require_seed_city_id, require_seed_service_id
@@ -201,8 +206,8 @@ async def test_booking_rejects_offline_service_on_online_slot(db_session):
     r = await db_session.execute(
         text(
             """
-            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, capacity, status, arena_id)
-            VALUES (:tid, :d, :st, :et, 1, 'available', NULL)
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, capacity, status, arena_id, is_online)
+            VALUES (:tid, :d, :st, :et, 1, 'available', NULL, true)
             RETURNING id
             """
         ),
@@ -373,3 +378,179 @@ async def test_quick_book_venue_service_without_arenas_is_not_rejected(db_sessio
     detail = await get_trainer_booking_detail_payload(db_session, int(booking_id), trainer_id)
     assert detail is not None
     assert detail["arenas_str"] == BOOKING_ARENA_UNSPECIFIED_LABEL
+
+
+@pytest.mark.asyncio
+async def test_no_arena_mixed_services_slot_defaults_in_person(db_session):
+    """No rink + offline and online services: a new slot is очно, not online.
+
+    The client can book the in-person service. The online service needs an explicit online slot.
+    """
+    sid, cid = await _seed_city_and_service(db_session)
+    phone, _pn = belarus_test_phone(unique_test_telegram_id())
+    trainer_id = await create_trainer(
+        db_session,
+        profile={"first_name": "Смесь", "last_name": "Форматов", "phone": phone, "city_id": cid},
+        service_ids=[sid],
+        arena_ids=[],
+    )
+    online_sid = int(
+        (
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO services (name, sort_order, is_public, created_by_trainer_id)
+                    VALUES ('Вовов онлайн', 81, false, :tid)
+                    RETURNING id
+                    """
+                ),
+                {"tid": trainer_id},
+            )
+        ).scalar_one()
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents, is_online) "
+            "VALUES (:tid, :sid, 4000, true)"
+        ),
+        {"tid": trainer_id, "sid": online_sid},
+    )
+    await sync_trainer_online_enabled_from_services(db_session, trainer_id)
+    await db_session.commit()
+
+    day = date.today() + timedelta(days=3)
+    await replace_slots_for_day(db_session, trainer_id, day, {10 * 60}, 60)
+    rows = await list_slots(db_session, trainer_id, day, day)
+    assert len(rows) == 1
+    assert rows[0]["arena_id"] is None
+    assert rows[0]["is_online"] is False
+    slot_id = int(rows[0]["id"])
+    client_id = await _insert_client(db_session)
+
+    with pytest.raises(ServiceOnlineFormatMismatch) as exc:
+        await create_booking(
+            db_session,
+            slot_id,
+            trainer_id,
+            client_id,
+            service_id=online_sid,
+            created_by_trainer=False,
+            arena_id=None,
+        )
+    assert exc.value.code == "venue_slot_needs_offline_service"
+
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id,
+        trainer_id,
+        client_id,
+        service_id=int(sid),
+        created_by_trainer=False,
+        arena_id=None,
+    )
+    assert booking_id is not None
+
+    online_day = day + timedelta(days=1)
+    await replace_slots_for_day(
+        db_session, trainer_id, online_day, {11 * 60}, 60, force_null_arena=True
+    )
+    online_rows = await list_slots(db_session, trainer_id, online_day, online_day)
+    assert len(online_rows) == 1
+    assert online_rows[0]["is_online"] is True
+    with pytest.raises(ServiceOnlineFormatMismatch) as online_exc:
+        await create_booking(
+            db_session,
+            int(online_rows[0]["id"]),
+            trainer_id,
+            client_id,
+            service_id=int(sid),
+            created_by_trainer=False,
+            arena_id=None,
+        )
+    assert online_exc.value.code == "online_slot_needs_online_service"
+
+
+@pytest.mark.asyncio
+async def test_confirm_online_booking_does_not_inherit_rink_added_later(db_session, monkeypatch):
+    """Pending online request stays venue-less after the trainer links a rink.
+
+    Confirm used to fill COALESCE(primary, any arena) into «Место» and the map button.
+    """
+    sid, cid = await _seed_city_and_service(db_session)
+    monkeypatch.setattr(
+        "src.application.admin_custom_service_notify.notify_admins_new_custom_service",
+        _noop_notify,
+    )
+    phone, _pn = belarus_test_phone(unique_test_telegram_id())
+    trainer_id = await create_trainer(
+        db_session,
+        profile={"first_name": "Максим", "last_name": "Тест", "phone": phone, "city_id": cid},
+        service_ids=[sid],
+        arena_ids=[],
+    )
+    custom = await add_trainer_custom_service(db_session, trainer_id, "Вовов", is_online=True)
+    online_sid = int(custom["service_id"])
+    day = date.today() + timedelta(days=4)
+    await replace_slots_for_day(
+        db_session, trainer_id, day, {16 * 60 + 15}, 45, force_null_arena=True
+    )
+    slot_id = int((await list_slots(db_session, trainer_id, day, day))[0]["id"])
+    client_id = await _insert_client(db_session)
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id,
+        trainer_id,
+        client_id,
+        service_id=online_sid,
+        created_by_trainer=False,
+        arena_id=None,
+    )
+    assert booking_id is not None
+    arena_id = int(
+        (
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO arenas (city_id, name, address, is_active)
+                    VALUES (:cid, 'Конькобежный стадион', 'проспект Победителей, 111', true)
+                    RETURNING id
+                    """
+                ),
+                {"cid": cid},
+            )
+        ).scalar_one()
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    await db_session.commit()
+
+    info = await confirm_booking(db_session, int(booking_id), trainer_id)
+    assert info is not None
+    assert info["arena_name"] == BOOKING_ONLINE_PLACE_LABEL
+    assert not (info.get("arena_address") or "").strip()
+    assert info.get("map_link") is None
+    text_client = bot_msg.format_client_booking_confirmed_by_trainer_text(
+        date="21.10",
+        day="Ср",
+        time="16:15",
+        trainer_name="Максим",
+        service_name=info.get("service_name"),
+        booking_price_cents=info.get("booking_price_cents"),
+        price_tier_label=info.get("price_tier_label"),
+        arena_name=info.get("arena_name"),
+        arena_address=info.get("arena_address"),
+    )
+    assert "Онлайн" in text_client
+    assert "Конькобежный" not in text_client
+    assert "Победителей" not in text_client
+    keyboard = bot_msg.build_client_booking_confirmed_inline_keyboard(
+        map_url=info.get("map_link"),
+        trainer_telegram_id=None,
+    )
+    assert keyboard is None

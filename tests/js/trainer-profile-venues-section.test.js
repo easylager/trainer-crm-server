@@ -60,7 +60,7 @@ describe('профиль тренера: раздел «Где занимаюс�
     assert.match(src, /function isArenaLockedByBookings/);
     assert.match(src, /function applyTrainerFromApi/);
     assert.match(src, /arena_ids_locked/);
-    assert.match(src, /есть записи или слоты сейчас или в будущем/);
+    assert.match(src, /есть записи сейчас или в будущем/);
     const start = src.indexOf('function updateArenaChips');
     const body = src.slice(start, src.indexOf('function arenaThumbUrl'));
     assert.match(body, /arena-row--locked/);

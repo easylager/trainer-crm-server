@@ -5609,7 +5609,7 @@
           var aLocked = findArenaById(n);
           var nameLocked = (aLocked && aLocked.name) ? aLocked.name : ('Площадка #' + n);
           flashArenaChipsNote(
-            '«' + nameLocked + '» нельзя убрать: есть записи или слоты сейчас или в будущем.'
+            '«' + nameLocked + '» нельзя убрать: есть записи сейчас или в будущем.'
           );
           return;
         }
@@ -5802,8 +5802,8 @@
             html +=
               '<button type="button" class="arena-row__remove" data-arena-remove="' +
               id +
-              '" disabled aria-disabled="true" aria-label="Нельзя убрать: есть записи или слоты" ' +
-              'title="Есть записи или слоты сейчас или в будущем — площадку нельзя убрать">×</button>';
+              '" disabled aria-disabled="true" aria-label="Нельзя убрать: есть записи" ' +
+              'title="Есть записи сейчас или в будущем — площадку нельзя убрать">×</button>';
           } else {
             html +=
               '<button type="button" class="arena-row__remove" data-arena-remove="' +

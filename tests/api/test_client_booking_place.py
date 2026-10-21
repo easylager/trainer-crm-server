@@ -71,12 +71,20 @@ async def _seed_online_trainer_two_arenas(session, *, primary: int, secondary: i
     return trainer_id, service_id
 
 
-async def _insert_available_slot(session, trainer_id: int, slot_date: date, *, arena_id: int | None, hour: int = 18) -> int:
+async def _insert_available_slot(
+    session,
+    trainer_id: int,
+    slot_date: date,
+    *,
+    arena_id: int | None,
+    hour: int = 18,
+    is_online: bool = False,
+) -> int:
     r = await session.execute(
         text(
             """
-            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, arena_id)
-            VALUES (:tid, :d, :st, :et, 'available', :aid)
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, arena_id, is_online)
+            VALUES (:tid, :d, :st, :et, 'available', :aid, :onl)
             RETURNING id
             """
         ),
@@ -86,6 +94,7 @@ async def _insert_available_slot(session, trainer_id: int, slot_date: date, *, a
             "st": time(hour, 0),
             "et": time(hour + 1, 0),
             "aid": arena_id,
+            "onl": is_online,
         },
     )
     slot_id = int(r.scalar_one())
@@ -320,14 +329,16 @@ async def test_get_client_slots_online_service_ignores_arena_filter(app_use_test
         {"tid": trainer_id, "sid": int(sid2)},
     )
     # Sync profile online flag from services (null-arena → is_online in payload).
-    from src.application.trainer_schedule_use_cases import sync_trainer_online_enabled_from_services
+    from src.application.trainer_use_cases import sync_trainer_online_enabled_from_services
 
     await sync_trainer_online_enabled_from_services(db_session, trainer_id)
     await db_session.commit()
 
     ref_day, ref_now = _monday_ref()
     slot_day = ref_day + timedelta(days=2)
-    online_slot_id = await _insert_available_slot(db_session, trainer_id, slot_day, arena_id=None, hour=11)
+    online_slot_id = await _insert_available_slot(
+        db_session, trainer_id, slot_day, arena_id=None, hour=11, is_online=True
+    )
     await _insert_available_slot(db_session, trainer_id, slot_day, arena_id=primary, hour=15)
     ctg = _fresh_tg()
 

@@ -201,6 +201,8 @@
 
       /** Sentinel for grid/precise venue pick — not a real arenas.id. */
       var SCHEDULE_ONLINE_VENUE = 'online';
+      /** In-person slot with no rink chosen yet. Not an arenas.id. */
+      var SCHEDULE_IN_PERSON_VENUE = 'in_person';
 
       function scheduleEditorPrimaryArenaId() {
         var ars = state.trainerScheduleArenas || [];
@@ -211,6 +213,7 @@
 
       function scheduleEditorArenaNameById(aid) {
         if (aid === SCHEDULE_ONLINE_VENUE) return 'Онлайн';
+        if (aid === SCHEDULE_IN_PERSON_VENUE) return 'Очно';
         if (aid == null || isNaN(Number(aid))) return '';
         var hit = (state.trainerScheduleArenas || []).filter(function(a) {
           return Number(a.id) === Number(aid);
@@ -219,13 +222,40 @@
       }
 
       function scheduleEditorSlotIsOnline(s) {
-        if (!s) return false;
-        if (s.is_online) return true;
-        return s.arena_id == null && !!state.onlineEnabled;
+        return !!(s && s.is_online);
+      }
+
+      function scheduleEditorHasInPersonService() {
+        return (state.trainerServices || []).some(function(s) { return !s.is_online; });
+      }
+
+      /**
+       * No rink yet, but both formats exist: the editor must ask очно vs онлайн.
+       * Default is очно — null arena must not land on the online service.
+       */
+      function scheduleEditorNeedsBareFormatPick() {
+        if (state.editMode !== 'calendar') return false;
+        if (!state.onlineEnabled) return false;
+        if ((state.trainerScheduleArenas || []).length > 0) return false;
+        return scheduleEditorHasInPersonService();
+      }
+
+      /** Week list labels too: same trainer, not only while the day editor is open. */
+      function scheduleEditorShowsBareFormat() {
+        if (!state.onlineEnabled) return false;
+        if ((state.trainerScheduleArenas || []).length > 0) return false;
+        return scheduleEditorHasInPersonService();
       }
 
       function scheduleEditorSlotVenueLabel(s) {
         if (scheduleEditorSlotIsOnline(s)) return 'Онлайн';
+        if (
+          scheduleEditorShowsBareFormat() &&
+          s &&
+          (s.arena_id == null || s.arena_id === '')
+        ) {
+          return 'Очно';
+        }
         var v = String(
           (s && (s.venue_label || s.arena_label || scheduleEditorArenaNameById(s.arena_id))) || ''
         ).trim();
@@ -259,6 +289,7 @@
 
       /** Show venue chip picker when trainer can choose among arenas and/or online. */
       function scheduleEditorNeedsVenuePick() {
+        if (scheduleEditorNeedsBareFormatPick()) return true;
         var n = (state.trainerScheduleArenas || []).length;
         if (scheduleEditorOnlinePickAllowed()) return n >= 1;
         return n > 1;
@@ -305,7 +336,8 @@
 
       /** Несколько связанных площадок — полное имя арены. Одна арена: строку не показываем. */
       function scheduleEditorSlotVenueLine(s) {
-        if (!scheduleEditorIsMultiArena() || !s) return '';
+        if (!s) return '';
+        if (!scheduleEditorIsMultiArena() && !scheduleEditorShowsBareFormat()) return '';
         var v = scheduleEditorSlotVenueLabel(s);
         var vt = v ? escapeHtml(v) : '<span class="venue-muted">не указано</span>';
         return '<div class="slot-venue">' + vt + '</div>';
@@ -313,7 +345,9 @@
 
       /** Compact venue chip for precise-slot tags when multi-arena — label only, no letter badge. */
       function scheduleEditorArenaChipHtml(arenaId, arenaLabel) {
-        if (!scheduleEditorIsMultiArena()) return '';
+        var formatSentinel =
+          arenaId === SCHEDULE_ONLINE_VENUE || arenaId === SCHEDULE_IN_PERSON_VENUE;
+        if (!scheduleEditorIsMultiArena() && !scheduleEditorShowsBareFormat() && !formatSentinel) return '';
         var aid = arenaId != null && !isNaN(Number(arenaId)) ? Number(arenaId) : null;
         var full = String(arenaLabel || scheduleEditorArenaNameById(aid) || '').trim();
         if (!full) return '';
@@ -347,8 +381,8 @@
 
       function scheduleEditorSetGridArenaPick(aid) {
         var n =
-          aid === SCHEDULE_ONLINE_VENUE
-            ? SCHEDULE_ONLINE_VENUE
+          aid === SCHEDULE_ONLINE_VENUE || aid === SCHEDULE_IN_PERSON_VENUE
+            ? aid
             : aid != null && !isNaN(Number(aid))
               ? Number(aid)
               : null;
@@ -388,26 +422,33 @@
         ars.forEach(function(a) {
           appendChip(a.id, String(a.name || '—'), !!a.is_primary);
         });
+        if (!ars.length && scheduleEditorNeedsBareFormatPick()) {
+          appendChip(SCHEDULE_IN_PERSON_VENUE, 'Очно', false);
+        }
         if (scheduleEditorOnlinePickAllowed()) {
           appendChip(SCHEDULE_ONLINE_VENUE, 'Онлайн', false);
         }
         var pick = preferredId;
         if (pick == null && state.scheduleGridArenaPickId != null) pick = state.scheduleGridArenaPickId;
         var pickOk =
-          pick === SCHEDULE_ONLINE_VENUE
-            ? scheduleEditorOnlinePickAllowed()
-            : pick != null &&
-              !isNaN(Number(pick)) &&
-              ars.some(function(x) { return Number(x.id) === Number(pick); });
+          pick === SCHEDULE_IN_PERSON_VENUE
+            ? scheduleEditorNeedsBareFormatPick()
+            : pick === SCHEDULE_ONLINE_VENUE
+              ? scheduleEditorOnlinePickAllowed()
+              : pick != null &&
+                !isNaN(Number(pick)) &&
+                ars.some(function(x) { return Number(x.id) === Number(pick); });
         if (!pickOk) {
           var prim = ars.filter(function(x) { return x.is_primary; })[0];
           pick = prim
             ? Number(prim.id)
             : ars.length
               ? Number(ars[0].id)
-              : scheduleEditorOnlinePickAllowed()
-                ? SCHEDULE_ONLINE_VENUE
-                : null;
+              : scheduleEditorNeedsBareFormatPick()
+                ? SCHEDULE_IN_PERSON_VENUE
+                : scheduleEditorOnlinePickAllowed()
+                  ? SCHEDULE_ONLINE_VENUE
+                  : null;
         }
         if (pick != null) scheduleEditorSetGridArenaPick(pick);
         else syncScheduleEditorGridArenaPickHighlight();
@@ -425,6 +466,12 @@
           o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
           sel.appendChild(o);
         });
+        if (!ars.length && scheduleEditorNeedsBareFormatPick()) {
+          var oIn = document.createElement('option');
+          oIn.value = SCHEDULE_IN_PERSON_VENUE;
+          oIn.textContent = 'Очно';
+          sel.appendChild(oIn);
+        }
         if (scheduleEditorOnlinePickAllowed()) {
           var oOn = document.createElement('option');
           oOn.value = SCHEDULE_ONLINE_VENUE;
@@ -432,10 +479,14 @@
           sel.appendChild(oOn);
         }
         var pick = preferredId;
-        if (pick === SCHEDULE_ONLINE_VENUE && scheduleEditorOnlinePickAllowed()) {
+        if (pick === SCHEDULE_IN_PERSON_VENUE && scheduleEditorNeedsBareFormatPick()) {
+          sel.value = SCHEDULE_IN_PERSON_VENUE;
+        } else if (pick === SCHEDULE_ONLINE_VENUE && scheduleEditorOnlinePickAllowed()) {
           sel.value = SCHEDULE_ONLINE_VENUE;
         } else if (pick != null && ars.some(function(x) { return Number(x.id) === Number(pick); })) {
           sel.value = String(pick);
+        } else if (prev === SCHEDULE_IN_PERSON_VENUE && scheduleEditorNeedsBareFormatPick()) {
+          sel.value = SCHEDULE_IN_PERSON_VENUE;
         } else if (prev === SCHEDULE_ONLINE_VENUE && scheduleEditorOnlinePickAllowed()) {
           sel.value = SCHEDULE_ONLINE_VENUE;
         } else if (prev && ars.some(function(x) { return String(x.id) === prev; })) {
@@ -443,34 +494,50 @@
         } else if (ars.length) {
           var prim = ars.filter(function(x) { return x.is_primary; })[0];
           sel.value = String((prim || ars[0]).id);
+        } else if (scheduleEditorNeedsBareFormatPick()) {
+          sel.value = SCHEDULE_IN_PERSON_VENUE;
         } else if (scheduleEditorOnlinePickAllowed()) {
           sel.value = SCHEDULE_ONLINE_VENUE;
         }
       }
 
-      /** When all grid-aligned rows share one explicit arena — prefill grid picker on editor open. */
+      /** When all grid-aligned rows share one venue or format — prefill the picker on editor open. */
       function inferGridArenaIdFromSlotRows(rows, allowedStarts, gridDefaultDur) {
         var aids = [];
+        var formats = [];
         (rows || []).forEach(function(row) {
           var sm = parseStartToMinutes(row.start_time);
           var dur = slotDurationFromRow(row);
           if (!allowedStarts.has(sm) || dur !== gridDefaultDur) return;
+          if (row.is_online) {
+            formats.push(SCHEDULE_ONLINE_VENUE);
+            return;
+          }
           var aidRaw = row.arena_id != null ? parseInt(String(row.arena_id), 10) : NaN;
           if (!isNaN(aidRaw)) aids.push(aidRaw);
+          else formats.push(SCHEDULE_IN_PERSON_VENUE);
         });
-        if (!aids.length) return null;
-        var unique = aids.filter(function(v, i, a) { return a.indexOf(v) === i; });
-        return unique.length === 1 ? unique[0] : null;
+        if (aids.length && !formats.length) {
+          var unique = aids.filter(function(v, i, a) { return a.indexOf(v) === i; });
+          return unique.length === 1 ? unique[0] : null;
+        }
+        if (!aids.length && formats.length) {
+          var uniqFmt = formats.filter(function(v, i, a) { return a.indexOf(v) === i; });
+          return uniqFmt.length === 1 ? uniqFmt[0] : null;
+        }
+        return null;
       }
 
       function readGridArenaPickForSave() {
         if (!scheduleEditorNeedsVenuePick()) return null;
         var aid = state.scheduleGridArenaPickId;
         if (aid === SCHEDULE_ONLINE_VENUE) return SCHEDULE_ONLINE_VENUE;
+        if (aid === SCHEDULE_IN_PERSON_VENUE) return SCHEDULE_IN_PERSON_VENUE;
         if (aid == null || isNaN(Number(aid))) {
           var sel = document.getElementById(scheduleEditorGridArenaSelectId());
           var raw = sel ? String(sel.value || '') : '';
           if (raw === SCHEDULE_ONLINE_VENUE) return SCHEDULE_ONLINE_VENUE;
+          if (raw === SCHEDULE_IN_PERSON_VENUE) return SCHEDULE_IN_PERSON_VENUE;
           aid = raw ? parseInt(raw, 10) : NaN;
         } else {
           aid = Number(aid);
@@ -488,6 +555,7 @@
         var sel = document.getElementById(selectId);
         var raw = sel ? String(sel.value || '') : '';
         if (raw === SCHEDULE_ONLINE_VENUE) return SCHEDULE_ONLINE_VENUE;
+        if (raw === SCHEDULE_IN_PERSON_VENUE) return SCHEDULE_IN_PERSON_VENUE;
         var aid = raw ? parseInt(raw, 10) : NaN;
         if (isNaN(aid)) return null;
         // Always keep the explicit venue — including the primary arena. Collapsing primary →
@@ -5292,6 +5360,17 @@
           scheduleEditorNeedsVenuePick();
         wrap.style.display = show ? 'block' : 'none';
         if (!show) return;
+        var bareFmt = scheduleEditorNeedsBareFormatPick();
+        var gridLabel = document.getElementById('calendarGridArenaLabel');
+        var gridHelp = document.getElementById('calendarGridArenaHelp');
+        if (gridLabel) {
+          gridLabel.textContent = bareFmt ? 'Формат слотов' : 'Площадка для отмеченных на сетке';
+        }
+        if (gridHelp) {
+          gridHelp.textContent = bareFmt
+            ? 'Очно — эти часы увидят на услугах без формата «онлайн». Онлайн — только на онлайн-услуге. Площадку можно добавить в профиле позже.'
+            : 'Отметки на сетке «Быстро» сохранятся на выбранную площадку. На основной метка в расписании не показывается.';
+        }
         var sel = document.getElementById('calendarGridArenaSelect');
         if (!sel || !sel.options.length) {
           fillScheduleEditorGridArenaPick(state.scheduleGridArenaPickId);
@@ -5334,6 +5413,12 @@
           scheduleEditorNeedsVenuePick();
         wrap.style.display = show ? 'block' : 'none';
         if (!show) return;
+        var precLabel = document.querySelector('label[for="calendarPreciseArenaSelect"]');
+        if (precLabel) {
+          precLabel.textContent = scheduleEditorNeedsBareFormatPick()
+            ? 'Формат для слотов «Точное время»'
+            : 'Площадка для слотов «Точное время»';
+        }
         fillScheduleEditorArenaSelect('calendarPreciseArenaSelect', null);
       }
 
@@ -8888,6 +8973,8 @@
               if (booked || occ > 0) psHydr.locked = true;
               var aidRaw = s.arena_id != null ? parseInt(String(s.arena_id), 10) : NaN;
               if (!isNaN(aidRaw)) psHydr.arenaId = aidRaw;
+              else if (s.is_online) psHydr.arenaId = SCHEDULE_ONLINE_VENUE;
+              else if (scheduleEditorNeedsBareFormatPick()) psHydr.arenaId = SCHEDULE_IN_PERSON_VENUE;
               state.preciseSlots.push(psHydr);
             }
           });
@@ -9447,6 +9534,12 @@
           var postBody;
           var gridArenaPickCal = readGridArenaPickForSave();
           var gridIsOnline = gridArenaPickCal === SCHEDULE_ONLINE_VENUE;
+          var gridIsInPerson = gridArenaPickCal === SCHEDULE_IN_PERSON_VENUE;
+          function scheduleEditorNumericArenaId(raw) {
+            if (raw == null || raw === SCHEDULE_ONLINE_VENUE || raw === SCHEDULE_IN_PERSON_VENUE) return null;
+            var n = Number(raw);
+            return isNaN(n) ? null : n;
+          }
           if (precSlots.length > 0) {
             // Mixed mode: build slot_entries combining grid starts + precise slots
             var slotEntries = [];
@@ -9464,7 +9557,10 @@
             startsSorted.forEach(function(m0) {
               var entGrid = { start_time: formatMinuteClock(m0), duration_minutes: durationMinutes };
               if (multiArenaPrec && gridIsOnline) entGrid.is_online = true;
-              else if (multiArenaPrec && gridArenaPickCal != null) entGrid.arena_id = gridArenaPickCal;
+              else if (multiArenaPrec && !gridIsInPerson) {
+                var gridAidNum = scheduleEditorNumericArenaId(gridArenaPickCal);
+                if (gridAidNum != null) entGrid.arena_id = gridAidNum;
+              }
               slotEntries.push(entGrid);
             });
             precSlots.forEach(function(ps) {
@@ -9476,9 +9572,10 @@
                 var aidEnt = ps.arenaId != null ? ps.arenaId : precArenaPayload;
                 if (aidEnt === SCHEDULE_ONLINE_VENUE) {
                   entPrec.is_online = true;
-                } else {
+                } else if (aidEnt !== SCHEDULE_IN_PERSON_VENUE) {
                   if (aidEnt == null) aidEnt = scheduleEditorPrimaryArenaId();
-                  if (aidEnt != null) entPrec.arena_id = aidEnt;
+                  var precAidNum = scheduleEditorNumericArenaId(aidEnt);
+                  if (precAidNum != null) entPrec.arena_id = precAidNum;
                 }
               }
               slotEntries.push(entPrec);
@@ -9487,10 +9584,11 @@
             if (
               multiArenaPrec &&
               !gridIsOnline &&
-              gridArenaPickCal != null &&
+              !gridIsInPerson &&
+              scheduleEditorNumericArenaId(gridArenaPickCal) != null &&
               !slotEntries.some(function(e) { return e.arena_id != null || e.is_online; })
             ) {
-              postBody.arena_id = gridArenaPickCal;
+              postBody.arena_id = scheduleEditorNumericArenaId(gridArenaPickCal);
             }
           } else {
             postBody = {
@@ -9500,7 +9598,9 @@
               capacity: capacity,
             };
             if (gridIsOnline) postBody.is_online = true;
-            else if (gridArenaPickCal != null) postBody.arena_id = gridArenaPickCal;
+            else if (!gridIsInPerson && scheduleEditorNumericArenaId(gridArenaPickCal) != null) {
+              postBody.arena_id = scheduleEditorNumericArenaId(gridArenaPickCal);
+            }
           }
           if (slotIntentUseGroupUi() && capacity > 1) {
             var gsel = document.getElementById('calendarGroupServiceSelect');

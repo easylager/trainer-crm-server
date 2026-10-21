@@ -886,6 +886,7 @@ async def get_schedule(
             "capacity": cap,
             "service_id": s.get("service_id"),
             "arena_id": s.get("arena_id"),
+            "is_online": bool(s.get("is_online")),
             "service_label": svc_lbl,
             "arena_label": ar_lbl,
             "training_group_id": s.get("training_group_id"),
@@ -1759,10 +1760,7 @@ async def get_client_slots(
         available = filtered
     else:
         available = [s for s in available if max(1, int(s.get("capacity") or 1)) == 1]
-    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
-
     default_arena_for_slot = await trainer_default_slot_arena_id(session, trainer_id)
-    offers_online = await trainer_offers_online_sessions(session, trainer_id)
     serialized_full: list[dict] = []
     for s in available:
         an = (s.get("arena_name") or "").strip() or None
@@ -1772,13 +1770,15 @@ async def get_client_slots(
         if raw_slot_arena is not None:
             eff_slot_arena: int | None = int(raw_slot_arena)
             is_online_slot = False
-        elif offers_online:
-            # Venue-less + trainer offers online → keep null; label for clients.
+        elif bool(s.get("is_online")):
+            # Explicit online slot — keep null; do not inherit a rink.
             eff_slot_arena = None
             is_online_slot = True
             if not an:
                 an = "Онлайн"
         else:
+            # In-person, including a slot saved before any rink is chosen.
+            # Legacy null arena still paints the schedule default when one exists.
             eff_slot_arena = default_arena_for_slot
             is_online_slot = False
         serialized_full.append(
@@ -1983,12 +1983,7 @@ async def post_client_booking(
             detail="Эта услуга недоступна у выбранного тренера. Откройте карточку тренера и выберите услугу снова.",
         )
     service_is_online = bool(ts_offer[0])
-    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
-
-    slot_arena_pre = slot.get("arena_id")
-    slot_is_online = (
-        slot_arena_pre is None and await trainer_offers_online_sessions(session, trainer_id)
-    )
+    slot_is_online = bool(slot.get("is_online")) and slot.get("arena_id") is None
     if slot_is_online and not service_is_online:
         raise HTTPException(
             status_code=422,
