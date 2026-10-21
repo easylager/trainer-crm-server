@@ -756,7 +756,7 @@
     var rows = list.map(function (p) {
       var photo = (p.photos && p.photos[0]) || p.logo;
       var media = photo
-        ? '<img class="gp-row__media" src="' + esc(photo) + '" alt="" width="64" height="64" loading="lazy" decoding="async" />'
+        ? '<img class="gp-row__media" src="' + esc(photo) + '" alt="" width="80" height="80" loading="lazy" decoding="async" />'
         : '<span class="gp-row__media"></span>';
       var line = [p.line, p.where].filter(Boolean).join(' · ');
       return (

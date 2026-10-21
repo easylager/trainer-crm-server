@@ -1666,7 +1666,7 @@ def _b_partners(card: Mapping[str, Any]) -> str:
     for p in partners:
         photo = (p.get("photos") or [None])[0] or p.get("logo")
         media = (
-            f'<img class="gp-row__media" src="{_esc(photo)}" alt="" width="64" height="64" loading="lazy" decoding="async" />'
+            f'<img class="gp-row__media" src="{_esc(photo)}" alt="" width="80" height="80" loading="lazy" decoding="async" />'
             if photo
             else '<span class="gp-row__media"></span>'
         )

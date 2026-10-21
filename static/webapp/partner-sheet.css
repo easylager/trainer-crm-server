@@ -2,6 +2,7 @@
    Один файл на сайт и Mini App — только токены --g-* из glide-tokens.css. */
 
 .gp-list {
+  --gp-thumb: 80px;
   display: flex;
   flex-direction: column;
   background: var(--g-surface);
@@ -29,10 +30,10 @@
 .gp-row + .gp-row { border-top: 1px solid var(--g-line); }
 .gp-row:active { background: var(--g-chip); }
 .gp-row__media {
-  width: 64px;
-  height: 64px;
+  width: var(--gp-thumb);
+  height: var(--gp-thumb);
   flex: none;
-  border-radius: 12px;
+  border-radius: 14px;
   object-fit: cover;
   background: var(--g-chip);
 }
