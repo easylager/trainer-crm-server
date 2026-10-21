@@ -131,11 +131,19 @@ async def test_place_page_lists_trainers_with_telegram_link_to_their_card(app_us
 
 
 @pytest.mark.asyncio
-async def test_place_page_without_trainers_has_no_section(app_use_test_db, db_session) -> None:
+async def test_place_page_without_trainers_invites_the_first_one(app_use_test_db, db_session) -> None:
+    """Тренеров нет — раздел только со строкой «Станьте первым»; не у катка — раздела нет."""
     place = await _place(db_session)
+    shop = await _place(db_session, venue_type="shop")
     async with _client() as client:
         html = (await client.get(place["path"])).text
-    assert 'id="trainers"' not in html
+        shop_html = (await client.get(shop["path"])).text
+    section = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', html, re.S)
+    assert section, "нет раздела тренеров"
+    assert "Станьте первым тренером на странице этого катка" in section.group(1)
+    assert 'class="b-coach tg-out" href="/trainers" data-coach-open' in section.group(1)
+    assert "startapp=trainer_" not in section.group(1)
+    assert 'id="trainers"' not in shop_html
 
 
 @pytest.mark.asyncio

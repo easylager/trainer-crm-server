@@ -35,11 +35,16 @@ def render_site_footer_html(
     context_html: str = "",
     telegram_href: str | None = None,
     show_telegram_button: bool = True,
+    show_app_button: bool = True,
 ) -> str:
     """HTML футера для подстановки в ``__SITE_FOOTER__``.
 
     ``show_telegram_button=False`` — на лендинге тренера: кнопка ведёт в клиентского бота,
     а у тренера свой вход (CTA страницы).
+
+    Кнопка «Приложение» закреплена внизу экрана на каждой странице с подвалом и ссылкой
+    в Telegram. ``show_app_button=False`` — когда у страницы своя нижняя панель (каток
+    с «Позвать»): кнопка тогда живёт в ней.
     """
     year = datetime.now(timezone.utc).year
     profile = public_telegram_href()
@@ -66,6 +71,12 @@ def render_site_footer_html(
         f'<a class="b-site-foot__link" href="{_esc(trainers_href)}">Для тренеров</a>',
         f'<a class="b-site-foot__link" href="{_esc(schedule_error_mailto())}">{_esc(report_label)}</a>',
     ]
+
+    app = ""
+    if button_href and show_telegram_button and show_app_button:
+        from src.application.style_b import app_button_html, app_button_script_html
+
+        app = app_button_html(button_href) + app_button_script_html()
 
     ctx = ""
     if context_html.strip():
@@ -115,4 +126,5 @@ def render_site_footer_html(
         f"</div>"
         f"</div>"
         f"</footer>"
+        f"{app}"
     )

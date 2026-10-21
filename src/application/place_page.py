@@ -973,20 +973,25 @@ def _nojs_messenger_row(share: Mapping[str, str]) -> str:
     return f'<noscript><div class="place-share-fallback">{row}</div></noscript>'
 
 
+def _place_has_share_dock(view: Mapping[str, Any]) -> bool:
+    """Есть ли у страницы своя нижняя панель «Позвать»: тогда «Приложение» живёт в ней."""
+    return _effective_pick_session(view) is not None and _skating(view["card"])
+
+
 def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool, telegram_url: str | None = None) -> str:
-    from src.application.style_b import telegram_button_html, telegram_dock_html, telegram_hint_html
+    from src.application.style_b import app_button_html
 
     pick = _effective_pick_session(view)
-    if pick is None or not _skating(view["card"]):
-        # Позвать некуда — внизу одна «Открыть в Telegram» (TASK-278).
-        return telegram_dock_html(telegram_url, hint=t("tg.map_all"))
+    if not _place_has_share_dock(view):
+        # Позвать некуда — внизу общая кнопка «Приложение» из подвала сайта.
+        return ""
     when = invite_cta_when(
         _parse_iso_date(pick.get("local_date")),
         str(pick.get("starts_at_local") or ""),
         today=view["today"],
     )
     label = f"Позвать на {when}" if when else "Позвать с собой"
-    tg = telegram_button_html(telegram_url, short=True) if telegram_url else ""
+    tg = app_button_html(telegram_url, floating=False) if telegram_url else ""
     # Без Telegram-ссылки панели без JS показывать нечего — как раньше, ждёт скрипт.
     dock_hidden = "" if tg else " hidden"
     return (
@@ -994,7 +999,7 @@ def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool, telegram_url
         '<div class="place-share-dock__inner"><div class="place-share-dock__row">'
         # «Позвать» hidden до скрипта: без JS ей нечего открыть — под выбранным сеансом свои ссылки.
         f'<button type="button" class="place-share-dock__btn" id="placeShareBtn" hidden>{_esc(label)}</button>'
-        f"{tg}</div>{telegram_hint_html(t('tg.map_all_named')) if tg else ''}</div></div>"
+        f"{tg}</div></div></div>"
     )
 
 
@@ -1052,10 +1057,12 @@ def _place_hub_footer_links(*, city: str, city_page_url: str | None, public_skat
     )
 
 
-def _place_site_footer(city_link: str, *, telegram_href: str | None) -> str:
+def _place_site_footer(city_link: str, *, telegram_href: str | None, own_dock: bool = False) -> str:
     from src.application.public_site_footer import render_site_footer_html
 
-    return render_site_footer_html(context_html=city_link, telegram_href=telegram_href)
+    return render_site_footer_html(
+        context_html=city_link, telegram_href=telegram_href, show_app_button=not own_dock
+    )
 
 
 def render_place_page(
@@ -1117,7 +1124,9 @@ def render_place_page(
         "__TOKENS_V__": TOKENS_VERSION,
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
-        "__SITE_FOOTER__": _place_site_footer(city_link, telegram_href=cta_url),
+        "__SITE_FOOTER__": _place_site_footer(
+            city_link, telegram_href=cta_url, own_dock=_place_has_share_dock(view)
+        ),
         "__BODY__": body,
         "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite, telegram_url=cta_url),
         "__PLACE_SHARE_SCRIPTS__": _place_share_scripts_html(
@@ -1569,9 +1578,11 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str) -> str:
     from src.application.style_b import section, trainer_rows_html
 
     trainers = list(view.get("trainers") or [])
-    if not trainers:
-        return ""
     card = view["card"]
+    coach = _b_coach_entry(card, first=not trainers) if _skating(card) else ""
+    if not trainers:
+        # Тренеров пока нет — раздел только ради «станьте первым».
+        return section(t("place.trainers"), coach, klass="b-sec--place", sec_id="trainers") if coach else ""
     arena_id = int(card["id"])
     city_id = int(card.get("city_id") or 0) or None
 
@@ -1586,9 +1597,57 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str) -> str:
 
     return section(
         t("place.trainers"),
-        trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go")),
+        trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go")) + coach,
         klass="b-sec--place",
         sec_id="trainers",
+    )
+
+
+def _coach_sheet_title(card: Mapping[str, Any]) -> str:
+    name = format_public_name(str(card.get("name") or "")).strip()
+    # Своё имя в кавычках («Ледовая арена «…»») и длинное в заголовок не ставим.
+    if not name or "«" in name or '"' in name or len(name) > 22:
+        return t("coach.sheet_title_plain")
+    return t("coach.sheet_title", place=name)
+
+
+def _b_coach_entry(card: Mapping[str, Any], *, first: bool) -> str:
+    """Вход для тренера последней строкой раздела «Тренеры» и шторка-мини-лендинг.
+
+    Без JS строка ведёт на /trainers; с JS открывает шторку (coach-sheet.js), считает
+    открытие и «Начать в Telegram» (coach_open / coach_join). Внутри Mini App не видна (tg-out).
+    """
+    from src.application.style_b import COACH_SHEET_SCRIPT_VERSION
+
+    arena_id = int(card["id"])
+    city_id = int(card.get("city_id") or 0) or None
+    beacon = f"/api/public/catalog/contact-click?surface=place_page&arena_id={arena_id}"
+    if city_id:
+        beacon += f"&city_id={city_id}"
+    title = t("coach.entry_first_title") if first else t("coach.entry_title")
+    sub = t("coach.entry_first_sub") if first else t("coach.entry_sub")
+    facts = "".join(
+        f'<li><i aria-hidden="true">{n}</i><div>{_esc(t(key))}<span>{_esc(t(key + "_sub"))}</span></div></li>'
+        for n, key in ((1, "coach.fact_list"), (2, "coach.fact_link"), (3, "coach.fact_auto"))
+    )
+    return (
+        f'<a class="b-coach tg-out" href="/trainers" data-coach-open>'
+        f'<span class="b-coach__ic" aria-hidden="true">+</span>'
+        f'<span class="b-coach__t"><b>{_esc(title)}</b><span>{_esc(sub)}</span></span>'
+        f'<span class="b-coach__go">{_esc(t("coach.entry_go"))}&nbsp;›</span></a>'
+        f'<dialog class="b-coach-sheet" id="coachSheet" aria-labelledby="coachSheetTitle" data-beacon="{_esc(beacon)}">'
+        # Фокус при открытии — на саму шторку, а не на крестик (иначе он открывается с кольцом фокуса).
+        f'<div class="b-coach-sheet__in" tabindex="-1" autofocus>'
+        f'<button type="button" class="b-coach-sheet__x" data-coach-close aria-label="{_esc(t("coach.close"))}">'
+        f'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>'
+        f'<span class="b-coach-sheet__kick">{_esc(t("coach.sheet_kicker"))}</span>'
+        f'<h2 class="b-coach-sheet__title" id="coachSheetTitle">{_esc(_coach_sheet_title(card))}</h2>'
+        f'<ul class="b-coach-sheet__facts">{facts}</ul>'
+        f'<a class="b-coach-sheet__cta" href="/join" data-coach-join>{_esc(t("coach.cta"))}</a>'
+        f'<p class="b-coach-sheet__trial">{_esc(t("coach.trial"))}</p>'
+        f'<a class="b-coach-sheet__more" href="/trainers">{_esc(t("coach.more"))}&nbsp;›</a>'
+        f"</div></dialog>"
+        f'<script defer src="/static/share/coach-sheet.js?v={_esc(COACH_SHEET_SCRIPT_VERSION)}"></script>'
     )
 
 

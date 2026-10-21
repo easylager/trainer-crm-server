@@ -65,7 +65,7 @@ _SCORES_SQL = text(
            -- Партнёр рядом (partner_*) — не интерес к катку: в счёт подборки не идёт.
            COUNT(*) FILTER (
                WHERE e.kind = 'public_contact_click'
-                 AND COALESCE(e.payload->>'action', '') NOT IN ('partner_open', 'partner_show')
+                 AND COALESCE(e.payload->>'action', '') NOT IN ('partner_open', 'partner_show', 'coach_open', 'coach_join')
            )::int AS clicks
     FROM catalog_consumer_events e
     JOIN arenas a ON a.id = e.arena_id

@@ -929,6 +929,91 @@ body.b:not([data-client-shell]):has(.b-tgdock.is-floating) {
 }
 body[data-client-shell] .tg-out { display: none !important; }
 
+/* ── «Приложение»: знак Glide внизу каждого экрана (app-button.js) ──────────
+   Тёмная, не тил: тил остаётся главному действию страницы («Позвать», «Записаться»). */
+.b-appbtn-host {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 9;
+  display: flex; justify-content: center;
+  padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms ease;
+}
+.b-appbtn-host.is-away { transform: translateY(calc(100% + 8px)); opacity: 0; }
+.b-appbtn {
+  pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 48px; padding: 0 18px 0 14px; border-radius: var(--g-r-pill);
+  background: var(--g-dark); color: #fff !important; text-decoration: none;
+  font-size: 15px; font-weight: 600; white-space: nowrap;
+  /* Тонкий светлый край: на тёмных блоках (карта, подвал героя) кнопка не сливается с фоном. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 10px 28px -10px rgba(13, 27, 38, .65);
+}
+.b-appbtn:focus-visible { outline: 3px solid var(--g-accent); outline-offset: 3px; }
+.b-appbtn__mark { width: 28px; height: 28px; flex: none; display: block; }
+.b-appbtn__t { display: flex; flex-direction: column; line-height: 1.15; }
+.b-appbtn__sub { font-size: 12px; font-weight: 400; color: var(--g-on-dark-muted); }
+.b-appbtn-host.is-intro .b-appbtn { min-height: 52px; padding: 0 20px 0 16px; font-size: 16px; }
+@media (prefers-reduced-motion: reduce) { .b-appbtn-host { transition: none; } }
+
+/* ── Вход для тренера: последняя строка раздела «Тренеры» (coach-sheet.js) ──
+   Пунктир — «свободное место» в списке, а не реклама. */
+.b-coach {
+  display: flex; align-items: center; gap: 12px; margin-top: 10px;
+  padding: 14px; border-radius: 18px; border: 1px dashed var(--g-line-strong);
+  color: var(--g-ink) !important; text-decoration: none;
+}
+.b-coach:active { background: var(--g-chip); }
+.b-coach:focus-visible { outline: 3px solid var(--g-accent); outline-offset: 2px; }
+.b-coach__ic {
+  width: 44px; height: 44px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; border: 1px dashed var(--g-quiet);
+  color: var(--g-muted); font-size: 22px; line-height: 1;
+}
+.b-coach__t { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.b-coach__t b { font-size: 15px; font-weight: 600; }
+.b-coach__t span { font-size: 13px; color: var(--g-muted); }
+.b-coach__go { color: var(--g-accent-ink); font-weight: 600; font-size: 14px; white-space: nowrap; }
+
+.b-coach-sheet {
+  position: fixed; inset: auto 0 0 0; width: 100%; max-width: 480px; margin: 0 auto;
+  max-height: calc(100dvh - 48px); padding: 0; border: 0; border-radius: 22px 22px 0 0;
+  background: var(--g-surface); color: var(--g-ink); font-family: var(--g-font);
+  overflow: auto; box-sizing: border-box;
+}
+.b-coach-sheet::backdrop { background: rgba(13, 27, 38, .5); }
+.b-coach-sheet__in {
+  position: relative; display: flex; flex-direction: column; gap: 16px;
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.b-coach-sheet__in:focus { outline: none; }
+.b-coach-sheet__x {
+  position: absolute; top: 6px; right: 6px; width: 44px; height: 44px;
+  display: grid; place-items: center; border: 0; border-radius: 50%;
+  background: transparent; color: var(--g-muted); cursor: pointer;
+}
+.b-coach-sheet__x svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.b-coach-sheet__kick { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--g-muted); font-weight: 600; }
+.b-coach-sheet__title {
+  margin: -6px 0 0; padding-right: 32px; font-family: var(--g-font-display); font-weight: 400;
+  font-size: 26px; line-height: 1.1; text-wrap: balance;
+}
+.b-coach-sheet__facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.b-coach-sheet__facts li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; font-size: 15px; }
+.b-coach-sheet__facts i {
+  font-style: normal; width: 28px; height: 28px; border-radius: 8px;
+  background: var(--g-accent-wash); color: var(--g-accent-ink);
+  display: grid; place-items: center; font-size: 14px; font-weight: 700;
+}
+.b-coach-sheet__facts span { display: block; color: var(--g-ink-2); font-size: 13px; }
+.b-coach-sheet__cta {
+  display: flex; align-items: center; justify-content: center; min-height: 52px;
+  border-radius: var(--g-r-pill); background: var(--g-accent); color: var(--g-on-accent) !important;
+  font-weight: 700; font-size: 16px; text-decoration: none;
+}
+.b-coach-sheet__cta:active { background: var(--g-accent-pressed); }
+.b-coach-sheet__trial { margin: -6px 0 0; text-align: center; font-size: 13px; color: var(--g-muted); }
+.b-coach-sheet__more { text-align: center; color: var(--g-accent-ink) !important; font-weight: 600; font-size: 14px; text-decoration: none; }
+
 /* ── Cross-document view transitions (публичка /, /c/, /p/) ─────────────
    Прогрессивно: Chrome/Edge 126+, Safari 18.2+; иначе обычная навигация. */
 @view-transition {

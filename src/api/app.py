@@ -2175,6 +2175,32 @@ def share_tg_dock_js(request: Request):
     )
 
 
+@app.get("/static/share/app-button.js")
+def share_app_button_js(request: Request):
+    """Кнопка «Приложение» внизу публичных страниц."""
+    path = _STATIC_DIR / "share" / "app-button.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/share/coach-sheet.js")
+def share_coach_sheet_js(request: Request):
+    """Вход для тренера на странице катка: шторка-мини-лендинг."""
+    path = _STATIC_DIR / "share" / "coach-sheet.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/share/glide-motion.js")
 def share_glide_motion_js(request: Request):
     """Публичка: появление блоков, счётчик, «через N мин»."""

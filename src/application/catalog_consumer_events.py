@@ -521,6 +521,7 @@ async def record_public_contact_click(
     """Клик «позвонить / билеты / маршрут» с SSR — demand-событие TASK-189.
 
     ``partner_open`` / ``partner_show`` — партнёр рядом с катком; slug партнёра в payload.
+    ``coach_open`` / ``coach_join`` — вход для тренера на странице катка.
     """
     from starlette.requests import Request
 
@@ -530,7 +531,8 @@ async def record_public_contact_click(
 
     act = (action or "").strip().lower()
     partner_actions = ("partner_open", "partner_show")
-    if act not in ("phone", "tickets", "direction", *partner_actions):
+    coach_actions = ("coach_open", "coach_join")
+    if act not in ("phone", "tickets", "direction", *partner_actions, *coach_actions):
         return
     slug = partner.strip().lower()[:64] if isinstance(partner, str) else ""
     if act in partner_actions and not slug:
@@ -538,7 +540,8 @@ async def record_public_contact_click(
     user_agent = request.headers.get("user-agent")
     actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
     surf = (surface or "place_page").strip().lower()[:40]
-    # Открыл и показал на кассе — разные события; без своего ключа второе схлопнулось бы с первым.
+    # Открыл и показал на кассе (открыл шторку и нажал «Начать») — разные события;
+    # без своего ключа второе схлопнулось бы с первым.
     partner_key = (
         event_dedup_hash(
             kind=KIND_PUBLIC_CONTACT_CLICK,
@@ -549,7 +552,7 @@ async def record_public_contact_click(
             arena_id=arena_id,
             variant=f"{act}:{slug}",
         )
-        if act in partner_actions
+        if act in partner_actions or act in coach_actions
         else None
     )
     await record_catalog_consumer_event(

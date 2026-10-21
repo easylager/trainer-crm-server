@@ -30,6 +30,8 @@ STYLE_VERSION = _file_version("static/share/style-b.css")
 # Отдельной ссылкой, не @import из style-b.css: импорт без ?v= шёл с no-store и ещё одним кругом до первой отрисовки.
 COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
 DOCK_SCRIPT_VERSION = _file_version("static/share/tg-dock.js")
+APP_BUTTON_SCRIPT_VERSION = _file_version("static/share/app-button.js")
+COACH_SHEET_SCRIPT_VERSION = _file_version("static/share/coach-sheet.js")
 PRESS_SCRIPT_VERSION = _file_version("static/share/b-press.js")
 WHEN_SWAP_SCRIPT_VERSION = _file_version("static/share/b-when-swap.js")
 MOTION_SCRIPT_VERSION = _file_version("static/share/glide-motion.js")
@@ -381,6 +383,45 @@ def telegram_button_html(href: str, *, short: bool = False) -> str:
         label += f'<span class="b-tgbtn__short">{esc(t("tg.open_short"))}</span>'
     # aria-label: на узком экране рядом с «Позвать» остаётся только самолётик.
     return f'<a class="b-tgbtn tg-out" href="{esc(href)}" aria-label="{esc(t("tg.open"))}">{_TG_PLANE_SVG}{label}</a>'
+
+
+APP_MARK_SRC = "/logos/01-icon/glide-icon-teal-transparent-128.png"
+
+
+def app_button_href(href: str) -> str:
+    """Та же ссылка в Telegram, что у страницы, с пометкой ``via=app_button`` для учёта.
+
+    Пометку понимает только наш ``/open-telegram``; прямую t.me-ссылку не трогаем.
+    """
+    if "/open-telegram?" not in href:
+        return href
+    return f"{href}&via=app_button"
+
+
+def app_button_html(href: str | None, *, floating: bool = True) -> str:
+    """Кнопка «Приложение»: знак Glide и слово, ведёт в то же место внутри Mini App.
+
+    ``floating`` — закреплённая внизу экрана (app-button.js прячет её у подвала и
+    показывает подпись при первом визите). Без него — для нижней панели катка рядом
+    с «Позвать», где place-share.js сжимает её до знака.
+    """
+    if not href:
+        return ""
+    sub = (
+        f'<small class="b-appbtn__sub" hidden>{esc(t("app.button_sub"))}</small>' if floating else ""
+    )
+    link = (
+        f'<a class="b-appbtn tg-out" href="{esc(app_button_href(href))}" aria-label="{esc(t("app.button_aria"))}">'
+        f'<img class="b-appbtn__mark" src="{APP_MARK_SRC}" width="28" height="28" alt="">'
+        f'<span class="b-appbtn__t"><span class="b-appbtn__label">{esc(t("app.button"))}</span>{sub}</span></a>'
+    )
+    if not floating:
+        return link
+    return f'<div class="b-appbtn-host tg-out" id="appButton">{link}</div>'
+
+
+def app_button_script_html() -> str:
+    return f'<script defer src="/static/share/app-button.js?v={esc(APP_BUTTON_SCRIPT_VERSION)}"></script>'
 
 
 def telegram_hint_html(text: str) -> str:

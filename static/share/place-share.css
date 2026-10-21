@@ -1,6 +1,6 @@
 /* TASK-252: закреплённая «Позвать на …» и no-JS ряд мессенджеров под билетом. */
 body.b.has-place-share {
-  --place-share-dock-h: calc(12px + 52px + 8px + 18px + 12px + env(safe-area-inset-bottom, 0px));
+  --place-share-dock-h: calc(12px + 52px + 12px + env(safe-area-inset-bottom, 0px));
   padding-bottom: var(--place-share-dock-h);
 }
 
@@ -34,6 +34,10 @@ body.b.has-place-share {
 .place-share-dock__row.has-invite .place-share-dock__btn { padding: 0 12px; font-size: 16px; }
 .place-share-dock__row.has-invite .b-tgbtn__long { display: none; }
 .place-share-dock__row.has-invite .b-tgbtn__short { display: inline; }
+/* «Приложение» в панели катка: одна — по центру со словом; рядом с «Позвать» — только знак. */
+.place-share-dock__row .b-appbtn { margin: 0 auto; min-height: 52px; }
+.place-share-dock__row.has-invite .b-appbtn { flex: 0 0 52px; width: 52px; margin: 0; padding: 0; justify-content: center; }
+.place-share-dock__row.has-invite .b-appbtn__t { display: none; }
 .place-share-dock__btn[hidden] { display: none; }
 
 .place-share-dock__btn {

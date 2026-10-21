@@ -580,8 +580,10 @@ async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db
     assert 'id="placeShareDock" hidden' not in html
     assert 'id="placeShareBtn" hidden' in html
     dock = html.split('id="placeShareDock"', 1)[1].split("</div></div>", 1)[0]
-    assert 'class="b-tgbtn tg-out"' in dock and "open-telegram?startapp=arena_" in dock
-    assert "Открыть в Telegram" in dock and "в Telegram — карта всех катков" in html
+    # «Приложение» живёт в панели «Позвать»; отдельной закреплённой кнопки у страницы нет.
+    assert 'class="b-appbtn tg-out"' in dock and "open-telegram?startapp=arena_" in dock
+    assert "via=app_button" in dock and ">Приложение<" in dock
+    assert 'id="appButton"' not in html
     assert "place-share-dock__zovi" not in dock
     assert "place-share-fallback" in html and "viber://forward?text=" in html
     assert "Позвать друзей" not in html and "b-invite" not in html and 'class="b-share"' not in html

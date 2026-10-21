@@ -22,6 +22,7 @@ from src.application.public_web_cta import (
     CONTACT_ACTION_DIRECTION,
     CONTACT_ACTION_PHONE,
     CONTACT_ACTION_TICKETS,
+    COACH_ACTIONS,
     PARTNER_ACTIONS,
 )
 from src.shared.html_template import safe_external_url
@@ -51,6 +52,7 @@ async def open_telegram_from_public_page(
     arena_id: int | None = Query(None),
     src: str | None = Query(None, description="канал шаринга с публичной страницы"),
     s: str | None = Query(None, description="id сеанса из ссылки ?s="),
+    via: str | None = Query(None, max_length=24, description="какая кнопка: app_button — закреплённая «Приложение»"),
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
     """Клик «Открыть в Telegram» с /p/, /c/, «Лёд сегодня» → учёт → редирект в Telegram."""
@@ -82,6 +84,8 @@ async def open_telegram_from_public_page(
     cleaned_src = clean_share_src(src)
     if cleaned_src:
         cta_payload["src"] = cleaned_src
+    if (via or "").strip() == "app_button":
+        cta_payload["via"] = "app_button"
     session_raw = (s or "").strip()
     if session_raw.isdigit() and 0 < int(session_raw) < 2**31:
         cta_payload["s"] = session_raw
@@ -164,7 +168,7 @@ async def public_contact_click_beacon(
     """Учёт клика «Позвонить» и партнёра рядом (``navigator.sendBeacon``); без JS клик не считается."""
     act = action.strip().lower()
     partner_slug = partner.strip() if isinstance(partner, str) else ""
-    if act != CONTACT_ACTION_PHONE and act not in PARTNER_ACTIONS:
+    if act != CONTACT_ACTION_PHONE and act not in PARTNER_ACTIONS and act not in COACH_ACTIONS:
         return Response(status_code=400)
     if act in PARTNER_ACTIONS and not partner_slug:
         return Response(status_code=400)
