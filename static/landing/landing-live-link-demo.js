@@ -109,9 +109,9 @@ function beat1(){
   side('trainer');
   inviteSheet.classList.add('is-up');
   /* Deliberately unhurried: the sheet has to be read, not glimpsed. */
-  after(reduce ? 20 : 1150, function(){
+  after(reduce ? 20 : 900, function(){
     inviteCopy.classList.add('is-done');
-    after(reduce ? 20 : 780, function(){
+    after(reduce ? 20 : 600, function(){
       inviteSheet.classList.remove('is-up');
       /* the client's screen is drawn out from behind the trainer's */
       after(reduce ? 20 : 260, function(){
@@ -255,12 +255,15 @@ notif.addEventListener('click', function(){
 });
 replay.addEventListener('click', function(){ reset(); after(280, beat1); });
 
+/* Сразу после анимации появления (ENTER_MS ниже ≈ 1.8 с): тренер начинает листать
+   в первые секунды, и при прежних 4.6 с паузы демо так никто и не видел. */
+var IDLE_START_MS = 1900;
 function armIdle(){
   clearTimeout(idleTimer);
   idleTimer = setTimeout(function(){
     if (engaged || state !== 0) return;
     beat1();
-  }, 4600);
+  }, IDLE_START_MS);
 }
 if ('IntersectionObserver' in window){
   var io = new IntersectionObserver(function(en){
