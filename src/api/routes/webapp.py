@@ -5079,19 +5079,21 @@ async def get_admin_cities(
     principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    """List cities for admin: id, name, sort_order, arenas_count, is_active."""
+    """List cities for admin: id, name, sort_order, arenas_count, is_active, currency_code."""
     from sqlalchemy import text
+
+    from src.shared.currency import currency_for_country
 
     # Only q_like param (no :q) so asyncpg never gets NULL / ambiguous type.
     q_like = f"%{(q or '').strip()}%" if (q or "").strip() else "%"
     sql = """
-        SELECT c.id, c.name, c.sort_order, c.is_active,
+        SELECT c.id, c.name, c.sort_order, c.is_active, c.country,
                COUNT(a.id) FILTER (WHERE a.is_active) AS arenas_count
         FROM cities c
         LEFT JOIN arenas a ON a.city_id = c.id
         WHERE (c.is_active = :active_ok OR :include_inactive)
         AND c.name ILIKE :q_like
-        GROUP BY c.id, c.name, c.sort_order, c.is_active
+        GROUP BY c.id, c.name, c.sort_order, c.is_active, c.country
         ORDER BY c.sort_order, c.id
     """
     params: dict[str, Any] = {
@@ -5108,7 +5110,8 @@ async def get_admin_cities(
                 "name": row[1],
                 "sort_order": row[2],
                 "is_active": row[3],
-                "arenas_count": row[4],
+                "currency_code": currency_for_country(row[4]),
+                "arenas_count": row[5],
             }
             for row in rows
         ]

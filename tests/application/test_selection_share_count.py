@@ -58,6 +58,7 @@ def test_site_card_names_how_many_sessions_remain() -> None:
     )
     assert "Ещё 78 сеансов в расписании" in html
     assert 'href="/p/minsk/tts-zamok#schedule"' in html
+    assert 'class="b-card2__cover" href="/p/minsk/tts-zamok"' in html
 
 
 def test_place_count_is_the_whole_selection_not_the_page() -> None:

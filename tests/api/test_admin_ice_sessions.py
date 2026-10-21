@@ -262,3 +262,16 @@ def test_admin_dicts_has_ice_week_grid() -> None:
     assert "ice-week" in dicts_html
     schedule_js = Path("static/webapp/admin-ice-schedule-main.js").read_text(encoding="utf-8")
     assert "ice-sessions" in schedule_js
+    assert "updatePricePlaceholders" in schedule_js
+    assert "city.currency_code" in schedule_js
+
+
+@pytest.mark.asyncio
+async def test_admin_cities_list_includes_currency_code(app_use_test_db, db_session) -> None:
+    _cid, _arena_id = await _insert_arena(db_session, country="RU")
+    with patch_admin_principal():
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/webapp/admin/cities", params={"include_inactive": True})
+    assert resp.status_code == 200, resp.text
+    row = next(i for i in resp.json()["items"] if i["id"] == _cid)
+    assert row["currency_code"] == "RUB"

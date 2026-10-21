@@ -1390,6 +1390,19 @@ def _b_card_head(item: Mapping[str, Any], *, city_name: str, href: str, extra: s
     )
 
 
+def _b_card2_cover(href: str) -> str:
+    """Клик по пустому месту карточки — на страницу арены; слоты и «Позвать» остаются отдельными ссылками."""
+    if not href:
+        return ""
+    return (
+        f'<a class="b-card2__cover" href="{_esc(href)}" tabindex="-1" aria-hidden="true"></a>'
+    )
+
+
+def _b_card2_open(card_cls: str, vt: str, href: str) -> str:
+    return f'<article class="{card_cls}"{vt}>{_b_card2_cover(href)}'
+
+
 # Строки состояния из ленты, которые говорят факт. «Расписание уточняется» (kind unknown) —
 # оговорка: на сайте её нет (решение владельца, craft-guide), карточка просто без строки.
 _B_FACT_LIVE_KINDS = frozenset({"phone", "season_closed", "closed", "place"})
@@ -1546,7 +1559,7 @@ def _b_place_card(
         if route_href:
             buttons.append(f'<a class="b-btn" href="{_esc(route_href)}" rel="noopener">{icon_svg("route")}Маршрут</a>')
         return (
-            '<article class="b-card2">'
+            _b_card2_open("b-card2", "", href)
             + _b_card_head(item, city_name=city_name, href=href, extra=extra)
             + (f'<div class="b-chips">{chips}</div>' if chips else "")
             + (f'<div class="b-btns">{"".join(buttons)}</div>' if buttons else "")
@@ -1608,11 +1621,11 @@ def _b_place_card(
     vt = place_vt_attr(slug) if slug else ""
     head_block = _b_card_head(item, city_name=city_name, href=href) + off_extra
     if not slots or not href:
-        return f'<article class="{card_cls}"{vt}>' + head_block + body + left_html + "</article>"
+        return _b_card2_open(card_cls, vt, href) + head_block + body + left_html + "</article>"
     first = slots[0]
     sid = first.get("id")
     if sid is None:
-        return f'<article class="{card_cls}"{vt}>' + head_block + body + left_html + "</article>"
+        return _b_card2_open(card_cls, vt, href) + head_block + body + left_html + "</article>"
     from src.application.catalog_list_share import catalog_invite_link, invite_label_for_slot
 
     place_name = format_public_name(str(item.get("name") or ""))
@@ -1630,7 +1643,7 @@ def _b_place_card(
         body = f'<div class="b-slots">{invite}{"".join(tickets)}</div>'
     else:
         body = f'<div class="b-slots">{invite}</div>'
-    return f'<article class="{card_cls}"{vt}>' + head_block + body + left_html + "</article>"
+    return _b_card2_open(card_cls, vt, href) + head_block + body + left_html + "</article>"
 
 
 def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:
@@ -1642,7 +1655,9 @@ def _b_center_card(item: Mapping[str, Any], *, city_name: str) -> str:
     extra = (f'<span class="b-chip b-chip--sm">{_esc(badge)}</span>' if badge else "") + (
         f'<span class="b-card2__where">{_esc(line)}</span>' if line else ""
     )
-    return '<article class="b-card2">' + _b_card_head(item, city_name=city_name, href=href, extra=extra) + "</article>"
+    return _b_card2_open("b-card2", "", href) + _b_card_head(
+        item, city_name=city_name, href=href, extra=extra
+    ) + "</article>"
 
 
 def _b_chips_nav(items: list[tuple[str, str, bool]], *, label: str) -> str:

@@ -287,6 +287,28 @@
     return q;
   }
 
+  function activeCurrencyCode() {
+    if (state.grid && state.grid.currency_code) return state.grid.currency_code;
+    var city = state.cities.filter(function(c) { return c.id === state.cityId; })[0];
+    if (city && city.currency_code) return city.currency_code;
+    return 'BYN';
+  }
+
+  function updatePricePlaceholders() {
+    var cur = activeCurrencyCode();
+    [
+      ['priceAdult', 'Взрослый'],
+      ['priceChild', 'Детский'],
+      ['priceRental', 'Прокат'],
+      ['editPriceAdult', 'Взрослый'],
+      ['editPriceChild', 'Детский'],
+      ['editPriceRental', 'Прокат']
+    ].forEach(function(pair) {
+      var el = document.getElementById(pair[0]);
+      if (el) el.placeholder = pair[1] + ', ' + cur;
+    });
+  }
+
   function filteredArenas() {
     var q = (state.arenaQ || '').trim().toLowerCase();
     return state.arenas.filter(function(a) {
@@ -341,7 +363,8 @@
       el.textContent = 'Выберите город и арену';
       return;
     }
-    el.textContent = (city.name || '') + ' · ' + (arena.name || '') + (state.grid ? ' · ' + (state.grid.currency_code || '') : '');
+    el.textContent = (city.name || '') + ' · ' + (arena.name || '') + ' · ' + activeCurrencyCode();
+    updatePricePlaceholders();
   }
 
   function loadCities() {
@@ -723,10 +746,13 @@
   document.getElementById('citySelect').addEventListener('change', function() {
     state.cityId = Number(this.value) || null;
     state.arenaId = null;
+    state.grid = null;
+    updateSubtitle();
     loadArenas();
   });
   document.getElementById('arenaSelect').addEventListener('change', function() {
     state.arenaId = Number(this.value) || null;
+    state.grid = null;
     state.priceHints = state.arenaId ? readStoredHints(state.arenaId) : {};
     state.activeKind = 'public_skate';
     updateSubtitle();

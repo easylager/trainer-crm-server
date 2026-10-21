@@ -672,9 +672,28 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
 .b-window-break__pill b { color: var(--g-ink-2); font-weight: 600; }
 
 .b-card2 {
+  position: relative;
   display: flex; flex-direction: column; gap: 12px;
   padding: 14px; border-radius: 18px; background: var(--g-surface); box-shadow: var(--g-shadow);
 }
+/* Вся карточка ведёт на место; слоты, «Позвать» и кнопки — поверх (см. selection_page._b_card2_cover). */
+.b-card2__cover {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+}
+.b-card2__head,
+.b-slots,
+.b-left,
+.b-note,
+.b-card2__off,
+.b-chips,
+.b-btns {
+  position: relative;
+  z-index: 1;
+}
+.b-card2:has(.b-card2__cover) { cursor: pointer; }
 .b-card2__head { display: flex; gap: 12px; align-items: center; min-width: 0; }
 .b-card2__thumb {
   flex: 0 0 64px; height: 64px; border-radius: 14px; overflow: hidden; background: var(--g-dark);
@@ -796,6 +815,7 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
   a.b-table__row:active,
   a.b-card:active,
   .b-card2:active:not(:has(.b-slot:active, .b-card2__thumb:active)),
+  .b-card2:has(.b-card2__cover:active):not(:has(.b-slot:active, .b-card2__thumb:active)),
   a.b-card2__thumb:active,
   .b-city.b-press,
   .b-toggle.b-press,
@@ -807,6 +827,7 @@ body.b .b-hero__sub a { color: var(--g-on-photo); }
   a.b-table__row.b-press,
   a.b-card.b-press,
   .b-card2.b-press,
+  .b-card2:has(.b-card2__cover.b-press):not(:has(.b-slot.b-press, .b-card2__thumb.b-press)),
   a.b-card2__thumb.b-press,
   .home-map__city.b-press .home-map__vis {
     transform: scale(0.97);
