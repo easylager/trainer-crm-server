@@ -162,7 +162,9 @@ async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_se
     assert home.status_code == 200
     # JSON-LD, is-ready, карта, beacon, b-press, glide-motion, b-when-swap.
     # Имя города с «</script>» не ломает разметку.
-    assert home.text.count("</script>") == 7
+    # Сравниваем закрывающие с открывающими, а не с числом скриптов на странице:
+    # лишний «</script>» из имени города даст расхождение, новый скрипт — нет.
+    assert home.text.count("</script>") == home.text.count("<script")
     assert "<img src=x" not in home.text
     ld = _json_ld(home.text)
     assert "@graph" in ld
