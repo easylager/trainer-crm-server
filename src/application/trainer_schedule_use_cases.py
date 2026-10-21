@@ -84,6 +84,46 @@ async def trainer_offers_online_sessions(session: AsyncSession, trainer_id: int)
     return (row[1] or "").strip() == "online"
 
 
+async def trainer_has_in_person_service(session: AsyncSession, trainer_id: int) -> bool:
+    """True when the trainer offers at least one service that is not online."""
+    r = await session.execute(
+        text(
+            """
+            SELECT EXISTS (
+              SELECT 1 FROM trainer_services ts
+              WHERE ts.trainer_id = :tid AND NOT COALESCE(ts.is_online, false)
+            )
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    return bool(r.scalar())
+
+
+def slot_is_online_for_insert(
+    arena_id: int | None,
+    *,
+    explicit_online: bool,
+    has_in_person_service: bool,
+    offers_online: bool,
+) -> bool:
+    """
+    Format stored on a new slot.
+
+    A rink wins. An explicit online choice is venue-less and online.
+    Otherwise a trainer who still has in-person services gets an in-person slot
+    even with no arena yet — null arena must not silently become online.
+    Online-only trainers (no in-person service) keep venue-less slots online.
+    """
+    if arena_id is not None:
+        return False
+    if explicit_online:
+        return True
+    if has_in_person_service:
+        return False
+    return bool(offers_online)
+
+
 async def list_templates(session: AsyncSession, trainer_id: int) -> list[dict]:
     """List schedule templates for the trainer. Sorted by day_of_week, start_time."""
     r = await session.execute(
@@ -417,6 +457,8 @@ async def generate_slots_for_week(
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     fixed_dur = fixed_slot_duration_minutes(preset)
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
+    has_in_person = await trainer_has_in_person_service(session, trainer_id)
+    offers_online = await trainer_offers_online_sessions(session, trainer_id)
     created = 0
     for day_offset in range(7):
         d = week_start + timedelta(days=day_offset)
@@ -440,12 +482,18 @@ async def generate_slots_for_week(
                 continue
             tmpl_arena = t.get("arena_id")
             slot_arena = int(tmpl_arena) if tmpl_arena is not None else default_arena
+            slot_online = slot_is_online_for_insert(
+                slot_arena,
+                explicit_online=False,
+                has_in_person_service=has_in_person,
+                offers_online=offers_online,
+            )
             if await trainer_has_slot_overlapping_interval(session, trainer_id, d, start_time, end_time):
                 continue
             await session.execute(
                 text("""
-                    INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id)
-                    VALUES (:tid, :d, :st, :end, 'available', :cap, :svc, :aid)
+                    INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id, is_online)
+                    VALUES (:tid, :d, :st, :end, 'available', :cap, :svc, :aid, :onl)
                 """),
                 {
                     "tid": trainer_id,
@@ -455,6 +503,7 @@ async def generate_slots_for_week(
                     "cap": cap,
                     "svc": svc,
                     "aid": slot_arena,
+                    "onl": slot_online,
                 },
             )
             created += 1
@@ -494,6 +543,8 @@ async def replace_week_with_template(
         await session.commit()
         return 0
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
+    has_in_person = await trainer_has_in_person_service(session, trainer_id)
+    offers_online = await trainer_offers_online_sessions(session, trainer_id)
     for day_offset in range(7):
         d = week_start + timedelta(days=day_offset)
         dow = day_offset
@@ -516,13 +567,19 @@ async def replace_week_with_template(
                 continue
             tmpl_arena = t.get("arena_id")
             slot_arena = int(tmpl_arena) if tmpl_arena is not None else default_arena
+            slot_online = slot_is_online_for_insert(
+                slot_arena,
+                explicit_online=False,
+                has_in_person_service=has_in_person,
+                offers_online=offers_online,
+            )
             # Booked / past sessions keep rows with status != 'available'; do not stack a template slot on top.
             if await trainer_has_slot_overlapping_interval(session, trainer_id, d, start_time, end_time):
                 continue
             await session.execute(
                 text("""
-                    INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id)
-                    VALUES (:tid, :d, :st, :end, 'available', :cap, :svc, :aid)
+                    INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id, is_online)
+                    VALUES (:tid, :d, :st, :end, 'available', :cap, :svc, :aid, :onl)
                 """),
                 {
                     "tid": trainer_id,
@@ -532,6 +589,7 @@ async def replace_week_with_template(
                     "cap": cap,
                     "svc": svc,
                     "aid": slot_arena,
+                    "onl": slot_online,
                 },
             )
             created += 1
@@ -554,6 +612,14 @@ async def add_slots_for_week(
     """
     slot_date = week_start + timedelta(days=day_of_week)
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
+    has_in_person = await trainer_has_in_person_service(session, trainer_id)
+    offers_online = await trainer_offers_online_sessions(session, trainer_id)
+    slot_online = slot_is_online_for_insert(
+        default_arena,
+        explicit_online=False,
+        has_in_person_service=has_in_person,
+        offers_online=offers_online,
+    )
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     validate_start_minutes_for_preset({int(m) for m in start_minutes}, preset)
     validate_duration_for_preset(duration_minutes, preset)
@@ -565,10 +631,17 @@ async def add_slots_for_week(
             continue
         await session.execute(
             text("""
-                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id)
-                VALUES (:tid, :d, :st, :end, 'available', 1, NULL, :aid)
+                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id, is_online)
+                VALUES (:tid, :d, :st, :end, 'available', 1, NULL, :aid, :onl)
             """),
-            {"tid": trainer_id, "d": slot_date, "st": start_time, "end": end_time, "aid": default_arena},
+            {
+                "tid": trainer_id,
+                "d": slot_date,
+                "st": start_time,
+                "end": end_time,
+                "aid": default_arena,
+                "onl": slot_online,
+            },
         )
         created += 1
     if created:
@@ -608,15 +681,35 @@ async def replace_slots_for_day(
     (e.g. precise-time entries on a secondary venue while grid stays on default arena).
     A value of ``None`` in that map means an explicit online (venue-less) slot.
     ``force_null_arena``: all new slots in this call are online (arena_id NULL), no default fill-in.
+    Venue-less slots that are not explicitly online stay in-person when the trainer
+    still offers a non-online service (no rink picked yet).
     """
     cap = max(1, min(int(capacity), 500))
     if cap > 1 and group_service_id is None:
         raise ValueError("Group slot requires group_service_id")
+    has_in_person = await trainer_has_in_person_service(session, trainer_id)
+    offers_online = await trainer_offers_online_sessions(session, trainer_id)
+    group_service_online = False
+    if cap > 1 and group_service_id is not None:
+        # Групповой слот без площадки — формат своей услуги (create_booking сверяет их).
+        r_gs = await session.execute(
+            text(
+                """
+                SELECT COALESCE(is_online, false) FROM trainer_services
+                WHERE trainer_id = :tid AND service_id = :sid
+                """
+            ),
+            {"tid": trainer_id, "sid": int(group_service_id)},
+        )
+        gs_row = r_gs.fetchone()
+        group_service_online = bool(gs_row[0]) if gs_row else False
     if force_null_arena:
         arena_for_new_slots: int | None = None
+        batch_explicit_online = True
     else:
         default_arena = await trainer_default_slot_arena_id(session, trainer_id)
         arena_for_new_slots = slot_arena_id if slot_arena_id is not None else default_arena
+        batch_explicit_online = False
     minute_set = {int(m) for m in start_minutes if 0 <= int(m) <= 23 * 60 + 59}
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     # Skip grid-alignment check for precise off-grid entries (per_slot_duration path).
@@ -715,13 +808,21 @@ async def replace_slots_for_day(
         end_time = _time_end(start_time, slot_dur)
         svc = int(group_service_id) if cap > 1 else None
         insert_aid = arena_for_new_slots
+        explicit_online = batch_explicit_online
         if per_slot_arena_id is not None and start_m in per_slot_arena_id:
             # Present key with None = explicit online; missing key keeps batch default.
             insert_aid = per_slot_arena_id[start_m]
+            explicit_online = insert_aid is None
+        insert_online = slot_is_online_for_insert(
+            insert_aid,
+            explicit_online=explicit_online or group_service_online,
+            has_in_person_service=has_in_person,
+            offers_online=offers_online,
+        )
         await session.execute(
             text("""
-                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id)
-                VALUES (:tid, :d, :st, :end, 'available', :cap, :svc, :aid)
+                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id, is_online)
+                VALUES (:tid, :d, :st, :end, 'available', :cap, :svc, :aid, :onl)
             """),
             {
                 "tid": trainer_id,
@@ -731,6 +832,7 @@ async def replace_slots_for_day(
                 "cap": cap,
                 "svc": svc,
                 "aid": insert_aid,
+                "onl": insert_online,
             },
         )
         new_intervals.append((start_m, end_m))
@@ -835,6 +937,14 @@ async def ensure_individual_slot_for_quick_book(
     end_t = _time_end(start_t, dm)
 
     slot_arena_effective_default = await trainer_default_slot_arena_id(session, trainer_id)
+    has_in_person = await trainer_has_in_person_service(session, trainer_id)
+    offers_online = await trainer_offers_online_sessions(session, trainer_id)
+    slot_online = slot_is_online_for_insert(
+        slot_arena_id,
+        explicit_online=bool(online),
+        has_in_person_service=has_in_person,
+        offers_online=offers_online,
+    )
 
     r = await session.execute(
         text(
@@ -896,24 +1006,33 @@ async def ensure_individual_slot_for_quick_book(
         await _delete_empty_individual_slot(session, trainer_id, sid)
 
     if exact_reuse_id is not None:
+        await session.execute(
+            text(
+                """
+                UPDATE slots SET arena_id = :aid, is_online = :onl
+                WHERE id = :sid AND trainer_id = :tid
+                """
+            ),
+            {"aid": slot_arena_id, "onl": slot_online, "sid": exact_reuse_id, "tid": trainer_id},
+        )
         return exact_reuse_id
     if exact_arena_update_id is not None:
         await session.execute(
             text(
                 """
-                UPDATE slots SET arena_id = :aid
+                UPDATE slots SET arena_id = :aid, is_online = :onl
                 WHERE id = :sid AND trainer_id = :tid
                 """
             ),
-            {"aid": slot_arena_id, "sid": exact_arena_update_id, "tid": trainer_id},
+            {"aid": slot_arena_id, "onl": slot_online, "sid": exact_arena_update_id, "tid": trainer_id},
         )
         return exact_arena_update_id
 
     r2 = await session.execute(
         text(
             """
-            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id)
-            VALUES (:tid, :d, :st, :end, 'available', 1, NULL, :aid)
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id, is_online)
+            VALUES (:tid, :d, :st, :end, 'available', 1, NULL, :aid, :onl)
             RETURNING id
             """
         ),
@@ -923,6 +1042,7 @@ async def ensure_individual_slot_for_quick_book(
             "st": start_t,
             "end": end_t,
             "aid": slot_arena_id,
+            "onl": slot_online,
         },
     )
     new_id = r2.fetchone()
@@ -952,7 +1072,8 @@ async def list_slots(
                    ar.longitude AS arena_longitude,
                    ac.name AS arena_city_name,
                    (SELECT COUNT(*)::int FROM bookings b
-                    WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')) AS active_bookings
+                    WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')) AS active_bookings,
+                   COALESCE(s.is_online, false) AS is_online
             FROM slots s
             LEFT JOIN training_groups tg ON tg.id = s.training_group_id
             LEFT JOIN services sv ON sv.id = s.service_id
@@ -968,12 +1089,13 @@ async def list_slots(
         {"tid": trainer_id, "from_d": from_date, "to_d": to_date},
     )
     rows = r.fetchall()
-    offers_online = await trainer_offers_online_sessions(session, trainer_id)
     out: list[dict] = []
     for row in rows:
         aid = int(row[7]) if row[7] is not None else None
         aname = (row[11] or "").strip() if row[11] else None
-        is_online = aid is None and offers_online
+        # Venue wins over a stale flag. Null arena + is_online is the online slot;
+        # null arena + not online is in-person with no rink chosen yet.
+        is_online = bool(row[17]) and aid is None
         if is_online and not aname:
             aname = "Онлайн"
         out.append(
@@ -1037,7 +1159,8 @@ async def get_slot(
     r = await session.execute(
         text("""
             SELECT s.id, s.trainer_id, s.slot_date, s.start_time, s.end_time, s.status, s.capacity,
-                   s.service_id, s.arena_id, s.training_group_id, tg.name
+                   s.service_id, s.arena_id, s.training_group_id, tg.name,
+                   COALESCE(s.is_online, false)
             FROM slots s
             LEFT JOIN training_groups tg ON tg.id = s.training_group_id
             WHERE s.id = :id
@@ -1059,6 +1182,7 @@ async def get_slot(
         "arena_id": int(row[8]) if row[8] is not None else None,
         "training_group_id": int(row[9]) if row[9] is not None else None,
         "training_group_name": (row[10] or "").strip() if row[9] is not None else None,
+        "is_online": bool(row[11]) and row[8] is None,
     }
 
 

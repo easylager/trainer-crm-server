@@ -697,7 +697,8 @@ async def create_booking(
     """
     r = await session.execute(
         text("""
-            SELECT id, capacity, status, service_id, arena_id FROM slots
+            SELECT id, capacity, status, service_id, arena_id, COALESCE(is_online, false)
+            FROM slots
             WHERE id = :sid AND trainer_id = :tid AND status != 'cancelled'
             FOR UPDATE
         """),
@@ -711,6 +712,7 @@ async def create_booking(
         return (None, (False, False))
     slot_service_id = slot_row[3]
     slot_arena_id: int | None = int(slot_row[4]) if slot_row[4] is not None else None
+    slot_is_online_flag = bool(slot_row[5]) and slot_arena_id is None
     if capacity > 1:
         if slot_service_id is None:
             return (None, (False, False))
@@ -731,11 +733,7 @@ async def create_booking(
     if not svc_row:
         return (None, (False, False))
     service_is_online = bool(svc_row[0])
-    from src.application.trainer_schedule_use_cases import trainer_offers_online_sessions
-
-    slot_is_online = slot_arena_id is None and await trainer_offers_online_sessions(
-        session, trainer_id
-    )
+    slot_is_online = slot_is_online_flag
     if slot_is_online != service_is_online:
         # XOR: online slot ↔ online service only. Caller may map to 422.
         raise ServiceOnlineFormatMismatch(
@@ -5225,10 +5223,21 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         await session.commit()
     arena_lat, arena_lon = row2[16], row2[17]
     trainer_tid = row2[19]
-    an = (row2[14] or "").strip() if row2[14] else ""
-    aa = (row2[15] or "").strip() if row2[15] else ""
-    city_raw = (row2[18] or "").strip() if row2[18] else ""
-    map_link = _arena_yandex_map_link(arena_lat, arena_lon, aa or None, an or None)
+    service_online = bool(row2[23])
+    # Venue-less online booking must not inherit a rink added after the request.
+    # COALESCE(booking, slot, primary, any trainer arena) is for in-person only.
+    if service_online:
+        an = BOOKING_ONLINE_PLACE_LABEL
+        aa = ""
+        city_raw = ""
+        map_link = None
+        resolved_arena_id = None
+    else:
+        an = (row2[14] or "").strip() if row2[14] else ""
+        aa = (row2[15] or "").strip() if row2[15] else ""
+        city_raw = (row2[18] or "").strip() if row2[18] else ""
+        map_link = _arena_yandex_map_link(arena_lat, arena_lon, aa or None, an or None)
+        resolved_arena_id = int(row2[22]) if row2[22] is not None else None
     ptk = normalize_price_tier_kind(row2[13])
     tier_label = price_tier_label_ru(ptk) if ptk else None
     sn = (row2[11] or "").strip() if row2[11] else ""
@@ -5245,8 +5254,8 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     notify_ctx: dict = {
         "slot_date": row2[8],
         "start_time": row2[9],
-        "resolved_arena_id": int(row2[22]) if row2[22] is not None else None,
-        "service_is_online": bool(row2[23]),
+        "resolved_arena_id": resolved_arena_id,
+        "service_is_online": service_online,
     }
     from src.application.booking_arena_tickets import enrich_booking_notification_with_arena_tickets
 

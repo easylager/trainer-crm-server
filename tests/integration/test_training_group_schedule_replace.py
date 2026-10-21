@@ -162,3 +162,36 @@ async def test_cancel_group_slot_and_range(db_session: AsyncSession) -> None:
     assert ok is True
     n = await cancel_future_group_slots_in_range(db_session, trainer_id, gid, date.today(), date.today() + timedelta(days=400))
     assert n >= 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("service_online", [True, False])
+async def test_venue_less_group_slots_take_format_from_group_service(
+    db_session: AsyncSession, service_online: bool
+) -> None:
+    """Группа без площадки: слот онлайн ровно тогда, когда онлайн её услуга (create_booking их сверяет)."""
+    trainer_id, service_id = await _minimal_trainer_with_service(db_session)
+    await db_session.execute(
+        text("UPDATE trainer_services SET is_online = :onl WHERE trainer_id = :tid AND service_id = :sid"),
+        {"onl": service_online, "tid": trainer_id, "sid": service_id},
+    )
+    await db_session.commit()
+    d0 = _next_weekday(date.today() + timedelta(days=1), 3)
+    gid = await create_training_group(
+        db_session,
+        trainer_id,
+        name="Online" if service_online else "Offline",
+        service_id=service_id,
+        arena_id=None,
+        max_members=8,
+        status="recruiting",
+        season_start_date=None,
+        catalog_visible=False,
+        catalog_pitch=None,
+        schedule_rules=[{"day_of_week": d0.weekday(), "start_time": "10:00", "duration_minutes": 60}],
+    )
+    r = await db_session.execute(
+        text("SELECT DISTINCT is_online FROM slots WHERE training_group_id = :gid"),
+        {"gid": gid},
+    )
+    assert [bool(row[0]) for row in r.fetchall()] == [service_online]

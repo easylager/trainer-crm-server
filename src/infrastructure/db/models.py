@@ -1392,6 +1392,9 @@ class Slot(Base):
     arena_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
     )  # Venue for this slot (group: fixed; individual: default from trainer).
+    # Explicit format. NULL arena is not enough: a trainer with no rink yet can still
+    # publish in-person slots (is_online false) for non-online services, or online slots.
+    is_online: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     training_group_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("training_groups.id", ondelete="SET NULL"), nullable=True, index=True
     )  # Set when slot is generated from a cohort (TrainingGroup).

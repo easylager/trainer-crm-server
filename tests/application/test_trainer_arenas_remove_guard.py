@@ -223,3 +223,43 @@ async def test_past_booking_does_not_lock_arena(db_session) -> None:
     locked = await list_trainer_arena_ids_locked_by_bookings(db_session, tid)
     assert arena_a not in locked
     await update_trainer_profile(db_session, tid, profile={}, arena_ids=[arena_b])
+
+
+@pytest.mark.asyncio
+async def test_empty_future_slots_do_not_lock_arena_and_detach_on_remove(db_session) -> None:
+    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    sid = r.scalar()
+    if sid is None:
+        pytest.skip("need service")
+    arena_a, arena_b, city_id = await _two_arenas_same_city(db_session)
+    tid = await create_trainer(
+        db_session,
+        profile={"first_name": "I", "last_name": "J", "age": 31, "city_id": city_id},
+        service_ids=[int(sid)],
+        arena_ids=[arena_a, arena_b],
+    )
+    slot_id = int(
+        (
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, arena_id)
+                    VALUES (:tid, :d, '16:15', '17:00', 'available', 1, :aid)
+                    RETURNING id
+                    """
+                ),
+                {"tid": tid, "d": date.today() + timedelta(days=4), "aid": arena_a},
+            )
+        ).scalar_one()
+    )
+    await db_session.commit()
+
+    locked = await list_trainer_arena_ids_locked_by_bookings(db_session, tid)
+    assert arena_a not in locked
+    await update_trainer_profile(db_session, tid, profile={}, arena_ids=[arena_b])
+    left = (
+        await db_session.execute(
+            text("SELECT arena_id FROM slots WHERE id = :id"), {"id": slot_id}
+        )
+    ).scalar()
+    assert left is None

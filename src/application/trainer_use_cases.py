@@ -536,34 +536,22 @@ async def list_trainer_arena_ids_locked_by_bookings(
     trainer_id: int,
 ) -> list[int]:
     """
-    Arenas the trainer must not unlink while they still have current/future activity there.
+    Arenas the trainer must not unlink while a current/future booking still resolves there.
 
-    Locked when either:
-    - a pending/confirmed booking resolves to the arena (booking.arena_id, else slot.arena_id), or
-    - a non-cancelled slot on that arena has not ended yet (wall clock in NOTIFICATION_TZ).
+    Empty future slots do not lock the venue. Unlinking clears their arena_id
+    (see ``detach_future_unbooked_slots_from_arenas``).
     """
     r = await session.execute(
         text(
             f"""
-            SELECT DISTINCT arena_id FROM (
-              SELECT COALESCE(b.arena_id, s.arena_id) AS arena_id
-              FROM bookings b
-              JOIN slots s ON s.id = b.slot_id
-              WHERE b.trainer_id = :tid
-                AND b.status IN ('pending', 'confirmed')
-                AND COALESCE(b.arena_id, s.arena_id) IS NOT NULL
-                AND ((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')
-                    > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
-              UNION
-              SELECT s2.arena_id AS arena_id
-              FROM slots s2
-              WHERE s2.trainer_id = :tid
-                AND s2.status <> 'cancelled'
-                AND s2.arena_id IS NOT NULL
-                AND ((s2.slot_date + s2.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')
-                    > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
-            ) locked
-            WHERE arena_id IS NOT NULL
+            SELECT DISTINCT COALESCE(b.arena_id, s.arena_id) AS arena_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid
+              AND b.status IN ('pending', 'confirmed')
+              AND COALESCE(b.arena_id, s.arena_id) IS NOT NULL
+              AND ((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                  > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
             ORDER BY 1
             """
         ),
@@ -572,16 +560,46 @@ async def list_trainer_arena_ids_locked_by_bookings(
     return [int(row[0]) for row in r.fetchall() if row[0] is not None]
 
 
+async def detach_future_unbooked_slots_from_arenas(
+    session: AsyncSession,
+    trainer_id: int,
+    arena_ids: set[int],
+) -> None:
+    """Drop the rink from future slots that have no pending/confirmed booking."""
+    if not arena_ids:
+        return
+    await session.execute(
+        text(
+            f"""
+            UPDATE slots s
+            SET arena_id = NULL
+            WHERE s.trainer_id = :tid
+              AND s.arena_id = ANY(:aids)
+              AND s.status <> 'cancelled'
+              AND ((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                  > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
+              AND NOT EXISTS (
+                SELECT 1 FROM bookings b
+                WHERE b.slot_id = s.id
+                  AND b.status IN ('pending', 'confirmed')
+              )
+            """
+        ),
+        {"tid": trainer_id, "aids": [int(x) for x in arena_ids]},
+    )
+
+
 async def ensure_trainer_arenas_replace_allowed(
     session: AsyncSession,
     trainer_id: int,
     arena_ids: list[int],
     *,
     replace_city_ids: list[int] | None,
-) -> None:
+) -> set[int]:
     """
-    Block unlinking a venue from the trainer profile while current/future occupying bookings
-    still resolve to that arena (booking.arena_id or slot.arena_id).
+    Block unlinking a venue from the trainer profile while a current/future
+    pending or confirmed booking still resolves to that arena.
+    Returns the arena ids this save actually unlinks (empty when nothing is removed).
     """
     r = await session.execute(
         text(
@@ -604,15 +622,15 @@ async def ensure_trainer_arenas_replace_allowed(
         in_scope = {int(aid) for aid, city_id in existing_rows if int(city_id) in scope}
         removed = in_scope - incoming
     if not removed:
-        return
+        return set()
     locked = set(await list_trainer_arena_ids_locked_by_bookings(session, trainer_id))
     blocked = removed & locked
-    if not blocked:
-        return
-    raise ValueError(
-        "Нельзя убрать площадку: есть записи или слоты сейчас или в будущем. "
-        "Сначала отмените записи или удалите слоты на этой площадке."
-    )
+    if blocked:
+        raise ValueError(
+            "Нельзя убрать площадку: есть записи сейчас или в будущем. "
+            "Сначала отмените эти записи."
+        )
+    return removed
 
 
 async def _apply_trainer_arenas_update(
@@ -635,9 +653,10 @@ async def _apply_trainer_arenas_update(
         )
         scope.update(int(row[0]) for row in r.fetchall() if row[0] is not None)
     scope_list = list(scope)
-    await ensure_trainer_arenas_replace_allowed(
+    removed = await ensure_trainer_arenas_replace_allowed(
         session, trainer_id, arena_ids, replace_city_ids=scope_list
     )
+    await detach_future_unbooked_slots_from_arenas(session, trainer_id, removed)
     await repo.set_trainer_arenas(trainer_id, arena_ids, replace_city_ids=scope_list)
     await repo.reconcile_primary_arena(trainer_id)
     if arena_ids:

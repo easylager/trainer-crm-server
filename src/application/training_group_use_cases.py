@@ -649,6 +649,19 @@ async def materialize_slots_for_group(
     cap = max(2, min(int(max_members), 500))
     svc = int(service_id)
     aid = int(arena_id) if arena_id is not None else None
+    # Формат группового слота — от услуги группы: онлайн-группа без площадки остаётся онлайн,
+    # очная без площадки — очной (create_booking сверяет slots.is_online с услугой).
+    r_onl = await session.execute(
+        text(
+            """
+            SELECT COALESCE(is_online, false) FROM trainer_services
+            WHERE trainer_id = :tid AND service_id = :sid
+            """
+        ),
+        {"tid": trainer_id, "sid": svc},
+    )
+    onl_row = r_onl.fetchone()
+    group_online = aid is None and bool(onl_row[0] if onl_row else False)
 
     r2 = await session.execute(
         text(
@@ -715,9 +728,9 @@ async def materialize_slots_for_group(
                     """
                     INSERT INTO slots (
                         trainer_id, slot_date, start_time, end_time, status, capacity,
-                        service_id, arena_id, training_group_id
+                        service_id, arena_id, training_group_id, is_online
                     )
-                    VALUES (:tid, :d, :st, :et, 'available', :cap, :svc, :aid, :gid)
+                    VALUES (:tid, :d, :st, :et, 'available', :cap, :svc, :aid, :gid, :onl)
                 """
                 ),
                 {
@@ -729,6 +742,7 @@ async def materialize_slots_for_group(
                     "svc": svc,
                     "aid": aid,
                     "gid": training_group_id,
+                    "onl": group_online,
                 },
             )
             created += 1
