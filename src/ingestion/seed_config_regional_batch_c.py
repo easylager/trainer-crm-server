@@ -15,14 +15,20 @@ PARSER_KEY_RAUBICHI = "raubichi_html_v1"
 
 
 VITEBSK_DS_CONFIG: dict = {
-    "url": "https://vitebsk.hockey.by/clubs/arena/massovoe-katanie/?clear_cache=Y",
-    "afisha_event_url": "https://24afisha.by/ru/vitebsk/event/1385106",
-    "saleframe_object_url": "https://saleframe.24afisha.by/object/124",
+    "schedule_api_url": (
+        "https://api.24afisha.by/api/v2/schedule/events/1385106"
+        "?cityId=11&lang=ru&slug=true&jsonld=0&ignoreEndTime=1"
+    ),
+    "afisha_event_id": 1385106,
+    "afisha_city_id": 11,
+    "afisha_object_id": 124,
+    "afisha_event_url": (
+        "https://24afisha.by/ru/vitebsk/event/massovoe-katanie-v-vitebskom-dvortse-sporta"
+    ),
+    "session_tickets_url": "https://saleframe.24afisha.by/?sid={session_id}&lang=ru",
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 60,
-    "adult_price_marker": "Стоимость билета",
-    "typo_times": {"201:15": "20:15"},
     "age_note": (
         "детям до 3 лет не допускаются; 3–12 лет только с взрослым 18+ на "
         "коньках; на поздние сеансы несовершеннолетним — со законным представителем"

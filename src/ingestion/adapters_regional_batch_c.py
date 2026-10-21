@@ -11,6 +11,7 @@ ParserRegistry / default_registry().
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -19,7 +20,7 @@ from urllib.parse import urljoin, urlparse
 
 
 from src.ingestion.dates import infer_date_from_day_month, parser_reference_date
-from src.ingestion.htmlutil import parse_tables, price_from_label, strip_tags
+from src.ingestion.htmlutil import parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
 from src.ingestion.seed_config_regional_batch_c import (
@@ -33,7 +34,7 @@ from src.ingestion.seed_config_regional_batch_c import (
 from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE
 from src.ingestion.cpu_work import run_cpu_bound
 from src.ingestion.image_io import open_image_bytes
-from src.ingestion.source_io import fetch_http_bytes, load_source_text
+from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
 _MONTHS = {
@@ -51,16 +52,6 @@ _MONTHS = {
     "ноября": 11,
     "декабря": 12,
 }
-
-_WEEKDAYS_RU = (
-    "Понедельник",
-    "Вторник",
-    "Среда",
-    "Четверг",
-    "Пятница",
-    "Суббота",
-    "Воскресенье",
-)
 
 _USER_AGENT = "trainer-crm-ice-ingest/1.0"
 
@@ -100,95 +91,179 @@ async def _load_bytes(job: ParserJob, *, filename: str, url: str) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# vitebsk-ds (arena_id 29) — hockey.by HTML weekday blocks.
+# vitebsk-ds (arena_id 29) — 24afisha schedule API.
+# hockey.by still shows the April–May 2026 grid, so the public page was empty.
 # ---------------------------------------------------------------------------
 
-_VITEBSK_DAY_BLOCK = re.compile(
-    r"(?P<day>Понедельник|Вторник|Среда|Четверг|Пятница|Суббота|Воскресенье)"
-    r"\s+(?P<dnum>\d{1,2})\s+(?P<month>[А-Яа-яЁё]+)\s*-\s*"
-    r"(?P<times>[\d:.,\s]+?)"
-    r"(?=(?:Понедельник|Вторник|Среда|Четверг|Пятница|Суббота|Воскресенье)|На поздние|$)"
+_VITEBSK_AFISHA_EVENT_ID = 1385106
+_VITEBSK_AFISHA_CITY_ID = 11
+_VITEBSK_AFISHA_OBJECT_ID = 124
+_VITEBSK_EVENT_PAGE = (
+    "https://24afisha.by/ru/vitebsk/event/massovoe-katanie-v-vitebskom-dvortse-sporta"
 )
-_HHMM_LOOSE = re.compile(r"^(\d+)[:.](\d{2})$")
+_VITEBSK_SESSION_TICKETS = "https://saleframe.24afisha.by/?sid={session_id}&lang=ru"
+_AFISHA_HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
+_HG_SECURITY = re.compile(r"hg-security=([^;\"\s]+)")
+_AFISHA_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "User-Agent": _USER_AGENT,
+}
 
 
-def _fix_typo_time(raw: str, typo_map: dict[str, str]) -> str:
-    raw = raw.strip()
-    if raw in typo_map:
-        return typo_map[raw]
-    match = _HHMM_LOOSE.match(raw)
+def vitebsk_schedule_url(config: dict) -> str:
+    """Live schedule URL. Existing jobs still point ``url`` at hockey.by."""
+    explicit = config.get("schedule_api_url")
+    if explicit:
+        return str(explicit)
+    event_id = int(config.get("afisha_event_id") or _VITEBSK_AFISHA_EVENT_ID)
+    city_id = int(config.get("afisha_city_id") or _VITEBSK_AFISHA_CITY_ID)
+    return (
+        f"https://api.24afisha.by/api/v2/schedule/events/{event_id}"
+        f"?cityId={city_id}&lang=ru&slug=true&jsonld=0&ignoreEndTime=1"
+    )
+
+
+def _afisha_local_date(value: str) -> str | None:
+    parts = str(value or "").strip().split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return None
+    day, month, year = (int(part) for part in parts)
+    try:
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return None
+
+
+def _afisha_hhmm(value: str) -> str | None:
+    match = _AFISHA_HHMM.match(str(value or "").strip())
     if not match:
-        return raw
-    hour_str, minute = match.groups()
-    hour = int(hour_str)
-    if hour > 23 and hour_str.startswith("20"):
-        hour = 20
-    return _fmt(hour, int(minute))
+        return None
+    hour, minute = int(match.group(1)), int(match.group(2))
+    if hour > 23 or minute > 59:
+        return None
+    return _fmt(hour, minute)
 
 
-def _guess_year(day: int, month: int, weekday_name: str, anchor_year: int) -> int:
-    """Pick the year (near anchor_year) whose real weekday matches the label.
+def vitebsk_slots_from_schedule(payload: Any, config: dict) -> list[ExtractedSlot]:
+    """Sessions from ``GET /api/v2/schedule/events/{id}``.
 
-    The source's weekday blocks carry no year; SPEC confirms the snapshot is
-    2026 because 30 Apr 2026 really is a Thursday. Search a small window
-    around the configured anchor year instead of hardcoding it.
+    ``minPrice`` is already minor units (700 = 7.00 BYN). ``dateStr`` / ``timeStr``
+    are local Europe/Minsk. Duration comes from the event (60). Buy link is the
+    saleframe widget for that session id.
     """
-    target_idx = _WEEKDAYS_RU.index(weekday_name)
-    for candidate in (anchor_year, anchor_year + 1, anchor_year - 1):
-        try:
-            if date(candidate, month, day).weekday() == target_idx:
-                return candidate
-        except ValueError:
+    events = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(events, list):
+        return []
+    object_id = int(config.get("afisha_object_id") or _VITEBSK_AFISHA_OBJECT_ID)
+    age_note = config.get("age_note")
+    fallback_duration = int(config.get("default_duration_minutes") or 60)
+    tickets_template = str(config.get("session_tickets_url") or _VITEBSK_SESSION_TICKETS)
+    slots: list[ExtractedSlot] = []
+    for event in events:
+        if not isinstance(event, dict):
             continue
-    return anchor_year
+        try:
+            duration = int(event.get("duration") or fallback_duration)
+        except (TypeError, ValueError):
+            duration = fallback_duration
+        if duration <= 0:
+            duration = fallback_duration
+        for obj in event.get("objects") or []:
+            if not isinstance(obj, dict):
+                continue
+            try:
+                if int(obj.get("id") or 0) != object_id:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            for session in obj.get("sessions") or []:
+                if not isinstance(session, dict):
+                    continue
+                local_date = _afisha_local_date(str(session.get("dateStr") or ""))
+                start = _afisha_hhmm(str(session.get("timeStr") or ""))
+                if not local_date or not start:
+                    continue
+                session_id = session.get("id")
+                external_url = None
+                source_id = None
+                if session_id is not None:
+                    source_id = str(session_id)
+                    external_url = tickets_template.format(session_id=source_id)
+                slots.append(
+                    ExtractedSlot(
+                        local_date=local_date,
+                        starts_at_local=start,
+                        ends_at_local=_add_minutes(start, duration),
+                        kind_raw="Массовое катание",
+                        price_adult=session.get("minPrice"),
+                        price_child=None,
+                        price_rental=None,
+                        source_id=source_id,
+                        session_label=None,
+                        age_note=age_note,
+                        external_url=external_url,
+                    )
+                )
+    return slots
+
+
+def afisha_clearance_cookie(body: str) -> str | None:
+    """24afisha answers bots with an HTML interstitial that sets ``hg-security``.
+
+    The value is in the page script. Sending it back on the next GET returns
+    the schedule JSON. No browser and no JS execution.
+    """
+    match = _HG_SECURITY.search(body or "")
+    if not match:
+        return None
+    return f"hg-security={match.group(1)}"
+
+
+def _json_body(body: str) -> Any | None:
+    stripped = body.lstrip()
+    if not stripped.startswith(("{", "[")):
+        return None
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+
+
+async def fetch_afisha_schedule(url: str) -> Any:
+    body = await fetch_http_text(url, headers=_AFISHA_HEADERS)
+    payload = _json_body(body)
+    if payload is not None:
+        return payload
+    cookie = afisha_clearance_cookie(body)
+    if not cookie:
+        raise RuntimeError("24afisha schedule was not JSON and had no clearance cookie")
+    body = await fetch_http_text(url, headers={**_AFISHA_HEADERS, "Cookie": cookie})
+    payload = _json_body(body)
+    if payload is None:
+        raise RuntimeError("24afisha schedule stayed behind the verification page")
+    return payload
+
+
+async def _load_vitebsk_schedule(job: ParserJob) -> Any:
+    fixture_dir = job.config.get("fixture_dir")
+    if fixture_dir:
+        path = Path(str(fixture_dir)) / "schedule.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+    return await fetch_afisha_schedule(vitebsk_schedule_url(job.config))
 
 
 class VitebskDsParser(IceParser):
     parser_key = PARSER_KEY_VITEBSK_DS
 
     async def extract(self, job: ParserJob) -> Extraction:
-        html = await load_source_text(job, filename="massovoe-katanie.html", url_keys=("url",))
-        text = strip_tags(html)
-        anchor_year = parser_reference_date(job.config).year
-        duration = int(job.config.get("default_duration_minutes") or 60)
-        typo_map = dict(job.config.get("typo_times") or {})
-        adult_marker = str(job.config.get("adult_price_marker") or "Стоимость билета")
-        age_note = job.config.get("age_note")
-        adult = price_from_label(text, adult_marker, already_minor=False)
-
-        slots: list[ExtractedSlot] = []
-        for match in _VITEBSK_DAY_BLOCK.finditer(text):
-            month = _MONTHS.get(match.group("month").lower())
-            if not month:
-                continue
-            day_num = int(match.group("dnum"))
-            year = _guess_year(day_num, month, match.group("day"), anchor_year)
-            try:
-                local_date = date(year, month, day_num)
-            except ValueError:
-                continue
-            for raw_time in match.group("times").split(","):
-                raw_time = raw_time.strip()
-                if not raw_time:
-                    continue
-                start = _fix_typo_time(raw_time, typo_map)
-                if not _HHMM_LOOSE.match(start):
-                    continue
-                end = _add_minutes(start, duration)
-                slots.append(
-                    ExtractedSlot(
-                        local_date=local_date.isoformat(),
-                        starts_at_local=start,
-                        ends_at_local=end,
-                        kind_raw="Массовое катание",
-                        price_adult=adult,
-                        price_child=None,
-                        price_rental=None,
-                        session_label=None,
-                        age_note=age_note,
-                    )
-                )
-        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+        payload = await _load_vitebsk_schedule(job)
+        slots = vitebsk_slots_from_schedule(payload, job.config)
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=payload,
+            slots=slots,
+        )
 
 
 # ---------------------------------------------------------------------------

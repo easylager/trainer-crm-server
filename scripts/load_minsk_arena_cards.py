@@ -346,6 +346,47 @@ def _hours_interval(open_raw: str, close_raw: str) -> dict[str, str]:
     return {"open": _norm_hhmm(open_raw), "close": _norm_hhmm(close_raw)}
 
 
+_RENTAL_CLAUSE = re.compile(r"\s*;\s*")
+_RENTAL_PRICE = re.compile(r"^(.+?)\s+[—–-]\s+(.+)$")
+
+
+def parse_rental_catalog(raw: str | None) -> list[dict[str, str]] | None:
+    """«до 34 размера — 5,00 BYN; от 35 размера — 10,00 BYN» → rows for the place page."""
+    if is_unknown(raw):
+        return None
+    rows: list[dict[str, str]] = []
+    for part in _RENTAL_CLAUSE.split((raw or "").strip()):
+        match = _RENTAL_PRICE.match(part.strip())
+        if not match:
+            continue
+        label, price = match.group(1).strip(), match.group(2).strip()
+        if label and price:
+            rows.append({"label": label, "price": price})
+    return rows or None
+
+
+def _attach_rental(
+    hours: dict[str, Any] | None,
+    *,
+    catalog_raw: str | None,
+    note_raw: str | None,
+    title_raw: str | None,
+) -> dict[str, Any] | None:
+    catalog = parse_rental_catalog(catalog_raw)
+    note = _known_text(note_raw)
+    title = _known_text(title_raw)
+    if not catalog and not note and not title:
+        return hours
+    payload = dict(hours or {})
+    if title:
+        payload["rental_title"] = title
+    if catalog:
+        payload["rental_catalog"] = catalog
+    if note:
+        payload["rental_note"] = note
+    return payload
+
+
 def parse_opening_hours(raw: str | None) -> dict[str, Any] | None:
     if is_unknown(raw):
         return None
@@ -519,7 +560,12 @@ def parse_dossier(path: Path) -> ArenaCard:
     phone = compact_phone(value_of("phone"))
     website_url = _known_text(value_of("website_url"))
     tickets_url = _known_text(value_of("tickets_url"))
-    opening_hours = parse_opening_hours(value_of("opening_hours"))
+    opening_hours = _attach_rental(
+        parse_opening_hours(value_of("opening_hours")),
+        catalog_raw=value_of("rental_catalog"),
+        note_raw=value_of("rental_note"),
+        title_raw=value_of("rental_title"),
+    )
     season_start, season_end = parse_season(value_of("season"))
     amenities = parse_amenities(value_of("amenities"))
     short_description = _known_text(value_of("short_description"))

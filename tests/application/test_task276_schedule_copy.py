@@ -69,6 +69,19 @@ def test_schedule_section_site_when_no_phone() -> None:
     assert "не публикуют" not in html
 
 
+def test_schedule_section_buy_link_when_no_sessions() -> None:
+    html = _b_schedule(
+        _view(website="https://hc-vitebsk.by/"),
+        base_path="/p/vitebsk/vitebsk-ds",
+        invite=False,
+        links={"tickets": ("/out?action=tickets", False)},
+    )
+    assert "Купить билет онлайн" in html
+    assert 'href="/out?action=tickets"' in html
+    assert 'href="https://hc-vitebsk.by/"' in html
+    assert "на сайте катка" not in html
+
+
 def test_schedule_section_absent_without_contact() -> None:
     html = _b_schedule(_view(), base_path="/p/1", invite=False, links={})
     assert html == ""
