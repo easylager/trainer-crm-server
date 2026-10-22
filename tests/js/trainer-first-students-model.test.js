@@ -57,12 +57,14 @@ describe('«Первые три ученика»: места и подписи',
   });
 
   it('заголовок листа и кнопка считают учеников', () => {
-    assert.equal(M.sheetTitle(state(0, [])), 'Ученик 1 из 3');
-    assert.equal(M.sheetTitle(state(2, ['А', 'Б'])), 'Ученик 3 из 3');
-    assert.equal(M.sheetTitle(state(3, ['А', 'Б', 'В'])), 'Ещё ученик');
+    /* TASK-313: без «1 из 3» — звучало как лимит на трёх учеников. */
+    assert.equal(M.sheetTitle(state(0, [])), 'Новый ученик');
+    assert.equal(M.sheetTitle(state(3, ['А', 'Б', 'В'])), 'Новый ученик');
+    assert.equal(M.addedKicker({ count: 1 }), 'Уже 1 ученик');
+    assert.equal(M.addedKicker({ count: 2 }), 'Уже 2 ученика');
     assert.deepEqual(
       [0, 1, 2, 3].map((n) => M.addButtonLabel({ count: n })),
-      ['Добавить ученика', 'Добавить второго', 'Добавить третьего', 'Добавить ещё']
+      ['Добавить ученика', 'Добавить ещё', 'Добавить ещё', 'Добавить ещё']
     );
     assert.equal(M.remaining(state(1, ['А'])), 2);
   });

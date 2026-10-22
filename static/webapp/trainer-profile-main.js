@@ -48,6 +48,17 @@
         }
         return url;
       }
+      /* «Услуги и цены» переехали на свой экран (TASK-313). Старые ссылки `?task=prices`
+         (пуш «укажите цены», хаб, экран «Готово» онбординга) ведём туда же, сохраняя возврат. */
+      (function redirectPricesTask() {
+        try {
+          var sp0 = new URLSearchParams(window.location.search || '');
+          if (sp0.get('task') !== 'prices') return;
+          var from0 = sp0.get('from');
+          var q0 = from0 === 'onboarding' || from0 === 'hub' ? '?from=' + from0 : '';
+          window.location.replace(webappPageUrl('trainer-prices' + q0));
+        } catch (eRedir) {}
+      })();
       function navigateToTrainerHubAfterMinimalTour() {
         window.location.href = webappPageUrl('trainer-home');
       }
@@ -342,6 +353,12 @@
           return;
         }
         if (!rail.length) rail = spec.rail.slice();
+        /* «Фото и имя»: город переехал на экран «Где занимаюсь» (TASK-313) — здесь его не дублируем. */
+        if (task === 'basics') {
+          var cityField = document.getElementById('city_id');
+          var cityWrap = cityField && cityField.closest('.field');
+          if (cityWrap) cityWrap.hidden = true;
+        }
         state.profileBlockTourSessionSealOrder = rail;
         state.profileBlockTourDisplayedStepOverride = rail[0];
         state.profileBlockTourSessionVisitedLastForward = false;
@@ -2635,7 +2652,44 @@
           title: 'Образование',
           subtitle: 'По желанию: вуз, курсы, сертификаты.',
         },
+        /* Разделы вкладки «Профиль» (TASK-313): один экран — одна задача, иногда из двух блоков. */
+        basics: {
+          containerIds: ['profileNavPhoto', 'anketaStart'],
+          tabId: 'form',
+          title: 'Фото и имя',
+          subtitle: 'Так вас увидит ученик на странице записи.',
+        },
+        experience_all: {
+          containerIds: ['profileNavExp', 'profileEducationCollapse'],
+          tabId: 'form',
+          title: 'Опыт и образование',
+          subtitle: 'По желанию. Родителям так спокойнее выбирать тренера.',
+        },
+        contacts: {
+          containerId: 'profileNavContacts',
+          tabId: 'form',
+          title: 'Контакты',
+          subtitle: 'Телефон и другие способы связаться с вами.',
+        },
+        booking: {
+          containerIds: ['obSessionDurationWrap', 'obMinHoursWrap'],
+          tabId: 'settings',
+          title: 'Запись',
+          subtitle: 'Сколько идёт занятие и до какого момента ученик может записаться.',
+        },
+        notifications: {
+          containerIds: ['pushNotifyField', 'digestSettingsField'],
+          tabId: 'settings',
+          title: 'Уведомления',
+          subtitle: 'Когда присылать сообщения о записях и утреннюю сводку дня.',
+        },
       };
+
+      function obFlowStepContainerIds(def) {
+        if (!def) return [];
+        if (def.containerIds) return def.containerIds.slice();
+        return def.containerId ? [def.containerId] : [];
+      }
 
       var PROFILE_FOCUSED_TASKS = {
         prices: {
@@ -2669,6 +2723,14 @@
           nextSave: 'Сохранить',
           nextDone: 'Готово',
         },
+        /* Разделы вкладки «Профиль»: один блок, «Сохранить» — и обратно в профиль. */
+        basics: { rail: ['basics'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        about: { rail: ['about'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        arenas: { rail: ['arenas'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        experience: { rail: ['experience_all'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        contacts: { rail: ['contacts'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        booking: { rail: ['booking'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        notifications: { rail: ['notifications'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
       };
 
       /** Последний смонтированный в слоте ключ шага — чтобы не перемонтировать одно и то же. */
@@ -2699,8 +2761,10 @@
         if (!key) return;
         var def = OB_FLOW_STEP_DEFS[key];
         if (!def) return;
-        var el = document.getElementById(def.containerId);
-        obFlowReturnHome(el);
+        /* В обратном порядке: соседние блоки возвращаются каждый перед своим соседом. */
+        obFlowStepContainerIds(def).reverse().forEach(function(id) {
+          obFlowReturnHome(document.getElementById(id));
+        });
       }
 
       /**
@@ -2728,14 +2792,18 @@
         }
         obFlowUnmountCurrent();
         var slot = document.getElementById('obFlowSlot');
-        var el = document.getElementById(def.containerId);
-        if (!slot || !el) return;
-        obFlowRecordHome(el);
+        var els = obFlowStepContainerIds(def)
+          .map(function(id) { return document.getElementById(id); })
+          .filter(Boolean);
+        if (!slot || !els.length) return;
         slot.innerHTML = '';
-        slot.appendChild(el);
-        if (el.tagName === 'DETAILS') {
-          try { el.open = true; } catch (eOpen) {}
-        }
+        els.forEach(function(el) {
+          obFlowRecordHome(el);
+          slot.appendChild(el);
+          if (el.tagName === 'DETAILS') {
+            try { el.open = true; } catch (eOpen) {}
+          }
+        });
         obFlowCurrentMountKey = key;
         /* Анимация входа. */
         var card = document.querySelector('#onboardingFlow .ob-flow__card');
@@ -2826,6 +2894,9 @@
         if (state.profileFocusedReturnPath === 'trainer-catalog') {
           return webappPageUrl('trainer-catalog');
         }
+        if (state.profileFocusedReturnPath === 'trainer-account') {
+          return webappPageUrl('trainer-account');
+        }
         if (state.profileFocusedReturn === 'onboarding') {
           return webappPageUrl('trainer-onboarding?done=1');
         }
@@ -2849,6 +2920,20 @@
         var catalogish =
           !backToCatalogSection &&
           (state.profileFocusedTask === 'catalog' || state.profileFocusedTask === 'vitrine');
+        /* Раздел вкладки «Профиль»: сохранили — короткое «Сохранили», отменили — сразу назад.
+           Экран раздела не закрываем до перехода: иначе на полсекунды мелькала вся анкета.
+           Обещать «откроется главная» здесь было бы неправдой: возвращаемся в профиль. */
+        if (state.profileFocusedReturnPath === 'trainer-account' && !catalogish) {
+          state.profileBlockTourActive = false;
+          if (wantSubmit) {
+            haptic('success');
+            showProfileToHubTransitionOverlay({ title: 'Сохранили', hint: 'Возвращаемся в профиль' });
+            setTimeout(function() { window.location.href = dest; }, 650);
+          } else {
+            window.location.href = dest;
+          }
+          return;
+        }
         state.profileBlockTourActive = false;
         state.profileFocusedTask = null;
         state.profileFocusedReturn = 'hub';
@@ -3011,12 +3096,13 @@
               dotsF.hidden = true;
             }
           }
+          var isSectionF = !!(spec && spec.section);
           var closeBtnF = document.getElementById('obFlowClose');
-          if (closeBtnF) closeBtnF.setAttribute('aria-label', 'Пропустить');
+          if (closeBtnF) closeBtnF.setAttribute('aria-label', isSectionF ? 'Назад к профилю' : 'Пропустить');
           var backBtnF = document.getElementById('obFlowBack');
           if (backBtnF) {
             backBtnF.hidden = false;
-            backBtnF.textContent = idxF > 0 ? 'Назад' : 'Не сейчас';
+            backBtnF.textContent = idxF > 0 ? 'Назад' : isSectionF ? 'Отмена' : 'Не сейчас';
             backBtnF.setAttribute('aria-hidden', 'false');
             backBtnF.setAttribute('aria-label', idxF > 0 ? 'Предыдущий шаг' : 'Пропустить');
           }
@@ -3513,7 +3599,7 @@
               state.catalogNeedFields = null;
             }
             state.profileFocusedReturnPath =
-              returnTo === 'trainer-catalog' ? 'trainer-catalog' : null;
+              returnTo === 'trainer-catalog' || returnTo === 'trainer-account' ? returnTo : null;
             sp.delete('task');
             sp.delete('from');
             sp.delete('need');
@@ -3524,6 +3610,8 @@
             startFocusedProfileTask(task, from);
             return;
           }
+          /* Неизвестный ?task= — показать анкету, а не пустой экран. */
+          document.documentElement.classList.remove('profile-task-boot');
           if (sp.get('onboarding') !== 'blocks') return;
           sp.delete('onboarding');
           var qs = sp.toString();
@@ -6764,6 +6852,7 @@
                 window.MiniAppErrorUi && typeof MiniAppErrorUi.humanizeDetail === 'function'
                   ? MiniAppErrorUi.humanizeDetail(rawDetail) || String(rawDetail)
                   : String(rawDetail);
+              document.documentElement.classList.remove('profile-task-boot');
               document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' +
                 detailShow + '</p>';
               return Promise.resolve();
@@ -6816,7 +6905,8 @@
             var tip = (!initData())
               ? 'Нет авторизации Telegram. Откройте профиль из бота или с init_data в адресе.'
               : 'Ошибка сети. Проверьте подключение.';
-            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
+            document.documentElement.classList.remove('profile-task-boot');
+              document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
             return Promise.resolve();
           });
       }
@@ -6831,6 +6921,7 @@
                 window.MiniAppErrorUi && typeof MiniAppErrorUi.humanizeDetail === 'function'
                   ? MiniAppErrorUi.humanizeDetail(rawDetail2) || String(rawDetail2)
                   : String(rawDetail2);
+              document.documentElement.classList.remove('profile-task-boot');
               document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' +
                 detailShow2 + '</p>';
               return Promise.resolve();
@@ -6872,7 +6963,8 @@
             var tip = (!initData())
               ? 'Нет авторизации Telegram. Откройте профиль из бота или с init_data в адресе.'
               : 'Ошибка сети. Проверьте подключение.';
-            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
+            document.documentElement.classList.remove('profile-task-boot');
+              document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
             return Promise.resolve();
           });
       }

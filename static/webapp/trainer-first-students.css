@@ -208,3 +208,22 @@ button.tfs-seat:active { transform: scale(0.97); transition-duration: 70ms; }
   .tfs-seat, .tfs-chip { transition: none; }
   .tfs-seat--on, .tfs-sheet { animation: none; }
 }
+
+/* Крестик листа: на телефоне мимо листа не тапнуть, а свайп забирал Telegram (TASK-313). */
+.tfs-sheet { position: relative; }
+.tfs-sheet__close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
+  color: var(--tg-theme-text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.tfs-sheet__title { padding-right: 44px; }

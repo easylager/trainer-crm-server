@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Услуги и цены</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-trainer-theme.js?v=2026102212"></script>
+  <script src="mini-app-telegram-chrome.js?v=2026102212"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102212" />
+  <link rel="stylesheet" href="theme.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-trainer-account.css?v=2026102212" />
+</head>
+<!--
+  «Услуги и цены» (TASK-313). Отдельный экран с одной задачей вместо блока анкеты, где у каждой
+  услуги было пять тарифов с галочками и нулями. Здесь — карточка на занятие, «Взрослый» и
+  «Детский» сразу, остальное под «Ещё тарифы». Пустая цена — ученик видит «по запросу».
+-->
+<body class="ta-body">
+  <main class="tp-page" id="tpPage">
+    <button type="button" class="tp-back" id="tpBack">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      <span id="tpBackLabel">Профиль</span>
+    </button>
+    <h1 class="tp-title">Услуги и цены</h1>
+    <p class="tp-lead" id="tpLead">Пустая цена — ученик увидит «по&nbsp;запросу»</p>
+
+    <div class="ta-loading" id="tpLoading">
+      <div class="ta-skel ta-skel--card"></div>
+      <div class="ta-skel ta-skel--card"></div>
+    </div>
+    <div class="ta-error" id="tpError" hidden>
+      <p class="ta-error__title">Не получилось загрузить</p>
+      <p class="ta-error__text">Проверьте связь и попробуйте ещё раз.</p>
+      <button type="button" class="ta-btn" id="tpRetry">Обновить</button>
+    </div>
+
+    <div class="tp-list" id="tpList" hidden></div>
+  </main>
+
+  <div class="tp-foot" id="tpFoot" hidden>
+    <div class="tp-foot__inner">
+      <button type="button" class="tp-save" id="tpSave" disabled>Сохранить</button>
+      <p class="tp-note" id="tpNote" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <script defer src="trainer-prices-main.js?v=2026102212"></script>
+</body>
+</html>

@@ -7,6 +7,7 @@ import html
 import logging
 from datetime import date, datetime, time, timedelta
 from itertools import groupby
+from pathlib import Path
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram import Bot, F, Router
@@ -14,6 +15,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ChatAction, ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
+    BufferedInputFile,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -311,9 +313,41 @@ async def _seed_trainer_avatar_bg(bot, trainer_id: int, telegram_user_id: int) -
         logger.info("avatar seed task failed trainer_id=%s", trainer_id, exc_info=True)
 
 
+_FIRST_RUN_IMAGE = Path(__file__).resolve().parents[1] / "assets" / "trainer-onboarding-welcome.png"
+
+
+def _first_run_caption(first_name: str | None) -> str:
+    """Подпись первого сообщения: имя из Telegram первой строкой, если оно есть."""
+    name = (first_name or "").strip()
+    if not name:
+        return msg.TRAINER_AFTER_LINK_HERO
+    greeting = msg.TRAINER_AFTER_LINK_GREETING.format(name=html.escape(name))
+    return f"{greeting}\n\n{msg.TRAINER_AFTER_LINK_HERO}"
+
+
+async def _send_first_run_offer(message: Message, reply_markup: InlineKeyboardMarkup) -> None:
+    """
+    TASK-312: картинка «ученик выбирает время → вам приходит запись» с подписью и одной кнопкой.
+
+    Картинка — объяснение, а не условие: если Telegram её не принял, тренер получает тот же
+    текст и ту же кнопку, а не пустой чат.
+    """
+    first_name = message.from_user.first_name if message.from_user else None
+    caption = _first_run_caption(first_name)
+    try:
+        photo = BufferedInputFile(_FIRST_RUN_IMAGE.read_bytes(), filename="glide-coach.png")
+        await message.answer_photo(
+            photo, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+        )
+        return
+    except Exception:
+        logger.warning("first-run photo failed, sending text", exc_info=True)
+    await message.answer(caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+
 def _onboarding_start_keyboard() -> InlineKeyboardMarkup | None:
     """
-    One button under the first message: «Начать» → the quick-setup screen.
+    One button under the first message: «Собрать страницу» → the quick-setup screen.
 
     Not «Обзор». The hub is a place with many things in it; at second zero the trainer needs a
     single door, and behind it a screen that asks two questions they can answer without thinking.
@@ -814,11 +848,7 @@ async def cmd_start(message: Message) -> None:
                 )
                 if is_first_run:
                     kb_start = _onboarding_start_keyboard()
-                    await message.answer(
-                        msg.TRAINER_AFTER_LINK_HERO,
-                        parse_mode=ParseMode.HTML,
-                        reply_markup=kb_start if kb_start else kb_onboarding,
-                    )
+                    await _send_first_run_offer(message, kb_start if kb_start else kb_onboarding)
                     await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
                     return
 

@@ -7,6 +7,7 @@ in one request, without a profile, a photo, a city, an arena or moderation.
 """
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -93,7 +94,72 @@ async def test_get_offers_a_prefilled_week_not_an_empty_form(app_use_test_db, db
     assert data["already_done"] is False
     assert data["week"], "first run must arrive pre-filled — an empty grid is a form"
     assert all(d["hours"] for d in data["week"])
+    # Прод 2026-10-22: в будни тренеры работают вечером (17–20); рассветы в подсказке — догадка.
+    assert all(h >= 17 for d in data["week"] for h in d["hours"]), data["week"]
     assert data["services"], "the trainer must have something to tap"
+
+
+@pytest.mark.asyncio
+async def test_get_carries_name_and_photo_for_the_preview_card(app_use_test_db, db_session) -> None:
+    """TASK-312: мини-карточка «как увидит ученик» над шагами — имя, фамилия и фото с сервера."""
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name) "
+            "VALUES (:t, 'Анна', 'Соколова')"
+        ),
+        {"t": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(QUICK_SETUP_URL, headers={"X-Telegram-Init-Data": "mock"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["first_name"] == "Анна"
+    assert data["last_name"] == "Соколова"
+    assert data["photo_url"] is None, "без фото — инициалы на клиенте, а не битая картинка"
+
+
+@pytest.mark.asyncio
+async def test_ninety_minute_starts_on_the_half_hour_round_trip(app_use_test_db, db_session) -> None:
+    """
+    TASK-312: окно «вечер» при 90 минутах отдаёт старты 17:00, 18:30, 20:00 — без площадки,
+    не с начала часа. Сервер сохраняет их как есть и возвращает теми же минутами.
+    """
+    tg = _fresh_trainer_telegram_id()
+    await _bare_linked_trainer(db_session, tg)
+    service_id = await _any_service_id(db_session)
+    starts = [17 * 60, 18 * 60 + 30, 20 * 60]
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            post_resp = await client.post(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "service_ids": [service_id],
+                    "days": [
+                        {
+                            "day_of_week": 2,
+                            "slots": [
+                                {"start_minute": m, "duration_minutes": None, "arena_id": None}
+                                for m in starts
+                            ],
+                        }
+                    ],
+                    "duration_minutes": 90,
+                },
+            )
+            assert post_resp.status_code == 200, post_resp.text
+            get_resp = await client.get(QUICK_SETUP_URL, headers={"X-Telegram-Init-Data": "mock"})
+
+    week = {d["day_of_week"]: d for d in get_resp.json()["week"]}
+    assert sorted(s["start_minute"] for s in week[2]["slots"]) == starts
+    assert get_resp.json()["duration_minutes"] == 90
 
 
 @pytest.mark.asyncio
@@ -911,32 +977,55 @@ def test_onboarding_city_and_inline_create_contract() -> None:
     assert "goAddMissingArena" not in js
     assert "arena-setup" in js
     assert "city_id: state.cityId" in js
-    assert "ob-arena-combo" in html
+    # TASK-312: один список с галочками вместо режимов «одна / несколько / пока не указывать».
+    assert 'id="obArenaList"' in html
+    assert 'aria-multiselectable="true"' in html
+    assert "data-arena-mode" not in html
+    assert "togglePickedArena" in js
     assert "arenasForPicker" in js
     assert "ARENA_BROWSE_CAP" in js
-    assert "Начните вводить название или адрес" not in js
 
 
-def test_onboarding_week_grid_compact_split_contract() -> None:
-    """TASK-171: compact core hours + «Показать больше часов»; no mid-grid gap strip."""
+def test_onboarding_steps_and_week_windows_contract() -> None:
+    """TASK-312: вступление + три шага; неделя окнами, раскрываемыми в точные старты."""
     webapp = Path(__file__).resolve().parents[2] / "static" / "webapp"
     html = (webapp / "trainer-onboarding.html").read_text(encoding="utf-8")
     js = (webapp / "trainer-onboarding-main.js").read_text(encoding="utf-8")
-    assert "ob-grid-gap" not in html
-    assert "gridHourSegments" not in js
-    assert "Днём обычно не отмечаем" not in js
-    assert "HOURS_COMPACT_FIRST" in js
-    assert "HOURS_COMPACT_LAST = 10" in js
-    assert "[7, 8, 9, 17" not in js
-    assert 'id="obGridMore"' in html
-    assert "Показать больше часов" in html
+    for pane in ('id="obIntro"', 'id="obStep1"', 'id="obStep2"', 'id="obStep3"', 'id="obDone"'):
+        assert pane in html
+    # Модель недели грузится раньше основного скрипта — main.js читает её при старте.
+    assert html.index("trainer-onboarding-week-model.js") < html.index("trainer-onboarding-main.js")
+    assert 'id="obWeek"' in html and 'id="obWindowPanel"' in html
+    assert "WM.fillWindow" in js and "WM.toggleStart" in js
+    # Старая часовая сетка и «перенесённые» слоты ушли: старты хранятся точными минутами.
+    assert "arenaByHour" not in js
+    assert "state.carried" not in js
+    assert "obGridMore" not in html
+    # Роль — строкой под карточкой, а не отдельным вопросом.
+    assert 'id="obRoleValue"' in html and 'id="obRoleEdit"' in html
     assert "MAX_SPECIALIST_ROLES = 5" in js
     assert "trySelectRole" in js
-    assert "ob-arena-row" in html
+    # Уверенность тренера: где это потом меняется — на самом экране.
+    assert "Страницу видят только те, кому вы&nbsp;отправите ссылку" in html
+    assert "«Профиле»" in html and "«Расписании»" in html
     assert "buildArenaThumbEl" in js
-    assert "buildArenaBrushSwatch" in js
     assert "findCityInListByName" in js
-    assert "#obCityCreateName" in html
     assert "ob-city-select--picked" in html
     assert "arenaInitial" not in js
-    assert "TASK-172" in html
+
+
+@pytest.mark.asyncio
+async def test_onboarding_scripts_are_served_as_javascript() -> None:
+    """
+    TASK-312: /webapp/ отдаёт только явно перечисленные файлы. Модуль недели без своего
+    маршрута получал 404 (JSON) — браузер отказывался его исполнять, и экран не открывался.
+    """
+    webapp = Path(__file__).resolve().parents[2] / "static" / "webapp"
+    html = (webapp / "trainer-onboarding.html").read_text(encoding="utf-8")
+    scripts = re.findall(r'<script src="(trainer-onboarding[^"?]*\.js)', html)
+    assert "trainer-onboarding-week-model.js" in scripts
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for name in scripts:
+            resp = await client.get(f"/webapp/{name}?v=1")
+            assert resp.status_code == 200, name
+            assert "javascript" in resp.headers["content-type"], name

@@ -53,9 +53,10 @@ DEFAULT_MIN_HOURS_BEFORE_BOOKING = 2
 # Two weeks is the horizon a client actually plans in, and short enough that a wrong guess is cheap.
 QUICK_SETUP_WEEKS = 2
 
-# Suggested week for the ice vertical: early mornings before work/school, evenings after.
+# Suggested week for the ice vertical: weekday evenings. Prod 2026-10-22 (15 trainers, 120 days):
+# 10–13 trainers put slots at 17–20 on weekdays, only 3–5 at 6–9 — early mornings were a guess.
 # Mon–Fri only — weekend ice is booked per-arena and varies too much to guess.
-SUGGESTED_WEEKDAY_HOURS: tuple[int, ...] = (7, 8, 18, 19, 20)
+SUGGESTED_WEEKDAY_HOURS: tuple[int, ...] = (17, 18, 19)
 SUGGESTED_WEEKDAYS: tuple[int, ...] = (0, 1, 2, 3, 4)
 
 

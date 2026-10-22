@@ -92,7 +92,9 @@
 
   function progressHtml() {
     var left = M.remaining(state);
-    var kicker = state.count > 0 ? (left === 1 ? 'Остался один' : 'Ещё ' + left) : 'Следующий шаг';
+    /* Не «Ещё 2» / «Остался один»: так звучало, будто учеников можно только трое (TASK-313). */
+    var kicker = state.count > 0 ? M.addedKicker(state) : 'Следующий шаг';
+    void left;
     return (
       '<div class="tfs-card">' +
       '<div class="tfs-card__head">' +
@@ -213,6 +215,9 @@
     sheet.innerHTML =
       '<div class="tfs-sheet" role="dialog" aria-modal="true" aria-labelledby="tfsSheetTitle">' +
       '<div class="tfs-sheet__handle" aria-hidden="true"></div>' +
+      '<button type="button" class="tfs-sheet__close" data-tfs="close" aria-label="Закрыть">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
+      '</button>' +
       '<div class="tfs-sheet__body" id="tfsSheetBody"></div>' +
       '</div>';
     document.body.appendChild(sheet);
@@ -220,12 +225,85 @@
       if (ev.target === sheet) close();
     });
     sheet.addEventListener('click', onSheetClick);
+    bindSheetDrag(sheet.querySelector('.tfs-sheet'));
     sheet.addEventListener('input', onSheetInput);
     sheet.addEventListener('submit', function (ev) {
       ev.preventDefault();
       submit();
     });
     return sheet;
+  }
+
+  /*
+   * На телефоне лист занимает почти весь экран: тапнуть мимо негде, а свайп вниз забирал
+   * Telegram и сворачивал всё приложение. Поэтому три выхода: крестик, «Назад» Telegram и
+   * свайп вниз за верх листа (вертикальные свайпы Telegram на это время выключены).
+   */
+  function tgApp() {
+    return global.Telegram && global.Telegram.WebApp ? global.Telegram.WebApp : null;
+  }
+
+  var backWasVisible = false;
+
+  function onTgBack() { close(); }
+
+  function holdTelegram(on) {
+    var tg = tgApp();
+    if (!tg) return;
+    try {
+      if (on) {
+        if (typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
+        if (tg.BackButton) {
+          backWasVisible = !!tg.BackButton.isVisible;
+          tg.BackButton.onClick(onTgBack);
+          tg.BackButton.show();
+        }
+      } else {
+        if (typeof tg.enableVerticalSwipes === 'function') tg.enableVerticalSwipes();
+        if (tg.BackButton) {
+          tg.BackButton.offClick(onTgBack);
+          if (!backWasVisible) tg.BackButton.hide();
+        }
+      }
+    } catch (e) { /* старые клиенты */ }
+  }
+
+  function bindSheetDrag(panel) {
+    if (!panel) return;
+    var startY = null;
+    var dy = 0;
+    panel.addEventListener('touchstart', function (ev) {
+      /* Тянуть можно, только когда лист прокручен к началу, — иначе это обычная прокрутка. */
+      if (panel.scrollTop > 0 || !ev.touches || ev.touches.length !== 1) { startY = null; return; }
+      var t = ev.target;
+      if (t && t.closest && t.closest('input, textarea, select')) { startY = null; return; }
+      startY = ev.touches[0].clientY;
+      dy = 0;
+      panel.style.transition = 'none';
+    }, { passive: true });
+    panel.addEventListener('touchmove', function (ev) {
+      if (startY == null) return;
+      dy = Math.max(0, ev.touches[0].clientY - startY);
+      if (dy > 0) panel.style.transform = 'translateY(' + dy + 'px)';
+    }, { passive: true });
+    var end = function () {
+      if (startY == null) return;
+      startY = null;
+      panel.style.transition = 'transform 0.2s ease';
+      if (dy > 90) {
+        panel.style.transform = 'translateY(100%)';
+        setTimeout(function () {
+          close();
+          panel.style.transition = '';
+          panel.style.transform = '';
+        }, 180);
+      } else {
+        panel.style.transform = '';
+      }
+      dy = 0;
+    };
+    panel.addEventListener('touchend', end);
+    panel.addEventListener('touchcancel', end);
   }
 
   function optionChips() {
@@ -328,6 +406,7 @@
       renderSheet();
       sheet.removeAttribute('hidden');
       document.body.classList.add('tfs-sheet-open');
+      holdTelegram(true);
       var focus = sheet.querySelector(mode === 'paste' ? '#tfsPaste' : '#tfsName');
       if (focus) {
         try { focus.focus({ preventScroll: true }); } catch (e) { focus.focus(); }
@@ -344,8 +423,10 @@
 
   function close() {
     if (!sheet) return;
+    if (sheet.hasAttribute('hidden')) return;
     sheet.setAttribute('hidden', '');
     document.body.classList.remove('tfs-sheet-open');
+    holdTelegram(false);
     renderCard();
     if (opts && typeof opts.onChanged === 'function') opts.onChanged(state);
   }
