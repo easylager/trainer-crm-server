@@ -8,18 +8,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=2026102211"></script>
-  <script src="mini-app-telegram-chrome.js?v=2026102211"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102211" />
-  <link rel="stylesheet" href="theme.css?v=2026102211" />
-  <link rel="stylesheet" href="mini-app-components.css?v=2026102211" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026102211" />
-  <link rel="stylesheet" href="mini-app-trainer-account.css?v=2026102211" />
+  <script src="mini-app-trainer-theme.js?v=2026102212"></script>
+  <script src="mini-app-telegram-chrome.js?v=2026102212"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102212" />
+  <link rel="stylesheet" href="theme.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-trainer-account.css?v=2026102212" />
 </head>
 <!--
   «Где занимаюсь» (TASK-313). Вместо блока анкеты: ваши катки сверху (основной помечен), ниже
-  город, поиск и список с кружками — как шаг «Где» онбординга. «Моего катка нет» — шторка с двумя
-  полями; похожий каток уже есть — предлагаем его, а не дубль. Тип места не спрашиваем: лёд.
+  город, поиск и список с кружками — как шаг «Где» онбординга. «Моего катка нет» — шторка:
+  название, «Каток / Зал», адрес; похожий каток уже есть — предлагаем его, а не дубль.
 -->
 <body class="ta-body">
   <main class="tp-page" id="taPage">
@@ -88,6 +88,13 @@
         <span class="ar-field__label">Название</span>
         <input type="text" id="arNewName" maxlength="200" autocomplete="off" enterkeyhint="next" placeholder="Например, каток в ТЦ Галерея" />
       </label>
+      <div class="ar-field">
+        <span class="ar-field__label" id="arNewTypeLabel">Это</span>
+        <div class="ar-seg" role="radiogroup" aria-labelledby="arNewTypeLabel">
+          <button type="button" class="ar-seg__btn" role="radio" aria-checked="true" data-venue="ice">Каток</button>
+          <button type="button" class="ar-seg__btn" role="radio" aria-checked="false" data-venue="gym">Зал</button>
+        </div>
+      </div>
       <label class="ar-field">
         <span class="ar-field__label">Адрес</span>
         <span class="ar-field__box">
@@ -107,6 +114,6 @@
     </div>
   </div>
 
-  <script defer src="trainer-arenas-main.js?v=2026102211"></script>
+  <script defer src="trainer-arenas-main.js?v=2026102212"></script>
 </body>
 </html>

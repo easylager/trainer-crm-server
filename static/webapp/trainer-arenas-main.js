@@ -7,7 +7,8 @@
  *   город и поиск → остальные катки города с кружками → «Моего катка нет в списке» →
  *   шторка с двумя полями. Похожий каток уже есть — предлагаем его, а не дубль.
  *
- * Тип места не спрашиваем: сервер без него ставит лёд, редкий зал поправит модератор.
+ * Тип места — только «Каток» или «Зал»: без выбора зал «Lifestyle» (#201) попал в ледовый каталог,
+ * а бассейн, «площадка» и «площадка на улице» тренеров путали. Остальное поправит модератор.
  * Сохранение — `PATCH /trainer/profile {arena_ids, primary_arena_id, profile.city_id}`.
  * Добавленный каток сервер сразу привязывает к тренеру (`arena-setup`, mode=create).
  */
@@ -50,6 +51,7 @@
     busy: false,
     adding: false,
     pendingNew: null,
+    newVenue: 'ice',
     ret: 'account',
   };
 
@@ -376,11 +378,19 @@
     el('arNewAddress').value = '';
     el('arNewCity').textContent = cityName(state.cityId) ? cityName(state.cityId) + ',' : '';
     el('arAddError').hidden = true;
+    setVenue('ice');
     el('arAddView').hidden = false;
     el('arSimilarView').hidden = true;
     el('arSheetBack').hidden = false;
     el('arSheet').hidden = false;
     setTimeout(function () { try { el('arNewName').focus(); } catch (e) { /* */ } }, 220);
+  }
+
+  function setVenue(key) {
+    state.newVenue = key === 'gym' ? 'gym' : 'ice';
+    Array.prototype.forEach.call(document.querySelectorAll('.ar-seg__btn'), function (b) {
+      b.setAttribute('aria-checked', b.getAttribute('data-venue') === state.newVenue ? 'true' : 'false');
+    });
   }
 
   function closeSheet() {
@@ -416,6 +426,7 @@
       arena_name: name,
       address: fullAddr,
       city_id: state.cityId,
+      venue_type: state.newVenue,
       confirm_duplicate: !!confirmDuplicate,
     }, { 'Idempotency-Key': 'arena-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) })
       .then(function (res) {
@@ -645,6 +656,9 @@
     });
     el('arSheetBack').onclick = closeSheet;
     el('arSheetClose').onclick = closeSheet;
+    Array.prototype.forEach.call(document.querySelectorAll('.ar-seg__btn'), function (b) {
+      b.addEventListener('click', function () { setVenue(b.getAttribute('data-venue')); haptic(); });
+    });
     el('arAddSubmit').onclick = function () { submitNew(false); };
     el('arNewName').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); el('arNewAddress').focus(); }

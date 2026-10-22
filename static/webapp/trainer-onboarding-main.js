@@ -958,7 +958,10 @@
     } else {
       wrap.classList.add('ob-arena-thumb--ph');
       wrap.setAttribute('aria-hidden', 'true');
-      wrap.textContent = (arena && arena.venue_chip) ? arena.venue_chip : '🏟';
+      /* Без фото — нейтральный знак катка, а не эмодзи: на телефоне эмодзи читались как мусор. */
+      wrap.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="6"/>' +
+        '<path d="M12 6v12"/><circle cx="12" cy="12" r="2.2"/></svg>';
     }
     var check = document.createElement('span');
     check.className = 'ob-arena-thumb__check';
@@ -1262,11 +1265,6 @@
   }
 
 
-  /* Больше трёх кистей на сетке не различить: цвет и буква на клетке 7×N клеток начинают
-     повторяться, а не добавлять ясность. Честный ответ — не тащить в онбординг больше трёх,
-     остальные площадки тренер добавит в «Расписании» уже после сохранения. */
-  var MAX_BRUSH_ARENAS = 3;
-
 
   /* Кнопки над неделей — только при нескольких площадках: выбирают, чьё время отмечает
      следующий тап. Цвет точки тот же, что на окнах и слотах. */
@@ -1504,14 +1502,21 @@
    * площадка молча становилась катком — так зал «Lifestyle» (#201) и попал
    * в ледовый каталог со снежинкой и «карточкой катка».
    */
+  /* Только «Каток» и «Зал» (TASK-313): бассейн, хореографический зал, «площадка» и «площадка
+     на улице» тренеров путали, а льду и ОФП-залу хватает двух. Остальное поправит модератор. */
+  var VENUE_CHOICES = [
+    { key: 'ice', noun: 'Каток' },
+    { key: 'gym', noun: 'Зал' },
+  ];
+
   function renderVenueTypePicker() {
     if (!el.obArenaCreateType) return;
     el.obArenaCreateType.innerHTML = '';
-    (state.venueTypes || []).forEach(function (vt) {
+    VENUE_CHOICES.forEach(function (vt) {
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'ob-chip';
-      b.textContent = (vt.icon ? vt.icon + ' ' : '') + vt.noun;
+      b.textContent = vt.noun;
       b.setAttribute('aria-pressed', state.newArenaVenueType === vt.key ? 'true' : 'false');
       b.onclick = function () {
         state.newArenaVenueType = vt.key;
@@ -1652,7 +1657,7 @@
         }
         if (o.data && o.data.status === 'duplicate_warning') {
           renderArenaCreateDuplicates(o.data.duplicates || []);
-          setArenaCreateStatus('Похожая площадка уже есть. Если это другая — добавьте всё равно.', true);
+          setArenaCreateStatus('Похоже, такой каток уже есть — выберите его. Если это другой, добавьте всё равно.', true);
           return;
         }
         var arenaId = o.data && o.data.arena_id;
@@ -1672,10 +1677,29 @@
     if (!el.obArenaCreateDup) return;
     el.obArenaCreateDup.innerHTML = '';
     el.obArenaCreateDup.hidden = !(dups && dups.length);
+    /* Похожий каток — кнопка: тап отмечает его, а не заставляет создавать дубль (TASK-313). */
     (dups || []).forEach(function (d) {
-      var p = document.createElement('p');
-      p.textContent = (d.name || 'Площадка') + (d.address ? (' · ' + d.address) : '');
-      el.obArenaCreateDup.appendChild(p);
+      var id = Number(d.arena_id);
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ob-arena-dup-pick';
+      b.textContent = 'Выбрать «' + (d.name || 'каток') + '»' + (d.address ? (' · ' + d.address) : '');
+      b.onclick = function () {
+        if (!arenaById(id)) {
+          state.arenas.push({
+            id: id, name: d.name || 'Каток', address: d.address || '', city_id: state.cityId,
+            city_name: cityNameById(state.cityId), grid_kind: 'quarter_15', minute_offset: 0,
+            hour_start: 6, hour_end: 23, fixed_duration_minutes: null, is_confirmed: false, thumb_url: null,
+          });
+        }
+        closeArenaCreate();
+        selectCreatedArena(id);
+        renderArenaList();
+        renderArenaTabs();
+        renderWeek();
+        syncCta();
+      };
+      el.obArenaCreateDup.appendChild(b);
     });
     var again = document.createElement('button');
     again.type = 'button';
@@ -1738,7 +1762,10 @@
       var late = starts.filter(function (m) { return m >= from; });
       return (late.length >= count ? late : starts).slice(0, count);
     }
-    var starts = pick('mor', 7 * 60, 2).concat(pick('eve', 18 * 60, 3));
+    /* Прод 2026-10-22, 15 тренеров за 120 дней: в будни слоты ставят в 17–20 (10–13 тренеров
+       в каждый час), утро 6–9 — у 3–5. Поэтому три старта подряд с 17:00 и никаких рассветов;
+       выходные тренер добавит тапом по окну. */
+    var starts = pick('eve', 17 * 60, 3);
     var week = {};
     for (var dow = 0; dow < 5; dow++) {
       var day = {};
@@ -1900,18 +1927,26 @@
       var mine = !slot || slot.a === brushId;
       var len = slot ? WM.slotDuration(slot, arenaById, dur) : brushDur;
       var blocked = slot ? !mine : WM.overlapWith(day, m, brushDur, arenaById, dur) != null;
+      var owner = slot && slot.a != null ? arenaById(slot.a) : null;
+      /* Время другого катка в окне этого — не «наше» и не пустое: приглушено и подписано, чьё.
+         Раньше оно рисовалось закрашенным, и чужие 7:30 читались как странные слоты Замка. */
+      var other = !!(slot && !mine);
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'ob-slot';
-      b.setAttribute('aria-pressed', slot ? 'true' : 'false');
+      b.className = 'ob-slot' + (other ? ' ob-slot--other' : '');
+      b.setAttribute('aria-pressed', slot && !other ? 'true' : 'false');
       if (blocked) b.disabled = true;
-      if (multi && slot && slot.a != null) {
+      if (multi && slot && slot.a != null && !other) {
         var dot = document.createElement('i');
         dot.className = 'ob-dot-' + arenaColorIndex(slot.a);
         b.appendChild(dot);
       }
       b.appendChild(document.createTextNode(WM.minuteLabel(m) + '–' + WM.minuteLabel(m + len)));
-      var owner = slot && slot.a != null ? arenaById(slot.a) : null;
+      if (other) {
+        var who = document.createElement('small');
+        who.textContent = owner ? owner.name : 'без катка';
+        b.appendChild(who);
+      }
       b.setAttribute('aria-label', WM.minuteLabel(m) + '–' + WM.minuteLabel(m + len) +
         (owner && multi ? ', ' + owner.name : '') + (blocked && !slot ? ', пересекается с другим занятием' : ''));
       b.onclick = function () {
@@ -1954,13 +1989,38 @@
       box.appendChild(empty);
       return;
     }
-    rows.forEach(function (r) {
-      var row = document.createElement('div');
-      row.className = 'ob-summary__row';
-      row.innerHTML = '<span></span><span></span>';
-      row.firstChild.textContent = r.days;
-      row.lastChild.textContent = r.times;
-      box.appendChild(row);
+    function addRows(list) {
+      list.forEach(function (r) {
+        var row = document.createElement('div');
+        row.className = 'ob-summary__row';
+        row.innerHTML = '<span></span><span></span>';
+        row.firstChild.textContent = r.days;
+        row.lastChild.textContent = r.times;
+        box.appendChild(row);
+      });
+    }
+    if (state.pickedArenaIds.length < 2) {
+      addRows(rows);
+      return;
+    }
+    /* Несколько катков: сводка по каждому, иначе времена разных катков сливались в одну строку. */
+    state.pickedArenaIds.concat([null]).forEach(function (aid) {
+      var part = {};
+      Object.keys(state.week).forEach(function (dow) {
+        var day = state.week[dow] || {};
+        Object.keys(day).forEach(function (m) {
+          if ((day[m].a == null ? null : Number(day[m].a)) !== aid) return;
+          (part[dow] = part[dow] || {})[m] = day[m];
+        });
+      });
+      var partRows = WM.weekSummary(part);
+      if (!partRows.length) return;
+      var head = document.createElement('div');
+      head.className = 'ob-summary__arena';
+      var a = aid != null ? arenaById(aid) : null;
+      head.textContent = a ? a.name : 'Без катка';
+      box.appendChild(head);
+      addRows(partRows);
     });
   }
 
@@ -2200,6 +2260,18 @@
           });
         });
         pruneEmptyDays();
+        /* Катки, уже привязанные к тренеру (в т.ч. созданный здесь же, пока неделя не сохранена),
+           отмечены сразу: иначе после повторного входа свой каток терялся за первыми 15 в списке. */
+        var linked = (data.linked_arena_ids || []).map(Number);
+        var primaryLinked = data.primary_arena_id != null ? Number(data.primary_arena_id) : null;
+        if (primaryLinked != null && linked.indexOf(primaryLinked) > 0) {
+          linked.splice(linked.indexOf(primaryLinked), 1);
+          linked.unshift(primaryLinked);
+        }
+        linked.forEach(function (aid) {
+          if (picked.length >= MAX_BRUSH_ARENAS || picked.indexOf(aid) >= 0 || !arenaById(aid)) return;
+          picked.push(aid);
+        });
         state.weekIsSuggestion = !!data.week_is_suggestion;
         /* Подсказку перестраиваем шагом в длительность тренера — при 90 минутах серверная
            подсказка 7:00 и 8:00 сама себе накладывалась бы. */

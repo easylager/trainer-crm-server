@@ -124,9 +124,10 @@ describe('экран «Где занимаюсь»', () => {
   const js = read('trainer-arenas-main.js');
   const html = read('trainer-arenas.html');
 
-  it('тип места не спрашиваем — сервер ставит лёд', () => {
-    assert.doesNotMatch(js, /venue_type/);
-    assert.doesNotMatch(html, /Бассейн|Хореограф/);
+  it('тип места — только «Каток» или «Зал»', () => {
+    assert.match(js, /venue_type: state\.newVenue/);
+    assert.ok(html.includes('data-venue="ice"') && html.includes('data-venue="gym"'));
+    assert.doesNotMatch(html, /Бассейн|Хореограф|на улице/);
   });
 
   it('новый каток — шторка с двумя полями, дубль — предложение выбрать существующий', () => {

@@ -84,20 +84,23 @@
     return Math.max(0, goal - count);
   }
 
-  /** Заголовок листа: «Ученик 1 из 3»; после цели — просто «Ещё ученик». */
-  function sheetTitle(state) {
-    var goal = (state && state.goal) || GOAL;
-    var count = (state && state.count) || 0;
-    if (count >= goal) return 'Ещё ученик';
-    return 'Ученик ' + (count + 1) + ' из ' + goal;
+  /**
+   * Заголовок листа. Было «Ученик 1 из 3» — тренер читал это как лимит на трёх учеников
+   * (TASK-313). Три места на карточке — только начало, поэтому без счёта.
+   */
+  function sheetTitle() {
+    return 'Новый ученик';
   }
 
   function addButtonLabel(state) {
     var count = (state && state.count) || 0;
-    if (count <= 0) return 'Добавить ученика';
-    if (count === 1) return 'Добавить второго';
-    if (count === 2) return 'Добавить третьего';
-    return 'Добавить ещё';
+    return count <= 0 ? 'Добавить ученика' : 'Добавить ещё';
+  }
+
+  /** Метка карточки после первого ученика: сколько уже, а не сколько «осталось». */
+  function addedKicker(state) {
+    var n = (state && state.count) || 0;
+    return 'Уже ' + n + ' ' + plural(n, 'ученик', 'ученика', 'учеников');
   }
 
   function plural(n, one, few, many) {
@@ -194,6 +197,7 @@
     seats: seats,
     remaining: remaining,
     sheetTitle: sheetTitle,
+    addedKicker: addedKicker,
     addButtonLabel: addButtonLabel,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

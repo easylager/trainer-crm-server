@@ -94,6 +94,8 @@ async def test_get_offers_a_prefilled_week_not_an_empty_form(app_use_test_db, db
     assert data["already_done"] is False
     assert data["week"], "first run must arrive pre-filled — an empty grid is a form"
     assert all(d["hours"] for d in data["week"])
+    # Прод 2026-10-22: в будни тренеры работают вечером (17–20); рассветы в подсказке — догадка.
+    assert all(h >= 17 for d in data["week"] for h in d["hours"]), data["week"]
     assert data["services"], "the trainer must have something to tap"
 
 
