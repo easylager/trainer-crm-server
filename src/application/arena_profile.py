@@ -15,6 +15,7 @@ from typing import Any, Mapping, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.arena_visit_info import normalize_visit_info
 from src.shared.arena_schedule_mode import (
     SCHEDULE_MODE_SEASON_CLOSED,
     normalize_schedule_mode,
@@ -550,6 +551,9 @@ async def apply_admin_arena_profile_patch(
         amenities = validate_amenities(fields["amenities"], venue_type)
         assignments.append("amenities = CAST(:amenities AS jsonb)")
         params["amenities"] = json.dumps(amenities)
+    if "visit_info" in fields:
+        assignments.append("visit_info = CAST(:visit_info AS jsonb)")
+        params["visit_info"] = json.dumps(normalize_visit_info(fields["visit_info"]), ensure_ascii=False)
     if "status" in fields and fields["status"] is not None:
         new_status = validate_profile_status(str(fields["status"]))
         current_status = (

@@ -35,6 +35,7 @@ from aiogram.exceptions import (
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
+from src.application.arena_visit_info import VisitInfoError, normalize_visit_info
 from src.application.hub_home import now_slot
 from src.application.trainer_custom_service_use_cases import MAX_CUSTOM_SERVICES_PER_TRAINER
 from src.shared.byr_currency_display import BYR_SIGN
@@ -5239,6 +5240,7 @@ class AdminArenaPatchBody(BaseModel):
     reopen_date: date | None = None
     schedule_mode_note: str | None = None
     amenities: dict[str, bool] | None = None
+    visit_info: dict[str, Any] | None = None
     status: str | None = None
 
 
@@ -5259,7 +5261,7 @@ async def get_admin_arenas(
                p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
                p.tickets_url,                p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
                p.schedule_mode, p.reopen_date, p.schedule_mode_note,
-               p.amenities, p.status, a.venue_type
+               p.amenities, p.status, a.venue_type, p.visit_info
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         WHERE a.city_id = :cid
@@ -5301,6 +5303,7 @@ async def get_admin_arenas(
             "amenities": row[21] or {},
             "status": row[22] or "published",
             "venue_type": row[23] or "ice",
+            "visit_info": row[24] or {},
         }
         for row in rows
     ]
@@ -5425,6 +5428,11 @@ async def patch_admin_arena(
     )
     if body.city_id is not None:
         profile_fields["city_id"] = body.city_id
+    if "visit_info" in profile_fields:
+        try:
+            profile_fields["visit_info"] = normalize_visit_info(profile_fields["visit_info"])
+        except VisitInfoError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not updates and not profile_fields:
         return {"ok": True}
     if updates:

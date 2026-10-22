@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.arena_visit_info import visit_view
 from src.application.arena_media import attach_arena_media_payloads
 from src.application.catalog_search import query_wants_ohm, rank_cities, rank_people, rank_places
 from src.application.arena_profile import (
@@ -741,7 +742,7 @@ SELECT
     p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
     p.schedule_mode, p.reopen_date, p.schedule_mode_note,
-    p.amenities, p.status, p.verified_at, p.updated_at AS profile_updated_at,
+    p.amenities, p.visit_info, p.status, p.verified_at, p.updated_at AS profile_updated_at,
     c.country, c.name AS city_name,
     COALESCE((
         SELECT COUNT(*)::int FROM ice_sessions s
@@ -803,6 +804,7 @@ def _row_to_arena_dict(row: Mapping[str, Any]) -> dict[str, Any]:
     _sanitize_public_profile_fields(data)
     data["social_urls"] = _as_mapping(row.get("social_urls"))
     data["amenities"] = _as_mapping(row.get("amenities"))
+    data["visit_info"] = _as_mapping(row.get("visit_info"))
     data["currency_code"] = currency_for_country(country)
     data["has_media"] = bool(row.get("has_media"))
     data["tier"] = compute_data_tier(
@@ -813,6 +815,7 @@ def _row_to_arena_dict(row: Mapping[str, Any]) -> dict[str, Any]:
     data["sessions_48h"] = int(row.get("sessions_48h") or 0)
     data["future_session_count"] = int(row.get("future_session_count") or 0)
     data["trainer_count"] = int(row.get("trainer_count") or 0)
+    data["visit"] = visit_view(data, has_trainers=data["trainer_count"] > 0)
     data["free_slots"] = int(row.get("free_slots") or 0)
     data["open_groups_count"] = int(row.get("open_groups_count") or 0)
     return data
@@ -2245,6 +2248,8 @@ async def get_public_arena_card(
         **schedule_mode_public_fields(row),
         "in_season": is_in_season(season_start, season_end, _today_minsk().month),
         "amenities": _as_mapping(row.get("amenities")),
+        "visit_info": _as_mapping(row.get("visit_info")),
+        "visit": row.get("visit") or visit_view(row, has_trainers=int(row.get("trainer_count") or 0) > 0),
         "contacts": {
             "phone": sanitized_phone,
             "website_url": row.get("website_url"),
