@@ -507,20 +507,39 @@
     return !!(t && t.tagName === 'INPUT');
   }
 
+  /**
+   * «Сохранить» видна всегда. Раньше футер прятался, пока поле в фокусе, — но на iOS фокус
+   * остаётся и после того, как клавиатуру свернули, и кнопка не возвращалась, пока тренер не
+   * уходил «назад». Теперь клавиатуру меряем по visualViewport и ставим футер над ней.
+   */
+  function keyboardInset() {
+    var vv = window.visualViewport;
+    if (!vv) return 0;
+    return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  }
+
+  function syncKeyboard() {
+    var inset = keyboardInset();
+    var open = inset > 80 || (isField(document.activeElement) && inset > 0);
+    document.body.classList.toggle('tp-kb', open);
+    var foot = el('tpFoot');
+    if (foot) foot.style.bottom = open ? inset + 'px' : '';
+  }
+
   function bindKeyboard() {
     document.addEventListener('focusin', function (e) {
       if (!isField(e.target)) return;
-      document.body.classList.add('tp-kb');
       var target = e.target;
       setTimeout(function () {
+        syncKeyboard();
         try { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (er) { /* */ }
       }, 250);
     });
-    document.addEventListener('focusout', function () {
-      setTimeout(function () {
-        if (!isField(document.activeElement)) document.body.classList.remove('tp-kb');
-      }, 60);
-    });
+    document.addEventListener('focusout', function () { setTimeout(syncKeyboard, 60); });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', syncKeyboard);
+      window.visualViewport.addEventListener('scroll', syncKeyboard);
+    }
     /* «Далее» на клавиатуре — к следующей цене, на последней — убрать клавиатуру. */
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Enter' || !e.target || !e.target.dataset || !e.target.dataset.price) return;

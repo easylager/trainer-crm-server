@@ -365,8 +365,9 @@ body.ta-body {
   box-sizing: border-box;
 }
 
+/* Клавиатура открыта: поле можно докрутить выше неё, «Сохранить» стоит над клавиатурой. */
 body.tp-kb .tp-page { padding-bottom: 50vh; }
-body.tp-kb .tp-foot { display: none; }
+body.tp-kb .tp-foot { padding-bottom: 8px; }
 
 .tp-back {
   min-height: 44px;

@@ -2914,6 +2914,20 @@
         var catalogish =
           !backToCatalogSection &&
           (state.profileFocusedTask === 'catalog' || state.profileFocusedTask === 'vitrine');
+        /* Раздел вкладки «Профиль»: сохранили — короткое «Сохранили», отменили — сразу назад.
+           Экран раздела не закрываем до перехода: иначе на полсекунды мелькала вся анкета.
+           Обещать «откроется главная» здесь было бы неправдой: возвращаемся в профиль. */
+        if (state.profileFocusedReturnPath === 'trainer-account' && !catalogish) {
+          state.profileBlockTourActive = false;
+          if (wantSubmit) {
+            haptic('success');
+            showProfileToHubTransitionOverlay({ title: 'Сохранили', hint: 'Возвращаемся в профиль' });
+            setTimeout(function() { window.location.href = dest; }, 650);
+          } else {
+            window.location.href = dest;
+          }
+          return;
+        }
         state.profileBlockTourActive = false;
         state.profileFocusedTask = null;
         state.profileFocusedReturn = 'hub';
@@ -2974,18 +2988,6 @@
           showProfileToHubTransitionOverlay();
         }
 
-        /* Раздел вкладки «Профиль»: сохранили — короткое «Сохранили», отменили — сразу назад.
-           Обещать «откроется главная» здесь было бы неправдой: возвращаемся в профиль. */
-        if (state.profileFocusedReturnPath === 'trainer-account' && !catalogish) {
-          if (wantSubmit) {
-            haptic('success');
-            showProfileToHubTransitionOverlay({ title: 'Сохранили', hint: 'Возвращаемся в профиль' });
-            setTimeout(goDest, 650);
-          } else {
-            goDest();
-          }
-          return;
-        }
         haptic(wantSubmit ? 'success' : 'warning');
         /* Submit только после явного завершения карусели. «Не сейчас» / X — не в очередь. */
         if (!wantSubmit || !catalogish) {
@@ -3602,6 +3604,8 @@
             startFocusedProfileTask(task, from);
             return;
           }
+          /* Неизвестный ?task= — показать анкету, а не пустой экран. */
+          document.documentElement.classList.remove('profile-task-boot');
           if (sp.get('onboarding') !== 'blocks') return;
           sp.delete('onboarding');
           var qs = sp.toString();
@@ -6842,6 +6846,7 @@
                 window.MiniAppErrorUi && typeof MiniAppErrorUi.humanizeDetail === 'function'
                   ? MiniAppErrorUi.humanizeDetail(rawDetail) || String(rawDetail)
                   : String(rawDetail);
+              document.documentElement.classList.remove('profile-task-boot');
               document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' +
                 detailShow + '</p>';
               return Promise.resolve();
@@ -6894,7 +6899,8 @@
             var tip = (!initData())
               ? 'Нет авторизации Telegram. Откройте профиль из бота или с init_data в адресе.'
               : 'Ошибка сети. Проверьте подключение.';
-            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
+            document.documentElement.classList.remove('profile-task-boot');
+              document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
             return Promise.resolve();
           });
       }
@@ -6909,6 +6915,7 @@
                 window.MiniAppErrorUi && typeof MiniAppErrorUi.humanizeDetail === 'function'
                   ? MiniAppErrorUi.humanizeDetail(rawDetail2) || String(rawDetail2)
                   : String(rawDetail2);
+              document.documentElement.classList.remove('profile-task-boot');
               document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' +
                 detailShow2 + '</p>';
               return Promise.resolve();
@@ -6950,7 +6957,8 @@
             var tip = (!initData())
               ? 'Нет авторизации Telegram. Откройте профиль из бота или с init_data в адресе.'
               : 'Ошибка сети. Проверьте подключение.';
-            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
+            document.documentElement.classList.remove('profile-task-boot');
+              document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' + tip + '</p>';
             return Promise.resolve();
           });
       }
