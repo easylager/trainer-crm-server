@@ -1043,68 +1043,112 @@
   }
 
 
-  var obArenaFocusScrollT = null;
+  /*
+   * Клавиатура на телефоне. Telegram не сжимает страницу под клавиатуру: поле уезжает под неё,
+   * а закреплённая кнопка внизу ложится поверх. Поэтому одно правило на все поля экрана —
+   * роль, своё занятие, город, поиск и создание площадки:
+   *   - пока поле в фокусе, кнопки внизу нет (.ob-kb), а снизу есть запас прокрутки на высоту
+   *     клавиатуры (--ob-kb-pad, из visualViewport; без него — половина экрана);
+   *   - поле прокручивается в видимую часть: по центру, поиск площадки — к верху, чтобы под ним
+   *     был виден список (data-ob-reveal="start");
+   *   - тап мимо поля и его панели убирает клавиатуру.
+   */
+  var kbRevealT = null;
 
-
-  /** Один раз после открытия клавиатуры — без polling и без vv.scroll (они гоняли scrollIntoView по кругу). */
-  function scheduleArenaSearchScrollOnce(inp) {
-    if (!inp) return;
-    if (obArenaFocusScrollT) clearTimeout(obArenaFocusScrollT);
-    obArenaFocusScrollT = setTimeout(function () {
-      obArenaFocusScrollT = null;
-      if (document.activeElement !== inp) return;
-      var wrap = inp.closest('.ob-where-bar');
-      if (!wrap) return;
-      try {
-        wrap.scrollIntoView({ block: 'start', behavior: 'auto', inline: 'nearest' });
-      } catch (eS) { /* */ }
-    }, 420);
+  function isTextField(node) {
+    if (!node || !node.tagName) return false;
+    if (node.tagName === 'TEXTAREA') return true;
+    if (node.tagName !== 'INPUT') return false;
+    var t = (node.getAttribute('type') || 'text').toLowerCase();
+    return ['text', 'search', 'tel', 'email', 'number', 'url'].indexOf(t) >= 0;
   }
 
-  function dismissArenaSearchKeyboard() {
-    if (obArenaFocusScrollT) {
-      clearTimeout(obArenaFocusScrollT);
-      obArenaFocusScrollT = null;
-    }
-    if (el.obArenaSearch && document.activeElement === el.obArenaSearch) {
-      try { el.obArenaSearch.blur(); } catch (eB) { /* */ }
+  function keyboardInset() {
+    var vv = window.visualViewport;
+    if (!vv) return 0;
+    return Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop || 0)));
+  }
+
+  function revealField(node, delay) {
+    if (kbRevealT) clearTimeout(kbRevealT);
+    kbRevealT = setTimeout(function () {
+      kbRevealT = null;
+      if (document.activeElement !== node) return;
+      var inset = keyboardInset();
+      document.body.style.setProperty('--ob-kb-pad', inset > 80 ? (inset + 24) + 'px' : '50vh');
+      var target = node.getAttribute('data-ob-reveal') === 'start' ? (node.closest('.ob-where-bar') || node) : node;
+      try {
+        target.scrollIntoView({ block: node.getAttribute('data-ob-reveal') === 'start' ? 'start' : 'center', behavior: 'smooth' });
+      } catch (eS) { /* старый WebView */ }
+    }, delay);
+  }
+
+  function hideKeyboard() {
+    var ae = document.activeElement;
+    if (isTextField(ae)) {
+      try { ae.blur(); } catch (eB) { /* */ }
     }
     try {
-      var tg = window.Telegram && window.Telegram.WebApp;
+      var tg = getTg();
       if (tg && typeof tg.hideKeyboard === 'function') tg.hideKeyboard();
     } catch (eTg) { /* */ }
   }
 
-  function bindArenaSearchMobile() {
-    var inp = el.obArenaSearch;
-    if (inp && !inp._obArenaMobileBound) {
-      inp._obArenaMobileBound = true;
-      inp.addEventListener('focus', function () { scheduleArenaSearchScrollOnce(inp); });
-      inp.addEventListener('blur', function () {
-        if (obArenaFocusScrollT) {
-          clearTimeout(obArenaFocusScrollT);
-          obArenaFocusScrollT = null;
-        }
-      });
-      inp.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === 'Escape') {
-          e.preventDefault();
-          dismissArenaSearchKeyboard();
-        }
+  function dismissArenaSearchKeyboard() {
+    if (el.obArenaSearch && document.activeElement === el.obArenaSearch) hideKeyboard();
+  }
+
+  function bindKeyboardSafety() {
+    if (document._obKeyboardBound) return;
+    document._obKeyboardBound = true;
+    document.addEventListener('focusin', function (e) {
+      if (!isTextField(e.target)) return;
+      document.body.classList.add('ob-kb');
+      /* Дважды: сразу (Android уже сжал окно) и после анимации клавиатуры (iOS). */
+      revealField(e.target, 60);
+      setTimeout(function () { revealField(e.target, 0); }, 420);
+    });
+    document.addEventListener('focusout', function () {
+      setTimeout(function () {
+        if (isTextField(document.activeElement)) return;
+        document.body.classList.remove('ob-kb');
+      }, 120);
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', function () {
+        if (isTextField(document.activeElement)) revealField(document.activeElement, 50);
       });
     }
-
-    if (document._obArenaSearchDismissBound) return;
-    document._obArenaSearchDismissBound = true;
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !isTextField(e.target)) return;
+      hideKeyboard();
+    });
     document.addEventListener(
       'touchstart',
       function (e) {
+        var ae = document.activeElement;
+        if (!isTextField(ae)) return;
         var t = e.target;
-        if (t && t.closest && t.closest('.ob-where-bar, .ob-arena-list')) return;
-        dismissArenaSearchKeyboard();
+        if (isTextField(t)) return;
+        var zone = ae.closest('.ob-addbox, .ob-arena-create, .ob-where-bar');
+        if (zone && t && zone.contains(t)) return;
+        if (ae === el.obArenaSearch && t && t.closest && t.closest('.ob-arena-list')) return;
+        hideKeyboard();
       },
       { passive: true, capture: true }
     );
+  }
+
+  function bindArenaSearchMobile() {
+    var inp = el.obArenaSearch;
+    if (!inp || inp._obArenaMobileBound) return;
+    inp._obArenaMobileBound = true;
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        dismissArenaSearchKeyboard();
+      }
+    });
   }
 
   /* ── Неделя: доступ к стартам. state.week[dow] = { минута: { a: площадка, d: длительность } } ── */
@@ -2468,12 +2512,27 @@
         }
       });
     }
+    bindKeyboardSafety();
     bindArenaSearchMobile();
     if (el.obArenaSearch) el.obArenaSearch.oninput = renderArenaList;
     if (el.obArenaCreateSubmit) {
       el.obArenaCreateSubmit.onclick = function () { submitArenaCreate(false); };
     }
     if (el.obArenaCreateCancel) el.obArenaCreateCancel.onclick = closeArenaCreate;
+    if (el.obArenaCreateName) {
+      el.obArenaCreateName.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (el.obArenaCreateAddress) el.obArenaCreateAddress.focus();
+      });
+    }
+    if (el.obArenaCreateAddress) {
+      el.obArenaCreateAddress.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        submitArenaCreate(false);
+      });
+    }
 
     if (el.obServiceAddSubmit) el.obServiceAddSubmit.onclick = addCustomService;
     if (el.obServiceAddCancel) el.obServiceAddCancel.onclick = closeServiceAdd;

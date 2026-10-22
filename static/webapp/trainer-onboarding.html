@@ -11,14 +11,14 @@
   <!-- telegram.org подключён async, поэтому ready() + раскрытие делает mini-app-full-height.js:
        он дожидается SDK, иначе на медленной сети вызовы уходили в никуда и приложение
        открывалось полушторкой. -->
-  <script src="mini-app-full-height.js?v=202610224"></script>
+  <script src="mini-app-full-height.js?v=202610225"></script>
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
   <!-- Палитра Glide по colorScheme Telegram (светлая / тёмная), как на остальных экранах тренера. -->
-  <script src="mini-app-trainer-theme.js?v=202610224"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610224" />
-  <link rel="stylesheet" href="theme.css?v=202610224" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610224" />
-  <script src="mini-app-telegram-chrome.js?v=202610224"></script>
+  <script src="mini-app-trainer-theme.js?v=202610225"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610225" />
+  <link rel="stylesheet" href="theme.css?v=202610225" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610225" />
+  <script src="mini-app-telegram-chrome.js?v=202610225"></script>
   <style>
     /*
      * Первый запуск (TASK-312): вступление и три шага — «что ведёте», «где», «когда».
@@ -354,6 +354,11 @@
     .ob-foot-note:empty { display: none; }
     .ob-foot-note.is-error { color: var(--app-danger-ink, #C4342A); }
 
+    /* ── Клавиатура: кнопка внизу прячется, снизу запас на высоту клавиатуры ── */
+    body.ob-kb .ob-foot { display: none; }
+    body.ob-kb .ob { padding-bottom: var(--ob-kb-pad, 50vh); }
+    input, select { scroll-margin: 16px; }
+
     /* ── Готово ── */
     .ob-done { display: none; padding: 40px 20px 0; text-align: center; }
     .ob-done.is-on { display: block; }
@@ -451,7 +456,7 @@
           <button type="button" class="ob-addcta" id="obRoleAddBtn">Меня нет в списке</button>
           <div class="ob-addbox" id="obRoleCustomWrap" hidden>
             <label for="obRoleCustom">Ваша роль</label>
-            <input id="obRoleCustom" type="text" maxlength="64" autocomplete="off" placeholder="Спортивный психолог">
+            <input id="obRoleCustom" type="text" enterkeyhint="done" maxlength="64" autocomplete="off" placeholder="Спортивный психолог">
             <div class="ob-addbox__actions">
               <button type="button" class="ob-chip" id="obRoleAddSubmit">Добавить</button>
               <button type="button" class="ob-chip" id="obRoleAddCancel">Отмена</button>
@@ -472,7 +477,7 @@
              попадает после модерации. -->
         <div class="ob-addbox" id="obServiceAddWrap" hidden>
           <label for="obServiceAddInput">Название занятия</label>
-          <input id="obServiceAddInput" type="text" maxlength="128" autocomplete="off" placeholder="Спортивная психология">
+          <input id="obServiceAddInput" type="text" enterkeyhint="done" maxlength="128" autocomplete="off" placeholder="Спортивная психология">
           <p class="ob-hint" style="margin: 0;">Где проводится? Онлайн можно поставить только своей услуге.</p>
           <div class="ob-addbox-format" id="obServiceAddFormat" role="group" aria-label="Формат нового занятия">
             <button type="button" class="ob-chip" data-online="0" aria-pressed="true">На площадке</button>
@@ -505,14 +510,14 @@
           </select>
           <label class="ob-search">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--ob-muted)"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
-            <input type="search" id="obArenaSearch" placeholder="Каток или адрес" aria-label="Поиск площадки"
+            <input type="search" id="obArenaSearch" data-ob-reveal="start" placeholder="Каток или адрес" aria-label="Поиск площадки"
                    autocomplete="off" enterkeyhint="done" aria-controls="obArenaList">
           </label>
         </div>
         <button type="button" class="ob-addcta" id="obCityAddBtn">Моего города нет в списке</button>
         <div class="ob-addbox" id="obCityCreateWrap" hidden>
           <label for="obCityCreateName">Название города</label>
-          <input id="obCityCreateName" type="text" maxlength="128" autocomplete="address-level2" placeholder="Кобрин">
+          <input id="obCityCreateName" type="text" enterkeyhint="done" maxlength="128" autocomplete="address-level2" placeholder="Кобрин">
           <div class="ob-addbox__actions">
             <button type="button" class="ob-chip" id="obCityCreateSubmit">Добавить</button>
             <button type="button" class="ob-chip" id="obCityCreateCancel">Отмена</button>
@@ -527,11 +532,11 @@
         <div id="obArenaCreateWrap" class="ob-arena-create" hidden>
           <p class="ob-hint" id="obArenaCreateLead" style="margin: 0;">Добавьте — выбирать её сможете сразу, а мы проверим карточку позже.</p>
           <label for="obArenaCreateName">Название</label>
-          <input id="obArenaCreateName" type="text" maxlength="128" autocomplete="off">
+          <input id="obArenaCreateName" type="text" enterkeyhint="next" maxlength="128" autocomplete="off">
           <label id="obArenaCreateTypeLabel">Что это за место</label>
           <div class="ob-chips" id="obArenaCreateType" role="group" aria-labelledby="obArenaCreateTypeLabel"></div>
           <label for="obArenaCreateAddress">Адрес</label>
-          <input id="obArenaCreateAddress" type="text" maxlength="512" autocomplete="street-address">
+          <input id="obArenaCreateAddress" type="text" enterkeyhint="done" maxlength="512" autocomplete="street-address">
           <p id="obArenaCreateStatus" class="ob-arena-create-status" hidden></p>
           <div id="obArenaCreateDup" class="ob-arena-create-dup" hidden></div>
           <div class="ob-arena-create-actions">
@@ -586,7 +591,7 @@
   </div>
 </div>
 
-<script src="trainer-onboarding-week-model.js?v=202610224"></script>
-<script src="trainer-onboarding-main.js?v=202610224"></script>
+<script src="trainer-onboarding-week-model.js?v=202610225"></script>
+<script src="trainer-onboarding-main.js?v=202610225"></script>
 </body>
 </html>
