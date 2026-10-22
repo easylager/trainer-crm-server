@@ -948,7 +948,7 @@
           '<div class="schedule-reload-panel">' +
           '<p class="schedule-reload-panel__msg">Не удалось загрузить расписание. Проверьте соединение и попробуйте снова.</p>' +
           detailHtml +
-          '<p class="schedule-reload-panel__hint">Если не помогло — закройте мини-приложение и снова нажмите синюю кнопку «Обзор» слева от поля ввода в боте (или /home).</p>' +
+          '<p class="schedule-reload-panel__hint">Если не помогло — закройте мини-приложение и снова нажмите синюю кнопку «Кабинет» слева от поля ввода в боте (или /home).</p>' +
           '<button type="button" class="btn-secondary schedule-reload-panel__btn" id="btnScheduleCalendarReload">Обновить</button>' +
           '</div>';
         var btn = document.getElementById('btnScheduleCalendarReload');

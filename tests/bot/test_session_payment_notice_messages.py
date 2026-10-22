@@ -258,7 +258,7 @@ def test_trainer_first_booking_milestone_pass_instead_of_price() -> None:
         expected_payment_class="PASS",
     )
     assert "Оплата: абонемент" in text
-    assert "💰" in text and "50" in text.split("💰")[1]
+    assert "50" not in text  # абонемент — разовую цену не повторяем
 
 
 def test_trainer_first_booking_milestone_omits_empty_venue_and_price_blocks() -> None:
@@ -285,10 +285,10 @@ def test_trainer_first_booking_milestone_omits_empty_venue_and_price_blocks() ->
     assert "перенос вашей базы" not in text
     assert "профиле" not in text
     assert "Площадка" not in text
-    assert "💰" not in text
-    assert "👤 <b>Ученик:</b> Иван" in text
+    assert "BYN" not in text
+    assert "Иван" in text
     assert "ФИО" not in text
-    assert text.startswith("✅ <b>Запись создана.</b>")
+    assert text.startswith("<b>Первая запись в кабинете</b>")
 
 
 def test_trainer_first_booking_milestone_without_client_phone_has_no_blank_line() -> None:
@@ -307,7 +307,7 @@ def test_trainer_first_booking_milestone_without_client_phone_has_no_blank_line(
         created_by_trainer=False,
     )
     assert "\n\n\n" not in text
-    assert "👤 <b>Ученик:</b> Иван\n\n" in text
+    assert "\nИван\n" in text
 
 
 def test_trainer_confirmed_echo_pass_instead_of_price() -> None:

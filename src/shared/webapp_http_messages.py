@@ -9,7 +9,7 @@ TRAINER_WEBAPP_FORBIDDEN_DETAIL = (
 # Lead Mode / lapsed subscription: CRM writes (slots, trainer-side bookings, template).
 WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED = (
     "Сейчас нет активной подписки с модулем CRM: создавать и менять слоты и вести записи через "
-    "систему можно после продления. Профиль в каталоге остаётся — откройте «Подписка» в Обзоре."
+    "систему можно после продления. Профиль в каталоге остаётся — откройте «Подписка» в «Кабинете»."
 )
 
 WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED = (

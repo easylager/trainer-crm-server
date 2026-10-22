@@ -274,7 +274,7 @@ class TestRenderOnboardingNudgeText:
         )
         assert "Рады, что вы заглянули" in text
         assert "расписание" in text.lower()
-        assert "Обзор" in text
+        assert "Кабинет" in text
         assert "заполни" not in text.lower()
 
     def test_no_students_stage_asks_for_names_and_opens_the_sheet(self):
@@ -283,7 +283,7 @@ class TestRenderOnboardingNudgeText:
         nudge = _nudge(step=ONBOARDING_NUDGE_STEP_D1, stage=STAGE_NO_STUDENTS)
         text = _render_onboarding_nudge_text(nudge, trial_days_remaining=None)
         assert "своих учеников" in text
-        assert "Обзор" not in text
+        assert "«Кабинет»" not in text
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv("WEBAPP_BASE_URL", "https://example.test")
             kb = _onboarding_nudge_keyboard(nudge)

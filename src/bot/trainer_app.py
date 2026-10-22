@@ -36,13 +36,13 @@ logger = logging.getLogger(__name__)
 
 
 async def setup_menu_and_commands(bot: Bot) -> None:
-    """Default scope: no slash menu; linked chats get per-chat «Обзор» via TrainerMenuSyncMiddleware."""
+    """Default scope: no slash menu; linked chats get per-chat «Кабинет» via TrainerMenuSyncMiddleware."""
     await set_default_trainer_commands_without_stats(bot)
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     _base, src = mini_app_https_base(Settings())
     logger.info(
         "Trainer bot: default menu = empty slash list [%s]; "
-        "linked chats get «Обзор» Web App button only",
+        "linked chats get «Кабинет» Web App button only",
         src,
     )
 
@@ -81,7 +81,7 @@ async def main() -> None:
     )
     dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
     dp.update.outer_middleware(TrainerBenchmarkMiddleware())
-    # Menu sync before gate: always re-apply «Обзор» for linked trainers even when gate blocks.
+    # Menu sync before gate: always re-apply «Кабинет» for linked trainers even when gate blocks.
     menu_sync = TrainerMenuSyncMiddleware()
     dp.message.outer_middleware(menu_sync)
     dp.callback_query.outer_middleware(menu_sync)

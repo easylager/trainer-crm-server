@@ -308,7 +308,7 @@ def _clear_hard_fail_throttle(kind: str, booking_id: int) -> None:
 
 
 async def _refresh_trainer_menu_after_push(trainer_bot: Bot, chat_id: int) -> None:
-    """Telegram often drops MenuButtonWebApp after Mini App; restore «Обзор» on outbound pushes."""
+    """Telegram often drops MenuButtonWebApp after Mini App; restore «Кабинет» on outbound pushes."""
     try:
         from src.bot.trainer_menu_commands import ensure_trainer_hub_menu_button
 
@@ -2063,53 +2063,25 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                     if not trainer_tid:
                         await mark_booking_notified(session, b["id"])
                         continue
-                    d = b["slot_date"]
-                    date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
-                    dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
-                    time_str = (
-                        f"{b['start_time'].strftime('%H:%M') if hasattr(b['start_time'], 'strftime') else b['start_time']}"
-                        f"–{b['end_time'].strftime('%H:%M') if hasattr(b['end_time'], 'strftime') else b['end_time']}"
+                    from src.shared.currency import resolve_trainer_currency
+                    from src.shared.public_display import format_phone_display
+
+                    currency = await resolve_trainer_currency(session, int(b["trainer_id"]))
+                    phone_raw = (b.get("client_phone") or "").strip()
+                    text = msg.format_trainer_new_booking_html(
+                        client_name=b.get("client_name") or "Ученик",
+                        slot_date=b["slot_date"],
+                        start_time=b["start_time"],
+                        service=b.get("service_name"),
+                        arena=b.get("arenas_str"),
+                        price=msg.money_text(b.get("booking_price_cents"), currency)
+                        or (b.get("price_tier_label") or ""),
+                        phone=format_phone_display(phone_raw)
+                        if phone_raw and not b.get("client_telegram_id")
+                        else None,
+                        comment=b.get("client_comment"),
+                        first_online=bool(b.get("is_first_client_online_booking")),
                     )
-                    duration = _reminder_duration_minutes(
-                        b.get("start_time"), b.get("end_time")
-                    )
-                    phone = b.get("client_phone") or "—"
-                    comment = (b.get("client_comment") or "").strip()
-                    client_name = b.get("client_name") or "Клиент"
-                    service = b.get("service_name") or "—"
-                    city = b.get("city_name") or "—"
-                    arenas = b.get("arenas_str") or "—"
-                    pl = (b.get("price_tier_label") or "").strip()
-                    tariff_display = pl or "—"
-                    if comment:
-                        text = msg.TRAINER_BOOKING_NOTIFICATION.format(
-                            date=html_lib.escape(date_str),
-                            day=html_lib.escape(dow),
-                            time=html_lib.escape(time_str),
-                            duration=duration,
-                            client_name=html_lib.escape(client_name),
-                            phone=html_lib.escape(phone),
-                            service=html_lib.escape(service),
-                            city=html_lib.escape(city),
-                            arenas=html_lib.escape(arenas),
-                            tariff=html_lib.escape(tariff_display),
-                            comment=html_lib.escape(comment),
-                        )
-                    else:
-                        text = msg.TRAINER_BOOKING_NOTIFICATION_NO_COMMENT.format(
-                            date=html_lib.escape(date_str),
-                            day=html_lib.escape(dow),
-                            time=html_lib.escape(time_str),
-                            duration=duration,
-                            client_name=html_lib.escape(client_name),
-                            phone=html_lib.escape(phone),
-                            service=html_lib.escape(service),
-                            city=html_lib.escape(city),
-                            arenas=html_lib.escape(arenas),
-                            tariff=html_lib.escape(tariff_display),
-                        )
-                    if b.get("is_first_client_online_booking"):
-                        text = msg.TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX + text
                     kb = _booking_pending_notify_keyboard(int(b["id"]), client_tid=b.get("client_telegram_id"), trainer_tid=int(trainer_tid))
                     kb_confirm_decline_only = InlineKeyboardMarkup(
                         inline_keyboard=[
@@ -2630,13 +2602,13 @@ def _render_onboarding_nudge_text(
             else msg.TRAINER_ONBOARDING_TRIAL_DAYS_LEFT.format(days=trial_days_remaining)
         )
 
-    # Шаг «ученики» открывается кнопкой прямо на листе — подсказка про «Обзор» там лишняя.
+    # Шаг «ученики» открывается кнопкой прямо на листе — подсказка про «Кабинет» там лишняя.
     outro = "" if nudge.stage == STAGE_NO_STUDENTS else msg.TRAINER_ONBOARDING_NUDGE_OUTRO
     return intro + body + trial_suffix + outro
 
 
 def _onboarding_nudge_keyboard(nudge: DueOnboardingNudge) -> InlineKeyboardMarkup | None:
-    """Кнопка сразу на лист «Ученик 1 из 3» (TASK-310) — остальные шаги ведут через «Обзор»."""
+    """Кнопка сразу на лист «Ученик 1 из 3» (TASK-310) — остальные шаги ведут через «Кабинет»."""
     if nudge.stage != STAGE_NO_STUDENTS:
         return None
     base = (Settings().webapp_base_url or "").rstrip("/")
@@ -3013,7 +2985,7 @@ async def run_daily_morning_digest_loop(trainer_bot: Bot) -> None:
     Ticks every DIGEST_LOOP_INTERVAL_SEC. For each enabled trainer whose resolved send_at
     falls in ``[send_at, send_at + DIGEST_SEND_GRACE_MIN)`` Minsk-time window today AND who
     hasn't yet received today's digest, compute the aggregator and fire a message with an
-    'Обзор' CTA to trainer-home.
+    'Кабинет' CTA to trainer-home.
 
     Suppression rules:
       - 0 sessions today AND 0 pending requests → stay silent.

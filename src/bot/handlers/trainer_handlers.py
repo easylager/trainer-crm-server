@@ -349,7 +349,7 @@ def _onboarding_start_keyboard() -> InlineKeyboardMarkup | None:
     """
     One button under the first message: «Собрать страницу» → the quick-setup screen.
 
-    Not «Обзор». The hub is a place with many things in it; at second zero the trainer needs a
+    Not «Кабинет». The hub is a place with many things in it; at second zero the trainer needs a
     single door, and behind it a screen that asks two questions they can answer without thinking.
     """
     base = (Settings().webapp_base_url or "").rstrip("/")
@@ -369,7 +369,7 @@ def _onboarding_start_keyboard() -> InlineKeyboardMarkup | None:
 
 def _post_welcome_link_keyboard(*, for_active_menu: bool) -> InlineKeyboardMarkup:
     """
-    After /start with link_: Обзор (HTTPS onboarding hub) only — no inline Profile (avoid duplicate entry;
+    After /start with link_: Кабинет (HTTPS onboarding hub) only — no inline Profile (avoid duplicate entry;
     profile is reachable from trainer-home + left menu). Subscription when menu fully active.
     """
     rows: list[list[InlineKeyboardButton]] = []

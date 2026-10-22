@@ -4,7 +4,7 @@ Prefixes: client bot vs trainer bot.
 
 Voice (UX):
 - Client bot: «Вы», нейтрально-дружелюбно; без канцелярита; CTA ведут в меню («Тренеры и запись», «Мои записи»), не в несуществующие команды.
-- Trainer bot: «Вы», коротко и по делу; пуши: заголовок + суть + CTA «Обзор» (кнопка слева от поля ввода).
+- Trainer bot: «Вы», коротко и по делу; пуши: заголовок + суть + CTA «Кабинет» (кнопка слева от поля ввода).
 - Кнопки «назад»/пагинация: префикс ◀️ / ▶️ где уместно; не дублировать десяток эмодзи в одном абзаце.
 - Не хардкодить тексты в handlers — только через константы здесь.
 """
@@ -12,6 +12,7 @@ Voice (UX):
 from __future__ import annotations
 
 import html
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -598,62 +599,57 @@ TRAINER_REQUEST_DECLINED = "Заявка отклонена. Её больше �
 # --- Notifications ---
 
 # --- Morning + Sunday digest (src/application/trainer_digest_use_cases.py) ---
-# Design intent: a habit-forming ritual, not a billing dump. Structure per message:
-#   1) HERO (emoji + warm hook + the number that matters most)
-#   2) DETAIL (scannable rows; inline tags for risks/opportunities)
-#   3) ONE RECOMMENDATION (👉 — closes an open loop; always present)
-# Voice rule: .cursor/rules/Product-voice.mdc  •  Edit: reuse emoji vocabulary consistently
-# (☀️ morning · 🌙 weekly · ⏱ time · 📍 venue · 👋 first-timer · ⚠ risk · 💬 owed · 👉 do-this).
+# Утренняя сводка (TASK-314): короткая, как кабинет. Сначала день одной фразой, потом строки
+# занятий, потом то, что ждёт ответа, и одна рекомендация. Без эмодзи: метка — словом.
 
 # --- Morning digest — auto: утренний слот (~8:00), не «за час» до вечерней тренировки; иначе digest_send_time.
-TRAINER_DIGEST_MORNING_GREETING = "☀️ Доброе утро!"
-TRAINER_DIGEST_MORNING_GREETING_DAY = "☀️ Добрый день!"
-TRAINER_DIGEST_MORNING_GREETING_EVENING = "🌤 Добрый вечер!"
-TRAINER_DIGEST_SESSION_TAG_FIRST_TIMER = "👋 первая тренировка"
-TRAINER_DIGEST_SESSION_TAG_PENDING = "⚠ ждёт подтверждения"
+TRAINER_DIGEST_MORNING_GREETING = "Доброе утро."
+TRAINER_DIGEST_MORNING_GREETING_DAY = "Добрый день."
+TRAINER_DIGEST_MORNING_GREETING_EVENING = "Добрый вечер."
+TRAINER_DIGEST_SESSION_TAG_FIRST_TIMER = "первое занятие"
+TRAINER_DIGEST_SESSION_TAG_PENDING = "<i>ждёт подтверждения</i>"
 TRAINER_DIGEST_GAP_LINE = (
-    "⏱ Окно между <b>{from_time}</b> и <b>{to_time}</b> — <b>{duration}</b>."
+    "Свободно с <b>{from_time}</b> до <b>{to_time}</b> — {duration}."
 )
 TRAINER_DIGEST_OWED_LINE_REQUESTS_ONLY = (
-    "💬 Ждут ответа: <b>{count}</b> {word} в каталоге."
+    "Ждут ответа: <b>{count}</b> {word} в каталоге."
 )
 TRAINER_DIGEST_OWED_LINE_CONFIRMS_ONLY = (
-    "💬 Ждут вашего решения: <b>{count}</b> {word} на подтверждение."
+    "Ждут подтверждения: <b>{count}</b> {word}."
 )
 TRAINER_DIGEST_OWED_LINE_BOTH = (
-    "💬 Ждут ответа: <b>{req_count}</b> {req_word} в каталоге "
+    "Ждут ответа: <b>{req_count}</b> {req_word} в каталоге "
     "и <b>{conf_count}</b> {conf_word} на подтверждение."
 )
 
-# Morning recommendation — exactly one 👉 line, picked by priority ladder in
-# trainer_digest_format._pick_morning_recommendation. Goal: close the open loop.
+# Одна рекомендация в конце — выбирается лестницей в trainer_digest_format._pick_morning_recommendation.
 TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_OPENS_DAY = (
-    "👉 Начните день с {name} — у клиента это первое занятие. "
+    "День начинается с {name} — у ученика первое занятие. "
     "Первые минуты знакомства часто решают, вернётся ли человек."
 )
 TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_LATER = (
-    "👉 У {name} в <b>{time}</b> первое занятие — "
+    "У {name} в <b>{time}</b> первое занятие — "
     "первые минуты знакомства часто решают, вернётся ли человек."
 )
 TRAINER_DIGEST_MORNING_REC_PENDING_CONFIRM = (
-    "👉 Бронь {name} в <b>{time}</b> ещё висит без подтверждения — одно нажатие закроет."
+    "Запись {name} в <b>{time}</b> ещё без подтверждения — ученик ждёт ответа."
 )
 TRAINER_DIGEST_MORNING_REC_PENDING_REQUESTS = (
-    "👉 <b>{count}</b> {word} в каталоге ждут ответа. "
+    "<b>{count}</b> {word} в каталоге ждут ответа. "
     "В первый час отклик работает лучше всего."
 )
 TRAINER_DIGEST_MORNING_REC_BIG_GAP = (
-    "👉 Днём есть окно — хороший момент ответить на заявки или пройтись по профилю."
+    "Днём есть окно — можно отправить ссылку ученику, который давно не был."
 )
-TRAINER_DIGEST_MORNING_REC_ALL_CLEAR = "👉 День собран. Хорошей работы."
+TRAINER_DIGEST_MORNING_REC_ALL_CLEAR = "День собран. Хорошей работы."
 
 # Morning LITE — 0 sessions but ≥1 open request. No run-sheet, just a nudge + rec.
 TRAINER_DIGEST_MORNING_LITE_HEADER = (
-    "☀️ {greet} Сегодня тренировок нет — но <b>{count}</b> {word} "
+    "{greet} Сегодня занятий нет, но <b>{count}</b> {word} "
     "в каталоге ждут ответа."
 )
 TRAINER_DIGEST_MORNING_LITE_REC = (
-    "👉 Ответ в первый час обычно решает, выберет клиент вас или другого тренера."
+    "Ответ в первый час обычно решает, выберет ученик вас или другого тренера."
 )
 
 # --- Sunday digest — perspective + ledger.
@@ -765,12 +761,12 @@ TRAINER_REQUEST_NOTIFICATION = (
     "📩 <b>Новая заявка</b>\n\n"
     "<b>{city}</b> · {service}\n"
     "💬 <b>Комментарий:</b> {comment}\n\n"
-    "Дальше: «Обзор» → <b>«Заявки»</b> — отклик и действия под заявкой."
+    "Дальше: «Кабинет» → <b>«Заявки»</b> — отклик и действия под заявкой."
 )
 TRAINER_REQUEST_NOTIFICATION_NO_COMMENT = (
     "📩 <b>Новая заявка</b>\n\n"
     "<b>{city}</b> · {service}\n\n"
-    "Дальше: «Обзор» → <b>«Заявки»</b> — отклик и действия под заявкой."
+    "Дальше: «Кабинет» → <b>«Заявки»</b> — отклик и действия под заявкой."
 )
 TRAINER_PASS_ORDER_NOTIFICATION = (
     "📦 <b>Клиент хочет абонемент</b>\n\n"
@@ -2478,7 +2474,7 @@ TRAINER_FEEDBACK_PROMPT = "Напишите отзыв о занятии (нео
 TRAINER_FEEDBACK_THANKS = "Спасибо! Отзыв сохранён."
 TRAINER_START_WELCOME = (
     "👋 Привет!\n\n"
-    "Вы в боте как тренер. Откройте <b>«Обзор»</b> слева от поля ввода — там все разделы в мини-приложении.\n\n"
+    "Вы в боте как тренер. Откройте <b>«Кабинет»</b> слева от поля ввода — там все разделы в мини-приложении.\n\n"
     "Вопросы — кнопка ниже."
 )
 TRAINER_ONLY_VIA_SITE = "Этот бот только для тренеров. Подключение по ссылке с сайта."
@@ -2486,12 +2482,12 @@ TRAINER_REGISTRATION_UNAVAILABLE = "Регистрация временно не
 # После привязки по ссылке: без обещания полного меню (гейт может быть закрыт).
 TRAINER_LINK_SUCCESS = (
     "Аккаунт привязан к этому Telegram.\n\n"
-    "Чеклист «Первые шаги» — в «Обзор». Вопросы — кнопка ниже."
+    "Чеклист «Первые шаги» — в «Кабинете». Вопросы — кнопка ниже."
 )
 # Только если тренер уже active — честно про все пункты меню.
 TRAINER_LINK_SUCCESS_ACTIVE = (
     "✅ <b>Telegram подключён</b>\n\n"
-    "Основное — кнопка <b>«Обзор»</b> слева от поля ввода: расписание, заявки, клиенты и остальное в мини-приложении. "
+    "Основное — кнопка <b>«Кабинет»</b> слева от поля ввода: расписание, заявки, клиенты и остальное в мини-приложении. "
     "Вопросы — кнопка ниже."
 )
 # Онбординг v2. Первое сообщение — не приветствие, а предложение с одним действием.
@@ -2514,7 +2510,7 @@ TRAINER_ONBOARDING_START_BUTTON = "Собрать страницу"
 TRAINER_LINK_INVALID = "Ссылка недействительна или уже использована. Получите новую на сайте после оплаты."
 TRAINER_LINK_TELEGRAM_CONFLICT = (
     "Этот Telegram уже привязан к <b>другому</b> профилю тренера в системе.\n\n"
-    "Если вы уже работаете в боте — просто откройте чат и нажмите «Обзор» (команда /start без ссылки). "
+    "Если вы уже работаете в боте — просто откройте чат и нажмите «Кабинет» (команда /start без ссылки). "
     "Если это ошибка — напишите в поддержку (кнопка ниже)."
 )
 # После первой привязки по ссылке: активируется полный доступ на пробный период.
@@ -2523,14 +2519,14 @@ TRAINER_WELCOME_TRIAL_ACTIVATED = (
     "До <b>{expires_date}</b> у вас открыт полный доступ ко всем модулям платформы: "
     "CRM, онлайн-запись, абонементы, сертификаты, аналитика и группы.\n\n"
     "Когда пробный период закончится, собери свой план в разделе "
-    "<b>«Подписка»</b> в «Обзор» — оставьте только то, что действительно используете."
+    "<b>«Подписка»</b> в «Кабинете» — оставьте только то, что действительно используете."
 )
 TRAINER_WELCOME_PAID_GRANT_ACTIVATED = (
     "💳 <b>Подписка активирована — {label}</b>\n\n"
     "Доступ открыт до <b>{expires_date}</b>. Срок считается с момента открытия этой ссылки.\n\n"
-    "Управлять модулями и продлением можно в разделе <b>«Подписка»</b> в «Обзор»."
+    "Управлять модулями и продлением можно в разделе <b>«Подписка»</b> в «Кабинете»."
 )
-TRAINER_FALLBACK = "Откройте «Обзор» слева от поля ввода — там все разделы. Помощь: /guide"
+TRAINER_FALLBACK = "Откройте «Кабинет» слева от поля ввода — там все разделы. Помощь: /guide"
 
 # Trainer: errors and hints
 TRAINER_ERROR_BOOKING_NOT_FOUND = "Запись не найдена. Обновите «Моё расписание» в приложении."
@@ -2557,7 +2553,7 @@ TRAINER_ERROR_SLOT_TAKEN_FOR_REQUEST = (
 
 # Trainer: Web App intros (HTTPS) — informal «ты» like TRAINER_START_WELCOME
 TRAINER_EDITOR_OPEN_HINT = (
-    "Откройте <b>«Обзор»</b> слева от поля ввода и перейдите в расписание — "
+    "Откройте <b>«Кабинет»</b> слева от поля ввода и перейдите в расписание — "
     "там шаблон недели, календарь слотов и применение на неделю. "
     "По клику на свободный слот можно записать клиента."
 )
@@ -2571,14 +2567,14 @@ TRAINER_BOOKINGS_CHAT_MODE_INTRO = (
     "Подробности по командам: /guide"
 )
 TRAINER_HOME_OPEN_WEBAPP = (
-    "<b>Обзор</b> — ближайшие записи и быстрые переходы в расписание, клиентов, заявки и другие разделы.\n\n"
-    "Основной вход — синяя кнопка <b>«Обзор»</b> слева от поля ввода; ниже — запасной ярлык на тот же экран."
+    "<b>Кабинет</b> — ближайшие записи и быстрые переходы в расписание, клиентов, заявки и другие разделы.\n\n"
+    "Основной вход — синяя кнопка <b>«Кабинет»</b> слева от поля ввода; ниже — запасной ярлык на тот же экран."
 )
-TRAINER_BUTTON_HOME_WEBAPP = "Обзор"
+TRAINER_BUTTON_HOME_WEBAPP = "Кабинет"
 # Telegram chat menu button (left of input); short label, max ~64 chars.
-TRAINER_MENU_BUTTON_HUB = "Обзор"
+TRAINER_MENU_BUTTON_HUB = "Кабинет"
 TRAINER_HOME_HTTPS_REQUIRED = (
-    "Экран «Обзор» доступен при HTTPS (нужен WEBAPP_BASE_URL в продакшене)."
+    "Экран «Кабинет» доступен при HTTPS (нужен WEBAPP_BASE_URL в продакшене)."
 )
 TRAINER_CLIENTS_HTTPS_REQUIRED = (
     "Раздел «Мои клиенты» доступен при HTTPS (нужен WEBAPP_BASE_URL в продакшене)."
@@ -2663,7 +2659,7 @@ TRAINER_MYPROFILE_INTRO = "Открой профиль — там анкета, 
 TRAINER_PROFILE_WIZARD_DEPRECATED = (
     "Старый многошаговый мастер в чате отключён. Открой профиль в Mini App — кнопка ниже."
 )
-TRAINER_CANCEL_IDLE = "Нечего отменять. Профиль — в «Обзор»."
+TRAINER_CANCEL_IDLE = "Нечего отменять. Профиль — в «Кабинете»."
 
 # --- Admin bot: trainer moderation ---
 ADMIN_START = (
@@ -2937,7 +2933,7 @@ TRAINER_RESCHEDULE_CLIENT_CONFIRMATION_QUEUED = (
 TRAINER_CREATE_BOOKING_SANDBOX_DONE = (
     "✅ <b>Тестовая запись создана</b> — {client_name}, <b>{date}</b> ({day}) {time}.\n\n"
     "Это учебный пример: клиент вымышленный, напоминания и сообщения в Telegram не уходят.\n\n"
-    "В «Обзоре» запись уже в блоке <b>«Ближайшие записи»</b> (пометка «тест»). "
+    "В «Кабинете» запись уже в блоке <b>«Ближайшие записи»</b> (пометка «тест»). "
     "Нажмите кнопку ниже, откройте строку записи — там можно посмотреть детали или отменить."
 )
 
@@ -3009,10 +3005,10 @@ TRAINER_BOOKINGS_DETAIL_CLIENT = "👤 {client_display}"
 TRAINER_BOOKINGS_DETAIL_META = "Услуга: {services}  ·  Арена: {arenas}  ·  {session_label}"
 TRAINER_BOOKINGS_DETAIL_COMMENT = "💬 Комментарий: {comment}"
 TRAINER_BOOKINGS_SESSION_NTH = "{n}-е занятие"
-TRAINER_BOOKINGS_BUTTON_WRITE = "✉️ Написать клиенту"
-TRAINER_BOOKINGS_BUTTON_WRITE_SLOT = "✉️ Написать клиенту — {date} {time}"
-TRAINER_BOOKINGS_BUTTON_CANCEL = "❌ Отменить запись"
-TRAINER_BOOKINGS_BUTTON_CONFIRM = "✅ Подтвердить"
+TRAINER_BOOKINGS_BUTTON_WRITE = "Написать"
+TRAINER_BOOKINGS_BUTTON_WRITE_SLOT = "Написать — {date} {time}"
+TRAINER_BOOKINGS_BUTTON_CANCEL = "Отменить запись"
+TRAINER_BOOKINGS_BUTTON_CONFIRM = "Подтвердить"
 # Client cancelled their booking (sent to trainer immediately)
 TRAINER_BOOKING_CANCELLED_CATALOG_LINE = (
     "🌐 <b>Онлайн-запись:</b> это окно снова в каталоге — его могут взять другие клиенты. "
@@ -3037,9 +3033,9 @@ TRAINER_BUTTON_CANCEL_CLIENT_WRITE = "💬 Написать клиенту"
 TRAINER_BUTTON_CANCEL_CLIENT_SCHEDULE = "📅 Расписание и слоты"
 TRAINER_BUTTON_OFFER_FREED_SLOT_TO_CLIENTS = "📣 Предложить это окно своим"
 TRAINER_BUTTON_SUPPORT_GO_SUBSCRIPTION = "Перейти в «Подписку»"
-TRAINER_BOOKINGS_BUTTON_DECLINE = "❌ Отклонить"
-TRAINER_BOOKINGS_BUTTON_MAKE_REGULAR = "📅 Сделать постоянным клиентом"
-TRAINER_BOOKINGS_BUTTON_REMOVE_REGULARITY = "📅 Снять регулярность"
+TRAINER_BOOKINGS_BUTTON_DECLINE = "Отклонить"
+TRAINER_BOOKINGS_BUTTON_MAKE_REGULAR = "Сделать постоянным"
+TRAINER_BOOKINGS_BUTTON_REMOVE_REGULARITY = "Снять постоянное время"
 TRAINER_RECURRING_DONE = "Клиент закреплён как постоянный: каждую неделю в это время слот будет автоматически бронироваться за ним."
 TRAINER_RECURRING_REMOVED = "Регулярность снята."
 TRAINER_RECURRING_NEEDS_SERVICE = (
@@ -3052,7 +3048,7 @@ TRAINER_RECURRING_MATERIALIZE_INCOMPLETE = (
 TRAINER_BOOKINGS_CHOOSE_WRITE = "Выбери запись, чтобы написать клиенту:"
 TRAINER_BOOKINGS_CHOOSE_CANCEL = "Какую запись отменить? Перед отменой предупреди клиента."
 TRAINER_BOOKINGS_WRITE_LINK = "Запись {date} {time}. Написать клиенту в Telegram?"
-TRAINER_BOOKINGS_BUTTON_BACK_TO_LIST = "◀️ К списку записей"
+TRAINER_BOOKINGS_BUTTON_BACK_TO_LIST = "‹ К списку записей"
 TRAINER_BOOKINGS_CANCEL_WARNING = (
     "⚠️ <b>Перед отменой обязательно предупреди клиента</b> (звонок или сообщение в Telegram).\n\n"
     "Отменить запись на <b>{date} ({day}) {time}</b>?"
@@ -3060,36 +3056,82 @@ TRAINER_BOOKINGS_CANCEL_WARNING = (
 TRAINER_BOOKINGS_CANCEL_CONFIRM_YES = "Да, отменить"
 TRAINER_BOOKINGS_CANCEL_CONFIRM_NO = "Нет, вернуться"
 TRAINER_BOOKINGS_CANCELLED = "Запись отменена. Слот снова свободен."
-TRAINER_BOOKINGS_BUTTON_WRITE_LINK = "✉️ Написать в Telegram"
-# Prefix for the first trainer_bot push about a client-initiated pending booking (HTML).
-TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX = (
-    "✨ <b>Первая онлайн-запись</b> — клиент записался сам, подтвердите ниже.\n\n"
-)
-TRAINER_BOOKING_NOTIFICATION = (
-    "🔔 <b>Новая запись</b> — нужно ваше решение\n\n"
-    "👤 <b>ФИО:</b> {client_name}\n"
-    "📞 {phone}\n"
-    "📅 <b>{date} ({day}) {time}</b> — {duration} мин.\n"
-    "🎯 {service}\n"
-    "💳 <b>Тариф:</b> {tariff}\n"
-    "📍 {city} · 🏟 {arenas}\n"
-    "💬 <b>Комментарий:</b> {comment}\n\n"
-    "<b>Действия:</b> подтвердите, отклоните или напишите клиенту — кнопки ниже.\n\n"
-    "<i>Слот занят; клиент получит напоминания автоматически.</i>"
-)
-TRAINER_BOOKING_NOTIFICATION_NO_COMMENT = (
-    "🔔 <b>Новая запись</b> — нужно ваше решение\n\n"
-    "👤 <b>ФИО:</b> {client_name}\n"
-    "📞 {phone}\n"
-    "📅 <b>{date} ({day}) {time}</b> — {duration} мин.\n"
-    "🎯 {service}\n"
-    "💳 <b>Тариф:</b> {tariff}\n"
-    "📍 {city} · 🏟 {arenas}\n\n"
-    "<b>Действия:</b> подтвердите, отклоните или напишите клиенту — кнопки ниже.\n\n"
-    "<i>Слот занят; клиент получит напоминания автоматически.</i>"
-)
-TRAINER_BOOKING_CONFIRMED_BTN_DETAILS = "🔍 Посмотреть детали"
-TRAINER_BOOKING_CONFIRMED_BTN_WRITE = "📩 Написать клиенту"
+TRAINER_BOOKINGS_BUTTON_WRITE_LINK = "Написать в Telegram"
+RU_DOW_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+RU_MONTH_SHORT = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+
+
+def ru_date_short(d) -> str:
+    """«пт, 23 окт» — как кабинет пишет даты (TrainerFormat.date)."""
+    return f"{RU_DOW_SHORT[d.weekday()]}, {d.day}\u00a0{RU_MONTH_SHORT[d.month - 1]}"
+
+
+def ru_time(t) -> str:
+    """«9:00», «17:15»."""
+    if hasattr(t, "hour"):
+        return f"{t.hour}:{t.minute:02d}"
+    parts = str(t or "").split(":")
+    if len(parts) >= 2 and parts[0].isdigit():
+        return f"{int(parts[0])}:{parts[1][:2]}"
+    return str(t or "")
+
+
+def money_text(cents: int | None, currency: str = "BYN") -> str:
+    """«45 BYN», «40,50 BYN», «500 ₽»; пусто, если цены нет."""
+    if cents is None:
+        return ""
+    value = int(cents) / 100
+    num = f"{value:.0f}" if int(cents) % 100 == 0 else f"{value:.2f}".replace(".", ",")
+    return f"{num}\u00a0₽" if currency == "RUB" else f"{num}\u00a0{currency}"
+
+
+def format_trainer_new_booking_html(
+    *,
+    client_name: str,
+    slot_date,
+    start_time,
+    service: str | None,
+    arena: str | None,
+    price: str | None,
+    phone: str | None,
+    comment: str | None,
+    first_online: bool,
+) -> str:
+    """
+    Новая запись ученика — три строки вместо анкеты (TASK-314):
+
+        Новая запись · пт, 23 окт, 17:15
+        Мария Ковальчук
+        Фигурное катание · Замок · 45 BYN
+
+    Телефон — только если ученика нет в боте (иначе связь — кнопкой «Написать»).
+    Комментарий ученика — отдельной строкой в кавычках. Первая запись по ссылке
+    отмечается строкой сверху, без эмодзи.
+    """
+    import html as _html
+
+    head = f"<b>Новая запись</b> · {ru_date_short(slot_date)}, {ru_time(start_time)}"
+    who = _html.escape(client_name.strip() or "Ученик")
+    if phone:
+        who += " · " + _html.escape(phone)
+    what = " · ".join(
+        _html.escape(x.strip()) for x in (service, arena, price) if x and x.strip() and x.strip() != "—"
+    )
+    lines = []
+    if first_online:
+        lines.append("<b>Первая запись по вашей ссылке</b> — ученик выбрал время сам.")
+        lines.append("")
+    lines.append(head)
+    lines.append(who)
+    if what:
+        lines.append(what)
+    if comment and comment.strip():
+        lines.append(f"«{_html.escape(comment.strip())}»")
+    return "\n".join(lines)
+
+
+TRAINER_BOOKING_CONFIRMED_BTN_DETAILS = "Открыть запись"
+TRAINER_BOOKING_CONFIRMED_BTN_WRITE = "Написать"
 
 
 def format_trainer_booking_confirmed_echo_html(
@@ -3211,20 +3253,18 @@ def build_trainer_booking_confirmed_echo_reply_markup(
 
 
 TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML = (
-    "<i>Запись создана и зафиксирована. Дальше слушаете клиентов и живьём ведёте занятие. "
-    "Настоящее начало — когда клиент запишется сам.</i>"
+    "<i>Следующие записи — кнопкой «Записать» на главной. А когда ученик запишется "
+    "по вашей ссылке сам, сообщение придёт сюда.</i>"
 )
 
 TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML = (
-    "<i>Дальше — рутина на автопилоте: напоминания, история клиента и расписание в одном месте. "
-    "Вы уже сделали главное. 🚀</i>"
+    "<i>Дальше — на автопилоте: напоминания, история ученика и расписание в одном месте.</i>"
 )
 TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML = (
-    "✨ <b>Клиент ещё не в Telegram-боте</b> — нажмите «Пригласить в бота», и он сможет получать напоминания и "
-    "подтверждения в мессенджере (пока достаточно звонка или SMS)."
+    "<b>Ученика ещё нет в боте</b> — отправьте ему ссылку, и напоминания будут приходить сами."
 )
 TRAINER_FIRST_BOOKING_TG_OK_LINE_HTML = (
-    "✅ Клиент в боте — напоминания и подтверждение уйдут автоматически."
+    "Ученик в боте — напоминания и подтверждение уйдут сами."
 )
 
 
@@ -3299,57 +3339,54 @@ def format_trainer_first_booking_milestone_rich_html(
     When ``sandbox_demo_identity`` is True (sandbox booking **and** sandbox client row), the Telegram
     invite/teaser paragraph is omitted — there's nothing real to invite.
     """
-    cn = html.escape((client_name or "").strip() or "Клиент")
+    cn = html.escape((client_name or "").strip() or "Ученик")
     phone = (client_phone or "").strip()
-    phone_line = f"📞 <b>Телефон:</b> {html.escape(phone)}\n" if phone else ""
 
-    city = (arena_city_name or "").strip()
-    an = (arena_name or "").strip()
-    aa = (arena_address or "").strip()
-    city_line = ""
-    if city:
-        city_line = f"🏙 <b>Город:</b> {html.escape(city)}\n"
-    if an or aa:
-        venue_body = ""
-        if an:
-            venue_body += f"<b>{html.escape(an)}</b>\n"
-        if aa:
-            venue_body += f"{html.escape(aa)}\n"
-        venue_block = f"📍 <b>Площадка</b>\n{city_line}{venue_body}".rstrip("\n")
-    elif city_line:
-        venue_block = f"📍 <b>Площадка</b>\n{city_line}".rstrip("\n")
-    else:
-        # Onboarding v2 does not ask for an arena, so «не заполнена в профиле» here would drop a
-        # to-do into the one message that is pure good news. The trainer knows where they coach;
-        # the gap belongs in a calm nudge later, not in the celebration.
-        venue_block = ""
-
-    svc_block = _milestone_service_tariff_price_html(
-        service_name,
-        price_tier_label,
-        booking_price_cents,
-        expected_payment_class=expected_payment_class,
-    )
-    service_section = ""
-    if svc_block.strip():
-        service_section = f"🎯 <b>Услуга и оплата</b>\n{svc_block}"
-
+    # Первая запись — короткое поздравление, а не анкета (TASK-314): когда, кто, что и где.
     dur = int(duration_minutes) if duration_minutes is not None else None
-    dur_suffix = f" · {dur} мин" if dur and dur > 0 else ""
-    when_line = f"{html.escape(date_str)} ({html.escape(day_label)}) · {html.escape(time_str)}{dur_suffix}"
+    when_line = f"{html.escape(day_label)}, {html.escape(date_str)}, {html.escape(time_str)}"
+    if dur and dur > 0:
+        when_line += f" · {dur}\u00a0мин"
 
-    map_section = ""
+    if phone:
+        from src.shared.public_display import format_phone_display
+
+        phone = format_phone_display(phone)
+    who_line = cn + (f" · {html.escape(phone)}" if phone else "")
+
+    what_parts: list[str] = []
+    svc = (service_name or "").strip()
+    if svc:
+        what_parts.append(html.escape(svc))
+    an = (arena_name or "").strip()
+    if an:
+        what_parts.append(html.escape(an))
+    paid_by_pass = bool(_upcoming_payment_outcome_from_class(expected_payment_class))
+    if booking_price_cents is not None and not paid_by_pass:
+        what_parts.append(html.escape(format_rubles_byn_display(booking_price_cents / 100.0)))
+    elif (price_tier_label or "").strip() and not paid_by_pass:
+        what_parts.append(html.escape(price_tier_label.strip()))
+    what_line = " · ".join(what_parts)
+
+    # Оплата отдельной строкой — только если занятие спишется с абонемента или сертификата:
+    # разовая цена уже стоит в строке «что и где».
+    pay_line = ""
+    if _upcoming_payment_outcome_from_class(expected_payment_class):
+        pay_line = format_trainer_upcoming_payment_display_html(
+            expected_payment_class=expected_payment_class,
+            booking_price_cents=booking_price_cents,
+        )
+        pay_line = re.sub(r"^[^\w<«]+", "", pay_line).strip()
+
     ml = (map_link or "").strip()
+    map_line = ""
     if ml:
-        esc = html.escape(ml, quote=True)
-        map_section = f"🗺 <b>Карта:</b> <a href=\"{esc}\">открыть в Яндекс.Картах</a>"
+        map_line = f"<a href=\"{html.escape(ml, quote=True)}\">Как добраться</a>"
 
     comment_raw = (client_comment or "").strip()
-    comment_section = ""
-    if comment_raw:
-        comment_section = f"💬 <b>Комментарий клиента</b>\n{html.escape(truncate_text(comment_raw, 400))}"
+    comment_line = f"«{html.escape(truncate_text(comment_raw, 400))}»" if comment_raw else ""
 
-    # Demo onboarding booking + phantom client: skip «Пригласить в бота» copy — no real Telegram invite target.
+    # Demo onboarding booking + phantom client: skip the invite copy — no real Telegram invite target.
     tg_line = ""
     if not sandbox_demo_identity:
         if client_has_telegram is True:
@@ -3358,33 +3395,23 @@ def format_trainer_first_booking_milestone_rich_html(
             tg_line = TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML
 
     if created_by_trainer:
-        intro_block = "✅ <b>Запись создана.</b>"
+        intro_block = "<b>Первая запись в кабинете</b>"
         footer_html = TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
     else:
-        intro_block = (
-            "🎉 <b>Первая настоящая запись!</b>\n\n"
-            "Клиент нашёл вас и записался сам — без вашего участия."
-        )
+        intro_block = "<b>Первая запись по вашей ссылке</b>\nУченик нашёл вас и выбрал время сам."
         footer_html = TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
 
-    # «ФИО» is a form field, not how a coach refers to the person who just booked them.
-    client_block = f"👤 <b>Ученик:</b> {cn}"
-    if phone_line:
-        client_block += "\n" + phone_line.rstrip("\n")
+    card = [when_line, who_line]
+    if what_line:
+        card.append(what_line)
+    if pay_line:
+        card.append(pay_line)
+    if comment_line:
+        card.append(comment_line)
+    if map_line:
+        card.append(map_line)
 
-    blocks: list[str] = [intro_block, client_block]
-    if venue_block:
-        blocks.append(venue_block)
-    blocks.append(f"📅 <b>Время</b>\n{when_line}")
-    if service_section:
-        blocks.append(service_section.rstrip("\n"))
-    price_section = _milestone_price_section_html(booking_price_cents)
-    if price_section:
-        blocks.append(price_section)
-    if map_section:
-        blocks.append(map_section)
-    if comment_section:
-        blocks.append(comment_section)
+    blocks: list[str] = [intro_block, "\n".join(card)]
     if tg_line:
         blocks.append(tg_line)
     blocks.append(footer_html)
@@ -3922,7 +3949,7 @@ TRAINER_ONBOARDING_TRIAL_LAST_DAY = (
 )
 
 TRAINER_ONBOARDING_NUDGE_OUTRO = (
-    "\n\nОткройте <b>Обзор</b> слева от поля ввода — там «Первые шаги»."
+    "\n\nОткройте <b>Кабинет</b> слева от поля ввода — там «Первые шаги»."
 )
 
 # TASK-035: honest "trial is over" framing for trainers stuck in pending_profile past their trial —
@@ -4071,7 +4098,7 @@ TRAINER_SUBSCRIPTION_GRANTED_BY_ADMIN = (
     "✅ <b>Подписка активирована</b>\n\n"
     "Тариф: <b>«{label}»</b>\n"
     "Действует до <b>{expires_date}</b>.\n\n"
-    "Все включённые модули уже доступны в «Обзор»."
+    "Все включённые модули уже доступны в «Кабинете»."
 )
 TRAINER_SUBSCRIPTION_INVOICE_DECLINED = (
     "ℹ️ <b>Заявка на подписку отклонена</b>\n\n"

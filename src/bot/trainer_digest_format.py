@@ -40,7 +40,7 @@ def _plural_ru(n: int, one: str, few: str, many: str) -> str:
 
 
 def _sessions_word(n: int) -> str:
-    return _plural_ru(n, "тренировка", "тренировки", "тренировок")
+    return _plural_ru(n, "занятие", "занятия", "занятий")
 
 
 def _requests_word(n: int) -> str:
@@ -70,17 +70,18 @@ def _weekday_label_prep(d: Any) -> str:
 
 
 def _format_hhmm(t: time) -> str:
-    return t.strftime("%H:%M")
+    """«9:00», «17:15» — как в кабинете."""
+    return f"{t.hour}:{t.minute:02d}"
 
 
 def _format_duration_minutes(minutes: int) -> str:
-    """Compact Russian duration: 90 → '1ч 30м', 120 → '2ч', 45 → '45м'."""
+    """90 → «1 ч 30 мин», 120 → «2 ч», 45 → «45 мин»."""
     h, m = divmod(max(0, int(minutes)), 60)
     if h and m:
-        return f"{h}ч {m}м"
+        return f"{h}\u00a0ч {m}\u00a0мин"
     if h:
-        return f"{h}ч"
-    return f"{m}м"
+        return f"{h}\u00a0ч"
+    return f"{m}\u00a0мин"
 
 
 def _format_money_cents(cents: int) -> str:
@@ -217,16 +218,16 @@ def _format_morning_header(
     if n == 1:
         return (
             f"{greet} "
-            f"Сегодня одна {_sessions_word(1)} — в <b>{first_hhmm}</b>."
+            f"Сегодня одно {_sessions_word(1)} — в <b>{first_hhmm}</b>."
         )
     return (
         f"{greet} "
-        f"Сегодня <b>{n}</b> {_sessions_word(n)}, первая в <b>{first_hhmm}</b>."
+        f"Сегодня <b>{n}</b> {_sessions_word(n)}, первое в <b>{first_hhmm}</b>."
     )
 
 
 def _format_session_row(sess: dict[str, Any]) -> str:
-    """``HH:MM · Имя Ф. · Площадка · 👋 первая тренировка · ⚠ ждёт подтверждения``."""
+    """``17:15 · Имя Ф. · Каток · первое занятие · ждёт подтверждения``."""
     hhmm = _format_hhmm(sess["start_time"])
     name = _h(_short_client_name(sess.get("client_name") or "Клиент"))
     parts = [f"<b>{hhmm}</b>", name]
