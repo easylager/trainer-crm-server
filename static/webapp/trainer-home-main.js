@@ -2851,16 +2851,20 @@
       function openHubFirstStudentsFromUrlOnce() {
         if (hubFirstStudentsUrlChecked) return;
         hubFirstStudentsUrlChecked = true;
+        var openedFrom = 'push';
         try {
           var params = new URLSearchParams(window.location.search || '');
           if (params.get('open') !== 'first_students') return;
+          /* С экрана «Готово» онбординга (TASK-313) или из пуша — считаем отдельно. */
+          openedFrom = params.get('from') === 'onboarding' ? 'onboarding' : 'push';
           params.delete('open');
+          params.delete('from');
           var ns = params.toString();
           window.history.replaceState({}, '', window.location.pathname + (ns ? '?' + ns : '') + (window.location.hash || ''));
         } catch (e) {
           return;
         }
-        trackHubGuidanceEvent('hint_clicked', 'first_students', 'push');
+        trackHubGuidanceEvent('hint_clicked', 'first_students', openedFrom);
         if (mountHubFirstStudents()) window.TrainerFirstStudents.open('one');
       }
 

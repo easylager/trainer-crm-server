@@ -2384,7 +2384,7 @@
     if (el.obDoneLead) {
       if (open) {
         el.obDoneLead.textContent =
-          'Ученик увидит их и выберет сам — без переписки «когда вам удобно».';
+          'По ссылке ученик выберет любое из них сам — без переписки «когда вам удобно».';
       } else if (leftWeekEmpty) {
         el.obDoneLead.textContent =
           'Время занятий добавите позже в кабинете — ссылку ученику можно отправлять уже сейчас.';
@@ -2401,26 +2401,22 @@
     state._doneShareText = shareText;
     state._doneShareBody = shareBody;
     persistDonePayload(body);
+    /* Главный шаг после расписания — свои ученики (TASK-310, решение владельца 2026-10-22):
+       по воронке тренеры, скопировавшие ссылку, клиентов не получили, а перенесённые ученики
+       сразу делают неделю живой. Кабинет откроет лист «Ученик 1 из 3» — тот же, что в карточке
+       на главной, поэтому экраны говорят одно и то же. Ссылка — второй кнопкой. */
     if (el.obFoot) el.obFoot.hidden = false;
     if (el.obCta) {
-      if (link) {
-        el.obCta.textContent = 'Отправить ученику';
-        el.obCta.disabled = false;
-        el.obCta.onclick = function () { share(link, shareText, shareBody); };
-        note('Откроется список ваших чатов в Telegram.');
-      } else {
-        /* Без CLIENT_BOT_USERNAME ссылку собрать нечем. Честно говорим об этом,
-           а не показываем кнопку, которая ничего не делает. */
-        el.obCta.textContent = 'Открыть кабинет';
-        el.obCta.disabled = false;
-        el.obCta.onclick = goHub;
-        note('Ссылка для учеников появится чуть позже — настройки уже сохранены.');
-      }
+      el.obCta.textContent = 'Добавить своих учеников';
+      el.obCta.disabled = false;
+      el.obCta.onclick = goFirstStudents;
     }
+    note('');
     if (el.obSkip) {
+      /* Без CLIENT_BOT_USERNAME ссылку собрать нечем — кнопку, которая ничего не делает, не рисуем. */
       el.obSkip.hidden = !link;
-      el.obSkip.textContent = 'Перейти в кабинет';
-      el.obSkip.onclick = goHub;
+      el.obSkip.textContent = 'Отправить ссылку ученику';
+      el.obSkip.onclick = function () { share(link, shareText, shareBody); };
     }
     /* Только тем, у кого реально есть время вне часовой сетки — остальным строка
        была бы просто шумом (DEC-002: «Точное время» в онбординг не тащим). */
@@ -2454,11 +2450,7 @@
     if (opened) {
       /* Telegram не сообщает, отправил ли пользователь сообщение. Поэтому не празднуем
          заранее: меняем подпись на честную и оставляем путь в кабинет. */
-      note('Отправили? Как только ученик запишется — придёт уведомление сюда.');
-      if (el.obSkip) {
-        el.obSkip.hidden = false;
-        el.obSkip.textContent = 'Перейти в кабинет';
-      }
+      note('Как только ученик запишется, придёт сообщение в Telegram.');
       return;
     }
     copyLink(link);
@@ -2494,6 +2486,10 @@
 
   function goHub() {
     window.location.href = pageUrl('trainer-home');
+  }
+
+  function goFirstStudents() {
+    window.location.href = pageUrl('trainer-home?open=first_students&from=onboarding');
   }
 
   function bind() {
