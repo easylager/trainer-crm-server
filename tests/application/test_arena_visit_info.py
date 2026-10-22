@@ -99,3 +99,22 @@ def test_online_without_link_falls_back_to_box_office() -> None:
     assert view["tickets"]["mode"] == "box_office"
     view = visit_view({"tickets_url": "https://x.by", "visit_info": {"tickets": {"mode": "same_day"}}})
     assert view["tickets"]["mode"] == "same_day"
+
+
+def test_rink_data_migration_passes_admin_validation() -> None:
+    """Данные миграции 0258 — те же, что сохранила бы админка: иначе их нельзя будет поправить."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "migrations" / "versions" / "0258_rink_visit_data.py"
+    spec = importlib.util.spec_from_file_location("m0258", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for arena_id, data in module.VISIT.items():
+        normalized = normalize_visit_info(data)
+        assert normalized.keys() == data.keys(), arena_id
+        view = visit_view({"visit_info": normalized, "tickets_url": "https://x.by"})
+        assert view["blocks"] == list(PLACE_BLOCKS)
+    orsha = visit_view({"visit_info": module.VISIT[31]})
+    assert orsha["services"]["rows"][0]["kind"] == "aid"
+    assert [m["note"] for m in orsha["more"]] == ["от 24 BYN за 4 катания"]
