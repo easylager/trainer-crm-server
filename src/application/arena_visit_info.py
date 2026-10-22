@@ -256,6 +256,30 @@ def _sentence(text: str) -> str:
     return body[0].upper() + body[1:] + "."
 
 
+def _looks_included(text: str) -> bool:
+    low = str(text or "").casefold()
+    return "входит" in low or "входят" in low
+
+
+def rental_included(card: Mapping[str, Any]) -> bool:
+    """Коньки в цене билета: в каталоге/услугах «входит», не отдельная сумма."""
+    hours = _mapping(card.get("opening_hours"))
+    if _looks_included(str(hours.get("rental_note") or "")):
+        return True
+    for row in hours.get("rental_catalog") or []:
+        if isinstance(row, Mapping) and _looks_included(str(row.get("price") or "")):
+            return True
+    visit = _mapping(card.get("visit_info"))
+    for row in visit.get("services") or []:
+        if not isinstance(row, Mapping):
+            continue
+        if row.get("kind") == "rental" and _looks_included(
+            f"{row.get('price') or ''} {row.get('note') or ''}"
+        ):
+            return True
+    return False
+
+
 def _tickets_view(card: Mapping[str, Any], visit: Mapping[str, Any], hours: Mapping[str, Any]) -> dict[str, Any]:
     """Строка покупки под тремя ценами и подпись к кнопке в шапке блока."""
     t = _mapping(visit.get("tickets"))
@@ -290,6 +314,8 @@ def _tickets_view(card: Mapping[str, Any], visit: Mapping[str, Any], hours: Mapp
         bits.append(", ".join(pay))
     legacy = re.sub(r"^билеты\s+только\s+в\s+кассе\s*[:,.—-]?\s*", "", legacy_note, flags=re.I)
     note = str(t.get("note") or "").strip() or (legacy if mode == "box_office" and not bits else "")
+    if not note and rental_included(card):
+        note = "Коньки входят в билет"
     return {
         "mode": mode,
         "detail": " · ".join(bits),
@@ -467,6 +493,7 @@ def visit_view(card: Mapping[str, Any], *, has_trainers: bool = False) -> dict[s
     return {
         "blocks": list(PLACE_BLOCKS),
         "tickets": _tickets_view(card, visit, hours),
+        "rental_included": rental_included(card),
         "child_age_max": visit.get("child_age_max"),
         "sizes": str(_mapping(visit.get("rental")).get("sizes") or ""),
         "facts": _facts_view(card, visit),

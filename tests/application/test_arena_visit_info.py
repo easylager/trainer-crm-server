@@ -94,6 +94,24 @@ def test_legacy_fields_fill_the_blocks_without_migration() -> None:
     assert view["services"]["notes"] == ["Сеанс 45 минут."]
 
 
+def test_included_rental_is_not_a_separate_price() -> None:
+    view = visit_view(
+        {
+            "tickets_url": "https://src.by/PAY/",
+            "amenities": {"skate_rental": True},
+            "opening_hours": {
+                "rental_catalog": [{"label": "Прокат коньков", "price": "входит в билет"}],
+            },
+        }
+    )
+    assert view["rental_included"] is True
+    assert view["tickets"]["mode"] == "online"
+    assert view["tickets"]["note"] == "Коньки входят в билет."
+    assert [(r["title"], r["price"]) for r in view["services"]["rows"]] == [
+        ("Прокат коньков", "входит в билет"),
+    ]
+
+
 def test_online_without_link_falls_back_to_box_office() -> None:
     view = visit_view({"visit_info": {"tickets": {"mode": "same_day"}}})
     assert view["tickets"]["mode"] == "box_office"

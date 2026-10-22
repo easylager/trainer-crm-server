@@ -319,7 +319,8 @@ class SoligorskSzkParser(IceParser):
 # СРЦ Молодечно (arena_id 18)
 # --------------------------------------------------------------------------
 
-_MOLODECHNO_DAY_LINE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.\s*в\s*(.+)$", re.I)
+# Живая страница то пишет «24.10. в», то «25.10 в» — вторая точка после месяца необязательна.
+_MOLODECHNO_DAY_LINE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.?\s*в\s*(.+)$", re.I)
 _TIME_HM = re.compile(r"(\d{1,2}):(\d{2})")
 _MOLODECHNO_AGE_NOTE = "детский до 14 лет"
 

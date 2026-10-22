@@ -178,6 +178,21 @@ def test_opening_hours_strip_dossier_markers(cards, loader) -> None:
     by_label = {row["label"]: row["price"] for row in lida["rental_catalog"]}
     assert by_label["Прокат коньков, детский до 16 лет"] == "5 BYN"
     assert by_label["Заточка для учащихся школы"] == "бесплатно"
+    molodechno = cards["molodechno-src"]
+    assert molodechno.tickets_url == "https://src.by/PAY/"
+    assert molodechno.website_url == (
+        "https://src.by/WDKL/%D0%BB%D0%B5%D0%B4%D0%BE%D0%B2%D0%B0%D1%8F-%D0%B0%D1%80%D0%B5%D0%BD%D0%B0"
+    )
+    assert molodechno.amenities.get("skate_rental") is True
+    assert molodechno.amenities.get("locker_rooms") is True
+    assert molodechno.opening_hours["rental_title"] == "Прокат коньков"
+    assert molodechno.opening_hours["rental_catalog"] == [
+        {"label": "Прокат коньков", "price": "входит в билет"}
+    ]
+    assert "rental_note" not in molodechno.opening_hours
+    assert "ticket_note" not in molodechno.opening_hours
+    assert "остановочный" not in (molodechno.short_description or "").casefold()
+    assert "вход и коньки" in (molodechno.short_description or "")
 
 
 def test_photo_decisions_skip_google_social_and_403_not_grant(cards) -> None:

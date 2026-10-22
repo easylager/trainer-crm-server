@@ -97,6 +97,7 @@ def test_one_shot_bumps_minsk_and_regional_mk_keys(runner) -> None:
         "gorki_lds_v1",
         "ostrovets_lds_v1",
         "bobruisk_arena_v1",
+        "molodechno_src_v1",
         "soligorsk_szk_v1",
         "shklov_arena_v1",
         "gomel_lds_v1",

@@ -1377,17 +1377,17 @@ def _b_buy(links: Mapping[str, Any]) -> str:
 
 
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
-    from src.application.style_b import section
-
+    """Тело пустого блока. Секцию рисует ``_b_schedule``, иначе заголовок дублируется."""
+    del title
     buy = _b_buy(links)
     call = _b_call(card, links)
     if call:
-        return section(title, f"{buy}{call}", klass="b-sec--place", sec_id="schedule")
+        return f"{buy}{call}"
     site_link = _b_schedule_site_link(card)
     if buy or site_link:
         # Пока сеансов нет, касса всё равно открыта: кнопка покупки важнее отсылки «смотрите на сайте».
         note = "" if buy else f'<p class="b-text">{_esc(t("place.site_schedule"))}</p>'
-        return section(title, f"{buy}{note}{site_link}", klass="b-sec--place", sec_id="schedule")
+        return f"{buy}{note}{site_link}"
     return ""
 
 

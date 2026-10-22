@@ -152,7 +152,7 @@ ARENAS: list[SeedArena] = [
         54.3011204,
         26.8650159,
         "molodechno-src",
-        False,
+        True,
         "molodechno_src_v1",
     ),
     SeedArena(

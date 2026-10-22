@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from html import escape
 from typing import Any
@@ -51,11 +52,24 @@ def prices_html(slots: list[Mapping[str, Any]], vv: Mapping[str, Any], *, curren
 
     age = vv.get("child_age_max")
     sizes = vv.get("sizes") or ""
+    included = bool(vv.get("rental_included"))
     cells: list[tuple[str, str, str]] = []
     if "adult" in floors:
-        cells.append(("Вход", money("adult"), "свои коньки" if "rental" in floors else "взрослый"))
+        if included:
+            adult_sub = "вход + коньки"
+        elif "rental" in floors:
+            adult_sub = "свои коньки"
+        else:
+            adult_sub = "взрослый"
+        cells.append(("Вход", money("adult"), adult_sub))
     if "child" in floors:
-        cells.append(("Детский", money("child"), f"до {age} лет" if age else ""))
+        if included:
+            child_sub = "вход + коньки"
+        elif age:
+            child_sub = f"до {age} лет"
+        else:
+            child_sub = ""
+        cells.append(("Детский", money("child"), child_sub))
     if "rental" in floors:
         cells.append(("Прокат", money("rental"), f"размеры {sizes}" if sizes else "коньки"))
     body = "".join(
@@ -149,7 +163,8 @@ def services_html(vv: Mapping[str, Any], *, title: str = "Прокат и усл
         )
     notes = "".join(f'<p class="b-buyline b-buyline--soft">{icon_svg("info")}<span>{_esc(n)}</span></p>'
                     for n in services.get("notes") or [])
-    aside = '<span class="b-aside">в кассе</span>' if any(r.get("price") for r in rows) else ""
+    paid = any(re.search(r"\d", str(r.get("price") or "")) for r in rows)
+    aside = '<span class="b-aside">в кассе</span>' if paid else ""
     return section(title, f'<div class="b-svcs">{"".join(items)}</div>{notes}', aside_html=aside,
                    klass="b-sec--place", sec_id="services")
 

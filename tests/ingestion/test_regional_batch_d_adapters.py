@@ -71,7 +71,7 @@ def _soligorsk_job() -> ParserJob:
 def _molodechno_job(**config_overrides) -> ParserJob:
     cfg = dict(MOLODECHNO_SRC_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "molodechno-src")
-    cfg["run_date"] = "2026-10-06"
+    cfg["run_date"] = "2026-10-22"
     cfg.update(config_overrides)
     return _job(arena_id=18, parser_key=PARSER_KEY_MOLODECHNO_SRC, config=cfg, job_id=105)
 
@@ -155,6 +155,21 @@ async def test_molodechno_src_matches_expected_fixture() -> None:
         assert hit.price_adult_minor == gold["price_adult_minor"]
         assert hit.price_child_minor == gold["price_child_minor"]
         assert hit.price_rental_minor is None
+
+
+def test_molodechno_accepts_date_without_trailing_dot() -> None:
+    html = """
+    <p><strong>Сеансы массового катания:</strong></p>
+    <p><strong>24.10. в 14:15, 16:00</strong></p>
+    <p><strong>25.10 в 13:15, 15:00</strong></p>
+    """
+    got = _molodechno_schedule_slots(html, reference=date(2026, 10, 22), duration_minutes=45)
+    assert {(d.isoformat(), start, end) for d, start, end in got} == {
+        ("2026-10-24", "14:15", "15:00"),
+        ("2026-10-24", "16:00", "16:45"),
+        ("2026-10-25", "13:15", "14:00"),
+        ("2026-10-25", "15:00", "15:45"),
+    }
 
 
 def test_molodechno_year_rollover_december_to_january() -> None:
