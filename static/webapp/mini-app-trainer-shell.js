@@ -914,12 +914,15 @@
     applyTabBarVisibility();
     syncTabBarActive();
     syncInboxBadges();
-    fetchOnboardingChecklist();
+    /* Главная отдаёт чеклист и счётчики из hub/bootstrap сама (syncOnboarding, setInboxBadges):
+       второй запрос за тем же на первом экране не нужен. */
+    var pageFeedsShell = body.getAttribute('data-shell-fed-by-page') === '1';
+    if (!pageFeedsShell) fetchOnboardingChecklist();
     if (isCollectiveFeatureEnabled()) {
       fetchCollectiveMenuVisibility();
       fetchSuspendedCollectiveNotice();
     }
-    fetchInboxBadgesFromServer();
+    if (!pageFeedsShell) fetchInboxBadgesFromServer();
   }
 
   /* ─── Auto-init via data attribute ─────────────────────────────────────── */

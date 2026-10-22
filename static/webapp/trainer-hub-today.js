@@ -335,6 +335,7 @@
 
   function openTasks() {
     renderSheet();
+    if (typeof opts.onTasksShown === 'function') opts.onTasksShown(taskItems());
     sheet.back.hidden = false;
     sheet.el.hidden = false;
     document.body.classList.add('ht-sheet-open');

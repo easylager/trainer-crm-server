@@ -13,6 +13,33 @@
        без него ready()/expand() уходили в никуда и приложение открывалось полушторкой. -->
   <script src="mini-app-full-height.js?v=2026102213"></script>
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
+  <script>
+    /* Данные главной запрашиваем сразу, параллельно со скриптами страницы (TASK-314):
+       раньше hub/bootstrap уходил только после разбора ~400 КБ JS — через 1,5 с. */
+    (function () {
+      try {
+        var init = new URLSearchParams(location.search).get('init_data') ||
+          new URLSearchParams((location.hash || '').replace(/^#/, '')).get('tgWebAppData') || '';
+        if (!init) return;
+        var qs = 'bookings_limit=32';
+        var slug = '';
+        try { slug = (sessionStorage.getItem('trainer_collective_slug') || '').trim().toLowerCase(); } catch (e) {}
+        if (slug) qs += '&collective_slug=' + encodeURIComponent(slug);
+        window.__hubEarlyBootstrap = {
+          init: init,
+          qs: qs,
+          promise: fetch('/api/webapp/trainer/hub/bootstrap?' + qs + '&init_data=' + encodeURIComponent(init), {
+            headers: { Accept: 'application/json', 'X-Telegram-Init-Data': init },
+            cache: 'no-store',
+          }).then(function (r) {
+            if (!r.ok) throw new Error('bootstrap');
+            return r.json();
+          }),
+        };
+        window.__hubEarlyBootstrap.promise.catch(function () {});
+      } catch (e) { /* обычный путь подхватит */ }
+    })();
+  </script>
   <script src="mini-app-trainer-theme.js?v=2026102213"></script>
   <script src="mini-app-telegram-chrome.js?v=2026102213"></script>
   <script src="trainer-format.js?v=2026102213"></script>
@@ -193,7 +220,7 @@
   </script>
 
 </head>
-<body class="hub-body ar-pilot ar-pilot--trainer-home" data-trainer-shell="tabs">
+<body class="hub-body ar-pilot ar-pilot--trainer-home" data-trainer-shell="tabs" data-shell-fed-by-page="1">
 
   <!-- ─── Premium splash loader ─────────────────────────────────────────── -->
   <!-- Renders immediately on parse; dismissed by __hubSplash.markDataReady() -->

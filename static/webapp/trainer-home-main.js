@@ -2874,6 +2874,10 @@
           onDismissItem: function(item) {
             dismissHubInboxRhythmItem(item.id);
           },
+          onTasksShown: function(items) {
+            initTrainerPendingInboxModule();
+            if (window.TrainerPendingInbox) TrainerPendingInbox.trackInboxItemsShown(items);
+          },
         });
       }
 
@@ -9078,8 +9082,15 @@
           window.TrainerMiniAppGate &&
           TrainerMiniAppGate.isActive(trainerAccessSnapshot)
         ) {
-          prefetchHubBookingContexts();
+          /* Форма «Записать» греется после первого экрана, а не наперегонки с ним. */
+          hubAfterFirstPaint(prefetchHubBookingContexts);
         }
+      }
+
+      function hubAfterFirstPaint(fn) {
+        var run = function() { try { fn(); } catch (e) { /* */ } };
+        if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 2500 });
+        else setTimeout(run, 1200);
       }
 
       /**
@@ -9193,18 +9204,23 @@
         hubTrainerMainBootstrapDone = true;
         ensureHubBookingsPlaceholder();
         showHubRhythmHintsSkeleton();
-        fetch(
-          apiUrlWithQuery('/trainer/hub/bootstrap?' + hubBootstrapQueryString()),
-          { headers: headersJson(), cache: 'no-store' }
-        )
-          .then(function(r) {
-            if (!r.ok) throw new Error('bootstrap');
-            return r.json();
-          })
+        var early = window.__hubEarlyBootstrap;
+        window.__hubEarlyBootstrap = null;
+        var bootstrapRequest =
+          early && early.init === getInitData() && early.qs === hubBootstrapQueryString()
+            ? early.promise
+            : fetch(
+                apiUrlWithQuery('/trainer/hub/bootstrap?' + hubBootstrapQueryString()),
+                { headers: headersJson(), cache: 'no-store' }
+              ).then(function(r) {
+                if (!r.ok) throw new Error('bootstrap');
+                return r.json();
+              });
+        bootstrapRequest
           .then(function(data) {
             applyHubBootstrapPayload(data);
             runHubAfterAccess({ bootstrapPayload: data });
-            prefetchHubTrainerClientsPresence();
+            hubAfterFirstPaint(prefetchHubTrainerClientsPresence);
           })
           .catch(function () {
             hubTrainerMainBootstrapDone = false;
