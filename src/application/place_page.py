@@ -1201,7 +1201,35 @@ def _b_status(view: Mapping[str, Any]) -> str:
     return f'<span class="b-hero__status b-hero__status--{_esc(kind)}"><i></i>{_esc(text)}</span>'
 
 
-def _b_hero(card: Mapping[str, Any], *, status_html: str = "") -> str:
+def _b_hero_chips(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
+    """Маршрут · Телефон · Сайт · колокольчик — на обложке, как в Mini App. Нет данных — нет чипа."""
+    from src.application.catalog_icons import icon_svg
+
+    chips: list[str] = []
+    if links.get("route"):
+        href, blank = links["route"]
+        attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+        chips.append(f'<a class="b-pill b-pill--chip" href="{_esc(href)}"{attrs}>{icon_svg("route")}{_esc(t("cta.route"))}</a>')
+    if links.get("tel"):
+        chips.append(
+            f'<a class="b-pill b-pill--chip" href="{_esc(links["tel"])}" '
+            f'data-catalog-phone-beacon="{_esc(links.get("tel_beacon"))}">{icon_svg("phone")}Телефон</a>'
+        )
+    site = safe_external_url(card.get("website_url"))
+    if site:
+        chips.append(
+            f'<a class="b-pill b-pill--chip" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
+            f'{icon_svg("globe")}Сайт</a>'
+        )
+    if links.get("bell"):
+        chips.append(
+            f'<a class="b-pill b-pill--icon b-pill--chip tg-out" href="{_esc(links["bell"])}" '
+            f'aria-label="Напоминания о сеансах в Telegram">{icon_svg("bell")}</a>'
+        )
+    return f'<div class="b-hero__chips">{"".join(chips)}</div>' if chips else ""
+
+
+def _b_hero(card: Mapping[str, Any], *, status_html: str = "", chips_html: str = "") -> str:
     from src.application.style_b import back_pill, brand_link, hero_html, media_url
 
     hero_media = card.get("hero") if isinstance(card.get("hero"), Mapping) else None
@@ -1227,7 +1255,7 @@ def _b_hero(card: Mapping[str, Any], *, status_html: str = "") -> str:
         toned=toned,
         bar_html=bar,
         variant="place",
-        extra_html=status_html,
+        extra_html=status_html + chips_html,
         photo_variants=photo_variants,
         vt_name=place_vt_name(str(card.get("slug") or "")),
     )
@@ -1433,53 +1461,133 @@ def _b_day_strip(
     return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>'
 
 
-def _b_schedule(view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any]) -> str:
-    from src.application.style_b import section
+def _place_visit(view: Mapping[str, Any]) -> dict[str, Any]:
+    """Модель блоков карточки v2 (arena_visit_info). Тренеры — из view: школа катка встаёт к ним."""
+    from src.application.arena_visit_info import visit_view
+
+    return visit_view(view["card"], has_trainers=bool(view.get("trainers")))
+
+
+def _b_buy_pill(view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[str, Any]) -> str:
+    """Кнопка онлайн-кассы в шапке блока «На льду».
+
+    Касса «только в день сеанса», а сегодня сеансов нет — кнопка сначала открывает шторку:
+    билет на другой день онлайн не купить, зато можно поставить напоминание в Telegram.
+    """
+    from src.application.catalog_icons import icon_svg
+
+    pair = links.get("tickets")
+    mode = (vv.get("tickets") or {}).get("mode")
+    if not pair or mode not in ("online", "same_day"):
+        return ""
+    href, blank = pair
+    attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+    label = "Билеты онлайн"
+    today_slots = [
+        s for d in view.get("days") or [] if _parse_iso_date(d.get("local_date")) == view.get("today")
+        for s in d.get("sessions") or []
+    ]
+    if mode != "same_day" or today_slots:
+        return f'<a class="b-buypill" href="{_esc(href)}"{attrs}>{label}{icon_svg("external")}</a>'
+    card = view["card"]
+    name = format_public_name(str(card.get("name") or ""))
+    nxt = view.get("next_slot")
+    when = f" Ближайший сеанс — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
+    bell = links.get("bell")
+    remind = (
+        f'<a class="b-sheet__main" href="{_esc(bell)}">{icon_svg("bell")}Напомнить в Telegram</a>' if bell else ""
+    )
+    return (
+        f'<a class="b-buypill" href="{_esc(href)}"{attrs} data-sameday-open>{label}{icon_svg("external")}</a>'
+        '<dialog class="b-sheet" id="sameDaySheet" aria-labelledby="sameDayTitle">'
+        '<div class="b-sheet__in" tabindex="-1" autofocus>'
+        '<button type="button" class="b-sheet__x" data-sheet-close aria-label="Закрыть">'
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>'
+        '<h2 class="b-sheet__title" id="sameDayTitle">Онлайн-билет появится в день сеанса</h2>'
+        f'<p class="b-sheet__text">{_esc(name)} продаёт онлайн только на сегодняшние сеансы. '
+        f"Заранее билет можно купить в кассе.{when}</p>"
+        f"{remind}"
+        f'<a class="b-sheet__alt" href="{_esc(href)}"{attrs}>Всё равно открыть сайт кассы</a>'
+        "</div></dialog>"
+        "<script>(function(){var d=document.getElementById('sameDaySheet');"
+        "var a=document.querySelector('[data-sameday-open]');if(!d||!a||!d.showModal)return;"
+        "a.addEventListener('click',function(e){e.preventDefault();d.showModal();});"
+        "d.addEventListener('click',function(e){if(e.target===d||e.target.closest('[data-sheet-close]'))d.close();});"
+        "})();</script>"
+    )
+
+
+def _b_schedule_parts(
+    view: Mapping[str, Any],
+    *,
+    base_path: str,
+    invite: bool,
+    links: Mapping[str, Any],
+    vv: Mapping[str, Any] | None = None,
+) -> tuple[str, str, str] | None:
+    """(заголовок, тело, правая часть шапки) блока массового катания — или None."""
+    from src.application.place_visit_blocks import prices_html, ticket_line_html
 
     card = view["card"]
     if not _skating(card):
-        return ""
+        return None
+    vv = vv if vv is not None else _place_visit(view)
     title = t("kind.public_skate")
     mode = normalize_schedule_mode(card.get("schedule_mode"))
     days = list(view.get("days") or [])
+    line = ticket_line_html(vv)
     if mode == SCHEDULE_MODE_SEASON_CLOSED:
         reopen = _parse_iso_date(card.get("schedule_reopen_date"))
-        line = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
-        return section(title, f'<p class="b-text">{_esc(line)}</p>', klass="b-sec--place", sec_id="schedule")
+        text = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
+        return title, f'<p class="b-text">{_esc(text)}</p>', ""
     if card.get("in_season") is False:
-        return ""
+        return None
     if not days:
-        return _b_schedule_when_empty(card, links, title=title)
+        empty = _b_schedule_when_empty(card, links, title=title)
+        return (title, line + empty, "") if empty or line else None
 
     by_date = _sessions_by_date(days)
     if not by_date:
-        return ""
+        return None
     all_slots = [s for slots in by_date.values() for s in slots]
-    aside_price, common = _b_price_floor(all_slots)
+    _aside_price, common = _b_price_floor(all_slots)
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
-    # Где касса продаёт онлайн — покупка над расписанием: в сезон вечера и выходные
-    # разбирают, и кнопка нужна до выбора времени, а не после всей недели.
-    buy = _b_buy(links)
+    currency = str(all_slots[0].get("currency_code") or card.get("currency_code") or "BYN")
+    prices = prices_html(all_slots, vv, currency=currency)
     foot: list[str] = []
     zovi = zovi_entry_path(view)
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = f"{buy}<div data-glide-session-list-root>{strip}{links_row}</div>"
-    aside = f'<span class="b-aside">{_esc(aside_price)}</span>' if aside_price else ""
+    body = f"{prices}{line}<div data-glide-session-list-root>{strip}{links_row}</div>"
+    return title, body, _b_buy_pill(view, links, vv)
+
+
+def _b_schedule(
+    view: Mapping[str, Any],
+    *,
+    base_path: str,
+    invite: bool,
+    links: Mapping[str, Any],
+    vv: Mapping[str, Any] | None = None,
+) -> str:
+    from src.application.style_b import section
+
+    parts = _b_schedule_parts(view, base_path=base_path, invite=invite, links=links, vv=vv)
+    if parts is None:
+        return ""
+    title, body, aside = parts
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
 
-def _b_ohm(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
-    """ОХМ — те же полоса дней и билеты, что у массового катания, только тёмные.
+def _b_ohm_parts(view: Mapping[str, Any], *, base_path: str, invite: bool) -> tuple[str, str] | None:
+    """(тело, подпись в шапке) ОХМ: те же полоса дней и билеты, только тёмные.
 
     Сеанс ОХМ выбирается тапом и уходит в «Позвать», как в Mini App (``arenaOhmDayTabs``).
     """
-    from src.application.style_b import section
-
     by_date = _sessions_by_date([d for d in (view.get("ohm_days") or []) if d.get("sessions")])
     if not by_date:
-        return ""
+        return None
     slots = [s for d in sorted(by_date) for s in by_date[d]]
     first = slots[0]
     aside_bits: list[str] = []
@@ -1503,9 +1611,55 @@ def _b_ohm(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
             if note and note not in notes:
                 notes.append(note)
     notes_html = f'<p class="b-note">{_esc(" ".join(notes))}</p>' if notes else ""
-    aside = f'<span class="b-aside">{_esc(" · ".join(aside_bits))}</span>' if aside_bits else ""
-    body = f"{strip}{notes_html}"
+    return f"{strip}{notes_html}", " · ".join(aside_bits)
+
+
+def _b_ohm(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
+    from src.application.style_b import section
+
+    parts = _b_ohm_parts(view, base_path=base_path, invite=invite)
+    if parts is None:
+        return ""
+    body, aside_text = parts
+    aside = f'<span class="b-aside">{_esc(aside_text)}</span>' if aside_text else ""
     return section(t("kind.hockey_practice"), body, aside_html=aside, klass="b-sec--place", sec_id="ohm")
+
+
+def _b_ice(
+    view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any], vv: Mapping[str, Any]
+) -> str:
+    """Блок «На льду»: массовое катание и ОХМ — вкладками одного блока, а не двумя расписаниями.
+
+    Вкладки без JS: радио-кнопки и :has(). Обе панели в разметке — поисковик видит и ОХМ.
+    """
+    from src.application.style_b import section
+
+    skate = _b_schedule_parts(view, base_path=base_path, invite=invite, links=links, vv=vv)
+    ohm = _b_ohm_parts(view, base_path=base_path, invite=invite)
+    if skate is None and ohm is None:
+        return ""
+    if ohm is None:
+        title, body, aside = skate  # type: ignore[misc]
+        return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
+    ohm_body, ohm_aside = ohm
+    ohm_label = t("kind.hockey_practice")
+    if skate is None:
+        aside = f'<span class="b-aside">{_esc(ohm_aside)}</span>' if ohm_aside else ""
+        return section(ohm_label, ohm_body, aside_html=aside, klass="b-sec--place", sec_id="ohm")
+    _title, skate_body, buy = skate
+    ohm_head = f'<p class="b-pane__aside">{_esc(ohm_aside)}</p>' if ohm_aside else ""
+    body = (
+        '<div class="b-icetabs">'
+        '<input type="radio" name="icetab" id="icetab-skate" class="b-icetabs__r" checked>'
+        '<input type="radio" name="icetab" id="icetab-ohm" class="b-icetabs__r">'
+        '<div class="b-seg" role="tablist">'
+        f'<label for="icetab-skate" class="b-seg__i b-seg__i--skate">{_esc(t("kind.public_skate"))}</label>'
+        f'<label for="icetab-ohm" class="b-seg__i b-seg__i--ohm">{_esc(ohm_label)}</label></div>'
+        f'<div class="b-pane b-pane--skate">{skate_body}</div>'
+        f'<div class="b-pane b-pane--ohm" id="ohm">{ohm_head}{ohm_body}</div>'
+        "</div>"
+    )
+    return section("На льду", body, aside_html=buy, klass="b-sec--place", sec_id="schedule")
 
 
 def _b_hours_rows(card: Mapping[str, Any]) -> list[tuple[str, str]]:
@@ -1533,10 +1687,32 @@ def _b_hours_rows(card: Mapping[str, Any]) -> list[tuple[str, str]]:
     return rows
 
 
-def _b_arrive(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
+def _b_contacts(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
+    """Адрес, часы и контакты внизу страницы: кнопки уже на обложке, здесь — справка и NAP для поиска."""
+    html = _b_arrive(card, links, buttons=False, title="Адрес и контакты")
+    address = format_place_address(str(card.get("address") or ""), city=_city(card))
+    if not html and not address:
+        return ""
+    row = (
+        f'<div class="b-info__row"><span class="b-info__key">Адрес</span>'
+        f'<span class="b-info__val">{_esc(address)}</span></div>'
+        if address
+        else ""
+    )
+    if not html:
+        from src.application.style_b import section
+
+        return section("Адрес и контакты", f'<div class="b-info">{row}</div>', klass="b-sec--place", sec_id="contacts")
+    return html.replace('<div class="b-info">', f'<div class="b-info">{row}', 1)
+
+
+def _b_arrive(
+    card: Mapping[str, Any], links: Mapping[str, Any], *, buttons: bool = True, title: str = ""
+) -> str:
     from src.application.catalog_icons import icon_svg
     from src.application.style_b import section
 
+    show_buttons = buttons
     buttons: list[str] = []
     if links.get("tel"):
         buttons.append(
@@ -1573,24 +1749,27 @@ def _b_arrive(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
             f'<span class="b-info__key">Instagram</span><span class="b-info__val">@{_esc(handle)}</span></a>'
         )
     body = ""
-    if buttons:
+    if buttons and show_buttons:
         body += f'<div class="b-btns">{"".join(buttons)}</div>'
     if rows:
         body += f'<div class="b-info">{"".join(rows)}</div>'
-    return section(t("hub.directions"), body, klass="b-sec--place")
+    sec_id = "contacts" if title else ""
+    return section(title or t("hub.directions"), body, klass="b-sec--place", sec_id=sec_id)
 
 
-def _b_trainers(view: Mapping[str, Any], *, base_url: str) -> str:
-    """Тренеры на этом месте (TASK-265), как в Mini App: тап — карточка тренера в Telegram."""
+def _b_trainers(view: Mapping[str, Any], *, base_url: str, school_html: str = "") -> str:
+    """Тренеры на этом месте (TASK-265), как в Mini App: тап — карточка тренера в Telegram.
+
+    Нет тренеров — нет блока: вход для тренера тогда стоит в «Ещё на катке».
+    """
     from src.application.place_links import public_telegram_cta_url, trainer_start_param
     from src.application.style_b import section, trainer_rows_html
 
     trainers = list(view.get("trainers") or [])
-    card = view["card"]
-    coach = _b_coach_entry(card, first=not trainers) if _skating(card) else ""
     if not trainers:
-        # Тренеров пока нет — раздел только ради «станьте первым».
-        return section(t("place.trainers"), coach, klass="b-sec--place", sec_id="trainers") if coach else ""
+        return ""
+    card = view["card"]
+    coach = _b_coach_entry(card, first=False) if _skating(card) else ""
     arena_id = int(card["id"])
     city_id = int(card.get("city_id") or 0) or None
 
@@ -1605,7 +1784,7 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str) -> str:
 
     return section(
         t("place.trainers"),
-        trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go")) + coach,
+        trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go")) + school_html + coach,
         klass="b-sec--place",
         sec_id="trainers",
     )
@@ -1916,22 +2095,50 @@ def render_place_body_b(
     from src.application.public_web_cta import phone_beacon_script, place_action_links
 
     card = view["card"]
-    links = place_action_links(
-        card, base_url=base_url, surface="place_page", city_id=int(card.get("city_id") or 0) or None
+    city_id = int(card.get("city_id") or 0) or None
+    links = place_action_links(card, base_url=base_url, surface="place_page", city_id=city_id)
+    if card.get("venue_type") == "shop":
+        parts = [
+            _b_hero(card, status_html=_b_status(view)),
+            _b_about(card),
+            _b_arrive(card, links),
+            _b_onsite(card, cta_url=cta_url),
+            _b_partners(card),
+        ]
+        body = "".join(parts)
+        return body + phone_beacon_script(body)
+    from src.application.place_links import public_telegram_cta_url
+    from src.application.place_visit_blocks import (
+        facts_html,
+        more_html,
+        school_in_trainers_html,
+        services_html,
     )
+
+    if card.get("id") is not None:
+        bell = public_telegram_cta_url(
+            base_url, start_param=f"arena_{int(card['id'])}", surface="place_page",
+            city_id=city_id, arena_id=int(card["id"]),
+        )
+        if bell:
+            links["bell"] = bell
+    vv = _place_visit(view)
+    food = _food_partner(card)
+    trainers_listed = bool(view.get("trainers"))
+    coach_in_more = _b_coach_entry(card, first=True) if _skating(card) and not trainers_listed else ""
+    hours = card.get("opening_hours") if isinstance(card.get("opening_hours"), Mapping) else {}
+    # Порядок блоков — arena_visit_info.PLACE_BLOCKS: cover, ice, facts, services, trainers, partners, more.
     parts = [
-        _b_hero(card, status_html=_b_status(view)),
+        _b_hero(card, status_html=_b_status(view), chips_html=_b_hero_chips(card, links)),
         _b_plan(view, invite=invite),
-        _b_schedule(view, base_path=base_path, invite=invite, links=links),
-        _b_ohm(view, base_path=base_path, invite=invite),
-        # Описание — после времени: на страницу приходят за сеансом, а не за абзацем о катке.
-        _b_about(card),
-        _b_arrive(card, links),
-        _b_onsite(card, cta_url=cta_url, trainers_listed=bool(view.get("trainers"))),
-        # Партнёр — сразу после чипов «На месте»: ответ на «куда потом», лёд и контакты не теснит.
+        _b_ice(view, base_path=base_path, invite=invite, links=links, vv=vv),
+        facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
+        services_html(vv, title=_rental_section_title(card, hours) if hours.get("rental_title") else "Прокат и услуги"),
+        _b_trainers(view, base_url=base_url, school_html=school_in_trainers_html(vv.get("school"))),
         _b_partners(card),
-        _b_trainers(view, base_url=base_url),
-        _b_rental(card),
+        more_html(vv, coach_html=coach_in_more, tel_href=str(links.get("tel") or "")),
+        _b_about(card),
+        _b_contacts(card, links),
     ]
     body = "".join(parts)
     return body + phone_beacon_script(body)
