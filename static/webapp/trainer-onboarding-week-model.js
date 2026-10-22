@@ -38,20 +38,36 @@
   }
 
   /**
-   * Старты, которые окно предлагает для площадки: от начала окна с её смещением, шагом в длину
-   * занятия — 90-минутные не налезают друг на друга. Занятие целиком помещается в окно, поэтому
-   * соседние окна тоже не пересекаются. Час старта — в рабочих часах площадки.
+   * Старты, которые окно предлагает для площадки, — строго по той же сетке, что проверяет сервер
+   * (allowed_start_minutes_from_preset):
+   *   - hourly_minute («Замок»): только ЧЧ:смещение в часах площадки; длинное занятие берёт
+   *     следующий свободный час (45 мин → 10:15, 11:15; 90 мин → 10:15, 12:15);
+   *   - quarter_15 и без площадки: кратно 15 минутам, шагом в длину занятия от начала окна или
+   *     открытия площадки, последний старт — не позже hour_end:00.
+   * Занятие целиком помещается в окно — соседние окна не пересекаются.
    */
   function windowStarts(win, arena, duration) {
-    var off = arenaOffset(arena);
-    var step = Math.max(15, duration | 0);
+    var dur = Math.max(15, duration | 0);
+    var h0 = arena && arena.hour_start != null ? arena.hour_start : 0;
+    var h1 = arena && arena.hour_end != null ? arena.hour_end : 23;
     var out = [];
-    for (var s = win.from * 60 + off; s + step <= win.to * 60 + off; s += step) {
-      var h = Math.floor(s / 60);
-      if (arena && arena.hour_start != null && h < arena.hour_start) continue;
-      if (arena && arena.hour_end != null && h > arena.hour_end) continue;
-      out.push(s);
+    if (arena && arena.grid_kind === 'hourly_minute') {
+      var off = arenaOffset(arena);
+      var bound = win.to * 60 + off;
+      var last = null;
+      for (var h = Math.max(h0, win.from); h <= h1; h++) {
+        var c = h * 60 + off;
+        if (windowOf(c) !== win || c + dur > bound) continue;
+        if (last != null && c < last + dur) continue;
+        out.push(c);
+        last = c;
+      }
+      return out;
     }
+    var step = Math.ceil(dur / 15) * 15;
+    var begin = Math.max(win.from * 60, h0 * 60);
+    begin = Math.ceil(begin / 15) * 15;
+    for (var s = begin; s + dur <= win.to * 60 && s <= h1 * 60; s += step) out.push(s);
     return out;
   }
 

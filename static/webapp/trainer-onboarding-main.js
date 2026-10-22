@@ -1241,13 +1241,16 @@
         return;
       }
       ids.push(arenaId);
-      if (ids.length === 1) adoptUnassignedSlots(arenaById(arenaId));
+      if (ids.length === 1 && !(state.weekIsSuggestion && !state.weekTouched)) {
+        adoptUnassignedSlots(arenaById(arenaId));
+      }
     }
     state.pickedArenaIds = ids;
     if (wasOnline && ids.length) state.arenaMode = 'single';
     syncArenaDerived();
     if (wasOnline && ids.length) clearArenaOnlineFormat();
-    state.weekTouched = true;
+    /* Нетронутая подсказка перестраивается по сетке первого катка; правленая неделя — нет. */
+    refreshSuggestedWeek();
     state.openWindow = null;
     haptic('light');
     renderArenaList();
@@ -1723,29 +1726,37 @@
   function windowKey(dow, win) { return dow + ':' + win.id; }
 
   /**
-   * Черновик недели для первого запуска: будни, два утренних и три вечерних занятия. Тот же,
-   * что предлагает сервер (7, 8, 18, 19, 20 при 60 минутах), но шагом в выбранную длину —
-   * при 90 минутах подсказка не должна сама себе накладываться.
+   * Черновик недели для первого запуска: будни, два утренних и три вечерних занятия — те же,
+   * что предлагает сервер (7, 8, 18, 19, 20 при 60 минутах), но по сетке катка: его смещение
+   * (:15 у «Замка»), часы работы и длительность. Иначе подсказка стоит мимо слотов окна и сама
+   * блокирует соседние.
    */
-  function buildSuggestedWeek(duration) {
+  function buildSuggestedWeek(arena) {
+    var dur = WM.effectiveDuration(arena, state.durationMinutes);
+    function pick(winId, from, count) {
+      var starts = WM.windowStarts(WM.windowById(winId), arena, dur);
+      var late = starts.filter(function (m) { return m >= from; });
+      return (late.length >= count ? late : starts).slice(0, count);
+    }
+    var starts = pick('mor', 7 * 60, 2).concat(pick('eve', 18 * 60, 3));
     var week = {};
     for (var dow = 0; dow < 5; dow++) {
       var day = {};
-      [7 * 60, 7 * 60 + duration, 18 * 60, 18 * 60 + duration, 18 * 60 + 2 * duration].forEach(function (m) {
-        day[m] = { a: null, d: null };
-      });
+      starts.forEach(function (m) { day[m] = { a: arena ? arena.id : null, d: null }; });
       week[dow] = day;
     }
     return week;
   }
 
-  /** Пока тренер не трогал подсказанную неделю, она следует за длительностью. */
+  /** Подсказанная неделя, которую тренер ещё не трогал, следует за длительностью и катком. */
+  function refreshSuggestedWeek() {
+    if (!state.weekIsSuggestion || state.weekTouched) return false;
+    state.week = buildSuggestedWeek(arenaById(state.pickedArenaIds[0]) || null);
+    return true;
+  }
+
   function onDurationChanged() {
-    if (state.weekIsSuggestion && !state.weekTouched) {
-      state.week = buildSuggestedWeek(state.durationMinutes);
-      var first = arenaById(state.pickedArenaIds[0]);
-      if (first) adoptUnassignedSlots(first);
-    }
+    refreshSuggestedWeek();
     state.openWindow = null;
     renderWeek();
   }
@@ -2196,7 +2207,7 @@
         state.weekIsSuggestion = !!data.week_is_suggestion;
         /* Подсказку перестраиваем шагом в длительность тренера — при 90 минутах серверная
            подсказка 7:00 и 8:00 сама себе накладывалась бы. */
-        if (state.weekIsSuggestion) state.week = buildSuggestedWeek(state.durationMinutes);
+        if (state.weekIsSuggestion) state.week = buildSuggestedWeek(arenaById(picked[0]) || null);
         state.pickedArenaIds = picked;
         syncArenaDerived();
         if (state.cityId == null) {

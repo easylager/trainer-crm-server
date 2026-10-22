@@ -27,6 +27,21 @@ describe('Онбординг: окна недели → точные старт�
     assert.deepEqual(M.windowStarts(MOR, rink, 60).map(M.minuteLabel), ['8:30', '9:30', '10:30']);
   });
 
+  it('часовая сетка «Замка» (:15): старты только в :15, длинное занятие — через час', () => {
+    const zamok = { id: 3, grid_kind: 'hourly_minute', minute_offset: 15, hour_start: 10, hour_end: 22 };
+    assert.deepEqual(M.windowStarts(MOR, zamok, 45).map(M.minuteLabel), ['10:15', '11:15']);
+    assert.deepEqual(M.windowStarts(EVE, zamok, 60).map(M.minuteLabel),
+      ['17:15', '18:15', '19:15', '20:15', '21:15', '22:15']);
+    assert.deepEqual(M.windowStarts(DAY, zamok, 90).map(M.minuteLabel), ['12:15', '14:15']);
+  });
+
+  it('четвертная сетка: от открытия катка, последний старт не позже его закрытия', () => {
+    const rink = { id: 9, grid_kind: 'quarter_15', hour_start: 8, hour_end: 21 };
+    assert.deepEqual(M.windowStarts(MOR, rink, 90).map(M.minuteLabel), ['8:00', '9:30']);
+    assert.deepEqual(M.windowStarts(EVE, rink, 90).map(M.minuteLabel), ['17:00', '18:30', '20:00']);
+    assert.ok(M.windowStarts(EVE, rink, 60).every((m) => m <= 21 * 60), 'не позже 21:00');
+  });
+
   it('фиксированная длительность катка важнее выбора тренера', () => {
     const rink = { id: 7, fixed_duration_minutes: 90 };
     const day = M.fillWindow({}, EVE, rink, 60, (id) => (id === 7 ? rink : null));
