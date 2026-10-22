@@ -11,811 +11,368 @@
   <!-- telegram.org подключён async, поэтому ready() + раскрытие делает mini-app-full-height.js:
        он дожидается SDK, иначе на медленной сети вызовы уходили в никуда и приложение
        открывалось полушторкой. -->
-  <script src="mini-app-full-height.js?v=202610222"></script>
+  <script src="mini-app-full-height.js?v=202610224"></script>
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610222" />
-  <link rel="stylesheet" href="theme.css?v=202610222" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610222" />
-  <script src="mini-app-telegram-chrome.js?v=202610222"></script>
+  <!-- Палитра Glide по colorScheme Telegram (светлая / тёмная), как на остальных экранах тренера. -->
+  <script src="mini-app-trainer-theme.js?v=202610224"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610224" />
+  <link rel="stylesheet" href="theme.css?v=202610224" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610224" />
+  <script src="mini-app-telegram-chrome.js?v=202610224"></script>
   <style>
     /*
-     * Первый запуск. Один экран, ответы пальцем, клавиатура — только когда наш
-     * список не подошёл.
+     * Первый запуск (TASK-312): вступление и три шага — «что ведёте», «где», «когда».
      *
-     * Правило этой страницы: специалист отвечает пальцем, а не головой. Всё, что
-     * нельзя ответить не задумываясь, здесь не спрашивается — оно спрашивается
-     * позже, когда без ответа ломается действие с живым человеком.
+     * Правило страницы прежнее: специалист отвечает пальцем, а не головой. Клавиатура —
+     * только когда нашего списка не хватило (роль, услуга, площадка, город), и все четыре
+     * оформлены одним паттерном (.ob-addcta + .ob-addbox).
      *
-     * Единственное исключение — «чего-то нет в списке»: роль, услуга и площадка.
-     * Там клавиатура неизбежна, поэтому все три оформлены одинаково (.ob-addcta
-     * + .ob-addbox): один паттерн вместо трёх непохожих на одном экране.
+     * Сверху каждого шага — мини-карточка «как увидит ученик»: она заполняется тем, что
+     * тренер только что выбрал. Прогресс показывает результат, а не полоску.
      *
-     * Обязательны только услуги и (если начали выбирать) площадка. Расписание —
-     * нет: к платформе идут не только тренеры по конькам, и психолог или
-     * консультант может быть ещё не готов называть часы.
+     * Обязательны только услуги. Площадка и время — нет: к нам идут не только тренеры по
+     * конькам, и психолог может быть ещё не готов называть часы.
      */
     html, body { height: 100%; margin: 0; }
+    /* Авторский display у компонентов иначе перебивает браузерное [hidden]. */
+    [hidden] { display: none !important; }
     body {
-      background: var(--app-bg);
-      color: var(--app-text);
-      font-family: var(--app-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+      /* Брендовые поверхности, а не themeParams Telegram: те часто дают фон и карточку
+         одного цвета. Тёмные значения приходят из glide-tokens по html.trainer-theme-dark. */
+      --ob-ground: var(--glide-bg, #F1F3F2);
+      --ob-paper: var(--glide-surface, #FFFFFF);
+      --ob-ink: var(--glide-text, #101617);
+      --ob-muted: var(--glide-hint, #5E6B6B);
+      --ob-line: color-mix(in srgb, var(--ob-ink) 14%, transparent);
+      --ob-dash: color-mix(in srgb, var(--ob-ink) 34%, transparent);
+      background: var(--ob-ground);
+      color: var(--ob-ink);
+      font-family: var(--app-font-sans, 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
       -webkit-font-smoothing: antialiased;
     }
+    button, input, select { font-family: inherit; color: inherit; }
+    .ob-num { font-variant-numeric: tabular-nums; }
 
     .ob {
       min-height: 100vh;
       display: flex;
       flex-direction: column;
-      /* Место под липкую кнопку внизу, чтобы она никогда не накрывала последний ряд сетки. */
-      padding: 0 0 108px;
+      /* Место под липкую кнопку внизу — она не накрывает последнее, что на экране. */
+      padding: 0 0 132px;
     }
+    .ob-loading, .ob-fatal { padding: 40px 20px; text-align: center; color: var(--ob-muted); }
+    .ob-fatal { display: none; color: var(--app-danger-ink, #C4342A); }
 
-    .ob-head { padding: 26px 20px 6px; }
-    .ob-eyebrow {
-      font-size: 12px;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--app-muted);
-      margin: 0 0 8px;
-    }
+    /* ── Заголовки ── */
+    .ob-head { padding: 20px 16px 0; }
     .ob-title {
-      font-size: 25px;
-      line-height: 1.2;
+      font-size: 26px;
+      line-height: 1.15;
       font-weight: 700;
       margin: 0;
       letter-spacing: -.01em;
     }
     .ob-lead {
       font-size: 15px;
-      line-height: 1.5;
-      color: var(--app-muted);
-      margin: 10px 0 0;
-    }
-
-    .ob-step { padding: 22px 20px 0; }
-    .ob-step-title {
-      font-size: 17px;
-      font-weight: 650;
-      margin: 0 0 4px;
-    }
-    .ob-step-hint {
-      font-size: 14px;
       line-height: 1.45;
-      color: var(--app-muted);
-      margin: 0 0 14px;
-    }
-    .ob-step-hint a {
-      color: var(--app-cta-fill);
-      font-weight: 600;
-      text-decoration: none;
-    }
-    .ob-step-hint a:focus-visible {
-      outline: 2px solid var(--app-cta-fill);
-      outline-offset: 2px;
+      color: var(--ob-muted);
+      margin: 6px 0 0;
     }
 
-    /* ── Услуги: чипсы, мультивыбор ── */
-    /* [hidden] должен побеждать display: класс .ob-chips сам по себе всегда сильнее голого
-       атрибута (author-стиль всегда перебивает UA default для [hidden]) — уже ловили эту
-       же ошибку на .ob-skip. #obDuration прячется этим классом, когда площадка фиксирует
-       длительность (см. syncDurationLock в JS), поэтому гвард обязателен. */
-    .ob-chips[hidden] { display: none; }
+    /* ── Вступление ── */
+    .ob-intro .ob-head { padding-top: 28px; }
+    .ob-intro .ob-title { font-size: 28px; }
+    .ob-intro-card { margin: 20px 16px 0; }
+    .ob-intro-card .ob-card { padding: 16px; gap: 14px; }
+    .ob-intro-caption { margin: 8px 0 0; font-size: 13px; color: var(--ob-muted); text-align: center; }
+    .ob-intro-steps { list-style: none; margin: 0; padding: 18px 16px 0; display: flex; flex-direction: column; gap: 4px; }
+    .ob-intro-steps li { display: flex; gap: 14px; align-items: center; min-height: 56px; }
+    .ob-intro-steps__n {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--ob-paper); font-size: 14px; font-weight: 600;
+    }
+    .ob-intro-steps li:first-child .ob-intro-steps__n { background: var(--ob-ink); color: var(--ob-paper); }
+    .ob-intro-steps__t { display: flex; flex-direction: column; gap: 2px; }
+    .ob-intro-steps__t b { font-size: 16px; font-weight: 600; }
+    .ob-intro-steps__t span { font-size: 14px; color: var(--ob-muted); }
+    .ob-calm {
+      margin: 16px 16px 0; padding: 14px 16px; border-radius: 14px; background: var(--ob-paper);
+      display: flex; gap: 12px; align-items: flex-start; font-size: 14px; line-height: 1.4;
+    }
+    .ob-calm svg { flex-shrink: 0; margin-top: 1px; }
+    .ob-calm p { margin: 0; }
+    .ob-calm p + p { margin-top: 4px; color: var(--ob-muted); }
+
+    /* ── Мини-карточка «как увидит ученик» ── */
+    .ob-card {
+      background: var(--ob-paper);
+      border-radius: 16px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ob-card__who { display: flex; gap: 10px; align-items: center; min-width: 0; }
+    .ob-avatar {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+      background: color-mix(in srgb, var(--ob-ink) 16%, var(--ob-paper));
+      display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 15px;
+    }
+    .ob-intro-card .ob-avatar { width: 52px; height: 52px; font-size: 18px; }
+    .ob-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ob-card__text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .ob-card__name { font-size: 15px; font-weight: 600; }
+    .ob-intro-card .ob-card__name { font-size: 17px; }
+    .ob-card__line { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ob-card__blanks { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ob-blank {
+      font-size: 13px; color: var(--ob-muted); border: 1.5px dashed var(--ob-dash);
+      border-radius: 6px; padding: 1px 8px;
+    }
+    .ob-card__times { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .ob-time {
+      height: 44px; border-radius: 9px; box-sizing: border-box;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+      background: var(--ob-ground);
+    }
+    .ob-time small { font-size: 11px; color: var(--ob-muted); }
+    .ob-time b { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .ob-time--empty { background: transparent; border: 1.5px dashed var(--ob-dash); }
+    .ob-time--empty b { color: var(--ob-muted); font-weight: 500; }
+
+    /* ── Шаги: шапка ── */
+    .ob-topbar { padding: 8px 16px 0; display: flex; flex-direction: column; gap: 10px; }
+    .ob-progress-row { display: flex; align-items: center; gap: 12px; }
+    .ob-back {
+      width: 44px; height: 44px; margin-left: -10px; border: 0; background: transparent;
+      display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 12px;
+    }
+    .ob-progress { flex-grow: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+    .ob-progress span { height: 4px; border-radius: 2px; background: var(--ob-line); }
+    .ob-progress span.is-on { background: var(--ob-ink); }
+    .ob-step-count { font-size: 13px; color: var(--ob-muted); font-variant-numeric: tabular-nums; min-width: 24px; text-align: right; }
+    .ob-pane[hidden] { display: none !important; }
+    .ob-section { padding: 18px 16px 0; }
+    .ob-section-title { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+    .ob-hint { font-size: 13px; line-height: 1.4; color: var(--ob-muted); margin: 8px 0 0; }
+
+    /* ── Роль строкой ── */
+    .ob-role-line {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 2px 4px 0; font-size: 14px; color: var(--ob-muted);
+    }
+    .ob-role-line b { color: var(--ob-ink); font-weight: 600; }
+    .ob-linkbtn {
+      min-height: 36px; border: 0; background: transparent; padding: 0; cursor: pointer;
+      font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px;
+    }
+    .ob-role-box { margin-top: 8px; padding: 14px; border-radius: 14px; background: var(--ob-paper); }
+    .ob-role-box[hidden] { display: none; }
+
+    /* ── Чипы (роль, формат, тип площадки) ── */
     .ob-chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .ob-chip {
-      appearance: none;
-      border: 1px solid var(--app-chip-line);
-      background: var(--app-chip-bg);
-      color: var(--app-chip-text);
-      border-radius: 999px;
-      padding: 10px 16px;
-      font-size: 15px;
-      font-family: inherit;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background .12s ease, border-color .12s ease, color .12s ease;
+      min-height: 40px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--ob-line);
+      background: var(--ob-paper); font-size: 15px; cursor: pointer;
     }
-    .ob-chip[aria-pressed="true"] {
-      background: var(--app-cta-fill);
-      border-color: var(--app-cta-fill);
-      color: var(--app-cta-text);
-      font-weight: 650;
+    .ob-chip[aria-pressed="true"] { background: var(--ob-ink); color: var(--ob-paper); border-color: var(--ob-ink); }
+
+    /* ── Плитки услуг ── */
+    .ob-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .ob-tile {
+      position: relative; min-height: 80px; border-radius: 14px; border: 2px solid transparent;
+      background: var(--ob-paper); padding: 10px 12px; text-align: left; cursor: pointer;
+      display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 8px;
     }
-    .ob-chip:focus-visible { outline: 2px solid var(--app-cta-fill); outline-offset: 2px; }
-    .ob-svc-formats { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .ob-tile[aria-pressed="true"] { border-color: var(--ob-ink); }
+    .ob-tile__name { font-size: 14px; font-weight: 600; line-height: 1.2; padding-right: 22px; }
+    .ob-tile__sub { display: block; font-size: 12px; font-weight: 400; color: var(--ob-muted); margin-top: 2px; }
+    .ob-tile__check {
+      position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 50%;
+      background: var(--ob-ink); color: var(--ob-paper); display: none; align-items: center; justify-content: center;
+    }
+    .ob-tile[aria-pressed="true"] .ob-tile__check { display: flex; }
+    .ob-tile--add { background: transparent; border: 1.5px dashed var(--ob-dash); }
+
+    .ob-svc-formats { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
     .ob-svc-formats[hidden] { display: none; }
     .ob-svc-format-row {
-      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-      font-size: 13px;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px;
+      border-radius: 14px; background: var(--ob-paper);
     }
-    .ob-svc-format-row__name { font-weight: 650; margin-right: 4px; flex: 1 1 100%; }
-    .ob-svc-format-row .ob-chip { font-size: 13px; padding: 6px 10px; }
-    .ob-addbox-format { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-    .ob-optional {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--app-muted);
-      text-transform: lowercase;
-      margin-left: 6px;
-      white-space: nowrap;
-    }
+    .ob-svc-format-row__name { flex: 1 1 100%; font-size: 14px; font-weight: 600; }
 
-    /* ── Сетка недели ── */
-    .ob-grid-wrap {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      margin: 0 -20px;
-      padding: 0 16px 4px 6px;
+    /* ── Длительность ── */
+    .ob-seg {
+      display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px;
+      background: color-mix(in srgb, var(--ob-ink) 9%, var(--ob-ground)); border-radius: 12px; padding: 4px;
     }
-    .ob-grid {
-      display: grid;
-      grid-template-columns: minmax(20px, max-content) repeat(7, minmax(0, 1fr));
-      gap: 5px;
-      touch-action: none;
-    }
-    .ob-grid-dayhead {
-      font-size: 13px;
-      font-weight: 700;
-      text-align: center;
-      color: var(--app-text);
-      padding-bottom: 2px;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-    }
-    .ob-grid-dayhead.is-weekend { color: var(--app-attention); }
-    .ob-grid-hour {
-      font-size: 13px;
-      font-weight: 650;
-      color: var(--app-text);
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      padding-right: 4px;
-      white-space: nowrap;
+    .ob-seg[hidden] { display: none; }
+    .ob-seg button {
+      height: 40px; border: 0; border-radius: 9px; background: transparent; font-size: 15px; cursor: pointer;
       font-variant-numeric: tabular-nums;
     }
-    .ob-cell {
-      appearance: none;
-      border: 1px solid var(--app-chip-line);
-      background: var(--app-chip-bg);
-      border-radius: 8px;
-      height: 34px;
-      padding: 0;
-      cursor: pointer;
-      font-family: inherit;
-      transition: background .1s ease, border-color .1s ease;
-      /* Позволяет вести пальцем по нескольким ячейкам подряд («протянуть» диапазон),
-         не отдавая жест браузерному скроллу/зуму на середине штриха. */
-      touch-action: none;
-      -webkit-touch-callout: none;
-      user-select: none;
-    }
-    .ob-cell[aria-pressed="true"] {
-      background: var(--app-cta-fill);
-      border-color: var(--app-cta-fill);
-    }
-    .ob-cell:focus-visible { outline: 2px solid var(--app-cta-fill); outline-offset: 2px; }
+    .ob-seg button[aria-pressed="true"] { background: var(--ob-paper); font-weight: 600; }
+    .ob-locked-note { font-size: 14px; color: var(--ob-muted); margin: 0; }
+    .ob-locked-note[hidden] { display: none; }
 
-    .ob-grid-foot {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-      margin-top: 12px;
-      font-size: 14px;
-      color: var(--app-muted);
-    }
-    .ob-link-btn {
-      appearance: none;
-      background: none;
-      border: 0;
-      padding: 0;
-      font: inherit;
-      color: var(--glide-ink-teal, var(--glide-700));
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      cursor: pointer;
-    }
-
-    /* ── Площадка: длительность зафиксирована ── */
-    .ob-arena-locked-note {
-      margin: 10px 0 0;
-      font-size: 13px;
-      line-height: 1.4;
-      color: var(--app-muted);
-    }
-    .ob-arena-locked-note[hidden] { display: none; }
-
-    /* ── Площадка: комбобокс (поиск + видимый список) ── */
-    .ob-arena-pick[hidden] { display: none; }
-    .ob-arena-pick { margin-top: 14px; }
-    .ob-arena-combo__label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--app-muted);
-      margin-bottom: 6px;
-    }
-    .ob-arena-combo {
-      border: 1px solid var(--app-chip-line);
-      border-radius: 12px;
-      background: var(--app-chip-bg);
-      overflow: hidden;
-    }
-    .ob-arena-combo__trigger {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 0 10px 0 12px;
-      border-bottom: 1px solid var(--app-chip-line);
-    }
-    .ob-arena-combo__input {
-      appearance: none;
-      flex: 1;
-      min-width: 0;
-      box-sizing: border-box;
-      border: 0;
-      background: transparent;
-      color: var(--app-chip-text);
-      -webkit-text-fill-color: var(--app-chip-text);
-      caret-color: var(--app-cta-fill);
-      padding: 10px 0;
-      font: inherit;
-      font-size: 15px;
-    }
-    .ob-arena-combo__input::placeholder {
-      color: var(--glide-ink, #0B6E70);
-      -webkit-text-fill-color: var(--glide-ink, #0B6E70);
-      opacity: .55;
-    }
-    .ob-arena-combo__input:focus { outline: none; }
-    .ob-arena-combo:focus-within {
-      outline: 2px solid var(--app-cta-fill);
-      outline-offset: 1px;
-    }
-    .ob-arena-combo__chev {
-      flex-shrink: 0;
-      width: 18px;
-      height: 18px;
-      opacity: 0.5;
-      background: currentColor;
-      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E") center / contain no-repeat;
-      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E") center / contain no-repeat;
-      pointer-events: none;
-    }
-    .ob-arena-combo__done {
-      flex-shrink: 0;
-      appearance: none;
-      border: 0;
-      background: none;
-      padding: 6px 2px 6px 8px;
-      font: inherit;
-      font-size: 14px;
-      font-weight: 650;
-      color: var(--app-cta-fill);
-      cursor: pointer;
-    }
-    .ob-arena-combo__done[hidden] { display: none; }
-    .ob-arena-combo--focused .ob-arena-list {
-      max-height: 168px;
-    }
-    .ob-arena-pick {
-      scroll-margin-top: 12px;
-    }
-    .ob-arena-combo__panel {
-      padding: 8px;
-    }
-    .ob-arena-combo__browse-hint {
-      margin: 0 2px 8px;
-      font-size: 12.5px;
-      line-height: 1.4;
-      color: var(--app-muted);
-    }
-    .ob-arena-combo__browse-hint[hidden] { display: none; }
-    .ob-arena-list {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      max-height: 260px;
-      overflow-y: auto;
-    }
-    .ob-arena-row {
-      appearance: none;
-      width: 100%;
-      text-align: left;
-      display: grid;
-      grid-template-columns: 72px minmax(0, 1fr);
-      gap: 11px;
-      align-items: start;
-      border: 1px solid var(--app-chip-line);
-      background: var(--app-chip-bg);
-      color: var(--app-chip-text);
-      border-radius: 12px;
-      padding: 7px 10px 7px 7px;
-      min-height: 86px;
-      box-sizing: border-box;
-      line-height: 1.25;
-      font: inherit;
-      cursor: pointer;
-    }
-    .ob-arena-row.is-on {
-      border-color: var(--app-cta-fill);
-      box-shadow: 0 0 0 1px var(--app-cta-fill);
-      background: var(--app-chip-bg);
-      color: var(--app-chip-text);
-    }
-    .ob-arena-thumb {
-      width: 72px;
-      height: 72px;
-      border-radius: 10px;
-      position: relative;
-      overflow: hidden;
-      background: color-mix(in srgb, var(--app-muted) 18%, var(--app-chip-bg));
-      flex-shrink: 0;
-      margin: 0;
-    }
-    .ob-arena-thumb img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center;
-      display: block;
-    }
-    .ob-arena-thumb::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.22) 100%);
-      pointer-events: none;
-    }
-    .ob-arena-thumb--ph {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      line-height: 1;
-    }
-    .ob-arena-thumb--ph::after { display: none; }
-    .ob-arena-thumb__check {
-      position: absolute;
-      right: 4px;
-      bottom: 4px;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: var(--app-cta-fill);
-      color: var(--app-cta-text);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: 700;
-      border: 2px solid #fff;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-      z-index: 2;
-    }
-    .ob-arena-row.is-on .ob-arena-thumb__check { display: flex; }
-    .ob-arena-row__body {
-      min-width: 0;
-      min-height: 72px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 1px 0;
-    }
-    .ob-arena-option__name { font-size: 15px; font-weight: 600; line-height: 1.25; }
-    .ob-arena-option__meta {
-      font-size: 12.5px;
-      color: var(--app-muted);
-      margin-top: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .ob-arena-unconfirmed-badge {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      line-height: 1.4;
-      padding: 1px 7px;
-      border-radius: 999px;
-      background: color-mix(in srgb, #c0392b 14%, transparent);
-      color: #c0392b;
-      vertical-align: middle;
-    }
-    .ob-arena-row.is-on .ob-arena-unconfirmed-badge {
-      background: color-mix(in srgb, var(--app-cta-fill) 14%, transparent);
-    }
-    .ob-arena-empty {
-      font-size: 14px;
-      color: var(--app-muted);
-      padding: 8px 2px;
-    }
-    .ob-city {
-      margin: 12px 0 18px;
-    }
-    /* Режим «одна / несколько / пропустить» — отдельно от услуг: после селекта города
-       нужен воздух, иначе чипсы визуально липнут к полю (см. onboarding QA). */
-    #obArenaMode.ob-chips {
-      gap: 10px 8px;
-      margin-bottom: 4px;
-    }
-    .ob-city-label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--app-muted);
-      margin-bottom: 6px;
-    }
-    .ob-city-select,
-    .ob-arena-create input,
-    #obRoleCustom,
-    #obServiceAddInput,
-    #obCityCreateName,
-    .ob-addbox input[type="text"] {
-      appearance: none;
-      width: 100%;
-      box-sizing: border-box;
-      border: 1px solid var(--app-chip-line);
-      background: var(--app-chip-bg);
-      color: var(--app-chip-text);
-      -webkit-text-fill-color: var(--app-chip-text);
-      caret-color: var(--app-cta-fill);
-      border-radius: 10px;
-      padding: 10px 12px;
-      font: inherit;
-      font-size: 15px;
-    }
-    .ob-city-select:focus-visible,
-    .ob-arena-create input:focus-visible,
-    #obRoleCustom:focus-visible,
-    #obServiceAddInput:focus-visible,
-    #obCityCreateName:focus-visible,
-    .ob-addbox input[type="text"]:focus-visible {
-      outline: 2px solid var(--app-cta-fill);
-      outline-offset: 1px;
-    }
-    .ob-arena-create[hidden],
-    .ob-addbox[hidden] { display: none; }
-    .ob-arena-create,
-    .ob-addbox {
-      margin-top: 12px;
-      padding: 12px;
-      border-radius: 12px;
-      border: 1px solid var(--app-chip-line);
-      background: var(--app-surface-2, rgba(127,127,127,.08));
-    }
-    .ob-addbox label,
-    .ob-arena-create label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--app-muted);
-      margin: 10px 0 6px;
-    }
-    .ob-addbox-lead {
-      margin: 0 0 10px;
-      font-size: 13px;
-      line-height: 1.45;
-      color: var(--app-muted);
-    }
-    .ob-city .ob-addcta { margin-top: 8px; }
-    .ob-city-select--picked {
-      border-color: var(--app-cta-fill);
-      box-shadow: 0 0 0 1px var(--app-cta-fill);
-    }
-    .ob-arena-create-actions,
-    .ob-addbox__actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 12px;
-    }
-    .ob-arena-create-status {
-      font-size: 13px;
-      margin: 8px 0 0;
-    }
-    .ob-arena-create-status.is-error { color: var(--app-danger, #c0392b); }
-    .ob-arena-create-dup {
-      margin-top: 8px;
-      font-size: 13px;
-      color: var(--app-muted);
-    }
-    .ob-arena-create-cta,
+    /* ── «Нет в списке»: роль, услуга, город, площадка ── */
     .ob-addcta {
-      appearance: none;
-      margin-top: 6px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px dashed var(--app-cta-fill);
-      background: transparent;
-      color: var(--app-cta-fill);
-      font: inherit;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      width: 100%;
-      text-align: left;
+      margin-top: 10px; min-height: 44px; width: 100%; border-radius: 14px; border: 1.5px dashed var(--ob-dash);
+      background: transparent; font-size: 15px; font-weight: 500; cursor: pointer;
     }
+    .ob-addbox {
+      margin-top: 10px; padding: 14px; border-radius: 14px; background: var(--ob-paper);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .ob-addbox[hidden] { display: none; }
+    .ob-addbox label, .ob-arena-create label { font-size: 13px; color: var(--ob-muted); }
+    .ob-addbox input, .ob-arena-create input {
+      height: 44px; border-radius: 10px; border: 1.5px solid var(--ob-line); padding: 0 12px;
+      font-size: 16px; background: var(--ob-paper); box-sizing: border-box; width: 100%;
+    }
+    .ob-addbox__actions, .ob-addbox-format { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ob-arena-create-status { font-size: 13px; margin: 0; color: var(--ob-muted); }
+    .ob-arena-create-status.is-error { color: var(--app-danger-ink, #C4342A); }
 
-    /* ── Окна из «Расписания», которые сетка не умеет нарисовать ── */
-    .ob-carried[hidden] { display: none; }
-    .ob-carried {
-      margin-top: 12px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: var(--app-surface-2, rgba(127,127,127,.08));
-      border: 1px solid var(--app-border, rgba(127,127,127,.18));
+    /* ── Город и поиск ── */
+    .ob-where-bar { display: flex; gap: 8px; }
+    .ob-city-select {
+      height: 44px; flex: 0 0 auto; max-width: 46%; border-radius: 12px; border: 0;
+      background: var(--ob-paper); padding: 0 12px; font-size: 15px; font-weight: 600;
     }
-    .ob-carried__title {
-      margin: 0 0 8px;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--app-text, inherit);
+    .ob-city-select--picked { box-shadow: 0 0 0 2px var(--app-cta-fill); }
+    .ob-search {
+      flex: 1 1 auto; min-width: 0; height: 44px; border-radius: 12px; background: var(--ob-paper);
+      display: flex; align-items: center; gap: 8px; padding: 0 12px;
     }
-    .ob-carried__row {
-      display: flex;
-      gap: 10px;
-      align-items: baseline;
-      padding: 3px 0;
-      font-size: 13px;
+    .ob-search input { border: 0; outline: none; background: transparent; font-size: 16px; width: 100%; min-width: 0; }
+    .ob-arena-list { margin-top: 10px; background: var(--ob-paper); border-radius: 14px; overflow: hidden; }
+    .ob-arena-row {
+      width: 100%; min-height: 60px; display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+      border: 0; border-bottom: 1px solid var(--ob-line); background: transparent; text-align: left; cursor: pointer;
     }
-    .ob-carried__day {
-      flex: 0 0 auto;
-      min-width: 26px;
-      font-weight: 600;
-      color: var(--app-text-muted, #8a8a8a);
+    .ob-arena-row:last-of-type { border-bottom: 0; }
+    .ob-arena-thumb {
+      position: relative; width: 44px; height: 44px; border-radius: 10px; overflow: hidden; flex-shrink: 0;
+      background: var(--ob-ground); display: flex; align-items: center; justify-content: center; font-size: 20px;
     }
-    .ob-carried__times { color: var(--app-text, inherit); }
-    .ob-carried__hint {
-      margin: 8px 0 0;
-      font-size: 12px;
-      line-height: 1.4;
-      color: var(--app-text-muted, #8a8a8a);
+    .ob-arena-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ob-arena-thumb__check { display: none; }
+    .ob-arena-row__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .ob-arena-option__name { font-size: 16px; font-weight: 600; }
+    .ob-arena-option__meta { font-size: 13px; color: var(--ob-muted); }
+    .ob-arena-unconfirmed-badge { font-size: 12px; font-weight: 500; color: var(--app-attention-ink, #8A5300); }
+    .ob-arena-row::after {
+      content: ''; width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box;
+      border: 1.8px solid var(--ob-dash);
     }
+    .ob-arena-row.is-on::after {
+      border: 0; background: var(--ob-ink)
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / 14px no-repeat;
+    }
+    .ob-arena-empty { padding: 16px 14px; font-size: 14px; color: var(--ob-muted); }
+    .ob-arena-create-cta {
+      width: 100%; min-height: 52px; border: 0; background: transparent; padding: 0 14px; text-align: left;
+      font-size: 15px; font-weight: 500; cursor: pointer; border-top: 1px solid var(--ob-line);
+    }
+    .ob-arena-create { margin-top: 10px; padding: 14px; border-radius: 14px; background: var(--ob-paper); display: flex; flex-direction: column; gap: 8px; }
+    .ob-arena-create[hidden] { display: none; }
+    .ob-arena-create-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ob-arena-create-dup { font-size: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .ob-arena-create-dup[hidden] { display: none; }
 
-    /* ── Кисти площадок над сеткой недели ──
-       Выбирают, чем красит следующий тап — не «какой день показать» (вкладок больше нет,
-       сетка одна на всю неделю). Каждая кисть выбирает следующий тап, чем красит. */
-    .ob-arena-tabs[hidden] { display: none; }
-    .ob-arena-tabs {
-      display: flex;
-      gap: 6px;
-      overflow-x: auto;
-      margin-bottom: 10px;
-      -webkit-overflow-scrolling: touch;
-    }
+    /* ── Неделя окнами ── */
+    .ob-brushes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .ob-brushes[hidden] { display: none; }
     .ob-arena-tab {
-      appearance: none;
-      flex: 0 0 auto;
-      display: grid;
-      grid-template-columns: 36px auto;
-      grid-template-rows: auto auto;
-      column-gap: 10px;
-      align-items: center;
-      border: 1px solid var(--app-chip-line);
-      background: var(--app-chip-bg);
-      color: var(--app-chip-text);
-      border-radius: 12px;
-      padding: 7px 14px 7px 8px;
-      font: inherit;
-      cursor: pointer;
-      white-space: nowrap;
-      text-align: left;
+      min-height: 40px; padding: 0 12px 0 8px; border-radius: 12px; border: 1.5px solid var(--ob-line);
+      background: var(--ob-paper); display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;
     }
-    .ob-arena-tab[aria-pressed="true"] {
-      border-color: var(--app-cta-fill);
-      font-weight: 650;
+    .ob-arena-tab[aria-pressed="true"] { border-color: var(--ob-ink); font-weight: 600; }
+    .ob-arena-tab__dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .ob-dot-0 { background: var(--ob-ink); }
+    .ob-dot-1 { background: var(--app-cta-fill, #45B9BB); }
+    .ob-dot-2 { background: var(--app-attention, #C87A15); }
+    .ob-week { background: var(--ob-paper); border-radius: 16px; padding: 12px 10px; }
+    .ob-week__row { display: grid; grid-template-columns: 58px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: center; }
+    .ob-week__row + .ob-week__row { margin-top: 6px; }
+    .ob-week__dayhead { text-align: center; font-size: 12px; color: var(--ob-muted); }
+    .ob-week__dayhead.is-weekend { font-weight: 600; }
+    .ob-week__label { display: flex; flex-direction: column; line-height: 1.15; }
+    .ob-week__label b { font-size: 13px; font-weight: 600; }
+    .ob-week__label small { font-size: 11px; color: var(--ob-muted); font-variant-numeric: tabular-nums; }
+    .ob-win {
+      position: relative; height: 44px; border-radius: 9px; padding: 0; cursor: pointer; box-sizing: border-box;
+      border: 1.5px solid var(--ob-line); background: var(--ob-paper);
+      font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
     }
-    .ob-arena-tab__swatch {
-      grid-row: 1 / 3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      padding: 0;
-      overflow: hidden;
-      flex-shrink: 0;
+    .ob-win.is-part { border: 2px solid var(--ob-ink); }
+    .ob-win.is-full { border: 0; background: var(--ob-ink); color: var(--ob-paper); }
+    .ob-win.is-open { outline: 3px solid var(--app-cta-fill, #45B9BB); outline-offset: 1px; }
+    .ob-win:disabled { cursor: default; opacity: .35; }
+    .ob-win__dots { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 3px; }
+    .ob-win__dots i { width: 5px; height: 5px; border-radius: 50%; }
+    .ob-win.is-full .ob-dot-0 { background: var(--ob-paper); }
+    .ob-panel { margin-top: 8px; border-top: 1px solid var(--ob-line); padding: 12px 4px 2px; }
+    .ob-panel[hidden] { display: none; }
+    .ob-panel__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+    .ob-panel__title { font-size: 15px; font-weight: 600; }
+    .ob-panel__clear { min-height: 32px; border: 0; background: transparent; padding: 0; font-size: 14px; color: var(--ob-muted); cursor: pointer; }
+    .ob-slots { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ob-slot {
+      min-width: 64px; height: 40px; padding: 0 10px; border-radius: 10px; box-sizing: border-box; cursor: pointer;
+      border: 1.5px solid var(--ob-line); background: var(--ob-paper); color: var(--ob-muted);
+      font-size: 14px; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 6px;
     }
-    .ob-arena-brush-thumb {
-      position: relative;
-      display: block;
-      width: 32px;
-      height: 32px;
-      border-radius: 7px;
-      overflow: hidden;
-      background: color-mix(in srgb, var(--app-muted) 16%, var(--app-chip-bg));
-    }
-    .ob-arena-brush-thumb img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .ob-arena-brush-thumb--ph {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      line-height: 1;
-    }
-    .ob-arena-tab__label { font-size: 14px; }
-    .ob-arena-tab__meta {
-      font-size: 11px;
-      color: var(--app-muted);
-      font-weight: 400;
-    }
-    .ob-arena-tab__meta:empty { display: none; }
+    .ob-slot[aria-pressed="true"] { border-color: var(--ob-ink); background: var(--ob-ink); color: var(--ob-paper); }
+    .ob-slot:disabled { cursor: default; border-style: dashed; }
+    .ob-slot i { width: 7px; height: 7px; border-radius: 50%; }
+    .ob-summary { padding: 12px 4px 0; display: flex; flex-direction: column; gap: 6px; }
+    .ob-summary__row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+    .ob-summary__row span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 
-    /* TASK-172 / AC-005: в multi-arena клетка кодирует площадку паттерном (сплошная /
-       контур / штрих), не буквой и не «своим» hue арены — theme.css: цвет = действие.
-       Кто это — имя + thumb на кисти. Только онбординг. */
-    .ob-cell--taken.ob-cell--arena-0,
-    .ob-cell[aria-pressed="true"].ob-cell--arena-0 {
-      background: var(--app-cta-fill);
-      border-color: var(--app-cta-fill);
-    }
-    .ob-cell--taken.ob-cell--arena-1,
-    .ob-cell[aria-pressed="true"].ob-cell--arena-1 {
-      background: transparent;
-      border: 2px solid var(--app-cta-fill);
-    }
-    .ob-cell--taken.ob-cell--arena-2,
-    .ob-cell[aria-pressed="true"].ob-cell--arena-2 {
-      background: repeating-linear-gradient(
-        135deg, var(--app-cta-fill) 0 3px, transparent 3px 7px
-      );
-      border-color: var(--app-cta-fill);
-    }
-    .ob-arena-tab--arena-0 .ob-arena-brush-thumb {
-      box-shadow: inset 0 0 0 3px var(--app-cta-fill);
-    }
-    .ob-arena-tab--arena-1 .ob-arena-brush-thumb {
-      box-shadow: inset 0 0 0 2px var(--app-cta-fill);
-      background: transparent;
-    }
-    .ob-arena-tab--arena-2 .ob-arena-brush-thumb::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      pointer-events: none;
-      background: repeating-linear-gradient(
-        135deg, var(--app-cta-fill) 0 2px, transparent 2px 6px
-      );
-      opacity: 0.55;
-    }
-    .ob-cell[aria-pressed="true"].ob-cell--arena-0,
-    .ob-cell[aria-pressed="true"].ob-cell--arena-1,
-    .ob-cell[aria-pressed="true"].ob-cell--arena-2 {
-      /* Перебиваем сплошной .ob-cell[aria-pressed] одной специфичностью (класс+атрибут). */
-      color: inherit;
-    }
-
-    /* Ячейка часа, занятого другой площадкой в режиме «нескольких». */
-    .ob-cell--taken {
-      cursor: default;
-      opacity: .55;
-    }
-
-    /* ── Липкая кнопка ── */
+    /* ── Низ: одна кнопка ── */
     .ob-foot {
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      padding: 12px 20px calc(14px + env(safe-area-inset-bottom, 0px));
-      background: var(--app-bg);
-      border-top: 1px solid var(--glide-line, #E2E6E5);
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+      padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(to top, var(--ob-ground) 70%, transparent);
+      display: flex; flex-direction: column; gap: 2px;
     }
+    .ob-foot[hidden] { display: none; }
     .ob-cta {
-      appearance: none;
-      width: 100%;
-      border: 0;
-      border-radius: 14px;
-      padding: 16px;
-      font-family: inherit;
-      font-size: 16px;
-      font-weight: 700;
-      background: var(--app-cta-fill);
-      color: var(--app-cta-text);
-      cursor: pointer;
+      height: 52px; border: 0; border-radius: 14px; background: var(--app-cta-fill, #45B9BB);
+      color: var(--app-cta-text, #10202B); font-size: 17px; font-weight: 600; cursor: pointer;
     }
-    .ob-cta[disabled] { opacity: .5; cursor: default; }
-    .ob-foot-note {
-      margin: 8px 0 0;
-      font-size: 13px;
-      line-height: 1.4;
-      color: var(--app-muted);
-      text-align: center;
-      min-height: 18px;
+    .ob-cta:disabled { opacity: .45; cursor: default; }
+    .ob-skip {
+      height: 40px; border: 0; background: transparent; font-size: 15px; color: var(--ob-muted); cursor: pointer;
     }
-    .ob-foot-note.is-error { color: var(--app-danger-ink); }
+    .ob-skip[hidden] { display: none; }
+    .ob-foot-note { margin: 4px 0 0; min-height: 0; font-size: 13px; text-align: center; color: var(--ob-muted); }
+    .ob-foot-note:empty { display: none; }
+    .ob-foot-note.is-error { color: var(--app-danger-ink, #C4342A); }
 
-    /* ── Экран 2: ссылка ── */
-    .ob-done { padding: 40px 20px 0; display: none; }
+    /* ── Готово ── */
+    .ob-done { display: none; padding: 40px 20px 0; text-align: center; }
     .ob-done.is-on { display: block; }
     .ob-done-mark {
-      width: 44px; height: 44px;
-      border-radius: 50%;
-      background: var(--app-cta-fill);
-      color: var(--app-cta-text);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px; font-weight: 700;
-      margin-bottom: 18px;
+      width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 50%; background: var(--ob-ink); color: var(--ob-paper);
+      display: flex; align-items: center; justify-content: center; font-size: 26px;
     }
-    .ob-done-title {
-      font-size: 25px; line-height: 1.2; font-weight: 700; margin: 0 0 10px; letter-spacing: -.01em;
-    }
-    .ob-done-lead { font-size: 16px; line-height: 1.5; color: var(--app-muted); margin: 0 0 22px; }
+    .ob-done-title { font-size: 26px; font-weight: 700; margin: 0; }
+    .ob-done-lead { font-size: 15px; line-height: 1.45; color: var(--ob-muted); margin: 8px 0 0; }
     .ob-done-ask {
-      background: var(--app-surface);
-      border: 1px solid var(--glide-line, #E2E6E5);
-      border-radius: 14px;
-      padding: 16px 18px;
-      font-size: 16px;
-      line-height: 1.5;
+      margin: 20px 0 0; padding: 14px 16px; border-radius: 14px; background: var(--ob-paper);
+      font-size: 15px; line-height: 1.45; text-align: left;
     }
-    .ob-done-ask strong { font-weight: 650; }
-
+    .ob-done-schedule-link { display: block; margin-top: 14px; font-size: 14px; color: var(--ob-ink); }
     .ob-done-schedule-link[hidden] { display: none; }
-    .ob-done-schedule-link {
-      display: block;
-      margin-top: 14px;
-      font-size: 14px;
-      color: var(--app-muted);
-      text-decoration: none;
-    }
-    .ob-done-schedule-link:active { opacity: .7; }
-
-    .ob-done-prices {
-      margin: 18px 0 0;
-      font-size: 14px;
-      line-height: 1.45;
-      color: var(--app-muted);
-    }
+    .ob-done-prices { font-size: 14px; color: var(--ob-muted); margin: 20px 0 8px; }
     .ob-done-prices-btn {
-      display: block;
-      margin: 8px 0 0;
-      padding: 0;
-      border: 0;
-      background: none;
-      font: inherit;
-      font-size: 15px;
-      font-weight: 650;
-      color: inherit;
-      text-decoration: underline;
-      text-underline-offset: 3px;
-      cursor: pointer;
-    }
-    .ob-done-prices-btn:active { opacity: .7; }
-
-    /* [hidden] должен побеждать display: атрибут hidden сам по себе слабее любого display. */
-    .ob-skip[hidden] { display: none; }
-    .ob-skip {
-      display: block;
-      margin: 14px auto 0;
-      background: none;
-      border: 0;
-      font: inherit;
-      font-size: 14px;
-      color: var(--app-muted);
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      cursor: pointer;
-    }
-
-    .ob-loading, .ob-fatal {
-      padding: 60px 20px;
-      text-align: center;
-      color: var(--app-muted);
-      font-size: 15px;
-    }
-    .ob-fatal { display: none; }
-
-    @media (prefers-reduced-motion: reduce) {
-      * { transition: none !important; animation: none !important; }
+      min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1.5px solid var(--ob-line);
+      background: var(--ob-paper); font-size: 15px; font-weight: 600; cursor: pointer;
     }
   </style>
 </head>
@@ -826,190 +383,210 @@
   <div class="ob-loading" id="obLoading" role="status">Загружаем…</div>
   <div class="ob-fatal" id="obFatal" role="alert"></div>
 
-  <!-- ── Шаг 1: что и когда ── -->
-  <div id="obSetup" hidden>
+  <!-- ── Вступление: что получится и почему не страшно ── -->
+  <section class="ob-pane ob-intro" id="obIntro" hidden aria-labelledby="obIntroTitle">
     <div class="ob-head">
-      <p class="ob-eyebrow">Первый запуск</p>
-      <h1 class="ob-title" id="obTitle">Настроим за две минуты</h1>
-      <p class="ob-lead">Расскажите о себе — дальше ученик найдёт вас по ссылке. Поправить можно в любой момент.</p>
+      <h1 class="ob-title" id="obIntroTitle">Соберём вашу страницу записи</h1>
+      <p class="ob-lead">Ученик откроет ссылку и&nbsp;сам выберет время. Вам придёт сообщение в&nbsp;Telegram.</p>
+    </div>
+    <div class="ob-intro-card">
+      <div class="ob-card">
+        <div class="ob-card__who">
+          <div class="ob-avatar" data-ob-avatar></div>
+          <div class="ob-card__text">
+            <span class="ob-card__name" data-ob-name></span>
+            <span class="ob-card__blanks"><span class="ob-blank">что ведёте</span><span class="ob-blank">где</span></span>
+          </div>
+        </div>
+        <div class="ob-card__times" data-ob-times></div>
+      </div>
+      <p class="ob-intro-caption">Так страницу увидит ученик</p>
+    </div>
+    <ol class="ob-intro-steps">
+      <li><span class="ob-intro-steps__n">1</span><span class="ob-intro-steps__t"><b>Что ведёте</b><span>Занятия и&nbsp;сколько длятся</span></span></li>
+      <li><span class="ob-intro-steps__n">2</span><span class="ob-intro-steps__t"><b>Где</b><span>Каток, зал или&nbsp;онлайн</span></span></li>
+      <li><span class="ob-intro-steps__n">3</span><span class="ob-intro-steps__t"><b>Когда</b><span>Обычные часы недели. Можно позже</span></span></li>
+    </ol>
+    <div class="ob-calm">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <div>
+        <p>Страницу видят только те, кому вы&nbsp;отправите ссылку.</p>
+        <p>Всё, что выберете сейчас, поменяете в&nbsp;любой момент. Ошибиться тут нельзя.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Три шага ── -->
+  <div id="obSetup" hidden>
+    <div class="ob-topbar">
+      <div class="ob-progress-row">
+        <button type="button" class="ob-back" id="obBack" aria-label="Назад">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <div class="ob-progress" id="obProgress" aria-hidden="true"><span></span><span></span><span></span></div>
+        <span class="ob-step-count" id="obStepCount"></span>
+      </div>
+      <div class="ob-card" id="obPreview">
+        <div class="ob-card__who">
+          <div class="ob-avatar" data-ob-avatar></div>
+          <div class="ob-card__text">
+            <span class="ob-card__name" data-ob-name></span>
+            <span class="ob-card__line" id="obPreviewLine"></span>
+          </div>
+        </div>
+        <div class="ob-card__times" data-ob-times id="obPreviewTimes" hidden></div>
+      </div>
     </div>
 
-    <section class="ob-step" aria-labelledby="obRoleTitle">
-      <h2 class="ob-step-title" id="obRoleTitle">Кто вы?</h2>
-      <p class="ob-step-hint">Это увидит ученик в карточке. Можно несколько — не нашли себя, впишите.</p>
-      <div class="ob-chips" id="obRole" role="group" aria-labelledby="obRoleTitle"></div>
-      <button type="button" class="ob-addcta" id="obRoleAddBtn">Меня нет в списке</button>
-      <div class="ob-addbox" id="obRoleCustomWrap" hidden>
-        <label for="obRoleCustom">Ваша роль</label>
-        <input id="obRoleCustom" type="text" maxlength="64" autocomplete="off"
-               placeholder="Спортивный психолог">
-        <div class="ob-addbox__actions">
-          <button type="button" class="ob-chip" id="obRoleAddSubmit">Добавить</button>
-          <button type="button" class="ob-chip" id="obRoleAddCancel">Отмена</button>
+    <!-- Шаг 1: что ведёте -->
+    <section class="ob-pane" id="obStep1" data-step="1" aria-labelledby="obServicesTitle">
+      <div class="ob-section" style="padding-top: 8px;">
+        <div class="ob-role-line">
+          <span>В карточке: <b id="obRoleValue">Тренер</b></span>
+          <button type="button" class="ob-linkbtn" id="obRoleEdit" aria-expanded="false" aria-controls="obRoleBox">Изменить</button>
         </div>
-        <p id="obRoleAddStatus" class="ob-arena-create-status" hidden></p>
+        <div class="ob-role-box" id="obRoleBox" hidden>
+          <p class="ob-section-title" id="obRoleTitle">Кто вы?</p>
+          <div class="ob-chips" id="obRole" role="group" aria-labelledby="obRoleTitle"></div>
+          <button type="button" class="ob-addcta" id="obRoleAddBtn">Меня нет в списке</button>
+          <div class="ob-addbox" id="obRoleCustomWrap" hidden>
+            <label for="obRoleCustom">Ваша роль</label>
+            <input id="obRoleCustom" type="text" maxlength="64" autocomplete="off" placeholder="Спортивный психолог">
+            <div class="ob-addbox__actions">
+              <button type="button" class="ob-chip" id="obRoleAddSubmit">Добавить</button>
+              <button type="button" class="ob-chip" id="obRoleAddCancel">Отмена</button>
+            </div>
+            <p id="obRoleAddStatus" class="ob-arena-create-status" hidden></p>
+          </div>
+        </div>
+      </div>
+      <div class="ob-head">
+        <h1 class="ob-title" id="obServicesTitle">Что ведёте?</h1>
+        <p class="ob-lead">Можно несколько. Список поменяете в&nbsp;«Профиле» когда угодно</p>
+      </div>
+      <div class="ob-section" style="padding-top: 14px;">
+        <div class="ob-tiles" id="obServices" role="group" aria-labelledby="obServicesTitle"></div>
+        <div class="ob-svc-formats" id="obServiceFormats" hidden aria-label="Формат своих услуг"></div>
+        <!-- Свои услуги: наш список закрытый и весь про лёд, смежным дисциплинам
+             в нём себя не найти. Вписанное работает сразу, в общий фильтр каталога
+             попадает после модерации. -->
+        <div class="ob-addbox" id="obServiceAddWrap" hidden>
+          <label for="obServiceAddInput">Название занятия</label>
+          <input id="obServiceAddInput" type="text" maxlength="128" autocomplete="off" placeholder="Спортивная психология">
+          <p class="ob-hint" style="margin: 0;">Где проводится? Онлайн можно поставить только своей услуге.</p>
+          <div class="ob-addbox-format" id="obServiceAddFormat" role="group" aria-label="Формат нового занятия">
+            <button type="button" class="ob-chip" data-online="0" aria-pressed="true">На площадке</button>
+            <button type="button" class="ob-chip" data-online="1" aria-pressed="false">Онлайн</button>
+          </div>
+          <div class="ob-addbox__actions">
+            <button type="button" class="ob-chip" id="obServiceAddSubmit">Добавить</button>
+            <button type="button" class="ob-chip" id="obServiceAddCancel">Отмена</button>
+          </div>
+          <p id="obServiceAddStatus" class="ob-arena-create-status" hidden></p>
+        </div>
+      </div>
+      <div class="ob-section">
+        <p class="ob-section-title" id="obDurationTitle">Сколько длится занятие</p>
+        <div class="ob-seg" id="obDuration" role="group" aria-labelledby="obDurationTitle"></div>
+        <p class="ob-locked-note" id="obDurationLockedNote" hidden></p>
       </div>
     </section>
 
-    <section class="ob-step" aria-labelledby="obServicesTitle">
-      <h2 class="ob-step-title" id="obServicesTitle">Ваши услуги</h2>
-      <p class="ob-step-hint">Отметьте всё, что проводите. Можно несколько.</p>
-      <div class="ob-chips" id="obServices" role="group" aria-labelledby="obServicesTitle"></div>
-      <div class="ob-svc-formats" id="obServiceFormats" hidden aria-label="Формат выбранных услуг"></div>
-      <!-- Свои услуги: наш список закрытый и весь про лёд, смежным дисциплинам
-           в нём себя не найти. Вписанное работает сразу, в общий фильтр каталога
-           попадает после модерации. -->
-      <button type="button" class="ob-addcta" id="obServiceAddBtn">Моей услуги нет в списке</button>
-      <div class="ob-addbox" id="obServiceAddWrap" hidden>
-        <label for="obServiceAddInput">Название услуги</label>
-        <input id="obServiceAddInput" type="text" maxlength="128" autocomplete="off"
-               placeholder="Спортивная психология">
-        <p class="ob-step-hint" style="margin:8px 0 0;">Где проводится?</p>
-        <div class="ob-addbox-format" id="obServiceAddFormat" role="group" aria-label="Формат новой услуги">
-          <button type="button" class="ob-chip" data-online="0" aria-pressed="true">На площадке</button>
-          <button type="button" class="ob-chip" data-online="1" aria-pressed="false">Онлайн</button>
-        </div>
-        <div class="ob-addbox__actions">
-          <button type="button" class="ob-chip" id="obServiceAddSubmit">Добавить</button>
-          <button type="button" class="ob-chip" id="obServiceAddCancel">Отмена</button>
-        </div>
-        <p id="obServiceAddStatus" class="ob-arena-create-status" hidden></p>
+    <!-- Шаг 2: где -->
+    <section class="ob-pane" id="obStep2" data-step="2" hidden aria-labelledby="obArenaTitle">
+      <div class="ob-head">
+        <h1 class="ob-title" id="obArenaTitle">Где занимаетесь?</h1>
+        <p class="ob-lead">Отметьте все, где работаете. Добавить или убрать — в&nbsp;«Профиле», в&nbsp;любой момент</p>
       </div>
-    </section>
-
-    <section class="ob-step" aria-labelledby="obDurationTitle">
-      <h2 class="ob-step-title" id="obDurationTitle">Сколько длится занятие?</h2>
-      <p class="ob-step-hint" id="obDurationHint">Столько по умолчанию длится одна встреча. Потом можно менять.</p>
-      <div class="ob-chips" id="obDuration" role="group" aria-labelledby="obDurationTitle"></div>
-      <p class="ob-arena-locked-note" id="obDurationLockedNote" hidden></p>
-    </section>
-
-    <section class="ob-step" aria-labelledby="obArenaModeTitle">
-      <h2 class="ob-step-title" id="obArenaModeTitle">Где проходят занятия?</h2>
-      <p class="ob-step-hint">Можно пропустить и вернуться сюда позже.</p>
-      <div class="ob-city" id="obCityWrap">
-        <label class="ob-city-label" for="obCity">Город</label>
-        <select id="obCity" class="ob-city-select">
-          <option value="">Выберите город</option>
-        </select>
+      <div class="ob-section" style="padding-top: 14px;">
+        <div class="ob-where-bar" id="obCityWrap">
+          <select id="obCity" class="ob-city-select" aria-label="Город">
+            <option value="">Город</option>
+          </select>
+          <label class="ob-search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--ob-muted)"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+            <input type="search" id="obArenaSearch" placeholder="Каток или адрес" aria-label="Поиск площадки"
+                   autocomplete="off" enterkeyhint="done" aria-controls="obArenaList">
+          </label>
+        </div>
         <button type="button" class="ob-addcta" id="obCityAddBtn">Моего города нет в списке</button>
         <div class="ob-addbox" id="obCityCreateWrap" hidden>
           <label for="obCityCreateName">Название города</label>
-          <input id="obCityCreateName" type="text" maxlength="128" autocomplete="address-level2"
-                 placeholder="Кобрин">
+          <input id="obCityCreateName" type="text" maxlength="128" autocomplete="address-level2" placeholder="Кобрин">
           <div class="ob-addbox__actions">
             <button type="button" class="ob-chip" id="obCityCreateSubmit">Добавить</button>
             <button type="button" class="ob-chip" id="obCityCreateCancel">Отмена</button>
           </div>
           <p id="obCityCreateStatus" class="ob-arena-create-status" hidden></p>
         </div>
-      </div>
-      <div class="ob-chips" id="obArenaMode" role="group" aria-labelledby="obArenaModeTitle">
-        <button type="button" class="ob-chip" data-arena-mode="none">Пока не указывать</button>
-        <button type="button" class="ob-chip" data-arena-mode="single">Одна площадка</button>
-        <button type="button" class="ob-chip" data-arena-mode="multi">Несколько площадок</button>
-        <button type="button" class="ob-chip" data-arena-mode="online">Провожу онлайн</button>
-      </div>
-      <p class="ob-step-hint" id="obArenaNeedCity" hidden>Сначала выберите город — тогда появится поиск площадок.</p>
+        <p class="ob-hint" id="obArenaNeedCity" hidden>Выберите город — появится список площадок.</p>
+        <p class="ob-hint" id="obArenaOnlineNote" hidden>Все ваши занятия — онлайн, площадка не нужна. Можно сразу дальше.</p>
+        <p class="ob-hint" id="obArenaBrowseHint" hidden></p>
+        <div class="ob-arena-list" id="obArenaList" role="listbox" aria-label="Площадки, где вы работаете" aria-multiselectable="true"></div>
 
-      <p class="ob-step-hint">
-        Формат «онлайн» можно поставить только своей услуге, не из общего списка. Чип «Провожу онлайн» — если площадок нет вообще.
-      </p>
-
-      <!-- Одна площадка: комбобокс — список виден сразу, поиск сужает. -->
-      <div id="obArenaSingleWrap" class="ob-arena-pick" hidden>
-        <label class="ob-arena-combo__label" for="obArenaSingleSearch">Площадка из списка</label>
-        <div class="ob-arena-combo">
-          <div class="ob-arena-combo__trigger">
-            <input type="text" class="ob-arena-combo__input" id="obArenaSingleSearch"
-                   placeholder="Поиск по названию или адресу" autocomplete="off" enterkeyhint="done"
-                   role="combobox" aria-autocomplete="list" aria-expanded="true"
-                   aria-controls="obArenaSingleList">
-            <button type="button" class="ob-arena-combo__done" hidden>Готово</button>
-            <span class="ob-arena-combo__chev" aria-hidden="true"></span>
+        <div id="obArenaCreateWrap" class="ob-arena-create" hidden>
+          <p class="ob-hint" id="obArenaCreateLead" style="margin: 0;">Добавьте — выбирать её сможете сразу, а мы проверим карточку позже.</p>
+          <label for="obArenaCreateName">Название</label>
+          <input id="obArenaCreateName" type="text" maxlength="128" autocomplete="off">
+          <label id="obArenaCreateTypeLabel">Что это за место</label>
+          <div class="ob-chips" id="obArenaCreateType" role="group" aria-labelledby="obArenaCreateTypeLabel"></div>
+          <label for="obArenaCreateAddress">Адрес</label>
+          <input id="obArenaCreateAddress" type="text" maxlength="512" autocomplete="street-address">
+          <p id="obArenaCreateStatus" class="ob-arena-create-status" hidden></p>
+          <div id="obArenaCreateDup" class="ob-arena-create-dup" hidden></div>
+          <div class="ob-arena-create-actions">
+            <button type="button" class="ob-chip" id="obArenaCreateSubmit">Добавить площадку</button>
+            <button type="button" class="ob-chip" id="obArenaCreateCancel">Отмена</button>
           </div>
-          <div class="ob-arena-combo__panel">
-            <p class="ob-arena-combo__browse-hint" id="obArenaSingleBrowseHint" hidden></p>
-            <div class="ob-arena-list" id="obArenaSingleList" role="listbox" aria-label="Площадки"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Несколько площадок: тот же комбобокс, можно отметить несколько. -->
-      <div id="obArenaMultiPickWrap" class="ob-arena-pick" hidden>
-        <label class="ob-arena-combo__label" for="obArenaMultiSearch">Площадки из списка</label>
-        <div class="ob-arena-combo">
-          <div class="ob-arena-combo__trigger">
-            <input type="text" class="ob-arena-combo__input" id="obArenaMultiSearch"
-                   placeholder="Поиск по названию или адресу" autocomplete="off" enterkeyhint="done"
-                   role="combobox" aria-autocomplete="list" aria-expanded="true"
-                   aria-controls="obArenaMultiList">
-            <button type="button" class="ob-arena-combo__done" hidden>Готово</button>
-            <span class="ob-arena-combo__chev" aria-hidden="true"></span>
-          </div>
-          <div class="ob-arena-combo__panel">
-            <p class="ob-arena-combo__browse-hint" id="obArenaMultiBrowseHint" hidden></p>
-            <div class="ob-arena-list" id="obArenaMultiList" role="listbox" aria-label="Площадки, где вы работаете" aria-multiselectable="true"></div>
-          </div>
-        </div>
-      </div>
-
-      <div id="obArenaCreateWrap" class="ob-arena-create" hidden>
-        <p class="ob-step-hint" id="obArenaCreateLead">Добавьте — выбирать её сможете сразу, а мы проверим карточку позже.</p>
-        <label for="obArenaCreateName">Название</label>
-        <input id="obArenaCreateName" type="text" maxlength="128" autocomplete="off">
-        <label id="obArenaCreateTypeLabel">Что это за место</label>
-        <div class="ob-chips" id="obArenaCreateType" role="group" aria-labelledby="obArenaCreateTypeLabel"></div>
-        <label for="obArenaCreateAddress">Адрес</label>
-        <input id="obArenaCreateAddress" type="text" maxlength="512" autocomplete="street-address">
-        <p id="obArenaCreateStatus" class="ob-arena-create-status" hidden></p>
-        <div id="obArenaCreateDup" class="ob-arena-create-dup" hidden></div>
-        <div class="ob-arena-create-actions">
-          <button type="button" class="ob-chip" id="obArenaCreateSubmit">Добавить площадку</button>
-          <button type="button" class="ob-chip" id="obArenaCreateCancel">Отмена</button>
         </div>
       </div>
     </section>
 
-    <section class="ob-step" aria-labelledby="obWeekTitle">
-      <h2 class="ob-step-title" id="obWeekTitle">Когда обычно? <span class="ob-optional">необязательно</span></h2>
-      <p class="ob-step-hint" id="obWeekHint">Показали популярные часы. Шаг необязательный — если время назвать пока не готовы, пропустите.</p>
-      <div class="ob-arena-tabs" id="obArenaTabs" role="group" aria-label="Чем красить" hidden></div>
-      <div class="ob-grid-wrap">
-        <div class="ob-grid" id="obGrid" role="group" aria-labelledby="obWeekTitle"></div>
+    <!-- Шаг 3: когда -->
+    <section class="ob-pane" id="obStep3" data-step="3" hidden aria-labelledby="obWeekTitle">
+      <div class="ob-head">
+        <h1 class="ob-title" id="obWeekTitle">Когда обычно свободны?</h1>
+        <p class="ob-lead" id="obWeekLead">Это черновик недели — поправите в&nbsp;«Расписании» когда угодно</p>
       </div>
-      <div class="ob-grid-foot">
-        <span id="obGridCount">—</span>
-        <button type="button" class="ob-link-btn" id="obGridMore">Показать больше часов</button>
+      <div class="ob-section" style="padding-top: 14px;">
+        <div class="ob-brushes" id="obArenaTabs" role="group" aria-label="Площадка для отметок" hidden></div>
+        <div class="ob-week">
+          <div id="obWeek" role="group" aria-labelledby="obWeekTitle"></div>
+          <div class="ob-panel" id="obWindowPanel" hidden>
+            <div class="ob-panel__head">
+              <span class="ob-panel__title" id="obWindowTitle"></span>
+              <button type="button" class="ob-panel__clear" id="obWindowClear">Снять все</button>
+            </div>
+            <div class="ob-slots" id="obWindowSlots" role="group" aria-labelledby="obWindowTitle"></div>
+          </div>
+        </div>
+        <p class="ob-hint" id="obWeekHint" hidden></p>
+        <div class="ob-summary" id="obWeekSummary" aria-live="polite"></div>
       </div>
-      <!-- Окна, которые эта сетка нарисовать не может (своё время начала, вторая площадка
-           в тот же день). Показаны, чтобы счётчик не врал, и сохраняются как есть. -->
-      <div class="ob-carried" id="obCarried" hidden></div>
     </section>
   </div>
 
-  <!-- ── Шаг 2: ссылка ── -->
+  <!-- ── Готово: ссылка ── -->
   <div class="ob-done" id="obDone">
     <div class="ob-done-mark" aria-hidden="true">✓</div>
     <h1 class="ob-done-title" id="obDoneTitle">Готово</h1>
     <p class="ob-done-lead" id="obDoneLead"></p>
     <div class="ob-done-ask">
-      Отправьте ссылку <strong>одному ученику</strong> — тому, кто и так собирался к вам на этой неделе.
+      Отправьте ссылку <strong>одному ученику</strong> — тому, кто и&nbsp;так собирался к&nbsp;вам на&nbsp;этой неделе.
     </div>
-    <!-- Показываем только тем, у кого реально есть время вне часовой сетки (state.carried) —
-         остальным эта строка была бы просто шумом. -->
-    <a href="#" class="ob-done-schedule-link" id="obDoneScheduleLink" hidden>Своё время начала (не с начала часа)? Настройте в «Расписании» →</a>
-    <p class="ob-done-prices" id="obDonePrices">Пока ученик видит «цена по запросу». Можно указать тариф сейчас — или пропустить.</p>
+    <a href="#" class="ob-done-schedule-link" id="obDoneScheduleLink" hidden>Своё время начала? Настройте в&nbsp;«Расписании» →</a>
+    <p class="ob-done-prices" id="obDonePrices">Пока ученик видит «цена по&nbsp;запросу». Можно указать тариф сейчас — или пропустить.</p>
     <button type="button" class="ob-done-prices-btn" id="obDonePricesBtn">Указать цены</button>
   </div>
 
   <div class="ob-foot" id="obFoot" hidden>
-    <button type="button" class="ob-cta" id="obCta">Готово</button>
-    <p class="ob-foot-note" id="obNote"></p>
+    <button type="button" class="ob-cta" id="obCta">Начать</button>
     <button type="button" class="ob-skip" id="obSkip" hidden>Позже</button>
+    <p class="ob-foot-note" id="obNote" aria-live="polite"></p>
   </div>
 </div>
 
-<script src="trainer-onboarding-main.js?v=202610222"></script>
+<script src="trainer-onboarding-week-model.js?v=202610224"></script>
+<script src="trainer-onboarding-main.js?v=202610224"></script>
 </body>
 </html>

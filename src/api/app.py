@@ -701,11 +701,24 @@ def webapp_trainer_clients_page():
 
 @app.api_route("/webapp/trainer-onboarding", methods=["GET", "HEAD"])
 def webapp_trainer_onboarding_page():
-    """First run: the only setup screen a trainer ever sees — sports + weekly grid, then the link."""
+    """First run: intro + three steps (what / where / when), then the link (TASK-312)."""
     path = _WEBAPP_DIR / "trainer-onboarding.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainer-onboarding-week-model.js")
+def webapp_trainer_onboarding_week_model_js(request: Request):
+    """TASK-312: неделя онбординга окнами — чистая логика стартов (без DOM). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-onboarding-week-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
 
 
 @app.get("/webapp/trainer-onboarding-main.js")

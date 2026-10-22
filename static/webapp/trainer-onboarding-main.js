@@ -1,16 +1,14 @@
 /**
- * Первый запуск тренера — вся логика онбординга v2.
+ * Первый запуск тренера — вся логика онбординга (TASK-312).
  *
- * Экран 1: кто я + услуги + длительность + где (город + площадки) + когда обычно.
- * Роль, своя услуга и своя площадка добавляются одним паттерном: пунктирная
- * кнопка «...нет в списке» → панель с полем и «Добавить»/«Отмена».
- * (сетка недели, предзаполненная, привязанная к реальной сетке выбранной площадки).
- * Экран 2: ссылка + одна кнопка «Отправить ученику».
+ * Вступление → три шага → ссылка. Шаг 1: что ведёте (плитки услуг, длительность, роль строкой).
+ * Шаг 2: где (город, один список площадок с галочками, до трёх). Шаг 3: когда — неделя окнами
+ * «утро / день / вечер», окно раскрывается в точные старты (trainer-onboarding-week-model.js).
+ * Финал: ссылка + одна кнопка «Отправить ученику».
  *
- * Город спрашивается здесь же, рядом с аренами (DEC-009): без него нельзя отфильтровать
- * десятки площадок и нельзя создать отсутствующую. «Пока не указывать» по-прежнему
- * пропускает площадку; город при этом можно сохранить отдельно. Создание арены —
- * на этом экране, без редиректа в профиль.
+ * Роль, своя услуга, город и площадка добавляются одним паттерном: «…нет в списке» → панель
+ * с полем и «Добавить»/«Отмена». Создание площадки и города — здесь же, без редиректа в профиль.
+ * Сохранение — один POST quick-setup со всеми стартами недели, как и раньше.
  */
 (function () {
   'use strict';
@@ -118,15 +116,8 @@
   }
 
   var OB_DONE_STORAGE_KEY = 'obDoneReturn';
+  var WM = window.TrainerOnboardingWeekModel;
 
-  var DAY_LABELS = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
-  /* Ледовое утро начинается рано, вечер заканчивается поздно — но сразу показывать 6:00–22:00
-     значит показать 112 клеток. Открываем ходовой диапазон, остальное — по кнопке.
-     Это только для режима «Пока не указывать»: у выбранной площадки уже есть свой явный
-     рабочий диапазон, и подбирать его эвристикой незачем — берём как есть. */
-  var HOURS_COMPACT_FIRST = 7;
-  var HOURS_COMPACT_LAST = 10;
-  var HOURS_ALL = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
   var MAX_SPECIALIST_ROLES = 5;
   /** Сколько площадок показываем в комбобоксе до сужения поиском (весь город не листаем). */
   var ARENA_BROWSE_CAP = 15;
@@ -157,23 +148,28 @@
     cities: [],
     cityId: null,
     arenas: [],
-    /* 'none' | 'single' | 'multi' */
+    /* 'none' | 'single' | 'multi' | 'online' — производное от pickedArenaIds и формата услуг. */
     arenaMode: 'none',
-    singleArenaId: null,
-    /* Площадки, отмеченные в режиме «Несколько» — порядок = порядок вкладок-кистей.
-       Не больше трёх: столько цветов умеет показать сетка одновременно. */
-    multiArenaIds: [],
+    /* Чьё время отмечает следующий тап, когда площадок несколько. */
     activeArenaTab: null,
-    /* Map<dayOfWeek, {arenaByHour: {hour: arenaId|null}}> — что сетка умеет нарисовать.
-       В режимах «пока не указывать»/«одна площадка» arenaId один и тот же (или null) на
-       всех клетках; в «нескольких» на клетку — своя площадка, отсюда и кисть, а не вкладка. */
+    /* Площадки, отмеченные во втором шаге, — один список вместо режимов «одна / несколько».
+       arenaMode и activeArenaTab — производные (syncArenaDerived). */
+    pickedArenaIds: [],
+    /* Map<dayOfWeek, {минута старта: {a: площадка|null, d: длительность|null}}>. Точные старты:
+       своя минута (13:25) и вторая площадка в тот же день хранятся как есть и уходят на
+       сервер нетронутыми — отдельного «перенесённого» больше нет. */
     week: {},
-    /* Слоты, которые эта сетка нарисовать не может: минута не с начала часа (13:25),
-       вторая площадка внутри дня, час вне окна площадки. Экран их показывает, считает
-       и возвращает на сервер нетронутыми — раньше «Сохранить» их молча удалял. */
-    carried: [],
+    weekIsSuggestion: false,
+    weekTouched: false,
+    /* Раскрытое окно недели: 'день:окно' (например, '0:eve'). */
+    openWindow: null,
     durationMinutes: 60,
-    hoursExpanded: false,
+    /* 0 — вступление, 1–3 — шаги. */
+    step: 0,
+    done: false,
+    firstName: '',
+    lastName: '',
+    photoUrl: null,
     alreadyDone: false,
     busy: false,
     /* Bumped on every city change / arena create so a stale in-flight quick-setup refetch
@@ -195,22 +191,24 @@
 
   function cacheEls() {
     [
-      'obLoading', 'obFatal', 'obSetup', 'obDone', 'obFoot', 'obCta', 'obNote', 'obSkip',
-      'obTitle', 'obServices', 'obDuration', 'obDurationLockedNote',
-      'obArenaMode', 'obCity', 'obArenaNeedCity',
+      'obLoading', 'obFatal', 'obIntro', 'obSetup', 'obDone', 'obFoot', 'obCta', 'obNote', 'obSkip',
+      'obBack', 'obProgress', 'obStepCount', 'obPreview', 'obPreviewLine', 'obPreviewTimes',
+      'obStep1', 'obStep2', 'obStep3', 'obRoleValue', 'obRoleEdit', 'obRoleBox',
+      'obServices', 'obDuration', 'obDurationLockedNote',
+      'obCity', 'obCityWrap', 'obArenaNeedCity', 'obArenaOnlineNote', 'obArenaBrowseHint',
+      'obArenaSearch', 'obArenaList',
       'obCityAddBtn', 'obCityCreateWrap', 'obCityCreateName', 'obCityCreateStatus',
       'obCityCreateSubmit', 'obCityCreateCancel',
-      'obArenaSingleWrap', 'obArenaSingleSearch', 'obArenaSingleList', 'obArenaSingleBrowseHint',
-      'obArenaMultiPickWrap', 'obArenaMultiSearch', 'obArenaMultiList', 'obArenaMultiBrowseHint',
       'obArenaTabs',
       'obArenaCreateWrap', 'obArenaCreateName', 'obArenaCreateAddress',
       'obArenaCreateStatus', 'obArenaCreateDup', 'obArenaCreateSubmit', 'obArenaCreateCancel',
       'obArenaCreateLead',
-      'obShell', 'obGrid', 'obGridCount', 'obGridMore', 'obWeekHint', 'obCarried',
+      'obShell', 'obWeek', 'obWindowPanel', 'obWindowTitle', 'obWindowClear', 'obWindowSlots',
+      'obWeekHint', 'obWeekSummary',
       'obDoneTitle', 'obDoneLead', 'obDoneScheduleLink', 'obDonePricesBtn',
       'obRole', 'obRoleCustomWrap', 'obRoleCustom',
       'obRoleAddBtn', 'obRoleAddSubmit', 'obRoleAddCancel', 'obRoleAddStatus',
-      'obServiceAddBtn', 'obServiceAddWrap', 'obServiceAddInput',
+      'obServiceAddWrap', 'obServiceAddInput',
       'obServiceAddSubmit', 'obServiceAddCancel', 'obServiceAddStatus',
       'obServiceFormats', 'obServiceAddFormat', 'obArenaCreateType',
     ].forEach(function (id) { el[id] = byId(id); });
@@ -251,16 +249,6 @@
 
   /* ── Кто вы: роль специалиста ── */
 
-  /*
-   * Чипсы — подсказки, а не ограничение: жёсткий список ролей мы бы угадывали, и
-   * каждая смежная дисциплина стоила бы миграции. Подсказки при этом нужны — без
-   * них одно и то же пишут как «тренер», «Тренер по ОФП» и «фитнес-тренер».
-   *
-   * Добавление своей роли идёт тем же паттерном, что своя услуга и своя площадка:
-   * пунктирная кнопка «Меня нет в списке» → панель с полем и «Добавить»/«Отмена».
-   * Раньше здесь был чип «Своё» с голым полем — третий непохожий вариант одного
-   * и того же действия на одном экране.
-   */
   function renderRole() {
     if (!el.obRole) return;
     el.obRole.innerHTML = '';
@@ -278,6 +266,26 @@
       var rolePanelOpen = el.obRoleCustomWrap && !el.obRoleCustomWrap.hidden;
       el.obRoleAddBtn.hidden = rolePanelOpen || !canAddMoreRoles();
     }
+    syncRoleLine();
+  }
+
+  /* Роль — не отдельный вопрос, а строка под карточкой: пустая роль читается сервером как
+     «Тренер», и так же её показываем. Поменять — «Изменить», чипы те же, что были. */
+  function syncRoleLine() {
+    if (!el.obRoleValue) return;
+    var roles = state.selectedRoles || [];
+    el.obRoleValue.textContent = roles.length ? roles.join(' · ') : 'Тренер';
+  }
+
+  function toggleRoleBox() {
+    if (!el.obRoleBox) return;
+    var open = el.obRoleBox.hidden;
+    el.obRoleBox.hidden = !open;
+    if (el.obRoleEdit) {
+      el.obRoleEdit.setAttribute('aria-expanded', open ? 'true' : 'false');
+      el.obRoleEdit.textContent = open ? 'Готово' : 'Изменить';
+    }
+    haptic('light');
   }
 
   function canAddMoreRoles() {
@@ -406,10 +414,10 @@
 
   function closeServiceAdd() {
     if (el.obServiceAddWrap) el.obServiceAddWrap.hidden = true;
-    if (el.obServiceAddBtn) el.obServiceAddBtn.hidden = false;
     if (el.obServiceAddInput) el.obServiceAddInput.value = '';
     state.newCustomServiceOnline = false;
     serviceAddNote('');
+    renderServices();
   }
 
   function serviceAddNote(text, isError) {
@@ -444,7 +452,7 @@
       return n.toLowerCase().replace(/ё/g, 'е') === raw.toLowerCase().replace(/ё/g, 'е');
     });
     if (dupInList || dupInCustom) {
-      serviceAddNote('Такая услуга уже есть в списке — отметьте её чипом.', true);
+      serviceAddNote('Такое занятие уже есть в списке — отметьте его плиткой.', true);
       return;
     }
     if (state.customServiceNames.length >= 5) {
@@ -500,61 +508,30 @@
     return !!(svc && svc.allows_online);
   }
 
-  function markAllSelectedOffersOnline(isOnline) {
-    var i;
-    for (i = 0; i < state.selectedServices.length; i++) {
-      var sid = state.selectedServices[i];
-      var svc = state.services.find(function (s) { return s.id === sid; });
-      if (isOnline && !serviceAllowsOnline(svc)) state.serviceOnlineById[sid] = false;
-      else state.serviceOnlineById[sid] = !!isOnline;
-    }
-    for (i = 0; i < state.customServiceNames.length; i++) {
-      state.customServiceOnlineByName[state.customServiceNames[i]] = !!isOnline;
-    }
-  }
-
-  /**
-   * Service-level online ↔ arena mode «Провожу онлайн».
-   * Exclusive online = no venues; also marks every selected offer as online.
-   */
   function syncOnlineArenaWithServices(opts) {
     opts = opts || {};
     var fromFormat = !!opts.fromFormat;
     if (allSelectedOffersOnline()) {
-      /* Exclusive «Провожу онлайн» only when not already picking venues (hybrid OK). */
+      /* Exclusive «онлайн» only when not already picking venues (hybrid OK). */
       if (state.arenaMode === 'none') {
         state.arenaMode = 'online';
-        state.singleArenaId = null;
-        state.multiArenaIds = [];
-        state.activeArenaTab = null;
-        Object.keys(state.week).forEach(function (dow) {
-          var d = state.week[dow];
-          if (!d) return;
-          var hrs = Object.keys(d.arenaByHour).map(Number);
-          if (!hrs.length) { delete state.week[dow]; return; }
-          var next = {};
-          hrs.forEach(function (h) { next[h] = null; });
-          d.arenaByHour = next;
-        });
-        renderArenaMode();
-        renderArenaSingleList();
-        renderArenaMultiList();
+        state.pickedArenaIds = [];
+        syncArenaDerived();
+        setAllSlotsArena(null);
+        renderArenaStep();
+        renderArenaList();
         renderArenaTabs();
         syncDurationLock();
-        renderGrid();
+        renderWeek();
         submitArenaOnlineFormat();
       }
     } else if (state.arenaMode === 'online' && fromFormat) {
       state.arenaMode = 'none';
-      renderArenaMode();
+      renderArenaStep();
       renderArenaTabs();
       syncDurationLock();
-      renderGrid();
-      fetch(apiUrl('/trainer/profile/arena-setup'), {
-        method: 'POST',
-        headers: apiHeaders(),
-        body: JSON.stringify({ mode: 'clear' }),
-      }).catch(function () { /* non-blocking */ });
+      renderWeek();
+      clearArenaOnlineFormat();
     }
     syncCta();
   }
@@ -617,61 +594,154 @@
     });
   }
 
-  /* ── Услуги ── */
+  /* Иконка плитки по названию услуги. Список закрытый и весь про лёд — сопоставление по
+     корню слова надёжнее id: id на стендах разные. Незнакомое — конёк. */
+  var ICON_SKATE = 'M6 4v10h10a3 3 0 0 0 3-3l-6-2V4z M4 18h16';
+  var SERVICE_ICONS = [
+    [/нул/i, ICON_SKATE],
+    [/совершенств/i, 'M4 17l6-6 4 4 6-6 M14 9h6v6'],
+    [/фигур/i, 'M12 12a1.5 1.5 0 1 1 1.5 1.5a3.5 3.5 0 1 1 3.5-3.5a5.5 5.5 0 1 1-5.5-5.5a7.5 7.5 0 0 1 7.5 7.5'],
+    [/охм|мастерств/i, 'M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16z M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z'],
+    [/хокке/i, 'M16 3l-5 14H5 M5 17v2h6 M14 19a3 1.5 0 1 0 6 0a3 1.5 0 1 0-6 0'],
+    [/ролик/i, 'M6 3v10h10a3 3 0 0 0 3-3l-6-2V3z M5 16h15 M6 19a2 2 0 1 0 4 0a2 2 0 1 0-4 0 M14 19a2 2 0 1 0 4 0a2 2 0 1 0-4 0'],
+    [/офп|сфп|физ/i, 'M6 8v8 M18 8v8 M3 10v4 M21 10v4 M6 12h12'],
+  ];
+  var ICON_CUSTOM = 'M5 5h14v14H5z M9 12h6';
+  var ICON_PLUS = 'M12 5v14 M5 12h14';
+  var ICON_CHECK = 'M5 12l5 5 9-10';
+  var ICON_CROSS = 'M7 7l10 10 M17 7L7 17';
+
+  function svgIcon(d, size, strokeWidth) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', String(size || 24));
+    svg.setAttribute('height', String(size || 24));
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', String(strokeWidth || 1.8));
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    var p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', d);
+    svg.appendChild(p);
+    return svg;
+  }
+
+  function serviceIcon(name) {
+    for (var i = 0; i < SERVICE_ICONS.length; i++) {
+      if (SERVICE_ICONS[i][0].test(name || '')) return SERVICE_ICONS[i][1];
+    }
+    return ICON_SKATE;
+  }
+
+  /** «ОХМ(отработка хоккейного мастерства)» → заголовок «ОХМ» и подпись под ним. */
+  function splitServiceName(name) {
+    var m = /^(.+?)\s*\((.+)\)\s*$/.exec(String(name || ''));
+    return m ? { title: glueShortWords(m[1]), sub: glueShortWords(m[2]) } : { title: glueShortWords(name), sub: '' };
+  }
+
+  /* «катанию «с нуля»» не должно рваться после «с»: короткий предлог держится за следующее слово. */
+  function glueShortWords(text) {
+    return String(text || '').replace(/(^|[\s«(])(с|в|к|и|о|у|на|по|до|за|от|для)\s+/gi, '$1$2\u00a0');
+  }
+
+  function serviceTile(opts) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ob-tile' + (opts.add ? ' ob-tile--add' : '');
+    if (!opts.add) b.setAttribute('aria-pressed', opts.on ? 'true' : 'false');
+    if (opts.label) b.setAttribute('aria-label', opts.label);
+    b.appendChild(svgIcon(opts.icon));
+    var nm = document.createElement('span');
+    nm.className = 'ob-tile__name';
+    nm.textContent = opts.title;
+    if (opts.sub) {
+      var sub = document.createElement('span');
+      sub.className = 'ob-tile__sub';
+      sub.textContent = opts.sub;
+      nm.appendChild(sub);
+    }
+    b.appendChild(nm);
+    if (!opts.add) {
+      var check = document.createElement('span');
+      check.className = 'ob-tile__check';
+      check.appendChild(svgIcon(opts.custom ? ICON_CROSS : ICON_CHECK, 12, 3));
+      b.appendChild(check);
+    }
+    b.onclick = opts.onClick;
+    return b;
+  }
+
+  /* ── Услуги: плитки ── */
   function renderServices() {
     if (!el.obServices) return;
     el.obServices.innerHTML = '';
     state.services.forEach(function (svc) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'ob-chip';
-      b.textContent = svc.name;
+      var parts = splitServiceName(svc.name);
       var on = state.selectedServices.indexOf(svc.id) >= 0;
-      b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      b.onclick = function () {
-        var i = state.selectedServices.indexOf(svc.id);
-        if (i >= 0) {
-          state.selectedServices.splice(i, 1);
-          delete state.serviceOnlineById[svc.id];
-        } else {
-          state.selectedServices.push(svc.id);
-          if (state.serviceOnlineById[svc.id] == null) state.serviceOnlineById[svc.id] = false;
-        }
-        b.setAttribute('aria-pressed', state.selectedServices.indexOf(svc.id) >= 0 ? 'true' : 'false');
-        haptic('light');
-        renderServiceFormats();
-        syncOnlineArenaWithServices({ fromFormat: true });
-        syncCta();
-      };
-      el.obServices.appendChild(b);
+      el.obServices.appendChild(serviceTile({
+        icon: serviceIcon(svc.name),
+        title: parts.title,
+        sub: parts.sub,
+        on: on,
+        label: svc.name,
+        onClick: function () {
+          var i = state.selectedServices.indexOf(svc.id);
+          if (i >= 0) {
+            state.selectedServices.splice(i, 1);
+            delete state.serviceOnlineById[svc.id];
+          } else {
+            state.selectedServices.push(svc.id);
+            if (state.serviceOnlineById[svc.id] == null) state.serviceOnlineById[svc.id] = false;
+          }
+          haptic('light');
+          renderServices();
+          syncOnlineArenaWithServices({ fromFormat: true });
+          renderPreview();
+          syncCta();
+        },
+      }));
     });
 
     /* Вписанные, но ещё не сохранённые услуги. Всегда выбраны — тренер только что
        сам их назвал; тап снимает не выбор, а саму услугу, поэтому крестик. */
     state.customServiceNames.forEach(function (name, idx) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'ob-chip';
-      b.textContent = name + ' ✕';
-      b.title = 'Убрать «' + name + '»';
-      b.setAttribute('aria-pressed', 'true');
-      b.onclick = function () {
-        var removed = state.customServiceNames.splice(idx, 1)[0];
-        if (removed) delete state.customServiceOnlineByName[removed];
-        renderServices();
-        syncCta();
-        haptic('light');
-      };
-      el.obServices.appendChild(b);
+      el.obServices.appendChild(serviceTile({
+        icon: ICON_CUSTOM,
+        title: name,
+        sub: state.customServiceOnlineByName[name] ? 'своё · онлайн' : 'своё',
+        on: true,
+        custom: true,
+        label: 'Убрать «' + name + '»',
+        onClick: function () {
+          var removed = state.customServiceNames.splice(idx, 1)[0];
+          if (removed) delete state.customServiceOnlineByName[removed];
+          renderServices();
+          renderPreview();
+          syncCta();
+          haptic('light');
+        },
+      }));
     });
+
+    var addOpen = el.obServiceAddWrap && !el.obServiceAddWrap.hidden;
+    if (!addOpen) {
+      el.obServices.appendChild(serviceTile({
+        add: true,
+        icon: ICON_PLUS,
+        title: 'Своё занятие',
+        onClick: function () { openServiceAdd(); renderServices(); },
+      }));
+    }
     renderServiceFormats();
   }
 
-  /* ── Длительность ── */
   function renderDuration() {
     if (!el.obDuration) return;
-    /* Значение из профиля может не совпасть ни с одним чипом (тренер менял его в настройках) —
-       тогда показываем и его, чтобы выбор не «перескочил» молча на соседнее. */
+    /* Значение из профиля может не совпасть ни с одним вариантом (тренер менял его в
+       настройках) — тогда показываем и его, чтобы выбор не «перескочил» молча на соседнее. */
     var options = DURATIONS.slice();
     if (options.indexOf(state.durationMinutes) < 0) {
       options.push(state.durationMinutes);
@@ -681,13 +751,14 @@
     options.forEach(function (mins) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'ob-chip';
       b.textContent = mins + ' мин';
       b.setAttribute('aria-pressed', state.durationMinutes === mins ? 'true' : 'false');
       b.onclick = function () {
+        if (state.durationMinutes === mins) return;
         state.durationMinutes = mins;
         haptic('light');
         renderDuration();
+        onDurationChanged();
       };
       el.obDuration.appendChild(b);
     });
@@ -754,47 +825,25 @@
     return (arena && arena.grid_kind === 'hourly_minute') ? (arena.minute_offset || 0) : 0;
   }
 
-  /** Площадки, чью сетку сейчас рисует грид: [] / [одна] / до трёх выбранных «кистей». */
+  /** Площадки, отмеченные во втором шаге: [] / [одна] / до трёх. */
   function activeArenas() {
-    if (state.arenaMode === 'single') {
-      var a = arenaById(state.singleArenaId);
-      return a ? [a] : [];
-    }
-    if (state.arenaMode === 'multi') {
-      return state.multiArenaIds.map(arenaById).filter(function (a) { return !!a; });
-    }
-    return [];
+    return state.pickedArenaIds.map(arenaById).filter(function (a) { return !!a; });
   }
 
-  /** Площадка, которой красит тап прямо сейчас — «одна» целиком или активная кисть «нескольких». */
+  /** Площадка, которой отмечается время прямо сейчас: единственная или выбранная над сеткой. */
   function currentBrushArena() {
-    if (state.arenaMode === 'single') return arenaById(state.singleArenaId);
-    if (state.arenaMode === 'multi') return arenaById(state.activeArenaTab);
-    return null;
+    if (!state.pickedArenaIds.length) return null;
+    return arenaById(state.activeArenaTab);
   }
 
-  /** Общее смещение минут для строк сетки, или null, если у выбранных площадок оно разное —
-      тогда подпись часа остаётся голой, а реальная минута видна на самой клетке. */
-  function commonOffset(arenas) {
-    if (!arenas.length) return 0;
-    var first = arenaOffset(arenas[0]);
-    var same = arenas.every(function (a) { return arenaOffset(a) === first; });
-    return same ? first : null;
-  }
 
-  /* Порядковый индекс площадки среди выбранных кистей — держит цвет клетки и её вкладки
-     стабильными, пока сама площадка не снята из списка. Максимум три: см. toggleMultiArena. */
+  /* Порядковый индекс площадки среди отмеченных — держит цвет точки стабильным, пока саму
+     площадку не сняли. */
   function arenaColorIndex(arenaId) {
-    var i = state.multiArenaIds.indexOf(arenaId);
+    var i = state.pickedArenaIds.indexOf(arenaId);
     return i >= 0 ? i : 0;
   }
 
-  /** Multi-arena: паттерн клетки по индексу 0/1/2 (TASK-172) — без букв на клетке. */
-  function applyArenaColor(cellEl, arena) {
-    if (!arena) return;
-    cellEl.classList.add('ob-cell--arena-' + arenaColorIndex(arena.id));
-    cellEl.textContent = '';
-  }
 
   function arenaMetaLabel(arena) {
     var bits = [];
@@ -874,7 +923,7 @@
 
   function syncArenaBrowseHint(hintEl, meta, q) {
     if (!hintEl) return;
-    if (q) {
+    if (q || state.cityId == null) {
       hintEl.hidden = true;
       hintEl.textContent = '';
       return;
@@ -885,37 +934,14 @@
       return;
     }
     hintEl.textContent = meta.truncated
-      ? ('Показано ' + meta.shown + ' из ' + meta.total +
-        '. Введите название или адрес, чтобы найти остальные.')
-      : 'Выберите из списка ниже.';
-    hintEl.hidden = false;
+      ? ('Показано ' + meta.shown + ' из ' + meta.total + '. Остальные — через поиск.')
+      : '';
+    hintEl.hidden = !meta.truncated;
   }
 
   function arenaThumbUrl(arena) {
     var u = arena && arena.thumb_url;
     return u && String(u).trim() ? String(u).trim() : '';
-  }
-
-  function buildArenaBrushSwatch(arena) {
-    var swatch = document.createElement('span');
-    swatch.className = 'ob-arena-tab__swatch';
-    swatch.setAttribute('aria-hidden', 'true');
-    var inner = document.createElement('span');
-    inner.className = 'ob-arena-brush-thumb';
-    var url = arenaThumbUrl(arena);
-    if (url) {
-      var img = document.createElement('img');
-      img.src = url;
-      img.alt = '';
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      inner.appendChild(img);
-    } else {
-      inner.classList.add('ob-arena-brush-thumb--ph');
-      inner.textContent = (arena && arena.venue_chip) ? arena.venue_chip : '🏟';
-    }
-    swatch.appendChild(inner);
-    return swatch;
   }
 
   function buildArenaThumbEl(arena) {
@@ -1005,38 +1031,20 @@
     appendArenaCreateCta(host, q);
   }
 
-  function renderArenaSingleList() {
-    var q = el.obArenaSingleSearch ? el.obArenaSingleSearch.value : '';
+  function renderArenaList() {
+    var q = el.obArenaSearch ? el.obArenaSearch.value : '';
     renderArenaOptionsInto(
-      el.obArenaSingleList,
+      el.obArenaList,
       q,
-      function (id) { return state.singleArenaId === id; },
-      selectSingleArena,
-      el.obArenaSingleBrowseHint
+      function (id) { return state.pickedArenaIds.indexOf(id) >= 0; },
+      togglePickedArena,
+      el.obArenaBrowseHint
     );
   }
 
-  function renderArenaMultiList() {
-    var q = el.obArenaMultiSearch ? el.obArenaMultiSearch.value : '';
-    renderArenaOptionsInto(
-      el.obArenaMultiList,
-      q,
-      function (id) { return state.multiArenaIds.indexOf(id) >= 0; },
-      toggleMultiArena,
-      el.obArenaMultiBrowseHint
-    );
-  }
 
   var obArenaFocusScrollT = null;
 
-  function setArenaSearchFocused(inp, on) {
-    var combo = inp && inp.closest ? inp.closest('.ob-arena-combo') : null;
-    if (combo) combo.classList.toggle('ob-arena-combo--focused', on);
-    if (combo) {
-      var doneBtn = combo.querySelector('.ob-arena-combo__done');
-      if (doneBtn) doneBtn.hidden = !on;
-    }
-  }
 
   /** Один раз после открытия клавиатуры — без polling и без vv.scroll (они гоняли scrollIntoView по кругу). */
   function scheduleArenaSearchScrollOnce(inp) {
@@ -1045,7 +1053,7 @@
     obArenaFocusScrollT = setTimeout(function () {
       obArenaFocusScrollT = null;
       if (document.activeElement !== inp) return;
-      var wrap = inp.closest('.ob-arena-pick');
+      var wrap = inp.closest('.ob-where-bar');
       if (!wrap) return;
       try {
         wrap.scrollIntoView({ block: 'start', behavior: 'auto', inline: 'nearest' });
@@ -1058,15 +1066,8 @@
       clearTimeout(obArenaFocusScrollT);
       obArenaFocusScrollT = null;
     }
-    var ae = document.activeElement;
-    if (ae && ae.classList && ae.classList.contains('ob-arena-combo__input')) {
-      setArenaSearchFocused(ae, false);
-    }
-    if (el.obArenaSingleSearch) {
-      try { el.obArenaSingleSearch.blur(); } catch (eB) { /* */ }
-    }
-    if (el.obArenaMultiSearch) {
-      try { el.obArenaMultiSearch.blur(); } catch (eB2) { /* */ }
+    if (el.obArenaSearch && document.activeElement === el.obArenaSearch) {
+      try { el.obArenaSearch.blur(); } catch (eB) { /* */ }
     }
     try {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -1075,22 +1076,15 @@
   }
 
   function bindArenaSearchMobile() {
-    function wireInput(inp) {
-      if (!inp || inp._obArenaMobileBound) return;
+    var inp = el.obArenaSearch;
+    if (inp && !inp._obArenaMobileBound) {
       inp._obArenaMobileBound = true;
-      inp.addEventListener('focus', function () {
-        setArenaSearchFocused(inp, true);
-        scheduleArenaSearchScrollOnce(inp);
-      });
+      inp.addEventListener('focus', function () { scheduleArenaSearchScrollOnce(inp); });
       inp.addEventListener('blur', function () {
         if (obArenaFocusScrollT) {
           clearTimeout(obArenaFocusScrollT);
           obArenaFocusScrollT = null;
         }
-        window.setTimeout(function () {
-          if (document.activeElement === inp) return;
-          setArenaSearchFocused(inp, false);
-        }, 100);
       });
       inp.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === 'Escape') {
@@ -1099,17 +1093,6 @@
         }
       });
     }
-    wireInput(el.obArenaSingleSearch);
-    wireInput(el.obArenaMultiSearch);
-
-    document.querySelectorAll('.ob-arena-combo__done').forEach(function (btn) {
-      if (btn._obArenaDoneBound) return;
-      btn._obArenaDoneBound = true;
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        dismissArenaSearchKeyboard();
-      });
-    });
 
     if (document._obArenaSearchDismissBound) return;
     document._obArenaSearchDismissBound = true;
@@ -1117,123 +1100,156 @@
       'touchstart',
       function (e) {
         var t = e.target;
-        if (t && t.closest && t.closest('.ob-arena-pick')) return;
+        if (t && t.closest && t.closest('.ob-where-bar, .ob-arena-list')) return;
         dismissArenaSearchKeyboard();
       },
       { passive: true, capture: true }
     );
   }
 
-  /** Отбрасывает часы, не попадающие в рабочее окно площадки — тихо и сразу видно на сетке. */
-  function clampHoursToArena(hours, arena) {
-    if (!arena) return hours;
-    return hours.filter(function (h) { return h >= arena.hour_start && h <= arena.hour_end; });
+  /* ── Неделя: доступ к стартам. state.week[dow] = { минута: { a: площадка, d: длительность } } ── */
+  function dayMap(dow, create) {
+    if (!state.week[dow] && create) state.week[dow] = {};
+    return state.week[dow] || {};
   }
 
-  function selectSingleArena(arenaId) {
-    state.singleArenaId = arenaId;
-    var arena = arenaById(arenaId);
-    /* Одна площадка — значит одна на всю неделю. Переключение переносит уже отмеченные
-       часы на новую площадку (обрезая те, что её сетке не подходят), а не оставляет
-       их привязанными к прежней — иначе выбор «одна площадка» ничего бы не значил. */
+  function pruneEmptyDays() {
     Object.keys(state.week).forEach(function (dow) {
-      var d = state.week[dow];
-      if (!d) return;
-      var hrs = clampHoursToArena(Object.keys(d.arenaByHour).map(Number), arena);
-      if (!hrs.length) { delete state.week[dow]; return; }
-      var next = {};
-      hrs.forEach(function (h) { next[h] = arenaId; });
-      d.arenaByHour = next;
+      if (!Object.keys(state.week[dow]).length) delete state.week[dow];
     });
+  }
+
+  function eachSlot(fn) {
+    Object.keys(state.week).forEach(function (dow) {
+      var day = state.week[dow];
+      Object.keys(day).forEach(function (m) { fn(Number(dow), Number(m), day[m], day); });
+    });
+  }
+
+  function setAllSlotsArena(arenaId) {
+    eachSlot(function (dow, m, slot) { slot.a = arenaId; });
+  }
+
+  function removeArenaSlots(arenaId) {
+    eachSlot(function (dow, m, slot, day) { if (slot.a === arenaId) delete day[m]; });
+    pruneEmptyDays();
+  }
+
+  /**
+   * Первая площадка забирает себе время, отмеченное «без площадки»: старт сдвигается на её
+   * минутную сетку (:30), а то, что не помещается в её часы или налезает, — снимается.
+   */
+  function adoptUnassignedSlots(arena) {
+    if (!arena) return;
+    var off = WM.arenaOffset(arena);
+    var dur = WM.effectiveDuration(arena, state.durationMinutes);
+    Object.keys(state.week).forEach(function (dow) {
+      var day = state.week[dow];
+      var next = {};
+      Object.keys(day).map(Number).sort(function (a, b) { return a - b; }).forEach(function (m) {
+        var slot = day[m];
+        if (slot.a != null) { next[m] = slot; return; }
+        var start = (m % 60 === 0) ? m + off : m;
+        var h = Math.floor(start / 60);
+        if (arena.hour_start != null && h < arena.hour_start) return;
+        if (arena.hour_end != null && h > arena.hour_end) return;
+        if (next[start] || WM.overlapWith(next, start, dur, arenaById, state.durationMinutes) != null) return;
+        next[start] = { a: arena.id, d: slot.d };
+      });
+      state.week[dow] = next;
+    });
+    pruneEmptyDays();
+  }
+
+  /** Производные поля режима площадок — из одного списка отмеченных. */
+  function syncArenaDerived() {
+    var ids = state.pickedArenaIds;
+    if (state.arenaMode === 'online' && !ids.length) {
+      state.activeArenaTab = null;
+      return;
+    }
+    state.arenaMode = ids.length === 0 ? 'none' : (ids.length === 1 ? 'single' : 'multi');
+    if (state.activeArenaTab == null || ids.indexOf(state.activeArenaTab) < 0) {
+      state.activeArenaTab = ids.length ? ids[0] : null;
+    }
+  }
+
+  /* Больше трёх площадок на одной неделе не различить точками, а в онбординге и не нужно:
+     остальные тренер добавит в «Расписании». */
+  var MAX_BRUSH_ARENAS = 3;
+
+  /**
+   * Одна галочка вместо развилки «одна / несколько / пока не указывать». Сняли единственную —
+   * время остаётся «без площадки» (как раньше при «Пока не указывать»); сняли одну из
+   * нескольких — уходит только её время: остальные дни уже размечены другими площадками.
+   */
+  function togglePickedArena(arenaId) {
+    var ids = state.pickedArenaIds.slice();
+    var i = ids.indexOf(arenaId);
+    var wasOnline = state.arenaMode === 'online';
+    if (i >= 0) {
+      ids.splice(i, 1);
+      if (ids.length) removeArenaSlots(arenaId);
+      else setAllSlotsArena(null);
+    } else {
+      if (ids.length >= MAX_BRUSH_ARENAS) {
+        note('Пока можно отметить не больше трёх площадок — остальные добавите в «Расписании».', true);
+        return;
+      }
+      ids.push(arenaId);
+      if (ids.length === 1) adoptUnassignedSlots(arenaById(arenaId));
+    }
+    state.pickedArenaIds = ids;
+    if (wasOnline && ids.length) state.arenaMode = 'single';
+    syncArenaDerived();
+    if (wasOnline && ids.length) clearArenaOnlineFormat();
+    state.weekTouched = true;
+    state.openWindow = null;
     haptic('light');
-    dismissArenaSearchKeyboard();
-    renderArenaSingleList();
+    renderArenaList();
+    renderArenaStep();
+    renderArenaTabs();
     syncDurationLock();
-    renderGrid();
+    renderWeek();
     syncCta();
   }
+
 
   /* Больше трёх кистей на сетке не различить: цвет и буква на клетке 7×N клеток начинают
      повторяться, а не добавлять ясность. Честный ответ — не тащить в онбординг больше трёх,
      остальные площадки тренер добавит в «Расписании» уже после сохранения. */
   var MAX_BRUSH_ARENAS = 3;
 
-  function toggleMultiArena(arenaId) {
-    var i = state.multiArenaIds.indexOf(arenaId);
-    if (i >= 0) {
-      /* Снимаем площадку — её клетки освобождаются, остальные площадки того же дня остаются:
-         блокировка теперь на уровне клетки, а не всего дня. */
-      state.multiArenaIds.splice(i, 1);
-      Object.keys(state.week).forEach(function (dow) {
-        var d = state.week[dow];
-        if (!d) return;
-        Object.keys(d.arenaByHour).forEach(function (h) {
-          if (d.arenaByHour[h] === arenaId) delete d.arenaByHour[h];
-        });
-        if (!Object.keys(d.arenaByHour).length) delete state.week[dow];
-      });
-      if (state.activeArenaTab === arenaId) {
-        state.activeArenaTab = state.multiArenaIds.length ? state.multiArenaIds[0] : null;
-      }
-    } else {
-      if (state.multiArenaIds.length >= MAX_BRUSH_ARENAS) {
-        note('Пока можно закрасить сетку не больше чем тремя площадками — остальные добавите в «Расписании» после сохранения.', true);
-        return;
-      }
-      state.multiArenaIds.push(arenaId);
-      if (state.activeArenaTab == null) state.activeArenaTab = arenaId;
-    }
-    haptic('light');
-    dismissArenaSearchKeyboard();
-    renderArenaMultiList();
-    renderArenaTabs();
-    syncDurationLock();
-    renderGrid();
-    syncCta();
-  }
 
-  /* Кисти над сеткой: раньше это были вкладки, переключающие видимый день на арену.
-     Теперь сетка одна на всю неделю и показывает все выбранные площадки сразу — кнопка
-     здесь выбирает не «что показать», а «чем красит следующий тап». */
+  /* Кнопки над неделей — только при нескольких площадках: выбирают, чьё время отмечает
+     следующий тап. Цвет точки тот же, что на окнах и слотах. */
   function renderArenaTabs() {
     if (!el.obArenaTabs) return;
     el.obArenaTabs.innerHTML = '';
-    if (state.arenaMode !== 'multi' || !state.multiArenaIds.length) {
+    var ids = state.pickedArenaIds;
+    if (ids.length < 2) {
       el.obArenaTabs.hidden = true;
       return;
     }
     el.obArenaTabs.hidden = false;
-    el.obArenaTabs.setAttribute('role', 'group');
-    state.multiArenaIds.forEach(function (aid, idx) {
+    ids.forEach(function (aid, idx) {
       var arena = arenaById(aid);
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'ob-arena-tab ob-arena-tab--arena-' + idx;
+      b.className = 'ob-arena-tab';
       b.setAttribute('aria-pressed', state.activeArenaTab === aid ? 'true' : 'false');
-      b.appendChild(buildArenaBrushSwatch(arena));
+      var dot = document.createElement('i');
+      dot.className = 'ob-arena-tab__dot ob-dot-' + idx;
+      b.appendChild(dot);
       var label = document.createElement('span');
-      label.className = 'ob-arena-tab__label';
       label.textContent = arena ? arena.name : ('Площадка #' + aid);
       b.appendChild(label);
-      var meta = arena ? arenaMetaLabel(arena) : '';
-      if (arena && arena.is_confirmed === false) meta = meta ? 'на проверке · ' + meta : 'на проверке';
-      if (meta) {
-        var metaEl = document.createElement('span');
-        metaEl.className = 'ob-arena-tab__meta';
-        metaEl.textContent = meta;
-        b.appendChild(metaEl);
-      }
-      b.setAttribute(
-        'aria-label',
-        'Красить площадкой «' + (arena ? arena.name : aid) + '»' + (meta ? ' (' + meta + ')' : '')
-      );
       b.onclick = function () {
         if (state.activeArenaTab === aid) return;
         state.activeArenaTab = aid;
         haptic('light');
         renderArenaTabs();
-        syncDurationLock();
-        renderGrid();
+        renderWeek();
       };
       el.obArenaTabs.appendChild(b);
     });
@@ -1269,24 +1285,14 @@
       var a = arenaById(id);
       return !!(a && Number(a.city_id) === Number(state.cityId));
     }
-    if (state.singleArenaId != null && !inCity(state.singleArenaId)) {
-      state.singleArenaId = null;
-    }
-    state.multiArenaIds = state.multiArenaIds.filter(inCity);
-    if (state.activeArenaTab != null && !inCity(state.activeArenaTab)) {
-      state.activeArenaTab = state.multiArenaIds[0] || null;
-    }
-    Object.keys(state.week).forEach(function (dow) {
-      var d = state.week[dow];
-      if (!d) return;
-      var next = {};
-      Object.keys(d.arenaByHour).forEach(function (h) {
-        var aid = d.arenaByHour[h];
-        if (aid == null || inCity(aid)) next[h] = aid;
-      });
-      if (!Object.keys(next).length) delete state.week[dow];
-      else d.arenaByHour = next;
+    var before = state.pickedArenaIds.length;
+    state.pickedArenaIds = state.pickedArenaIds.filter(inCity);
+    eachSlot(function (dow, m, slot, day) {
+      if (slot.a != null && !inCity(slot.a)) delete day[m];
     });
+    pruneEmptyDays();
+    syncArenaDerived();
+    if (before !== state.pickedArenaIds.length) state.openWindow = null;
   }
 
   function setCityCreateStatus(text, isError) {
@@ -1422,11 +1428,10 @@
     closeCityCreate();
     haptic('light');
     renderCitySelect();
-    renderArenaMode();
-    renderArenaSingleList();
-    renderArenaMultiList();
+    renderArenaStep();
+    renderArenaList();
     renderArenaTabs();
-    renderGrid();
+    renderWeek();
     syncCta();
   }
 
@@ -1500,12 +1505,7 @@
 
   function selectCreatedArena(arenaId) {
     var id = Number(arenaId);
-    if (state.arenaMode === 'multi') {
-      if (state.multiArenaIds.indexOf(id) < 0) toggleMultiArena(id);
-    } else {
-      if (state.arenaMode !== 'single') setArenaMode('single');
-      selectSingleArena(id);
-    }
+    if (state.pickedArenaIds.indexOf(id) < 0) togglePickedArena(id);
   }
 
   function afterCreatedArena(arenaId, payload) {
@@ -1535,10 +1535,9 @@
     if (!exists) state.arenas.push(created);
     closeArenaCreate();
     selectCreatedArena(created.id);
-    renderArenaSingleList();
-    renderArenaMultiList();
+    renderArenaList();
     renderArenaTabs();
-    renderGrid();
+    renderWeek();
     syncCta();
     /* Refresh grids from GET so a venue with a real preset replaces the stub. Guarded by a
        token: if the trainer changes city (or creates another arena) before this resolves, a
@@ -1553,10 +1552,9 @@
         if (data.cities) state.cities = data.cities;
         if (data.city_id != null) state.cityId = Number(data.city_id);
         renderCitySelect();
-        renderArenaSingleList();
-        renderArenaMultiList();
+        renderArenaList();
         renderArenaTabs();
-        renderGrid();
+        renderWeek();
       })
       .catch(function () { /* stub already selected */ });
     void payload;
@@ -1640,66 +1638,21 @@
     el.obArenaCreateDup.appendChild(again);
   }
 
-  function renderArenaMode() {
-    if (!el.obArenaMode) return;
-    Array.prototype.forEach.call(el.obArenaMode.querySelectorAll('[data-arena-mode]'), function (btn) {
-      var m = btn.getAttribute('data-arena-mode');
-      btn.setAttribute('aria-pressed', m === state.arenaMode ? 'true' : 'false');
-    });
-    var picking = state.arenaMode === 'single' || state.arenaMode === 'multi';
+  function renderArenaStep() {
     var hasCity = state.cityId != null;
-    if (el.obArenaNeedCity) el.obArenaNeedCity.hidden = !picking || hasCity;
-    if (el.obArenaSingleWrap) el.obArenaSingleWrap.hidden = state.arenaMode !== 'single' || !hasCity;
-    if (el.obArenaMultiPickWrap) el.obArenaMultiPickWrap.hidden = state.arenaMode !== 'multi' || !hasCity;
-    if (!picking || !hasCity) closeArenaCreate();
+    if (el.obArenaNeedCity) el.obArenaNeedCity.hidden = hasCity;
+    if (el.obArenaList) el.obArenaList.hidden = !hasCity;
+    if (el.obArenaOnlineNote) el.obArenaOnlineNote.hidden = state.arenaMode !== 'online';
+    if (!hasCity) closeArenaCreate();
   }
 
-  function setArenaMode(mode) {
-    if (state.arenaMode === mode) return;
-    state._prevArenaMode = state.arenaMode;
-    state.arenaMode = mode;
-    if (mode === 'multi') {
-      state.singleArenaId = null;
-      /* Клетка в режиме «нескольких» обязана знать свою кисть — начинаем чистый лист:
-         сначала отмечаем площадки, потом красим сетку под каждой из них. */
-      Object.keys(state.week).forEach(function (dow) { delete state.week[dow]; });
-    } else {
-      state.multiArenaIds = [];
-      state.activeArenaTab = null;
-      /* Переключение на «одну»/«пока не указывать» не сносит уже отмеченные часы —
-         только площадку у них (и обрезает те, что не влезают в новую площадку). */
-      var arena = mode === 'single' ? arenaById(state.singleArenaId) : null;
-      Object.keys(state.week).forEach(function (dow) {
-        var d = state.week[dow];
-        if (!d) return;
-        var hrs = Object.keys(d.arenaByHour).map(Number);
-        if (mode === 'single' && state.singleArenaId != null) hrs = clampHoursToArena(hrs, arena);
-        if (!hrs.length) { delete state.week[dow]; return; }
-        var next = {};
-        hrs.forEach(function (h) { next[h] = mode === 'single' ? state.singleArenaId : null; });
-        d.arenaByHour = next;
-      });
-    }
-    haptic('light');
-    renderArenaMode();
-    renderArenaSingleList();
-    renderArenaMultiList();
-    renderArenaTabs();
-    syncDurationLock();
-    renderGrid();
-    syncCta();
-    if (mode === 'online') {
-      markAllSelectedOffersOnline(true);
-      renderServiceFormats();
-      submitArenaOnlineFormat();
-    } else if (state._prevArenaMode === 'online') {
-      /* Leaving exclusive online — do not force services offline (hybrid allowed). */
-      fetch(apiUrl('/trainer/profile/arena-setup'), {
-        method: 'POST',
-        headers: apiHeaders(),
-        body: JSON.stringify({ mode: 'clear' }),
-      }).catch(function () { /* non-blocking */ });
-    }
+  function clearArenaOnlineFormat() {
+    /* Leaving exclusive online — do not force services offline (hybrid allowed). */
+    fetch(apiUrl('/trainer/profile/arena-setup'), {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ mode: 'clear' }),
+    }).catch(function () { /* non-blocking */ });
   }
 
   /* «Онлайн» takes effect immediately (like arena create) rather than waiting for the final
@@ -1717,384 +1670,429 @@
       });
   }
 
-  /* ── Сетка недели ── */
-  function hourLabel(hour, offset) {
-    if (!offset) return String(hour);
-    var mm = offset < 10 ? '0' + offset : String(offset);
-    return hour + ':' + mm;
-  }
+  /* ── Неделя окнами: утро / день / вечер → точные старты ── */
 
-  /** Объединённый рабочий диапазон выбранных площадок — дыр не бывает, только их общая крайняя рамка. */
-  function visibleHours(arenas) {
-    if (arenas && arenas.length) {
-      var lo = null, hi = null;
-      arenas.forEach(function (a) {
-        if (lo == null || a.hour_start < lo) lo = a.hour_start;
-        if (hi == null || a.hour_end > hi) hi = a.hour_end;
-      });
-      var out = [];
-      for (var h = lo; h <= hi; h++) out.push(h);
-      return out;
-    }
-    if (state.hoursExpanded) return HOURS_ALL;
-    var out = [];
-    for (var h = HOURS_COMPACT_FIRST; h <= HOURS_COMPACT_LAST; h++) {
-      if (HOURS_ALL.indexOf(h) >= 0) out.push(h);
-    }
-    return out;
-  }
-
-  /* ── Аксессоры по клетке: (день, час) → площадка. Единая модель для всех трёх режимов —
-     «одна»/«пока не указывать» просто хранят одну и ту же площадку (или null) в каждой
-     занятой клетке дня, «несколько» хранит свою в каждой. ── */
-  function dayHours(dow) {
-    var d = state.week[dow];
-    return d ? Object.keys(d.arenaByHour).map(Number).sort(function (a, b) { return a - b; }) : [];
-  }
-  /** Площадка клетки: undefined — клетка пуста, null/id — чем закрашена. */
-  function cellArena(dow, hour) {
-    var d = state.week[dow];
-    if (!d || !(hour in d.arenaByHour)) return undefined;
-    return d.arenaByHour[hour];
-  }
-  function setCellArena(dow, hour, arenaId) {
-    var d = state.week[dow];
-    if (!d) { d = state.week[dow] = { arenaByHour: {} }; }
-    d.arenaByHour[hour] = arenaId;
-  }
-  function clearCell(dow, hour) {
-    var d = state.week[dow];
-    if (!d) return;
-    delete d.arenaByHour[hour];
-    if (!Object.keys(d.arenaByHour).length) delete state.week[dow];
-  }
-
-  function totalSelectedCells() {
-    var n = 0;
-    Object.keys(state.week).forEach(function (d) { n += Object.keys(state.week[d].arenaByHour).length; });
-    return n;
-  }
-
-  /** Всё, что уедет на сервер: отмеченное в сетке плюс перенесённое как есть. */
   function totalSlots() {
-    return totalSelectedCells() + state.carried.length;
+    return WM.totalStarts(state.week);
   }
 
-  function minuteLabel(minute) {
-    var h = Math.floor(minute / 60);
-    var m = minute % 60;
-    return h + ':' + (m < 10 ? '0' + m : String(m));
-  }
+  function windowKey(dow, win) { return dow + ':' + win.id; }
 
   /**
-   * Слот ложится на сетку онбординга?
-   *
-   * Сетка умеет ровно одно: целый час плюс смещение площадки. Всё, что в него не попадает —
-   * своя минута, чужая площадка внутри дня, час вне окна — экран нарисовать не может, но и
-   * потерять не имеет права: тренер настроил это в «Расписании».
+   * Черновик недели для первого запуска: будни, два утренних и три вечерних занятия. Тот же,
+   * что предлагает сервер (7, 8, 18, 19, 20 при 60 минутах), но шагом в выбранную длину —
+   * при 90 минутах подсказка не должна сама себе накладываться.
    */
-  function slotFitsGrid(dow, slot, arenasById) {
-    var arena = slot.arenaId != null ? arenasById(slot.arenaId) : null;
-    if (slot.arenaId != null && !arena) return false;
-    var off = arenaOffset(arena);
-    if (slot.startMinute % 60 !== off) return false;
-    if (!arena) return true;
-    var h = Math.floor(slot.startMinute / 60);
-    return h >= arena.hour_start && h <= arena.hour_end;
-  }
-
-  function renderCarried() {
-    if (!el.obCarried) return;
-    if (!state.carried.length) {
-      el.obCarried.hidden = true;
-      el.obCarried.innerHTML = '';
-      return;
-    }
-    var byDay = {};
-    state.carried.forEach(function (c) {
-      (byDay[c.dow] = byDay[c.dow] || []).push(c);
-    });
-    var parts = [];
-    Object.keys(byDay).sort(function (a, b) { return a - b; }).forEach(function (dow) {
-      var times = byDay[dow]
-        .sort(function (a, b) { return a.startMinute - b.startMinute; })
-        .map(function (c) {
-          var arena = arenaById(c.arenaId);
-          return minuteLabel(c.startMinute) + (arena ? ' · ' + arena.name : '');
-        });
-      parts.push(
-        '<div class="ob-carried__row"><span class="ob-carried__day">' + DAY_LABELS[dow] +
-        '</span><span class="ob-carried__times">' + times.join(', ') + '</span></div>'
-      );
-    });
-    el.obCarried.innerHTML =
-      '<p class="ob-carried__title">Уже настроено в «Расписании» — оставляем как есть:</p>' +
-      parts.join('') +
-      '<p class="ob-carried__hint">Эти окна сюда не помещаются: своё время начала или другая ' +
-      'площадка в тот же день. Менять их — в разделе «Расписание».</p>';
-    el.obCarried.hidden = false;
-  }
-
-  function syncWeekHint(arenas) {
-    if (!el.obWeekHint) return;
-    var later = 'Можно не всё сразу — потом подкорректируете :)';
-    if (arenas.length === 1) {
-      var arena = arenas[0];
-      var off = arenaOffset(arena);
-      var offTxt = off ? ('с :' + (off < 10 ? '0' + off : off)) : 'с начала часа';
-      el.obWeekHint.textContent =
-        '«' + arena.name + '»: ' + offTxt + ', ' +
-        arena.hour_start + ':00–' + arena.hour_end + ':00. ' + later;
-    } else if (arenas.length > 1) {
-      var bits = arenas.map(function (a) {
-        var o = arenaOffset(a);
-        return '«' + a.name + '» — ' + (o ? ('с :' + (o < 10 ? '0' + o : o)) : 'с начала часа');
+  function buildSuggestedWeek(duration) {
+    var week = {};
+    for (var dow = 0; dow < 5; dow++) {
+      var day = {};
+      [7 * 60, 7 * 60 + duration, 18 * 60, 18 * 60 + duration, 18 * 60 + 2 * duration].forEach(function (m) {
+        day[m] = { a: null, d: null };
       });
-      el.obWeekHint.textContent = bits.join('; ') + '. Красьте той площадкой, что выбрана вверху.';
-    } else if (state.alreadyDone) {
-      el.obWeekHint.textContent = 'Можно поправить, если что-то изменилось.';
-    } else if (
-      state.cityId != null &&
-      (state.arenaMode === 'single' || state.arenaMode === 'multi')
-    ) {
-      el.obWeekHint.textContent =
-        'Сначала выберите площадку выше — часы подстроятся под её график. ' + later;
-    } else {
-      el.obWeekHint.textContent =
-        'С 7:00 до 10:00. Остальные часы — по кнопке «Показать больше часов» ниже. ' + later;
+      week[dow] = day;
     }
+    return week;
   }
 
-  /* Текущая кисть — читается делегированными pointer-хендлерами ниже, чтобы красить
-     ячейки во время drag без перерисовки всего грида. */
-  var currentBrushArenaId = null;
-
-  function renderGrid() {
-    if (!el.obGrid) return;
-    var arenas = activeArenas();
-    var brush = currentBrushArena();
-    currentBrushArenaId = brush ? brush.id : null;
-    var offset = commonOffset(arenas);
-    var hours = visibleHours(arenas);
-    syncWeekHint(arenas);
-    if (el.obGridMore) {
-      /* У выбранных площадок уже есть свой явный рабочий диапазон — расширять нечего. */
-      el.obGridMore.hidden = arenas.length > 0;
+  /** Пока тренер не трогал подсказанную неделю, она следует за длительностью. */
+  function onDurationChanged() {
+    if (state.weekIsSuggestion && !state.weekTouched) {
+      state.week = buildSuggestedWeek(state.durationMinutes);
+      var first = arenaById(state.pickedArenaIds[0]);
+      if (first) adoptUnassignedSlots(first);
     }
+    state.openWindow = null;
+    renderWeek();
+  }
 
-    el.obGrid.innerHTML = '';
-
-    var corner = document.createElement('div');
-    el.obGrid.appendChild(corner);
-    DAY_LABELS.forEach(function (label, idx) {
-      var d = document.createElement('div');
-      d.className = 'ob-grid-dayhead' + (idx >= 5 ? ' is-weekend' : '');
-      d.textContent = label;
-      el.obGrid.appendChild(d);
+  function syncWeekHint() {
+    if (!el.obWeekHint) return;
+    var bits = [];
+    activeArenas().forEach(function (a) {
+      var parts = [];
+      var off = WM.arenaOffset(a);
+      if (off) parts.push('с :' + (off < 10 ? '0' + off : off));
+      if (a.fixed_duration_minutes) parts.push(a.fixed_duration_minutes + ' мин');
+      if (parts.length) bits.push('«' + a.name + '» — занятия ' + parts.join(', '));
     });
+    el.obWeekHint.textContent = bits.join('. ');
+    el.obWeekHint.hidden = !bits.length;
+  }
 
-    hours.forEach(function (h) {
-      var hcell = document.createElement('div');
-      hcell.className = 'ob-grid-hour';
-      hcell.textContent = hourLabel(h, offset);
-      el.obGrid.appendChild(hcell);
+  function dotsFor(arenaIds) {
+    var wrap = document.createElement('span');
+    wrap.className = 'ob-win__dots';
+    wrap.setAttribute('aria-hidden', 'true');
+    arenaIds.forEach(function (aid) {
+      var i = document.createElement('i');
+      i.className = 'ob-dot-' + arenaColorIndex(aid);
+      wrap.appendChild(i);
+    });
+    return wrap;
+  }
+
+  function renderWeek() {
+    if (!el.obWeek) return;
+    var brush = currentBrushArena();
+    var dur = state.durationMinutes;
+    var brushDur = WM.effectiveDuration(brush, dur);
+    var multi = state.pickedArenaIds.length > 1;
+    el.obWeek.innerHTML = '';
+
+    var head = document.createElement('div');
+    head.className = 'ob-week__row';
+    head.appendChild(document.createElement('span'));
+    WM.DAY_SHORT.forEach(function (label, idx) {
+      var d = document.createElement('span');
+      d.className = 'ob-week__dayhead' + (idx >= 5 ? ' is-weekend' : '');
+      d.textContent = label;
+      head.appendChild(d);
+    });
+    el.obWeek.appendChild(head);
+
+    WM.WINDOWS.forEach(function (win) {
+      var row = document.createElement('div');
+      row.className = 'ob-week__row';
+      var lab = document.createElement('span');
+      lab.className = 'ob-week__label';
+      lab.innerHTML = '<b></b><small></small>';
+      lab.firstChild.textContent = win.label;
+      lab.lastChild.textContent = win.from + '–' + win.to;
+      row.appendChild(lab);
 
       for (var dow = 0; dow < 7; dow++) {
-        el.obGrid.appendChild(makeCell(dow, h));
+        (function (dow) {
+          var day = dayMap(dow, false);
+          var picked = WM.startsInWindow(day, win);
+          var offered = WM.windowStarts(win, brush, brushDur);
+          var full = picked.length > 0 && offered.length > 0 && offered.every(function (s) { return !!day[s]; });
+          var key = windowKey(dow, win);
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'ob-win' +
+            (picked.length ? (full ? ' is-full' : ' is-part') : '') +
+            (state.openWindow === key ? ' is-open' : '');
+          b.setAttribute('aria-pressed', picked.length ? 'true' : 'false');
+          b.setAttribute('aria-label', WM.DAY_SHORT[dow] + ', ' + win.label.toLowerCase() + ': ' +
+            (picked.length ? picked.map(WM.minuteLabel).join(', ') : 'не отмечено'));
+          if (picked.length && !full) b.textContent = String(picked.length);
+          if (!picked.length && !offered.length) b.disabled = true;
+          if (multi && picked.length) {
+            var arenasHere = [];
+            picked.forEach(function (m) {
+              var a = day[m].a;
+              if (a != null && arenasHere.indexOf(a) < 0) arenasHere.push(a);
+            });
+            b.appendChild(dotsFor(arenasHere));
+          }
+          b.onclick = function () { tapWindow(dow, win); };
+          row.appendChild(b);
+        })(dow);
       }
+      el.obWeek.appendChild(row);
     });
-    renderCarried();
-    syncGridCount();
+
+    renderWindowPanel();
+    renderWeekSummary();
+    syncWeekHint();
+    renderPreview();
+    syncCta();
   }
 
-  /**
-   * Одна клетка = один час одного дня. В режиме «нескольких» клетка, уже закрашенная
-   * ЧУЖОЙ кистью, — только для чтения: тренер физически не может быть в этот час на
-   * двух аренах, и это видно на самой клетке, а не спрятано за вкладкой (DEC-004).
-   */
-  function makeCell(dow, hour) {
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'ob-cell';
-    b.dataset.dow = dow;
-    b.dataset.hour = hour;
-
-    var occ = cellArena(dow, hour);
-    var multi = state.arenaMode === 'multi';
-    var locked = multi && occ !== undefined && occ !== currentBrushArenaId;
-
-    if (locked) {
-      var owner = arenaById(occ);
-      b.className += ' ob-cell--taken';
-      applyArenaColor(b, owner);
-      b.disabled = true;
-      b.setAttribute(
-        'aria-label',
-        DAY_LABELS[dow] + ', ' + hourLabel(hour, arenaOffset(owner)) +
-          ' — занято: ' + (owner ? owner.name : 'другая площадка')
-      );
-      return b;
+  /** Пустое окно — отметить целиком и раскрыть; отмеченное — раскрыть или свернуть. */
+  function tapWindow(dow, win) {
+    var key = windowKey(dow, win);
+    var day = dayMap(dow, false);
+    if (!WM.startsInWindow(day, win).length) {
+      WM.fillWindow(dayMap(dow, true), win, currentBrushArena(), state.durationMinutes, arenaById);
+      pruneEmptyDays();
+      state.weekTouched = true;
+      state.openWindow = key;
+    } else {
+      state.openWindow = state.openWindow === key ? null : key;
     }
-
-    var pressed = occ !== undefined;
-    b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
-    if (pressed && multi) applyArenaColor(b, arenaById(occ));
-    /* Реальная минута клетки: занятой — её собственной площадки, пустой в режиме
-       «нескольких» — той, что закрасит следующий тап (AC-008). */
-    var realOffset = pressed ? arenaOffset(arenaById(occ)) : (multi ? arenaOffset(arenaById(currentBrushArenaId)) : 0);
-    b.setAttribute('aria-label', DAY_LABELS[dow] + ', ' + hourLabel(hour, realOffset));
-    /* Клики/тапы и протягивание пальцем обрабатываются делегированно на el.obGrid —
-       см. bindGridDrag(). Так одну ячейку можно закрасить без перерисовки всего грида. */
-    return b;
+    haptic('light');
+    renderWeek();
   }
 
-  /** Проставляет/снимает кисть на одной ячейке и синхронизирует state.week. */
-  function paintCell(cellEl, brushArenaId, value) {
-    var dow = parseInt(cellEl.dataset.dow, 10);
-    var hour = parseInt(cellEl.dataset.hour, 10);
-    if (value) setCellArena(dow, hour, brushArenaId);
-    else clearCell(dow, hour);
-    cellEl.setAttribute('aria-pressed', value ? 'true' : 'false');
-    /* В одну ячейку (без перерисовки всей сетки) makeCell() не заглядывает — цвет/букву
-       кисти нужно проставить/снять здесь же, иначе клетка красится только логически. */
-    if (state.arenaMode === 'multi') {
-      cellEl.className = cellEl.className.replace(/\bob-cell--arena-\d\b/g, '').trim();
-      cellEl.textContent = '';
-      if (value) applyArenaColor(cellEl, arenaById(brushArenaId));
-      var realOffset = value ? arenaOffset(arenaById(brushArenaId)) : arenaOffset(arenaById(currentBrushArenaId));
-      cellEl.setAttribute('aria-label', DAY_LABELS[dow] + ', ' + hourLabel(hour, realOffset));
+  function renderWindowPanel() {
+    var panel = el.obWindowPanel;
+    if (!panel) return;
+    if (!state.openWindow) {
+      panel.hidden = true;
+      return;
     }
-    return true;
-  }
+    var parts = state.openWindow.split(':');
+    var dow = Number(parts[0]);
+    var win = WM.windowById(parts[1]);
+    var brush = currentBrushArena();
+    var brushId = brush ? brush.id : null;
+    var dur = state.durationMinutes;
+    var brushDur = WM.effectiveDuration(brush, dur);
+    var day = dayMap(dow, false);
+    var multi = state.pickedArenaIds.length > 1;
 
-  function cellRowCol(cellEl) {
-    return cellEl.dataset.dow + '_' + cellEl.dataset.hour;
-  }
+    var starts = WM.windowStarts(win, brush, brushDur).concat(WM.startsInWindow(day, win));
+    starts = starts.filter(function (m, i) { return starts.indexOf(m) === i; }).sort(function (a, b) { return a - b; });
 
-  function cellUnderPoint(x, y) {
-    var target = document.elementFromPoint(x, y);
-    if (!target || !target.closest) return null;
-    var cellEl = target.closest('.ob-cell');
-    if (!cellEl || cellEl.disabled || !el.obGrid.contains(cellEl)) return null;
-    return cellEl;
-  }
-
-  /**
-   * Тап/клик красит одну ячейку, протягивание — все ячейки под курсором/пальцем.
-   * Pointer Events: мышь на десктопе + тач в WebView (touch-only ломал десктоп).
-   */
-  var dragPaint = null;
-
-  function bindGridDrag() {
-    if (!el.obGrid || el.obGrid.dataset.obDragBound === '1') return;
-    el.obGrid.dataset.obDragBound = '1';
-
-    var onPointerMove = function (e) {
-      if (!dragPaint || e.pointerId !== dragPaint.pointerId) return;
-      if (e.cancelable) e.preventDefault();
-      var cellEl = cellUnderPoint(e.clientX, e.clientY);
-      if (!cellEl) return;
-      var key = cellRowCol(cellEl);
-      if (key === dragPaint.key) return;
-      dragPaint.key = key;
-      if (paintCell(cellEl, dragPaint.arenaId, dragPaint.value)) {
-        haptic('light');
-        syncGridCount();
-        syncCta();
+    panel.hidden = false;
+    if (el.obWindowTitle) el.obWindowTitle.textContent = WM.DAY_SHORT[dow] + ', ' + win.label.toLowerCase();
+    if (!el.obWindowSlots) return;
+    el.obWindowSlots.innerHTML = '';
+    starts.forEach(function (m) {
+      var slot = day[m];
+      var mine = !slot || slot.a === brushId;
+      var len = slot ? WM.slotDuration(slot, arenaById, dur) : brushDur;
+      var blocked = slot ? !mine : WM.overlapWith(day, m, brushDur, arenaById, dur) != null;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ob-slot';
+      b.setAttribute('aria-pressed', slot ? 'true' : 'false');
+      if (blocked) b.disabled = true;
+      if (multi && slot && slot.a != null) {
+        var dot = document.createElement('i');
+        dot.className = 'ob-dot-' + arenaColorIndex(slot.a);
+        b.appendChild(dot);
       }
-    };
-
-    var endDrag = function (e) {
-      if (!dragPaint || e.pointerId !== dragPaint.pointerId) return;
-      dragPaint = null;
-      try {
-        if (el.obGrid.hasPointerCapture(e.pointerId)) {
-          el.obGrid.releasePointerCapture(e.pointerId);
-        }
-      } catch (errCapture) { /* старые WebView */ }
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', endDrag);
-      document.removeEventListener('pointercancel', endDrag);
-    };
-
-    el.obGrid.addEventListener('pointerdown', function (e) {
-      var cellEl = e.target.closest && e.target.closest('.ob-cell');
-      if (!cellEl || cellEl.disabled) return;
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (e.cancelable) e.preventDefault();
-      var value = cellEl.getAttribute('aria-pressed') !== 'true';
-      dragPaint = {
-        arenaId: currentBrushArenaId,
-        value: value,
-        key: cellRowCol(cellEl),
-        pointerId: e.pointerId,
+      b.appendChild(document.createTextNode(WM.minuteLabel(m) + '–' + WM.minuteLabel(m + len)));
+      var owner = slot && slot.a != null ? arenaById(slot.a) : null;
+      b.setAttribute('aria-label', WM.minuteLabel(m) + '–' + WM.minuteLabel(m + len) +
+        (owner && multi ? ', ' + owner.name : '') + (blocked && !slot ? ', пересекается с другим занятием' : ''));
+      b.onclick = function () {
+        WM.toggleStart(dayMap(dow, true), m, brush, dur, arenaById);
+        pruneEmptyDays();
+        state.weekTouched = true;
+        haptic('light');
+        renderWeek();
       };
-      try {
-        el.obGrid.setPointerCapture(e.pointerId);
-      } catch (errCapture) { /* */ }
-      if (paintCell(cellEl, currentBrushArenaId, value)) {
-        haptic('light');
-        syncGridCount();
-        syncCta();
+      el.obWindowSlots.appendChild(b);
+    });
+  }
+
+  function clearOpenWindow() {
+    if (!state.openWindow) return;
+    var parts = state.openWindow.split(':');
+    var dow = Number(parts[0]);
+    var win = WM.windowById(parts[1]);
+    var brush = currentBrushArena();
+    var only = state.pickedArenaIds.length > 1 ? (brush ? brush.id : null) : undefined;
+    WM.clearWindow(dayMap(dow, false), win, only);
+    pruneEmptyDays();
+    state.weekTouched = true;
+    state.openWindow = null;
+    haptic('light');
+    renderWeek();
+  }
+
+  function renderWeekSummary() {
+    var box = el.obWeekSummary;
+    if (!box) return;
+    box.innerHTML = '';
+    var rows = WM.weekSummary(state.week);
+    if (!rows.length) {
+      var empty = document.createElement('div');
+      empty.className = 'ob-summary__row';
+      empty.innerHTML = '<span></span>';
+      empty.firstChild.textContent = 'Пока ничего не отмечено';
+      empty.firstChild.style.color = 'var(--ob-muted)';
+      box.appendChild(empty);
+      return;
+    }
+    rows.forEach(function (r) {
+      var row = document.createElement('div');
+      row.className = 'ob-summary__row';
+      row.innerHTML = '<span></span><span></span>';
+      row.firstChild.textContent = r.days;
+      row.lastChild.textContent = r.times;
+      box.appendChild(row);
+    });
+  }
+
+  /* ── Мини-карточка «как увидит ученик» ── */
+  function initials() {
+    var a = (state.firstName || '').trim().charAt(0);
+    var b = (state.lastName || '').trim().charAt(0);
+    return ((a + b) || 'Т').toUpperCase();
+  }
+
+  function timeChip(day, time, empty) {
+    var t = document.createElement('span');
+    t.className = 'ob-time' + (empty ? ' ob-time--empty' : '');
+    t.innerHTML = '<small></small><b></b>';
+    t.firstChild.textContent = day || '';
+    t.lastChild.textContent = time;
+    return t;
+  }
+
+  function previewLine() {
+    var names = [];
+    state.selectedServices.forEach(function (sid) {
+      var svc = state.services.find(function (s) { return Number(s.id) === Number(sid); });
+      if (svc) names.push(splitServiceName(svc.name).title);
+    });
+    state.customServiceNames.forEach(function (n) { names.push(n); });
+    var what = names.slice(0, 2).join(' · ') + (names.length > 2 ? ' и ещё ' + (names.length - 2) : '');
+    var where = activeArenas().map(function (a) { return '«' + a.name + '»'; }).join(', ');
+    if (!where && state.arenaMode === 'online') where = 'онлайн';
+    return { what: what, where: where };
+  }
+
+  function renderPreview() {
+    var fullName = [state.firstName, state.lastName].filter(Boolean).join(' ');
+    document.querySelectorAll('[data-ob-name]').forEach(function (n) { n.textContent = fullName || 'Ваше имя'; });
+    document.querySelectorAll('[data-ob-avatar]').forEach(function (av) {
+      if (av.dataset.obPhoto === (state.photoUrl || '')) {
+        if (!state.photoUrl) av.textContent = initials();
+        return;
       }
-      document.addEventListener('pointermove', onPointerMove);
-      document.addEventListener('pointerup', endDrag);
-      document.addEventListener('pointercancel', endDrag);
+      av.dataset.obPhoto = state.photoUrl || '';
+      av.textContent = '';
+      if (state.photoUrl) {
+        var img = document.createElement('img');
+        img.src = state.photoUrl;
+        img.alt = '';
+        img.onerror = function () { av.textContent = initials(); };
+        av.appendChild(img);
+      } else {
+        av.textContent = initials();
+      }
     });
 
-    /* Enter/Space на сфокусированной кнопке — click с detail === 0 (мышь/pointer выше). */
-    el.obGrid.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;
-      var cellEl = e.target.closest && e.target.closest('.ob-cell');
-      if (!cellEl || cellEl.disabled) return;
-      var value = cellEl.getAttribute('aria-pressed') !== 'true';
-      paintCell(cellEl, currentBrushArenaId, value);
+    var line = previewLine();
+    if (el.obPreviewLine) {
+      el.obPreviewLine.innerHTML = '';
+      if (!line.what && !line.where) {
+        el.obPreviewLine.innerHTML = '<span class="ob-card__blanks"><span class="ob-blank">что ведёте</span><span class="ob-blank">где</span></span>';
+      } else {
+        el.obPreviewLine.textContent = [line.what, line.where].filter(Boolean).join(' · ');
+      }
+    }
+
+    var picks = WM.previewStarts(state.week, 3);
+    document.querySelectorAll('[data-ob-times]').forEach(function (box) {
+      box.innerHTML = '';
+      var intro = box !== el.obPreviewTimes;
+      for (var i = 0; i < 3; i++) {
+        var p = intro ? null : picks[i];
+        box.appendChild(p ? timeChip(p.day, p.time, false) : timeChip(intro ? ['чт', 'сб', 'вс'][i] : '', '—:—', true));
+      }
+    });
+    if (el.obPreviewTimes) el.obPreviewTimes.hidden = state.step !== 3;
+  }
+
+  /* ── Шаги ── */
+  function hasService() {
+    return state.selectedServices.length > 0 || state.customServiceNames.length > 0;
+  }
+
+  function canGoBack() {
+    return state.step > 1 || (state.step === 1 && !state.alreadyDone);
+  }
+
+  function syncTelegramBack() {
+    var tg = getTg();
+    if (!tg || !tg.BackButton) return;
+    try {
+      if (!state.done && canGoBack()) tg.BackButton.show();
+      else tg.BackButton.hide();
+    } catch (e) { /* старый клиент */ }
+  }
+
+  function showStep(n) {
+    state.step = n;
+    if (el.obIntro) el.obIntro.hidden = n !== 0;
+    if (el.obSetup) el.obSetup.hidden = n === 0;
+    [el.obStep1, el.obStep2, el.obStep3].forEach(function (pane, idx) {
+      if (pane) pane.hidden = n !== idx + 1;
+    });
+    if (el.obProgress) {
+      Array.prototype.forEach.call(el.obProgress.children, function (seg, idx) {
+        seg.classList.toggle('is-on', idx < n);
+      });
+    }
+    if (el.obStepCount) el.obStepCount.textContent = n ? n + '/3' : '';
+    if (el.obBack) el.obBack.style.visibility = canGoBack() ? 'visible' : 'hidden';
+    if (n !== 2) dismissArenaSearchKeyboard();
+    state.submitError = null;
+    syncTelegramBack();
+    renderPreview();
+    syncCta();
+    try { window.scrollTo(0, 0); } catch (e) { /* */ }
+  }
+
+  function goBack() {
+    if (state.busy || state.done) return;
+    if (state.step > 1) showStep(state.step - 1);
+    else if (state.step === 1 && !state.alreadyDone) showStep(0);
+    haptic('light');
+  }
+
+  function goNext() {
+    if (state.busy || state.done) return;
+    if (state.step === 0) { showStep(1); haptic('light'); return; }
+    if (state.step === 1) {
+      if (!hasService()) { syncCta(); return; }
+      showStep(2);
       haptic('light');
-      syncGridCount();
-      syncCta();
-    });
+      return;
+    }
+    if (state.step === 2) { showStep(3); haptic('light'); return; }
+    submit();
   }
 
-  function syncGridCount() {
-    if (!el.obGridCount) return;
-    var n = totalSlots();
-    el.obGridCount.textContent = n
-      ? (n + ' ' + slotsWord(n) + ' в неделю')
-      : 'Ничего не отмечено';
-  }
-
-  function arenaStepValid() {
-    if (state.arenaMode === 'none' || state.arenaMode === 'online') return true;
-    if (state.cityId == null) return false;
-    if (state.arenaMode === 'single') return state.singleArenaId != null;
-    if (state.arenaMode === 'multi') return state.multiArenaIds.length > 0;
-    return true;
+  function onSkip() {
+    if (state.busy || state.done) return;
+    if (state.step === 2) { showStep(3); return; }
+    if (state.step === 3 && !state.alreadyDone) {
+      /* «Настрою позже» — честно пустая неделя: сервер её принимает, а ссылку тренер
+         получает сразу. Неделю вернувшегося тренера так не трём: кнопки у него нет. */
+      state.week = {};
+      state.openWindow = null;
+      submit();
+    }
   }
 
   function syncCta() {
-    if (!el.obCta) return;
-    if (state.busy) {
-      el.obCta.disabled = true;
+    if (!el.obCta || state.done) return;
+    var step = state.step;
+    var skip = el.obSkip;
+    if (skip) skip.hidden = true;
+    el.obCta.disabled = !!state.busy;
+    if (step === 0) {
+      el.obCta.textContent = 'Начать';
+      note('Около двух минут');
       return;
     }
-    /* Вписанная своя услуга — такой же ответ на вопрос об услугах, как и
-       выбранный чип. Иначе специалист смежной дисциплины, которому наш список
-       не подошёл, упирался бы в заблокированную кнопку. */
-    var hasService = state.selectedServices.length > 0 || state.customServiceNames.length > 0;
-    /* Расписание НЕ обязательно. Консультант или психолог может быть ещё не готов
-       называть часы, а для него это и не главное — держать его на экране до первого
-       отмеченного окна значит не пускать в продукт того, кто уже всё про себя сказал.
-       Сервер пустую неделю принимает: пишет пустые шаблоны и ноль слотов. */
-    var ok = hasService && arenaStepValid();
-    el.obCta.disabled = !ok;
-    if (!hasService) note('Отметьте или впишите хотя бы одну услугу.');
-    else if (!arenaStepValid()) {
-      note(state.cityId == null
-        ? 'Выберите город или переключитесь на «Пока не указывать».'
-        : 'Выберите площадку или переключитесь на «Пока не указывать».');
+    if (step === 1) {
+      el.obCta.textContent = 'Дальше';
+      /* Вписанная своя услуга — такой же ответ, как отмеченная плитка: специалиста
+         смежной дисциплины, которому наш список не подошёл, не держим у закрытой кнопки. */
+      if (!hasService()) {
+        el.obCta.disabled = true;
+        note('Отметьте хотя бы одно занятие');
+      } else {
+        note('');
+      }
+      return;
     }
+    if (step === 2) {
+      el.obCta.textContent = 'Дальше';
+      if (skip && !state.pickedArenaIds.length && state.arenaMode !== 'online') {
+        skip.hidden = false;
+        skip.textContent = 'Пропустить';
+      }
+      note('');
+      return;
+    }
+    /* Шаг 3. Расписание необязательно: сервер пустую неделю принимает. */
+    el.obCta.textContent = state.alreadyDone ? 'Сохранить' : 'Получить ссылку';
+    if (skip && !state.alreadyDone && totalSlots() > 0) {
+      skip.hidden = false;
+      skip.textContent = 'Настрою позже';
+    }
+    if (state.busy) note('Сохраняем…');
     else if (state.submitError) note(state.submitError, true);
-    else if (!totalSlots()) note('Время можно не отмечать — расписание необязательно.');
     else note('');
   }
 
@@ -2126,91 +2124,46 @@
         state.arenas = data.arenas || [];
         state.durationMinutes = data.duration_minutes || 60;
         state.alreadyDone = !!data.already_done;
-        /* Разбор недели: слот попадает в сетку, только если а) лежит на своей часовой сетке
-           и б) его площадка входит в первые три различные площадки недели — столько кистей
-           сетка умеет показать сразу. Остальное уезжает в state.carried и возвращается на
-           сервер нетронутым — раньше вторая площадка внутри дня терялась целиком. */
-        var byId = function (id) { return arenaById(id); };
-        var flatSlots = [];
+        /* Разбор недели: каждый сохранённый старт ложится как есть — со своей минутой,
+           площадкой и длительностью. Отмеченные площадки — те, что встречаются в неделе. */
+        var picked = [];
+        state.week = {};
         (data.week || []).forEach(function (d) {
           var dow = d.day_of_week;
           if (!d.slots) {
             /* Старый ответ без slots — читаем часы, как читали раньше. */
+            var legacyArena = d.arena_id != null ? d.arena_id : null;
             (d.hours || []).forEach(function (h) {
-              var legacyArena = d.arena_id != null ? d.arena_id : null;
-              flatSlots.push({
-                dow: dow,
-                startMinute: h * 60 + arenaOffset(byId(legacyArena)),
-                durationMinutes: null,
-                arenaId: legacyArena,
-              });
+              dayMap(dow, true)[h * 60 + WM.arenaOffset(arenaById(legacyArena))] = { a: legacyArena, d: null };
             });
+            if (legacyArena != null && picked.indexOf(legacyArena) < 0) picked.push(legacyArena);
             return;
           }
           d.slots.forEach(function (raw) {
-            flatSlots.push({
-              dow: dow,
-              startMinute: raw.start_minute,
-              durationMinutes: raw.duration_minutes != null ? raw.duration_minutes : null,
-              arenaId: raw.arena_id != null ? raw.arena_id : null,
-            });
+            var aid = raw.arena_id != null ? raw.arena_id : null;
+            dayMap(dow, true)[raw.start_minute] = {
+              a: aid,
+              d: raw.duration_minutes != null ? raw.duration_minutes : null,
+            };
+            if (aid != null && picked.indexOf(aid) < 0) picked.push(aid);
           });
         });
-
-        var paintableArenas = [];
-        flatSlots.forEach(function (slot) {
-          if (
-            slot.arenaId != null &&
-            paintableArenas.indexOf(slot.arenaId) < 0 &&
-            paintableArenas.length < MAX_BRUSH_ARENAS &&
-            slotFitsGrid(slot.dow, slot, byId)
-          ) {
-            paintableArenas.push(slot.arenaId);
-          }
-        });
-        flatSlots.forEach(function (slot) {
-          var fits = slotFitsGrid(slot.dow, slot, byId);
-          var paintable = fits && (slot.arenaId == null || paintableArenas.indexOf(slot.arenaId) >= 0);
-          if (paintable) {
-            setCellArena(slot.dow, Math.floor(slot.startMinute / 60), slot.arenaId);
-          } else {
-            state.carried.push(slot);
-          }
-        });
-
-        /* Режим при повторном открытии — производная от того, что реально сохранено и
-           уместилось на сетку, а не отдельный флаг. */
-        if (paintableArenas.length > 1) {
-          state.arenaMode = 'multi';
-          state.multiArenaIds = paintableArenas.slice();
-          state.activeArenaTab = paintableArenas[0];
-        } else if (paintableArenas.length === 1) {
-          state.arenaMode = 'single';
-          state.singleArenaId = paintableArenas[0];
-        }
+        pruneEmptyDays();
+        state.weekIsSuggestion = !!data.week_is_suggestion;
+        /* Подсказку перестраиваем шагом в длительность тренера — при 90 минутах серверная
+           подсказка 7:00 и 8:00 сама себе накладывалась бы. */
+        if (state.weekIsSuggestion) state.week = buildSuggestedWeek(state.durationMinutes);
+        state.pickedArenaIds = picked;
+        syncArenaDerived();
         if (state.cityId == null) {
-          var seedArena = arenaById(state.singleArenaId || (state.multiArenaIds[0] || null));
+          var seedArena = arenaById(picked[0] || null);
           if (seedArena && seedArena.city_id != null) state.cityId = Number(seedArena.city_id);
         }
         renderCitySelect();
 
-        var name = (data.first_name || '').trim();
-        if (el.obTitle) {
-          /* Вернувшемуся не обещаем «настроим за две минуты» — он уже настроил.
-             Экран для него это правка профиля и расписания, а не первый запуск. */
-          if (state.alreadyDone) {
-            el.obTitle.textContent = 'Ваши настройки';
-          } else {
-            el.obTitle.textContent = name
-              ? (name + ', настроим за две минуты')
-              : 'Настроим за две минуты';
-          }
-        }
-        var lead = document.querySelector('.ob-lead');
-        if (lead && state.alreadyDone) {
-          lead.textContent = 'Поправьте, если что-то изменилось, — и заберите ссылку для ученика.';
-        }
-        if (el.obCta && state.alreadyDone) el.obCta.textContent = 'Сохранить';
+        state.firstName = (data.first_name || '').trim();
+        state.lastName = (data.last_name || '').trim();
+        state.photoUrl = data.photo_url || null;
 
         state.roleSuggestions = data.specialist_role_suggestions || [];
         /* NULL от сервера = роль ещё не спрашивали. Тогда не подсвечиваем ни один
@@ -2226,18 +2179,17 @@
         state.venueTypes = data.venue_types || [];
 
         if (el.obLoading) el.obLoading.style.display = 'none';
-        if (el.obSetup) el.obSetup.hidden = false;
         if (el.obFoot) el.obFoot.hidden = false;
         renderRole();
         renderVenueTypePicker();
         renderServices();
-        renderArenaMode();
-        renderArenaSingleList();
-        renderArenaMultiList();
+        renderArenaStep();
+        renderArenaList();
         renderArenaTabs();
         syncDurationLock();
-        renderGrid();
-        syncCta();
+        renderWeek();
+        /* Вернувшийся тренер уже видел вступление — сразу к первому шагу. */
+        showStep(state.alreadyDone ? 1 : 0);
       })
       .catch(function (err) {
         if (err && err.message === 'forbidden') {
@@ -2254,11 +2206,9 @@
     state.busy = true;
     state.submitError = null;
     syncCta();
-    note('Сохраняем…');
 
-    /* Каждая закрашенная клетка идёт явным стартом — своя минута (час + смещение её
-       площадки) и своя площадка на слот, а не общий час/арена на день. Только так один
-       день может нести две площадки: часовая сетка-шорткат этого не умеет в принципе. */
+    /* Каждый отмеченный старт идёт как есть — своя минута и своя площадка на слот, а не общий
+       час/арена на день. Только так один день может нести две площадки и занятия по 90 минут. */
     var byDay = {};
     function pushSlot(dow, startMinute, durationMinutes, arenaId) {
       (byDay[dow] = byDay[dow] || []).push({
@@ -2267,18 +2217,8 @@
         arena_id: arenaId,
       });
     }
-    Object.keys(state.week).forEach(function (d) {
-      var dow = parseInt(d, 10);
-      var arenaByHour = state.week[d].arenaByHour;
-      Object.keys(arenaByHour).forEach(function (h) {
-        var hour = parseInt(h, 10);
-        var arenaId = arenaByHour[h];
-        pushSlot(dow, hour * 60 + arenaOffset(arenaById(arenaId)), null, arenaId);
-      });
-    });
-    /* Перенесённые слоты идут как есть — их точное время и есть то, ради чего они перенесены. */
-    state.carried.forEach(function (c) {
-      pushSlot(c.dow, c.startMinute, c.durationMinutes, c.arenaId);
+    eachSlot(function (dow, minute, slot) {
+      pushSlot(dow, minute, slot.d, slot.a);
     });
     var days = Object.keys(byDay).map(function (d) {
       return { day_of_week: parseInt(d, 10), slots: byDay[d] };
@@ -2319,7 +2259,6 @@
         state.busy = false;
         state.submitError = (err && err.message) || 'Не удалось сохранить. Попробуйте ещё раз.';
         syncCta();
-        note(state.submitError, true);
       });
   }
 
@@ -2330,7 +2269,7 @@
         link: body.link || null,
         share_text: body.share_text || null,
         share_body: body.share_body || null,
-        needs_schedule: !!(body.needs_schedule || (state.carried && state.carried.length)),
+        needs_schedule: !!body.needs_schedule,
       }));
     } catch (e) {}
   }
@@ -2341,7 +2280,7 @@
       link: state._doneLink,
       share_text: state._doneShareText,
       share_body: state._doneShareBody,
-      needs_schedule: !!(state.carried && state.carried.length),
+      needs_schedule: !!state._doneNeedsSchedule,
     });
     window.location.href = pageUrl('trainer-profile?task=prices&from=onboarding');
   }
@@ -2376,8 +2315,11 @@
   function showDone(body) {
     body = body || {};
     state.busy = false;
+    state.done = true;
     if (el.obSetup) el.obSetup.hidden = true;
+    if (el.obIntro) el.obIntro.hidden = true;
     if (el.obDone) el.obDone.classList.add('is-on');
+    syncTelegramBack();
 
     var open = body.open_slots_ahead || 0;
     /* Неделю можно было оставить пустой намеренно. Тогда обещать «окна появятся
@@ -2431,7 +2373,8 @@
     /* Только тем, у кого реально есть время вне часовой сетки — остальным строка
        была бы просто шумом (DEC-002: «Точное время» в онбординг не тащим). */
     if (el.obDoneScheduleLink) {
-      var needsSchedule = !!(body.needs_schedule || (state.carried && state.carried.length));
+      var needsSchedule = !!body.needs_schedule;
+      state._doneNeedsSchedule = needsSchedule;
       el.obDoneScheduleLink.hidden = !needsSchedule;
       if (needsSchedule) {
         el.obDoneScheduleLink.onclick = function (e) {
@@ -2502,15 +2445,15 @@
   }
 
   function bind() {
-    if (el.obCta) el.obCta.onclick = submit;
-    bindGridDrag();
-    if (el.obGridMore) {
-      el.obGridMore.onclick = function () {
-        state.hoursExpanded = !state.hoursExpanded;
-        el.obGridMore.textContent = state.hoursExpanded ? 'Свернуть часы' : 'Показать больше часов';
-        renderGrid();
-      };
+    if (el.obCta) el.obCta.onclick = goNext;
+    if (el.obSkip) el.obSkip.onclick = onSkip;
+    if (el.obBack) el.obBack.onclick = goBack;
+    var tg = getTg();
+    if (tg && tg.BackButton && typeof tg.BackButton.onClick === 'function') {
+      try { tg.BackButton.onClick(goBack); } catch (eBk) { /* старый клиент */ }
     }
+    if (el.obRoleEdit) el.obRoleEdit.onclick = toggleRoleBox;
+    if (el.obWindowClear) el.obWindowClear.onclick = clearOpenWindow;
     if (el.obCity) {
       el.obCity.onchange = function () { setCity(el.obCity.value); };
     }
@@ -2525,20 +2468,13 @@
         }
       });
     }
-    if (el.obArenaMode) {
-      Array.prototype.forEach.call(el.obArenaMode.querySelectorAll('[data-arena-mode]'), function (btn) {
-        btn.onclick = function () { setArenaMode(btn.getAttribute('data-arena-mode')); };
-      });
-    }
     bindArenaSearchMobile();
-    if (el.obArenaSingleSearch) el.obArenaSingleSearch.oninput = renderArenaSingleList;
-    if (el.obArenaMultiSearch) el.obArenaMultiSearch.oninput = renderArenaMultiList;
+    if (el.obArenaSearch) el.obArenaSearch.oninput = renderArenaList;
     if (el.obArenaCreateSubmit) {
       el.obArenaCreateSubmit.onclick = function () { submitArenaCreate(false); };
     }
     if (el.obArenaCreateCancel) el.obArenaCreateCancel.onclick = closeArenaCreate;
 
-    if (el.obServiceAddBtn) el.obServiceAddBtn.onclick = openServiceAdd;
     if (el.obServiceAddSubmit) el.obServiceAddSubmit.onclick = addCustomService;
     if (el.obServiceAddCancel) el.obServiceAddCancel.onclick = closeServiceAdd;
     if (el.obServiceAddInput) {

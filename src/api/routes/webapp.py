@@ -9072,6 +9072,7 @@ async def get_trainer_onboarding_quick_setup(
     Returns ``already_done`` when the trainer already has a weekly template, so re-opening the
     link lands on the share step instead of re-asking a question they answered.
     """
+    from src.application.site_trainers import trainer_photo_url
     from src.application.trainer_quick_setup_use_cases import (
         DEFAULT_SESSION_DURATION_MINUTES,
         suggested_week,
@@ -9238,6 +9239,7 @@ async def get_trainer_onboarding_quick_setup(
     trainer = await get_trainer(session, trainer_id) or {}
     profile = trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {}
     first_name = (profile.get("first_name") or "").strip()
+    last_name = (profile.get("last_name") or "").strip()
     city_id = int(profile["city_id"]) if profile.get("city_id") is not None else None
     distinct_arenas_in_week = {
         s["arena_id"]
@@ -9249,6 +9251,9 @@ async def get_trainer_onboarding_quick_setup(
     return {
         "trainer_id": trainer_id,
         "first_name": first_name,
+        # Имя, фамилия и фото — для мини-карточки «как увидит ученик» над шагами онбординга.
+        "last_name": last_name,
+        "photo_url": trainer_photo_url(trainer),
         "services": services,
         "selected_service_ids": selected,
         "selected_services": selected_service_formats,

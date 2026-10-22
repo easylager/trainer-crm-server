@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; }
+  body { width: 600px; background: #F1F3F2; font-family: 'Golos Text', sans-serif; color: #101617; }
+  .wrap { padding: 28px 28px 30px; display: flex; flex-direction: column; gap: 22px; }
+  .cap { font-size: 19px; font-weight: 600; color: #3D4A4A; display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .n { width: 30px; height: 30px; border-radius: 50%; background: #101617; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .card { background: #fff; border-radius: 22px; padding: 22px; display: flex; flex-direction: column; gap: 18px; }
+  .who { display: flex; gap: 16px; align-items: center; }
+  .av { width: 64px; height: 64px; border-radius: 50%; background: #CFD8DA; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 22px; }
+  .name { font-size: 24px; font-weight: 600; }
+  .line { font-size: 18px; color: #5E6B6B; margin-top: 2px; }
+  .times { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .t { height: 70px; border-radius: 14px; background: #F1F3F2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .t small { font-size: 15px; color: #5E6B6B; }
+  .t b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .t.on { background: #101617; color: #fff; }
+  .t.on small { color: #C9D2D2; }
+  .btn { height: 60px; border-radius: 14px; background: #45B9BB; color: #04262A; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; }
+  .note { background: #fff; border-radius: 22px; padding: 18px 22px; display: flex; gap: 16px; align-items: flex-start; }
+  .ok { width: 44px; height: 44px; border-radius: 50%; background: #101617; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .note b { display: block; font-size: 20px; font-weight: 600; }
+  .note span { display: block; font-size: 19px; margin-top: 3px; }
+  .note small { display: block; font-size: 17px; color: #5E6B6B; margin-top: 3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <div class="cap"><span class="n">1</span>Ученик выбирает время</div>
+    <div class="card">
+      <div class="who">
+        <div class="av">АС</div>
+        <div><div class="name">Анна Соколова</div><div class="line">Фигурное катание · «Юность»</div></div>
+      </div>
+      <div class="times">
+        <div class="t"><small>чт</small><b>18:00</b></div>
+        <div class="t on"><small>сб</small><b>10:00</b></div>
+        <div class="t"><small>вс</small><b>11:30</b></div>
+      </div>
+      <div class="btn">Записаться на&nbsp;сб, 10:00</div>
+    </div>
+  </div>
+  <div>
+    <div class="cap"><span class="n">2</span>Вам приходит запись</div>
+    <div class="note">
+      <div class="ok"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#45B9BB" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4 4 10-10"/></svg></div>
+      <div><b>Новая запись</b><span>Мария Ковальчук · сб, 10:00</span><small>Фигурное катание · «Юность»</small></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
