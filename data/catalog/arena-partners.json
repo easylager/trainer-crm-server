@@ -20,6 +20,29 @@
       ],
       "valid_from": "2026-10-21",
       "valid_to": null
+    },
+    {
+      "slug": "hinkali-spot-zamok",
+      "arena_ids": [3],
+      "kind": "food",
+      "name": "Хинкальня",
+      "line": "Хинкали",
+      "where": "фудкорт, в этом же здании",
+      "hours": "Каждый день 10:00–22:00",
+      "offer": "4 хинкали за 1 коп.",
+      "offer_note": "со свининой и зеленью, если заказ от 39 рублей",
+      "code": "GLIDE",
+      "phone": "+375 44 585 89 76",
+      "instagram": "https://www.instagram.com/hinkali.spot",
+      "maps_url": "https://2gis.by/minsk/firm/70000001102898666",
+      "logo": "partners/hinkali-spot/logo.jpg",
+      "photos": [
+        "partners/hinkali-spot/front.jpg",
+        "partners/hinkali-spot/food.jpg",
+        "partners/hinkali-spot/table.jpg"
+      ],
+      "valid_from": "2026-10-22",
+      "valid_to": null
     }
   ]
 }

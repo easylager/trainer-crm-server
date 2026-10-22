@@ -13,6 +13,8 @@
     walk: 'M13 4.5a1.5 1.5 0 1 0 0-.01M10 21l2-6 3 3v3M9 12l1.5-4 3.5 1 2 3 2 1M10.5 8L7 10v3',
     clock: 'M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16M12 8v4l3 2',
     pin: 'M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11zM12 8a2 2 0 1 0 0 4a2 2 0 1 0 0-4',
+    phone: 'M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A15 15 0 0 1 4.5 5.5a2 2 0 0 1 2-2z',
+    ig: 'M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm5 5a4 4 0 1 0 0 8a4 4 0 0 0 0-8zm6.5-1.8h.01',
   };
 
   var dialog = null;
@@ -111,8 +113,9 @@
     head.appendChild(names);
     sec.appendChild(head);
 
-    var offer = el('div', 'gp-offer');
-    offer.appendChild(el('b', 'gp-offer__big', p.offer));
+    var long = String(p.offer || '').length > 10;
+    var offer = el('div', 'gp-offer' + (long ? ' gp-offer--long' : ''));
+    offer.appendChild(el('b', 'gp-offer__big' + (long ? ' gp-offer__big--long' : ''), p.offer));
     var offerText = el('span', 'gp-offer__text');
     if (p.offer_note) offerText.appendChild(el('strong', '', p.offer_note));
     offerText.appendChild(el('span', '', 'Покажите экран на кассе'));
@@ -123,6 +126,26 @@
     if (p.where) facts.appendChild(fact('walk', capitalize(p.where)));
     if (p.hours) facts.appendChild(fact('clock', p.hours));
     if (facts.childNodes.length) sec.appendChild(facts);
+
+    var contacts = el('div', 'gp-contacts');
+    if (p.phone && p.phone_tel) {
+      var tel = el('a', 'gp-contact');
+      tel.href = p.phone_tel;
+      tel.appendChild(icon('phone'));
+      tel.appendChild(el('span', '', p.phone));
+      contacts.appendChild(tel);
+    }
+    if (p.instagram) {
+      var ig = el('a', 'gp-contact');
+      ig.href = p.instagram;
+      ig.target = '_blank';
+      ig.rel = 'noopener nofollow';
+      ig.appendChild(icon('ig'));
+      ig.appendChild(el('span', '', '@' + (p.instagram_handle || 'instagram')));
+      ig.addEventListener('click', function (e) { openExternal(p.instagram, e); });
+      contacts.appendChild(ig);
+    }
+    if (contacts.childNodes.length) sec.appendChild(contacts);
 
     var actions = el('div', 'gp-actions');
     var show = el('button', 'gp-btn gp-btn--main', 'Показать на кассе');
@@ -161,8 +184,9 @@
       logo.alt = p.name;
       mid.appendChild(logo);
     }
-    mid.appendChild(el('span', 'gp-counter__for', 'Скидка в ' + p.name));
-    mid.appendChild(el('span', 'gp-counter__big', p.offer));
+    var long = String(p.offer || '').length > 10;
+    mid.appendChild(el('span', 'gp-counter__for', (/[−\-]\d+\s*%/.test(p.offer) ? 'Скидка в ' : 'Акция в ') + p.name));
+    mid.appendChild(el('span', 'gp-counter__big' + (long ? ' gp-counter__big--long' : ''), p.offer));
     if (p.code) {
       var code = el('div', 'gp-counter__code');
       code.appendChild(el('span', 'gp-counter__kicker', 'Промокод'));

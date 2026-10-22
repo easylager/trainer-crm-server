@@ -12,15 +12,24 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from src.shared.phone_guard import sanitize_public_phone, tel_href
+from src.shared.public_display import format_phone_display
+
 _REGISTRY_PATH = Path(__file__).resolve().parents[2] / "data" / "catalog" / "arena-partners.json"
 _STATIC_PREFIX = "/static/webapp/"
 MAX_PARTNERS_PER_ARENA = 3
 PARTNER_KINDS = frozenset({"food", "coffee", "shop", "service"})
+_IG_HANDLE = re.compile(
+    r"(?:https?://)?(?:www\.)?instagram\.com/([A-Za-z0-9._]+)/?",
+    re.I,
+)
+_IG_RESERVED = frozenset({"p", "reel", "reels", "stories", "explore", "accounts"})
 
 
 def _parse_date(raw: Any) -> date | None:
@@ -39,6 +48,31 @@ def _asset(path: Any) -> str | None:
     return _STATIC_PREFIX + rel
 
 
+def _instagram(raw: Any) -> tuple[str | None, str | None]:
+    text = str(raw or "").strip()
+    if not text:
+        return None, None
+    if text.startswith("@"):
+        handle = text[1:].strip().strip("/")
+    else:
+        match = _IG_HANDLE.search(text)
+        handle = match.group(1) if match else ""
+    handle = handle.strip("/")
+    if not handle or handle.lower() in _IG_RESERVED or "/" in handle:
+        return None, None
+    return f"https://www.instagram.com/{handle}", handle
+
+
+def _phone(raw: Any) -> tuple[str | None, str | None]:
+    cleaned = sanitize_public_phone(raw)
+    if not cleaned:
+        return None, None
+    href = tel_href(cleaned)
+    if not href:
+        return None, None
+    return format_phone_display(cleaned), "tel:" + href
+
+
 def _public(entry: dict[str, Any]) -> dict[str, Any] | None:
     slug = str(entry.get("slug") or "").strip()
     name = str(entry.get("name") or "").strip()
@@ -47,6 +81,8 @@ def _public(entry: dict[str, Any]) -> dict[str, Any] | None:
         return None
     kind = str(entry.get("kind") or "").strip()
     photos = [u for u in (_asset(p) for p in entry.get("photos") or []) if u]
+    phone, phone_tel = _phone(entry.get("phone"))
+    instagram, instagram_handle = _instagram(entry.get("instagram"))
     return {
         "slug": slug,
         "kind": kind if kind in PARTNER_KINDS else "service",
@@ -58,6 +94,10 @@ def _public(entry: dict[str, Any]) -> dict[str, Any] | None:
         "offer_note": str(entry.get("offer_note") or "").strip(),
         "code": str(entry.get("code") or "").strip(),
         "maps_url": str(entry.get("maps_url") or "").strip() or None,
+        "phone": phone,
+        "phone_tel": phone_tel,
+        "instagram": instagram,
+        "instagram_handle": instagram_handle,
         "logo": _asset(entry.get("logo")),
         "photos": photos[:3],
     }
