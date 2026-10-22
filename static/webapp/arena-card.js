@@ -213,6 +213,26 @@
     return '<div class="arena-h-row__tools">' + watch + ticket + '</div>';
   }
 
+  /**
+   * Пришли колокольчиком с сайта — подписка сразу, без второго нажатия. Один раз на открытие:
+   * перезагрузка WebView с той же ссылкой не включает её снова, если человек успел выключить.
+   */
+  function maybeAutoWatch(start) {
+    if (typeof M.watchRequested !== 'function' || !M.watchRequested(global.location.search || '', start)) return;
+    if (!state.card || !skatingCard() || seasonRemindActive()) return;
+    if (state.iceWatchKinds && state.iceWatchKinds.sessions) {
+      var tg = global.Telegram && global.Telegram.WebApp;
+      if (tg && tg.showAlert) tg.showAlert('🔔 Напоминание об этом катке уже включено.');
+      return;
+    }
+    var key = 'glide.autowatch.' + state.card.id;
+    try {
+      if (global.sessionStorage.getItem(key)) return;
+      global.sessionStorage.setItem(key, '1');
+    } catch (e) { /* без хранилища — просто подписываем */ }
+    subscribeIceWatch('sessions');
+  }
+
   function toggleIceWatch(kind) {
     kind = kind || 'sessions';
     if (state.iceWatchKinds && state.iceWatchKinds[kind]) {
@@ -2373,6 +2393,7 @@
         state.trainers = { items: [], groups: [] };
         syncIceWatches().then(function () {
           paint();
+          maybeAutoWatch(start);
         });
         reloadSessions();
         reloadTrainers();

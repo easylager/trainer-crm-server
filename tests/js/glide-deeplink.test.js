@@ -192,3 +192,20 @@ describe('GlideDeepLink.maybeEarlyRedirect', () => {
     assert.equal(replaced, '');
   });
 });
+
+describe('колокольчик с сайта: arena_<id>_watch', () => {
+  const G = load();
+
+  it('ведёт в карточку Mini App с watch=1', () => {
+    assert.deepEqual(G.deepLinkTarget('arena_31_watch'), { key: 'arena', path: 'arena?ref=31&watch=1' });
+    assert.deepEqual(G.deepLinkTarget('arena_31'), { key: 'arena', path: 'arena?ref=31' });
+  });
+
+  it('даже при карточке-странице остаётся в Mini App: подписка живёт там', async () => {
+    const target = await G.resolveArenaDeepLinkTarget('arena_31_watch', {
+      serverPlaceCard: true,
+      fetchPublicArenaCard: () => ({ public_path: '/p/orsha/orsha-arena' }),
+    });
+    assert.deepEqual(target, { key: 'arena', path: 'arena?ref=31&watch=1' });
+  });
+});

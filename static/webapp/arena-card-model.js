@@ -606,7 +606,7 @@
     if (ref) return String(ref).trim();
     var sp = startParam != null ? String(startParam).trim() : '';
     if (!sp) return null;
-    var withSession = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
+    var withSession = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?(?:_watch)?$/i.exec(sp);
     if (withSession) return withSession[1];
     var m = /^arena[_-](.+)$/i.exec(sp);
     if (m) return m[1];
@@ -615,8 +615,15 @@
 
   /** ``arena_42_s_7`` → ``"7"``. Сеанс в диплинке, когда в query его ещё нет. */
   function sessionIdFromStartParam(startParam) {
-    var m = /^arena[_-][1-9][0-9]*_s_([1-9][0-9]*)$/i.exec(String(startParam || '').trim());
+    var m = /^arena[_-][1-9][0-9]*_s_([1-9][0-9]*)(?:_watch)?$/i.exec(String(startParam || '').trim());
     return m ? m[1] : null;
+  }
+
+  /** Колокольчик с сайта: ``?watch=1`` или ``arena_31_watch`` — включить напоминание при открытии. */
+  function watchRequested(search, startParam) {
+    var qp = new URLSearchParams(search || '');
+    if (qp.get('watch') === '1') return true;
+    return /^arena[_-][1-9][0-9]*(?:_s_[1-9][0-9]*)?_watch$/i.test(String(startParam || '').trim());
   }
 
   /** Окно ленты сеансов на карточке: сегодня … сегодня+13 (как reloadSessions). */
@@ -1403,6 +1410,7 @@
     buildBookingHref: buildBookingHref,
     parseArenaRef: parseArenaRef,
     sessionIdFromStartParam: sessionIdFromStartParam,
+    watchRequested: watchRequested,
     dayForSession: dayForSession,
     ARENA_SESSION_WINDOW_DAYS: ARENA_SESSION_WINDOW_DAYS,
     nearestScheduleSlot: nearestScheduleSlot,

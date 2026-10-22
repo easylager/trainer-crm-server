@@ -43,14 +43,16 @@
 
   function parseArenaDeepLink(sp) {
     sp = String(sp || '').trim();
-    var arena = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
+    // ``arena_31_watch`` — колокольчик с сайта: открыть карточку и сразу включить напоминание.
+    var arena = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?(_watch)?$/i.exec(sp);
     if (!arena) return null;
-    return { arenaId: arena[1], sessionId: arena[2] || null };
+    return { arenaId: arena[1], sessionId: arena[2] || null, watch: !!arena[3] };
   }
 
-  function arenaLegacyMiniAppPath(arenaId, sessionId) {
+  function arenaLegacyMiniAppPath(arenaId, sessionId, watch) {
     var arenaPath = 'arena?ref=' + encodeURIComponent(String(arenaId));
     if (sessionId != null) arenaPath += '&s=' + encodeURIComponent(String(sessionId));
+    if (watch) arenaPath += '&watch=1';
     return arenaPath;
   }
 
@@ -68,8 +70,9 @@
     options = options || {};
     var parsed = parseArenaDeepLink(sp);
     if (!parsed) return Promise.resolve(null);
-    var legacy = { key: 'arena', path: arenaLegacyMiniAppPath(parsed.arenaId, parsed.sessionId) };
-    if (!options.serverPlaceCard) return Promise.resolve(legacy);
+    var legacy = { key: 'arena', path: arenaLegacyMiniAppPath(parsed.arenaId, parsed.sessionId, parsed.watch) };
+    // Подписка живёт в карточке Mini App — со страницей /p/ её не включить.
+    if (!options.serverPlaceCard || parsed.watch) return Promise.resolve(legacy);
     var fetchCard = options.fetchPublicArenaCard;
     if (typeof fetchCard !== 'function') return Promise.resolve(legacy);
     return Promise.resolve()
@@ -103,7 +106,7 @@
     sp = String(sp || '').trim();
     var parsed = parseArenaDeepLink(sp);
     if (parsed) {
-      return { key: 'arena', path: arenaLegacyMiniAppPath(parsed.arenaId, parsed.sessionId) };
+      return { key: 'arena', path: arenaLegacyMiniAppPath(parsed.arenaId, parsed.sessionId, parsed.watch) };
     }
     if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
     var coach = trainerDeepLinkTarget(sp);

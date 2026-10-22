@@ -1172,3 +1172,14 @@ describe('TASK-290: живой остаток вместо полоски', () =
     assert.equal(scheduleInviteHint(false, true, true), 'Под временем — сколько билетов осталось.');
   });
 });
+
+describe('watchRequested — колокольчик с сайта', () => {
+  const M = loadModel();
+
+  it('узнаёт ?watch=1 и arena_<id>_watch, не путая ref', () => {
+    assert.equal(M.watchRequested('?ref=31&watch=1', ''), true);
+    assert.equal(M.watchRequested('', 'arena_31_watch'), true);
+    assert.equal(M.watchRequested('?ref=31', 'arena_31'), false);
+    assert.equal(M.parseArenaRef('', 'arena_31_watch'), '31');
+  });
+});

@@ -2132,7 +2132,8 @@ def render_place_body_b(
 
     if card.get("id") is not None:
         bell = public_telegram_cta_url(
-            base_url, start_param=f"arena_{int(card['id'])}", surface="place_page",
+            # «_watch»: Mini App откроет карточку и сразу включит напоминание о сеансах.
+            base_url, start_param=f"arena_{int(card['id'])}_watch", surface="place_page",
             city_id=city_id, arena_id=int(card["id"]),
         )
         if bell:

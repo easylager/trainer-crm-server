@@ -1095,10 +1095,11 @@
       return G.deepLinkTarget(sp);
     }
     sp = String(sp || '').trim();
-    var arena = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
+    var arena = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?(_watch)?$/i.exec(sp);
     if (arena) {
       var arenaPath = 'arena?ref=' + arena[1];
       if (arena[2]) arenaPath += '&s=' + arena[2];
+      if (arena[3]) arenaPath += '&watch=1';
       return { key: 'arena', path: arenaPath };
     }
     // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
