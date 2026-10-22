@@ -294,8 +294,9 @@ class KobrinLdsParser(IceParser):
 # Пинск — arena_id 24 — parser_key pinsk_volna_v1
 # ---------------------------------------------------------------------------
 
+# Пробел между днём и датой на polessu.by то есть, то нет: «Четверг 22.10.2026» и «Четверг22.10.2026».
 _PINSK_DAY_DATE = re.compile(
-    r"(Понедельник|Вторник|Среда|Четверг|Пятница|Суббота|Воскресенье)\s+(\d{2})\.(\d{2})\.(\d{4})",
+    r"(Понедельник|Вторник|Среда|Четверг|Пятница|Суббота|Воскресенье)\s*(\d{2})\.(\d{2})\.(\d{4})",
     re.IGNORECASE,
 )
 _PINSK_TIME_RANGE = re.compile(r"(\d{1,2})[.:](\d{2})\s*[-–—]+\s*(\d{1,2})[.:](\d{2})")
@@ -335,7 +336,7 @@ def _pinsk_prices(html: str) -> tuple[int | None, int | None, int | None]:
 class PinskVolnaParser(IceParser):
     """УСК «Волна» / Ледовая арена ПолесГУ (Пинск).
 
-    ``polessu.by`` writes the week as free-text «День DD.MM.YYYY» headers
+    ``polessu.by`` writes the week as free-text «ДеньDD.MM.YYYY» headers, with or without a space,
     followed by ``HH.MM – HH.MM`` intervals inside the block between
     «Расписание массового катания» and «В расписании возможны изменения».
     Prices are a real HTML tariff table on a separate page.

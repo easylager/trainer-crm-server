@@ -10,6 +10,7 @@ result against that ground truth — same pattern as
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
@@ -157,3 +158,30 @@ async def test_pinsk_volna_matches_expected_horizon() -> None:
         assert slot.price_adult_minor == gold["price_adult_minor"] == 440
         assert slot.price_child_minor == gold["price_child_minor"] == 418
         assert slot.price_rental_minor == gold["price_rental_minor"] == 420
+
+
+@pytest.mark.asyncio
+async def test_pinsk_volna_reads_weekday_glued_to_the_date(tmp_path: Path) -> None:
+    """Неделя 19–25 окт 2026: часть дней на сайте без пробела перед датой."""
+    schedule = """
+    <p>Расписание массового катания</p>
+    <p>Понедельник19.10.2026</p>
+    <p>09.45 – 10.30</p>
+    <p>Четверг22.10.2026</p>
+    <p>10.00 – 10.45</p>
+    <p>21.00 – 21.45</p>
+    <p>Среда 21.10.2026</p>
+    <p>11.00 – 11.45</p>
+    <p>В расписании возможны изменения</p>
+    """
+    (tmp_path / "schedule.html").write_text(schedule, encoding="utf-8")
+    shutil.copy(_FIXTURES / "pinsk-volna" / "tariff.html", tmp_path / "tariff.html")
+    cfg = dict(PINSK_VOLNA_CONFIG)
+    cfg["fixture_dir"] = str(tmp_path)
+    job = _job(arena_id=24, parser_key=PARSER_KEY_PINSK_VOLNA, config=cfg, job_id=105)
+    extraction = await PinskVolnaParser().extract(job)
+    keys = {(slot.local_date, slot.starts_at_local) for slot in extraction.slots}
+    assert ("2026-10-19", "09:45") in keys
+    assert ("2026-10-22", "10:00") in keys
+    assert ("2026-10-22", "21:00") in keys
+    assert ("2026-10-21", "11:00") in keys
