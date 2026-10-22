@@ -4,9 +4,7 @@ Client bot handlers: /start and catalog. Public entry; no auth.
 import asyncio
 import html
 import logging
-import random
 import re
-import string
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -52,7 +50,6 @@ from src.application.client_username_enrich import sync_client_telegram_username
 from src.application.client_use_cases import (
     apply_certificate_recipient_to_client,
     attach_telegram_id_to_client,
-    get_client_by_phone,
     get_client_id_by_telegram_id,
     get_client_phone_for_webapp,
     get_client_telegram_id,
@@ -209,7 +206,6 @@ CLIENT_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 _booking_state: dict[int, dict] = {}
 
 # Link-by-phone: trainer added client without Telegram; user attaches telegram_id after code verification.
-_link_phone_state: dict[int, dict] = {}  # telegram_id -> { "step": "phone"|"code", "client_id": int, "code": str }
 
 # Request (leave demand) flow: telegram_id -> { city_id, service_id }; next step = comment or skip
 _request_state: dict[int, dict] = {}
@@ -643,10 +639,27 @@ async def cmd_start(message: Message) -> None:
             if not allowed:
                 await message.answer(msg.CLIENT_WELCOME_BIND_FAILED)
                 return
-            if row_tg is None:
-                if other is not None and int(other) != int(bind_client_id):
-                    await message.answer(msg.CLIENT_WELCOME_BIND_OTHER_PROFILE)
+            if row_tg is None and other is not None and int(other) != int(bind_client_id):
+                # У открывшего уже есть свой профиль: ученик тренера становится ещё одним
+                # профилем в его приложении (мама, а ссылка — на Льва), а не отказом.
+                from src.application.client_profile_use_cases import link_guardian_profile
+
+                async with async_session_factory() as db_session:
+                    linked = await link_guardian_profile(db_session, telegram_id, int(bind_client_id))
+                    r_name = await db_session.execute(
+                        text("SELECT first_name FROM clients WHERE id = :cid"),
+                        {"cid": int(bind_client_id)},
+                    )
+                    bound_name = (r_name.scalar() or "").strip()
+                    await db_session.commit()
+                if not linked:
+                    await message.answer(msg.CLIENT_WELCOME_BIND_PROFILE_LIMIT)
                     return
+                await message.answer(
+                    msg.CLIENT_WELCOME_BIND_ADDED_PROFILE.format(name=html.escape(bound_name or "Ученик")),
+                    parse_mode=ParseMode.HTML,
+                )
+            elif row_tg is None:
                 async with async_session_factory() as db_session:
                     ok = await attach_telegram_id_to_client(
                         db_session,
@@ -1696,7 +1709,6 @@ async def on_book(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as db_session:
         session_data = await get_session(telegram_id, db_session)
-        client_id = await get_client_id_by_telegram_id(db_session, telegram_id)
     trainer_id = (session_data or {}).get("selected_trainer_id") if session_data else None
     if not trainer_id:
         await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
@@ -1712,12 +1724,6 @@ async def on_book(callback: CallbackQuery) -> None:
                 ),
             )
             return
-    # No client yet: offer link-by-phone (trainer may have added them by phone)
-    if client_id is None:
-        _link_phone_state[telegram_id] = {"step": "phone"}
-        await callback.message.answer(msg.CLIENT_LINK_PHONE_PROMPT)
-        return
-
     chat_id = callback.message.chat.id if callback.message.chat else 0
     await callback.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     text, keyboard = await _client_slots_content(trainer_id, client_telegram_id=telegram_id)
@@ -3409,72 +3415,6 @@ async def on_catalog_web_app_data(message: Message) -> None:
         msg.CLIENT_TRAINER_SELECTED.format(name=name),
         reply_markup=_trainer_book_markup(base, int(trainer_id), include_catalog_alternative=True),
     )
-
-
-def _has_link_phone_state(message: Message) -> bool:
-    tid = message.from_user.id if message.from_user else 0
-    return tid in _link_phone_state
-
-
-@router.message(F.text, _has_link_phone_state)
-async def on_link_phone_message(message: Message) -> None:
-    """Handle phone or verification code when user is in link-by-phone flow."""
-    telegram_id = message.from_user.id if message.from_user else 0
-    state = _link_phone_state.get(telegram_id)
-    if not state:
-        return
-    text = (message.text or "").strip()
-    if not text:
-        return
-
-    if state.get("step") == "phone":
-        async with async_session_factory() as db_session:
-            client = await get_client_by_phone(db_session, text)
-        if not client:
-            await message.answer(msg.CLIENT_LINK_PHONE_NOT_FOUND)
-            return
-        if client.get("telegram_id") is not None:
-            await message.answer(msg.CLIENT_LINK_PHONE_ALREADY_LINKED)
-            return
-        code = "".join(random.choices(string.digits, k=4))
-        _link_phone_state[telegram_id] = {"step": "code", "client_id": client["id"], "code": code}
-        # TODO: send real SMS; for now code in bot message. Never log the code unless DEBUG (secrets in logs policy).
-        if Settings().debug:
-            logger.info(
-                "Phone verification code for client_id=%s (debug only): %s",
-                client["id"],
-                code,
-            )
-        else:
-            logger.info("Phone verification code issued for client_id=%s", client["id"])
-        dev_hint = msg.CLIENT_LINK_CODE_DEV.format(code=code)
-        await message.answer(msg.CLIENT_LINK_CODE_SENT + dev_hint, parse_mode=ParseMode.HTML)
-        return
-
-    if state.get("step") == "code":
-        if text != state.get("code"):
-            await message.answer(msg.CLIENT_LINK_CODE_WRONG)
-            return
-        client_id = state.get("client_id")
-        if not client_id:
-            _link_phone_state.pop(telegram_id, None)
-            await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
-            return
-        un_link = None
-        if message.from_user and (message.from_user.username or "").strip():
-            un_link = (message.from_user.username or "").strip()[:64]
-        async with async_session_factory() as db_session:
-            ok = await attach_telegram_id_to_client(
-                db_session, client_id, telegram_id, telegram_username=un_link
-            )
-            await sync_client_telegram_username_from_client_bot(db_session, telegram_id)
-            await db_session.commit()
-        _link_phone_state.pop(telegram_id, None)
-        if not ok:
-            await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
-            return
-        await message.answer(msg.CLIENT_LINK_SUCCESS)
-        return
 
 
 @router.callback_query(lambda c: c.data and (c.data.startswith("RSY:") or c.data.startswith("RSN:")))

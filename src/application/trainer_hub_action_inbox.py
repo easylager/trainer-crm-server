@@ -727,6 +727,7 @@ def build_trainer_hub_action_inbox(
     show_center_inbox: bool = False,
     active_hint_snoozes: dict[str, Any] | None = None,
     feature_moment_facts: dict[str, Any] | None = None,
+    client_matches: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Build unified hub inbox payload for bootstrap and inbox-count endpoint.
@@ -735,6 +736,8 @@ def build_trainer_hub_action_inbox(
     ``feature_moment_facts`` — see ``trainer_feature_moments.fetch_trainer_feature_moment_facts``
     (TASK-030); caller fetches it once (or omits it entirely when the gate the resolver
     would apply anyway is already known false) and passes the raw facts through here.
+    ``client_matches`` — ``trainer_client_matches.list_client_matches``: someone came by
+    themselves with the number of a client from the trainer's list.
     """
     items: list[dict[str, Any]] = []
     pending_count = 0
@@ -768,6 +771,34 @@ def build_trainer_hub_action_inbox(
                 booking_ids=pending_ids,
             )
         )
+
+    matches = list(client_matches or [])
+    if matches:
+        first = matches[0]
+        who = first.get("client_name") or "Ученик"
+        other = first.get("other_name") or "ученик"
+        n = len(matches)
+        items.append(
+            _inbox_item(
+                item_id="client_match",
+                kind="client_match",
+                # Сразу под записями: пока тренер не ответил, ученик из его списка без
+                # напоминаний, а его история — в другой карточке.
+                priority=112,
+                count=n,
+                title=f"Похоже, {who} — это {other} из вашего списка",
+                subtitle=(
+                    "Тот же номер телефона: один человек или родитель и ребёнок?"
+                    if n == 1
+                    else f"Тот же номер телефона. Ещё {n - 1} {_plural_ru(n - 1, 'совпадение', 'совпадения', 'совпадений')} после этого"
+                ),
+                primary_label="Разобраться",
+                primary_action="client_match",
+                dismissible=False,
+            )
+        )
+        items[-1]["client_name"] = who
+        items[-1]["other_name"] = other
 
     req_n = max(0, int(requests_count))
     if schedule_unlocked and req_n > 0:

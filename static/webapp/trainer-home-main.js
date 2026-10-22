@@ -2323,6 +2323,8 @@
           booking_ids: Array.isArray(raw.booking_ids) ? raw.booking_ids : null,
           primary_action: raw.primary_action || null,
           secondary_action: raw.secondary_action || null,
+          client_name: raw.client_name || '',
+          other_name: raw.other_name || '',
         };
         if (item.kind === 'rhythm') {
           item.candidate = {
@@ -2666,6 +2668,38 @@
           openHubPendingConfirmSheet(pendingIds);
           return;
         }
+        if (item.kind === 'client_match') {
+          if (!window.TrainerClientMatch) return;
+          window.TrainerClientMatch.open({
+            get: getJsonTrainer,
+            post: postJsonTrainer,
+            notify: function(title) {
+              showHubInlineToast(title, '', { kind: 'success' });
+            },
+            onChanged: function(left) {
+              /* «Дела» приходят только с bootstrap — строку правим на месте, без второго запроса. */
+              if (hubServerActionInbox && Array.isArray(hubServerActionInbox.items)) {
+                hubServerActionInbox.items = hubServerActionInbox.items.filter(function(it) {
+                  if (it.id !== 'client_match') return true;
+                  if (left > 0 && left !== it.count) {
+                    it.title = left + ' ' + pluralRu(left, 'совпадение', 'совпадения', 'совпадений') + ' по телефону';
+                    it.subtitle = 'Один человек или родитель и ребёнок?';
+                    it.client_name = '';
+                    it.other_name = '';
+                  }
+                  it.count = left;
+                  return left > 0;
+                });
+                hubServerActionInbox.total_actionable = hubServerActionInbox.items.length;
+              }
+              renderHubSummaryHints();
+              if (typeof loadBookings === 'function') loadBookings();
+            },
+          }).catch(function() {
+            hubToast('Не получилось открыть. Проверьте связь.');
+          });
+          return;
+        }
         if (item.kind === 'requests') {
           navigateTo('trainer-requests');
           return;
@@ -2754,6 +2788,12 @@
             return 'Отправьте ссылку ученику';
           case 'first_students':
             return 'Добавьте своих учеников';
+          case 'client_match': {
+            if (hasN && n > 1) return n + ' ' + pluralRu(n, 'совпадение', 'совпадения', 'совпадений') + ' по телефону';
+            var a = String(item.client_name || '').split(' ')[0];
+            var b = String(item.other_name || '').split(' ')[0];
+            return a && b ? a + ' и ' + b + ' — один человек?' : 'Совпадение по телефону';
+          }
           default:
             break;
         }

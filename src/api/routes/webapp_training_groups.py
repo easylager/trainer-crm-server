@@ -423,6 +423,7 @@ async def post_trainer_training_group_member(
                 body.phone.strip(),
                 first_name=(body.first_name or "").strip(),
                 last_name=(body.last_name or "").strip() or None,
+                trainer_id=int(trainer_id),
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e

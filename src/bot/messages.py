@@ -177,13 +177,6 @@ CLIENT_BOOK_RECORDED = "Запись оформлена."
 CLIENT_BOOK_COMMENT_OR_BUTTON = "Напишите комментарий или нажмите кнопку:"
 
 # Link by phone (trainer added client; user attaches Telegram)
-CLIENT_LINK_PHONE_PROMPT = "Введите номер телефона (как указали тренеру при записи):"
-CLIENT_LINK_PHONE_NOT_FOUND = "Клиент с таким номером не найден. Запишитесь через тренера — тогда вы появитесь здесь."
-CLIENT_LINK_PHONE_ALREADY_LINKED = "Этот номер уже привязан к аккаунту."
-CLIENT_LINK_CODE_SENT = "Код для проверки отправлен на ваш номер. Введите код:"
-CLIENT_LINK_CODE_DEV = " (для проверки код: <code>{code}</code>)"
-CLIENT_LINK_SUCCESS = "Готово! Ваш профиль привязан. Теперь можете записаться к тренеру."
-CLIENT_LINK_CODE_WRONG = "Неверный код. Введите код из сообщения."
 
 # Trainer bot: client completed public invite registration form.
 TRAINER_CLIENT_REGISTERED_NEW_HTML = (
@@ -1564,6 +1557,14 @@ CLIENT_WELCOME_LINK_USED = (
 CLIENT_WELCOME_BIND_OTHER_PROFILE = (
     "Этот Telegram уже привязан к другому профилю в системе. "
     "Если это ошибка — обратитесь к тренеру или в поддержку."
+)
+CLIENT_WELCOME_BIND_ADDED_PROFILE = (
+    "<b>{name}</b> теперь в вашем приложении — профиль переключается на главной. "
+    "Записи и абонементы у каждого свои."
+)
+CLIENT_WELCOME_BIND_PROFILE_LIMIT = (
+    "В вашем приложении уже максимум профилей. "
+    "Напишите тренеру — он поможет."
 )
 CLIENT_WELCOME_BIND_FAILED = (
     "Не удалось привязать профиль. Попросите тренера отправить новую пригласительную ссылку."

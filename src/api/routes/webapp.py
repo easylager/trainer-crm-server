@@ -122,7 +122,6 @@ from src.application.booking_use_cases import (
     ensure_trainer_schedule_arena_link,
     get_trainer_primary_arena_resolved,
     get_trainer_slot_for_mass_client_invite,
-    trainer_client_roster_link_exists,
     is_slot_start_in_past_local,
     get_first_service_id_for_trainer,
 )
@@ -155,7 +154,6 @@ from src.application.trainer_client_registration_notify import (
 from src.application.client_stats_use_cases import get_client_activity_snapshot
 from src.application.client_use_cases import (
     attach_telegram_id_to_client,
-    get_client_by_phone,
     get_client_id_by_telegram_id,
     reset_orphan_client_miniapp_trainer_pointers,
     trainer_id_belongs_to_telegram,
@@ -4202,6 +4200,13 @@ async def get_trainer_hub_bootstrap(
                 feature_moment_facts = await fetch_trainer_feature_moment_facts(session, trainer_id_linked)
             except Exception as exc:
                 partial_errors["feature_moment_facts"] = str(exc)
+        from src.application.trainer_client_matches import list_client_matches
+
+        client_matches: list[dict] = []
+        try:
+            client_matches = await list_client_matches(session, trainer_id_linked)
+        except Exception as exc:
+            partial_errors["client_matches"] = str(exc)
         action_inbox = build_trainer_hub_action_inbox(
             onboarding=onboarding_checklist or {},
             requests_count=req_n,
@@ -4212,6 +4217,7 @@ async def get_trainer_hub_bootstrap(
             show_center_inbox=show_center_inbox,
             active_hint_snoozes=active_hint_snoozes,
             feature_moment_facts=feature_moment_facts,
+            client_matches=client_matches,
         )
         if onboarding_checklist is not None:
             onboarding_checklist["active_hint_snoozes"] = list(active_hint_snoozes.keys())
@@ -4264,6 +4270,8 @@ async def get_trainer_hub_inbox_count(
         from src.application.trainer_feature_moments import fetch_trainer_feature_moment_facts
 
         feature_moment_facts = await fetch_trainer_feature_moment_facts(session, tid)
+    from src.application.trainer_client_matches import list_client_matches
+
     inbox = build_trainer_hub_action_inbox(
         onboarding=onboarding,
         requests_count=requests_count,
@@ -4271,6 +4279,7 @@ async def get_trainer_hub_inbox_count(
         schedule_unlocked=schedule_unlocked,
         active_hint_snoozes=active_hint_snoozes,
         feature_moment_facts=feature_moment_facts,
+        client_matches=await list_client_matches(session, tid),
     )
     return {
         "total_actionable": inbox["total_actionable"],
@@ -6223,8 +6232,9 @@ async def post_client_self_register(
 ):
     """
     Client self-registration via the trainer's universal invite link.
-    Looks up by phone: links Telegram ID to existing trainer-created client,
-    or creates a new client row and adds them to the trainer's roster.
+    Creates (or reuses) this account's own client row and adds it to the trainer's roster.
+    The typed phone is stored as a contact only; a match with a client from the trainer's
+    list is resolved by the trainer, not by whoever typed the number.
     """
     telegram_id = client_catalog_telegram_key(principal)
 
@@ -6234,7 +6244,6 @@ async def post_client_self_register(
     phone_ok, phone_err = validate_phone_non_empty(phone_e164)
     if phone_err or not phone_ok:
         raise HTTPException(status_code=422, detail=phone_err or "Некорректный номер телефона.")
-    phone_norm = normalize_phone(phone_ok)
 
     first_name = (body.first_name or "").strip()[:64]
     if not first_name:
@@ -6244,23 +6253,6 @@ async def post_client_self_register(
     if not trainer:
         raise HTTPException(status_code=404, detail="Тренер не найден.")
 
-    existing_by_phone = await get_client_by_phone(session, body.phone)
-    if (
-        existing_by_phone
-        and existing_by_phone.get("telegram_id") is not None
-        and int(existing_by_phone["telegram_id"]) != telegram_id
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail="Этот номер уже используется другим аккаунтом Telegram.",
-        )
-
-    existing_phone_client_id = int(existing_by_phone["id"]) if existing_by_phone else None
-    had_roster_before = (
-        await trainer_client_roster_link_exists(session, body.trainer_id, existing_phone_client_id)
-        if existing_phone_client_id is not None
-        else False
-    )
     prior_tid_client_id = await get_client_id_by_telegram_id(session, telegram_id)
     last_name = (body.last_name or "").strip()[:64] or None
     client_id = await get_or_create_client(
@@ -6283,16 +6275,9 @@ async def post_client_self_register(
     await session.commit()
     await clear_pending_referral(telegram_id, session)
 
-    notify_event = None
-    if roster_link_created:
-        notify_event = "new_client"
-    elif (
-        existing_by_phone
-        and existing_phone_client_id == client_id
-        and existing_by_phone.get("telegram_id") is None
-        and had_roster_before
-    ):
-        notify_event = "telegram_linked"
+    # A typed number never binds this account to a client from the trainer's list: if it
+    # matches one, the trainer decides in «Дела» (``trainer_client_matches``).
+    notify_event = "new_client" if roster_link_created else None
 
     if notify_event is not None:
         await notify_trainer_client_registered_from_invite(
@@ -6302,15 +6287,7 @@ async def post_client_self_register(
             event=notify_event,
         )
 
-    if existing_by_phone and int(existing_by_phone["id"]) == client_id:
-        if existing_by_phone.get("telegram_id") is None:
-            status = "linked"
-        else:
-            status = "already_registered"
-    elif prior_tid_client_id is None and existing_by_phone is None:
-        status = "created"
-    else:
-        status = "already_registered"
+    status = "created" if prior_tid_client_id is None else "already_registered"
 
     logger.info(
         "client self-register done status=%s telegram_id=%s client_id=%s trainer_id=%s notify_event=%s",
@@ -8309,6 +8286,7 @@ async def post_trainer_clients(
                 first_name=body.first_name,
                 last_name=body.last_name or None,
                 middle_name=body.middle_name or None,
+                trainer_id=int(trainer_id),
             )
         await link_trainer_client_roster(session, trainer_id, client_id)
     except ValueError as e:
@@ -8525,6 +8503,54 @@ async def get_trainer_first_students(
     return await first_students_state(session, int(trainer_id))
 
 
+class TrainerClientMatchBody(BaseModel):
+    client_id: int
+    other_client_id: int
+    decision: str
+
+
+@router.get("/trainer/client-matches")
+async def get_trainer_client_matches(
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """«Похоже, это Анна из вашего списка»: open pairs with the same phone."""
+    from src.application.trainer_client_matches import list_client_matches
+
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    return {"matches": await list_client_matches(session, int(trainer_id))}
+
+
+@router.post("/trainer/client-matches")
+async def post_trainer_client_match(
+    body: TrainerClientMatchBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Trainer's answer: ``same`` (merge), ``parent`` (child profile for the account), ``different``."""
+    from src.application.trainer_client_matches import resolve_client_match
+
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    try:
+        result = await resolve_client_match(
+            session, int(trainer_id), body.client_id, body.other_client_id, body.decision
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail="Уже решено — обновите главную.") from e
+    except ValueError as e:
+        if str(e) == "guardian_profile_limit_reached":
+            raise HTTPException(
+                status_code=409, detail="У этого аккаунта уже максимум профилей детей."
+            ) from e
+        raise HTTPException(status_code=422, detail="Неизвестный ответ.") from e
+    await session.commit()
+    return result
+
+
 @router.post("/trainer/first-students")
 async def post_trainer_first_student(
     body: TrainerFirstStudentBody,
@@ -8557,6 +8583,7 @@ async def post_trainer_first_student(
                 body.phone,
                 first_name=body.first_name,
                 last_name=body.last_name or None,
+                trainer_id=int(trainer_id),
             )
         else:
             client_id = await create_client_without_phone(

@@ -15,6 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import quote
 
 import pytest
+
+from src.application.booking_use_cases import link_trainer_client_roster
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
@@ -602,12 +604,12 @@ async def test_booking_happy_path_and_list_grouped_by_day(app_use_test_db, db_se
 
 
 @pytest.mark.asyncio
-async def test_booking_with_existing_offline_client_phone_links_telegram_silently(
+async def test_booking_with_offline_client_phone_does_not_take_over_that_client(
     app_use_test_db, db_session
 ) -> None:
     ref_day, ref_now = _minsk_monday_reference()
     slot_day = ref_day + timedelta(days=4)
-    _trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
+    trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
         db_session, slot_date=slot_day, start_hours={18}
     )
     ctg = _fresh_client_telegram_id()
@@ -623,6 +625,7 @@ async def test_booking_with_existing_offline_client_phone_links_telegram_silentl
         {"phone": phone, "pn": phone_norm},
     )
     offline_client_id = int(r_offline.fetchone()[0])
+    await link_trainer_client_roster(db_session, trainer_id, offline_client_id)
     await db_session.commit()
 
     with patch_client_init_auth(ctg):
@@ -646,27 +649,27 @@ async def test_booking_with_existing_offline_client_phone_links_telegram_silentl
     assert book.status_code == 200
     booking_id = int(book.json()["booking_id"])
 
-    r_clients = await db_session.execute(
-        text(
-            """
-            SELECT id, telegram_id
-            FROM clients
-            WHERE phone_normalized = :pn
-            ORDER BY id
-            """
-        ),
-        {"pn": phone_norm},
+    # A typed number is a contact: the trainer's client stays theirs, the booking lands on
+    # the person who is actually signed in, and the trainer decides «Похоже, это …».
+    r_offline_tid = await db_session.execute(
+        text("SELECT telegram_id FROM clients WHERE id = :cid"), {"cid": offline_client_id}
     )
-    rows = r_clients.fetchall()
-    assert len(rows) == 1
-    assert int(rows[0][0]) == offline_client_id
-    assert int(rows[0][1]) == ctg
+    assert r_offline_tid.scalar() is None
 
     r_booking = await db_session.execute(
-        text("SELECT client_id FROM bookings WHERE id = :bid"),
+        text("SELECT b.client_id, c.telegram_id FROM bookings b JOIN clients c ON c.id = b.client_id WHERE b.id = :bid"),
         {"bid": booking_id},
     )
-    assert int(r_booking.scalar()) == offline_client_id
+    booked_client_id, booked_tid = r_booking.one()
+    assert int(booked_client_id) != offline_client_id
+    assert int(booked_tid) == ctg
+
+    from src.application.trainer_client_matches import list_client_matches
+
+    matches = await list_client_matches(db_session, trainer_id)
+    assert [(m["client_id"], m["other_client_id"]) for m in matches] == [
+        (int(booked_client_id), offline_client_id)
+    ]
 
 
 @pytest.mark.asyncio

@@ -1108,8 +1108,9 @@ class ClientSession(Base):
 
 class Client(Base):
     """
-    Client identity: by telegram_id (bot user), vk_user_id (MAX/VK Mini App), or phone_normalized (trainer-added).
-    At least one of telegram_id, vk_user_id, or phone_normalized must be set for a valid row.
+    Client identity: telegram_id (bot user) or vk_user_id (MAX/VK Mini App); a trainer-added
+    client has neither until the trainer's personal link binds one. ``phone_normalized`` is a
+    contact for lookup, not an identity: one family number may belong to several clients.
     """
     __tablename__ = "clients"
 
@@ -2394,6 +2395,29 @@ class TrainerHintDismissal(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     snooze_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TrainerClientMatchDismissal(Base):
+    """
+    Trainer said «разные люди» to «Похоже, это Анна из вашего списка» — the pair
+    (``client_id`` who came by themselves, ``other_client_id`` from the trainer's list)
+    is never offered again.
+    """
+
+    __tablename__ = "trainer_client_match_dismissals"
+    __table_args__ = (
+        UniqueConstraint(
+            "trainer_id", "client_id", "other_client_id", name="ux_client_match_dismissals_pair"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    other_client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 # «Компания на лёд». Снимок сеанса живёт отдельно от ice_sessions: у сеанса нет version.
