@@ -1,4 +1,4 @@
-"""Rink card v2: visit_info for Mogilev, Orsha, Ostrovets, Pinsk and Soligorsk.
+"""Rink card v2: visit_info for Mogilev, Orsha, Ostrovets, Pinsk, Soligorsk, Lida and led.by.
 
 Data the owner collected by phone and from the rinks' price lists (2026-10-22).
 Left out on purpose: hockey lessons, synthetic ice, roller rental (not public skating),
@@ -31,7 +31,7 @@ VISIT: dict[int, dict] = {
     31: {
         "facts": {"spectators": {"state": "yes", "price": "1 BYN", "note": "посмотреть катание с трибуны"}},
         "custom_facts": [
-            {"icon": "clock", "title": "Время меняется", "note": "дни и часы уточняйте по телефону 679-02-59 (МТС)"}
+            {"icon": "clock", "title": "Время меняется", "note": "дни и часы уточняйте по телефону +375 216 44-30-44"}
         ],
         "services": [
             {"kind": "aid", "price": "5 BYN", "note": "держаться, пока учитесь стоять"},
@@ -107,7 +107,26 @@ VISIT: dict[int, dict] = {
     },
     # Солигорск: онлайн-касса продаёт только на сегодняшние сеансы.
     19: {"tickets": {"mode": "same_day"}},
+    # Ледовый дворец Минской области (led.by): онлайн — только в день сеанса.
+    5: {"tickets": {"mode": "same_day"}},
+    # Лида: касса в день катания и за два дня, онлайна нет (0256 положил то же в opening_hours).
+    37: {
+        "tickets": {"mode": "box_office", "open": "12:30", "close": "21:00", "presale_days": 2},
+        "child_age_max": 16,
+        "services": [
+            {"kind": "rental", "label": "Прокат коньков, детский", "price": "5 BYN", "note": "до 16 лет; взрослый — 6 BYN"},
+            {"kind": "sharpening", "price": "12 BYN", "note": "за пару; учащимся школы — бесплатно"},
+            {"kind": "other", "label": "Заточка с мелким ремонтом", "price": "15 BYN", "note": "за пару"},
+        ],
+        "passes": {
+            "columns": ["Детский", "Взрослый"],
+            "rows": [{"label": "12", "values": ["73,50 BYN", "94,50 BYN"]}],
+        },
+    },
 }
+
+# Онлайн-касса led.by — если в профиле ссылки ещё нет.
+LEDBY_TICKETS_URL = "https://led.by/tickets_online/"
 
 
 def upgrade() -> None:
@@ -120,10 +139,18 @@ def upgrade() -> None:
             ),
             {"v": json.dumps(data, ensure_ascii=False), "a": arena_id},
         )
+    bind.execute(
+        sa.text("UPDATE arena_profiles SET tickets_url = :u WHERE arena_id = 5 AND COALESCE(tickets_url, '') = ''"),
+        {"u": LEDBY_TICKETS_URL},
+    )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
+    bind.execute(
+        sa.text("UPDATE arena_profiles SET tickets_url = NULL WHERE arena_id = 5 AND tickets_url = :u"),
+        {"u": LEDBY_TICKETS_URL},
+    )
     for arena_id, data in VISIT.items():
         expr = "visit_info" + "".join(f" - '{key}'" for key in data)
         bind.execute(sa.text(f"UPDATE arena_profiles SET visit_info = {expr} WHERE arena_id = :a"), {"a": arena_id})

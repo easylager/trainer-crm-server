@@ -288,7 +288,8 @@ def _tickets_view(card: Mapping[str, Any], visit: Mapping[str, Any], hours: Mapp
         bits.append(f"продают за {presale} {_days_word(int(presale))}")
     if pay:
         bits.append(", ".join(pay))
-    note = str(t.get("note") or "").strip() or (legacy_note if mode == "box_office" and not bits else "")
+    legacy = re.sub(r"^билеты\s+только\s+в\s+кассе\s*[:,.—-]?\s*", "", legacy_note, flags=re.I)
+    note = str(t.get("note") or "").strip() or (legacy if mode == "box_office" and not bits else "")
     return {
         "mode": mode,
         "detail": " · ".join(bits),

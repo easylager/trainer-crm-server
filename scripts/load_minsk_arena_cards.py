@@ -371,11 +371,13 @@ def _attach_rental(
     catalog_raw: str | None,
     note_raw: str | None,
     title_raw: str | None,
+    ticket_note_raw: str | None = None,
 ) -> dict[str, Any] | None:
     catalog = parse_rental_catalog(catalog_raw)
     note = _known_text(note_raw)
     title = _known_text(title_raw)
-    if not catalog and not note and not title:
+    ticket_note = _known_text(ticket_note_raw)
+    if not catalog and not note and not title and not ticket_note:
         return hours
     payload = dict(hours or {})
     if title:
@@ -384,6 +386,8 @@ def _attach_rental(
         payload["rental_catalog"] = catalog
     if note:
         payload["rental_note"] = note
+    if ticket_note:
+        payload["ticket_note"] = ticket_note
     return payload
 
 
@@ -565,6 +569,7 @@ def parse_dossier(path: Path) -> ArenaCard:
         catalog_raw=value_of("rental_catalog"),
         note_raw=value_of("rental_note"),
         title_raw=value_of("rental_title"),
+        ticket_note_raw=value_of("ticket_note"),
     )
     season_start, season_end = parse_season(value_of("season"))
     amenities = parse_amenities(value_of("amenities"))

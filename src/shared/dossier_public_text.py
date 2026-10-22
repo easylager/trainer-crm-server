@@ -23,6 +23,7 @@ _OPENING_HOURS_STRING_KEYS = (
     "track_close",
     "rental_title",
     "rental_note",
+    "ticket_note",
     "center_badge",
     "center_line",
 )
