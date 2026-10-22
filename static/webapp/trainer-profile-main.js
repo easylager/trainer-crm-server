@@ -2672,10 +2672,10 @@
           subtitle: 'Телефон и другие способы связаться с вами.',
         },
         booking: {
-          containerIds: ['obSessionDurationWrap', 'obMinHoursWrap'],
+          containerIds: ['obSessionDurationWrap', 'obMinHoursWrap', 'groupClassesField'],
           tabId: 'settings',
           title: 'Запись',
-          subtitle: 'Сколько идёт занятие и до какого момента ученик может записаться.',
+          subtitle: 'Сколько идёт занятие, до какого момента ученик может записаться и бывают ли группы.',
         },
         notifications: {
           containerIds: ['pushNotifyField', 'digestSettingsField'],

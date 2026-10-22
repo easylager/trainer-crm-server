@@ -635,7 +635,6 @@
       /** Greeting is the welcome; «Первые шаги» below is the action — no second hero. */
       function syncHubOnboardingWelcomeVisibility() {
         var statusMarkers = document.getElementById('hubStatusMarkers');
-        var footerAside = document.getElementById('hubFooterAside');
         var show = hubOnboardingStripVisible();
 
         document.body.classList.toggle('hub-onboarding-active', show);
@@ -644,7 +643,6 @@
           statusMarkers.setAttribute('hidden', '');
           statusMarkers.innerHTML = '';
         }
-        if (footerAside) footerAside.hidden = show;
         syncHubDayCanvas();
         if (!show) renderHubStatusMarkers();
       }
@@ -9132,135 +9130,5 @@
           };
         }
       })();
-      function closeHubCommunitySheet() {
-        var overlay = document.getElementById('hubCommunitySheetOverlay');
-        if (!overlay) return;
-        overlay.classList.remove('hub-community-sheet-overlay--open');
-        overlay.setAttribute('aria-hidden', 'true');
-        document.body.style.overflow = '';
-        window.setTimeout(function() {
-          if (!overlay.classList.contains('hub-community-sheet-overlay--open')) {
-            overlay.setAttribute('hidden', '');
-          }
-        }, 260);
-      }
-
-      (function wireHubCommunitySheet() {
-        var link = document.getElementById('hubCommunityLink');
-        var faqLink = document.getElementById('hubCommunityFaqLink');
-        var overlay = document.getElementById('hubCommunitySheetOverlay');
-        var sheet = document.getElementById('hubCommunitySheet');
-        if (!link || !overlay || !sheet) return;
-
-        function openHubCommunitySheet() {
-          overlay.removeAttribute('hidden');
-          overlay.setAttribute('aria-hidden', 'false');
-          overlay.classList.add('hub-community-sheet-overlay--open');
-          document.body.style.overflow = 'hidden';
-          var wg = window.Telegram && window.Telegram.WebApp;
-          if (wg && wg.HapticFeedback && wg.HapticFeedback.impactOccurred) {
-            try { wg.HapticFeedback.impactOccurred('light'); } catch (eh) { /* noop */ }
-          }
-        }
-
-        link.addEventListener('click', openHubCommunitySheet);
-        if (faqLink) {
-          faqLink.addEventListener('click', function() {
-            closeHubCommunitySheet();
-            navigateTo('trainer-faq');
-          });
-        }
-        overlay.addEventListener('click', function(ev) {
-          if (ev.target === overlay) closeHubCommunitySheet();
-        });
-        sheet.addEventListener('click', function(ev) {
-          ev.stopPropagation();
-        });
-        document.addEventListener('keydown', function(ev) {
-          if (ev.key === 'Escape' && overlay.classList.contains('hub-community-sheet-overlay--open')) {
-            closeHubCommunitySheet();
-          }
-        });
-      })();
       wireHubBookGroupModal();
-      (function wireHubSupportForm() {
-        var form = document.getElementById('hubSupportForm');
-        var ta = document.getElementById('hubSupportMessage');
-        var btn = document.getElementById('hubSupportSubmit');
-        var statusEl = document.getElementById('hubSupportStatus');
-        if (!form || !ta || !btn) return;
-        form.addEventListener('submit', function(ev) {
-          ev.preventDefault();
-          var text = (ta.value || '').trim();
-          if (!text) {
-            if (statusEl) {
-              statusEl.textContent = 'Напишите пару слов — что случилось или что хотите улучшить.';
-              statusEl.className = 'hub-support-status hub-support-status--err';
-            }
-            return;
-          }
-          if (!getInitData()) {
-            if (statusEl) {
-              statusEl.textContent =
-                'Сессия ещё не готова — подождите секунду или отправьте через /guide в боте.';
-              statusEl.className = 'hub-support-status hub-support-status--err';
-            }
-            return;
-          }
-          btn.disabled = true;
-          if (statusEl) {
-            statusEl.textContent = 'Отправляем…';
-            statusEl.className = 'hub-support-status';
-          }
-          fetch(apiUrlWithQuery('/support'), {
-            method: 'POST',
-            headers: headersJson(),
-            body: JSON.stringify({ message: text, role: 'trainer' }),
-          })
-            .then(function(r) {
-              return r.json().then(function(data) {
-                return { ok: r.ok, data: data };
-              });
-            })
-            .then(function(o) {
-              btn.disabled = false;
-              var sid = o.data && o.data.id;
-              var okSend = o.ok && o.data && o.data.ok !== false && sid != null;
-              if (okSend) {
-                ta.value = '';
-                if (statusEl) {
-                  statusEl.textContent =
-                    'Спасибо! Сообщение отправлено — мы ответим вам в тренерском боте.';
-                  statusEl.className = 'hub-support-status hub-support-status--ok';
-                }
-                var wg = window.Telegram && window.Telegram.WebApp;
-                if (wg && wg.HapticFeedback && wg.HapticFeedback.notificationOccurred) {
-                  try {
-                    wg.HapticFeedback.notificationOccurred('success');
-                  } catch (eh) {
-                    /* noop */
-                  }
-                }
-                window.setTimeout(closeHubCommunitySheet, 1800);
-              } else {
-                var detail =
-                  o.data && (o.data.detail || o.data.message)
-                    ? String(o.data.detail || o.data.message)
-                    : 'Не удалось отправить.';
-                if (statusEl) {
-                  statusEl.textContent = detail + ' Попробуйте через /guide в боте.';
-                  statusEl.className = 'hub-support-status hub-support-status--err';
-                }
-              }
-            })
-            .catch(function() {
-              btn.disabled = false;
-              if (statusEl) {
-                statusEl.textContent =
-                  'Сеть недоступна. Повторите позже или напишите через /guide в боте.';
-                statusEl.className = 'hub-support-status hub-support-status--err';
-              }
-            });
-        });
-      })();
     })();

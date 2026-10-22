@@ -46,6 +46,7 @@
     invite: 'M10 11a4 4 0 1 0 0-8a4 4 0 1 0 0 8z M3 21a7 7 0 0 1 14 0 M19 8v6 M16 11h6',
     help: 'M12 21a9 9 0 1 0 0-18a9 9 0 1 0 0 18z M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7 M12 17h.01',
     studio: 'M3 21h18 M6 21V7l6-4 6 4v14 M10 21v-6h4v6',
+    chat: 'M4 5h16v11H9l-5 4z',
   };
 
   /* Раздел анкеты — экран с одним блоком, после сохранения назад сюда. */
@@ -380,7 +381,12 @@
     out.push({ title: 'Аккаунт', rows: [
       { icon: ICONS.card, label: 'Подписка', value: sub.text, attention: sub.attention, route: 'trainer-subscription' },
       { icon: ICONS.invite, label: 'Пригласить коллегу', value: '', route: 'trainer-referral' },
-      { icon: ICONS.help, label: 'Помощь', value: '', route: 'trainer-faq' },
+    ] });
+    /* Бывший блок «Наше комьюнити» с главной (решение 2026-10-22): помощь нужна, когда
+       что-то не получается, — ей место здесь, а не в ленте дня. */
+    out.push({ title: 'Помощь', rows: [
+      { icon: ICONS.help, label: 'Справка', value: '', route: 'trainer-faq' },
+      { icon: ICONS.chat, label: 'Написать команде', value: '', action: openHelp },
     ] });
     return out;
   }
@@ -413,12 +419,80 @@
           badge +
           svg('M9 6l6 6-6 6', 'ta-row__chevron') +
           '</span>';
-        b.onclick = function () { go(r.route); };
+        b.onclick = function () {
+          if (typeof r.action === 'function') r.action();
+          else go(r.route);
+        };
         card.appendChild(b);
       });
       sec.appendChild(card);
       host.appendChild(sec);
     });
+  }
+
+  /* ---------- «Написать команде» ---------- */
+
+  var helpBusy = false;
+
+  function onTgBack() { closeHelp(); }
+
+  function openHelp() {
+    haptic();
+    el('taHelpStatus').textContent = '';
+    el('taHelpStatus').className = 'tp-note';
+    el('taHelpSubmit').disabled = false;
+    el('taHelpBack').hidden = false;
+    el('taHelpSheet').hidden = false;
+    try {
+      if (tg && tg.BackButton) { tg.BackButton.onClick(onTgBack); tg.BackButton.show(); }
+    } catch (e) { /* */ }
+    setTimeout(function () { try { el('taHelpMessage').focus(); } catch (e) { /* */ } }, 220);
+  }
+
+  function closeHelp() {
+    if (el('taHelpSheet').hidden) return;
+    el('taHelpSheet').hidden = true;
+    el('taHelpBack').hidden = true;
+    try { document.activeElement && document.activeElement.blur(); } catch (e) { /* */ }
+    try {
+      if (tg && tg.BackButton) { tg.BackButton.offClick(onTgBack); tg.BackButton.hide(); }
+    } catch (e) { /* */ }
+  }
+
+  function helpStatus(text, kind) {
+    var n = el('taHelpStatus');
+    n.textContent = text || '';
+    n.className = 'tp-note' + (kind ? ' tp-note--' + kind : '');
+  }
+
+  function sendHelp(ev) {
+    if (ev) ev.preventDefault();
+    if (helpBusy) return;
+    var text = String(el('taHelpMessage').value || '').trim();
+    if (!text) { helpStatus('Напишите пару слов — что случилось или что хотите улучшить.', 'error'); return; }
+    var c = credential();
+    var h = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    if (c) h['X-Telegram-Init-Data'] = c;
+    helpBusy = true;
+    el('taHelpSubmit').disabled = true;
+    helpStatus('Отправляем…');
+    fetch(apiUrl('/support'), { method: 'POST', headers: h, body: JSON.stringify({ message: text, role: 'trainer' }) })
+      .then(function (r) {
+        return r.json().then(function (d) { return { ok: r.ok && d && d.ok !== false && d.id != null, d: d }; });
+      })
+      .then(function (o) {
+        helpBusy = false;
+        if (!o.ok) throw new Error((o.d && (o.d.detail || o.d.message)) || '');
+        el('taHelpMessage').value = '';
+        helpStatus('Отправлено. Ответим в боте тренера.', 'ok');
+        try { if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success'); } catch (e) { /* */ }
+        setTimeout(closeHelp, 1600);
+      })
+      .catch(function (err) {
+        helpBusy = false;
+        el('taHelpSubmit').disabled = false;
+        helpStatus((err && err.message) || 'Не получилось отправить. Попробуйте ещё раз.', 'error');
+      });
   }
 
   function render() {
@@ -468,6 +542,9 @@
   function start() {
     el('taRetry').onclick = load;
     el('taFullForm').onclick = function () { go('trainer-profile'); };
+    el('taHelpForm').addEventListener('submit', sendHelp);
+    el('taHelpClose').onclick = closeHelp;
+    el('taHelpBack').onclick = closeHelp;
     load();
   }
 

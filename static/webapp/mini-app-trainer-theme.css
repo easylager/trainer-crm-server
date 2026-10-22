@@ -2,6 +2,12 @@
  * Trainer theme overrides — load after theme.css + mini-app-trainer-nav.css.
  * Пере-фиксирует GLIDE teal на nav-кнопках (Telegram themeParams часто подсовывает свой button_color).
  */
+/* Кабинет тренера говорит тем же шрифтом, что сайт и свод деталей (решение 2026-10-22).
+   Клиентское приложение остаётся на Golos — токен переопределён только здесь. */
+:root {
+  --app-font-sans: 'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 button.btn-app-home,
 .trainer-mini-nav > button.btn-app-home {
   border: 1px solid rgba(var(--accent-rgb), 0.34) !important;

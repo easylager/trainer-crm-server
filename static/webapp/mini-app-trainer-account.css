@@ -18,7 +18,7 @@ body.ta-body {
   margin: 0;
   background: var(--glide-bg);
   color: var(--glide-text);
-  font-family: 'Golos Text', var(--app-font-sans, system-ui), sans-serif;
+  font-family: var(--app-font-sans, 'Onest', system-ui), sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -887,7 +887,7 @@ body.tp-kb .tp-foot { padding-bottom: 8px; }
 .ar-sheet-back {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 9300; /* над баром вкладок (9000): шторка всегда поверх */
   background: rgba(16, 32, 43, 0.38);
 }
 
@@ -896,7 +896,7 @@ body.tp-kb .tp-foot { padding-bottom: 8px; }
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 41;
+  z-index: 9301;
   max-width: 560px;
   margin: 0 auto;
   box-sizing: border-box;
@@ -970,6 +970,7 @@ body.tp-kb .tp-foot { padding-bottom: 8px; }
 }
 
 .ar-field > input,
+.ar-field > textarea,
 .ar-field__box {
   height: 48px;
   box-sizing: border-box;
@@ -1001,6 +1002,7 @@ body.tp-kb .tp-foot { padding-bottom: 8px; }
 }
 
 .ar-field > input:focus,
+.ar-field > textarea:focus,
 .ar-field__box:focus-within { border-color: var(--glide-brand); }
 
 .ar-field__prefix {
@@ -1063,3 +1065,19 @@ body.tp-kb .tp-foot { padding-bottom: 8px; }
   color: var(--glide-text);
   box-shadow: 0 1px 2px rgba(16, 32, 43, 0.12);
 }
+
+/* ═══ «Профиль → Помощь»: написать команде ════════════════════════════════ */
+
+.ar-field > textarea {
+  height: auto;
+  min-height: 120px;
+  padding: 12px 14px;
+  line-height: 1.4;
+  resize: none;
+}
+
+.ta-help { display: flex; flex-direction: column; gap: 14px; }
+
+.ta-help__done { margin: 0; font-size: 15px; line-height: 1.45; color: var(--glide-text); }
+
+.tp-note--ok { color: var(--glide-ink-teal, var(--glide-brand)); }

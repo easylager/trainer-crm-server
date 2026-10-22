@@ -6,8 +6,8 @@
   <title>Тренерский кабинет</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Onest:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400..700&display=swap" />
   <!-- telegram.org грузится async: блокирующий запрос на плохой сети оставлял Mini App на сплеше.
        mini-app-full-height.js дожидается SDK и сам вызывает ready() + раскрытие на всю высоту —
        без него ready()/expand() уходили в никуда и приложение открывалось полушторкой. -->
@@ -471,26 +471,6 @@
 
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
-    <aside class="hub-footer-aside" id="hubFooterAside" aria-label="Сообщество и поддержка">
-      <button
-        type="button"
-        class="hub-community-link"
-        id="hubCommunityLink"
-        aria-haspopup="dialog"
-        aria-controls="hubCommunitySheet"
-      >
-        <svg class="hub-community-link__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        <span class="hub-community-link__copy">
-          <span class="hub-community-link__label">Наше комьюнити</span>
-          <span class="hub-community-link__hint">Справка · идеи и отзывы</span>
-        </span>
-        <svg class="hub-community-link__arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M9 6l6 6-6 6"/>
-        </svg>
-      </button>
-    </aside>
   </div>
 
   <!-- Pending bookings batch confirm (Wave A inbox) -->
@@ -510,58 +490,6 @@
         <button type="button" class="btn-block btn-primary" id="hubPendingConfirmAll">Подтвердить все</button>
         <button type="button" class="btn-block btn-secondary" id="hubPendingSheetClose">Закрыть</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Community sheet — form lives here, not in scroll stack under FAB -->
-  <div id="hubCommunitySheetOverlay" class="hub-community-sheet-overlay" hidden aria-hidden="true">
-    <div
-      id="hubCommunitySheet"
-      class="hub-community-sheet"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="hubCommunitySheetTitle"
-    >
-      <div class="hub-community-sheet__handle" aria-hidden="true"></div>
-      <h2 id="hubCommunitySheetTitle" class="hub-community-sheet__title">Развиваем платформу вместе</h2>
-      <p class="hub-community-sheet__lead">
-        Мы создаём этот проект рука об руку с вашими тренерами, чтобы детям и родителям было по-настоящему уютно и удобно. Поделитесь, чего вам не хватает, или напишите нам доброе слово — мы читаем каждое сообщение! 💛
-      </p>
-      <button type="button" id="hubCommunityFaqLink" class="hub-community-sheet__faq">
-        <span class="hub-community-sheet__faq-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-            <path d="M12 17h.01"/>
-          </svg>
-        </span>
-        <span class="hub-community-sheet__faq-copy">
-          <span class="hub-community-sheet__faq-label">Справка</span>
-          <span class="hub-community-sheet__faq-hint">Расписание, абонементы, группы</span>
-        </span>
-        <svg class="hub-community-sheet__faq-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M9 6l6 6-6 6"/>
-        </svg>
-      </button>
-      <p class="hub-community-sheet__form-kicker">Написать команде</p>
-      <form id="hubSupportForm" class="hub-support-form" autocomplete="off">
-        <label for="hubSupportMessage" class="hub-support-label">Ваше сообщение</label>
-        <textarea
-          id="hubSupportMessage"
-          class="hub-support-textarea input"
-          name="message"
-          rows="3"
-          maxlength="4000"
-          placeholder="Идея, отзыв или нужна помощь? Напишите сюда"
-          aria-describedby="hubSupportHint"
-        ></textarea>
-        <p id="hubSupportHint" class="hub-support-hint">До 4000 символов.</p>
-        <button type="submit" id="hubSupportSubmit" class="btn-block btn-primary hub-support-submit">Отправить</button>
-        <p id="hubSupportStatus" class="hub-support-status" role="status" aria-live="polite"></p>
-      </form>
-      <p class="hub-community-sheet__cta">
-        Личный вопрос по тарифу или учёту — через <strong>/guide</strong> в боте.
-      </p>
     </div>
   </div>
 
