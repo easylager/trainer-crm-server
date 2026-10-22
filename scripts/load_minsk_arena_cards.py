@@ -908,11 +908,11 @@ async def _sync_speed_oval_arena_row(session: Any, arena_id: int) -> None:
 
 
 def profile_patch(card: ArenaCard) -> dict[str, Any]:
-    return {
+    # tickets_url только если досье его знает: иначе --apply затрёт живую онлайн-кассу.
+    patch = {
         "district": card.district,
         "phone": card.phone,
         "website_url": card.website_url,
-        "tickets_url": card.tickets_url,
         "opening_hours": card.opening_hours,
         "season_start_month": card.season_start_month,
         "season_end_month": card.season_end_month,
@@ -921,6 +921,9 @@ def profile_patch(card: ArenaCard) -> dict[str, Any]:
         "social_urls": card.social_urls,
         "status": card.status,
     }
+    if card.tickets_url:
+        patch["tickets_url"] = card.tickets_url
+    return patch
 
 
 async def apply_card(
@@ -1247,6 +1250,7 @@ async def run_load(
     seed_sessions: bool,
     report_path: Path | None,
     allow_local_dev: bool = False,
+    allow_prod: bool = False,
     only_arena_ids: frozenset[int] | None = None,
     only_slugs: frozenset[str] | None = None,
 ) -> list[ArenaLoadResult]:
@@ -1277,7 +1281,9 @@ async def run_load(
     results: list[ArenaLoadResult] = []
     if apply:
         db_url = resolve_database_url()
-        assert_local_database_url(db_url, apply=True, allow_local_dev=allow_local_dev)
+        assert_local_database_url(
+            db_url, apply=True, allow_local_dev=allow_local_dev, allow_prod=allow_prod
+        )
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
         engine = create_async_engine(async_database_url(db_url), pool_pre_ping=True)
@@ -1405,6 +1411,7 @@ def main(argv: list[str] | None = None) -> int:
             seed_sessions=not args.no_seed_sessions,
             report_path=report_path,
             allow_local_dev=args.allow_local_dev_db,
+            allow_prod=args.i_know_this_is_prod,
             only_arena_ids=parse_only_arena_ids(args.only_arena_ids),
             only_slugs=parse_only_slugs(args.only_slugs),
         )

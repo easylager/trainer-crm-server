@@ -88,7 +88,7 @@ def test_mozyr_global_ice_dossier_parses(slug_only_cards) -> None:
     assert card.enough_facts and card.status == "published"
 
 
-def test_zamok_is_the_fullest_card(cards) -> None:
+def test_zamok_is_the_fullest_card(cards, loader) -> None:
     zamok = cards["zamok"]
     assert zamok.district == "Центральный район"
     assert zamok.phone and zamok.phone.startswith("+375")
@@ -96,6 +96,11 @@ def test_zamok_is_the_fullest_card(cards) -> None:
     assert zamok.website_url == "https://tczamok.by/entertainments/ice-rink"
     assert zamok.opening_hours is not None
     assert zamok.opening_hours["daily"] == {"open": "10:00", "close": "23:00"}
+    assert zamok.opening_hours["rental_catalog"] == [
+        {"label": "Прокат коньков", "price": "9 BYN"},
+        {"label": "Заточка", "price": "15 BYN"},
+    ]
+    assert "tickets_url" not in loader.profile_patch(zamok)
     assert zamok.season_start_month == 1
     assert zamok.season_end_month == 12
     assert zamok.amenities == {

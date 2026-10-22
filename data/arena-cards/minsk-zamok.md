@@ -1,8 +1,8 @@
 # Card: ТЦ Замок
 - arena_id: 3
 - slug: zamok
-- verified_at: 2026-09-06
-- verified_by: CONTENT TASK-073 (web only, без звонка)
+- verified_at: 2026-10-23
+- verified_by: CONTENT TASK-073 (web) + operator prices 2026-10-23
 
 Имя и адрес в прод-CSV: «ТЦ Замок», пр-т. Победителей 65, Минск (lat 53.92635, lon 27.51738). Сайт катка уточняет: 4 этаж.
 
@@ -13,6 +13,7 @@
 | phone | +375 (44) 783-85-18; +375 (17) 309-54-76 | блок «Телефон» на https://tczamok.by/entertainments/ice-rink | 2026-09-06 |
 | website_url | https://tczamok.by/entertainments/ice-rink | официальная страница катка ТЦ «Замок» | 2026-09-06 |
 | opening_hours | каток: ежедневно 10:00–23:00 | https://tczamok.by/entertainments/ice-rink («Время работы» и попап часов ТЦ: «Ледовый каток с 10:00 до 23:00») | 2026-09-06 |
+| rental_catalog | Прокат коньков — 9 BYN; Заточка — 15 BYN | оператор 2026-10-23 | 2026-10-23 |
 | season | круглый год (season_start_month=1, season_end_month=12) | https://tczamok.by/entertainments/ice-rink — «Сезон катаний круглый год!», «ледовая площадка работает без выходных» | 2026-09-06 |
 | amenities | skate_rental: true; skate_sharpening: true; locker_rooms: true; cafe: true; parking: unknown; accessibility: unknown | прокат, заточка, раздевалки и камеры хранения — текст страницы катка; кафе/рестораны ТЦ — попап «Время работы» на том же сайте. Парковка и доступность на странице катка не названы | 2026-09-06 |
 | short_description | Крытый каток в ТЦ «Замок» (4 этаж), площадь более 1000 м². Прокат хоккейных и фигурных коньков, раздевалки, заточка; сезон круглый год. | https://tczamok.by/entertainments/ice-rink | 2026-09-06 |
