@@ -235,7 +235,7 @@ def school_in_trainers_html(school: Mapping[str, Any] | None) -> str:
     age = f"с {int(school['age_from'])} лет" if school.get("age_from") else ""
     note = f'<span class="b-more-row__n">{_esc(age)}</span>' if age else ""
     return (
-        '<details class="b-more-row" id="more-school"><summary>'
+        '<details class="b-more-row b-more-row--solo" id="more-school"><summary>'
         f'<span class="b-svc__ic">{icon_svg("child")}</span>'
         f'<span class="b-svc__b"><b>Школа катка</b>{note}</span>{icon_svg("down")}</summary>'
         f'<div class="b-more-row__body">{school_table_html(school)}</div></details>'
@@ -245,10 +245,11 @@ def school_in_trainers_html(school: Mapping[str, Any] | None) -> str:
 def json_ld_extras(vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str, Any]]) -> dict[str, Any]:
     """Поля schema.org для катка: удобства, оплата, цены услуг."""
     out: dict[str, Any] = {}
+    names = {"locker_rooms": "Раздевалка", "lockers": "Камеры хранения", "cafe": "Кафе", "parking": "Парковка"}
     features = [
-        {"@type": "LocationFeatureSpecification", "name": f["title"], "value": True}
+        {"@type": "LocationFeatureSpecification", "name": names[f["key"]], "value": not str(f["title"]).endswith("нет")}
         for f in vv.get("facts") or []
-        if f.get("key") in ("locker_rooms", "lockers", "cafe", "parking") and not str(f["title"]).endswith("нет")
+        if f.get("key") in names
     ]
     if features:
         out["amenityFeature"] = features
@@ -280,6 +281,10 @@ def json_ld_extras(vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[
     return out
 
 
+def _upper_first(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
 def search_bits(vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str, Any]]) -> list[str]:
     """Факты для meta description: цены входа, услуги, как купить."""
     bits: list[str] = []
@@ -290,11 +295,11 @@ def search_bits(vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str
             minor, varies = floors[key]
             parts.append(f"{label} {'от ' if varies else ''}{format_price_minor(minor, currency)}")
     if parts:
-        bits.append(", ".join(parts).capitalize())
+        bits.append(_upper_first(", ".join(parts)))
     names = [str(r["title"]).lower() for r in (vv.get("services") or {}).get("rows") or []
              if r.get("kind") in ("aid", "sharpening", "protection", "helmet")]
     if names:
-        bits.append(", ".join(dict.fromkeys(names)).capitalize())
+        bits.append(_upper_first(", ".join(dict.fromkeys(names))))
     mode = (vv.get("tickets") or {}).get("mode")
     if mode == "box_office":
         bits.append("Билеты в кассе")

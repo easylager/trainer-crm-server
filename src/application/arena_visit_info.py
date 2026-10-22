@@ -443,7 +443,14 @@ def _from_price_line(passes: Mapping[str, Any]) -> str:
     values = [v for v in first.get("values") or [] if v]
     if not values:
         return ""
-    return f"от {min(values, key=_price_key)} за {first['label']}" if first["label"].isdigit() else f"{first['label']} — {values[0]}"
+    label = str(first["label"])
+    if label.isdigit():
+        n = int(label)
+        word = "катание" if n % 10 == 1 and n % 100 != 11 else (
+            "катания" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else "катаний"
+        )
+        return f"от {min(values, key=_price_key)} за {n} {word}"
+    return f"{label} — {values[0]}"
 
 
 def _price_key(text: str) -> float:

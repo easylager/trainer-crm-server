@@ -62,7 +62,7 @@ def test_view_box_office_small_rink() -> None:
     assert kinds == ["aid", "helmet", "sharpening"]  # пингвин первым
     assert view["services"]["notes"] == ["Коньки выдают под залог: документ, кроме паспорта."]
     more = {m["key"]: m["note"] for m in view["more"]}
-    assert more == {"school": "с 4 лет · занятие, 15 минут от 10 BYN", "passes": "от 15 BYN за 4", "rink": "от 240 BYN за час"}
+    assert more == {"school": "с 4 лет · занятие, 15 минут от 10 BYN", "passes": "от 15 BYN за 4 катания", "rink": "от 240 BYN за час"}
 
 
 def test_school_moves_into_trainers_when_trainers_exist() -> None:

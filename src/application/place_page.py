@@ -594,7 +594,13 @@ def search_description(view: Mapping[str, Any]) -> str:
     if view.get("focus") is not None:
         return og_description(view)
     if _skating(card):
+        from src.application.place_visit_blocks import search_bits
+
+        slots = [s for d in view.get("days") or [] for s in d.get("sessions") or []]
+        bits = search_bits(_place_visit(view), currency=str(card.get("currency_code") or "BYN"), slots=slots)
         head = "Расписание массового катания на неделю, цены и как добраться"
+        if bits:
+            head = "Расписание массового катания на неделю. " + ". ".join(bits)
     elif card.get("venue_type") == "shop":
         head = " · ".join(_services(card)) or "Магазин для катания"
     else:
@@ -907,6 +913,15 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
             break
     if events:
         place["event"] = events
+    if _skating(card):
+        from src.application.place_visit_blocks import json_ld_extras
+
+        skate_slots = [s for d in view.get("days") or [] for s in d.get("sessions") or []]
+        place.update(
+            json_ld_extras(
+                _place_visit(view), currency=str(card.get("currency_code") or "BYN"), slots=skate_slots
+            )
+        )
     # </script> или <!-- внутри JSON закрыли бы тег раньше времени — экранируем < > &.
     return json_for_script(place)
 

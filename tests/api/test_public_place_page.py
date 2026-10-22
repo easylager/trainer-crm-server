@@ -573,7 +573,8 @@ async def test_place_page_session_share_dock_and_nojs_messengers(app_use_test_db
     # Покупка — над полосой дней, не в нижнем ряду ссылок.
     assert "Купить билет онлайн" not in links_row.group(1)
     schedule = html.split('id="schedule"', 1)[1]
-    assert schedule.index('class="b-btn b-btn--wide b-buy"') < schedule.index('class="b-sched')
+    # Карточка v2: касса — кнопкой в шапке блока, над полосой дней.
+    assert schedule.index('class="b-buypill"') < schedule.index('class="b-sched')
     assert ">Открытка</a>" in links_row.group(1)
     # TASK-278: док виден и без JS — в нём «Открыть в Telegram»; «Позвать» ждёт скрипт
     # (без JS ей нечего открыть — ссылки мессенджеров под выбранным сеансом).
@@ -885,7 +886,7 @@ async def test_plan_card_names_ohm_before_the_hall(app_use_test_db, db_session) 
 
 @pytest.mark.asyncio
 async def test_schedule_price_is_the_week_floor_not_the_most_frequent(app_use_test_db, db_session) -> None:
-    """Будни по 11, выходные по 12 (их больше): в шапке «от 11 BYN», а не «12 BYN» над билетами по 11."""
+    """Будни по 11, выходные по 12 (их больше): цена входа «от 11 BYN», а не «12 BYN» над билетами по 11."""
     place = await _place(db_session)
     for hhmm in ("12:00", "12:45"):
         await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local=hhmm, price_adult_minor=1100)
@@ -897,7 +898,7 @@ async def test_schedule_price_is_the_week_floor_not_the_most_frequent(app_use_te
         resp = await client.get(place["path"])
 
     schedule = resp.text.split('id="schedule"', 1)[1].split("</section>", 1)[0]
-    assert '<span class="b-aside">от 11 BYN</span>' in schedule
+    assert '<b class="b-price__v">от 11 BYN</b>' in schedule
     # Билет пишет цену, только когда она выше минимума недели.
     assert "до 12:45 · 11 BYN" not in schedule and "до 12:45</span>" in schedule
     assert "· 12 BYN" in schedule
