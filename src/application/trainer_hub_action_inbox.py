@@ -282,7 +282,7 @@ def _build_hub_rhythm_inbox_candidates(
                 priority=108,
                 title="Вас пока нет в каталоге",
                 subtitle=(
-                    "Карточку смотрят новые ученики — сейчас к вам приходят только по вашей ссылке."
+                    "В каталоге вас находят новые ученики. Сейчас приходят только те, кому вы дали ссылку"
                 ),
                 primary_label="Разместить карточку",
                 primary_action="profile_catalog",
@@ -301,12 +301,11 @@ def _build_hub_rhythm_inbox_candidates(
                 kind="rhythm",
                 priority=106,
                 urgent=True,
-                title=(
-                    f"Модератор попросил поправить карточку: «{_feedback_preview(feedback)}» — "
-                    "исправьте в анкете и сохраните, заявка уйдёт на повторную проверку."
+                title="Модератор просит поправить страницу",
+                subtitle=(
+                    f"«{_feedback_preview(feedback)}». Исправьте и сохраните — страница уйдёт на повторную проверку"
                     if feedback
-                    else "Модератор попросил поправить карточку — комментарий в анкете; "
-                    "исправьте и сохраните, заявка уйдёт на повторную проверку."
+                    else "Комментарий — в разделе «Каталог». Исправьте и сохраните — страница уйдёт на повторную проверку"
                 ),
                 primary_label="Открыть «Каталог»",
                 primary_action="profile_catalog",
@@ -328,10 +327,8 @@ def _build_hub_rhythm_inbox_candidates(
                     item_id="share_link",
                     kind="rhythm",
                     priority=110,
-                    title=(
-                        "Позовите первого ученика — он напишет вам сам, "
-                        "расписание для этого не нужно."
-                    ),
+                    title="Позовите первого ученика",
+                    subtitle="Отправьте ссылку — ученик напишет вам сам, расписание для этого не нужно",
                     primary_label="Отправить ссылку",
                     primary_action="share_link",
                     secondary_label="Добавить расписание",
@@ -349,10 +346,8 @@ def _build_hub_rhythm_inbox_candidates(
                 kind="rhythm",
                 priority=120,
                 urgent=True,
-                title=(
-                    "Настройте профиль: две минуты — кто вы, что проводите и где. "
-                    "Расписание по желанию."
-                ),
+                title="Настройте профиль",
+                subtitle="Две минуты: кто вы, что проводите и где. Расписание — по желанию",
                 primary_label="Начать",
                 primary_action="onboarding",
                 dismissible=False,
@@ -401,10 +396,8 @@ def _build_hub_rhythm_inbox_candidates(
                 item_id="share_link",
                 kind="rhythm",
                 priority=86,
-                title=(
-                    "Отправьте ссылку одному ученику — тому, кто и так собирался к вам "
-                    "на этой неделе. Он выберет время сам, вам придёт уведомление."
-                ),
+                title="Отправьте ссылку ученику",
+                subtitle="Тому, кто и так собирался к вам на этой неделе. Он выберет время сам, вам придёт сообщение",
                 primary_label="Отправить ученику",
                 primary_action="share_link",
                 dismissible=True,
@@ -417,11 +410,9 @@ def _build_hub_rhythm_inbox_candidates(
                 item_id="referral_growth",
                 kind="rhythm",
                 priority=66,
-                title=(
-                    "До 60 бесплатных дней полного доступа — приглашайте коллег "
-                    "по реферальной программе. Подробности в разделе «Рефералы»."
-                ),
-                primary_label="Рефералы",
+                title="Пригласите коллегу",
+                subtitle="За каждого, кто начнёт работать в кабинете, — до 60 дней полного доступа бесплатно",
+                primary_label="Пригласить",
                 primary_action="trainer_referral",
                 dismissible=True,
             )
@@ -458,11 +449,8 @@ def _build_hub_rhythm_inbox_candidates(
                     kind="rhythm",
                     priority=97,
                     urgent=True,
-                    title=(
-                        no_next_base
-                        + ". В расписании сейчас нет свободных слотов — сначала добавьте окна, "
-                        "чтобы можно было пригласить на конкретное время."
-                    ),
+                    title=no_next_base,
+                    subtitle="Свободных окон нет — добавьте их, чтобы позвать учеников на конкретное время",
                     primary_label="Расписание",
                     primary_action="schedule",
                     dismissible=False,
@@ -470,19 +458,20 @@ def _build_hub_rhythm_inbox_candidates(
             )
         elif fill_candidates > 0:
             remind_n = fill_candidates
-            suffix = ""
+            subtitle = "Напомним в боте и предложим свободные окна"
             if open_no_tg > 0:
-                suffix = (
-                    f" · ещё {open_no_tg} "
-                    f"{_plural_ru(open_no_tg, 'клиент', 'клиента', 'клиентов')} "
-                    "не в боте — «Напомнить» им не уйдёт; пришлите общую ссылку с главной (кнопка «Связь»)"
+                subtitle = (
+                    f"Ещё {open_no_tg} "
+                    f"{_plural_ru(open_no_tg, 'ученик', 'ученика', 'учеников')} "
+                    "без бота — им отправьте личную ссылку"
                 )
             item = _inbox_item(
                 item_id="open_loop_no_next",
                 kind="rhythm",
                 priority=97,
                 urgent=True,
-                title=f"{remind_n} {_plural_ru(remind_n, 'ученик', 'ученика', 'учеников')} без следующей записи{suffix}.",
+                title=f"{remind_n} {_plural_ru(remind_n, 'ученик', 'ученика', 'учеников')} без следующей записи",
+                subtitle=subtitle,
                 primary_label="Напомнить",
                 primary_action="fill_slots_invites",
                 dismissible=False,
@@ -498,11 +487,8 @@ def _build_hub_rhythm_inbox_candidates(
                     kind="rhythm",
                     priority=97,
                     urgent=True,
-                    title=(
-                        no_next_base
-                        + ". Напоминание в боте — только подключённым. Остальным: общая ссылка "
-                        "с главной (кнопка «Связь»)."
-                    ),
+                    title=no_next_base,
+                    subtitle="Они ещё не в боте — отправьте каждому личную ссылку",
                     primary_label="Клиенты без бота",
                     primary_action="trainer_clients_invite_bot",
                     secondary_label="Рассылка в боте",
@@ -519,9 +505,9 @@ def _build_hub_rhythm_inbox_candidates(
                 priority=72,
                 title=(
                     f"На следующей неделе {avail_next} "
-                    f"{_plural_ru(avail_next, 'свободный слот', 'свободных слота', 'свободных слотов')} "
-                    "— кому из клиентов в боте напомнить о записи?"
+                    f"{_plural_ru(avail_next, 'свободное окно', 'свободных окна', 'свободных окон')}"
                 ),
+                subtitle="Напомните ученикам в боте — они выберут время сами",
                 primary_label="Напомнить",
                 primary_action="fill_slots_invites",
                 dismissible=True,
@@ -539,11 +525,9 @@ def _build_hub_rhythm_inbox_candidates(
                 kind="rhythm",
                 priority=102,
                 urgent=True,
-                title=(
-                    "Свободных окон не осталось: ученик откроет ссылку и не увидит времени. "
-                    "Откройте расписание на ближайшие недели."
-                ),
-                primary_label="Обновить расписание",
+                title="Свободных окон не осталось",
+                subtitle="Ученик откроет ссылку и не увидит времени. Откройте окна на ближайшие недели",
+                primary_label="Открыть окна",
                 primary_action="schedule",
                 dismissible=False,
             )
@@ -562,8 +546,9 @@ def _build_hub_rhythm_inbox_candidates(
                 kind="rhythm",
                 priority=100,
                 urgent=True,
-                title="На этой неделе нет свободных слотов. Добавьте окна, чтобы клиенты могли записаться.",
-                primary_label="Добавить слоты",
+                title="На этой неделе нет свободных окон",
+                subtitle="Добавьте окна, чтобы ученики могли записаться",
+                primary_label="Добавить окна",
                 primary_action="schedule",
                 dismissible=False,
             )
@@ -576,8 +561,9 @@ def _build_hub_rhythm_inbox_candidates(
                 item_id="slots_next_week",
                 kind="rhythm",
                 priority=90,
-                title="На следующей неделе пока нет слотов. Заполните расписание заранее.",
-                primary_label="Добавить слоты",
+                title="Следующая неделя пока пустая",
+                subtitle="Откройте окна заранее — ученики планируют наперёд",
+                primary_label="Добавить окна",
                 primary_action="schedule",
                 dismissible=True,
             )
@@ -585,17 +571,18 @@ def _build_hub_rhythm_inbox_candidates(
 
     if wd == 0:
         tpl = (
-            "Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов."
+            "Добавьте часы в шаблон недели — следующую неделю он соберёт за вас"
             if this_week_ready and next_week_ready
-            else "Создайте шаблон недели с постоянными часами — так проще держать ритм и наполнять расписание."
+            else "Шаблон с постоянными часами сам открывает окна на каждую неделю"
         )
         out.append(
             _inbox_item(
                 item_id="template",
                 kind="rhythm",
                 priority=104,
-                title=tpl,
-                primary_label="Шаблон в расписании",
+                title="Шаблон недели",
+                subtitle=tpl,
+                primary_label="Открыть шаблон",
                 primary_action="template",
                 dismissible=True,
             )
@@ -610,11 +597,9 @@ def _build_hub_rhythm_inbox_candidates(
                 item_id="open_loop_no_telegram",
                 kind="rhythm",
                 priority=88,
-                title=(
-                    f"{open_no_tg} {_plural_ru(open_no_tg, 'клиент', 'клиента', 'клиентов')} "
-                    "ещё не в боте. Откройте список по кнопке и отправьте им пригласительную ссылку."
-                ),
-                primary_label="Клиенты без бота",
+                title=f"{open_no_tg} {_plural_ru(open_no_tg, 'ученик', 'ученика', 'учеников')} без бота",
+                subtitle="Им не придут напоминания о тренировках. Отправьте каждому личную ссылку",
+                primary_label="Отправить ссылки",
                 primary_action="trainer_clients_invite_bot",
                 dismissible=True,
             )
@@ -764,7 +749,7 @@ def build_trainer_hub_action_inbox(
                 title=(
                     f"{n} {_plural_ru(n, 'запись ждёт подтверждения', 'записи ждут подтверждения', 'записей ждут подтверждения')}"
                 ),
-                subtitle="До подтверждения клиент не увидит занятие как согласованное",
+                subtitle="Ученики ждут ответа",
                 primary_label="Подтвердить все" if n > 1 else "Подтвердить",
                 primary_action="batch_confirm",
                 dismissible=False,
@@ -812,7 +797,7 @@ def build_trainer_hub_action_inbox(
                 title=(
                     f"{req_n} {_plural_ru(req_n, 'новая заявка без ответа', 'новые заявки без ответа', 'новых заявок без ответа')}"
                 ),
-                subtitle="Ответьте клиентам в разделе «Заявки»",
+                subtitle="Ученики ждут ответа в разделе «Заявки»",
                 primary_label="Ответить",
                 primary_action="trainer_requests",
                 dismissible=False,

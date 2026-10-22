@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="mini-app-components.css?v=2026102213" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026102213" />
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
+  <link rel="stylesheet" href="mini-app-trainer-ui.css?v=2026102213" />
   <link rel="stylesheet" href="mini-app-trainer-hub.css?v=2026102213" />
   <link rel="stylesheet" href="mini-app-trainer-shell.css?v=2026102213" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
@@ -292,6 +293,7 @@
   <div class="hub-shell" id="hubShell">
     <header class="hub-header">
       <div class="hub-header-text">
+        <p class="hub-header-date" id="hubPageDate"></p>
         <h1 class="hub-header-title" id="hubPageTitle">Доброе утро</h1>
         <div id="hubCollectiveSwitcher" class="hub-collective-switcher" hidden></div>
       </div>
@@ -309,8 +311,15 @@
             <path d="M13 11a5 5 0 0 0-7.07 0L4.51 12.41a5 5 0 1 0 7.07 7.07l1.41-1.41" />
           </svg>
         </button>
+        <button type="button" class="tu-btn tu-btn--dark hub-header-book" id="hubHeaderBookBtn" hidden>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          Записать
+        </button>
       </div>
     </header>
+
+    <!-- Главная по макету (TASK-314): неделя, срочное, «Дела», день, итог недели — trainer-hub-today.js -->
+    <section class="hub-today" id="hubToday" hidden aria-label="Ваш день"></section>
 
     <script>
       (function () {
@@ -852,6 +861,7 @@
   <script defer src="trainer-first-students-model.js?v=2026102213"></script>
   <script defer src="trainer-first-students.js?v=2026102213"></script>
   <script defer src="trainer-client-match.js?v=2026102213"></script>
+  <script defer src="trainer-hub-today.js?v=2026102213"></script>
   <script defer src="trainer-home-main.js?v=2026102213"></script>
   <script src="mini-app-more-icons.js?v=2026102213"></script>
   <script defer src="mini-app-trainer-shell.js?v=2026102213"></script>
