@@ -4355,10 +4355,10 @@
         }
         if (addBtn) {
           addBtn.textContent = centerOnly
-            ? '➕ Добавить окна центра'
+            ? 'Добавить окна центра'
             : dual
-              ? '➕ Добавить слоты'
-              : '➕ Добавить слоты на неделю';
+              ? 'Добавить слоты'
+              : 'Добавить слоты на неделю';
         }
       }
 
@@ -7918,7 +7918,7 @@
         if (bookedClick) {
           const v = scheduleEditorSlotVenueLabel(s);
           const vt = (v && String(v).trim()) ? escapeHtml(String(v).trim()) : '<span class="venue-muted">не указано</span>';
-          html += '<div class="slot-venue">📍 ' + vt + '</div>';
+          html += '<div class="slot-venue">' + vt + '</div>';
           if (s.client_preview && !cohortSlot) html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
         } else if (!groupHub && !cohortSlot) {
           if (!(cap > 1 && String(s.arena_label || '').trim())) {

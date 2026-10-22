@@ -5936,7 +5936,7 @@
         } else {
           wrap.classList.add('arena-combo__thumb--ph');
           wrap.setAttribute('aria-hidden', 'true');
-          wrap.textContent = (arena && arena.venue_chip) ? arena.venue_chip : '🏟';
+          wrap.textContent = (arena && arena.venue_chip) ? arena.venue_chip : 'Лёд';
         }
         var check = document.createElement('span');
         check.className = 'arena-combo__thumb-check';

@@ -129,8 +129,8 @@
       '<div class="tc-card__photo">' +
       (img
         ? '<img src="' + esc(img) + '" alt="" loading="lazy" ' +
-          'onerror="this.remove();this.parentNode.innerHTML=\'<span class=&quot;tc-card__photo-empty&quot; aria-hidden=&quot;true&quot;>👤</span>\'" />'
-        : '<span class="tc-card__photo-empty" aria-hidden="true">👤</span>') +
+          'onerror="this.remove();this.parentNode.innerHTML=\'<span class=&quot;tc-card__photo-empty&quot; aria-hidden=&quot;true&quot;></span>\'" />'
+        : '<span class="tc-card__photo-empty" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8z M4 21a8 8 0 0 1 16 0"/></svg></span>') +
       '</div>' +
       '<div class="tc-card__body">' +
       '<p class="tc-card__name">' + esc(name) + '</p>' +
@@ -314,7 +314,7 @@
       var row = document.createElement('div');
       row.className = 'tc-warning';
       row.innerHTML =
-        '<span class="tc-warning__icon" aria-hidden="true">⚠</span>' +
+        '<span class="tc-warning__icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3z M12 10v4 M12 17h.01"/></svg></span>' +
         '<span class="tc-warning__text">' + esc(w.text) + '</span>';
       if (w.action === 'arenas' || w.action === 'profile') {
         var a = document.createElement('button');

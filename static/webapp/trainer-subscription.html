@@ -1333,6 +1333,7 @@
 
   <script src="mini-app-trainer-gate.js?v=2026102212"></script>
   <script src="mini-app-trainer-celebration.js?v=2026102212"></script>
+  <script src="trainer-format.js?v=2026102212"></script>
   <script src="mini-app-trainer-home.js?v=2026102212"></script>
   <script>
     (function() {
@@ -1891,7 +1892,9 @@
         // Render current status
         var statusContainer = document.getElementById('currentStatus');
         if (currentTier && currentTier !== 'none') {
-          var expiresText = status.expires_at ? ' до ' + status.expires_at.slice(0, 10) : '';
+          var expiresText = status.expires_at
+            ? ' до ' + (window.TrainerFormat ? TrainerFormat.dateLong(status.expires_at) : status.expires_at.slice(0, 10))
+            : '';
           var bpm = status.billing_period_months;
           var periodHint = '';
           if (status.is_trial) {

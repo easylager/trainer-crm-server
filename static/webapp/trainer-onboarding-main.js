@@ -1574,7 +1574,7 @@
       fixed_duration_minutes: null,
       is_confirmed: false,
       venue_type: (payload && payload.venue_type) || 'ice_rink',
-      venue_chip: (payload && payload.venue_chip) || '🏒',
+      venue_chip: (payload && payload.venue_chip) || 'Лёд',
       thumb_url: (payload && payload.thumb_url) || null,
     };
     var exists = false;

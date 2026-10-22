@@ -4224,7 +4224,7 @@
                   hubSessionNowPillHtml(b) + hubSandboxPillHtml(b) + hubProblemReportPillHtml(b) +
                   '</div>' +
               badgeRowSingle +
-              '<div class="slot-venue">📍 ' + venueInner + '</div>' +
+              '<div class="slot-venue">' + venueInner + '</div>' +
               '<div class="slot-client-hint">' + escapeHtml(clientLabel(b)) + '</div>' +
             '</div>' +
             '<div class="slot-meta">' +
@@ -7480,7 +7480,7 @@
         setHubUpcomingBookingsSectionVisible(true);
         if (hasFirstOnline) {
           parts.unshift(
-            '<div class="hub-first-online-hint" role="status">✨ Первая онлайн-запись — клиент записался сам</div>'
+            '<div class="hub-first-online-hint" role="status">Первая онлайн-запись — клиент записался сам</div>'
           );
         }
         var capHint = '';
@@ -8704,9 +8704,9 @@
           return window.TrainerHubCelebration.featuresFromUnlockedList(unlocked || []);
         }
         var META = {
-          crm: { id: 'crm', label: 'CRM и клиентская база', icon: '📋' },
-          online: { id: 'online', label: 'Онлайн-запись клиентов', icon: '🌐' },
-          analytics: { id: 'analytics', label: 'Аналитика и отчёты', icon: '📊' },
+          crm: { id: 'crm', label: 'CRM и клиентская база', icon: '✓' },
+          online: { id: 'online', label: 'Онлайн-запись клиентов', icon: '✓' },
+          analytics: { id: 'analytics', label: 'Аналитика и отчёты', icon: '✓' },
         };
         var order = ['crm', 'online', 'analytics'];
         var out = [];

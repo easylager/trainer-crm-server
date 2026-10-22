@@ -82,13 +82,13 @@
     }
     if (st === 'not_linked') {
       return {
-        icon: '🔗',
+        icon: '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
         title: 'Только для тренеров',
         hint: 'Этот бот только для тренеров. Подключение по ссылке с сайта.',
       };
     }
     return {
-      icon: '🔗',
+      icon: '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
       title: 'Откройте из бота',
       hint: 'Запустите мини-приложение из чата бота тренера (кнопка в меню или под сообщением).',
     };

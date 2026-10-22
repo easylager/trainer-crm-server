@@ -6,10 +6,10 @@
   var STORAGE_KEY = 'trainer_hub_subscription_celebration_v1';
 
   var TIER_FEATURE_META = {
-    crm: { label: 'CRM и клиентская база', icon: '📋' },
-    online: { label: 'Онлайн-запись клиентов', icon: '🌐' },
-    analytics: { label: 'Аналитика и отчёты', icon: '📊' },
-    groups: { label: 'Группы', icon: '👥' },
+    crm: { label: 'CRM и клиентская база', icon: '✓' },
+    online: { label: 'Онлайн-запись клиентов', icon: '✓' },
+    analytics: { label: 'Аналитика и отчёты', icon: '✓' },
+    groups: { label: 'Группы', icon: '✓' },
   };
 
   /**
