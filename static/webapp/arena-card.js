@@ -199,7 +199,8 @@
   }
 
   function scheduleHeaderTools(tickets) {
-    var watch = iceWatchBtnHtml();
+    // Карточка v2: колокольчик живёт на обложке; здесь он остаётся, только если обложка его не показала.
+    var watch = visit() ? '' : iceWatchBtnHtml();
     var ticket =
       tickets
         ? '<a class="arena-cta arena-cta--link ga-press" href="' +
@@ -822,7 +823,7 @@
       html += '<p class="arena-sub arena-sub--tight">' + esc(foot.join(' · ')) + '</p>';
     }
     html += '</div>';
-    if (mass.rentalCatalog.length) {
+    if (mass.rentalCatalog.length && !visit()) {
       html += '<div class="arena-sec"><p class="arena-h">' + esc(mass.rentalTitle || 'Прокат инвентаря') + '</p><ul class="arena-price-list">';
       mass.rentalCatalog.forEach(function (row) {
         html +=
@@ -1005,6 +1006,8 @@
       );
     });
     // «Поделиться» теперь всегда круглой кнопкой на фото — здесь только то, ради чего открывают место.
+    var bell = heroBellHtml();
+    if (bell) items.push(bell);
     if (!items.length) return '';
     return '<span class="arena-hero__chips">' + items.join('') + '</span>';
   }
@@ -1354,6 +1357,8 @@
       scheduleHeaderTools(tickets) +
       '</div>' +
       focusGone +
+      renderVisitPrices() +
+      renderBuyLine() +
       (hint ? '<p class="arena-schedule-hint">' + esc(hint) + '</p>' : '') +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
@@ -1644,6 +1649,244 @@
     return html;
   }
 
+  /* ── Карточка катка v2 (arena_visit_info.visit_view → card.visit) ──────────
+     Порядок блоков тот же, что на сайте: cover, ice, facts, services, trainers, partners, more.
+     Блок без данных не рисуется. */
+  var VISIT_ICONS = {
+    hanger: '<path d="M10 7a2 2 0 1 1 3 1.7c-.7.4-1 .9-1 1.6v.7"/><path d="M3 18l9-6 9 6z"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    cup: '<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 10h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v3M12 3v3"/>',
+    parking: '<circle cx="12" cy="12" r="9"/><path d="M10 16V8h3a2.5 2.5 0 0 1 0 5h-3"/>',
+    thermo: '<path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/><path d="M12 9v6"/>',
+    card: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>',
+    child: '<circle cx="12" cy="5.5" r="2.5"/><path d="M7 11h10M12 9v6M9 21l3-6 3 6"/>',
+    eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    ruler: '<path d="M4 15 15 4l5 5L9 20z"/><path d="M8 11l2 2M11 8l2 2M14 5l2 2"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    person: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+    skate: '<path d="M6 4v9h8l4 2v2H5"/><path d="M4 20h16"/>',
+    sharpen: '<circle cx="10" cy="8.5" r="5"/><circle cx="10" cy="8.5" r="1.2"/><path d="M3 18.5h16a2 2 0 0 0 2-2"/><path d="M8 18.5v-2.5h6l1.5 2.5"/>',
+    shield: '<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/>',
+    helmet: '<path d="M4 16a8 8 0 0 1 16 0v1H4z"/><path d="M12 8v4M4 17h16"/>',
+    ticket: '<path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4z"/><path d="M14 8v8"/>',
+    pass: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>',
+    rink: '<rect x="3" y="6" width="18" height="12" rx="6"/><path d="M12 6v12"/><circle cx="12" cy="12" r="2"/>',
+    phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+    down: '<path d="M6 9l6 6 6-6"/>'
+  };
+  var PENGUIN =
+    '<svg class="av-penguin" viewBox="0 0 64 64" role="img" aria-label="Опора «пингвин»">' +
+    '<path d="M20 20c0-12 24-12 24 0" fill="none" stroke="#0d1b26" stroke-width="4" stroke-linecap="round"/>' +
+    '<ellipse cx="32" cy="38" rx="15" ry="20" fill="#0d1b26"/><ellipse cx="32" cy="43" rx="9.5" ry="13" fill="#fff"/>' +
+    '<path d="M19 31h26v4H19z" fill="#45B9BB"/><circle cx="27" cy="25" r="3" fill="#fff"/><circle cx="37" cy="25" r="3" fill="#fff"/>' +
+    '<circle cx="27.5" cy="25.5" r="1.4" fill="#0d1b26"/><circle cx="36.5" cy="25.5" r="1.4" fill="#0d1b26"/>' +
+    '<path d="M29.5 28.5h5l-2.5 3z" fill="#f2a33a"/><ellipse cx="25" cy="58" rx="6" ry="2.6" fill="#f2a33a"/>' +
+    '<ellipse cx="39" cy="58" rx="6" ry="2.6" fill="#f2a33a"/></svg>';
+
+  function visitIcon(name) {
+    return '<svg class="av-ic__svg" viewBox="0 0 24 24" aria-hidden="true">' + (VISIT_ICONS[name] || VISIT_ICONS.info) + '</svg>';
+  }
+
+  function visit() {
+    var v = state.card && state.card.visit;
+    return v && typeof v === 'object' ? v : null;
+  }
+
+  function moneyMinor(minor, currency) {
+    var f = M.formatMinor ? M.formatMinor(minor, currency) : null;
+    if (f) return f.withCurrency;
+    var major = Number(minor) / 100;
+    return (Number.isInteger(major) ? String(major) : major.toFixed(2)) + ' ' + currency;
+  }
+
+  /** Минимум недели по взрослому, детскому и прокату — как на сайте (place_visit_blocks.price_floors). */
+  function priceFloors() {
+    var seen = { adult: {}, child: {}, rental: {} };
+    var currency = 'BYN';
+    ((state.sessions && state.sessions.days) || []).forEach(function (d) {
+      (d.sessions || []).forEach(function (s) {
+        if (s.currency_code) currency = s.currency_code;
+        var adult = s.price_adult_minor != null ? s.price_adult_minor : s.price_minor;
+        if (adult != null) seen.adult[adult] = 1;
+        if (s.price_child_minor != null) seen.child[s.price_child_minor] = 1;
+        if (s.price_rental_minor != null) seen.rental[s.price_rental_minor] = 1;
+      });
+    });
+    var out = { currency: currency };
+    Object.keys(seen).forEach(function (k) {
+      var vals = Object.keys(seen[k]).map(Number);
+      if (vals.length) out[k] = { minor: Math.min.apply(null, vals), varies: vals.length > 1 };
+    });
+    return out;
+  }
+
+  function renderVisitPrices() {
+    var v = visit() || {};
+    var f = priceFloors();
+    function money(k) {
+      return (f[k].varies ? 'от ' : '') + moneyMinor(f[k].minor, f.currency);
+    }
+    var cells = [];
+    if (f.adult) cells.push(['Вход', money('adult'), f.rental ? 'свои коньки' : 'взрослый']);
+    if (f.child) cells.push(['Детский', money('child'), v.child_age_max ? 'до ' + v.child_age_max + ' лет' : '']);
+    if (f.rental) cells.push(['Прокат', money('rental'), v.sizes ? 'размеры ' + v.sizes : 'коньки']);
+    if (!cells.length) return '';
+    var html = '<div class="av-prices av-prices--' + cells.length + '">' + cells.map(function (c) {
+      return '<div class="av-price"><span class="av-price__k">' + esc(c[0]) + '</span><b class="av-price__v">' +
+        esc(c[1]) + '</b>' + (c[2] ? '<span class="av-price__s">' + esc(c[2]) + '</span>' : '') + '</div>';
+    }).join('') + '</div>';
+    if (f.adult && f.rental) {
+      html += '<p class="av-sum">Взрослому с прокатом — ' + (f.adult.varies || f.rental.varies ? 'от ' : '') +
+        esc(moneyMinor(f.adult.minor + f.rental.minor, f.currency)) + '.</p>';
+    }
+    return html;
+  }
+
+  function renderBuyLine() {
+    var v = visit();
+    if (!v || !v.tickets) return '';
+    var t = v.tickets;
+    var detail = t.detail || '';
+    var note = String(t.note || '').replace(/\.$/, '');
+    if (t.mode === 'box_office') {
+      var tail = [detail, note].filter(Boolean).join(' · ');
+      return '<p class="av-line av-line--desk">' + visitIcon('ticket') + '<span><b>Билеты только в кассе</b>' +
+        (tail ? ' · ' + esc(tail) : '') + '</span></p>';
+    }
+    if (t.mode === 'same_day') {
+      return '<p class="av-line av-line--soft">' + visitIcon('clock') +
+        '<span><b>Онлайн продают только в день сеанса.</b> Заранее — в кассе.' + (detail ? ' ' + esc(detail) + '.' : '') + '</span></p>';
+    }
+    var bits = [detail, note].filter(Boolean).join(' · ');
+    return bits ? '<p class="av-line av-line--plain">' + visitIcon('ticket') + '<span>' + esc(bits) + '</span></p>' : '';
+  }
+
+  function renderFacts() {
+    var v = visit();
+    var facts = (v && v.facts) || [];
+    if (!facts.length) return '';
+    var food = foodPartner();
+    var visible = v.facts_visible || 4;
+    function cell(f) {
+      var badge = f.key === 'cafe' && food ? '<span class="av-fact__badge">' + esc(food.offer) + '</span>' : '';
+      var tag = badge ? 'a' : 'div';
+      var href = badge ? ' href="#arenaPartners"' : '';
+      return '<' + tag + ' class="av-fact"' + href + '><span class="av-ic av-ic--sm">' + visitIcon(f.icon) + '</span>' +
+        '<b class="av-fact__t">' + esc(f.title) + badge + '</b>' +
+        (f.note ? '<span class="av-fact__n">' + esc(f.note) + '</span>' : '') + '</' + tag + '>';
+    }
+    var html = '<div class="arena-sec"><p class="arena-h">Что важно знать</p><div class="av-facts">' +
+      facts.slice(0, visible).map(cell).join('') + '</div>';
+    var rest = facts.slice(visible);
+    if (rest.length) {
+      html += '<details class="av-facts-more"><summary>Ещё ' + rest.length + '</summary><div class="av-facts">' +
+        rest.map(cell).join('') + '</div></details>';
+    }
+    return html + '</div>';
+  }
+
+  function renderServices() {
+    var v = visit();
+    var sv = (v && v.services) || {};
+    var rows = sv.rows || [];
+    if (!rows.length) return '';
+    var priced = rows.some(function (r) { return !!r.price; });
+    var html = '<div class="arena-sec"><div class="arena-h-row"><p class="arena-h">Прокат и услуги</p>' +
+      (priced ? '<span class="av-aside">в кассе</span>' : '') + '</div><div class="av-list">';
+    rows.forEach(function (r) {
+      var media = r.icon === 'penguin'
+        ? '<span class="av-pic">' + PENGUIN + '</span>'
+        : '<span class="av-ic">' + visitIcon(r.icon) + '</span>';
+      html += '<div class="av-row">' + media + '<span class="av-row__b"><b>' + esc(r.title) + '</b>' +
+        (r.note ? '<span>' + esc(r.note) + '</span>' : '') + '</span>' +
+        (r.price ? '<span class="av-row__p">' + esc(r.price) + '</span>' : '') + '</div>';
+    });
+    html += '</div>';
+    (sv.notes || []).forEach(function (n) {
+      html += '<p class="av-line av-line--soft">' + visitIcon('info') + '<span>' + esc(n) + '</span></p>';
+    });
+    return html + '</div>';
+  }
+
+  function schoolTable(school) {
+    var rows = school.rows || [];
+    var hasChild = rows.some(function (r) { return !!r.child; });
+    var hasAdult = rows.some(function (r) { return !!r.adult; });
+    var html = '<table class="av-table"><thead><tr><th></th>' + (hasChild ? '<th>Детям</th>' : '') +
+      (hasAdult ? '<th>Взрослым</th>' : '') + '</tr></thead><tbody>' + rows.map(function (r) {
+        return '<tr><td>' + esc(r.label) + '</td>' + (hasChild ? '<td>' + esc(r.child || '—') + '</td>' : '') +
+          (hasAdult ? '<td>' + esc(r.adult || '—') + '</td>' : '') + '</tr>';
+      }).join('') + '</tbody></table>';
+    if (school.phone) {
+      var digits = String(school.phone).replace(/[^\d+]/g, '');
+      html += '<a class="av-call ga-press" href="tel:' + esc(digits) + '">' + visitIcon('phone') + 'Записаться: ' +
+        esc(school.phone) + (school.contact ? ' · ' + esc(school.contact) : '') + '</a>';
+    }
+    return html;
+  }
+
+  function moreRow(key, icon, title, note, inner, solo) {
+    return '<details class="av-more' + (solo ? ' av-more--solo' : '') + '"><summary><span class="av-ic">' + visitIcon(icon) +
+      '</span><span class="av-row__b"><b>' + esc(title) + '</b>' + (note ? '<span>' + esc(note) + '</span>' : '') +
+      '</span><span class="av-more__chev">' + visitIcon('down') + '</span></summary><div class="av-more__body">' + inner +
+      '</div></details>';
+  }
+
+  function renderSchoolInTrainers() {
+    var v = visit();
+    var school = v && v.school;
+    if (!school || !school.rows || !school.rows.length) return '';
+    return '<div class="arena-sec av-sec--tight">' +
+      moreRow('school', 'child', 'Школа катка', school.age_from ? 'с ' + school.age_from + ' лет' : '', schoolTable(school), true) +
+      '</div>';
+  }
+
+  function renderMore() {
+    var v = visit();
+    var more = (v && v.more) || [];
+    if (!more.length) return '';
+    var phone = state.card && state.card.contacts && state.card.contacts.phone;
+    var html = more.map(function (m) {
+      var d = m.detail || {};
+      var inner = '';
+      if (m.key === 'school') inner = schoolTable(d);
+      else if (m.key === 'passes') {
+        var cols = d.columns || [];
+        inner = '<table class="av-table"><thead><tr><th></th>' + cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') +
+          '</tr></thead><tbody>' + (d.rows || []).map(function (r) {
+            return '<tr><td>' + esc(r.label) + '</td>' + (r.values || []).slice(0, cols.length).map(function (x) {
+              return '<td>' + esc(x || '—') + '</td>';
+            }).join('') + '</tr>';
+          }).join('') + '</tbody></table>';
+      } else {
+        var tel = d.phone || phone || '';
+        inner = '<p class="av-lead">Весь каток на вашу компанию: день рождения, хоккей с друзьями, корпоратив.</p>' +
+          '<div class="av-rink">' + (d.rows || []).map(function (r) {
+            return '<div><span>' + esc(r.label) + (r.minutes ? ', ' + r.minutes + ' минут' : '') + '</span><b>' + esc(r.price) + '</b></div>';
+          }).join('') + '</div>' +
+          (tel ? '<a class="av-call ga-press" href="tel:' + esc(String(tel).split(';')[0].replace(/[^\d+]/g, '')) + '">' +
+            visitIcon('phone') + 'Позвонить и забронировать</a>' : '');
+      }
+      return moreRow(m.key, m.icon, m.title, m.note, inner, false);
+    }).join('');
+    return '<div class="arena-sec"><p class="arena-h">Ещё на катке</p><div class="av-list">' + html + '</div></div>';
+  }
+
+  /** Колокольчик «следить за катком» — на обложке рядом с Маршрутом и Телефоном. */
+  function heroBellHtml() {
+    if (!initData() || !skatingCard() || seasonRemindActive()) return '';
+    var on = state.iceWatchKinds && state.iceWatchKinds.sessions;
+    var hint = on
+      ? 'Напоминание в Telegram включено. Нажмите, чтобы отключить'
+      : 'Напомнить в Telegram о подходящих сеансах';
+    return '<button type="button" class="ga-onphoto ga-onphoto--icon ga-press' + (on ? ' is-on' : '') +
+      '" data-action="ice-watch" data-watch-kind="sessions" aria-pressed="' + (on ? 'true' : 'false') +
+      '" aria-label="' + esc(hint) + '" title="' + esc(hint) + '">' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/>' +
+      (on ? '<path d="M4 4l16 16"/>' : '') + '</svg></button>';
+  }
+
   function paint() {
     if (!root || !state.card) return;
     var title = document.getElementById('headerTitle');
@@ -1654,11 +1897,14 @@
         renderHero() +
         renderIceSection() +
         renderOhmSection() +
-        // Тренер — сразу после расписания: человек только что выбрал время и думает, как выйти на лёд.
-        renderTrainers() +
-        renderAmenities() +
-        renderPartners() +
+        // Карточка v2 — порядок PLACE_BLOCKS, как на сайте: на месте → тренеры → партнёры → ещё.
+        (visit() && String(state.card.venue_type || '') !== 'shop' ? renderFacts() : renderAmenities()) +
+        renderServices() +
         renderMassAccess() +
+        renderTrainers() +
+        (state.trainers && state.trainers.items && state.trainers.items.length ? renderSchoolInTrainers() : '') +
+        renderPartners() +
+        renderMore() +
         renderCenterOffer() +
         renderGroups() +
         renderInfo() +

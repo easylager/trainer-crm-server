@@ -166,6 +166,18 @@ def test_opening_hours_strip_dossier_markers(cards, loader) -> None:
     arena = cards["minskarena"].opening_hours
     assert arena.get("note") == "Администрация: Пн–Чт 9:00–18:00, Пт 9:00–16:45"
     assert cards["vitebsk-ds"].district is None
+    lida = cards["lida-lds"].opening_hours
+    assert lida["kassa"] == {"open": "12:30", "close": "21:00"}
+    assert "Онлайн-кассы пока нет" in lida["ticket_note"]
+    assert lida["rental_title"] == "Услуги и цены"
+    assert "45 минут" in lida["rental_note"]
+    labels = [row["label"] for row in lida["rental_catalog"]]
+    assert "Прокат коньков, детский до 16 лет" in labels
+    assert "Заточка для катания" in labels
+    assert "Абонемент 12 посещений, взрослый, без коньков" in labels
+    by_label = {row["label"]: row["price"] for row in lida["rental_catalog"]}
+    assert by_label["Прокат коньков, детский до 16 лет"] == "5 BYN"
+    assert by_label["Заточка для учащихся школы"] == "бесплатно"
 
 
 def test_photo_decisions_skip_google_social_and_403_not_grant(cards) -> None:

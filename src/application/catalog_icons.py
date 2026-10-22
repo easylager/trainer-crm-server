@@ -42,6 +42,36 @@ _SHARPEN = (
     '<path d="M16.5 12.5l2.5 1.2M17 9h2.5"/>'
 )
 
+# Линейные иконки карточки катка v2 (viewBox 24, та же толщина, что у «Заточки»).
+_LINE: dict[str, str] = {
+    "hanger": '<path d="M10 7a2 2 0 1 1 3 1.7c-.7.4-1 .9-1 1.6v.7"/><path d="M3 18l9-6 9 6z"/>',
+    "lock": '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    "thermo": '<path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/><path d="M12 9v6"/>',
+    "card": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>',
+    "child": '<circle cx="12" cy="5.5" r="2.5"/><path d="M7 11h10M12 9v6M9 21l3-6 3 6"/>',
+    "eye": '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    "ruler": '<path d="M4 15 15 4l5 5L9 20z"/><path d="M8 11l2 2M11 8l2 2M14 5l2 2"/>',
+    "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    "shield": '<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/>',
+    "helmet": '<path d="M4 16a8 8 0 0 1 16 0v1H4z"/><path d="M12 8v4M4 17h16"/>',
+    "ticket": '<path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4z"/><path d="M14 8v8"/>',
+    "globe": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
+    "pass": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>',
+    "rink": '<rect x="3" y="6" width="18" height="12" rx="6"/><path d="M12 6v12"/><circle cx="12" cy="12" r="2"/>',
+}
+
+# Опора «пингвин»: картинка, а не значок — по ней узнают предмет в кассе.
+PENGUIN_SVG = (
+    '<svg class="b-penguin" viewBox="0 0 64 64" role="img" aria-label="Опора «пингвин»">'
+    '<path d="M20 20c0-12 24-12 24 0" fill="none" stroke="#0d1b26" stroke-width="4" stroke-linecap="round"/>'
+    '<ellipse cx="32" cy="38" rx="15" ry="20" fill="#0d1b26"/><ellipse cx="32" cy="43" rx="9.5" ry="13" fill="#fff"/>'
+    '<path d="M19 31h26v4H19z" fill="#45B9BB"/><circle cx="27" cy="25" r="3" fill="#fff"/>'
+    '<circle cx="37" cy="25" r="3" fill="#fff"/><circle cx="27.5" cy="25.5" r="1.4" fill="#0d1b26"/>'
+    '<circle cx="36.5" cy="25.5" r="1.4" fill="#0d1b26"/><path d="M29.5 28.5h5l-2.5 3z" fill="#f2a33a"/>'
+    '<ellipse cx="25" cy="58" rx="6" ry="2.6" fill="#f2a33a"/><ellipse cx="39" cy="58" rx="6" ry="2.6" fill="#f2a33a"/>'
+    "</svg>"
+)
+
 
 def icon_svg(name: str, *, extra_class: str = "") -> str:
     """Пустая строка, если имени нет в наборе — emoji не подставляем."""
@@ -51,6 +81,11 @@ def icon_svg(name: str, *, extra_class: str = "") -> str:
         return (
             f'<svg class="{klass} b-icon--line" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
             f"{shapes}</svg>"
+        )
+    if name in _LINE:
+        return (
+            f'<svg class="{klass} b-icon--line" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+            f"{_LINE[name]}</svg>"
         )
     shape = _PHOSPHOR.get(name)
     if not shape:

@@ -152,6 +152,8 @@
             draft.reopen_date = trimOrNull((row.querySelector('[data-field="reopen_date"]') || {}).value);
           }
         }
+        var visitInfo = collectVisitInfo(row);
+        if (visitInfo !== undefined) draft.visit_info = visitInfo;
         var sortEl = row.querySelector('[data-field="sort_order"]');
         if (sortEl && sortEl.value !== '') {
           var so = Number(sortEl.value);
@@ -482,6 +484,215 @@
         };
       }
 
+      // ── Карточка катка (arena_profiles.visit_info). Ключи — контракт arena_visit_info.py ──
+      var VISIT_TICKET_MODES = [
+        ['', 'Авто'], ['online', 'Онлайн'], ['same_day', 'Онлайн в день сеанса'],
+        ['box_office', 'Только касса'], ['phone', 'Расписание по телефону']
+      ];
+      var VISIT_TRI = [['', 'не знаем'], ['true', 'да'], ['false', 'нет']];
+      var VISIT_FACT_STATES = [['', 'не знаем'], ['yes', 'есть'], ['no', 'нет']];
+      var VISIT_WARMTH = [['', 'не знаем'], ['warm', 'тепло'], ['cool', 'прохладно'], ['cold', 'холодно']];
+      var VISIT_FACT_ICONS = [
+        ['hanger', 'Раздевалка'], ['lock', 'Замок'], ['cup', 'Кафе'], ['thermo', 'Температура'],
+        ['card', 'Оплата'], ['child', 'Дети'], ['eye', 'Трибуна'], ['ruler', 'Размеры'],
+        ['clock', 'Время'], ['info', 'Инфо'], ['parking', 'Парковка'], ['person', 'Человек']
+      ];
+      var VISIT_SERVICE_KINDS = [
+        ['aid', 'Опора «пингвин»'], ['rental', 'Прокат коньков'], ['sharpening', 'Заточка'],
+        ['protection', 'Защита'], ['helmet', 'Шлем'], ['other', 'Другое']
+      ];
+      var VISIT_LISTS = {
+        custom_facts: { add: '+ Факт', cols: [['icon', 'select', VISIT_FACT_ICONS, 'info'], ['title', 'text', 'Заголовок'], ['note', 'text', 'Пояснение']] },
+        services: { add: '+ Услуга', cols: [['kind', 'select', VISIT_SERVICE_KINDS, 'rental'], ['label', 'text', 'Название (если «Другое»)'], ['price', 'text', 'Цена'], ['note', 'text', 'Пояснение']] },
+        'school.rows': { add: '+ Строка', cols: [['label', 'text', 'Занятие'], ['child', 'text', 'Детям'], ['adult', 'text', 'Взрослым']] },
+        'passes.rows': { add: '+ Абонемент', cols: [['label', 'text', 'Название'], ['v0', 'text', 'Цена 1'], ['v1', 'text', 'Цена 2']] },
+        'rink_rental.rows': { add: '+ Тариф', cols: [['label', 'text', 'Название'], ['minutes', 'number', 'Минут'], ['price', 'text', 'Цена']] }
+      };
+
+      function visitGet(obj, path) {
+        var cur = obj;
+        String(path).split('.').forEach(function(k) {
+          cur = (cur && typeof cur === 'object') ? cur[k] : undefined;
+        });
+        return cur;
+      }
+      function visitSet(obj, path, value) {
+        var keys = String(path).split('.');
+        var cur = obj;
+        keys.slice(0, -1).forEach(function(k) {
+          if (!cur[k] || typeof cur[k] !== 'object') cur[k] = {};
+          cur = cur[k];
+        });
+        cur[keys[keys.length - 1]] = value;
+      }
+      function visitStr(v) {
+        return v === true ? 'true' : v === false ? 'false' : (v == null ? '' : String(v));
+      }
+      function visitInput(path, v, opts) {
+        opts = opts || {};
+        return '<input data-v="' + path + '"' + (opts.type ? ' type="' + opts.type + '"' : '') +
+          (opts.ph ? ' placeholder="' + escapeHtml(opts.ph) + '"' : '') + ' value="' + escapeHtml(visitStr(v)) + '">';
+      }
+      function visitSelect(attr, pairs, current) {
+        var html = '<select ' + attr + '>';
+        pairs.forEach(function(p) {
+          html += '<option value="' + p[0] + '"' + (visitStr(current) === p[0] ? ' selected' : '') + '>' + escapeHtml(p[1]) + '</option>';
+        });
+        return html + '</select>';
+      }
+      function visitField(label, inner) {
+        return '<div class="field"><label>' + label + '</label>' + inner + '</div>';
+      }
+      function visitRowHtml(listKey, row) {
+        var spec = VISIT_LISTS[listKey];
+        var html = '<div class="visit-row">';
+        spec.cols.forEach(function(c) {
+          var v = row[c[0]];
+          if (c[0] === 'v0' || c[0] === 'v1') v = (row.values || [])[c[0] === 'v0' ? 0 : 1];
+          if (c[1] === 'select') html += visitSelect('data-vk="' + c[0] + '"', c[2], v || c[3]);
+          else html += '<input data-vk="' + c[0] + '"' + (c[1] === 'number' ? ' type="number" inputmode="numeric"' : '') +
+            ' placeholder="' + escapeHtml(c[2]) + '" value="' + escapeHtml(visitStr(v)) + '">';
+        });
+        return html + '<button type="button" class="btn-ghost" data-vrole="del" title="Убрать">×</button></div>';
+      }
+      function visitListHtml(listKey, rows) {
+        var html = '<div class="visit-list" data-vlist="' + listKey + '">';
+        (rows || []).forEach(function(r) { html += visitRowHtml(listKey, r || {}); });
+        return html + '</div><button type="button" class="btn-ghost visit-add" data-vrole="add" data-vlist-key="' +
+          listKey + '">' + VISIT_LISTS[listKey].add + '</button>';
+      }
+      function visitGroup(title, inner, open) {
+        return '<details class="visit-group"' + (open ? ' open' : '') + '><summary>' + title + '</summary>' + inner + '</details>';
+      }
+      function visitInfoSectionHtml(a) {
+        var v = (a.visit_info && typeof a.visit_info === 'object') ? a.visit_info : {};
+        var armId = 'vm' + (a.id != null ? a.id : 'new');
+        var html = '<details class="arena-section visit-section"><summary class="arena-section-title">Карточка катка</summary>';
+        var mode = visitStr(visitGet(v, 'tickets.mode'));
+        var g = '<div class="field"><label>Как продаются билеты</label><div class="amenity-grid visit-modes">';
+        VISIT_TICKET_MODES.forEach(function(p) {
+          g += '<label><input type="radio" name="' + armId + '" data-v="tickets.mode" value="' + p[0] + '"' +
+            (mode === p[0] ? ' checked' : '') + '> ' + escapeHtml(p[1]) + '</label>';
+        });
+        g += '</div></div>';
+        g += '<div class="field-row">' + visitField('Касса с', visitInput('tickets.open', visitGet(v, 'tickets.open'), { ph: '09:00' })) +
+          visitField('до', visitInput('tickets.close', visitGet(v, 'tickets.close'), { ph: '21:00' })) + '</div>';
+        g += '<div class="field-row field-row--3">' +
+          visitField('Продают за (дней)', visitInput('tickets.presale_days', visitGet(v, 'tickets.presale_days'), { type: 'number' })) +
+          visitField('Картой', visitSelect('data-v="tickets.card"', VISIT_TRI, visitGet(v, 'tickets.card'))) +
+          visitField('Наличными', visitSelect('data-v="tickets.cash"', VISIT_TRI, visitGet(v, 'tickets.cash'))) + '</div>';
+        g += '<div class="amenity-grid"><label><input type="checkbox" data-v="tickets.desk_only_services"' +
+          (visitGet(v, 'tickets.desk_only_services') === true ? ' checked' : '') + '> Прокат и заточку оплачивают только в кассе</label></div>';
+        g += visitField('Пояснение к билетам', visitInput('tickets.note', visitGet(v, 'tickets.note')));
+        html += visitGroup('Как купить билет', g, true);
+
+        html += visitGroup('Вход', visitField('Детский билет до (лет)', visitInput('child_age_max', v.child_age_max, { type: 'number' })));
+
+        g = '';
+        [['locker_rooms', 'Раздевалка'], ['lockers', 'Камеры хранения'], ['cafe', 'Кафе'], ['parking', 'Парковка']].forEach(function(p) {
+          g += '<div class="field-row">' + visitField(p[1], visitSelect('data-v="facts.' + p[0] + '.state"', VISIT_FACT_STATES, visitGet(v, 'facts.' + p[0] + '.state'))) +
+            visitField('Пояснение', visitInput('facts.' + p[0] + '.note', visitGet(v, 'facts.' + p[0] + '.note'))) + '</div>';
+        });
+        g += '<div class="field-row">' + visitField('Температура внутри', visitSelect('data-v="facts.warmth.state"', VISIT_WARMTH, visitGet(v, 'facts.warmth.state'))) +
+          visitField('Пояснение', visitInput('facts.warmth.note', visitGet(v, 'facts.warmth.note'))) + '</div>';
+        g += '<div class="field-row field-row--3">' + visitField('Трибуна', visitSelect('data-v="facts.spectators.state"', VISIT_FACT_STATES, visitGet(v, 'facts.spectators.state'))) +
+          visitField('Цена', visitInput('facts.spectators.price', visitGet(v, 'facts.spectators.price'))) +
+          visitField('Пояснение', visitInput('facts.spectators.note', visitGet(v, 'facts.spectators.note'))) + '</div>';
+        g += '<div class="field"><label>Свои факты</label>' + visitListHtml('custom_facts', v.custom_facts) + '</div>';
+        html += visitGroup('Что важно знать', g);
+
+        g = '<div class="field"><label>Услуги</label>' + visitListHtml('services', v.services) + '</div>';
+        g += '<div class="field-row">' + visitField('Размеры проката', visitInput('rental.sizes', visitGet(v, 'rental.sizes'), { ph: '28–46' })) +
+          visitField('Залог', visitInput('rental.deposit', visitGet(v, 'rental.deposit'))) + '</div>';
+        html += visitGroup('Прокат и услуги', g);
+
+        g = '<div class="field-row field-row--3">' + visitField('Учат с (лет)', visitInput('school.age_from', visitGet(v, 'school.age_from'), { type: 'number' })) +
+          visitField('Телефон', visitInput('school.phone', visitGet(v, 'school.phone'))) +
+          visitField('Контакт', visitInput('school.contact', visitGet(v, 'school.contact'))) + '</div>';
+        g += '<div class="field"><label>Занятия и цены</label>' + visitListHtml('school.rows', visitGet(v, 'school.rows')) + '</div>';
+        html += visitGroup('Школа катка', g);
+
+        var cols = visitGet(v, 'passes.columns');
+        cols = (cols && cols.length) ? cols : ['Детский', 'Взрослый'];
+        g = '<div class="field-row">' + visitField('Колонка 1', visitInput('passes.col0', cols[0])) +
+          visitField('Колонка 2', visitInput('passes.col1', cols[1] || '')) + '</div>';
+        g += '<div class="field"><label>Абонементы</label>' + visitListHtml('passes.rows', visitGet(v, 'passes.rows')) + '</div>';
+        html += visitGroup('Абонементы', g);
+
+        g = '<div class="field"><label>Тарифы</label>' + visitListHtml('rink_rental.rows', visitGet(v, 'rink_rental.rows')) + '</div>';
+        g += visitField('Телефон для заказа', visitInput('rink_rental.phone', visitGet(v, 'rink_rental.phone')));
+        html += visitGroup('Снять лёд целиком', g);
+        return html + '</details>';
+      }
+      function collectVisitInfo(row) {
+        var sec = row.querySelector('.visit-section');
+        if (!sec) return undefined;
+        var out = {};
+        sec.querySelectorAll('[data-v]').forEach(function(el) {
+          var path = el.getAttribute('data-v');
+          var val;
+          if (el.type === 'radio') {
+            if (!el.checked) return;
+            val = el.value;
+          } else if (el.type === 'checkbox') {
+            val = el.checked ? true : '';
+          } else {
+            val = (el.value || '').trim();
+            if (el.tagName === 'SELECT') {
+              if (val === 'true') val = true;
+              else if (val === 'false') val = false;
+            }
+          }
+          visitSet(out, path, val);
+        });
+        if (out.passes) {
+          out.passes.columns = [out.passes.col0 || '', out.passes.col1 || ''].filter(function(c) { return c; });
+          delete out.passes.col0;
+          delete out.passes.col1;
+        }
+        sec.querySelectorAll('.visit-list').forEach(function(list) {
+          var key = list.getAttribute('data-vlist');
+          var rows = [];
+          list.querySelectorAll('.visit-row').forEach(function(r) {
+            var item = {};
+            var values = [];
+            r.querySelectorAll('[data-vk]').forEach(function(el) {
+              var k = el.getAttribute('data-vk');
+              var val = (el.value || '').trim();
+              if (k === 'v0') values[0] = val;
+              else if (k === 'v1') values[1] = val;
+              else item[k] = val;
+            });
+            if (key === 'passes.rows') item.values = values.map(function(x) { return x || ''; });
+            rows.push(item);
+          });
+          visitSet(out, key, rows);
+        });
+        return out;
+      }
+      function bindVisitIn(root) {
+        (root || document).querySelectorAll('.visit-section').forEach(function(sec) {
+          if (sec.getAttribute('data-bound') === '1') return;
+          sec.setAttribute('data-bound', '1');
+          sec.addEventListener('click', function(e) {
+            var btn = e.target.closest ? e.target.closest('[data-vrole]') : null;
+            if (!btn) return;
+            e.stopPropagation();
+            if (btn.getAttribute('data-vrole') === 'del') {
+              var rowEl = btn.closest('.visit-row');
+              if (rowEl) rowEl.parentNode.removeChild(rowEl);
+              return;
+            }
+            var key = btn.getAttribute('data-vlist-key');
+            var list = btn.previousElementSibling;
+            if (!list || !VISIT_LISTS[key]) return;
+            var tmp = document.createElement('div');
+            tmp.innerHTML = visitRowHtml(key, {});
+            list.appendChild(tmp.firstChild);
+          });
+        });
+      }
+
       function arenaProfileBodyHtml(a, opts) {
         opts = opts || {};
         var includePhotos = opts.includePhotos !== false;
@@ -551,6 +762,7 @@
           html += '<label><input type="checkbox" data-amenity="' + pair[0] + '"' + checked + '> ' + pair[1] + '</label>';
         });
         html += '</div></div></section>';
+        if (includePhotos && venueType !== 'shop') html += visitInfoSectionHtml(a);
         if (includePhotos && arenaId != null) {
           html += '<section class="arena-section"><h3 class="arena-section-title">Фото</h3>';
           html += '<p class="muted" style="margin:0 0 8px;">До 6 снимков. Первое — hero в каталоге.</p>';
@@ -741,6 +953,7 @@
         });
         bindGeocodeIn(card);
         bindScheduleModeIn(card);
+        bindVisitIn(card);
         card.querySelectorAll('.icon-btn[data-role="save"], .btn-save-primary[data-role="save"]').forEach(function(btn) {
           btn.addEventListener('click', function(e) {
             e.stopPropagation();
