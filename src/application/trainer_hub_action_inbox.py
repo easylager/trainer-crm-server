@@ -753,7 +753,9 @@ def build_trainer_hub_action_inbox(
             _inbox_item(
                 item_id="pending_bookings",
                 kind="pending",
-                priority=100,
+                # Ученик ждёт ответа — это выше приглашения в каталог (108) и правок модератора
+                # (106): иначе первая настоящая запись тренера стояла под «Вас пока нет в каталоге».
+                priority=115,
                 urgent=True,
                 count=n,
                 title=(

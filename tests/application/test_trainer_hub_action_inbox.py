@@ -668,3 +668,31 @@ def test_states_other_than_draft_never_ask_to_publish() -> None:
     }
     for state in ("pending_review", "published", "hidden", "paused", "needs_revision"):
         assert not _should_nudge_catalog_in_hub({**base, "catalog_state": state}), state
+
+
+def test_waiting_student_outranks_the_catalog_invitation() -> None:
+    """
+    TASK-313: первая настоящая запись тренера ждёт подтверждения — ученик ждёт ответа. Строка
+    стояла под «Вас пока нет в каталоге» (приглашение без срока) и читалась как второстепенная.
+    """
+    onboarding = {
+        "catalog_state": "draft",
+        "is_active": False,
+        "profile_complete": False,
+        "has_any_booking": True,
+        "has_real_booking": True,
+        "real_bookings_count": 1,
+        "is_catalog_visible": False,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "has_crm_subscription_access": True,
+        "open_loop_pending_bookings_count": 1,
+    }
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        schedule_unlocked=True,
+        pending_booking_ids=[1],
+    )
+    ids = [x["id"] for x in inbox["items"]]
+    assert "catalog_publication" in ids, ids
+    assert ids[0] == "pending_bookings", ids

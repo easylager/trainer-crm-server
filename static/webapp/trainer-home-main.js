@@ -2361,7 +2361,7 @@
         if (canAct && pendingCount > 0) {
           items.push({
             id: 'pending_bookings',
-            priority: 100,
+            priority: 115,
             kind: 'pending',
             urgent: true,
             count: pendingCount,
@@ -2555,8 +2555,12 @@
             if (isRhythmHintDismissed('catalog_publication')) {
               badgesPayload.menu['trainer-profile'] = 0;
             }
+            /* Подсказка «дополнить анкету» — не действие, а приглашение: в число на вкладке
+               «Профиль» не входит (TASK-313). Иначе на вкладке висела «1», а внутри не было
+               ничего, что её объясняет: пустые поля и так показывает «Странице не хватает». */
             var moreSum = 0;
             Object.keys(badgesPayload.menu).forEach(function(k) {
+              if (k === 'trainer-profile') return;
               moreSum += parseInt(String(badgesPayload.menu[k] || 0), 10) || 0;
             });
             badgesPayload.more = moreSum;
@@ -2577,7 +2581,7 @@
         var clientsBadge = d ? parseNonNegativeInt(d.open_loop_clients_no_telegram_count) : 0;
         var payload = {
           schedule: scheduleBadge,
-          more: requestsBadge + profileBadge,
+          more: requestsBadge,
           clients: clientsBadge > 0 ? clientsBadge : 0,
           menu: {
             'trainer-requests': requestsBadge,
@@ -2598,7 +2602,7 @@
         if (profileBadge > 0) {
           payload.menu_hints['trainer-profile'] = 'Шаг для публикации в каталоге';
         }
-        payload.more = requestsBadge + profileBadge;
+        payload.more = requestsBadge;
         TrainerShell.setInboxBadges(payload);
         if (window.TrainerPendingInbox) {
           TrainerPendingInbox.syncShellBadges(payload);
@@ -2823,7 +2827,24 @@
 
       function syncHubFirstStudents(visible) {
         if (!mountHubFirstStudents()) return;
+        placeHubFirstStudents();
         window.TrainerFirstStudents.sync(visible);
+      }
+
+      /**
+       * Ученик записался сам и ждёт подтверждения — это важнее, чем «добавьте своих учеников».
+       * Пока есть неподтверждённые записи, карточка первых учеников уходит под «Сейчас важно»,
+       * иначе первая настоящая запись тренера пряталась третьей строкой под ней (TASK-313).
+       */
+      function placeHubFirstStudents() {
+        var fs = document.getElementById('hubFirstStudents');
+        var inbox = document.getElementById('hubActionInbox');
+        if (!fs || !inbox || fs.parentNode !== inbox.parentNode) return;
+        var below = hubLastPendingCount > 0;
+        var isBelow = !!(inbox.compareDocumentPosition(fs) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (below === isBelow) return;
+        if (below) inbox.parentNode.insertBefore(fs, inbox.nextSibling);
+        else inbox.parentNode.insertBefore(fs, inbox);
       }
 
       /** Пуш онбординга ведёт сюда с ?open=first_students — лист открывается сразу, один раз. */
