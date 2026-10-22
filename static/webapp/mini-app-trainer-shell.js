@@ -1,5 +1,11 @@
 /**
- * Trainer Mini App shell: bottom tab bar, «Ещё» sheet, navigate with init_data.
+ * Trainer Mini App shell: bottom tab bar, navigate with init_data.
+ *
+ * Пятая вкладка — «Профиль» (TASK-313): экран trainer-account со всеми разделами группами.
+ * Раньше здесь была шторка «Ещё», и тренер не находил в ней ни профиль, ни цены. Внутренний
+ * id вкладки остался 'more' — на нём держатся серверные бейджи (`badges.more`) и стили.
+ * Шторка по-прежнему собирается (скрыто): из неё вкладка «Профиль» берёт бейджи разделов
+ * и пункт «Студия» через getMenuState().
  * Exposes window.TrainerShell for inter-module communication.
  *
  * Drill-down detection is reactive:
@@ -11,7 +17,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202610051';
+  var SHELL_VERSION = '202610221';
 
   /** Prod default: off until TRAINER_COLLECTIVE_ENABLED=1 on API + hub bootstrap / access flag. */
   function isCollectiveFeatureEnabled() {
@@ -44,7 +50,7 @@
     schedule: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     clients: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     center: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 21V7l6-4 6 4v14"/><path d="M10 21v-6h4v6"/></svg>',
-    more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
     catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h2M7 17h2"/></svg>',
   };
 
@@ -146,8 +152,10 @@
     'trainer-profile': 20,
   };
 
-  /** Pages whose route key maps to «Ещё» tab */
+  /** Pages whose route key maps to the «Профиль» tab */
   var MORE_ROUTE_KEYS = [
+    'trainer-account',
+    'trainer-prices',
     'trainer-requests',
     'trainer-profile',
     'trainer-pass-products',
@@ -508,6 +516,7 @@
   }
 
   function syncCollectiveMoreItemVisibility() {
+    emitMenuState();
     var link = document.querySelector('[data-shell-path="trainer-collective"]');
     var item = link && link.closest('.trainer-more-sheet__item');
     if (!item) return;
@@ -631,7 +640,7 @@
          узнать о каталоге можно было только из хинта, который легко смахнуть. Место — четвёртое,
          перед «Ещё»: мышечную память первых трёх вкладок не сдвигаем. */
       { id: 'catalog',  label: 'Каталог',     path: 'trainer-catalog',  icon: TAB_ICONS.catalog },
-      { id: 'more',     label: 'Ещё',        path: null,               icon: TAB_ICONS.more },
+      { id: 'more',     label: 'Профиль',    path: 'trainer-account',  icon: TAB_ICONS.more },
     ];
 
     tabs.forEach(function (tab) {
@@ -649,10 +658,6 @@
         '</span>';
       btn.addEventListener('click', function () {
         hapticSelection();
-        if (tab.id === 'more') {
-          toggleMoreSheet();
-          return;
-        }
         if (btn.classList.contains('trainer-tab-bar__btn--locked') && tab.path) {
           showOnboardingNavSheet(evaluateOnboardingPath(tab.path));
           return;
@@ -918,7 +923,31 @@
     return path === 'trainer-profile';
   }
 
+  /** Бейджи разделов, подсказки и пункт «Студия» — для экрана «Профиль». */
+  function getMenuState() {
+    var collective = null;
+    if (state.collectiveMenuVisible && !showCenterGridTab()) {
+      collective = {
+        path: COLLECTIVE_MORE_ITEM.path,
+        label: collectiveMoreLabel(),
+        hint: collectiveMoreHint(),
+      };
+    }
+    return {
+      badges: state.menuBadges || {},
+      hints: state.menuBadgeHints || {},
+      collective: collective,
+    };
+  }
+
+  function emitMenuState() {
+    try {
+      document.dispatchEvent(new CustomEvent('trainer-shell:menu', { detail: getMenuState() }));
+    } catch (e) { /* старые WebView без CustomEvent */ }
+  }
+
   function syncMoreMenuBadges() {
+    emitMenuState();
     var menu = state.menuBadges || {};
     var list = document.querySelector('.trainer-more-sheet__list');
     if (list) {
@@ -1368,6 +1397,11 @@
   }
 
   function toggleMoreSheet() {
+    /* Шторки больше нет на экране: всё, что в ней было, живёт во вкладке «Профиль». */
+    if (!isSameTabRoute('trainer-account')) {
+      navigate('trainer-account');
+      return;
+    }
     if (state.moreOpen) {
       closeMoreSheet();
       return;
@@ -1505,6 +1539,7 @@
     toggleMoreSheet: toggleMoreSheet,
     setInboxBadges: setInboxBadges,
     fetchInboxBadgesFromServer: fetchInboxBadgesFromServer,
+    getMenuState: getMenuState,
     syncOnboarding: syncOnboarding,
     fetchOnboardingChecklist: fetchOnboardingChecklist,
     syncCollectiveMenuFromBootstrap: syncCollectiveMenuFromBootstrap,

@@ -628,6 +628,24 @@ def webapp_trainer_profile_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/trainer-account")
+def webapp_trainer_account_page():
+    """Trainer «Профиль» tab (TASK-313): header, what the page lacks, sections in groups."""
+    path = _WEBAPP_DIR / "trainer-account.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainer-prices")
+def webapp_trainer_prices_page():
+    """Trainer «Услуги и цены» (TASK-313): a card per service, adult/child first."""
+    path = _WEBAPP_DIR / "trainer-prices.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/trainer-catalog")
 def webapp_trainer_catalog_page():
     """Trainer «Каталог» section: publication state, preview, history (TASK-140)."""
@@ -1868,6 +1886,45 @@ def webapp_trainer_profile_css(request: Request):
     path = _WEBAPP_DIR / "mini-app-trainer-profile.css"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-account-main.js")
+def webapp_trainer_account_main_js(request: Request):
+    """Trainer «Профиль» tab logic (TASK-313). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-account-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-prices-main.js")
+def webapp_trainer_prices_main_js(request: Request):
+    """Trainer «Услуги и цены» logic (TASK-313). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-prices-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-account.css")
+def webapp_mini_app_trainer_account_css(request: Request):
+    """Trainer «Профиль» and «Услуги и цены» styles (TASK-313). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-account.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(
         path,
         media_type="text/css",

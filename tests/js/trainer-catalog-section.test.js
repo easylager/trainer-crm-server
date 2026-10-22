@@ -27,13 +27,13 @@ describe('бар: «Каталог» — постоянная пятая вкл�
     assert.match(shell, /id: 'catalog'[\s\S]{0,120}path: 'trainer-catalog'/);
   });
 
-  it('стоит четвёртой — перед «Ещё», после «Клиентов»', () => {
+  it('стоит четвёртой — перед «Профилем», после «Клиентов»', () => {
     const clients = shell.indexOf("id: 'clients'");
     const catalog = shell.indexOf("id: 'catalog'");
     const more = shell.indexOf("id: 'more'");
     assert.ok(clients > 0 && catalog > 0 && more > 0);
     assert.ok(clients < catalog, 'мышечную память первых вкладок не сдвигаем');
-    assert.ok(catalog < more, '«Ещё» остаётся последней');
+    assert.ok(catalog < more, '«Профиль» остаётся последней');
   });
 
   it('точка, а не число: для одной карточки «сколько» бессмысленно', () => {

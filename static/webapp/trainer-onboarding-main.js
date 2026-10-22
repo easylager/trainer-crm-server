@@ -2098,14 +2098,9 @@
 
   function onSkip() {
     if (state.busy || state.done) return;
-    if (state.step === 2) { showStep(3); return; }
-    if (state.step === 3 && !state.alreadyDone) {
-      /* «Настрою позже» — честно пустая неделя: сервер её принимает, а ссылку тренер
-         получает сразу. Неделю вернувшегося тренера так не трём: кнопки у него нет. */
-      state.week = {};
-      state.openWindow = null;
-      submit();
-    }
+    /* На шаге 3 пропуска нет: ссылка без единого времени — тупик для ученика, ему нечего
+       выбрать. Подсказанная неделя уже отмечена, тренер только правит её. */
+    if (state.step === 2) showStep(3);
   }
 
   function syncCta() {
@@ -2140,11 +2135,12 @@
       note('');
       return;
     }
-    /* Шаг 3. Расписание необязательно: сервер пустую неделю принимает. */
+    /* Шаг 3. Хотя бы одно время — иначе по ссылке ученику нечего выбрать. */
     el.obCta.textContent = state.alreadyDone ? 'Сохранить' : 'Получить ссылку';
-    if (skip && !state.alreadyDone && totalSlots() > 0) {
-      skip.hidden = false;
-      skip.textContent = 'Настрою позже';
+    if (!state.busy && totalSlots() === 0) {
+      el.obCta.disabled = true;
+      note('Отметьте хотя бы одно время — иначе ученику нечего выбрать');
+      return;
     }
     if (state.busy) note('Сохраняем…');
     else if (state.submitError) note(state.submitError, true);
@@ -2337,7 +2333,7 @@
       share_body: state._doneShareBody,
       needs_schedule: !!state._doneNeedsSchedule,
     });
-    window.location.href = pageUrl('trainer-profile?task=prices&from=onboarding');
+    window.location.href = pageUrl('trainer-prices?from=onboarding');
   }
 
   function maybeRestoreDoneScreen() {
@@ -2423,6 +2419,7 @@
     }
     if (el.obSkip) {
       el.obSkip.hidden = !link;
+      el.obSkip.textContent = 'Перейти в кабинет';
       el.obSkip.onclick = goHub;
     }
     /* Только тем, у кого реально есть время вне часовой сетки — остальным строка

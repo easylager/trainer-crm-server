@@ -48,6 +48,17 @@
         }
         return url;
       }
+      /* «Услуги и цены» переехали на свой экран (TASK-313). Старые ссылки `?task=prices`
+         (пуш «укажите цены», хаб, экран «Готово» онбординга) ведём туда же, сохраняя возврат. */
+      (function redirectPricesTask() {
+        try {
+          var sp0 = new URLSearchParams(window.location.search || '');
+          if (sp0.get('task') !== 'prices') return;
+          var from0 = sp0.get('from');
+          var q0 = from0 === 'onboarding' || from0 === 'hub' ? '?from=' + from0 : '';
+          window.location.replace(webappPageUrl('trainer-prices' + q0));
+        } catch (eRedir) {}
+      })();
       function navigateToTrainerHubAfterMinimalTour() {
         window.location.href = webappPageUrl('trainer-home');
       }
@@ -2635,7 +2646,44 @@
           title: 'Образование',
           subtitle: 'По желанию: вуз, курсы, сертификаты.',
         },
+        /* Разделы вкладки «Профиль» (TASK-313): один экран — одна задача, иногда из двух блоков. */
+        basics: {
+          containerIds: ['profileNavPhoto', 'anketaStart'],
+          tabId: 'form',
+          title: 'Фото и имя',
+          subtitle: 'Так вас увидит ученик на странице записи.',
+        },
+        experience_all: {
+          containerIds: ['profileNavExp', 'profileEducationCollapse'],
+          tabId: 'form',
+          title: 'Опыт и образование',
+          subtitle: 'По желанию. Родителям так спокойнее выбирать тренера.',
+        },
+        contacts: {
+          containerId: 'profileNavContacts',
+          tabId: 'form',
+          title: 'Контакты',
+          subtitle: 'Телефон и другие способы связаться с вами.',
+        },
+        booking: {
+          containerIds: ['obSessionDurationWrap', 'obMinHoursWrap'],
+          tabId: 'settings',
+          title: 'Запись',
+          subtitle: 'Сколько идёт занятие и до какого момента ученик может записаться.',
+        },
+        notifications: {
+          containerIds: ['pushNotifyField', 'digestSettingsField'],
+          tabId: 'settings',
+          title: 'Уведомления',
+          subtitle: 'Когда присылать сообщения о записях и утреннюю сводку дня.',
+        },
       };
+
+      function obFlowStepContainerIds(def) {
+        if (!def) return [];
+        if (def.containerIds) return def.containerIds.slice();
+        return def.containerId ? [def.containerId] : [];
+      }
 
       var PROFILE_FOCUSED_TASKS = {
         prices: {
@@ -2669,6 +2717,14 @@
           nextSave: 'Сохранить',
           nextDone: 'Готово',
         },
+        /* Разделы вкладки «Профиль»: один блок, «Сохранить» — и обратно в профиль. */
+        basics: { rail: ['basics'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        about: { rail: ['about'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        arenas: { rail: ['arenas'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        experience: { rail: ['experience_all'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        contacts: { rail: ['contacts'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        booking: { rail: ['booking'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
+        notifications: { rail: ['notifications'], stepLabel: 'Профиль', nextSave: 'Сохранить', nextDone: 'Готово', section: true },
       };
 
       /** Последний смонтированный в слоте ключ шага — чтобы не перемонтировать одно и то же. */
@@ -2699,8 +2755,10 @@
         if (!key) return;
         var def = OB_FLOW_STEP_DEFS[key];
         if (!def) return;
-        var el = document.getElementById(def.containerId);
-        obFlowReturnHome(el);
+        /* В обратном порядке: соседние блоки возвращаются каждый перед своим соседом. */
+        obFlowStepContainerIds(def).reverse().forEach(function(id) {
+          obFlowReturnHome(document.getElementById(id));
+        });
       }
 
       /**
@@ -2728,14 +2786,18 @@
         }
         obFlowUnmountCurrent();
         var slot = document.getElementById('obFlowSlot');
-        var el = document.getElementById(def.containerId);
-        if (!slot || !el) return;
-        obFlowRecordHome(el);
+        var els = obFlowStepContainerIds(def)
+          .map(function(id) { return document.getElementById(id); })
+          .filter(Boolean);
+        if (!slot || !els.length) return;
         slot.innerHTML = '';
-        slot.appendChild(el);
-        if (el.tagName === 'DETAILS') {
-          try { el.open = true; } catch (eOpen) {}
-        }
+        els.forEach(function(el) {
+          obFlowRecordHome(el);
+          slot.appendChild(el);
+          if (el.tagName === 'DETAILS') {
+            try { el.open = true; } catch (eOpen) {}
+          }
+        });
         obFlowCurrentMountKey = key;
         /* Анимация входа. */
         var card = document.querySelector('#onboardingFlow .ob-flow__card');
@@ -2826,6 +2888,9 @@
         if (state.profileFocusedReturnPath === 'trainer-catalog') {
           return webappPageUrl('trainer-catalog');
         }
+        if (state.profileFocusedReturnPath === 'trainer-account') {
+          return webappPageUrl('trainer-account');
+        }
         if (state.profileFocusedReturn === 'onboarding') {
           return webappPageUrl('trainer-onboarding?done=1');
         }
@@ -2909,6 +2974,18 @@
           showProfileToHubTransitionOverlay();
         }
 
+        /* Раздел вкладки «Профиль»: сохранили — короткое «Сохранили», отменили — сразу назад.
+           Обещать «откроется главная» здесь было бы неправдой: возвращаемся в профиль. */
+        if (state.profileFocusedReturnPath === 'trainer-account' && !catalogish) {
+          if (wantSubmit) {
+            haptic('success');
+            showProfileToHubTransitionOverlay({ title: 'Сохранили', hint: 'Возвращаемся в профиль' });
+            setTimeout(goDest, 650);
+          } else {
+            goDest();
+          }
+          return;
+        }
         haptic(wantSubmit ? 'success' : 'warning');
         /* Submit только после явного завершения карусели. «Не сейчас» / X — не в очередь. */
         if (!wantSubmit || !catalogish) {
@@ -3011,12 +3088,13 @@
               dotsF.hidden = true;
             }
           }
+          var isSectionF = !!(spec && spec.section);
           var closeBtnF = document.getElementById('obFlowClose');
-          if (closeBtnF) closeBtnF.setAttribute('aria-label', 'Пропустить');
+          if (closeBtnF) closeBtnF.setAttribute('aria-label', isSectionF ? 'Назад к профилю' : 'Пропустить');
           var backBtnF = document.getElementById('obFlowBack');
           if (backBtnF) {
             backBtnF.hidden = false;
-            backBtnF.textContent = idxF > 0 ? 'Назад' : 'Не сейчас';
+            backBtnF.textContent = idxF > 0 ? 'Назад' : isSectionF ? 'Отмена' : 'Не сейчас';
             backBtnF.setAttribute('aria-hidden', 'false');
             backBtnF.setAttribute('aria-label', idxF > 0 ? 'Предыдущий шаг' : 'Пропустить');
           }
@@ -3513,7 +3591,7 @@
               state.catalogNeedFields = null;
             }
             state.profileFocusedReturnPath =
-              returnTo === 'trainer-catalog' ? 'trainer-catalog' : null;
+              returnTo === 'trainer-catalog' || returnTo === 'trainer-account' ? returnTo : null;
             sp.delete('task');
             sp.delete('from');
             sp.delete('need');
