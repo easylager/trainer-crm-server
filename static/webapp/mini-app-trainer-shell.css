@@ -36,14 +36,6 @@ body.trainer-shell-body.trainer-shell-tabs-hidden {
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
-body.trainer-shell-body.trainer-shell-more-open {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
-body.trainer-shell-body.trainer-shell-more-open .trainer-tab-bar {
-  z-index: 9200;
-}
 
 /* Hide redundant «Главная» when tab bar is visible; show again in focus screens (schedule, drill-down). */
 body.trainer-shell-body .trainer-mini-nav > button.btn-app-home {
@@ -54,6 +46,14 @@ body.trainer-shell-body.trainer-shell-tabs-hidden .trainer-mini-nav > button.btn
 }
 body.trainer-shell-body .trainer-mini-nav:empty {
   display: none;
+}
+/* Вложенный экран: «‹ Откуда» вместо «Главная» (mini-app-trainer-home.js). Видна всегда, кроме
+   внутреннего вида экрана, где её прячет атрибут hidden. */
+body.trainer-shell-body .trainer-mini-nav > button.btn-app-home.btn-app-home--origin {
+  display: inline-flex !important;
+}
+body.trainer-shell-body .trainer-mini-nav > button.btn-app-home.btn-app-home--origin[hidden] {
+  display: none !important;
 }
 
 /* ─── Bottom tab bar ─────────────────────────────────────────────────────── */
@@ -185,281 +185,9 @@ body.trainer-shell-body .trainer-mini-nav:empty {
 
 /* ─── More sheet ─────────────────────────────────────────────────────────── */
 
-.trainer-more-sheet-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9100;
-  background: rgba(0, 0, 0, 0.45);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.25s ease;
-}
-
-.trainer-more-sheet-overlay.trainer-more-sheet-overlay--open {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.trainer-more-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 9101;
-  max-height: min(82vh, 560px);
-  padding: 8px 16px calc(12px + var(--trainer-tab-bar-height) + env(safe-area-inset-bottom, 0px));
-  border-radius: 20px 20px 0 0;
-  background: var(--tg-theme-bg-color);
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
-  transform: translateY(100%);
-  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.trainer-more-sheet.trainer-more-sheet--open {
-  transform: translateY(0);
-}
-
-.trainer-more-sheet__handle {
-  width: 40px;
-  height: 5px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
-  margin: 4px auto 10px;
-  flex-shrink: 0;
-  cursor: grab;
-  touch-action: none;
-  position: relative;
-}
-.trainer-more-sheet__handle::before {
-  content: '';
-  position: absolute;
-  left: -28px;
-  right: -28px;
-  top: -18px;
-  bottom: -14px;
-}
-.trainer-more-sheet__handle:active {
-  cursor: grabbing;
-}
-
-.trainer-more-sheet__scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-}
-
-.trainer-more-sheet__title {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 4px;
-  padding: 0 4px;
-}
-
-.trainer-more-sheet__subtitle {
-  margin: 0 0 12px;
-  padding: 0 4px;
-  font-size: 13px;
-  line-height: 1.4;
-  font-weight: 500;
-  color: var(--tg-theme-hint-color);
-  flex-shrink: 0;
-}
-
-.trainer-more-sheet__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.trainer-more-sheet__item {
-  margin: 0 0 6px;
-}
-
-.trainer-more-sheet__link {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 14px;
-  border: none;
-  border-radius: 14px;
-  background: var(--tg-theme-secondary-bg-color);
-  color: var(--tg-theme-text-color);
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  text-decoration: none;
-  box-sizing: border-box;
-}
-
-.trainer-more-sheet__link--locked .glide-more-plate {
-  opacity: 0.72;
-  filter: grayscale(0.35);
-}
-
-.trainer-more-sheet__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.trainer-more-sheet__label {
-  display: block;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.trainer-more-sheet__hint {
-  display: block;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--tg-theme-hint-color);
-  margin-top: 2px;
-}
-
-.trainer-more-sheet__hint--attention {
-  color: color-mix(in srgb, #e53935 72%, var(--tg-theme-text-color));
-  font-weight: 600;
-}
 
 /* Incoming client requests — attention, not alarm (amber, calmer than red). */
-.trainer-more-sheet__hint--notice {
-  color: color-mix(in srgb, #d97706 78%, var(--tg-theme-text-color));
-  font-weight: 600;
-}
 
-.trainer-more-sheet__badge {
-  flex-shrink: 0;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #e53935;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 20px;
-  text-align: center;
-  box-sizing: border-box;
-}
-
-.trainer-more-sheet__badge[hidden] {
-  display: none !important;
-}
-
-.trainer-more-sheet__badge--notice {
-  background: #d97706;
-  box-shadow: 0 1px 4px rgba(217, 119, 6, 0.28);
-}
-
-.trainer-more-sheet__link--attention {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #e53935 28%, transparent);
-  background: color-mix(in srgb, #e53935 6%, var(--tg-theme-secondary-bg-color));
-}
-
-.trainer-more-sheet__link--notice {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #d97706 24%, transparent);
-  background: color-mix(in srgb, #d97706 5%, var(--tg-theme-secondary-bg-color));
-}
-
-.trainer-more-sheet__link--hint {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
-}
-
-.trainer-more-sheet__hint--soft {
-  color: var(--tg-theme-hint-color);
-  font-weight: 500;
-}
-
-.trainer-more-sheet__attention {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: color-mix(in srgb, #e53935 8%, var(--tg-theme-secondary-bg-color));
-  border: 1px solid color-mix(in srgb, #e53935 22%, transparent);
-  flex-shrink: 0;
-}
-
-.trainer-more-sheet__attention-kicker {
-  margin: 0 0 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, #e53935 80%, var(--tg-theme-text-color));
-}
-
-.trainer-more-sheet__attention--notice {
-  background: color-mix(in srgb, #d97706 7%, var(--tg-theme-secondary-bg-color));
-  border-color: color-mix(in srgb, #d97706 20%, transparent);
-}
-
-.trainer-more-sheet__attention--notice .trainer-more-sheet__attention-kicker {
-  color: color-mix(in srgb, #d97706 82%, var(--tg-theme-text-color));
-  text-transform: none;
-  letter-spacing: 0.01em;
-}
-
-.trainer-more-sheet__attention-pill--notice {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #d97706 18%, transparent);
-}
-
-.trainer-more-sheet__attention-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.trainer-more-sheet__attention-pill {
-  border: none;
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tg-theme-text-color);
-  background: var(--tg-theme-bg-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.trainer-more-sheet__attention-pill:active {
-  opacity: 0.88;
-  transform: scale(0.98);
-}
-
-.trainer-more-sheet__chevron {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--tg-theme-hint-color);
-  opacity: 0.55;
-}
-
-.trainer-more-sheet__link:active {
-  opacity: 0.9;
-  transform: scale(0.99);
-}
-
-.trainer-more-sheet__link--locked {
-  opacity: 0.55;
-}
-
-.trainer-more-sheet__link--locked .trainer-more-sheet__label::after {
-  content: ' · скоро';
-  font-weight: 500;
-  color: var(--tg-theme-hint-color);
-}
 
 /* ─── Locked tab bar items ───────────────────────────────────────────────── */
 

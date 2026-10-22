@@ -1330,8 +1330,8 @@
         var active = document.querySelector('[data-screen].active');
         var sid = active ? active.id : 'screenList';
         if (sid === 'screenList') {
-          btn.hidden = !canBrowserGoBack();
-          btn.onclick = function() { window.history.back(); };
+          /* Выход со списка — «‹ Откуда» в шапке (mini-app-trainer-home.js). */
+          btn.hidden = true;
           return;
         }
         btn.hidden = false;

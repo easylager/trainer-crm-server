@@ -249,8 +249,8 @@
           btn.onclick = function() { backToListFromDetail(); };
           return;
         }
-        btn.hidden = !canBrowserGoBack();
-        btn.onclick = function() { window.history.back(); };
+        /* Список — корневая вкладка: «Назад» тут некуда, переходы — через бар. */
+        btn.hidden = true;
       }
 
       function updateReturnBookingBackUi() {
