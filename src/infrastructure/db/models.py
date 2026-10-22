@@ -332,6 +332,7 @@ class ArenaProfile(Base):
     reopen_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
     schedule_mode_note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    visit_info: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Последняя правка карточки в админке (TASK-146, Q-012). NULL — неизвестно.
