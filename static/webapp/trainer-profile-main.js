@@ -353,6 +353,12 @@
           return;
         }
         if (!rail.length) rail = spec.rail.slice();
+        /* «Фото и имя»: город переехал на экран «Где занимаюсь» (TASK-313) — здесь его не дублируем. */
+        if (task === 'basics') {
+          var cityField = document.getElementById('city_id');
+          var cityWrap = cityField && cityField.closest('.field');
+          if (cityWrap) cityWrap.hidden = true;
+        }
         state.profileBlockTourSessionSealOrder = rail;
         state.profileBlockTourDisplayedStepOverride = rail[0];
         state.profileBlockTourSessionVisitedLastForward = false;

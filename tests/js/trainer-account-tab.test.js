@@ -52,9 +52,10 @@ describe('экран «Профиль»', () => {
   });
 
   it('разделы анкеты возвращаются в профиль', () => {
-    for (const task of ['basics', 'about', 'arenas', 'experience', 'contacts', 'booking', 'notifications']) {
+    for (const task of ['basics', 'about', 'experience', 'contacts', 'booking', 'notifications']) {
       assert.match(js, new RegExp(`trainer-profile\\?task=${task}' \\+ BACK`));
     }
+    assert.match(js, /arenas: 'trainer-arenas'/);
     assert.match(js, /var BACK = '&return=trainer-account'/);
   });
 
@@ -116,5 +117,40 @@ describe('экран «Услуги и цены»', () => {
   it('онбординг ведёт сюда и ждёт тренера назад', () => {
     assert.ok(read('trainer-onboarding-main.js').includes("pageUrl('trainer-prices?from=onboarding')"));
     assert.match(js, /trainer-onboarding\?done=1/);
+  });
+});
+
+describe('экран «Где занимаюсь»', () => {
+  const js = read('trainer-arenas-main.js');
+  const html = read('trainer-arenas.html');
+
+  it('тип места не спрашиваем — сервер ставит лёд', () => {
+    assert.doesNotMatch(js, /venue_type/);
+    assert.doesNotMatch(html, /Бассейн|Хореограф/);
+  });
+
+  it('новый каток — шторка с двумя полями, дубль — предложение выбрать существующий', () => {
+    assert.ok(html.includes('id="arNewName"') && html.includes('id="arNewAddress"'));
+    assert.match(js, /mode: 'create'/);
+    assert.match(js, /res\.status === 'duplicate_warning'/);
+    assert.match(js, /submitNew\(true\)/);
+  });
+
+  it('сохраняет катки, основной и город одним PATCH', () => {
+    assert.match(js, /var body = \{ arena_ids: state\.picked\.slice\(\) \}/);
+    assert.match(js, /body\.primary_arena_id = /);
+    assert.match(js, /body\.profile = \{ city_id: state\.cityId \}/);
+  });
+
+  it('каток с записями убрать нельзя — объясняем почему', () => {
+    assert.match(js, /if \(state\.locked\[id\]\)/);
+  });
+
+  it('вкладка «Профиль» подсвечена и на этом экране', () => {
+    assert.match(read('mini-app-trainer-shell.js'), /'trainer-arenas',/);
+  });
+
+  it('город переехал сюда: в «Фото и имя» его нет', () => {
+    assert.match(read('trainer-profile-main.js'), /if \(task === 'basics'\) \{[\s\S]{0,160}cityWrap\.hidden = true/);
   });
 });

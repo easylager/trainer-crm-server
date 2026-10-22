@@ -54,7 +54,7 @@
     prices: 'trainer-prices',
     basics: 'trainer-profile?task=basics' + BACK,
     about: 'trainer-profile?task=about' + BACK,
-    arenas: 'trainer-profile?task=arenas' + BACK,
+    arenas: 'trainer-arenas',
     experience: 'trainer-profile?task=experience' + BACK,
     contacts: 'trainer-profile?task=contacts' + BACK,
     booking: 'trainer-profile?task=booking' + BACK,

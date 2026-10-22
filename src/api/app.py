@@ -646,6 +646,15 @@ def webapp_trainer_prices_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/trainer-arenas")
+def webapp_trainer_arenas_page():
+    """Trainer «Где занимаюсь» (TASK-313): your rinks, city list, add a rink in a sheet."""
+    path = _WEBAPP_DIR / "trainer-arenas.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/trainer-catalog")
 def webapp_trainer_catalog_page():
     """Trainer «Каталог» section: publication state, preview, history (TASK-140)."""
@@ -1928,6 +1937,19 @@ def webapp_mini_app_trainer_account_css(request: Request):
     return FileResponse(
         path,
         media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-arenas-main.js")
+def webapp_trainer_arenas_main_js(request: Request):
+    """Trainer «Где занимаюсь» logic (TASK-313). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-arenas-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
 

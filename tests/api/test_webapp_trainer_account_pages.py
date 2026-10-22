@@ -19,10 +19,10 @@ WEBAPP = Path(__file__).resolve().parents[2] / "static" / "webapp"
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("page", ["trainer-account", "trainer-prices"])
+@pytest.mark.parametrize("page", ["trainer-account", "trainer-prices", "trainer-arenas"])
 async def test_page_and_its_assets_are_served(page: str) -> None:
     html = (WEBAPP / f"{page}.html").read_text(encoding="utf-8")
-    own = re.findall(r'(?:src|href)="((?:trainer-(?:account|prices)|mini-app-trainer-account)[^"?]*)', html)
+    own = re.findall(r'(?:src|href)="((?:trainer-(?:account|prices|arenas)|mini-app-trainer-account)[^"?]*)', html)
     assert own, "страница не подключила свои файлы"
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(f"/webapp/{page}")

@@ -156,6 +156,7 @@
   var MORE_ROUTE_KEYS = [
     'trainer-account',
     'trainer-prices',
+    'trainer-arenas',
     'trainer-requests',
     'trainer-profile',
     'trainer-pass-products',

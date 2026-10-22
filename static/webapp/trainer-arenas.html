@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Где занимаюсь</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-trainer-theme.js?v=2026102210"></script>
+  <script src="mini-app-telegram-chrome.js?v=2026102210"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102210" />
+  <link rel="stylesheet" href="theme.css?v=2026102210" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026102210" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026102210" />
+  <link rel="stylesheet" href="mini-app-trainer-account.css?v=2026102210" />
+</head>
+<!--
+  «Где занимаюсь» (TASK-313). Вместо блока анкеты: ваши катки сверху (основной помечен), ниже
+  город, поиск и список с кружками — как шаг «Где» онбординга. «Моего катка нет» — шторка с двумя
+  полями; похожий каток уже есть — предлагаем его, а не дубль. Тип места не спрашиваем: лёд.
+-->
+<body class="ta-body">
+  <main class="tp-page" id="taPage">
+    <button type="button" class="tp-back" id="tpBack">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      <span id="tpBackLabel">Профиль</span>
+    </button>
+    <h1 class="tp-title">Где занимаюсь</h1>
+    <p class="tp-lead">Ученик выберет каток, где ему удобнее. Отметьте все, где работаете</p>
+
+    <div class="ta-loading" id="tpLoading">
+      <div class="ta-skel ta-skel--card"></div>
+      <div class="ta-skel ta-skel--card"></div>
+    </div>
+    <div class="ta-error" id="tpError" hidden>
+      <p class="ta-error__title">Не получилось загрузить</p>
+      <p class="ta-error__text">Проверьте связь и попробуйте ещё раз.</p>
+      <button type="button" class="ta-btn" id="tpRetry">Обновить</button>
+    </div>
+
+    <div id="arRoot" hidden>
+      <section class="ar-mine" id="arMine" hidden aria-labelledby="arMineTitle">
+        <h2 class="ta-group__title" id="arMineTitle">Ваши катки</h2>
+        <div class="ta-group__card ar-list" id="arMineList"></div>
+        <p class="ar-note" id="arPrimaryNote" hidden>Основной каток ученик увидит первым, если ему всё равно где</p>
+      </section>
+
+      <div class="ar-tools">
+        <label class="ar-city">
+          <span id="arCityName">Город</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          <select id="arCity" aria-label="Город"></select>
+        </label>
+        <label class="ar-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+          <input type="search" id="arSearch" placeholder="Каток или адрес" aria-label="Поиск катка" autocomplete="off" enterkeyhint="search" />
+        </label>
+      </div>
+
+      <div class="ta-group__card ar-list ar-others" id="arOthers"></div>
+    </div>
+  </main>
+
+  <div class="tp-foot" id="tpFoot" hidden>
+    <div class="tp-foot__inner">
+      <button type="button" class="tp-save" id="tpSave" disabled>Сохранить</button>
+      <p class="tp-note" id="tpNote" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div class="ar-sheet-back" id="arSheetBack" hidden></div>
+  <div class="ar-sheet" id="arSheet" role="dialog" aria-modal="true" aria-labelledby="arSheetTitle" hidden>
+    <span class="ar-sheet__handle" aria-hidden="true"></span>
+
+    <div id="arAddView">
+      <div class="ar-sheet__head">
+        <div>
+          <h2 class="ar-sheet__title" id="arSheetTitle">Добавить каток</h2>
+          <p class="ar-sheet__lead">Появится в&nbsp;вашем расписании сразу. Мы&nbsp;проверим адрес и&nbsp;добавим фото</p>
+        </div>
+        <button type="button" class="ar-sheet__close" id="arSheetClose" aria-label="Закрыть">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <label class="ar-field">
+        <span class="ar-field__label">Название</span>
+        <input type="text" id="arNewName" maxlength="200" autocomplete="off" enterkeyhint="next" placeholder="Например, каток в ТЦ Галерея" />
+      </label>
+      <label class="ar-field">
+        <span class="ar-field__label">Адрес</span>
+        <span class="ar-field__box">
+          <span class="ar-field__prefix" id="arNewCity"></span>
+          <input type="text" id="arNewAddress" maxlength="400" autocomplete="off" enterkeyhint="done" placeholder="улица и дом" />
+        </span>
+      </label>
+      <p class="tp-note tp-note--error ar-sheet__error" id="arAddError" hidden></p>
+      <button type="button" class="tp-save" id="arAddSubmit">Добавить</button>
+    </div>
+
+    <div id="arSimilarView" hidden>
+      <h2 class="ar-sheet__title">Похоже, этот каток уже есть</h2>
+      <p class="ar-sheet__lead">Выберите его&nbsp;— тогда ученики увидят фото и&nbsp;часы работы</p>
+      <div class="ar-similar" id="arSimilarList"></div>
+      <button type="button" class="ta-link ar-similar__anyway" id="arAddAnyway"></button>
+    </div>
+  </div>
+
+  <script defer src="trainer-arenas-main.js?v=2026102210"></script>
+</body>
+</html>

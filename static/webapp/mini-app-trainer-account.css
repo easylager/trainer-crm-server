@@ -667,3 +667,372 @@ body.tp-kb .tp-foot { padding-bottom: 8px; }
 }
 
 .tp-note--error { color: var(--app-danger, #C0392B); }
+
+/* ═══ Экран «Где занимаюсь» ═══════════════════════════════════════════════ */
+
+.ar-mine { margin-bottom: 18px; }
+
+.ar-note {
+  margin: 8px 4px 0;
+  font-size: 13px;
+  color: var(--glide-hint);
+}
+
+.ar-list { padding: 0 14px; }
+
+.ar-row {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ar-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: var(--glide-bg);
+  background-size: cover;
+  background-position: center;
+  color: var(--glide-hint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ar-row__main {
+  flex-grow: 1;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--glide-line);
+}
+
+.ar-list > :last-child .ar-row__main { border-bottom: 0; }
+
+.ar-row__text {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ar-row__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ar-row__addr {
+  font-size: 13px;
+  color: var(--glide-hint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ar-badge {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--glide-bg);
+  color: var(--glide-hint);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ar-primary-btn {
+  align-self: flex-start;
+  min-height: 32px;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--glide-ink-teal);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ar-check {
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.8px solid var(--glide-line-strong);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ar-check--on {
+  border: 0;
+  background: var(--glide-text);
+  color: var(--glide-bg);
+}
+
+.ar-check--locked { opacity: 0.45; }
+
+.ar-tools {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ar-city {
+  position: relative;
+  height: 44px;
+  padding: 0 12px 0 14px;
+  border-radius: 12px;
+  background: var(--glide-surface);
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 45%;
+}
+
+.ar-city span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ar-city svg { flex-shrink: 0; }
+
+/* Нативный выбор города поверх кнопки: на телефоне открывается системное колесо. */
+.ar-city select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.ar-search {
+  flex-grow: 1;
+  min-width: 0;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--glide-surface);
+  color: var(--glide-hint);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.ar-search input {
+  flex-grow: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--glide-text);
+  font: inherit;
+  font-size: 16px;
+  -webkit-appearance: none;
+}
+
+.ar-empty {
+  padding: 16px 0;
+  font-size: 15px;
+  color: var(--glide-hint);
+}
+
+.ar-add-tile {
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1.5px dashed var(--glide-line-strong);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ar-add-label {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* ─── Шторка «Добавить каток» ───────────────────────────────────────────── */
+
+.ar-sheet-back {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(16, 32, 43, 0.38);
+}
+
+.ar-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  max-width: 560px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  background: var(--glide-surface);
+  border-radius: 20px 20px 0 0;
+  padding: 8px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.ar-sheet > div {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ar-sheet__handle {
+  align-self: center;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--glide-line-strong);
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.ar-sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ar-sheet__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.ar-sheet__lead {
+  margin: 4px 0 0;
+  font-size: 15px;
+  color: var(--glide-hint);
+}
+
+.ar-sheet__close {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--glide-bg);
+  color: var(--glide-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ar-field__label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ar-field > input,
+.ar-field__box {
+  height: 48px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1.5px solid transparent;
+  background: var(--glide-bg);
+  color: var(--glide-text);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+
+.ar-field__box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ar-field__box input {
+  flex-grow: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--glide-text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.ar-field > input:focus,
+.ar-field__box:focus-within { border-color: var(--glide-brand); }
+
+.ar-field__prefix {
+  color: var(--glide-hint);
+  flex-shrink: 0;
+}
+
+.ar-sheet__error { margin: -4px 0 0; text-align: left; }
+
+.ar-similar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ar-similar__item {
+  width: 100%;
+  border-radius: 16px;
+  border: 1.5px solid var(--glide-line-strong);
+  background: none;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ar-similar__anyway {
+  align-self: center;
+  text-decoration: none;
+  min-height: 44px;
+}
