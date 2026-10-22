@@ -264,7 +264,7 @@ _TRAINER_STATUS_LABELS = {
 def _trainer_profile_webapp_url() -> str | None:
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.lower().startswith("https://"):
-        return f"{base}/webapp/trainer-profile"
+        return f"{base}/webapp/trainer-account"
     return None
 
 
