@@ -65,9 +65,25 @@ async def test_coach_entry_closes_trainer_list_and_opens_mini_landing(app_use_te
     # Строка — после списка тренеров, а не над ним.
     assert body.index(name) < body.index("Тренируете на этом катке?")
     assert "Ученики «ТЦ Замок» записываются к вам сами" in body
-    assert 'href="/join" data-coach-join' in body and 'class="b-coach-sheet__more" href="/trainers"' in body
+    # «Начать» несёт каток в /join (онбординг откроется с ним), «подробнее» — лендинг этого катка.
+    rink_landing = "/trainers" + place["path"][len("/p"):]
+    assert f'href="/join?arena={place["arena_id"]}" data-coach-join' in body
+    assert f'class="b-coach-sheet__more" href="{rink_landing}"' in body
     assert f"arena_id={place['arena_id']}" in body
     assert sheet_js.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_coach_sheet_more_opens_the_rink_landing(app_use_test_db, db_session) -> None:
+    place = await _place(db_session, name="Каток Подробный")
+    async with _client() as client:
+        html = (await client.get(place["path"])).text
+        more = re.search(r'class="b-coach-sheet__more" href="([^"]+)"', html)
+        assert more, "в шторке нет «подробнее»"
+        landing = await client.get(more.group(1))
+    assert more.group(1).startswith("/trainers/")
+    assert landing.status_code == 200
+    assert "Тренерам катка «Каток Подробный»" in landing.text
 
 
 @pytest.mark.asyncio

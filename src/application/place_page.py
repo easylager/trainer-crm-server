@@ -1818,10 +1818,18 @@ def _b_coach_entry(card: Mapping[str, Any], *, first: bool) -> str:
 
     Без JS строка ведёт на /trainers; с JS открывает шторку (coach-sheet.js), считает
     открытие и «Начать в Telegram» (coach_open / coach_join). Внутри Mini App не видна (tg-out).
+    «Подробнее» — лендинг этого катка ``/trainers/{город}/{каток}``, «Начать» — ``/join`` с катком:
+    в онбординге тренера он уже отмечен.
     """
     from src.application.style_b import COACH_SHEET_SCRIPT_VERSION
+    from src.application.trainer_landing_page import join_href_for, trainer_rink_path
 
     arena_id = int(card["id"])
+    slug = str(card.get("slug") or "")
+    more_href = (
+        trainer_rink_path(city_name=_city(card), slug=slug) if slug and _city(card) else "/trainers"
+    )
+    join_href = join_href_for({"id": arena_id}, rink_page=True)
     city_id = int(card.get("city_id") or 0) or None
     beacon = f"/api/public/catalog/contact-click?surface=place_page&arena_id={arena_id}"
     if city_id:
@@ -1845,9 +1853,9 @@ def _b_coach_entry(card: Mapping[str, Any], *, first: bool) -> str:
         f'<span class="b-coach-sheet__kick">{_esc(t("coach.sheet_kicker"))}</span>'
         f'<h2 class="b-coach-sheet__title" id="coachSheetTitle">{_esc(_coach_sheet_title(card))}</h2>'
         f'<ul class="b-coach-sheet__facts">{facts}</ul>'
-        f'<a class="b-coach-sheet__cta" href="/join" data-coach-join>{_esc(t("coach.cta"))}</a>'
+        f'<a class="b-coach-sheet__cta" href="{_esc(join_href)}" data-coach-join>{_esc(t("coach.cta"))}</a>'
         f'<p class="b-coach-sheet__trial">{_esc(t("coach.trial"))}</p>'
-        f'<a class="b-coach-sheet__more" href="/trainers">{_esc(t("coach.more"))}&nbsp;›</a>'
+        f'<a class="b-coach-sheet__more" href="{_esc(more_href)}">{_esc(t("coach.more"))}&nbsp;›</a>'
         f"</div></dialog>"
         f'<script defer src="/static/share/coach-sheet.js?v={_esc(COACH_SHEET_SCRIPT_VERSION)}"></script>'
     )
