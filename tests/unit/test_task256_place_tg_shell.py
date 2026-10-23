@@ -26,6 +26,11 @@ def test_theme_includes_place_hero_view_transition() -> None:
     theme = (REPO / "static/webapp/mini-app-client-theme.css").read_text(encoding="utf-8")
     assert ".b-hero__img[data-vt-hero]" in theme
     assert re.search(r"client-arena-hero", theme)
+    assert re.search(
+        r"::view-transition-old\(client-arena-hero\),\s*"
+        r"::view-transition-new\(client-arena-hero\)\s*\{[^}]*object-fit:\s*cover",
+        theme,
+    )
 
 
 def test_place_shell_hero_is_full_bleed() -> None:

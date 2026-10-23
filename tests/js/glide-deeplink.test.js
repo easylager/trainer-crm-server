@@ -6,6 +6,7 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const webapp = path.resolve(__dirname, '../../static/webapp');
@@ -190,5 +191,42 @@ describe('GlideDeepLink.maybeEarlyRedirect', () => {
     });
     assert.equal(ok, false);
     assert.equal(replaced, '');
+  });
+
+  it('catalog_* с главной сразу уходит на ice, не дожидаясь body', () => {
+    const storage = memStorage();
+    let replaced = '';
+    const loc = {
+      href: 'https://app.test/webapp/client-home#tgWebAppStartParam=catalog_7',
+      pathname: '/webapp/client-home',
+      search: '',
+      hash: '#tgWebAppStartParam=catalog_7',
+      replace(u) {
+        replaced = u;
+      },
+    };
+    const ok = G.maybeEarlyRedirect({
+      location: loc,
+      sessionStorage: storage,
+      Telegram: { WebApp: { initDataUnsafe: { start_param: 'catalog_7' } } },
+    });
+    assert.equal(ok, true);
+    assert.equal(replaced, '/webapp/ice?city_id=7#tgWebAppStartParam=catalog_7');
+    assert.equal(storage.getItem(G.DEEP_LINK_FLAG), 'catalog_7');
+  });
+});
+
+describe('client-home подключает early redirect до body', () => {
+  const html = fs.readFileSync(path.join(webapp, 'client-home.html'), 'utf8');
+  const head = html.slice(0, html.indexOf('</head>'));
+
+  it('glide-deeplink.js синхронно после Telegram SDK, без defer', () => {
+    assert.match(head, /<script src="glide-deeplink\.js\?v=[^"]+"><\/script>/);
+    assert.doesNotMatch(head, /<script defer[^>]*glide-deeplink/);
+    const tg = head.indexOf('telegram-web-app.js');
+    const dl = head.indexOf('glide-deeplink.js');
+    const bodyTag = html.indexOf('<body');
+    assert.ok(tg >= 0 && dl > tg, 'redirect читает start_param из уже загруженного SDK');
+    assert.ok(dl < bodyTag, 'уходим до разбора главной');
   });
 });
