@@ -333,6 +333,7 @@ from src.application.subscription_tier_use_cases import (
     get_trainer_subscription_status,
     list_subscription_tier_pricing_for_admin,
     normalize_modules_dict,
+    single_plan_from_constructor,
     set_subscription_after_mock_payment,
     set_subscription_constructor_after_mock_payment,
     trainer_allows_online_booking,
@@ -4720,6 +4721,8 @@ async def get_trainer_subscription_tier_catalog(
     return {
         "tiers": tiers,
         "constructor": constructor,
+        # PDEC-025: экран оплаты показывает одну подписку; tiers/constructor — для старых клиентов.
+        "single_plan": single_plan_from_constructor(constructor),
         "mock_checkout_enabled": mock_enabled,
         "checkout_mode": checkout_mode,
     }
