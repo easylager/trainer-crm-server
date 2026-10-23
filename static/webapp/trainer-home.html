@@ -11,7 +11,7 @@
   <!-- telegram.org грузится async: блокирующий запрос на плохой сети оставлял Mini App на сплеше.
        mini-app-full-height.js дожидается SDK и сам вызывает ready() + раскрытие на всю высоту —
        без него ready()/expand() уходили в никуда и приложение открывалось полушторкой. -->
-  <script src="mini-app-full-height.js?v=202610232"></script>
+  <script src="mini-app-full-height.js?v=202610233"></script>
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
   <script>
     /* Данные главной запрашиваем сразу, параллельно со скриптами страницы (TASK-314):
@@ -40,23 +40,23 @@
       } catch (e) { /* обычный путь подхватит */ }
     })();
   </script>
-  <script src="mini-app-trainer-theme.js?v=202610232"></script>
-  <script src="mini-app-telegram-chrome.js?v=202610232"></script>
-  <script src="trainer-format.js?v=202610232"></script>
-  <script src="mini-app-phone-field.js?v=202610232"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610232" />
-  <link rel="stylesheet" href="theme.css?v=202610232" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610232" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610232" />
+  <script src="mini-app-trainer-theme.js?v=202610233"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610233"></script>
+  <script src="trainer-format.js?v=202610233"></script>
+  <script src="mini-app-phone-field.js?v=202610233"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610233" />
+  <link rel="stylesheet" href="theme.css?v=202610233" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610233" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610233" />
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202610232" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202610232" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202610233" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202610233" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202610232" />
-  <link rel="stylesheet" href="trainer-first-students.css?v=202610232" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610232" />
-  <link rel="preload" href="trainer-home-main.js?v=202610232" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202610232" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202610233" />
+  <link rel="stylesheet" href="trainer-first-students.css?v=202610233" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610233" />
+  <link rel="preload" href="trainer-home-main.js?v=202610233" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202610233" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -181,6 +181,7 @@
       from { transform: scaleX(0); }
       to   { transform: scaleX(1); }
     }
+    html.hub-splash-skip #hubSplash { display: none; }
     @media (prefers-reduced-motion: reduce) {
       .hub-splash-ring, .hub-splash-ring-glow, .hub-splash-icon-wrap { animation: none !important; }
       .hub-splash-dot { animation: none !important; opacity: .5; }
@@ -192,11 +193,17 @@
   <script>
     (function() {
       var _minDone = false, _dataReady = false;
+      /* Заставка — только при первом открытии за сессию. Вернуться на «Главную» с другой
+         вкладки и снова ждать 0,7 с колец — это и было «всё медленно» (TASK-314). */
+      var _skip = false;
+      try { _skip = sessionStorage.getItem('hub_splash_seen') === '1'; } catch (e) {}
+      if (_skip) document.documentElement.classList.add('hub-splash-skip');
       function tryDismiss() {
         if (!_minDone || !_dataReady) return;
         var el = document.getElementById('hubSplash');
         if (!el || el._dismissed) return;
         el._dismissed = true;
+        try { sessionStorage.setItem('hub_splash_seen', '1'); } catch (e) {}
         el.classList.add('hub-splash--out');
         setTimeout(function() { try { el.parentNode && el.parentNode.removeChild(el); } catch(e) {} }, 450);
       }
@@ -869,18 +876,18 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js?v=202610232"></script>
-  <script src="mini-app-trainer-celebration.js?v=202610232"></script>
-  <script src="trainer-client-relay-ui.js?v=202610232"></script>
-  <script src="trainer-relay-helpers.js?v=202610232"></script>
+  <script src="mini-app-trainer-gate.js?v=202610233"></script>
+  <script src="mini-app-trainer-celebration.js?v=202610233"></script>
+  <script src="trainer-client-relay-ui.js?v=202610233"></script>
+  <script src="trainer-relay-helpers.js?v=202610233"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script src="mini-app-trainer-pending-inbox.js?v=202610232"></script>
-  <script src="trainer-booking-context.js?v=202610232"></script>
-  <script defer src="trainer-first-students-model.js?v=202610232"></script>
-  <script defer src="trainer-first-students.js?v=202610232"></script>
-  <script defer src="trainer-client-match.js?v=202610232"></script>
-  <script defer src="trainer-home-main.js?v=202610232"></script>
-  <script src="mini-app-more-icons.js?v=202610232"></script>
-  <script defer src="mini-app-trainer-shell.js?v=202610232"></script>
+  <script src="mini-app-trainer-pending-inbox.js?v=202610233"></script>
+  <script src="trainer-booking-context.js?v=202610233"></script>
+  <script defer src="trainer-first-students-model.js?v=202610233"></script>
+  <script defer src="trainer-first-students.js?v=202610233"></script>
+  <script defer src="trainer-client-match.js?v=202610233"></script>
+  <script defer src="trainer-home-main.js?v=202610233"></script>
+  <script src="mini-app-more-icons.js?v=202610233"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202610233"></script>
 </body>
 </html>

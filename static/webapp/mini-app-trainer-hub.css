@@ -4280,8 +4280,9 @@
         0 2px 8px rgba(0, 0, 0, 0.1);
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
-      /* Entrance: rise + fade once mounted */
-      animation: hub-book-fab-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+      /* Entrance: rise + fade once mounted. backwards, не both: с both конечный кадр держал
+         transform навсегда — кнопка не сжималась при нажатии и не уезжала под формой. */
+      animation: hub-book-fab-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
       transition:
         transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
         box-shadow 0.2s ease,

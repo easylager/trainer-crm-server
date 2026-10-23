@@ -3,6 +3,12 @@
  * Telegram colorScheme — источник истины (не prefers-color-scheme ОС).
  * Подключать сразу после telegram-web-app.js, ДО theme.css.
  */
+/* Нажатие видно на iPhone: WebKit включает :active только при слушателе touchstart на странице.
+   Без него кнопки кабинета на iOS не откликались на касание вовсе (TASK-314, как ga-touch.js у клиента). */
+try {
+  document.addEventListener('touchstart', function () {}, { passive: true });
+} catch (e) { /* */ }
+
 (function () {
   /*
    * ЗНАЧЕНИЯ ЗЕРКАЛЯТ theme.css. Telegram ставит свои --tg-theme-* инлайном,

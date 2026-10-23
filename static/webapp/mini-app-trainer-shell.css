@@ -294,3 +294,16 @@ body.trainer-shell-body .hub-inline-toast {
 body.trainer-shell-body.trainer-shell-tabs-hidden .hub-inline-toast {
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
+
+/* Бар не участвует в переходе страниц — он один на все вкладки (см. mini-app-trainer-theme.css). */
+.trainer-tab-bar {
+  view-transition-name: trainer-tab-bar;
+}
+::view-transition-group(trainer-tab-bar),
+::view-transition-old(trainer-tab-bar),
+::view-transition-new(trainer-tab-bar) {
+  animation: none;
+}
+::view-transition-old(trainer-tab-bar) {
+  display: none;
+}

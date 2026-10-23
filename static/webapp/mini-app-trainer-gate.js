@@ -13,13 +13,61 @@
     return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
   }
 
-  /**
-   * @returns {Promise<{ access_state: string, trainer_id: number|null, is_active: boolean }>}
+  /*
+   * Доступ меняется редко (деактивация), а спрашивали его на каждой вкладке и только потом
+   * шли за данными экрана — лишний круг до сервера перед каждым экраном. Ответ
+   * помним 10 минут в рамках сессии Telegram и сверяем в фоне; если сервер ответил иначе —
+   * перезагружаем экран, чтобы гейт показался честно.
    */
-  function fetchTrainerAccess(initData) {
-    if (!initData || String(initData).length < 10) {
-      return Promise.resolve({ access_state: 'not_linked', trainer_id: null, is_active: false });
+  var ACCESS_CACHE_KEY = 'trainer_access_v1';
+  var ACCESS_CACHE_TTL_MS = 10 * 60 * 1000;
+
+  function initFingerprint(initData) {
+    var s = String(initData || '');
+    var m = /(?:^|&)hash=([^&]+)/.exec(s);
+    return m ? m[1] : s.slice(-64);
+  }
+
+  function applyAccessSideEffects(d) {
+    if (!d || typeof d !== 'object') return;
+    if (Object.prototype.hasOwnProperty.call(d, 'force_client_chat_relay')) {
+      var forceRelay = !!d.force_client_chat_relay;
+      global.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY = forceRelay;
+      global.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY = forceRelay;
     }
+    if (typeof d.collective_enabled === 'boolean') {
+      global.TRAINER_COLLECTIVE_ENABLED = d.collective_enabled;
+    }
+  }
+
+  function rememberAccess(initData, d) {
+    try {
+      if (d && typeof d === 'object' && d.access_state) {
+        sessionStorage.setItem(
+          ACCESS_CACHE_KEY,
+          JSON.stringify({ at: Date.now(), fp: initFingerprint(initData), d: d })
+        );
+      } else {
+        sessionStorage.removeItem(ACCESS_CACHE_KEY);
+      }
+    } catch (e) { /* */ }
+  }
+
+  function readRememberedAccess(initData) {
+    try {
+      var raw = sessionStorage.getItem(ACCESS_CACHE_KEY);
+      if (!raw) return null;
+      var c = JSON.parse(raw);
+      if (!c || !c.d || !c.d.access_state) return null;
+      if (c.fp !== initFingerprint(initData)) return null;
+      if (!(Date.now() - c.at < ACCESS_CACHE_TTL_MS)) return null;
+      return c.d;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function fetchTrainerAccessFromServer(initData) {
     return fetch(apiAccessUrl(initData), {
       method: 'GET',
       cache: 'no-store',
@@ -30,22 +78,38 @@
     }).then(function (r) {
       return r.json().then(function (d) {
         if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'access');
-        if (
-          typeof global.document !== 'undefined' &&
-          d &&
-          typeof d === 'object' &&
-          Object.prototype.hasOwnProperty.call(d, 'force_client_chat_relay')
-        ) {
-          var forceRelay = !!d.force_client_chat_relay;
-          global.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY = forceRelay;
-          global.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY = forceRelay;
-        }
-        if (d && typeof d.collective_enabled === 'boolean') {
-          global.TRAINER_COLLECTIVE_ENABLED = d.collective_enabled;
-        }
+        if (typeof global.document !== 'undefined') applyAccessSideEffects(d);
+        rememberAccess(initData, d);
         return d;
       });
     });
+  }
+
+  /**
+   * @returns {Promise<{ access_state: string, trainer_id: number|null, is_active: boolean }>}
+   */
+  function fetchTrainerAccess(initData) {
+    if (!initData || String(initData).length < 10) {
+      return Promise.resolve({ access_state: 'not_linked', trainer_id: null, is_active: false });
+    }
+    var remembered = readRememberedAccess(initData);
+    if (remembered) {
+      applyAccessSideEffects(remembered);
+      fetchTrainerAccessFromServer(initData)
+        .then(function (fresh) {
+          if (
+            !fresh ||
+            fresh.access_state !== remembered.access_state ||
+            fresh.is_active !== remembered.is_active ||
+            fresh.schedule_unlocked !== remembered.schedule_unlocked
+          ) {
+            global.location.reload();
+          }
+        })
+        .catch(function () { /* сеть моргнула — остаёмся на запомненном */ });
+      return Promise.resolve(remembered);
+    }
+    return fetchTrainerAccessFromServer(initData);
   }
 
   function webappBasePath() {
@@ -163,6 +227,8 @@
 
   global.TrainerMiniAppGate = {
     fetchAccess: fetchTrainerAccess,
+    /** Главная получает доступ в hub/bootstrap — кладём его сюда, чтобы вкладки не спрашивали снова. */
+    rememberAccess: rememberAccess,
     gateCardHtml: gateCardHtml,
     wireGate: wireGate,
     showBlockingOverlay: showBlockingOverlay,

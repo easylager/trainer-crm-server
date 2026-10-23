@@ -109,16 +109,29 @@
     postJson('/trainer/hub/inbox-event', body).catch(function () {});
   }
 
+  /* Показы — аналитика: уходят, когда браузер освободился, а не наперегонки с данными экрана. */
+  function whenIdle(fn) {
+    if (typeof global.requestIdleCallback === 'function') global.requestIdleCallback(fn, { timeout: 4000 });
+    else setTimeout(fn, 1500);
+  }
+
   function trackInboxItemsShown(items) {
     if (!items || !items.length) return;
+    var fresh = [];
     items.forEach(function (it) {
       var key = String(it.id || it.kind || '');
       if (!key || shownItemIdsSession[key]) return;
       shownItemIdsSession[key] = true;
-      trackEvent('inbox_item_shown', {
-        item_id: it.id || null,
-        kind: it.kind || null,
-        count: it.count != null ? it.count : null,
+      fresh.push(it);
+    });
+    if (!fresh.length) return;
+    whenIdle(function () {
+      fresh.forEach(function (it) {
+        trackEvent('inbox_item_shown', {
+          item_id: it.id || null,
+          kind: it.kind || null,
+          count: it.count != null ? it.count : null,
+        });
       });
     });
   }

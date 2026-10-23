@@ -8895,6 +8895,9 @@
         if (payload.access) {
           trainerAccessSnapshot = payload.access;
           syncHubForceClientChatRelayFromTrainerAccess();
+          if (window.TrainerMiniAppGate && typeof TrainerMiniAppGate.rememberAccess === 'function') {
+            TrainerMiniAppGate.rememberAccess(getInitData(), payload.access);
+          }
         }
         if (payload.profile) mergeHubAccessFromProfilePayload({ ok: true, data: payload.profile });
         if (payload.onboarding_checklist) applyOnboardingChecklist(payload.onboarding_checklist);

@@ -3981,6 +3981,8 @@ async def get_trainer_hub_bootstrap(
         "is_active": is_active,
         "schedule_unlocked": schedule_unlocked,
         "force_client_chat_relay": bool(Settings().trainer_webapp_force_client_chat_relay),
+        # Как в GET /trainer/access: главная кладёт этот объект в кэш доступа для вкладок.
+        "collective_enabled": bool(Settings().trainer_collective_enabled),
     }
 
     # Two scopes, deliberately different:

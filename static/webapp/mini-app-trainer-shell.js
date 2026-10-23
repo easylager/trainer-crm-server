@@ -452,6 +452,38 @@
     });
   }
 
+  /*
+   * Бейджи бара и чеклист меняются редко, а спрашивались на каждой вкладке до того, как бар
+   * становился «настоящим». Последний ответ держим в sessionStorage: бар сразу рисуется
+   * с ним, а свежий ответ приходит, когда браузер освободился от данных экрана.
+   */
+  var SHELL_CACHE_KEY = 'trainer_shell_cache_v1';
+  var SHELL_CACHE_TTL_MS = 30 * 60 * 1000;
+
+  function readShellCache() {
+    try {
+      var c = JSON.parse(sessionStorage.getItem(SHELL_CACHE_KEY) || 'null');
+      if (!c || !(Date.now() - c.at < SHELL_CACHE_TTL_MS)) return null;
+      return c;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeShellCache(part) {
+    try {
+      var c = readShellCache() || {};
+      Object.keys(part).forEach(function (k) { c[k] = part[k]; });
+      c.at = Date.now();
+      sessionStorage.setItem(SHELL_CACHE_KEY, JSON.stringify(c));
+    } catch (e) { /* */ }
+  }
+
+  function whenIdle(fn) {
+    if (typeof global.requestIdleCallback === 'function') global.requestIdleCallback(fn, { timeout: 2000 });
+    else setTimeout(fn, 600);
+  }
+
   function fetchOnboardingChecklist() {
     var initData = getInitData();
     if (!initData) {
@@ -475,6 +507,7 @@
         return null;
       })
       .then(function (d) {
+        if (d) writeShellCache({ onboarding: d });
         state.onboardingData = d;
         state.onboardingLoaded = true;
         syncOnboardingTabLocks();
@@ -484,6 +517,7 @@
   }
 
   function syncOnboarding(data) {
+    if (data) writeShellCache({ onboarding: data });
     state.onboardingData = data || null;
     state.onboardingLoaded = true;
     syncOnboardingTabLocks();
@@ -629,8 +663,9 @@
     syncMoreMenuBadges();
   }
 
-  function setInboxBadges(badges) {
+  function setInboxBadges(badges, fromCache) {
     badges = badges || { schedule: 0, center: 0, more: 0, clients: 0, catalog: 0 };
+    if (!fromCache) writeShellCache({ badges: badges });
     var menu = badges.menu && typeof badges.menu === 'object' ? badges.menu : {};
     state.inboxBadges = {
       schedule: parseInt(String(badges.schedule || 0), 10) || 0,
@@ -917,12 +952,22 @@
     /* Главная отдаёт чеклист и счётчики из hub/bootstrap сама (syncOnboarding, setInboxBadges):
        второй запрос за тем же на первом экране не нужен. */
     var pageFeedsShell = body.getAttribute('data-shell-fed-by-page') === '1';
-    if (!pageFeedsShell) fetchOnboardingChecklist();
+    var cached = readShellCache();
+    if (cached && cached.onboarding && !state.onboardingLoaded) {
+      state.onboardingData = cached.onboarding;
+      state.onboardingLoaded = true;
+      syncOnboardingTabLocks();
+      syncShellNavForCapabilities();
+    }
+    if (cached && cached.badges) setInboxBadges(cached.badges, true);
+    /* С кэшем бар уже верный — свежий ответ подождёт, пока экран получит свои данные. */
+    var refreshShell = cached ? whenIdle : function (fn) { fn(); };
+    if (!pageFeedsShell) refreshShell(fetchOnboardingChecklist);
     if (isCollectiveFeatureEnabled()) {
       fetchCollectiveMenuVisibility();
       fetchSuspendedCollectiveNotice();
     }
-    if (!pageFeedsShell) fetchInboxBadgesFromServer();
+    if (!pageFeedsShell) refreshShell(fetchInboxBadgesFromServer);
   }
 
   /* ─── Auto-init via data attribute ─────────────────────────────────────── */

@@ -2,6 +2,25 @@
  * Trainer theme overrides — load after theme.css + mini-app-trainer-nav.css.
  * Пере-фиксирует GLIDE teal на nav-кнопках (Telegram themeParams часто подсовывает свой button_color).
  */
+/*
+ * Переход между вкладками и экранами кабинета (TASK-314). Каждая вкладка — отдельная
+ * страница, и без этого смена экрана — белая вспышка. Короткий crossfade, бар стоит на месте:
+ * глаз видит, что сменилось содержимое, а не приложение перезапустилось. Длительность —
+ * как в клиентском приложении: длиннее 200 мс переход начинает ощущаться задержкой.
+ */
+@view-transition {
+  navigation: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+}
+::view-transition-group(root) {
+  animation-duration: 160ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Кабинет тренера говорит тем же шрифтом, что сайт и свод деталей (решение 2026-10-22).
    Клиентское приложение остаётся на Golos — токен переопределён только здесь. */
 :root {
@@ -41,4 +60,22 @@ html.trainer-theme-light body {
 html.trainer-theme-dark body {
   background-color: var(--glide-paper) !important;
   color: var(--glide-text) !important;
+}
+
+/*
+ * Отклик на нажатие там, где его не было (TASK-314: проверка :active по всем вкладкам).
+ * Тот же язык, что у соседей: крупное — чуть сжимается, текстовое — притухает.
+ */
+.btn-block:active {
+  transform: scale(0.97);
+}
+.hub-action-inbox__btn:active,
+.se-pending-inbox-chip:active,
+.filter-btn:active,
+.tab:active,
+.tc-link-btn:active,
+.tc-why__toggle:active,
+.ta-head__who:active,
+.ta-link:active {
+  opacity: 0.7;
 }
