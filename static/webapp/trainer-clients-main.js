@@ -2368,7 +2368,13 @@
             html += '<div class="dossier-field-value' + (!val ? ' empty' : '') + '" data-field="' + f.key + '">' + (val ? escapeHtml(val) : 'Нажмите, чтобы добавить') + '</div>';
           }
           html += '</div>';
-          if (f.key === 'season_goal' && dossierState.suggestedSeasonGoals.length) {
+          // Быстрый выбор — чтобы заполнить цель; у заполненной он только шумит, пока её не правят.
+          var seasonGoalSet = !!(dossierState.profile.season_goal || '').trim();
+          if (
+            f.key === 'season_goal' &&
+            dossierState.suggestedSeasonGoals.length &&
+            (!seasonGoalSet || dossierState.editingField === 'season_goal')
+          ) {
             var cur = (dossierState.profile.season_goal || '').trim().toLowerCase();
             var chipHtml = '';
             dossierState.suggestedSeasonGoals.forEach(function(lbl) {
