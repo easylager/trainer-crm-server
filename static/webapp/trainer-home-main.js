@@ -207,13 +207,6 @@
         var greeting = hubTimeGreeting();
         var name = getTelegramFirstName();
         el.textContent = name ? greeting + ', ' + name : greeting;
-        var dateEl = document.getElementById('hubPageDate');
-        if (dateEl) {
-          var now = new Date();
-          var wd = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'][now.getDay()];
-          var mon = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'][now.getMonth()];
-          dateEl.textContent = wd + ', ' + now.getDate() + '\u00a0' + mon;
-        }
       }
 
       window.__syncHubPageTitle = syncHubPageTitle;
@@ -2758,37 +2751,37 @@
               ? n + ' ' + pluralRu(n, 'заявка в центр', 'заявки в центр', 'заявок в центр')
               : 'Заявки в центр';
           case 'slots_this_week':
-            return 'Нет окон на этой неделе';
+            return 'Нет слотов на этой неделе';
           case 'slots_next_week':
-            return 'Следующая неделя пустая';
+            return 'Нет слотов на следующей неделе';
           case 'template':
-            return 'Шаблон недели';
+            return 'Создайте шаблон недели';
           case 'client_notes':
             return 'Заметки после записи';
           case 'open_loop_no_telegram':
             return hasN
-              ? n + ' ' + pluralRu(n, 'ученик без бота', 'ученика без бота', 'учеников без бота')
-              : 'Ученики без бота';
+              ? n + ' ' + pluralRu(n, 'клиент без бота', 'клиента без бота', 'клиентов без бота')
+              : 'Клиенты без бота';
           case 'open_loop_free_next':
           case 'open_loop_free_next_growth':
             return hasN
               ? n +
                   ' ' +
-                  pluralRu(n, 'свободное окно', 'свободных окна', 'свободных окон') +
-                  ' на следующей неделе'
-              : 'Свободные окна на следующей неделе';
+                  pluralRu(n, 'свободный слот', 'свободных слота', 'свободных слотов') +
+                  ' на след. неделе'
+              : 'Свободные слоты на след. неделе';
           case 'open_loop_no_next':
-            return 'Ученики без следующей записи';
+            return 'Клиенты без следующей записи';
           case 'catalog_publication':
             return 'Вас пока нет в каталоге';
           case 'catalog_needs_revision':
-            return 'Поправьте страницу';
+            return 'Поправьте карточку каталога';
           case 'setup_profile':
             return 'Настройте профиль';
           case 'no_future_slots':
             return 'Свободных окон не осталось';
           case 'referral_growth':
-            return 'Пригласите коллегу';
+            return 'Пригласите коллег в каталог';
           case 'share_link':
             return 'Отправьте ссылку ученику';
           case 'first_students':
@@ -2821,89 +2814,6 @@
         var tail = labels.join(', ');
         if (hidden.length > 3) tail += '…';
         return 'Ещё ' + hidden.length + ': ' + tail;
-      }
-
-      /* ---------- Главная по макету (TASK-314, волна 2) ---------- */
-      var hubTodayBookings = null;
-      var hubTodayItems = [];
-      var hubTodayMounted = false;
-
-      /** Новая главная — когда есть с чем работать: доступ открыт, расписание собрано. */
-      function hubTodayActive() {
-        if (!window.TrainerHubToday || !getInitData()) return false;
-        if (hubOnboardingStripVisible() || shouldShowHubDayZero()) return false;
-        if (
-          trainerAccessSnapshot &&
-          window.TrainerMiniAppGate &&
-          !window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)
-        ) {
-          return false;
-        }
-        return true;
-      }
-
-      function mountHubToday() {
-        if (hubTodayMounted) return;
-        hubTodayMounted = true;
-        window.TrainerHubToday.mount({
-          host: document.getElementById('hubToday'),
-          compactTitle: hubInboxCompactTitle,
-          onPending: function(ids) {
-            var list = ids && ids.length ? ids : hubPendingBookingIdsFromInbox();
-            if (list.length === 1) {
-              hubConfirmPendingBookingIdsInline(list);
-              return;
-            }
-            openHubPendingConfirmSheet(list);
-          },
-          onConfirm: function(id) {
-            return hubConfirmPendingBookingIdsInline([id]);
-          },
-          onOpenBooking: function(id) {
-            if (id) navigateTo('schedule-editor?open_booking=' + encodeURIComponent(id) + '&from=hub');
-          },
-          onOpenSchedule: function(dateIso) {
-            navigateTo('schedule-editor' + (dateIso ? '?anchor_date=' + encodeURIComponent(dateIso) : ''));
-          },
-          onFreeTime: function(dateIso) {
-            navigateTo('schedule-editor' + (dateIso ? '?anchor_date=' + encodeURIComponent(dateIso) : ''));
-          },
-          onRunItem: function(item) {
-            runHubInboxItemAction(item);
-          },
-          onDismissItem: function(item) {
-            dismissHubInboxRhythmItem(item.id);
-          },
-          onTasksShown: function(items) {
-            initTrainerPendingInboxModule();
-            if (window.TrainerPendingInbox) TrainerPendingInbox.trackInboxItemsShown(items);
-          },
-        });
-      }
-
-      /**
-       * Рисует главную по макету и прячет старые блоки (полоса-пульс, инбокс, «день открыт»,
-       * маркеры, плавающая «Записать»). Возвращает false, если главная сейчас в другом режиме
-       * (онбординг, день ноль, закрытый доступ) — тогда работает прежняя вёрстка.
-       */
-      function syncHubToday(items) {
-        if (Array.isArray(items)) hubTodayItems = items;
-        var host = document.getElementById('hubToday');
-        var active = !!host && hubTodayActive();
-        document.body.classList.toggle('hub-today-on', active);
-        var bookBtn = document.getElementById('hubHeaderBookBtn');
-        if (bookBtn) bookBtn.hidden = !active;
-        if (!active) {
-          if (host) host.hidden = true;
-          return false;
-        }
-        mountHubToday();
-        window.TrainerHubToday.render({
-          bookings: hubTodayBookings || { days: [] },
-          inbox: { items: hubTodayItems },
-          now: new Date(),
-        });
-        return true;
       }
 
       /* ---------- «Первые три ученика» (TASK-310) ---------- */
@@ -3033,17 +2943,6 @@
         }).map(function(it) {
           return it.id;
         });
-
-        /* Главная по макету (TASK-314): срочное и «Дела» рисует TrainerHubToday, старый инбокс молчит. */
-        if (syncHubToday(items)) {
-          if (items.some(function(it) { return it.primary_action === 'share_link' || (it.candidate && it.candidate.action === 'share_link'); })) {
-            prefetchHubInviteShare();
-          }
-          host.setAttribute('hidden', '');
-          host.innerHTML = '';
-          syncHubInboxShellBadges();
-          return;
-        }
 
         if (!items.length) {
           host.setAttribute('hidden', '');
@@ -7400,12 +7299,6 @@
       }
 
       function renderBookings(daysOrPayload) {
-        if (daysOrPayload && typeof daysOrPayload === 'object' && !Array.isArray(daysOrPayload)) {
-          hubTodayBookings = daysOrPayload;
-        } else if (Array.isArray(daysOrPayload)) {
-          hubTodayBookings = Object.assign({}, hubTodayBookings || {}, { days: daysOrPayload });
-        }
-        syncHubToday();
         var rawDays = Array.isArray(daysOrPayload)
           ? daysOrPayload
           : daysOrPayload && daysOrPayload.days;
@@ -8645,8 +8538,6 @@
 
         if (hubBookFabWired) return;
         hubBookFabWired = true;
-        var headerBook = document.getElementById('hubHeaderBookBtn');
-        if (headerBook) headerBook.onclick = function() { fab.onclick(); };
         fab.onclick = function() {
           /* Расписания ещё нет — ведём на первый экран настройки, а не в анкету. */
           if (hubOnboardingStripVisible()) {

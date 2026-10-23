@@ -3765,14 +3765,6 @@ async def _trainer_bookings_grouped_days_payload(
             "remaining": summary_counts["week_remaining"],
         },
     }
-    from zoneinfo import ZoneInfo
-
-    from src.application.trainer_hub_week import hub_week_summary
-    from src.shared.notification_hours import NOTIFICATION_TZ
-
-    hub_summary["week"] = await hub_week_summary(
-        session, trainer_id, datetime.now(ZoneInfo(NOTIFICATION_TZ)).date()
-    )
     bookings = await list_bookings_for_trainer(session, trainer_id, limit=lim)
     if not bookings:
         return {"days": [], **hub_summary}

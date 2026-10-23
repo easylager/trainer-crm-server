@@ -1950,30 +1950,6 @@ def webapp_trainer_prices_main_js(request: Request):
     )
 
 
-@app.get("/webapp/mini-app-trainer-ui.css")
-def webapp_mini_app_trainer_ui_css(request: Request):
-    """Компоненты кабинета тренера: строка, карточка, кнопки, шторка (TASK-314)."""
-    path = _WEBAPP_DIR / "mini-app-trainer-ui.css"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(
-        path,
-        media_type="text/css",
-        headers=_webapp_versioned_asset_cache_headers(request),
-    )
-
-
-@app.get("/webapp/trainer-hub-today.js")
-def webapp_trainer_hub_today_js(request: Request):
-    """Главная тренера по макету: неделя, срочное, «Дела», день (TASK-314)."""
-    path = _WEBAPP_DIR / "trainer-hub-today.js"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="JS file not found")
-    return FileResponse(
-        path, media_type="application/javascript", headers=_webapp_versioned_asset_cache_headers(request)
-    )
-
-
 @app.get("/webapp/mini-app-trainer-account.css")
 def webapp_mini_app_trainer_account_css(request: Request):
     """Trainer «Профиль» and «Услуги и цены» styles (TASK-313). Use ``?v=…`` for long cache."""

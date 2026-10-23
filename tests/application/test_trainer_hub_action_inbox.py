@@ -478,7 +478,7 @@ def test_catalog_revision_hint_names_the_moderator_comment() -> None:
     }
     payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
     row = next(x for x in payload["items"] if x["id"] == "catalog_needs_revision")
-    assert "Уточните цены" in row["subtitle"]
+    assert "Уточните цены" in row["title"]
     assert row["dismissible"] is False
     assert row["primary_action"] == "profile_catalog"
 
