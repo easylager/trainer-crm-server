@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.place_links import place_path
 from src.application.place_page import load_place_view, slot_price, slot_when
-from src.application.style_b import media_url
+from src.application.style_b import APP_MARK_SRC, media_url
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.public_display import format_public_name
 
@@ -134,9 +134,8 @@ async def load_landing_rink(session: AsyncSession, arena_id: int) -> dict[str, A
 
 
 def _mark() -> str:
-    return (
-        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3c4 5 4 13 0 18M17 3c-4 5-4 13 0 18"/></svg>'
-    )
+    # Знак бренда — тот же файл, что у кнопки приложения на сайте (style_b.APP_MARK_SRC).
+    return f'<img class="tl-brand__mark" src="{APP_MARK_SRC}" width="40" height="40" alt="">'
 
 
 def _coach_card(trainer: Mapping[str, Any]) -> str:
@@ -536,8 +535,8 @@ def render_trainer_landing_page(
   <meta name="twitter:title" content="{t}">
   <meta name="twitter:description" content="{d}">
   <meta name="twitter:image" content="{_esc(og_image)}">
-  <link rel="icon" href="/logos/01-icon/glide-icon-teal-on-black.png" type="image/png">
-  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-on-black.png">
+  <link rel="icon" href="/favicon.ico" type="image/png">
+  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png">
 {_landing_site_head_html()}
   <link rel="stylesheet" href="/landing/trainer-landing.css?v={css_v}">
   {analytics}

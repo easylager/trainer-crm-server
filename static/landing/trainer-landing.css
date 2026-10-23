@@ -41,7 +41,7 @@ body.tl { margin: 0; background: var(--tl-paper); color: var(--tl-ink); font-fam
 .tl-hero__in { position: relative; padding-top: 24px; display: flex; flex-direction: column; gap: 40px; }
 .tl-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 .tl .tl-brand { display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; font-family: var(--tl-display); font-size: 26px; }
-.tl-brand svg { width: 40px; height: 40px; padding: 10px; border-radius: 11px; background: var(--tl-ink); fill: none; stroke: var(--tl-teal); stroke-width: 2.4; stroke-linecap: round; }
+.tl-brand__mark { display: block; width: 40px; height: 40px; object-fit: contain; }
 .tl-nav { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; font-size: 16px; }
 .tl-nav a:not(.tl-btn) { color: var(--tl-dark-text); text-decoration: none; }
 .tl-nav a:not(.tl-btn):hover { color: #fff; }
