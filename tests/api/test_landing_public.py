@@ -77,52 +77,69 @@ async def test_landing_config_public(monkeypatch):
     assert data.get("telegram_join_url") == "https://t.me/IceProTestBot?start=join"
 
 
-@pytest.mark.asyncio
-async def test_landing_trainers_injects_config_script(monkeypatch):
-    s = _landing_settings(trainer_bot_username="IceProTestBot")
-    monkeypatch.setattr("src.application.landing_manifest.Settings", lambda: s)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/trainers")
-    assert resp.status_code == 200
-    assert "text/html" in resp.headers.get("content-type", "")
-    body = resp.text
-    assert 'data-vertical="ice"' in body
-    assert 'id="landing-config"' in body
-    assert "Glide" in body
-    assert 'id="hero"' in body
-    assert "landing-live-link.css" in body
-    assert 'rel="canonical"' in body
-    assert "/trainers" in body
+@pytest.fixture
+def _no_rink_cache():
+    from src.application.trainer_landing_page import clear_rink_picker_cache_for_tests
+
+    clear_rink_picker_cache_for_tests()
+    yield
+    clear_rink_picker_cache_for_tests()
 
 
 @pytest.mark.asyncio
-async def test_landing_trainers_is_part_of_the_site(monkeypatch):
-    """Лендинг тренера — страница glideclub.by: путь на главную, общий подвал и шрифты, JSON-LD."""
-    s = _landing_settings(trainer_bot_username="IceProTestBot", webapp_base_url="https://glideclub.by")
-    monkeypatch.setattr("src.application.landing_manifest.Settings", lambda: s)
+async def test_landing_trainers_renders_rink_first_page(monkeypatch, _no_rink_cache):
+    """«Ученики с катка» (TASK-322): часть сайта, SEO, превью, аналитика, цены PDEC-025, HEAD."""
+    s = _landing_settings(
+        trainer_bot_username="IceProTestBot",
+        webapp_base_url="https://glideclub.by",
+        yandex_metrika_counter_id=12345,
+        google_analytics_measurement_id="G-ABC1234",
+    )
+    monkeypatch.setattr("src.shared.config.Settings", lambda: s)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/trainers")
+        head = await client.head("/trainers")
+        cover = await client.get("/landing/og-trainers.png")
         raw = await client.get("/landing/index.html", follow_redirects=False)
+    assert resp.status_code == 200
     body = resp.text
-    assert "__" + "SITE_FOOTER__" not in body and "__LANDING_SITE_HEAD__" not in body
-    assert '<a class="logo" id="logoBox" href="/"' in body
-    assert 'class="b-site-foot"' in body
-    assert '<a href="/">Расписание катков по Беларуси</a>' in body
-    assert "b-site-foot__tg" not in body  # кнопка клиентского бота тренеру не нужна
-    # Кнопки — ссылки, а не <button>: поисковик видит путь регистрации.
-    assert body.count('class="cta cta--') == 3
-    assert body.count('href="/join">Начать в Telegram</a>') == 3
-    assert "fonts.googleapis.com" not in body
-    assert "/static/shared/glide-public-fonts.css" in body
-    assert 'lang="ru-BY">' in body.split("<head>", 1)[0]
-    assert body.count("<h1") == 1
-    assert "Всё рабочее пространство тренера — в одном месте</h2>" in body
-    assert body.count("в одном месте</h2>") == 1
-    ld_raw = body.split('<script type="application/ld+json">', 1)[1].split("</script>", 1)[0]
-    graph = json.loads(ld_raw)["@graph"]
-    crumbs = next(n for n in graph if n["@type"] == "BreadcrumbList")["itemListElement"]
-    assert [c["item"] for c in crumbs] == ["https://glideclub.by/", "https://glideclub.by/trainers"]
+    assert body.count("<h1") == 1 and "Ваши ученики" in body
+    assert "<title>CRM для тренера по фигурному катанию и хоккею — Glide</title>" in body
+    assert '<link rel="canonical" href="https://glideclub.by/trainers">' in body
+    assert '<meta name="robots" content="index, follow">' in body
+    assert '<meta property="og:image" content="https://glideclub.by/landing/og-trainers.png">' in body
+    assert '<meta name="twitter:image" content="https://glideclub.by/landing/og-trainers.png">' in body
+    assert '<meta property="og:image:width" content="1200">' in body
+    assert "mc.yandex.ru/metrika/tag.js?id=12345" in body
+    assert "googletagmanager.com/gtag/js?id=G-ABC1234" in body
+    assert '"ym_counter_id": 12345' in body
+    # Кнопки — настоящие ссылки на /join: путь регистрации виден поисковику и работает без JS.
+    assert body.count('js-tl-join" href="/join"') >= 3
+    assert "39 BYN" in body and "105 BYN за 3 месяца" in body and "375 BYN за год" in body
+    assert 'class="b-site-foot"' in body and "fonts.googleapis.com" not in body
+    graph = []
+    for chunk in body.split('<script type="application/ld+json">')[1:]:
+        data = json.loads(chunk.split("</script>", 1)[0])
+        graph.extend(data.get("@graph") or [data])
+    types = {n["@type"] for n in graph}
+    assert {"SoftwareApplication", "BreadcrumbList", "FAQPage"} <= types
+    assert head.status_code == 200
+    assert cover.status_code == 200 and cover.headers["content-type"].startswith("image/png")
     assert raw.status_code == 301 and raw.headers["location"] == "/trainers"
+
+
+@pytest.mark.asyncio
+async def test_landing_trainers_without_counters_has_no_analytics(monkeypatch, _no_rink_cache):
+    s = _landing_settings(
+        trainer_bot_username="IceProTestBot",
+        yandex_metrika_counter_id=None,
+        google_analytics_measurement_id=None,
+    )
+    monkeypatch.setattr("src.shared.config.Settings", lambda: s)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        body = (await client.get("/trainers")).text
+    assert "mc.yandex" not in body and "googletagmanager" not in body
+    assert "ym_counter_id" not in body
 
 
 @pytest.mark.asyncio
@@ -177,49 +194,6 @@ async def test_trainer_join_get_redirect(db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_landing_trainers_preview_cover_and_analytics(monkeypatch):
-    """Превью в мессенджерах — обложка 1200×630; Метрика и GA — как на остальном сайте; HEAD отвечает."""
-    s = _landing_settings(
-        trainer_bot_username="IceProTestBot",
-        webapp_base_url="https://glideclub.by",
-        yandex_metrika_counter_id=12345,
-        google_analytics_measurement_id="G-ABC1234",
-    )
-    monkeypatch.setattr("src.application.landing_manifest.Settings", lambda: s)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/trainers")
-        head = await client.head("/trainers")
-        cover = await client.get("/landing/og-trainers.png")
-    body = resp.text
-    assert '<meta property="og:image" content="https://glideclub.by/landing/og-trainers.png">' in body
-    assert '<meta name="twitter:image" content="https://glideclub.by/landing/og-trainers.png">' in body
-    assert '<meta property="og:image:width" content="1200">' in body
-    assert '<meta property="og:image:height" content="630">' in body
-    assert "<title>CRM для тренера по фигурному катанию и хоккею — Glide</title>" in body
-    assert "__PUBLIC_ANALYTICS_HEAD__" not in body
-    assert "mc.yandex.ru/metrika/tag.js?id=12345" in body
-    assert "googletagmanager.com/gtag/js?id=G-ABC1234" in body
-    assert '"ym_counter_id": 12345' in body
-    assert head.status_code == 200
-    assert cover.status_code == 200 and cover.headers["content-type"].startswith("image/png")
-
-
-@pytest.mark.asyncio
-async def test_landing_trainers_without_counters_has_no_analytics(monkeypatch):
-    s = _landing_settings(
-        trainer_bot_username="IceProTestBot",
-        yandex_metrika_counter_id=None,
-        google_analytics_measurement_id=None,
-    )
-    monkeypatch.setattr("src.application.landing_manifest.Settings", lambda: s)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        body = (await client.get("/trainers")).text
-    assert "__PUBLIC_ANALYTICS_HEAD__" not in body
-    assert "mc.yandex" not in body and "googletagmanager" not in body
-    assert "ym_counter_id" not in body
-
-
-@pytest.mark.asyncio
 async def test_trainer_join_records_source_in_audit(db_session, monkeypatch):
     """UTM и внешний сайт-источник с лендинга попадают в аудит /join — иначе канал тренеров не виден."""
     s = _landing_settings(trainer_bot_username="IceProTestBot", landing_trainer_start_max_requests=20)
@@ -234,7 +208,7 @@ async def test_trainer_join_records_source_in_audit(db_session, monkeypatch):
     long_campaign = "x" * 200
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False) as client:
         resp = await client.get(
-            f"/join?utm_source=instagram&utm_medium=bio&utm_campaign={long_campaign}&from=l.instagram.com&junk=1"
+            f"/join?utm_source=instagram&utm_medium=bio&utm_campaign={long_campaign}&from=l.instagram.com&arena=5&junk=1"
         )
     assert resp.status_code == 302
     payload = next(p for e, p in events if e == "landing.trainer_join_redirect")
@@ -242,6 +216,7 @@ async def test_trainer_join_records_source_in_audit(db_session, monkeypatch):
     assert payload["utm_medium"] == "bio"
     assert payload["utm_campaign"] == "x" * 64
     assert payload["from"] == "l.instagram.com"
+    assert payload["arena"] == "5"
     assert "junk" not in payload
 
 

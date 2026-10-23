@@ -43,7 +43,6 @@ from src.api.routes.catalog_consumer_telemetry import router as catalog_consumer
 from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.api.routes.public import issue_trainer_join_redirect
-from src.application.landing_manifest import inject_landing_html, polish_trainer_landing_html
 from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.api.middleware.maintenance import MaintenanceModeMiddleware
@@ -2573,23 +2572,54 @@ _LANDING_ASSET_MEDIA = {
 }
 
 
-def _trainer_landing_html() -> str:
-    """Glide marketing landing — vertical entry for trainers (PDEC-017 ред. 2: ``/trainers``)."""
-    path = _LANDING_DIR / "index.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Landing not found")
-    html = path.read_text(encoding="utf-8")
+async def _trainer_landing(session: AsyncSession, *, arena_id: int | None, rink_page: bool) -> str:
+    """Лендинг «Ученики с катка» (TASK-321/322). Сбой данных катка не роняет страницу —
+    она рисуется без экрана катка."""
+    from src.application.trainer_landing_page import (
+        load_landing_rink,
+        load_rink_picker,
+        render_trainer_landing_page,
+    )
+
+    rinks: list = []
+    rink = None
     try:
-        html = polish_trainer_landing_html(inject_landing_html(html))
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    return html
+        rinks = await load_rink_picker(session)
+        target = arena_id if arena_id is not None else (rinks[0]["id"] if rinks else None)
+        if target is not None:
+            rink = await load_landing_rink(session, int(target))
+    except Exception:
+        logger.exception("trainer landing: rink data unavailable")
+        await session.rollback()
+    return render_trainer_landing_page(rink=rink, rinks=rinks, rink_page=rink_page and rink is not None)
 
 
 # HEAD — для генераторов превью и SEO-сканеров, которые сначала спрашивают заголовки.
 @app.api_route("/trainers", methods=["GET", "HEAD"])
-def trainer_landing_page():
-    return HTMLResponse(content=_trainer_landing_html(), media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
+async def trainer_landing_page(request: Request, session: AsyncSession = Depends(get_session)):
+    if request.method == "HEAD":
+        return Response(status_code=200, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
+    html = await _trainer_landing(session, arena_id=None, rink_page=False)
+    return HTMLResponse(content=html, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
+
+
+@app.api_route("/trainers/{city_ref}/{slug}", methods=["GET", "HEAD"])
+async def trainer_rink_landing_page(
+    city_ref: str,
+    slug: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """Лендинг под каток — ссылка для холодного сообщения тренеру (TASK-321)."""
+    from src.api.routes.public_place_page import _resolve
+
+    city, arena_id = await _resolve(session, city_ref, slug)
+    if city is None or arena_id is None:
+        return RedirectResponse(url="/trainers", status_code=302)
+    if request.method == "HEAD":
+        return Response(status_code=200, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
+    html = await _trainer_landing(session, arena_id=int(arena_id), rink_page=True)
+    return HTMLResponse(content=html, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.get("/join")

@@ -134,9 +134,10 @@ async def issue_trainer_join_from_request(
     return result
 
 
-# Откуда пришёл тренер: UTM из ссылки лендинга и внешний сайт-источник (``from``).
+# Откуда пришёл тренер: UTM из ссылки лендинга, внешний сайт-источник (``from``) и каток
+# лендинга ``/trainers/{город}/{каток}`` (``arena``).
 # Лендинг сам дописывает их к /join — Referer у /join всегда glideclub.by/trainers.
-_JOIN_ATTRIBUTION_KEYS = ("utm_source", "utm_medium", "utm_campaign", "from")
+_JOIN_ATTRIBUTION_KEYS = ("utm_source", "utm_medium", "utm_campaign", "from", "arena")
 _JOIN_ATTRIBUTION_MAX_LEN = 64
 
 
