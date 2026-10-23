@@ -11,10 +11,10 @@
     "cta_loading": "Открываем Telegram…"
   },
   "seo": {
-    "title": "Glide — CRM для тренера на льду",
-    "description": "Glide — CRM для тренера на льду в Telegram. Живая ссылка на запись, расписание, клиенты и каталог. 14 дней бесплатно.",
+    "title": "CRM для тренера по фигурному катанию и хоккею — Glide",
+    "description": "Запись учеников по ссылке, расписание, клиенты и абонементы — в Telegram, без отдельного приложения. Для тренеров на льду. 14 дней бесплатно.",
     "canonical_path": "/trainers",
-    "og_image": "/logos/02-horizontal-full/glide-horizontal-teal-icon-black-text-on-white.png"
+    "og_image": "/landing/og-trainers.png"
   },
   "value_pillars": [
     { "id": "telegram", "label": "Telegram — без установки", "icon": "telegram" },

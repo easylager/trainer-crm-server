@@ -96,7 +96,8 @@ async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_
     home_block = _url_block(xml, f"{base}/")
     trainers_block = _url_block(xml, f"{base}/trainers")
     assert "<lastmod>" in home_block
-    assert "<lastmod>" in trainers_block
+    # Свежесть катков к лендингу не относится — ложный lastmod подрывает доверие ко всему файлу.
+    assert "<lastmod>" not in trainers_block
     assert "?t=" not in xml and "?w=" not in xml
     assert hidden_path not in xml
 

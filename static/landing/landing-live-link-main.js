@@ -81,9 +81,34 @@
     }, 6000);
   }
 
+  /* Источник тренера уходит в аудит /join: UTM из адреса лендинга и внешний сайт, с которого пришли. */
+  function externalReferrerHost() {
+    try {
+      var host = document.referrer ? new URL(document.referrer).hostname : '';
+      return host && host !== window.location.hostname ? host : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
   function joinPath(cfg) {
-    var ref = new URLSearchParams(window.location.search).get('ref') || '';
-    return (cfg.join_url || '/join') + (ref ? '?ref=' + encodeURIComponent(ref) : '');
+    var here = new URLSearchParams(window.location.search);
+    var out = new URLSearchParams();
+    ['ref', 'utm_source', 'utm_medium', 'utm_campaign'].forEach(function (key) {
+      var v = here.get(key);
+      if (v) out.set(key, v);
+    });
+    var from = externalReferrerHost();
+    if (from) out.set('from', from);
+    var qs = out.toString();
+    return (cfg.join_url || '/join') + (qs ? '?' + qs : '');
+  }
+
+  function reportJoinGoal(cfg) {
+    try {
+      if (cfg.ym_counter_id && typeof window.ym === 'function') window.ym(cfg.ym_counter_id, 'reachGoal', 'trainer_join');
+      if (typeof window.gtag === 'function') window.gtag('event', 'trainer_join');
+    } catch (e) { /* аналитика не должна мешать переходу */ }
   }
 
   function startTelegram(btn) {
@@ -99,6 +124,7 @@
       btn.setAttribute('aria-disabled', 'true');
       btn.textContent = hero.cta_loading || 'Открываем Telegram…';
     }
+    reportJoinGoal(cfg);
     window.location.href = joinPath(cfg);
   }
 

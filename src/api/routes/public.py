@@ -89,6 +89,7 @@ async def issue_trainer_join_from_request(
     *,
     referral_code: str | None = None,
     audit_event: str = "landing.trainer_start_issued",
+    attribution: dict[str, str] | None = None,
 ) -> dict:
     """
     Mint a one-time landing welcome token and return redirect metadata.
@@ -127,9 +128,25 @@ async def issue_trainer_join_from_request(
             "vertical": settings.landing_vertical,
             "market": settings.landing_market,
             "has_referral": bool(result.get("referral_code")),
+            **(attribution or {}),
         },
     )
     return result
+
+
+# Откуда пришёл тренер: UTM из ссылки лендинга и внешний сайт-источник (``from``).
+# Лендинг сам дописывает их к /join — Referer у /join всегда glideclub.by/trainers.
+_JOIN_ATTRIBUTION_KEYS = ("utm_source", "utm_medium", "utm_campaign", "from")
+_JOIN_ATTRIBUTION_MAX_LEN = 64
+
+
+def join_attribution_from_request(request: Request) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key in _JOIN_ATTRIBUTION_KEYS:
+        value = (request.query_params.get(key) or "").strip()
+        if value:
+            out[key] = value[:_JOIN_ATTRIBUTION_MAX_LEN]
+    return out
 
 
 async def issue_trainer_join_redirect(
@@ -144,6 +161,7 @@ async def issue_trainer_join_redirect(
         request,
         referral_code=referral_code,
         audit_event="landing.trainer_join_redirect",
+        attribution=join_attribution_from_request(request),
     )
     redirect_url = result.get("redirect_url")
     if not redirect_url:

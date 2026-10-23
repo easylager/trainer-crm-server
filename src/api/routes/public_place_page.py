@@ -473,7 +473,9 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
         by_city[city_name].append((loc, freq, stamp, "0.7"))
     urls: list[tuple[str, str, datetime | None, str | None]] = [
         (f"{base}/", "daily", site_stamp, "1.0"),
-        (f"{base}/trainers", "weekly", site_stamp, "0.4"),
+        # Без lastmod: свежесть катков к лендингу отношения не имеет, а ложная дата
+        # учит поисковик не верить lastmod всего файла.
+        (f"{base}/trainers", "weekly", None, "0.4"),
     ]
     for city_name in order:
         stamp = city_stamp[city_name]

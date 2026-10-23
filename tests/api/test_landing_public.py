@@ -177,6 +177,75 @@ async def test_trainer_join_get_redirect(db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_landing_trainers_preview_cover_and_analytics(monkeypatch):
+    """Превью в мессенджерах — обложка 1200×630; Метрика и GA — как на остальном сайте; HEAD отвечает."""
+    s = _landing_settings(
+        trainer_bot_username="IceProTestBot",
+        webapp_base_url="https://glideclub.by",
+        yandex_metrika_counter_id=12345,
+        google_analytics_measurement_id="G-ABC1234",
+    )
+    monkeypatch.setattr("src.application.landing_manifest.Settings", lambda: s)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/trainers")
+        head = await client.head("/trainers")
+        cover = await client.get("/landing/og-trainers.png")
+    body = resp.text
+    assert '<meta property="og:image" content="https://glideclub.by/landing/og-trainers.png">' in body
+    assert '<meta name="twitter:image" content="https://glideclub.by/landing/og-trainers.png">' in body
+    assert '<meta property="og:image:width" content="1200">' in body
+    assert '<meta property="og:image:height" content="630">' in body
+    assert "<title>CRM для тренера по фигурному катанию и хоккею — Glide</title>" in body
+    assert "__PUBLIC_ANALYTICS_HEAD__" not in body
+    assert "mc.yandex.ru/metrika/tag.js?id=12345" in body
+    assert "googletagmanager.com/gtag/js?id=G-ABC1234" in body
+    assert '"ym_counter_id": 12345' in body
+    assert head.status_code == 200
+    assert cover.status_code == 200 and cover.headers["content-type"].startswith("image/png")
+
+
+@pytest.mark.asyncio
+async def test_landing_trainers_without_counters_has_no_analytics(monkeypatch):
+    s = _landing_settings(
+        trainer_bot_username="IceProTestBot",
+        yandex_metrika_counter_id=None,
+        google_analytics_measurement_id=None,
+    )
+    monkeypatch.setattr("src.application.landing_manifest.Settings", lambda: s)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        body = (await client.get("/trainers")).text
+    assert "__PUBLIC_ANALYTICS_HEAD__" not in body
+    assert "mc.yandex" not in body and "googletagmanager" not in body
+    assert "ym_counter_id" not in body
+
+
+@pytest.mark.asyncio
+async def test_trainer_join_records_source_in_audit(db_session, monkeypatch):
+    """UTM и внешний сайт-источник с лендинга попадают в аудит /join — иначе канал тренеров не виден."""
+    s = _landing_settings(trainer_bot_username="IceProTestBot", landing_trainer_start_max_requests=20)
+    monkeypatch.setattr("src.api.routes.public.Settings", lambda: s)
+    monkeypatch.setattr("src.application.landing_trainer_start_use_cases.Settings", lambda: s)
+    monkeypatch.setattr("src.application.trainer_link_token_use_cases.Settings", lambda: s)
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "src.api.routes.public.audit_log",
+        lambda event, actor_type, actor_id, payload=None: events.append((event, payload or {})),
+    )
+    long_campaign = "x" * 200
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False) as client:
+        resp = await client.get(
+            f"/join?utm_source=instagram&utm_medium=bio&utm_campaign={long_campaign}&from=l.instagram.com&junk=1"
+        )
+    assert resp.status_code == 302
+    payload = next(p for e, p in events if e == "landing.trainer_join_redirect")
+    assert payload["utm_source"] == "instagram"
+    assert payload["utm_medium"] == "bio"
+    assert payload["utm_campaign"] == "x" * 64
+    assert payload["from"] == "l.instagram.com"
+    assert "junk" not in payload
+
+
+@pytest.mark.asyncio
 async def test_trainer_join_get_disabled(monkeypatch):
     s = _landing_settings(trainer_bot_username="IceProTestBot", landing_trainer_registration_enabled=False)
     monkeypatch.setattr("src.api.routes.public.Settings", lambda: s)

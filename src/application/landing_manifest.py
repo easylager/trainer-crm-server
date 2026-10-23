@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.application.public_analytics import public_analytics_head_html
 from src.shared.config import Settings
 
 _LANDING_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "landing"
@@ -175,6 +176,9 @@ def inject_landing_html(html: str, settings: Settings | None = None) -> str:
     s = settings or Settings()
     m = load_landing_manifest(s)
     cfg = public_landing_config(s)
+    if s.yandex_metrika_counter_id:
+        # Цель «нажал Начать в Telegram» — ym() требует номер счётчика.
+        cfg["ym_counter_id"] = s.yandex_metrika_counter_id
     cfg_json = json.dumps(cfg, ensure_ascii=False)
     vertical = m.get("vertical", "ice")
     market = m.get("market", "by")
@@ -230,6 +234,14 @@ def inject_landing_html(html: str, settings: Settings | None = None) -> str:
         + html[head_end:]
     )
     html = html.replace("__LANDING_SITE_HEAD__", _landing_site_head_html(), 1)
+    html = html.replace(
+        "__PUBLIC_ANALYTICS_HEAD__",
+        public_analytics_head_html(
+            yandex_metrika_counter_id=s.yandex_metrika_counter_id,
+            google_analytics_measurement_id=s.google_analytics_measurement_id,
+        ),
+        1,
+    )
     html = html.replace("__SITE_FOOTER__", _landing_site_footer_html(), 1)
 
     bootstrap = (

@@ -2586,7 +2586,8 @@ def _trainer_landing_html() -> str:
     return html
 
 
-@app.get("/trainers")
+# HEAD — для генераторов превью и SEO-сканеров, которые сначала спрашивают заголовки.
+@app.api_route("/trainers", methods=["GET", "HEAD"])
 def trainer_landing_page():
     return HTMLResponse(content=_trainer_landing_html(), media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
 
