@@ -3799,9 +3799,9 @@ def format_trainer_trial_roi_recap_html(
 
 
 # Напоминание об окончании подписки / триала: одна кнопка → мини-приложение trainer-subscription (тарифы и оплата).
-TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP = "💳 Тарифы и оплата"
+TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP = "💳 Подписка и оплата"
 TRAINER_BUTTON_PAY_SUBSCRIPTION = "Продлить подписку"
-TRAINER_BUTTON_CHOOSE_TARIFF = "Выбрать тариф"
+TRAINER_BUTTON_CHOOSE_TARIFF = "Оформить подписку"
 # /subscription — мини-апп trainer-subscription
 TRAINER_BUTTON_SUBSCRIPTION_CONSTRUCTOR = "Подписки"
 TRAINER_SUBSCRIPTION_WITH_TIER = (
@@ -3811,11 +3811,11 @@ TRAINER_SUBSCRIPTION_WITH_TIER = (
 TRAINER_SUBSCRIPTION_WITHOUT_TIER = (
     "📋 <b>Сейчас без активного тарифа</b>\n\n"
     "Расписание и клиентская база на паузе. <b>Карточка в общем каталоге остаётся</b> — вас можно найти в списке. "
-    "Чтобы вернуть ведение записей и онлайн-запись, выберите тариф ниже — в своём темпе."
+    "Чтобы вернуть ведение записей и онлайн-запись, оформите подписку ниже — одна, всё включено."
 )
 TRAINER_SUBSCRIPTION_ACTIVE = (
     "Подписка на платформу активна до <b>{expires_date}</b>. Вы в каталоге.\n\n"
-    "Кнопка ниже — оплата за <b>следующий период</b> (после этой даты). Можно выбрать срок: месяц, 3 мес, год или 1,5 года."
+    "Кнопка ниже — оплата за <b>следующий период</b> (после этой даты). Можно выбрать срок: месяц, 3 месяца или год — за 3 месяца и за год дешевле."
 )
 TRAINER_SUBSCRIPTION_EXPIRED = (
     "Срок подписки прошёл. Оформите новый период — вернутся расписание, база и онлайн-запись. "
