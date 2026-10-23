@@ -1171,7 +1171,7 @@
    * В сетке остаётся только время с загрузкой — без ↗ у каждой плитки: купить можно из «билета»,
    * а главные кнопки «Позвать» и «Собрать компанию» — в панели внизу.
    */
-  function showGroupHtml(g, sectionTitle, dayLabel) {
+  function showGroupHtml(g, sectionTitle, dayLabel, pricesAbove) {
     var ownTitle = g.title && g.title !== sectionTitle ? g.title : '';
     var hasPick = g.times.some(function (t) { return t.picked; });
     var head = '';
@@ -1184,7 +1184,8 @@
         '</div>';
     }
     var picked = g.times.filter(function (t) { return t.picked; })[0] || null;
-    var pricesLine = !picked && g.prices.length
+    // Цены уже стоят плитками над расписанием — строкой под датами их не повторяем.
+    var pricesLine = !picked && !pricesAbove && g.prices.length
       ? '<p class="arena-show__line">' + g.prices.map(function (p) { return esc(p.label) + ' ' + esc(p.value); }).join(' · ') + '</p>'
       : '';
     var ticket = '';
@@ -1253,8 +1254,10 @@
     }
     var sectionTitle = iceSectionTitle();
     var dayLabel = ticketDayLabel(strip(), iso);
+    var f = priceFloors();
+    var pricesAbove = !!(f.adult || f.child || f.rental);
     view.groups.forEach(function (g) {
-      html += showGroupHtml(g, sectionTitle, dayLabel);
+      html += showGroupHtml(g, sectionTitle, dayLabel, pricesAbove);
     });
     if (lessons.length) {
       html += '<p class="arena-h arena-h--sub">Занятия с тренером</p><div class="arena-rows">' + lessons.map(rowHtml).join('') + '</div>';

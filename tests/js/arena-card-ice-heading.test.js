@@ -34,10 +34,16 @@ describe('arena card ice section heading', () => {
 
   it('drops the slot title when it only repeats the section name', () => {
     // TASK-306: группа сеансов рисуется общей showGroupHtml для массового катания и ОХМ.
-    assert.match(fnBody('renderShowtimes'), /showGroupHtml\(g, sectionTitle, dayLabel\)/);
+    assert.match(fnBody('renderShowtimes'), /showGroupHtml\(g, sectionTitle, dayLabel, pricesAbove\)/);
     const body = fnBody('showGroupHtml');
     assert.ok(body.includes('g.title !== sectionTitle'));
     assert.ok(!body.includes("'<b>' + esc(g.title) + '</b>'"));
+  });
+
+  it('does not repeat the price tiles as a line under the day strip', () => {
+    // Плитки «Вход · Детский · Прокат» уже над расписанием — строка под датами их дублировала.
+    assert.ok(fnBody('renderShowtimes').includes('priceFloors()'));
+    assert.ok(fnBody('showGroupHtml').includes('!pricesAbove && g.prices.length'));
   });
 
   it('model still names plain sessions «Массовое катание» and keeps own labels', () => {
