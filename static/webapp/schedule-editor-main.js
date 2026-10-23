@@ -157,7 +157,7 @@
         var list = state.trainerServices || [];
         for (var i = 0; i < list.length; i++) {
           if (Number(list[i].id) === sid) {
-            var a = list[i].ui_accent;
+            var a = list[i].ui_accent_effective || list[i].ui_accent;
             if (a == null || !String(a).trim()) return '';
             var slug = String(a).trim().toLowerCase();
             if (SCHEDULE_SERVICE_UI_ACCENT_SLUGS.indexOf(slug) < 0) return '';

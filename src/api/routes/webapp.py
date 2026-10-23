@@ -7199,12 +7199,17 @@ async def get_trainer_my_services(
         u = str(row[3]).strip().lower()
         return u if u else None
 
+    from src.shared.service_ui_accent import with_default_service_ui_accents
+
+    accent_by_sid = with_default_service_ui_accents({int(row[0]): _service_row_ui_accent(row) for row in rows})
     services = [
         {
             "id": row[0],
             "name": (row[1] or "").strip() or "—",
             "description": _service_row_description(row),
             "ui_accent": _service_row_ui_accent(row),
+            # Цвет карточек записей: выбранный или по умолчанию (см. with_default_service_ui_accents).
+            "ui_accent_effective": accent_by_sid.get(int(row[0])),
             "is_online": bool(row[4]) if len(row) > 4 else False,
             "currency_code": trainer_currency,
             "price_tiers": tiers_by_sid.get(int(row[0]), []),

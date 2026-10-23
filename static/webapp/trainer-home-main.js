@@ -4017,7 +4017,8 @@
       function syncHubMyServicesAccentMap(servicesList) {
         (servicesList || []).forEach(function(s) {
           if (s == null || s.id == null) return;
-          var slug = s.ui_accent != null ? String(s.ui_accent).trim().toLowerCase() : '';
+          var accent = s.ui_accent_effective || s.ui_accent;
+          var slug = accent != null ? String(accent).trim().toLowerCase() : '';
           if (!slug || HUB_SERVICE_UI_ACCENT_SLUGS.indexOf(slug) < 0) {
             delete hubMyServicesAccentByServiceId[s.id];
             return;
