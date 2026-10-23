@@ -56,6 +56,12 @@ body.trainer-shell-body .trainer-mini-nav > button.btn-app-home.btn-app-home--or
   display: none !important;
 }
 
+/* Расписание: при видимом нижнем баре заголовок «Расписание» дублирует активную вкладку —
+   прячем, если в шапке нет «‹ Откуда» (вложенный вход). */
+body.trainer-shell-body:not(.trainer-shell-tabs-hidden) .se-schedule-top-chrome .header:not(:has(.btn-app-home--origin:not([hidden]))) {
+  display: none;
+}
+
 /* ─── Bottom tab bar ─────────────────────────────────────────────────────── */
 
 .trainer-tab-bar {

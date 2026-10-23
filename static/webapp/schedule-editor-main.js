@@ -1240,7 +1240,8 @@
       function refreshCalendarChrome() {
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         const start = state.weekStart;
-        document.getElementById('weekLabel').textContent = formatWeekLabel(start);
+        var weekLabelEl = document.getElementById('weekLabel');
+        if (weekLabelEl) weekLabelEl.textContent = formatWeekLabel(start);
       }
 
       function flushPendingGroupHubModal() {
@@ -6229,7 +6230,8 @@
         end.setDate(end.getDate() + 6);
         const from = dateToStr(start);
         const to = dateToStr(end);
-        document.getElementById('weekLabel').textContent = formatWeekLabel(start);
+        var weekLabelEl = document.getElementById('weekLabel');
+        if (weekLabelEl) weekLabelEl.textContent = formatWeekLabel(start);
         syncAddSlotsButtonEligibility();
         document.getElementById('calendarContent').innerHTML = buildCalendarSkeletonHtml();
         state.scheduleLoadInFlight = true;
@@ -9874,12 +9876,6 @@
         loadSlots(loadOpts);
       }
 
-      document.getElementById('weekPrev').onclick = function() {
-        shiftTrainerScheduleWeek(-1);
-      };
-      document.getElementById('weekNext').onclick = function() {
-        shiftTrainerScheduleWeek(1);
-      };
 
       function rescheduleDayPickAfterWeekChangeIfVisible() {
         var dp = document.getElementById('screenDayPick');
