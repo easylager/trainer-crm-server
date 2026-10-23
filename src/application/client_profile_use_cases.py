@@ -190,8 +190,30 @@ async def resolve_acting_client_id(
     raising, so a stale/foreign id in a client-sent header never blocks the request.
     """
     legacy_id = await get_client_id_by_telegram_id(session, account_telegram_id)
-    if legacy_id is not None and await _is_own_row(session, account_telegram_id, legacy_id):
-        await _ensure_self_link(session, account_telegram_id, legacy_id)
+    if legacy_id is not None:
+        # Хаб клиента зовёт это десятки раз за запрос, из ~15 параллельных сессий. Раньше каждый
+        # вызов делал SELECT «своя строка» и INSERT … ON CONFLICT — запись с блокировкой на чтении.
+        # Теперь одно чтение отвечает на оба вопроса, а INSERT — только когда ссылки правда нет.
+        ensured = session.info.setdefault("client_self_link_ensured", set())
+        key = (int(account_telegram_id), int(legacy_id))
+        if key not in ensured:
+            r = await session.execute(
+                text(
+                    """
+                    SELECT
+                      EXISTS (SELECT 1 FROM clients WHERE id = :cid AND telegram_id = :tid) AS own,
+                      EXISTS (
+                        SELECT 1 FROM client_profile_links
+                        WHERE account_telegram_id = :tid AND profile_client_id = :cid
+                      ) AS linked
+                    """
+                ),
+                {"cid": legacy_id, "tid": account_telegram_id},
+            )
+            own, linked = r.one()
+            if own and not linked:
+                await _ensure_self_link(session, account_telegram_id, legacy_id)
+            ensured.add(key)
 
     if requested_profile_id is None:
         return legacy_id
@@ -256,8 +278,30 @@ async def list_accessible_profiles(
     for display parity) the family-shared profile from ``client_family_access_members`` if any.
     """
     legacy_id = await get_client_id_by_telegram_id(session, account_telegram_id)
-    if legacy_id is not None and await _is_own_row(session, account_telegram_id, legacy_id):
-        await _ensure_self_link(session, account_telegram_id, legacy_id)
+    if legacy_id is not None:
+        # Хаб клиента зовёт это десятки раз за запрос, из ~15 параллельных сессий. Раньше каждый
+        # вызов делал SELECT «своя строка» и INSERT … ON CONFLICT — запись с блокировкой на чтении.
+        # Теперь одно чтение отвечает на оба вопроса, а INSERT — только когда ссылки правда нет.
+        ensured = session.info.setdefault("client_self_link_ensured", set())
+        key = (int(account_telegram_id), int(legacy_id))
+        if key not in ensured:
+            r = await session.execute(
+                text(
+                    """
+                    SELECT
+                      EXISTS (SELECT 1 FROM clients WHERE id = :cid AND telegram_id = :tid) AS own,
+                      EXISTS (
+                        SELECT 1 FROM client_profile_links
+                        WHERE account_telegram_id = :tid AND profile_client_id = :cid
+                      ) AS linked
+                    """
+                ),
+                {"cid": legacy_id, "tid": account_telegram_id},
+            )
+            own, linked = r.one()
+            if own and not linked:
+                await _ensure_self_link(session, account_telegram_id, legacy_id)
+            ensured.add(key)
 
     r = await session.execute(
         text(
@@ -374,8 +418,16 @@ async def link_guardian_profile(
     trainer's link and must commit. False when the account is at the profile limit.
     """
     legacy_id = await get_client_id_by_telegram_id(session, account_telegram_id)
-    if legacy_id is not None and await _is_own_row(session, account_telegram_id, legacy_id):
-        await _ensure_self_link(session, account_telegram_id, legacy_id)
+    if legacy_id is not None:
+        # Проверка «своя строка» и вставка self-ссылки идемпотентны: в одной сессии их достаточно
+        # сделать раз. Хаб клиента звал это десятки раз за запрос — по два лишних SQL, один из них
+        # INSERT, на каждый вызов.
+        ensured = session.info.setdefault("client_self_link_ensured", set())
+        key = (int(account_telegram_id), int(legacy_id))
+        if key not in ensured:
+            if await _is_own_row(session, account_telegram_id, legacy_id):
+                await _ensure_self_link(session, account_telegram_id, legacy_id)
+            ensured.add(key)
     r_exists = await session.execute(
         text(
             """

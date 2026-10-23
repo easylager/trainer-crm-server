@@ -10,6 +10,33 @@
   <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610233" />
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610233" />
   <link rel="stylesheet" href="/static/shared/glide-components.css?v=202610233" />
+  <script>
+    /* Данные главной — сразу из <head>, не дожидаясь SDK Telegram и разбора скриптов (TASK-314):
+       раньше /client/hub/bootstrap уходил через ~0,85 с после открытия. Профиль — та же догадка,
+       что у client-home-main.js (выбранный или по умолчанию с прошлого раза); нет догадки — ждём профили. */
+    (function () {
+      try {
+        var init = new URLSearchParams((location.hash || '').replace(/^#/, '')).get('tgWebAppData') ||
+          new URLSearchParams(location.search).get('init_data') || '';
+        if (!init) return;
+        var pid = null;
+        try {
+          var v = localStorage.getItem('cw_active_profile_id_v1');
+          pid = v ? parseInt(v, 10) : null;
+          if (pid == null) {
+            var user = JSON.parse(new URLSearchParams(init).get('user') || 'null');
+            var d = JSON.parse(localStorage.getItem('cw_default_profile_v1') || 'null');
+            if (user && d && d.u === String(user.id) && Number(d.id) > 0) pid = Number(d.id);
+          }
+        } catch (e) { pid = null; }
+        if (pid == null || !(pid > 0)) return;
+        var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': init, 'X-Profile-Id': String(pid) };
+        var promise = fetch('/api/webapp/client/hub/bootstrap?init_data=' + encodeURIComponent(init), { headers: headers, cache: 'no-store' });
+        promise.catch(function () {});
+        window.__clientEarlyBootstrap = { init: init, pid: pid, promise: promise };
+      } catch (e) { /* обычный путь подхватит */ }
+    })();
+  </script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="client-mini-app-theme.js?v=202610233"></script>
 <link rel="stylesheet" href="theme.css?v=202610233" />

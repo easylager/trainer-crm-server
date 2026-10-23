@@ -1919,7 +1919,12 @@
             : switcher && typeof switcher.getActiveProfileId === 'function'
               ? switcher.getActiveProfileId()
               : null;
-          earlyBootstrapPromise = fetchHubBootstrap(guessDefault ? storedProfileId : null);
+          var head = window.__clientEarlyBootstrap;
+          window.__clientEarlyBootstrap = null;
+          earlyBootstrapPromise =
+            head && head.init === initData && head.pid === earlySentProfileId
+              ? head.promise
+              : fetchHubBootstrap(guessDefault ? storedProfileId : null);
           // Ответ может не понадобиться (профиль сменился) — без «unhandled rejection» в консоли.
           earlyBootstrapPromise.catch(function () {});
         }
