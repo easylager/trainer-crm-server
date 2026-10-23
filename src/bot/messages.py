@@ -624,11 +624,11 @@ TRAINER_DIGEST_OWED_LINE_BOTH = (
 
 # Одна рекомендация в конце — выбирается лестницей в trainer_digest_format._pick_morning_recommendation.
 TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_OPENS_DAY = (
-    "День начинается с {name} — у ученика первое занятие. "
+    "Первым сегодня придёт {name} — у ученика первое занятие. "
     "Первые минуты знакомства часто решают, вернётся ли человек."
 )
 TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_LATER = (
-    "У {name} в <b>{time}</b> первое занятие — "
+    "{name} в <b>{time}</b> придёт на первое занятие — "
     "первые минуты знакомства часто решают, вернётся ли человек."
 )
 TRAINER_DIGEST_MORNING_REC_PENDING_CONFIRM = (
@@ -655,7 +655,7 @@ TRAINER_DIGEST_MORNING_LITE_REC = (
 # --- Sunday digest — perspective + ledger.
 TRAINER_DIGEST_WEEKLY_GREETING = "🌙 Воскресный обзор."
 TRAINER_DIGEST_WEEKLY_PAST_HEADER = "📊 <b>За прошедшую неделю</b>"
-TRAINER_DIGEST_WEEKLY_PAST_COMPLETED = "• Провёл <b>{count}</b> {word}"
+TRAINER_DIGEST_WEEKLY_PAST_COMPLETED = "• Проведено <b>{count}</b> {word}"
 TRAINER_DIGEST_WEEKLY_PAST_CASH = "• <b>{cash}</b> наличными"
 TRAINER_DIGEST_WEEKLY_PAST_PASSES = "• <b>{count}</b> {word} по абонементам"
 TRAINER_DIGEST_WEEKLY_PAST_CERTS = "• <b>{cash}</b> по сертификатам"

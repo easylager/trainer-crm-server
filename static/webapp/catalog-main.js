@@ -283,7 +283,7 @@
         var p = getSelectedCatalogBookProfile();
         if (p && p.role === 'guardian') {
           var name = (p.first_name || '').trim() || catalogBookProfileDisplayName(p);
-          btn.textContent = 'Записаться за ' + name;
+          btn.textContent = 'Записать: ' + name;
         } else {
           btn.textContent = 'Записаться';
         }

@@ -268,7 +268,7 @@ def test_morning_recommendation_first_timer_opens_day() -> None:
     d = _morning_digest_fixture([_session(hh=9, name="Виктория Шевченко", first=True)])
     out = format_morning_digest(d)
     rec = out.rstrip().split("\n")[-1]
-    assert "День начинается с Виктория Ш." in rec
+    assert "Первым сегодня придёт Виктория Ш." in rec
     assert "первое занятие" in rec
 
 
