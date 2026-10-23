@@ -317,7 +317,16 @@ async def test_gorki_lds_expands_day_ranges_and_multiple_times(tmp_path) -> None
         (_FIXTURES / "gorki-lds" / "uslugi.html").read_text(encoding="utf-8"), encoding="utf-8"
     )
     config = dict(GORKI_LDS_CONFIG, fixture_dir=str(tmp_path), run_date="2026-10-24")
-    job = _job(arena_id=32, parser_key=PARSER_KEY_GORKI_LDS, config=config, slug="gorki-lds", job_id=104)
+    job = ParserJob(
+        id=104,
+        arena_id=32,
+        parser_key=PARSER_KEY_GORKI_LDS,
+        is_enabled=True,
+        cadence="daily",
+        next_run_at=None,
+        last_run_at=None,
+        config=config,
+    )
     extraction = await GorkiLdsParser().extract(job)
     got = sorted((s.local_date, s.starts_at_local) for s in extraction.slots)
     assert got == [
