@@ -59,7 +59,7 @@
 | [partner-commerce-2026.md](strategy/partner-commerce-2026.md) | Третий двигатель выручки: экипировка и сервис |
 | [onboarding-2026-roadmap.md](strategy/onboarding-2026-roadmap.md) · [executive-summary.md](strategy/executive-summary.md) | Переделка онбординга тренера |
 | [sales-pitches-2026-09.md](strategy/sales-pitches-2026-09.md) | Скрипты трёх разговоров с клиентом |
-| [trainer-acquisition-2026-10.md](strategy/trainer-acquisition-2026-10.md) | Откуда брать тренеров: диагноз «первый клиент», каналы по реалистичности, метрика активации |
+| [trainer-acquisition-2026-10.md](strategy/trainer-acquisition-2026-10.md) | Откуда брать тренеров: диагноз «первый клиент», каналы, модель цены (бесплатная карточка + фиксированная подписка), структура лендинга по каткам |
 | [advice-2026-success.md](strategy/advice-2026-success.md) | Принципы: как сделать успешный продукт в 2026 |
 
 ## research — что выяснили
