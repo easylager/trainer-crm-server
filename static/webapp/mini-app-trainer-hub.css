@@ -4562,6 +4562,7 @@ body.hub-today-on .hub-section-head--bookings-top {
 .ht-next__time { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
 .ht-next__who { margin-top: 4px; font-size: 17px; font-weight: 600; }
 .ht-next__what { font-size: 14px; opacity: 0.8; }
+.ht-next__what--warm { opacity: 1; color: #F3C98B; }
 .ht-next__confirm { align-self: flex-start; margin-top: 6px; }
 
 .ht-booking__time { width: 48px; flex-shrink: 0; font-size: 15px; font-weight: 600; }
@@ -4573,15 +4574,24 @@ body.hub-today-on .hub-section-head--bookings-top {
 .ht-empty__link { align-self: flex-start; background: var(--glide-bg); }
 
 .ht-week {
+  width: 100%;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
   font-size: 14px;
   color: var(--glide-hint);
+  text-align: left;
+  cursor: pointer;
 }
-.ht-week .tu-btn { color: var(--glide-text); }
+.ht-week__text { min-width: 0; }
+/* Последняя строка главной не должна уходить под бар вкладок. */
+body.hub-today-on .hub-shell { padding-bottom: calc(var(--trainer-shell-tab-inset, 96px) + 16px); }
 
 .ht-task { padding: 14px 0; border-bottom: 1px solid var(--glide-line); }
 .ht-task:last-child { border-bottom: 0; }

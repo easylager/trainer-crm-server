@@ -78,6 +78,41 @@
     return inboxItems().filter(function (it) { return it.kind !== 'pending'; });
   }
 
+  /** Одно окно — одна строка: в группе все ученики через запятую, место — «2 из 4». */
+  function groupBySlot(list) {
+    var bySlot = {};
+    var out = [];
+    list.forEach(function (b) {
+      var key = b.slot_id != null ? 's' + b.slot_id : 'b' + b.id;
+      if (!bySlot[key]) {
+        bySlot[key] = { main: b, people: [], pending: [] };
+        out.push(bySlot[key]);
+      }
+      bySlot[key].people.push(b);
+      if (b.status === 'pending') bySlot[key].pending.push(b);
+    });
+    return out;
+  }
+
+  function groupNames(g) {
+    var names = g.people.map(personName);
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return names[0] + ' и ' + names[1];
+    return names.slice(0, 2).join(', ') + ' и ещё ' + (names.length - 2);
+  }
+
+  function groupSub(g) {
+    if (g.pending.length) {
+      return g.people.length > 1 ? g.pending.length + ' ждут подтверждения' : 'Ждёт подтверждения';
+    }
+    var cap = Number(g.main.slot_capacity) || 0;
+    if (cap > 1) {
+      /* В группе важнее места, чем название услуги: «Группа · 2 из 4 · ТЦ Замок». */
+      return ['Группа · ' + g.people.length + ' из ' + cap, g.main.arenas_str].filter(Boolean).join(' · ');
+    }
+    return whatLine(g.main);
+  }
+
   function personName(b) {
     return [b.client_first_name, b.client_last_name].filter(Boolean).join(' ').trim() || 'Ученик';
   }
@@ -153,18 +188,18 @@
     return '';
   }
 
-  function rowHtml(b) {
-    var pending = b.status === 'pending';
+  function rowHtml(g) {
+    var b = g.main;
+    var pending = g.pending.length > 0;
     return (
       '<div class="tu-row ht-booking" data-ht="booking" data-id="' + esc(b.id) + '" role="button" tabindex="0">' +
       '<span class="ht-booking__time tu-mono">' + esc(hm(b.start_time)) + '</span>' +
       '<span class="tu-row__main">' +
-      '<span class="tu-row__title">' + esc(personName(b)) + '</span>' +
-      '<span class="tu-row__sub' + (pending ? ' tu-row__sub--warm' : '') + '">' +
-      esc(pending ? 'Ждёт подтверждения' : whatLine(b)) + '</span>' +
+      '<span class="tu-row__title">' + esc(groupNames(g)) + '</span>' +
+      '<span class="tu-row__sub' + (pending ? ' tu-row__sub--warm' : '') + '">' + esc(groupSub(g)) + '</span>' +
       '</span>' +
-      (pending
-        ? '<button type="button" class="tu-btn tu-btn--primary tu-btn--small" data-ht="confirm" data-id="' + esc(b.id) + '">Подтвердить</button>'
+      (pending && g.pending.length === 1
+        ? '<button type="button" class="tu-btn tu-btn--primary tu-btn--small" data-ht="confirm" data-id="' + esc(g.pending[0].id) + '">Подтвердить</button>'
         : '') +
       '</div>'
     );
@@ -178,12 +213,13 @@
     });
     var nowMin = data.now.getHours() * 60 + data.now.getMinutes();
     if (isToday) list = list.filter(function (b) { return minutesOf(b.end_time) > nowMin || b.hub_in_session; });
+    var groups = groupBySlot(list);
     var dt = parseIso(selected);
     var dayName = isToday ? 'Сегодня' : (selected === iso(new Date(parseIso(todayIso).getTime() + 86400000)) ? 'Завтра' : DOW_FULL[dt.getDay()] + ', ' + dt.getDate() + ' ' + MONTH_GEN[dt.getMonth()]);
-    var label = dayName + (list.length ? ' · ' + list.length + ' ' + plural(list.length, 'занятие', 'занятия', 'занятий') : '');
+    var label = dayName + (groups.length ? ' · ' + groups.length + ' ' + plural(groups.length, 'занятие', 'занятия', 'занятий') : '');
     var html = '<p class="tu-label">' + esc(label) + '</p>';
 
-    if (!list.length) {
+    if (!groups.length) {
       var wd = weekDays().filter(function (d) { return d.date === selected; })[0];
       var free = (wd && wd.free_times) || [];
       if (free.length) {
@@ -205,19 +241,20 @@
       return html;
     }
 
-    var rest = list;
+    var rest = groups;
     if (isToday) {
-      var next = list[0];
+      var ng = groups[0];
+      var next = ng.main;
       var until = untilText(next);
-      rest = list.slice(1);
+      rest = groups.slice(1);
       html +=
         '<div class="tu-card tu-card--deep ht-next" data-ht="booking" data-id="' + esc(next.id) + '" role="button" tabindex="0">' +
         (until ? '<span class="ht-next__until">' + esc(until) + '</span>' : '') +
         '<span class="ht-next__time tu-mono">' + esc(hm(next.start_time)) + '–' + esc(hm(next.end_time)) + '</span>' +
-        '<span class="ht-next__who">' + esc(personName(next)) + '</span>' +
-        '<span class="ht-next__what">' + esc(next.status === 'pending' ? 'Ждёт подтверждения' : whatLine(next)) + '</span>' +
-        (next.status === 'pending'
-          ? '<button type="button" class="tu-btn tu-btn--primary tu-btn--small ht-next__confirm" data-ht="confirm" data-id="' + esc(next.id) + '">Подтвердить</button>'
+        '<span class="ht-next__who">' + esc(groupNames(ng)) + '</span>' +
+        '<span class="ht-next__what' + (ng.pending.length ? ' ht-next__what--warm' : '') + '">' + esc(groupSub(ng)) + '</span>' +
+        (ng.pending.length === 1
+          ? '<button type="button" class="tu-btn tu-btn--primary tu-btn--small ht-next__confirm" data-ht="confirm" data-id="' + esc(ng.pending[0].id) + '">Подтвердить</button>'
           : '') +
         '</div>';
     }
@@ -246,10 +283,9 @@
     parts.push(sessions + ' ' + plural(sessions, 'занятие', 'занятия', 'занятий'));
     if (free) parts.push(free + ' ' + plural(free, 'свободное окно', 'свободных окна', 'свободных окон'));
     return (
-      '<div class="ht-week">' +
-      '<span>Неделя: ' + parts.join(', ') + '</span>' +
-      '<button type="button" class="tu-btn tu-btn--quiet tu-btn--small" data-ht="schedule">Расписание</button>' +
-      '</div>'
+      '<button type="button" class="ht-week" data-ht="schedule">' +
+      '<span class="ht-week__text">Неделя: ' + parts.join(', ') + '</span>' + CHEVRON +
+      '</button>'
     );
   }
 

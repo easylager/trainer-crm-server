@@ -2,7 +2,7 @@
 Неделя для главной тренера (TASK-314, волна 2): полоса дней, «Неделя: N занятий, M окон» и
 свободные окна в пустой день — одним запросом внутри ``hub/bootstrap``.
 
-Занятие — живая запись (не отменённая и не отклонённая). Свободное окно — слот в статусе
+Занятие — окно с живой записью (группа из трёх — одно занятие). Свободное окно — слот в статусе
 ``available``, который ещё не начался. Время — как его видит тренер, в ``NOTIFICATION_TZ``.
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ async def hub_week_summary(
         text(
             """
             SELECT s.slot_date,
-                   COUNT(*) AS sessions,
+                   COUNT(DISTINCT s.id) AS sessions,
                    COUNT(*) FILTER (WHERE b.status = 'pending') AS pending
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
