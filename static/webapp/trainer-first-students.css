@@ -227,3 +227,43 @@ button.tfs-seat:active { transform: scale(0.97); transition-duration: 70ms; }
   cursor: pointer;
 }
 .tfs-sheet__title { padding-right: 44px; }
+
+/* ---------- «Похоже, это …» (trainer-client-match.js) ---------- */
+.tcm-pair { margin: 0 0 16px; padding: 4px 14px; border-radius: 14px; background: var(--tg-theme-secondary-bg-color); }
+.tcm-pair__row { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; }
+.tcm-pair__row + .tcm-pair__row { border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent); }
+.tcm-pair dt { font-size: 13px; color: var(--tg-theme-hint-color); }
+.tcm-pair dd { margin: 0; font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); }
+.tcm-mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.tcm-options { display: flex; flex-direction: column; gap: 8px; }
+.tcm-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 56px;
+  padding: 12px 14px;
+  border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 30%, transparent);
+  border-radius: 14px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tcm-option:active { border-color: var(--tg-theme-button-color); }
+.tcm-option[aria-busy='true'] { opacity: 0.6; pointer-events: none; }
+.tcm-option__title { font-size: 16px; font-weight: 600; }
+.tcm-option__hint { font-size: 13px; line-height: 1.35; color: var(--tg-theme-hint-color); }
+.tcm-quiet {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 6px;
+  border: 0;
+  background: none;
+  color: var(--tg-theme-hint-color);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.tcm-more { margin: 4px 0 0; text-align: center; font-size: 13px; color: var(--tg-theme-hint-color); }

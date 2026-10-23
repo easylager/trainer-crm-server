@@ -65,7 +65,7 @@ def render_profile_enrichment_nudge_text(step: str) -> str:
     return body
 
 
-PROFILE_ENRICHMENT_MINIAPP_PATH = "/webapp/trainer-profile?task=prices&from=hub"
+PROFILE_ENRICHMENT_MINIAPP_PATH = "/webapp/trainer-prices?from=hub"
 
 
 def profile_enrichment_webapp_url(base: str) -> str:

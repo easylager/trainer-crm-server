@@ -31,18 +31,18 @@ from src.shared.byr_currency_display import BYR_SIGN
 @pytest.mark.parametrize(
     "n,expected",
     [
-        (1, "тренировка"),
-        (2, "тренировки"),
-        (3, "тренировки"),
-        (4, "тренировки"),
-        (5, "тренировок"),
-        (11, "тренировок"),
-        (12, "тренировок"),
-        (21, "тренировка"),
-        (22, "тренировки"),
-        (25, "тренировок"),
-        (101, "тренировка"),
-        (111, "тренировок"),
+        (1, "занятие"),
+        (2, "занятия"),
+        (3, "занятия"),
+        (4, "занятия"),
+        (5, "занятий"),
+        (11, "занятий"),
+        (12, "занятий"),
+        (21, "занятие"),
+        (22, "занятия"),
+        (25, "занятий"),
+        (101, "занятие"),
+        (111, "занятий"),
     ],
 )
 def test_sessions_plural_rules(n: int, expected: str) -> None:
@@ -69,13 +69,13 @@ def test_requests_and_bookings_words() -> None:
 @pytest.mark.parametrize(
     "minutes,expected",
     [
-        (0, "0м"),
-        (45, "45м"),
-        (60, "1ч"),
-        (90, "1ч 30м"),
-        (120, "2ч"),
-        (390, "6ч 30м"),
-        (-10, "0м"),
+        (0, "0\u00a0мин"),
+        (45, "45\u00a0мин"),
+        (60, "1\u00a0ч"),
+        (90, "1\u00a0ч 30\u00a0мин"),
+        (120, "2\u00a0ч"),
+        (390, "6\u00a0ч 30\u00a0мин"),
+        (-10, "0\u00a0мин"),
     ],
 )
 def test_duration_formatting(minutes: int, expected: str) -> None:
@@ -155,13 +155,13 @@ def test_morning_digest_raises_on_empty_sessions() -> None:
         format_morning_digest({"sessions": [], "sessions_count": 0})
 
 
-def test_morning_digest_has_hero_emoji_and_count() -> None:
-    """Hero line must carry the morning signature (☀️) so trainer recognizes the message instantly."""
+def test_morning_digest_has_greeting_and_count() -> None:
+    """Сводка начинается с дня одной фразой — без эмодзи (TASK-314)."""
     d = _morning_digest_fixture([_session(hh=9)])
     out = format_morning_digest(d)
-    assert "☀️" in out
-    assert "одна тренировка" in out
-    assert "<b>09:00</b>" in out
+    assert out.startswith("Доброе утро.")
+    assert "одно занятие" in out
+    assert "<b>9:00</b>" in out
     assert "Олег П." in out
     assert "Минск-Арена" in out
 
@@ -181,23 +181,22 @@ def test_morning_digest_multiple_sessions_header_and_run_sheet() -> None:
         ]
     )
     out = format_morning_digest(d)
-    assert "<b>2</b> тренировки" in out
-    assert "первая в <b>09:00</b>" in out
-    assert "👋 первая тренировка" in out
+    assert "<b>2</b> занятия" in out
+    assert "первое в <b>9:00</b>" in out
+    assert "первое занятие" in out
 
 
 def test_morning_digest_pending_session_gets_risk_tag() -> None:
     """Pending bookings must surface inline on the row so the trainer sees the risk."""
     d = _morning_digest_fixture([_session(hh=18, name="Катя С.", status="pending")])
     out = format_morning_digest(d)
-    assert "⚠" in out
     assert "ждёт подтверждения" in out
 
 
 def test_morning_digest_skips_arena_when_none() -> None:
     d = _morning_digest_fixture([_session(hh=9, name="Катя", arena=None)])
     out = format_morning_digest(d)
-    row = next(line for line in out.split("\n") if line.startswith("<b>09:00"))
+    row = next(line for line in out.split("\n") if line.startswith("<b>9:00"))
     assert row.count("·") == 1  # only "HH:MM · Катя", no arena
 
 
@@ -210,7 +209,7 @@ def test_morning_digest_surfaces_longest_gap_only() -> None:
         ],
     )
     out = format_morning_digest(d)
-    assert "13:00" in out and "18:00" in out and "5ч" in out
+    assert "13:00" in out and "18:00" in out and "5\u00a0ч" in out
     assert "10:00" not in out  # shorter gap not rendered
 
 
@@ -242,11 +241,10 @@ def test_morning_digest_no_owed_line_when_zero() -> None:
 
 
 def test_morning_digest_always_closes_with_single_recommendation() -> None:
-    """Every morning digest must end with exactly one 👉 line — the open-loop closer."""
+    """Сводка заканчивается одной рекомендацией — отдельным абзацем."""
     d = _morning_digest_fixture([_session(hh=9, name="A", arena=None)])
     out = format_morning_digest(d)
-    assert out.count("👉") == 1
-    assert out.rstrip().split("\n")[-1].startswith("👉")
+    assert out.rstrip().split("\n\n")[-1] == "День собран. Хорошей работы."
 
 
 def test_morning_recommendation_prefers_first_timer() -> None:
@@ -270,7 +268,7 @@ def test_morning_recommendation_first_timer_opens_day() -> None:
     d = _morning_digest_fixture([_session(hh=9, name="Виктория Шевченко", first=True)])
     out = format_morning_digest(d)
     rec = out.rstrip().split("\n")[-1]
-    assert "Начните день с Виктория Ш." in rec
+    assert "День начинается с Виктория Ш." in rec
     assert "первое занятие" in rec
 
 
@@ -315,9 +313,9 @@ def test_morning_lite_returns_none_when_no_owed_work() -> None:
 def test_morning_lite_has_hero_and_closes_with_recommendation() -> None:
     out = format_morning_digest_lite_owed_only({"pending_requests_count": 2})
     assert out is not None
-    assert "☀️" in out
+    assert out.startswith("Доброе утро.")
     assert "<b>2</b> заявки" in out
-    assert "👉" in out
+    assert out.rstrip().split("\n\n")[-1].startswith("Ответ в первый час")
 
 
 def test_morning_digest_includes_catalog_pulse_favorites_and_clicks() -> None:
@@ -458,7 +456,7 @@ def test_weekly_past_cash_only_renders_completed_and_cash_bullets() -> None:
             }
         )
     )
-    assert "<b>5</b> тренировок" in out
+    assert "<b>5</b> занятий" in out
     assert f"<b>250 {BYR_SIGN}</b> наличными" in out
 
 
@@ -474,7 +472,7 @@ def test_weekly_past_mixed_cash_and_pass_and_cert() -> None:
         )
     )
     assert f"<b>240 {BYR_SIGN}</b> наличными" in out
-    assert "<b>3</b> тренировки по абонементам" in out
+    assert "<b>3</b> занятия по абонементам" in out
     assert f"<b>50 {BYR_SIGN}</b> по сертификатам" in out
 
 

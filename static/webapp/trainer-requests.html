@@ -4,17 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Заявки клиентов</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/static/fonts/glide-public/onest-cyr.woff2?v=202610236" />
+  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610236" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=2026102212"></script>
-  <script src="mini-app-telegram-chrome.js?v=2026102212"></script>
-<link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102212" />
-<link rel="stylesheet" href="theme.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-components.css?v=2026102212" />
-  <script src="mini-app-confirm.js?v=2026102212"></script>
+  <script src="mini-app-trainer-theme.js?v=202610236"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610236"></script>
+<link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610236" />
+<link rel="stylesheet" href="theme.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610236" />
+  <script src="mini-app-confirm.js?v=202610236"></script>
   <style>
     /* Shell: theme.css?v=202610024 + mini-app-components.css?v=202609091 */
     /* Amber accent fixed — never var(--tg-theme-button-color): Telegram injects blue after tg.ready() */
@@ -1101,9 +1099,9 @@
     }
     .pagination span { font-size: 13px; color: var(--req-muted); font-weight: 500; }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610236" />
 </head>
 <body class="ar-pilot ar-pilot--trainer-requests">
   <header class="page-header">
@@ -1130,7 +1128,7 @@
       <div id="requestListInProgress"></div>
     </div>
     <div id="screenEmpty" class="empty empty-with-hint" style="display: none;">
-      <div class="empty-visual" aria-hidden="true">✉️</div>
+      <div class="empty-visual" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2-8h12l2 8v6H4z M4 13h5l1 2h4l1-2h5"/></svg></div>
       <p id="emptyStateText">Пока нет заявок по вашему профилю (город + услуги).</p>
       <p id="emptyStateHint" class="empty-state-hint">Заявки показываются только если в вашем профиле тренера указаны те же город и услуга, что в заявке.</p>
     </div>
@@ -1213,9 +1211,9 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js?v=2026102212"></script>
-  <script src="trainer-client-relay-ui.js?v=2026102212"></script>
-  <script src="trainer-relay-helpers.js?v=2026102212"></script>
+  <script src="mini-app-trainer-gate.js?v=202610236"></script>
+  <script src="trainer-client-relay-ui.js?v=202610236"></script>
+  <script src="trainer-relay-helpers.js?v=202610236"></script>
   <script>
     (function() {
       fetch('/api/webapp/trainer/requests/ping?step=script').catch(function() {});
@@ -1330,8 +1328,8 @@
         var active = document.querySelector('[data-screen].active');
         var sid = active ? active.id : 'screenList';
         if (sid === 'screenList') {
-          btn.hidden = !canBrowserGoBack();
-          btn.onclick = function() { window.history.back(); };
+          /* Выход со списка — «‹ Откуда» в шапке (mini-app-trainer-home.js). */
+          btn.hidden = true;
           return;
         }
         btn.hidden = false;
@@ -2171,6 +2169,6 @@
       syncTrainerRequestsHeaderBack();
     })();
   </script>
-  <script src="mini-app-trainer-home.js?v=2026102212"></script>
+  <script src="mini-app-trainer-home.js?v=202610236"></script>
 </body>
 </html>

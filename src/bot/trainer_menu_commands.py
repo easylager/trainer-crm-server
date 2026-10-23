@@ -1,7 +1,7 @@
 """
-Trainer bot: no slash command menu — only per-chat «Обзор» Web App button to hub.
+Trainer bot: no slash command menu — only per-chat «Кабинет» Web App button to hub.
 
-- Linked trainers: MenuButtonWebApp «Обзор» → trainer-home (requires HTTPS).
+- Linked trainers: MenuButtonWebApp «Кабинет» → trainer-home (requires HTTPS).
 - NOT_LINKED: empty commands, commands-style menu button without hub until welcome link.
 """
 import asyncio
@@ -67,14 +67,14 @@ async def sync_trainer_hub_menu_button(bot: Bot, chat_id: int) -> None:
 
 
 async def sync_trainer_linked_chat_menu(bot: Bot, chat_id: int) -> None:
-    """Linked trainer chat: hide slash menu, show only «Обзор» hub Web App button."""
+    """Linked trainer chat: hide slash menu, show only «Кабинет» hub Web App button."""
     await bot.set_my_commands([], scope=BotCommandScopeChat(chat_id=chat_id))
     await sync_trainer_hub_menu_button(bot, chat_id)
 
 
 async def ensure_trainer_hub_menu_button(bot: Bot, chat_id: int) -> None:
     """
-    Re-apply per-chat «Обзор» when Telegram drops MenuButtonWebApp (e.g. after Mini App close).
+    Re-apply per-chat «Кабинет» when Telegram drops MenuButtonWebApp (e.g. after Mini App close).
 
     Use after outbound trainer pushes so the hub entry returns without waiting for the next
     inbound message. chat_id for private chats equals the trainer telegram user id.
@@ -87,7 +87,7 @@ async def ensure_trainer_hub_menu_button(bot: Bot, chat_id: int) -> None:
 
 async def restore_all_linked_trainer_hub_menu_buttons(bot: Bot) -> None:
     """
-    On startup after deploy: re-apply «Обзор» for every linked non-deactivated trainer.
+    On startup after deploy: re-apply «Кабинет» for every linked non-deactivated trainer.
 
     Telegram does not notify clients when MenuButtonWebApp is dropped; this restores hub
     access without asking trainers to message the bot or run /home.
@@ -104,7 +104,7 @@ async def restore_all_linked_trainer_hub_menu_buttons(bot: Bot) -> None:
         logger.info("trainer_hub_menu_restore: no linked trainers")
         return
 
-    logger.info("trainer_hub_menu_restore: restoring «Обзор» for %s linked trainers", len(chat_ids))
+    logger.info("trainer_hub_menu_restore: restoring «Кабинет» for %s linked trainers", len(chat_ids))
     ok = 0
     skipped = 0
     failed = 0

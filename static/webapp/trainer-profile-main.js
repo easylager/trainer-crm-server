@@ -2672,10 +2672,10 @@
           subtitle: 'Телефон и другие способы связаться с вами.',
         },
         booking: {
-          containerIds: ['obSessionDurationWrap', 'obMinHoursWrap'],
+          containerIds: ['obSessionDurationWrap', 'obMinHoursWrap', 'groupClassesField'],
           tabId: 'settings',
           title: 'Запись',
-          subtitle: 'Сколько идёт занятие и до какого момента ученик может записаться.',
+          subtitle: 'Сколько идёт занятие, до какого момента ученик может записаться и бывают ли группы.',
         },
         notifications: {
           containerIds: ['pushNotifyField', 'digestSettingsField'],
@@ -5936,7 +5936,7 @@
         } else {
           wrap.classList.add('arena-combo__thumb--ph');
           wrap.setAttribute('aria-hidden', 'true');
-          wrap.textContent = (arena && arena.venue_chip) ? arena.venue_chip : '🏟';
+          wrap.textContent = (arena && arena.venue_chip) ? arena.venue_chip : 'Лёд';
         }
         var check = document.createElement('span');
         check.className = 'arena-combo__thumb-check';

@@ -4692,7 +4692,8 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
                    COALESCE(spv.tier_kind, b.price_tier_kind) AS tier_kind_raw,
                    """
             + _SQL_PRIOR_TRAINER_NOTIFIED_BOOKING_COUNT
-            + """ AS prior_notified_push_count
+            + """ AS prior_notified_push_count,
+                   b.booking_price_cents
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -4733,6 +4734,7 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
                 "is_first_client_online_booking": (
                     int(prior_raw) == 0 if prior_raw is not None else False
                 ),
+                "booking_price_cents": row[15] if len(row) > 15 else None,
             }
         )
     return out

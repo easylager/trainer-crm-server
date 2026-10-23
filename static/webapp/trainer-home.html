@@ -4,31 +4,57 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/static/fonts/glide-public/onest-cyr.woff2?v=202610236" />
+  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610236" />
   <!-- telegram.org грузится async: блокирующий запрос на плохой сети оставлял Mini App на сплеше.
        mini-app-full-height.js дожидается SDK и сам вызывает ready() + раскрытие на всю высоту —
        без него ready()/expand() уходили в никуда и приложение открывалось полушторкой. -->
-  <script src="mini-app-full-height.js?v=2026102212"></script>
+  <script src="mini-app-full-height.js?v=202610236"></script>
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
-  <script src="mini-app-trainer-theme.js?v=2026102212"></script>
-  <script src="mini-app-telegram-chrome.js?v=2026102212"></script>
-  <script src="mini-app-phone-field.js?v=2026102212"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102212" />
-  <link rel="stylesheet" href="theme.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-components.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026102212" />
+  <script>
+    /* Данные главной запрашиваем сразу, параллельно со скриптами страницы (TASK-314):
+       раньше hub/bootstrap уходил только после разбора ~400 КБ JS — через 1,5 с. */
+    (function () {
+      try {
+        var init = new URLSearchParams(location.search).get('init_data') ||
+          new URLSearchParams((location.hash || '').replace(/^#/, '')).get('tgWebAppData') || '';
+        if (!init) return;
+        var qs = 'bookings_limit=32';
+        var slug = '';
+        try { slug = (sessionStorage.getItem('trainer_collective_slug') || '').trim().toLowerCase(); } catch (e) {}
+        if (slug) qs += '&collective_slug=' + encodeURIComponent(slug);
+        window.__hubEarlyBootstrap = {
+          init: init,
+          qs: qs,
+          promise: fetch('/api/webapp/trainer/hub/bootstrap?' + qs + '&init_data=' + encodeURIComponent(init), {
+            headers: { Accept: 'application/json', 'X-Telegram-Init-Data': init },
+            cache: 'no-store',
+          }).then(function (r) {
+            if (!r.ok) throw new Error('bootstrap');
+            return r.json();
+          }),
+        };
+        window.__hubEarlyBootstrap.promise.catch(function () {});
+      } catch (e) { /* обычный путь подхватит */ }
+    })();
+  </script>
+  <script src="mini-app-trainer-theme.js?v=202610236"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610236"></script>
+  <script src="trainer-format.js?v=202610236"></script>
+  <script src="mini-app-phone-field.js?v=202610236"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610236" />
+  <link rel="stylesheet" href="theme.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610236" />
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202610236" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=2026102212" />
-  <link rel="stylesheet" href="trainer-first-students.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026102212" />
-  <link rel="preload" href="trainer-home-main.js?v=2026102212" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=2026102212" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202610236" />
+  <link rel="stylesheet" href="trainer-first-students.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610236" />
+  <link rel="preload" href="trainer-home-main.js?v=202610236" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202610236" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -153,6 +179,7 @@
       from { transform: scaleX(0); }
       to   { transform: scaleX(1); }
     }
+    html.hub-splash-skip #hubSplash { display: none; }
     @media (prefers-reduced-motion: reduce) {
       .hub-splash-ring, .hub-splash-ring-glow, .hub-splash-icon-wrap { animation: none !important; }
       .hub-splash-dot { animation: none !important; opacity: .5; }
@@ -164,11 +191,17 @@
   <script>
     (function() {
       var _minDone = false, _dataReady = false;
+      /* Заставка — только при первом открытии за сессию. Вернуться на «Главную» с другой
+         вкладки и снова ждать 0,7 с колец — это и было «всё медленно» (TASK-314). */
+      var _skip = false;
+      try { _skip = sessionStorage.getItem('hub_splash_seen') === '1'; } catch (e) {}
+      if (_skip) document.documentElement.classList.add('hub-splash-skip');
       function tryDismiss() {
         if (!_minDone || !_dataReady) return;
         var el = document.getElementById('hubSplash');
         if (!el || el._dismissed) return;
         el._dismissed = true;
+        try { sessionStorage.setItem('hub_splash_seen', '1'); } catch (e) {}
         el.classList.add('hub-splash--out');
         setTimeout(function() { try { el.parentNode && el.parentNode.removeChild(el); } catch(e) {} }, 450);
       }
@@ -191,7 +224,7 @@
   </script>
 
 </head>
-<body class="hub-body ar-pilot ar-pilot--trainer-home" data-trainer-shell="tabs">
+<body class="hub-body ar-pilot ar-pilot--trainer-home" data-trainer-shell="tabs" data-shell-fed-by-page="1">
 
   <!-- ─── Premium splash loader ─────────────────────────────────────────── -->
   <!-- Renders immediately on parse; dismissed by __hubSplash.markDataReady() -->
@@ -471,26 +504,6 @@
 
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
-    <aside class="hub-footer-aside" id="hubFooterAside" aria-label="Сообщество и поддержка">
-      <button
-        type="button"
-        class="hub-community-link"
-        id="hubCommunityLink"
-        aria-haspopup="dialog"
-        aria-controls="hubCommunitySheet"
-      >
-        <svg class="hub-community-link__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        <span class="hub-community-link__copy">
-          <span class="hub-community-link__label">Наше комьюнити</span>
-          <span class="hub-community-link__hint">Справка · идеи и отзывы</span>
-        </span>
-        <svg class="hub-community-link__arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M9 6l6 6-6 6"/>
-        </svg>
-      </button>
-    </aside>
   </div>
 
   <!-- Pending bookings batch confirm (Wave A inbox) -->
@@ -510,58 +523,6 @@
         <button type="button" class="btn-block btn-primary" id="hubPendingConfirmAll">Подтвердить все</button>
         <button type="button" class="btn-block btn-secondary" id="hubPendingSheetClose">Закрыть</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Community sheet — form lives here, not in scroll stack under FAB -->
-  <div id="hubCommunitySheetOverlay" class="hub-community-sheet-overlay" hidden aria-hidden="true">
-    <div
-      id="hubCommunitySheet"
-      class="hub-community-sheet"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="hubCommunitySheetTitle"
-    >
-      <div class="hub-community-sheet__handle" aria-hidden="true"></div>
-      <h2 id="hubCommunitySheetTitle" class="hub-community-sheet__title">Развиваем платформу вместе</h2>
-      <p class="hub-community-sheet__lead">
-        Мы создаём этот проект рука об руку с вашими тренерами, чтобы детям и родителям было по-настоящему уютно и удобно. Поделитесь, чего вам не хватает, или напишите нам доброе слово — мы читаем каждое сообщение! 💛
-      </p>
-      <button type="button" id="hubCommunityFaqLink" class="hub-community-sheet__faq">
-        <span class="hub-community-sheet__faq-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-            <path d="M12 17h.01"/>
-          </svg>
-        </span>
-        <span class="hub-community-sheet__faq-copy">
-          <span class="hub-community-sheet__faq-label">Справка</span>
-          <span class="hub-community-sheet__faq-hint">Расписание, абонементы, группы</span>
-        </span>
-        <svg class="hub-community-sheet__faq-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M9 6l6 6-6 6"/>
-        </svg>
-      </button>
-      <p class="hub-community-sheet__form-kicker">Написать команде</p>
-      <form id="hubSupportForm" class="hub-support-form" autocomplete="off">
-        <label for="hubSupportMessage" class="hub-support-label">Ваше сообщение</label>
-        <textarea
-          id="hubSupportMessage"
-          class="hub-support-textarea input"
-          name="message"
-          rows="3"
-          maxlength="4000"
-          placeholder="Идея, отзыв или нужна помощь? Напишите сюда"
-          aria-describedby="hubSupportHint"
-        ></textarea>
-        <p id="hubSupportHint" class="hub-support-hint">До 4000 символов.</p>
-        <button type="submit" id="hubSupportSubmit" class="btn-block btn-primary hub-support-submit">Отправить</button>
-        <p id="hubSupportStatus" class="hub-support-status" role="status" aria-live="polite"></p>
-      </form>
-      <p class="hub-community-sheet__cta">
-        Личный вопрос по тарифу или учёту — через <strong>/guide</strong> в боте.
-      </p>
     </div>
   </div>
 
@@ -913,17 +874,18 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js?v=2026102212"></script>
-  <script src="mini-app-trainer-celebration.js?v=2026102212"></script>
-  <script src="trainer-client-relay-ui.js?v=2026102212"></script>
-  <script src="trainer-relay-helpers.js?v=2026102212"></script>
+  <script src="mini-app-trainer-gate.js?v=202610236"></script>
+  <script src="mini-app-trainer-celebration.js?v=202610236"></script>
+  <script src="trainer-client-relay-ui.js?v=202610236"></script>
+  <script src="trainer-relay-helpers.js?v=202610236"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script src="mini-app-trainer-pending-inbox.js?v=2026102212"></script>
-  <script src="trainer-booking-context.js?v=2026102212"></script>
-  <script defer src="trainer-first-students-model.js?v=2026102212"></script>
-  <script defer src="trainer-first-students.js?v=2026102212"></script>
-  <script defer src="trainer-home-main.js?v=2026102212"></script>
-  <script src="mini-app-more-icons.js?v=2026102212"></script>
-  <script defer src="mini-app-trainer-shell.js?v=2026102212"></script>
+  <script src="mini-app-trainer-pending-inbox.js?v=202610236"></script>
+  <script src="trainer-booking-context.js?v=202610236"></script>
+  <script defer src="trainer-first-students-model.js?v=202610236"></script>
+  <script defer src="trainer-first-students.js?v=202610236"></script>
+  <script defer src="trainer-client-match.js?v=202610236"></script>
+  <script defer src="trainer-home-main.js?v=202610236"></script>
+  <script src="mini-app-more-icons.js?v=202610236"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202610236"></script>
 </body>
 </html>

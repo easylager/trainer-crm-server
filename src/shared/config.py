@@ -1,6 +1,7 @@
 """
 App settings loaded from env (.env + os.environ). Single entry point for config.
 """
+import os
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
@@ -26,7 +27,34 @@ TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX = 180  # inclusive — не слать 
 TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC = 8
 
 
-class Settings(BaseSettings):
+class _SettingsMeta(type(BaseSettings)):
+    """``Settings()`` без аргументов собирается один раз на состояние окружения.
+
+    Сборка читает и разбирает ``.env`` и стоит единицы миллисекунд, а в одном запросе к API её
+    звали девять раз (middleware, авторизация, проверка initData) — это была основная часть
+    времени ответа. Ключ — переменные окружения, рабочая папка и mtime ``.env``: поменялось
+    что-то из этого (в том числе ``monkeypatch.setenv`` в тестах) — собираем заново. Каждый
+    вызов получает свою копию, поэтому правка полей у одного объекта до других не доходит.
+    """
+
+    _cache_key: Any = None
+    _cache_value: Any = None
+
+    def __call__(cls, *args: Any, **kwargs: Any):
+        if args or kwargs:
+            return super().__call__(*args, **kwargs)
+        try:
+            env_mtime = os.stat(".env").st_mtime_ns
+        except OSError:
+            env_mtime = None
+        key = (cls, os.getcwd(), env_mtime, frozenset(os.environ.items()))
+        if cls._cache_key != key:
+            cls._cache_value = super().__call__()
+            cls._cache_key = key
+        return cls._cache_value.model_copy()
+
+
+class Settings(BaseSettings, metaclass=_SettingsMeta):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

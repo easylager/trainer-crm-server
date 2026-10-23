@@ -4,16 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Справка</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/static/fonts/glide-public/onest-cyr.woff2?v=202610236" />
+  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610236" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=2026102212"></script>
-  <script src="mini-app-telegram-chrome.js?v=2026102212"></script>
-<link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102212" />
-<link rel="stylesheet" href="theme.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-components.css?v=2026102212" />
+  <script src="mini-app-trainer-theme.js?v=202610236"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610236"></script>
+<link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610236" />
+<link rel="stylesheet" href="theme.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610236" />
   <style>
     /* FAQ shell: tokens from theme.css?v=202610024 + patterns from constitution (hero, surfaces) */
     #faqApp {
@@ -151,9 +149,9 @@
       border: 1px solid rgba(128, 128, 128, 0.1);
     }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026102212" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026102212" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610236" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610236" />
 </head>
 <body class="ar-pilot ar-pilot--trainer-faq">
   <div id="faqApp">
@@ -183,7 +181,7 @@
     <div class="faq-list" id="faqRest"></div>
 
     <p class="faq-more-hint" id="faqFooterHint">
-      Индивидуальные вопросы по тарифу и учёту — через <b>/guide</b> в боте → «Написать в поддержку».
+      Не нашли ответ — <b>«Профиль → Помощь → Написать команде»</b>. Ответим в боте тренера.
     </p>
   </div>
 
@@ -219,7 +217,7 @@
           popular: true,
           chip: 'Группы',
           q: 'Как включить групповые занятия в расписании?',
-          a: '<p>По умолчанию в календаре доступны только <b>индивидуальные слоты</b> — на одно время одно место.</p><p>Чтобы создавать слоты с несколькими местами: откройте мини-приложение <b>«Профиль»</b> → вкладка <b>«Настройки»</b> → блок <b>«Формат занятий»</b> → включите переключатель <b>«Группы в расписании»</b>.</p><p>После этого в редакторе расписания и в шаблоне недели можно задавать <b>групповые слоты</b> (несколько мест на одно время) и выбирать услугу для группы.</p>'
+          a: '<p>По умолчанию в календаре доступны только <b>индивидуальные слоты</b> — на одно время одно место.</p><p>Чтобы создавать слоты с несколькими местами: откройте вкладку <b>«Профиль»</b> → <b>«Запись»</b> → включите <b>«Группы в расписании»</b>.</p><p>После этого в редакторе расписания и в шаблоне недели можно задавать <b>групповые слоты</b> (несколько мест на одно время) и выбирать услугу для группы.</p>'
         },
         {
           id: 'client_requests',
@@ -233,7 +231,7 @@
           popular: true,
           chip: 'Приглашение',
           q: 'Как пригласить клиента в бота и сразу выдать абонемент?',
-          a: '<p>В разделе <b>абонементов</b> в мини-приложении можно сделать <b>ссылку-приглашение с абонементом</b>: клиент переходит по ней один раз — подставляются город, услуга и вы как тренер, а по выбранному варианту ему сразу выдаётся <b>готовый абонемент</b>. Можно пригласить и <b>без автоматической выдачи</b> — просто зайти в бота к вам.</p>'
+          a: '<p>В <b>«Профиль → Абонементы»</b> можно сделать <b>ссылку-приглашение с абонементом</b>: клиент переходит по ней один раз — подставляются город, услуга и вы как тренер, а по выбранному варианту ему сразу выдаётся <b>готовый абонемент</b>. Можно пригласить и <b>без автоматической выдачи</b> — просто зайти в бота к вам.</p>'
         },
         {
           id: 'passes',
@@ -257,8 +255,8 @@
         },
         {
           id: 'profile_gate',
-          q: 'Профиль и почему раздел «закрыт»?',
-          a: '<p>Анкета, фото и модерация — в мини-приложении <b>«Профиль»</b>. Пока карточка на проверке, вас нет в публичном каталоге — это не мешает вести своих учеников: расписание, абонементы, сертификаты и записи работают сразу. Закрытый аккаунт бывает только если его поставили на паузу.</p>'
+          q: 'Где моя страница и почему меня нет в каталоге?',
+          a: '<p>Фото, описание, цены и катки — во вкладке <b>«Профиль»</b>, размещение в каталоге — во вкладке <b>«Каталог»</b>. Пока страница на проверке, вас нет в публичном каталоге — это не мешает вести своих учеников: расписание, абонементы, сертификаты и записи работают сразу.</p>'
         }
       ];
 
@@ -393,6 +391,6 @@
       }
     })();
   </script>
-  <script src="mini-app-trainer-home.js?v=2026102212"></script>
+  <script src="mini-app-trainer-home.js?v=202610236"></script>
 </body>
 </html>

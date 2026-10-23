@@ -157,7 +157,7 @@
         var list = state.trainerServices || [];
         for (var i = 0; i < list.length; i++) {
           if (Number(list[i].id) === sid) {
-            var a = list[i].ui_accent;
+            var a = list[i].ui_accent_effective || list[i].ui_accent;
             if (a == null || !String(a).trim()) return '';
             var slug = String(a).trim().toLowerCase();
             if (SCHEDULE_SERVICE_UI_ACCENT_SLUGS.indexOf(slug) < 0) return '';
@@ -948,7 +948,7 @@
           '<div class="schedule-reload-panel">' +
           '<p class="schedule-reload-panel__msg">Не удалось загрузить расписание. Проверьте соединение и попробуйте снова.</p>' +
           detailHtml +
-          '<p class="schedule-reload-panel__hint">Если не помогло — закройте мини-приложение и снова нажмите синюю кнопку «Обзор» слева от поля ввода в боте (или /home).</p>' +
+          '<p class="schedule-reload-panel__hint">Если не помогло — закройте мини-приложение и снова нажмите синюю кнопку «Кабинет» слева от поля ввода в боте (или /home).</p>' +
           '<button type="button" class="btn-secondary schedule-reload-panel__btn" id="btnScheduleCalendarReload">Обновить</button>' +
           '</div>';
         var btn = document.getElementById('btnScheduleCalendarReload');
@@ -1101,6 +1101,8 @@
       }
 
       function showBookingStack(view) {
+        /* Ранний показ экрана записи из <head> — дальше экранами управляет этот код. */
+        document.documentElement.classList.remove('se-open-booking');
         var main = document.getElementById('screenMain');
         var det = document.getElementById('screenBookingDetail');
         var dec = document.getElementById('screenBookingDecline');
@@ -1913,7 +1915,13 @@
         document.getElementById('detailBookingActions').innerHTML = '';
         showBookingStack('detail');
         hideFlowBookBootOverlay();
-        getJsonTrainer('/trainer/bookings/' + bookingId).then(function(b) {
+        var early = window.__seEarlyBooking;
+        window.__seEarlyBooking = null;
+        var bookingRequest =
+          early && String(early.id) === String(bookingId) && early.init === (tg && tg.initData)
+            ? early.promise
+            : getJsonTrainer('/trainer/bookings/' + bookingId);
+        bookingRequest.then(function(b) {
           state.selectedBooking = b;
           /* Anchor return-to-schedule on the booking's day when scroll-spy had no day yet. */
           if (b && b.slot_date && /^\d{4}-\d{2}-\d{2}$/.test(String(b.slot_date))) {
@@ -4355,10 +4363,10 @@
         }
         if (addBtn) {
           addBtn.textContent = centerOnly
-            ? '➕ Добавить окна центра'
+            ? 'Добавить окна центра'
             : dual
-              ? '➕ Добавить слоты'
-              : '➕ Добавить слоты на неделю';
+              ? 'Добавить слоты'
+              : 'Добавить слоты на неделю';
         }
       }
 
@@ -7918,7 +7926,7 @@
         if (bookedClick) {
           const v = scheduleEditorSlotVenueLabel(s);
           const vt = (v && String(v).trim()) ? escapeHtml(String(v).trim()) : '<span class="venue-muted">не указано</span>';
-          html += '<div class="slot-venue">📍 ' + vt + '</div>';
+          html += '<div class="slot-venue">' + vt + '</div>';
           if (s.client_preview && !cohortSlot) html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
         } else if (!groupHub && !cohortSlot) {
           if (!(cap > 1 && String(s.arena_label || '').trim())) {
@@ -10196,11 +10204,12 @@
               state.bookingDetailReturn = fromHub ? 'hub' : 'schedule';
               state.hubGroupSlotReturnId = null;
             }
-            runAfterScheduleCrmGate(function() {
-              withTrainerMiniAppAccessThen(function() {
-                openBookingDetail(bid);
-                prefetchSlotsInBackground();
-              });
+            /* Запись с главной открывается сразу: подписка нужна только кнопкам записи (проверка
+               на нажатии), доступ — из кэша сессии. Раньше ждали /subscription/status по цепочке. */
+            runAfterScheduleCrmGate(function() {});
+            withTrainerMiniAppAccessThen(function() {
+              openBookingDetail(bid);
+              prefetchSlotsInBackground();
             });
             return;
           }

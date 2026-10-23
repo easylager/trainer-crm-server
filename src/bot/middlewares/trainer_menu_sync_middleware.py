@@ -1,7 +1,7 @@
 """
 Keep Telegram menu in sync with trainer link status.
 
-Linked trainers get only the «Обзор» Web App button (no slash command menu).
+Linked trainers get only the «Кабинет» Web App button (no slash command menu).
 Unlinked chats get an empty commands menu without hub access.
 
 Throttles repeated API calls when nothing changed.
@@ -74,7 +74,7 @@ class TrainerMenuSyncMiddleware(BaseMiddleware):
         sig = "linked" if tid else "unlinked"
         prev_sig = self._last_sig.get(uid)
         signature_changed = prev_sig != sig
-        # Linked trainers: always re-apply «Обзор» — Telegram may drop MenuButtonWebApp after Web App
+        # Linked trainers: always re-apply «Кабинет» — Telegram may drop MenuButtonWebApp after Web App
         # sessions; throttling here caused /home to leave the hub button missing (activation killer).
         throttled = (
             not tid

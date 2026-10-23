@@ -554,7 +554,7 @@
       '" aria-label="\u041f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c ' +
       esc(p) +
       '">' +
-      esc(p) +
+      esc(global.TrainerFormat ? global.TrainerFormat.phone(p) : p) +
       '</a>'
     );
   }

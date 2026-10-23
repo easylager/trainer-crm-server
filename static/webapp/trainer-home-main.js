@@ -635,7 +635,6 @@
       /** Greeting is the welcome; «Первые шаги» below is the action — no second hero. */
       function syncHubOnboardingWelcomeVisibility() {
         var statusMarkers = document.getElementById('hubStatusMarkers');
-        var footerAside = document.getElementById('hubFooterAside');
         var show = hubOnboardingStripVisible();
 
         document.body.classList.toggle('hub-onboarding-active', show);
@@ -644,7 +643,6 @@
           statusMarkers.setAttribute('hidden', '');
           statusMarkers.innerHTML = '';
         }
-        if (footerAside) footerAside.hidden = show;
         syncHubDayCanvas();
         if (!show) renderHubStatusMarkers();
       }
@@ -2323,6 +2321,8 @@
           booking_ids: Array.isArray(raw.booking_ids) ? raw.booking_ids : null,
           primary_action: raw.primary_action || null,
           secondary_action: raw.secondary_action || null,
+          client_name: raw.client_name || '',
+          other_name: raw.other_name || '',
         };
         if (item.kind === 'rhythm') {
           item.candidate = {
@@ -2666,6 +2666,38 @@
           openHubPendingConfirmSheet(pendingIds);
           return;
         }
+        if (item.kind === 'client_match') {
+          if (!window.TrainerClientMatch) return;
+          window.TrainerClientMatch.open({
+            get: getJsonTrainer,
+            post: postJsonTrainer,
+            notify: function(title) {
+              showHubInlineToast(title, '', { kind: 'success' });
+            },
+            onChanged: function(left) {
+              /* «Дела» приходят только с bootstrap — строку правим на месте, без второго запроса. */
+              if (hubServerActionInbox && Array.isArray(hubServerActionInbox.items)) {
+                hubServerActionInbox.items = hubServerActionInbox.items.filter(function(it) {
+                  if (it.id !== 'client_match') return true;
+                  if (left > 0 && left !== it.count) {
+                    it.title = left + ' ' + pluralRu(left, 'совпадение', 'совпадения', 'совпадений') + ' по телефону';
+                    it.subtitle = 'Один человек или родитель и ребёнок?';
+                    it.client_name = '';
+                    it.other_name = '';
+                  }
+                  it.count = left;
+                  return left > 0;
+                });
+                hubServerActionInbox.total_actionable = hubServerActionInbox.items.length;
+              }
+              renderHubSummaryHints();
+              if (typeof loadBookings === 'function') loadBookings();
+            },
+          }).catch(function() {
+            hubToast('Не получилось открыть. Проверьте связь.');
+          });
+          return;
+        }
         if (item.kind === 'requests') {
           navigateTo('trainer-requests');
           return;
@@ -2754,6 +2786,12 @@
             return 'Отправьте ссылку ученику';
           case 'first_students':
             return 'Добавьте своих учеников';
+          case 'client_match': {
+            if (hasN && n > 1) return n + ' ' + pluralRu(n, 'совпадение', 'совпадения', 'совпадений') + ' по телефону';
+            var a = String(item.client_name || '').split(' ')[0];
+            var b = String(item.other_name || '').split(' ')[0];
+            return a && b ? a + ' и ' + b + ' — один человек?' : 'Совпадение по телефону';
+          }
           default:
             break;
         }
@@ -3979,7 +4017,8 @@
       function syncHubMyServicesAccentMap(servicesList) {
         (servicesList || []).forEach(function(s) {
           if (s == null || s.id == null) return;
-          var slug = s.ui_accent != null ? String(s.ui_accent).trim().toLowerCase() : '';
+          var accent = s.ui_accent_effective || s.ui_accent;
+          var slug = accent != null ? String(accent).trim().toLowerCase() : '';
           if (!slug || HUB_SERVICE_UI_ACCENT_SLUGS.indexOf(slug) < 0) {
             delete hubMyServicesAccentByServiceId[s.id];
             return;
@@ -4186,7 +4225,7 @@
                   hubSessionNowPillHtml(b) + hubSandboxPillHtml(b) + hubProblemReportPillHtml(b) +
                   '</div>' +
               badgeRowSingle +
-              '<div class="slot-venue">📍 ' + venueInner + '</div>' +
+              '<div class="slot-venue">' + venueInner + '</div>' +
               '<div class="slot-client-hint">' + escapeHtml(clientLabel(b)) + '</div>' +
             '</div>' +
             '<div class="slot-meta">' +
@@ -7442,7 +7481,7 @@
         setHubUpcomingBookingsSectionVisible(true);
         if (hasFirstOnline) {
           parts.unshift(
-            '<div class="hub-first-online-hint" role="status">✨ Первая онлайн-запись — клиент записался сам</div>'
+            '<div class="hub-first-online-hint" role="status">Первая онлайн-запись — клиент записался сам</div>'
           );
         }
         var capHint = '';
@@ -8666,9 +8705,9 @@
           return window.TrainerHubCelebration.featuresFromUnlockedList(unlocked || []);
         }
         var META = {
-          crm: { id: 'crm', label: 'CRM и клиентская база', icon: '📋' },
-          online: { id: 'online', label: 'Онлайн-запись клиентов', icon: '🌐' },
-          analytics: { id: 'analytics', label: 'Аналитика и отчёты', icon: '📊' },
+          crm: { id: 'crm', label: 'CRM и клиентская база', icon: '✓' },
+          online: { id: 'online', label: 'Онлайн-запись клиентов', icon: '✓' },
+          analytics: { id: 'analytics', label: 'Аналитика и отчёты', icon: '✓' },
         };
         var order = ['crm', 'online', 'analytics'];
         var out = [];
@@ -8857,6 +8896,9 @@
         if (payload.access) {
           trainerAccessSnapshot = payload.access;
           syncHubForceClientChatRelayFromTrainerAccess();
+          if (window.TrainerMiniAppGate && typeof TrainerMiniAppGate.rememberAccess === 'function') {
+            TrainerMiniAppGate.rememberAccess(getInitData(), payload.access);
+          }
         }
         if (payload.profile) mergeHubAccessFromProfilePayload({ ok: true, data: payload.profile });
         if (payload.onboarding_checklist) applyOnboardingChecklist(payload.onboarding_checklist);
@@ -8935,8 +8977,15 @@
           window.TrainerMiniAppGate &&
           TrainerMiniAppGate.isActive(trainerAccessSnapshot)
         ) {
-          prefetchHubBookingContexts();
+          /* Форма «Записать» греется после первого экрана, а не наперегонки с ним. */
+          hubAfterFirstPaint(prefetchHubBookingContexts);
         }
+      }
+
+      function hubAfterFirstPaint(fn) {
+        var run = function() { try { fn(); } catch (e) { /* */ } };
+        if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 2500 });
+        else setTimeout(run, 1200);
       }
 
       /**
@@ -9050,18 +9099,23 @@
         hubTrainerMainBootstrapDone = true;
         ensureHubBookingsPlaceholder();
         showHubRhythmHintsSkeleton();
-        fetch(
-          apiUrlWithQuery('/trainer/hub/bootstrap?' + hubBootstrapQueryString()),
-          { headers: headersJson(), cache: 'no-store' }
-        )
-          .then(function(r) {
-            if (!r.ok) throw new Error('bootstrap');
-            return r.json();
-          })
+        var early = window.__hubEarlyBootstrap;
+        window.__hubEarlyBootstrap = null;
+        var bootstrapRequest =
+          early && early.init === getInitData() && early.qs === hubBootstrapQueryString()
+            ? early.promise
+            : fetch(
+                apiUrlWithQuery('/trainer/hub/bootstrap?' + hubBootstrapQueryString()),
+                { headers: headersJson(), cache: 'no-store' }
+              ).then(function(r) {
+                if (!r.ok) throw new Error('bootstrap');
+                return r.json();
+              });
+        bootstrapRequest
           .then(function(data) {
             applyHubBootstrapPayload(data);
             runHubAfterAccess({ bootstrapPayload: data });
-            prefetchHubTrainerClientsPresence();
+            hubAfterFirstPaint(prefetchHubTrainerClientsPresence);
           })
           .catch(function () {
             hubTrainerMainBootstrapDone = false;
@@ -9092,135 +9146,5 @@
           };
         }
       })();
-      function closeHubCommunitySheet() {
-        var overlay = document.getElementById('hubCommunitySheetOverlay');
-        if (!overlay) return;
-        overlay.classList.remove('hub-community-sheet-overlay--open');
-        overlay.setAttribute('aria-hidden', 'true');
-        document.body.style.overflow = '';
-        window.setTimeout(function() {
-          if (!overlay.classList.contains('hub-community-sheet-overlay--open')) {
-            overlay.setAttribute('hidden', '');
-          }
-        }, 260);
-      }
-
-      (function wireHubCommunitySheet() {
-        var link = document.getElementById('hubCommunityLink');
-        var faqLink = document.getElementById('hubCommunityFaqLink');
-        var overlay = document.getElementById('hubCommunitySheetOverlay');
-        var sheet = document.getElementById('hubCommunitySheet');
-        if (!link || !overlay || !sheet) return;
-
-        function openHubCommunitySheet() {
-          overlay.removeAttribute('hidden');
-          overlay.setAttribute('aria-hidden', 'false');
-          overlay.classList.add('hub-community-sheet-overlay--open');
-          document.body.style.overflow = 'hidden';
-          var wg = window.Telegram && window.Telegram.WebApp;
-          if (wg && wg.HapticFeedback && wg.HapticFeedback.impactOccurred) {
-            try { wg.HapticFeedback.impactOccurred('light'); } catch (eh) { /* noop */ }
-          }
-        }
-
-        link.addEventListener('click', openHubCommunitySheet);
-        if (faqLink) {
-          faqLink.addEventListener('click', function() {
-            closeHubCommunitySheet();
-            navigateTo('trainer-faq');
-          });
-        }
-        overlay.addEventListener('click', function(ev) {
-          if (ev.target === overlay) closeHubCommunitySheet();
-        });
-        sheet.addEventListener('click', function(ev) {
-          ev.stopPropagation();
-        });
-        document.addEventListener('keydown', function(ev) {
-          if (ev.key === 'Escape' && overlay.classList.contains('hub-community-sheet-overlay--open')) {
-            closeHubCommunitySheet();
-          }
-        });
-      })();
       wireHubBookGroupModal();
-      (function wireHubSupportForm() {
-        var form = document.getElementById('hubSupportForm');
-        var ta = document.getElementById('hubSupportMessage');
-        var btn = document.getElementById('hubSupportSubmit');
-        var statusEl = document.getElementById('hubSupportStatus');
-        if (!form || !ta || !btn) return;
-        form.addEventListener('submit', function(ev) {
-          ev.preventDefault();
-          var text = (ta.value || '').trim();
-          if (!text) {
-            if (statusEl) {
-              statusEl.textContent = 'Напишите пару слов — что случилось или что хотите улучшить.';
-              statusEl.className = 'hub-support-status hub-support-status--err';
-            }
-            return;
-          }
-          if (!getInitData()) {
-            if (statusEl) {
-              statusEl.textContent =
-                'Сессия ещё не готова — подождите секунду или отправьте через /guide в боте.';
-              statusEl.className = 'hub-support-status hub-support-status--err';
-            }
-            return;
-          }
-          btn.disabled = true;
-          if (statusEl) {
-            statusEl.textContent = 'Отправляем…';
-            statusEl.className = 'hub-support-status';
-          }
-          fetch(apiUrlWithQuery('/support'), {
-            method: 'POST',
-            headers: headersJson(),
-            body: JSON.stringify({ message: text, role: 'trainer' }),
-          })
-            .then(function(r) {
-              return r.json().then(function(data) {
-                return { ok: r.ok, data: data };
-              });
-            })
-            .then(function(o) {
-              btn.disabled = false;
-              var sid = o.data && o.data.id;
-              var okSend = o.ok && o.data && o.data.ok !== false && sid != null;
-              if (okSend) {
-                ta.value = '';
-                if (statusEl) {
-                  statusEl.textContent =
-                    'Спасибо! Сообщение отправлено — мы ответим вам в тренерском боте.';
-                  statusEl.className = 'hub-support-status hub-support-status--ok';
-                }
-                var wg = window.Telegram && window.Telegram.WebApp;
-                if (wg && wg.HapticFeedback && wg.HapticFeedback.notificationOccurred) {
-                  try {
-                    wg.HapticFeedback.notificationOccurred('success');
-                  } catch (eh) {
-                    /* noop */
-                  }
-                }
-                window.setTimeout(closeHubCommunitySheet, 1800);
-              } else {
-                var detail =
-                  o.data && (o.data.detail || o.data.message)
-                    ? String(o.data.detail || o.data.message)
-                    : 'Не удалось отправить.';
-                if (statusEl) {
-                  statusEl.textContent = detail + ' Попробуйте через /guide в боте.';
-                  statusEl.className = 'hub-support-status hub-support-status--err';
-                }
-              }
-            })
-            .catch(function() {
-              btn.disabled = false;
-              if (statusEl) {
-                statusEl.textContent =
-                  'Сеть недоступна. Повторите позже или напишите через /guide в боте.';
-                statusEl.className = 'hub-support-status hub-support-status--err';
-              }
-            });
-        });
-      })();
     })();

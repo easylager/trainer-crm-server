@@ -181,4 +181,18 @@ html:active-view-transition-type(back)::view-transition-new(root) {
 ::view-transition-group(client-arena-hero) {
   animation-duration: 260ms;
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: clip;
+}
+
+/*
+ * Снимок в группе по умолчанию — object-fit: fill. Кадр списка 2:1, шапка
+ * арены 320px в ширину экрана: fill растягивает фото на полсекунды, пока
+ * группа интерполирует размер. cover оставляет кадр кадром.
+ */
+::view-transition-old(client-arena-hero),
+::view-transition-new(client-arena-hero) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }

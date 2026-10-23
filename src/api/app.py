@@ -1252,6 +1252,28 @@ def webapp_trainer_first_students_model_js(request: Request):
     )
 
 
+@app.get("/webapp/trainer-format.js")
+def webapp_trainer_format_js(request: Request):
+    """Телефон, деньги, даты и склонения кабинета тренера в одном месте (TASK-314)."""
+    path = _WEBAPP_DIR / "trainer-format.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path, media_type="application/javascript", headers=_webapp_versioned_asset_cache_headers(request)
+    )
+
+
+@app.get("/webapp/trainer-client-match.js")
+def webapp_trainer_client_match_js(request: Request):
+    """Лист «Похоже, это Анна из вашего списка» на хабе тренера (TASK-314)."""
+    path = _WEBAPP_DIR / "trainer-client-match.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path, media_type="application/javascript", headers=_webapp_versioned_asset_cache_headers(request)
+    )
+
+
 @app.get("/webapp/trainer-first-students.js")
 def webapp_trainer_first_students_js(request: Request):
     """Карточка «Добавьте учеников» и лист «Ученик 1 из 3» на хабе тренера (TASK-310)."""

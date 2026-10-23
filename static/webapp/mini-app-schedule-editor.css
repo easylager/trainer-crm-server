@@ -121,6 +121,13 @@
       font-family: var(--app-font-sans);
       -webkit-tap-highlight-color: transparent;
     }
+    /* Бар вкладок виден на неделе (TASK-314): полоса дней встаёт над ним, отступ списка — под обоих. */
+    body.trainer-shell-body:not(.trainer-shell-tabs-hidden) .schedule-week-day-strip {
+      bottom: calc(var(--trainer-shell-tab-inset) + 16px);
+    }
+    html.se-week-day-strip-visible body.trainer-shell-body:not(.trainer-shell-tabs-hidden) #tabCalendar.tab-content.active {
+      padding-bottom: calc(var(--trainer-shell-tab-inset) + 96px);
+    }
     .schedule-week-day-strip__days {
       flex: 1 1 0;
       min-width: 0;

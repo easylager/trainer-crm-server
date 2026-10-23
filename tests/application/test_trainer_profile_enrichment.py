@@ -72,9 +72,9 @@ def test_nudge_has_open_profile_button_label() -> None:
     )
 
     assert msg.TRAINER_PROFILE_ENRICH_NUDGE_BTN == "Указать цены"
-    assert "task=prices" in PROFILE_ENRICHMENT_MINIAPP_PATH
+    assert PROFILE_ENRICHMENT_MINIAPP_PATH.startswith("/webapp/trainer-prices")
     assert profile_enrichment_webapp_url("https://example.com") == (
-        "https://example.com/webapp/trainer-profile?task=prices&from=hub"
+        "https://example.com/webapp/trainer-prices?from=hub"
     )
 
 

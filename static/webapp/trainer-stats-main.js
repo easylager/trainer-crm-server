@@ -339,7 +339,7 @@
         if (d.busiest_weekday) {
           var busiestDisplay = d.busiest_date ? (formatDateShort(d.busiest_date) + ' · ' + d.busiest_weekday) : d.busiest_weekday;
           html += '<div class="section"><div class="section-title">Пик спроса за месяц</div>';
-          html += '<div class="insight"><span class="insight-icon">📈</span><span class="insight-text">Чаще всего — <strong>' + busiestDisplay + '</strong></span></div></div>';
+          html += '<div class="insight"><span class="insight-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6 4 4 6-7 M15 8h5v5"/></svg></span><span class="insight-text">Чаще всего — <strong>' + busiestDisplay + '</strong></span></div></div>';
         }
 
         return html;

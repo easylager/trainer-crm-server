@@ -2933,64 +2933,6 @@
       border-top: 1px solid rgba(128, 128, 128, 0.12);
     }
 
-    .hub-support-form {
-      margin-top: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .hub-support-label {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--tg-theme-text-color);
-    }
-    .hub-support-textarea {
-      width: 100%;
-      min-height: 76px;
-      padding: 10px 12px;
-      border-radius: 12px;
-      font-size: 14px;
-      line-height: 1.45;
-      resize: vertical;
-      box-sizing: border-box;
-      background: var(--tg-theme-bg-color, #fff);
-      color: var(--tg-theme-text-color);
-      border: 1px solid rgba(128, 128, 128, 0.22);
-    }
-    .hub-is-dark .hub-support-textarea {
-      background: var(--tg-theme-secondary-bg-color);
-      border-color: rgba(255, 255, 255, 0.14);
-    }
-    .hub-support-textarea::placeholder {
-      color: var(--tg-theme-hint-color);
-      opacity: 0.85;
-    }
-    .hub-support-hint {
-      margin: 0;
-      font-size: 11px;
-      line-height: 1.45;
-      color: var(--tg-theme-hint-color);
-    }
-    .hub-support-submit {
-      margin-top: 2px;
-    }
-    .hub-support-status {
-      margin: 0;
-      min-height: 1.35em;
-      font-size: 12px;
-      line-height: 1.45;
-      color: var(--tg-theme-hint-color);
-    }
-    .hub-support-status.hub-support-status--ok {
-      color: var(--tg-theme-text-color);
-    }
-    .hub-support-status.hub-support-status--err {
-      color: #c0392b;
-    }
-    .hub-is-dark .hub-support-status.hub-support-status--err {
-      color: #ff8a80;
-    }
-
     /* Onboarding checklist (same tokens as trainer-profile; constitution surfaces) */
     /* Hub: strip sits under header — avoid double gap with .hub-header margin-bottom */
     .onboarding-strip.onboarding-strip--hub-top {
@@ -3840,8 +3782,7 @@
     }
 
     /* Onboarding: stats chips forced visible by flex !important above — override via body class */
-    body.hub-onboarding-active #hubStatusMarkers,
-    body.hub-onboarding-active #hubFooterAside {
+    body.hub-onboarding-active #hubStatusMarkers {
       display: none !important;
     }
 
@@ -4339,8 +4280,9 @@
         0 2px 8px rgba(0, 0, 0, 0.1);
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
-      /* Entrance: rise + fade once mounted */
-      animation: hub-book-fab-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+      /* Entrance: rise + fade once mounted. backwards, не both: с both конечный кадр держал
+         transform навсегда — кнопка не сжималась при нажатии и не уезжала под формой. */
+      animation: hub-book-fab-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
       transition:
         transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
         box-shadow 0.2s ease,
@@ -4386,17 +4328,6 @@
       .hub-book-fab { animation: none; }
     }
 
-    /* ── 8. Community footer link + sheet ─────────────────────────────────── */
-
-    .hub-footer-aside {
-      margin: 28px 0 24px;
-      padding-top: 16px;
-      border-top: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 26%, transparent);
-    }
-
-    .hub-is-dark .hub-footer-aside {
-      border-top-color: color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
-    }
 
     /* ═══════════════════════════════════════════════════════════════════
        ONBOARDING — greeting in the header, one focal card («Первые шаги»).
@@ -4421,240 +4352,7 @@
       }
     }
 
-    .hub-community-link {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      width: 100%;
-      margin: 0;
-      padding: 6px 0;
-      border: none;
-      background: transparent;
-      font: inherit;
-      text-align: left;
-      cursor: pointer;
-      color: color-mix(in srgb, var(--tg-theme-hint-color) 92%, var(--tg-theme-text-color));
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
-      border-radius: 8px;
-      transition: opacity 0.15s ease;
-    }
-
-    .hub-community-link:active {
-      opacity: 0.72;
-    }
-
-    .hub-community-link:focus-visible {
-      outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
-      outline-offset: 2px;
-    }
-
-    .hub-community-link__icon {
-      flex-shrink: 0;
-      color: color-mix(in srgb, var(--app-cta-fill) 80%, var(--tg-theme-text-color));
-      opacity: 0.85;
-    }
-
-    .hub-community-link__copy {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1px;
-      line-height: 1.3;
-      letter-spacing: -0.01em;
-    }
-
-    .hub-community-link__label {
-      font-size: 12px;
-      font-weight: 600;
-      color: color-mix(in srgb, var(--tg-theme-text-color) 68%, var(--tg-theme-hint-color));
-    }
-
-    .hub-community-link__hint {
-      font-size: 11px;
-      font-weight: 500;
-      color: color-mix(in srgb, var(--tg-theme-hint-color) 95%, transparent);
-    }
-
-    .hub-community-link__arrow {
-      flex-shrink: 0;
-      width: 12px;
-      height: 12px;
-      opacity: 0.4;
-      color: var(--tg-theme-hint-color);
-    }
-
     /* Bottom sheet — mirrors trainer-more-sheet rhythm */
-    .hub-community-sheet-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 9100;
-      background: rgba(0, 0, 0, 0.45);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.25s ease;
-    }
-
-    .hub-community-sheet-overlay[hidden] {
-      display: block !important;
-    }
-
-    .hub-community-sheet-overlay.hub-community-sheet-overlay--open {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .hub-community-sheet {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 9101;
-      max-height: min(78vh, 520px);
-      padding: 8px 16px calc(12px + var(--trainer-tab-bar-height, 62px) + env(safe-area-inset-bottom, 0px));
-      border-radius: 20px 20px 0 0;
-      background: var(--tg-theme-bg-color);
-      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
-      transform: translateY(100%);
-      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .hub-community-sheet-overlay--open .hub-community-sheet {
-      transform: translateY(0);
-    }
-
-    .hub-community-sheet__handle {
-      width: 36px;
-      height: 4px;
-      border-radius: 2px;
-      background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
-      margin: 6px auto 14px;
-      flex-shrink: 0;
-    }
-
-    .hub-community-sheet__title {
-      margin: 0 0 8px;
-      padding: 0 2px;
-      font-size: 17px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      line-height: 1.2;
-      color: var(--tg-theme-text-color);
-    }
-
-    .hub-community-sheet__lead {
-      margin: 0 0 14px;
-      padding: 0 2px;
-      font-size: 13px;
-      line-height: 1.45;
-      font-weight: 500;
-      color: var(--tg-theme-hint-color);
-    }
-
-    .hub-community-sheet__faq {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      width: 100%;
-      margin: 0 0 14px;
-      padding: 10px 12px;
-      border-radius: 14px;
-      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
-      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 72%, transparent);
-      font: inherit;
-      text-align: left;
-      cursor: pointer;
-      color: inherit;
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
-      transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
-    }
-
-    .hub-community-sheet__faq:active {
-      transform: scale(0.985);
-      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent);
-    }
-
-    .hub-community-sheet__faq:focus-visible {
-      outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
-      outline-offset: 2px;
-    }
-
-    .hub-community-sheet__faq-icon {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
-      color: color-mix(in srgb, var(--app-cta-fill) 78%, var(--tg-theme-text-color));
-      background: color-mix(in srgb, var(--app-cta-fill) 12%, transparent);
-    }
-
-    .hub-community-sheet__faq-copy {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
-
-    .hub-community-sheet__faq-label {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: color-mix(in srgb, var(--tg-theme-text-color) 82%, var(--tg-theme-hint-color));
-    }
-
-    .hub-community-sheet__faq-hint {
-      font-size: 11px;
-      font-weight: 500;
-      line-height: 1.35;
-      color: color-mix(in srgb, var(--tg-theme-hint-color) 94%, transparent);
-    }
-
-    .hub-community-sheet__faq-chevron {
-      flex-shrink: 0;
-      opacity: 0.38;
-      color: var(--tg-theme-hint-color);
-    }
-
-    .hub-community-sheet__form-kicker {
-      margin: 0 2px 8px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: color-mix(in srgb, var(--tg-theme-hint-color) 88%, transparent);
-    }
-
-    .hub-community-sheet .hub-support-form {
-      margin: 0;
-    }
-
-    .hub-community-sheet__cta {
-      margin: 10px 2px 4px;
-      font-size: 11px;
-      line-height: 1.45;
-      color: color-mix(in srgb, var(--tg-theme-hint-color) 92%, transparent);
-    }
-
-    .hub-community-sheet__cta strong {
-      color: color-mix(in srgb, var(--tg-theme-text-color) 72%, var(--tg-theme-hint-color));
-      font-weight: 600;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .hub-community-sheet-overlay,
-      .hub-community-sheet {
-        transition: none;
-      }
-    }
 
 
     /* ═══ День ноль — один вопрос вместо пустого экрана (TASK-173) ═══

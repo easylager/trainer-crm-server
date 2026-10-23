@@ -249,8 +249,8 @@
           btn.onclick = function() { backToListFromDetail(); };
           return;
         }
-        btn.hidden = !canBrowserGoBack();
-        btn.onclick = function() { window.history.back(); };
+        /* Список — корневая вкладка: «Назад» тут некуда, переходы — через бар. */
+        btn.hidden = true;
       }
 
       function updateReturnBookingBackUi() {
@@ -2020,7 +2020,7 @@
           var name = trainerClientDisplayName(c).trim() || 'Клиент';
           var initials = clientInitials(name);
           var isSandbox = !!c.is_sandbox;
-          var phone = isSandbox ? 'Тестовый клиент' : (c.phone || 'Телефон не указан');
+          var phone = isSandbox ? 'Тестовый клиент' : (c.phone ? (window.TrainerFormat ? TrainerFormat.phone(c.phone) : c.phone) : 'Телефон не указан');
           var lastLabel = c.last_date
             ? ('Последнее проведённое: ' + formatDate(c.last_date) + (c.last_start ? ' ' + formatTime(c.last_start) : ''))
             : (isSandbox ? 'Демо-запись для знакомства с системой' : 'Проведённых занятий ещё не было');

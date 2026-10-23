@@ -76,7 +76,7 @@ describe('анкета: разделы профиля — экраны с одн
   });
 
   it('экран может собрать два блока анкеты', () => {
-    assert.match(js, /containerIds: \['obSessionDurationWrap', 'obMinHoursWrap'\]/);
+    assert.match(js, /containerIds: \['obSessionDurationWrap', 'obMinHoursWrap', 'groupClassesField'\]/);
     assert.match(js, /containerIds: \['pushNotifyField', 'digestSettingsField'\]/);
     assert.ok(read('trainer-profile.html').includes('id="pushNotifyField"'));
   });
