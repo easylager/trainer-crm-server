@@ -59,7 +59,7 @@ describe('расписание: возврат из карточки запис�
 
   it('дата записи якорит выбранный день полоски', () => {
     const start = src.indexOf('function openBookingDetail');
-    const body = src.slice(start, start + 1200);
+    const body = src.slice(start, src.indexOf("bookingRequest.then", start) + 600);
     assert.match(body, /scheduleStripSelectedDate = String\(b\.slot_date\)/);
   });
 });

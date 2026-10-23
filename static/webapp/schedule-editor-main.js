@@ -1101,6 +1101,8 @@
       }
 
       function showBookingStack(view) {
+        /* Ранний показ экрана записи из <head> — дальше экранами управляет этот код. */
+        document.documentElement.classList.remove('se-open-booking');
         var main = document.getElementById('screenMain');
         var det = document.getElementById('screenBookingDetail');
         var dec = document.getElementById('screenBookingDecline');
@@ -1913,7 +1915,13 @@
         document.getElementById('detailBookingActions').innerHTML = '';
         showBookingStack('detail');
         hideFlowBookBootOverlay();
-        getJsonTrainer('/trainer/bookings/' + bookingId).then(function(b) {
+        var early = window.__seEarlyBooking;
+        window.__seEarlyBooking = null;
+        var bookingRequest =
+          early && String(early.id) === String(bookingId) && early.init === (tg && tg.initData)
+            ? early.promise
+            : getJsonTrainer('/trainer/bookings/' + bookingId);
+        bookingRequest.then(function(b) {
           state.selectedBooking = b;
           /* Anchor return-to-schedule on the booking's day when scroll-spy had no day yet. */
           if (b && b.slot_date && /^\d{4}-\d{2}-\d{2}$/.test(String(b.slot_date))) {
@@ -10196,11 +10204,12 @@
               state.bookingDetailReturn = fromHub ? 'hub' : 'schedule';
               state.hubGroupSlotReturnId = null;
             }
-            runAfterScheduleCrmGate(function() {
-              withTrainerMiniAppAccessThen(function() {
-                openBookingDetail(bid);
-                prefetchSlotsInBackground();
-              });
+            /* Запись с главной открывается сразу: подписка нужна только кнопкам записи (проверка
+               на нажатии), доступ — из кэша сессии. Раньше ждали /subscription/status по цепочке. */
+            runAfterScheduleCrmGate(function() {});
+            withTrainerMiniAppAccessThen(function() {
+              openBookingDetail(bid);
+              prefetchSlotsInBackground();
             });
             return;
           }
