@@ -127,6 +127,19 @@ def main() -> None:
             page.screenshot(path=str(args.out / name))
             print("saved", name)
 
+        def chat_shot(name: str, html: str) -> None:
+            # Сообщение бота: окно по высоте сообщения, без пустого фона чата над ним.
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.goto((args.messages / html).resolve().as_uri()); settle(page, 500)
+            gap = page.evaluate("""() => {
+                const top = document.querySelector('header').getBoundingClientRect().bottom;
+                return document.querySelector('.day').getBoundingClientRect().top - top;
+            }""")
+            page.set_viewport_size({"width": 390, "height": max(480, 844 - int(gap) + 28)})
+            page.wait_for_timeout(300)
+            shot(name)
+            page.set_viewport_size({"width": 390, "height": 844})
+
         def visit(path: str, bot: str = "trainer", warm: bool = True) -> None:
             if warm:  # первый заход гасит одноразовые подсказки (как у тренера со второго дня)
                 page.goto(sh.url(path, bot)); settle(page, 6000)
@@ -156,8 +169,7 @@ def main() -> None:
         shot("04-pass-5-of-8.png")
 
         # 5. Уведомление тренеру о новой записи (сообщение бота)
-        page.goto((args.messages / "trainer-new-booking.html").resolve().as_uri()); settle(page, 500)
-        shot("05-new-booking-push.png")
+        chat_shot("05-new-booking-push.png", "trainer-new-booking.html")
 
         # 6. Запись глазами родителя: ссылка тренера → «Записаться» → первое окно → форма
         visit(f"/webapp/book?trainer_id={trainer_id}", bot="client")
@@ -173,12 +185,10 @@ def main() -> None:
         shot("06-parent-booking.png")
 
         # 7. Напоминание родителю
-        page.goto((args.messages / "client-reminder.html").resolve().as_uri()); settle(page, 500)
-        shot("07-parent-reminder.png")
+        chat_shot("07-parent-reminder.png", "client-reminder.html")
 
         # 8. Воскресная сводка тренеру
-        page.goto((args.messages / "trainer-weekly-digest.html").resolve().as_uri()); settle(page, 500)
-        shot("08-weekly-digest.png")
+        chat_shot("08-weekly-digest.png", "trainer-weekly-digest.html")
 
         browser.close()
 
