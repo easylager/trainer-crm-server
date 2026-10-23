@@ -90,6 +90,7 @@ async def issue_trainer_join_from_request(
     referral_code: str | None = None,
     audit_event: str = "landing.trainer_start_issued",
     attribution: dict[str, str] | None = None,
+    arena_id: int | None = None,
 ) -> dict:
     """
     Mint a one-time landing welcome token and return redirect metadata.
@@ -109,6 +110,7 @@ async def issue_trainer_join_from_request(
         result = await issue_trainer_start_from_landing(
             session,
             referral_code=referral_code,
+            arena_id=arena_id,
             settings=settings,
         )
     except ValueError as exc:
@@ -150,6 +152,15 @@ def join_attribution_from_request(request: Request) -> dict[str, str]:
     return out
 
 
+def join_arena_id_from_request(request: Request) -> int | None:
+    """Каток из ``/join?arena=`` для онбординга: только положительное целое, иначе ничего."""
+    raw = (request.query_params.get("arena") or "").strip()
+    if not (raw.isascii() and raw.isdigit()) or len(raw) > 9:
+        return None
+    value = int(raw)
+    return value if value > 0 else None
+
+
 async def issue_trainer_join_redirect(
     request: Request,
     session: AsyncSession,
@@ -163,6 +174,7 @@ async def issue_trainer_join_redirect(
         referral_code=referral_code,
         audit_event="landing.trainer_join_redirect",
         attribution=join_attribution_from_request(request),
+        arena_id=join_arena_id_from_request(request),
     )
     redirect_url = result.get("redirect_url")
     if not redirect_url:

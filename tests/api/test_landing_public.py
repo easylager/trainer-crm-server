@@ -15,6 +15,12 @@ from src.application.landing_trainer_start_use_cases import (
     build_trainer_bot_join_deep_link,
     sanitize_referral_code,
 )
+from src.application.trainer_start_payload import (
+    TELEGRAM_START_PAYLOAD_MAX_LEN,
+    TrainerStartKind,
+    parse_trainer_start_payload,
+    split_arena_suffix,
+)
 from src.shared.config import Settings
 
 
@@ -46,6 +52,43 @@ def test_build_trainer_bot_deep_link_with_referral():
     s = _landing_settings(trainer_bot_username="IceProTestBot")
     url = build_trainer_bot_deep_link("tok123", referral_code="REF1", settings=s)
     assert url == "https://t.me/IceProTestBot?start=link_tok123_ref_REF1"
+
+
+def test_deep_link_carries_the_rink_after_the_referral():
+    """Каток — последним хвостом: токен и ``_ref_`` разбираются как раньше."""
+    s = _landing_settings(trainer_bot_username="IceProTestBot")
+    assert (
+        build_trainer_bot_deep_link("tok123", arena_id=42, settings=s)
+        == "https://t.me/IceProTestBot?start=link_tok123_arena_42"
+    )
+    assert (
+        build_trainer_bot_deep_link("tok123", referral_code="REF1", arena_id=42, settings=s)
+        == "https://t.me/IceProTestBot?start=link_tok123_ref_REF1_arena_42"
+    )
+
+
+def test_rink_is_dropped_when_payload_would_not_fit_telegram():
+    """Лимит start-параметра — 64 символа; вход и реферал важнее катка."""
+    s = _landing_settings(trainer_bot_username="IceProTestBot")
+    token = "t" * 43  # длина реального token_urlsafe(32)
+    with_ref = build_trainer_bot_deep_link(token, referral_code="ABCDEFGH", arena_id=123, settings=s)
+    assert with_ref.endswith(f"start=link_{token}_ref_ABCDEFGH")
+    plain = build_trainer_bot_deep_link(token, arena_id=123, settings=s)
+    payload = plain.split("start=", 1)[1]
+    assert payload.endswith("_arena_123") and len(payload) <= TELEGRAM_START_PAYLOAD_MAX_LEN
+
+
+def test_start_payload_reads_the_rink():
+    parsed = parse_trainer_start_payload("link_tok_x-1_ref_REF1_arena_42")
+    assert parsed.kind == TrainerStartKind.LINK
+    assert (parsed.link_token, parsed.ref_code, parsed.arena_id) == ("tok_x-1", "REF1", 42)
+    parsed = parse_trainer_start_payload("link_tok_arena_7")
+    assert (parsed.link_token, parsed.ref_code, parsed.arena_id) == ("tok", None, 7)
+    assert parse_trainer_start_payload("link_tok").arena_id is None
+    assert split_arena_suffix("link_tok_arena_0") == ("link_tok_arena_0", None)
+    assert split_arena_suffix("link_tok_arena_x") == ("link_tok_arena_x", None)
+    # Чужие payload-ы катка не несут.
+    assert split_arena_suffix("col_x_arena_5") == ("col_x_arena_5", None)
 
 
 def test_build_trainer_bot_join_deep_link():
@@ -191,6 +234,25 @@ async def test_trainer_join_get_redirect(db_session, monkeypatch):
     location = resp.headers.get("location") or ""
     assert location.startswith("https://t.me/IceProTestBot?start=link_")
     assert "_ref_REF9" in location
+
+
+@pytest.mark.asyncio
+async def test_trainer_join_passes_the_rink_to_the_bot(db_session, monkeypatch):
+    """``/join?arena=`` с лендинга катка: каток едет в start-параметре, мусор — нет."""
+    s = _landing_settings(trainer_bot_username="IceProTestBot", landing_trainer_start_max_requests=20)
+    monkeypatch.setattr("src.api.routes.public.Settings", lambda: s)
+    monkeypatch.setattr("src.application.landing_trainer_start_use_cases.Settings", lambda: s)
+    monkeypatch.setattr("src.application.trainer_link_token_use_cases.Settings", lambda: s)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False) as client:
+        with_rink = await client.get("/join?arena=42&utm_source=qr")
+        junk = await client.get("/join?arena=4x2")
+        negative = await client.get("/join?arena=-1")
+    assert with_rink.status_code == 302
+    assert with_rink.headers["location"].endswith("_arena_42")
+    for resp in (junk, negative):
+        assert resp.status_code == 302
+        assert "_arena_" not in resp.headers["location"]
 
 
 @pytest.mark.asyncio
