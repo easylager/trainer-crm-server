@@ -2,7 +2,7 @@
   "schema_version": "canonical-slot-v1",
   "arena_id": 32,
   "city": "Горки",
-  "parser_key": "gorki_home_html_v1",
+  "parser_key": "gorki_lds_v1",
   "timezone": "Europe/Minsk",
   "currency_code": "BYN",
   "captured_at": "2026-09-06T00:51:00+03:00",
