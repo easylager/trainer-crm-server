@@ -302,3 +302,28 @@ async def test_raubichi_matches_expected_fixture() -> None:
 def test_raubichi_closed_page_yields_no_slots() -> None:
     html = (_FIXTURES / "raubichi-rcop" / "skates-closed.html").read_text(encoding="utf-8")
     assert _raubichi_schedule_slots(html, duration_minutes=45) == []
+
+
+@pytest.mark.asyncio
+async def test_gorki_lds_expands_day_ranges_and_multiple_times(tmp_path) -> None:
+    (tmp_path / "mass-skating-home-excerpt.html").write_text(
+        "<p><strong>МАССОВОЕ КАТАНИЕ 2026</strong></p>"
+        "<p>20 - 22 ОКТЯБРЯ: 20.00</p>"
+        "<p>23-24: ОТМЕНЯЕТСЯ В СВЯЗИ С ПРОВЕДЕНИЕМ ТУРНИРА</p>"
+        "<p>25 ОКТЯБРЯ: 17.00; 18.30</p>",
+        encoding="utf-8",
+    )
+    (tmp_path / "uslugi.html").write_text(
+        (_FIXTURES / "gorki-lds" / "uslugi.html").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    config = dict(GORKI_LDS_CONFIG, fixture_dir=str(tmp_path), run_date="2026-10-24")
+    job = _job(arena_id=32, parser_key=PARSER_KEY_GORKI_LDS, config=config, slug="gorki-lds", job_id=104)
+    extraction = await GorkiLdsParser().extract(job)
+    got = sorted((s.local_date, s.starts_at_local) for s in extraction.slots)
+    assert got == [
+        ("2026-10-20", "20:00"),
+        ("2026-10-21", "20:00"),
+        ("2026-10-22", "20:00"),
+        ("2026-10-25", "17:00"),
+        ("2026-10-25", "18:30"),
+    ]

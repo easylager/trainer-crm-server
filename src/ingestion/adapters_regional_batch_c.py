@@ -608,10 +608,8 @@ class OrshaArenaParser(IceParser):
 # gorki-lds (arena_id 32) — hand-written MK announcements on the home page.
 # ---------------------------------------------------------------------------
 
-_GORKI_RANGE = re.compile(
-    r"(\d{1,2})\s*[-–—]\s*(\d{1,2})\s+([А-ЯЁа-яё]+)\s*:?\s*(\d{1,2})[.:](\d{2})"
-)
-_GORKI_SINGLE = re.compile(r"(\d{1,2})\s+([А-ЯЁа-яё]+)\s*:?\s*(\d{1,2})[.:](\d{2})")
+_GORKI_HEAD = re.compile(r"(\d{1,2})(?:\s*[-–—]\s*(\d{1,2}))?\s+([А-ЯЁа-яё]+)\s*:?\s*(.*)")
+_GORKI_TIME = re.compile(r"(\d{1,2})[.:](\d{2})")
 
 
 class GorkiLdsParser(IceParser):
@@ -643,30 +641,24 @@ class GorkiLdsParser(IceParser):
                 continue
             if "ОТМЕНЯ" in text.upper():
                 continue
-            range_match = _GORKI_RANGE.search(text)
-            if range_match:
-                d1, d2, month_word, hh, mm = range_match.groups()
-                month = _MONTHS.get(month_word.lower())
-                if not month:
-                    continue
-                start = _fmt(int(hh), int(mm))
-                for day_num in (int(d1), int(d2)):
-                    local_date = infer_date_from_day_month(day_num, month, reference)
-                    if local_date is None:
-                        continue
-                    slots.append(_gorki_slot(local_date, start, duration, adult, child, rental, age_note))
+            head = _GORKI_HEAD.search(text)
+            if not head:
                 continue
-            single_match = _GORKI_SINGLE.search(text)
-            if single_match:
-                d1, month_word, hh, mm = single_match.groups()
-                month = _MONTHS.get(month_word.lower())
-                if not month:
-                    continue
-                start = _fmt(int(hh), int(mm))
-                local_date = infer_date_from_day_month(int(d1), month, reference)
+            d1, d2, month_word, tail = head.groups()
+            month = _MONTHS.get(month_word.lower())
+            times = _GORKI_TIME.findall(tail)
+            if not month or not times:
+                continue
+            first = int(d1)
+            last = int(d2) if d2 else first
+            for day_num in range(first, last + 1):
+                local_date = infer_date_from_day_month(day_num, month, reference)
                 if local_date is None:
                     continue
-                slots.append(_gorki_slot(local_date, start, duration, adult, child, rental, age_note))
+                for hh, mm in times:
+                    slots.append(
+                        _gorki_slot(local_date, _fmt(int(hh), int(mm)), duration, adult, child, rental, age_note)
+                    )
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,
