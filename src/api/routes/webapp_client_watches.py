@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_trainer_edges import _parse_profile_id_header, _resolve_edge_client_id_or_400
+from src.api.miniapp_auth.types import MiniAppPlatform
 from src.application.client_ice_watch_use_cases import (
+    IceWatchChannelUnsupported,
     client_watches_hub_payload,
     subscribe_ice_watch,
     unsubscribe_ice_watch,
@@ -24,6 +26,8 @@ from src.infrastructure.db.models import (
 )
 
 router = APIRouter(tags=["webapp"])
+
+CHANNEL_UNSUPPORTED = "channel_unsupported"
 
 
 class IceWatchBody(BaseModel):
@@ -74,6 +78,10 @@ async def post_client_ice_watch(
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
+    # TASK-328 AC5: напоминания уходят только клиентским ботом Telegram. В MAX канала
+    # доставки нет — не создаём подписку, которую некому выполнить.
+    if principal.platform != MiniAppPlatform.TELEGRAM:
+        raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED)
     catalog_tid = client_catalog_telegram_key(principal)
     client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
     kind = (body.watch_kind or ICE_WATCH_KIND_SESSIONS).strip().lower()
@@ -87,15 +95,18 @@ async def post_client_ice_watch(
             "day": (body.day or "").strip() or None,
             "intent": (body.intent or "skate").strip().lower() or "skate",
         }
-    watch = await subscribe_ice_watch(
-        session,
-        client_id=client_id,
-        telegram_id=catalog_tid,
-        arena_id=int(body.arena_id),
-        watch_kind=kind,
-        filter_json=filter_json,
-        city_id=body.city_id,
-    )
+    try:
+        watch = await subscribe_ice_watch(
+            session,
+            client_id=client_id,
+            telegram_id=catalog_tid,
+            arena_id=int(body.arena_id),
+            watch_kind=kind,
+            filter_json=filter_json,
+            city_id=body.city_id,
+        )
+    except IceWatchChannelUnsupported as exc:
+        raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED) from exc
     return {"watch": watch}
 
 

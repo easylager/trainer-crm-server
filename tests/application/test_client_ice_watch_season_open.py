@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from src.application.client_ice_watch_use_cases import (
     compose_season_open_telegram_message,
-    notify_ice_watches_after_arena_publish,
+    deliver_ice_watch_reminders,
     notify_season_open_watches,
     subscribe_ice_watch,
 )
@@ -242,7 +242,6 @@ async def test_sessions_notify_clears_season_open(db_session) -> None:
     city_id = await _city(db_session)
     arena_id = await _arena(db_session, city_id=city_id)
     client_id = await _client(db_session, telegram_id=7_700_000_004)
-    await _future_session(db_session, arena_id)
     await subscribe_ice_watch(
         db_session,
         client_id=client_id,
@@ -261,13 +260,14 @@ async def test_sessions_notify_clears_season_open(db_session) -> None:
         filter_json={},
         city_id=city_id,
     )
+    await _future_session(db_session, arena_id)
     await db_session.commit()
 
     send = AsyncMock()
-    sent = await notify_ice_watches_after_arena_publish(db_session, arena_id, send_fn=send)
-    assert sent == 1
+    stats = await deliver_ice_watch_reminders(db_session, send_fn=send)
+    assert stats.sent == 1
     assert send.await_count == 1
-    assert "Появились сеансы" in send.await_args.args[1]
+    assert "новое расписание" in send.await_args.args[1]
 
     season_active = await db_session.execute(
         text("SELECT active FROM client_ice_watches WHERE arena_id = :aid AND watch_kind = :k"),
