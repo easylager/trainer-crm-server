@@ -29,15 +29,13 @@ async def _future_session(db_session, arena_id: int, *, days: int):
     local_day = datetime.now(MINSK).date() + timedelta(days=days)
     starts = datetime(local_day.year, local_day.month, local_day.day, 17, 0, tzinfo=MINSK)
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO ice_sessions (
                 arena_id, kind, status, starts_at_utc, ends_at_utc,
                 starts_at_local, ends_at_local, local_date, schedule_basis, currency_code
             )
             VALUES (:aid, 'public_skate', 'active', :s, :e, '17:00', '18:00', :ld, 'live', 'BYN')
-            """
-        ),
+            """),
         {
             "aid": arena_id,
             "s": starts.astimezone(timezone.utc),
@@ -50,12 +48,10 @@ async def _future_session(db_session, arena_id: int, *, days: int):
 
 async def _watches(db_session, arena_id: int) -> list[dict]:
     r = await db_session.execute(
-        text(
-            """
+        text("""
             SELECT id, telegram_id, watch_kind, active, baseline_horizon_date, filter_json
             FROM client_ice_watches WHERE arena_id = :aid
-            """
-        ),
+            """),
         {"aid": arena_id},
     )
     return [dict(m) for m in r.mappings().all()]
@@ -78,9 +74,7 @@ async def test_start_watch_creates_subscription_with_baseline(app_use_test_db, d
 
     reply = await subscribe_from_bot_start(db_session, telegram_id=tid, arena_id=arena_id, webapp_base_url=BASE)
     assert reply is not None
-    assert reply["text"].replace(NBSP, " ") == (
-        "Готово. Напишем один раз, когда у «Юность» появится новое расписание."
-    )
+    assert reply["text"].replace(NBSP, " ") == ("Готово. Напишем один раз, когда у «Юность» появится новое расписание.")
     assert reply["button_text"] == "Открыть «Юность»"
     assert reply["url"] == f"{BASE}/webapp/arena?arena_id={arena_id}"
 
@@ -125,8 +119,7 @@ async def test_start_watch_unknown_or_hidden_rink_returns_none(app_use_test_db, 
     arena_id = await _insert_arena(db_session, city_id, name="Закрытый")
     await db_session.execute(text("UPDATE arenas SET is_active = false WHERE id = :id"), {"id": arena_id})
     assert (
-        await subscribe_from_bot_start(db_session, telegram_id=_tid(), arena_id=arena_id, webapp_base_url=BASE)
-        is None
+        await subscribe_from_bot_start(db_session, telegram_id=_tid(), arena_id=arena_id, webapp_base_url=BASE) is None
     )
     assert await _watches(db_session, arena_id) == []
 
@@ -140,7 +133,9 @@ def _message(payload: str, tid: int) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_bot_start_watch_answers_with_open_button(app_use_test_db, db_session, _test_db_core, monkeypatch) -> None:
+async def test_bot_start_watch_answers_with_open_button(
+    app_use_test_db, db_session, _test_db_core, monkeypatch
+) -> None:
     city_id = await _insert_city(db_session, name=f"Колокольск {uuid.uuid4().hex[:6]}")
     arena_id = await _insert_arena(db_session, city_id, name="Юность")
     await db_session.commit()

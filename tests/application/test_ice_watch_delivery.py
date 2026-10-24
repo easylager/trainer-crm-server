@@ -35,37 +35,29 @@ def _tid() -> int:
 
 
 async def _city(db_session) -> int:
-    r = await db_session.execute(
-        text(
-            """
+    r = await db_session.execute(text("""
             INSERT INTO cities (name, country, price_group, is_active, sort_order)
             VALUES ('Bell City', 'BY', 'default', true, 0)
             RETURNING id
-            """
-        )
-    )
+            """))
     return int(r.scalar_one())
 
 
 async def _arena(db_session, city_id: int, *, name: str = "Юность", tz: str = "Europe/Minsk") -> int:
     r = await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO arenas (city_id, name, latitude, longitude, is_active, is_confirmed, venue_type)
             VALUES (:cid, :name, 53.9, 27.5, true, true, 'ice')
             RETURNING id
-            """
-        ),
+            """),
         {"cid": city_id, "name": name},
     )
     arena_id = int(r.scalar_one())
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO arena_profiles (arena_id, city_id, slug, timezone, status)
             VALUES (:aid, :cid, :slug, :tz, 'published')
-            """
-        ),
+            """),
         {"aid": arena_id, "cid": city_id, "slug": f"bell-{arena_id}", "tz": tz},
     )
     return arena_id
@@ -102,15 +94,13 @@ async def _session(
     starts_local = datetime(local_day.year, local_day.month, local_day.day, hour, 0, tzinfo=zone)
     starts = starts_local.astimezone(timezone.utc)
     await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO ice_sessions (
                 arena_id, kind, status, starts_at_utc, ends_at_utc,
                 starts_at_local, ends_at_local, local_date, schedule_basis, currency_code
             )
             VALUES (:aid, :kind, :status, :start, :end, :sl, :el, :ld, 'live', 'BYN')
-            """
-        ),
+            """),
         {
             "aid": arena_id,
             "kind": kind,
@@ -125,7 +115,9 @@ async def _session(
     return local_day
 
 
-async def _subscribe(db_session, *, client_id: int, tid: int, arena_id: int, city_id: int, kind=ICE_WATCH_KIND_SESSIONS):
+async def _subscribe(
+    db_session, *, client_id: int, tid: int, arena_id: int, city_id: int, kind=ICE_WATCH_KIND_SESSIONS
+):
     return await subscribe_ice_watch(
         db_session,
         client_id=client_id,
@@ -139,12 +131,10 @@ async def _subscribe(db_session, *, client_id: int, tid: int, arena_id: int, cit
 
 async def _watch_row(db_session, watch_id: int) -> dict:
     r = await db_session.execute(
-        text(
-            """
+        text("""
             SELECT active, last_notified_at, baseline_horizon_date, failed_attempts, deactivated_reason
             FROM client_ice_watches WHERE id = :id
-            """
-        ),
+            """),
         {"id": watch_id},
     )
     return dict(r.mappings().one())
@@ -152,12 +142,10 @@ async def _watch_row(db_session, watch_id: int) -> dict:
 
 async def _journal(db_session, watch_id: int) -> list[dict]:
     r = await db_session.execute(
-        text(
-            """
+        text("""
             SELECT watch_id, client_id, arena_id, attempted_at, ok, error
             FROM client_ice_watch_deliveries WHERE watch_id = :id ORDER BY id
-            """
-        ),
+            """),
         {"id": watch_id},
     )
     return [dict(m) for m in r.mappings().all()]
@@ -416,12 +404,10 @@ async def test_legacy_surrogate_watch_is_closed_without_sending(db_session) -> N
     surrogate = -(10**12 + 54321)
     client_id = await _client(db_session, surrogate)
     r = await db_session.execute(
-        text(
-            """
+        text("""
             INSERT INTO client_ice_watches (client_id, telegram_id, arena_id, watch_kind, filter_json, active)
             VALUES (:cid, :tg, :aid, 'sessions', '{}'::jsonb, true) RETURNING id
-            """
-        ),
+            """),
         {"cid": client_id, "tg": surrogate, "aid": arena_id},
     )
     watch_id = int(r.scalar_one())

@@ -265,12 +265,10 @@ async def _seed(factory) -> dict:
             )
         ).scalar_one()
         await s.execute(
-            text(
-                """
+            text("""
                 INSERT INTO client_ice_watches (client_id, telegram_id, arena_id, city_id, watch_kind, filter_json, active)
                 VALUES (:cid, :tid, :aid, :city, 'sessions', '{"when": "any"}'::jsonb, true)
-                """
-            ),
+                """),
             {"cid": client_id, "tid": tid, "aid": arena_id, "city": city_id},
         )
         await s.commit()
@@ -309,15 +307,13 @@ async def test_session_inserted_in_tick_is_sent_by_the_same_pass_after_commit() 
             starts_local = datetime(local_day.year, local_day.month, local_day.day, 17, 0, tzinfo=MINSK)
             async with self.session.begin_nested():
                 await self.session.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO ice_sessions (
                             arena_id, kind, status, starts_at_utc, ends_at_utc,
                             starts_at_local, ends_at_local, local_date, schedule_basis, currency_code
                         )
                         VALUES (:aid, 'public_skate', 'active', :s, :e, '17:00', '18:00', :ld, 'live', 'BYN')
-                        """
-                    ),
+                        """),
                     {
                         "aid": seed["arena_id"],
                         "s": starts_local.astimezone(timezone.utc),
@@ -356,14 +352,18 @@ async def test_session_inserted_in_tick_is_sent_by_the_same_pass_after_commit() 
                 )
             ).one()
             journal = (
-                await s.execute(
-                    text(
-                        "SELECT ok FROM client_ice_watch_deliveries d JOIN client_ice_watches w ON w.id = d.watch_id "
-                        "WHERE w.arena_id = :aid"
-                    ),
-                    {"aid": seed["arena_id"]},
+                (
+                    await s.execute(
+                        text(
+                            "SELECT ok FROM client_ice_watch_deliveries d JOIN client_ice_watches w ON w.id = d.watch_id "
+                            "WHERE w.arena_id = :aid"
+                        ),
+                        {"aid": seed["arena_id"]},
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         assert row.active is False and row.last_notified_at is not None
         assert journal == [True]
     finally:

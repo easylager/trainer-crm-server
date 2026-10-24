@@ -101,10 +101,7 @@ def compose_new_schedule_message(
 
 def compose_watch_subscribed_reply(arena_name: str) -> str:
     """Ответ бота на ``/start watch_<arena_id>``."""
-    return (
-        f"Готово. Напишем один раз, когда у{NBSP}{quoted_place_name(arena_name)} "
-        f"появится новое расписание."
-    )
+    return f"Готово. Напишем один раз, когда у{NBSP}{quoted_place_name(arena_name)} появится новое расписание."
 
 
 def watch_subscribed_button_text(arena_name: str) -> str:

@@ -67,8 +67,7 @@ def upgrade() -> None:
         ["attempted_at"],
     )
 
-    op.execute(
-        """
+    op.execute("""
         UPDATE client_ice_watches w
         SET baseline_horizon_date = h.horizon
         FROM (
@@ -82,8 +81,7 @@ def upgrade() -> None:
         WHERE w.arena_id = h.arena_id
           AND w.active = true
           AND w.watch_kind IN ('sessions', 'schedule_fresh')
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

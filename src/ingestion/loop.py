@@ -6,7 +6,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from src.ingestion.alerts import tick_ice_health_alerts, tick_ice_health_weekly_digest
 from src.ingestion.jobs import SqlAlchemyParserJobStore
@@ -68,7 +68,7 @@ _WATCH_PASS_THROTTLE = WatchPassThrottle()
 
 async def run_ice_watch_pass_after_tick(
     *,
-    watch_pass: Callable[[], Awaitable[object]] | None = None,
+    watch_pass: Callable[[], Awaitable[Any]] | None = None,
     throttle: WatchPassThrottle | None = None,
 ) -> None:
     """TASK-328: напоминания колокольчика — после коммита тика, под тем же локом ингеста.
@@ -103,7 +103,7 @@ async def run_ice_ingest_tick(
     session_factory=None,
     engine=None,
     scheduler_factory: Callable[[object], IceIngestScheduler] | None = None,
-    watch_pass: Callable[[], Awaitable[object]] | None = None,
+    watch_pass: Callable[[], Awaitable[Any]] | None = None,
     watch_pass_throttle: WatchPassThrottle | None = None,
 ) -> IceIngestTickResult:
     """Один тик планировщика под общим advisory-локом; затем проход доставки колокольчика.
