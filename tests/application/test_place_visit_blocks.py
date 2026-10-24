@@ -25,3 +25,14 @@ def test_rental_row_uses_known_slot_price_instead_of_box_office_wording() -> Non
     unknown = visit_view(card)["services"]["rows"][0]
     assert unknown["price"] == ""
     assert unknown["note"] == "цена в кассе"
+
+
+def test_arena_with_slots_but_no_buy_link_says_box_office_only() -> None:
+    from src.application.arena_visit_info import visit_view
+
+    card = {"opening_hours": {}, "visit_info": {}, "amenities": {}}
+    assert visit_view(card, has_slots=True)["tickets"]["mode"] == "box_office"
+    assert visit_view({**card, "future_session_count": 3})["tickets"]["mode"] == "box_office"
+    assert visit_view(card, has_slots=False)["tickets"]["mode"] is None
+    with_link = {**card, "tickets_url": "https://tickets.example/rink"}
+    assert visit_view(with_link, has_slots=True)["tickets"]["mode"] == "online"

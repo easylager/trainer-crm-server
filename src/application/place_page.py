@@ -1488,7 +1488,9 @@ def _place_visit(view: Mapping[str, Any]) -> dict[str, Any]:
     if rental:
         text = format_price_minor(rental[0], str(card.get("currency_code") or "BYN"))
         rental_price = f"от {text}" if rental[1] else text
-    return visit_view(card, has_trainers=bool(view.get("trainers")), rental_price=rental_price)
+    return visit_view(
+        card, has_trainers=bool(view.get("trainers")), rental_price=rental_price, has_slots=bool(slots)
+    )
 
 
 def _b_buy_pill(view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[str, Any]) -> str:

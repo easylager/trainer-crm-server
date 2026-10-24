@@ -280,8 +280,14 @@ def rental_included(card: Mapping[str, Any]) -> bool:
     return False
 
 
-def _tickets_view(card: Mapping[str, Any], visit: Mapping[str, Any], hours: Mapping[str, Any]) -> dict[str, Any]:
-    """Строка покупки под тремя ценами и подпись к кнопке в шапке блока."""
+def _tickets_view(
+    card: Mapping[str, Any], visit: Mapping[str, Any], hours: Mapping[str, Any], has_slots: bool = False
+) -> dict[str, Any]:
+    """Строка покупки под тремя ценами и подпись к кнопке в шапке блока.
+
+    Правило: раз показываем сеансы, клиент должен знать, как купить билет — ссылка на
+    покупку или «только в кассе». Если ни ссылки, ни режима нет, сеансы есть — значит касса.
+    """
     t = _mapping(visit.get("tickets"))
     mode = t.get("mode")
     has_url = bool(str(card.get("tickets_url") or "").strip())
@@ -293,6 +299,8 @@ def _tickets_view(card: Mapping[str, Any], visit: Mapping[str, Any], hours: Mapp
             mode = "box_office"
         elif card.get("schedule_mode") == "phone":
             mode = "phone"
+    if mode is None and has_slots:
+        mode = "box_office"
     if mode in ("online", "same_day") and not has_url:
         mode = "box_office"
     kassa = _mapping(hours.get("kassa"))
@@ -492,7 +500,11 @@ def _price_key(text: str) -> float:
 
 
 def visit_view(
-    card: Mapping[str, Any], *, has_trainers: bool = False, rental_price: str = ""
+    card: Mapping[str, Any],
+    *,
+    has_trainers: bool = False,
+    rental_price: str = "",
+    has_slots: bool | None = None,
 ) -> dict[str, Any]:
     """Всё, что блоки 2–7 показывают сверх расписания. Пустые части — пустые списки.
 
@@ -502,9 +514,11 @@ def visit_view(
     visit = _mapping(card.get("visit_info"))
     hours = _mapping(card.get("opening_hours"))
     school = _mapping(visit.get("school"))
+    if has_slots is None:
+        has_slots = int(card.get("future_session_count") or 0) > 0
     return {
         "blocks": list(PLACE_BLOCKS),
-        "tickets": _tickets_view(card, visit, hours),
+        "tickets": _tickets_view(card, visit, hours, bool(has_slots)),
         "rental_included": rental_included(card),
         "child_age_max": visit.get("child_age_max"),
         "sizes": str(_mapping(visit.get("rental")).get("sizes") or ""),
