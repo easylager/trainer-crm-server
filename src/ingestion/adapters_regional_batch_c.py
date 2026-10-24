@@ -196,7 +196,8 @@ def vitebsk_slots_from_schedule(payload: Any, config: dict) -> list[ExtractedSlo
                         ends_at_local=_add_minutes(start, duration),
                         kind_raw="Массовое катание",
                         price_adult=session.get("minPrice"),
-                        price_child=None,
+                        # hc-vitebsk.by/uslugi/massovoe-katanie: один билет для граждан, детского тарифа нет
+                        price_child=session.get("minPrice"),
                         price_rental=None,
                         source_id=source_id,
                         session_label=None,

@@ -86,7 +86,7 @@ async def test_vitebsk_ds_matches_expected_fixture() -> None:
         slot = by_key[(gold["local_date"], gold["starts_at_local"])]
         assert slot.ends_at_local == gold["ends_at_local"]
         assert slot.price_adult == gold["price_adult_minor"]
-        assert slot.price_child is None
+        assert slot.price_child == gold["price_adult_minor"]
         assert slot.price_rental is None
         assert slot.external_url == gold["external_url"]
         assert slot.source_id == gold["source_id"]
