@@ -1731,7 +1731,7 @@
       return (f[k].varies ? 'от ' : '') + moneyMinor(f[k].minor, f.currency);
     }
     var cells = [];
-    if (f.adult) cells.push(['Вход', money('adult'), f.rental ? 'свои коньки' : 'взрослый']);
+    if (f.adult) cells.push(['Взрослый', money('adult'), '']);
     if (f.child) cells.push(['Детский', money('child'), v.child_age_max ? 'до ' + v.child_age_max + ' лет' : '']);
     if (f.rental) cells.push(['Прокат', money('rental'), v.sizes ? 'размеры ' + v.sizes : 'коньки']);
     if (!cells.length) return '';

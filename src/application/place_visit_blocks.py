@@ -55,13 +55,7 @@ def prices_html(slots: list[Mapping[str, Any]], vv: Mapping[str, Any], *, curren
     included = bool(vv.get("rental_included"))
     cells: list[tuple[str, str, str]] = []
     if "adult" in floors:
-        if included:
-            adult_sub = "вход + коньки"
-        elif "rental" in floors:
-            adult_sub = "свои коньки"
-        else:
-            adult_sub = "взрослый"
-        cells.append(("Вход", money("adult"), adult_sub))
+        cells.append(("Взрослый", money("adult"), "вход + коньки" if included else ""))
     if "child" in floors:
         if included:
             child_sub = "вход + коньки"
