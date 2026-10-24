@@ -779,6 +779,7 @@
     var mass = M.massAccessView(state.card);
     if (!mass.enabled) return '';
     var html = '<div class="arena-sec"><p class="arena-h">Когда можно приехать</p>';
+    var headOnly = html;
     if (mass.freeEntry) {
       html += '<p class="arena-kicker arena-kicker--ok">Вход бесплатно · бронь слотов не нужна</p>';
     }
@@ -822,7 +823,8 @@
     if (foot.length) {
       html += '<p class="arena-sub arena-sub--tight">' + esc(foot.join(' · ')) + '</p>';
     }
-    html += '</div>';
+    // Прайс проката сам по себе не «когда приехать»: без часов и пометок заголовок остался бы пустым.
+    html = html === headOnly ? '' : html + '</div>';
     if (mass.rentalCatalog.length && !visit()) {
       html += '<div class="arena-sec"><p class="arena-h">' + esc(mass.rentalTitle || 'Прокат инвентаря') + '</p><ul class="arena-price-list">';
       mass.rentalCatalog.forEach(function (row) {
