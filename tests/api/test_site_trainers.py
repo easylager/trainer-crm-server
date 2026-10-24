@@ -142,7 +142,8 @@ async def test_place_page_without_trainers_invites_the_first_one(app_use_test_db
     section = re.search(r'<section class="b-sec b-sec--place" id="more">(.*?)</section>', html, re.S)
     assert section, "нет блока «Ещё на катке»"
     assert "Станьте первым тренером на странице этого катка" in section.group(1)
-    assert 'class="b-coach tg-out" href="/trainers" data-coach-open' in section.group(1)
+    rink_landing = "/trainers" + place["path"][len("/p"):]
+    assert f'class="b-coach tg-out" href="{rink_landing}" data-coach-open' in section.group(1)
     assert "startapp=trainer_" not in section.group(1)
     assert 'id="trainers"' not in shop_html and "data-coach-open" not in shop_html
 

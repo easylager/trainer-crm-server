@@ -120,18 +120,5 @@
   "coach.entry_sub": "Появитесь в этом списке — ученики запишутся сами",
   "coach.entry_first_title": "Тренируете здесь?",
   "coach.entry_first_sub": "Станьте первым тренером на странице этого катка",
-  "coach.entry_go": "Как",
-  "coach.sheet_kicker": "Glide для тренеров",
-  "coach.sheet_title": "Ученики «{place}» записываются к вам сами",
-  "coach.sheet_title_plain": "Ученики записываются к вам сами",
-  "coach.fact_list": "Ваша карточка в списке тренеров этого катка",
-  "coach.fact_list_sub": "После проверки профиля вас видят те, кто ищет здесь лёд",
-  "coach.fact_link": "Ссылка на запись вместо переписки",
-  "coach.fact_link_sub": "Ученик выбирает свободное время, вам приходит заявка",
-  "coach.fact_auto": "Напоминания и абонементы считаются сами",
-  "coach.fact_auto_sub": "Всё в Telegram, ничего не нужно устанавливать",
-  "coach.cta": "Начать в Telegram",
-  "coach.trial": "14 дней бесплатно · без карты",
-  "coach.more": "Подробнее о Glide для тренеров",
-  "coach.close": "Закрыть"
+  "coach.entry_go": "Как"
 }

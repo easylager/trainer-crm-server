@@ -52,36 +52,35 @@ async def test_place_without_sessions_gets_floating_button_not_a_dock(app_use_te
 
 
 @pytest.mark.asyncio
-async def test_coach_entry_closes_trainer_list_and_opens_mini_landing(app_use_test_db, db_session) -> None:
+async def test_coach_entry_closes_trainer_list_and_leads_to_rink_landing(app_use_test_db, db_session) -> None:
     place = await _place(db_session, name="ТЦ Замок")
     name = f"Анна{uuid.uuid4().hex[:4]}"
     async with _client() as client:
         await _trainer_on(db_session, client, place, first_name=name)
         html = (await client.get(place["path"])).text
-        sheet_js = await client.get("/static/share/coach-sheet.js")
+        coach_js = await client.get("/static/share/coach-sheet.js")
     section = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', html, re.S)
     assert section
     body = section.group(1)
     # Строка — после списка тренеров, а не над ним.
     assert body.index(name) < body.index("Тренируете на этом катке?")
-    assert "Ученики «ТЦ Замок» записываются к вам сами" in body
-    # «Начать» несёт каток в /join (онбординг откроется с ним), «подробнее» — лендинг этого катка.
+    # Без промежуточной шторки: сразу лендинг этого катка, тап считается (coach_open).
     rink_landing = "/trainers" + place["path"][len("/p"):]
-    assert f'href="/join?arena={place["arena_id"]}" data-coach-join' in body
-    assert f'class="b-coach-sheet__more" href="{rink_landing}"' in body
+    assert f'class="b-coach tg-out" href="{rink_landing}" data-coach-open' in body
     assert f"arena_id={place['arena_id']}" in body
-    assert sheet_js.status_code == 200
+    assert "b-coach-sheet" not in html
+    assert coach_js.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_coach_sheet_more_opens_the_rink_landing(app_use_test_db, db_session) -> None:
+async def test_coach_entry_opens_the_rink_landing(app_use_test_db, db_session) -> None:
     place = await _place(db_session, name="Каток Подробный")
     async with _client() as client:
         html = (await client.get(place["path"])).text
-        more = re.search(r'class="b-coach-sheet__more" href="([^"]+)"', html)
-        assert more, "в шторке нет «подробнее»"
-        landing = await client.get(more.group(1))
-    assert more.group(1).startswith("/trainers/")
+        link = re.search(r'class="b-coach tg-out" href="([^"]+)"', html)
+        assert link, "нет входа для тренера"
+        landing = await client.get(link.group(1))
+    assert link.group(1).startswith("/trainers/")
     assert landing.status_code == 200
     assert "Тренерам катка «Каток Подробный»" in landing.text
 
