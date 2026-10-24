@@ -3,13 +3,14 @@
 Дату мы не обещаем: карточка говорит «обычно выкладывает расписание по пятницам».
 Чистые функции без БД.
 
-``schedule_habit(waves, tz)`` → ``{level, weekday}``:
+``schedule_habit(waves, tz, now=...)`` → ``{level, weekday}``:
 
 * ``day`` — ≥3 волн в ≥3 разных ISO-неделях и ≥75% из них в один день недели W;
   ``weekday`` = W (0 — понедельник … 6 — воскресенье).
 * ``week`` — иначе ≥2 волн и медиана промежутков 5–9 дней; ``weekday`` = ``None``.
 * ``none`` — всё остальное: мало волн, разброс, «скользящее окно» (медиана
-  промежутков ≤2 дней — новые дни добавляются каждую ночь).
+  промежутков ≤2 дней — новые дни добавляются каждую ночь), а также устаревшая
+  привычка: последняя волна старше 14 дней от ``now`` (по датам в поясе катка).
 
 Функции передаются волны окна (``waves_in_window``: последние 42 дня от ``now``).
 ``seed`` — точка отсчёта, а не публикация, и не считается. Волны ближе 6 ч к
@@ -41,6 +42,8 @@ WEEK_MIN_WAVES = 2
 WEEK_GAP_MIN_DAYS = 5
 WEEK_GAP_MAX_DAYS = 9
 SLIDING_GAP_MAX_DAYS = 2
+# Последняя волна старше стольких дней (по датам в поясе катка) — привычки нет.
+STALE_AFTER_DAYS = 14
 
 LEVEL_DAY = "day"
 LEVEL_WEEK = "week"
@@ -105,10 +108,15 @@ def _iso_week(day: date) -> tuple[int, int]:
     return iso[0], iso[1]
 
 
-def schedule_habit(waves: Iterable[ScheduleWave], tz: str | tzinfo | None) -> dict[str, Any]:
+def schedule_habit(
+    waves: Iterable[ScheduleWave], tz: str | tzinfo | None, *, now: datetime
+) -> dict[str, Any]:
     days = wave_days(waves, tz)
     if len(days) < WEEK_MIN_WAVES:
         return no_habit()
+    today = _aware(now).astimezone(resolve_zone(tz)).date()
+    if (today - days[-1]).days > STALE_AFTER_DAYS:
+        return no_habit()  # каток замолчал: привычка устарела
     gaps = [(later - earlier).days for earlier, later in zip(days, days[1:])]
     typical_gap = median(gaps)
     if typical_gap <= SLIDING_GAP_MAX_DAYS:

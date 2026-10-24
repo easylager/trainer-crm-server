@@ -125,6 +125,7 @@ async def run(
                 now=now,
             ),
             tz_name,
+            now=now,
         )
         levels[habit["level"]] += 1
         detail = f" weekday={_WEEKDAYS_RU[habit['weekday']]}" if habit["weekday"] is not None else ""

@@ -21,8 +21,11 @@ def w(day: str, hhmm: str = "15:00", source: str = "parser") -> ScheduleWave:
     return ScheduleWave(detected_at=datetime(y, m, d, hh, mm, tzinfo=MINSK), source=source)
 
 
-def habit(waves, tz="Europe/Minsk"):
-    return schedule_habit(waves, tz)
+NOW = datetime(2026, 10, 24, 12, 0, tzinfo=MINSK)
+
+
+def habit(waves, tz="Europe/Minsk", now=NOW):
+    return schedule_habit(waves, tz, now=now)
 
 
 # --- мало данных ----------------------------------------------------------------------
@@ -171,6 +174,49 @@ def test_naive_datetimes_are_utc_and_unknown_tz_falls_back() -> None:
     waves = [ScheduleWave(detected_at=datetime(2026, 10, d, 12, 0), source="parser") for d in (9, 16, 23)]
     assert habit(waves, tz=None)["level"] == "day"
     assert habit(waves, tz="Not/AZone")["level"] == "day"
+
+
+# --- устаревшая привычка: последняя волна старше 14 дней -------------------------------
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        (datetime(2026, 11, 6, 23, 59, tzinfo=MINSK), {"level": "day", "weekday": FRI}),  # 14 дней
+        (datetime(2026, 11, 7, 0, 0, tzinfo=MINSK), NONE),  # 15 дней
+    ],
+)
+def test_stale_day_habit_boundary(now: datetime, expected: dict) -> None:
+    waves = [w("2026-10-09"), w("2026-10-16"), w("2026-10-23")]
+    assert habit(waves, now=now) == expected
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        (datetime(2026, 10, 27, 23, 0, tzinfo=MINSK), WEEK),  # 14 дней после 13.10
+        (datetime(2026, 10, 28, 0, 30, tzinfo=MINSK), NONE),  # 15 дней
+    ],
+)
+def test_stale_week_habit_boundary(now: datetime, expected: dict) -> None:
+    waves = [w("2026-10-06", "18:07"), w("2026-10-13", "15:30")]  # «Юность»
+    assert habit(waves, now=now) == expected
+
+
+def test_junost_on_2026_10_24_is_still_week() -> None:
+    # 13.10 → 24.10 = 11 дней < 14: по правилу 14 дней «Юность» пока «week», none — с 28.10.
+    assert habit([w("2026-10-06", "18:07"), w("2026-10-13", "15:30")]) == WEEK
+
+
+def test_staleness_uses_arena_local_date() -> None:
+    # последняя волна 22.10 22:30 UTC = пт 23.10 01:30 Минск; now 06.11 12:00 — та же дата в обоих поясах
+    waves = [
+        ScheduleWave(detected_at=datetime(2026, 10, d, 22, 30, tzinfo=timezone.utc), source="parser")
+        for d in (8, 15, 22)
+    ]
+    now = datetime(2026, 11, 6, 12, 0, tzinfo=timezone.utc)
+    assert habit(waves, now=now) == {"level": "day", "weekday": FRI}  # Минск: 23.10 → 06.11 = 14 дней
+    assert habit(waves, tz="UTC", now=now) == NONE  # UTC: 22.10 → 06.11 = 15 дней
 
 
 # --- окно 42 дня ----------------------------------------------------------------------

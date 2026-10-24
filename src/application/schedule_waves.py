@@ -275,6 +275,8 @@ async def schedule_card_fields(
         logger.exception("schedule card fields failed arena_id=%s", arena_id)
         return empty_card_fields()
     return {
-        "schedule_habit": schedule_habit(waves_in_window(waves, now=now), resolve_zone(tz_name)),
+        "schedule_habit": schedule_habit(
+            waves_in_window(waves, now=now), resolve_zone(tz_name), now=now
+        ),
         "schedule_horizon": horizon.isoformat() if horizon is not None else None,
     }
