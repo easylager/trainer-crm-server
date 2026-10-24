@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -25,6 +26,8 @@ from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE
 from src.ingestion.cpu_work import run_cpu_bound
 from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
+
+_log = logging.getLogger(__name__)
 
 _MONTHS = {
     "января": 1,
@@ -418,6 +421,14 @@ _IMG_FULL = re.compile(r'<img[^>]+class="[^"]*size-full[^"]*"[^>]+src="([^"]+\.j
 _WEEK_FILENAME = re.compile(r"(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{4})")
 _HEADER_DAY = re.compile(r"^\d{1,2}$")
 _OCR_TIME_TOKEN = re.compile(r"^(\d{1,2})[.:](\d{2})-(\d{1,2})[.:](\d{2})$")
+_WEEKDAY_TOKEN = re.compile(
+    r"^\(?(понедельник|вторник|среда|четверг|пятница|суббота|воскресенье)\)?[,.]?$", re.IGNORECASE
+)
+_WEEKDAY_INDEX = {
+    "понедельник": 0, "вторник": 1, "среда": 2, "четверг": 3,
+    "пятница": 4, "суббота": 5, "воскресенье": 6,
+}
+_WEEKDAY_BELOW_PX = 90
 
 
 def _shklov_find_latest_post(index_html: str, title_contains: str) -> str | None:
@@ -474,6 +485,41 @@ def _shklov_month_year(filename: str) -> tuple[int, int]:
     return end_month, year
 
 
+def _shklov_week_window(filename: str) -> tuple[date, date] | None:
+    """Период недели из имени файла ``19.10-25.10.2026.jpg``; переход через год учтён."""
+    m = _WEEK_FILENAME.search(filename)
+    if not m:
+        return None
+    start_day, start_month, end_day, end_month, year = (int(g) for g in m.groups())
+    try:
+        end = date(year, end_month, end_day)
+        start = date(year - 1 if start_month > end_month else year, start_month, start_day)
+    except ValueError:
+        return None
+    return (start, end) if start <= end else None
+
+
+def _shklov_resolve_date(day_num: int, weekday: int | None, window: tuple[date, date]) -> date | None:
+    """Дата сеанса внутри периода недели; ``None`` — данные противоречат друг другу.
+
+    Опечатка в числе («15 октября (четверг)» вместо 22-го) лечится днём недели: в окне
+    из семи дней у него ровно одна дата. Если число и день недели оба правдоподобны, но
+    не сходятся, угадывать нельзя — слот не публикуем.
+    """
+    start, end = window
+    days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+    by_number = [d for d in days if d.day == day_num]
+    by_weekday = [d for d in days if weekday is not None and d.weekday() == weekday]
+    if by_number:
+        picked = by_number[0]
+        if weekday is not None and picked.weekday() != weekday:
+            return None
+        return picked
+    if len(by_weekday) == 1:
+        return by_weekday[0]
+    return None
+
+
 def _run_tesseract_tsv(image_bytes: bytes) -> str:
     proc = subprocess.run(
         ["tesseract", "stdin", "stdout", "-l", "rus", "--psm", "6", "tsv"],
@@ -488,8 +534,8 @@ async def _ocr_tsv(image_bytes: bytes) -> str:
     return await run_cpu_bound(_run_tesseract_tsv, image_bytes)
 
 
-def _shklov_parse_grid(tsv_text: str) -> list[tuple[int, str, str]]:
-    """(day_of_month, start, end) using column x-position of tesseract TSV word tokens."""
+def _shklov_parse_grid_with_weekdays(tsv_text: str) -> list[tuple[int, int | None, str, str]]:
+    """(day_of_month, weekday|None, start, end) by column x-position of tesseract TSV tokens."""
     tokens: list[tuple[int, int, int, str]] = []
     lines = tsv_text.splitlines()
     for line in lines[1:]:
@@ -510,26 +556,39 @@ def _shklov_parse_grid(tsv_text: str) -> list[tuple[int, str, str]]:
         tokens.append((left, top, width, text))
 
     headers = sorted(
-        ((left + width / 2, int(text)) for left, top, width, text in tokens if _HEADER_DAY.fullmatch(text)),
+        ((left + width / 2, top, int(text)) for left, top, width, text in tokens if _HEADER_DAY.fullmatch(text)),
         key=lambda item: item[0],
     )
     if not headers:
         return []
-    centers = [c for c, _ in headers]
-    days = [d for _, d in headers]
+    centers = [c for c, _, _ in headers]
+    days = [d for _, _, d in headers]
+    weekdays: list[int | None] = [None] * len(headers)
+    for left, top, width, text in tokens:
+        wm = _WEEKDAY_TOKEN.match(text)
+        if not wm:
+            continue
+        center = left + width / 2
+        idx = min(range(len(centers)), key=lambda i: abs(centers[i] - center))
+        if 0 <= top - headers[idx][1] <= _WEEKDAY_BELOW_PX:
+            weekdays[idx] = _WEEKDAY_INDEX[wm.group(1).lower()]
 
-    sessions: list[tuple[int, str, str]] = []
+    sessions: list[tuple[int, int | None, str, str]] = []
     for left, _top, width, text in tokens:
         tm = _OCR_TIME_TOKEN.match(text)
         if not tm:
             continue
         center = left + width / 2
         idx = min(range(len(centers)), key=lambda i: abs(centers[i] - center))
-        day_num = days[idx]
         start = _fmt(int(tm.group(1)), int(tm.group(2)))
         end = _fmt(int(tm.group(3)), int(tm.group(4)))
-        sessions.append((day_num, start, end))
+        sessions.append((days[idx], weekdays[idx], start, end))
     return sessions
+
+
+def _shklov_parse_grid(tsv_text: str) -> list[tuple[int, str, str]]:
+    """(day_of_month, start, end) — прежний вид без дня недели."""
+    return [(day, start, end) for day, _wd, start, end in _shklov_parse_grid_with_weekdays(tsv_text)]
 
 
 def _shklov_prices(html: str) -> tuple[int | None, int | None, int | None]:
@@ -571,14 +630,26 @@ class ShklovArenaParser(IceParser):
         image_bytes, filename = loaded
         prices_html = await load_source_text(job, filename="uslugi.html", url_keys=("prices_url",))
         month, year = _shklov_month_year(filename)
+        window = _shklov_week_window(filename)
         adult, child, rental = _shklov_prices(prices_html)
         tsv_text = await _ocr_tsv(image_bytes)
         age_note = "детский до 14 лет; прокат дет. 4.10, в каноне взр. 4.20"
         slots: list[ExtractedSlot] = []
-        for day_num, start, end in _shklov_parse_grid(tsv_text):
+        date_conflicts: list[str] = []
+        for day_num, weekday, start, end in _shklov_parse_grid_with_weekdays(tsv_text):
+            if window is not None:
+                local_date = _shklov_resolve_date(day_num, weekday, window)
+                if local_date is None:
+                    date_conflicts.append(f"{day_num} / weekday={weekday} / {start}-{end}")
+                    continue
+            else:
+                try:
+                    local_date = date(year, month, day_num)
+                except ValueError:
+                    continue
             slots.append(
                 ExtractedSlot(
-                    local_date=date(year, month, day_num).isoformat(),
+                    local_date=local_date.isoformat(),
                     starts_at_local=start,
                     ends_at_local=end,
                     kind_raw="Массовое катание",
@@ -588,10 +659,17 @@ class ShklovArenaParser(IceParser):
                     age_note=age_note,
                 )
             )
+        if date_conflicts:
+            _log.warning("shklov: слоты пропущены, число и день недели не сходятся: %s (%s)", date_conflicts, filename)
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,
-            snapshot={"photo_filename": filename, "prices": prices_html, "ocr_tsv": tsv_text},
+            snapshot={
+                "photo_filename": filename,
+                "prices": prices_html,
+                "ocr_tsv": tsv_text,
+                "date_conflicts": date_conflicts,
+            },
             slots=slots,
         )
 

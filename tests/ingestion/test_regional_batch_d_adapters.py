@@ -326,3 +326,42 @@ async def test_gomel_lds_matches_expected_fixture() -> None:
     assert fri.price_adult_minor == 1200
     thu = by_key[(date(2026, 9, 3), "19:00")]
     assert thu.price_adult_minor == 1000
+
+
+def test_shklov_resolve_date_fixes_typo_by_weekday_and_rejects_conflicts() -> None:
+    from src.ingestion.adapters_regional_batch_d import _shklov_resolve_date, _shklov_week_window
+
+    window = _shklov_week_window("19.10-25.10.2026.jpg")
+    assert window == (date(2026, 10, 19), date(2026, 10, 25))
+    # «15 октября (четверг)» — опечатка, 15-го нет в неделе; четверг этой недели — 22-е.
+    assert _shklov_resolve_date(15, 3, window) == date(2026, 10, 22)
+    assert _shklov_resolve_date(20, 1, window) == date(2026, 10, 20)
+    # число есть в неделе, но день недели другой — не угадываем.
+    assert _shklov_resolve_date(21, 4, window) is None
+    # без дня недели опечатку не вылечить, слот не публикуем.
+    assert _shklov_resolve_date(15, None, window) is None
+
+
+def test_shklov_week_window_across_month_and_year_boundaries() -> None:
+    from src.ingestion.adapters_regional_batch_d import _shklov_resolve_date, _shklov_week_window
+
+    window = _shklov_week_window("26.10-01.11.2026.jpg")
+    assert window == (date(2026, 10, 26), date(2026, 11, 1))
+    assert _shklov_resolve_date(28, 2, window) == date(2026, 10, 28)
+    assert _shklov_resolve_date(1, 6, window) == date(2026, 11, 1)
+    assert _shklov_week_window("28.12-03.01.2027.jpg") == (date(2026, 12, 28), date(2027, 1, 3))
+
+
+@pytest.mark.asyncio
+async def test_shklov_real_photo_with_typo_gets_corrected_dates() -> None:
+    skip_unless_tesseract_rus()
+    config = dict(SHKLOV_ARENA_CONFIG)
+    config["photo_filename"] = "19.10-25.10.2026.jpg"
+    job = ParserJob(
+        id=1, arena_id=42, parser_key=PARSER_KEY_SHKLOV_ARENA, is_enabled=True, cadence="daily",
+        next_run_at=None, last_run_at=None, config={**config, "fixture_dir": str(_FIXTURES / "shklov-arena")},
+    )
+    extraction = await ShklovArenaParser().extract(job)
+    got = sorted((s.local_date, s.starts_at_local) for s in extraction.slots)
+    assert got == [("2026-10-20", "14:00"), ("2026-10-21", "14:15"), ("2026-10-22", "13:30")]
+    assert extraction.snapshot["date_conflicts"] == []
