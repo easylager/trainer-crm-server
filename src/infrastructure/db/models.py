@@ -1055,6 +1055,30 @@ class ClientIceWatch(Base):
     active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # TASK-328: latest future session date at subscription; only sessions past it are «new».
+    baseline_horizon_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
+    failed_attempts: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
+    deactivated_reason: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+
+
+ICE_WATCH_DEACTIVATED_UNREACHABLE = "unreachable"
+ICE_WATCH_DEACTIVATED_FAILED = "failed"
+
+
+class ClientIceWatchDelivery(Base):
+    """One send attempt of an ice watch reminder (TASK-328). Ids only — no message text."""
+
+    __tablename__ = "client_ice_watch_deliveries"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    watch_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("client_ice_watches.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[int] = mapped_column(Integer(), nullable=False)
+    arena_id: Mapped[int] = mapped_column(Integer(), nullable=False)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ok: Mapped[bool] = mapped_column(nullable=False)
+    error: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
 
 class ClientMerge(Base):
