@@ -12,7 +12,12 @@ from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
 import pytest
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramNetworkError,
+    TelegramRetryAfter,
+)
 from aiogram.methods import SendMessage
 from sqlalchemy import text
 
@@ -216,7 +221,7 @@ async def test_new_dates_past_baseline_fire_once_with_new_range(db_session) -> N
     chat_id, body, _markup = send.await_args.args
     assert chat_id == tid
     plain = body.replace(NBSP, " ")
-    assert plain.startswith("<b>«Юность»: новое расписание</b>\n")
+    assert plain.startswith("<b>Юность: новое расписание</b>\n")
     assert f"{first.day} " in plain and f"{last.day} " in plain
     assert "17:00" in plain
     assert "20:00" not in plain
@@ -384,6 +389,34 @@ async def test_transient_failure_then_success_delivers(db_session) -> None:
     row = await _watch_row(db_session, watch["id"])
     assert row["active"] is False and row["last_notified_at"] is not None
     assert [j["ok"] for j in await _journal(db_session, watch["id"])] == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_flood_limit_does_not_penalize_and_stops_the_pass(db_session) -> None:
+    """429 от Telegram: строка журнала ok=false, failed_attempts не растёт, остальные — в следующем проходе."""
+    city_id, arena_id, tid, client_id = await _setup(db_session)
+    first = await _subscribe(db_session, client_id=client_id, tid=tid, arena_id=arena_id, city_id=city_id)
+    tid2 = _tid()
+    client2 = await _client(db_session, tid2)
+    second = await _subscribe(db_session, client_id=client2, tid=tid2, arena_id=arena_id, city_id=city_id)
+    await _session(db_session, arena_id, days=2)
+
+    send = AsyncMock(side_effect=TelegramRetryAfter(_METHOD, "Too Many Requests: retry after 7", 7))
+    stats = await _pass(db_session, send)
+    assert stats.flood_limited is True
+    assert send.await_count == 1, "pass must stop after the first 429"
+    row1 = await _watch_row(db_session, first["id"])
+    assert row1["active"] is True and row1["failed_attempts"] == 0 and row1["deactivated_reason"] is None
+    journal1 = await _journal(db_session, first["id"])
+    assert len(journal1) == 1 and journal1[0]["ok"] is False
+    assert "TelegramRetryAfter" in journal1[0]["error"]
+    assert await _journal(db_session, second["id"]) == []
+    assert (await _watch_row(db_session, second["id"]))["active"] is True
+
+    ok_send = AsyncMock()
+    stats2 = await _pass(db_session, ok_send)
+    assert stats2.sent == 2 and stats2.flood_limited is False
+    assert {c.args[0] for c in ok_send.await_args_list} == {tid, tid2}
 
 
 # --- AC5: суррогатный id MAX ----------------------------------------------------------

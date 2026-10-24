@@ -16,7 +16,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -453,6 +453,11 @@ class IceWatchPassStats:
     failed: int = 0
     unreachable: int = 0
     gave_up: int = 0
+    flood_limited: bool = False
+
+
+class _FloodLimited(Exception):
+    """Telegram ответил 429: остаток прохода откладываем, подписки не штрафуем."""
 
 
 # Telegram: чат больше недоступен — повтор не поможет.
@@ -605,6 +610,13 @@ async def deliver_ice_watch_reminders(
                 reply_markup_factory=reply_markup_factory,
                 stats=stats,
             )
+        except _FloodLimited:
+            stats.flood_limited = True
+            logger.warning(
+                "ice watch delivery pass stopped by Telegram flood limit at watch_id=%s; rest goes next pass",
+                watch.get("id"),
+            )
+            break
         except Exception:
             # Сбой учёта (БД) — откатываем только эту подписку; она останется активной и
             # пройдёт на следующем проходе. Остальные подписки не ждут.
@@ -663,6 +675,10 @@ async def _deliver_one(
             ok=False,
             error=error,
         )
+        if isinstance(exc, TelegramRetryAfter):
+            # Флуд-лимит — не вина подписки: failed_attempts не трогаем, проход прерываем.
+            await session.commit()
+            raise _FloodLimited() from exc
         if is_unreachable_chat_error(exc):
             await repo.deactivate_with_reason(watch_id, ICE_WATCH_DEACTIVATED_UNREACHABLE)
             stats.unreachable += 1
