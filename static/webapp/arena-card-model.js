@@ -695,6 +695,49 @@
     };
   }
 
+  /* TASK-330: пустая карточка катка, который ведёт расписание. Даты не обещаем —
+     только наблюдение о привычке катка («Обычно по пятницам») и колокольчик. */
+  function copyWith(key, fallback, kw) {
+    var GC = glideCopy();
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t(key, kw);
+      if (label && label !== key) return String(label);
+    }
+    return String(fallback).replace(/\{(\w+)\}/g, function (match, name) {
+      return kw && Object.prototype.hasOwnProperty.call(kw, name) ? String(kw[name]) : match;
+    });
+  }
+
+  var DOW_DAT_PL = ['понедельникам', 'вторникам', 'средам', 'четвергам', 'пятницам', 'субботам', 'воскресеньям'];
+
+  function scheduleWaitView(card) {
+    card = card || {};
+    var habit = card.schedule_habit && typeof card.schedule_habit === 'object' ? card.schedule_habit : {};
+    var kicker = '';
+    var title = '';
+    var wd = habit.weekday;
+    if (habit.level === 'day' && typeof wd === 'number' && wd >= 0 && wd <= 6 && Math.floor(wd) === wd) {
+      var day = copyLine('schedule.dow_' + wd, DOW_DAT_PL[wd]);
+      title = copyWith('schedule.habit_day', 'Обычно по\u00a0{day}', { day: day });
+    } else if (habit.level === 'week') {
+      title = copyLine('schedule.habit_week', 'Обычно раз в\u00a0неделю');
+    }
+    if (title) {
+      kicker = copyLine('schedule.wait_kicker', 'Новое расписание');
+    } else {
+      title = copyLine('schedule.wait_none', 'Ждём новое расписание');
+    }
+    return {
+      kicker: kicker,
+      title: title,
+      sub: copyLine('schedule.wait_sub', 'Сообщим в\u00a0Telegram, как только появится.'),
+      cta: copyLine('schedule.bell_cta', 'Сообщить, когда появится'),
+      note: copyLine('schedule.bell_note', 'Одно сообщение, потом колокольчик сам выключится.'),
+      on: copyLine('schedule.bell_on', 'Напоминание включено'),
+      off: copyLine('schedule.bell_off', 'Выключить'),
+    };
+  }
+
   function iceSectionMode(opts) {
     opts = opts || {};
     if (opts.hasSessions) return 'ribbon';
@@ -725,7 +768,10 @@
     if (sectionMode === 'ribbon') {
       return { mode: 'ribbon', banner: null, showRibbon: true };
     }
-    return scheduleAsk(card);
+    var ask = scheduleAsk(card);
+    // TASK-330: сеансов нет, но каток расписание ведёт — ждём его и зовём на колокольчик.
+    if (card.schedule_tracked === true) ask.wait = scheduleWaitView(card);
+    return ask;
   }
 
   function seasonClosedBanner(card) {
@@ -1424,6 +1470,7 @@
     focusState: focusState,
     iceSectionMode: iceSectionMode,
     iceFeedView: iceFeedView,
+    scheduleWaitView: scheduleWaitView,
     seasonClosedBanner: seasonClosedBanner,
     seasonRemindView: seasonRemindView,
     closedSeasonHoursLabel: closedSeasonHoursLabel,

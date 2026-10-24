@@ -177,8 +177,8 @@
     var on = state.iceWatchKinds && state.iceWatchKinds[kind];
     // Выкл — 🔔; вкл — 🔕. Текст только в подсказке, не отдельной полосой под заголовком.
     var hint = on
-      ? 'Напоминание в Telegram включено. Нажмите, чтобы отключить'
-      : 'Напомнить в Telegram о подходящих сеансах';
+      ? copyLine('schedule.bell_on', 'Напоминание включено')
+      : copyLine('schedule.bell_hint', 'Сообщить о\u00a0новом расписании');
     return (
       '<button type="button" class="arena-watch-btn' +
       (on ? ' arena-watch-btn--on' : '') +
@@ -222,6 +222,28 @@
     }
   }
 
+  /* TASK-330: бот пишет первым, только если человек это разрешил. Mini App, открытая по
+     прямой ссылке без запуска бота, иначе оформила бы подписку, которую некуда доставить. */
+  function ensureWriteAccess(done) {
+    var tg = global.Telegram && global.Telegram.WebApp;
+    var user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+    var supported =
+      tg &&
+      typeof tg.requestWriteAccess === 'function' &&
+      (typeof tg.isVersionAtLeast !== 'function' || tg.isVersionAtLeast('6.9'));
+    if (!supported || (user && user.allows_write_to_pm === true)) {
+      done(true);
+      return;
+    }
+    try {
+      tg.requestWriteAccess(function (granted) {
+        done(!!granted);
+      });
+    } catch (e) {
+      done(true);
+    }
+  }
+
   function subscribeIceWatch(kind) {
     var id = initData();
     if (!id || !state.card) {
@@ -230,6 +252,17 @@
       return;
     }
     kind = kind || 'sessions';
+    ensureWriteAccess(function (granted) {
+      if (granted) {
+        postIceWatch(kind, id);
+        return;
+      }
+      var tg = global.Telegram && global.Telegram.WebApp;
+      if (tg && tg.showAlert) tg.showAlert('Без разрешения писать бот не\u00a0сможет прислать напоминание.');
+    });
+  }
+
+  function postIceWatch(kind, id) {
     fetch('/api/webapp/client/ice-watches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
@@ -243,6 +276,7 @@
     })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (body) {
+        var wasWaitBlock = kind === 'sessions' && !hasAnySessions();
         state.iceWatchKinds = state.iceWatchKinds || {};
         state.iceWatchIds = state.iceWatchIds || {};
         state.iceWatchKinds[kind] = true;
@@ -251,11 +285,16 @@
         }
         paint();
         var tg = global.Telegram && global.Telegram.WebApp;
-        if (tg && tg.showAlert) tg.showAlert('🔔 Уведомим в Telegram, когда появятся подходящие сеансы.');
+        // На пустой карточке включение видно в самом блоке — лишний алерт не нужен.
+        if (!wasWaitBlock && tg && tg.showAlert) {
+          tg.showAlert('Сообщим в\u00a0Telegram, как только появится новое расписание.');
+        }
       })
-      .catch(function () {
+      .catch(function (status) {
         var tg = global.Telegram && global.Telegram.WebApp;
-        if (tg && tg.showAlert) tg.showAlert('Не удалось оформить подписку. Завершите регистрацию в боте.');
+        if (!tg || !tg.showAlert) return;
+        if (status === 409) tg.showAlert('Напоминания пока приходят только в\u00a0Telegram.');
+        else tg.showAlert('Не удалось оформить подписку. Завершите регистрацию в боте.');
       });
   }
 
@@ -1267,6 +1306,53 @@
     return html;
   }
 
+  var BELL_PATHS = '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/>';
+
+  /** TASK-330: сеансов нет, каток расписание ведёт — привычка катка и колокольчик главным действием. */
+  function renderScheduleWait(feed) {
+    var w = feed.wait;
+    var canWatch = !!initData();
+    var on = !!(state.iceWatchKinds && state.iceWatchKinds.sessions);
+    var bell = '';
+    if (canWatch && on) {
+      bell =
+        '<div class="arena-wait__on">' +
+        '<svg class="arena-wait__ico" viewBox="0 0 24 24" aria-hidden="true">' + BELL_PATHS + '</svg>' +
+        '<span class="arena-wait__on-t">' + esc(w.on) + '</span>' +
+        '<button type="button" class="linkish" data-action="ice-watch" data-watch-kind="sessions" aria-pressed="true">' +
+        esc(w.off) +
+        '</button></div>';
+    } else if (canWatch) {
+      bell =
+        '<button type="button" class="arena-btn arena-btn--pri arena-wait__cta" data-action="ice-watch" data-watch-kind="sessions" aria-pressed="false">' +
+        '<svg class="arena-wait__ico" viewBox="0 0 24 24" aria-hidden="true">' + BELL_PATHS + '</svg>' +
+        '<span>' + esc(w.cta) + '</span></button>' +
+        '<p class="arena-wait__note">' + esc(w.note) + '</p>';
+    }
+    var alt = '';
+    if (feed.mode === 'phone' && feed.callHref) {
+      alt = '<a class="arena-btn" href="' + esc(feed.callHref) + '">' + esc(copyLine('cta.call', 'Позвонить')) + '</a>';
+    } else if (feed.mode === 'site' && feed.siteHref) {
+      alt =
+        '<a class="arena-btn" href="' + esc(feed.siteHref) + '" data-action="external" data-href="' + esc(feed.siteHref) + '">' +
+        esc(displayHost(feed.siteHref)) +
+        '</a>';
+    }
+    return (
+      '<div class="arena-sec">' +
+      '<p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
+      '<div class="arena-wait">' +
+      '<div class="arena-wait__head">' +
+      (w.kicker ? '<p class="arena-wait__kicker">' + esc(w.kicker) + '</p>' : '') +
+      '<p class="arena-wait__title">' + esc(w.title) + '</p>' +
+      (canWatch ? '<p class="arena-wait__sub">' + esc(w.sub) + '</p>' : '') +
+      '</div>' +
+      bell +
+      alt +
+      '</div></div>'
+    );
+  }
+
   function renderScheduleFact(feed) {
     feed = feed || {};
     var action = '';
@@ -1331,6 +1417,7 @@
         '</div>'
       );
     }
+    if (feed.wait) return renderScheduleWait(feed);
     if (feed.mode === 'phone' || feed.mode === 'site' || feed.mode === 'none' || feed.mode === 'pending') {
       return renderScheduleFact(feed);
     }
@@ -1890,8 +1977,8 @@
     if (!initData() || !skatingCard() || seasonRemindActive()) return '';
     var on = state.iceWatchKinds && state.iceWatchKinds.sessions;
     var hint = on
-      ? 'Напоминание в Telegram включено. Нажмите, чтобы отключить'
-      : 'Напомнить в Telegram о подходящих сеансах';
+      ? copyLine('schedule.bell_on', 'Напоминание включено')
+      : copyLine('schedule.bell_hint', 'Сообщить о\u00a0новом расписании');
     return '<button type="button" class="ga-onphoto ga-onphoto--icon ga-press' + (on ? ' is-on' : '') +
       '" data-action="ice-watch" data-watch-kind="sessions" aria-pressed="' + (on ? 'true' : 'false') +
       '" aria-label="' + esc(hint) + '" title="' + esc(hint) + '">' +

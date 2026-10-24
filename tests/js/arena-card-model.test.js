@@ -1203,3 +1203,79 @@ describe('TASK-290: живой остаток вместо полоски', () =
     assert.equal(scheduleInviteHint(false, true, true), 'Под временем — сколько билетов осталось.');
   });
 });
+
+describe('scheduleWaitView (TASK-330)', () => {
+  const NB = ' ';
+
+  it('names the rink habit day without promising a date', () => {
+    const { scheduleWaitView } = loadModel();
+    const v = scheduleWaitView({ schedule_habit: { level: 'day', weekday: 4 } });
+    assert.equal(v.kicker, 'Новое расписание');
+    assert.equal(v.title, 'Обычно по' + NB + 'пятницам');
+    assert.equal(v.sub, 'Сообщим в' + NB + 'Telegram, как только появится.');
+    assert.equal(v.cta, 'Сообщить, когда появится');
+    assert.doesNotMatch(v.title + v.sub, /\d/);
+  });
+
+  it('covers every weekday and the weekly rhythm', () => {
+    const { scheduleWaitView } = loadModel();
+    const days = ['понедельникам', 'вторникам', 'средам', 'четвергам', 'пятницам', 'субботам', 'воскресеньям'];
+    days.forEach((day, wd) => {
+      assert.equal(scheduleWaitView({ schedule_habit: { level: 'day', weekday: wd } }).title, 'Обычно по' + NB + day);
+    });
+    const week = scheduleWaitView({ schedule_habit: { level: 'week', weekday: null } });
+    assert.equal(week.title, 'Обычно раз в' + NB + 'неделю');
+    assert.equal(week.kicker, 'Новое расписание');
+  });
+
+  it('falls back to waiting without a habit or with a broken weekday', () => {
+    const { scheduleWaitView } = loadModel();
+    [
+      {},
+      { schedule_habit: null },
+      { schedule_habit: { level: 'none', weekday: null } },
+      { schedule_habit: { level: 'day', weekday: 7 } },
+      { schedule_habit: { level: 'day', weekday: '4' } },
+      { schedule_habit: { level: 'day', weekday: 2.5 } },
+    ].forEach((card) => {
+      const v = scheduleWaitView(card);
+      assert.equal(v.title, 'Ждём новое расписание');
+      assert.equal(v.kicker, '');
+    });
+  });
+});
+
+describe('iceFeedView wait block (TASK-330)', () => {
+  it('waits only for a rink that keeps a schedule and has no sessions', () => {
+    const { iceFeedView } = loadModel();
+    const habit = { level: 'day', weekday: 4 };
+    const tracked = iceFeedView({ card: { schedule_tracked: true, schedule_habit: habit }, hasSessions: false });
+    assert.ok(tracked.wait);
+    assert.equal(tracked.wait.title, 'Обычно по пятницам');
+    assert.equal(iceFeedView({ card: { schedule_tracked: false }, hasSessions: false }).wait, undefined);
+    assert.equal(iceFeedView({ card: { schedule_tracked: true }, hasSessions: true }).wait, undefined);
+  });
+
+  it('keeps the phone-only and closed-season rinks as they are', () => {
+    const { iceFeedView } = loadModel();
+    const phone = iceFeedView({
+      card: { schedule_tracked: true, schedule_mode: 'phone', phone: '+375 29 330-07-49' },
+      hasSessions: false,
+    });
+    assert.equal(phone.wait, undefined);
+    const closed = iceFeedView({
+      card: { schedule_tracked: true, in_season: false, season_start_month: 12 },
+      hasSessions: false,
+    });
+    assert.equal(closed.mode, 'closed');
+    assert.equal(closed.wait, undefined);
+  });
+
+  it('keeps the call button next to the bell', () => {
+    const { iceFeedView } = loadModel();
+    const feed = iceFeedView({ card: { schedule_tracked: true, phone: '+375 29 330-07-49' }, hasSessions: false });
+    assert.ok(feed.wait);
+    assert.equal(feed.mode, 'phone');
+    assert.ok(feed.callHref);
+  });
+});

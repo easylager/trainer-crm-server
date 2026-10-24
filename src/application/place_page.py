@@ -1236,10 +1236,13 @@ def _b_hero_chips(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
             f'<a class="b-pill b-pill--chip" href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
             f'{icon_svg("globe")}Сайт</a>'
         )
-    if links.get("bell"):
+    # TASK-330: колокольчик на обложке ставит ту же подписку, что и блок пустой карточки, —
+    # через бота (/start watch_<id>); без неё — прежняя ссылка в мини-апп.
+    bell_href = links.get("watch") or links.get("bell")
+    if bell_href:
         chips.append(
-            f'<a class="b-pill b-pill--icon b-pill--chip tg-out" href="{_esc(links["bell"])}" '
-            f'aria-label="Напоминания о сеансах в Telegram">{icon_svg("bell")}</a>'
+            f'<a class="b-pill b-pill--icon b-pill--chip tg-out" href="{_esc(bell_href)}" rel="nofollow" '
+            f'aria-label="{_esc(t("schedule.bell_hint"))} в\u00a0Telegram">{icon_svg("bell")}</a>'
         )
     return f'<div class="b-hero__chips">{"".join(chips)}</div>' if chips else ""
 
@@ -1376,9 +1379,52 @@ def _b_buy(links: Mapping[str, Any]) -> str:
     )
 
 
+def schedule_wait_lines(card: Mapping[str, Any]) -> tuple[str, str]:
+    """TASK-330: (надзаголовок, заголовок) пустой карточки — привычка катка, без дат.
+
+    Та же логика, что ``scheduleWaitView`` в Mini App (arena-card-model.js), один словарь.
+    """
+    raw = card.get("schedule_habit")
+    habit: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
+    level = habit.get("level")
+    weekday = habit.get("weekday")
+    if level == "day" and isinstance(weekday, int) and not isinstance(weekday, bool) and 0 <= weekday <= 6:
+        return t("schedule.wait_kicker"), t("schedule.habit_day", day=t(f"schedule.dow_{weekday}"))
+    if level == "week":
+        return t("schedule.wait_kicker"), t("schedule.habit_week")
+    return "", t("schedule.wait_none")
+
+
+def _schedule_waits(card: Mapping[str, Any]) -> bool:
+    """Каток расписание ведёт, а сеансов нет — пустой карточке есть что сказать (TASK-330)."""
+    mode = normalize_schedule_mode(card.get("schedule_mode"))
+    return card.get("schedule_tracked") is True and mode not in (SCHEDULE_MODE_PHONE, SCHEDULE_MODE_SEASON_CLOSED)
+
+
+def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
+    """TASK-330: привычка катка и колокольчик в Telegram (бот ставит его по /start watch_<id>)."""
+    from src.application.catalog_icons import icon_svg
+
+    kicker, headline = schedule_wait_lines(card)
+    watch = links.get("watch")
+    kicker_html = f'<p class="b-wait__kicker">{_esc(kicker)}</p>' if kicker else ""
+    bell = ""
+    if watch:
+        bell = (
+            f'<p class="b-wait__sub">{_esc(t("schedule.wait_sub"))}</p>'
+            f'<a class="b-btn b-btn--accent b-btn--wide b-wait__cta" href="{_esc(watch)}" rel="nofollow">'
+            f'{icon_svg("bell")}{_esc(t("schedule.bell_site_cta"))}</a>'
+            f'<p class="b-wait__note">{_esc(t("schedule.bell_note"))}</p>'
+        )
+    return f'<div class="b-wait">{kicker_html}<p class="b-wait__title">{_esc(headline)}</p>{bell}</div>'
+
+
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
     """Тело пустого блока. Секцию рисует ``_b_schedule``, иначе заголовок дублируется."""
     del title
+    if _schedule_waits(card):
+        # Касса и телефон остаются под колокольчиком: они полезны и без расписания.
+        return f"{_b_schedule_wait(card, links)}{_b_buy(links)}{_b_call(card, links)}"
     buy = _b_buy(links)
     call = _b_call(card, links)
     if call:
@@ -1579,7 +1625,10 @@ def _b_schedule_parts(
 
     by_date = _sessions_by_date(days)
     if not by_date:
-        return None
+        # Дни пришли, но все без сеансов — та же пустая карточка (TASK-330).
+        if not _schedule_waits(card):
+            return None
+        return title, line + _b_schedule_when_empty(card, links, title=title), ""
     all_slots = [s for slots in by_date.values() for s in slots]
     _aside_price, common = _b_price_floor(all_slots)
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
@@ -2117,7 +2166,7 @@ def render_place_body_b(
         ]
         body = "".join(parts)
         return body + phone_beacon_script(body)
-    from src.application.place_links import public_telegram_cta_url
+    from src.application.place_links import public_telegram_cta_url, watch_start_param
     from src.application.place_visit_blocks import (
         facts_html,
         more_html,
@@ -2132,6 +2181,13 @@ def render_place_body_b(
         )
         if bell:
             links["bell"] = bell
+        # TASK-330: колокольчик пустой карточки ставит бот по /start watch_<id>.
+        watch = public_telegram_cta_url(
+            base_url, start_param=watch_start_param(int(card["id"])), surface="place_page",
+            city_id=city_id, arena_id=int(card["id"]),
+        )
+        if watch:
+            links["watch"] = watch
     vv = _place_visit(view)
     food = _food_partner(card)
     trainers_listed = bool(view.get("trainers"))

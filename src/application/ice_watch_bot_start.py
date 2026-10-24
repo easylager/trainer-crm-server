@@ -17,17 +17,16 @@ from src.application.client_ice_watch_use_cases import subscribe_ice_watch
 from src.application.client_session_use_cases import get_or_create_session
 from src.application.client_use_cases import get_or_create_client
 from src.application.ice_watch_message import OPEN_SCHEDULE_BUTTON, compose_watch_subscribed_reply
+from src.application.place_links import parse_watch_start_param
 from src.infrastructure.db.models import ICE_WATCH_KIND_SESSIONS
-
-_WATCH_START = re.compile(r"^watch_(\d{1,9})$")
 
 # Как у кнопки в Mini App: подписка на любые новые сеансы катка.
 WATCH_START_FILTER = {"when": "any", "day": None, "intent": "skate"}
 
 
 def parse_watch_start(payload: str | None) -> int | None:
-    match = _WATCH_START.match((payload or "").strip())
-    return int(match.group(1)) if match else None
+    # Один разбор с сайтом и учётом клика (place_links): ссылку строит сайт, читает бот.
+    return parse_watch_start_param(payload)
 
 
 async def subscribe_from_bot_start(

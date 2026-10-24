@@ -171,6 +171,30 @@ def is_valid_start_param(value: str) -> bool:
     return bool(_START_PARAM_RE.match(value or ""))
 
 
+# TASK-330: колокольчик с сайта — ``/start watch_<arena_id>`` в чат бота (TASK-328 AC7).
+WATCH_START_PREFIX = "watch_"
+_WATCH_START_RE = re.compile(r"^watch_(\d{1,9})$")
+
+
+def watch_start_param(arena_id: int) -> str:
+    return f"{WATCH_START_PREFIX}{int(arena_id)}"
+
+
+def parse_watch_start_param(value: str | None) -> int | None:
+    match = _WATCH_START_RE.match((value or "").strip())
+    if not match or int(match.group(1)) <= 0:
+        return None
+    return int(match.group(1))
+
+
+def telegram_bot_start_link(*, client_bot_username: str | None, start_param: str) -> str | None:
+    """``t.me/<bot>?start=…`` — всегда чат бота, не мини-апп: команду ``/start`` получает бот."""
+    bot = normalize_client_bot_username(client_bot_username)
+    if not bot or not is_valid_start_param(start_param):
+        return None
+    return f"https://t.me/{bot}?start={start_param}"
+
+
 def place_start_param(arena_id: int, session_id: int | None = None) -> str:
     """``arena_42`` или ``arena_42_s_9001`` — карточка на конкретном сеансе."""
     param = f"{PLACE_START_PREFIX}{int(arena_id)}"

@@ -1249,3 +1249,60 @@ button.arena-info__tel--copy {
 .av-rink div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--g-line); font-size: var(--app-text-body); color: var(--g-ink); }
 .av-call { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border-radius: var(--app-radius-pill); background: var(--g-dark); color: var(--g-on-photo); text-decoration: none; font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }
 .av-call .av-ic__svg { width: 18px; height: 18px; }
+
+/* TASK-330: пустая карточка катка, который ведёт расписание — привычка катка и колокольчик. */
+.arena-wait {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: var(--app-radius-md);
+  background: var(--g-surface, var(--app-card-bg));
+}
+.arena-wait__head { display: flex; flex-direction: column; gap: 6px; }
+.arena-wait__kicker {
+  margin: 0;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--g-muted, var(--glide-hint));
+}
+.arena-wait__title { margin: 4px 0 0; font-size: var(--app-text-headline); font-weight: var(--app-weight-bold); line-height: 1.15; text-wrap: balance; }
+.arena-wait__sub { margin: 0; font-size: var(--app-text-body); line-height: 1.4; color: var(--g-muted, var(--glide-hint)); }
+.arena-wait__cta { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; }
+.arena-wait__ico {
+  width: var(--app-icon-md);
+  height: var(--app-icon-md);
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.arena-wait__note { margin: -6px 0 0; font-size: var(--app-text-caption); line-height: 1.4; text-align: center; color: var(--g-muted, var(--glide-hint)); }
+.arena-wait__on {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: var(--app-radius-md);
+  background: var(--g-accent-wash, var(--glide-brand-wash));
+  color: var(--g-accent-ink, var(--glide-ink-teal));
+}
+.arena-wait__on-t { flex: 1; font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }
+.arena-wait__on .linkish {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--app-text-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
