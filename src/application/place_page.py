@@ -1433,6 +1433,12 @@ def _b_day_strip(
     focus_id = int(focus["id"]) if focus is not None else None
     pick_id = int(pick["id"]) if pick is not None else None
     default_day = min(by_date)
+    prefer = view.get("prefer_dates")
+    if prefer:
+        # TASK-326: хаб города открыт в окне с главной — первый день окна, где есть сеансы.
+        in_window = [d for d in sorted(by_date) if prefer[0] <= d <= prefer[1]]
+        if in_window:
+            default_day = in_window[0]
     if focus_id is not None:
         for d, slots in by_date.items():
             if any(int(s["id"]) == focus_id for s in slots):

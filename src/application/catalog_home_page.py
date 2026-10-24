@@ -509,12 +509,21 @@ def _resolve_user_city(
     return catalog_cities[0] if catalog_cities else None
 
 
-def _user_city_button_href(city: Mapping[str, Any]) -> str:
+# TASK-326 (PDEC-026): окно, выбранное на главной, едет в город — хаб открывается в нём.
+CITY_WINDOW_KEYS = ("today", "tomorrow", "weekend")
+
+
+def city_hub_href(slug: str, city_when: str | None = None) -> str:
+    """``/c/{город}``; с ``city_when`` — хаб в этом окне (``?w=``). Без явного выбора — голый город."""
+    return f"/c/{slug}" + (f"?w={city_when}" if city_when in CITY_WINDOW_KEYS else "")
+
+
+def _user_city_button_href(city: Mapping[str, Any], city_when: str | None = None) -> str:
     slug = str(city["slug"])
     sole = str(city.get("sole_place_slug") or "").strip()
     if int(city.get("place_count") or 0) == 1 and sole:
         return place_path(city_name=str(city["name"]), slug=sole)
-    return f"/c/{slug}"
+    return city_hub_href(slug, city_when)
 
 
 def _upcoming_block_title(city_name: str, when_key: str) -> str:
@@ -624,7 +633,7 @@ def _map_label_pos(pt: Mapping[str, Any]) -> tuple[float, float, str]:
     return x, y - r - ring - 8.0, "middle"
 
 
-def render_map_svg(points: list[Mapping[str, Any]]) -> str:
+def render_map_svg(points: list[Mapping[str, Any]], *, city_when: str | None = None) -> str:
     """Карта страны: точка = город (ссылка на /c/{slug}), кольцо = есть ОХМ, подпись у областных центров.
 
     У каждой точки прозрачный круг-зона нажатия (см. _MAP_TAP_RADIUS_*): сами точки малы,
@@ -663,7 +672,7 @@ def render_map_svg(points: list[Mapping[str, Any]]) -> str:
             else ""
         )
         parts.append(
-            f'<a href="/c/{_esc(pt["slug"])}" class="home-map__city{" home-map__city--on" if live else ""}" '
+            f'<a href="{_esc(city_hub_href(str(pt["slug"]), city_when))}" class="home-map__city{" home-map__city--on" if live else ""}" '
             f'aria-label="{_esc(pt["name"])}">'
             f'<circle class="home-map__tap" cx="{x:.1f}" cy="{y:.1f}" r="{tap:.1f}" fill="transparent"/>'
             f'<g class="home-map__vis">'
@@ -889,6 +898,9 @@ async def load_catalog_home_view(
     period_start, period_end = window.starts_at, window.ends_at
     today = _minsk_date(now)
     selected_day = _selected_home_day(when_key, window.local_date, show_day_picker=show_day_picker, today=today)
+    # Явный выбор окна едет в ссылки на города; умный дефолт — нет: хаб посчитает его сам.
+    raw_when = (when or "").strip().lower()
+    city_when = when_key if raw_when == when_key and when_key in CITY_WINDOW_KEYS else None
     horizon_end = now + timedelta(days=_UPCOMING_HORIZON_DAYS)
 
     cities = await _public_cities(session)
@@ -904,6 +916,7 @@ async def load_catalog_home_view(
         "country": "BY",
         "now": now,
         "when_key": when_key,
+        "city_when": city_when,
         "selected_date": selected_day.isoformat() if selected_day else None,
         "user_city": None,
         "user_city_id": None,
@@ -979,7 +992,7 @@ async def load_catalog_home_view(
             "ice_place_count": int(user_city.get("ice_place_count") or 0),
             "arenas_with_sessions": int(user_city.get("arenas_with_sessions") or 0),
             "horizon_arenas_with_sessions": int(user_city.get("horizon_arenas_with_sessions") or 0),
-            "href": _user_city_button_href(user_city),
+            "href": _user_city_button_href(user_city, city_when),
             "when_phrase": _period_when_phrase(when_key),
             "show_upcoming_block": show_upcoming_block,
             "upcoming_more_href": _upcoming_more_href(user_city, when_key, selected_day=selected_day, today=today),
@@ -1010,7 +1023,7 @@ async def load_catalog_home_view(
         "user_city_id": user_city_id,
         "user_city_slug": str(user_city["slug"]) if user_city else _MINSK_SLUG,
         "map_points": map_points,
-        "map_svg": render_map_svg(map_points),
+        "map_svg": render_map_svg(map_points, city_when=city_when),
         "chips": {
             "hockey": has_hockey,
             "rollerski": False,
@@ -1227,7 +1240,7 @@ def _today_done_text(cities: list[Mapping[str, Any]]) -> str:
     )
 
 
-def _b_home_city_card(user_city: Mapping[str, Any] | None) -> str:
+def _b_home_city_card(user_city: Mapping[str, Any] | None, *, when_key: str = "today") -> str:
     """Тёмная карточка «Ваш город»: сколько сеансов и ближайший, ниже — «Другой город»."""
     from src.application.catalog_icons import icon_svg
 
@@ -1237,7 +1250,9 @@ def _b_home_city_card(user_city: Mapping[str, Any] | None) -> str:
     sessions = int(user_city.get("session_count") or 0)
     nxt = user_city.get("next_skate") if isinstance(user_city.get("next_skate"), Mapping) else None
     if sessions:
-        bits.append(f"{sessions}\u00a0{plural_ru(sessions, 'сеанс', 'сеанса', 'сеансов')}")
+        when = _period_when_phrase(when_key)
+        tail = f" {when}" if when and when_key != "today" else ""
+        bits.append(f"{sessions}\u00a0{plural_ru(sessions, 'сеанс', 'сеанса', 'сеансов')}{tail}")
     if nxt and nxt.get("hhmm"):
         place = format_public_name(str(nxt.get("arena_name") or ""))
         when = f"в\u00a0{nxt['hhmm']}" if nxt.get("is_today") else _next_phrase(nxt)
@@ -1268,17 +1283,18 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
         ("today", t("when.today"), "/?when=today"),
         ("tomorrow", t("when.tomorrow"), "/?when=tomorrow"),
         ("weekend", t("when.weekend"), "/?when=weekend"),
-        ("day", t("when.day"), "/?when=day"),
     )
     links = "".join(
         f'<a href="{href}"' + (' aria-current="true"' if key == when_key else "") + f">{_esc(label)}</a>"
         for key, label, href in items
     )
-    index = next((i for i, (key, _, _) in enumerate(items) if key == when_key), 0)
-    # Один ползунок на всех четырёх страницах: общее имя перехода сдвигает его под новый пункт.
+    index = next((i for i, (key, _, _) in enumerate(items) if key == when_key), None)
+    # Один ползунок на всех страницах: общее имя перехода сдвигает его под новый пункт.
+    # «День…» убран (PDEC-026); старая ссылка ?when=day открывается без выбранного пункта.
+    thumb = "" if index is None else '<span class="b-when__thumb" aria-hidden="true"></span>'
     nav = (
-        f'<nav class="b-when vt-when-strip" style="--when-i: {index}" aria-label="Когда">'
-        f'<span class="b-when__thumb" aria-hidden="true"></span>{links}</nav>'
+        f'<nav class="b-when vt-when-strip" style="--when-i: {index or 0}" aria-label="Когда">'
+        f"{thumb}{links}</nav>"
     )
     if view.get("show_day_picker"):
         days = "".join(
@@ -1289,7 +1305,7 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
     return nav
 
 
-def _b_city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
+def _b_city_tile(city: Mapping[str, Any], *, when_key: str, city_when: str | None = None) -> str:
     from src.application.style_b import b_photo_url, tile_html
 
     name = format_public_name(str(city["name"]))
@@ -1307,7 +1323,7 @@ def _b_city_tile(city: Mapping[str, Any], *, when_key: str) -> str:
         line += " · ОХМ"
     variants = city.get("photo_variants")
     return tile_html(
-        href=f"/c/{city['slug']}",
+        href=city_hub_href(str(city["slug"]), city_when),
         name=name,
         line=line,
         photo_url=b_photo_url(city.get("photo_key")),
@@ -1430,7 +1446,8 @@ def render_catalog_home_page(
     if not cities:
         cities_html = f'<section class="b-sec"><p class="b-text">{_esc(t("home.cities_empty"))}</p></section>'
     else:
-        grid = "".join(_b_city_tile(c, when_key=when_key) for c in tiles)
+        city_when = view.get("city_when")
+        grid = "".join(_b_city_tile(c, when_key=when_key, city_when=city_when) for c in tiles)
         head = {
             "today": "Сегодня в городах",
             "tomorrow": "Завтра в городах",
@@ -1468,7 +1485,7 @@ def render_catalog_home_page(
         "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__HERO__": hero,
         "__WHEN__": _b_when_nav(view),
-        "__HERO_CITY__": _b_home_city_card(user_city),
+        "__HERO_CITY__": _b_home_city_card(user_city, when_key=when_key),
         "__MAP__": map_html,
         "__CITIES__": cities_html,
         "__CTA__": "",

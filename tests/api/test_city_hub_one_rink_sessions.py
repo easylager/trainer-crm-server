@@ -77,3 +77,33 @@ async def test_one_rink_city_hub_render_includes_session_query(app_use_test_db, 
     assert "data-glide-session-list-root" in html
     assert 'class="b-sched"' in html
     assert "b-ticket--week" not in html
+
+
+@pytest.mark.asyncio
+async def test_one_rink_hub_in_window_opens_first_window_day(app_use_test_db, db_session) -> None:
+    """TASK-326: хаб в окне с главной открывает полосу дней на первом дне окна, а не на ближайшем."""
+    import re
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    cid, aid, name = await _only_very_stale_city(db_session, now)
+    tomorrow = _minsk_today() + timedelta(days=1)
+    later = _minsk_today() + timedelta(days=4)
+    await _session(db_session, aid, day=tomorrow, hhmm="11:00")
+    await _session(db_session, aid, day=later, hhmm="11:00")
+    await db_session.flush()
+    invalidate_public_city_cache()
+    city = {"id": cid, "name": name, "country": "BY"}
+    share = {"share_url": "https://x/c/x", "share_text": "x", "share_body": "x"}
+
+    def current_day(view) -> str:
+        html = render_city_hub_page(view, canonical_url="/c/x", og_image_url="/c/x/og.png", cta_url=None, share=share)
+        m = re.search(r'class="b-day[^"]*b-day--current" id="[a-z]+-(\d{4}-\d{2}-\d{2})"', html)
+        assert m, "в полосе есть текущий день"
+        return m.group(1)
+
+    plain = await load_city_hub_view(db_session, city=city, now=now)
+    assert current_day(plain) == tomorrow.isoformat()
+    view = await load_city_hub_view(db_session, city=city, now=now, window="tomorrow")
+    assert current_day(view) == tomorrow.isoformat()
+    view = {**view, "one_rink_place_view": {**view["one_rink_place_view"], "prefer_dates": (later, later)}}
+    assert current_day(view) == later.isoformat()

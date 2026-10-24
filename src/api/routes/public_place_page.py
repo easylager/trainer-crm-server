@@ -562,6 +562,7 @@ async def selection_page(
         selection_path,
         selection_start_param,
     )
+    from src.application.city_hub_page import HUB_WINDOW_KEYS
 
     base = _base()
     city = await resolve_city_by_ref(session, city_ref)
@@ -580,8 +581,12 @@ async def selection_page(
     share_src = clean_share_src(src)
     city_name = str(city["name"])
     # TASK-224: /c/{город} без параметров — маршрутизатор потребностей, не список.
-    if t is None and w is None and kind is None and svc is None and page is None and seg is None:
-        return await _city_hub(session, request, city=city, city_ref=city_ref, base=base, share_src=share_src)
+    # TASK-326 (PDEC-026): одно окно (?w=today|tomorrow|weekend) — тот же хаб, открытый в этом окне.
+    hub_when = when if when in HUB_WINDOW_KEYS else None
+    if t is None and kind is None and svc is None and page is None and seg is None and (w is None or hub_when):
+        return await _city_hub(
+            session, request, city=city, city_ref=city_ref, base=base, share_src=share_src, when=hub_when
+        )
     path_when = None if seg_value else when
     path = selection_path(
         city_name=city_name, venue=venue, when=path_when, kind=kind_value, svc=svc_value, seg=seg_value
@@ -646,8 +651,12 @@ async def _city_hub(
     city_ref: str,
     base: str,
     share_src: str | None,
+    when: str | None = None,
 ):
-    """Маршрутизатор города (TASK-224): плитки-потребности, ближайшее на льду, все места."""
+    """Маршрутизатор города (TASK-224): плитки-потребности, ближайшее на льду, все места.
+
+    ``when`` — окно, пришедшее с главной (PDEC-026). Без него хаб берёт окно по правилу главной.
+    """
     from src.application.city_hub_page import (
         city_hub_selection_preview_view,
         compose_city_hub_share,
@@ -664,8 +673,8 @@ async def _city_hub(
     city_name = str(city["name"])
     slug = city_slug(city_name)
     if city_ref != slug:
-        return RedirectResponse(url=f"/c/{slug}", status_code=301)
-    view = await load_city_hub_view(session, city=city)
+        return RedirectResponse(url=f"/c/{slug}" + (f"?w={when}" if when else ""), status_code=301)
+    view = await load_city_hub_view(session, city=city, window=when or "auto")
     preview = city_hub_selection_preview_view(view)
     inventory_line = selection_share_description(preview)
     page_url = f"{base}/c/{slug}"
