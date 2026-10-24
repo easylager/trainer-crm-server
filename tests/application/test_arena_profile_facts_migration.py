@@ -4,7 +4,7 @@ from pathlib import Path
 from src.application.arena_visit_info import normalize_visit_info, visit_view
 
 _DIR = Path(__file__).resolve().parents[2] / "migrations/versions"
-_PATHS = ["0263_arena_profile_facts.py", "0264_grodno_rink_facts.py", "0265_molodechno_rink_facts.py", "0266_arena_facts_batch2.py"]
+_PATHS = ["0263_arena_profile_facts.py", "0264_grodno_rink_facts.py", "0265_molodechno_rink_facts.py", "0266_arena_facts_batch2.py", "0267_arena_facts_batch3.py"]
 
 
 def _facts() -> dict:
