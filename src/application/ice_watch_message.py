@@ -43,17 +43,13 @@ _WEEKDAYS_ACC = (
 OPEN_SCHEDULE_BUTTON = "Открыть расписание"
 
 
-def quoted_place_name(raw_name: str) -> str:
-    """Имя места в ёлочках, как в заголовке страницы места; HTML-экранировано.
+def place_name(raw_name: str) -> str:
+    """Имя места как в заголовке страницы места на сайте; HTML-экранировано.
 
-    «Юность» → «Юность»; ХК «Юность» → «ХК „Юность“» (вложенные — лапки).
+    Без своих кавычек поверх: «ЛД «Гранд Каньон Айс»» остаётся как есть,
+    «Каток хк "Юность"» → «Каток ХК «Юность»».
     """
-    name = format_public_name(raw_name) or "Каток"
-    if name.startswith("«") and name.endswith("»") and name.count("«") == 1:
-        inner = name[1:-1]
-    else:
-        inner = name.replace("«", "„").replace("»", "“")
-    return html.escape(f"«{inner}»", quote=False)
+    return html.escape(format_public_name(raw_name) or "Каток", quote=False)
 
 
 def _day_month(day: date) -> str:
@@ -93,17 +89,12 @@ def compose_new_schedule_message(
 ) -> str:
     """Уведомление «у катка появилось новое расписание» (HTML для Telegram)."""
     return (
-        f"<b>{quoted_place_name(arena_name)}: новое расписание</b>\n"
+        f"<b>{place_name(arena_name)}: новое расписание</b>\n"
         f"Сеансы на{NBSP}{format_dates_range(first_date, last_date)}.\n"
         f"Ближайший{NBSP}— {format_nearest(nearest_date, nearest_time, today=today)}."
     )
 
 
 def compose_watch_subscribed_reply(arena_name: str) -> str:
-    """Ответ бота на ``/start watch_<arena_id>``."""
-    return f"Готово. Напишем один раз, когда у{NBSP}{quoted_place_name(arena_name)} появится новое расписание."
-
-
-def watch_subscribed_button_text(arena_name: str) -> str:
-    """Кнопка WebApp: «Открыть «Юность»». Текст кнопки — не HTML."""
-    return f"Открыть {html.unescape(quoted_place_name(arena_name))}"
+    """Ответ бота на ``/start watch_<arena_id>``; кнопка к нему — ``OPEN_SCHEDULE_BUTTON``."""
+    return f"Готово: {place_name(arena_name)}. Напишем один раз, когда появится новое расписание."

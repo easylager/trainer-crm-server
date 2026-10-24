@@ -16,7 +16,7 @@ from src.application.arena_public_use_cases import get_public_arena_card
 from src.application.client_ice_watch_use_cases import subscribe_ice_watch
 from src.application.client_session_use_cases import get_or_create_session
 from src.application.client_use_cases import get_or_create_client
-from src.application.ice_watch_message import compose_watch_subscribed_reply, watch_subscribed_button_text
+from src.application.ice_watch_message import OPEN_SCHEDULE_BUTTON, compose_watch_subscribed_reply
 from src.infrastructure.db.models import ICE_WATCH_KIND_SESSIONS
 
 _WATCH_START = re.compile(r"^watch_(\d{1,9})$")
@@ -63,6 +63,6 @@ async def subscribe_from_bot_start(
     url = f"{base}/webapp/arena?arena_id={int(card['id'])}" if base.lower().startswith("https://") else None
     return {
         "text": compose_watch_subscribed_reply(name),
-        "button_text": watch_subscribed_button_text(name),
+        "button_text": OPEN_SCHEDULE_BUTTON,
         "url": url,
     }

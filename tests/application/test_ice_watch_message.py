@@ -5,14 +5,15 @@ from __future__ import annotations
 import re
 from datetime import date, time
 
+import pytest
+
 from src.application.ice_watch_message import (
     NBSP,
     compose_new_schedule_message,
     compose_watch_subscribed_reply,
     format_dates_range,
     format_nearest,
-    quoted_place_name,
-    watch_subscribed_button_text,
+    place_name,
 )
 
 # Суббота.
@@ -33,7 +34,7 @@ def test_message_matches_contract_example() -> None:
         today=TODAY,
     )
     assert _plain(msg) == (
-        "<b>«Юность»: новое расписание</b>\n"
+        "<b>Юность: новое расписание</b>\n"
         "Сеансы на 31 октября – 6 ноября.\n"
         "Ближайший — в субботу, 31 октября, 17:00."
     )
@@ -82,15 +83,36 @@ def test_typography_nbsp_no_emoji_no_brand() -> None:
     assert '"' not in msg
 
 
-def test_place_name_as_on_site_header() -> None:
-    assert quoted_place_name("Юность") == "«Юность»"
-    assert quoted_place_name('Каток хк "Юность"') == "«Каток ХК „Юность“»"
-    assert quoted_place_name("«Чижовка-арена»") == "«Чижовка-арена»"
-    assert quoted_place_name("A & B") == "«A &amp; B»"
+# Реальные имена из прода → как в заголовке страницы места на сайте, без своих кавычек.
+REAL_NAMES = [
+    ("ТЦ Замок", "ТЦ Замок"),
+    ('Каток хк "Юность"', "Каток ХК «Юность»"),
+    ("ЛД «Гранд Каньон Айс»", "ЛД «Гранд Каньон Айс»"),
+    ("Ледовый комплекс «Шанс Арена»", "Ледовый комплекс «Шанс Арена»"),
+    ("Гомельский ледовый дворец спорта", "Гомельский ледовый дворец спорта"),
+]
 
 
-def test_watch_subscribed_reply_and_button() -> None:
-    assert _plain(compose_watch_subscribed_reply("Юность")) == (
-        "Готово. Напишем один раз, когда у «Юность» появится новое расписание."
+@pytest.mark.parametrize(("raw", "shown"), REAL_NAMES)
+def test_real_names_as_on_site_header(raw: str, shown: str) -> None:
+    from src.shared.public_display import format_public_name
+
+    assert place_name(raw) == shown == format_public_name(raw)
+    msg = compose_new_schedule_message(
+        arena_name=raw,
+        first_date=date(2026, 10, 31),
+        last_date=date(2026, 11, 6),
+        nearest_date=date(2026, 10, 31),
+        nearest_time=time(17, 0),
+        today=TODAY,
     )
-    assert watch_subscribed_button_text("A & B") == "Открыть «A & B»"
+    assert msg.startswith(f"<b>{shown}: новое расписание</b>\n")
+    assert "„" not in msg and "“" not in msg and "««" not in msg
+    assert _plain(compose_watch_subscribed_reply(raw)) == (
+        f"Готово: {shown}. Напишем один раз, когда появится новое расписание."
+    )
+
+
+def test_place_name_is_html_escaped() -> None:
+    assert place_name("A & <B>") == "A &amp; &lt;B&gt;"
+    assert place_name("") == "Каток"

@@ -74,8 +74,8 @@ async def test_start_watch_creates_subscription_with_baseline(app_use_test_db, d
 
     reply = await subscribe_from_bot_start(db_session, telegram_id=tid, arena_id=arena_id, webapp_base_url=BASE)
     assert reply is not None
-    assert reply["text"].replace(NBSP, " ") == ("Готово. Напишем один раз, когда у «Юность» появится новое расписание.")
-    assert reply["button_text"] == "Открыть «Юность»"
+    assert reply["text"].replace(NBSP, " ") == ("Готово: Юность. Напишем один раз, когда появится новое расписание.")
+    assert reply["button_text"] == "Открыть расписание"
     assert reply["url"] == f"{BASE}/webapp/arena?arena_id={arena_id}"
 
     rows = await _watches(db_session, arena_id)
@@ -147,10 +147,10 @@ async def test_bot_start_watch_answers_with_open_button(
     await client_handlers.cmd_start(message)
     message.answer.assert_awaited_once()
     body = message.answer.await_args.args[0]
-    assert body.replace(NBSP, " ").startswith("Готово. Напишем один раз")
+    assert body.replace(NBSP, " ").startswith("Готово: Юность. Напишем один раз")
     markup = message.answer.await_args.kwargs["reply_markup"]
     button = markup.inline_keyboard[0][0]
-    assert button.text == "Открыть «Юность»"
+    assert button.text == "Открыть расписание"
     assert button.web_app.url == f"{BASE}/webapp/arena?arena_id={arena_id}"
 
     # Повторный старт — тот же ответ, без дубля.
