@@ -271,7 +271,11 @@ async def _wave(db_session, arena_id: int, moment: datetime, source: str = "pars
 async def test_card_fields_default_and_habit(db_session) -> None:
     arena_id = await _arena(db_session)
     fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
-    assert fields == {"schedule_habit": {"level": "none", "weekday": None}, "schedule_horizon": None}
+    assert fields == {
+        "schedule_habit": {"level": "none", "weekday": None},
+        "schedule_horizon": None,
+        "schedule_tracked": False,
+    }
 
     await _ice(db_session, arena_id, D)
     # пятницы 16.10 и 23.10; seed (09.10), волна старше 42 дней (04.09) и «будущая» не в счёт
@@ -281,7 +285,11 @@ async def test_card_fields_default_and_habit(db_session) -> None:
     await _wave(db_session, arena_id, datetime(2026, 9, 4, 15, 0, tzinfo=MINSK))
     await _wave(db_session, arena_id, datetime(2026, 10, 30, 15, 0, tzinfo=MINSK))
     fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
-    assert fields == {"schedule_habit": {"level": "week", "weekday": None}, "schedule_horizon": "2026-10-25"}
+    assert fields == {
+        "schedule_habit": {"level": "week", "weekday": None},
+        "schedule_horizon": "2026-10-25",
+        "schedule_tracked": True,
+    }
 
     await _wave(db_session, arena_id, datetime(2026, 10, 2, 15, 0, tzinfo=MINSK), source="backfill")
     fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
@@ -299,6 +307,7 @@ async def test_card_fields_fall_back_when_query_fails(db_session, monkeypatch) -
     arena_id = await _arena(db_session)
     fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
     assert fields["schedule_habit"] == {"level": "none", "weekday": None}
+    assert fields["schedule_tracked"] is False
     # savepoint откатил только сбойный запрос — сессия карточки жива
     assert (await db_session.execute(text("SELECT 1"))).scalar() == 1
 
@@ -357,3 +366,26 @@ async def test_admin_recurrence_lookup_failure_is_swallowed(db_session, monkeypa
     monkeypatch.setattr(mod, "arena_id_for_recurrence", boom)
     assert await mod.record_admin_wave_for_recurrence_after_commit(db_session, "k") is None
     assert "arena lookup failed" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["parser_job", "disabled_job", "wave", "session"])
+async def test_card_fields_tracked_sources(db_session, source) -> None:
+    """TASK-330: пустой карточке есть что обещать, только если каток ведёт расписание."""
+    arena_id = await _arena(db_session)
+    if source in ("parser_job", "disabled_job"):
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO ice_parser_jobs (arena_id, parser_key, is_enabled, cadence, next_run_at, config)
+                VALUES (:a, 'task330_test_v1', :on, 'daily', :t, CAST('{}' AS jsonb))
+                """
+            ),
+            {"a": arena_id, "on": source == "parser_job", "t": NOW},
+        )
+    elif source == "wave":
+        await _wave(db_session, arena_id, datetime(2026, 10, 9, 15, 0, tzinfo=MINSK), source="seed")
+    else:
+        await _ice(db_session, arena_id, D)
+    fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
+    assert fields["schedule_tracked"] is (source != "disabled_job")

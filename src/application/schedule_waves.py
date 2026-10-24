@@ -215,8 +215,13 @@ async def arena_id_for_recurrence(session: AsyncSession, recurrence_key: str) ->
 
 async def load_card_inputs(
     session: AsyncSession, arena_id: int, *, since: datetime, now: datetime
-) -> tuple[list[ScheduleWave], date | None]:
-    """Волны окна (без seed) и горизонт одним запросом: страница места считает SQL (TASK-197)."""
+) -> tuple[list[ScheduleWave], date | None, bool]:
+    """Волны окна (без seed), горизонт и «ведёт ли каток расписание» одним запросом.
+
+    Страница места считает SQL (TASK-197). Ведёт расписание (TASK-330) — у катка включён
+    парсер, есть сеансы в таблице (свежие, в том числе из админки) или записанные волны:
+    только такой пустой карточке есть что обещать.
+    """
     row = (
         await session.execute(
             text(
@@ -237,7 +242,15 @@ async def load_card_inputs(
                           AND detected_at >= :since
                           AND detected_at <= :now
                           AND source <> 'seed'
-                    ) AS waves
+                    ) AS waves,
+                    (
+                        EXISTS (
+                            SELECT 1 FROM ice_parser_jobs
+                            WHERE arena_id = :arena_id AND is_enabled = true
+                        )
+                        OR EXISTS (SELECT 1 FROM ice_sessions WHERE arena_id = :arena_id)
+                        OR EXISTS (SELECT 1 FROM ice_schedule_waves WHERE arena_id = :arena_id)
+                    ) AS tracked
                 """
             ),
             {"arena_id": int(arena_id), "now": now, "since": since},
@@ -245,11 +258,11 @@ async def load_card_inputs(
     ).one()
     # source внутри окна функции уже не важен: seed отфильтрован в SQL.
     waves = [ScheduleWave(detected_at=moment, source=SOURCE_PARSER) for moment in (row[1] or [])]
-    return waves, row[0]
+    return waves, row[0], bool(row[2])
 
 
 def empty_card_fields() -> dict[str, Any]:
-    return {"schedule_habit": no_habit(), "schedule_horizon": None}
+    return {"schedule_habit": no_habit(), "schedule_horizon": None, "schedule_tracked": False}
 
 
 async def schedule_card_fields(
@@ -270,7 +283,7 @@ async def schedule_card_fields(
         now = now.replace(tzinfo=timezone.utc)
     try:
         async with session.begin_nested():
-            waves, horizon = await load_card_inputs(session, arena_id, since=window_start(now), now=now)
+            waves, horizon, tracked = await load_card_inputs(session, arena_id, since=window_start(now), now=now)
     except Exception:  # noqa: BLE001 — карточка важнее наблюдения
         logger.exception("schedule card fields failed arena_id=%s", arena_id)
         return empty_card_fields()
@@ -279,4 +292,5 @@ async def schedule_card_fields(
             waves_in_window(waves, now=now), resolve_zone(tz_name), now=now
         ),
         "schedule_horizon": horizon.isoformat() if horizon is not None else None,
+        "schedule_tracked": tracked,
     }
