@@ -2613,8 +2613,10 @@ async def trainer_rink_landing_page(
     """Лендинг под каток — ссылка для холодного сообщения тренеру (TASK-321)."""
     from src.api.routes.public_place_page import _resolve
 
+    from src.application.trainer_landing_page import TRAINER_OFFER_COUNTRY
+
     city, arena_id = await _resolve(session, city_ref, slug)
-    if city is None or arena_id is None:
+    if city is None or arena_id is None or city.get("country") != TRAINER_OFFER_COUNTRY:
         return RedirectResponse(url="/trainers", status_code=302)
     if request.method == "HEAD":
         return Response(status_code=200, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)

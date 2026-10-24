@@ -42,6 +42,10 @@ RINK_PICKER_LIMIT = 10
 _RINKS_CACHE_SECONDS = 3600
 _rinks_cache: tuple[float, list[dict[str, Any]]] | None = None
 
+# Предложение тренерам — белорусское: цены в BYN, отзыв и тексты про катки РБ. Катки России
+# (каталог Питера открыт) лендинга под каток не получают и в «Где вы тренируете?» не попадают.
+TRAINER_OFFER_COUNTRY = "BY"
+
 # Порядок катков — по людям, открывшим их страницу за 30 дней (боты отфильтрованы),
 # как в срезе спроса 2026-10-23: тренеру первым показываем каток, где больше всего глаз.
 _RINKS_SQL = text(f"""
@@ -61,6 +65,7 @@ _RINKS_SQL = text(f"""
     WHERE {PUBLIC_ARENA_VISIBLE_SQL}
       AND p.status = 'published' AND p.slug IS NOT NULL
       AND a.venue_type = 'ice'
+      AND c.country = :offer_country
     ORDER BY people DESC, c.sort_order, a.id
     LIMIT :limit
     """)
@@ -81,7 +86,7 @@ async def load_rink_picker(session: AsyncSession) -> list[dict[str, Any]]:
     now = time.monotonic()
     if _rinks_cache is not None and now - _rinks_cache[0] < _RINKS_CACHE_SECONDS:
         return _rinks_cache[1]
-    params = {**public_scope_params(), "limit": RINK_PICKER_LIMIT}
+    params = {**public_scope_params(), "limit": RINK_PICKER_LIMIT, "offer_country": TRAINER_OFFER_COUNTRY}
     rows = (await session.execute(_RINKS_SQL, params)).mappings().all()
     rinks = [
         {

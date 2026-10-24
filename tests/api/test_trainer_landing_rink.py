@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import text
 from httpx import ASGITransport, AsyncClient
 
 from src.api.app import app
@@ -54,3 +55,20 @@ async def test_unknown_rink_redirects_to_trainers(db_session):
     async with _client(follow_redirects=False) as client:
         resp = await client.get("/trainers/nowhere/no-such-rink")
     assert resp.status_code == 302 and resp.headers["location"] == "/trainers"
+
+
+@pytest.mark.asyncio
+async def test_russian_rink_gets_no_trainer_landing(db_session, monkeypatch):
+    """Предложение тренерам — белорусское (BYN): каток Питера открыт в каталоге, но лендинга нет."""
+    monkeypatch.setenv("ICE_DISCOVERY_COUNTRIES", "BY,RU")
+    place = await _place(db_session, name="Каток Питерский")
+    await db_session.execute(text("UPDATE cities SET country = 'RU' WHERE id = :id"), {"id": place["city_id"]})
+    await db_session.commit()
+    path = "/trainers" + place["path"][len("/p"):]
+    async with _client(follow_redirects=False) as client:
+        place_resp = await client.get(place["path"])
+        resp = await client.get(path)
+        home = await client.get("/trainers")
+    assert place_resp.status_code == 200  # сам каток публичен — отсекает именно лендинг
+    assert resp.status_code == 302 and resp.headers["location"] == "/trainers"
+    assert "Каток Питерский" not in home.text
