@@ -11,8 +11,8 @@
 Active watches get the baseline backfilled from today's sessions: otherwise the first pass
 after deploy would send «новое расписание» for sessions that were already on the card.
 
-Revision ID: 0264_ice_watch_delivery
-Revises: 0263_arena_profile_facts
+Revision ID: 0266_ice_watch_delivery
+Revises: 0265_ice_schedule_waves
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0264_ice_watch_delivery"
-down_revision = "0263_arena_profile_facts"
+revision = "0266_ice_watch_delivery"
+down_revision = "0265_ice_schedule_waves"
 branch_labels = None
 depends_on = None
 
