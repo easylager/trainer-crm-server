@@ -974,45 +974,6 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-coach__t span { font-size: 13px; color: var(--g-muted); }
 .b-coach__go { color: var(--g-accent-ink); font-weight: 600; font-size: 14px; white-space: nowrap; }
 
-.b-coach-sheet {
-  position: fixed; inset: auto 0 0 0; width: 100%; max-width: 480px; margin: 0 auto;
-  max-height: calc(100dvh - 48px); padding: 0; border: 0; border-radius: 22px 22px 0 0;
-  background: var(--g-surface); color: var(--g-ink); font-family: var(--g-font);
-  overflow: auto; box-sizing: border-box;
-}
-.b-coach-sheet::backdrop { background: rgba(13, 27, 38, .5); }
-.b-coach-sheet__in {
-  position: relative; display: flex; flex-direction: column; gap: 16px;
-  padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
-}
-.b-coach-sheet__in:focus { outline: none; }
-.b-coach-sheet__x {
-  position: absolute; top: 6px; right: 6px; width: 44px; height: 44px;
-  display: grid; place-items: center; border: 0; border-radius: 50%;
-  background: transparent; color: var(--g-muted); cursor: pointer;
-}
-.b-coach-sheet__x svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.b-coach-sheet__kick { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--g-muted); font-weight: 600; }
-.b-coach-sheet__title {
-  margin: -6px 0 0; padding-right: 32px; font-family: var(--g-font-display); font-weight: 400;
-  font-size: 26px; line-height: 1.1; text-wrap: balance;
-}
-.b-coach-sheet__facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.b-coach-sheet__facts li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; font-size: 15px; }
-.b-coach-sheet__facts i {
-  font-style: normal; width: 28px; height: 28px; border-radius: 8px;
-  background: var(--g-accent-wash); color: var(--g-accent-ink);
-  display: grid; place-items: center; font-size: 14px; font-weight: 700;
-}
-.b-coach-sheet__facts span { display: block; color: var(--g-ink-2); font-size: 13px; }
-.b-coach-sheet__cta {
-  display: flex; align-items: center; justify-content: center; min-height: 52px;
-  border-radius: var(--g-r-pill); background: var(--g-accent); color: var(--g-on-accent) !important;
-  font-weight: 700; font-size: 16px; text-decoration: none;
-}
-.b-coach-sheet__cta:active { background: var(--g-accent-pressed); }
-.b-coach-sheet__trial { margin: -6px 0 0; text-align: center; font-size: 13px; color: var(--g-muted); }
-.b-coach-sheet__more { text-align: center; color: var(--g-accent-ink) !important; font-weight: 600; font-size: 14px; text-decoration: none; }
 
 /* ── Cross-document view transitions (публичка /, /c/, /p/) ─────────────
    Прогрессивно: Chrome/Edge 126+, Safari 18.2+; иначе обычная навигация. */

@@ -81,7 +81,10 @@ async def test_catalog_defaults_to_by_base_without_city(app_use_test_db, db_sess
     trainer_id, tg = await _make_trainer(db_session, city_id=None)
     catalog = await _get_catalog(tg)
     assert catalog["constructor"]["base"]["currency"] == "BYN"
-    assert _crm_monthly_cents(catalog) == 2000
+    assert _crm_monthly_cents(catalog) == 3900  # PDEC-025: одна подписка, 39 BYN
+    plan = catalog["single_plan"]
+    assert plan["tier"] == "full" and plan["currency"] == "BYN"
+    assert plan["prices_by_period"] == {"1": 3900, "3": 10500, "12": 37500}
 
 
 @pytest.mark.asyncio
@@ -131,3 +134,23 @@ async def test_admin_editing_by_base_price_does_not_touch_ru_rows(
     )
     ru_base_after = after.scalar_one()
     assert ru_base_after == ru_base_before == 59000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "request_kw",
+    [{"tier": "online", "modules": None}, {"tier": None, "modules": {"online": True}}],
+)
+async def test_invoice_is_always_the_single_plan(db_session, request_kw):
+    """PDEC-025: старый клиент просит тариф или набор модулей — счёт всё равно на всю подписку."""
+    from src.application.subscription_use_cases import create_catalog_subscription_invoice_for_trainer
+
+    trainer_id, _tg = await _make_trainer(db_session, city_id=None)
+    inv = await create_catalog_subscription_invoice_for_trainer(
+        db_session, trainer_id, period_months=12, **request_kw
+    )
+    assert inv is not None
+    assert inv["checkout_modules"] == {"online": True, "analytics": True, "groups": True}
+    assert inv["checkout_bundle_tier"] is None
+    assert inv["amount_cents_before_referral"] == 37500
+    assert inv["plan_name"] == "Подписка Glide"

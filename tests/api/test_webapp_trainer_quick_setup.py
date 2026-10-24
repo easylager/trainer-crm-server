@@ -1029,3 +1029,66 @@ async def test_onboarding_scripts_are_served_as_javascript() -> None:
             resp = await client.get(f"/webapp/{name}?v=1")
             assert resp.status_code == 200, name
             assert "javascript" in resp.headers["content-type"], name
+
+
+@pytest.mark.asyncio
+async def test_rink_from_join_is_already_picked_in_onboarding(app_use_test_db, db_session) -> None:
+    """TASK-323: тренер пришёл с лендинга катка (/join?arena=) — онбординг открывается с этим катком."""
+    from src.application.trainer_quick_setup_use_cases import seed_trainer_arena_from_join
+
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+    _city_id, zamok, _manege = await _fresh_city_and_arenas(db_session)
+
+    assert await seed_trainer_arena_from_join(db_session, trainer_id, zamok) is True
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(QUICK_SETUP_URL, headers={"X-Telegram-Init-Data": "mock"})
+    data = resp.json()
+    assert data["linked_arena_ids"] == [zamok]
+    assert data["primary_arena_id"] == zamok
+    assert any(a["id"] == zamok for a in data["arenas"])  # онбординг сможет его отметить
+
+
+@pytest.mark.asyncio
+async def test_rink_from_join_does_not_change_a_trainer_who_has_rinks(app_use_test_db, db_session) -> None:
+    from src.application.trainer_quick_setup_use_cases import seed_trainer_arena_from_join
+
+    trainer_id = await _bare_linked_trainer(db_session, _fresh_trainer_telegram_id())
+    _city_id, zamok, manege = await _fresh_city_and_arenas(db_session)
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:t, :a)"),
+        {"t": trainer_id, "a": manege},
+    )
+    await db_session.commit()
+
+    assert await seed_trainer_arena_from_join(db_session, trainer_id, zamok) is False
+    r = await db_session.execute(
+        text("SELECT arena_id FROM trainer_arenas WHERE trainer_id = :t"), {"t": trainer_id}
+    )
+    assert [int(x) for x in r.scalars().all()] == [manege]
+
+
+@pytest.mark.asyncio
+async def test_rink_from_join_ignores_shops_and_unknown_ids(app_use_test_db, db_session) -> None:
+    from src.application.trainer_quick_setup_use_cases import seed_trainer_arena_from_join
+
+    trainer_id = await _bare_linked_trainer(db_session, _fresh_trainer_telegram_id())
+    city_id, _zamok, _manege = await _fresh_city_and_arenas(db_session)
+    r = await db_session.execute(
+        text(
+            "INSERT INTO arenas (city_id, name, is_active, venue_type) "
+            "VALUES (:c, 'Заточка HTTP', true, 'shop') RETURNING id"
+        ),
+        {"c": city_id},
+    )
+    shop = int(r.fetchone()[0])
+    await db_session.commit()
+
+    assert await seed_trainer_arena_from_join(db_session, trainer_id, shop) is False
+    assert await seed_trainer_arena_from_join(db_session, trainer_id, 2_000_000_000) is False
+    r = await db_session.execute(
+        text("SELECT primary_arena_id FROM trainers WHERE id = :t"), {"t": trainer_id}
+    )
+    assert r.scalar() is None

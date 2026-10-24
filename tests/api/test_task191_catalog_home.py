@@ -93,7 +93,7 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session, monk
     assert _meta(home.text, "robots") == "index, follow"
 
     assert trainers.status_code == 200
-    assert 'id="landing-config"' in trainers.text
+    assert 'js-tl-join" href="/join"' in trainers.text
     assert "CRM для тренера" in trainers.text
     assert "__PUBLIC_ANALYTICS_HEAD__" not in home.text
     assert "mc.yandex.ru/metrika/tag.js" not in home.text

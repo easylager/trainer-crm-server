@@ -865,6 +865,10 @@
     #tiersContainer {
       display: none !important;
     }
+    /* PDEC-025: одна подписка — её карточка и есть экран. */
+    body.sub-single-plan #tiersContainer {
+      display: flex !important;
+    }
 
     .selection-indicator {
       flex-shrink: 0;
@@ -1413,7 +1417,7 @@
         var h = invoiceHints || {};
         var parts = [];
         parts.push('<p class="inv-hint-title">Оплата по счёту / ЕРИП</p>');
-        parts.push('<p class="trial-strip-hint" style="margin-top:0;">Выберите тариф и нажмите «Запросить счёт». После поступления оплаты мы продлим подписку — доступ в приложении обновится автоматически.</p>');
+        parts.push('<p class="trial-strip-hint" style="margin-top:0;">' + (singlePlan ? 'Выберите период' : 'Выберите тариф') + ' и нажмите «Запросить счёт». После поступления оплаты мы продлим подписку — доступ в приложении обновится автоматически.</p>');
         if (h.legal_name) {
           parts.push('<div class="inv-hint-row"><span class="inv-hint-k">Получатель</span><span class="inv-hint-v">' + escapeHtml(h.legal_name) + '</span></div>');
         }
@@ -1523,6 +1527,8 @@
       // State
       var catalog = [];
       var constructor = null;
+      /** PDEC-025: одна подписка — CRM и все модули. Пришла с сервера → экран без тарифов и конструктора. */
+      var singlePlan = null;
       var status = null;
       /** 'tier' = legacy card; 'constructor' = CRM base + module checkboxes. */
       var checkoutMode = 'tier';
@@ -1804,12 +1810,24 @@
           var catalogData = results[0];
           var statusData = results[1];
           
-          if (!catalogData.tiers || !catalogData.tiers.length) {
+          singlePlan = catalogData.single_plan || null;
+          if (!singlePlan && (!catalogData.tiers || !catalogData.tiers.length)) {
             throw new Error('Нет доступных тарифов');
           }
           
           catalog = catalogData.tiers;
           constructor = catalogData.constructor || null;
+          if (singlePlan) {
+            catalog = [singlePlan];
+            constructor = null;
+            selectedTier = singlePlan.tier;
+            checkoutMode = 'tier';
+            document.body.classList.add('sub-single-plan');
+            var heroTitle = document.querySelector('.sub-hero-title');
+            if (heroTitle) heroTitle.textContent = 'Подписка';
+            var heroSub = document.querySelector('.sub-hero-sub');
+            if (heroSub) heroSub.textContent = 'Одна подписка — всё включено. За 3 месяца и за год дешевле. Карточка в каталоге остаётся бесплатно и без подписки.';
+          }
           paymentCheckoutMode = catalogData.checkout_mode || (catalogData.mock_checkout_enabled !== false ? 'sandbox' : 'bepaid');
           invoiceHints = catalogData.invoice_hints || {};
           status = statusData;
@@ -1820,7 +1838,7 @@
           // Constructor only pre-selects itself when the trainer's real current setup can't be
           // expressed as one of the named tiers — today that means the "groups" module, which
           // no preset includes.
-          if (constructor && constructor.base && selectedTier == null && status && status.modules && status.modules.groups) {
+          if (!singlePlan && constructor && constructor.base && selectedTier == null && status && status.modules && status.modules.groups) {
             checkoutMode = 'constructor';
           }
           initPeriodSelector();
@@ -1837,6 +1855,11 @@
 
       /** "Текущий" on a card = same tier AND same period tab as last paid segment (see billing_period_months). */
       function isCurrentTierForPeriod(tierId) {
+        if (singlePlan && tierId === singlePlan.tier) {
+          var m = (status && status.modules) || {};
+          if (!status || status.is_trial || !(m.online && m.analytics && m.groups)) return false;
+          return status.billing_period_months != null && Number(status.billing_period_months) === selectedPeriod;
+        }
         var currentTier = status && status.effective_tier;
         if (!currentTier || currentTier === 'none' || tierId !== currentTier) return false;
         if (status.is_trial) return true;
@@ -1877,7 +1900,9 @@
               '<div class="trial-strip">' +
               '<p class="trial-strip-title">Пробный период</p>' +
               '<p class="trial-strip-body">' + tn + untilLabel + '</p>' +
-              '<p class="trial-strip-hint">Открыты все модули: CRM, онлайн-запись, аналитика и группы. После окончания соберите свой план ниже.</p>' +
+              '<p class="trial-strip-hint">' + (singlePlan
+                ? 'Открыто всё. После окончания — одна подписка, всё включено; карточка в каталоге остаётся бесплатно.'
+                : 'Открыты все модули: CRM, онлайн-запись, аналитика и группы. После окончания соберите свой план ниже.') + '</p>' +
               nextLine +
               '</div>';
             trialStripEl.style.display = 'block';
@@ -2013,6 +2038,7 @@
 
       // Select tier (second tap on same card clears selection)
       function selectTier(tier) {
+        if (singlePlan) return; // один тариф всегда выбран
         if (selectedTier === tier) {
           selectedTier = null;
         } else {
@@ -2139,7 +2165,9 @@
 
         var btn = document.getElementById('btnPay');
         var payload = { period_months: selectedPeriod };
-        if (checkoutMode === 'constructor') {
+        if (singlePlan) {
+          payload.modules = { online: true, analytics: true, groups: true };
+        } else if (checkoutMode === 'constructor') {
           payload.modules = selectedModules;
         } else {
           payload.tier = selectedTier;
@@ -2285,7 +2313,9 @@
         var expiresDate = data.expires_at ? data.expires_at.slice(0, 10) : '';
         
         var planLabel = tierData ? tierData.name_ru : String(data.tier || '');
-        if (data.modules) {
+        if (singlePlan) {
+          planLabel = singlePlan.name_ru;
+        } else if (data.modules) {
           var bits = ['CRM'];
           if (data.modules.online) bits.push('онлайн');
           if (data.modules.analytics) bits.push('аналитика');

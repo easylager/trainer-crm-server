@@ -624,11 +624,11 @@ TRAINER_DIGEST_OWED_LINE_BOTH = (
 
 # Одна рекомендация в конце — выбирается лестницей в trainer_digest_format._pick_morning_recommendation.
 TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_OPENS_DAY = (
-    "День начинается с {name} — у ученика первое занятие. "
+    "Первым сегодня придёт {name} — у ученика первое занятие. "
     "Первые минуты знакомства часто решают, вернётся ли человек."
 )
 TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_LATER = (
-    "У {name} в <b>{time}</b> первое занятие — "
+    "{name} в <b>{time}</b> придёт на первое занятие — "
     "первые минуты знакомства часто решают, вернётся ли человек."
 )
 TRAINER_DIGEST_MORNING_REC_PENDING_CONFIRM = (
@@ -655,7 +655,7 @@ TRAINER_DIGEST_MORNING_LITE_REC = (
 # --- Sunday digest — perspective + ledger.
 TRAINER_DIGEST_WEEKLY_GREETING = "🌙 Воскресный обзор."
 TRAINER_DIGEST_WEEKLY_PAST_HEADER = "📊 <b>За прошедшую неделю</b>"
-TRAINER_DIGEST_WEEKLY_PAST_COMPLETED = "• Провёл <b>{count}</b> {word}"
+TRAINER_DIGEST_WEEKLY_PAST_COMPLETED = "• Проведено <b>{count}</b> {word}"
 TRAINER_DIGEST_WEEKLY_PAST_CASH = "• <b>{cash}</b> наличными"
 TRAINER_DIGEST_WEEKLY_PAST_PASSES = "• <b>{count}</b> {word} по абонементам"
 TRAINER_DIGEST_WEEKLY_PAST_CERTS = "• <b>{cash}</b> по сертификатам"
@@ -3799,9 +3799,9 @@ def format_trainer_trial_roi_recap_html(
 
 
 # Напоминание об окончании подписки / триала: одна кнопка → мини-приложение trainer-subscription (тарифы и оплата).
-TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP = "💳 Тарифы и оплата"
+TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP = "💳 Подписка и оплата"
 TRAINER_BUTTON_PAY_SUBSCRIPTION = "Продлить подписку"
-TRAINER_BUTTON_CHOOSE_TARIFF = "Выбрать тариф"
+TRAINER_BUTTON_CHOOSE_TARIFF = "Оформить подписку"
 # /subscription — мини-апп trainer-subscription
 TRAINER_BUTTON_SUBSCRIPTION_CONSTRUCTOR = "Подписки"
 TRAINER_SUBSCRIPTION_WITH_TIER = (
@@ -3811,11 +3811,11 @@ TRAINER_SUBSCRIPTION_WITH_TIER = (
 TRAINER_SUBSCRIPTION_WITHOUT_TIER = (
     "📋 <b>Сейчас без активного тарифа</b>\n\n"
     "Расписание и клиентская база на паузе. <b>Карточка в общем каталоге остаётся</b> — вас можно найти в списке. "
-    "Чтобы вернуть ведение записей и онлайн-запись, выберите тариф ниже — в своём темпе."
+    "Чтобы вернуть ведение записей и онлайн-запись, оформите подписку ниже — одна, всё включено."
 )
 TRAINER_SUBSCRIPTION_ACTIVE = (
     "Подписка на платформу активна до <b>{expires_date}</b>. Вы в каталоге.\n\n"
-    "Кнопка ниже — оплата за <b>следующий период</b> (после этой даты). Можно выбрать срок: месяц, 3 мес, год или 1,5 года."
+    "Кнопка ниже — оплата за <b>следующий период</b> (после этой даты). Можно выбрать срок: месяц, 3 месяца или год — за 3 месяца и за год дешевле."
 )
 TRAINER_SUBSCRIPTION_EXPIRED = (
     "Срок подписки прошёл. Оформите новый период — вернутся расписание, база и онлайн-запись. "

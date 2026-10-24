@@ -49,6 +49,57 @@ SUBSCRIPTION_MODULE_NAMES_RU: dict[str, str] = {
 }
 SUBSCRIPTION_FULL_ACCESS_NAME_RU = "Полный доступ"
 
+# PDEC-025: тренеру продаётся одна подписка — CRM и все модули, цена за период.
+SINGLE_PLAN_TIER = "full"
+SINGLE_PLAN_NAME_RU = "Подписка Glide"
+SINGLE_PLAN_DESCRIPTION_RU = "Всё включено: ученики сами записываются в ваши окна — с катка и по вашей ссылке."
+SINGLE_PLAN_BULLETS_RU: tuple[str, ...] = (
+    "«Записаться» на карточке в каталоге и запись по ссылке",
+    "Напоминания ученикам и родителям",
+    "Абонементы и сертификаты с автосписанием",
+    "Группы и индивидуальные занятия",
+    "Клиентская база, заметки, аналитика",
+)
+
+
+def all_modules_dict() -> dict[str, bool]:
+    return {k: True for k in SUBSCRIPTION_MODULES}
+
+
+def single_plan_from_constructor(constructor: dict[str, Any]) -> dict[str, Any] | None:
+    """Единственный тариф для экрана оплаты: база CRM + все модули, по периодам.
+
+    Цены — те же строки, что считает счёт (``create_catalog_subscription_invoice_for_trainer``),
+    поэтому карточка и сумма к оплате не расходятся.
+    """
+    base = constructor.get("base") if isinstance(constructor, dict) else None
+    if not base:
+        return None
+    modules = constructor.get("modules") or []
+    prices: dict[str, int] = {}
+    for period, cents in (base.get("prices_by_period") or {}).items():
+        total = int(cents)
+        complete = True
+        for m in modules:
+            mp = (m.get("prices_by_period") or {}).get(period)
+            if mp is None:
+                complete = False
+                break
+            total += int(mp)
+        if complete:
+            prices[period] = total
+    if not prices:
+        return None
+    return {
+        "tier": SINGLE_PLAN_TIER,
+        "name_ru": SINGLE_PLAN_NAME_RU,
+        "short_description_ru": SINGLE_PLAN_DESCRIPTION_RU,
+        "bullets": list(SINGLE_PLAN_BULLETS_RU),
+        "currency": base.get("currency"),
+        "prices_by_period": prices,
+        "period_days_by_period": dict(base.get("period_days_by_period") or {}),
+    }
+
 
 def default_modules_dict() -> dict[str, bool]:
     return {k: False for k in SUBSCRIPTION_MODULES}

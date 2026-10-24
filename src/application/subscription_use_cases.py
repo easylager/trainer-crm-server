@@ -17,6 +17,7 @@ from src.application.platform_settings_use_cases import (
 from src.shared.config import Settings
 from src.shared.currency import resolve_trainer_price_group
 from src.application.subscription_tier_use_cases import (
+    SINGLE_PLAN_NAME_RU,
     SUBSCRIPTION_BILLING_PERIOD_MONTHS,
     SUBSCRIPTION_MODULE_ANALYTICS,
     SUBSCRIPTION_MODULE_ONLINE,
@@ -25,6 +26,7 @@ from src.application.subscription_tier_use_cases import (
     SUBSCRIPTION_TIER_CRM,
     SUBSCRIPTION_TIER_ONLINE,
     SUBSCRIPTION_TIERS,
+    all_modules_dict,
     default_modules_dict,
     get_module_period_pricing,
     get_tier_period_pricing,
@@ -441,51 +443,31 @@ async def create_catalog_subscription_invoice_for_trainer(
     period_months: int,
 ) -> dict | None:
     """
-    Unpaid invoice for Mini App catalog selection (tier bundle or CRM+modules constructor).
-    Payment via ERIP / manual: ops confirm with confirm_subscription_invoice_after_payment.
+    Unpaid invoice for the Mini App subscription screen. Payment via ERIP / bePaid / manual:
+    ops confirm with confirm_subscription_invoice_after_payment.
+
+    PDEC-025: one plan — CRM plus every module. ``tier`` / ``modules`` from older clients are
+    accepted and ignored: whatever was asked, the invoice is the single plan for the period.
     """
+    del tier, modules  # одна подписка: старые клиенты присылают тариф или набор модулей
     if period_months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
         return None
     bundle_tier: str | None = None
-    mods = default_modules_dict()
-    if tier is not None:
-        if tier not in SUBSCRIPTION_TIERS:
-            return None
-        bundle_tier = tier
-        if tier == SUBSCRIPTION_TIER_ONLINE:
-            mods[SUBSCRIPTION_MODULE_ONLINE] = True
-        elif tier == SUBSCRIPTION_TIER_ANALYTICS:
-            mods[SUBSCRIPTION_MODULE_ONLINE] = True
-            mods[SUBSCRIPTION_MODULE_ANALYTICS] = True
-    elif modules is not None:
-        mods = normalize_modules_dict(modules)
-    else:
-        return None
+    mods = all_modules_dict()
 
     price_group = await resolve_trainer_price_group(session, trainer_id)
-    if bundle_tier is not None:
-        tp = await get_tier_period_pricing(session, bundle_tier, period_months, price_group)  # type: ignore[arg-type]
-        if not tp:
+    base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, period_months, price_group)
+    if not base:
+        return None
+    total_cents = int(base["price_cents"])
+    period_days = int(base["period_days"])
+    currency = str(base["currency"])
+    for key in SUBSCRIPTION_MODULES:
+        mp = await get_module_period_pricing(session, key, period_months, price_group)
+        if not mp:
             return None
-        total_cents = int(tp["price_cents"])
-        period_days = int(tp["period_days"])
-        plan_label = str(tp.get("name_ru") or bundle_tier)
-        currency = str(tp["currency"])
-    else:
-        base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, period_months, price_group)
-        if not base:
-            return None
-        total_cents = int(base["price_cents"])
-        period_days = int(base["period_days"])
-        currency = str(base["currency"])
-        for key in SUBSCRIPTION_MODULES:
-            if not mods.get(key):
-                continue
-            mp = await get_module_period_pricing(session, key, period_months, price_group)
-            if not mp:
-                return None
-            total_cents += int(mp["price_cents"])
-        plan_label = "Конструктор подписки"
+        total_cents += int(mp["price_cents"])
+    plan_label = SINGLE_PLAN_NAME_RU
 
     now = datetime.now(timezone.utc)
     result = await session.execute(

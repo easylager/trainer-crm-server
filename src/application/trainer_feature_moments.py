@@ -292,7 +292,7 @@ def _recurring_client_card(fact: dict[str, Any]) -> dict[str, Any]:
     time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else str(start_time or "")
     return {
         "item_id": ITEM_RECURRING_CLIENT,
-        "title": f"У {name} обозначился постоянный ритм",
+        "title": f"{name} ходит в одно и то же время",
         "subtitle": (
             f"{name} — {_ordinal_ru(n)} занятие подряд по {weekday} в {time_str}. "
             "Заведите постоянного клиента — слоты будут появляться сами, без ручного повтора."

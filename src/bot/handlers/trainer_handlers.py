@@ -714,6 +714,12 @@ async def cmd_start(message: Message) -> None:
     text = message.text or ""
     args = text.split(maxsplit=1)
     pending_referrer_id: int | None = None  # Referral code to attribute after link
+    pending_arena_id: int | None = None  # Rink from /join?arena= — preselected in onboarding
+    if len(args) > 1:
+        from src.application.trainer_start_payload import split_arena_suffix
+
+        # Хвост катка снимаем до разбора ref/токена: link_<token>[_ref_<CODE>]_arena_<id>.
+        args[1], pending_arena_id = split_arena_suffix(args[1])
     async with async_session_factory() as session:
         if len(args) > 1:
             from src.application.trainer_start_payload import TrainerStartKind, parse_trainer_start_payload
@@ -825,11 +831,14 @@ async def cmd_start(message: Message) -> None:
                 # moderator approve them». A first-timer gets one offer and one button; everyone
                 # else gets the normal welcome-back with the hub and their subscription state.
                 from src.application.trainer_quick_setup_use_cases import (
+                    seed_trainer_arena_from_join,
                     seed_trainer_identity_from_telegram,
                     seed_trainer_photo_from_telegram,
                     trainer_has_weekly_template,
                 )
 
+                if pending_arena_id is not None:
+                    await seed_trainer_arena_from_join(session, trainer_id, pending_arena_id)
                 tg_user = message.from_user
                 await seed_trainer_identity_from_telegram(
                     session,

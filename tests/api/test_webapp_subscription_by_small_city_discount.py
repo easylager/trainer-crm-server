@@ -80,7 +80,8 @@ async def test_catalog_discounted_for_small_by_city(app_use_test_db, db_session:
     tg = await _make_trainer(db_session, city_id=city_id)
     catalog = await _get_catalog(tg)
     assert catalog["constructor"]["base"]["currency"] == "BYN"
-    assert _crm_monthly_cents(catalog) == 1700  # 2000 * 0.85
+    assert _crm_monthly_cents(catalog) == 3315  # 3900 * 0.85
+    assert catalog["single_plan"]["prices_by_period"] == {"1": 3315, "3": 8925, "12": 31875}
 
 
 @pytest.mark.asyncio
@@ -89,7 +90,7 @@ async def test_catalog_unchanged_for_capital_city(app_use_test_db, db_session: A
     tg = await _make_trainer(db_session, city_id=city_id)
     catalog = await _get_catalog(tg)
     assert catalog["constructor"]["base"]["currency"] == "BYN"
-    assert _crm_monthly_cents(catalog) == 2000  # unchanged
+    assert _crm_monthly_cents(catalog) == 3900  # unchanged
 
 
 @pytest.mark.asyncio

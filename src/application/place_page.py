@@ -1805,50 +1805,29 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str, school_html: str = ""
     )
 
 
-def _coach_sheet_title(card: Mapping[str, Any]) -> str:
-    name = format_public_name(str(card.get("name") or "")).strip()
-    # Своё имя в кавычках («Ледовая арена «…»») и длинное в заголовок не ставим.
-    if not name or "«" in name or '"' in name or len(name) > 22:
-        return t("coach.sheet_title_plain")
-    return t("coach.sheet_title", place=name)
-
-
 def _b_coach_entry(card: Mapping[str, Any], *, first: bool) -> str:
-    """Вход для тренера последней строкой раздела «Тренеры» и шторка-мини-лендинг.
+    """Вход для тренера последней строкой раздела «Тренеры» — сразу на лендинг этого катка.
 
-    Без JS строка ведёт на /trainers; с JS открывает шторку (coach-sheet.js), считает
-    открытие и «Начать в Telegram» (coach_open / coach_join). Внутри Mini App не видна (tg-out).
+    Ссылка ``/trainers/{город}/{каток}`` (без slug — ``/trainers``); тап считается как
+    ``coach_open`` (coach-sheet.js). Внутри Mini App не видна (tg-out).
     """
     from src.application.style_b import COACH_SHEET_SCRIPT_VERSION
+    from src.application.trainer_landing_page import trainer_rink_path
 
     arena_id = int(card["id"])
+    slug = str(card.get("slug") or "")
+    href = trainer_rink_path(city_name=_city(card), slug=slug) if slug and _city(card) else "/trainers"
     city_id = int(card.get("city_id") or 0) or None
     beacon = f"/api/public/catalog/contact-click?surface=place_page&arena_id={arena_id}"
     if city_id:
         beacon += f"&city_id={city_id}"
     title = t("coach.entry_first_title") if first else t("coach.entry_title")
     sub = t("coach.entry_first_sub") if first else t("coach.entry_sub")
-    facts = "".join(
-        f'<li><i aria-hidden="true">{n}</i><div>{_esc(t(key))}<span>{_esc(t(key + "_sub"))}</span></div></li>'
-        for n, key in ((1, "coach.fact_list"), (2, "coach.fact_link"), (3, "coach.fact_auto"))
-    )
     return (
-        f'<a class="b-coach tg-out" href="/trainers" data-coach-open>'
+        f'<a class="b-coach tg-out" href="{_esc(href)}" data-coach-open data-beacon="{_esc(beacon)}">'
         f'<span class="b-coach__ic" aria-hidden="true">+</span>'
         f'<span class="b-coach__t"><b>{_esc(title)}</b><span>{_esc(sub)}</span></span>'
         f'<span class="b-coach__go">{_esc(t("coach.entry_go"))}&nbsp;›</span></a>'
-        f'<dialog class="b-coach-sheet" id="coachSheet" aria-labelledby="coachSheetTitle" data-beacon="{_esc(beacon)}">'
-        # Фокус при открытии — на саму шторку, а не на крестик (иначе он открывается с кольцом фокуса).
-        f'<div class="b-coach-sheet__in" tabindex="-1" autofocus>'
-        f'<button type="button" class="b-coach-sheet__x" data-coach-close aria-label="{_esc(t("coach.close"))}">'
-        f'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>'
-        f'<span class="b-coach-sheet__kick">{_esc(t("coach.sheet_kicker"))}</span>'
-        f'<h2 class="b-coach-sheet__title" id="coachSheetTitle">{_esc(_coach_sheet_title(card))}</h2>'
-        f'<ul class="b-coach-sheet__facts">{facts}</ul>'
-        f'<a class="b-coach-sheet__cta" href="/join" data-coach-join>{_esc(t("coach.cta"))}</a>'
-        f'<p class="b-coach-sheet__trial">{_esc(t("coach.trial"))}</p>'
-        f'<a class="b-coach-sheet__more" href="/trainers">{_esc(t("coach.more"))}&nbsp;›</a>'
-        f"</div></dialog>"
         f'<script defer src="/static/share/coach-sheet.js?v={_esc(COACH_SHEET_SCRIPT_VERSION)}"></script>'
     )
 

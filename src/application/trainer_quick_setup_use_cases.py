@@ -121,6 +121,52 @@ async def seed_trainer_identity_from_telegram(
     return wrote
 
 
+async def seed_trainer_arena_from_join(
+    session: AsyncSession,
+    trainer_id: int,
+    arena_id: int,
+) -> bool:
+    """
+    Отметить каток, с лендинга которого тренер пришёл (``/join?arena=``), чтобы онбординг
+    открылся с ним, а не с пустым списком.
+
+    Только новичку: у тренера ещё нет ни одного катка. Кто уже выбрал свои, тому ссылка
+    чужого катка ничего не меняет. Каток — из тех, что онбординг сам предлагает (активный,
+    не магазин, в активном городе); иначе молча ничего. Основной каток ставим, только если
+    его ещё нет. Returns True, когда каток записан.
+    """
+    r = await session.execute(
+        text(
+            """
+            INSERT INTO trainer_arenas (trainer_id, arena_id)
+            SELECT :tid, a.id
+            FROM arenas a
+            JOIN cities c ON c.id = a.city_id AND c.is_active = true
+            WHERE a.id = :aid
+              AND a.is_active = true
+              AND a.venue_type <> 'shop'
+              AND NOT EXISTS (SELECT 1 FROM trainer_arenas ta WHERE ta.trainer_id = :tid)
+            ON CONFLICT (trainer_id, arena_id) DO NOTHING
+            RETURNING arena_id
+            """
+        ),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    wrote = r.fetchone() is not None
+    if wrote:
+        await session.execute(
+            text(
+                """
+                UPDATE trainers SET primary_arena_id = :aid
+                WHERE id = :tid AND primary_arena_id IS NULL
+                """
+            ),
+            {"tid": trainer_id, "aid": arena_id},
+        )
+    await session.commit()
+    return wrote
+
+
 async def seed_trainer_photo_from_telegram(
     bot: Any,
     session: AsyncSession,
