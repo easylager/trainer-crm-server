@@ -7,6 +7,7 @@
 
 Макет утверждён владельцем 2026-10-23: https://claude.ai/artifact/FrgcxSoWgBr24pJNKYdwqN
 """
+
 from __future__ import annotations
 
 import html as html_lib
@@ -33,7 +34,10 @@ PRICE_FOUNDING_YEAR_BYN = 299
 # Цитата и фото появятся, когда тренер их пришлёт; до этого блок без них.
 PROOF_TRAINER_NAME = "Александр Гаевский"
 PROOF_TRAINER_ROLE = "учит кататься с нуля, Минск"
-PROOF_BOOKINGS = 208
+# Цифры — прод 2026-10-24, последние 60 дней: проведённые занятия и ученики в Glide.
+# «Записей без переписки» не пишем: больше половины записей тренер создал сам.
+PROOF_LESSONS = 150
+PROOF_STUDENTS = 52
 PROOF_PERIOD = "за 2 месяца"
 PROOF_QUOTE: str | None = None
 PROOF_PHOTO_URL: str | None = None
@@ -77,7 +81,7 @@ def _esc(value: Any) -> str:
 
 def trainer_rink_path(*, city_name: str, slug: str) -> str:
     """``/trainers/minsk/zamok`` — тот же город и slug, что у ``/p/minsk/zamok``."""
-    return "/trainers" + place_path(city_name=city_name, slug=slug)[len("/p"):]
+    return "/trainers" + place_path(city_name=city_name, slug=slug)[len("/p") :]
 
 
 async def load_rink_picker(session: AsyncSession) -> list[dict[str, Any]]:
@@ -164,7 +168,7 @@ def _you_card(first: bool) -> str:
     return (
         '<div class="tl-coach tl-coach--you">'
         '<span class="tl-coach__ph"><i aria-hidden="true">+</i>'
-        '<em>окно сразу после катания</em></span>'
+        "<em>окно сразу после катания</em></span>"
         f'<span class="tl-coach__body"><b>Здесь можете быть вы</b><span>{_esc(sub)}</span></span>'
         "</div>"
     )
@@ -217,10 +221,10 @@ def _hero(rink: Mapping[str, Any] | None, *, rink_page: bool, join_href: str) ->
         '<div class="tl-hero__grid">'
         '<div class="tl-hero__copy">'
         f'<span class="tl-kicker">{_esc(kicker)}</span>'
-        '<h1>Ваши ученики<br>уже катаются.<br><em>Рядом с вами.</em></h1>'
-        "<p>Люди открывают Glide, чтобы узнать, когда массовое катание. Рядом с сеансом — "
-        "тренеры этого катка и их свободное окно сразу после катания. А свои ученики записываются "
-        "по вашей ссылке — без переписки «а когда можно?».</p>"
+        "<h1>Ваши ученики<br>уже катаются.<br><em>Рядом с вами.</em></h1>"
+        "<p>Люди открывают Glide, чтобы узнать, когда массовое катание. На странице катка — тренеры, "
+        "которые здесь работают, а в Glide в Telegram — их свободные окна после сеанса. "
+        "Свои ученики записываются к вам по ссылке, без переписки «а когда можно?».</p>"
         '<div class="tl-hero__cta">'
         f'<a class="tl-btn tl-btn--accent js-tl-join" href="{_esc(join_href)}">{cta}</a>'
         "<span>Бесплатно. Настроим<br>вместе за 15 минут</span></div>"
@@ -233,12 +237,18 @@ def _hero(rink: Mapping[str, Any] | None, *, rink_page: bool, join_href: str) ->
 
 def _how() -> str:
     steps = (
-        ("Человек ищет, когда покататься",
-         "Открывает Glide — сайт или Mini App в Telegram — и смотрит расписание массового катания на своём катке."),
-        ("Видит вас рядом с сеансом",
-         "«Научат здесь же» — ваша карточка и свободное окно сразу после его катания."),
-        ("Записывается в один тап",
-         "Запись приходит вам в Telegram. Дальше Glide ведёт её сам: напоминания, абонемент, перенос."),
+        (
+            "Человек ищет, когда покататься",
+            "Открывает Glide — сайт или Mini App в Telegram — и смотрит расписание массового катания на своём катке.",
+        ),
+        (
+            "Видит вас рядом с сеансом",
+            "Ваша карточка — в «Научат здесь же», и рядом ваше свободное окно сразу после его сеанса.",
+        ),
+        (
+            "Записывается сам",
+            "Выбирает окно и пишет комментарий. Запись приходит вам в Telegram, напоминание ему — накануне.",
+        ),
     )
     items = "".join(
         f'<li class="tl-step{" tl-step--dark" if i == 2 else ""}"><i>{i + 1}</i><b>{_esc(t)}</b><span>{_esc(d)}</span></li>'
@@ -282,7 +292,7 @@ def _versus() -> str:
         "Родители сами видят свободные окна и записываются",
         "Напоминания уходят сами — ученику и родителям",
         "Абонемент списывается сам, остаток виден обоим",
-        "Перенос — в приложении, без переписки",
+        "Перенос — пара нажатий у вас, ученику приходит одно уведомление",
     )
     li = lambda xs: "".join(f"<li>{_esc(x)}</li>" for x in xs)  # noqa: E731
     return (
@@ -308,8 +318,8 @@ def _proof() -> str:
         f"{photo}"
         f'<div class="tl-proof__text">{quote}'
         f"<figcaption><b>{_esc(PROOF_TRAINER_NAME)}</b>, {_esc(PROOF_TRAINER_ROLE)}</figcaption></div>"
-        f'<div class="tl-proof__num"><b>{PROOF_BOOKINGS}</b>'
-        f"<span>записей {_esc(PROOF_PERIOD)} — без переписки «когда можно»</span></div>"
+        f'<div class="tl-proof__num"><b>{PROOF_LESSONS}</b>'
+        f"<span>занятий {_esc(PROOF_PERIOD)}, {PROOF_STUDENTS} ученика — расписание, записи и абонементы в Glide</span></div>"
         "</figure></section>"
     )
 
@@ -340,12 +350,12 @@ def _price() -> str:
         '<div class="tl-card tl-plan">'
         '<div class="tl-plan__head"><b>Карточка на катке</b><strong>0 BYN</strong></div>'
         "<p>Вы в «Научат здесь же» на странице своих катков. Вам пишут в Telegram.</p>"
-        "<ul><li>Фото, цена, катки</li><li>«Написать в Telegram»</li><li>Навсегда, без условий</li></ul>"
+        "<ul><li>Фото, цена, катки</li><li>«Написать в Telegram»</li><li>Бесплатно, без срока</li></ul>"
         "</div>"
         '<div class="tl-card tl-card--dark tl-plan">'
         f'<div class="tl-plan__head"><b>Подписка</b><strong>{PRICE_MONTH_BYN} BYN<small> / мес</small></strong></div>'
         '<span class="tl-plan__anchor">Обычно это меньше одного занятия в месяц</span>'
-        "<p>Ученики сами записываются в ваши окна — с катка и по вашей ссылке. Сколько бы их ни было.</p>"
+        "<p>Ученики сами записываются в ваши окна — с катка и по вашей ссылке. Без лимита по ученикам.</p>"
         "<ul><li>«Записаться» на карточке</li><li>Напоминания, абонементы, группы, переносы</li>"
         f"<li>{PRICE_QUARTER_BYN} BYN за 3 месяца · {PRICE_YEAR_BYN} BYN за год</li></ul>"
         "</div></div>"
@@ -392,18 +402,28 @@ def _rinks(rinks: list[dict[str, Any]], current_id: int | None) -> str:
 def _faq() -> str:
     qa = (
         ("Ученикам нужно ставить приложение?", "Нет. Запись — в Telegram, который у всех уже есть."),
-        ("Я тренирую на нескольких катках",
-         "Укажите все — карточка появится на странице каждого, окна видны по каждому катку."),
-        ("Что будет после пробного периода?",
-         "Карточка на катке остаётся бесплатно. Без подписки на ней кнопка «Написать» вместо «Записаться»."),
-        ("Часть учеников привыкла писать в личку",
-         "Пусть пишут — запишите их сами из карточки клиента. Ссылка не отменяет переписку, а убирает лишнюю."),
-        ("Кто видит моих учеников?",
-         "В каталоге — только ваша карточка: имя, фото, цена, катки. Ученики, их телефоны и заметки "
-         "туда не попадают и другим тренерам не видны."),
-        ("Сколько стоит?",
-         f"Карточка — бесплатно. Подписка — {PRICE_MONTH_BYN} BYN в месяц, {PRICE_QUARTER_BYN} BYN за 3 месяца, "
-         f"{PRICE_YEAR_BYN} BYN за год."),
+        (
+            "Я тренирую на нескольких катках",
+            "Укажите все — карточка появится на странице каждого, окна видны по каждому катку.",
+        ),
+        (
+            "Что будет после пробного периода?",
+            "Карточка на катке остаётся бесплатно. Без подписки на ней кнопка «Написать» вместо «Записаться».",
+        ),
+        (
+            "Часть учеников привыкла писать в личку",
+            "Пусть пишут. Таких вы записываете сами из карточки ученика — напоминание и абонемент сработают так же.",
+        ),
+        (
+            "Кто видит моих учеников?",
+            "В каталоге — только ваша карточка: имя, фото, цена, катки. Ученики, их телефоны и заметки "
+            "туда не попадают и другим тренерам не видны.",
+        ),
+        (
+            "Сколько стоит?",
+            f"Карточка — бесплатно. Подписка — {PRICE_MONTH_BYN} BYN в месяц, {PRICE_QUARTER_BYN} BYN за 3 месяца, "
+            f"{PRICE_YEAR_BYN} BYN за год.",
+        ),
     )
     items = "".join(f"<details><summary>{_esc(q)}</summary><p>{_esc(a)}</p></details>" for q, a in qa)
     return f'<section class="tl-wrap tl-sec"><h2 class="tl-h2">Вопросы</h2><div class="tl-faq">{items}</div></section>'
@@ -528,9 +548,9 @@ def render_trainer_landing_page(
             og_alt = f"Расписание катка «{rink['name']}» в Glide"
     jsonld = _landing_jsonld_script(s, manifest, canonical_url)
     if not rink_page:
-        faq = json.dumps(
-            {"@context": "https://schema.org", **faq_jsonld(canonical_url)}, ensure_ascii=False
-        ).replace("</", "<\\/")
+        faq = json.dumps({"@context": "https://schema.org", **faq_jsonld(canonical_url)}, ensure_ascii=False).replace(
+            "</", "<\\/"
+        )
         jsonld += f'  <script type="application/ld+json">{faq}</script>\n'
     analytics = public_analytics_head_html(
         yandex_metrika_counter_id=s.yandex_metrika_counter_id,
