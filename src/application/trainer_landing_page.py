@@ -513,6 +513,8 @@ def render_trainer_landing_page(
     robots = "index, follow"
     og_w, og_h, og_alt = 1200, 630, "Glide: запись к тренеру по ссылке — расписание с выбором свободного времени"
     page_url = canonical_url
+    # Страница катка — noindex; canonical на другую страницу рядом с noindex — противоречивый сигнал.
+    canonical_link = "" if (rink_page and rink) else f'  <link rel="canonical" href="{_esc(canonical_url)}">\n'
     if rink_page and rink:
         title = f"Тренерам катка «{rink['name']}» — Glide"
         description = (
@@ -548,8 +550,7 @@ def render_trainer_landing_page(
   <meta name="description" content="{d}">
   <meta name="robots" content="{robots}">
   <meta name="theme-color" content="#101617">
-  <link rel="canonical" href="{_esc(canonical_url)}">
-  <meta property="og:type" content="website">
+{canonical_link}  <meta property="og:type" content="website">
   <meta property="og:locale" content="ru_RU">
   <meta property="og:site_name" content="Glide">
   <meta property="og:title" content="{t}">

@@ -40,7 +40,7 @@ async def test_rink_landing_shows_that_rink(db_session):
     assert "Тренерам катка «Каток Проверочный»" in body
     assert "<title>Тренерам катка «Каток Проверочный» — Glide</title>" in body
     assert '<meta name="robots" content="noindex, follow">' in body
-    assert 'rel="canonical" href="' in body and '/trainers">' in body
+    assert 'rel="canonical"' not in body  # noindex без canonical на /trainers
     # Превью ссылки — картинка этого катка: в мессенджере тренер видит свой лёд.
     assert f'{place["path"]}/og.png"' in body
     assert "Научат здесь же" in body and "Здесь можете быть вы" in body
