@@ -128,7 +128,8 @@ body.b img { max-width: 100%; }
 /* ── Выбор времени ────────────────────────────────────────────────────── */
 .b-when {
   position: relative;
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
+  /* Три окна: «Сегодня · Завтра · В выходные» — и на главной, и в хабе города (PDEC-026). */
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;
   padding: 4px; border-radius: 14px; background: #e3eaed;
   /* Лоток утоплен в страницу: тень сверху внутри, блик по нижней кромке. */
   box-shadow: inset 0 1px 3px rgba(13, 27, 38, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
@@ -136,7 +137,7 @@ body.b img { max-width: 100%; }
 .b-when__thumb {
   position: absolute; z-index: 0; pointer-events: none;
   top: 4px; bottom: 4px; left: 4px;
-  width: calc((100% - 20px) / 4);
+  width: calc((100% - 16px) / 3);
   border-radius: 10px;
   background: linear-gradient(180deg, #24333f 0%, var(--g-dark) 60%);
   transform: translateX(calc(var(--when-i, 0) * (100% + 4px)));

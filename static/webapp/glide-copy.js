@@ -98,7 +98,7 @@
     "home.other_city": "Другой город",
     "hub.on_ice": "{city} на льду",
     "hub.nearest_ice": "Ближайший лёд",
-    "hub.what": "Что нужно",
+    "hub.what": "Чем займёмся?",
     "hub.today": "Сегодня",
     "hub.week": "Неделя",
     "hub.nearby": "Лёд рядом",

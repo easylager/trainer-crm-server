@@ -78,6 +78,8 @@ _UPCOMING_DAYS = 7
 _UPCOMING_LIMIT = 3
 _UPCOMING_FETCH = 24
 _WINDOW_KEYS = ("today", "tomorrow", "weekend")
+# Окна, в которых открывается хаб (``/c/{город}?w=…``, PDEC-026). Остальные ``w`` — список.
+HUB_WINDOW_KEYS = _WINDOW_KEYS
 _SOON_MINUTES = 60
 
 # Сеансы города по окнам, по аренам и по виду (МК / ОХМ) — один запрос.
@@ -261,7 +263,13 @@ async def load_city_hub_view(
     *,
     city: Mapping[str, Any],
     now: datetime | None = None,
+    window: str | None = None,
 ) -> dict[str, Any]:
+    """Вид хаба города.
+
+    ``window`` (PDEC-026): ``today|tomorrow|weekend`` — хаб открыт в этом окне, ``auto`` — в окне
+    по правилу главной, ``None`` — без окна (хаб Mini App): «Ближайший лёд» — на неделю вперёд.
+    """
     now = _aware(now or datetime.now(timezone.utc))
     city_id = int(city["id"])
     city_name = str(city["name"])
@@ -299,14 +307,28 @@ async def load_city_hub_view(
             if not row.get("is_ohm"):
                 skate_by_arena[aid] = skate_by_arena.get(aid, 0) + int(row.get("all_n") or 0)
 
+    when_explicit = window in _WINDOW_KEYS
+    when = window if when_explicit else (hot_window_key(skate, now=now) if window == "auto" else None)
+    upcoming_from, upcoming_to = now, now + timedelta(days=_UPCOMING_DAYS)
+    window_dates: tuple[date, date] | None = None
+    if when:
+        tw = resolve_window(when, now)
+        assert tw is not None
+        upcoming_from, upcoming_to = max(now, tw.starts_at), tw.ends_at
+        local_tz = ZoneInfo(DEFAULT_TIMEZONE)
+        window_dates = (
+            tw.starts_at.astimezone(local_tz).date(),
+            (tw.ends_at - timedelta(microseconds=1)).astimezone(local_tz).date(),
+        )
+
     upcoming_rows = (
         (
             await session.execute(
                 _USER_UPCOMING_SQL,
                 {
                     "user_city_id": city_id,
-                    "starts_at": now,
-                    "ends_at": now + timedelta(days=_UPCOMING_DAYS),
+                    "starts_at": upcoming_from,
+                    "ends_at": upcoming_to,
                     "now": now,
                     "st": STATUS_ACTIVE,
                     "lim": _UPCOMING_FETCH,
@@ -417,6 +439,9 @@ async def load_city_hub_view(
                 city_id=city_id,
                 now=now,
             )
+            if one_rink_place_view is not None and when_explicit and window_dates:
+                # Полоса дней открывается на первом дне окна с сеансами, а не на сегодня.
+                one_rink_place_view = {**one_rink_place_view, "prefer_dates": window_dates}
         if one_rink_place_view is None:
             week_rows = await load_week(session, arena_id=int(rink["id"]), today=local_now.date(), now=now)
     origin = city_origin(places)
@@ -451,7 +476,9 @@ async def load_city_hub_view(
         "trainer_count": trainer_count,
         "trainer_roles": roles[:3],
         "trainers": trainers,
-        "hot_skate": hot_window_key(skate, now=now),
+        "hot_skate": when if when_explicit else hot_window_key(skate, now=now),
+        "when": when,
+        "when_explicit": when_explicit,
         "hot_ohm": hot_window_key(ohm, now=now),
         "variant": variant,
         "week_rows": week_rows,
@@ -728,7 +755,8 @@ def render_city_hub_page(
             "__OG_IMAGE__": _esc(og_image_url),
             "__LANG__": lang,
             "__OG_LOCALE__": og_locale,
-            "__ROBOTS__": "index, follow",
+            # Хаб в окне (?w=) — вариант той же страницы: канон на голый город, в индекс не идёт.
+            "__ROBOTS__": "noindex, follow" if view.get("when_explicit") else "index, follow",
             "__HEAD_EXTRA__": "",
             "__JSONLD__": ld,
             "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
@@ -767,7 +795,39 @@ def _b_today_kicker(view: Mapping[str, Any]) -> str:
     return f"{_WEEKDAYS_FULL[d.weekday()]}, {d.day} {_MONTHS_GEN[d.month - 1]}"
 
 
+_WHEN_PHRASE = {"today": "сегодня", "tomorrow": "завтра", "weekend": "в выходные"}
+
+
+def _b_window_line(view: Mapping[str, Any]) -> str:
+    """Строка героя для хаба, открытого в окне с главной: «В выходные — 2 сеанса»."""
+    when = str(view.get("when") or "")
+    n = int(view["skate_counts"].get(when) or 0)
+    phrase = _WHEN_PHRASE[when]
+    head = phrase[:1].upper() + phrase[1:]
+    if not n:
+        return f"{head} сеансов нет"
+    return f"{head} — {n} {plural_ru(n, 'сеанс', 'сеанса', 'сеансов')}"
+
+
+def _b_when_switch(view: Mapping[str, Any]) -> str:
+    """«Сегодня · Завтра · В выходные» хаба — та же полоса, что на главной (PDEC-026)."""
+    when = view.get("when")
+    slug = str(view["slug"])
+    links = "".join(
+        f'<a href="{_esc(_list_href(slug, w=key))}"' + (' aria-current="true"' if key == when else "") + f">{_esc(label)}</a>"
+        for key, label in (("today", t("when.today")), ("tomorrow", t("when.tomorrow")), ("weekend", t("when.weekend")))
+    )
+    index = _WINDOW_KEYS.index(when) if when in _WINDOW_KEYS else None
+    thumb = "" if index is None else '<span class="b-when__thumb" aria-hidden="true"></span>'
+    return (
+        f'<div class="b-sec b-sec--when"><nav class="b-when vt-when-strip" style="--when-i: {index or 0}" '
+        f'aria-label="Когда">{thumb}{links}</nav></div>'
+    )
+
+
 def _b_counts_line(view: Mapping[str, Any]) -> str:
+    if view.get("when_explicit"):
+        return _b_window_line(view)
     today_n = int(view["skate_counts"].get("today") or 0)
     tomorrow_n = int(view["skate_counts"].get("tomorrow") or 0)
     weekend_n = int(view["skate_counts"].get("weekend") or 0)
@@ -798,12 +858,23 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
     from src.application.style_b import section, tile_html
 
     upcoming = list(view.get("upcoming") or [])
-    if not upcoming:
-        return ""
     slug = str(view["slug"])
+    when = view.get("when")
+    if not upcoming:
+        if not when or not int(view["skate_counts"].get("all") or 0):
+            return ""
+        # Окно пустое, а сеансы в городе есть: не прячем блок молча — ведём в полный список.
+        body = (
+            f'<p class="b-text">{_esc(_WHEN_PHRASE[when][:1].upper() + _WHEN_PHRASE[when][1:])} сеансов нет.</p>'
+        )
+        more = f'<a class="b-more" href="{_esc(_list_href(slug, t="ice"))}">Все сеансы</a>'
+        return section(_b_upcoming_title(when), body, aside_html=more)
     city_name = str(view["city"]["name"])
     today_n = int(view["skate_counts"].get("today") or 0)
-    all_href = _list_href(slug, t="ice", w="today") if today_n else _list_href(slug, t="ice")
+    if when:
+        all_href = _list_href(slug, t="ice", w=when)
+    else:
+        all_href = _list_href(slug, t="ice", w="today") if today_n else _list_href(slug, t="ice")
     by_slug = {str(p.get("slug") or ""): p for p in view.get("places") or []}
     tiles: list[str] = []
     seen_slugs: set[str] = set()
@@ -857,13 +928,19 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
             )
             tile = f'<div class="b-tile-wrap">{invite}{tile}</div>'
         tiles.append(tile)
-    more = f'<a class="b-more" href="{_esc(all_href)}">{_esc("Весь день" if today_n else "Все")}</a>'
+    more_label = ("Весь день" if when == "today" else "Все") if when else ("Весь день" if today_n else "Все")
+    more = f'<a class="b-more" href="{_esc(all_href)}">{_esc(more_label)}</a>'
     return section(
-        t("hub.nearest_ice"),
+        _b_upcoming_title(when),
         f'<div class="b-scroll">{"".join(tiles)}</div>',
         aside_html=more,
         klass="b-sec--flush",
     )
+
+
+def _b_upcoming_title(when: str | None) -> str:
+    """«Лёд в выходные», если хаб открыт в окне; без окна — «Ближайший лёд»."""
+    return f"Лёд {_WHEN_PHRASE[when]}" if when in _WHEN_PHRASE else t("hub.nearest_ice")
 
 
 def _b_route_row(*, href: str, icon: str, title: str, line: str, quick: str = "") -> str:
@@ -1360,6 +1437,7 @@ def _b_body(
     return "".join(
         [
             hero,
+            _b_when_switch(view) if int(view["skate_counts"].get("all") or 0) else "",
             _b_upcoming(view),
             _b_routes(view, coach_href=coach_href),
             _b_for_you(view),

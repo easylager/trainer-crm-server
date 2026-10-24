@@ -22,6 +22,7 @@ from src.application.catalog_home_page import (
     render_map_svg,
 )
 from src.application.city_hub_page import city_hub_document_title, hot_window_key, open_state
+from src.shared.copy_ru import t
 from src.application.selection_page import _hero_kicker
 from src.application.ice_city_day import city_slug, invalidate_public_city_cache
 from src.application.ice_time_windows import resolve_window
@@ -148,7 +149,7 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert hub.status_code == 200
     html = hub.text
     assert re.search(rf'<h1 class="b-hero__title[^"]*">{re.escape(name)}(<br>| )на льду</h1>', html)
-    assert "Что нужно" in html
+    assert t("hub.what") in html
     assert 'class="b-card2"' not in html, "хаб — не список мест"
 
     skate = _route(html, "Покататься")
@@ -176,8 +177,8 @@ async def test_city_hub_shows_only_tiles_with_data_and_quick_windows(app_use_tes
     assert not _route(html, "Магазины")
     assert not _route(html, "Тренеры")
 
-    # «Ближайшее на льду» — ссылки на страницы мест; все места — списком (SEO).
-    assert "Ближайший лёд" in html
+    # Лёд в окне по правилу главной (TASK-326) — ссылки на страницы мест; все места — списком (SEO).
+    assert re.search(r">Лёд (сегодня|завтра|в выходные)</h2>", html)
     assert f'href="/p/{slug}/' in html
     assert "Все места города" in html
     # Канон и редирект по id — как у подборки.
@@ -260,7 +261,7 @@ async def test_city_hub_description_matches_selection_share(app_use_test_db, db_
 
 @pytest.mark.asyncio
 async def test_city_hub_with_params_is_still_the_list(app_use_test_db, db_session) -> None:
-    """AC-005: старые ссылки ведут на списки, хаб — только чистый /c/{город}."""
+    """AC-005: ссылки с фильтром ведут на списки. Одно окно ``?w=`` — хаб в окне (TASK-326)."""
     name = f"Списочный {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     rink = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:4]}")
@@ -269,11 +270,12 @@ async def test_city_hub_with_params_is_still_the_list(app_use_test_db, db_sessio
     invalidate_public_city_cache()
     slug = city_slug(name)
     async with _client() as client:
-        weekend = await client.get(f"/c/{slug}", params={"w": "weekend"})
+        weekend = await client.get(f"/c/{slug}", params={"t": "ice", "w": "weekend"})
+        evening = await client.get(f"/c/{slug}", params={"w": "today_evening"})
         ice = await client.get(f"/c/{slug}", params={"t": "ice"})
         paged = await client.get(f"/c/{slug}", params={"page": "1"})
         hub_src = await client.get(f"/c/{slug}", params={"src": "tg"})
-    for resp in (weekend, ice, paged):
+    for resp in (weekend, evening, ice, paged):
         assert resp.status_code == 200
         assert 'class="b-card2' in resp.text, "список мест"
         assert "на льду" not in resp.text
@@ -381,7 +383,7 @@ async def test_one_rink_city_shows_the_week_not_the_router(app_use_test_db, db_s
     assert resp.status_code == 200
     assert "Массовое катание" in resp.text
     assert 'class="b-sched"' in resp.text
-    assert "Что нужно" not in resp.text
+    assert t("hub.what") not in resp.text
     assert "завтра" in resp.text.lower() and "12:30" in resp.text
     assert "/* task246-week */" not in resp.text
 
@@ -403,7 +405,7 @@ async def test_phone_city_asks_to_call_and_invents_nothing(app_use_test_db, db_s
         resp = await client.get(f"/c/{city_slug(name)}")
     assert resp.status_code == 200
     assert "называет время массового катания по телефону" in resp.text
-    assert "Что нужно" not in resp.text
+    assert t("hub.what") not in resp.text
     assert "Неделя" not in resp.text
     assert "b-motif" in resp.text
     assert "+375 29 111-22-33" in resp.text
@@ -428,3 +430,61 @@ def test_skate_route_without_sessions_says_so() -> None:
     assert "времени катания в расписании нет" in html
     assert "Сегодня" not in html
     assert 'class="b-quick"' not in html
+
+
+# ---------------------------------------------------------------------------
+# TASK-326 (PDEC-026): окно с главной открывает хаб в этом окне
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_city_hub_opens_in_window_from_home(app_use_test_db, db_session) -> None:
+    name = f"Окноград {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    near = await _insert_arena(db_session, city_id, name=f"Завтрашний {uuid.uuid4().hex[:4]}")
+    far = await _insert_arena(db_session, city_id, name=f"Дальний {uuid.uuid4().hex[:4]}")
+    await _session(db_session, near, day=_minsk_today() + timedelta(days=1), hhmm="12:00")
+    await _session(db_session, far, day=_minsk_today() + timedelta(days=5), hhmm="12:00")
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+    async with _client() as client:
+        tomorrow = await client.get(f"/c/{slug}", params={"w": "tomorrow"})
+        today = await client.get(f"/c/{slug}", params={"w": "today"})
+    html = tomorrow.text
+    assert tomorrow.status_code == 200
+    assert "на льду" in html and 'class="b-card2' not in html, "хаб, а не список"
+    assert '<link rel="canonical" href="http://test/c/' + slug + '"' in html or f'/c/{slug}"' in html
+    assert re.search(r'<nav class="b-when[^>]*>.*?aria-current="true">Завтра</a>', html, re.S)
+    assert ">Лёд завтра</h2>" in html
+    assert "Завтрашний" in html and "Дальний" not in html.split(">Лёд завтра</h2>")[1].split("</section>")[0]
+    assert f'href="/c/{slug}?t=ice&amp;w=tomorrow"' in html
+    assert "Завтра — 1 сеанс" in html.replace("\u00a0", " ")
+    # Пустое окно не прячется молча: подпись и ссылка на все сеансы.
+    assert "Сегодня сеансов нет" in today.text
+    assert f'href="/c/{slug}?t=ice"' in today.text
+
+
+@pytest.mark.asyncio
+async def test_home_links_carry_chosen_window(app_use_test_db, db_session) -> None:
+    name = f"Ссылкоград {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    for _ in range(2):
+        rink = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:4]}")
+        await _session(db_session, rink, day=_minsk_today() + timedelta(days=1), hhmm="12:00")
+    await db_session.commit()
+    invalidate_public_city_cache()
+    slug = city_slug(name)
+    async with _client() as client:
+        chosen = await client.get("/", params={"when": "tomorrow"}, cookies={"glide_city": slug})
+        default = await client.get("/", cookies={"glide_city": slug})
+    assert f'class="b-city" href="/c/{slug}?w=tomorrow"' in chosen.text
+    assert f'class="b-city" href="/c/{slug}"' in default.text, "умный дефолт не пишется в ссылку"
+    nav = re.search(r'<nav class="b-when.*?</nav>', chosen.text, re.S)
+    assert nav and "when=day" not in nav.group(0), "«День…» убран"
+
+
+def test_map_links_carry_window() -> None:
+    points = [{"slug": "minsk", "name": "Минск", "x": 1, "y": 1, "r": 5, "session_count": 1}]
+    assert 'href="/c/minsk?w=weekend"' in render_map_svg(points, city_when="weekend")
+    assert 'href="/c/minsk"' in render_map_svg(points)
