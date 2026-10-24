@@ -45,6 +45,7 @@ async def run_ice_ingest_tick() -> IceIngestTickResult:
     # а не тихая смерть задачи (TASK-176).
     from src.infrastructure.db.session import async_session_factory, engine
     from src.ingestion.ice_sales_snapshots import SqlAlchemyKoronaSalesSnapshotStore
+    from src.application.schedule_waves import parser_wave_recorder
     from src.ingestion.publish import SqlAlchemyIceSessionPublisher
     from src.ingestion.scheduler_lock import run_with_ice_ingest_lock
     from src.ingestion.types import RUN_STATUS_OK
@@ -61,6 +62,7 @@ async def run_ice_ingest_tick() -> IceIngestTickResult:
                 by_egress_proxy_url=get_settings().by_egress_proxy_url,
                 checkpoint=session.commit,
                 job_savepoint=session.begin_nested,
+                schedule_wave_recorder=parser_wave_recorder(async_session_factory),
             )
             outcomes = await scheduler.run_due(datetime.now(timezone.utc))
             await session.commit()

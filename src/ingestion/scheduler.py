@@ -81,6 +81,7 @@ class IceIngestScheduler:
         job_savepoint: Callable[[], AbstractAsyncContextManager] | None = None,
         tick_budget_s: float | None = TICK_BUDGET_S,
         clock: Callable[[], float] = time.monotonic,
+        schedule_wave_recorder: Callable[[int], Awaitable[object]] | None = None,
     ) -> None:
         self._store = store
         self._recorder = recorder or LoggingScrapeRunRecorder()
@@ -105,6 +106,8 @@ class IceIngestScheduler:
         self._job_savepoint = job_savepoint
         self._tick_budget_s = tick_budget_s
         self._clock = clock
+        # TASK-329: запись волны расписания — только после checkpoint (коммита публикации).
+        self._schedule_wave_recorder = schedule_wave_recorder
         # TASK-176: сколько заданий было просрочено на последнем тике (до потолка) — для heartbeat.
         self.last_due_count = 0
         # TASK-226: season_open reminders — at most once per calendar day (Europe/Minsk) per worker.
@@ -163,7 +166,21 @@ class IceIngestScheduler:
             record = await self._recover_job_after_tick_error(job, now, exc)
         if self._checkpoint is not None:
             await self._checkpoint()
+            await self._record_schedule_wave(job, record)
         return record
+
+    async def _record_schedule_wave(self, job: ParserJob, record: ScrapeRunRecord) -> None:
+        """TASK-329: опубликовано и закоммичено — пересчитать горизонт катка. Сбой — только лог."""
+        if (
+            self._schedule_wave_recorder is None
+            or self._publisher is None
+            or record.status != RUN_STATUS_OK
+        ):
+            return
+        try:
+            await self._schedule_wave_recorder(int(job.arena_id))
+        except Exception:  # noqa: BLE001 — публикация уже закоммичена
+            logger.exception("schedule wave record failed arena_id=%s after publish", job.arena_id)
 
     async def _execute_job_tick(self, job: ParserJob, now: datetime) -> ScrapeRunRecord:
         record, drafts, korona_sales = await self._run_one(job, now)

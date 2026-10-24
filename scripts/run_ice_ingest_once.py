@@ -80,6 +80,7 @@ def _assert_local_database(url: str, *, apply: bool = True, allow_prod: bool = F
 async def _run_once() -> None:
     from sqlalchemy import text
 
+    from src.application.schedule_waves import parser_wave_recorder
     from src.infrastructure.db.session import async_session_factory, engine
     from src.ingestion.jobs import SqlAlchemyParserJobStore
     from src.ingestion.parsers import default_registry
@@ -97,6 +98,7 @@ async def _run_once() -> None:
             publisher=SqlAlchemyIceSessionPublisher(session),
             checkpoint=session.commit,
             job_savepoint=session.begin_nested,
+            schedule_wave_recorder=parser_wave_recorder(async_session_factory),
             by_egress_proxy_url=Settings().by_egress_proxy_url,
             max_jobs_per_tick=max_jobs_per_tick,
             # Разовый ручной прогон: поднятые задания должны отработать все, бюджет тика не нужен.
