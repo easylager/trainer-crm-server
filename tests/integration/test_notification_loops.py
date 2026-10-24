@@ -153,8 +153,13 @@ async def test_response_batch_marks_sent_only_after_telegram_ok(db_session) -> N
 
 
 @pytest.mark.asyncio
-async def test_request_batch_marks_sent_only_after_telegram_ok(db_session) -> None:
+async def test_request_batch_marks_sent_only_after_telegram_ok(db_session, monkeypatch) -> None:
     """Pending request notify: claim released on Telegram failure; kept after successful send."""
+    # Time-independent test: at night the trainer's quiet hours skip the send and nothing is claimed.
+    monkeypatch.setattr(
+        "src.bot.notification_loops.is_trainer_push_allowed_now",
+        AsyncMock(return_value=True),
+    )
     city_id = await require_seed_city_id(db_session)
     service_id = await require_seed_service_id(db_session)
     tr_tid = 888_000_000 + (unique_test_telegram_id() % 99_999_999)
