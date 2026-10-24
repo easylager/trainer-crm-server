@@ -212,23 +212,38 @@ async def arena_id_for_recurrence(session: AsyncSession, recurrence_key: str) ->
     return int(value) if value is not None else None
 
 
-async def load_recent_waves(
-    session: AsyncSession, arena_id: int, *, since: datetime
-) -> list[ScheduleWave]:
-    result = await session.execute(
-        text(
-            """
-            SELECT detected_at, source
-            FROM ice_schedule_waves
-            WHERE arena_id = :arena_id
-              AND detected_at >= :since
-              AND source <> 'seed'
-            ORDER BY detected_at, id
-            """
-        ),
-        {"arena_id": int(arena_id), "since": since},
-    )
-    return [ScheduleWave(detected_at=row[0], source=str(row[1])) for row in result.fetchall()]
+async def load_card_inputs(
+    session: AsyncSession, arena_id: int, *, since: datetime, now: datetime
+) -> tuple[list[ScheduleWave], date | None]:
+    """Волны окна (без seed) и горизонт одним запросом: страница места считает SQL (TASK-197)."""
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT
+                    (
+                        SELECT max(local_date)
+                        FROM ice_sessions
+                        WHERE arena_id = :arena_id
+                          AND kind IN ('public_skate', 'open_ice')
+                          AND status = 'active'
+                          AND starts_at_utc > :now
+                    ) AS horizon,
+                    (
+                        SELECT array_agg(detected_at ORDER BY detected_at, id)
+                        FROM ice_schedule_waves
+                        WHERE arena_id = :arena_id
+                          AND detected_at >= :since
+                          AND source <> 'seed'
+                    ) AS waves
+                """
+            ),
+            {"arena_id": int(arena_id), "now": now, "since": since},
+        )
+    ).one()
+    # source внутри окна функции уже не важен: seed отфильтрован в SQL.
+    waves = [ScheduleWave(detected_at=moment, source=SOURCE_PARSER) for moment in (row[1] or [])]
+    return waves, row[0]
 
 
 def _promise_payload(promise: dict[str, Any]) -> dict[str, Any]:
@@ -266,8 +281,7 @@ async def schedule_card_fields(
     since = now - timedelta(days=WINDOW_DAYS + 1)
     try:
         async with session.begin_nested():
-            waves = await load_recent_waves(session, arena_id, since=since)
-            horizon = await arena_schedule_horizon(session, arena_id, now=now)
+            waves, horizon = await load_card_inputs(session, arena_id, since=since, now=now)
     except Exception:  # noqa: BLE001 — карточка важнее обещания
         logger.exception("schedule card fields failed arena_id=%s", arena_id)
         return empty_card_fields()

@@ -290,7 +290,7 @@ async def test_card_fields_fall_back_when_query_fails(db_session, monkeypatch) -
     async def boom(*args, **kwargs):
         await db_session.execute(text("SELECT * FROM no_such_table_task329"))
 
-    monkeypatch.setattr(mod, "load_recent_waves", boom)
+    monkeypatch.setattr(mod, "load_card_inputs", boom)
     arena_id = await _arena(db_session)
     fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
     assert fields["schedule_promise"]["level"] == "none"
