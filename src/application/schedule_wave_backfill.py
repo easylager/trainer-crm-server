@@ -20,7 +20,7 @@ from typing import Iterable, Mapping
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.schedule_promise import MERGE_WITHIN
+from src.application.schedule_habit import MERGE_WITHIN
 
 COUNTED_STATUSES = frozenset({"ok", "empty"})
 MIN_ABS_GROWTH = 2

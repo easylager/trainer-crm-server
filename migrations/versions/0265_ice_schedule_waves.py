@@ -5,8 +5,8 @@ sessions) grew after a parser publish or an admin save. ``seed`` is the first ro
 per rink — a reference point, never counted as a wave. ``backfill`` rows are
 reconstructed from ice_scrape_runs and carry no horizons.
 
-Revision ID: 0264_ice_schedule_waves
-Revises: 0262_brest_rental_prices
+Revision ID: 0265_ice_schedule_waves
+Revises: 0264_grodno_rink_facts
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0264_ice_schedule_waves"
-down_revision = "0262_brest_rental_prices"
+revision = "0265_ice_schedule_waves"
+down_revision = "0264_grodno_rink_facts"
 branch_labels = None
 depends_on = None
 

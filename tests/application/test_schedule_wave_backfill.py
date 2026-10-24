@@ -157,7 +157,7 @@ async def test_script_dry_run_prints_waves_and_writes_nothing(db_session) -> Non
     )
     mine = [line for line in lines if line.lstrip().startswith(f"{arena_id} ")]
     assert len(mine) == 1
-    assert "waves=3 promise=day date=2026-10-30 week=next" in mine[0]
+    assert "waves=3 habit=day weekday=пт" in mine[0]
     assert "пт 09.10 15:00, пт 16.10 15:00, пт 23.10 15:00" in mine[0]
     assert levels["day"] >= 1
     assert lines[-1].startswith("dry-run")

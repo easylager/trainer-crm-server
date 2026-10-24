@@ -18,18 +18,19 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.schedule_promise import (
-    WINDOW_DAYS,
+from src.application.schedule_habit import (
     ScheduleWave,
-    no_promise,
+    no_habit,
     resolve_zone,
-    schedule_promise,
+    schedule_habit,
+    waves_in_window,
+    window_start,
 )
 
 logger = logging.getLogger(__name__)
@@ -234,6 +235,7 @@ async def load_card_inputs(
                         FROM ice_schedule_waves
                         WHERE arena_id = :arena_id
                           AND detected_at >= :since
+                          AND detected_at <= :now
                           AND source <> 'seed'
                     ) AS waves
                 """
@@ -246,17 +248,8 @@ async def load_card_inputs(
     return waves, row[0]
 
 
-def _promise_payload(promise: dict[str, Any]) -> dict[str, Any]:
-    promised = promise.get("date")
-    return {
-        "level": promise["level"],
-        "date": promised.isoformat() if promised is not None else None,
-        "week": promise.get("week"),
-    }
-
-
 def empty_card_fields() -> dict[str, Any]:
-    return {"schedule_promise": no_promise(), "schedule_horizon": None}
+    return {"schedule_habit": no_habit(), "schedule_horizon": None}
 
 
 async def schedule_card_fields(
@@ -266,26 +259,22 @@ async def schedule_card_fields(
     tz_name: str | None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """``schedule_promise`` + ``schedule_horizon`` для карточки катка (Mini App и сайт).
+    """``schedule_habit`` + ``schedule_horizon`` для карточки катка (Mini App и сайт).
 
-    Даты — ISO-строки: карточка уходит и в JSON API, и в ``json_for_script`` сайта.
-    Сбой (например, таблицы ещё нет) не роняет карточку: savepoint откатывает только
-    эти запросы, поля — «обещания нет».
+    Окно 42 дня считается от ``now`` здесь. Горизонт — ISO-строка: карточка уходит и
+    в JSON API, и в ``json_for_script`` сайта. Сбой (например, таблицы ещё нет) не роняет
+    карточку: savepoint откатывает только этот запрос, поля — «привычки нет».
     """
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
-    zone = resolve_zone(tz_name)
-    today = now.astimezone(zone).date()
-    # С запасом в сутки: окно функции считается по дате катка, а не по UTC.
-    since = now - timedelta(days=WINDOW_DAYS + 1)
     try:
         async with session.begin_nested():
-            waves, horizon = await load_card_inputs(session, arena_id, since=since, now=now)
-    except Exception:  # noqa: BLE001 — карточка важнее обещания
+            waves, horizon = await load_card_inputs(session, arena_id, since=window_start(now), now=now)
+    except Exception:  # noqa: BLE001 — карточка важнее наблюдения
         logger.exception("schedule card fields failed arena_id=%s", arena_id)
         return empty_card_fields()
     return {
-        "schedule_promise": _promise_payload(schedule_promise(waves, today, zone)),
+        "schedule_habit": schedule_habit(waves_in_window(waves, now=now), resolve_zone(tz_name)),
         "schedule_horizon": horizon.isoformat() if horizon is not None else None,
     }

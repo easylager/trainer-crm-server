@@ -260,27 +260,32 @@ async def test_admin_save_survives_wave_failure(app_use_test_db, db_session, mon
     assert saved == 1
 
 
+async def _wave(db_session, arena_id: int, moment: datetime, source: str = "parser") -> None:
+    await db_session.execute(
+        text("INSERT INTO ice_schedule_waves (arena_id, detected_at, source) VALUES (:a, :t, :s)"),
+        {"a": arena_id, "t": moment, "s": source},
+    )
+
+
 @pytest.mark.asyncio
-async def test_card_fields_default_and_promise(db_session) -> None:
+async def test_card_fields_default_and_habit(db_session) -> None:
     arena_id = await _arena(db_session)
     fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
-    assert fields == {"schedule_promise": {"level": "none", "date": None, "week": None}, "schedule_horizon": None}
+    assert fields == {"schedule_habit": {"level": "none", "weekday": None}, "schedule_horizon": None}
 
     await _ice(db_session, arena_id, D)
-    for day in (9, 16, 23):  # пятницы, 15:00 Минск
-        await db_session.execute(
-            text("INSERT INTO ice_schedule_waves (arena_id, detected_at, source) VALUES (:a, :t, 'parser')"),
-            {"a": arena_id, "t": datetime(2026, 10, day, 15, 0, tzinfo=MINSK)},
-        )
-    await db_session.execute(
-        text("INSERT INTO ice_schedule_waves (arena_id, detected_at, source) VALUES (:a, :t, 'seed')"),
-        {"a": arena_id, "t": datetime(2026, 10, 2, 15, 0, tzinfo=MINSK)},
-    )
+    # пятницы 16.10 и 23.10; seed (09.10), волна старше 42 дней (04.09) и «будущая» не в счёт
+    await _wave(db_session, arena_id, datetime(2026, 10, 16, 15, 0, tzinfo=MINSK))
+    await _wave(db_session, arena_id, datetime(2026, 10, 23, 15, 0, tzinfo=MINSK))
+    await _wave(db_session, arena_id, datetime(2026, 10, 9, 15, 0, tzinfo=MINSK), source="seed")
+    await _wave(db_session, arena_id, datetime(2026, 9, 4, 15, 0, tzinfo=MINSK))
+    await _wave(db_session, arena_id, datetime(2026, 10, 30, 15, 0, tzinfo=MINSK))
     fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
-    assert fields == {
-        "schedule_promise": {"level": "day", "date": "2026-10-30", "week": "next"},
-        "schedule_horizon": "2026-10-25",
-    }
+    assert fields == {"schedule_habit": {"level": "week", "weekday": None}, "schedule_horizon": "2026-10-25"}
+
+    await _wave(db_session, arena_id, datetime(2026, 10, 2, 15, 0, tzinfo=MINSK), source="backfill")
+    fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
+    assert fields["schedule_habit"] == {"level": "day", "weekday": 4}
 
 
 @pytest.mark.asyncio
@@ -293,7 +298,7 @@ async def test_card_fields_fall_back_when_query_fails(db_session, monkeypatch) -
     monkeypatch.setattr(mod, "load_card_inputs", boom)
     arena_id = await _arena(db_session)
     fields = await schedule_card_fields(db_session, arena_id, tz_name="Europe/Minsk", now=NOW)
-    assert fields["schedule_promise"]["level"] == "none"
+    assert fields["schedule_habit"] == {"level": "none", "weekday": None}
     # savepoint откатил только сбойный запрос — сессия карточки жива
     assert (await db_session.execute(text("SELECT 1"))).scalar() == 1
 
@@ -302,12 +307,12 @@ async def test_card_fields_fall_back_when_query_fails(db_session, monkeypatch) -
 async def test_public_card_carries_schedule_fields(app_use_test_db, db_session) -> None:
     arena_id = await _arena(db_session)
     card = await get_public_arena_card(db_session, str(arena_id))
-    assert card["schedule_promise"] == {"level": "none", "date": None, "week": None}
+    assert card["schedule_habit"] == {"level": "none", "weekday": None}
     assert card["schedule_horizon"] is None
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get(f"/api/public/arenas/{arena_id}")
     assert r.status_code == 200, r.text
-    assert r.json()["schedule_promise"] == {"level": "none", "date": None, "week": None}
+    assert r.json()["schedule_habit"] == {"level": "none", "weekday": None}
     assert "schedule_horizon" in r.json()
 
 

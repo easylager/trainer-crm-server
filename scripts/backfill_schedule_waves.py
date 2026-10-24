@@ -6,8 +6,8 @@ ok/empty-прогонов; волна — ``0 → N`` или прирост ≥2
 У катка, где волны уже пишутся вживую (есть seed/parser/admin), восстановление
 обрывается на первой живой записи — без дублей.
 
-По умолчанию — dry-run в READ ONLY транзакции: печатает волны по каткам и обещание,
-которое карточка показала бы сегодня. ``--apply`` пишет (идемпотентно: прежние
+По умолчанию — dry-run в READ ONLY транзакции: печатает волны по каткам и привычку,
+которую карточка показала бы сейчас. ``--apply`` пишет (идемпотентно: прежние
 backfill-строки окна заменяются). Облачная БД — только с ``--i-know-this-is-prod``;
 ``--apply`` на проде запускать только с согласия владельца.
 
@@ -32,7 +32,7 @@ if str(ROOT) not in sys.path:
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.application.schedule_promise import ScheduleWave, resolve_zone, schedule_promise
+from src.application.schedule_habit import ScheduleWave, resolve_zone, schedule_habit, waves_in_window
 from src.application.schedule_wave_backfill import (
     detect_backfill_waves,
     load_live_start_by_arena,
@@ -105,7 +105,7 @@ async def run(
     apply: bool,
     out=print,
 ) -> dict[str, int]:
-    """Ядро скрипта (тестируется на фикстуре). Возвращает счётчики уровней обещания."""
+    """Ядро скрипта (тестируется на фикстуре). Возвращает счётчики уровней привычки."""
     table = await _table_exists(session)
     if apply and not table:
         raise SystemExit("ice_schedule_waves is missing: run alembic upgrade head first")
@@ -119,18 +119,17 @@ async def run(
     for arena_id in sorted(set(arenas) | set(waves)):
         name, tz_name = arenas.get(arena_id, (f"arena {arena_id}", None))
         moments = waves.get(arena_id, [])
-        today = now.astimezone(resolve_zone(tz_name)).date()
-        promise = schedule_promise(
-            [ScheduleWave(detected_at=m, source="backfill") for m in moments] + live.get(arena_id, []),
-            today,
+        habit = schedule_habit(
+            waves_in_window(
+                [ScheduleWave(detected_at=m, source="backfill") for m in moments] + live.get(arena_id, []),
+                now=now,
+            ),
             tz_name,
         )
-        levels[promise["level"]] += 1
-        detail = ""
-        if promise["level"] != "none":
-            detail = f" date={promise['date'].isoformat() if promise['date'] else '-'} week={promise['week']}"
+        levels[habit["level"]] += 1
+        detail = f" weekday={_WEEKDAYS_RU[habit['weekday']]}" if habit["weekday"] is not None else ""
         when = ", ".join(_fmt(m, tz_name) for m in moments) or "—"
-        out(f"{arena_id:>4} {name[:40]:<40} waves={len(moments)} promise={promise['level']}{detail} | {when}")
+        out(f"{arena_id:>4} {name[:40]:<40} waves={len(moments)} habit={habit['level']}{detail} | {when}")
 
     out(
         f"total arenas={sum(levels.values())} day={levels['day']} week={levels['week']} "
