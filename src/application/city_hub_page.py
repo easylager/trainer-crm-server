@@ -755,7 +755,8 @@ def render_city_hub_page(
             "__OG_IMAGE__": _esc(og_image_url),
             "__LANG__": lang,
             "__OG_LOCALE__": og_locale,
-            "__ROBOTS__": "index, follow",
+            # Хаб в окне (?w=) — вариант той же страницы: канон на голый город, в индекс не идёт.
+            "__ROBOTS__": "noindex, follow" if view.get("when_explicit") else "index, follow",
             "__HEAD_EXTRA__": "",
             "__JSONLD__": ld,
             "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),

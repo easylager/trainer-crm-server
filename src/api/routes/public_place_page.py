@@ -679,7 +679,7 @@ async def _city_hub(
     inventory_line = selection_share_description(preview)
     page_url = f"{base}/c/{slug}"
     og_image = base + selection_image_path(
-        city_name=city_name, venue=None, when=None, version=selection_image_version(preview)
+        city_name=city_name, venue=None, when=when, version=selection_image_version(preview)
     )
     html = render_city_hub_page(
         view,
@@ -687,7 +687,7 @@ async def _city_hub(
         og_image_url=og_image,
         cta_url=public_telegram_cta_url(
             base,
-            start_param=selection_start_param(city_id=int(city["id"]), venue=None, when=None),
+            start_param=selection_start_param(city_id=int(city["id"]), venue=None, when=when),
             surface="selection_page",
             city_id=int(city["id"]),
         ),
