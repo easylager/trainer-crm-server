@@ -40,14 +40,17 @@ FACTS: dict[int, dict] = {
     # orsha-arena
     31: {"parking": {"state": "yes", "note": "бесплатная стоянка перед зданием"}, "cafe": {"state": "yes", "note": "буфеты и кофе-автоматы"}, "locker_rooms": {"state": "yes", "note": "большой гардероб"}},
     # bobruisk-arena
-    38: {"parking": {"state": "yes", "note": "бесплатная, около 1000 мест"}, "cafe": {"state": "yes", "note": "буфеты и кафе-бар «Овертайм»"}, "locker_rooms": {"state": "yes", "note": "гардероб и камера хранения"}},
+    38: {"parking": {"state": "yes", "note": "бесплатная"}, "cafe": {"state": "yes", "note": "буфеты и кафе-бар «Овертайм»"}, "locker_rooms": {"state": "yes", "note": "гардероб и камера хранения"}},
     # ostrovets-lds
-    41: {"parking": {"state": "yes", "note": ""}, "cafe": {"state": "no", "note": "в фойе автоматы с кофе, напитками и снеками"}, "locker_rooms": {"state": "yes", "note": "переодеться и оставить обувь"}},
+    41: {"parking": {"state": "yes", "note": ""}, "cafe": {"state": "no", "note": "в фойе автоматы с кофе, напитками и снеками"}, "locker_rooms": {"state": "yes", "note": "переобуться и оставить обувь"}},
     # mogilev-ds
     43: {"parking": {"state": "yes", "note": "бесплатная парковка вокруг дворца"}, "cafe": {"state": "yes", "note": "ледовые буфеты"}, "locker_rooms": {"state": "yes", "note": "гардероб и зона для переодевания"}},
     # mozyr-global-ice
     217: {"parking": {"state": "yes", "note": ""}, "cafe": {"state": "yes", "note": ""}, "locker_rooms": {"state": "yes", "note": ""}},
 }
+
+# Уже были в проде до этой миграции (0258): откат их не трогает.
+PREEXISTING: dict[int, set[str]] = {41: {"locker_rooms"}}
 
 
 def upgrade() -> None:
@@ -69,7 +72,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     for arena_id, facts in FACTS.items():
-        expr = "COALESCE(visit_info->'facts', '{}'::jsonb)" + "".join(f" - '{key}'" for key in facts)
+        removable = [key for key in facts if key not in PREEXISTING.get(arena_id, set())]
+        if not removable:
+            continue
+        expr = "COALESCE(visit_info->'facts', '{}'::jsonb)" + "".join(f" - '{key}'" for key in removable)
         bind.execute(
             sa.text(
                 "UPDATE arena_profiles SET visit_info = COALESCE(visit_info, '{}'::jsonb) "
