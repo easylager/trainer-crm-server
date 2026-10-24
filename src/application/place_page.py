@@ -1479,8 +1479,16 @@ def _b_day_strip(
 def _place_visit(view: Mapping[str, Any]) -> dict[str, Any]:
     """Модель блоков карточки v2 (arena_visit_info). Тренеры — из view: школа катка встаёт к ним."""
     from src.application.arena_visit_info import visit_view
+    from src.application.place_visit_blocks import price_floors
 
-    return visit_view(view["card"], has_trainers=bool(view.get("trainers")))
+    card = view["card"]
+    slots = [s for d in view.get("days") or [] for s in d.get("sessions") or []]
+    rental = price_floors(slots).get("rental")
+    rental_price = ""
+    if rental:
+        text = format_price_minor(rental[0], str(card.get("currency_code") or "BYN"))
+        rental_price = f"от {text}" if rental[1] else text
+    return visit_view(card, has_trainers=bool(view.get("trainers")), rental_price=rental_price)
 
 
 def _b_buy_pill(view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[str, Any]) -> str:

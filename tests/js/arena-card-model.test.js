@@ -824,6 +824,37 @@ describe('formatChildTicketAgeNote', () => {
   });
 });
 
+describe('showtimesForDay: заметка о возрасте не дробит один тариф', () => {
+  const now = new Date('2026-10-24T10:00:00Z');
+  const slot = (id, hh, extra) => ({
+    id, kind: 'public_skate', local_date: '2026-10-24',
+    starts_at_local: hh + ':15:00', ends_at_local: String(Number(hh) + 1) + ':15:00',
+    starts_at_utc: '2026-10-24T' + String(Number(hh) - 3).padStart(2, '0') + ':15:00Z',
+    ends_at_utc: '2026-10-24T' + String(Number(hh) - 2).padStart(2, '0') + ':15:00Z',
+    price_adult_minor: 1000, price_child_minor: 800, price_rental_minor: 500, currency_code: 'BYN', ...extra,
+  });
+
+  it('сеанс с заметкой и без неё при тех же ценах — одна группа', () => {
+    const { showtimesForDay } = loadModel();
+    const v = showtimesForDay({
+      sessions: [slot(1, '19', { age_note: 'детский с 3 до 14 лет' }), slot(2, '20', { age_note: null })],
+      now,
+    });
+    assert.equal(v.groups.length, 1);
+    assert.equal(v.groups[0].times.length, 2);
+    assert.match(v.groups[0].note, /3 до 14/);
+  });
+
+  it('две разные заметки при тех же ценах остаются разными группами', () => {
+    const { showtimesForDay } = loadModel();
+    const v = showtimesForDay({
+      sessions: [slot(1, '19', { age_note: 'до 12 лет' }), slot(2, '20', { age_note: 'до 16 лет' })],
+      now,
+    });
+    assert.equal(v.groups.length, 2);
+  });
+});
+
 describe('TASK-146: расписание как сеансы в кино', () => {
   const now = new Date('2026-10-02T10:00:00Z'); // 13:00 по Минску
   const s = (id, t, extra = {}) => ({

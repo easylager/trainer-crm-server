@@ -382,7 +382,12 @@ def _facts_view(card: Mapping[str, Any], visit: Mapping[str, Any]) -> list[dict[
     return out
 
 
-def _services_view(card: Mapping[str, Any], visit: Mapping[str, Any], hours: Mapping[str, Any]) -> dict[str, Any]:
+def _services_view(
+    card: Mapping[str, Any],
+    visit: Mapping[str, Any],
+    hours: Mapping[str, Any],
+    rental_price: str = "",
+) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for row in visit.get("services") or []:
         kind = row.get("kind") or "other"
@@ -408,8 +413,9 @@ def _services_view(card: Mapping[str, Any], visit: Mapping[str, Any], hours: Map
         have = {r["icon"] for r in rows}
         for key, kind in (("skate_rental", "rental"), ("skate_sharpening", "sharpening")):
             if amenities.get(key) is True and _SERVICE_ICONS[kind] not in have:
+                known = rental_price if kind == "rental" else ""
                 rows.append({"kind": kind, "icon": _SERVICE_ICONS[kind], "title": _SERVICE_TITLES[kind],
-                             "price": "", "note": "цена в кассе"})
+                             "price": known, "note": "" if known else "цена в кассе"})
     rows.sort(key=lambda r: _SERVICE_ORDER.get(r["kind"], 99))
     rental = _mapping(visit.get("rental"))
     notes: list[str] = []
@@ -485,8 +491,14 @@ def _price_key(text: str) -> float:
     return float(m.group(0).replace(",", ".")) if m else 1e9
 
 
-def visit_view(card: Mapping[str, Any], *, has_trainers: bool = False) -> dict[str, Any]:
-    """Всё, что блоки 2–7 показывают сверх расписания. Пустые части — пустые списки."""
+def visit_view(
+    card: Mapping[str, Any], *, has_trainers: bool = False, rental_price: str = ""
+) -> dict[str, Any]:
+    """Всё, что блоки 2–7 показывают сверх расписания. Пустые части — пустые списки.
+
+    ``rental_price`` — цена проката из сеансов недели: если она известна, строка проката
+    не должна говорить «цена в кассе».
+    """
     visit = _mapping(card.get("visit_info"))
     hours = _mapping(card.get("opening_hours"))
     school = _mapping(visit.get("school"))
@@ -498,7 +510,7 @@ def visit_view(card: Mapping[str, Any], *, has_trainers: bool = False) -> dict[s
         "sizes": str(_mapping(visit.get("rental")).get("sizes") or ""),
         "facts": _facts_view(card, visit),
         "facts_visible": FACTS_VISIBLE,
-        "services": _services_view(card, visit, hours),
+        "services": _services_view(card, visit, hours, rental_price),
         "school": dict(school) if school.get("rows") and has_trainers else None,
         "more": _more_view(visit, has_trainers=has_trainers),
     }

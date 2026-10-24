@@ -947,17 +947,32 @@
     var picked = opts.pickedId != null ? String(opts.pickedId) : null;
     var hasPicked = !!picked && list.some(function (x) { return String(x.id) === picked; });
     var nearestId = list.length && list[0].id != null ? String(list[0].id) : null;
+    // Заметка про возраст делит сеансы на группы только если в одном «что и почём» их две разные:
+    // у одного сеанса заметка есть, у другого парсер её не вернул — это один и тот же тариф.
+    function baseKey(x, dur) {
+      return [iceKindLabel(x), x.price_adult_minor, x.price_child_minor, x.price_rental_minor, dur].join('|');
+    }
+    var notesByBase = {};
+    list.forEach(function (x) {
+      var d = minutesBetween(hhmm(x.starts_at_local), hhmm(x.ends_at_local));
+      var note = String(x.age_note || '').trim();
+      var b = baseKey(x, d);
+      notesByBase[b] = notesByBase[b] || {};
+      if (note) notesByBase[b][note] = 1;
+    });
     list.forEach(function (s) {
       var start = hhmm(s.starts_at_local);
       var dur = minutesBetween(start, hhmm(s.ends_at_local));
-      var key = [iceKindLabel(s), s.price_adult_minor, s.price_child_minor, s.price_rental_minor, dur, s.age_note || ''].join('|');
+      var base = baseKey(s, dur);
+      var notes = Object.keys(notesByBase[base]);
+      var key = notes.length > 1 ? base + '|' + (s.age_note || '') : base;
       if (!(key in index)) {
         index[key] = groups.length;
         groups.push({
           title: iceKindLabel(s),
           duration: dur ? dur + ' мин' : '',
           prices: priceChips(s),
-          note: formatChildTicketAgeNote(s.age_note),
+          note: formatChildTicketAgeNote(notes.length === 1 ? notes[0] : s.age_note),
           times: [],
         });
       }

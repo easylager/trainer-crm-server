@@ -1797,7 +1797,14 @@
     var priced = rows.some(function (r) { return !!r.price; });
     var html = '<div class="arena-sec"><div class="arena-h-row"><p class="arena-h">Прокат и услуги</p>' +
       (priced ? '<span class="av-aside">в кассе</span>' : '') + '</div><div class="av-list">';
+    var fl = priceFloors();
     rows.forEach(function (r) {
+      if (r.kind === 'rental' && !r.price && fl.rental) {
+        r = Object.assign({}, r, {
+          price: (fl.rental.varies ? 'от ' : '') + moneyMinor(fl.rental.minor, fl.currency),
+          note: r.note === 'цена в кассе' ? '' : r.note
+        });
+      }
       var media = r.icon === 'penguin'
         ? '<span class="av-pic">' + PENGUIN + '</span>'
         : '<span class="av-ic">' + visitIcon(r.icon) + '</span>';
