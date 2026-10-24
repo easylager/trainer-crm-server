@@ -36,3 +36,22 @@ def test_arena_with_slots_but_no_buy_link_says_box_office_only() -> None:
     assert visit_view(card, has_slots=False)["tickets"]["mode"] is None
     with_link = {**card, "tickets_url": "https://tickets.example/rink"}
     assert visit_view(with_link, has_slots=True)["tickets"]["mode"] == "online"
+
+
+def test_size_priced_rental_catalog_does_not_add_a_box_office_rental_row() -> None:
+    from src.application.arena_visit_info import visit_view
+
+    card = {
+        "amenities": {"skate_rental": True},
+        "visit_info": {},
+        "opening_hours": {
+            "rental_title": "Прокат коньков",
+            "rental_catalog": [
+                {"label": "до 34 размера", "price": "5,00 BYN"},
+                {"label": "от 35 размера", "price": "10,00 BYN"},
+            ],
+        },
+    }
+    rows = visit_view(card)["services"]["rows"]
+    assert [r["price"] for r in rows] == ["5,00 BYN", "10,00 BYN"]
+    assert not any("в кассе" in r["note"] for r in rows)

@@ -419,6 +419,10 @@ def _services_view(
                              "price": f"{price}/{per}" if per else price, "note": ""})
         amenities = _mapping(card.get("amenities"))
         have = {r["icon"] for r in rows}
+        # Строки прайса по размерам («до 34 размера — 5 BYN») подписаны без слова «прокат», но
+        # раздел назван «Прокат коньков»: это и есть цена проката, второй строки «в кассе» не нужно.
+        if rows and re.search(r"прокат", str(hours.get("rental_title") or ""), re.I):
+            have.add(_SERVICE_ICONS["rental"])
         for key, kind in (("skate_rental", "rental"), ("skate_sharpening", "sharpening")):
             if amenities.get(key) is True and _SERVICE_ICONS[kind] not in have:
                 known = rental_price if kind == "rental" else ""
