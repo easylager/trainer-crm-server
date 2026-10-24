@@ -56,15 +56,16 @@ body.tl { margin: 0; background: var(--tl-paper); color: var(--tl-ink); font-fam
 .tl-hero__note { font-size: 15px; color: var(--tl-dark-hint); }
 
 /* Экран телефона: так выглядит страница катка */
-.tl-phone { flex: 1 1 340px; max-width: 380px; background: var(--tl-paper); color: var(--tl-ink); border-radius: 34px 34px 0 0; padding: 22px 18px 18px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 -10px 60px rgba(0, 0, 0, .45); }
+.tl-phone-wrap { flex: 1 1 340px; max-width: 380px; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.tl-phone__cap { padding: 0 6px; font-size: 13px; color: var(--tl-dark-hint); }
+.tl-phone { background: var(--tl-paper); color: var(--tl-ink); border-radius: 34px 34px 0 0; padding: 22px 18px 18px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 -10px 60px rgba(0, 0, 0, .45); }
 .tl-phone__where { font-size: 13px; color: var(--tl-hint); padding: 0 4px; }
 .tl-phone__slot { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--tl-ink); color: #fff; border-radius: 18px; padding: 14px 16px; }
 .tl-phone__slot > span:first-child { display: flex; flex-direction: column; gap: 2px; }
 .tl-phone__slot small { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--tl-dark-hint); }
 .tl-phone__slot b { font-size: 22px; }
 .tl-phone__slot > span:last-child { font-size: 14px; color: #C5CFCF; white-space: nowrap; }
-.tl-phone__kick { margin-top: 6px; padding: 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--tl-hint); }
-.tl-phone__title { padding: 0 4px; margin-top: -8px; font-family: var(--tl-display); font-weight: 400; font-size: 21px; }
+.tl-phone__title { padding: 0 4px; margin-top: 6px; font-family: var(--tl-display); font-weight: 400; font-size: 21px; }
 .tl-phone__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .tl-coach { background: #fff; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
 .tl-coach__ph { position: relative; aspect-ratio: 4 / 3.4; background: #E2E6E5; display: grid; place-items: center; }
@@ -145,7 +146,7 @@ body.tl { margin: 0; background: var(--tl-paper); color: var(--tl-ink); font-fam
   .tl-nav a:not(.tl-btn) { display: none; }
   .tl-hero__copy { padding-bottom: 40px; }
   .tl-hero__copy p { font-size: 18px; }
-  .tl-phone { max-width: none; }
+  .tl-phone-wrap { max-width: none; }
   .tl-proof, .tl-setup { padding: 24px; }
   .tl-versus, .tl-steps { grid-template-columns: 1fr; }
 }

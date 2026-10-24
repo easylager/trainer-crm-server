@@ -13,16 +13,18 @@ from __future__ import annotations
 import html as html_lib
 import json
 import time
+from datetime import datetime
 from typing import Any, Mapping
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.arena_public_use_cases import _trainer_windows_on_arena
 from src.application.place_links import place_path
 from src.application.place_page import load_place_view, slot_price, slot_when
 from src.application.style_b import APP_MARK_SRC, media_url
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
-from src.shared.public_display import format_public_name
+from src.shared.public_display import format_clock, format_public_name
 
 # PDEC-025: одна цена, скидка за период; первым 10 тренерам — год по цене сезона.
 PRICE_MONTH_BYN = 39
@@ -125,7 +127,25 @@ async def load_landing_rink(session: AsyncSession, arena_id: int) -> dict[str, A
     if slot:
         when = slot_when(slot, today=view["today"])
         day, _, clock = when.rpartition(", ")
-        slot_view = {"day": day or when, "time": clock if day else "", "price": slot_price(slot)}
+        slot_view = {
+            "day": day or when,
+            "time": clock if day else "",
+            "end": format_clock(str(slot.get("ends_at_local") or "")),
+            "price": slot_price(slot),
+            "local_date": str(slot.get("local_date") or ""),
+            "ends_hhmm": str(slot.get("ends_at_local") or "")[:5],
+        }
+    trainers = [dict(t) for t in list(view.get("trainers") or [])[:2]]
+    bookable = [int(t["id"]) for t in trainers if t.get("can_book")]
+    windows = (
+        await _trainer_windows_on_arena(
+            session, int(card["id"]), bookable, timezone_name=str(card.get("timezone") or "Europe/Minsk")
+        )
+        if bookable
+        else {}
+    )
+    for trainer in trainers:
+        trainer["window"] = _window_label(windows.get(int(trainer["id"])), slot_view)
     return {
         "id": int(card["id"]),
         "name": format_public_name(str(card.get("name") or "")),
@@ -134,12 +154,43 @@ async def load_landing_rink(session: AsyncSession, arena_id: int) -> dict[str, A
         "place_url": place_path(city_name=city_name, slug=slug) if slug else None,
         "photo_url": media_url(hero, size="hero") or media_url(hero, size="card"),
         "slot": slot_view,
-        "trainers": list(view.get("trainers") or [])[:2],
+        "trainers": trainers,
         "trainer_count": len(view.get("trainers") or []),
     }
 
 
 # ─── Разметка ────────────────────────────────────────────────────────────────
+
+
+def _window_label(windows: list[dict[str, Any]] | None, slot: Mapping[str, Any] | None) -> str:
+    """Подпись настоящего окна тренера: первое после сеанса в тот же день — «после катания»."""
+    if not windows:
+        return ""
+    if slot and slot.get("local_date") and slot.get("ends_hhmm"):
+        try:
+            session_end = datetime.fromisoformat(f"{slot['local_date']}T{slot['ends_hhmm']}")
+        except ValueError:
+            session_end = None
+        for win in windows:
+            starts = datetime.fromisoformat(str(win["starts_at"])).replace(tzinfo=None)
+            if session_end and starts.date() == session_end.date() and starts >= session_end:
+                return f"свободно в {win['time']} — после катания"
+    first = windows[0]
+    return f"свободно: {first['day']}, {first['time']}"
+
+
+def _example_window(slot: Mapping[str, Any] | None) -> str:
+    """«Например, в 12:00» — ближайшие полчаса после конца сеанса; без сеанса — пусто."""
+    hhmm = str((slot or {}).get("ends_hhmm") or "")
+    try:
+        hour, minute = (int(x) for x in hhmm.split(":"))
+    except ValueError:
+        return ""
+    total = hour * 60 + minute
+    total = -(-total // 30) * 30
+    if total >= 24 * 60:
+        return ""
+    return format_clock(f"{total // 60:02d}:{total % 60:02d}")
 
 
 def _mark() -> str:
@@ -154,22 +205,24 @@ def _coach_card(trainer: Mapping[str, Any]) -> str:
         if photo
         else f'<i aria-hidden="true">{_esc(trainer.get("initial") or "Т")}</i>'
     )
+    window = f"<em>{_esc(trainer['window'])}</em>" if trainer.get("window") else ""
     return (
         '<div class="tl-coach">'
-        f'<span class="tl-coach__ph">{ph}</span>'
+        f'<span class="tl-coach__ph">{ph}{window}</span>'
         f'<span class="tl-coach__body"><b>{_esc(trainer.get("name"))}</b>'
         f'<span>{_esc(trainer.get("line"))}</span></span>'
         "</div>"
     )
 
 
-def _you_card(first: bool) -> str:
-    sub = "Станьте первым тренером здесь" if first else "Учите кататься здесь же"
+def _you_card(slot: Mapping[str, Any] | None, *, first: bool) -> str:
+    example = _example_window(slot)
+    sub = f"Ваше окно после катания — например, в {example}" if example else "Ваше окно сразу после катания"
+    title = "Станьте первым тренером здесь" if first else "Здесь можете быть вы"
     return (
         '<div class="tl-coach tl-coach--you">'
-        '<span class="tl-coach__ph"><i aria-hidden="true">+</i>'
-        "<em>окно сразу после катания</em></span>"
-        f'<span class="tl-coach__body"><b>Здесь можете быть вы</b><span>{_esc(sub)}</span></span>'
+        '<span class="tl-coach__ph"><i aria-hidden="true">+</i></span>'
+        f'<span class="tl-coach__body"><b>{_esc(title)}</b><span>{_esc(sub)}</span></span>'
         "</div>"
     )
 
@@ -181,23 +234,26 @@ def _phone(rink: Mapping[str, Any] | None) -> str:
     slot_html = ""
     if slot:
         price = f'<span>Взрослый {_esc(slot["price"])}</span>' if slot.get("price") else ""
+        clock = slot["time"] or slot["day"]
+        if slot["time"] and slot.get("end"):
+            clock = f"{slot['time']}–{slot['end']}"
         slot_html = (
             '<div class="tl-phone__slot">'
-            f'<span><small>{_esc(slot["day"])} · массовое катание</small><b>{_esc(slot["time"] or slot["day"])}</b></span>{price}'
+            f'<span><small>{_esc(slot["day"])} · массовое катание</small><b>{_esc(clock)}</b></span>{price}'
             "</div>"
         )
     trainers = list(rink.get("trainers") or [])
     count = int(rink.get("trainer_count") or 0)
-    cards = "".join(_coach_card(t) for t in trainers[:1]) + _you_card(first=count == 0)
-    kicker = f"Тренеры этого катка · {count}" if count else "Тренеры этого катка"
+    cards = "".join(_coach_card(t) for t in trainers[:1]) + _you_card(slot, first=count == 0)
     return (
-        '<div class="tl-phone" aria-label="Так выглядит страница катка в Glide">'
+        '<figure class="tl-phone-wrap">'
+        '<figcaption class="tl-phone__cap">Так ваш каток выглядит в Glide</figcaption>'
+        '<div class="tl-phone">'
         f'<span class="tl-phone__where">{_esc(rink.get("city_name"))} · {_esc(rink.get("name"))}</span>'
         f"{slot_html}"
-        f'<span class="tl-phone__kick">{_esc(kicker)}</span>'
         '<b class="tl-phone__title">Научат здесь же</b>'
         f'<div class="tl-phone__row">{cards}</div>'
-        "</div>"
+        "</div></figure>"
     )
 
 

@@ -43,9 +43,10 @@ async def test_rink_landing_shows_that_rink(db_session):
     assert 'rel="canonical"' not in body  # noindex без canonical на /trainers
     # Превью ссылки — картинка этого катка: в мессенджере тренер видит свой лёд.
     assert f'{place["path"]}/og.png"' in body
-    assert "Научат здесь же" in body and "Здесь можете быть вы" in body
+    assert "Научат здесь же" in body and "Так ваш каток выглядит в Glide" in body
     assert "Станьте первым тренером здесь" in body  # на катке пока нет опубликованных тренеров
-    assert "19:30" in body
+    # Сеанс — с концом, а окно в пустой карточке — пример после него, без выдуманного тренера.
+    assert "19:30–" in body and "Ваше окно после катания — например, в" in body
     assert f'href="/join?arena={place["arena_id"]}"' in body
     assert head.status_code == 200
 
@@ -72,3 +73,19 @@ async def test_russian_rink_gets_no_trainer_landing(db_session, monkeypatch):
     assert place_resp.status_code == 200  # сам каток публичен — отсекает именно лендинг
     assert resp.status_code == 302 and resp.headers["location"] == "/trainers"
     assert "Каток Питерский" not in home.text
+
+
+def test_window_label_prefers_the_window_after_the_session():
+    from src.application.trainer_landing_page import _example_window, _window_label
+
+    slot = {"local_date": "2026-10-24", "ends_hhmm": "11:45"}
+    wins = [
+        {"starts_at": "2026-10-24T09:00:00+03:00", "time": "9:00", "day": "сегодня"},
+        {"starts_at": "2026-10-24T12:00:00+03:00", "time": "12:00", "day": "сегодня"},
+    ]
+    assert _window_label(wins, slot) == "свободно в 12:00 — после катания"
+    assert _window_label(wins[:1], slot) == "свободно: сегодня, 9:00"
+    assert _window_label([], slot) == ""
+    assert _example_window(slot) == "12:00"
+    assert _example_window({"ends_hhmm": "12:00"}) == "12:00"
+    assert _example_window(None) == ""
