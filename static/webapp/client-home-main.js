@@ -868,6 +868,19 @@
         var ctx = _meCardTrainerPaintCtx;
         var nowNotify = !!(ctx && String(ctx.trainer.id) === String(trainerId) && ctx.notifyWhenSlots);
         var nextNotify = !nowNotify;
+        var WA = window.GlideWriteAccess;
+        if (nextNotify && WA) {
+          // Подписку оформляем только после того, как бот получил право писать (write-access.js).
+          WA.gate(window.Telegram && window.Telegram.WebApp, { surface: 'slot_wait', trainerId: trainerId }).then(
+            function (res) { if (res === 'proceed') applyHubNotifySlots(trainerId, ctx, nowNotify, nextNotify); },
+            function () { applyHubNotifySlots(trainerId, ctx, nowNotify, nextNotify); }
+          );
+          return;
+        }
+        applyHubNotifySlots(trainerId, ctx, nowNotify, nextNotify);
+      }
+
+      function applyHubNotifySlots(trainerId, ctx, nowNotify, nextNotify) {
         if (ctx && String(ctx.trainer.id) === String(trainerId)) {
           paintMeCardForTrainerSync(ctx.trainer, ctx.slots, ctx.hubMeta, nextNotify);
         }

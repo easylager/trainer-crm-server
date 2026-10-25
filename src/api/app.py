@@ -2054,6 +2054,19 @@ def webapp_bell_follow_js(request: Request):
     )
 
 
+@app.get("/webapp/write-access.js")
+def webapp_write_access_js(request: Request):
+    """Разрешение боту писать первым: общий код записи, ожидания слотов, подписки на каток и колокольчика. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "write-access.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-shell.js")
 def webapp_mini_app_client_shell_js(request: Request):
     """Client shell — tab navigation, more sheet, navigate helpers. Use ``?v=…`` for long cache."""

@@ -11,14 +11,14 @@
  */
 (function (global, factory) {
   'use strict';
-  var api = factory();
+  var api = factory(global);
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   }
   if (global) {
     global.GlideBellFollow = api;
   }
-})(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this, function () {
+})(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this, function (global) {
   'use strict';
 
   var FLAG = 'glide_bell_follow_v1';
@@ -44,50 +44,16 @@
     return id ? 'arena_' + id : sp;
   }
 
-  /** Только Telegram: есть подписанная initData и положительный id (у MAX/VK ключ отрицательный). */
-  function isTelegramPrincipal(tg) {
-    if (!tg || !tg.initData) return false;
-    var user = tg.initDataUnsafe && tg.initDataUnsafe.user;
-    if (user && user.id != null && Number(user.id) <= 0) return false;
-    return true;
-  }
+  /* Проверки и запрос разрешения живут в write-access.js (общие с записью, ожиданием слотов и каткой). */
+  var WA = typeof module !== 'undefined' && module.exports && typeof require === 'function'
+    ? require('./write-access.js')
+    : global.GlideWriteAccess;
 
-  /** Можно ли вообще показать диалог: метод есть и версия SDK его знает. */
-  function canRequestWriteAccess(tg) {
-    if (!tg || typeof tg.requestWriteAccess !== 'function') return false;
-    if (typeof tg.isVersionAtLeast === 'function') {
-      try {
-        if (!tg.isVersionAtLeast('6.9')) return false;
-      } catch (e) {
-        return false;
-      }
-    }
-    return true;
-  }
-
+  var isTelegramPrincipal = WA.isTelegramPrincipal;
+  var canRequestWriteAccess = WA.canRequestWriteAccess;
   /** ``already`` — бот уже может писать; ``askable`` — спросим; ``unsupported`` — спросить нечем. */
-  function writeAccessState(tg) {
-    var user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-    if (user && user.allows_write_to_pm === true) return 'already';
-    return canRequestWriteAccess(tg) ? 'askable' : 'unsupported';
-  }
-
-  /** Показывает диалог; ``granted`` только если колбэк вернул ``true``. */
-  function requestWriteAccess(tg) {
-    return new Promise(function (resolve) {
-      if (!canRequestWriteAccess(tg)) {
-        resolve('unsupported');
-        return;
-      }
-      try {
-        tg.requestWriteAccess(function (granted) {
-          resolve(granted === true ? 'granted' : 'denied');
-        });
-      } catch (e) {
-        resolve('unsupported');
-      }
-    });
-  }
+  var writeAccessState = WA.rawState;
+  var requestWriteAccess = WA.requestWriteAccess;
 
   /** Нативный попап Telegram; промис резолвится id нажатой кнопки (или ``null``). */
   function showPopup(tg, message, buttons) {

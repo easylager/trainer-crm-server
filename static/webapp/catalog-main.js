@@ -3653,7 +3653,19 @@
         var edge = state.trainerEdges[key] || {};
         var nowNotify = !!edge.notify_when_slots;
         var nextNotify = !nowNotify;
+        var WA = window.GlideWriteAccess;
+        if (nextNotify && WA) {
+          // Подписку оформляем только после того, как бот получил право писать (write-access.js).
+          WA.gate(tg, { surface: 'slot_wait', trainerId: trainerId }).then(
+            function(res) { if (res === 'proceed') applyNotifySlots(trainerId, key, edge, nowNotify, nextNotify, initData); },
+            function() { applyNotifySlots(trainerId, key, edge, nowNotify, nextNotify, initData); }
+          );
+          return;
+        }
+        applyNotifySlots(trainerId, key, edge, nowNotify, nextNotify, initData);
+      }
 
+      function applyNotifySlots(trainerId, key, edge, nowNotify, nextNotify, initData) {
         state.trainerEdges[key] = Object.assign({}, edge, { notify_when_slots: nextNotify });
         _updateNotifyChipUI(trainerId, nextNotify);
 

@@ -9,6 +9,7 @@ Vocabulary:
   notify_slot_waitlist — called from slot-creation hook; dispatches messages + clears subscriptions
   get_edges            — read all edges enriched with trainer profile data for API responses
 """
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -22,6 +23,8 @@ from src.infrastructure.repositories.client_trainer_edge_repository import Clien
 
 from src.application.booking_use_cases import trainer_has_future_available_slot_wall_clock
 from src.application.demand_signals_use_cases import record_catalog_favorite
+
+logger = logging.getLogger(__name__)
 
 
 # ── write ──────────────────────────────────────────────────────────────────────
@@ -181,7 +184,7 @@ async def notify_slot_waitlist(
     reply_markup=None,
 ) -> int:
     """
-    Fire-and-forget: send one Telegram message per subscriber, then bulk-clear subscriptions.
+    Send one Telegram message per subscriber, then clear the subscription of those whose send succeeded.
     ``send_fn(telegram_id, text, reply_markup=None)`` — async callable injected by the API layer.
     Returns count of notified clients.
 
@@ -202,15 +205,20 @@ async def notify_slot_waitlist(
     msg = text_tpl.format(name=trainer_display_name)
 
     notified = 0
+    sent_edge_ids: list[int] = []
     for edge in subscribers:
         try:
             await send_fn(int(edge["telegram_id"]), msg, reply_markup)
             notified += 1
-        except Exception:
-            # Individual send failure must not abort the rest of the batch
-            pass
+            sent_edge_ids.append(int(edge["id"]))
+        except Exception as exc:
+            # Individual send failure must not abort the rest of the batch. The subscription stays,
+            # so the client is not silently dropped; no telegram_id in the log, error class only.
+            logger.warning(
+                "slot waitlist send failed trainer_id=%s error=%s", trainer_id, type(exc).__name__
+            )
 
-    await repo.clear_slot_subscriptions(trainer_id)
+    await repo.clear_slot_subscriptions_for_edges(trainer_id, sent_edge_ids)
     await session.commit()
     return notified
 

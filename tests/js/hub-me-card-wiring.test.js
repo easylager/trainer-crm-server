@@ -445,7 +445,9 @@ describe('S3: переходы окон', () => {
   it('чип «Напомнить» (окон нет) зовёт тот же notify-slots API, что каталог', () => {
     assert.match(wire, /action === 'notify-slots'/);
     assert.match(wire, /toggleHubNotifySlots\(tid\)/);
-    const toggle = fnBody('toggleHubNotifySlots');
+    // Подписку оформляет applyHubNotifySlots, а toggleHubNotifySlots сначала проходит ворота разрешения писать.
+    assert.match(fnBody('toggleHubNotifySlots'), /GlideWriteAccess|WA\.gate/);
+    const toggle = fnBody('applyHubNotifySlots');
     assert.match(toggle, /trainer-edges\/notify-slots/);
     assert.match(fnBody('buildMeCardTrainerInput'), /notify_when_slots: !!notifyWhenSlots/);
     assert.match(fnBody('paintMeCardForTrainer'), /resolveHubNotifyWhenSlots/);

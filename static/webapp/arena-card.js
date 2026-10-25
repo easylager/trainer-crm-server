@@ -223,24 +223,33 @@
   }
 
   /* TASK-330: бот пишет первым, только если человек это разрешил. Mini App, открытая по
-     прямой ссылке без запуска бота, иначе оформила бы подписку, которую некуда доставить. */
+     прямой ссылке без запуска бота, иначе оформила бы подписку, которую некуда доставить.
+     Логика — в write-access.js: если спросить нечем, подписку не сохраняем, а ведём в бота
+     по /start watch_<id>, где её оформит сам бот. */
+  var DENIED_TEXT = 'Без разрешения писать бот не\u00a0сможет прислать напоминание.';
+
   function ensureWriteAccess(done) {
     var tg = global.Telegram && global.Telegram.WebApp;
-    var user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-    var supported =
-      tg &&
-      typeof tg.requestWriteAccess === 'function' &&
-      (typeof tg.isVersionAtLeast !== 'function' || tg.isVersionAtLeast('6.9'));
-    if (!supported || (user && user.allows_write_to_pm === true)) {
-      done(true);
+    var WA = global.GlideWriteAccess;
+    if (!WA) {
+      done(false);
       return;
     }
     try {
-      tg.requestWriteAccess(function (granted) {
-        done(!!granted);
-      });
+      WA.gate(tg, {
+        surface: 'arena_watch',
+        arenaId: state.card && state.card.id,
+        deniedText: DENIED_TEXT,
+      }).then(
+        function (res) {
+          done(res === 'proceed', res);
+        },
+        function () {
+          done(false, 'error');
+        }
+      );
     } catch (e) {
-      done(true);
+      done(false, 'error');
     }
   }
 
@@ -252,13 +261,9 @@
       return;
     }
     kind = kind || 'sessions';
+    // Отказ и «спросить нечем» объясняет сам ensureWriteAccess (алерт или попап с кнопкой в бота).
     ensureWriteAccess(function (granted) {
-      if (granted) {
-        postIceWatch(kind, id);
-        return;
-      }
-      var tg = global.Telegram && global.Telegram.WebApp;
-      if (tg && tg.showAlert) tg.showAlert('Без разрешения писать бот не\u00a0сможет прислать напоминание.');
+      if (granted) postIceWatch(kind, id);
     });
   }
 
@@ -2523,6 +2528,7 @@
     load: load,
     paint: paint,
     state: state,
+    subscribeIceWatch: subscribeIceWatch,
   };
 
   /* Токены сайта темнеют по body.tg-dark, а тема Mini App ставит hub-is-dark на <html> — как на главной. */

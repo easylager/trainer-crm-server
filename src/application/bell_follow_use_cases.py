@@ -52,10 +52,13 @@ async def _record(
     *,
     telegram_id: int,
     client_id: int | None,
-    arena_id: int,
+    arena_id: int | None,
     extra: dict[str, Any] | None = None,
+    surface: str = "site_bell",
 ) -> None:
-    payload: dict[str, Any] = {"arena_id": int(arena_id), "surface": "site_bell"}
+    payload: dict[str, Any] = {"surface": surface}
+    if arena_id is not None:
+        payload["arena_id"] = int(arena_id)
     if client_id is not None:
         payload["client_id"] = int(client_id)
     payload.update(extra or {})
@@ -146,6 +149,45 @@ async def record_write_access_outcome(
         client_id=client_id,
         arena_id=arena_id,
         extra={"retry": bool(retry)},
+    )
+    await session.commit()
+    return True
+
+
+#: Где в Mini App человек увидел запрос разрешения (поле ``surface`` в payload события).
+WRITE_ACCESS_SURFACES = frozenset({"booking", "slot_wait", "arena_watch"})
+
+
+async def record_surface_write_access_outcome(
+    session: AsyncSession,
+    *,
+    telegram_id: int,
+    client_id: int | None,
+    surface: str,
+    outcome: str,
+    arena_id: int | None = None,
+    trainer_id: int | None = None,
+    retry: bool = False,
+) -> bool:
+    """Исход запроса разрешения с экрана записи, ожидания слотов или подписки на каток.
+
+    Те же типы событий, что у колокольчика; различие только в ``surface``. Неизвестный
+    исход или экран -> ``False``, ничего не пишем. В payload только хэш актора и id объектов.
+    """
+    event_type = OUTCOME_EVENTS.get(outcome)
+    if event_type is None or surface not in WRITE_ACCESS_SURFACES:
+        return False
+    extra: dict[str, Any] = {"retry": bool(retry)}
+    if trainer_id is not None:
+        extra["trainer_id"] = int(trainer_id)
+    await _record(
+        session,
+        event_type,
+        telegram_id=telegram_id,
+        client_id=client_id,
+        arena_id=arena_id,
+        extra=extra,
+        surface=surface,
     )
     await session.commit()
     return True

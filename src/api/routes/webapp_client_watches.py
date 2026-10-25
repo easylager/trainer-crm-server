@@ -10,7 +10,11 @@ from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_trainer_edges import _parse_profile_id_header, _resolve_edge_client_id_or_400
 from src.api.miniapp_auth.types import MiniAppPlatform
-from src.application.bell_follow_use_cases import follow_arena_from_bell, record_write_access_outcome
+from src.application.bell_follow_use_cases import (
+    follow_arena_from_bell,
+    record_surface_write_access_outcome,
+    record_write_access_outcome,
+)
 from src.application.client_ice_watch_use_cases import (
     IceWatchChannelUnsupported,
     client_watches_hub_payload,
@@ -160,6 +164,60 @@ async def post_client_bell_follow_outcome(
     if not recorded:
         raise HTTPException(status_code=400, detail="Неизвестный исход.")
     return {"ok": True}
+
+
+class SurfaceWriteAccessOutcomeBody(BaseModel):
+    surface: str = Field(..., max_length=20)
+    outcome: str = Field(..., max_length=20)
+    arena_id: int | None = Field(default=None, ge=1)
+    trainer_id: int | None = Field(default=None, ge=1)
+    retry: bool = False
+
+
+def _bot_chat_link(arena_id: int | None) -> str | None:
+    """Ссылка на чат клиентского бота; для подписки на каток — ``/start watch_<id>``. Имя бота из настроек."""
+    from src.application.place_links import telegram_bot_start_link, watch_start_param
+    from src.application.trainer_invite_links import normalize_client_bot_username
+    from src.shared.config import Settings
+
+    username = Settings().client_bot_username
+    if arena_id is not None:
+        return telegram_bot_start_link(client_bot_username=username, start_param=watch_start_param(arena_id))
+    bot = normalize_client_bot_username(username)
+    return f"https://t.me/{bot}" if bot else None
+
+
+@router.post("/client/write-access/outcome")
+async def post_client_write_access_outcome(
+    body: SurfaceWriteAccessOutcomeBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Исход запроса разрешения писать с экрана записи / ожидания слотов / подписки на каток.
+
+    В ответе ``bot_link``: куда вести, если спросить нечем и надо нажать «Старт» в боте.
+    """
+    if principal.platform != MiniAppPlatform.TELEGRAM:
+        raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED)
+    telegram_id = client_catalog_telegram_key(principal)
+    client_id = await resolve_acting_client_id(session, telegram_id, None)
+    recorded = await record_surface_write_access_outcome(
+        session,
+        telegram_id=telegram_id,
+        client_id=client_id,
+        surface=(body.surface or "").strip().lower(),
+        outcome=(body.outcome or "").strip().lower(),
+        arena_id=body.arena_id,
+        trainer_id=body.trainer_id,
+        retry=body.retry,
+    )
+    if not recorded:
+        raise HTTPException(status_code=400, detail="Неизвестный исход.")
+    try:
+        link = _bot_chat_link(body.arena_id if body.surface.strip().lower() == "arena_watch" else None)
+    except Exception:  # noqa: BLE001 — без ссылки кнопка просто не рисуется
+        link = None
+    return {"ok": True, "bot_link": link}
 
 
 @router.delete("/client/ice-watches/{watch_id:int}")

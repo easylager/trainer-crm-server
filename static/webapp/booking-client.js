@@ -245,10 +245,11 @@
    * с сервера). Ни одного придуманного: нет плана напоминаний — нет и строки
    * про напоминания, вместо неё не появляется утешительная неправда (AC-005).
    */
-  function formatFirstBookingSuccess(data) {
-    var steps = ['Тренер подтвердит запись — уведомление придёт сюда, в бот.'];
+  function formatFirstBookingSuccess(data, unreachable) {
+    // Обещание «уведомление придёт в бот» и «напомним» — только тому, кому бот и правда может написать.
+    var steps = [unreachable ? 'Тренер подтвердит запись.' : 'Тренер подтвердит запись — уведомление придёт сюда, в бот.'];
     var plan = data && data.reminder_plan ? String(data.reminder_plan).trim() : '';
-    if (plan) {
+    if (plan && !unreachable) {
       steps.push('Напомним о тренировке ' + escSuccessHtml(plan) + '.');
     }
     steps.push('Детали, адрес и отмена — всегда в «Моих записях».');
@@ -268,10 +269,44 @@
     );
   }
 
+  /* Достижимость клиента ботом. Только Telegram-клиент, которому бот ещё не может написать
+     (нет /start и разрешения): для MAX/VK, вне Telegram и при allows_write_to_pm === true — ''. */
+  var WA_COPY_ASK = 'Чтобы получить подтверждение и напоминание о тренировке, разрешите сообщения от бота.';
+  var WA_COPY_GRANTED = 'Готово. Напишем, когда тренер подтвердит запись, и напомним о тренировке.';
+  var WA_COPY_DENIED = 'Уведомления выключены. Статус записи виден в приложении.';
+  var WA_COPY_OPEN_BOT = 'Откройте бота и нажмите «Старт», чтобы получать уведомления.';
+
+  function unreachableState() {
+    var WA = global.GlideWriteAccess;
+    if (!WA) return '';
+    try {
+      var st = WA.writeAccessState(getTg());
+      return st === 'askable' || st === 'unsupported' ? st : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function writeAccessBlockHtml(st) {
+    if (!st) return '';
+    var ask = st === 'askable';
+    return (
+      '<div class="booking-write-access" data-wa-block="' + st + '">' +
+      '<p class="booking-success-note" data-wa-text>' + escSuccessHtml(ask ? WA_COPY_ASK : WA_COPY_OPEN_BOT) + '</p>' +
+      '<button type="button" class="btn-secondary btn-block" data-wa-allow' + (ask ? '' : ' hidden') + '>' +
+      escSuccessHtml(ask ? 'Разрешить' : 'Открыть бота') + '</button>' +
+      '</div>'
+    );
+  }
+
   function formatSuccessMessage(data, opts) {
     opts = opts || {};
-    var first = data && data.is_first_booking ? formatFirstBookingSuccess(data) : '';
-    var main = first || '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+    var st = unreachableState();
+    var first = data && data.is_first_booking ? formatFirstBookingSuccess(data, !!st) : '';
+    var main =
+      first ||
+      '✅ <b>Вы записаны</b>.<br><br>' +
+        (st ? 'Ожидайте подтверждения от тренера.' : 'Ожидайте подтверждения от тренера в боте.');
     var ctx = '';
     if (opts.requestId) {
       ctx =
@@ -282,7 +317,7 @@
     var foot = first
       ? ''
       : '<br><span class="booking-success-note">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
-    return main + ctx + foot;
+    return main + ctx + foot + writeAccessBlockHtml(st);
   }
 
   function hapticSuccess() {
@@ -296,6 +331,90 @@
         tg.HapticFeedback.notificationOccurred('success');
       } catch (e) { /* WebView */ }
     }
+  }
+
+  function setBlockText(block, text) {
+    var el = block.querySelector('[data-wa-text]');
+    if (el) el.textContent = text;
+  }
+
+  function setBlockButton(block, label, visible, onClick) {
+    var btn = block.querySelector('[data-wa-allow]');
+    if (!btn) return;
+    if (label != null) btn.textContent = label;
+    btn.hidden = !visible;
+    btn.disabled = false;
+    btn.onclick = onClick || null;
+  }
+
+  /** «Откройте бота…»: кнопка появляется, когда сервер вернул ссылку на чат бота. */
+  function showOpenBotInBlock(block, tg, WA, link) {
+    setBlockText(block, WA_COPY_OPEN_BOT);
+    if (!link) {
+      setBlockButton(block, null, false, null);
+      return;
+    }
+    setBlockButton(block, 'Открыть бота', true, function () {
+      WA.openBotChat(tg, link);
+    });
+  }
+
+  /**
+   * Блок «Разрешить» на экране успеха. Диалог Telegram открывается только по тапу на кнопку;
+   * запись к этому моменту уже создана и от исхода не зависит.
+   */
+  function bindWriteAccessBlock(container) {
+    var WA = global.GlideWriteAccess;
+    var tg = getTg();
+    if (!WA || !tg || !container || typeof container.querySelector !== 'function') return;
+    var block = container.querySelector('[data-wa-block]');
+    if (!block || block.__waBound) return;
+    block.__waBound = true;
+    var retry = false;
+
+    function ask() {
+      var btn = block.querySelector('[data-wa-allow]');
+      if (btn) btn.disabled = true;
+      WA.requestWriteAccess(tg).then(function (outcome) {
+        if (outcome === 'unsupported') {
+          WA.reportOutcome(tg, 'booking', 'unsupported', { retry: retry }).then(function (res) {
+            showOpenBotInBlock(block, tg, WA, res && res.bot_link);
+          });
+          return;
+        }
+        WA.reportOutcome(tg, 'booking', outcome, { retry: retry });
+        if (outcome === 'granted') {
+          setBlockText(block, WA_COPY_GRANTED);
+          setBlockButton(block, null, false, null);
+          return;
+        }
+        retry = true;
+        setBlockText(block, WA_COPY_DENIED);
+        setBlockButton(block, 'Разрешить', true, ask);
+      });
+    }
+
+    if (block.getAttribute('data-wa-block') === 'unsupported') {
+      WA.reportOutcome(tg, 'booking', 'unsupported', {}).then(function (res) {
+        showOpenBotInBlock(block, tg, WA, res && res.bot_link);
+      });
+      return;
+    }
+    setBlockButton(block, null, true, ask);
+  }
+
+  /** Вызывается после того, как экран успеха уже показан. Любой сбой молча игнорируется. */
+  function afterSuccessShown(container) {
+    try {
+      var WA = global.GlideWriteAccess;
+      var tg = getTg();
+      if (!WA || !tg) return;
+      if (WA.writeAccessState(tg) === 'already') {
+        WA.reportOutcome(tg, 'booking', 'already', {});
+        return;
+      }
+      bindWriteAccessBlock(container);
+    } catch (e) { /* уведомления — не повод ломать экран успеха */ }
   }
 
   /**
@@ -329,6 +448,7 @@
       if (opts.messageHtml) {
         var bodyEl = global.document.getElementById('successMsgBody');
         if (bodyEl) bodyEl.innerHTML = opts.messageHtml;
+        afterSuccessShown(bodyEl);
       }
       enableBookSuccessShell();
       return;
@@ -339,6 +459,7 @@
       if (opts.messageHtml) {
         var st = global.document.getElementById('successText');
         if (st) st.innerHTML = opts.messageHtml;
+        afterSuccessShown(st);
       }
       if (typeof opts.showScreen === 'function') {
         opts.showScreen('screenSuccess');
@@ -499,6 +620,7 @@
     formatSuccessMessage: formatSuccessMessage,
     formatFirstBookingSuccess: formatFirstBookingSuccess,
     showBookingSuccess: showBookingSuccess,
+    bindWriteAccessBlock: bindWriteAccessBlock,
     catalogFormBackAction: catalogFormBackAction,
     formatPriceAmountHtml: formatPriceAmountHtml,
     resolveBookingReturn: resolveBookingReturn,

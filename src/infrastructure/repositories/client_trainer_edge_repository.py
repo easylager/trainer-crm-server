@@ -12,7 +12,7 @@ All inserts use ON CONFLICT (client_id, trainer_id).
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 _SELECT_EDGE = """
@@ -420,6 +420,24 @@ class ClientTrainerEdgeRepository:
             """),
             {"cid": client_id, "tid": trainer_id},
         )
+
+    async def clear_slot_subscriptions_for_edges(self, trainer_id: int, edge_ids: list[int]) -> int:
+        """
+        Clear notify_when_slots only for the given edge rows (those whose message was actually sent).
+        Rows of failed sends and rows subscribed after the batch was listed keep their subscription.
+        """
+        if not edge_ids:
+            return 0
+        r = await self._s.execute(
+            text("""
+                UPDATE client_trainer_edges
+                SET notify_when_slots    = false,
+                    notify_when_slots_at = NULL
+                WHERE trainer_id = :trainer_id AND notify_when_slots = true AND id IN :edge_ids
+            """).bindparams(bindparam("edge_ids", expanding=True)),
+            {"trainer_id": trainer_id, "edge_ids": [int(i) for i in edge_ids]},
+        )
+        return r.rowcount or 0
 
     async def clear_slot_subscriptions(self, trainer_id: int) -> int:
         """
