@@ -58,9 +58,11 @@ def test_resolve_pg_dump_prefers_versioned_debian_path(tmp_path: Path, monkeypat
 
     real_path = Path
 
+    # Every path under /usr/lib/postgresql, so a real PG on the runner can't win.
     def fake_path(p):
-        if p == "/usr/lib/postgresql":
-            return pg_root
+        prefix = "/usr/lib/postgresql"
+        if isinstance(p, str) and (p == prefix or p.startswith(prefix + "/")):
+            return pg_root / p[len(prefix) :].lstrip("/")
         return real_path(p)
 
     monkeypatch.setattr(mod, "Path", fake_path)
