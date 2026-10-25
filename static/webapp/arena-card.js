@@ -51,21 +51,45 @@
     );
   }
 
-  /* Остаток — только когда его мало (TASK-333): «110 мест» под каждым временем было шумом. */
+  /*
+   * Остаток на времени говорит формой, а не числом (TASK-333): «нет мест» и «осталось N»
+   * словами, «раскупили треть» — той же полоской, что «обычно в меру». Свободный сеанс чистый.
+   * Точная цифра — у выбранного сеанса в «билете».
+   */
   function slotTag(t) {
     if (t.seats && t.seats.low) return t.seats.label;
-    if (t.seats) return t.next ? 'Ближайший' : '';
+    if (t.seats) return !t.seats.filling && t.next ? 'Ближайший' : '';
     return (t.picked && LOAD_WORDS[t.load]) || (t.next ? 'Ближайший' : '');
   }
 
-  /* Живой остаток вместо полоски; мало мест — подпись акцентом. */
+  function seatsMeterHtml() {
+    return (
+      '<span class="arena-load" data-level="medium" role="img" aria-label="Раскупили больше трети">' +
+      '<i></i><i></i><i></i></span>'
+    );
+  }
+
   function slotBody(t) {
     var tag = slotTag(t);
-    var tagCls = t.seats && t.seats.low ? ' class="arena-seats--low"' : '';
+    var tagCls = t.seats && t.seats.low && !t.seats.gone ? ' class="arena-seats--low"' : '';
+    var meter = t.seats ? (t.seats.filling ? seatsMeterHtml() : '') : loadMeterHtml(t.load);
     return (
       '<b>' + esc(t.time) + '</b>' +
-      (t.seats ? '' : loadMeterHtml(t.load)) +
+      meter +
       (tag ? '<small' + tagCls + '>' + esc(tag) + '</small>' : '')
+    );
+  }
+
+  /* «Свободно / 72 из 115» и полоска раскупленного — справа в «билете» выбранного сеанса. */
+  function ticketSeatsHtml(seats) {
+    if (seats.gone) return '<span class="arena-ticket__seats arena-seats--low">нет мест</span>';
+    var bar = seats.sold != null
+      ? '<span class="arena-ticket__bar' + (seats.low ? ' is-low' : '') + '"><i style="width:' + Math.round(seats.sold * 100) + '%"></i></span>'
+      : '';
+    return (
+      '<span class="arena-ticket__free">' +
+      '<small>Свободно</small><b' + (seats.low ? ' class="arena-seats--low"' : '') + '>' + esc(M.seatsFreeText(seats)) + '</b>' + bar +
+      '</span>'
     );
   }
 
@@ -647,7 +671,20 @@
     if (picked && sessionExistsInSchedule(picked)) return picked;
     var fs = getFocusState();
     if (fs.kind === 'gone') return null;
-    return slots.length ? String(slots[0].id) : null;
+    // Ближайший сеанс, где есть места: раскупленный в 15:15 первым кадром — тупик (TASK-333).
+    var open = slots.filter(function (x) { return !sessionSoldOut(x.id); })[0] || slots[0];
+    return open ? String(open.id) : null;
+  }
+
+  function sessionSoldOut(sessionId) {
+    var id = String(sessionId);
+    return combinedScheduleDays().some(function (d) {
+      return (d.sessions || []).some(function (s) {
+        if (String(s.id) !== id) return false;
+        var seats = M.liveSeats(s.capacity_note, s.seats_capacity);
+        return !!(seats && seats.gone);
+      });
+    });
   }
 
   /*
@@ -1201,16 +1238,18 @@
   }
 
   function renderDayStrip(days) {
+    var counts = M.dayCountsWorthShowing(days);
+    var anyCount = counts.some(Boolean);
     return (
-      '<div class="arena-strip" id="arenaDayTabs" role="tablist">' +
-      days.map(function (d) {
+      '<div class="arena-strip' + (anyCount ? '' : ' arena-strip--slim') + '" id="arenaDayTabs" role="tablist">' +
+      days.map(function (d, i) {
         return (
           '<button type="button" role="tab" class="arena-strip__day' +
           (d.count ? '' : ' arena-strip__day--empty') +
           (d.weekend ? ' arena-strip__day--weekend' : '') +
           '" data-day="' + esc(d.iso) + '" aria-pressed="' + (state.day === d.iso ? 'true' : 'false') + '">' +
           '<span>' + esc(shortDayTop(d.top)) + '</span><b>' + esc(d.num) + '</b>' +
-          '<i>' + (d.count ? esc(String(d.count)) : '—') + '</i>' +
+          (anyCount ? '<i>' + (counts[i] ? esc(String(counts[i])) : '\u00a0') + '</i>' : '') +
           '</button>'
         );
       }).join('') +
@@ -1258,7 +1297,9 @@
         '<div class="arena-ticket__top"><span class="arena-ticket__lead">' +
         '<span class="arena-ticket__kick">' + esc([dayLabel, g.duration ? g.duration.toUpperCase() : ''].filter(Boolean).join(' · ')) + '</span>' +
         '<b class="arena-ticket__time">' + esc(picked.time) + '</b></span>' +
-        (tag ? '<span class="arena-ticket__seats' + (low ? ' arena-seats--low' : '') + '">' + esc(tag) + '</span>' : loadMeterHtml(picked.load)) +
+        (picked.seats
+          ? ticketSeatsHtml(picked.seats)
+          : tag ? '<span class="arena-ticket__seats' + (low ? ' arena-seats--low' : '') + '">' + esc(tag) + '</span>' : loadMeterHtml(picked.load)) +
         '</div>' +
         (g.prices.length
           ? '<div class="arena-ticket__prices">' + g.prices.map(function (p) {
@@ -1274,6 +1315,7 @@
       var timeCls = 'arena-slot-time ga-press';
       if (t.picked) timeCls += ' arena-time--picked';
       else if (t.next) timeCls += ' arena-time--next';
+      if (t.seats && t.seats.gone) timeCls += ' arena-time--gone';
       var body = slotBody(t);
       if (t.sessionId == null) return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span></div>';
       return (

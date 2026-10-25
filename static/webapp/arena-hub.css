@@ -73,6 +73,8 @@ body.arena-hub .arena-strip__day[aria-pressed="true"] { background: var(--g-ink)
 body.arena-hub .arena-strip__day[aria-pressed="true"] span { color: var(--g-on-dark-muted); }
 body.arena-hub .arena-strip__day[aria-pressed="true"] b { color: var(--g-bg); }
 body.arena-hub .arena-strip__day[aria-pressed="true"] i { color: var(--g-on-dark-accent); }
+/* Счётчика под датами нет, когда он везде одинаковый (TASK-333) — ряд ниже. */
+body.arena-hub .arena-strip--slim .arena-strip__day { min-height: 56px; }
 
 /* Группа сеансов — без рамки, на фоне; цены строкой, пока время не выбрано. */
 body.arena-hub .arena-show { padding: 0; border: 0; background: transparent; gap: 12px; }
@@ -95,6 +97,13 @@ body.arena-hub .arena-ticket__lead { display: flex; flex-direction: column; gap:
 body.arena-hub .arena-ticket__kick { font: 600 12px/1 var(--g-font); letter-spacing: .05em; color: var(--g-accent-ink); }
 body.arena-hub .arena-ticket__time { font: 400 40px/1 var(--g-font-display); }
 body.arena-hub .arena-ticket__seats { font: 600 14px/1.2 var(--g-font); color: var(--g-ink-2); text-align: right; }
+/* «Свободно / 72 из 115» и полоска раскупленного (TASK-333). */
+body.arena-hub .arena-ticket__free { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding-bottom: 2px; }
+body.arena-hub .arena-ticket__free small { font-family: var(--g-font); font-size: var(--app-text-caption); font-weight: var(--app-weight-medium); color: var(--g-muted); }
+body.arena-hub .arena-ticket__free b { font-family: var(--g-font); font-size: var(--app-text-lead); font-weight: var(--app-weight-bold); line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+body.arena-hub .arena-ticket__free b.arena-seats--low { color: var(--app-attention-ink); }
+body.arena-hub .arena-ticket__bar { width: 92px; height: 4px; margin-top: 2px; border-radius: var(--app-radius-xs); background: var(--g-line); overflow: hidden; }
+body.arena-hub .arena-ticket__bar i { display: block; height: 100%; border-radius: inherit; background: var(--app-attention); }
 body.arena-hub .arena-ticket__prices { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
 body.arena-hub .arena-ticket__prices > span { background: var(--g-bg); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 body.arena-hub .arena-ticket__prices small { font: 500 12px/1.2 var(--g-font); color: var(--g-muted); }
@@ -113,6 +122,9 @@ body.arena-hub .arena-slot-time small { font: 600 11px/1.1 var(--g-font); color:
 body.arena-hub .arena-slot-time .arena-seats--low { color: #b45309; }
 body.tg-dark.arena-hub .arena-slot-time .arena-seats--low { color: #f5a35c; }
 body.arena-hub .arena-time--next { box-shadow: inset 0 0 0 1.5px var(--g-accent); }
+/* Раскуплено: время зачёркнуто, плитка пустая — выбрать можно, но взгляд не цепляется. */
+body.arena-hub .arena-time--gone:not(.arena-time--picked) { background: transparent; box-shadow: inset 0 0 0 1px var(--g-line); }
+body.arena-hub .arena-time--gone:not(.arena-time--picked) b { color: var(--g-muted); text-decoration: line-through; text-decoration-thickness: 1.5px; }
 body.arena-hub .arena-slot--picked { box-shadow: none; }
 body.arena-hub .arena-slot--picked .arena-slot-time,
 body.arena-hub .arena-time--picked {

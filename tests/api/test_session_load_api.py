@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -179,3 +179,46 @@ async def test_city_day_sessions_carry_typical_load(db_session) -> None:
     assert mine and mine[0]["typical_load_level"] == "busy"
     assert mine[0]["typical_load_label"] == "Людно"
     assert "arena_id" not in mine[0]
+
+
+@pytest.mark.asyncio
+async def test_public_session_carries_seats_capacity_from_korona_snapshot(db_session) -> None:
+    """TASK-333: «свободно 72 из 115» — вместимость из последнего снимка кассы, только при живом остатке."""
+    aid, slug = await _insert_arena_with_profile(db_session)
+    day = date.today() + timedelta(days=14)
+    start = datetime.now(timezone.utc) + timedelta(days=14)
+    for local, note in ((time(14, 0), "72 мест"), (time(16, 0), None)):
+        await db_session.execute(
+            text("""
+                INSERT INTO ice_sessions (
+                    arena_id, kind, status, starts_at_utc, ends_at_utc,
+                    local_date, starts_at_local, ends_at_local, currency_code, capacity_note
+                )
+                VALUES (:aid, 'public_skate', 'active', :start, :end, :day, :local,
+                        :local_end, 'BYN', :note)
+                """),
+            {"aid": aid, "day": day, "start": start, "end": start + timedelta(hours=1), "local": local, "local_end": time(local.hour + 1, 0), "note": note},
+        )
+        await db_session.execute(
+            text("""
+                INSERT INTO ice_sales_snapshots (
+                    arena_id, local_date, starts_at_local, observed_at, capacity, sold, held, source
+                )
+                VALUES (:aid, :day, :local, now() - INTERVAL '2 hours', 120, 0, 0, 'korona'),
+                       (:aid, :day, :local, now(), 115, 38, 5, 'korona')
+                """),
+            {"aid": aid, "day": day, "local": local},
+        )
+    await db_session.commit()
+    invalidate_session_load_cache()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get(
+            f"/api/public/arenas/{slug}/sessions",
+            params={"from": day.isoformat(), "to": day.isoformat()},
+        )
+    assert resp.status_code == 200
+    by_time = {s["starts_at_local"][:5]: s for s in resp.json()["days"][0]["sessions"]}
+    assert by_time["14:00"]["seats_capacity"] == 115
+    assert "seats_capacity" not in by_time["16:00"]

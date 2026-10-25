@@ -2325,7 +2325,17 @@ async def public_arena_session_days(
             SELECT id, arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                    price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                    price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-                   source_id, observed_at, valid_until, confidence, schedule_basis
+                   source_id, observed_at, valid_until, confidence, schedule_basis,
+                   -- Вместимость зала для «свободно N из M» (TASK-333): остаток уже в capacity_note,
+                   -- а «из скольких» знает только снимок кассы. Вместимость не меняется, свежесть не важна.
+                   CASE WHEN s.capacity_note IS NOT NULL THEN (
+                       SELECT snap.capacity FROM ice_sales_snapshots snap
+                       WHERE snap.arena_id = s.arena_id
+                         AND snap.local_date = s.local_date
+                         AND snap.starts_at_local = s.starts_at_local
+                       ORDER BY snap.observed_at DESC
+                       LIMIT 1
+                   ) END AS seats_capacity
             FROM ice_sessions s
             WHERE s.arena_id = :aid
               AND {where}
@@ -2367,6 +2377,7 @@ async def public_arena_session_days(
         "valid_until",
         "confidence",
         "schedule_basis",
+        "seats_capacity",
     ]
     by_date: dict[str, list[dict[str, Any]]] = {}
     from src.application.session_load import enrich_sessions_with_typical_load
@@ -2374,8 +2385,11 @@ async def public_arena_session_days(
     serialized: list[dict[str, Any]] = []
     for raw in result.fetchall():
         mapped = dict(zip(keys, raw, strict=True))
+        capacity = mapped.pop("seats_capacity")
         ser = serialize_ice_session(mapped)
         ser.pop("parser_key", None)
+        if capacity:
+            ser["seats_capacity"] = int(capacity)
         serialized.append(ser)
     await enrich_sessions_with_typical_load(session, serialized)
     for ser in serialized:

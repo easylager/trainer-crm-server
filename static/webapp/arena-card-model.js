@@ -972,19 +972,52 @@
   /* Живой остаток из кассы (парсер пишет «70 мест» / «нет мест» раз в ~15 минут). Где он
      есть, плитка показывает только его: число понятнее полоски «обычно», а вместе они
      говорили бы одно и то же. Другие заметки (у ОХМ «30–35 человек») — не остаток. */
-  /* «Мало» — 20 и меньше: около 20% зала Замка (115 мест); вместимости в данных нет (TASK-333). */
+  /* «Мало» — 20 и меньше: около 20% зала Замка (115 мест). */
   var LOW_SEATS = 20;
+  /* Полоска на времени — когда раскуплено больше трети: дальше Замок обычно уходит за час. */
+  var FILLING_SHARE = 1 / 3;
 
-  function liveSeats(note) {
+  /**
+   * TASK-333: остаток говорит формой, а цифрой — только у выбранного сеанса.
+   * capacity — вместимость из снимка кассы («из 115»); без неё полоски нет, цифра остаётся.
+   */
+  function liveSeats(note, capacity) {
     var text = String(note || '').trim();
-    if (/^нет мест$/i.test(text)) return { label: 'нет мест', low: true };
+    var cap = Number(capacity) > 0 ? Number(capacity) : null;
+    if (/^нет мест$/i.test(text)) return { label: 'нет мест', low: true, gone: true, free: 0, capacity: cap, sold: cap ? 1 : null, filling: false };
     var m = /^(\d+)\s+мест[а-я]*$/i.exec(text);
     if (!m) return null;
     var n = Number(m[1]);
     var word = n % 10 === 1 && n % 100 !== 11 ? 'место'
       : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'места' : 'мест';
-    if (n <= LOW_SEATS) return { label: 'осталось\u00a0' + n, low: true };
-    return { label: n + ' ' + word, low: false };
+    var sold = cap && cap >= n ? (cap - n) / cap : null;
+    var low = n <= LOW_SEATS;
+    return {
+      label: low ? 'осталось\u00a0' + n : n + ' ' + word,
+      count: n + ' ' + word,
+      low: low,
+      gone: false,
+      free: n,
+      capacity: cap,
+      sold: sold,
+      filling: !low && sold != null && sold >= FILLING_SHARE,
+    };
+  }
+
+  /** «72 из 115» — когда вместимость известна; иначе «72 места». */
+  function seatsFreeText(seats) {
+    if (!seats || seats.gone) return '';
+    return seats.capacity ? seats.free + ' из\u00a0' + seats.capacity : seats.count;
+  }
+
+  /**
+   * Счётчик сеансов под датой — только у дня, где их меньше обычного (TASK-333): «13» под
+   * каждым днём ничего не различало. Обычное — максимум по дням с сеансами.
+   */
+  function dayCountsWorthShowing(days) {
+    var usual = 0;
+    (days || []).forEach(function (d) { if (d.count > usual) usual = d.count; });
+    return (days || []).map(function (d) { return d.count > 0 && d.count < usual ? d.count : 0; });
   }
 
   function showtimesForDay(opts) {
@@ -1031,7 +1064,7 @@
         sessionId: s.id != null ? s.id : null,
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
-        seats: liveSeats(s.capacity_note),
+        seats: liveSeats(s.capacity_note, s.seats_capacity),
         load: s.typical_load_level || '',
       });
     });
@@ -1488,6 +1521,8 @@
     shareSlotInviteLabel: shareSlotInviteLabel,
     scheduleInviteHint: scheduleInviteHint,
     liveSeats: liveSeats,
+    seatsFreeText: seatsFreeText,
+    dayCountsWorthShowing: dayCountsWorthShowing,
     shopServicesView: shopServicesView,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,
