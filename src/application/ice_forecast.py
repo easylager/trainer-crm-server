@@ -61,6 +61,7 @@ SHORT_ARENA_NAMES = {
     "chizhovka": "Чижовка",
     "konkobezhnaya-arena": "Конькобежный",
     "katok-na-nemige-u-dvortsa-sporta": "Немига",
+    "ledby": "ЛДС",
 }
 
 SEASON_START_TEXT = (
@@ -103,8 +104,10 @@ class ForecastMessage:
 
 
 def in_forecast_season(day: date) -> bool:
-    """1 декабря – 15 февраля, через Новый год."""
-    if day.month == 12:
+    """26 октября – 15 февраля, через Новый год: выходные в Замке раскупают уже с конца октября."""
+    if day.month == 10:
+        return day.day >= 26
+    if day.month in (11, 12):
         return True
     if day.month == 1:
         return True

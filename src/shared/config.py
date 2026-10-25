@@ -344,7 +344,7 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     indexnow_enabled: bool = False
     indexnow_key: str | None = None
 
-    # «Лёд на выходные»: четверг 18:00–20:00 Europe/Minsk, 1 дек – 15 фев.
+    # «Лёд на выходные»: четверг 18:00–20:00 Europe/Minsk, 26 окт – 15 фев.
     # По умолчанию выключено. Старт сезона этим флагом не управляется — его шлёт скрипт.
     ice_forecast_enabled: bool = False
 

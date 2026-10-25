@@ -859,6 +859,14 @@ CLIENT_BOOKING_TICKETS_CONFIRMED_HINT = (
 CLIENT_BOOKING_TICKETS_REMINDER_HINT = (
     "🎟 Билет на лёд уже есть? Если нет — ещё можно онлайн."
 )
+CLIENT_BOOKING_TICKETS_SOON_HINT = (
+    "🎟 Билета ещё нет? Возьмите сейчас онлайн — на популярные часы его раскупают за час до начала."
+)
+CLIENT_BOOKING_TICKETS_SOLD_OUT_HINT = "🎟 Онлайн-билеты на этот час уже раскуплены — уточните у тренера."
+
+
+def format_client_tickets_free_line(*, free: int, capacity: int) -> str:
+    return f"Сейчас свободно {int(free)} из {int(capacity)}."
 CLIENT_DECLINE_BTN_OTHER_TIME = "📅 Другое время"
 CLIENT_DECLINE_BTN_OTHER_TRAINERS = "🔍 Другие тренеры"
 CLIENT_REMINDER_BTN_SHOW_ON_MAP = "🗺 На карте"
@@ -881,12 +889,19 @@ def format_client_booking_tickets_message_block(
     tickets_url: str | None,
     for_reminder: bool,
     is_soon: bool = False,
+    tickets_free: int | None = None,
+    tickets_capacity: int | None = None,
 ) -> str:
-    """One line when the arena sells tickets online; empty without a URL or in the ~2 h reminder."""
+    """One line when the arena sells tickets online; the ~2 h reminder adds live free seats when known."""
     if not (tickets_url or "").strip():
         return ""
     if for_reminder and is_soon:
-        return ""
+        if tickets_capacity and tickets_free is not None:
+            if tickets_free <= 0:
+                return f"\n{CLIENT_BOOKING_TICKETS_SOLD_OUT_HINT}\n"
+            free_line = format_client_tickets_free_line(free=tickets_free, capacity=tickets_capacity)
+            return f"\n{CLIENT_BOOKING_TICKETS_SOON_HINT}\n{free_line}\n"
+        return f"\n{CLIENT_BOOKING_TICKETS_SOON_HINT}\n"
     hint = (
         CLIENT_BOOKING_TICKETS_REMINDER_HINT
         if for_reminder
@@ -1636,6 +1651,8 @@ def format_client_booking_reminder_text(
             tickets_url=s0.get("arena_tickets_url"),
             for_reminder=True,
             is_soon=is_soon,
+            tickets_free=s0.get("tickets_free"),
+            tickets_capacity=s0.get("tickets_capacity"),
         )
         return (
             f"{title}\n\n"
@@ -1684,6 +1701,7 @@ def format_client_booking_reminder_text(
             f"• {dpart}{t} – <b>{dur}</b> мин · <b>{svc}</b> · {pay_line} · 📍 {ar}"
         )
     body = head + "\n".join(lines)
+    # Several sessions: one hint without a seat count — a single number would be ambiguous.
     tickets_block = format_client_booking_tickets_message_block(
         tickets_url=next((s.get("arena_tickets_url") for s in sessions if s.get("arena_tickets_url")), None),
         for_reminder=True,

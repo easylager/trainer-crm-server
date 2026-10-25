@@ -52,7 +52,7 @@
 |------------|-----|----------|
 | `FOR_YOU_CITY_IDS` | API | id Минска |
 | `ICE_COMPANY_CITY_IDS` | API **и** `notification_service`, одинаково | id Минска (после юриста) |
-| `ICE_FORECAST_ENABLED` | `notification_service` | `true` (молчит до 1 декабря) |
+| `ICE_FORECAST_ENABLED` | `notification_service` | `true` (с 26 октября, TASK-331) |
 
 После смены — redeploy/restart сервисов.
 

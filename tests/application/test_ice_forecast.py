@@ -199,6 +199,7 @@ def test_markup_rows_short_names_and_opt_out_only_weekly() -> None:
     assert rows[3][0].text == OPT_OUT_LABEL
     assert rows[3][0].callback_data == OPT_OUT_CALLBACK
     assert button_label("katok-na-nemige-u-dvortsa-sporta", "Длинное") == "🎟 Немига"
+    assert button_label("ledby", "Ледовый дворец спорта Минской области") == "🎟 ЛДС"
 
     season = build_forecast_markup(arenas, webapp_base_url="https://glide.example", opt_out=False)
     assert season is not None
@@ -228,9 +229,12 @@ def test_forecast_window_gates() -> None:
     assert not ice_forecast_due(_at(thursday, 17, 59), enabled=True)
     assert not ice_forecast_due(_at(thursday, 20, 0), enabled=True)
     assert not ice_forecast_due(_at(thursday - timedelta(days=1), 18, 30), enabled=True)
-    november_thursday = date(2026, 11, 26)
-    assert november_thursday.weekday() == 3
-    assert not ice_forecast_due(_at(november_thursday, 18, 30), enabled=True)
+    first_thursday = date(2026, 10, 29)
+    assert first_thursday.weekday() == 3
+    assert ice_forecast_due(_at(first_thursday, 18, 30), enabled=True)
+    october_thursday = date(2026, 10, 22)
+    assert october_thursday.weekday() == 3
+    assert not ice_forecast_due(_at(october_thursday, 18, 30), enabled=True)
 
     feb = date(2027, 2, 1)
     while feb.weekday() != 3:

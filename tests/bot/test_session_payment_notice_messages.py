@@ -452,7 +452,7 @@ def test_client_confirmed_omits_tickets_without_url() -> None:
     assert "Билет" not in text
 
 
-def test_client_reminder_tickets_only_tomorrow_not_2h() -> None:
+def test_client_reminder_tickets_tomorrow_and_2h() -> None:
     session = {
         "date": "10.06",
         "day": "Ср",
@@ -468,8 +468,16 @@ def test_client_reminder_tickets_only_tomorrow_not_2h() -> None:
     tomorrow = msg.format_client_booking_reminder_text(is_soon=False, sessions=[session])
     soon = msg.format_client_booking_reminder_text(is_soon=True, sessions=[session])
     assert "ул. Тест\n\n🎟 Билет на лёд уже есть? Если нет — ещё можно онлайн.\n\nСначала" in tomorrow
-    assert "Билет" not in soon
-    assert "ул. Тест\n\nСначала" in soon
+    assert f"ул. Тест\n\n{msg.CLIENT_BOOKING_TICKETS_SOON_HINT}\n\nСначала" in soon
+    live = msg.format_client_booking_reminder_text(
+        is_soon=True, sessions=[{**session, "tickets_free": 41, "tickets_capacity": 115}]
+    )
+    assert f"{msg.CLIENT_BOOKING_TICKETS_SOON_HINT}\nСейчас свободно 41 из 115.\n\nСначала" in live
+    gone = msg.format_client_booking_reminder_text(
+        is_soon=True, sessions=[{**session, "tickets_free": 0, "tickets_capacity": 115}]
+    )
+    assert msg.CLIENT_BOOKING_TICKETS_SOLD_OUT_HINT in gone
+    assert "Возьмите сейчас" not in gone
 
 
 def test_client_reminder_without_url_keeps_blank_line() -> None:

@@ -18,6 +18,7 @@ from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
+from src.application.booking_arena_tickets import fetch_ticket_availability
 from src.application.booking_payment_notice import load_booking_deduction_snapshot
 from src.application.booking_payment_notice import classify_booking_expected_payment_class
 from src.application.booking_payment_notice import load_pass_sessions_remaining_after_booking
@@ -1651,8 +1652,18 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                     if not chat_id:
                         continue
                     raw_sessions = p.get("sessions") or []
+                    kind = p.get("kind") or ""
+                    is_soon = kind not in ("before_24h", "before_evening_prior")
                     sessions_payload: list[dict] = []
                     for s in raw_sessions:
+                        availability = None
+                        if is_soon and s.get("arena_tickets_url"):
+                            availability = await fetch_ticket_availability(
+                                session,
+                                s.get("resolved_arena_id"),
+                                s.get("slot_date"),
+                                s.get("start_time"),
+                            )
                         date_str, day_str, time_str = _slot_display_strings(
                             s.get("slot_date"), s.get("start_time")
                         )
@@ -1672,10 +1683,10 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 "arena_address": s.get("arena_address"),
                                 "booked_for_name": s.get("booked_for_name"),
                                 "arena_tickets_url": s.get("arena_tickets_url"),
+                                "tickets_free": availability.free if availability else None,
+                                "tickets_capacity": availability.capacity if availability else None,
                             }
                         )
-                    kind = p.get("kind") or ""
-                    is_soon = kind not in ("before_24h", "before_evening_prior")
                     text = msg.format_client_booking_reminder_text(
                         is_soon=is_soon,
                         sessions=sessions_payload,
@@ -1706,13 +1717,12 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 )
                             ]
                         )
-                    if not is_soon:
-                        for sess in sessions_payload:
-                            msg.append_client_booking_tickets_keyboard_row(
-                                kb_rows,
-                                arena_tickets_url=sess.get("arena_tickets_url"),
-                                arena_name=sess.get("arena_name"),
-                            )
+                    for sess in sessions_payload:
+                        msg.append_client_booking_tickets_keyboard_row(
+                            kb_rows,
+                            arena_tickets_url=sess.get("arena_tickets_url"),
+                            arena_name=sess.get("arena_name"),
+                        )
                     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows) if kb_rows else None
                     try:
                         await client_bot.send_message(
@@ -3278,8 +3288,43 @@ async def run_care_pulse_loop(trainer_bot: Bot, client_bot: Bot) -> None:
             break
 
 
+BOOKING_TICKETS_INTERVAL_SEC = 5 * 60
+
+
+async def run_booking_tickets_loop(client_bot: Bot, trainer_bot: Bot) -> None:
+    """TASK-331: «билеты кончаются» клиенту и «перешлите ученикам» тренеру, каждые 5 минут в часы уведомлений."""
+    from src.application.booking_tickets_push import send_low_ticket_alerts, send_trainer_ticket_forwards
+    from src.shared.config import get_settings
+
+    logger.info("[booking_tickets_loop] started")
+    while True:
+        try:
+            if is_within_notification_hours():
+                now = datetime.now(timezone.utc)
+                async with async_session_factory() as session:
+                    low = await send_low_ticket_alerts(session, client_bot, now=now)
+                    fwd = await send_trainer_ticket_forwards(
+                        session,
+                        trainer_bot,
+                        now=now,
+                        client_bot_username=get_settings().client_bot_username,
+                    )
+                if low or fwd:
+                    logger.info("[booking_tickets_loop] tickets_low=%s trainer_forward=%s", low, fwd)
+        except asyncio.CancelledError:
+            logger.info("[booking_tickets_loop] cancelled")
+            break
+        except Exception as e:
+            logger.exception("Booking tickets loop: %s", e)
+
+        try:
+            await asyncio.sleep(BOOKING_TICKETS_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            break
+
+
 async def run_ice_forecast_loop(client_bot: Bot) -> None:
-    """Четверг 18:00–20:00 Europe/Minsk, 1 дек – 15 фев. Молчит, пока ICE_FORECAST_ENABLED выключен."""
+    """Четверг 18:00–20:00 Europe/Minsk, 26 окт – 15 фев. Молчит, пока ICE_FORECAST_ENABLED выключен."""
     from src.application.ice_forecast import ice_forecast_due, send_ice_forecast
     from src.application.trainer_digest_use_cases import now_minsk
     from src.shared.config import get_settings

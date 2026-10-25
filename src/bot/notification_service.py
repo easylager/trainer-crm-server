@@ -40,6 +40,7 @@ from src.bot.notification_loops import (
     run_weekly_sunday_digest_loop,
     run_care_pulse_loop,
     run_ice_forecast_loop,
+    run_booking_tickets_loop,
     run_hockey_matches_loop,
 )
 from src.bot.ice_company_loop import run_ice_company_loop
@@ -107,6 +108,7 @@ async def main() -> None:
         asyncio.create_task(run_inactive_client_loop(client_bot), name="inactive_client"),
         asyncio.create_task(run_ice_company_loop(client_bot), name="ice_company"),
         asyncio.create_task(run_ice_forecast_loop(client_bot), name="ice_forecast"),
+        asyncio.create_task(run_booking_tickets_loop(client_bot, trainer_bot), name="booking_tickets"),
     ]
     # Trainer-facing loops
     trainer_tasks = [
