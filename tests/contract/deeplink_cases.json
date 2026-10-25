@@ -1,6 +1,7 @@
 [
  {"start_param": "arena_42", "valid_start_param": true, "expect": {"kind": "arena", "arena_id": 42}, "build": {"kind": "arena", "arena_id": 42}, "card": {"ref": "42", "session_id": null}},
  {"start_param": "arena_42_s_9001", "valid_start_param": true, "expect": {"kind": "arena", "arena_id": 42, "session_id": 9001}, "build": {"kind": "arena", "arena_id": 42, "session_id": 9001}, "card": {"ref": "42", "session_id": "9001"}},
+ {"start_param": "follow_arena_42", "note": "Колокольчик сайта: не диплинк места для общего контракта (его разбирает bell-follow.js и ведёт на ту же карточку).", "valid_start_param": true, "expect": {"kind": null}, "card": {"ref": "follow_arena_42", "session_id": null}},
  {"start_param": "arena-42", "note": "РАСХОЖДЕНИЕ: дефис принимают JS-парсеры, python — нет (билдеры всегда пишут «_»).", "valid_start_param": true, "expect": {"kind": null}, "js": {"kind": "arena", "arena_id": 42}, "card": {"ref": "42", "session_id": null}},
  {"start_param": "arena-42_s_9", "note": "РАСХОЖДЕНИЕ: то же, с сеансом.", "valid_start_param": true, "expect": {"kind": null}, "js": {"kind": "arena", "arena_id": 42, "session_id": 9}, "card": {"ref": "42", "session_id": "9"}},
  {"start_param": "arena_0", "note": "id=0 не арена. JS-шелл не диплинкует, но карточка отдаёт хвост «0» как ref (унаследованный slug-путь).", "valid_start_param": true, "expect": {"kind": null}, "card": {"ref": "0", "session_id": null}},

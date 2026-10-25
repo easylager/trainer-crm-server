@@ -73,6 +73,12 @@ ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES: frozenset[str] = frozenset(
         # inbox_item_shown above. hint_clicked/hint_dismissed/next_step_clicked/
         # next_step_dismissed stay visible — real engagement, much lower volume.
         "trainer.hub.next_step_shown",
+        # Колокольчик сайта: воронка охвата уведомлений, смотрится запросом, не лентой.
+        "bell_follow_subscribed",
+        "write_access_granted",
+        "write_access_denied",
+        "write_access_already",
+        "write_access_unsupported",
     }
 )
 

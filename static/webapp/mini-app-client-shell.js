@@ -1183,6 +1183,8 @@
 
   function maybeOpenArenaDeepLinkWithSession(session) {
     var sp = String(readStartParam() || '').trim();
+    /* Колокольчик сайта (follow_arena_<id>) ведёт на ту же карточку, что arena_<id>. */
+    if (global.GlideBellFollow) sp = global.GlideBellFollow.arenaStartParam(sp);
     var G = global.GlideDeepLink;
     var serverPlaceCard = !!(session && session.mini_app_server_place_card);
     if (G && typeof G.resolveArenaDeepLinkTarget === 'function') {
@@ -1210,6 +1212,24 @@
       });
   }
 
+  /* Колокольчик сайта: подписка + запрос разрешения писать до ухода на карточку (bell-follow.js). */
+  function runBellFollow() {
+    var B = global.GlideBellFollow;
+    var sp = String(readStartParam() || '').trim();
+    var initData = getInitData();
+    if (!B || !initData || !B.parseFollowStartParam(sp)) return Promise.resolve();
+    var storage = null;
+    try {
+      storage = global.sessionStorage;
+    } catch (e) { /* без storage */ }
+    return B.run({
+      tg: getTg(),
+      startParam: sp,
+      storage: storage,
+      post: B.makePost(initData, global.fetch.bind(global)),
+    }).catch(function () {});
+  }
+
   function bootAfterSession(session) {
     if (
       session &&
@@ -1220,7 +1240,9 @@
     }
     refreshWatchesSummary();
     reportCatalogPresence('miniapp_shell', readStartParam());
-    return maybeOpenArenaDeepLinkWithSession(session).then(function (opened) {
+    return runBellFollow().then(function () {
+      return maybeOpenArenaDeepLinkWithSession(session);
+    }).then(function (opened) {
       if (opened) return;
       // На главной префетч каталога стартует после снятия скелетона: иначе он
       // занимает соединения, пока хаб ещё ждёт bootstrap.

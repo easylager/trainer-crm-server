@@ -187,6 +187,22 @@ def parse_watch_start_param(value: str | None) -> int | None:
     return int(match.group(1))
 
 
+# Колокольчик сайта: ``follow_arena_<id>`` открывает мини-апп, оформляет подписку на каток и просит
+# разрешение писать. Отдельный от ``arena_<id>`` токен: у шеринга и прочих ссылок поведения нет.
+FOLLOW_START_PREFIX = "follow_arena_"
+_FOLLOW_START_RE = re.compile(r"^follow_arena_([1-9][0-9]{0,8})$")
+
+
+def follow_start_param(arena_id: int) -> str:
+    return f"{FOLLOW_START_PREFIX}{int(arena_id)}"
+
+
+def parse_follow_start_param(value: str | None) -> int | None:
+    """``follow_arena_42`` → ``42``; всё остальное, включая ``arena_42``, → ``None``."""
+    match = _FOLLOW_START_RE.match((value or "").strip())
+    return int(match.group(1)) if match else None
+
+
 def telegram_bot_start_link(*, client_bot_username: str | None, start_param: str) -> str | None:
     """``t.me/<bot>?start=…`` — всегда чат бота, не мини-апп: команду ``/start`` получает бот."""
     bot = normalize_client_bot_username(client_bot_username)

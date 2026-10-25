@@ -335,9 +335,9 @@ async def resolve_entry_scope(
             if coach is not None and coach[1] is not None:
                 arena_id = coach[1]
             else:
-                from src.application.place_links import parse_watch_start_param
+                from src.application.place_links import parse_follow_start_param, parse_watch_start_param
 
-                arena_id = parse_watch_start_param(sp)
+                arena_id = parse_watch_start_param(sp) or parse_follow_start_param(sp)
     if city_id is None and arena_id is None:
         target = parse_catalog_start_param(sp)
         if target is not None and target[0] is not None:

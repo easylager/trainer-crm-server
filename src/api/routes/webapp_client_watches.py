@@ -10,6 +10,7 @@ from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_trainer_edges import _parse_profile_id_header, _resolve_edge_client_id_or_400
 from src.api.miniapp_auth.types import MiniAppPlatform
+from src.application.bell_follow_use_cases import follow_arena_from_bell, record_write_access_outcome
 from src.application.client_ice_watch_use_cases import (
     IceWatchChannelUnsupported,
     client_watches_hub_payload,
@@ -108,6 +109,57 @@ async def post_client_ice_watch(
     except IceWatchChannelUnsupported as exc:
         raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED) from exc
     return {"watch": watch}
+
+
+class BellFollowBody(BaseModel):
+    arena_id: int = Field(..., ge=1)
+
+
+class WriteAccessOutcomeBody(BaseModel):
+    arena_id: int = Field(..., ge=1)
+    outcome: str = Field(..., max_length=20)
+    retry: bool = False
+
+
+@router.post("/client/bell-follow")
+async def post_client_bell_follow(
+    body: BellFollowBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Вход по колокольчику сайта (``follow_arena_<id>``): гарантирует подписку, идемпотентно."""
+    if principal.platform != MiniAppPlatform.TELEGRAM:
+        raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED)
+    result = await follow_arena_from_bell(
+        session, telegram_id=client_catalog_telegram_key(principal), arena_id=int(body.arena_id)
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Каток не найден.")
+    return result
+
+
+@router.post("/client/bell-follow/outcome")
+async def post_client_bell_follow_outcome(
+    body: WriteAccessOutcomeBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Исход запроса разрешения писать (granted | denied | already | unsupported) для метрики охвата."""
+    if principal.platform != MiniAppPlatform.TELEGRAM:
+        raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED)
+    telegram_id = client_catalog_telegram_key(principal)
+    client_id = await resolve_acting_client_id(session, telegram_id, None)
+    recorded = await record_write_access_outcome(
+        session,
+        telegram_id=telegram_id,
+        client_id=client_id,
+        arena_id=int(body.arena_id),
+        outcome=(body.outcome or "").strip().lower(),
+        retry=body.retry,
+    )
+    if not recorded:
+        raise HTTPException(status_code=400, detail="Неизвестный исход.")
+    return {"ok": True}
 
 
 @router.delete("/client/ice-watches/{watch_id:int}")

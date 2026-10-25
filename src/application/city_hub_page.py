@@ -39,10 +39,10 @@ from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, format_pri
 from src.application.ice_time_windows import home_default_when_key, resolve_window
 from src.application.place_links import (
     catalog_start_param,
+    follow_start_param,
     join_public_origin,
     place_path,
     place_query,
-    place_start_param,
     public_telegram_cta_url,
 )
 from src.shared.catalog_sharpening import row_in_sharpening_section
@@ -1299,7 +1299,7 @@ def _b_phone_block(view: Mapping[str, Any], rink: Mapping[str, Any], *, base_url
     if rink.get("id") is not None:
         href = public_telegram_cta_url(
             base_url,
-            start_param=place_start_param(int(rink["id"])),
+            start_param=follow_start_param(int(rink["id"])),
             surface="selection_page",
             city_id=city_id,
             arena_id=int(rink["id"]),

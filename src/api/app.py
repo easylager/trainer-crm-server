@@ -2041,6 +2041,19 @@ def webapp_glide_deeplink_js(request: Request):
     )
 
 
+@app.get("/webapp/bell-follow.js")
+def webapp_bell_follow_js(request: Request):
+    """Колокольчик сайта: подписка и запрос разрешения писать при startapp=follow_arena_<id>. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "bell-follow.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-shell.js")
 def webapp_mini_app_client_shell_js(request: Request):
     """Client shell — tab navigation, more sheet, navigate helpers. Use ``?v=…`` for long cache."""
