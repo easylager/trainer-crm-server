@@ -127,7 +127,7 @@ def test_minutes_until_is_live_and_under_two_hours_only() -> None:
     assert _minutes_until("live", now + timedelta(minutes=119), now) == 119
     assert _minutes_until("live", now + timedelta(minutes=120), now) is None
     assert _price_with_rental({"price_adult_minor": 1000, "price_rental_minor": 500, "currency_code": "BYN"}) == (
-        "с прокатом 15 BYN"
+        "с прокатом 15\u00a0BYN"
     )
     assert _price_with_rental({"price_adult_minor": 1000, "currency_code": "BYN"}) is None
 

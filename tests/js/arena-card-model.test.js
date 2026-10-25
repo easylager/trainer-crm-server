@@ -1174,9 +1174,9 @@ describe('TASK-290: обычная загрузка на плитке и в по
     const { scheduleInviteHint } = loadModel();
     assert.equal(
       scheduleInviteHint(true, true),
-      'Выбери время — позовём на него друзей. Полоска — насколько обычно людно; на красные часы билет лучше взять заранее.'
+      'Выберите время — позовём на него друзей. Полоска — насколько обычно людно; на красные часы билет лучше взять заранее.'
     );
-    assert.equal(scheduleInviteHint(true, false), 'Выбери время — позовём на него друзей. Билет — в карточке времени.');
+    assert.equal(scheduleInviteHint(true, false), 'Выберите время — позовём на него друзей. Билет — в карточке времени.');
     assert.equal(scheduleInviteHint(false, true), 'Полоска под временем — насколько обычно людно в эти часы.');
     assert.equal(scheduleInviteHint(false, false), '');
   });
@@ -1198,7 +1198,7 @@ describe('TASK-290: живой остаток вместо полоски', () =
     const { scheduleInviteHint } = loadModel();
     assert.equal(
       scheduleInviteHint(true, true, true),
-      'Выбери время — позовём на него друзей. Под временем — сколько билетов осталось.'
+      'Выберите время — позовём на него друзей. Под временем — сколько билетов осталось.'
     );
     assert.equal(scheduleInviteHint(false, true, true), 'Под временем — сколько билетов осталось.');
   });

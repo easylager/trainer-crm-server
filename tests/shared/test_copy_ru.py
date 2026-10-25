@@ -159,7 +159,7 @@ def test_when_weekend_is_the_aligned_wording() -> None:
 
 def test_t_formats_placeholders() -> None:
     assert t("mode.reopen", date="12 октября") == "Откроется 12 октября"
-    assert t("price.with_rental", total="25", currency="BYN") == "с прокатом 25 BYN"
+    assert t("price.with_rental", total="25", currency="BYN") == "с прокатом 25\u00a0BYN"
 
 
 def test_t_without_kwargs_returns_raw_template() -> None:

@@ -312,13 +312,34 @@
     }
   }
 
+  /*
+   * Что уже записано на сервер в этой сессии WebView (TASK-332): без этого каждое
+   * открытие «Поиска» слало два PATCH с теми же городом и «когда».
+   */
+  var SERVER_SYNCED_KEY = 'glide_ice_server_synced_v1_';
+
+  function readServerSynced(field) {
+    try {
+      return global.sessionStorage.getItem(SERVER_SYNCED_KEY + field);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeServerSynced(field, value) {
+    try {
+      global.sessionStorage.setItem(SERVER_SYNCED_KEY + field, String(value));
+    } catch (e) { /* приватный режим — просто запишем ещё раз */ }
+  }
+
   /** Серверная сессия: переживает закрытие Telegram (localStorage часто сбрасывается). */
   function persistIceWhenServer() {
     var token = initData();
     if (!token) return;
     var sig = String(state.when || 'any') + '|' + String(state.whenDay || '');
-    if (sig === lastServerWhenSig) return;
+    if (sig === lastServerWhenSig || sig === readServerSynced('when')) return;
     lastServerWhenSig = sig;
+    writeServerSynced('when', sig);
     global.fetch('/api/webapp/client/session/catalog-filters', {
       method: 'PATCH',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
@@ -2634,7 +2655,8 @@
     persist();
     if (mapCtl && typeof mapCtl.leaveCity === 'function') mapCtl.leaveCity();
     var token = initData();
-    if (token && city.id) {
+    if (token && city.id && readServerSynced('city') !== String(city.id)) {
+      writeServerSynced('city', city.id);
       fetch('/api/webapp/client/session/catalog-filters', {
         method: 'PATCH',
         headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
@@ -2788,7 +2810,12 @@
         }
         /* Не блокируем ленту сессией/GPS: сразу дефолтный город, потом уточняем. */
         ensureProvisionalCity();
-        return fetchJson('/api/webapp/client/session', { auth: true, timeoutMs: 8000 })
+        var shell = global.ClientShell;
+        var sessionReq =
+          shell && typeof shell.getJsonOnce === 'function'
+            ? shell.getJsonOnce('/api/webapp/client/session')
+            : fetchJson('/api/webapp/client/session', { auth: true, timeoutMs: 8000 });
+        return sessionReq
           .then(function (session) {
             var sid = session && session.city_id;
             var fromSession = sid

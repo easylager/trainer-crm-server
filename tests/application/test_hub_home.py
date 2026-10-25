@@ -99,7 +99,7 @@ def _view() -> dict:
                 "local_date": date(2026, 10, 19),
                 "price_adult_minor": 1000,
                 "currency_code": "BYN",
-                "price_with_rental": "с прокатом 19 BYN",
+                "price_with_rental": "с прокатом 19\u00a0BYN",
             }
         ],
     }
@@ -122,6 +122,7 @@ def test_city_block_matches_the_city_page_with_mini_app_links() -> None:
     assert ohm["line"] == "ОХМ на 2 катках · ближайший завтра в 10:00"
     assert ohm["windows"][0]["href"] is None, "ноль — не ссылка"
     assert block["needs"][2]["line"] == "12 мест · 8 открыты сейчас"
+    assert block["needs"][3]["line"] == "13 магазинов · 11 открыты сейчас"
 
 
 def test_hero_has_fallback_photos_from_rinks_only() -> None:

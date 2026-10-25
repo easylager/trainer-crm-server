@@ -613,8 +613,12 @@
 
     body.classList.add('client-shell-body');
 
-    if (!document.getElementById('clientTabBar')) {
+    var earlyBar = document.getElementById('clientTabBar');
+    if (!earlyBar) {
       document.body.appendChild(buildTabBar());
+    } else if (earlyBar.parentNode === body && earlyBar !== body.lastElementChild) {
+      // Поставленная до разбора body панель — в конец, как раньше: порядок фокуса не меняется.
+      body.appendChild(earlyBar);
     }
     if (!document.getElementById('clientMoreOverlay')) {
       document.body.appendChild(buildMoreSheet());
@@ -744,17 +748,40 @@
       .catch(function () {});
   }
 
+  /*
+   * Один GET на страницу (TASK-332): сессию и окна тренера просили оболочка при старте,
+   * прогрев соседних вкладок и сам экран — до трёх одинаковых запросов на открытие.
+   * Неудача не кэшируется: следующий вызов спросит снова.
+   */
+  var jsonOnce = {};
+
+  function getJsonOnce(path) {
+    var initData = getInitData();
+    if (!initData) return Promise.resolve(null);
+    if (!jsonOnce[path]) {
+      var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
+      jsonOnce[path] = global
+        .fetch(path, { headers: headers, cache: 'no-store' })
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .catch(function () {
+          return null;
+        })
+        .then(function (data) {
+          if (data == null) delete jsonOnce[path];
+          return data;
+        });
+    }
+    return jsonOnce[path];
+  }
+
   function prefetchCatalogWarmCache() {
     var initData = getInitData();
     if (!initData) return Promise.resolve();
-    var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
     return Promise.all([
-      fetch('/api/webapp/client/session', { headers: headers, cache: 'no-store' }).then(function (r) {
-        return r.ok ? r.json() : null;
-      }),
-      fetch('/api/webapp/client/trainer-edges', { headers: headers }).then(function (r) {
-        return r.ok ? r.json() : null;
-      }),
+      getJsonOnce('/api/webapp/client/session'),
+      getJsonOnce('/api/webapp/client/trainer-edges'),
     ])
       .then(function (results) {
         var session = results[0];
@@ -1015,6 +1042,7 @@
     renderSkeletonList: renderSkeletonList,
     hapticSelection: hapticSelection,
     hapticSuccess: hapticSuccess,
+    getJsonOnce: getJsonOnce,
     prefetchCatalogWarmCache: prefetchCatalogWarmCache,
     prefetchCatalogAssets: prefetchCatalogAssets,
     prefetchIceAssets: prefetchIceAssets,
@@ -1199,17 +1227,7 @@
   }
 
   function loadClientSessionBeforeDeepLink() {
-    var initData = getInitData();
-    if (!initData) return Promise.resolve(null);
-    var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
-    return global
-      .fetch('/api/webapp/client/session', { headers: headers, cache: 'no-store' })
-      .then(function (r) {
-        return r.ok ? r.json() : null;
-      })
-      .catch(function () {
-        return null;
-      });
+    return getJsonOnce('/api/webapp/client/session');
   }
 
   /* Колокольчик сайта: подписка + запрос разрешения писать до ухода на карточку (bell-follow.js). */
@@ -1269,6 +1287,32 @@
     }
     loadClientSessionBeforeDeepLink().then(bootAfterSession);
   }
+
+  /*
+   * Панель — до первого кадра новой страницы (TASK-332). Иначе переход снимает
+   * страницу без панели: она исчезает и появляется заново после DOMContentLoaded.
+   * Скрипт стоит синхронно в <head>, поэтому body ещё нет — ждём, пока парсер его создаст.
+   */
+  function mountTabBarEarly() {
+    var mount = function (body) {
+      if (body.getAttribute('data-client-shell') !== 'tabs' || document.getElementById('clientTabBar')) return;
+      body.appendChild(buildTabBar());
+      syncTabBarActive();
+    };
+    if (document.body) {
+      mount(document.body);
+      return;
+    }
+    if (typeof MutationObserver === 'undefined') return;
+    var observer = new MutationObserver(function () {
+      if (!document.body) return;
+      observer.disconnect();
+      mount(document.body);
+    });
+    observer.observe(document.documentElement, { childList: true });
+  }
+
+  mountTabBarEarly();
 
   /*
    * Подписка на pagereveal — на уровне модуля, а не в boot(): событие

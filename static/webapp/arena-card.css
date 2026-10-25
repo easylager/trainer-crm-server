@@ -1306,3 +1306,18 @@ button.arena-info__tel--copy {
   text-underline-offset: 3px;
   cursor: pointer;
 }
+
+/* Отклик на касание (TASK-332): адрес, телефон, скидка рядом и «Сообщить об ошибке» были без :active. */
+.av-fact,
+.arena-info {
+  transition: filter .18s ease;
+}
+.av-fact:active,
+.arena-info:active {
+  filter: brightness(.96);
+  transition-duration: 70ms;
+}
+.arena-info__tel:active,
+.linkish:active {
+  opacity: .6;
+}

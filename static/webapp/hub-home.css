@@ -326,3 +326,27 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
   min-height: 40px; padding: 0 14px; border: 1px solid var(--g-line); border-radius: 12px;
   background: var(--g-surface); color: var(--g-ink); font: 600 14px/1 var(--g-font); cursor: pointer;
 }
+
+/*
+ * Отклик на касание (TASK-332): аудит нашёл на главной десять нажимаемых элементов
+ * без :active — карточку ближайшего льда, её кнопки, тренера и чипы времени.
+ * Те же значения, что у .ga-press: кнопки и чипы вдавливаются, карточки и строки темнеют.
+ */
+.hh-body :is(.hn__btn, .me__dm, .me__chip, .me__who-link, .hw__chip, .cps-chip) {
+  transition: transform .42s cubic-bezier(.22, 1.15, .36, 1), filter .18s ease;
+}
+.hh-body :is(.hn__btn, .me__dm, .me__chip, .me__who-link, .hw__chip, .cps-chip):active {
+  transform: scale(.97);
+  filter: brightness(.96);
+  transition-duration: 70ms;
+}
+.hh-body :is(.hn__main, .hw__link) {
+  transition: filter .18s ease;
+}
+.hh-body :is(.hn__main, .hw__link):active {
+  filter: brightness(.96);
+  transition-duration: 70ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hh-body :is(.hn__btn, .me__dm, .me__chip, .me__who-link, .hw__chip, .cps-chip):active { transform: none; }
+}

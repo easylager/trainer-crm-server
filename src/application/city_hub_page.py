@@ -972,11 +972,14 @@ def _b_quick(slug: str, counts: Mapping[str, int], *, all_count: int, hot: str |
     return f'<span class="b-quick">{"".join(parts)}</span>'
 
 
-def _b_open_line(places: list[Mapping[str, Any]], open_places: list[Mapping[str, Any]]) -> str:
+def _b_open_line(
+    places: list[Mapping[str, Any]], open_places: list[Mapping[str, Any]], *, one: str = "открыто"
+) -> str:
+    """«3 открыты сейчас»; ``one`` — род единственного числа: место открыто, магазин открыт."""
     k = len(open_places)
     if not k:
         return ""
-    word = "открыто" if k == 1 else "открыты"
+    word = plural_ru(k, one, "открыты", "открыты")
     return f"{k} {word} сейчас"
 
 
@@ -1025,8 +1028,8 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
     shop_n = int(view.get("shop_count") or 0)
     if shop_n:
         shops = [p for p in view.get("places") or [] if p.get("venue_type") == VENUE_TYPE_SHOP]
-        bits = [str(shop_n)]
-        open_line = _b_open_line(shops, list(view.get("shops_open") or []))
+        bits = [f"{shop_n}\u00a0{plural_ru(shop_n, 'магазин', 'магазина', 'магазинов')}"]
+        open_line = _b_open_line(shops, list(view.get("shops_open") or []), one="открыт")
         if open_line:
             bits.append(open_line)
         rows.append(_b_route_row(href=_list_href(slug, t="shop"), icon="shop", title=t("route.shops"), line=_esc(" · ".join(bits))))

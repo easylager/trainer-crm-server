@@ -46,7 +46,11 @@ async def test_webapp_ice_html_injects_ymaps_meta_when_key_set(monkeypatch, app_
     assert resp.status_code == 200
     assert 'name="ymaps-key"' in resp.text
     assert 'content="html-injected-key"' in resp.text
-    assert resp.headers.get("cache-control", "").lower().find("no-store") >= 0
+    # TASK-332: ключ карты — только в частном кэше; no-cache (не no-store) — чтобы «Назад»
+    # с карточки катка возвращал страницу из bfcache, а не грузил заново.
+    cache_control = resp.headers.get("cache-control", "").lower()
+    assert "private" in cache_control and "no-cache" in cache_control
+    assert "no-store" not in cache_control
 
 
 @pytest.mark.asyncio

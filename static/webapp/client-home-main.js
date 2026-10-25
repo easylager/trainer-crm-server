@@ -803,8 +803,11 @@
           return Promise.resolve(notifyFlagFromEdgesPayload(warm.trainerEdges, trainerId));
         }
         if (!initData) return Promise.resolve(false);
-        return fetch('/api/webapp/client/trainer-edges', { headers: headersJson() })
-          .then(function (r) { return r.ok ? r.json() : null; })
+        var edgesReq = shell && typeof shell.getJsonOnce === 'function'
+          ? shell.getJsonOnce('/api/webapp/client/trainer-edges')
+          : fetch('/api/webapp/client/trainer-edges', { headers: headersJson() })
+              .then(function (r) { return r.ok ? r.json() : null; });
+        return edgesReq
           .then(function (data) {
             if (data && shell && typeof shell.writeCatalogWarmCache === 'function') {
               shell.writeCatalogWarmCache({

@@ -167,6 +167,23 @@ html:active-view-transition-type(back)::view-transition-new(root) {
 }
 
 /*
+ * Таб-бар не участвует в переходе: стоит на месте, пока экран под ним меняется
+ * (TASK-332, как у тренера). Старый снимок прячем — на экранах без панели она
+ * просто исчезает, а не уезжает вместе со страницей.
+ */
+.client-tab-bar {
+  view-transition-name: client-tab-bar;
+}
+::view-transition-group(client-tab-bar),
+::view-transition-old(client-tab-bar),
+::view-transition-new(client-tab-bar) {
+  animation: none;
+}
+::view-transition-old(client-tab-bar) {
+  display: none;
+}
+
+/*
  * AC-003. Кадр катка не мигает, а разворачивается в шапку арены: один и тот же
  * снимок с двух сторон перехода. Имя ставится на КОНКРЕТНУЮ карточку в момент
  * тапа (ice-tab.js) — в списке таких элементов пять, а имя обязано быть

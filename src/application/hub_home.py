@@ -122,7 +122,8 @@ def _needs(view: Mapping[str, Any], city_id: int) -> list[dict[str, Any]]:
             {
                 "key": "shop",
                 "title": "Магазины",
-                "line": str(shops) + (f" · {k} открыт{'о' if k == 1 else 'ы'} сейчас" if k else ""),
+                "line": f"{shops} {plural_ru(shops, 'магазин', 'магазина', 'магазинов')}"
+                + (f" · {k} {plural_ru(k, 'открыт', 'открыты', 'открыты')} сейчас" if k else ""),
                 "href": _ice_href(city_id, venue="shop"),
                 "windows": [],
             }

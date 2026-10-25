@@ -232,7 +232,8 @@ async def test_city_hub_service_and_shop_tiles_count_open_now(app_use_test_db, d
     assert "2 открыты сейчас" in service
     shops = _route(html, "Магазины")
     assert shops and f'href="/c/{slug}?t=shop"' in shops
-    assert "1 открыто сейчас" in shops
+    assert "1 магазин" in shops
+    assert "1 открыт сейчас" in shops
     assert not _route(html, "Покататься") or "Каток простой" not in _route(html, "Покататься")
     assert plain  # каток без сеансов — в «Все места города», но без плитки времени
     assert "Каток простой" in html

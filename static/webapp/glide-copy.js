@@ -40,7 +40,7 @@
     "cta.route": "Маршрут",
     "cta.share": "Поделиться",
     "cta.report": "Нашли ошибку? Напишите нам",
-    "price.with_rental": "с прокатом {total} {currency}",
+    "price.with_rental": "с прокатом {total}\u00a0{currency}",
     "footer.made_by": "Сделано теми, кто сам катается.",
     "site.footer.about": "Мы сами катаемся и знаем, как важно быстро найти свободный лёд.",
     "site.footer.disclaimer": "Расписание может меняться — уточняйте у катка.",

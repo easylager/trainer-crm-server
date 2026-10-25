@@ -159,6 +159,14 @@ _WEBAPP_NO_CACHE_HEADERS = {
     **_WEBAPP_SNIFFING,
 }
 
+# «Поиск» (TASK-332): no-cache без no-store — каждая загрузка по-прежнему идёт на сервер,
+# но «Назад» с карточки катка может вернуть страницу из bfcache (WebKit/Chrome не кладут
+# туда no-store). Страница сама обновляет ленту на pageshow.persisted (ice-tab.js).
+_WEBAPP_BFCACHE_HTML_HEADERS = {
+    "Cache-Control": "private, no-cache, must-revalidate",
+    **_WEBAPP_SNIFFING,
+}
+
 # Long-lived cache for split hub assets (HTML stays no-store).
 # trainer-home.html links these with ?v=… — bump the query in HTML when the file changes so clients refresh.
 _WEBAPP_IMMUTABLE_CACHE_HEADERS = {
@@ -258,7 +266,7 @@ def webapp_ice_tab_page():
     return HTMLResponse(
         content=page_html,
         media_type="text/html",
-        headers=_WEBAPP_NO_CACHE_HEADERS,
+        headers=_WEBAPP_BFCACHE_HTML_HEADERS,
     )
 
 
