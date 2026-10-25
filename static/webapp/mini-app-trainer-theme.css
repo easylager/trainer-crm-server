@@ -79,3 +79,12 @@ html.trainer-theme-dark body {
 .ta-link:active {
   opacity: 0.7;
 }
+
+/* Тренерские экраны. «+375 29 333-44-55» с пробелами: долгое нажатие выделяет номер целиком, а не кусок между пробелами. */
+.bd-tel,
+.tc-tel,
+.crm-tel-link {
+  -webkit-user-select: all;
+  user-select: all;
+  white-space: nowrap;
+}

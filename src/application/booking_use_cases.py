@@ -1615,6 +1615,8 @@ def _trainer_booked_notification_row_to_dict(row) -> dict:
         "map_link": _map_link(row[12], row[13]),
         "duration_minutes": _booking_interval_duration_minutes(row[5], row[6]),
         "booked_for_name": (row[14] or "").strip() or None if len(row) > 14 else None,
+        "resolved_arena_id": int(row[15]) if len(row) > 15 and row[15] is not None else None,
+        "service_is_online": bool(row[16]) if len(row) > 16 else False,
     }
 
 
@@ -1630,7 +1632,9 @@ _TRAINER_BOOKED_NOTIFY_SELECT_SQL = """
            CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.address END AS arena_address,
            CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.latitude END,
            CASE WHEN COALESCE(ts.is_online, false) THEN NULL ELSE a.longitude END,
-           """ + sql_client_booked_for_name("c") + """ AS booked_for_name
+           """ + sql_client_booked_for_name("c") + """ AS booked_for_name,
+           (""" + SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT + """) AS resolved_arena_id,
+           COALESCE(ts.is_online, false) AS service_is_online
     FROM bookings b
     JOIN clients c ON c.id = b.client_id
     JOIN slots s ON s.id = b.slot_id

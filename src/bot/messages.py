@@ -436,6 +436,7 @@ def format_client_trainer_booked_you_html(
     map_link: str | None,
     expected_payment_class: str | None = None,
     booked_for_name: str | None = None,
+    arena_tickets_url: str | None = None,
 ) -> str:
     """Rich HTML message for client after trainer books them (ParseMode.HTML)."""
     parts: list[str] = [
@@ -479,6 +480,9 @@ def format_client_trainer_booked_you_html(
     else:
         venue_lines.append("📍 <b>Место:</b> уточните у тренера")
     parts.append("\n" + "\n".join(venue_lines) + "\n")
+    parts.append(
+        format_client_booking_tickets_message_block(tickets_url=arena_tickets_url, for_reminder=False)
+    )
 
     parts.append("\nАдрес, отмена и детали — в <b>«Мои записи»</b>.")
     return "".join(parts)
@@ -489,6 +493,8 @@ def build_client_trainer_booked_you_inline_keyboard(
     booking_id: int,
     map_url: str | None,
     webapp_base_url: str | None,
+    arena_tickets_url: str | None = None,
+    arena_name: str | None = None,
 ):
     """After trainer books the client: open «Мои записи» in Mini App + optional map (ParseMode.HTML message)."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -509,6 +515,7 @@ def build_client_trainer_booked_you_inline_keyboard(
         )
     if map_url:
         rows.append([InlineKeyboardButton(text=CLIENT_BUTTON_SHOW_ON_MAP, url=map_url)])
+    append_client_booking_tickets_keyboard_row(rows, arena_tickets_url=arena_tickets_url, arena_name=arena_name)
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 

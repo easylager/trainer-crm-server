@@ -552,14 +552,6 @@ button[data-call-phone]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
   touch-action: manipulation;
   box-shadow: none;
 }
-/* «+375 29 333-44-55» с пробелами: долгое нажатие выделяет номер целиком, а не кусок между пробелами. */
-.bd-tel,
-.tc-tel,
-.crm-tel-link {
-  -webkit-user-select: all;
-  user-select: all;
-  white-space: nowrap;
-}
 a.bd-tel,
 a.tc-tel,
 a.crm-tel-link,

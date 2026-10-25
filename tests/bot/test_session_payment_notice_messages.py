@@ -508,3 +508,23 @@ def test_tickets_keyboard_row_dedupes_same_link() -> None:
         msg.append_client_booking_tickets_keyboard_row(rows, arena_tickets_url="https://koronaticket.by/rink", arena_name="ТЦ Замок")
     msg.append_client_booking_tickets_keyboard_row(rows, arena_tickets_url="https://chizhovka-arena.by/x", arena_name="Чижовка")
     assert [r[0].url for r in rows] == ["https://koronaticket.by/rink", "https://chizhovka-arena.by/x"]
+
+
+def test_trainer_booked_you_has_tickets_line_and_button_only_with_url() -> None:
+    kwargs = dict(
+        date="25.10", day="Вс", time="21:15", trainer_name="Александр", service_name="Обучение",
+        booking_price_cents=None, price_tier_label=None, arena_name="ТЦ Замок",
+        arena_address="пр-т Победителей 65", duration_minutes=45, map_link=None,
+    )
+    text = msg.format_client_trainer_booked_you_html(**kwargs, arena_tickets_url="https://koronaticket.by/rink")
+    assert f"пр-т Победителей 65\n\n{msg.CLIENT_BOOKING_TICKETS_CONFIRMED_HINT}\n\nАдрес, отмена" in text
+    assert "Билет" not in msg.format_client_trainer_booked_you_html(**kwargs)
+    kb = msg.build_client_trainer_booked_you_inline_keyboard(
+        booking_id=1, map_url="https://yandex.by/maps", webapp_base_url="https://glideclub.by",
+        arena_tickets_url="https://koronaticket.by/rink", arena_name="ТЦ Замок",
+    )
+    assert kb.inline_keyboard[-1][0].url == "https://koronaticket.by/rink"
+    plain = msg.build_client_trainer_booked_you_inline_keyboard(
+        booking_id=1, map_url=None, webapp_base_url="https://glideclub.by"
+    )
+    assert all(getattr(r[0], "url", None) != "https://koronaticket.by/rink" for r in plain.inline_keyboard)

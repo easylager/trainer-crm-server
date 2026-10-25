@@ -186,7 +186,6 @@ async def get_trial_roi_recap(
             JOIN bookings b ON b.id = rem.booking_id
             WHERE b.trainer_id = :tid
               AND rem.status = 'sent'
-              AND rem.kind <> 'trainer_tickets_forward'
               AND rem.sent_at >= :start
               AND rem.sent_at <= :end
             """

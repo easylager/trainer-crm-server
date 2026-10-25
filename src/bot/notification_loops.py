@@ -3288,35 +3288,6 @@ async def run_care_pulse_loop(trainer_bot: Bot, client_bot: Bot) -> None:
             break
 
 
-BOOKING_TICKETS_INTERVAL_SEC = 5 * 60
-
-
-async def run_booking_tickets_loop(client_bot: Bot, trainer_bot: Bot) -> None:
-    """TASK-331: «билеты кончаются» клиенту и «перешлите ученикам» тренеру, каждые 5 минут в часы уведомлений."""
-    from src.application.booking_tickets_push import send_low_ticket_alerts, send_trainer_ticket_forwards
-
-    logger.info("[booking_tickets_loop] started")
-    while True:
-        try:
-            if is_within_notification_hours():
-                now = datetime.now(timezone.utc)
-                async with async_session_factory() as session:
-                    low = await send_low_ticket_alerts(session, client_bot, now=now)
-                    fwd = await send_trainer_ticket_forwards(session, trainer_bot, now=now)
-                if low or fwd:
-                    logger.info("[booking_tickets_loop] tickets_low=%s trainer_forward=%s", low, fwd)
-        except asyncio.CancelledError:
-            logger.info("[booking_tickets_loop] cancelled")
-            break
-        except Exception as e:
-            logger.exception("Booking tickets loop: %s", e)
-
-        try:
-            await asyncio.sleep(BOOKING_TICKETS_INTERVAL_SEC)
-        except asyncio.CancelledError:
-            break
-
-
 async def run_ice_forecast_loop(client_bot: Bot) -> None:
     """Четверг 18:00–20:00 Europe/Minsk, 26 окт – 15 фев. Молчит, пока ICE_FORECAST_ENABLED выключен."""
     from src.application.ice_forecast import ice_forecast_due, send_ice_forecast
