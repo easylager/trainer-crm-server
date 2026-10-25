@@ -1176,31 +1176,29 @@ describe('TASK-290: обычная загрузка на плитке и в по
       scheduleInviteHint(true, true),
       'Выберите время — позовём на него друзей. Полоска — насколько обычно людно; на красные часы билет лучше взять заранее.'
     );
-    assert.equal(scheduleInviteHint(true, false), 'Выберите время — позовём на него друзей. Билет — в карточке времени.');
+    assert.equal(scheduleInviteHint(true, false), 'Выберите время — позовём на него друзей.');
     assert.equal(scheduleInviteHint(false, true), 'Полоска под временем — насколько обычно людно в эти часы.');
     assert.equal(scheduleInviteHint(false, false), '');
   });
 });
 
 describe('TASK-290: живой остаток вместо полоски', () => {
-  it('«N мест» из кассы — остаток со склонением, «нет мест» — мало; прочие заметки — не остаток', () => {
+  it('«N мест» из кассы — «осталось N», только когда 20 и меньше (TASK-333); прочие заметки — не остаток', () => {
     const { liveSeats } = loadModel();
     assert.deepEqual(liveSeats('110 мест'), { label: '110 мест', low: false });
-    assert.deepEqual(liveSeats('23 мест'), { label: '23 места', low: true });
-    assert.deepEqual(liveSeats('21 мест'), { label: '21 место', low: true });
-    assert.deepEqual(liveSeats('12 мест'), { label: '12 мест', low: true });
+    assert.deepEqual(liveSeats('23 мест'), { label: '23 места', low: false });
+    assert.deepEqual(liveSeats('21 мест'), { label: '21 место', low: false });
+    assert.deepEqual(liveSeats('20 мест'), { label: 'осталось\u00a020', low: true });
+    assert.deepEqual(liveSeats('12 мест'), { label: 'осталось\u00a012', low: true });
     assert.deepEqual(liveSeats('нет мест'), { label: 'нет мест', low: true });
     assert.equal(liveSeats('30–35 человек'), null);
     assert.equal(liveSeats(''), null);
   });
 
-  it('подсказка про остаток, когда касса его отдаёт', () => {
+  it('при остатке из кассы подсказка не объясняет ни его, ни полоску (TASK-333)', () => {
     const { scheduleInviteHint } = loadModel();
-    assert.equal(
-      scheduleInviteHint(true, true, true),
-      'Выберите время — позовём на него друзей. Под временем — сколько билетов осталось.'
-    );
-    assert.equal(scheduleInviteHint(false, true, true), 'Под временем — сколько билетов осталось.');
+    assert.equal(scheduleInviteHint(true, true, true), 'Выберите время — позовём на него друзей.');
+    assert.equal(scheduleInviteHint(false, true, true), '');
   });
 });
 

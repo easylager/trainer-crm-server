@@ -51,8 +51,10 @@
     );
   }
 
+  /* Остаток — только когда его мало (TASK-333): «110 мест» под каждым временем было шумом. */
   function slotTag(t) {
-    if (t.seats) return t.seats.label;
+    if (t.seats && t.seats.low) return t.seats.label;
+    if (t.seats) return t.next ? 'Ближайший' : '';
     return (t.picked && LOAD_WORDS[t.load]) || (t.next ? 'Ближайший' : '');
   }
 
@@ -648,38 +650,44 @@
     return slots.length ? String(slots[0].id) : null;
   }
 
-  function shareInviteCtaLabel() {
+  /*
+   * TASK-333: выбранный сеанс внизу — корешок билета («Завтра · Массовое катание», «10:15 · 10 BYN»).
+   * Главное действие одно: «Купить билет», если у сеанса онлайн-касса, иначе «Позвать».
+   * «Компания», «Открытка» и «Погнали кататься» — вкладки одного листа, отдельной кнопки нет.
+   */
+  function pickedBarInfo() {
     var sid = resolvedShareSessionId();
-    if (!sid || !scheduleSlots().length) return 'Позвать с собой';
-    var when = M.shareSlotInviteLabel(
-      combinedScheduleDays(),
-      todayIso(),
-      sid,
-      state.day || state.ohmDay || todayIso()
-    );
-    return when ? 'Позвать на ' + when : 'Позвать с собой';
-  }
-
-  function companyButton() {
-    if (!state.card || state.card.ice_company !== true) return '';
-    var sid = resolvedShareSessionId();
-    if (!sid) return '';
-    return (
-      '<button type="button" class="ga-btn ga-btn--dark ga-press" data-haptic="tap" data-action="ice-company" data-session="' +
-      esc(sid) +
-      '">' + icon('company') + 'Собрать компанию</button>'
-    );
-  }
-
-  /** Строка над кнопками панели: «Сегодня, 10:15 · Массовое катание». */
-  function shareBarWhen() {
-    var sid = resolvedShareSessionId();
-    if (!sid) return '';
-    var label = M.shareSlotInviteLabel(combinedScheduleDays(), todayIso(), sid, todayIso());
-    if (!label) return '';
-    var isToday = /^\d{1,2}:\d{2}$/.test(label);
-    var kind = sessionInOhm(sid) ? ohmChipTitle() : iceSectionTitle();
-    return (isToday ? 'Сегодня, ' + label : capitalize(label)) + (kind ? ' · ' + kind : '');
+    if (!sid) return null;
+    var slot = scheduleSlots().filter(function (x) { return String(x.id) === String(sid); })[0];
+    if (!slot) return null;
+    var day = combinedScheduleDays().filter(function (d) { return d.local_date === slot.localDate; })[0];
+    var view = M.showtimesForDay({
+      sessions: (day && day.sessions) || [],
+      now: new Date(),
+      ticketsUrl: state.card && state.card.tickets_url,
+      pickedId: sid,
+    });
+    var time = slot.time;
+    var price = '';
+    var ticketHref = '';
+    view.groups.forEach(function (g) {
+      g.times.forEach(function (t) {
+        if (!t.picked) return;
+        time = t.time || time;
+        ticketHref = t.ticketHref || '';
+        price = g.prices.length ? g.prices[0].value : '';
+      });
+    });
+    var label = M.shareSlotInviteLabel(combinedScheduleDays(), todayIso(), sid, todayIso()) || '';
+    var dayWord = label.slice(0, Math.max(0, label.length - String(time).length)).trim();
+    // Массовое катание — вид по умолчанию: подписываем только ОХМ, иначе строка не влезает рядом с кнопкой.
+    var kind = sessionInOhm(sid) ? ohmChipTitle() : '';
+    return {
+      when: [capitalize(dayWord || 'сегодня'), kind].filter(Boolean).join(' · '),
+      time: time,
+      price: price,
+      ticketHref: ticketHref,
+    };
   }
 
   function sessionInOhm(sid) {
@@ -693,25 +701,32 @@
     return false;
   }
 
-  /*
-   * TASK-306: «Позвать на …» и «Собрать компанию» — панелью внизу экрана. Тап по времени
-   * меняет подпись, она мягко подпрыгивает, «Позвать» один раз светится — кнопка говорит
-   * о выборе человека, а не об абстрактном «поделиться».
-   */
+  function shareBarInner() {
+    var info = pickedBarInfo();
+    if (!info) return '';
+    var invite = info.ticketHref
+      ? '<button type="button" class="ga-btn ga-btn--soft ga-press arena-bar__sq" data-haptic="tap" data-action="share-invite" aria-label="Позвать">' +
+        icon('invite') + '</button>' +
+        '<button type="button" class="ga-btn ga-press" data-haptic="tap" data-action="external" data-href="' + esc(info.ticketHref) + '">' +
+        '<span>Купить билет</span>' + icon('buy') + '</button>'
+      : '<button type="button" class="ga-btn ga-press" data-haptic="tap" data-action="share-invite">' + icon('invite') +
+        '<span>Позвать</span></button>';
+    return (
+      '<div class="arena-bar__stub">' +
+      '<small id="arenaBarWhen">' + esc(info.when) + '</small>' +
+      '<b id="arenaBarTime">' + esc(info.time) +
+      (info.price ? '<span class="arena-bar__price">\u00a0· ' + esc(info.price) + (info.ticketHref ? '' : ' на\u00a0кассе') + '</span>' : '') +
+      '</b></div>' +
+      '<div class="arena-bar__acts">' + invite + '</div>'
+    );
+  }
+
   function renderShareBar() {
     if (!global.GlideShareSheet) return '';
     if (!scheduleSlots().length) return '';
-    var company = companyButton();
-    return (
-      '<div class="ga-actionbar arena-bar" id="arenaShareBar">' +
-      '<span class="arena-bar__when" id="arenaBarWhen">' + esc(shareBarWhen()) + '</span>' +
-      '<div class="ga-actionbar__row' + (company ? '' : ' arena-bar__row--one') + '">' +
-      '<button type="button" class="ga-btn ga-press" data-haptic="tap" data-action="share-invite">' + icon('invite') +
-      '<span id="arenaBarInvite">' + esc(shareInviteCtaLabel()) + '</span></button>' +
-      (company || '<button type="button" class="ga-btn ga-btn--soft ga-press" data-action="share">Поделиться</button>') +
-      '</div>' +
-      '</div>'
-    );
+    var inner = shareBarInner();
+    if (!inner) return '';
+    return '<div class="ga-actionbar arena-bar arena-bar--stub" id="arenaShareBar">' + inner + '</div>';
   }
 
   function fetchShareSlots() {
@@ -1213,7 +1228,7 @@
   }
 
   /*
-   * TASK-306: выбранный сеанс — «билет» над сеткой: время крупно, загрузка, цены и «Купить билет».
+   * TASK-306: выбранный сеанс — «билет» над сеткой: время крупно, загрузка, цены. «Купить билет» — в панели внизу (TASK-333).
    * В сетке остаётся только время с загрузкой — без ↗ у каждой плитки: купить можно из «билета»,
    * а главные кнопки «Позвать» и «Собрать компанию» — в панели внизу.
    */
@@ -1249,10 +1264,6 @@
           ? '<div class="arena-ticket__prices">' + g.prices.map(function (p) {
               return '<span><small>' + esc(p.label) + '</small><b>' + esc(p.value) + '</b></span>';
             }).join('') + '</div>'
-          : '') +
-        (picked.ticketHref
-          ? '<button type="button" class="ga-btn ga-btn--dark ga-btn--block ga-press" data-action="external" data-href="' +
-            esc(picked.ticketHref) + '">Купить билет' + icon('buy') + '</button>'
           : '') +
         (g.note ? '<p class="arena-ticket__note">' + esc(g.note) + '</p>' : '') +
         '</div>';
@@ -2074,28 +2085,20 @@
   function paintShareBar() {
     var bar = document.getElementById('arenaShareBar');
     if (!bar) return;
-    var label = document.getElementById('arenaBarInvite');
-    var when = document.getElementById('arenaBarWhen');
-    var next = shareInviteCtaLabel();
-    var changed = label && label.textContent !== next;
-    if (label) label.textContent = next;
-    if (when) when.textContent = shareBarWhen();
-    var company = bar.querySelector('[data-action="ice-company"]');
-    if (company) company.setAttribute('data-session', resolvedShareSessionId() || '');
-    if (!changed) return;
+    var prev = document.getElementById('arenaBarTime');
+    var prevKey = prev ? prev.textContent + '|' + (document.getElementById('arenaBarWhen') || {}).textContent : '';
+    var inner = shareBarInner();
+    if (!inner) return;
+    bar.innerHTML = inner;
+    var time = document.getElementById('arenaBarTime');
+    var nextKey = time ? time.textContent + '|' + (document.getElementById('arenaBarWhen') || {}).textContent : '';
+    if (!prevKey || prevKey === nextKey) return;
     // Два одинаковых кадра: смена класса перезапускает анимацию на каждом выборе.
     barTick += 1;
     var odd = barTick % 2 === 1;
-    [label, when].forEach(function (n) {
-      if (!n) return;
-      n.classList.remove('ga-pop-a', 'ga-pop-b');
-      n.classList.add(odd ? 'ga-pop-a' : 'ga-pop-b');
-    });
-    var pri = bar.querySelector('[data-action="share-invite"]');
-    if (pri) {
-      pri.classList.remove('ga-glow-a', 'ga-glow-b');
-      pri.classList.add(odd ? 'ga-glow-a' : 'ga-glow-b');
-    }
+    if (time) time.classList.add(odd ? 'ga-pop-a' : 'ga-pop-b');
+    var pri = bar.querySelector('.arena-bar__acts .ga-btn:last-child');
+    if (pri) pri.classList.add(odd ? 'ga-glow-a' : 'ga-glow-b');
   }
 
   var REPORT_FIELDS = [

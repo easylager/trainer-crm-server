@@ -360,6 +360,7 @@ _SHARE_CHANNELS = (
     "image_os",
     "image_fallback",
 )
+_SHARE_VARIANTS = frozenset({"invite", "company", "postcard", "schedule"})
 
 
 @router.get("/ice/selection/share")
@@ -487,6 +488,7 @@ async def get_public_place_share(
     share_context: str | None = Query(None, description="Где нажали: arena_card, ice_list, hub."),
     record: bool = Query(True, description="false — предпросмотр в шите: показать, но не считать шерингом."),
     channel: str | None = Query(None, description="Канал: telegram | copy | story | system."),
+    variant: str | None = Query(None, description="Формат в шите: invite | company | postcard | schedule (TASK-333)."),
     city_id: int | None = Query(None),
     city: str | None = Query(None),
     principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
@@ -540,6 +542,7 @@ async def get_public_place_share(
                 "session_id": focus_id,
                 "invite": bool(invite),
                 "channel": ch if ch in _SHARE_CHANNELS else None,
+                "variant": v if (v := (variant or "").strip().lower()) in _SHARE_VARIANTS else None,
             },
         )
     return {

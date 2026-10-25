@@ -2622,3 +2622,57 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
   .ice-board__invite:active,
   .ice-season-foot:active { transform: none; }
 }
+
+/*
+ * TASK-333: шапка в два ряда. Город — в строке поиска (пилюля, что раньше была только на
+ * карте); вкладки разделов и «Все места» — в листе чипа «что ищем».
+ */
+.ice-citypill--insearch { display: inline-flex; }
+.hdr-city { display: none !important; }
+#iceModeSeg,
+#iceCatalogTools { display: none !important; }
+.ice-intent-row { gap: 8px; }
+.ice-intent-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--g-surface); box-shadow: inset 0 0 0 1.5px var(--g-ink); color: var(--g-ink);
+}
+.ice-intent-chip svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.ice-intent-chip[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* Вариант А: значок раздела вместо слова, ряд плотнее — «Сегодня · Завтра · Сб–Вс» целиком на 390 px. */
+.ice-intent-chip.is-icon { position: relative; gap: 4px; padding-inline: 10px 9px; }
+.ice-intent-chip .ice-intent-chip__ic { width: 19px; height: 19px; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ice-intent-chip__ic[hidden] { display: none; }
+.ice-intent-chip.is-narrowed::after {
+  content: ""; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--g-accent); box-shadow: 0 0 0 1.5px var(--g-surface);
+}
+.ice-intent-chip.is-icon + .hdr-scroll .ice-chip { padding-inline: 12px; }
+
+.ice-intent-sheet { position: fixed; inset: 0; z-index: 9500; }
+.ice-intent-sheet__dim { position: absolute; inset: 0; background: rgba(13, 27, 38, .38); opacity: 0; transition: opacity .2s ease; }
+.ice-intent-sheet__panel {
+  position: absolute; left: 0; right: 0; bottom: 0; max-width: 560px; margin: 0 auto;
+  background: var(--g-surface); border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
+  padding: 8px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 10px; transform: translateY(100%); transition: transform .32s cubic-bezier(.22, 1.15, .36, 1);
+}
+.ice-intent-sheet.is-open .ice-intent-sheet__dim { opacity: 1; }
+.ice-intent-sheet.is-open .ice-intent-sheet__panel { transform: none; }
+.ice-intent-sheet__grab { justify-self: center; width: 36px; height: 4px; border-radius: var(--app-radius-xs); background: var(--g-line); }
+.ice-intent-sheet__title { margin: 4px 0 0; font-family: var(--g-font); font-size: var(--app-text-lead); line-height: 1.2; font-weight: var(--app-weight-bold); color: var(--g-ink); }
+.ice-intent-sheet__list { display: grid; gap: 2px; }
+.ice-intent-opt {
+  display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center;
+  min-height: 52px; padding: 6px 8px; border: 0; border-radius: var(--app-radius-md); background: transparent;
+  font-family: var(--g-font); font-size: var(--app-text-lead); line-height: 1.2; font-weight: var(--app-weight-semibold); color: var(--g-ink); text-align: left; cursor: pointer;
+}
+.ice-intent-opt[aria-pressed="true"] { background: var(--g-accent-wash); }
+.ice-intent-opt__ic { width: 36px; height: 36px; border-radius: var(--app-radius-sm); background: var(--g-accent-wash); color: var(--g-accent-ink); display: grid; place-items: center; }
+.ice-intent-opt[aria-pressed="true"] .ice-intent-opt__ic { background: var(--g-surface); }
+.ice-intent-opt__ic svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ice-intent-opt__n { font-weight: var(--app-weight-medium); font-size: var(--app-text-body); color: var(--g-muted); font-variant-numeric: tabular-nums; }
+.ice-intent-sheet__kicker { margin: 6px 0 0; font-family: var(--g-font); font-size: var(--app-text-kicker); line-height: 1; font-weight: var(--app-weight-bold); letter-spacing: .1em; text-transform: uppercase; color: var(--g-muted); }
+.ice-intent-sheet__where .ice-chips { flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) {
+  .ice-intent-sheet__dim, .ice-intent-sheet__panel { transition: none; }
+}

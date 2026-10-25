@@ -1023,6 +1023,151 @@
     renderShopFilters(scope === 'shop');
     setSearchPlaceholder();
     setNearButton();
+    renderIntentChip();
+  }
+
+  /*
+   * TASK-333: «что ищем» — один чип в ряду дат вместо вкладок и «Все места».
+   * Вкладки (#iceModeSeg) и меню мест (#icePlaceMenu) остаются источником правды и
+   * обработчиками: лист показывает их кнопки и нажимает их же — логика разделов не дублируется.
+   */
+  var INTENT_ICONS = {
+    places: '<path d="M4 16h13a3 3 0 0 0 3-3M4 16V6h5l2 5h6M4 20h16"/>',
+    coach: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.5 4-5 7-5s5.8 1.5 7 5"/>',
+    ohm: '<path d="M6 3l8 14h5M18 3l-8 14H5"/>',
+    service: '<path d="M4 18h16M7 18l3-12 7 12"/>',
+    shop: '<path d="M5 8h14l-1 12H6zM9 8a3 3 0 0 1 6 0"/>',
+  };
+
+  function folderButtons() {
+    var nav = $('iceModeSeg');
+    return nav && nav.innerHTML ? Array.prototype.slice.call(nav.querySelectorAll('[data-catalog-mode]')) : [];
+  }
+
+  function placeMenuButtons() {
+    var host = $('iceCatalogTools');
+    var menu = $('icePlaceMenu');
+    if (!host || host.hidden || !menu) return [];
+    return Array.prototype.slice.call(menu.querySelectorAll('[data-place-type], [data-season]'));
+  }
+
+  function folderLabel(btn) {
+    var first = btn && btn.firstChild;
+    return first && first.nodeType === 3 ? String(first.textContent).trim() : String(btn ? btn.textContent : '').trim();
+  }
+
+  function renderIntentChip() {
+    var chip = $('iceIntentChip');
+    var label = $('iceIntentLabel');
+    if (!chip || !label) return;
+    var folders = folderButtons();
+    var places = placeMenuButtons();
+    chip.hidden = folders.length < 2 && places.length < 2;
+    var on = folders.filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; })[0];
+    var placeOn = places.filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; })[0];
+    var text = on ? folderLabel(on) : 'Что ищем';
+    // Выбранный вид площадки виден на чипе: «Покататься · Лёд». «Все места» — по умолчанию, не пишем.
+    var placeNarrowed = !!placeOn && placeOn.getAttribute('data-place-type') !== '';
+    if (placeNarrowed) text += ' · ' + folderLabel(placeOn);
+    // Вариант А: при датах чип сжимается до значка раздела — иначе «Сб–Вс» уезжает за край.
+    // Слово остаётся для экранного диктора; без дат (Тренеры, Магазины) чип пишет его как есть.
+    var dates = $('iceWhenChips');
+    var iconOnly = !!on && !!dates && !dates.hidden;
+    var icon = $('iceIntentIcon');
+    if (icon) {
+      var id = on ? on.getAttribute('data-catalog-mode') || '' : '';
+      var paths = INTENT_ICONS[id] || INTENT_ICONS.places;
+      if (icon.getAttribute('data-mode') !== id) {
+        icon.innerHTML = paths;
+        icon.setAttribute('data-mode', id);
+      }
+      icon.toggleAttribute('hidden', !iconOnly); // у SVG нет свойства hidden — только атрибут
+    }
+    label.hidden = iconOnly;
+    chip.classList.toggle('is-icon', iconOnly);
+    chip.classList.toggle('is-narrowed', iconOnly && placeNarrowed);
+    chip.setAttribute('aria-label', text);
+    if (label.textContent !== text) label.textContent = text;
+    var sheet = $('iceIntentSheet');
+    if (sheet && !sheet.hidden) paintIntentSheet();
+  }
+
+  function paintIntentSheet() {
+    var list = $('iceIntentOptions');
+    var where = $('iceIntentWhere');
+    var placesHost = $('iceIntentPlaces');
+    if (!list) return;
+    list.innerHTML = folderButtons().map(function (b) {
+      var id = b.getAttribute('data-catalog-mode') || '';
+      var small = b.querySelector('small');
+      var on = b.getAttribute('aria-pressed') === 'true';
+      return (
+        '<button type="button" class="ice-intent-opt ga-press" data-intent-mode="' + esc(id) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+        '<span class="ice-intent-opt__ic"><svg viewBox="0 0 24 24" aria-hidden="true">' + (INTENT_ICONS[id] || INTENT_ICONS.places) + '</svg></span>' +
+        '<span class="ice-intent-opt__name">' + esc(folderLabel(b)) + '</span>' +
+        (small ? '<span class="ice-intent-opt__n">' + esc(small.textContent) + '</span>' : '<span></span>') +
+        '</button>'
+      );
+    }).join('');
+    var places = placeMenuButtons();
+    if (where && placesHost) {
+      where.hidden = places.length < 2;
+      placesHost.innerHTML = places.map(function (b, i) {
+        var n = b.querySelector('b');
+        return (
+          '<button type="button" class="ice-chip" data-intent-place="' + i + '" aria-pressed="' + esc(b.getAttribute('aria-pressed') || 'false') + '">' +
+          esc(folderLabel(b)) + (n && n.textContent ? ' <small>' + esc(n.textContent) + '</small>' : '') +
+          '</button>'
+        );
+      }).join('');
+    }
+  }
+
+  function openIntentSheet(open) {
+    var sheet = $('iceIntentSheet');
+    var chip = $('iceIntentChip');
+    if (!sheet) return;
+    if (open) paintIntentSheet();
+    sheet.hidden = !open;
+    if (chip) chip.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      global.requestAnimationFrame(function () { sheet.classList.add('is-open'); });
+    } else {
+      sheet.classList.remove('is-open');
+    }
+  }
+
+  function bindIntentSheet() {
+    var chip = $('iceIntentChip');
+    var sheet = $('iceIntentSheet');
+    if (!chip || !sheet || chip.dataset.wired === '1') return;
+    chip.dataset.wired = '1';
+    chip.addEventListener('click', function () {
+      openIntentSheet(sheet.hidden);
+    });
+    sheet.addEventListener('click', function (ev) {
+      if (ev.target.closest('[data-intent-close]')) {
+        openIntentSheet(false);
+        return;
+      }
+      var opt = ev.target.closest('[data-intent-mode]');
+      if (opt) {
+        var id = opt.getAttribute('data-intent-mode');
+        var target = folderButtons().filter(function (b) { return b.getAttribute('data-catalog-mode') === id; })[0];
+        openIntentSheet(false);
+        if (target && target.getAttribute('aria-pressed') !== 'true') target.click();
+        return;
+      }
+      var place = ev.target.closest('[data-intent-place]');
+      if (place) {
+        var btn = placeMenuButtons()[Number(place.getAttribute('data-intent-place'))];
+        openIntentSheet(false);
+        if (btn && btn.getAttribute('aria-pressed') !== 'true') btn.click();
+      }
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && !sheet.hidden) openIntentSheet(false);
+    });
   }
 
   function setChips() {
@@ -3173,6 +3318,7 @@
   }
 
   function bind() {
+    bindIntentSheet();
     var modeSeg = $('iceModeSeg');
     if (modeSeg && modeSeg.dataset.scrollWired !== '1') {
       modeSeg.dataset.scrollWired = '1';

@@ -169,6 +169,15 @@ body.arena-hub .arena-bar__row--one { grid-template-columns: 1fr; }
 body.arena-hub .arena-bar .ga-btn { font-size: 14px; padding: 0 8px; gap: 6px; white-space: nowrap; }
 body.arena-hub .arena-bar .ga-btn svg { width: 16px; height: 16px; }
 body.arena-hub .arena-bar .ga-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* TASK-333: корешок выбранного сеанса слева, одно главное действие справа. */
+body.arena-hub .arena-bar--stub { flex-direction: row; align-items: center; gap: 12px; }
+body.arena-hub .arena-bar__stub { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+body.arena-hub .arena-bar__stub small { font: 600 12px/1.2 var(--g-font); color: var(--g-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.arena-hub .arena-bar__stub b { font: 700 18px/1.15 var(--g-font); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.arena-hub .arena-bar__price { font-weight: 500; font-size: 14px; color: var(--g-ink-2); }
+body.arena-hub .arena-bar__acts { flex: none; display: flex; gap: 8px; }
+body.arena-hub .arena-bar__acts .ga-btn { padding: 0 16px; }
+body.arena-hub .arena-bar__acts .arena-bar__sq { width: 50px; padding: 0; }
 
 /* ── Прочее: кнопки и плашки старого вида — на таблетки сайта ── */
 body.arena-hub .arena-btn { border: 0; border-radius: var(--g-r-btn); background: var(--g-chip); color: var(--g-ink); box-shadow: none; clip-path: none; font: 600 15px/1.2 var(--g-font); min-height: 48px; }

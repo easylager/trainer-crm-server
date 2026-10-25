@@ -106,14 +106,13 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
     assert.match(js, /margin:\s*\[150, 70,/);
   });
 
-  it('город: в списке пилюля у намерения, в карте — внутри поиска', () => {
+  it('город: и в списке, и в карте — пилюля внутри поиска (TASK-333)', () => {
     const css = read('ice-tab.css');
     const html = read('ice.html');
-    assert.match(css, /\.ice-citypill--insearch\s*{\s*display:\s*none/);
-    assert.match(css, /body\.ice-view-map \.ice-citypill--insearch\s*{\s*display:\s*inline-flex/);
+    assert.match(css, /\.ice-citypill--insearch\s*{\s*display:\s*inline-flex/);
+    assert.match(css, /\.hdr-city\s*{\s*display:\s*none !important/);
     assert.match(html, /id="iceCityChange"/);
     assert.match(html, /ice-citypill--insearch/);
-    assert.match(html, /ice-intent-row[\s\S]{0,400}id="iceCityChange"/);
   });
 
   it('режим карты скрывает намерение, услуги и типы площадок', () => {

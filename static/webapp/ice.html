@@ -5,38 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Поиск</title>
   <!-- TASK-306: свои шрифты вместо Google. Без preload: на медленной сети он отбирал канал у стилей и откладывал первый кадр (замер: FCP карточки 1520 → 2212 мс). -->
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610254" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610254" />
-  <link rel="stylesheet" href="/static/shared/glide-components.css?v=202610254" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610261" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610261" />
+  <link rel="stylesheet" href="/static/shared/glide-components.css?v=202610261" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <!-- web_app из чата (CTA «Открыть каталог») без expand() остаётся полушторкой — см. mini-app-full-height.js -->
-  <script src="mini-app-full-height.js?v=202610254"></script>
-  <script src="client-mini-app-theme.js?v=202610254"></script>
-  <link rel="stylesheet" href="theme.css?v=202610254" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610254" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610254" />
-  <script src="mini-app-telegram-chrome.js?v=202610254"></script>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202610254" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610254" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610254" />
-  <link rel="stylesheet" href="ice-tab.css?v=202610254" />
-  <link rel="stylesheet" href="/static/webapp/ice-hub.css?v=202610254" />
-  <script src="mini-app-empty-state.js?v=202610254"></script>
-  <script src="mini-app-more-icons.js?v=202610254"></script>
-  <script src="mini-app-client-shell.js?v=202610254"></script>
-  <script src="catalog-geo-model.js?v=202610254"></script>
-  <script src="minsk-time.js?v=202610254"></script>
-  <script src="opening-hours.js?v=202610254"></script>
-  <script src="schedule-staleness-model.js?v=202610254"></script>
-  <script src="arena-schedule-mode-model.js?v=202610254"></script>
-  <script src="catalog-public-url.js?v=202610254"></script>
-  <script src="glide-copy.js?v=202610254"></script>
-  <script src="public-display-model.js?v=202610254"></script>
-  <script src="ice-tab-model.js?v=202610254"></script>
-  <script src="arena-card-model.js?v=202610254"></script>
+  <script src="mini-app-full-height.js?v=202610261"></script>
+  <script src="client-mini-app-theme.js?v=202610261"></script>
+  <link rel="stylesheet" href="theme.css?v=202610261" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610261" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610261" />
+  <script src="mini-app-telegram-chrome.js?v=202610261"></script>
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202610261" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610261" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610261" />
+  <link rel="stylesheet" href="ice-tab.css?v=202610261" />
+  <link rel="stylesheet" href="/static/webapp/ice-hub.css?v=202610261" />
+  <script src="mini-app-empty-state.js?v=202610261"></script>
+  <script src="mini-app-more-icons.js?v=202610261"></script>
+  <script src="mini-app-client-shell.js?v=202610261"></script>
+  <script src="catalog-geo-model.js?v=202610261"></script>
+  <script src="minsk-time.js?v=202610261"></script>
+  <script src="opening-hours.js?v=202610261"></script>
+  <script src="schedule-staleness-model.js?v=202610261"></script>
+  <script src="arena-schedule-mode-model.js?v=202610261"></script>
+  <script src="catalog-public-url.js?v=202610261"></script>
+  <script src="glide-copy.js?v=202610261"></script>
+  <script src="public-display-model.js?v=202610261"></script>
+  <script src="ice-tab-model.js?v=202610261"></script>
+  <script src="arena-card-model.js?v=202610261"></script>
   <!-- Лист «Поделиться» — по требованию: заглушка догружает его при первом open() или в простое. -->
-  <script src="/static/webapp/share-sheet-lazy.js?v=202610254"></script>
-  <script src="ice-map-model.js?v=202610254"></script>
+  <script src="/static/webapp/share-sheet-lazy.js?v=202610261"></script>
+  <script src="ice-map-model.js?v=202610261"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
 </head>
@@ -78,6 +78,12 @@
       </div>
       <div class="ice-header-chrome">
       <div class="hdr-top ice-intent-row" id="iceWhenRow">
+        <!-- TASK-333: «что ищем» — один чип; вкладки и «Все места» открываются его листом. -->
+        <button type="button" class="ice-chip ice-intent-chip ga-press" id="iceIntentChip" aria-haspopup="dialog" aria-expanded="false" hidden>
+          <svg class="ice-intent-chip__ic" id="iceIntentIcon" viewBox="0 0 24 24" aria-hidden="true" hidden></svg>
+          <span id="iceIntentLabel">Покататься</span>
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>
+        </button>
         <div class="hdr-scroll" id="iceWhenChips" hidden role="group" aria-label="Когда"></div>
         <button type="button" class="ice-citypill hdr-city" id="iceCityChange">
           <span class="ice-citypill__name" id="iceCityName">Город</span>
@@ -206,6 +212,18 @@
     </div>
   </div>
 
+  <div class="ice-intent-sheet" id="iceIntentSheet" hidden>
+    <div class="ice-intent-sheet__dim" data-intent-close></div>
+    <div class="ice-intent-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="iceIntentTitle">
+      <span class="ice-intent-sheet__grab" data-intent-close aria-hidden="true"></span>
+      <h2 class="ice-intent-sheet__title" id="iceIntentTitle">Что ищем</h2>
+      <div class="ice-intent-sheet__list" id="iceIntentOptions"></div>
+      <div class="ice-intent-sheet__where" id="iceIntentWhere" hidden>
+        <p class="ice-intent-sheet__kicker">Где</p>
+        <div class="ice-chips" id="iceIntentPlaces"></div>
+      </div>
+    </div>
+  </div>
   <div class="ice-picker" id="iceCityPicker" hidden>
     <div class="ice-picker__head">
       <h2>Город</h2>
@@ -236,9 +254,9 @@
     <span class="ice-viewswitch__label" id="iceViewSwitchLabel">Карта</span>
   </button>
 
-  <script src="ru-text.js?v=202610254"></script>
-  <script src="ice-map.js?v=202610254"></script>
-  <script src="ice-tab.js?v=202610254"></script>
-  <script src="/static/webapp/ga-touch.js?v=202610254"></script>
+  <script src="ru-text.js?v=202610261"></script>
+  <script src="ice-map.js?v=202610261"></script>
+  <script src="ice-tab.js?v=202610261"></script>
+  <script src="/static/webapp/ga-touch.js?v=202610261"></script>
 </body>
 </html>

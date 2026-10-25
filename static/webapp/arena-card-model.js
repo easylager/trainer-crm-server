@@ -972,7 +972,8 @@
   /* Живой остаток из кассы (парсер пишет «70 мест» / «нет мест» раз в ~15 минут). Где он
      есть, плитка показывает только его: число понятнее полоски «обычно», а вместе они
      говорили бы одно и то же. Другие заметки (у ОХМ «30–35 человек») — не остаток. */
-  var LOW_SEATS = 30;
+  /* «Мало» — 20 и меньше: около 20% зала Замка (115 мест); вместимости в данных нет (TASK-333). */
+  var LOW_SEATS = 20;
 
   function liveSeats(note) {
     var text = String(note || '').trim();
@@ -982,7 +983,8 @@
     var n = Number(m[1]);
     var word = n % 10 === 1 && n % 100 !== 11 ? 'место'
       : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'места' : 'мест';
-    return { label: n + ' ' + word, low: n <= LOW_SEATS };
+    if (n <= LOW_SEATS) return { label: 'осталось\u00a0' + n, low: true };
+    return { label: n + ' ' + word, low: false };
   }
 
   function showtimesForDay(opts) {
@@ -1413,22 +1415,15 @@
   /* Подсказка над временем. Полоска загрузки (TASK-290) объясняется здесь же: у плитки
      Mini App нет места под слово, а подпись под временем занята остатком мест. */
   function scheduleInviteHint(hasTicketLinks, hasLoad, hasSeats) {
-    if (hasSeats) {
-      return hasTicketLinks
-        ? 'Выберите время — позовём на него друзей. Под временем — сколько билетов осталось.'
-        : 'Под временем — сколько билетов осталось.';
-    }
-    if (hasTicketLinks && hasLoad) {
+    /* TASK-333: остаток виден только когда мест мало, билет — в панели внизу: объяснять их не нужно. */
+    if (hasTicketLinks && hasLoad && !hasSeats) {
       return 'Выберите время — позовём на него друзей. Полоска — насколько обычно людно; на красные часы билет лучше взять заранее.';
     }
-    if (hasTicketLinks) {
-      return 'Выберите время — позовём на него друзей. Билет — в карточке времени.';
-    }
-    if (hasLoad) {
-      return 'Полоска под временем — насколько обычно людно в эти часы.';
-    }
+    if (hasTicketLinks) return 'Выберите время — позовём на него друзей.';
+    if (hasLoad && !hasSeats) return 'Полоска под временем — насколько обычно людно в эти часы.';
     return '';
   }
+
 
   function startParamFromLocation(loc) {
     loc = loc || (typeof window !== 'undefined' ? window.location : null);

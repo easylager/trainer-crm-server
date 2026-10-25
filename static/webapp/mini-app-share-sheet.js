@@ -304,8 +304,14 @@
 
   /** Событие шеринга — по нажатию канала. Ошибка счётчика не мешает отправке. */
   function track(channel) {
+    var extra = { channel: channel };
+    // Каким форматом звали — в журнал (TASK-333); последний формат помним для следующего «Позвать».
+    if (state && state.variantId) {
+      extra.variant = state.variantId;
+      rememberInviteVariant(state.variantId);
+    }
     try {
-      fetch(endpoint({ channel: channel }), {
+      fetch(endpoint(extra), {
         cache: 'no-store',
         keepalive: true,
         headers: shareRequestHeaders(),
@@ -1797,6 +1803,25 @@
     return opts.invite ? 'invite' : 'schedule';
   }
 
+  var LAST_VARIANT_KEY = 'glide_share_last_variant_v1';
+  var REMEMBERED_VARIANTS = { invite: 1, company: 1, postcard: 1 };
+
+  function readLastInviteVariant() {
+    try {
+      var v = global.localStorage && global.localStorage.getItem(LAST_VARIANT_KEY);
+      return v && REMEMBERED_VARIANTS[v] ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function rememberInviteVariant(id) {
+    if (!REMEMBERED_VARIANTS[id] || (state && state.match)) return;
+    try {
+      global.localStorage.setItem(LAST_VARIANT_KEY, id);
+    } catch (e) { /* без памяти — откроется «Погнали кататься» */ }
+  }
+
   function selectVariant(id) {
     var variant = variantById(id);
     if (!variant || !state || !variant.available(state)) return false;
@@ -2160,7 +2185,9 @@
     };
     if (!state.endpoint && (state.venueType || 'ice') === 'ice') loadZovi().then(onZoviLoaded);
     var opening = initialVariantId(opts);
-    if (opening) selectVariant(opening);
+    // «Позвать» открывает формат, которым человек звал в прошлый раз (TASK-333).
+    var remembered = opening === 'invite' && !state.match ? readLastInviteVariant() : null;
+    if (!(remembered && selectVariant(remembered)) && opening) selectVariant(opening);
     ensureSlotDay();
     root.hidden = false;
     global.requestAnimationFrame(function () { root.classList.add('is-open'); });

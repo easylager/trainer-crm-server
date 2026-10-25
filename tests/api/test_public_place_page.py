@@ -539,7 +539,9 @@ async def test_share_preview_is_not_counted_and_channel_is(app_use_test_db, db_s
     async with _client() as client:
         for _ in range(3):  # переключатели в шите
             await client.get(f"/api/public/arenas/{place['arena_id']}/share", params={"record": "false"})
-        await client.get(f"/api/public/arenas/{place['arena_id']}/share", params={"channel": "telegram"})
+        await client.get(f"/api/public/arenas/{place['arena_id']}/share", params={"channel": "telegram", "variant": "company"})
+        # Чужой формат не пишется как есть (TASK-333).
+        await client.get(f"/api/public/arenas/{place['arena_id']}/share", params={"channel": "copy", "variant": "<x>"})
     rows = (
         (
             await db_session.execute(
@@ -549,8 +551,10 @@ async def test_share_preview_is_not_counted_and_channel_is(app_use_test_db, db_s
         .scalars()
         .all()
     )
-    assert len(rows) == 1
-    assert rows[0]["channel"] == "telegram"
+    assert len(rows) == 2
+    by_channel = {r["channel"]: r for r in rows}
+    assert by_channel["telegram"]["variant"] == "company"
+    assert by_channel["copy"]["variant"] is None
 
 
 @pytest.mark.asyncio
