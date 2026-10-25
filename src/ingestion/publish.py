@@ -84,6 +84,12 @@ class SqlAlchemyIceSessionPublisher:
                 await self._update(session_id, draft, scrape_run_id=run_id)
             for draft in plan.to_insert:
                 await self._insert(draft, scrape_run_id=run_id)
+        # IndexNow: только если набор сеансов реально изменился (новые или исчезнувшие слоты).
+        # UPDATE на месте не считаем: он идёт на каждый прогон, даже без правок.
+        if plan.to_insert or plan.to_delete_ids:
+            from src.application.indexnow import notify_arena_changed
+
+            await notify_arena_changed(self._session, run.arena_id)
         return len(drafts)
 
     async def _load_existing(self, arena_id: int, window: PublishWindow) -> list[ExistingParserSession]:

@@ -30,6 +30,7 @@ from src.application.ice_city_day import (
     render_unknown_city_html,
     resolve_city_by_ref,
 )
+from src.application.indexnow import SITEMAP_PLACE_WHERE_SQL
 from src.application.place_card_image import render_place_card, share_display_path
 from src.application.arena_public_use_cases import resolve_merged_arena_id
 from src.application.png_render_cache import render_png_cached
@@ -414,8 +415,7 @@ _SITEMAP_SQL = text(f"""
         FROM ice_sessions
         GROUP BY arena_id
     ) sess ON sess.arena_id = a.id
-    WHERE {PUBLIC_ARENA_VISIBLE_SQL}
-      AND p.status = 'published' AND p.slug IS NOT NULL
+    WHERE {SITEMAP_PLACE_WHERE_SQL}
     ORDER BY c.sort_order, c.id, a.id
     """)
 

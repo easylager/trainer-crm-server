@@ -902,3 +902,23 @@ async def test_schedule_price_is_the_week_floor_not_the_most_frequent(app_use_te
     # Билет пишет цену, только когда она выше минимума недели.
     assert "до 12:45 · 11 BYN" not in schedule and "до 12:45</span>" in schedule
     assert "· 12 BYN" in schedule
+
+
+@pytest.mark.asyncio
+async def test_indexnow_urls_match_sitemap_exactly(app_use_test_db, db_session) -> None:
+    """IndexNow берёт те же URL, что sitemap (в т.ч. прячет draft-места)."""
+    from src.application.indexnow import arena_page_urls, fetch_sitemap_urls
+
+    place = await _place(db_session)
+    hidden = await _place(db_session)
+    await db_session.execute(
+        text("UPDATE arena_profiles SET status = 'draft' WHERE arena_id = :id"), {"id": hidden["arena_id"]}
+    )
+    await db_session.commit()
+    async with _client() as client:
+        sm = await client.get("/sitemap.xml")
+    locs = re.findall(r"<loc>([^<]*)</loc>", sm.text)
+    assert await fetch_sitemap_urls(db_session) == locs
+    assert await arena_page_urls(db_session, hidden["arena_id"]) == []
+    urls = await arena_page_urls(db_session, place["arena_id"])
+    assert len(urls) == 2 and all(u in locs for u in urls)

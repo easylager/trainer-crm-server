@@ -34,6 +34,7 @@ from src.api.routes.public_invites import router as public_invites_router
 from src.api.routes.zovi_create_page import router as zovi_create_page_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
+from src.api.routes.indexnow_key import build_indexnow_key_router
 from src.api.routes.zovi_pages import router as zovi_pages_router
 from src.api.routes.public_ice_company import router as public_ice_company_router
 from src.api.routes.public_hockey_leagues import card_router as public_hockey_cards_router
@@ -2720,6 +2721,9 @@ app.include_router(public_invites_router)
 app.include_router(zovi_create_page_router)
 app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
+_indexnow_key_router = build_indexnow_key_router()
+if _indexnow_key_router is not None:
+    app.include_router(_indexnow_key_router)
 app.include_router(zovi_pages_router)
 app.include_router(public_ice_company_router)
 app.include_router(public_hockey_leagues_router)

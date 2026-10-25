@@ -143,6 +143,31 @@ PYTHONPATH=. python scripts/create_trainer_link.py --bot-username YourTrainerBot
 
 `pytest` **не** должен смотреть на staging/production: в [`tests/conftest.py`](tests/conftest.py) при старте проверяется `DATABASE_URL` (локальный хост и имя базы `trainer_crm_test`). Railway/Supabase и т.п. без `PYTEST_ALLOW_REMOTE_DB=1` отклоняются. Создайте БД `trainer_crm_test`, выполните `alembic upgrade head`, в `.env` укажите URL на неё для тестов — отдельно от URL приложения.
 
+## IndexNow (Bing, Яндекс)
+
+Пинг поисковикам об изменении страниц `/p/{город}/{slug}` и `/c/{город}`. По умолчанию выключен: без флага ничего не отправляется и ключ-файл не отдаётся.
+
+Включение:
+
+```bash
+python -c "import secrets;print(secrets.token_hex(16))"   # сгенерировать ключ (32 hex)
+# в окружении сервиса и воркера парсеров:
+INDEXNOW_ENABLED=true
+INDEXNOW_KEY=<ключ>
+```
+
+Сервис отдаёт ключ на `https://<домен>/<ключ>.txt` (точный путь, другие маршруты не затрагиваются). Пинг уходит из публикатора сеансов, когда у арены появились или исчезли сеансы (обновление без изменений набора — не повод); URL берутся по правилам sitemap, каждый не чаще раза в час (кэш в памяти процесса: сбрасывается при рестарте, не общий между воркерами). Сбои сети логируются и ничего не ломают.
+
+Проверка:
+
+```bash
+curl https://glideclub.by/<ключ>.txt                     # вернёт ключ, text/plain
+PYTHONPATH=. python scripts/indexnow_submit_sitemap.py --dry-run   # число URL и первые из них
+PYTHONPATH=. python scripts/indexnow_submit_sitemap.py             # разовая засылка всего sitemap
+```
+
+Затем в Bing Webmaster Tools откройте IndexNow и убедитесь, что отправки видны.
+
 ## CI
 
 На каждый push и pull request в `master`/`main` запускается [GitHub Actions](.github/workflows/tests.yml): поднимается PostgreSQL 16, накатываются миграции, выполняется `pytest tests/`. Токены ботов в CI задаются заглушками.

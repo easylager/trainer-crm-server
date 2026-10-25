@@ -339,6 +339,11 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     ice_company_outbound_chat_per_sec: float = 1
     ice_company_outbound_group_per_min: int = 20
 
+    # IndexNow (Bing/Яндекс): пинг об изменении страниц. Выключено по умолчанию.
+    # Ключ — 32 hex: python -c "import secrets;print(secrets.token_hex(16))"; отдаётся на /<ключ>.txt.
+    indexnow_enabled: bool = False
+    indexnow_key: str | None = None
+
     # «Лёд на выходные»: четверг 18:00–20:00 Europe/Minsk, 1 дек – 15 фев.
     # По умолчанию выключено. Старт сезона этим флагом не управляется — его шлёт скрипт.
     ice_forecast_enabled: bool = False
