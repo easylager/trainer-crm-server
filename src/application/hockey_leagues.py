@@ -1,8 +1,9 @@
 """Лиги друзей «Кто кого»: создать, вступить по ссылке, таблица лиги, выйти (TASK-298).
 
-Таблица лиги — те же очки сезона, что и в общей таблице, только по участникам лиги. Вступивший
-позже приходит со своими очками за сезон: в лиге и в общей таблице у человека одно и то же число.
-Участник без сыгранных ходов стоит в таблице с нулём — друг, который только что вступил, виден сразу.
+Таблица лиги — очки участников за матчи, начавшиеся после их вступления (владелец 2026-10-26):
+лига — соревнование с момента, когда вы в ней встретились, без форы за прошлые недели. Поэтому в лиге
+и в общей таблице у человека могут быть разные числа. Участник без очков стоит в таблице с нулём —
+друг, который только что вступил, виден сразу.
 """
 
 from __future__ import annotations
@@ -138,19 +139,19 @@ _DELETE_LEAGUE = text("DELETE FROM hockey_leagues WHERE id = :league_id")
 
 _RENAME = text("UPDATE hockey_leagues SET name = :name, updated_at = now() WHERE id = :league_id")
 
-# Очки сезона по каждому участнику; у кого ходов ещё нет — ноль.
+# Очки каждого участника за матчи сезона, начавшиеся после его вступления; у кого их нет — ноль.
 _LEAGUE_TABLE = text("""
     WITH members AS (
-        SELECT player_key FROM hockey_league_members WHERE league_id = :league_id
+        SELECT player_key, joined_at FROM hockey_league_members WHERE league_id = :league_id
     ), totals AS (
         SELECT p.player_key,
                SUM(p.points)::int AS points,
                COUNT(*) FILTER (WHERE p.points = :exact)::int AS exact,
                COUNT(*)::int AS played
         FROM hockey_picks AS p
+        JOIN members AS me ON me.player_key = p.player_key
         JOIN hockey_matches AS m ON m.id = p.match_id
-        WHERE p.points IS NOT NULL AND m.starts_at >= :season_start
-          AND p.player_key IN (SELECT player_key FROM members)
+        WHERE p.points IS NOT NULL AND m.starts_at >= GREATEST(:season_start, me.joined_at)
         GROUP BY p.player_key
     )
     SELECT RANK() OVER (ORDER BY COALESCE(t.points, 0) DESC, COALESCE(t.exact, 0) DESC)::int AS rank,

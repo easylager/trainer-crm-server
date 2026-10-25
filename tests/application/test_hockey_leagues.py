@@ -72,27 +72,38 @@ async def test_create_and_join_is_idempotent(db_session) -> None:
         await join_by_code(db_session, player_key=KATYA, display_name="Катя", code="NOPE2345")
 
 
+async def _joined(db_session, league_id: int, player: int, at: datetime) -> None:
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :at WHERE league_id = :l AND player_key = :p"),
+        {"at": at, "l": league_id, "p": player},
+    )
+
+
 @pytest.mark.asyncio
-async def test_league_table_is_season_points_of_members_with_zero_for_newcomers(db_session) -> None:
+async def test_league_table_counts_only_matches_after_joining(db_session) -> None:
     league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
     await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
+    await _joined(db_session, league.id, SASHA, NOW - timedelta(days=1))
+    await _joined(db_session, league.id, KATYA, NOW - timedelta(days=1))
     mid = await _match(db_session, "lg1", NOW + timedelta(hours=1))
     await _pick(db_session, mid, SASHA, "Саша", home_score=3, away_score=1)
     await _pick(db_session, mid, KATYA, "Катя", side="away")
+    await _pick(db_session, mid, LESHA, "Лёша", home_score=3, away_score=1)
     await _pick(db_session, mid, STRANGER, "Чужой", side="home")
     await set_manual_result(
         db_session, mid, home_score=3, away_score=1, decided_in="regulation", now=NOW + timedelta(hours=4)
     )
     await score_finished_matches(db_session, now=NOW + timedelta(hours=4))
-    # Лёша вступил после матча: очки сезона у него свои (ноль), но в таблице он виден сразу.
+    # Лёша угадал точный счёт, но вступил после матча: в лиге он с нуля, без форы, и виден сразу.
     await join_by_code(db_session, player_key=LESHA, display_name="Лёша", code=league.invite_code)
+    await _joined(db_session, league.id, LESHA, NOW + timedelta(hours=5))
 
     rows = await league_table(db_session, league_id=league.id, player_key=KATYA, now=NOW)
     assert [(r.display_name, r.points, r.rank) for r in rows] == [("Саша", 50, 1), ("Катя", 0, 2), ("Лёша", 0, 2)]
     assert STRANGER not in [r.player_key for r in rows]
-    # Те же очки, что в общей таблице.
-    global_sasha = next(s for s in await standings(db_session, now=NOW) if s.player_key == SASHA)
-    assert global_sasha.points == rows[0].points
+    # В общей таблице очки Лёши за сезон на месте.
+    global_lesha = next(s for s in await standings(db_session, now=NOW) if s.player_key == LESHA)
+    assert global_lesha.points == 50
     with pytest.raises(PermissionError):
         await league_table(db_session, league_id=league.id, player_key=STRANGER, now=NOW)
 

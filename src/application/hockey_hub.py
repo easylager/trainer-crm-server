@@ -141,7 +141,8 @@ _LAST_FINALS = text("""
     LIMIT :limit
     """)
 
-# То же место, что в таблице лиги: очки сезона, при равенстве — точные счета. Лучшая лига — меньший rank.
+# То же место, что в таблице лиги: очки за матчи после вступления, при равенстве — точные счета.
+# Лучшая лига — меньший rank.
 _BEST_PLACE = text("""
     WITH my AS (
         SELECT l.id AS league_id, l.name AS league_name
@@ -157,7 +158,7 @@ _BEST_PLACE = text("""
         LEFT JOIN hockey_picks AS p ON p.player_key = mb.player_key AND p.points IS NOT NULL
             AND EXISTS (
                 SELECT 1 FROM hockey_matches AS m
-                WHERE m.id = p.match_id AND m.starts_at >= :season_start
+                WHERE m.id = p.match_id AND m.starts_at >= GREATEST(:season_start, mb.joined_at)
             )
         GROUP BY mb.league_id, mb.player_key
     ),

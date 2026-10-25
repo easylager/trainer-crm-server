@@ -192,6 +192,11 @@ async def test_place_is_the_best_league(db_session) -> None:
         text("INSERT INTO hockey_league_members (league_id, player_key) VALUES (:l, :p)"),
         {"l": weak.id, "p": SASHA},
     )
+    # Лиги собрались до матча: очки лиги — за матчи после вступления.
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :at WHERE league_id IN (:a, :b)"),
+        {"at": NOW - timedelta(days=1), "a": strong.id, "b": weak.id},
+    )
     card = await hub_card(db_session, SASHA, now=NOW)
     assert card["mode"] == "result"
     assert card["points"] == 20
