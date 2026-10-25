@@ -3384,6 +3384,36 @@
   }
 
   /*
+   * TASK-332: данные катка начинают грузиться с касания, а не после перехода — за
+   * 100–200 мс до click и пока идёт анимация. Ответ кладётся в тёплый кэш карточки;
+   * не успел до ухода со страницы — карточка просто загрузит сама.
+   */
+  var cardPrefetched = {};
+
+  function onCardPress(ev) {
+    var card = ev.target && ev.target.closest ? ev.target.closest('[data-arena-ref]') : null;
+    var A = global.ArenaCardModel;
+    if (!card || !A || !A.writeArenaWarm || typeof global.fetch !== 'function') return;
+    var ref = card.getAttribute('data-arena-ref') || '';
+    if (!ref || Date.now() - (cardPrefetched[ref] || 0) < 60000) return;
+    // Кэш моложе минуты — не трогаем: «сейчас» сдвинуто так, что срок годности — 60 с.
+    if (A.readArenaWarm(global.sessionStorage, ref, Date.now() + A.ARENA_WARM_TTL_MS - 60000)) return;
+    cardPrefetched[ref] = Date.now();
+    var base = '/api/public/arenas/' + encodeURIComponent(ref);
+    var MT = global.MinskTime;
+    var today = MT ? MT.dateIso(new Date()) : '';
+    var get = function (url) {
+      return global.fetch(url, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; });
+    };
+    Promise.all([
+      get(base),
+      today ? get(base + '/sessions?from=' + today + '&to=' + MT.addDaysIso(today, 13)) : Promise.resolve(null),
+    ]).then(function (got) {
+      if (got[0] && got[1]) A.writeArenaWarm(global.sessionStorage, ref, { card: got[0], sessions: got[1] }, Date.now());
+    }).catch(function () { /* карточка загрузит сама */ });
+  }
+
+  /*
    * TASK-094 AC-003. Кадр тапнутой карточки получает имя перехода — и только он:
    * в списке таких элементов пять, а view-transition-name обязано быть
    * уникальным в документе, иначе браузер отменит переход целиком.
@@ -3682,6 +3712,9 @@
     if (list) list.addEventListener('click', onRootClick);
     var results = $('iceSearchResults');
     if (results) results.addEventListener('click', onRootClick);
+    [list, results].forEach(function (host) {
+      if (host) host.addEventListener('pointerdown', onCardPress, { passive: true });
+    });
 
     var change = $('iceCityChange');
     if (change) change.addEventListener('click', function () {

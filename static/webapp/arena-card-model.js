@@ -1004,6 +1004,56 @@
     };
   }
 
+  /*
+   * Тёплый кэш карточки (TASK-332): последние открытые катки — каток и расписание. Карточка
+   * рисуется из него сразу, а свежие данные тихо подменяют. Лента кладёт сюда же по касанию,
+   * ещё до перехода. Четыре катка по ~80 КБ — далеко от квоты sessionStorage.
+   */
+  var ARENA_WARM_KEY = 'glideArenaWarm:v1';
+  var ARENA_WARM_MAX = 4;
+  var ARENA_WARM_TTL_MS = 10 * 60 * 1000;
+
+  function readWarmMap(storage) {
+    try {
+      var raw = storage && storage.getItem(ARENA_WARM_KEY);
+      var map = raw ? JSON.parse(raw) : null;
+      return map && typeof map === 'object' ? map : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function readArenaWarm(storage, ref, nowMs) {
+    if (!ref) return null;
+    var rec = readWarmMap(storage)[String(ref)];
+    if (!rec || !rec.card || !(rec.at > 0)) return null;
+    if (nowMs - rec.at > ARENA_WARM_TTL_MS) return null;
+    return { card: rec.card, sessions: rec.sessions || null, at: rec.at };
+  }
+
+  function writeArenaWarm(storage, ref, patch, nowMs) {
+    if (!storage || !ref || !patch) return false;
+    var map = readWarmMap(storage);
+    var key = String(ref);
+    var prev = map[key] || {};
+    var rec = {
+      at: nowMs,
+      card: patch.card || prev.card || null,
+      sessions: patch.sessions || prev.sessions || null,
+    };
+    if (!rec.card) return false;
+    map[key] = rec;
+    var keys = Object.keys(map).sort(function (a, b) { return (map[b].at || 0) - (map[a].at || 0); });
+    keys.slice(ARENA_WARM_MAX).forEach(function (k) { delete map[k]; });
+    try {
+      storage.setItem(ARENA_WARM_KEY, JSON.stringify(map));
+      return true;
+    } catch (e) {
+      try { storage.removeItem(ARENA_WARM_KEY); } catch (e2) { /* */ }
+      return false;
+    }
+  }
+
   /** «72 из 115» — когда вместимость известна; иначе «72 места». */
   function seatsFreeText(seats) {
     if (!seats || seats.gone) return '';
@@ -1522,6 +1572,9 @@
     scheduleInviteHint: scheduleInviteHint,
     liveSeats: liveSeats,
     seatsFreeText: seatsFreeText,
+    readArenaWarm: readArenaWarm,
+    writeArenaWarm: writeArenaWarm,
+    ARENA_WARM_TTL_MS: ARENA_WARM_TTL_MS,
     dayCountsWorthShowing: dayCountsWorthShowing,
     shopServicesView: shopServicesView,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,

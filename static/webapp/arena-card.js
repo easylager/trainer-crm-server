@@ -1290,10 +1290,13 @@
       : '';
     var ticket = '';
     if (picked) {
+      var steadySid = lastTicketSid;
+      nextTicketSid = String(picked.sessionId);
       var tag = slotTag(picked);
       var low = picked.seats && picked.seats.low;
       ticket =
-        '<div class="arena-ticket">' +
+        // Въезд «билета» — на смену выбора, а не на каждую дорисовку данных (TASK-332).
+        '<div class="arena-ticket' + (String(picked.sessionId) === steadySid ? ' arena-ticket--steady' : '') + '">' +
         '<div class="arena-ticket__top"><span class="arena-ticket__lead">' +
         '<span class="arena-ticket__kick">' + esc([dayLabel, g.duration ? g.duration.toUpperCase() : ''].filter(Boolean).join(' · ')) + '</span>' +
         '<b class="arena-ticket__time">' + esc(picked.time) + '</b></span>' +
@@ -2044,14 +2047,19 @@
       (on ? '<path d="M4 4l16 16"/>' : '') + '</svg></button>';
   }
 
+  var heroNode = null;
+  var lastHeroHtml = '';
+  var lastTicketSid = '';
+  var nextTicketSid = '';
+
   function paint() {
     if (!root || !state.card) return;
     var title = document.getElementById('headerTitle');
     // Имя места — на обложке; в шапке — что это за место, без дубля.
     if (title) title.textContent = capitalize(state.card.venue_noun) || 'Площадка';
     try {
-      root.innerHTML =
-        renderHero() +
+      var heroHtml = renderHero();
+      var restHtml =
         renderIceSection() +
         renderOhmSection() +
         // Карточка v2 — порядок PLACE_BLOCKS, как на сайте: на месте → тренеры → партнёры → ещё.
@@ -2067,6 +2075,17 @@
         renderInfo() +
         renderFreshness() +
         renderShareBar();
+      // Обложка не пересоздаётся, если не изменилась (TASK-332): новый <img> на каждой
+      // дорисовке (тренеры, колокольчик) в WebKit мигал фото.
+      if (heroNode && heroNode.parentNode === root && heroHtml === lastHeroHtml) {
+        while (heroNode.nextSibling) root.removeChild(heroNode.nextSibling);
+        heroNode.insertAdjacentHTML('afterend', restHtml);
+      } else {
+        root.innerHTML = heroHtml + restHtml;
+        heroNode = root.firstElementChild;
+        lastHeroHtml = heroHtml;
+      }
+      lastTicketSid = nextTicketSid;
       bindHeroFallbacks(root);
       bindAvatarFallbacks(root);
     } catch (err) {
@@ -2085,7 +2104,10 @@
 
   function paintRowsOnly() {
     var el = document.getElementById('arenaRows');
-    if (el) el.innerHTML = renderShowtimes();
+    if (el) {
+      el.innerHTML = renderShowtimes();
+      lastTicketSid = nextTicketSid;
+    }
     var ohmEl = document.getElementById('arenaOhmRows');
     if (ohmEl) ohmEl.innerHTML = renderOhmShowtimes();
     paintShareBar();
@@ -2512,26 +2534,74 @@
     var base = arenaApiBase();
     state.sessionsError = false;
     state.trainersError = false;
+    /*
+     * TASK-332: карточка открывается целиком, без «фото на пустом экране, потом скачок».
+     * 1) Тёплый кэш (лента кладёт его по касанию, карточка — после загрузки) рисуется сразу,
+     *    ещё до первого кадра — переход снимает уже готовую страницу.
+     * 2) Каток, расписание и тренеры уходят разом, а не цепочкой (было два круга по ~0,6 с).
+     * 3) Первая отрисовка ждёт каток и расписание вместе; без кэша содержимое проявляется
+     *    на месте скелета, а не выпрыгивает.
+     */
+    var warm = M.readArenaWarm(global.sessionStorage, state.ref, Date.now());
+    var warmSig = '';
+    if (warm) {
+      state.card = warm.card;
+      state.sessions = warm.sessions;
+      state.trainers = { items: [], groups: [] };
+      applyScheduleFocus();
+      paint();
+      warmSig = JSON.stringify([warm.card, warm.sessions]);
+    }
+    var today = todayIso();
+    var sessionsP = fetchJson(base + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(addDaysIso(today, 13)))
+      .then(function (data) { return { ok: true, data: data || { days: [] } }; }, function () { return { ok: false }; });
+    var trainersP = fetchJson(base + '/trainers')
+      .then(function (data) { return { ok: true, data: data || { items: [], groups: [] } }; }, function () { return { ok: false }; });
     fetchJson(base)
       .then(function (card) {
         if (!card) {
           showError('Арена не найдена.');
           return;
         }
-        state.card = card;
-        state.trainers = { items: [], groups: [] };
-        syncIceWatches().then(function () {
-          paint();
+        return sessionsP.then(function (sess) {
+          var fresh = JSON.stringify([card, sess.ok ? sess.data : warm && warm.sessions]);
+          var firstPaint = !state.card;
+          state.card = card;
+          if (sess.ok) state.sessions = sess.data;
+          state.sessionsError = !sess.ok;
+          if (!state.trainers) state.trainers = { items: [], groups: [] };
+          M.writeArenaWarm(global.sessionStorage, state.ref, { card: card, sessions: sess.ok ? sess.data : null }, Date.now());
+          applyScheduleFocus();
+          // Свежее совпало с кэшем — не перерисовываем: пересоздание <img> мигало бы обложкой.
+          if (fresh !== warmSig) {
+            if (firstPaint) revealOnPaint();
+            paint();
+          }
+          syncIceWatches().then(function () {
+            paint();
+          });
+          trainersP.then(function (tr) {
+            state.trainers = tr.ok ? tr.data : { items: [], groups: [] };
+            state.trainersError = !tr.ok;
+            if (tr.ok && !(tr.data.items || []).length && !(tr.data.groups || []).length) return;
+            paint();
+          });
+          if (global.ClientShell && global.ClientShell.reportCatalogPresence) {
+            global.ClientShell.reportCatalogPresence('miniapp_arena', start, { arena_id: Number(state.ref) });
+          }
         });
-        reloadSessions();
-        reloadTrainers();
-        if (global.ClientShell && global.ClientShell.reportCatalogPresence) {
-          global.ClientShell.reportCatalogPresence('miniapp_arena', start, { arena_id: Number(state.ref) });
-        }
       })
       .catch(function () {
+        if (state.card) return;
         showError('Не удалось загрузить карточку. Попробуйте ещё раз.');
       });
+  }
+
+  /* Содержимое под обложкой проявляется один раз, на месте скелета; обложка не мигает. */
+  function revealOnPaint() {
+    if (!root || (global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+    root.classList.add('arena-card--reveal');
+    global.setTimeout(function () { root.classList.remove('arena-card--reveal'); }, 600);
   }
 
   function bindChrome() {

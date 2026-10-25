@@ -1300,3 +1300,32 @@ describe('iceFeedView wait block (TASK-330)', () => {
     assert.ok(feed.callHref);
   });
 });
+
+describe('тёплый кэш карточки (TASK-332)', () => {
+  const memStorage = () => {
+    const mem = {};
+    return { mem, getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
+  };
+
+  it('каток и расписание читаются обратно, пока не протухли', () => {
+    const { readArenaWarm, writeArenaWarm, ARENA_WARM_TTL_MS } = loadModel();
+    const st = memStorage();
+    assert.equal(writeArenaWarm(st, '3', { card: { id: 3 } }, 1000), true);
+    assert.equal(writeArenaWarm(st, '3', { sessions: { days: [] } }, 1500), true);
+    const got = readArenaWarm(st, '3', 2000);
+    assert.deepEqual(got.card, { id: 3 });
+    assert.deepEqual(got.sessions, { days: [] });
+    assert.equal(readArenaWarm(st, '3', 1500 + ARENA_WARM_TTL_MS + 1), null);
+    assert.equal(readArenaWarm(st, '4', 2000), null);
+  });
+
+  it('без катка расписание одно не пишется; держит четыре последних', () => {
+    const { readArenaWarm, writeArenaWarm } = loadModel();
+    const st = memStorage();
+    assert.equal(writeArenaWarm(st, '9', { sessions: { days: [] } }, 1), false);
+    for (let i = 1; i <= 5; i++) writeArenaWarm(st, String(i), { card: { id: i } }, i * 10);
+    assert.equal(readArenaWarm(st, '1', 60), null);
+    assert.deepEqual(readArenaWarm(st, '5', 60).card, { id: 5 });
+  });
+});
+

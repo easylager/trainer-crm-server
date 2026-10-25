@@ -21,6 +21,29 @@ body.arena-hub .arena-hero {
   flex-direction: column; justify-content: flex-end; align-items: stretch;
 }
 body.arena-hub .arena-hero--pending { min-height: 320px; }
+
+/* Каркас первой секции до данных (TASK-332): те же размеры, что у «Массового катания». */
+body.arena-hub .arena-skel { display: grid; gap: 12px; }
+body.arena-hub .arena-skel i { display: block; background: var(--g-chip); border-radius: var(--app-radius-md); animation: arena-skel-pulse 1.4s ease-in-out infinite; }
+body.arena-hub .arena-skel__head { display: flex; justify-content: space-between; align-items: center; min-height: 48px; }
+body.arena-hub .arena-skel__title { width: 180px; height: 24px; }
+body.arena-hub .arena-skel__cta { width: 150px; height: 44px; border-radius: var(--app-radius-pill) !important; }
+body.arena-hub .arena-skel__prices { height: 75px; }
+body.arena-hub .arena-skel__line { width: 70%; height: 14px; margin: 4px 0 10px; }
+body.arena-hub .arena-skel__strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+body.arena-hub .arena-skel__strip i { height: 56px; border-radius: var(--app-radius-lg); }
+body.arena-hub .arena-skel__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 4px; }
+body.arena-hub .arena-skel__grid i { height: 52px; }
+@keyframes arena-skel-pulse { 50% { opacity: .55; } }
+
+/* Содержимое проявляется на месте каркаса, обложка стоит (TASK-332). */
+body.arena-hub .arena-card--reveal > :not(.arena-hero) { animation: arena-reveal .32s cubic-bezier(.22, 1, .36, 1) both; }
+body.arena-hub .arena-card--reveal > :nth-child(3) { animation-delay: .04s; }
+body.arena-hub .arena-card--reveal > :nth-child(n+4) { animation-delay: .08s; }
+@keyframes arena-reveal { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) {
+  body.arena-hub .arena-skel i, body.arena-hub .arena-card--reveal > * { animation: none; }
+}
 body.arena-hub .arena-hero__shade,
 body.arena-hub .arena-hero--photo .arena-hero__shade {
   position: absolute; inset: 0;
@@ -91,6 +114,7 @@ body.arena-hub .arena-ticket {
   animation: arena-ticket-in .38s cubic-bezier(.22, 1, .36, 1);
 }
 body.tg-dark.arena-hub .arena-ticket { box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 28px rgba(0, 0, 0, .35); }
+body.arena-hub .arena-ticket.arena-ticket--steady { animation: none; }
 @keyframes arena-ticket-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 body.arena-hub .arena-ticket__top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
 body.arena-hub .arena-ticket__lead { display: flex; flex-direction: column; gap: 4px; }
