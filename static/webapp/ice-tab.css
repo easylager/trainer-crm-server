@@ -2658,7 +2658,12 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
 }
 .ice-intent-sheet.is-open .ice-intent-sheet__dim { opacity: 1; }
 .ice-intent-sheet.is-open .ice-intent-sheet__panel { transform: none; }
-.ice-intent-sheet__grab { justify-self: center; width: 36px; height: 4px; border-radius: var(--app-radius-xs); background: var(--g-line); }
+.ice-intent-sheet__dim { cursor: pointer; }
+.ice-intent-sheet__panel.is-drag { transition: none; }
+.ice-intent-sheet__grab, .ice-intent-sheet__title { touch-action: none; }
+/* Ручка шире в касании, чем на вид: 4 px не поймать пальцем. */
+.ice-intent-sheet__grab { justify-self: center; width: 76px; height: 20px; margin: -8px 0; display: grid; place-items: center; cursor: grab; }
+.ice-intent-sheet__grab::before { content: ""; width: 36px; height: 4px; border-radius: var(--app-radius-xs); background: var(--g-line); }
 .ice-intent-sheet__title { margin: 4px 0 0; font-family: var(--g-font); font-size: var(--app-text-lead); line-height: 1.2; font-weight: var(--app-weight-bold); color: var(--g-ink); }
 .ice-intent-sheet__list { display: grid; gap: 2px; }
 .ice-intent-opt {
@@ -2671,7 +2676,9 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
 .ice-intent-opt[aria-pressed="true"] .ice-intent-opt__ic { background: var(--g-surface); }
 .ice-intent-opt__ic svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ice-intent-opt__n { font-weight: var(--app-weight-medium); font-size: var(--app-text-body); color: var(--g-muted); font-variant-numeric: tabular-nums; }
-.ice-intent-sheet__kicker { margin: 6px 0 0; font-family: var(--g-font); font-size: var(--app-text-kicker); line-height: 1; font-weight: var(--app-weight-bold); letter-spacing: .1em; text-transform: uppercase; color: var(--g-muted); }
+.ice-intent-sheet__where { display: grid; gap: 10px; margin-top: 8px; }
+.ice-intent-sheet__where[hidden] { display: none; }
+.ice-intent-sheet__kicker { margin: 0; font-family: var(--g-font); font-size: var(--app-text-kicker); line-height: 1; font-weight: var(--app-weight-bold); letter-spacing: .1em; text-transform: uppercase; color: var(--g-muted); }
 .ice-intent-sheet__where .ice-chips { flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) {
   .ice-intent-sheet__dim, .ice-intent-sheet__panel { transition: none; }

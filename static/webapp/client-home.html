@@ -7,9 +7,9 @@
   <!-- TASK-303: заголовки главной — Dela Gothic; без preload шрифт приходит после текста и строки прыгают. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610261" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610261" />
-  <link rel="stylesheet" href="/static/shared/glide-components.css?v=202610261" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610262" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610262" />
+  <link rel="stylesheet" href="/static/shared/glide-components.css?v=202610262" />
   <script>
     /* Данные главной — сразу из <head>, не дожидаясь SDK Telegram и разбора скриптов (TASK-314):
        раньше /client/hub/bootstrap уходил через ~0,85 с после открытия. Профиль — та же догадка,
@@ -40,24 +40,24 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <!-- Синхронно после SDK: startapp=catalog_* уходит на ice до разбора body.
        defer + blocking=render на #hubShell рисовали главную на секунду, потом скачок. -->
-  <script src="glide-deeplink.js?v=202610261"></script>
-  <script src="write-access.js?v=202610261"></script>
-  <script src="bell-follow.js?v=202610261"></script>
-  <script src="client-mini-app-theme.js?v=202610261"></script>
+  <script src="glide-deeplink.js?v=202610262"></script>
+  <script src="write-access.js?v=202610262"></script>
+  <script src="bell-follow.js?v=202610262"></script>
+  <script src="client-mini-app-theme.js?v=202610262"></script>
   <!-- Синхронно: таб-бар встаёт до первого кадра, иначе переход между вкладками его мигает (TASK-332). -->
-  <script src="mini-app-client-shell.js?v=202610261"></script>
-<link rel="stylesheet" href="theme.css?v=202610261" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610261" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610261" />
-  <script defer src="mini-app-telegram-chrome.js?v=202610261"></script>
-  <link rel="preload" href="client-home-main.js?v=202610261" as="script" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202610261" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610261" />
-  <link rel="stylesheet" href="hub-home.css?v=202610261" />
-  <script defer src="mini-app-empty-state.js?v=202610261"></script>
-  <script defer src="mini-app-more-icons.js?v=202610261"></script>
-  <script defer src="client-profile-switcher.js?v=202610261"></script>
-  <script defer src="mini-app-client-home.js?v=202610261"></script>
+  <script src="mini-app-client-shell.js?v=202610262"></script>
+<link rel="stylesheet" href="theme.css?v=202610262" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610262" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610262" />
+  <script defer src="mini-app-telegram-chrome.js?v=202610262"></script>
+  <link rel="preload" href="client-home-main.js?v=202610262" as="script" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202610262" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610262" />
+  <link rel="stylesheet" href="hub-home.css?v=202610262" />
+  <script defer src="mini-app-empty-state.js?v=202610262"></script>
+  <script defer src="mini-app-more-icons.js?v=202610262"></script>
+  <script defer src="client-profile-switcher.js?v=202610262"></script>
+  <script defer src="mini-app-client-home.js?v=202610262"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#hubShell" blocking="render" />
 </head>
@@ -120,15 +120,15 @@
 
   </div>
 
-  <script src="ru-text.js?v=202610261"></script>
-  <script src="catalog-public-url.js?v=202610261"></script>
+  <script src="ru-text.js?v=202610262"></script>
+  <script src="catalog-public-url.js?v=202610262"></script>
   <!-- TASK-160: «моя карточка» хаба — чистая модель + рендер, без DOM. -->
-  <script src="hub-me-card.js?v=202610261"></script>
+  <script src="hub-me-card.js?v=202610262"></script>
   <!-- Падежи имени для подписей карточки; модуля нет — формы безпадежные. -->
-  <script src="ru-person-name.js?v=202610261"></script>
-  <script src="hub-home.js?v=202610261"></script>
-  <script src="hub-bootstrap-parallel-model.js?v=202610261"></script>
-  <script defer src="client-home-main.js?v=202610261"></script>
-  <script src="/static/webapp/ga-touch.js?v=202610261"></script>
+  <script src="ru-person-name.js?v=202610262"></script>
+  <script src="hub-home.js?v=202610262"></script>
+  <script src="hub-bootstrap-parallel-model.js?v=202610262"></script>
+  <script defer src="client-home-main.js?v=202610262"></script>
+  <script src="/static/webapp/ga-touch.js?v=202610262"></script>
 </body>
 </html>

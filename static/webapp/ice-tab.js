@@ -1035,7 +1035,8 @@
     places: '<path d="M4 16h13a3 3 0 0 0 3-3M4 16V6h5l2 5h6M4 20h16"/>',
     coach: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.5 4-5 7-5s5.8 1.5 7 5"/>',
     ohm: '<path d="M6 3l8 14h5M18 3l-8 14H5"/>',
-    service: '<path d="M4 18h16M7 18l3-12 7 12"/>',
+    // Лезвие конька лежит на точильном круге, искры вверх — заточка, а не абстрактный треугольник.
+    service: '<circle cx="12" cy="16" r="5"/><path d="M3 11h15a3 3 0 0 0 3-3"/><path d="M12 8V4.5M8.5 8.5 6.5 5.5M15.5 8.5l2-3"/>',
     shop: '<path d="M5 8h14l-1 12H6zM9 8a3 3 0 0 1 6 0"/>',
   };
 
@@ -1145,6 +1146,11 @@
     chip.addEventListener('click', function () {
       openIntentSheet(sheet.hidden);
     });
+    // Затемнение закрывает по pointerup: в WebView Telegram на iOS click с пустого div
+    // может не прийти — шторка оставалась открытой.
+    var dim = sheet.querySelector('.ice-intent-sheet__dim');
+    if (dim) dim.addEventListener(global.PointerEvent ? 'pointerup' : 'click', function () { openIntentSheet(false); });
+    bindIntentSheetDrag(sheet.querySelector('.ice-intent-sheet__panel'));
     sheet.addEventListener('click', function (ev) {
       if (ev.target.closest('[data-intent-close]')) {
         openIntentSheet(false);
@@ -1168,6 +1174,41 @@
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape' && !sheet.hidden) openIntentSheet(false);
     });
+  }
+
+  /*
+   * Шторку тянут вниз за ручку и заголовок — как лист «Поделиться» (TASK-308): дальше 90 px
+   * или резко вниз — закрывается, иначе встаёт на место. Вверх упирается пружиной.
+   */
+  function bindIntentSheetDrag(panel) {
+    if (!panel || !global.PointerEvent) return;
+    var drag = null;
+    panel.addEventListener('pointerdown', function (e) {
+      if (e.button || !e.target.closest('.ice-intent-sheet__grab, .ice-intent-sheet__title')) return;
+      drag = { id: e.pointerId, y0: e.clientY, y: e.clientY, t: e.timeStamp, v: 0, dy: 0 };
+      try { panel.setPointerCapture(e.pointerId); } catch (eCap) { /* */ }
+      panel.classList.add('is-drag');
+    });
+    panel.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var raw = e.clientY - drag.y0;
+      drag.v = (e.clientY - drag.y) / Math.max(1, e.timeStamp - drag.t);
+      drag.y = e.clientY;
+      drag.t = e.timeStamp;
+      drag.dy = raw > 0 ? raw : -Math.sqrt(-raw) * 2;
+      panel.style.transform = 'translateY(' + drag.dy + 'px)';
+    });
+    function end(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var gone = drag.dy > 90 || (drag.dy > 24 && drag.v > 0.6);
+      var tap = Math.abs(drag.dy) < 4;
+      drag = null;
+      panel.classList.remove('is-drag');
+      panel.style.transform = '';
+      if (gone || (tap && e.type === 'pointerup' && e.target.closest('.ice-intent-sheet__grab'))) openIntentSheet(false);
+    }
+    panel.addEventListener('pointerup', end);
+    panel.addEventListener('pointercancel', end);
   }
 
   function setChips() {
