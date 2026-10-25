@@ -84,6 +84,7 @@
   /* Скролл после возврата с карточки: применить только когда лента уже в DOM. */
   var pendingScrollY = 0;
   var pendingScrollAnchor = '';
+  var pendingAnchorTop = null;
   var scrollRestoreTimer = 0;
   /* Последний якорь карточки — shellNav зовёт persist() без аргументов и не должен его стереть. */
   var lastScrollAnchor = '';
@@ -111,8 +112,8 @@
     if (doc && doc.body) doc.body.scrollTop = y;
   }
 
-  function applyScrollAnchor(anchor) {
-    if (!anchor || !global.document) return false;
+  function findAnchorNode(anchor) {
+    if (!anchor || !global.document) return null;
     var needle = String(anchor);
     var byRef = global.document.querySelector('[data-arena-ref="' + needle.replace(/"/g, '') + '"]');
     var node = byRef;
@@ -130,7 +131,21 @@
         }
       }
     }
+    return node;
+  }
+
+  function applyScrollAnchor(anchor, anchorTop) {
+    var node = findAnchorNode(anchor);
     if (!node) return false;
+    // Карточка встаёт на ту же высоту экрана, где была при уходе: «по центру» сдвигало
+    // ленту на полэкрана от того места, откуда человек ушёл.
+    if (anchorTop != null) {
+      var target = Math.max(0, Math.round(node.getBoundingClientRect().top + readScrollY() - anchorTop));
+      if (Math.abs(target - readScrollY()) > 1) {
+        try { global.scrollTo(0, target); } catch (eTo) { /* */ }
+      }
+      return true;
+    }
     try {
       node.scrollIntoView({ block: 'center', behavior: 'auto' });
       return true;
@@ -147,9 +162,11 @@
   function queuePendingScroll() {
     var y = pendingScrollY;
     var anchor = pendingScrollAnchor;
+    var anchorTop = pendingAnchorTop;
     if (!(y > 0) && !anchor) return;
     var apply = function () {
-      if (anchor && applyScrollAnchor(anchor)) return true;
+      if (!pendingScrollY && !pendingScrollAnchor) return false;
+      if (anchor && applyScrollAnchor(anchor, anchorTop)) return true;
       if (y > 0) {
         writeScrollY(y);
         return true;
@@ -173,20 +190,40 @@
       apply();
       left -= 1;
       if (left <= 0) {
-        global.clearInterval(scrollRestoreTimer);
-        scrollRestoreTimer = 0;
-        pendingScrollY = 0;
-        pendingScrollAnchor = '';
+        cancelPendingScroll();
       }
     }, 100);
+  }
+
+  function cancelPendingScroll() {
+    if (scrollRestoreTimer) global.clearInterval(scrollRestoreTimer);
+    scrollRestoreTimer = 0;
+    pendingScrollY = 0;
+    pendingScrollAnchor = '';
+    pendingAnchorTop = null;
+  }
+
+  /*
+   * Палец главнее восстановления: первое касание или прокрутка снимает его. Раньше таймер
+   * ещё 1,2 с после возврата с карточки ставил ленту на место и откатывал первый жест.
+   */
+  function bindScrollRestoreCancel() {
+    var stop = function () {
+      if (pendingScrollY || pendingScrollAnchor || scrollRestoreTimer) cancelPendingScroll();
+    };
+    ['touchstart', 'wheel', 'pointerdown', 'keydown'].forEach(function (type) {
+      global.addEventListener(type, stop, { passive: true, capture: true });
+    });
   }
 
   function rememberListScroll(anchor) {
     var y = readScrollY();
     var a = anchor != null ? String(anchor) : lastScrollAnchor;
     if (a) lastScrollAnchor = a;
+    var node = a ? findAnchorNode(a) : null;
+    var top = node ? node.getBoundingClientRect().top : null;
     if (M.saveListScroll) {
-      M.saveListScroll(global.sessionStorage, { scrollY: y, scrollAnchor: a || '' });
+      M.saveListScroll(global.sessionStorage, { scrollY: y, scrollAnchor: a || '', anchorTop: top });
     }
   }
 
@@ -196,6 +233,7 @@
     if (got.scrollY > 0) pendingScrollY = got.scrollY;
     if (got.scrollAnchor) {
       pendingScrollAnchor = got.scrollAnchor;
+      pendingAnchorTop = got.anchorTop != null ? got.anchorTop : null;
       lastScrollAnchor = got.scrollAnchor;
     }
   }
@@ -1887,6 +1925,9 @@
 
   function markListRefresh(list) {
     if (!list || !list.classList) return;
+    // Вспышка «обновилось» — для смены фильтра у начала ленты. Посреди ленты (тихое
+    // обновление после возврата с карточки) она мигала всеми карточками под пальцем.
+    if (list.getBoundingClientRect && list.getBoundingClientRect().top < 0) return;
     list.classList.remove('is-refresh');
     void list.offsetWidth;
     list.classList.add('is-refresh');
@@ -3739,6 +3780,7 @@
 
   function boot() {
     bind();
+    bindScrollRestoreCancel();
     var saved = M.loadIceState(global.sessionStorage);
     takePendingListScroll();
     if (saved && saved.intent) state.intent = M.coerceIntent(saved.intent);

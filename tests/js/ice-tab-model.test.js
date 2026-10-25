@@ -1172,6 +1172,18 @@ describe('session restore', () => {
     assert.equal(second.scrollY, 0);
     assert.equal(second.scrollAnchor, '');
   });
+
+  it('remembers where the card stood on screen, so return puts it back there, not centred', () => {
+    const { saveListScroll, consumeListScroll } = loadModel();
+    const mem = {};
+    const storage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
+    saveListScroll(storage, { scrollY: 1410, scrollAnchor: '2', anchorTop: 134.4 });
+    assert.equal(consumeListScroll(storage).anchorTop, 134);
+    saveListScroll(storage, { scrollY: 1410, scrollAnchor: '2', anchorTop: -40 });
+    assert.equal(consumeListScroll(storage).anchorTop, -40);
+    saveListScroll(storage, { scrollY: 1410, scrollAnchor: '2' });
+    assert.equal(consumeListScroll(storage).anchorTop, null);
+  });
 });
 
 describe('boardCardView (TASK-090: карточка-табло)', () => {

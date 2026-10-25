@@ -2257,6 +2257,13 @@
     return a || '';
   }
 
+  function anchorTopFrom(saved) {
+    var t = saved && saved.anchorTop;
+    if (t == null || t === '') return null;
+    t = Number(t);
+    return isFinite(t) ? Math.round(t) : null;
+  }
+
   function saveListScroll(storage, payload) {
     if (!storage || typeof storage.setItem !== 'function') return false;
     var y = Number(payload && payload.scrollY);
@@ -2268,6 +2275,8 @@
         JSON.stringify({
           scrollY: y > 0 && isFinite(y) ? Math.round(y) : 0,
           scrollAnchor: anchor,
+          // Где карточка стояла на экране — возврат ставит её туда же, а не по центру.
+          anchorTop: anchorTopFrom(payload),
         })
       );
       return true;
@@ -2278,22 +2287,24 @@
 
   /** Читает и сразу снимает ключ — один возврат = одно восстановление. */
   function consumeListScroll(storage) {
-    if (!storage || typeof storage.getItem !== 'function') return { scrollY: 0, scrollAnchor: '' };
+    var none = { scrollY: 0, scrollAnchor: '', anchorTop: null };
+    if (!storage || typeof storage.getItem !== 'function') return none;
     try {
       var raw = storage.getItem(ICE_SCROLL_KEY);
-      if (!raw) return { scrollY: 0, scrollAnchor: '' };
+      if (!raw) return none;
       storage.removeItem(ICE_SCROLL_KEY);
       var parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return { scrollY: 0, scrollAnchor: '' };
+      if (!parsed || typeof parsed !== 'object') return none;
       return {
         scrollY: scrollYFromSaved(parsed),
         scrollAnchor: scrollAnchorFromSaved(parsed),
+        anchorTop: anchorTopFrom(parsed),
       };
     } catch (e) {
       try {
         storage.removeItem(ICE_SCROLL_KEY);
       } catch (e2) { /* */ }
-      return { scrollY: 0, scrollAnchor: '' };
+      return none;
     }
   }
 
