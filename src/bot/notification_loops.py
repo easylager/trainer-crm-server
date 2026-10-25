@@ -3294,7 +3294,6 @@ BOOKING_TICKETS_INTERVAL_SEC = 5 * 60
 async def run_booking_tickets_loop(client_bot: Bot, trainer_bot: Bot) -> None:
     """TASK-331: «билеты кончаются» клиенту и «перешлите ученикам» тренеру, каждые 5 минут в часы уведомлений."""
     from src.application.booking_tickets_push import send_low_ticket_alerts, send_trainer_ticket_forwards
-    from src.shared.config import get_settings
 
     logger.info("[booking_tickets_loop] started")
     while True:
@@ -3303,12 +3302,7 @@ async def run_booking_tickets_loop(client_bot: Bot, trainer_bot: Bot) -> None:
                 now = datetime.now(timezone.utc)
                 async with async_session_factory() as session:
                     low = await send_low_ticket_alerts(session, client_bot, now=now)
-                    fwd = await send_trainer_ticket_forwards(
-                        session,
-                        trainer_bot,
-                        now=now,
-                        client_bot_username=get_settings().client_bot_username,
-                    )
+                    fwd = await send_trainer_ticket_forwards(session, trainer_bot, now=now)
                 if low or fwd:
                     logger.info("[booking_tickets_loop] tickets_low=%s trainer_forward=%s", low, fwd)
         except asyncio.CancelledError:

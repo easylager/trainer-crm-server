@@ -4,11 +4,11 @@ from zoneinfo import ZoneInfo
 from src.application.booking_tickets_push import (
     BookedTicket,
     format_low_tickets_text,
-    format_trainer_forward_card,
-    format_trainer_forward_intro,
+    format_trainer_forward_text,
     is_low,
     match_session_free,
     trainer_forward_due,
+    trainer_forward_markup,
 )
 
 MINSK = ZoneInfo("Europe/Minsk")
@@ -64,19 +64,21 @@ def test_low_tickets_text() -> None:
     assert "Свободно 23 из 115." in text
 
 
-def test_trainer_forward_texts_escape_and_list_clients() -> None:
-    intro = format_trainer_forward_intro(
-        [_booked(date(2026, 10, 25), time(15, 15), "Аня <b>"), _booked(date(2026, 10, 24), time(18, 15))],
-        today=date(2026, 10, 24),
-    )
-    assert "• Аня &lt;b&gt; — завтра 15:15, ТЦ Замок" in intro
-    assert "• Анна — сегодня 18:15, ТЦ Замок" in intro
-    card = format_trainer_forward_card(
-        arena_name="ТЦ Замок", tickets_url="https://koronaticket.by/rink", client_bot_username="@glide_bot"
-    )
-    assert "«ТЦ Замок»" in card
-    assert "https://koronaticket.by/rink" in card
-    assert card.endswith("— @glide_bot")
-    assert "@" not in format_trainer_forward_card(
-        arena_name="ТЦ Замок", tickets_url="https://koronaticket.by/rink", client_bot_username=None
-    )
+def test_trainer_forward_one_message_with_share_buttons() -> None:
+    from urllib.parse import parse_qs, urlparse
+
+    today = date(2026, 10, 24)
+    rows = [_booked(date(2026, 10, 25), time(13, 15), "Татьяна <b>"), _booked(today, time(18, 15), "Анна Ли")]
+    text = format_trainer_forward_text(rows, today=today)
+    assert "Татьяна &lt;b&gt; — завтра 13:15, ТЦ Замок" in text
+    assert "Анна Ли — сегодня 18:15, ТЦ Замок" in text
+    assert "У этих учеников нет нашего бота" in text
+    markup = trainer_forward_markup(rows, today=today)
+    labels = [r[0].text for r in markup.inline_keyboard]
+    assert labels == ["📤 Татьяна · 13:15", "📤 Анна · 18:15"]
+    q = parse_qs(urlparse(markup.inline_keyboard[1][0].url).query)
+    assert q["url"] == ["https://koronaticket.by/rink"]
+    assert q["text"][0].startswith("Анна, напоминаю: сегодня в 18:15 занятие на катке «ТЦ Замок».")
+    single = trainer_forward_markup(rows[:1], today=today)
+    assert single.inline_keyboard[0][0].text == "📤 Отправить напоминание"
+    assert "У ученика нет нашего бота" in format_trainer_forward_text(rows[:1], today=today)

@@ -5,7 +5,7 @@ Two pushes on top of the regular reminders:
 * client: «билеты на ваш сеанс заканчиваются» once the rink's fresh Korona snapshot
   shows half the seats gone — popular hours sell out in the last hour;
 * trainer: clients without the bot get nothing from us, so the trainer receives
-  a list plus a ready-to-forward message with the ticket link.
+  a list plus a share button per client with a ready message and the ticket link.
 
 Both are journaled in ``reminders`` (status ``sent``/``failed``) under their own kinds,
 so the regular reminder loop never picks them up.
@@ -19,6 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
+from urllib.parse import quote, urlencode
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import text
@@ -226,33 +227,50 @@ def _day_word(slot_date: date, today: date) -> str:
     return "сегодня" if slot_date == today else "завтра"
 
 
-def format_trainer_forward_intro(rows: list[BookedTicket], *, today: date) -> str:
+TRAINER_FORWARD_MAX_BUTTONS = 8
+
+
+def format_trainer_forward_text(rows: list[BookedTicket], *, today: date) -> str:
     lines = [
-        f"• {html.escape(b.client_name)} — {_day_word(b.slot_date, today)} {b.start_time.strftime('%H:%M')}, "
+        f"{html.escape(b.client_name)} — {_day_word(b.slot_date, today)} {b.start_time.strftime('%H:%M')}, "
         f"{html.escape(b.arena_name)}"
         for b in rows
     ]
+    who = "У ученика нет нашего бота" if len(rows) == 1 else "У этих учеников нет нашего бота"
     return (
-        "🎟 <b>Напомните ученикам про билеты</b>\n\n"
-        "У них нет нашего бота — напомнить можем только через вас:\n"
+        "🎟 <b>Напомните про билет</b>\n\n"
         + "\n".join(lines)
-        + "\n\nНа популярные часы билеты раскупают за час до начала. Перешлите им сообщение ниже 👇"
+        + f"\n\n{who}. Кнопка откроет Telegram с готовым сообщением и ссылкой на кассу."
     )
 
 
-def format_trainer_forward_card(*, arena_name: str, tickets_url: str, client_bot_username: str | None) -> str:
-    arena = html.escape(arena_name or "каток")
-    url = html.escape(tickets_url, quote=True)
-    bot = (client_bot_username or "").strip().lstrip("@")
-    bot_line = (
-        f"\n\nЧтобы получать напоминания о занятиях самим — @{html.escape(bot)}" if bot else ""
-    )
+def format_client_share_text(b: BookedTicket, *, today: date) -> str:
+    """Trainer's voice; Telegram puts the ticket link above it."""
+    first = b.client_name.split()[0] if b.client_name and b.client_name != "Клиент" else ""
+    hello = f"{first}, напоминаю" if first else "Напоминаю"
     return (
-        f"⛸ Напоминание о занятии на катке «{arena}».\n\n"
-        "🎟 Билет на лёд лучше купить заранее онлайн — на популярные часы его раскупают "
-        f"за час до начала:\n{url}"
-        f"{bot_line}"
+        f"{hello}: {_day_word(b.slot_date, today)} в {b.start_time.strftime('%H:%M')} занятие "
+        f"на катке «{b.arena_name or 'каток'}». Билет лучше купить заранее онлайн по ссылке — "
+        "на популярные часы его раскупают за час до начала."
     )
+
+
+def share_url(b: BookedTicket, *, today: date) -> str:
+    return "https://t.me/share/url?" + urlencode(
+        {"url": b.tickets_url, "text": format_client_share_text(b, today=today)}, quote_via=quote
+    )
+
+
+def trainer_forward_markup(rows: list[BookedTicket], *, today: date) -> InlineKeyboardMarkup:
+    buttons: list[list[InlineKeyboardButton]] = []
+    for b in rows[:TRAINER_FORWARD_MAX_BUTTONS]:
+        label = (
+            "📤 Отправить напоминание"
+            if len(rows) == 1
+            else f"📤 {b.client_name.split()[0]} · {b.start_time.strftime('%H:%M')}"
+        )
+        buttons.append([InlineKeyboardButton(text=label, url=share_url(b, today=today))])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def trainer_forward_due(b: BookedTicket, now_local: datetime) -> bool:
@@ -270,9 +288,8 @@ async def send_trainer_ticket_forwards(
     trainer_bot: Any,
     *,
     now: datetime,
-    client_bot_username: str | None,
 ) -> int:
-    """Per trainer: one list + one forwardable card per rink, for clients the client bot can't reach."""
+    """Per trainer: one message with a share button per client the client bot can't reach."""
     now_local = _local(now)
     today = now_local.date()
     booked = await _list_booked(
@@ -292,22 +309,12 @@ async def send_trainer_ticket_forwards(
             await _journal(session, booking_id=b.booking_id, telegram_id=trainer_tid, kind=KIND_TRAINER_TICKETS_FORWARD)
             for b in rows
         ]
-        cards: dict[str, BookedTicket] = {}
-        for b in rows:
-            cards.setdefault(b.tickets_url, b)
         try:
-            await trainer_bot.send_message(chat_id=trainer_tid, text=format_trainer_forward_intro(rows, today=today))
-            for b in cards.values():
-                await trainer_bot.send_message(
-                    chat_id=trainer_tid,
-                    text=format_trainer_forward_card(
-                        arena_name=b.arena_name,
-                        tickets_url=b.tickets_url,
-                        client_bot_username=client_bot_username,
-                    ),
-                    reply_markup=tickets_markup(url=b.tickets_url, arena_name=b.arena_name),
-                    disable_web_page_preview=True,
-                )
+            await trainer_bot.send_message(
+                chat_id=trainer_tid,
+                text=format_trainer_forward_text(rows, today=today),
+                reply_markup=trainer_forward_markup(rows, today=today),
+            )
             sent += 1
         except Exception as e:  # noqa: BLE001
             logger.warning("trainer_tickets_forward send trainer_tid=%s: %s", trainer_tid, e)
