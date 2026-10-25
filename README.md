@@ -164,6 +164,7 @@ INDEXNOW_KEY=<ключ>
 curl https://glideclub.by/<ключ>.txt                     # вернёт ключ, text/plain
 PYTHONPATH=. python scripts/indexnow_submit_sitemap.py --dry-run   # число URL и первые из них
 PYTHONPATH=. python scripts/indexnow_submit_sitemap.py             # разовая засылка всего sitemap
+# Скрипт читает URL из БД: для прода запускать с её DATABASE_URL, например `railway run python scripts/indexnow_submit_sitemap.py`.
 ```
 
 Затем в Bing Webmaster Tools откройте IndexNow и убедитесь, что отправки видны.
