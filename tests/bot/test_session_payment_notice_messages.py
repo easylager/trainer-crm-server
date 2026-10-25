@@ -528,3 +528,28 @@ def test_trainer_booked_you_has_tickets_line_and_button_only_with_url() -> None:
         booking_id=1, map_url=None, webapp_base_url="https://glideclub.by"
     )
     assert all(getattr(r[0], "url", None) != "https://koronaticket.by/rink" for r in plain.inline_keyboard)
+
+
+def test_rescheduled_and_recurring_have_tickets_only_with_url() -> None:
+    url = "https://koronaticket.by/rink"
+    resched = dict(
+        old_date="25.10", old_day="Вс", old_time="17:15", new_date="26.10", new_day="Пн", new_time="18:15",
+        trainer_name="Александр", service_name="Обучение", booking_price_cents=None, price_tier_label=None,
+        arena_name="ТЦ Замок", arena_address="пр-т Победителей 65", duration_minutes=45,
+    )
+    text = msg.format_client_booking_rescheduled_html(**resched, arena_tickets_url=url)
+    assert f"пр-т Победителей 65\n\n{msg.CLIENT_BOOKING_TICKETS_CONFIRMED_HINT}\n\nВсё остальное" in text
+    assert "Билет" not in msg.format_client_booking_rescheduled_html(**resched)
+
+    recurring = dict(
+        trainer_name="Александр", weekday_short="Пн", time_range="18:15–19:00", service_name="Обучение",
+        booking_price_cents=None, price_tier_label=None, arena_display="ТЦ Замок", materialized_count=4,
+    )
+    text = msg.format_client_recurring_set_by_trainer_notification_html(**recurring, arena_tickets_url=url)
+    assert f"📍 <b>Место:</b> ТЦ Замок\n\n{msg.CLIENT_BOOKING_TICKETS_CONFIRMED_HINT}\n\nБлижайшие" in text
+    plain = msg.format_client_recurring_set_by_trainer_notification_html(**recurring)
+    assert "Билет" not in plain and "📍 <b>Место:</b> ТЦ Замок\n\nБлижайшие" in plain
+    kb = msg.build_client_recurring_set_inline_keyboard(
+        trainer_telegram_id=5, webapp_base_url="https://glideclub.by", arena_tickets_url=url, arena_name="ТЦ Замок"
+    )
+    assert kb.inline_keyboard[-1][0].url == url

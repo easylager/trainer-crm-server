@@ -15,6 +15,7 @@ import logging
 from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.booking_arena_tickets import enrich_booking_notification_with_arena_tickets
 from src.application.booking_payment_notice import classify_booking_expected_payment_class
 from src.application.booking_use_cases import (
     claim_client_trainer_booked_notification,
@@ -59,6 +60,7 @@ async def try_send_client_booking_reschedule_push(
         return False
 
     payment_class = await classify_booking_expected_payment_class(session, bid, int(trainer_id))
+    await enrich_booking_notification_with_arena_tickets(session, p)
     old_date_str, old_day_str, old_time_str = _slot_display_strings(old_slot_date, old_start_time)
     new_date_str, new_day_str, new_time_str = _slot_display_strings(p.get("slot_date"), p.get("start_time"))
     text = msg.format_client_booking_rescheduled_html(
@@ -77,11 +79,14 @@ async def try_send_client_booking_reschedule_push(
         duration_minutes=p.get("duration_minutes"),
         expected_payment_class=payment_class,
         booked_for_name=p.get("booked_for_name"),
+        arena_tickets_url=p.get("arena_tickets_url"),
     )
     kb = msg.build_client_trainer_booked_you_inline_keyboard(
         booking_id=bid,
         map_url=p.get("map_link"),
         webapp_base_url=webapp_base_url,
+        arena_tickets_url=p.get("arena_tickets_url"),
+        arena_name=p.get("arena_name"),
     )
     try:
         await client_bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)

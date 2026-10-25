@@ -536,6 +536,7 @@ def format_client_booking_rescheduled_html(
     duration_minutes: int | None,
     expected_payment_class: str | None = None,
     booked_for_name: str | None = None,
+    arena_tickets_url: str | None = None,
 ) -> str:
     """Rich HTML message for client when trainer reschedules their booking (ParseMode.HTML).
 
@@ -588,6 +589,9 @@ def format_client_booking_rescheduled_html(
         venue_lines.append(f"📍 <b>Место:</b> {html.escape(aa)}")
     if venue_lines:
         parts.append("\n" + "\n".join(venue_lines) + "\n")
+    parts.append(
+        format_client_booking_tickets_message_block(tickets_url=arena_tickets_url, for_reminder=False)
+    )
 
     parts.append("\nВсё остальное без изменений — просто отметьте новое время себе в календаре. До встречи! 🙌")
     return "".join(parts)
@@ -986,6 +990,7 @@ def format_client_recurring_set_by_trainer_notification_html(
     arena_display: str | None,
     materialized_count: int,
     expected_payment_class: str | None = None,
+    arena_tickets_url: str | None = None,
 ) -> str:
     """Single client-bot message when trainer sets recurring from CRM (not one push per auto-booking)."""
     tn = html.escape((trainer_name or "").strip() or "Тренер")
@@ -1005,6 +1010,7 @@ def format_client_recurring_set_by_trainer_notification_html(
     ar = (arena_display or "").strip()
     if ar:
         parts.append(f"📍 <b>Место:</b> {html.escape(ar)}\n")
+    parts.append(format_client_booking_tickets_message_block(tickets_url=arena_tickets_url, for_reminder=False))
     parts.append("\n")
     if int(materialized_count or 0) > 0:
         parts.append(
@@ -1023,6 +1029,8 @@ def build_client_recurring_set_inline_keyboard(
     *,
     trainer_telegram_id: int | None,
     webapp_base_url: str | None,
+    arena_tickets_url: str | None = None,
+    arena_name: str | None = None,
 ) -> "InlineKeyboardMarkup | None":
     """After trainer sets recurring in CRM: open My bookings + write trainer (no per-booking deep link)."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -1048,6 +1056,7 @@ def build_client_recurring_set_inline_keyboard(
                 )
             ]
         )
+    append_client_booking_tickets_keyboard_row(rows, arena_tickets_url=arena_tickets_url, arena_name=arena_name)
     if not rows:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)

@@ -39,6 +39,24 @@ async def enrich_booking_notification_with_arena_tickets(
     info["arena_tickets_url"] = await fetch_arena_tickets_url(session, info.get(arena_id_key))
 
 
+
+async def fetch_booking_tickets_url(session: AsyncSession, booking_id: int) -> str | None:
+    """Ticket link for a booking's rink (same arena resolution as client pushes); None for online services."""
+    from src.application.booking_use_cases import SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT
+
+    arena_id = (
+        await session.execute(
+            text(
+                "SELECT (" + SQL_BOOKING_RESOLVED_ARENA_ID_FOR_CLIENT + ") FROM bookings b "
+                "JOIN slots s ON s.id = b.slot_id "
+                "LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id "
+                "WHERE b.id = :bid"
+            ),
+            {"bid": int(booking_id)},
+        )
+    ).scalar()
+    return await fetch_arena_tickets_url(session, arena_id)
+
 # Korona snapshots arrive every ~15 min; an older one may already be sold out.
 TICKET_SNAPSHOT_MAX_AGE = timedelta(minutes=45)
 

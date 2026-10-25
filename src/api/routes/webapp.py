@@ -7621,6 +7621,9 @@ async def post_trainer_client_recurring_from_booking(
             expected_payment_class = await classify_booking_expected_payment_class(
                 session, int(detail_row["id"]), trainer_id
             )
+        from src.application.booking_arena_tickets import fetch_booking_tickets_url
+
+        tickets_url = await fetch_booking_tickets_url(session, int(body.booking_id))
         text_client = msg.format_client_recurring_set_by_trainer_notification_html(
             trainer_name=trainer_name,
             weekday_short=day_short,
@@ -7631,10 +7634,13 @@ async def post_trainer_client_recurring_from_booking(
             arena_display=arena_disp,
             materialized_count=int(materialized),
             expected_payment_class=expected_payment_class,
+            arena_tickets_url=tickets_url,
         )
         reply_markup = msg.build_client_recurring_set_inline_keyboard(
             trainer_telegram_id=trainer_tid,
             webapp_base_url=settings.webapp_base_url,
+            arena_tickets_url=tickets_url,
+            arena_name=arena_disp,
         )
         client_bot = Bot(
             token=settings.telegram_bot_token_client,
