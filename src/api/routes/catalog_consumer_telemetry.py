@@ -26,7 +26,13 @@ from src.application.public_web_cta import (
     PARTNER_ACTIONS,
 )
 from src.shared.html_template import safe_external_url
-from src.application.place_links import clean_share_src, is_valid_start_param, telegram_open_link
+from src.application.place_links import (
+    clean_share_src,
+    is_valid_start_param,
+    parse_watch_start_param,
+    telegram_bot_start_link,
+    telegram_open_link,
+)
 from src.shared.config import Settings
 
 router = APIRouter(prefix="/api/public/catalog", tags=["catalog-telemetry"])
@@ -99,12 +105,16 @@ async def open_telegram_from_public_page(
         start_param=startapp,
         payload=cta_payload,
     )
-    link = telegram_open_link(
-        client_bot_username=settings.client_bot_username,
-        mini_app_short_name=settings.client_mini_app_short_name,
-        main_mini_app=settings.client_bot_main_mini_app,
-        start_param=startapp,
-    )
+    if parse_watch_start_param(startapp) is not None:
+        # TASK-330: колокольчик ставит бот по /start — мини-апп этот параметр не получила бы.
+        link = telegram_bot_start_link(client_bot_username=settings.client_bot_username, start_param=startapp)
+    else:
+        link = telegram_open_link(
+            client_bot_username=settings.client_bot_username,
+            mini_app_short_name=settings.client_mini_app_short_name,
+            main_mini_app=settings.client_bot_main_mini_app,
+            start_param=startapp,
+        )
     if not link:
         base = (settings.webapp_base_url or "").rstrip("/")
         return RedirectResponse(url=f"{base}/webapp/ice", status_code=302, headers={"Cache-Control": "no-store"})

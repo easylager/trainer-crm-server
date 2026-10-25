@@ -2275,6 +2275,10 @@ async def get_public_arena_card(
     from src.application.arena_partners import partners_for_arena
 
     card["partners"] = partners_for_arena(int(row["id"]), today=_today_minsk())
+    # TASK-329: когда каток обычно выкладывает расписание. Одна сборка на Mini App и сайт.
+    from src.application.schedule_waves import schedule_card_fields
+
+    card.update(await schedule_card_fields(session, int(row["id"]), tz_name=card["timezone"]))
     return card
 
 

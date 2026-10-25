@@ -145,6 +145,10 @@ async def _run(caption: str, *, dry_run: bool) -> None:
             )
         await session.commit()
         print(f"status=ok slots_published={published} run_id={run_id}")
+    # TASK-329: ручная публикация — та же волна расписания, после коммита, своя сессия.
+    from src.application.schedule_waves import record_parser_wave_in_own_session
+
+    await record_parser_wave_in_own_session(ARENA_ID, session_factory=async_session_factory)
 
 
 def main() -> None:

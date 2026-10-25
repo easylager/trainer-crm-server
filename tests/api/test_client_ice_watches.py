@@ -143,3 +143,44 @@ async def test_ice_watch_season_open_accepted(app_use_test_db, db_session) -> No
             )
             assert post.status_code == 200, post.text
             assert post.json()["watch"]["kind"] == "season_open"
+
+
+@pytest.mark.asyncio
+async def test_ice_watch_rejected_for_max_with_channel_unsupported(app_use_test_db, db_session) -> None:
+    """TASK-328 AC5: у MAX нет канала доставки — подписку не создаём, отвечаем 409."""
+    from src.api.miniapp_auth import MiniAppPlatform
+    from src.api.miniapp_auth.principal_keys import VK_CLIENT_SESSION_TELEGRAM_SURROGATE_BASE
+
+    vk_uid = 100_000 + (uuid.uuid4().int % 800_000)
+    surrogate = -(VK_CLIENT_SESSION_TELEGRAM_SURROGATE_BASE + vk_uid)
+    await _insert_client(db_session, telegram_id=surrogate)
+    city_id = await _insert_city(db_session)
+    arena = (
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO arenas (city_id, name, latitude, longitude, is_active, is_confirmed, venue_type)
+                VALUES (:cid, 'Max Rink', 53.9, 27.5, true, true, 'ice')
+                RETURNING id
+                """
+            ),
+            {"cid": city_id},
+        )
+    ).scalar_one()
+    await db_session.commit()
+
+    with patch_client_init_auth(vk_uid, platform=MiniAppPlatform.MAX):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            for kind in ("sessions", "season_open"):
+                post = await client.post(
+                    "/api/webapp/client/ice-watches",
+                    headers=_client_auth_headers(MiniAppPlatform.MAX),
+                    json={"arena_id": int(arena), "watch_kind": kind},
+                )
+                assert post.status_code == 409, post.text
+                assert post.json()["detail"] == "channel_unsupported"
+
+    count = await db_session.execute(
+        text("SELECT COUNT(*) FROM client_ice_watches WHERE arena_id = :aid"), {"aid": int(arena)}
+    )
+    assert count.scalar() == 0

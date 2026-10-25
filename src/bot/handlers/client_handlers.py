@@ -41,6 +41,7 @@ from src.application.booking_use_cases import (
 from src.application.subscription_tier_use_cases import trainer_allows_online_booking
 from src.application.certificate_use_cases import activate_certificate_by_code
 from src.application.catalog_deep_links import build_catalog_deep_link_reply, is_catalog_deep_link
+from src.application.ice_watch_bot_start import parse_watch_start, subscribe_from_bot_start
 from src.application.client_invite_use_cases import (
     bind_client_invite_trainer_context as _bind_client_invite_trainer_context,
     client_invite_needs_registration_form,
@@ -844,6 +845,35 @@ async def cmd_start(message: Message) -> None:
                     base, trainer_id, city_id=city_id, service_id=book_url_svc
                 ),
             )
+        return
+
+    # TASK-328: watch_<arena_id> — колокольчик с сайта. Подписка оформляется здесь, у кого
+    # нет Mini App initData. Катка нет в каталоге — обычное приветствие.
+    watch_arena_id = parse_watch_start(payload)
+    if watch_arena_id is not None:
+        async with async_session_factory() as db_session:
+            watch_reply = await subscribe_from_bot_start(
+                db_session,
+                telegram_id=telegram_id,
+                arena_id=watch_arena_id,
+                webapp_base_url=Settings().webapp_base_url or "",
+                telegram_username=(message.from_user.username if message.from_user else None),
+            )
+        if watch_reply is None:
+            await message.answer(msg.CLIENT_START_WELCOME)
+            return
+        watch_markup = None
+        if watch_reply["url"]:
+            watch_markup = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=watch_reply["button_text"], web_app=WebAppInfo(url=watch_reply["url"])
+                        )
+                    ]
+                ]
+            )
+        await message.answer(watch_reply["text"], parse_mode=ParseMode.HTML, reply_markup=watch_markup)
         return
 
     # TASK-146: arena_<id> / catalog_<city>[_<intent>] — с публичной страницы места или

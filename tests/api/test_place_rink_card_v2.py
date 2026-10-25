@@ -65,7 +65,9 @@ async def test_small_rink_gets_blocks_in_fixed_order_without_trainers(app_use_te
     assert _section_ids(html) == ["schedule", "facts", "services", "more", "contacts"]
     # Обложка: чипы вместо блока «Как добраться».
     chips = re.search(r'<div class="b-hero__chips">(.*?)</div>', html, re.S).group(1)
-    assert ">Маршрут<" in chips and ">Телефон<" in chips and ">Сайт<" in chips and "startapp=arena_" in chips
+    assert ">Маршрут<" in chips and ">Телефон<" in chips and ">Сайт<" in chips
+    # TASK-330: колокольчик обложки ставит подписку через бота, как кнопка пустой карточки.
+    assert "startapp=watch_" in chips
     schedule = html.split('id="schedule"', 1)[1].split("</section>", 1)[0]
     assert '<b class="b-price__v">8 BYN</b>' in schedule and "до 14 лет" in schedule and "размеры 26–47" in schedule
     assert "Взрослому с прокатом — 15 BYN." in schedule

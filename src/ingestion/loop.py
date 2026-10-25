@@ -6,7 +6,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from src.ingestion.alerts import tick_ice_health_alerts, tick_ice_health_weekly_digest
 from src.ingestion.jobs import SqlAlchemyParserJobStore
@@ -39,34 +39,125 @@ class IceIngestTickResult:
     ok: int = 0
 
 
-async def run_ice_ingest_tick() -> IceIngestTickResult:
-    """Один тик планировщика под общим advisory-локом."""
+# TASK-328: проход доставки колокольчика — не чаще раза в минуту на процесс.
+ICE_WATCH_PASS_MIN_INTERVAL_SEC = 60.0
+
+
+class WatchPassThrottle:
+    """Пропускает проход, если предыдущий стартовал меньше ``min_interval_sec`` назад."""
+
+    def __init__(
+        self,
+        min_interval_sec: float = ICE_WATCH_PASS_MIN_INTERVAL_SEC,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._min_interval = min_interval_sec
+        self._clock = clock
+        self._last_started: float | None = None
+
+    def try_start(self) -> bool:
+        now = self._clock()
+        if self._last_started is not None and now - self._last_started < self._min_interval:
+            return False
+        self._last_started = now
+        return True
+
+
+_WATCH_PASS_THROTTLE = WatchPassThrottle()
+
+
+async def run_ice_watch_pass_after_tick(
+    *,
+    watch_pass: Callable[[], Awaitable[Any]] | None = None,
+    throttle: WatchPassThrottle | None = None,
+) -> None:
+    """TASK-328: напоминания колокольчика — после коммита тика, под тем же локом ингеста.
+
+    Проход видит всё закоммиченное к этому моменту: сеансы этого тика, ручной прогон,
+    админку, BY-VPS. Его сбой не роняет тик: подписки останутся активными до следующего.
+    """
+    if not (throttle or _WATCH_PASS_THROTTLE).try_start():
+        return
+    if watch_pass is None:
+        from src.application.client_ice_watch_use_cases import run_ice_watch_delivery_pass
+
+        watch_pass = run_ice_watch_delivery_pass
+    try:
+        stats = await watch_pass()
+    except Exception:  # noqa: BLE001 — проход доставки не должен ронять тик
+        logger.exception("ice watch delivery pass failed")
+        return
+    if getattr(stats, "due", 0):
+        logger.info(
+            "ice watch delivery pass due=%s sent=%s failed=%s unreachable=%s gave_up=%s",
+            stats.due,
+            stats.sent,
+            stats.failed,
+            stats.unreachable,
+            stats.gave_up,
+        )
+
+
+async def run_ice_ingest_tick(
+    *,
+    session_factory=None,
+    engine=None,
+    scheduler_factory: Callable[[object], IceIngestScheduler] | None = None,
+    watch_pass: Callable[[], Awaitable[Any]] | None = None,
+    watch_pass_throttle: WatchPassThrottle | None = None,
+) -> IceIngestTickResult:
+    """Один тик планировщика под общим advisory-локом; затем проход доставки колокольчика.
+
+    Аргументы — для тестов; по умолчанию боевые сессия, движок и планировщик.
+    """
     # Импорты здесь, а не в начале цикла: ошибка импорта — это сбой тика (в лог, цикл жив),
     # а не тихая смерть задачи (TASK-176).
-    from src.infrastructure.db.session import async_session_factory, engine
+    from src.infrastructure.db import session as db_session_module
     from src.ingestion.ice_sales_snapshots import SqlAlchemyKoronaSalesSnapshotStore
+    from src.application.schedule_waves import parser_wave_recorder
     from src.ingestion.publish import SqlAlchemyIceSessionPublisher
     from src.ingestion.scheduler_lock import run_with_ice_ingest_lock
     from src.ingestion.types import RUN_STATUS_OK
     from src.shared.config import get_settings
 
+    factory = session_factory or db_session_module.async_session_factory
+    lock_engine = engine or db_session_module.engine
+
+    def default_scheduler(session) -> IceIngestScheduler:
+        return IceIngestScheduler(
+            store=SqlAlchemyParserJobStore(session),
+            recorder=SqlAlchemyScrapeRunRecorder(session),
+            registry=default_registry(),
+            publisher=SqlAlchemyIceSessionPublisher(session),
+            korona_sales_store=SqlAlchemyKoronaSalesSnapshotStore(session),
+            by_egress_proxy_url=get_settings().by_egress_proxy_url,
+            checkpoint=session.commit,
+            job_savepoint=session.begin_nested,
+            schedule_wave_recorder=parser_wave_recorder(factory),
+        )
+
+    make_scheduler = scheduler_factory or default_scheduler
+
     async def run_tick() -> tuple[int, list]:
-        async with async_session_factory() as session:
-            scheduler = IceIngestScheduler(
-                store=SqlAlchemyParserJobStore(session),
-                recorder=SqlAlchemyScrapeRunRecorder(session),
-                registry=default_registry(),
-                publisher=SqlAlchemyIceSessionPublisher(session),
-                korona_sales_store=SqlAlchemyKoronaSalesSnapshotStore(session),
-                by_egress_proxy_url=get_settings().by_egress_proxy_url,
-                checkpoint=session.commit,
-                job_savepoint=session.begin_nested,
-            )
+        async with factory() as session:
+            scheduler = make_scheduler(session)
             outcomes = await scheduler.run_due(datetime.now(timezone.utc))
             await session.commit()
             return scheduler.last_due_count, outcomes
 
-    acquired, payload = await run_with_ice_ingest_lock(engine, run_tick)
+    async def run_tick_then_watch_pass() -> tuple[int, list]:
+        # Сессия тика закрыта и закоммичена до прохода. Упавший тик (Exception) не отменяет
+        # проход: сеансы из админки и прошлых коммитов всё равно надо доставить. Остановку
+        # сервиса (CancelledError) не перехватываем — во время неё ничего не шлём.
+        try:
+            payload = await run_tick()
+        except Exception:
+            await run_ice_watch_pass_after_tick(watch_pass=watch_pass, throttle=watch_pass_throttle)
+            raise
+        await run_ice_watch_pass_after_tick(watch_pass=watch_pass, throttle=watch_pass_throttle)
+        return payload
+
+    acquired, payload = await run_with_ice_ingest_lock(lock_engine, run_tick_then_watch_pass)
     if not acquired or payload is None:
         return IceIngestTickResult(acquired=False)
     due, outcomes = payload

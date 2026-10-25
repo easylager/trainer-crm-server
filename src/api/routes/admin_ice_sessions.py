@@ -20,6 +20,10 @@ from src.application.ice_session_use_cases import (
     monday_of,
     rematerialize_recurrence,
 )
+from src.application.schedule_waves import (
+    record_admin_wave_after_commit,
+    record_admin_wave_for_recurrence_after_commit,
+)
 
 router = APIRouter(tags=["webapp-admin-ice-sessions"])
 
@@ -116,6 +120,7 @@ async def post_admin_ice_session(
     except (LookupError, IceSessionValidationError) as exc:
         raise _map_error(exc) from exc
     await session.commit()
+    await record_admin_wave_after_commit(session, arena_id)
     return created
 
 
@@ -133,6 +138,7 @@ async def patch_admin_ice_session(
     except (LookupError, IceSessionValidationError) as exc:
         raise _map_error(exc) from exc
     await session.commit()
+    await record_admin_wave_after_commit(session, updated.get("arena_id"))
     return updated
 
 
@@ -164,6 +170,7 @@ async def post_admin_copy_ice_week(
     except (LookupError, IceSessionValidationError) as exc:
         raise _map_error(exc) from exc
     await session.commit()
+    await record_admin_wave_after_commit(session, arena_id)
     return result
 
 
@@ -179,4 +186,5 @@ async def post_admin_rematerialize_ice(
     except LookupError as exc:
         raise _map_error(exc) from exc
     await session.commit()
+    await record_admin_wave_for_recurrence_after_commit(session, recurrence_key)
     return result

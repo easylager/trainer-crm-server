@@ -23,8 +23,9 @@ from tests.api.test_public_place_page import _client, _place
 # Свежести расписания на странице больше нет, просмотр пишет sendBeacon, а не GET.
 # Warm drops only the cached city list.
 # +1 к прежним 6: правила обычной загрузки (TASK-290), кэш процесса на 60 с — в тёплом прогоне их нет.
-_PLACE_SQL_COLD = 7
-_PLACE_SQL_WARM = 5
+# +1 (TASK-329): волны расписания и горизонт катка — один запрос по arena_id, и в холодном, и в тёплом.
+_PLACE_SQL_COLD = 8
+_PLACE_SQL_WARM = 6
 
 _CATALOG_WIDE_MARKERS = (
     "GROUP BY s.arena_id",
