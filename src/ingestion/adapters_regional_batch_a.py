@@ -90,7 +90,7 @@ class BrestLdsParser(IceParser):
         prices_html = await load_source_text(job, filename="prices.html", url_keys=("prices_url",))
         adult, child = _brest_prices(prices_html)
         fixed_start = str(job.config.get("fixed_start") or "21:15")
-        fixed_end = str(job.config.get("fixed_end") or "22:15")
+        fixed_end = str(job.config.get("fixed_end") or "22:00")
         horizon = int(job.config.get("horizon_days") or 7)
         run_date = parser_reference_date(job.config)
         session_label = str(job.config.get("session_label") or "СВ кат")

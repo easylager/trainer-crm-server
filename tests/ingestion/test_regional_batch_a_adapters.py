@@ -58,6 +58,8 @@ def _brest_job() -> ParserJob:
     cfg = dict(BREST_LDS_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "brest-lds")
     cfg["run_date"] = "2026-08-31"
+    # Неделя фото 31.08 — сеанс 60 минут; с октября 45 (см. test_brest_lds_session_is_45_minutes_now).
+    cfg["fixed_end"] = "22:15"
     return _job(arena_id=22, parser_key=PARSER_KEY_BREST_LDS, config=cfg, job_id=101)
 
 
@@ -185,3 +187,10 @@ async def test_pinsk_volna_reads_weekday_glued_to_the_date(tmp_path: Path) -> No
     assert ("2026-10-22", "10:00") in keys
     assert ("2026-10-22", "21:00") in keys
     assert ("2026-10-21", "11:00") in keys
+
+
+def test_brest_lds_session_is_45_minutes_now() -> None:
+    """С октября 2026 «СВ кат» в Бресте — 21:15–22:00, а не час, как на фото 31.08."""
+    assert BREST_LDS_CONFIG["fixed_start"] == "21:15"
+    assert BREST_LDS_CONFIG["fixed_end"] == "22:00"
+    assert BREST_LDS_CONFIG["default_duration_minutes"] == 45

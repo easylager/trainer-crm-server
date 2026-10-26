@@ -14,18 +14,19 @@ PARSER_KEY_PINSK_VOLNA = "pinsk_volna_v1"
 # arena_id 22 — Брест, ул. Московская, 151. Weekly time grid is a JPEG photo,
 # not HTML (see BrestLdsParser docstring): fixed_start/fixed_end/horizon_days
 # are the config-carried substitute for OCR. Prices are parsed live.
+# Since 2026-10 the session is 45 min (21:15–22:00, owner checked); the 31.08 photo had 60.
 BREST_LDS_CONFIG: dict = {
     "prices_url": "https://brest.hockey.by/raspisanie-svobodnogo-kataniya/",
     "schedule_url": "https://brest.hockey.by/raspisanie-svobodnogo-kataniya/raspisanie-ledovoy-areny/?clear_cache=Y",
     "timezone": "Europe/Minsk",
     "kind": "open_ice",
     "fixed_start": "21:15",
-    "fixed_end": "22:15",
+    "fixed_end": "22:00",
     "horizon_days": 7,
     "session_label": "СВ кат",
     "age_note": "Детский билет — до 12 лет",
     "prices_already_minor": True,
-    "default_duration_minutes": 60,
+    "default_duration_minutes": 45,
     "requires_by_egress": False,
 }
 
