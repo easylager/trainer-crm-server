@@ -102,7 +102,7 @@ async def test_brest_lds_matches_expected_photo_week() -> None:
         assert slot.price_adult_minor == gold["price_adult_minor"] == 630
         assert slot.price_child_minor == gold["price_child_minor"] == 530
         assert slot.price_rental_minor is None
-        assert slot.session_label == "СВ кат"
+        assert slot.session_label is None, "«СВ кат» — сокращение с фото, клиенту его не показываем"
 
 
 @pytest.mark.asyncio

@@ -801,6 +801,9 @@ describe('formatChildTicketAgeNote', () => {
   it('добавляет «Детский билет» к голому возрастному лимиту и типовым формулировкам', () => {
     const { formatChildTicketAgeNote, showtimesForDay } = loadModel();
     assert.equal(formatChildTicketAgeNote('до 16 лет'), 'Детский билет — до 16 лет');
+    // Уже готовая фраза (Брест) не должна получить второй «билет».
+    assert.equal(formatChildTicketAgeNote('Детский билет — до 12 лет'), 'Детский билет — до 12 лет');
+    assert.equal(formatChildTicketAgeNote('Детский билет до 12 лет'), 'Детский билет — до 12 лет');
     assert.equal(formatChildTicketAgeNote('детский до 14 лет'), 'Детский билет — до 14 лет');
     assert.equal(formatChildTicketAgeNote('детский от 3 до 12 лет'), 'Детский билет — от 3 до 12 лет');
     assert.equal(formatChildTicketAgeNote('дети до 14 лет'), 'Детский билет — до 14 лет');
@@ -1212,12 +1215,6 @@ describe('TASK-290: живой остаток вместо полоски', () =
     assert.equal(seatsFreeText(liveSeats('нет мест', 115)), '');
   });
 
-  it('счётчик под датой — только у дня, где сеансов меньше обычного (TASK-333)', () => {
-    const { dayCountsWorthShowing } = loadModel();
-    assert.deepEqual(dayCountsWorthShowing([{ count: 13 }, { count: 13 }, { count: 0 }]), [0, 0, 0]);
-    assert.deepEqual(dayCountsWorthShowing([{ count: 13 }, { count: 9 }, { count: 0 }]), [0, 9, 0]);
-  });
-
   it('при остатке из кассы подсказка не объясняет ни его, ни полоску (TASK-333)', () => {
     const { scheduleInviteHint } = loadModel();
     assert.equal(scheduleInviteHint(true, true, true), 'Выберите время — позовём на него друзей.');
@@ -1328,4 +1325,3 @@ describe('тёплый кэш карточки (TASK-332)', () => {
     assert.deepEqual(readArenaWarm(st, '5', 60).card, { id: 5 });
   });
 });
-

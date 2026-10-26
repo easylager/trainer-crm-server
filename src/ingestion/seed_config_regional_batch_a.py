@@ -23,7 +23,7 @@ BREST_LDS_CONFIG: dict = {
     "fixed_start": "21:15",
     "fixed_end": "22:00",
     "horizon_days": 7,
-    "session_label": "СВ кат",
+    "session_label": None,  # «СВ кат» — сокращение с фото, клиенту ничего не говорит
     "age_note": "Детский билет — до 12 лет",
     "prices_already_minor": True,
     "default_duration_minutes": 45,

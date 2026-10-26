@@ -953,7 +953,8 @@
   function formatChildTicketAgeNote(raw) {
     var note = String(raw || '').trim();
     if (!note) return '';
-    if (/^детский\s+билет\b/i.test(note)) {
+    // \b не работает с кириллицей, поэтому граница слова — пробел, тире или конец строки.
+    if (/^детский\s+билет(?=[\s\-–—]|$)/i.test(note)) {
       return note.replace(/^детский\s+билет\s*[-–—]?\s*/i, 'Детский билет — ');
     }
     if (/^до\s+\d+\s+лет$/i.test(note)) {
@@ -1058,16 +1059,6 @@
   function seatsFreeText(seats) {
     if (!seats || seats.gone) return '';
     return seats.capacity ? seats.free + ' из\u00a0' + seats.capacity : seats.count;
-  }
-
-  /**
-   * Счётчик сеансов под датой — только у дня, где их меньше обычного (TASK-333): «13» под
-   * каждым днём ничего не различало. Обычное — максимум по дням с сеансами.
-   */
-  function dayCountsWorthShowing(days) {
-    var usual = 0;
-    (days || []).forEach(function (d) { if (d.count > usual) usual = d.count; });
-    return (days || []).map(function (d) { return d.count > 0 && d.count < usual ? d.count : 0; });
   }
 
   function showtimesForDay(opts) {
@@ -1575,7 +1566,6 @@
     readArenaWarm: readArenaWarm,
     writeArenaWarm: writeArenaWarm,
     ARENA_WARM_TTL_MS: ARENA_WARM_TTL_MS,
-    dayCountsWorthShowing: dayCountsWorthShowing,
     shopServicesView: shopServicesView,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,

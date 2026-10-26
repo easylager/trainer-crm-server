@@ -96,8 +96,6 @@ body.arena-hub .arena-strip__day[aria-pressed="true"] { background: var(--g-ink)
 body.arena-hub .arena-strip__day[aria-pressed="true"] span { color: var(--g-on-dark-muted); }
 body.arena-hub .arena-strip__day[aria-pressed="true"] b { color: var(--g-bg); }
 body.arena-hub .arena-strip__day[aria-pressed="true"] i { color: var(--g-on-dark-accent); }
-/* Счётчика под датами нет, когда он везде одинаковый (TASK-333) — ряд ниже. */
-body.arena-hub .arena-strip--slim .arena-strip__day { min-height: 56px; }
 
 /* Группа сеансов — без рамки, на фоне; цены строкой, пока время не выбрано. */
 body.arena-hub .arena-show { padding: 0; border: 0; background: transparent; gap: 12px; }

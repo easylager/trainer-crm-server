@@ -93,7 +93,7 @@ class BrestLdsParser(IceParser):
         fixed_end = str(job.config.get("fixed_end") or "22:00")
         horizon = int(job.config.get("horizon_days") or 7)
         run_date = parser_reference_date(job.config)
-        session_label = str(job.config.get("session_label") or "СВ кат")
+        session_label = str(job.config.get("session_label") or "").strip() or None
         age_note = str(job.config.get("age_note") or "детям до 12 лет")
         slots: list[ExtractedSlot] = []
         for offset in range(horizon):

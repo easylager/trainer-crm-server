@@ -1238,18 +1238,16 @@
   }
 
   function renderDayStrip(days) {
-    var counts = M.dayCountsWorthShowing(days);
-    var anyCount = counts.some(Boolean);
     return (
-      '<div class="arena-strip' + (anyCount ? '' : ' arena-strip--slim') + '" id="arenaDayTabs" role="tablist">' +
-      days.map(function (d, i) {
+      '<div class="arena-strip" id="arenaDayTabs" role="tablist">' +
+      days.map(function (d) {
         return (
           '<button type="button" role="tab" class="arena-strip__day' +
           (d.count ? '' : ' arena-strip__day--empty') +
           (d.weekend ? ' arena-strip__day--weekend' : '') +
           '" data-day="' + esc(d.iso) + '" aria-pressed="' + (state.day === d.iso ? 'true' : 'false') + '">' +
           '<span>' + esc(shortDayTop(d.top)) + '</span><b>' + esc(d.num) + '</b>' +
-          (anyCount ? '<i>' + (counts[i] ? esc(String(counts[i])) : '\u00a0') + '</i>' : '') +
+          '<i>' + (d.count ? esc(String(d.count)) : '—') + '</i>' +
           '</button>'
         );
       }).join('') +
