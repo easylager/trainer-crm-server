@@ -199,3 +199,30 @@ async def test_hub_shows_month_result_with_league_podium_then_match_flow(db_sess
     assert now_slot(bookings=[], hockey=card, upcoming=[], now=DEC_1)["kind"] == "kk_month"
     await mark_race_seen(db_session, player_key=KATYA, race_id=race.id, now=DEC_1)
     assert (await hub_card(db_session, KATYA, now=DEC_1))["mode"] != "race_result"
+
+
+@pytest.mark.asyncio
+async def test_match_loop_marks_calendar_then_closes_the_month(db_session) -> None:
+    """Сквозь цикл матчей: календарь прочитан — финал известен; месяц прошёл — короны."""
+    from src.application.hockey_matches import match_url, run_tick
+    from src.ingestion.hockey_sources import HCDINAMO_CALENDAR_URL
+
+    pages = {HCDINAMO_CALENDAR_URL: '<a href="/matches/1/">x</a>', match_url("1"): "<html>сломано</html>"}
+
+    async def fetch(url: str) -> str:
+        return pages[url]
+
+    async def silent(_body: str) -> bool:
+        return True
+
+    last = await _play(db_session, datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ), {SASHA: (3, 1)}, mid="loop")
+    counts = await run_tick(db_session, fetch, now=NOV, alert=silent, calendar_due=True)
+    race = await ensure_month_race(db_session, now=NOV)
+    assert counts["closed_races"] == []
+    assert race.calendar_synced_at is not None
+    assert await race_final_match_id(db_session, race) == last
+
+    counts = await run_tick(db_session, fetch, now=DEC_1, alert=silent, calendar_due=False)
+    assert counts["closed_races"] == [race.id]
+    assert [w["player_key"] for w in await race_winners(db_session, race_id=race.id, league_id=None)] == [SASHA]
+    assert (await ensure_month_race(db_session, now=DEC_1)).closed_at is None
