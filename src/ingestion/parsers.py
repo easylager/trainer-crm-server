@@ -83,10 +83,12 @@ def default_registry() -> ParserRegistry:
     from src.ingestion.adapters_spb_batch_j import IzhoretsHtmlParser
     from src.ingestion.adapters_spb_batch_m import DinamoYuniorHtmlParser
     from src.ingestion.adapters_spb_batch_o import ShuvalovskyLedHtmlParser
+    from src.ingestion.manual_schedule_v1 import ManualScheduleParser
     from src.ingestion.weekly_grid_v1 import WeeklyGridV1Parser
 
     registry = ParserRegistry()
     for parser in (
+        ManualScheduleParser(),
         MinskArenaSaleframeParser(),
         MinskMainArenaSaleframeParser(),
         MinskSpeedOvalParser(),
