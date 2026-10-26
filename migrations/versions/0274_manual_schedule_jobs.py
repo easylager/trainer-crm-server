@@ -38,6 +38,14 @@ def upgrade() -> None:
             ),
             {"a": arena_id, "k": _PARSER_KEY, "c": json.dumps(_CONFIG)},
         )
+    # Берёза: строку задания завели заранее выключенной (для записи прогона до выкатки парсера).
+    conn.execute(
+        sa.text(
+            "UPDATE ice_parser_jobs SET is_enabled = true, next_run_at = now() "
+            "WHERE parser_key = :k AND arena_id = ANY(:a) AND NOT is_enabled"
+        ),
+        {"k": _PARSER_KEY, "a": list(_ARENAS)},
+    )
 
 
 def downgrade() -> None:
