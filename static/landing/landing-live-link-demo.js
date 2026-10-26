@@ -387,7 +387,7 @@ var FRAGS = [
         '<div class="p-head"><span class="p-name">Подарочный сертификат</span>' +
         '<span class="p-tag">Выдан</span></div>' +
         '<p class="p-meta">Активируется кодом в боте</p>' +
-        '<p class="p-nom">Номинал: 120 BYN</p>' +
+        '<p class="p-nom">Номинал: 120 ' + (document.documentElement.dataset.market === 'ru' ? '₽' : 'BYN') + '</p>' +
       '</div>'
   },
   /* 5 — Каталог Glide · catalog.html */

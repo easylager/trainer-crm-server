@@ -93,7 +93,7 @@ async def test_catalog_uses_ru_base_pricing_for_spb_city(app_use_test_db, db_ses
     trainer_id, tg = await _make_trainer(db_session, city_id=city_id)
     catalog = await _get_catalog(tg)
     assert catalog["constructor"]["base"]["currency"] == "RUB"
-    assert _crm_monthly_cents(catalog) == 59000
+    assert _crm_monthly_cents(catalog) == 115000
 
 
 @pytest.mark.asyncio
@@ -102,7 +102,7 @@ async def test_catalog_uses_ru_moscow_premium_pricing(app_use_test_db, db_sessio
     trainer_id, tg = await _make_trainer(db_session, city_id=city_id)
     catalog = await _get_catalog(tg)
     assert catalog["constructor"]["base"]["currency"] == "RUB"
-    assert _crm_monthly_cents(catalog) == 75000  # RU_BASE 59000 * 1.25
+    assert _crm_monthly_cents(catalog) == 75000  # RU_MOSCOW, unchanged by 0272
 
 
 @pytest.mark.asyncio
@@ -133,7 +133,7 @@ async def test_admin_editing_by_base_price_does_not_touch_ru_rows(
         )
     )
     ru_base_after = after.scalar_one()
-    assert ru_base_after == ru_base_before == 59000
+    assert ru_base_after == ru_base_before == 115000
 
 
 @pytest.mark.asyncio
