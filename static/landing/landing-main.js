@@ -1,6 +1,10 @@
 (function () {
   'use strict';
 
+  function demoCurrency() {
+    return document.documentElement.dataset.market === 'ru' ? '₽' : 'BYN';
+  }
+
   function demoWeekRange() {
     var shifted = new Date(Date.now() + 180 * 60000);
     var dow = shifted.getUTCDay();
@@ -226,7 +230,7 @@
         '<p class="bv-analytics__banner">Неделя ' + demoWeekRange() + '</p>' +
         '<div class="bv-analytics__metrics">' +
         '<div class="bv-analytics__metric"><strong>12</strong><span>записей</span></div>' +
-        '<div class="bv-analytics__metric bv-analytics__metric--hi"><strong>840</strong><span>BYN</span></div>' +
+        '<div class="bv-analytics__metric bv-analytics__metric--hi"><strong>840</strong><span>' + demoCurrency() + '</span></div>' +
         '<div class="bv-analytics__metric"><strong>+3</strong><span>новых</span></div>' +
         '</div>' +
         '<div class="bv-analytics__spark" aria-hidden="true">' +
