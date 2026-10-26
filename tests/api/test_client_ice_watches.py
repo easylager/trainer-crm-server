@@ -107,6 +107,50 @@ async def test_ice_watch_subscribe_list_unsubscribe(app_use_test_db, db_session)
 
 
 @pytest.mark.asyncio
+async def test_ice_watch_creates_client_for_catalog_only_user(app_use_test_db, db_session) -> None:
+    """Обращение #13: пользователь каталога (только client_sessions, без clients) жмёт колокольчик.
+
+    Раньше — 400 «Сначала завершите регистрацию», хотя регистрации для каталога нет.
+    """
+    tid = _fresh_client_telegram_id()
+    await db_session.execute(
+        text("INSERT INTO client_sessions (telegram_id, state) VALUES (:tid, 'city_selected')"),
+        {"tid": tid},
+    )
+    city_id = await _insert_city(db_session)
+    arena = (
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO arenas (city_id, name, latitude, longitude, is_active, is_confirmed, venue_type)
+                VALUES (:cid, 'Catalog Only Rink', 53.9, 27.5, true, true, 'ice')
+                RETURNING id
+                """
+            ),
+            {"cid": city_id},
+        )
+    ).scalar_one()
+    await db_session.commit()
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            post = await client.post(
+                "/api/webapp/client/ice-watches",
+                headers=_client_auth_headers(),
+                json={"arena_id": int(arena), "watch_kind": "sessions", "when": "any"},
+            )
+            assert post.status_code == 200, post.text
+
+            hub = await client.get("/api/webapp/client/watches", headers=_client_auth_headers())
+            assert hub.json()["ice_watches"] == 1
+
+    client_rows = (
+        await db_session.execute(text("SELECT count(*) FROM clients WHERE telegram_id = :tid"), {"tid": tid})
+    ).scalar_one()
+    assert client_rows == 1
+
+
+@pytest.mark.asyncio
 async def test_ice_watch_season_open_accepted(app_use_test_db, db_session) -> None:
     tid = _fresh_client_telegram_id()
     await _insert_client(db_session, telegram_id=tid)

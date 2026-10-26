@@ -325,7 +325,7 @@
         var tg = global.Telegram && global.Telegram.WebApp;
         if (!tg || !tg.showAlert) return;
         if (status === 409) tg.showAlert('Напоминания пока приходят только в\u00a0Telegram.');
-        else tg.showAlert('Не удалось оформить подписку. Завершите регистрацию в боте.');
+        else tg.showAlert('Не удалось оформить подписку. Попробуйте ещё раз чуть позже.');
       });
   }
 

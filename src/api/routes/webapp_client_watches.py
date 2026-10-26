@@ -23,7 +23,9 @@ from src.application.client_ice_watch_use_cases import (
     watches_summary,
 )
 from src.application.client_profile_use_cases import resolve_acting_client_id
+from src.application.client_session_use_cases import get_or_create_session
 from src.application.client_trainer_edge_use_cases import unsubscribe_notify_slots as uc_unsubscribe_notify_slots
+from src.application.client_use_cases import get_or_create_client
 from src.infrastructure.db.models import (
     ICE_WATCH_KIND_SCHEDULE_FRESH,
     ICE_WATCH_KIND_SEASON_OPEN,
@@ -88,7 +90,14 @@ async def post_client_ice_watch(
     if principal.platform != MiniAppPlatform.TELEGRAM:
         raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED)
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
+    client_id = await resolve_acting_client_id(session, catalog_tid, _parse_profile_id_header(x_profile_id))
+    if client_id is None:
+        # Пользователь каталога: регистрации у него нет и не будет — строку клиента заводим
+        # здесь, как вход по колокольчику сайта (follow_arena_from_bell). Иначе 400 «завершите
+        # регистрацию» отправлял человека на шаг, которого не существует (обращение #13).
+        client_id = await get_or_create_client(session, catalog_tid)
+        await session.commit()
+        await get_or_create_session(catalog_tid, session)
     kind = (body.watch_kind or ICE_WATCH_KIND_SESSIONS).strip().lower()
     if kind not in (ICE_WATCH_KIND_SESSIONS, ICE_WATCH_KIND_SCHEDULE_FRESH, ICE_WATCH_KIND_SEASON_OPEN):
         raise HTTPException(status_code=400, detail="Недопустимый тип подписки.")
