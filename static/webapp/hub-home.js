@@ -23,6 +23,7 @@
   var NBSP = ' ';
 
   var ICON = {
+    crown: 'M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z',
     skate: 'M12 2v20M4.9 7l14.2 10M19.1 7 4.9 17M9 3.5l3 2.5 3-2.5M9 20.5l3-2.5 3 2.5',
     ohm: 'M15 3 8.5 17.5a2 2 0 0 1-1.8 1.2H3M3 21h8M16.5 21a2 2 0 1 0 0-.01',
     service: 'M3 16h14a3 3 0 0 0 3-3v-1H8L5.5 7H3zM3 20h18',
@@ -50,8 +51,9 @@
     var ns = 'http://www.w3.org/2000/svg';
     var s = doc.createElementNS(ns, 'svg');
     s.setAttribute('viewBox', '0 0 24 24');
-    s.setAttribute('fill', 'none');
-    s.setAttribute('stroke', 'currentColor');
+    // Корона — залитая: контуром в наклейке она не читается.
+    s.setAttribute('fill', name === 'crown' ? 'currentColor' : 'none');
+    s.setAttribute('stroke', name === 'crown' ? 'none' : 'currentColor');
     s.setAttribute('stroke-width', name === 'chevron' || name === 'down' ? '2' : '1.8');
     s.setAttribute('stroke-linecap', 'round');
     s.setAttribute('stroke-linejoin', 'round');
@@ -356,6 +358,8 @@
     var r = m.result;
     if (card.mode === 'live') return { text: 'ИДЁТ', dot: true, live: true };
     if (r && r.home_score != null) return { text: 'ИТОГ ' + r.home_score + ':' + r.away_score, dot: false, live: false };
+    // Последний матч месяца в гонке «Кто кого» (TASK-334): та же наклейка, другие слова.
+    if (m.race_final) return { text: 'ФИНАЛ МЕСЯЦА', dot: false, live: false };
     var p = minskParts(new Date(m.starts_at));
     var n = minskParts(now || new Date());
     if (p.y === n.y && p.m === n.m && p.d === n.d) return { text: 'СЕГОДНЯ', dot: true, live: false };
@@ -454,6 +458,28 @@
     var line = m.home.name + ' — ' + m.away.name + ' ' + r.home_score + ':' + r.away_score;
     if (card.place) line += ' · ты ' + card.place.rank + '-й в лиге';
     what.appendChild(el('span', 'hn__sub', line));
+    a.appendChild(what);
+    a.appendChild(icon('chevron', 'hn__go'));
+    host.replaceChildren(a);
+  }
+
+  /** Итог месяца «Кто кого» (TASK-334): сутки после финала, пока не открыли. Слова — как KtoKogoModel.monthHead. */
+  function kkMonth(card, host) {
+    var res = card.race || {};
+    var won = !!res.won;
+    var winners = res.winners || [];
+    var head = won ? res.title + ' твой' : winners.length ? 'корона — ' + winners.join(' и ') : res.title + ' без короны';
+    var where = res.league ? 'в «' + res.league.name + '»' : 'в общей таблице';
+    var line = won ? 'Первое место ' + where : res.rank ? 'Ты ' + res.rank + '-й ' + where : 'Итоги ' + where;
+    var a = link(el('a', 'hn__card hn__card--dark'), 'kto-kogo?month=' + res.race_id);
+    a.setAttribute('aria-label', 'Итоги месяца: ' + head);
+    var st = el('span', 'hn__sticker' + (won ? '' : ' hn__sticker--miss'));
+    if (won) st.appendChild(icon('crown', 'hn__crown'));
+    else st.textContent = res.rank ? String(res.rank) : '–';
+    a.appendChild(st);
+    var what = el('span', 'hn__what');
+    what.appendChild(el('span', 'hn__head hh-display', head));
+    what.appendChild(el('span', 'hn__sub', line + ' · все с нуля'));
     a.appendChild(what);
     a.appendChild(icon('chevron', 'hn__go'));
     host.replaceChildren(a);
@@ -684,6 +710,7 @@
     if ((kind === 'kk_before' || kind === 'kk_result') && now.hockey && now.hockey.event_href) eventCard(now.hockey, host);
     else if (kind === 'kk_before') kkBefore(now.hockey, host);
     else if (kind === 'kk_result') kkResult(now.hockey, host);
+    else if (kind === 'kk_month') kkMonth(now.hockey, host);
     else if (kind === 'ice') iceCard(now.session, host);
     else if (!city && hub && hub.ice_teaser) {
       lastTeaserHub = hub;

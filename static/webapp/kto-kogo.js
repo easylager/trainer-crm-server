@@ -2,7 +2,8 @@
  * «Кто кого» — экран игры в Mini App (TASK-299). Макет: claude.ai/artifact/QxDWNDDKXcHYJdZFv6uPvt, экраны 1–5, 10–14.
  *
  * Вкладки: матчи, таблица, лиги. Поверх них — лига изнутри, создание лиги, вход по ссылке (?join=КОД или
- * startapp=kk_КОД), итог матча (?reveal=<id матча>, открывается из строки на главной).
+ * startapp=kk_КОД), итог матча (?reveal=<id матча>, открывается из строки на главной), итоги месяца
+ * (?month=<id гонки>, TASK-334; холст гонки месяца: claude.ai/artifact/4h6iFvDSrMtckeduVzj2Vn).
  * Чужие имена попадают в DOM только через textContent.
  */
 (function () {
@@ -32,6 +33,9 @@
     joinPreview: null,
     joinError: '',
     revealId: null,
+    race: null, // гонка месяца из /matches: шапка таблицы, финал
+    leader: null, // строка под финалом месяца
+    month: null, // итоги месяца для экрана ?month=
     sheet: null, // {kind:'score', matchId, home, away} | {kind:'menu'} | {kind:'rename', draft} | {kind:'leave'}
     draftName: '',
     createError: '',
@@ -144,6 +148,25 @@
   var I_LOCK = ['M7 11V8a5 5 0 0 1 10 0v3', 'M5 11h14v9H5z'];
   var I_PLUS = ['M12 5v14', 'M5 12h14'];
 
+  /** Корона — залитая, не контурная: так она читается на жёлтом и в 11 px. */
+  function crownIcon(size) {
+    var s = document.createElementNS(SVG_NS, 'svg');
+    s.setAttribute('width', size);
+    s.setAttribute('height', size);
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('fill', 'currentColor');
+    s.setAttribute('aria-hidden', 'true');
+    var p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', 'M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z');
+    s.appendChild(p);
+    return s;
+  }
+
+  function crownTag(r) {
+    if (!r || !r.crowns) return null;
+    return h('span', { class: 'kk-crown', 'aria-label': r.crowns + ' ' + M.plural(r.crowns, 'корона', 'короны', 'корон') }, [crownIcon(11), r.crowns > 1 ? String(r.crowns) : null]);
+  }
+
   function initials(name) {
     var parts = String(name || '').trim().split(/\s+/);
     return ((parts[0] || '?').charAt(0) + (parts[1] ? parts[1].charAt(0) : '')).toUpperCase();
@@ -173,6 +196,8 @@
     return api('GET', '/client/hockey/matches').then(function (data) {
       state.matches = (data && data.items) || [];
       state.me = data && data.me;
+      state.race = (data && data.race) || null;
+      state.leader = (data && data.leader) || null;
     });
   }
 
@@ -363,7 +388,9 @@
       ]);
     }
 
+    var final = m.race_final ? h('span', { class: 'kk-sticker kk-sticker--final', 'aria-hidden': 'true', text: 'ФИНАЛ МЕСЯЦА' }) : null;
     var kids = [
+      final,
       h('div', { class: 'kk-kicker' }, started
         ? [h('span', { class: 'kk-kicker__live', 'aria-hidden': 'true' }), 'матч идёт · ходы закрыты']
         : [M.kicker(m.starts_at)]),
@@ -382,7 +409,11 @@
         h('span', { class: 'kk-chip', text: has ? 'счёт' : '+' + M.EXACT }),
       ]));
     }
-    return h('article', { class: 'kk-card', 'aria-label': m.home.name + ' — ' + m.away.name }, kids);
+    // Финал месяца: одна строка факта, без шансов и подсказок (холст гонки, экран 2).
+    if (m.race_final && !started && state.leader) {
+      kids.push(h('p', { class: 'kk-race-note', text: 'Последний матч месяца · ' + M.leaderNote(state.leader) }));
+    }
+    return h('article', { class: 'kk-card' + (m.race_final ? ' kk-card--final' : ''), 'aria-label': m.home.name + ' — ' + m.away.name + (m.race_final ? ', финал месяца' : '') }, kids);
   }
 
   function finalCard(m, colors, mine) {
@@ -500,8 +531,17 @@
     if (!state.tableKeyChosen) state.tableKey = leagues.length ? leagues[0].id : 'all';
     var key = state.tableKey;
     var chips = leagues.map(function (l) { return [l.id, l.name]; }).concat([['all', 'Все']]);
+    var race = (key === 'all' ? state.standings && state.standings.race : state.leagueTables[key] && state.leagueTables[key].race) || state.race;
+    var head = M.raceHead(race);
+    var segs = M.raceSegments(race);
     var out = [
-      h('h2', { class: 'kk-h2', text: 'таблица' }),
+      h('div', { class: 'kk-race-head' }, [
+        h('h2', { class: 'kk-h2', text: head.title }),
+        head.left ? h('span', { class: 'kk-race-left', text: head.left }) : null,
+      ]),
+      segs.length ? h('div', { class: 'kk-race-bar', role: 'img', 'aria-label': head.left + (segs[segs.length - 1] === 'final' ? ', последний матч — финал месяца' : ''), style: 'grid-template-columns:repeat(' + segs.length + ',minmax(0,1fr))' }, segs.map(function (x) {
+        return h('span', { class: 'kk-race-bar__seg kk-race-bar__seg--' + x });
+      })) : null,
       h('div', { class: 'kk-seg', role: 'tablist' }, chips.map(function (c) {
         return h('button', {
           type: 'button',
@@ -536,7 +576,12 @@
     if (!rows.length) {
       return out.concat([empty('таблица заполнится после первого матча', 'Тапни за команду — и после финальной сирены ты уже в ней.', 'К матчам', function () { go('matches'); }, ['#e2502c', '#1747b5'])]);
     }
-    return out.concat([podium(rows.slice(0, 3)), list(rows.slice(3))]);
+    var chase = M.chaseLine(rows);
+    return out.concat([
+      podium(rows.slice(0, 3)),
+      chase ? h('div', { class: 'kk-chase' }, [h('span', { text: chase.text }), chase.num ? h('span', { class: 'kk-chase__num', text: chase.num }) : null]) : null,
+      list(rows.slice(3)),
+    ]);
   }
 
   function nameOf(r) {
@@ -565,7 +610,7 @@
       var place = i === 1 ? 1 : i === 0 ? 2 : 3;
       return h('div', { class: 'kk-podium__col' }, [
         avaOf(r, place === 1 ? 60 : 48),
-        h('span', { class: 'kk-podium__name', text: nameOf(r) }),
+        h('span', { class: 'kk-podium__name' }, [nameOf(r), crownTag(r)]),
         titleTag(r),
         h('div', { class: 'kk-podium__block kk-podium__block--' + place }, [
           h('span', { class: 'kk-display', style: 'font-size:22px', text: String(r.rank) }),
@@ -582,7 +627,7 @@
         h('span', { class: 'kk-list__pos', text: String(r.rank) }),
         avaOf(r, 34),
         h('span', { class: 'kk-list__who' }, [
-          h('span', { class: 'kk-list__name', style: r.is_me ? 'font-weight:800' : '', text: nameOf(r) }),
+          h('span', { class: 'kk-list__name', style: r.is_me ? 'font-weight:800' : '' }, [nameOf(r), crownTag(r)]),
           titleTag(r),
         ]),
         r.exact ? h('span', { class: 'kk-list__meta', text: r.exact + ' ' + M.plural(r.exact, 'точный', 'точных', 'точных') }) : null,
@@ -756,7 +801,27 @@
         h('p', { class: 'kk-hint', style: 'font-weight:700', text: n + ' ' + M.plural(n, 'человек', 'человека', 'человек') + (me ? ' · ты ' + me.rank + '-й · ' + M.points(me.points) : '') }),
       ]),
       h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', style: 'min-height:52px;font-size:16px', onclick: function () { shareCard({ card: 'league', league_id: t.id }, t.invite_url, inviteText(t.name)); } }, [icon(I_INVITE), 'Позвать друзей']),
+      crownWall(t.wall),
+      n > 1 ? h('h3', { class: 'kk-h3', text: M.raceHead(t.race).title }) : null,
       n > 1 ? list(t.items) : h('p', { class: 'kk-hint', text: 'Пока в лиге только ты. Позови друзей — таблица оживёт после первого матча.' }),
+    ]);
+  }
+
+  /** Стена корон лиги: сезон — это короны по месяцам, а не сумма очков (PDEC-027). */
+  function crownWall(wall) {
+    if (!wall || !wall.length) return null;
+    var LABEL = { running: 'идёт', counting: 'считаем', empty: 'без короны', ahead: '' };
+    return h('section', { class: 'kk-wall', 'aria-label': 'Короны лиги' }, [
+      h('h3', { class: 'kk-h3', text: 'короны лиги' }),
+      h('div', { class: 'kk-wall__grid' }, wall.map(function (w) {
+        var who = (w.winners || []).map(function (x) { return x.display_name; }).join(', ');
+        return h('div', { class: 'kk-wall__tile kk-wall__tile--' + w.state }, [
+          h('span', { class: 'kk-wall__mo', text: w.title.toUpperCase() }),
+          w.state === 'crowned'
+            ? h('span', { class: 'kk-wall__who' }, [crownIcon(14), who])
+            : LABEL[w.state] ? h('span', { class: 'kk-wall__note', text: LABEL[w.state] }) : null,
+        ]);
+      })),
     ]);
   }
 
@@ -905,10 +970,53 @@
       h('div', { class: 'kk-hero__body', style: 'align-items:center;text-align:center' }, [
         h('span', { class: 'kk-display', style: 'background:#ffd23f;color:#0d1424;border-radius:20px;padding:10px 18px;font-size:22px;transform:rotate(-5deg)', text: 'ты в лиге' }),
         h('p', { class: 'kk-hero__title', style: 'font-size:28px', text: l.name }),
+        M.remainingLine(state.race) ? h('p', { class: 'kk-hero__text', style: 'max-width:300px;opacity:.85', text: M.remainingLine(state.race) }) : null,
         h('p', { class: 'kk-hero__text', style: 'max-width:290px', text: next ? 'Первый ход — ' + M.whenLabel(next.starts_at, new Date()).split(',')[0] + ': ' + next.home.name + ' или ' + next.away.name + '?' : 'Как только Динамо поставят матч, тапни за команду.' }),
       ]),
       h('button', { type: 'button', class: 'kk-btn', style: 'background:#fff;color:#0d1424', onclick: function () { go('matches'); }, text: 'Тапнуть за команду' }),
     ]);
+  }
+
+  // ---------- итоги месяца (TASK-334) ----------
+
+  function monthView() {
+    var res = state.month;
+    if (!res) return null;
+    var won = res.won;
+    var kicker = 'ИТОГИ: ' + res.title.toUpperCase() + (res.league ? ' · ' + res.league.name.toUpperCase() : '');
+    return h('div', { class: 'kk-hero kk-hero--blue' }, [
+      h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:12px' }, [
+        h('span', { style: 'font-size:13px;font-weight:800;letter-spacing:.06em;opacity:.8;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', text: kicker }),
+        h('button', { type: 'button', class: 'kk-icon-btn', style: 'background:rgba(255,255,255,.14);color:#fff;flex:none', 'aria-label': 'Закрыть', onclick: function () { go('table'); } }, [icon(['M6 6l12 12', 'M18 6L6 18'])]),
+      ]),
+      h('div', { class: 'kk-hero__body', style: 'align-items:center;text-align:center;gap:18px' }, [
+        h('span', { class: 'kk-month-badge' + (won ? '' : ' kk-month-badge--miss') }, [won ? crownIcon(64) : h('span', { class: 'kk-display', text: res.rank ? String(res.rank) : '–' })]),
+        h('p', { class: 'kk-hero__title', style: 'font-size:38px;line-height:1.05', text: M.monthHead(res) }),
+        h('p', { class: 'kk-hero__text', style: 'max-width:300px', text: M.monthLine(res) }),
+      ]),
+      res.podium && res.podium.length ? h('ol', { class: 'kk-month-podium' }, res.podium.map(function (p) {
+        return h('li', { style: p.is_me ? 'font-weight:800' : '' }, [
+          h('span', { class: 'kk-display', style: 'width:20px', text: String(p.rank) }),
+          h('span', { style: 'flex:1;display:flex;align-items:center;gap:6px;min-width:0' }, [p.is_me ? 'Ты' : p.display_name, p.crown ? h('span', { style: 'color:#ffd23f;display:inline-flex' }, [crownIcon(14)]) : null]),
+          h('span', { class: 'kk-display', text: String(p.points) }),
+        ]);
+      })) : null,
+      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: brag }, [icon(['M21 4L3 11l6 2 2 6 3-4 5 4z']), won ? 'Похвастаться в чате' : res.winners && res.winners.length ? 'Поздравить в чате' : 'Позвать в новый месяц']),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', style: 'background:rgba(255,255,255,.12);opacity:1', onclick: function () { go('matches'); }, text: 'Новый месяц — все с нуля' }),
+    ]);
+
+    function brag() {
+      var leagues = state.leagues || [];
+      var league = (res.league && leagues.filter(function (l) { return l.id === res.league.id; })[0]) || leagues[0];
+      var where = res.league ? ' в «' + res.league.name + '»' : '';
+      var who = (res.winners || []).join(' и ');
+      var text = won
+        ? 'Корона «Кто кого» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
+        : who
+          ? 'Корона «Кто кого» за ' + res.title + where + ' досталась: ' + who + '. Поздравляю! В новом месяце — реванш.'
+          : '«Кто кого» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
+      share(league ? league.invite_url : null, text);
+    }
   }
 
   // ---------- итог матча ----------
@@ -978,9 +1086,9 @@
 
   function render() {
     var nodes = [];
-    var bare = state.view === 'created' || state.view === 'joined' || state.view === 'reveal' || (state.view === 'join' && state.joinCode);
+    var bare = state.view === 'created' || state.view === 'joined' || state.view === 'reveal' || state.view === 'month' || (state.view === 'join' && state.joinCode);
     if (bare) {
-      var v = state.view === 'created' ? createdView() : state.view === 'joined' ? joinedView() : state.view === 'reveal' ? revealView() : joinView();
+      var v = state.view === 'created' ? createdView() : state.view === 'joined' ? joinedView() : state.view === 'reveal' ? revealView() : state.view === 'month' ? monthView() : joinView();
       if (v) nodes.push(v);
       else {
         state.view = null;
@@ -1049,6 +1157,7 @@
     applyTheme();
     var code = (params.get('join') || M.inviteCode(startParam()) || '').toUpperCase();
     var reveal = Number(params.get('reveal')) || null;
+    var month = Number(params.get('month')) || null;
     var tab = params.get('tab');
     if (tab === 'table' || tab === 'leagues') state.tab = tab;
     render();
@@ -1071,6 +1180,14 @@
           api('POST', '/client/hockey/matches/' + reveal + '/seen').catch(function () {});
         }
         render();
+        if (month) {
+          api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {
+            state.month = data;
+            state.view = 'month';
+            render();
+            api('POST', '/client/hockey/races/' + month + '/seen').catch(function () {});
+          }, function () {});
+        }
         if (state.tab === 'table') go('table');
         if (state.tab === 'leagues') go('leagues');
         if (!state.leagues) loadLeagues().then(render, function () {});

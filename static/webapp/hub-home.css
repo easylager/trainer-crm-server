@@ -160,6 +160,7 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
   width: 58px; height: 58px; flex: none; border-radius: 16px; background: #ffd23f; color: #0d1424;
   display: flex; align-items: center; justify-content: center; font: 400 22px/1 var(--g-font-display); transform: rotate(-6deg);
 }
+.hn__crown { width: 30px; height: 30px; }
 .hn__sticker--miss { background: rgba(255, 255, 255, .16); color: #fff; }
 .hn__card--dark .hn__sub { color: var(--g-on-dark-muted); }
 .hn__head { font-size: 24px; line-height: 1; }
