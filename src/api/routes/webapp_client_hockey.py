@@ -298,3 +298,34 @@ async def put_client_hockey_double(
         raise HTTPException(status_code=409, detail=detail) from None
     await session.commit()
     return {"double": await my_double(session, player_key=player_key, now=now)}
+
+
+class RemindBody(BaseModel):
+    on: bool
+    display_name: str | None = None
+
+
+@router.get("/client/hockey/remind")
+async def get_client_hockey_remind(
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from src.application.hockey_notices import remind_on
+
+    return {"on": await remind_on(session, client_catalog_telegram_key(principal))}
+
+
+@router.put("/client/hockey/remind")
+async def put_client_hockey_remind(
+    body: RemindBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+) -> dict:
+    """Напоминать за час до матча и присылать итог (TASK-335). Включает только сам игрок."""
+    from src.application.hockey_notices import set_remind
+
+    name = _player_name(body.display_name, x_telegram_init_data or "")
+    on = await set_remind(session, client_catalog_telegram_key(principal), body.on, display_name=name)
+    await session.commit()
+    return {"on": on}

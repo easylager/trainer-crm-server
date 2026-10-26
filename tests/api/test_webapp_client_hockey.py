@@ -293,3 +293,19 @@ async def test_month_race_result_and_seen(app_use_test_db, db_session) -> None:
             seen = await client.post(f"/api/webapp/client/hockey/races/{race.id}/seen")
             assert seen.status_code == 204
     assert await fresh_race_result(db_session, player_key=ME, now=dec) is None
+
+
+@pytest.mark.asyncio
+async def test_remind_toggle_and_double_errors(app_use_test_db, db_session) -> None:
+    """TASK-335: напоминания включает сам игрок; ×2 без хода — понятная ошибка."""
+    now = datetime.now(timezone.utc)
+    match_id = await _insert_match(db_session, starts_at=now + timedelta(days=1))
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            assert (await client.get("/api/webapp/client/hockey/remind")).json() == {"on": False}
+            on = await client.put("/api/webapp/client/hockey/remind", json={"on": True, "display_name": "Саша"})
+            assert on.status_code == 200 and on.json() == {"on": True}
+            assert (await client.get("/api/webapp/client/hockey/remind")).json() == {"on": True}
+            double = await client.put(f"/api/webapp/client/hockey/matches/{match_id}/double", json={"on": True})
+            assert double.status_code == 409
