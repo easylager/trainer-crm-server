@@ -482,11 +482,20 @@ async def run_tick(
     from src.application.hockey_game import score_finished_matches
 
     scored = await score_finished_matches(session, now=now)
+    # Гонка месяца (TASK-334): текущая и прошлая есть всегда; календарь прочитан — финал месяца известен;
+    # прошёл месяц и всё посчитано — короны.
+    from src.application.hockey_races import close_due_races, ensure_races, mark_calendar_synced
+
+    await ensure_races(session, now=now)
+    if calendar is not None:
+        await mark_calendar_synced(session, now=now)
+    closed_races = await close_due_races(session, now=now)
     return {
         "calendar": calendar,
         "calendar_failed": calendar_failed,
         "calendar_error": calendar_error,
         "scored_picks": scored,
+        "closed_races": closed_races,
         "checked": len(results),
         "final": sum(1 for _, kind in results if kind == KIND_FINAL),
         "review": sum(1 for _, kind in results if kind == KIND_REVIEW),
