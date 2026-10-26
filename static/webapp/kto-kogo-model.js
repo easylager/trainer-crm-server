@@ -290,7 +290,7 @@
 
   function monthLine(res) {
     var where = res.league ? 'в «' + res.league.name + '»' : 'в общей таблице';
-    if (res.won) return 'Первое место ' + where + ' · ' + points(res.points);
+    if (res.won) return 'Первое место ' + where + NBSP + '· ' + points(res.points);
     if (res.rank == null) return 'В этом месяце без твоих ходов ' + where;
     if (!res.gap) return 'Ты ' + res.rank + '-й ' + where;
     return 'Ты ' + res.rank + '-й ' + where + ', до короны не хватило ' + points(res.gap);

@@ -148,7 +148,7 @@ describe('гонка месяца (TASK-334)', () => {
     assert.equal(M.leaderNote({ gap: 0, me_leading: true }), 'Очков поровну — решит финал');
     const won = { title: 'ноябрь', won: true, points: 280, league: { name: 'ОХМ' }, winners: ['Я'] };
     assert.equal(M.monthHead(won), 'ноябрь твой');
-    assert.equal(M.monthLine(won), 'Первое место в «ОХМ» · 280' + NBSP + 'очков');
+    assert.equal(M.monthLine(won), 'Первое место в «ОХМ»' + NBSP + '· 280' + NBSP + 'очков');
     const lost = { title: 'ноябрь', won: false, rank: 2, gap: 10, points: 250, league: null, winners: ['Катя', 'Саша'] };
     assert.equal(M.monthHead(lost), 'корона — Катя и Саша');
     assert.equal(M.monthLine(lost), 'Ты 2-й в общей таблице, до короны не хватило 10' + NBSP + 'очков');

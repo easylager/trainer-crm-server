@@ -250,7 +250,7 @@ body.kk-dark .kk-stepper__num { color: var(--kk-ink); }
 .kk-chase { background: var(--kk-hero); color: #ffffff; border-radius: 20px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 15px; font-weight: 700; }
 .kk-chase__num { font-family: var(--kk-display); font-weight: 800; white-space: nowrap; }
 .kk-crown { display: inline-flex; align-items: center; gap: 2px; height: 20px; padding: 0 6px; margin-left: 6px; border-radius: 6px; background: var(--kk-sticker); color: var(--kk-on-sticker); font: 800 11px/1 var(--kk-display); vertical-align: middle; flex: none; }
-.kk-card--final { box-shadow: 0 0 0 3px var(--kk-ink); margin-top: 6px; }
+.kk-card--final { box-shadow: 0 0 0 3px var(--kk-ink); margin-top: 6px; padding-top: 24px; }
 .kk-sticker--final { top: -13px; font-size: 12px; padding: 6px 10px; border-radius: 8px; transform: rotate(-3deg); }
 .kk-race-note { margin: 2px 0 0; background: var(--kk-dark-fill); color: var(--kk-on-dark); border-radius: 16px; padding: 10px 12px; font-size: 14px; font-weight: 700; }
 .kk-h3 { font-family: var(--kk-display); font-weight: 800; font-size: 18px; letter-spacing: -0.01em; margin: 6px 0 0; }
