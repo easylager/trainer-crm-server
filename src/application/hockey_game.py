@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +64,51 @@ def season_start(now: datetime) -> datetime:
     local = _utc(now).astimezone(MINSK_TZ)
     year = local.year if local.month >= 8 else local.year - 1
     return datetime(year, 8, 1, tzinfo=MINSK_TZ).astimezone(timezone.utc)
+
+
+# Гонка месяца (PDEC-027, TASK-334): таблицы считают календарный месяц по Минску, 1-го все с нуля.
+# До первой гонки таблицы живут по-старому — сезоном до её начала.
+FIRST_RACE_MONTH = date(2026, 11, 1)
+MONTHS = (
+    "январь",
+    "февраль",
+    "март",
+    "апрель",
+    "май",
+    "июнь",
+    "июль",
+    "август",
+    "сентябрь",
+    "октябрь",
+    "ноябрь",
+    "декабрь",
+)
+
+
+@dataclass(frozen=True)
+class RaceWindow:
+    """Окно таблиц: матчи с ``since`` (включительно) до ``until`` (не включая) по времени начала."""
+
+    since: datetime
+    until: datetime
+    title: str
+    monthly: bool
+
+
+def month_bounds(day: date) -> tuple[datetime, datetime]:
+    """Начало месяца и начало следующего — минская полночь, в UTC."""
+    start = datetime(day.year, day.month, 1, tzinfo=MINSK_TZ)
+    nxt = datetime(day.year + (day.month == 12), day.month % 12 + 1, 1, tzinfo=MINSK_TZ)
+    return start.astimezone(timezone.utc), nxt.astimezone(timezone.utc)
+
+
+def race_window(now: datetime) -> RaceWindow:
+    local = _utc(now).astimezone(MINSK_TZ).date()
+    if local.replace(day=1) >= FIRST_RACE_MONTH:
+        since, until = month_bounds(local)
+        return RaceWindow(since=since, until=until, title=MONTHS[local.month - 1], monthly=True)
+    first, _ = month_bounds(FIRST_RACE_MONTH)
+    return RaceWindow(since=season_start(now), until=first, title="сезон", monthly=False)
 
 
 def normalize_pick(
@@ -138,7 +183,7 @@ _STANDINGS = text("""
                COUNT(*)::int AS played
         FROM hockey_picks AS p
         JOIN hockey_matches AS m ON m.id = p.match_id
-        WHERE p.points IS NOT NULL AND m.starts_at >= :season_start
+        WHERE p.points IS NOT NULL AND m.starts_at >= :since AND m.starts_at < :until
         GROUP BY p.player_key
     ), ranked AS (
         SELECT t.*, pl.display_name,
@@ -233,13 +278,19 @@ async def score_finished_matches(session: AsyncSession, *, now: datetime) -> int
     return int(scored)
 
 
+def _window_params(now: datetime) -> dict:
+    window = race_window(now)
+    return {"since": window.since, "until": window.until}
+
+
 async def standings(session: AsyncSession, *, now: datetime, limit: int = 50) -> list[Standing]:
-    params = {"exact": POINTS_EXACT, "season_start": season_start(now), "player_key": None, "limit": limit}
+    """Общая таблица текущей гонки (месяц; до первой гонки — сезон)."""
+    params = {"exact": POINTS_EXACT, **_window_params(now), "player_key": None, "limit": limit}
     return [Standing(**r._mapping) for r in (await session.execute(_STANDINGS, params)).all()]
 
 
 async def player_standing(session: AsyncSession, player_key: int, *, now: datetime) -> Standing | None:
-    params = {"exact": POINTS_EXACT, "season_start": season_start(now), "player_key": player_key, "limit": 1}
+    params = {"exact": POINTS_EXACT, **_window_params(now), "player_key": player_key, "limit": 1}
     record = (await session.execute(_STANDINGS, params)).one_or_none()
     return None if record is None else Standing(**record._mapping)
 
@@ -257,6 +308,8 @@ async def player_matches(
 
 
 __all__ = [
+    "FIRST_RACE_MONTH",
+    "MONTHS",
     "POINTS_DIFF",
     "POINTS_EXACT",
     "POINTS_GOALS",
@@ -265,11 +318,14 @@ __all__ = [
     "pick_points",
     "Pick",
     "PicksClosed",
+    "RaceWindow",
     "Standing",
     "make_pick",
+    "month_bounds",
     "normalize_pick",
     "player_matches",
     "player_standing",
+    "race_window",
     "score_finished_matches",
     "season_start",
     "standings",

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.hockey_event import enabled as hockey_enabled
 from src.application.hockey_event import event_href, is_home, kk_hidden
 from src.application.hockey_matches import DINAMO
-from src.application.hockey_game import POINTS_EXACT, season_start
+from src.application.hockey_game import POINTS_EXACT, race_window
 from src.application.hockey_teams import team_card
 
 RESULT_WINDOW = timedelta(hours=24)
@@ -141,7 +141,7 @@ _LAST_FINALS = text("""
     LIMIT :limit
     """)
 
-# То же место, что в таблице лиги: очки за матчи после вступления, при равенстве — точные счета.
+# То же место, что в таблице лиги: очки гонки за матчи после вступления, при равенстве — точные счета.
 # Лучшая лига — меньший rank.
 _BEST_PLACE = text("""
     WITH my AS (
@@ -158,7 +158,7 @@ _BEST_PLACE = text("""
         LEFT JOIN hockey_picks AS p ON p.player_key = mb.player_key AND p.points IS NOT NULL
             AND EXISTS (
                 SELECT 1 FROM hockey_matches AS m
-                WHERE m.id = p.match_id AND m.starts_at >= GREATEST(:season_start, mb.joined_at)
+                WHERE m.id = p.match_id AND m.starts_at >= GREATEST(:since, mb.joined_at) AND m.starts_at < :until
             )
         GROUP BY mb.league_id, mb.player_key
     ),
@@ -182,15 +182,13 @@ _MARK_SEEN = text("""
     """)
 
 
-async def _best_place(session: AsyncSession, player_key: int, *, now: datetime) -> dict | None:
+async def _best_place(session: AsyncSession, player_key: int, *, at: datetime) -> dict | None:
+    """Место в лучшей лиге в гонке, где был матч ``at``: итог матча 30-го смотрят и 1-го числа."""
+    window = race_window(at)
     row = (
         await session.execute(
             _BEST_PLACE,
-            {
-                "player_key": player_key,
-                "exact": POINTS_EXACT,
-                "season_start": season_start(now),
-            },
+            {"player_key": player_key, "exact": POINTS_EXACT, "since": window.since, "until": window.until},
         )
     ).one_or_none()
     if row is None:
@@ -273,7 +271,7 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
             "match": _match(result._mapping, now=now),
             "my_pick": pick,
             "points": None if pick is None else pick["points"],
-            "place": await _best_place(session, player_key, now=now),
+            "place": await _best_place(session, player_key, at=_utc(result._mapping["starts_at"])),
             **_event_fields(result._mapping),
         }
     if mode == "before" and upcoming is not None:
