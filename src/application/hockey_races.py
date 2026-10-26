@@ -422,7 +422,32 @@ async def race_result(session: AsyncSession, *, player_key: int, race: Race) -> 
     }
 
 
+_LEAGUE_NAME = text("SELECT name FROM hockey_leagues WHERE id = :league_id")
+
+
+async def crown_card_data(session: AsyncSession, *, race_id: int, league_id: int | None) -> dict | None:
+    """Что нарисовать на карточке короны: месяц, где (лига или общая), чемпионы. Гонка не закрыта — ничего."""
+    race = await race_by_id(session, race_id)
+    if race is None or race.closed_at is None:
+        return None
+    if league_id is None:
+        where = "общая таблица"
+    else:
+        name = (await session.execute(_LEAGUE_NAME, {"league_id": league_id})).scalar_one_or_none()
+        if name is None:
+            return None
+        where = f"«{name}»"
+    winners = await race_winners(session, race_id=race_id, league_id=league_id)
+    return {
+        "title": race.title,
+        "where": where,
+        "winners": [w["display_name"] for w in winners],
+        "points": winners[0]["points"] if winners else 0,
+    }
+
+
 __all__ = [
+    "crown_card_data",
     "KIND_MONTH",
     "LEAGUE_CROWN_MIN_MEMBERS",
     "POINTS_RULE",

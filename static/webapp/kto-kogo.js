@@ -1015,7 +1015,8 @@
         : who
           ? 'Корона «Кто кого» за ' + res.title + where + ' досталась: ' + who + '. Поздравляю! В новом месяце — реванш.'
           : '«Кто кого» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
-      share(league ? league.invite_url : null, text);
+      // Карточка короны с кнопкой в лигу (TASK-334); без бота — та же мысль текстом через t.me/share.
+      shareCard({ card: 'crown', race_id: res.race_id }, league ? league.invite_url : null, text);
     }
   }
 

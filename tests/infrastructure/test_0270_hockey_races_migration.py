@@ -56,6 +56,7 @@ async def test_races_crowns_unique_and_roundtrip(db_session) -> None:
         )
     ).scalar_one()
     assert league == "Динамо-Минск"
+    await db_session.execute(text("INSERT INTO hockey_card_events (kind, card) VALUES ('shared', 'crown')"))
     await _step(db_session, "downgrade")
     assert not await _exists(db_session, "hockey_races")
     await _step(db_session, "upgrade")

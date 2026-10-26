@@ -205,3 +205,55 @@ async def test_share_without_telegram_photo_still_returns_link(
     assert r.status_code == 200, r.text
     assert prepared[-1]["photo"] is None, "без https Telegram картинку не заберёт — шлём текст"
     assert r.json()["url"].endswith("startapp=kkl_" + league["invite_url"].split("kk_", 1)[1])
+
+
+@pytest.mark.asyncio
+async def test_crown_card_share_and_signed_image(app_use_test_db, db_session, prepared) -> None:
+    """TASK-334: корона месяца в чат — подпись чемпиона и поздравление, картинка по подписанному адресу."""
+    from src.application.hockey_game import make_pick
+    from src.application.hockey_leagues import create_league, join_by_code
+    from src.application.hockey_races import close_due_races, ensure_month_race
+    from src.ingestion.hockey_sources import MINSK_TZ
+
+    nov = datetime(2026, 11, 10, 12, 0, tzinfo=MINSK_TZ)
+    dec = datetime(2026, 12, 1, 12, 0, tzinfo=MINSK_TZ)
+    league = await create_league(db_session, owner_key=ME, owner_name="Саша", name="ОХМ")
+    await join_by_code(db_session, player_key=FRIEND, display_name="Катя", code=league.invite_code)
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :at WHERE league_id = :l"),
+        {"at": datetime(2026, 11, 1, tzinfo=MINSK_TZ), "l": league.id},
+    )
+    race = await ensure_month_race(db_session, now=nov)
+    starts = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
+    match_id = await _insert_match(db_session, starts_at=starts)
+    for player, score in ((ME, (3, 1)), (FRIEND, (2, 1))):
+        await make_pick(
+            db_session,
+            player_key=player,
+            display_name="x",
+            match_id=match_id,
+            home_score=score[0],
+            away_score=score[1],
+            now=starts - timedelta(hours=1),
+        )
+    await set_manual_result(db_session, match_id, home_score=3, away_score=1, decided_in="regulation", now=dec)
+    await score_finished_matches(db_session, now=dec)
+    assert await close_due_races(db_session, now=dec) == [race.id]
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            mine = await client.post("/api/webapp/client/hockey/share", json={"card": "crown", "race_id": race.id})
+        assert mine.status_code == 200, mine.text
+        assert mine.json()["text"].startswith("Кто кого: корона за ноябрь в «ОХМ» — моя.")
+        assert mine.json()["url"] == f"https://t.me/glide_test_bot?startapp=kkl_{league.invite_code}"
+        photo = prepared[-1]["photo"]
+        assert photo.startswith(f"https://glide.test/kk/c/{race.id}/{league.id}/")
+        png = await client.get(_path(photo))
+        assert png.status_code == 200 and Image.open(io.BytesIO(png.content)).size == (1200, 630)
+        assert (await client.get(f"/kk/c/{race.id}/{league.id}/0000000000000000.png")).status_code == 404
+
+        with patch_client_principal(FRIEND):
+            theirs = await client.post("/api/webapp/client/hockey/share", json={"card": "crown", "race_id": race.id})
+        assert theirs.status_code == 200, theirs.text
+        assert "Поздравляю" in theirs.json()["text"]

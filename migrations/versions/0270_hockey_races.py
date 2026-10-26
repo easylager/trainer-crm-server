@@ -63,6 +63,11 @@ def upgrade() -> None:
         sa.Column("race_id", sa.Integer(), sa.ForeignKey("hockey_races.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("seen_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
+    # Карточка короны в чат — новый вид в воронке карточек.
+    op.drop_constraint("ck_hockey_card_events_card", "hockey_card_events", type_="check")
+    op.create_check_constraint(
+        "ck_hockey_card_events_card", "hockey_card_events", "card IN ('result', 'league', 'crown')"
+    )
     op.add_column(
         "hockey_leagues",
         sa.Column("club", sa.String(64), nullable=False, server_default="Динамо-Минск"),
@@ -71,6 +76,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("hockey_leagues", "club")
+    op.execute("DELETE FROM hockey_card_events WHERE card = 'crown'")
+    op.drop_constraint("ck_hockey_card_events_card", "hockey_card_events", type_="check")
+    op.create_check_constraint("ck_hockey_card_events_card", "hockey_card_events", "card IN ('result', 'league')")
     op.drop_table("hockey_race_seen")
     op.drop_index("ix_hockey_crowns_league", table_name="hockey_crowns")
     op.execute("DROP INDEX IF EXISTS uq_hockey_crowns_race_scope_player")
