@@ -8,14 +8,23 @@
  * Грузить ПОСЛЕ mini-app-trainer-nav.css / -shell.css: те держат кнопки через !important.
  */
 
-body.ts-page {
-  background-color: var(--glide-bg);
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--glide-brand) 13%, var(--glide-bg)) 0,
-    var(--glide-bg) 360px
-  );
-  background-repeat: no-repeat;
+/* Тот же «рассвет» сверху, что на экране «О себе» (#onboardingFlow в mini-app-trainer-profile.css). */
+html body.ts-page {
+  background:
+    radial-gradient(
+        ellipse 125vw 55vh at 50% 0%,
+        rgba(69, 185, 187, 0.16) 0%,
+        rgba(69, 185, 187, 0.05) 45%,
+        rgba(69, 185, 187, 0) 72%
+      )
+      top / 100% 70vh no-repeat,
+    var(--glide-bg) !important;
+}
+html.trainer-theme-dark body.ts-page {
+  background:
+    radial-gradient(ellipse 125vw 55vh at 50% 0%, rgba(69, 185, 187, 0.14) 0%, rgba(69, 185, 187, 0) 62%) top / 100%
+      70vh no-repeat,
+    var(--glide-bg) !important;
 }
 
 /* Специфичность выше, чем у .trainer-mini-nav > button.btn-app-home/-back в nav.css, theme.css и shell.css. */
@@ -27,7 +36,7 @@ html body .trainer-mini-nav > button.ts-back {
   gap: 12px !important;
   min-height: 44px !important;
   margin: 0 !important;
-  padding: 0 16px 0 0 !important;
+  padding: 4px 16px 4px 0 !important;
   border: 0 !important;
   border-radius: 22px !important;
   background: transparent !important;
@@ -47,21 +56,23 @@ html body .trainer-mini-nav > button.ts-back[hidden] {
   display: none !important;
 }
 
+/* Круг как у крестика «О себе» (36 px, карточный фон, тень); область нажатия остаётся 44 px у кнопки. */
 .ts-back__ic {
   flex: none;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 1px solid var(--glide-line);
-  background: color-mix(in srgb, var(--glide-text) 7%, transparent);
+  background: var(--glide-card);
+  box-shadow: var(--glide-shadow-card);
   color: var(--glide-text);
-  transition: transform 0.12s ease, background-color 0.12s ease;
+  transition: transform 0.12s ease;
 }
 .ts-back:active .ts-back__ic {
-  transform: scale(0.94);
-  background: color-mix(in srgb, var(--glide-text) 14%, transparent);
+  transform: scale(0.95);
 }
 .ts-back__ic svg {
   display: block;
@@ -90,4 +101,26 @@ body .trainer-app-topbar.trainer-mini-nav.ts-nav {
 }
 .ts-header > .ts-nav {
   order: -1;
+}
+
+/* Шапка со строкой «заголовок + кнопка» была карточкой с срезом (mini-app-arena-ribbon.css).
+   Теперь кнопка стоит над заголовком на общем фоне, как на «Услугах и ценах». */
+html body.ar-pilot > .header.ts-header,
+html body.ar-pilot > * > .header.ts-header,
+html body .ts-header {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  clip-path: none !important;
+  padding: 0 16px 4px !important;
+  margin-bottom: 8px !important;
+}
+.ts-header .header-title,
+.ts-header .ref-page-title {
+  margin: 0;
+  font-size: 26px !important;
+  line-height: 1.15 !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+  text-transform: none !important;
 }

@@ -137,7 +137,7 @@
   /* Назад без перезагрузки: если пришли из «Профиля» и ничего не сохраняли, возвращаемся по истории —
      «Профиль» открывается из кэша, а не грузится заново. После сохранения — обычный переход, чтобы
      «Профиль» показал новые данные. */
-  var ICON_CHEVRON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+  var ICON_CHEVRON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
 
   function cameFromAccount() {
     try {
