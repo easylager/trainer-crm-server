@@ -39,6 +39,8 @@ async def _tables(db_session) -> list[str]:
 @pytest.mark.asyncio
 async def test_hockey_picks_roundtrip_and_score_side_guard(db_session) -> None:
     # Лиги (0246) ссылаются на игроков, «итог открыт» (0247) — колонка хода. Снимаем сверху.
+    # Гонки и короны (0270) ссылаются на игроков и лиги — их снимаем первыми.
+    await _run_migration_step(db_session, "downgrade", "0270_hockey_races.py")
     await _run_migration_step(db_session, "downgrade", SEEN_FILE)
     await _run_migration_step(db_session, "downgrade", DEPENDENT_FILE)
     await _run_migration_step(db_session, "downgrade")
