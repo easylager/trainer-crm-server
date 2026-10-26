@@ -26,6 +26,7 @@ from src.application.hockey_leagues import (
     player_leagues,
     rename_league,
 )
+from src.application.hockey_races import crown_counts, league_crown_wall, race_summary
 from src.application.hockey_share import record_card_event
 from src.application.place_links import telegram_open_link
 from src.shared.config import Settings
@@ -199,12 +200,15 @@ async def get_client_hockey_league(
         item for item in await player_leagues(session, player_key=player_key, now=now) if item.id == league_id
     )
     titles = await league_titles(session, league_id=league_id, now=now)
+    crowns = await crown_counts(session, league_id=league_id)
     return {
         "id": summary.id,
         "name": summary.name,
         "is_owner": summary.is_owner,
         "invite_url": invite_url_for_code(summary.invite_code),
-        "items": [_table_row(row, player_key, titles) for row in rows],
+        "race": await race_summary(session, now=now),
+        "wall": await league_crown_wall(session, league_id=league_id, now=now),
+        "items": [{**_table_row(row, player_key, titles), "crowns": crowns.get(row.player_key, 0)} for row in rows],
     }
 
 

@@ -30,6 +30,7 @@ from src.application.hockey_cards import (
 from src.application.hockey_match_share import card_image_url, match_link, match_share_payload, when_phrase
 from src.application.hockey_cards import match_card_version
 from src.application.hockey_leagues import league_preview
+from src.application.hockey_races import crown_card_data
 from src.application.hockey_matches import STATUS_FINAL, get_match
 from src.application.hockey_share import league_card
 from src.application.ice_company.service import minsk_arena
@@ -123,6 +124,25 @@ async def get_result_card_png(
     return Response(content=png, media_type="image/png", headers=_IMMUTABLE)
 
 
+@card_router.get("/kk/c/{race_id}/{league_id}/{sig}.png")
+async def get_crown_card_png(
+    race_id: int, league_id: int, sig: str, session: AsyncSession = Depends(get_session)
+) -> Response:
+    """Корона месяца (TASK-334): адрес подписан, чемпионы — из базы. Лига 0 — общая таблица."""
+    from src.application.hockey_cards import check_crown_card_sig, render_crown_card
+
+    if not check_crown_card_sig(Settings().telegram_bot_token_client, race_id, league_id, sig):  # type: ignore[call-arg]
+        raise HTTPException(status_code=404, detail="Карточка не найдена")
+    data = await crown_card_data(session, race_id=race_id, league_id=league_id or None)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Карточка не найдена")
+    png = await cached_png(
+        ("crown", data["title"], data["where"], tuple(data["winners"]), data["points"]),
+        lambda: render_crown_card(**data),
+    )
+    return Response(content=png, media_type="image/png", headers=_IMMUTABLE)
+
+
 @card_router.get("/kk/l/{code}.png")
 async def get_league_card_png(code: str, session: AsyncSession = Depends(get_session)) -> Response:
     """Приглашение в лигу. Адрес несёт ?v= от содержимого — новая версия, новый адрес."""
@@ -157,7 +177,9 @@ async def _match_card(session: AsyncSession, match_id: int, *, invite: bool, sto
     # Ключ — команды, время и тон, а не версия из адреса: «/kk/m/11/любое.png» не рисуется заново.
     png = await cached_png(
         ("match", row.home_team, row.away_team, row.starts_at.isoformat(), invite, story),
-        lambda: render_match_card(home=row.home_team, away=row.away_team, starts_at=row.starts_at, invite=invite, story=story),
+        lambda: render_match_card(
+            home=row.home_team, away=row.away_team, starts_at=row.starts_at, invite=invite, story=story
+        ),
     )
     # Версия в адресе меняется вместе с командами и временем, поэтому кэш на час безопасен;
     # старая ссылка из давно отправленного сообщения получает актуальную картинку, а не 404.
@@ -199,8 +221,7 @@ async def get_match_share_page(
     hop = ""
     if not _preview_bot(request):
         hop = (
-            f'<meta http-equiv="refresh" content="0; url={e(go)}">'
-            f"<script>location.replace({json.dumps(go)});</script>"
+            f'<meta http-equiv="refresh" content="0; url={e(go)}"><script>location.replace({json.dumps(go)});</script>'
         )
     page = f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">

@@ -2,7 +2,8 @@
  * «Кто кого» — экран игры в Mini App (TASK-299). Макет: claude.ai/artifact/QxDWNDDKXcHYJdZFv6uPvt, экраны 1–5, 10–14.
  *
  * Вкладки: матчи, таблица, лиги. Поверх них — лига изнутри, создание лиги, вход по ссылке (?join=КОД или
- * startapp=kk_КОД), итог матча (?reveal=<id матча>, открывается из строки на главной).
+ * startapp=kk_КОД), итог матча (?reveal=<id матча>, открывается из строки на главной), итоги месяца
+ * (?month=<id гонки>, TASK-334; холст гонки месяца: claude.ai/artifact/4h6iFvDSrMtckeduVzj2Vn).
  * Чужие имена попадают в DOM только через textContent.
  */
 (function () {
@@ -32,6 +33,11 @@
     joinPreview: null,
     joinError: '',
     revealId: null,
+    race: null, // гонка месяца из /matches: шапка таблицы, финал
+    leader: null, // строка под финалом месяца
+    month: null, // итоги месяца для экрана ?month=
+    double: null, // ×2 месяца: {match_id, locked}; null — гонки месяца ещё нет (TASK-335)
+    remind: null, // напоминания в бот: true | false | null (не загружено)
     sheet: null, // {kind:'score', matchId, home, away} | {kind:'menu'} | {kind:'rename', draft} | {kind:'leave'}
     draftName: '',
     createError: '',
@@ -143,6 +149,26 @@
   var I_INVITE = ['M16 11a4 4 0 1 0-8 0', 'M4 20c1.5-3 4.5-4.5 8-4.5s6.5 1.5 8 4.5', 'M19 3v4', 'M17 5h4'];
   var I_LOCK = ['M7 11V8a5 5 0 0 1 10 0v3', 'M5 11h14v9H5z'];
   var I_PLUS = ['M12 5v14', 'M5 12h14'];
+  var I_BELL = ['M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.9 1.9 0 0 0 3.4 0'];
+
+  /** Корона — залитая, не контурная: так она читается на жёлтом и в 11 px. */
+  function crownIcon(size) {
+    var s = document.createElementNS(SVG_NS, 'svg');
+    s.setAttribute('width', size);
+    s.setAttribute('height', size);
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('fill', 'currentColor');
+    s.setAttribute('aria-hidden', 'true');
+    var p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', 'M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z');
+    s.appendChild(p);
+    return s;
+  }
+
+  function crownTag(r) {
+    if (!r || !r.crowns) return null;
+    return h('span', { class: 'kk-crown', 'aria-label': r.crowns + ' ' + M.plural(r.crowns, 'корона', 'короны', 'корон') }, [crownIcon(11), r.crowns > 1 ? String(r.crowns) : null]);
+  }
 
   function initials(name) {
     var parts = String(name || '').trim().split(/\s+/);
@@ -173,7 +199,85 @@
     return api('GET', '/client/hockey/matches').then(function (data) {
       state.matches = (data && data.items) || [];
       state.me = data && data.me;
+      state.race = (data && data.race) || null;
+      state.leader = (data && data.leader) || null;
+      state.double = (data && data.double) || null;
     });
+  }
+
+  function loadRemind() {
+    return api('GET', '/client/hockey/remind').then(function (data) {
+      state.remind = !!(data && data.on);
+    }, function () { state.remind = null; });
+  }
+
+  /**
+   * Напоминания в бот (TASK-335). Включает сам игрок: сначала Telegram спрашивает, можно ли боту писать.
+   * Отказ — не включаем: иначе бот промолчит, а игрок будет ждать.
+   */
+  function setRemind(on) {
+    function save() {
+      api('PUT', '/client/hockey/remind', { on: on })
+        .then(function (r) {
+          state.remind = !!(r && r.on);
+          haptic('success');
+          toast(on ? 'Напомню за час до каждого матча' : 'Напоминания выключены');
+          render();
+        })
+        .catch(function (e) { toast(e.message); });
+    }
+    if (!on || !tg || typeof tg.requestWriteAccess !== 'function') return save();
+    try {
+      tg.requestWriteAccess(function (granted) {
+        if (granted === true) save();
+        else toast('Без разрешения бот не сможет напомнить');
+      });
+    } catch (e) {
+      save();
+    }
+  }
+
+  function remindBanner() {
+    if (state.remind === null) return null;
+    if (state.remind) {
+      return h('button', { type: 'button', class: 'kk-remind-on', onclick: function () { setRemind(false); } }, [
+        icon(I_BELL, 16), 'Напомню за час до каждого матча',
+      ]);
+    }
+    return h('div', { class: 'kk-remind' }, [
+      h('span', { class: 'kk-remind__icon', 'aria-hidden': 'true' }, [icon(I_BELL, 20)]),
+      h('span', { class: 'kk-remind__text' }, [
+        h('span', { class: 'kk-remind__title', text: 'Напомнить за час до матча' }),
+        h('span', { class: 'kk-remind__sub', text: 'и прислать итог с местом в лиге' }),
+      ]),
+      h('button', { type: 'button', class: 'kk-toggle', role: 'switch', 'aria-checked': 'false', 'aria-label': 'Напоминать за час до матча', onclick: function () { setRemind(true); } }, [h('span')]),
+    ]);
+  }
+
+  /** ×2 месяца: поставить, перенести или снять до начала матча. */
+  function toggleDouble(m) {
+    var on = !(m.my_pick && m.my_pick.doubled);
+    var before = state.matches.map(function (x) { return x.my_pick ? x.my_pick.doubled : false; });
+    var prevDouble = state.double;
+    state.matches.forEach(function (x) {
+      if (!x.my_pick) return;
+      if (x.id === m.id) x.my_pick.doubled = on;
+      else if (on && x.my_pick.doubled && x.open) x.my_pick.doubled = false;
+    });
+    state.double = { match_id: on ? m.id : null, locked: false };
+    haptic();
+    render();
+    api('PUT', '/client/hockey/matches/' + m.id + '/double', { on: on })
+      .then(function (r) {
+        state.double = (r && r.double) || state.double;
+        render();
+      })
+      .catch(function (e) {
+        state.matches.forEach(function (x, i) { if (x.my_pick) x.my_pick.doubled = before[i]; });
+        state.double = prevDouble;
+        toast(e.message);
+        render();
+      });
   }
 
   /** Скрыл строку игры на матче — вернуть её можно здесь, в самой игре («Ещё › Кто кого»). */
@@ -228,6 +332,8 @@
 
   function sendPick(match, body, optimistic) {
     var before = match.my_pick;
+    // ×2 живёт на ходе: смена стороны или счёта его не снимает (TASK-335).
+    if (before && before.doubled) optimistic.doubled = true;
     match.my_pick = optimistic;
     haptic();
     render();
@@ -363,7 +469,11 @@
       ]);
     }
 
+    var doubled = !!(mine && mine.doubled);
+    var stickerText = m.race_final ? (doubled ? 'ФИНАЛ МЕСЯЦА · ×2' : 'ФИНАЛ МЕСЯЦА') : doubled ? '×2 · МОЙ МАТЧ' : '';
+    var final = stickerText ? h('span', { class: 'kk-sticker kk-sticker--final', 'aria-hidden': 'true', text: stickerText }) : null;
     var kids = [
+      final,
       h('div', { class: 'kk-kicker' }, started
         ? [h('span', { class: 'kk-kicker__live', 'aria-hidden': 'true' }), 'матч идёт · ходы закрыты']
         : [M.kicker(m.starts_at)]),
@@ -371,18 +481,69 @@
     ];
     var names = { home: m.home.name, away: m.away.name };
     if (started) {
-      kids.push(h('p', { class: 'kk-note', text: M.stakeLine(mine, names, 'live') }));
+      kids.push(h('p', { class: 'kk-note', text: M.stakeLine(mine, names, 'live') + (doubled ? ' · ×2' : '') }));
+      var moves = m.friend_moves || [];
+      var cr = M.crowd(m, moves, mine);
+      if (cr) kids.push(crowdBlock(m, cr, colors));
+      if (moves.length) kids.push(movesList(moves, mine, m, colors));
     } else if (nudge) {
       kids.push(h('p', { class: 'kk-note', text: M.nudgeLine(friends, names) }));
     } else if (side) {
       var has = mine.home_score != null;
       kids.push(h('p', { class: 'kk-note', text: M.stakeLine(mine, names, 'open') }));
-      kids.push(h('button', { type: 'button', class: 'kk-btn-soft', onclick: function () { openScore(m); } }, [
+      var scoreBtn = h('button', { type: 'button', class: 'kk-btn-soft', onclick: function () { openScore(m); } }, [
         has ? 'Поменять счёт' : 'Угадать счёт',
         h('span', { class: 'kk-chip', text: has ? 'счёт' : '+' + M.EXACT }),
-      ]));
+      ]);
+      kids.push(state.double ? h('div', { class: 'kk-row2' }, [scoreBtn, x2Button(m, doubled)]) : scoreBtn);
     }
-    return h('article', { class: 'kk-card', 'aria-label': m.home.name + ' — ' + m.away.name }, kids);
+    // Финал месяца: одна строка факта, без шансов и подсказок (холст гонки, экран 2).
+    if (m.race_final && !started && state.leader) {
+      kids.push(h('p', { class: 'kk-race-note', text: 'Последний матч месяца · ' + M.leaderNote(state.leader) }));
+    }
+    var cls = 'kk-card' + (m.race_final || doubled ? ' kk-card--final' : '') + (doubled ? ' kk-card--x2' : '');
+    return h('article', { class: cls, 'aria-label': m.home.name + ' — ' + m.away.name + (m.race_final ? ', финал месяца' : '') + (doubled ? ', очки ×2' : '') }, kids);
+  }
+
+  /** Кнопка ×2: стоит здесь — жёлтая; ×2 месяца уже сыгран на другом матче — недоступна. */
+  function x2Button(m, on) {
+    var d = state.double || {};
+    var locked = !on && d.locked;
+    return h('button', {
+      type: 'button',
+      class: 'kk-x2' + (on ? ' kk-x2--on' : ''),
+      'aria-pressed': on ? 'true' : 'false',
+      'aria-label': locked ? '×2 этого месяца уже сыгран' : on ? 'Снять ×2 с этого матча' : 'Двойные очки на этот матч',
+      disabled: locked,
+      onclick: function () { toggleDouble(m); },
+      text: '×2',
+    });
+  }
+
+  /** Расклад друзей со стартом матча: «6 из 8 за Динамо-Минск» и полоса двух цветов. */
+  function crowdBlock(m, cr, colors) {
+    return h('div', { class: 'kk-crowd' }, [
+      h('div', { class: 'kk-crowd__head' }, [h('span', { class: 'kk-crowd__text', text: cr.text }), h('span', { class: 'kk-crowd__sub', text: 'твои лиги' })]),
+      h('div', { class: 'kk-crowd__bar', 'aria-hidden': 'true', style: 'grid-template-columns:' + Math.max(cr.home, 0.0001) + 'fr ' + Math.max(cr.away, 0.0001) + 'fr' }, [
+        h('span', { style: 'background:' + colors.home + (cr.home ? '' : ';display:none') }),
+        h('span', { style: 'background:' + colors.away + (cr.away ? '' : ';display:none') }),
+      ]),
+    ]);
+  }
+
+  /** Счета друзей: открываются со стартом матча (до него сервер их не отдаёт). */
+  function movesList(moves, mine, m, colors) {
+    var rows = [];
+    if (mine && M.pickSide(mine)) rows.push({ display_name: 'Ты', me: true, side: M.pickSide(mine), home_score: mine.home_score, away_score: mine.away_score, doubled: mine.doubled });
+    rows = rows.concat(moves);
+    return h('ol', { class: 'kk-moves', 'aria-label': 'Счета друзей' }, rows.map(function (x) {
+      return h('li', { class: x.me ? 'kk-me' : '' }, [
+        ava(x.display_name, 30, x.me),
+        h('span', { class: 'kk-moves__name' }, [x.me ? 'Ты' : x.display_name, x.doubled ? h('span', { class: 'kk-x2-badge', text: '×2' }) : null]),
+        h('span', { class: 'kk-moves__side', style: 'background:' + colors[x.side], 'aria-label': 'за ' + m[x.side].name }),
+        h('span', { class: x.home_score != null ? 'kk-moves__score' : 'kk-moves__none', text: M.friendMove(x) }),
+      ]);
+    }));
   }
 
   function finalCard(m, colors, mine) {
@@ -405,8 +566,9 @@
       }, [badge(m[which], colors[which]), h('span', { class: 'kk-team', text: m[which].name })]);
     }
     var pts = mine.points;
+    var total = M.totalPoints(mine);
     var move = M.moveLine(mine, { home: m.home.name, away: m.away.name });
-    var tail = pts == null ? move + ' · считаем очки' : move + ' · ' + M.verdict(pts).tail + (pts ? ' · +' + pts : '');
+    var tail = pts == null ? move + ' · считаем очки' : move + ' · ' + M.verdict(pts).tail + (pts ? ' · +' + total + (mine.doubled ? ' с ×2' : '') : '');
     return h('article', { class: 'kk-card', 'aria-label': m.home.name + ' — ' + m.away.name + ', ' + r.home_score + ':' + r.away_score }, [
       h('div', { class: 'kk-kicker', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] + ' · ' + M.decidedLabel(r.decided_in) }),
       h('div', { class: 'kk-halves kk-halves--result' }, [
@@ -415,7 +577,7 @@
         side('away'),
       ]),
       h('p', { class: 'kk-note', text: tail }),
-      pts != null ? h('span', { class: 'kk-sticker', 'aria-label': M.points(pts), text: pts ? '+' + pts : '0' }) : null,
+      pts != null ? h('span', { class: 'kk-sticker', 'aria-label': M.points(total), text: pts ? '+' + total + (mine.doubled ? ' ×2' : '') : '0' }) : null,
     ]);
   }
 
@@ -426,11 +588,13 @@
     }
     var now = Date.now();
     var nudged = false;
+    var banner = remindBanner();
     var cards = orderMatches(state.matches).map(function (m) {
       var ask = !nudged && m.open && !m.my_pick;
       if (ask) nudged = true;
       return matchCard(m, now, ask);
     });
+    if (banner) cards.unshift(banner);
     if (state.kkHidden) {
       cards.push(h('p', { class: 'kk-note', style: 'text-align:center' }, [
         'На страницах матчей игра скрыта · ',
@@ -500,8 +664,17 @@
     if (!state.tableKeyChosen) state.tableKey = leagues.length ? leagues[0].id : 'all';
     var key = state.tableKey;
     var chips = leagues.map(function (l) { return [l.id, l.name]; }).concat([['all', 'Все']]);
+    var race = (key === 'all' ? state.standings && state.standings.race : state.leagueTables[key] && state.leagueTables[key].race) || state.race;
+    var head = M.raceHead(race);
+    var segs = M.raceSegments(race);
     var out = [
-      h('h2', { class: 'kk-h2', text: 'таблица' }),
+      h('div', { class: 'kk-race-head' }, [
+        h('h2', { class: 'kk-h2', text: head.title }),
+        head.left ? h('span', { class: 'kk-race-left', text: head.left }) : null,
+      ]),
+      segs.length ? h('div', { class: 'kk-race-bar', role: 'img', 'aria-label': head.left + (segs[segs.length - 1] === 'final' ? ', последний матч — финал месяца' : ''), style: 'grid-template-columns:repeat(' + segs.length + ',minmax(0,1fr))' }, segs.map(function (x) {
+        return h('span', { class: 'kk-race-bar__seg kk-race-bar__seg--' + x });
+      })) : null,
       h('div', { class: 'kk-seg', role: 'tablist' }, chips.map(function (c) {
         return h('button', {
           type: 'button',
@@ -536,7 +709,12 @@
     if (!rows.length) {
       return out.concat([empty('таблица заполнится после первого матча', 'Тапни за команду — и после финальной сирены ты уже в ней.', 'К матчам', function () { go('matches'); }, ['#e2502c', '#1747b5'])]);
     }
-    return out.concat([podium(rows.slice(0, 3)), list(rows.slice(3))]);
+    var chase = M.chaseLine(rows);
+    return out.concat([
+      podium(rows.slice(0, 3)),
+      chase ? h('div', { class: 'kk-chase' }, [h('span', { text: chase.text }), chase.num ? h('span', { class: 'kk-chase__num', text: chase.num }) : null]) : null,
+      list(rows.slice(3)),
+    ]);
   }
 
   function nameOf(r) {
@@ -565,7 +743,7 @@
       var place = i === 1 ? 1 : i === 0 ? 2 : 3;
       return h('div', { class: 'kk-podium__col' }, [
         avaOf(r, place === 1 ? 60 : 48),
-        h('span', { class: 'kk-podium__name', text: nameOf(r) }),
+        h('span', { class: 'kk-podium__name' }, [nameOf(r), crownTag(r)]),
         titleTag(r),
         h('div', { class: 'kk-podium__block kk-podium__block--' + place }, [
           h('span', { class: 'kk-display', style: 'font-size:22px', text: String(r.rank) }),
@@ -582,7 +760,7 @@
         h('span', { class: 'kk-list__pos', text: String(r.rank) }),
         avaOf(r, 34),
         h('span', { class: 'kk-list__who' }, [
-          h('span', { class: 'kk-list__name', style: r.is_me ? 'font-weight:800' : '', text: nameOf(r) }),
+          h('span', { class: 'kk-list__name', style: r.is_me ? 'font-weight:800' : '' }, [nameOf(r), crownTag(r)]),
           titleTag(r),
         ]),
         r.exact ? h('span', { class: 'kk-list__meta', text: r.exact + ' ' + M.plural(r.exact, 'точный', 'точных', 'точных') }) : null,
@@ -756,7 +934,27 @@
         h('p', { class: 'kk-hint', style: 'font-weight:700', text: n + ' ' + M.plural(n, 'человек', 'человека', 'человек') + (me ? ' · ты ' + me.rank + '-й · ' + M.points(me.points) : '') }),
       ]),
       h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', style: 'min-height:52px;font-size:16px', onclick: function () { shareCard({ card: 'league', league_id: t.id }, t.invite_url, inviteText(t.name)); } }, [icon(I_INVITE), 'Позвать друзей']),
+      crownWall(t.wall),
+      n > 1 ? h('h3', { class: 'kk-h3', text: M.raceHead(t.race).title }) : null,
       n > 1 ? list(t.items) : h('p', { class: 'kk-hint', text: 'Пока в лиге только ты. Позови друзей — таблица оживёт после первого матча.' }),
+    ]);
+  }
+
+  /** Стена корон лиги: сезон — это короны по месяцам, а не сумма очков (PDEC-027). */
+  function crownWall(wall) {
+    if (!wall || !wall.length) return null;
+    var LABEL = { running: 'идёт', counting: 'считаем', empty: 'без короны', ahead: '' };
+    return h('section', { class: 'kk-wall', 'aria-label': 'Короны лиги' }, [
+      h('h3', { class: 'kk-h3', text: 'короны лиги' }),
+      h('div', { class: 'kk-wall__grid' }, wall.map(function (w) {
+        var who = (w.winners || []).map(function (x) { return x.display_name; }).join(', ');
+        return h('div', { class: 'kk-wall__tile kk-wall__tile--' + w.state }, [
+          h('span', { class: 'kk-wall__mo', text: w.title.toUpperCase() }),
+          w.state === 'crowned'
+            ? h('span', { class: 'kk-wall__who' }, [crownIcon(14), who])
+            : LABEL[w.state] ? h('span', { class: 'kk-wall__note', text: LABEL[w.state] }) : null,
+        ]);
+      })),
     ]);
   }
 
@@ -905,10 +1103,54 @@
       h('div', { class: 'kk-hero__body', style: 'align-items:center;text-align:center' }, [
         h('span', { class: 'kk-display', style: 'background:#ffd23f;color:#0d1424;border-radius:20px;padding:10px 18px;font-size:22px;transform:rotate(-5deg)', text: 'ты в лиге' }),
         h('p', { class: 'kk-hero__title', style: 'font-size:28px', text: l.name }),
+        M.remainingLine(state.race) ? h('p', { class: 'kk-hero__text', style: 'max-width:300px;opacity:.85', text: M.remainingLine(state.race) }) : null,
         h('p', { class: 'kk-hero__text', style: 'max-width:290px', text: next ? 'Первый ход — ' + M.whenLabel(next.starts_at, new Date()).split(',')[0] + ': ' + next.home.name + ' или ' + next.away.name + '?' : 'Как только Динамо поставят матч, тапни за команду.' }),
       ]),
       h('button', { type: 'button', class: 'kk-btn', style: 'background:#fff;color:#0d1424', onclick: function () { go('matches'); }, text: 'Тапнуть за команду' }),
     ]);
+  }
+
+  // ---------- итоги месяца (TASK-334) ----------
+
+  function monthView() {
+    var res = state.month;
+    if (!res) return null;
+    var won = res.won;
+    var kicker = 'ИТОГИ: ' + res.title.toUpperCase() + (res.league ? ' · ' + res.league.name.toUpperCase() : '');
+    return h('div', { class: 'kk-hero kk-hero--blue' }, [
+      h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:12px' }, [
+        h('span', { style: 'font-size:13px;font-weight:800;letter-spacing:.06em;opacity:.8;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', text: kicker }),
+        h('button', { type: 'button', class: 'kk-icon-btn', style: 'background:rgba(255,255,255,.14);color:#fff;flex:none', 'aria-label': 'Закрыть', onclick: function () { go('table'); } }, [icon(['M6 6l12 12', 'M18 6L6 18'])]),
+      ]),
+      h('div', { class: 'kk-hero__body', style: 'align-items:center;text-align:center;gap:18px' }, [
+        h('span', { class: 'kk-month-badge' + (won ? '' : ' kk-month-badge--miss') }, [won ? crownIcon(64) : h('span', { class: 'kk-display', text: res.rank ? String(res.rank) : '–' })]),
+        h('p', { class: 'kk-hero__title', style: 'font-size:38px;line-height:1.05', text: M.monthHead(res) }),
+        h('p', { class: 'kk-hero__text', style: 'max-width:300px', text: M.monthLine(res) }),
+      ]),
+      res.podium && res.podium.length ? h('ol', { class: 'kk-month-podium' }, res.podium.map(function (p) {
+        return h('li', { style: p.is_me ? 'font-weight:800' : '' }, [
+          h('span', { class: 'kk-display', style: 'width:20px', text: String(p.rank) }),
+          h('span', { style: 'flex:1;display:flex;align-items:center;gap:6px;min-width:0' }, [p.is_me ? 'Ты' : p.display_name, p.crown ? h('span', { style: 'color:#ffd23f;display:inline-flex' }, [crownIcon(14)]) : null]),
+          h('span', { class: 'kk-display', text: String(p.points) }),
+        ]);
+      })) : null,
+      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: brag }, [icon(['M21 4L3 11l6 2 2 6 3-4 5 4z']), won ? 'Похвастаться в чате' : res.winners && res.winners.length ? 'Поздравить в чате' : 'Позвать в новый месяц']),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', style: 'background:rgba(255,255,255,.12);opacity:1', onclick: function () { go('matches'); }, text: 'Новый месяц — все с нуля' }),
+    ]);
+
+    function brag() {
+      var leagues = state.leagues || [];
+      var league = (res.league && leagues.filter(function (l) { return l.id === res.league.id; })[0]) || leagues[0];
+      var where = res.league ? ' в «' + res.league.name + '»' : '';
+      var who = (res.winners || []).join(' и ');
+      var text = won
+        ? 'Корона «Кто кого» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
+        : who
+          ? 'Корона «Кто кого» за ' + res.title + where + ' досталась: ' + who + '. Поздравляю! В новом месяце — реванш.'
+          : '«Кто кого» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
+      // Карточка короны с кнопкой в лигу (TASK-334); без бота — та же мысль текстом через t.me/share.
+      shareCard({ card: 'crown', race_id: res.race_id }, league ? league.invite_url : null, text);
+    }
   }
 
   // ---------- итог матча ----------
@@ -937,7 +1179,7 @@
             h('div', { class: 'kk-result-team' + (homeWon ? ' kk-result-team--lost' : '') }, [badge(m.away, colors.away), m.away.name]),
           ]),
           h('p', { class: 'kk-note', style: 'color:#4b5568', text: myLine }),
-          h('span', { class: 'kk-sticker', 'aria-label': M.points(pts || 0), text: v.sticker }),
+          h('span', { class: 'kk-sticker', 'aria-label': M.points(M.totalPoints(mine) || 0), text: mine && mine.doubled && pts ? '+' + M.totalPoints(mine) + ' ×2' : v.sticker }),
         ]),
         friendsBlock(),
       ]),
@@ -947,6 +1189,20 @@
 
     // Друзья из лиг: за кого были. Очков друзей API пока не отдаёт — только сторона.
     function friendsBlock() {
+      // Со счётами друзей (TASK-335) — их очки; без них — как раньше, только стороны.
+      var moves = m.friend_moves || [];
+      if (moves.length) {
+        return h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, [
+          h('span', { style: 'font-size:13px;font-weight:800;opacity:.8;letter-spacing:.04em', text: 'А ДРУЗЬЯ' }),
+          h('ol', { class: 'kk-moves kk-moves--hero' }, moves.slice().sort(function (a, b) { return (b.points || 0) - (a.points || 0); }).slice(0, 8).map(function (x) {
+            return h('li', { style: x.points ? '' : 'opacity:.6' }, [
+              ava(x.display_name, 30),
+              h('span', { class: 'kk-moves__name' }, [x.display_name, x.doubled ? h('span', { class: 'kk-x2-badge', text: '×2' }) : null]),
+              h('span', { class: 'kk-moves__score', text: x.points == null ? M.friendMove(x) : x.points ? '+' + x.points : '0' }),
+            ]);
+          })),
+        ]);
+      }
       var f = m.friends || { home: [], away: [] };
       var rows = [];
       ['home', 'away'].forEach(function (which) {
@@ -978,9 +1234,9 @@
 
   function render() {
     var nodes = [];
-    var bare = state.view === 'created' || state.view === 'joined' || state.view === 'reveal' || (state.view === 'join' && state.joinCode);
+    var bare = state.view === 'created' || state.view === 'joined' || state.view === 'reveal' || state.view === 'month' || (state.view === 'join' && state.joinCode);
     if (bare) {
-      var v = state.view === 'created' ? createdView() : state.view === 'joined' ? joinedView() : state.view === 'reveal' ? revealView() : joinView();
+      var v = state.view === 'created' ? createdView() : state.view === 'joined' ? joinedView() : state.view === 'reveal' ? revealView() : state.view === 'month' ? monthView() : joinView();
       if (v) nodes.push(v);
       else {
         state.view = null;
@@ -1049,6 +1305,9 @@
     applyTheme();
     var code = (params.get('join') || M.inviteCode(startParam()) || '').toUpperCase();
     var reveal = Number(params.get('reveal')) || null;
+    var month = Number(params.get('month')) || null;
+    var pickId = Number(params.get('pick')) || null;
+    var pickSideParam = params.get('side');
     var tab = params.get('tab');
     if (tab === 'table' || tab === 'leagues') state.tab = tab;
     render();
@@ -1062,15 +1321,36 @@
     state.fromCard = M.cardFrom(startParam(), params.get('from'));
     if (state.fromCard) api('POST', '/client/hockey/card-opened', { card: state.fromCard }).catch(function () {});
     if (code) openJoin(code);
-    Promise.all([loadMatches(), loadPrefs()])
+    if (params.get('remind') === 'off') {
+      api('PUT', '/client/hockey/remind', { on: false }).then(function () {
+        state.remind = false;
+        toast('Напоминания выключены');
+        render();
+      }, function () {});
+    }
+    Promise.all([loadMatches(), loadPrefs(), loadRemind()])
       .then(function () {
         state.loading = false;
+        // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
+        var target = pickId && findMatch(pickId);
+        if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
+          pickSide(target, pickSideParam);
+          toast('Ход принят: за ' + target[pickSideParam].name);
+        }
         if (reveal && findMatch(reveal) && findMatch(reveal).result) {
           state.revealId = reveal;
           state.view = 'reveal';
           api('POST', '/client/hockey/matches/' + reveal + '/seen').catch(function () {});
         }
         render();
+        if (month) {
+          api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {
+            state.month = data;
+            state.view = 'month';
+            render();
+            api('POST', '/client/hockey/races/' + month + '/seen').catch(function () {});
+          }, function () {});
+        }
         if (state.tab === 'table') go('table');
         if (state.tab === 'leagues') go('leagues');
         if (!state.leagues) loadLeagues().then(render, function () {});

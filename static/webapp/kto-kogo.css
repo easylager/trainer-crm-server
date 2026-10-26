@@ -10,6 +10,7 @@
   --kk-ink: #0d1424;
   --kk-muted: #4b5568;
   --kk-line: #eef1f6;
+  --kk-track: #dce2ec;
   --kk-me: #e7eefc;
   --kk-sticker: #ffd23f;
   --kk-on-sticker: #0d1424;
@@ -32,6 +33,7 @@ body.kk-dark .kk {
   --kk-ink: #eef2f8;
   --kk-muted: #9aa6ba;
   --kk-line: #22304a;
+  --kk-track: #2a3a57;
   --kk-me: #1d2c4d;
   --kk-dark-fill: #eef2f8;
   --kk-on-dark: #0b1220;
@@ -237,3 +239,65 @@ body.kk-dark .kk-stepper__num { color: var(--kk-ink); }
   .kk-half { transition: none; }
   .kk-half[aria-pressed='true'] { transform: none; }
 }
+
+/* ── Гонка месяца (TASK-334, холст 4h6iFvDSrMtckeduVzj2Vn) ───────────── */
+.kk-race-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.kk-race-left { font-size: 13px; font-weight: 700; color: var(--kk-muted); white-space: nowrap; }
+.kk-race-bar { display: grid; gap: 4px; }
+.kk-race-bar__seg { height: 8px; border-radius: 4px; background: var(--kk-track); }
+.kk-race-bar__seg--played { background: var(--kk-ink); }
+.kk-race-bar__seg--final { background: var(--kk-sticker); }
+.kk-chase { background: var(--kk-hero); color: #ffffff; border-radius: 20px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 15px; font-weight: 700; }
+.kk-chase__num { font-family: var(--kk-display); font-weight: 800; white-space: nowrap; }
+.kk-crown { display: inline-flex; align-items: center; gap: 2px; height: 20px; padding: 0 6px; margin-left: 6px; border-radius: 6px; background: var(--kk-sticker); color: var(--kk-on-sticker); font: 800 11px/1 var(--kk-display); vertical-align: middle; flex: none; }
+.kk-card--final { box-shadow: 0 0 0 3px var(--kk-ink); margin-top: 6px; padding-top: 24px; }
+.kk-sticker--final { top: -13px; font-size: 12px; padding: 6px 10px; border-radius: 8px; transform: rotate(-3deg); }
+.kk-race-note { margin: 2px 0 0; background: var(--kk-dark-fill); color: var(--kk-on-dark); border-radius: 16px; padding: 10px 12px; font-size: 14px; font-weight: 700; }
+.kk-h3 { font-family: var(--kk-display); font-weight: 800; font-size: 18px; letter-spacing: -0.01em; margin: 6px 0 0; }
+.kk-wall { display: flex; flex-direction: column; gap: 10px; }
+.kk-wall__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kk-wall__tile { min-height: 66px; border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; box-shadow: inset 0 0 0 2px var(--kk-track); min-width: 0; }
+.kk-wall__tile--crowned { background: var(--kk-sticker); color: var(--kk-on-sticker); box-shadow: none; }
+.kk-wall__tile--running { background: var(--kk-surface); box-shadow: inset 0 0 0 2px var(--kk-ink); }
+.kk-wall__mo { font: 800 12px/1 var(--kk-display); letter-spacing: 0.02em; }
+.kk-wall__tile--ahead .kk-wall__mo, .kk-wall__tile--empty .kk-wall__mo { color: var(--kk-muted); }
+.kk-wall__who { display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kk-wall__who svg { flex: none; }
+.kk-wall__note { font-size: 13px; font-weight: 700; color: var(--kk-muted); }
+.kk-month-badge { width: 120px; height: 120px; border-radius: 32px; background: var(--kk-sticker); color: var(--kk-on-sticker); display: flex; align-items: center; justify-content: center; font-size: 48px; transform: rotate(-7deg); box-shadow: 0 14px 30px rgba(0, 0, 0, 0.25); }
+.kk-month-badge--miss { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
+.kk-month-podium { list-style: none; margin: 0; padding: 0; background: rgba(255, 255, 255, 0.1); border-radius: 22px; }
+.kk-month-podium li { display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-size: 16px; font-weight: 600; }
+.kk-month-podium li + li { border-top: 1px solid rgba(255, 255, 255, 0.14); }
+
+/* ── Волна 2: ×2, напоминания, счета друзей (TASK-335) ───────────── */
+.kk-row2 { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.kk-x2 { min-width: 64px; min-height: 48px; border: 0; border-radius: 18px; background: var(--kk-surface-2); color: var(--kk-ink); font: 800 16px/1 var(--kk-display); cursor: pointer; }
+.kk-x2--on { background: var(--kk-sticker); color: var(--kk-on-sticker); }
+.kk-x2:disabled { opacity: 0.4; cursor: default; }
+.kk-card--x2 { box-shadow: 0 0 0 3px var(--kk-sticker); }
+.kk-x2-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 2px 6px; border-radius: 6px; background: var(--kk-sticker); color: var(--kk-on-sticker); font: 800 11px/1.2 var(--kk-display); vertical-align: middle; }
+.kk-remind { background: var(--kk-surface); border-radius: 22px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+.kk-remind__icon { width: 40px; height: 40px; border-radius: 12px; background: var(--kk-sticker); color: var(--kk-on-sticker); display: flex; align-items: center; justify-content: center; flex: none; }
+.kk-remind__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.kk-remind__title { font-size: 15px; font-weight: 800; }
+.kk-remind__sub { font-size: 13px; font-weight: 600; color: var(--kk-muted); }
+.kk-toggle { width: 46px; height: 28px; border: 0; border-radius: 14px; background: var(--kk-track); position: relative; flex: none; cursor: pointer; }
+.kk-toggle span { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 11px; background: #ffffff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
+.kk-remind-on { align-self: flex-start; border: 0; background: none; padding: 0; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; font: 700 13px/1 var(--kk-text); color: var(--kk-muted); cursor: pointer; }
+.kk-crowd { display: flex; flex-direction: column; gap: 8px; padding: 0 4px; }
+.kk-crowd__head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.kk-crowd__text { font-size: 15px; font-weight: 800; }
+.kk-crowd__sub { font-size: 13px; font-weight: 700; color: var(--kk-muted); }
+.kk-crowd__bar { display: grid; gap: 4px; }
+.kk-crowd__bar span { height: 10px; border-radius: 5px; }
+.kk-moves { list-style: none; margin: 0; padding: 4px 0; background: var(--kk-surface-2); border-radius: 20px; }
+.kk-moves li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+.kk-moves li + li { border-top: 1px solid var(--kk-line); }
+.kk-moves li.kk-me { background: var(--kk-me); }
+.kk-moves__name { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kk-moves__side { width: 10px; height: 10px; border-radius: 5px; flex: none; }
+.kk-moves__score { font: 800 15px/1 var(--kk-display); white-space: nowrap; }
+.kk-moves__none { font-size: 13px; font-weight: 700; color: var(--kk-muted); white-space: nowrap; }
+.kk-moves--hero { background: rgba(255, 255, 255, 0.1); }
+.kk-moves--hero li + li { border-top-color: rgba(255, 255, 255, 0.14); }

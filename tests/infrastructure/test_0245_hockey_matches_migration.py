@@ -13,7 +13,13 @@ from sqlalchemy.exc import IntegrityError
 
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versions"
 MIGRATION_FILE = "0245_hockey_matches.py"
-DEPENDENT_FILES = ("0252_ice_invites_match.py", "0247_hockey_leagues.py", "0246_hockey_picks.py")
+DEPENDENT_FILES = (
+    "0271_hockey_double_and_reminders.py",
+    "0270_hockey_races.py",
+    "0252_ice_invites_match.py",
+    "0247_hockey_leagues.py",
+    "0246_hockey_picks.py",
+)
 
 
 async def _run_migration_step(db_session, step: str, file: str = MIGRATION_FILE) -> None:

@@ -15,8 +15,8 @@ MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versi
 MIGRATION_FILE = "0247_hockey_leagues.py"
 
 
-async def _run_migration_step(db_session, step: str) -> None:
-    migration = runpy.run_path(str(MIGRATIONS / MIGRATION_FILE))
+async def _run_migration_step(db_session, step: str, file: str = MIGRATION_FILE) -> None:
+    migration = runpy.run_path(str(MIGRATIONS / file))
     connection = await db_session.connection()
 
     def invoke(sync_connection) -> None:
@@ -36,6 +36,8 @@ async def _tables(db_session) -> list[str]:
 
 @pytest.mark.asyncio
 async def test_hockey_leagues_roundtrip_and_guards(db_session) -> None:
+    # Короны лиг (0270) ссылаются на лиги — снимаем их первыми.
+    await _run_migration_step(db_session, "downgrade", "0270_hockey_races.py")
     await _run_migration_step(db_session, "downgrade")
     assert await _tables(db_session) == []
     await _run_migration_step(db_session, "upgrade")

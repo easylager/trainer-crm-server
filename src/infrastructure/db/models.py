@@ -569,6 +569,8 @@ class HockeyPlayerPrefs(Base):
 
     player_key: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=False)
     kk_hidden: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    # Напомнить за час до матча и прислать итог в бот (TASK-335).
+    remind: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -598,6 +600,8 @@ class HockeyPick(Base):
     home_score: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
     away_score: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
     points: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+    # ×2 на матч месяца (TASK-335): ``points`` остаются базовыми, в таблицах умножаются.
+    doubled: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
     scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

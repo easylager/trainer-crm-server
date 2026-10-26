@@ -85,7 +85,8 @@ def _ellipsize(draw: ImageDraw.ImageDraw, text: str, font, max_w: float) -> str:
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_w: float) -> list[str]:
     rows: list[str] = []
     current = ""
-    for word in text.split():
+    # Делим только по обычному пробелу: неразрывный держит слова вместе.
+    for word in (w for w in text.split(" ") if w):
         trial = f"{current} {word}".strip()
         if not current or _width(draw, trial, font) <= max_w:
             current = trial
@@ -150,6 +151,64 @@ def render_result_card(*, home: str, away: str, home_score: int, away_score: int
 
     tile = _sticker(sticker, size=84, angle=8)
     image.paste(tile, (width - _PAD - tile.width + 12, 44), tile)
+    return _png(image)
+
+
+def _crown(size: int) -> Image.Image:
+    """Жёлтая наклейка с короной — та же, что на экране итогов месяца."""
+    tile = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(tile)
+    d.rounded_rectangle((0, 0, size - 1, size - 1), radius=int(size * 0.27), fill=_YELLOW)
+    pts = [(3, 7), (7.5, 11), (12, 4), (16.5, 11), (21, 7), (19, 19), (5, 19)]
+    inset = size * 0.18
+    scale = (size - 2 * inset) / 24
+    d.polygon([(inset + x * scale, inset + y * scale) for x, y in pts], fill=_NAVY)
+    return tile.rotate(7, resample=Image.Resampling.BICUBIC, expand=True)
+
+
+def crown_head(title: str, winners: Sequence[str]) -> str:
+    """Заголовок карточки короны: без родов и падежей — «ноябрь: корона — Катя»."""
+    if not winners:
+        return f"{title}: без короны"
+    # Неразрывный пробел держит тире в конце строки, а не в начале следующей.
+    # и имя «Андрей К.» не рвётся на две строки.
+    names = " и ".join(name.replace(" ", "\u00a0") for name in winners)
+    return f"{title}: корона\u00a0— {names}"
+
+
+def render_crown_card(*, title: str, where: str, winners: Sequence[str], points: int) -> bytes:
+    """Итоги месяца «Кто кого» (TASK-334): кто забрал корону в лиге или в общей таблице."""
+    image = Image.new("RGB", CARD_SIZE, _BLUE)
+    draw = ImageDraw.Draw(image)
+    width, height = CARD_SIZE
+    inner = width - 2 * _PAD
+    draw.text((_PAD, 70), "кто кого · " + where, font=_text(40, 800), fill=(197, 210, 238))
+    tile = _crown(170)
+    image.paste(tile, (width - _PAD - tile.width + 10, 40), tile)
+    head = crown_head(title, winners)
+    size = 92 if len(_wrap(draw, head, _display(92), inner)) <= 2 else 72
+    font = _display(size)
+    lines = _wrap(draw, head, font, inner)[:3]
+    step = int(size * 1.05)
+    y = height - 120 - (len(lines) - 1) * step
+    for line in lines:
+        draw.text((_PAD, y), line, font=font, fill=_WHITE, anchor="ls")
+        y += step
+    if winners and points:
+        word = (
+            "очко"
+            if points % 10 == 1 and points % 100 != 11
+            else "очка"
+            if 2 <= points % 10 <= 4 and not 12 <= points % 100 <= 14
+            else "очков"
+        )
+        draw.text(
+            (_PAD, height - 60),
+            f"{points} {word} · новый месяц — все с нуля",
+            font=_text(40, 700),
+            fill=(227, 234, 250),
+            anchor="ls",
+        )
     return _png(image)
 
 
@@ -256,7 +315,9 @@ def _face(
     box = (cx - radius, cy - radius, cx + radius, cy + radius)
     if avatar:
         try:
-            face = Image.open(io.BytesIO(avatar)).convert("RGB").resize((radius * 2, radius * 2), Image.Resampling.LANCZOS)
+            face = (
+                Image.open(io.BytesIO(avatar)).convert("RGB").resize((radius * 2, radius * 2), Image.Resampling.LANCZOS)
+            )
             mask = Image.new("L", face.size, 0)
             ImageDraw.Draw(mask).ellipse((0, 0, face.width - 1, face.height - 1), fill=255)
             image.paste(face, (box[0], box[1]), mask)
@@ -332,7 +393,13 @@ def render_match_company_card(
         x += radius * 2 + gap
     free = (x - radius, cy - radius, x + radius, cy + radius)
     draw.ellipse(free, outline=_SOFT, width=4)
-    draw.text((x, cy + 1), f"+{extra}" if extra else "+", font=_display(int(radius * (0.6 if extra else 0.9))), fill=_SOFT, anchor="mm")
+    draw.text(
+        (x, cy + 1),
+        f"+{extra}" if extra else "+",
+        font=_display(int(radius * (0.6 if extra else 0.9))),
+        fill=_SOFT,
+        anchor="mm",
+    )
     stand_label = f"Трибуна · {len(going)}"
     draw.text(((stand[0] + stand[2]) // 2, stand[3] - 46), stand_label, font=_text(28, 800), fill=_SOFT, anchor="mm")
 
@@ -442,6 +509,23 @@ def check_result_card_sig(token: str, match_id: int, points: int, sig: str) -> b
     return hmac.compare_digest(result_card_sig(token, match_id, points), sig or "")
 
 
+def crown_card_sig(token: str, race_id: int, league_id: int) -> str:
+    """Подпись адреса карточки короны: лига 0 — общая таблица."""
+    return hmac.new(_secret(token), f"crown:{race_id}:{league_id}".encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def check_crown_card_sig(token: str, race_id: int, league_id: int, sig: str) -> bool:
+    return hmac.compare_digest(crown_card_sig(token, race_id, league_id), sig or "")
+
+
+def crown_caption(*, title: str, where: str, winners: Sequence[str], won: bool) -> str:
+    if won:
+        return f"Кто кого: корона за {title} {where} — моя. Новый месяц, все с нуля: попробуй забрать."
+    if winners:
+        return f"Кто кого: корона за {title} {where} — {' и '.join(winners)}. Поздравляю! В новом месяце — реванш."
+    return f"Кто кого: {title} {where} без короны. Новый месяц, все с нуля — играем?"
+
+
 def league_card_version(name: str, members: int, names: Sequence[str], next_match: str | None) -> str:
     """Меняется вместе с картинкой — Telegram кэширует фото по адресу."""
     raw = "\x1f".join([name, str(members), *names, next_match or ""])
@@ -459,6 +543,11 @@ def league_caption(name: str) -> str:
 
 __all__ = [
     "CARD_SIZE",
+    "check_crown_card_sig",
+    "crown_caption",
+    "crown_card_sig",
+    "crown_head",
+    "render_crown_card",
     "check_result_card_sig",
     "STORY_SIZE",
     "league_caption",

@@ -180,8 +180,11 @@
     var move = moveLine(pick, names);
     if (!move) return live ? 'ходы закрыты · этот матч без тебя' : '';
     if (live) return move + ' · ждём сирену';
-    if (pick.home_score != null) return 'ход принят · ' + pick.home_score + ':' + pick.away_score + ' · в точку — 50';
-    return 'ход принят · ' + move;
+    // ×2 (TASK-335): ставка не меняется, удваиваются очки — пишем итоговое число.
+    if (pick.home_score != null) {
+      return 'ход принят · ' + pick.home_score + ':' + pick.away_score + ' · в точку — ' + (pick.doubled ? 100 : 50);
+    }
+    return 'ход принят · ' + move + (pick.doubled ? ' · очки ×2' : '');
   }
 
   /**
@@ -229,6 +232,110 @@
     return pick.side || '';
   }
 
+  // ---------- гонка месяца (TASK-334) ----------
+
+  /** Шапка таблицы: месяц и сколько сыграно. До первой гонки — просто «таблица». */
+  function raceHead(race) {
+    if (!race || !race.monthly) return { title: 'таблица', left: '' };
+    var played = race.played || 0;
+    var known = race.known || 0;
+    var left = '';
+    if (known && race.final_match_id && played === known - 1) left = 'остался финал';
+    else if (known) left = 'сыграно ' + played + ' из ' + known;
+    return { title: race.title, left: left };
+  }
+
+  /** Полоса матчей месяца: сыгранные, впереди, последний — финал (если календарь месяца прочитан). */
+  function raceSegments(race) {
+    if (!race || !race.monthly || !race.known) return [];
+    var out = [];
+    for (var i = 0; i < Math.min(race.known, 16); i++) {
+      if (i < race.played) out.push('played');
+      else if (race.final_match_id && i === race.known - 1) out.push('final');
+      else out.push('ahead');
+    }
+    return out;
+  }
+
+  /** Синяя строка под подиумом: где ты относительно первого места. */
+  function chaseLine(rows) {
+    var me = null;
+    for (var i = 0; i < (rows || []).length; i++) if (rows[i].is_me) me = rows[i];
+    if (!me || !rows.length) return null;
+    if (me.rank === 1) {
+      if (!me.points) return null;
+      var second = rows.filter(function (r) { return !r.is_me; })[0];
+      if (!second) return null;
+      var lead = me.points - second.points;
+      return lead > 0 ? { text: 'Ты первый. Отрыв', num: points(lead) } : { text: 'Первое место делишь', num: '' };
+    }
+    return { text: 'Ты ' + me.rank + '-й. До первого места', num: points(rows[0].points - me.points) };
+  }
+
+  /** Строка под финалом месяца: факт без шансов («Катя впереди на 20»). */
+  function leaderNote(leader) {
+    if (!leader) return '';
+    if (leader.me_leading) return leader.gap ? 'Ты впереди на ' + points(leader.gap) : 'Очков поровну — решит финал';
+    return leader.gap ? leader.leader + ' впереди на ' + points(leader.gap) : 'Очков поровну — решит финал';
+  }
+
+  function joinNames(names) {
+    if (names.length < 2) return names[0] || '';
+    return names.slice(0, -1).join(', ') + ' и ' + names[names.length - 1];
+  }
+
+  /** Итоги месяца: заголовок и строка под ним. */
+  function monthHead(res) {
+    if (res.won) return res.title + ' твой';
+    if (!res.winners || !res.winners.length) return res.title + ' без короны';
+    return 'корона — ' + joinNames(res.winners);
+  }
+
+  function monthLine(res) {
+    var where = res.league ? 'в «' + res.league.name + '»' : 'в общей таблице';
+    if (res.won) return 'Первое место ' + where + NBSP + '· ' + points(res.points);
+    if (res.rank == null) return 'В этом месяце без твоих ходов ' + where;
+    if (!res.gap) return 'Ты ' + res.rank + '-й ' + where;
+    return 'Ты ' + res.rank + '-й ' + where + ', до короны не хватило ' + points(res.gap);
+  }
+
+  /** Вступил в середине месяца — сколько матчей осталось. */
+  function remainingLine(race) {
+    if (!race || !race.monthly) return '';
+    var n = Math.max(0, (race.known || 0) - (race.played || 0));
+    var head = n ? 'В этом месяце ещё ' + n + ' ' + plural(n, 'матч', 'матча', 'матчей') + '. ' : '';
+    return head + 'Очки в лиге — с ближайшего матча, с 1-го числа все с нуля.';
+  }
+
+  // ---------- волна 2 (TASK-335) ----------
+
+  var DINAMO = 'Динамо-Минск';
+
+  /** Очки хода с ×2: сервер хранит базовые (по ним «в точку»), наклейка показывает итог. */
+  function totalPoints(pick) {
+    if (!pick || pick.points == null) return null;
+    return pick.doubled ? pick.points * 2 : pick.points;
+  }
+
+  /** Расклад по друзьям со стартом матча: «6 из 8 за Динамо-Минск». Меньше двух ходов — молчим. */
+  function crowd(m, moves, mine) {
+    var sides = (moves || []).map(function (x) { return x.side; });
+    var my = pickSide(mine);
+    if (my) sides.push(my);
+    if (sides.length < 2) return null;
+    var home = sides.filter(function (x) { return x === 'home'; }).length;
+    var away = sides.length - home;
+    var side = m.home.name === DINAMO ? 'home' : m.away.name === DINAMO ? 'away' : home >= away ? 'home' : 'away';
+    var n = side === 'home' ? home : away;
+    return { text: n + ' из ' + sides.length + ' за ' + m[side].name, home: home, away: away };
+  }
+
+  /** Строка хода друга в списке «счета открыты». */
+  function friendMove(x, names) {
+    if (x.home_score != null && x.away_score != null) return x.home_score + ':' + x.away_score;
+    return 'без счёта';
+  }
+
   var api = {
     NEUTRAL: NEUTRAL,
     whenLabel: whenLabel,
@@ -251,6 +358,16 @@
     inviteCode: inviteCode,
     cardFrom: cardFrom,
     pickSide: pickSide,
+    raceHead: raceHead,
+    raceSegments: raceSegments,
+    chaseLine: chaseLine,
+    leaderNote: leaderNote,
+    monthHead: monthHead,
+    monthLine: monthLine,
+    remainingLine: remainingLine,
+    totalPoints: totalPoints,
+    crowd: crowd,
+    friendMove: friendMove,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

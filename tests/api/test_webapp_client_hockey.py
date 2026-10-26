@@ -84,7 +84,7 @@ async def test_matches_show_own_pick_open_result_and_sides(app_use_test_db, db_s
         body = listed.json()
         own = _by_id(body, future)
         assert own["open"] is True
-        assert own["my_pick"] == {"side": "home", "home_score": None, "away_score": None, "points": None}
+        assert own["my_pick"] == {"side": "home", "home_score": None, "away_score": None, "points": None, "doubled": False}
         assert own["result"] is None
         assert own["sides"] == {"home": 1, "away": 1}
         assert own["home_team"] == "Динамо-Минск"
@@ -104,7 +104,7 @@ async def test_matches_show_own_pick_open_result_and_sides(app_use_test_db, db_s
             other_list = await client.get("/api/webapp/client/hockey/matches")
         assert other_list.status_code == 200, other_list.text
         foreign = _by_id(other_list.json(), future)
-        assert foreign["my_pick"] == {"side": "away", "home_score": None, "away_score": None, "points": None}
+        assert foreign["my_pick"] == {"side": "away", "home_score": None, "away_score": None, "points": None, "doubled": False}
         assert foreign["sides"] == {"home": 1, "away": 1}
 
 
@@ -137,6 +137,7 @@ async def test_pick_side_exact_replace_and_errors(app_use_test_db, db_session) -
                 "home_score": 1,
                 "away_score": 4,
                 "points": None,
+                "doubled": False,
             }
 
             draw = await client.put(
@@ -253,3 +254,58 @@ def test_player_name_from_init_data_uses_last_initial() -> None:
     assert _player_name(None, raw({"first_name": "Андрей"})) == "Андрей"
     assert _player_name("Саша", raw({"first_name": "Андрей", "last_name": "Козлов"})) == "Саша"
     assert _player_name(None, "") == ""
+
+
+@pytest.mark.asyncio
+async def test_month_race_result_and_seen(app_use_test_db, db_session) -> None:
+    """TASK-334: итоги закрытой гонки и отметка «открыл»; незакрытая гонка — 404."""
+    from src.application.hockey_game import make_pick
+    from src.application.hockey_races import close_due_races, ensure_month_race, fresh_race_result
+    from src.ingestion.hockey_sources import MINSK_TZ
+
+    nov = datetime(2026, 11, 10, 12, 0, tzinfo=MINSK_TZ)
+    dec = datetime(2026, 12, 1, 12, 0, tzinfo=MINSK_TZ)
+    race = await ensure_month_race(db_session, now=nov)
+    starts = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
+    match_id = await _insert_match(db_session, starts_at=starts)
+    await make_pick(
+        db_session,
+        player_key=ME,
+        display_name="Саша",
+        match_id=match_id,
+        home_score=3,
+        away_score=1,
+        now=starts - timedelta(hours=1),
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            await db_session.commit()
+            assert (await client.get(f"/api/webapp/client/hockey/races/{race.id}/result")).status_code == 404
+    await set_manual_result(db_session, match_id, home_score=3, away_score=1, decided_in="regulation", now=dec)
+    await score_finished_matches(db_session, now=dec)
+    assert await close_due_races(db_session, now=dec) == [race.id]
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            body = (await client.get(f"/api/webapp/client/hockey/races/{race.id}/result")).json()
+            assert (body["title"], body["won"], body["points"], body["league"]) == ("ноябрь", True, 50, None)
+            seen = await client.post(f"/api/webapp/client/hockey/races/{race.id}/seen")
+            assert seen.status_code == 204
+    assert await fresh_race_result(db_session, player_key=ME, now=dec) is None
+
+
+@pytest.mark.asyncio
+async def test_remind_toggle_and_double_errors(app_use_test_db, db_session) -> None:
+    """TASK-335: напоминания включает сам игрок; ×2 без хода — понятная ошибка."""
+    now = datetime.now(timezone.utc)
+    match_id = await _insert_match(db_session, starts_at=now + timedelta(days=1))
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            assert (await client.get("/api/webapp/client/hockey/remind")).json() == {"on": False}
+            on = await client.put("/api/webapp/client/hockey/remind", json={"on": True, "display_name": "Саша"})
+            assert on.status_code == 200 and on.json() == {"on": True}
+            assert (await client.get("/api/webapp/client/hockey/remind")).json() == {"on": True}
+            double = await client.put(f"/api/webapp/client/hockey/matches/{match_id}/double", json={"on": True})
+            assert double.status_code == 409
