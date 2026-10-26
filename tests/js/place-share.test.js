@@ -47,6 +47,12 @@ describe('place-share.js (TASK-252)', () => {
     assert.doesNotMatch(src, /place-share-zovi/);
   });
 
+  it('смена дня не уводит полосу дней к верху окна', () => {
+    assert.match(src, /querySelectorAll\('\.b-sched > a\.b-day'\)/);
+    assert.match(src, /var before = strip\.getBoundingClientRect\(\)\.top/);
+    assert.match(src, /window\.scrollBy\(0, shift\)/);
+  });
+
   it('подпись: сегодня, завтра, дальше', () => {
     const today = '2026-10-13';
     assert.equal(PD.inviteCtaWhen(today, '22:15', today), '22:15');

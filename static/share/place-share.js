@@ -428,6 +428,28 @@
     });
   });
 
+  /* День выбирается якорем :target (работает без JS), а браузер при переходе по якорю
+     крутит страницу так, что полоса дней оказывается у самого верха окна. Запоминаем
+     положение полосы и возвращаем его, чтобы интерфейс не прыгал. */
+  document.querySelectorAll('.b-sched > a.b-day').forEach(function (day) {
+    day.addEventListener('click', function () {
+      var strip = day.parentNode;
+      if (!strip || !strip.getBoundingClientRect) return;
+      var before = strip.getBoundingClientRect().top;
+      var restore = function () {
+        var shift = strip.getBoundingClientRect().top - before;
+        if (shift) window.scrollBy(0, shift);
+      };
+      restore();
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function () {
+          restore();
+          requestAnimationFrame(restore);
+        });
+      }
+    });
+  });
+
   window.addEventListener('load', function () {
     alignCurrentDay();
     if (openedOnSession) revealAboveDock();

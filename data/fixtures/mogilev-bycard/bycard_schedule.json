@@ -1,0 +1,163 @@
+{
+ "currentCityId": 23,
+ "data": [
+  {
+   "id": 1307519,
+   "name": "Массовое катание в ледовом дворце спорта Могилева",
+   "minPrice": 0,
+   "maxPrice": 800,
+   "objects": [
+    {
+     "id": 4982,
+     "name": "Ледовый дворец спорта Могилев",
+     "sessions": [
+      {
+       "id": 1775651,
+       "timeSpending": 1793385900,
+       "timeSpendingStopsale": 1793387700,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1824",
+       "dateStr": "30.10.2026",
+       "timeStr": "21:45",
+       "tags": []
+      },
+      {
+       "id": 1775652,
+       "timeSpending": 1793455200,
+       "timeSpendingStopsale": 1793457000,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1825",
+       "dateStr": "31.10.2026",
+       "timeStr": "17:00",
+       "tags": []
+      },
+      {
+       "id": 1775653,
+       "timeSpending": 1793462700,
+       "timeSpendingStopsale": 1793464500,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1826",
+       "dateStr": "31.10.2026",
+       "timeStr": "19:05",
+       "tags": []
+      },
+      {
+       "id": 1775654,
+       "timeSpending": 1793470500,
+       "timeSpendingStopsale": 1793472300,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1827",
+       "dateStr": "31.10.2026",
+       "timeStr": "21:15",
+       "tags": []
+      },
+      {
+       "id": 1775655,
+       "timeSpending": 1793541600,
+       "timeSpendingStopsale": 1793543400,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1828",
+       "dateStr": "01.11.2026",
+       "timeStr": "17:00",
+       "tags": []
+      },
+      {
+       "id": 1775656,
+       "timeSpending": 1793548800,
+       "timeSpendingStopsale": 1793550600,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1829",
+       "dateStr": "01.11.2026",
+       "timeStr": "19:00",
+       "tags": []
+      },
+      {
+       "id": 1775657,
+       "timeSpending": 1793556900,
+       "timeSpendingStopsale": 1793558700,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1830",
+       "dateStr": "01.11.2026",
+       "timeStr": "21:15",
+       "tags": []
+      },
+      {
+       "id": 1775658,
+       "timeSpending": 1793624400,
+       "timeSpendingStopsale": 1793626200,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1831",
+       "dateStr": "02.11.2026",
+       "timeStr": "16:00",
+       "tags": []
+      },
+      {
+       "id": 1775659,
+       "timeSpending": 1793716200,
+       "timeSpendingStopsale": 1793718000,
+       "minPrice": 0,
+       "maxPrice": 800,
+       "description": "",
+       "timezone": "+0300",
+       "objectId": 4982,
+       "isSaleOpen": true,
+       "isBooking": false,
+       "outerSessionId": "1832",
+       "dateStr": "03.11.2026",
+       "timeStr": "17:30",
+       "tags": []
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
