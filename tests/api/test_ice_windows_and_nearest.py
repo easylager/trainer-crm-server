@@ -100,3 +100,35 @@ async def test_nearest_ice_prefers_today_then_the_soonest_day(app_use_test_db, d
     async with _client() as client:
         bad = await client.get("/api/public/ice/nearest", params={"near": "x"})
     assert bad.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_alternatives_for_a_rink_without_public_skating(app_use_test_db, db_session) -> None:
+    """Каток без МК (Олимпик) показывает ближайшие катки: сначала с сеансом сегодня, сам — никогда."""
+    from datetime import datetime, time, timezone
+    from zoneinfo import ZoneInfo
+
+    from src.application.arena_public_use_cases import nearest_ice_alternatives
+
+    city_id = await _insert_city(db_session, name=f"Олимпинск {uuid.uuid4().hex[:6]}")
+    here = await _insert_arena(db_session, city_id, name=f"Центр {uuid.uuid4().hex[:4]}", latitude=20.0, longitude=20.0)
+    near_tomorrow = await _insert_arena(
+        db_session, city_id, name=f"Рядом {uuid.uuid4().hex[:4]}", latitude=20.001, longitude=20.001
+    )
+    far_today = await _insert_arena(
+        db_session, city_id, name=f"Далеко {uuid.uuid4().hex[:4]}", latitude=20.05, longitude=20.05
+    )
+    day = date.today() + timedelta(days=50)
+    await _session(db_session, here, day=day, hhmm="18:00")
+    await _session(db_session, far_today, day=day, hhmm="19:00")
+    await _session(db_session, far_today, day=day, hhmm="21:00")
+    await _session(db_session, near_tomorrow, day=day + timedelta(days=1), hhmm="10:00")
+    await db_session.commit()
+
+    morning = datetime.combine(day, time(7, 0), tzinfo=ZoneInfo("Europe/Minsk")).astimezone(timezone.utc)
+    alts = await nearest_ice_alternatives(db_session, lat=20.0, lon=20.0, exclude_arena_id=here, limit=50, now=morning)
+    ours = [a for a in alts if a["arena_id"] in (near_tomorrow, far_today)]
+    assert here not in {a["arena_id"] for a in alts}
+    assert [a["arena_id"] for a in ours] == [far_today, near_tomorrow], "сегодняшний лёд важнее близкого завтрашнего"
+    assert ours[0]["starts_at_local"] == "19:00" and ours[0]["is_today"] is True
+    assert ours[0]["path"].startswith("/p/")

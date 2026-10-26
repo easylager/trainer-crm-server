@@ -49,9 +49,10 @@ def test_hockey_centers_file_keeps_badge_line_and_services() -> None:
     city, records, _rinks = parse_shops_file(REPO / "data" / "catalog" / "hockey-centers-minsk.json")
     assert city == "Минск"
     by_key = {r.key: r for r in records}
-    assert set(by_key) == {"lepshy-hockey-center", "fint", "minikatok"}
+    assert set(by_key) == {"lepshy-hockey-center", "fint", "minikatok", "olimpik-arena"}
     for rec in records:
-        assert rec.venue_type == "other"
+        # Олимпик — настоящий лёд, но без массового катания: каток в хоккейных центрах.
+        assert rec.venue_type == ("ice" if rec.key == "olimpik-arena" else "other")
         assert rec.amenities["hockey_center"] is True
         assert rec.hours_extra["center_badge"]
         assert rec.hours_extra["center_line"]

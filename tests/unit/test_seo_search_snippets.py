@@ -128,3 +128,43 @@ def test_city_search_description_names_ohm_when_the_city_has_it() -> None:
     text = city_hub_search_description(_hub(ohm_counts={"all": 19}, ohm_arena_count=4)).replace("\u00a0", " ")
     assert "Открытые тренировки с клюшкой (ОХМ) — на 4 катках." in text
     assert "ОХМ" not in city_hub_search_description(_hub())
+
+
+def test_ice_hockey_center_does_not_promise_public_skating() -> None:
+    """Олимпик-арена: лёд есть, массового катания нет — ни в title, ни в сниппете."""
+    from src.application.place_page import page_title
+
+    view = _place_view(next_slot=None)
+    view["card"].update(name="Олимпик-арена", amenities={"hockey_center": True})
+    title = page_title(view)
+    text = search_description(view)
+    assert title == "Олимпик-арена, Минск — каток без массового катания"
+    assert text.startswith("Массового катания здесь нет. Ближайшие катки с сеансами")
+    assert "Расписание" not in text
+
+
+def test_no_public_skate_block_points_to_nearest_rinks() -> None:
+    from src.application.place_page import _b_schedule_parts
+
+    alt = {
+        "arena_name": "ТЦ Замок",
+        "path": "/p/minsk/zamok",
+        "session_id": 42,
+        "day_label": "Сегодня",
+        "starts_at_local": "19:00",
+        "distance_km": 2.4,
+    }
+    view = _place_view(next_slot=None, alternatives=[alt], days=[])
+    view["card"].update(name="Олимпик-арена", amenities={"hockey_center": True})
+    title, body, aside = _b_schedule_parts(view, base_path="", invite=False, links={})
+    assert title == "Массовое катание"
+    assert "Массового катания здесь нет" in body
+    assert 'href="/p/minsk/zamok?s=42"' in body
+    assert "Сегодня 19:00 · 2 км" in body
+    assert "на сайте катка" not in body
+    assert aside == ""
+
+    lonely = _place_view(next_slot=None, alternatives=[], days=[])
+    lonely["card"].update(amenities={"hockey_center": True})
+    _t, body, _a = _b_schedule_parts(lonely, base_path="", invite=False, links={})
+    assert "Покататься можно рядом" not in body

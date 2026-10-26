@@ -926,3 +926,26 @@ async def test_indexnow_urls_match_sitemap_exactly(app_use_test_db, db_session) 
     assert await arena_page_urls(db_session, hidden["arena_id"]) == []
     urls = await arena_page_urls(db_session, place["arena_id"])
     assert len(urls) == 2 and all(u in locs for u in urls)
+
+
+@pytest.mark.asyncio
+async def test_ice_without_public_skating_says_so_and_sends_to_a_rink_nearby(app_use_test_db, db_session) -> None:
+    """Олимпик-арена: лёд по записи. Страница не обещает расписание, колокольчика нет, рядом — каток с сеансом."""
+    place = await _place(db_session, name=f"Олимпик {uuid.uuid4().hex[:6]}", amenities={"hockey_center": True})
+    neighbour_name = f"Соседний каток {uuid.uuid4().hex[:6]}"
+    neighbour = await _insert_arena(db_session, place["city_id"], name=neighbour_name)
+    await _add_future_session(db_session, neighbour, days_ahead=1, starts_at_local="19:30")
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(place["path"])
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)
+    assert "каток без массового катания" in title
+    assert "Массовое катание —" not in title
+    assert _meta(html, "description").startswith("Массового катания здесь нет")
+    assert "Массового катания здесь нет: лёд — для команд" in html
+    assert neighbour_name in html and "19:30" in html
+    assert "на сайте катка" not in html
+    assert "watch_" not in html, "колокольчик расписания здесь ничего не ждёт"

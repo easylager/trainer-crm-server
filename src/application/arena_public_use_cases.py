@@ -1788,6 +1788,40 @@ def _human_day(local_date: date, today: date) -> str:
     return f"{_WEEKDAYS_SHORT_RU[local_date.weekday()]}, {local_date.day} {_MONTHS_SHORT_RU[local_date.month - 1]}"
 
 
+async def _upcoming_ice_session_rows(
+    session: AsyncSession, *, now: datetime, today: date
+) -> list[Mapping[str, Any]]:
+    """Будущие сеансы МК на две недели вперёд у видимых катков с координатами, по времени."""
+    result = await session.execute(
+        text(
+            f"""
+            SELECT s.id AS session_id, s.local_date, s.starts_at_local, s.starts_at_utc,
+                   s.price_adult_minor, s.currency_code,
+                   a.id AS arena_id, a.name AS arena_name, a.latitude, a.longitude,
+                   p.slug AS arena_slug, c.name AS city_name
+            FROM ice_sessions s
+            JOIN arenas a ON a.id = s.arena_id
+            LEFT JOIN arena_profiles p ON p.arena_id = a.id
+            JOIN cities c ON c.id = a.city_id
+            WHERE {_CURRENT_SESSION_SQL}
+              AND {PUBLIC_ARENA_VISIBLE_SQL}
+              AND {arena_schedule_mode_sql()} <> 'season_closed'
+              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+              AND s.local_date <= :horizon
+            ORDER BY s.starts_at_utc
+            """
+        ),
+        {
+            "st": STATUS_ACTIVE,
+            "now": now,
+            "published": ARENA_PROFILE_STATUS_PUBLISHED,
+            "ice_countries": ice_discovery_countries(),
+            "horizon": today + timedelta(days=13),
+        },
+    )
+    return list(result.mappings().all())
+
+
 async def find_nearest_ice_now(
     session: AsyncSession, *, near: str, now: datetime | None = None
 ) -> dict[str, Any] | None:
@@ -1801,34 +1835,7 @@ async def find_nearest_ice_now(
         raise IcePublicQueryError("near must be lat,lon")
     now = now or datetime.now(timezone.utc)
     today = now.astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
-    rows = (
-        await session.execute(
-            text(
-                f"""
-                SELECT s.id AS session_id, s.local_date, s.starts_at_local, s.starts_at_utc,
-                       s.price_adult_minor, s.currency_code,
-                       a.id AS arena_id, a.name AS arena_name, a.latitude, a.longitude
-                FROM ice_sessions s
-                JOIN arenas a ON a.id = s.arena_id
-                LEFT JOIN arena_profiles p ON p.arena_id = a.id
-                JOIN cities c ON c.id = a.city_id
-                WHERE {_CURRENT_SESSION_SQL}
-                  AND {PUBLIC_ARENA_VISIBLE_SQL}
-                  AND {arena_schedule_mode_sql()} <> 'season_closed'
-                  AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
-                  AND s.local_date <= :horizon
-                ORDER BY s.starts_at_utc
-                """
-            ),
-            {
-                "st": STATUS_ACTIVE,
-                "now": now,
-                "published": ARENA_PROFILE_STATUS_PUBLISHED,
-                "ice_countries": ice_discovery_countries(),
-                "horizon": today + timedelta(days=13),
-            },
-        )
-    ).mappings().all()
+    rows = await _upcoming_ice_session_rows(session, now=now, today=today)
     if not rows:
         return None
     first_day = min(r["local_date"] for r in rows)
@@ -1855,6 +1862,53 @@ async def find_nearest_ice_now(
         "distance_km": best["distance_km"],
         "price": _format_price_minor(best["price_adult_minor"], best["currency_code"] or "BYN"),
     }
+
+
+async def nearest_ice_alternatives(
+    session: AsyncSession,
+    *,
+    lat: float,
+    lon: float,
+    exclude_arena_id: int,
+    limit: int = 3,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Ближайшие катки с массовым катанием — для места, где его нет.
+
+    На каждом катке — его ближайший сеанс. Сначала катки, где лёд ещё будет сегодня,
+    потом остальные; внутри — по расстоянию.
+    """
+    now = now or datetime.now(timezone.utc)
+    today = now.astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
+    rows = await _upcoming_ice_session_rows(session, now=now, today=today)
+    first: dict[int, Mapping[str, Any]] = {}
+    for r in rows:
+        arena_id = int(r["arena_id"])
+        if arena_id != exclude_arena_id and r["arena_slug"] and arena_id not in first:
+            first[arena_id] = r
+    ranked = sorted(
+        (
+            (r["local_date"] != today, haversine_km(lat, lon, float(r["latitude"]), float(r["longitude"])), r)
+            for r in first.values()
+        ),
+        key=lambda item: (item[0], item[1]),
+    )
+    out: list[dict[str, Any]] = []
+    for _later, dist, r in ranked[:limit]:
+        local_date = r["local_date"]
+        out.append(
+            {
+                "arena_id": int(r["arena_id"]),
+                "arena_name": r["arena_name"],
+                "path": place_path(city_name=str(r["city_name"] or ""), slug=str(r["arena_slug"])),
+                "session_id": int(r["session_id"]),
+                "starts_at_local": _hhmm(r["starts_at_local"]),
+                "day_label": _human_day(local_date, today),
+                "is_today": local_date == today,
+                "distance_km": dist,
+            }
+        )
+    return out
 
 
 _WINDOW_FIELDS = (
@@ -2230,8 +2284,9 @@ async def get_public_arena_card(
         "venue_chip": venue_type_chip(row.get("venue_type")),
         "venue_site_label": venue_site_label(row.get("venue_type")),
         # TASK-146: у места бывает массовое катание (каток или уличный лёд) — клиент
-        # не решает это сам по строке типа, а берёт готовый ответ.
-        "has_skating": has_public_skating(row.get("venue_type")),
+        # не решает это сам по строке типа, а берёт готовый ответ. Хоккейный центр со
+        # льдом (Олимпик) — каток без массового катания: лёд только по записи.
+        "has_skating": has_public_skating(row.get("venue_type")) and not _is_hockey_center(row),
         "district": row.get("district"),
         "address": row.get("address"),
         "latitude": row.get("latitude"),

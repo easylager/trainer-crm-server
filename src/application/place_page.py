@@ -405,6 +405,17 @@ async def load_place_view(
                     if int(slot["id"]) == int(session_id):
                         focus = slot
             focus_missing = focus is None
+    alternatives: list[dict[str, Any]] = []
+    if _ice_without_public_skate(card) and card.get("latitude") is not None and card.get("longitude") is not None:
+        from src.application.arena_public_use_cases import nearest_ice_alternatives
+
+        alternatives = await nearest_ice_alternatives(
+            session,
+            lat=float(card["latitude"]),
+            lon=float(card["longitude"]),
+            exclude_arena_id=int(card["id"]),
+            now=now,
+        )
     trainers: list[dict[str, Any]] = []
     if int(card.get("trainer_count") or 0) > 0:
         from src.application.site_trainers import load_site_trainers
@@ -420,6 +431,7 @@ async def load_place_view(
         "next_slot": next_slot,
         "session_count": len(all_slots),
         "schedule_note": schedule_note,
+        "alternatives": alternatives,
         "today": today,
         "now": now,
     }
@@ -467,7 +479,19 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
 
 
 def _skating(card: Mapping[str, Any]) -> bool:
+    """Есть массовое катание. Хоккейный центр со льдом — каток, но лёд только по записи."""
+    amenities = card.get("amenities") or {}
+    return has_public_skating(card.get("venue_type")) and amenities.get("hockey_center") is not True
+
+
+def _ice(card: Mapping[str, Any]) -> bool:
+    """Каток или уличный лёд — с массовым катанием или без. Тренеру здесь есть место."""
     return has_public_skating(card.get("venue_type"))
+
+
+def _ice_without_public_skate(card: Mapping[str, Any]) -> bool:
+    """Лёд есть, массового катания нет: такой странице нельзя обещать расписание."""
+    return _ice(card) and not _skating(card)
 
 
 def _city(card: Mapping[str, Any]) -> str:
@@ -542,7 +566,7 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
     if invite:
         return f"Погнали? {name}"
     vt = card.get("venue_type")
-    if has_public_skating(vt):
+    if _skating(card):
         # Ключевые слова в начале title; бренд как у домена — иначе Google режет до
         # официального имени арены и сниппет тянет short_description из «О катке».
         if city:
@@ -552,6 +576,8 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
         services = ", ".join(s.lower() for s in _services(card))
         tail = f" — {services}" if services else " — магазин для катания"
         return f"{name}, {city}{tail}" if city else f"{name}{tail}"
+    if _ice_without_public_skate(card):
+        return f"{name}, {city} — {t('place.no_public_skate_title')}" if city else name
     noun = str(card.get("venue_noun") or "")
     return f"{name}, {city} — {noun.lower()}" if city and noun else name
 
@@ -603,6 +629,8 @@ def search_description(view: Mapping[str, Any]) -> str:
             head = "Расписание массового катания на неделю. " + ". ".join(bits)
     elif card.get("venue_type") == "shop":
         head = " · ".join(_services(card)) or "Магазин для катания"
+    elif _ice_without_public_skate(card):
+        head = t("place.no_public_skate_meta")
     else:
         head = f"{card.get('venue_noun') or 'Место'}: адрес, телефон и как добраться"
     where = _where(card).replace(" · ", ", ")
@@ -1606,6 +1634,8 @@ def _b_schedule_parts(
     from src.application.place_visit_blocks import prices_html, ticket_line_html
 
     card = view["card"]
+    if _ice_without_public_skate(card):
+        return t("kind.public_skate"), _b_no_public_skate(view), ""
     if not _skating(card):
         return None
     vv = vv if vv is not None else _place_visit(view)
@@ -1742,6 +1772,29 @@ def _b_ice(
     return section("На льду", body, aside_html=buy, klass="b-sec--place", sec_id="schedule")
 
 
+def _b_no_public_skate(view: Mapping[str, Any]) -> str:
+    """Честный ответ тому, кто пришёл за массовым катанием, и куда пойти вместо этого."""
+    from src.application.city_style_b import _km
+    from src.application.place_links import place_query
+
+    head = f'<p class="b-text">{_esc(t("place.no_public_skate"))}</p>'
+    rows = []
+    for alt in view.get("alternatives") or []:
+        when = " ".join(x for x in (alt.get("day_label"), alt.get("starts_at_local")) if x)
+        dist = alt.get("distance_km")
+        if dist is not None:
+            when = f"{when} · {_km(float(dist))}"
+        href = f'{alt["path"]}{place_query(session_id=int(alt["session_id"]))}'
+        rows.append(
+            f'<a class="b-info__row" href="{_esc(href)}"><span class="b-info__key">{_esc(alt["arena_name"])}</span>'
+            f'<span class="b-info__val">{_esc(when)}</span></a>'
+        )
+    if not rows:
+        return head
+    near = f'<p class="b-text">{_esc(t("place.no_public_skate_near"))}</p>'
+    return f'{head}{near}<div class="b-info">{"".join(rows)}</div>'
+
+
 def _b_hours_rows(card: Mapping[str, Any]) -> list[tuple[str, str]]:
     """Строки часов для таблицы «Как добраться»: «Открыто · каждый день 7:00–23:00», «Касса · 11:00–21:00»."""
     hours = card.get("opening_hours")
@@ -1849,7 +1902,7 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str, school_html: str = ""
     if not trainers:
         return ""
     card = view["card"]
-    coach = _b_coach_entry(card, first=False) if _skating(card) else ""
+    coach = _b_coach_entry(card, first=False) if _ice(card) else ""
     arena_id = int(card["id"])
     city_id = int(card.get("city_id") or 0) or None
 
@@ -2174,7 +2227,7 @@ def render_place_body_b(
         services_html,
     )
 
-    if card.get("id") is not None:
+    if card.get("id") is not None and _skating(card):
         bell = public_telegram_cta_url(
             base_url, start_param=f"arena_{int(card['id'])}", surface="place_page",
             city_id=city_id, arena_id=int(card["id"]),
@@ -2191,7 +2244,7 @@ def render_place_body_b(
     vv = _place_visit(view)
     food = _food_partner(card)
     trainers_listed = bool(view.get("trainers"))
-    coach_in_more = _b_coach_entry(card, first=True) if _skating(card) and not trainers_listed else ""
+    coach_in_more = _b_coach_entry(card, first=True) if _ice(card) and not trainers_listed else ""
     hours = card.get("opening_hours") if isinstance(card.get("opening_hours"), Mapping) else {}
     # Порядок блоков — arena_visit_info.PLACE_BLOCKS: cover, ice, facts, services, trainers, partners, more.
     parts = [
