@@ -121,6 +121,7 @@
     else if (from === 'hub') state.ret = 'hub';
     else state.ret = 'account';
     el('tpBackLabel').textContent = state.ret === 'onboarding' ? 'Назад' : state.ret === 'hub' ? 'Главная' : 'Профиль';
+    if (state.ret !== 'account') el('tpBackIc').innerHTML = ICON_CHEVRON;
   }
 
   function returnUrl() {
@@ -133,13 +134,33 @@
     window.location.href = returnUrl();
   }
 
+  /* Назад без перезагрузки: если пришли из «Профиля» и ничего не сохраняли, возвращаемся по истории —
+     «Профиль» открывается из кэша, а не грузится заново. После сохранения — обычный переход, чтобы
+     «Профиль» показал новые данные. */
+  var ICON_CHEVRON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+
+  function cameFromAccount() {
+    try {
+      var ref = document.referrer ? new URL(document.referrer) : null;
+      return !!ref && ref.origin === window.location.origin && /\/trainer-account$/.test(ref.pathname);
+    } catch (e) { return false; }
+  }
+
+  function exitSection() {
+    if (state.ret === 'account' && !state.saved && cameFromAccount() && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    leave();
+  }
+
   function goBack() {
-    if (!state.dirty || state.busy) { leave(); return; }
+    if (!state.dirty || state.busy) { exitSection(); return; }
     var msg = 'Цены не сохранены. Выйти без сохранения?';
     if (tg && typeof tg.showConfirm === 'function') {
-      tg.showConfirm(msg, function (ok) { if (ok) leave(); });
+      tg.showConfirm(msg, function (ok) { if (ok) exitSection(); });
     } else if (window.confirm(msg)) {
-      leave();
+      exitSection();
     }
   }
 
@@ -488,6 +509,7 @@
       .then(function () {
         state.busy = false;
         state.dirty = false;
+        state.saved = true;
         haptic('success');
         note('Сохранили');
         syncSave();

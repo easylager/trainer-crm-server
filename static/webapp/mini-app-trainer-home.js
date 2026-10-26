@@ -103,6 +103,25 @@
     return key;
   }
 
+  var ICON_CLOSE =
+    '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+  var ICON_CHEVRON =
+    '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+
+  /* Кнопка шапки: круг с иконкой + подпись. Иконки — наши константы, подпись — textContent. */
+  function fillBackButton(btn, label, iconHtml) {
+    btn.textContent = '';
+    var ic = document.createElement('span');
+    ic.className = 'ts-back__ic';
+    ic.innerHTML = iconHtml;
+    var tx = document.createElement('span');
+    tx.className = 'ts-back__label';
+    tx.textContent = label;
+    btn.appendChild(ic);
+    btn.appendChild(tx);
+    btn.classList.add('ts-back');
+  }
+
   function wireNestedHeader(here) {
     var nav = document.querySelector('.trainer-mini-nav');
     var origin = (nav && nav.querySelector('.btn-app-home')) || document.getElementById('btnHomeList');
@@ -123,9 +142,20 @@
       window.location.href = url;
     }
 
-    origin.textContent = '‹ ' + ORIGIN_LABELS[key];
+    /* Шапка раздела (mini-app-trainer-section.css): крестик — выход в «Профиль», «‹» — шаг назад. */
+    var toAccount = key === 'trainer-account';
+    fillBackButton(origin, ORIGIN_LABELS[key], toAccount ? ICON_CLOSE : ICON_CHEVRON);
     origin.classList.add('btn-app-home--origin');
-    origin.setAttribute('aria-label', 'Назад: ' + ORIGIN_LABELS[key]);
+    origin.setAttribute('aria-label', (toAccount ? 'Закрыть, вернуться: ' : 'Назад: ') + ORIGIN_LABELS[key]);
+    if (nav) {
+      nav.classList.add('ts-nav');
+      var host = nav.parentElement;
+      if (host && host !== document.body && (host.classList.contains('header') || /header/i.test(host.className || ''))) {
+        host.classList.add('ts-header');
+      }
+    }
+    document.body.classList.add('ts-page');
+    if (back && pageOwnsBack) fillBackButton(back, 'Назад', ICON_CHEVRON);
     origin.addEventListener('click', function (ev) {
       ev.preventDefault();
       ev.stopImmediatePropagation();

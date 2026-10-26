@@ -145,16 +145,37 @@
     try { from = new URLSearchParams(window.location.search).get('from') || ''; } catch (e) { /* */ }
     state.ret = from === 'hub' ? 'hub' : 'account';
     el('tpBackLabel').textContent = state.ret === 'hub' ? 'Главная' : 'Профиль';
+    if (state.ret === 'hub') el('tpBackIc').innerHTML = ICON_CHEVRON;
   }
 
   function leave() {
     window.location.href = pageUrl(state.ret === 'hub' ? 'trainer-home' : 'trainer-account');
   }
 
+  /* Назад без перезагрузки: если пришли из «Профиля» и ничего не сохраняли, возвращаемся по истории —
+     «Профиль» открывается из кэша, а не грузится заново. После сохранения — обычный переход, чтобы
+     «Профиль» показал новые данные. */
+  var ICON_CHEVRON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+
+  function cameFromAccount() {
+    try {
+      var ref = document.referrer ? new URL(document.referrer) : null;
+      return !!ref && ref.origin === window.location.origin && /\/trainer-account$/.test(ref.pathname);
+    } catch (e) { return false; }
+  }
+
+  function exitSection() {
+    if (state.ret === 'account' && !state.saved && cameFromAccount() && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    leave();
+  }
+
   function goBack() {
     if (!el('arSheet').hidden) { closeSheet(); return; }
-    if (!state.dirty || state.busy) { leave(); return; }
-    confirmDialog('Изменения не сохранены. Выйти без сохранения?', leave);
+    if (!state.dirty || state.busy) { exitSection(); return; }
+    confirmDialog('Изменения не сохранены. Выйти без сохранения?', exitSection);
   }
 
   /* ─── Данные ──────────────────────────────────────────────────────────── */
@@ -542,6 +563,7 @@
       .then(function () {
         state.busy = false;
         state.dirty = false;
+        state.saved = true;
         haptic('success');
         note('Сохранили');
         syncSave();

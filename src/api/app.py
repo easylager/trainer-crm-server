@@ -1067,6 +1067,19 @@ def webapp_trainer_nav_css(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-trainer-section.css")
+def webapp_trainer_section_css(request: Request):
+    """Header of a trainer section (cross / chevron + label). Use ``?v=…`` for long-lived cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-section.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-schedule-editor.css")
 def webapp_schedule_editor_css(request: Request):
     """Schedule editor page styles (split from schedule-editor.html). Use ``?v=…`` for cache."""

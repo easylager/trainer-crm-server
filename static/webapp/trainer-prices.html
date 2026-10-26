@@ -5,26 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Услуги и цены</title>
   <link rel="preload" as="font" type="font/woff2" crossorigin href="/static/fonts/glide-public/onest-cyr.woff2?v=202610236" />
-  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610267" />
+  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610268" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202610267"></script>
-  <script src="mini-app-telegram-chrome.js?v=202610267"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610267" />
-  <link rel="stylesheet" href="theme.css?v=202610267" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610267" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610267" />
-  <link rel="stylesheet" href="mini-app-trainer-account.css?v=202610267" />
+  <script src="mini-app-trainer-theme.js?v=202610268"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610268"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610268" />
+  <link rel="stylesheet" href="theme.css?v=202610268" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610268" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610268" />
+  <link rel="stylesheet" href="mini-app-trainer-account.css?v=202610268" />
+  <link rel="stylesheet" href="mini-app-trainer-section.css?v=202610268" />
 </head>
 <!--
   «Услуги и цены» (TASK-313). Отдельный экран с одной задачей вместо блока анкеты, где у каждой
   услуги было пять тарифов с галочками и нулями. Здесь — карточка на занятие, «Взрослый» и
   «Детский» сразу, остальное под «Ещё тарифы». Пустая цена — ученик видит «по запросу».
 -->
-<body class="ta-body">
+<body class="ta-body ts-page">
   <main class="tp-page" id="tpPage">
-    <button type="button" class="tp-back" id="tpBack">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-      <span id="tpBackLabel">Профиль</span>
+    <button type="button" class="ts-back tp-back" id="tpBack">
+      <span class="ts-back__ic" id="tpBackIc"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></span>
+      <span class="ts-back__label" id="tpBackLabel">Профиль</span>
     </button>
     <h1 class="tp-title">Услуги и цены</h1>
     <p class="tp-lead" id="tpLead">Пустая цена — ученик увидит «по&nbsp;запросу»</p>
@@ -49,6 +50,6 @@
     </div>
   </div>
 
-  <script defer src="trainer-prices-main.js?v=202610267"></script>
+  <script defer src="trainer-prices-main.js?v=202610268"></script>
 </body>
 </html>

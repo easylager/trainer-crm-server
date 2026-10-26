@@ -1,0 +1,93 @@
+/**
+ * Шапка раздела кабинета тренера — одна на все разделы «Профиля».
+ * Круглая кнопка + подпись: крестик выходит в «Профиль», стрелка «‹» — один шаг назад
+ * внутри раздела или в другое место (Заявки, Приглашение…). Мягкий бирюзовый градиент сверху.
+ *
+ * Разметка: .ts-back > .ts-back__ic + .ts-back__label. Страницы с оболочкой получают её от
+ * mini-app-trainer-home.js (кнопка «‹ Откуда»), «Услуги и цены» и «Где занимаюсь» — из HTML.
+ * Грузить ПОСЛЕ mini-app-trainer-nav.css / -shell.css: те держат кнопки через !important.
+ */
+
+body.ts-page {
+  background-color: var(--glide-bg);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--glide-brand) 13%, var(--glide-bg)) 0,
+    var(--glide-bg) 360px
+  );
+  background-repeat: no-repeat;
+}
+
+/* Специфичность выше, чем у .trainer-mini-nav > button.btn-app-home/-back в nav.css, theme.css и shell.css. */
+.ts-back,
+html body .trainer-mini-nav > button.ts-back {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+  padding: 0 16px 0 0 !important;
+  border: 0 !important;
+  border-radius: 22px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--glide-ink-teal) !important;
+  font-family: var(--app-font-sans, inherit) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  width: auto !important;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.ts-back[hidden],
+html body .trainer-mini-nav > button.ts-back[hidden] {
+  display: none !important;
+}
+
+.ts-back__ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--glide-line);
+  background: color-mix(in srgb, var(--glide-text) 7%, transparent);
+  color: var(--glide-text);
+  transition: transform 0.12s ease, background-color 0.12s ease;
+}
+.ts-back:active .ts-back__ic {
+  transform: scale(0.94);
+  background: color-mix(in srgb, var(--glide-text) 14%, transparent);
+}
+.ts-back__ic svg {
+  display: block;
+}
+
+/* Строка с кнопкой: слева, над заголовком, а не прижатой вправо, как было у «Главной». */
+body .trainer-mini-nav.ts-nav {
+  justify-content: flex-start !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 0 8px !important;
+  flex: 0 0 auto !important;
+}
+body .trainer-app-topbar.trainer-mini-nav.ts-nav {
+  width: 100% !important;
+  margin: 0 0 8px !important;
+}
+
+/* Страницы, где кнопка стояла справа от заголовка: кнопка уходит строкой выше. */
+.ts-header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 4px !important;
+}
+.ts-header > .ts-nav {
+  order: -1;
+}

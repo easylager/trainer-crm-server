@@ -539,6 +539,11 @@
     if (state.boot) renderGroups();
   });
 
+  /* Вернулись «назад» из раздела, и браузер показал страницу из кэша (bfcache): данные могли измениться. */
+  window.addEventListener('pageshow', function (ev) {
+    if (ev.persisted && state.boot) load();
+  });
+
   function start() {
     el('taRetry').onclick = load;
     el('taFullForm').onclick = function () { go('trainer-profile'); };
