@@ -226,3 +226,18 @@ async def test_match_loop_marks_calendar_then_closes_the_month(db_session) -> No
     assert counts["closed_races"] == [race.id]
     assert [w["player_key"] for w in await race_winners(db_session, race_id=race.id, league_id=None)] == [SASHA]
     assert (await ensure_month_race(db_session, now=DEC_1)).closed_at is None
+
+
+@pytest.mark.asyncio
+async def test_month_closes_right_after_the_final_when_calendar_saw_month_end(db_session) -> None:
+    """TASK-335: корона — сразу после финала, чтобы итог финала в боте назвал чемпиона."""
+    race = await ensure_month_race(db_session, now=NOV)
+    # Календарь читали 2 ноября: до конца месяца он не дотягивается — финала нет, досрочно не закрываем.
+    await mark_calendar_synced(db_session, now=datetime(2026, 11, 2, 12, 0, tzinfo=MINSK_TZ))
+    final = await _play(db_session, datetime(2026, 11, 30, 19, 0, tzinfo=MINSK_TZ), {SASHA: (3, 1)}, mid="early")
+    evening = datetime(2026, 11, 30, 22, 0, tzinfo=MINSK_TZ)
+    assert await race_final_match_id(db_session, await ensure_month_race(db_session, now=NOV)) is None
+    assert await close_due_races(db_session, now=evening) == []
+    await mark_calendar_synced(db_session, now=datetime(2026, 11, 25, 12, 0, tzinfo=MINSK_TZ))
+    assert await race_final_match_id(db_session, await ensure_month_race(db_session, now=NOV)) == final
+    assert await close_due_races(db_session, now=evening) == [race.id]

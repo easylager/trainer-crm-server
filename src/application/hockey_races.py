@@ -34,6 +34,9 @@ POINTS_RULE = "fifa_v1"
 RESULT_WINDOW = timedelta(hours=24)
 # Лига на одного — не соревнование: корону лиги даём, когда в ней хотя бы двое.
 LEAGUE_CROWN_MIN_MEMBERS = 2
+# Сайт клуба показывает календарь примерно на 4 недели вперёд: прочитанный за 3 недели до конца
+# месяца, он видит последний матч месяца. Раньше — финал не называем и гонку досрочно не закрываем.
+CALENDAR_COVERS_END = timedelta(days=21)
 # Стена корон: регулярка КХЛ стартует в сентябре, плей-офф заканчивается в апреле.
 SEASON_FIRST_MONTH = 9
 SEASON_LAST_MONTH = 4
@@ -77,7 +80,8 @@ _SYNCED = text("UPDATE hockey_races SET calendar_synced_at = :now WHERE id = :ra
 
 _DUE = text(f"""
     SELECT {_RACE_COLUMNS} FROM hockey_races
-    WHERE closed_at IS NULL AND ends_at <= :now
+    WHERE closed_at IS NULL
+      AND (ends_at <= :now OR calendar_synced_at >= ends_at - CAST(:covers AS INTERVAL))
     ORDER BY starts_at
     FOR UPDATE SKIP LOCKED
     """)
@@ -234,12 +238,18 @@ async def mark_calendar_synced(session: AsyncSession, *, now: datetime, club: st
 
 
 async def close_due_races(session: AsyncSession, *, now: datetime) -> list[int]:
-    """Закрыть гонки, у которых прошёл месяц и посчитан каждый матч: записать короны. Идемпотентно."""
+    """Закрыть гонки, где посчитан каждый матч: записать короны. Идемпотентно.
+
+    Обычно — после конца месяца. Досрочно — когда сыгран финал месяца и календарь его видел
+    (TASK-335): тогда итог финала в боте уже говорит, у кого корона.
+    """
     closed: list[int] = []
-    for record in (await session.execute(_DUE, {"now": _utc(now)})).all():
+    for record in (await session.execute(_DUE, {"now": _utc(now), "covers": CALENDAR_COVERS_END})).all():
         race = _race(record)
         window = {"since": race.starts_at, "until": race.ends_at, "club": race.club}
         if (await session.execute(_UNFINISHED, window)).first():
+            continue
+        if _utc(now) < race.ends_at and not await _final_played(session, race, now=now):
             continue
         params = {**window, "race_id": race.id, "exact": POINTS_EXACT}
         await session.execute(_GLOBAL_CROWNS, params)
@@ -249,12 +259,28 @@ async def close_due_races(session: AsyncSession, *, now: datetime) -> list[int]:
     return closed
 
 
+def _calendar_covers_end(race: Race) -> bool:
+    return race.calendar_synced_at is not None and race.calendar_synced_at >= race.ends_at - CALENDAR_COVERS_END
+
+
 async def race_final_match_id(session: AsyncSession, race: Race | None) -> int | None:
-    """Последний матч гонки — финал месяца. Пока календарь месяца не прочитан, финала не называем."""
-    if race is None or race.calendar_synced_at is None:
+    """Последний матч гонки — финал месяца. Пока календарь не видел конец месяца, финала не называем."""
+    if race is None or not _calendar_covers_end(race):
         return None
     params = {"since": race.starts_at, "until": race.ends_at, "club": race.club}
     return (await session.execute(_LAST_MATCH, params)).scalar_one_or_none()
+
+
+_MATCH_STATUS = text("SELECT status, starts_at FROM hockey_matches WHERE id = :match_id")
+
+
+async def _final_played(session: AsyncSession, race: Race, *, now: datetime) -> bool:
+    """Финал месяца известен, начался и посчитан — корону можно отдать до полуночи."""
+    final_id = await race_final_match_id(session, race)
+    if final_id is None:
+        return False
+    row = (await session.execute(_MATCH_STATUS, {"match_id": final_id})).one()
+    return row.status == "final" and _utc(row.starts_at) <= _utc(now)
 
 
 async def crown_counts(session: AsyncSession, *, league_id: int | None) -> dict[int, int]:
