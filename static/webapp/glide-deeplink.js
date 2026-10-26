@@ -122,6 +122,16 @@
       if (fromCard[2]) return { key: 'kto-kogo', path: 'kto-kogo?join=' + fromCard[2].toUpperCase() + '&from=' + cardKind };
       if (cardKind === 'result') return { key: 'kto-kogo', path: 'kto-kogo?from=result' };
     }
+    // Сообщения бота «Кто кого» (TASK-335): kkn[_<матч>[_h|_a]] — к матчу или сразу ход за сторону,
+    // kkmo_<гонка> — итоги месяца, kkoff — выключить напоминания.
+    var kkPick = /^kkn(?:_([1-9][0-9]*)(?:_([ha]))?)?$/.exec(sp);
+    if (kkPick) {
+      if (kkPick[2]) return { key: 'kto-kogo', path: 'kto-kogo?pick=' + kkPick[1] + '&side=' + (kkPick[2] === 'h' ? 'home' : 'away') };
+      return { key: 'kto-kogo', path: 'kto-kogo' };
+    }
+    var kkMonth = /^kkmo_([1-9][0-9]*)$/.exec(sp);
+    if (kkMonth) return { key: 'kto-kogo', path: 'kto-kogo?month=' + kkMonth[1] };
+    if (sp === 'kkoff') return { key: 'kto-kogo', path: 'kto-kogo?remind=off' };
     // Домашний матч — ивент (TASK-304): kkm_<матч>[_<код компании>] — «Подробнее» и «Позвать» из чата.
     var matchEvent = /^kkm_([1-9][0-9]*)(?:_([A-Za-z0-9]{4,16}))?$/.exec(sp);
     if (matchEvent) {

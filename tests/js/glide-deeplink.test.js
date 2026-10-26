@@ -230,3 +230,15 @@ describe('client-home подключает early redirect до body', () => {
     assert.ok(dl < bodyTag, 'уходим до разбора главной');
   });
 });
+
+describe('«Кто кого» из сообщений бота (TASK-335)', () => {
+  const G = require('../../static/webapp/glide-deeplink.js');
+  it('ход за сторону, матчи, итоги месяца, выключить напоминания', () => {
+    assert.deepEqual(G.deepLinkTarget('kkn_42_h'), { key: 'kto-kogo', path: 'kto-kogo?pick=42&side=home' });
+    assert.deepEqual(G.deepLinkTarget('kkn_42_a'), { key: 'kto-kogo', path: 'kto-kogo?pick=42&side=away' });
+    assert.deepEqual(G.deepLinkTarget('kkn_42'), { key: 'kto-kogo', path: 'kto-kogo' });
+    assert.deepEqual(G.deepLinkTarget('kkmo_7'), { key: 'kto-kogo', path: 'kto-kogo?month=7' });
+    assert.deepEqual(G.deepLinkTarget('kkoff'), { key: 'kto-kogo', path: 'kto-kogo?remind=off' });
+    assert.deepEqual(G.deepLinkTarget('kkm_5'), { key: 'client-match', path: 'client-match?id=5' });
+  });
+});

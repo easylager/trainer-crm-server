@@ -158,3 +158,29 @@ describe('гонка месяца (TASK-334)', () => {
     assert.equal(M.remainingLine({ monthly: false }), '');
   });
 });
+
+describe('волна 2 (TASK-335)', () => {
+  const m = { home: { name: 'СКА' }, away: { name: 'Динамо-Минск' } };
+  it('очки с ×2', () => {
+    assert.equal(M.totalPoints({ points: 50, doubled: true }), 100);
+    assert.equal(M.totalPoints({ points: 20 }), 20);
+    assert.equal(M.totalPoints({ points: null }), null);
+  });
+  it('расклад считает Динамо и меня, меньше двух — молчим', () => {
+    const moves = [{ side: 'away' }, { side: 'away' }, { side: 'home' }];
+    assert.deepEqual(M.crowd(m, moves, { side: 'away' }), { text: '3 из 4 за Динамо-Минск', home: 1, away: 3 });
+    assert.equal(M.crowd(m, [], { side: 'away' }), null);
+  });
+  it('ход друга', () => {
+    assert.equal(M.friendMove({ home_score: 2, away_score: 4 }), '2:4');
+    assert.equal(M.friendMove({ side: 'home' }), 'без счёта');
+  });
+});
+
+describe('строка хода с ×2 (TASK-335)', () => {
+  const names = { home: 'Динамо-Минск', away: 'Трактор' };
+  it('точный счёт — итоговое число, сторона — пометка ×2', () => {
+    assert.equal(M.stakeLine({ side: 'home', home_score: 4, away_score: 1, doubled: true }, names, 'open'), 'ход принят · 4:1 · в точку — 100');
+    assert.match(M.stakeLine({ side: 'home', home_score: null, away_score: null, doubled: true }, names, 'open'), /очки ×2$/);
+  });
+});

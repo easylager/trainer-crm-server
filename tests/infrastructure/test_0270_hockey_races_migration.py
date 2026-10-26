@@ -57,6 +57,15 @@ async def test_races_crowns_unique_and_roundtrip(db_session) -> None:
     ).scalar_one()
     assert league == "Динамо-Минск"
     await db_session.execute(text("INSERT INTO hockey_card_events (kind, card) VALUES ('shared', 'crown')"))
+    # Волна 2 (0271) стоит поверх — снимаем её первой.
+    w2 = runpy.run_path(str(MIGRATIONS / "0271_hockey_double_and_reminders.py"))
+    connection = await db_session.connection()
+
+    def drop_w2(sync_connection) -> None:
+        with Operations.context(MigrationContext.configure(sync_connection)):
+            w2["downgrade"]()
+
+    await connection.run_sync(drop_w2)
     await _step(db_session, "downgrade")
     assert not await _exists(db_session, "hockey_races")
     await _step(db_session, "upgrade")

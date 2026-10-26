@@ -180,8 +180,11 @@
     var move = moveLine(pick, names);
     if (!move) return live ? 'ходы закрыты · этот матч без тебя' : '';
     if (live) return move + ' · ждём сирену';
-    if (pick.home_score != null) return 'ход принят · ' + pick.home_score + ':' + pick.away_score + ' · в точку — 50';
-    return 'ход принят · ' + move;
+    // ×2 (TASK-335): ставка не меняется, удваиваются очки — пишем итоговое число.
+    if (pick.home_score != null) {
+      return 'ход принят · ' + pick.home_score + ':' + pick.away_score + ' · в точку — ' + (pick.doubled ? 100 : 50);
+    }
+    return 'ход принят · ' + move + (pick.doubled ? ' · очки ×2' : '');
   }
 
   /**
@@ -304,6 +307,35 @@
     return head + 'Очки в лиге — с ближайшего матча, с 1-го числа все с нуля.';
   }
 
+  // ---------- волна 2 (TASK-335) ----------
+
+  var DINAMO = 'Динамо-Минск';
+
+  /** Очки хода с ×2: сервер хранит базовые (по ним «в точку»), наклейка показывает итог. */
+  function totalPoints(pick) {
+    if (!pick || pick.points == null) return null;
+    return pick.doubled ? pick.points * 2 : pick.points;
+  }
+
+  /** Расклад по друзьям со стартом матча: «6 из 8 за Динамо-Минск». Меньше двух ходов — молчим. */
+  function crowd(m, moves, mine) {
+    var sides = (moves || []).map(function (x) { return x.side; });
+    var my = pickSide(mine);
+    if (my) sides.push(my);
+    if (sides.length < 2) return null;
+    var home = sides.filter(function (x) { return x === 'home'; }).length;
+    var away = sides.length - home;
+    var side = m.home.name === DINAMO ? 'home' : m.away.name === DINAMO ? 'away' : home >= away ? 'home' : 'away';
+    var n = side === 'home' ? home : away;
+    return { text: n + ' из ' + sides.length + ' за ' + m[side].name, home: home, away: away };
+  }
+
+  /** Строка хода друга в списке «счета открыты». */
+  function friendMove(x, names) {
+    if (x.home_score != null && x.away_score != null) return x.home_score + ':' + x.away_score;
+    return 'без счёта';
+  }
+
   var api = {
     NEUTRAL: NEUTRAL,
     whenLabel: whenLabel,
@@ -333,6 +365,9 @@
     monthHead: monthHead,
     monthLine: monthLine,
     remainingLine: remainingLine,
+    totalPoints: totalPoints,
+    crowd: crowd,
+    friendMove: friendMove,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

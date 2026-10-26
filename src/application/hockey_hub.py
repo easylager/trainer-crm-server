@@ -278,10 +278,8 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
             "mode": "result",
             "match": {**_match(result._mapping, now=now), "race_final": result._mapping["id"] == final_id},
             "my_pick": pick,
-            # С ×2 в слоте — итоговые очки: «+100», а не базовые 50 (TASK-335).
-            "points": None
-            if pick is None or pick["points"] is None
-            else pick["points"] * (2 if pick["doubled"] else 1),
+            # Базовые очки — по ним слова «в точку»; ×2 в my_pick.doubled, наклейка умножит (TASK-335).
+            "points": None if pick is None else pick["points"],
             "place": await _best_place(session, player_key, at=_utc(result._mapping["starts_at"])),
             **_event_fields(result._mapping),
         }
