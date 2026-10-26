@@ -20,6 +20,14 @@ from src.application.hockey_game import (
     standings,
 )
 from src.application.hockey_hub import hub_card, mark_result_seen
+from src.application.hockey_races import (
+    crown_counts,
+    leader_line,
+    mark_race_seen,
+    race_by_id,
+    race_result,
+    race_summary,
+)
 from src.application.hockey_leagues import friends_picks
 from src.application.hockey_teams import team_card
 from src.shared.telegram_webapp import parse_user_json_from_init_data
@@ -73,7 +81,7 @@ def _player_name(display_name: str | None, init_raw: str) -> str:
     return f"{first.strip()} {initial}." if initial else first.strip()
 
 
-def _match_out(row: dict, *, now: datetime, friends: dict[str, list[str]]) -> dict:
+def _match_out(row: dict, *, now: datetime, friends: dict[str, list[str]], final_id: int | None = None) -> dict:
     starts_at = _aware(row["starts_at"])
     played = row["status"] == "final"
     my_pick = None
@@ -100,6 +108,7 @@ def _match_out(row: dict, *, now: datetime, friends: dict[str, list[str]]) -> di
         "my_pick": my_pick,
         "sides": {"home": row["home_picks"], "away": row["away_picks"]},
         "friends": friends,
+        "race_final": row["id"] == final_id,
     }
 
 
@@ -113,9 +122,14 @@ async def get_client_hockey_matches(
     rows = await player_matches(session, player_key, since=now - _MATCH_WINDOW, limit=_LIST_LIMIT)
     friends = await friends_picks(session, player_key=player_key, match_ids=[int(row["id"]) for row in rows])
     me = await player_standing(session, player_key, now=now)
+    race = await race_summary(session, now=now)
+    final_id = race["final_match_id"]
+    final_open = any(row["id"] == final_id and row["status"] == "scheduled" for row in rows)
     return {
-        "items": [_match_out(row, now=now, friends=friends[int(row["id"])]) for row in rows],
+        "items": [_match_out(row, now=now, friends=friends[int(row["id"])], final_id=final_id) for row in rows],
         "me": _standing_me(me),
+        "race": race,
+        "leader": await leader_line(session, player_key=player_key, now=now) if final_open else None,
     }
 
 
@@ -184,7 +198,9 @@ async def get_client_hockey_standings(
     player_key = client_catalog_telegram_key(principal)
     rows = await standings(session, now=now, limit=_TABLE_LIMIT)
     me = await player_standing(session, player_key, now=now)
+    crowns = await crown_counts(session, league_id=None)
     return {
+        "race": await race_summary(session, now=now),
         "items": [
             {
                 "rank": row.rank,
@@ -193,8 +209,37 @@ async def get_client_hockey_standings(
                 "exact": row.exact,
                 "played": row.played,
                 "is_me": row.player_key == player_key,
+                "crowns": crowns.get(row.player_key, 0),
             }
             for row in rows
         ],
         "me": _standing_me(me),
     }
+
+
+@router.get("/client/hockey/races/{race_id}/result")
+async def get_client_hockey_race_result(
+    race_id: int,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Итоги месяца (TASK-334): лучшая лига игрока или общая таблица, подиум, чемпионы."""
+    race = await race_by_id(session, race_id)
+    if race is None or race.closed_at is None:
+        raise HTTPException(status_code=404, detail="race_not_closed")
+    return await race_result(session, player_key=client_catalog_telegram_key(principal), race=race)
+
+
+@router.post("/client/hockey/races/{race_id}/seen", status_code=204)
+async def post_client_hockey_race_seen(
+    race_id: int,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    if await race_by_id(session, race_id) is None:
+        raise HTTPException(status_code=404, detail="race_not_found")
+    await mark_race_seen(
+        session, player_key=client_catalog_telegram_key(principal), race_id=race_id, now=datetime.now(timezone.utc)
+    )
+    await session.commit()
+    return Response(status_code=204)

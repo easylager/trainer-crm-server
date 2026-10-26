@@ -247,6 +247,9 @@ def now_slot(
             "minutes_until": _minutes_until(str(booking.get("start_time") or ""), local_now=local_now),
         }
     mode = (hockey or {}).get("mode") if has_city else None
+    # Итог месяца «Кто кого» (TASK-334) — сутки после финала, пока не открыли.
+    if mode == "race_result" and (hockey or {}).get("race"):
+        return {"kind": "kk_month", "hockey": dict(hockey or {})}
     # live — идущий домашний матч-событие (TASK-304); рисуется той же карточкой, что before.
     if mode in ("result", "before", "live") and (hockey or {}).get("match"):
         return {"kind": "kk_result" if mode == "result" else "kk_before", "hockey": dict(hockey or {})}

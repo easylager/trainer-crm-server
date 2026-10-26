@@ -327,6 +327,101 @@ async def race_winners(session: AsyncSession, *, race_id: int, league_id: int | 
     return [dict(r._mapping) for r in rows]
 
 
+_RACE_COUNTS = text("""
+    SELECT COUNT(*) FILTER (WHERE status = 'final')::int AS played,
+           COUNT(*) FILTER (WHERE status <> 'cancelled')::int AS known
+    FROM hockey_matches
+    WHERE starts_at >= :since AND starts_at < :until AND (home_team = :club OR away_team = :club)
+    """)
+
+
+async def current_race(session: AsyncSession, *, now: datetime, club: str = DINAMO) -> Race | None:
+    """Гонка текущего месяца без записи в базу (её создаёт цикл матчей)."""
+    window = race_window(now)
+    if not window.monthly:
+        return None
+    params = {"club": club, "kind": KIND_MONTH, "starts_at": window.since}
+    record = (await session.execute(_RACE_AT, params)).one_or_none()
+    return None if record is None else _race(record)
+
+
+async def race_summary(session: AsyncSession, *, now: datetime, club: str = DINAMO) -> dict:
+    """Шапка таблиц: какой месяц, сколько матчей сыграно из известных, какой матч — финал."""
+    window = race_window(now)
+    counts = (await session.execute(_RACE_COUNTS, {"since": window.since, "until": window.until, "club": club})).one()
+    race = await current_race(session, now=now, club=club)
+    return {
+        "title": window.title,
+        "monthly": window.monthly,
+        "ends_at": window.until.isoformat(),
+        "played": counts.played,
+        "known": counts.known,
+        "final_match_id": await race_final_match_id(session, race),
+    }
+
+
+async def leader_line(session: AsyncSession, *, player_key: int, now: datetime) -> dict | None:
+    """Строка под финалом месяца — в лучшей лиге игрока: кто впереди и на сколько."""
+    from src.application.hockey_leagues import league_table, player_leagues
+
+    leagues = [x for x in await player_leagues(session, player_key=player_key, now=now) if x.members > 1]
+    if not leagues:
+        return None
+    best = min(leagues, key=lambda x: (x.my_rank, -x.my_points, x.id))
+    rows = await league_table(session, league_id=best.id, player_key=player_key, now=now)
+    me = next(r for r in rows if r.player_key == player_key)
+    others = [r for r in rows if r.player_key != player_key]
+    if not others or not any(r.points for r in rows):
+        return None
+    top = max(others, key=lambda r: (r.points, r.exact))
+    if me.points > top.points or (me.points == top.points and me.exact > top.exact):
+        return {"league_name": best.name, "leader": None, "gap": me.points - top.points, "me_leading": True}
+    return {
+        "league_name": best.name,
+        "leader": top.display_name,
+        "gap": top.points - me.points,
+        "me_leading": False,
+    }
+
+
+async def race_result(session: AsyncSession, *, player_key: int, race: Race) -> dict:
+    """Итоги гонки для игрока: лучшая лига (или общая таблица), место, подиум, чемпионы."""
+    from src.application.hockey_game import standings
+    from src.application.hockey_leagues import league_table, player_leagues
+
+    at = race.starts_at
+    leagues = [x for x in await player_leagues(session, player_key=player_key, now=at) if x.members > 1]
+    league = min(leagues, key=lambda x: (x.my_rank, -x.my_points, x.id)) if leagues else None
+    if league is not None:
+        rows = await league_table(session, league_id=league.id, player_key=player_key, now=at)
+    else:
+        rows = await standings(session, now=at)
+    winners = await race_winners(session, race_id=race.id, league_id=league.id if league else None)
+    crowned = {w["player_key"] for w in winners}
+    me = next((r for r in rows if r.player_key == player_key), None)
+    leader_points = rows[0].points if rows else 0
+    return {
+        "race_id": race.id,
+        "title": race.title,
+        "league": None if league is None else {"id": league.id, "name": league.name},
+        "won": player_key in crowned,
+        "rank": None if me is None else me.rank,
+        "points": 0 if me is None else me.points,
+        "gap": None if me is None else leader_points - me.points,
+        "winners": [w["display_name"] for w in winners],
+        "podium": [
+            {
+                "rank": r.rank,
+                "display_name": r.display_name,
+                "points": r.points,
+                "crown": r.player_key in crowned,
+                "is_me": r.player_key == player_key,
+            }
+            for r in rows[:3]
+        ],
+    }
+
+
 __all__ = [
     "KIND_MONTH",
     "LEAGUE_CROWN_MIN_MEMBERS",
@@ -334,6 +429,10 @@ __all__ = [
     "RESULT_WINDOW",
     "Race",
     "close_due_races",
+    "current_race",
+    "leader_line",
+    "race_result",
+    "race_summary",
     "crown_counts",
     "ensure_month_race",
     "ensure_races",

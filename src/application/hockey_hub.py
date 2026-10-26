@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.hockey_event import enabled as hockey_enabled
 from src.application.hockey_event import event_href, is_home, kk_hidden
 from src.application.hockey_matches import DINAMO
+from src.application.hockey_races import current_race, fresh_race_result, race_final_match_id, race_result
 from src.application.hockey_game import POINTS_EXACT, race_window
 from src.application.hockey_teams import team_card
 
@@ -220,6 +221,12 @@ def _suppressed(upcoming, *, hidden: bool, had_pick: bool, finals: list[bool]) -
 async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> dict:
     now = _utc(now)
     hidden = await kk_hidden(session, player_key)
+    # Итог месяца важнее итога матча: в нём уже есть финал (TASK-334).
+    if not hidden:
+        race = await fresh_race_result(session, player_key=player_key, now=now)
+        if race is not None:
+            return {"mode": "race_result", "race": await race_result(session, player_key=player_key, race=race)}
+    final_id = await race_final_match_id(session, await current_race(session, now=now))
     result = (
         None
         if hidden
@@ -236,7 +243,7 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
         if live is not None and hockey_enabled():
             return {
                 "mode": "live",
-                "match": _match(live._mapping, now=now),
+                "match": {**_match(live._mapping, now=now), "race_final": live._mapping["id"] == final_id},
                 "my_pick": _pick(live._mapping),
                 **_event_fields(live._mapping),
             }
@@ -268,7 +275,7 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
         pick = _pick(result._mapping)
         return {
             "mode": "result",
-            "match": _match(result._mapping, now=now),
+            "match": {**_match(result._mapping, now=now), "race_final": result._mapping["id"] == final_id},
             "my_pick": pick,
             "points": None if pick is None else pick["points"],
             "place": await _best_place(session, player_key, at=_utc(result._mapping["starts_at"])),
@@ -277,7 +284,7 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
     if mode == "before" and upcoming is not None:
         return {
             "mode": "before",
-            "match": _match(upcoming._mapping, now=now),
+            "match": {**_match(upcoming._mapping, now=now), "race_final": upcoming._mapping["id"] == final_id},
             "my_pick": _pick(upcoming._mapping),
             **_event_fields(upcoming._mapping),
         }

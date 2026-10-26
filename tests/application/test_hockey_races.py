@@ -173,3 +173,29 @@ async def test_league_table_in_month_counts_after_joining(db_session) -> None:
     rows = await league_table(db_session, league_id=league.id, player_key=SASHA, now=NOV)
     # 2:1 при итоге 3:1 — победитель и шайбы гостей: 30; октябрьские 50 в ноябрь не попадают.
     assert [(r.player_key, r.points) for r in rows] == [(SASHA, 30)]
+
+
+@pytest.mark.asyncio
+async def test_hub_shows_month_result_with_league_podium_then_match_flow(db_session) -> None:
+    from src.application.hockey_hub import hub_card
+    from src.application.hub_home import now_slot
+
+    league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
+    await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :at WHERE league_id = :l"),
+        {"at": datetime(2026, 11, 1, tzinfo=MINSK_TZ), "l": league.id},
+    )
+    race = await ensure_month_race(db_session, now=NOV)
+    await _play(db_session, datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ), {SASHA: (3, 1), KATYA: (2, 1)}, mid="h1")
+    await close_due_races(db_session, now=DEC_1)
+
+    card = await hub_card(db_session, KATYA, now=DEC_1)
+    assert card["mode"] == "race_result"
+    res = card["race"]
+    assert res["title"] == "ноябрь" and res["league"]["name"] == "ОХМ"
+    assert (res["won"], res["rank"], res["gap"], res["winners"]) == (False, 2, 20, ["Саша"])
+    assert [p["display_name"] for p in res["podium"]] == ["Саша", "Катя"]
+    assert now_slot(bookings=[], hockey=card, upcoming=[], now=DEC_1)["kind"] == "kk_month"
+    await mark_race_seen(db_session, player_key=KATYA, race_id=race.id, now=DEC_1)
+    assert (await hub_card(db_session, KATYA, now=DEC_1))["mode"] != "race_result"
