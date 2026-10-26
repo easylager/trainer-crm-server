@@ -449,6 +449,46 @@ async def friends_picks(
     return out
 
 
+# Счета друзей открываются со стартом матча (TASK-335): до начала — только сторона (friends_picks).
+_FRIENDS_MOVES = text("""
+    SELECT DISTINCT p.match_id, p.player_key, pl.display_name, p.side, p.home_score, p.away_score,
+           p.doubled, p.points
+    FROM hockey_picks AS p
+    JOIN hockey_players AS pl ON pl.player_key = p.player_key
+    JOIN hockey_matches AS m ON m.id = p.match_id
+    WHERE p.match_id = ANY(:match_ids)
+      AND p.player_key <> :player_key
+      AND (m.status <> 'scheduled' OR m.starts_at <= :now)
+      AND p.player_key IN (
+          SELECT f.player_key FROM hockey_league_members AS f
+          WHERE f.league_id IN (SELECT league_id FROM hockey_league_members WHERE player_key = :player_key)
+      )
+    ORDER BY p.match_id, pl.display_name, p.player_key
+    """)
+
+
+async def friends_moves(
+    session: AsyncSession, *, player_key: int, match_ids: list[int], now: datetime
+) -> dict[int, list[dict]]:
+    """Ходы друзей на начавшиеся матчи: сторона, счёт, ×2 и очки (уже с ×2), когда посчитаны."""
+    out: dict[int, list[dict]] = {mid: [] for mid in match_ids}
+    if not match_ids:
+        return out
+    params = {"player_key": player_key, "match_ids": list(match_ids), "now": _utc(now)}
+    for r in (await session.execute(_FRIENDS_MOVES, params)).all():
+        out[r.match_id].append(
+            {
+                "display_name": r.display_name,
+                "side": r.side,
+                "home_score": r.home_score,
+                "away_score": r.away_score,
+                "doubled": bool(r.doubled),
+                "points": None if r.points is None else r.points * (2 if r.doubled else 1),
+            }
+        )
+    return out
+
+
 __all__ = [
     "League",
     "LeagueFull",
@@ -459,6 +499,7 @@ __all__ = [
     "TooManyLeagues",
     "clean_name",
     "create_league",
+    "friends_moves",
     "friends_picks",
     "join_by_code",
     "league_by_code",

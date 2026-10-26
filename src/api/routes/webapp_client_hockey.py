@@ -31,7 +31,7 @@ from src.application.hockey_races import (
     race_result,
     race_summary,
 )
-from src.application.hockey_leagues import friends_picks
+from src.application.hockey_leagues import friends_moves, friends_picks
 from src.application.hockey_teams import team_card
 from src.shared.telegram_webapp import parse_user_json_from_init_data
 
@@ -88,7 +88,14 @@ def _player_name(display_name: str | None, init_raw: str) -> str:
     return f"{first.strip()} {initial}." if initial else first.strip()
 
 
-def _match_out(row: dict, *, now: datetime, friends: dict[str, list[str]], final_id: int | None = None) -> dict:
+def _match_out(
+    row: dict,
+    *,
+    now: datetime,
+    friends: dict[str, list[str]],
+    final_id: int | None = None,
+    moves: list[dict] | None = None,
+) -> dict:
     starts_at = _aware(row["starts_at"])
     played = row["status"] == "final"
     my_pick = None
@@ -118,6 +125,8 @@ def _match_out(row: dict, *, now: datetime, friends: dict[str, list[str]], final
         "sides": {"home": row["home_picks"], "away": row["away_picks"]},
         "friends": friends,
         "race_final": row["id"] == final_id,
+        # Со стартом матча — счета друзей из моих лиг (TASK-335); до старта сервер их не отдаёт.
+        "friend_moves": moves or [],
     }
 
 
@@ -129,13 +138,18 @@ async def get_client_hockey_matches(
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
     rows = await player_matches(session, player_key, since=now - _MATCH_WINDOW, limit=_LIST_LIMIT)
-    friends = await friends_picks(session, player_key=player_key, match_ids=[int(row["id"]) for row in rows])
+    ids = [int(row["id"]) for row in rows]
+    friends = await friends_picks(session, player_key=player_key, match_ids=ids)
+    moves = await friends_moves(session, player_key=player_key, match_ids=ids, now=now)
     me = await player_standing(session, player_key, now=now)
     race = await race_summary(session, now=now)
     final_id = race["final_match_id"]
     final_open = any(row["id"] == final_id and row["status"] == "scheduled" for row in rows)
     return {
-        "items": [_match_out(row, now=now, friends=friends[int(row["id"])], final_id=final_id) for row in rows],
+        "items": [
+            _match_out(row, now=now, friends=friends[int(row["id"])], final_id=final_id, moves=moves[int(row["id"])])
+            for row in rows
+        ],
         "me": _standing_me(me),
         "race": race,
         "double": await my_double(session, player_key=player_key, now=now),

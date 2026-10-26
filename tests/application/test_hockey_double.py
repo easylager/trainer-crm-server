@@ -96,3 +96,31 @@ async def test_doubled_exact_counts_as_100_and_still_exact(db_session) -> None:
     rows = {s.player_key: s for s in await standings(db_session, now=done + timedelta(days=1))}
     assert (rows[SASHA].points, rows[SASHA].exact, rows[SASHA].rank) == (100, 1, 1)
     assert (rows[KATYA].points, rows[KATYA].exact) == (50, 1)
+
+
+@pytest.mark.asyncio
+async def test_friends_scores_open_at_kickoff_only_for_my_leagues(db_session) -> None:
+    from src.application.hockey_leagues import create_league, friends_moves, join_by_code
+
+    stranger = 9350009
+    league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
+    await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
+    starts = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
+    m = await _match(db_session, "f1", starts)
+    await _pick(db_session, m, SASHA, side="home")
+    await _pick(db_session, m, KATYA, home_score=3, away_score=1)
+    await _pick(db_session, m, stranger, side="away")
+    await set_double(db_session, player_key=KATYA, match_id=m, on=True, now=NOV)
+
+    assert await friends_moves(db_session, player_key=SASHA, match_ids=[m], now=starts - timedelta(minutes=1)) == {
+        m: []
+    }
+    live = await friends_moves(db_session, player_key=SASHA, match_ids=[m], now=starts + timedelta(minutes=5))
+    assert live[m] == [
+        {"display_name": "x", "side": "home", "home_score": 3, "away_score": 1, "doubled": True, "points": None}
+    ]
+    done = starts + timedelta(hours=3)
+    await set_manual_result(db_session, m, home_score=3, away_score=1, decided_in="regulation", now=done)
+    await score_finished_matches(db_session, now=done)
+    after = await friends_moves(db_session, player_key=SASHA, match_ids=[m], now=done)
+    assert after[m][0]["points"] == 100
