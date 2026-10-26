@@ -39,6 +39,14 @@ VITEBSK_DS_CONFIG: dict = {
 }
 
 MOGILEV_DS_CONFIG: dict = {
+    # ByCard — основной источник (сеансы на неделю вперёд + продажа билетов);
+    # таблица hockey.by ниже — запасной.
+    "bycard_schedule_url": (
+        "https://abws.bycard.by/api/v2/schedule/events/1307519"
+        "?cityId=23&lang=ru&slug=true&jsonld=0&ignoreEndTime=1"
+    ),
+    "bycard_object_id": 4982,
+    "session_tickets_url": "https://saleframe.bycard.by/?sid={session_id}&lang=ru",
     "schedule_url": "https://mogilev.hockey.by/raspisanie/",
     "prices_url": "https://mogilev.hockey.by/uslugi/?clear_cache=Y",
     "timezone": "Europe/Minsk",

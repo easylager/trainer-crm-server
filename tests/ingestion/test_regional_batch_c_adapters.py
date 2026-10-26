@@ -163,6 +163,42 @@ async def test_mogilev_ds_filters_school_and_hockey_rows() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mogilev_ds_prefers_bycard_sessions_with_buy_link() -> None:
+    """ByCard даёт сеансы на неделю вперёд: цены из прайса дворца, ссылка покупки — на каждый сеанс."""
+    job = _job(
+        arena_id=43,
+        parser_key=PARSER_KEY_MOGILEV_DS,
+        config=MOGILEV_DS_CONFIG,
+        slug="mogilev-bycard",
+        job_id=102,
+    )
+    extraction = await MogilevDsParser().extract(job)
+    assert len(extraction.slots) == 9
+    first = extraction.slots[0]
+    assert (first.local_date, first.starts_at_local, first.ends_at_local) == ("2026-10-30", "21:45", "22:30")
+    assert (first.price_adult, first.price_child, first.price_rental) == (800, 500, 700)
+    assert first.age_note == "детский до 6 лет"
+    assert first.source_id == "1775651"
+    assert first.external_url == "https://saleframe.bycard.by/?sid=1775651&lang=ru"
+    assert all(s.external_url for s in extraction.slots)
+
+
+@pytest.mark.asyncio
+async def test_mogilev_ds_falls_back_to_hockey_table_without_bycard() -> None:
+    """Нет ответа ByCard — берём таблицу hockey.by, как раньше."""
+    job = _job(
+        arena_id=43,
+        parser_key=PARSER_KEY_MOGILEV_DS,
+        config=MOGILEV_DS_CONFIG,
+        slug="mogilev-ds",
+        job_id=102,
+    )
+    extraction = await MogilevDsParser().extract(job)
+    assert len(extraction.slots) == 6
+    assert all(s.external_url is None for s in extraction.slots)
+
+
+@pytest.mark.asyncio
 async def test_orsha_arena_ocr_matches_expected_fixture() -> None:
     """AC: OCR of Ld-07-13.jpg yields exactly the 3 gold MK slots; OL/Ol dropped."""
     skip_unless_tesseract_rus()

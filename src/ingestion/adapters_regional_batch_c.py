@@ -279,6 +279,83 @@ _MOGILEV_DATE_HEADER = re.compile(
 _TIME_RANGE_DOT = re.compile(r"(\d{1,2})[.:](\d{2})\s*[-–—]+\s*(\d{1,2})[.:](\d{2})")
 
 
+_MOGILEV_BYCARD_OBJECT_ID = 4982
+_MOGILEV_BYCARD_TICKETS = "https://saleframe.bycard.by/?sid={session_id}&lang=ru"
+
+
+def mogilev_slots_from_bycard(
+    payload: Any,
+    config: dict,
+    *,
+    adult: int | None,
+    child: int | None,
+    rental: int | None,
+) -> list[ExtractedSlot]:
+    """Sessions from ByCard ``GET /api/v2/schedule/events/{id}`` (same engine as 24afisha).
+
+    The widget lists only mass-skating sessions of the ice palace, so no label filter is
+    needed. ``dateStr`` / ``timeStr`` are local Europe/Minsk. A session lasts 45 minutes
+    (the event carries no duration). ``minPrice`` is 0 (a free category), so the adult
+    price comes from the arena's own price list, falling back to ``maxPrice``.
+    """
+    events = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(events, list):
+        return []
+    object_id = int(config.get("bycard_object_id") or _MOGILEV_BYCARD_OBJECT_ID)
+    duration = int(config.get("default_duration_minutes") or 45)
+    tickets_template = str(config.get("session_tickets_url") or _MOGILEV_BYCARD_TICKETS)
+    age_note = config.get("age_note")
+    slots: list[ExtractedSlot] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        for obj in event.get("objects") or []:
+            if not isinstance(obj, dict) or int(obj.get("id") or 0) != object_id:
+                continue
+            for session in obj.get("sessions") or []:
+                if not isinstance(session, dict):
+                    continue
+                local_date = _afisha_local_date(str(session.get("dateStr") or ""))
+                start = _afisha_hhmm(str(session.get("timeStr") or ""))
+                if not local_date or not start:
+                    continue
+                session_id = session.get("id")
+                max_price = session.get("maxPrice")
+                slots.append(
+                    ExtractedSlot(
+                        local_date=local_date,
+                        starts_at_local=start,
+                        ends_at_local=_add_minutes(start, duration),
+                        kind_raw="Массовое катание",
+                        price_adult=adult if adult is not None else (max_price or None),
+                        price_child=child,
+                        price_rental=rental,
+                        source_id=str(session_id) if session_id is not None else None,
+                        session_label=None,
+                        age_note=age_note,
+                        external_url=tickets_template.format(session_id=session_id)
+                        if session_id is not None
+                        else None,
+                    )
+                )
+    return slots
+
+
+async def _load_mogilev_bycard(job: ParserJob) -> Any | None:
+    """ByCard schedule JSON, or ``None`` when the job has no ByCard source configured."""
+    fixture_dir = job.config.get("fixture_dir")
+    if fixture_dir:
+        path = Path(str(fixture_dir)) / "bycard_schedule.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    url = job.config.get("bycard_schedule_url")
+    if not url:
+        return None
+    try:
+        return await fetch_afisha_schedule(str(url))
+    except Exception:  # noqa: BLE001 — запасной путь: таблица hockey.by ниже
+        return None
+
+
 class MogilevDsParser(IceParser):
     parser_key = PARSER_KEY_MOGILEV_DS
 
@@ -288,6 +365,22 @@ class MogilevDsParser(IceParser):
         keep_substring = str(job.config.get("kind_keep_substring") or "массовое катание").lower()
         age_note = job.config.get("age_note")
         adult, child, rental = _mogilev_prices(prices_html)
+
+        # ByCard продаёт билеты и держит расписание на неделю вперёд; таблица hockey.by —
+        # запасной источник, когда ByCard не ответил или сеансов в нём нет.
+        bycard = await _load_mogilev_bycard(job)
+        bycard_slots = (
+            mogilev_slots_from_bycard(bycard, job.config, adult=adult, child=child, rental=rental)
+            if bycard is not None
+            else []
+        )
+        if bycard_slots:
+            return Extraction(
+                arena_id=job.arena_id,
+                parser_key=self.parser_key,
+                snapshot={"bycard": bycard, "uslugi": prices_html},
+                slots=bycard_slots,
+            )
 
         slots: list[ExtractedSlot] = []
         current_date: date | None = None
