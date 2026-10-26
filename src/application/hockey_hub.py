@@ -62,6 +62,7 @@ def _pick(row) -> dict | None:
         "home_score": row["pick_home_score"],
         "away_score": row["pick_away_score"],
         "points": row["pick_points"],
+        "doubled": bool(row["pick_doubled"]),
     }
 
 
@@ -93,7 +94,7 @@ _UNSEEN_RESULT = text("""
     SELECT m.id, m.home_team, m.away_team, m.starts_at, m.status,
            m.home_score, m.away_score, m.decided_in,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
-           p.points AS pick_points
+           p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
     FROM hockey_picks AS p
     JOIN hockey_matches AS m ON m.id = p.match_id
     WHERE p.player_key = :player_key
@@ -109,7 +110,7 @@ _UPCOMING = text("""
     SELECT m.id, m.home_team, m.away_team, m.starts_at, m.status,
            m.home_score, m.away_score, m.decided_in,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
-           p.points AS pick_points
+           p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
     FROM hockey_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.status = 'scheduled' AND m.starts_at > :now AND m.starts_at <= :until
@@ -122,7 +123,7 @@ _LIVE_HOME = text("""
     SELECT m.id, m.home_team, m.away_team, m.starts_at, m.status,
            m.home_score, m.away_score, m.decided_in,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
-           p.points AS pick_points
+           p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
     FROM hockey_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.home_team = :home AND m.status IN ('scheduled', 'review')
@@ -152,7 +153,7 @@ _BEST_PLACE = text("""
     ),
     totals AS (
         SELECT mb.league_id, mb.player_key,
-               COALESCE(SUM(p.points), 0)::int AS points,
+               COALESCE(SUM(p.points * (1 + p.doubled::int)), 0)::int AS points,
                COALESCE(COUNT(p.points) FILTER (WHERE p.points = :exact), 0)::int AS exact
         FROM hockey_league_members AS mb
         JOIN my ON my.league_id = mb.league_id
@@ -277,7 +278,10 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
             "mode": "result",
             "match": {**_match(result._mapping, now=now), "race_final": result._mapping["id"] == final_id},
             "my_pick": pick,
-            "points": None if pick is None else pick["points"],
+            # С ×2 в слоте — итоговые очки: «+100», а не базовые 50 (TASK-335).
+            "points": None
+            if pick is None or pick["points"] is None
+            else pick["points"] * (2 if pick["doubled"] else 1),
             "place": await _best_place(session, player_key, at=_utc(result._mapping["starts_at"])),
             **_event_fields(result._mapping),
         }

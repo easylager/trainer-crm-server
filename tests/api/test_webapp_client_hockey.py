@@ -84,7 +84,7 @@ async def test_matches_show_own_pick_open_result_and_sides(app_use_test_db, db_s
         body = listed.json()
         own = _by_id(body, future)
         assert own["open"] is True
-        assert own["my_pick"] == {"side": "home", "home_score": None, "away_score": None, "points": None}
+        assert own["my_pick"] == {"side": "home", "home_score": None, "away_score": None, "points": None, "doubled": False}
         assert own["result"] is None
         assert own["sides"] == {"home": 1, "away": 1}
         assert own["home_team"] == "Динамо-Минск"
@@ -104,7 +104,7 @@ async def test_matches_show_own_pick_open_result_and_sides(app_use_test_db, db_s
             other_list = await client.get("/api/webapp/client/hockey/matches")
         assert other_list.status_code == 200, other_list.text
         foreign = _by_id(other_list.json(), future)
-        assert foreign["my_pick"] == {"side": "away", "home_score": None, "away_score": None, "points": None}
+        assert foreign["my_pick"] == {"side": "away", "home_score": None, "away_score": None, "points": None, "doubled": False}
         assert foreign["sides"] == {"home": 1, "away": 1}
 
 
@@ -137,6 +137,7 @@ async def test_pick_side_exact_replace_and_errors(app_use_test_db, db_session) -
                 "home_score": 1,
                 "away_score": 4,
                 "points": None,
+                "doubled": False,
             }
 
             draw = await client.put(

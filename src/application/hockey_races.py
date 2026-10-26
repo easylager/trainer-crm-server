@@ -94,7 +94,7 @@ _UNFINISHED = text("""
 _GLOBAL_CROWNS = text("""
     WITH totals AS (
         SELECT p.player_key,
-               SUM(p.points)::int AS points,
+               SUM(p.points * (1 + p.doubled::int))::int AS points,
                COUNT(*) FILTER (WHERE p.points = :exact)::int AS exact
         FROM hockey_picks AS p
         JOIN hockey_matches AS m ON m.id = p.match_id
@@ -118,7 +118,7 @@ _LEAGUE_CROWNS = text("""
         HAVING COUNT(*) >= :min_members
     ), totals AS (
         SELECT mb.league_id, p.player_key,
-               SUM(p.points)::int AS points,
+               SUM(p.points * (1 + p.doubled::int))::int AS points,
                COUNT(*) FILTER (WHERE p.points = :exact)::int AS exact
         FROM hockey_league_members AS mb
         JOIN leagues AS lg ON lg.id = mb.league_id

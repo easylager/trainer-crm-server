@@ -146,7 +146,7 @@ _LEAGUE_TABLE = text("""
         SELECT player_key, joined_at FROM hockey_league_members WHERE league_id = :league_id
     ), totals AS (
         SELECT p.player_key,
-               SUM(p.points)::int AS points,
+               SUM(p.points * (1 + p.doubled::int))::int AS points,
                COUNT(*) FILTER (WHERE p.points = :exact)::int AS exact,
                COUNT(*)::int AS played
         FROM hockey_picks AS p

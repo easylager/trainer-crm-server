@@ -33,6 +33,14 @@ class PicksClosed(Exception):
     """Матч начался, отменён или уже сыгран — ход не принимается."""
 
 
+class DoubleUnavailable(Exception):
+    """×2 нельзя: нет хода на матч, матч вне гонки месяца или ×2 этого месяца уже сыгран."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 @dataclass(frozen=True)
 class Pick:
     match_id: int
@@ -41,6 +49,7 @@ class Pick:
     home_score: int | None
     away_score: int | None
     points: int | None
+    doubled: bool = False
 
 
 @dataclass(frozen=True)
@@ -147,7 +156,7 @@ _PICK_UPSERT = text("""
     ON CONFLICT (match_id, player_key) DO UPDATE
     SET side = EXCLUDED.side, home_score = EXCLUDED.home_score, away_score = EXCLUDED.away_score,
         points = NULL, scored_at = NULL, updated_at = now()
-    RETURNING match_id, player_key, side, home_score, away_score, points
+    RETURNING match_id, player_key, side, home_score, away_score, points, doubled
     """)
 
 # Пересчёт из итога: только где итога ещё не считали или итог поправили позже подсчёта.
@@ -178,7 +187,7 @@ _UNSCORE_CANCELLED = text("""
 _STANDINGS = text("""
     WITH totals AS (
         SELECT p.player_key,
-               SUM(p.points)::int AS points,
+               SUM(p.points * (1 + p.doubled::int))::int AS points,
                COUNT(*) FILTER (WHERE p.points = :exact)::int AS exact,
                COUNT(*)::int AS played
         FROM hockey_picks AS p
@@ -202,7 +211,7 @@ _PLAYER_MATCHES = text("""
     SELECT m.id, m.home_team, m.away_team, m.starts_at, m.status,
            m.home_score, m.away_score, m.decided_in,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
-           p.points AS pick_points,
+           p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'away')::int AS away_picks
     FROM hockey_matches AS m
@@ -278,6 +287,79 @@ async def score_finished_matches(session: AsyncSession, *, now: datetime) -> int
     return int(scored)
 
 
+# ×2 (TASK-335): один матч месяца с двойными очками. Переносится до начала матча, со стартом закреплён.
+_MY_DOUBLES = text("""
+    SELECT p.match_id, m.status, m.starts_at
+    FROM hockey_picks AS p
+    JOIN hockey_matches AS m ON m.id = p.match_id
+    WHERE p.player_key = :player_key AND p.doubled
+      AND m.starts_at >= :since AND m.starts_at < :until
+    FOR UPDATE OF p
+    """)
+
+_SET_DOUBLE = text("""
+    UPDATE hockey_picks SET doubled = :on, updated_at = now()
+    WHERE player_key = :player_key AND match_id = :match_id
+    RETURNING match_id
+    """)
+
+
+async def set_double(session: AsyncSession, *, player_key: int, match_id: int, on: bool, now: datetime) -> int | None:
+    """Поставить или снять ×2. Возвращает матч, на котором ×2 стоит после вызова (или ``None``)."""
+    match = (await session.execute(_MATCH_OPEN, {"match_id": match_id})).one_or_none()
+    if match is None:
+        raise LookupError(match_id)
+    if match.status != "scheduled" or _utc(now) >= _utc(match.starts_at):
+        raise PicksClosed(match_id)
+    window = race_window(match.starts_at)
+    if not window.monthly:
+        raise DoubleUnavailable("no_race")
+    params = {"player_key": player_key, "since": window.since, "until": window.until}
+    current = (await session.execute(_MY_DOUBLES, params)).all()
+    if not on:
+        if any(r.match_id == match_id for r in current):
+            await session.execute(_SET_DOUBLE, {"player_key": player_key, "match_id": match_id, "on": False})
+            return None
+        return next((r.match_id for r in current), None)
+    for r in current:
+        if r.match_id == match_id:
+            return match_id
+        if r.status != "scheduled" or _utc(now) >= _utc(r.starts_at):
+            raise DoubleUnavailable("used")
+    moved = (
+        await session.execute(_SET_DOUBLE, {"player_key": player_key, "match_id": match_id, "on": True})
+    ).one_or_none()
+    if moved is None:
+        raise DoubleUnavailable("no_pick")
+    for r in current:
+        await session.execute(_SET_DOUBLE, {"player_key": player_key, "match_id": r.match_id, "on": False})
+    return match_id
+
+
+_MY_DOUBLE = text("""
+    SELECT p.match_id, m.status, m.starts_at
+    FROM hockey_picks AS p
+    JOIN hockey_matches AS m ON m.id = p.match_id
+    WHERE p.player_key = :player_key AND p.doubled
+      AND m.starts_at >= :since AND m.starts_at < :until
+    ORDER BY m.starts_at
+    LIMIT 1
+    """)
+
+
+async def my_double(session: AsyncSession, *, player_key: int, now: datetime) -> dict | None:
+    """×2 игрока в текущем месяце: на каком матче и закреплён ли он (матч начался)."""
+    window = race_window(now)
+    if not window.monthly:
+        return None
+    params = {"player_key": player_key, "since": window.since, "until": window.until}
+    row = (await session.execute(_MY_DOUBLE, params)).one_or_none()
+    if row is None:
+        return {"match_id": None, "locked": False}
+    locked = row.status != "scheduled" or _utc(now) >= _utc(row.starts_at)
+    return {"match_id": row.match_id, "locked": locked}
+
+
 def _window_params(now: datetime) -> dict:
     window = race_window(now)
     return {"since": window.since, "until": window.until}
@@ -317,10 +399,12 @@ __all__ = [
     "POINTS_WINNER",
     "pick_points",
     "Pick",
+    "DoubleUnavailable",
     "PicksClosed",
     "RaceWindow",
     "Standing",
     "make_pick",
+    "my_double",
     "month_bounds",
     "normalize_pick",
     "player_matches",
@@ -328,5 +412,6 @@ __all__ = [
     "race_window",
     "score_finished_matches",
     "season_start",
+    "set_double",
     "standings",
 ]

@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.application.hockey_game import (
+    DoubleUnavailable,
+    my_double,
+    set_double,
     Pick,
     PicksClosed,
     Standing,
@@ -52,12 +55,16 @@ def _aware(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _pick_out(side: str, home_score: int | None, away_score: int | None, points: int | None) -> dict:
+def _pick_out(
+    side: str, home_score: int | None, away_score: int | None, points: int | None, doubled: bool = False
+) -> dict:
+    """``points`` — базовые очки хода (0…50), ``doubled`` — стоит ли на нём ×2 (TASK-335)."""
     return {
         "side": side,
         "home_score": home_score,
         "away_score": away_score,
         "points": points,
+        "doubled": bool(doubled),
     }
 
 
@@ -86,7 +93,9 @@ def _match_out(row: dict, *, now: datetime, friends: dict[str, list[str]], final
     played = row["status"] == "final"
     my_pick = None
     if row["pick_side"] is not None:
-        my_pick = _pick_out(row["pick_side"], row["pick_home_score"], row["pick_away_score"], row["pick_points"])
+        my_pick = _pick_out(
+            row["pick_side"], row["pick_home_score"], row["pick_away_score"], row["pick_points"], row["pick_doubled"]
+        )
     return {
         "id": row["id"],
         "home_team": row["home_team"],
@@ -129,6 +138,7 @@ async def get_client_hockey_matches(
         "items": [_match_out(row, now=now, friends=friends[int(row["id"])], final_id=final_id) for row in rows],
         "me": _standing_me(me),
         "race": race,
+        "double": await my_double(session, player_key=player_key, now=now),
         "leader": await leader_line(session, player_key=player_key, now=now) if final_open else None,
     }
 
@@ -186,7 +196,7 @@ async def put_client_hockey_pick(
     except PicksClosed as exc:
         raise HTTPException(status_code=409, detail="Матч уже начался") from exc
     await session.commit()
-    return {"my_pick": _pick_out(pick.side, pick.home_score, pick.away_score, pick.points)}
+    return {"my_pick": _pick_out(pick.side, pick.home_score, pick.away_score, pick.points, pick.doubled)}
 
 
 @router.get("/client/hockey/standings")
@@ -243,3 +253,34 @@ async def post_client_hockey_race_seen(
     )
     await session.commit()
     return Response(status_code=204)
+
+
+class DoubleBody(BaseModel):
+    on: bool
+
+
+@router.put("/client/hockey/matches/{match_id}/double")
+async def put_client_hockey_double(
+    match_id: int,
+    body: DoubleBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """×2 на матч месяца (TASK-335): поставить, перенести или снять до начала матча."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        await set_double(session, player_key=player_key, match_id=match_id, on=body.on, now=now)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Матч не найден") from None
+    except PicksClosed:
+        raise HTTPException(status_code=409, detail="Матч уже начался") from None
+    except DoubleUnavailable as exc:
+        detail = {
+            "no_pick": "Сначала тапни за команду",
+            "used": "×2 этого месяца уже сыгран",
+            "no_race": "×2 появится с гонкой месяца",
+        }[exc.reason]
+        raise HTTPException(status_code=409, detail=detail) from None
+    await session.commit()
+    return {"double": await my_double(session, player_key=player_key, now=now)}
