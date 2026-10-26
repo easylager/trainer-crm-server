@@ -168,19 +168,3 @@ async def test_notify_slots_subscription_is_isolated_per_profile(app_use_test_db
         {"tg": tid, "tid": trainer_id, "cid": child_id},
     )
     assert r_parent.scalar_one() == 0
-
-
-@pytest.mark.asyncio
-async def test_trainer_edge_write_requires_registration(app_use_test_db, db_session) -> None:
-    """No clients row yet for this Telegram account -> clear 400, not a silently orphaned edge row."""
-    tid = _fresh_client_telegram_id()
-    trainer_id = await _seed_online_trainer(db_session)
-
-    with patch_client_init_auth(tid):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.post(
-                "/api/webapp/client/trainer-edges/save",
-                json={"trainer_id": trainer_id},
-                headers=_client_auth_headers(),
-            )
-    assert r.status_code == 400

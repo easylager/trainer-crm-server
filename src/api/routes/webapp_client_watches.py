@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.client_bootstrap import ensure_acting_client_id
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
-from src.api.routes.webapp_client_trainer_edges import _parse_profile_id_header, _resolve_edge_client_id_or_400
+from src.api.routes.webapp_client_trainer_edges import _existing_edge_client_id, _parse_profile_id_header
+from src.api.miniapp_auth.deps import MiniappCredentialIn, require_miniapp_credential_in
 from src.api.miniapp_auth.types import MiniAppPlatform
 from src.application.bell_follow_use_cases import (
     follow_arena_from_bell,
@@ -23,9 +25,7 @@ from src.application.client_ice_watch_use_cases import (
     watches_summary,
 )
 from src.application.client_profile_use_cases import resolve_acting_client_id
-from src.application.client_session_use_cases import get_or_create_session
 from src.application.client_trainer_edge_use_cases import unsubscribe_notify_slots as uc_unsubscribe_notify_slots
-from src.application.client_use_cases import get_or_create_client
 from src.infrastructure.db.models import (
     ICE_WATCH_KIND_SCHEDULE_FRESH,
     ICE_WATCH_KIND_SEASON_OPEN,
@@ -84,20 +84,14 @@ async def post_client_ice_watch(
     x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
 ):
     # TASK-328 AC5: напоминания уходят только клиентским ботом Telegram. В MAX канала
     # доставки нет — не создаём подписку, которую некому выполнить.
     if principal.platform != MiniAppPlatform.TELEGRAM:
         raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED)
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await resolve_acting_client_id(session, catalog_tid, _parse_profile_id_header(x_profile_id))
-    if client_id is None:
-        # Пользователь каталога: регистрации у него нет и не будет — строку клиента заводим
-        # здесь, как вход по колокольчику сайта (follow_arena_from_bell). Иначе 400 «завершите
-        # регистрацию» отправлял человека на шаг, которого не существует (обращение #13).
-        client_id = await get_or_create_client(session, catalog_tid)
-        await session.commit()
-        await get_or_create_session(catalog_tid, session)
+    client_id = await ensure_acting_client_id(session, principal, cred.raw, _parse_profile_id_header(x_profile_id))
     kind = (body.watch_kind or ICE_WATCH_KIND_SESSIONS).strip().lower()
     if kind not in (ICE_WATCH_KIND_SESSIONS, ICE_WATCH_KIND_SCHEDULE_FRESH, ICE_WATCH_KIND_SEASON_OPEN):
         raise HTTPException(status_code=400, detail="Недопустимый тип подписки.")
@@ -237,8 +231,12 @@ async def delete_client_ice_watch(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
-    watch = await unsubscribe_ice_watch(session, client_id=client_id, watch_id=watch_id)
+    client_id = await _existing_edge_client_id(session, catalog_tid, x_profile_id)
+    watch = (
+        await unsubscribe_ice_watch(session, client_id=client_id, watch_id=watch_id)
+        if client_id is not None
+        else None
+    )
     if watch is None:
         raise HTTPException(status_code=404, detail="Подписка не найдена.")
     return {"watch": watch}
@@ -252,6 +250,7 @@ async def delete_client_trainer_slot_watch(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
-    await uc_unsubscribe_notify_slots(client_id, catalog_tid, trainer_id, session)
+    client_id = await _existing_edge_client_id(session, catalog_tid, x_profile_id)
+    if client_id is not None:
+        await uc_unsubscribe_notify_slots(client_id, catalog_tid, trainer_id, session)
     return {"success": True}

@@ -16,6 +16,7 @@ from src.shared.config import Settings
 from src.shared.sentry_init import init_sentry
 from src.bot.client_menu_commands import sync_client_hub_menu_button
 from src.bot.handlers.client_handlers import router as client_router
+from src.bot.handlers.service_messages import build_service_messages_router
 from src.bot.handlers.ice_company_handlers import router as ice_company_router
 from src.bot.main_mini_app_check import warn_if_main_mini_app_missing
 from src.bot.middlewares.client_menu_sync_middleware import ClientMenuSyncMiddleware
@@ -57,6 +58,7 @@ async def main() -> None:
     dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
     dp.update.outer_middleware(ServiceUnavailableMiddleware())
     dp.update.outer_middleware(ClientMenuSyncMiddleware())
+    dp.include_router(build_service_messages_router())
     dp.include_router(ice_company_router)
     dp.include_router(client_router)
     logger.info("Client bot polling started (notifications run in notification_service)")

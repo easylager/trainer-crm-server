@@ -3612,6 +3612,7 @@
             // Rollback optimistic on error
             state.trainerEdges[key] = Object.assign({}, edge, { is_saved: nowSaved });
             _updateSaveButtonUI(trainerId, nowSaved);
+            showToast('Не получилось — попробуйте ещё раз');
           });
       }
 
@@ -3669,13 +3670,6 @@
         state.trainerEdges[key] = Object.assign({}, edge, { notify_when_slots: nextNotify });
         _updateNotifyChipUI(trainerId, nextNotify);
 
-        // Immediate feedback — tells user exactly what will happen
-        if (nextNotify) {
-          showToast('🔔 Уведомим, когда тренер добавит свободные окна');
-        } else {
-          showToast('Подписка на уведомления отменена');
-        }
-
         var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
         var method = nextNotify ? 'POST' : 'DELETE';
         var url = nextNotify
@@ -3689,10 +3683,14 @@
               state.trainerEdges[key] = data.edge;
               _updateNotifyChipUI(trainerId, !!data.edge.notify_when_slots);
             }
+            // Тост — только после ответа сервера: раньше «Уведомим» обещали до запроса,
+            // и при ошибке человек оставался уверен, что подписан.
+            showToast(nextNotify ? '🔔 Уведомим, когда тренер добавит свободные окна' : 'Подписка на уведомления отменена');
           })
           .catch(function() {
             state.trainerEdges[key] = Object.assign({}, edge, { notify_when_slots: nowNotify });
             _updateNotifyChipUI(trainerId, nowNotify);
+            showToast('Не получилось — попробуйте ещё раз');
           });
       }
 

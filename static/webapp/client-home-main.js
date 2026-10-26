@@ -887,11 +887,6 @@
         if (ctx && String(ctx.trainer.id) === String(trainerId)) {
           paintMeCardForTrainerSync(ctx.trainer, ctx.slots, ctx.hubMeta, nextNotify);
         }
-        if (nextNotify) {
-          hubShowToast('🔔 Уведомим, когда тренер добавит свободные окна');
-        } else {
-          hubShowToast('Подписка на уведомления отменена');
-        }
         var method = nextNotify ? 'POST' : 'DELETE';
         var url = nextNotify
           ? '/api/webapp/client/trainer-edges/notify-slots'
@@ -905,11 +900,14 @@
             if (ctx && String(ctx.trainer.id) === String(trainerId)) {
               paintMeCardForTrainerSync(ctx.trainer, ctx.slots, ctx.hubMeta, on);
             }
+            // Как в каталоге: тост после ответа сервера, а не до запроса.
+            hubShowToast(nextNotify ? '🔔 Уведомим, когда тренер добавит свободные окна' : 'Подписка на уведомления отменена');
           })
           .catch(function () {
             if (ctx && String(ctx.trainer.id) === String(trainerId)) {
               paintMeCardForTrainerSync(ctx.trainer, ctx.slots, ctx.hubMeta, nowNotify);
             }
+            hubShowToast('Не получилось — попробуйте ещё раз');
           });
       }
 

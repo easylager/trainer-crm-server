@@ -1499,8 +1499,8 @@ async def test_get_passes_empty_for_new_client(app_use_test_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_certificate_activate_403_when_client_row_missing(app_use_test_db) -> None:
-    """Активация привязана к клиенту в БД; только initData недостаточно."""
+async def test_certificate_activate_without_client_row_checks_the_code(app_use_test_db) -> None:
+    """Получатель подарка без строки клиента: клиент заводится, неверный код — 404, а не 403."""
     ctg = _fresh_client_telegram_id()
     with patch_client_init_auth(ctg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -1509,8 +1509,7 @@ async def test_certificate_activate_403_when_client_row_missing(app_use_test_db)
                 json={"code": "ANY-CODE"},
                 headers={"X-Telegram-Init-Data": "mock"},
             )
-    assert resp.status_code == 403
-    assert "client" in (resp.json().get("detail") or "").lower()
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio

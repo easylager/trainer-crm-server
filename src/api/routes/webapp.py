@@ -34,6 +34,7 @@ from aiogram.exceptions import (
 )
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
+from src.api.client_bootstrap import ensure_acting_client_id
 from src.api.deps import get_session
 from src.application.arena_visit_info import VisitInfoError, normalize_visit_info
 from src.application.hub_home import now_slot
@@ -127,6 +128,7 @@ from src.application.booking_use_cases import (
 )
 from src.application.client_username_enrich import enrich_booking_dicts_with_client_telegram_usernames
 from src.application.family_access_use_cases import (
+    MAX_FAMILY_ACCESS_EXTRA_MEMBERS,
     create_family_access_invite_token,
     list_family_access_members_api,
     revoke_family_member,
@@ -2728,8 +2730,22 @@ async def get_client_family_access(
     telegram_id = client_catalog_telegram_key(principal)
     data = await list_family_access_members_api(session, viewer_telegram_id=telegram_id)
     if data is None:
-        raise HTTPException(status_code=404, detail="Клиент не найден. Завершите регистрацию в приложении.")
+        # Пользователь каталога: семьи ещё нет, он будущий владелец. Приглашение честно скажет,
+        # что сначала нужна связь с тренером (roster_required), — без «завершите регистрацию».
+        return {
+            "primary_client_id": None,
+            "viewer_telegram_id": int(telegram_id),
+            "max_extra_members": MAX_FAMILY_ACCESS_EXTRA_MEMBERS,
+            "extra_members_count": 0,
+            "can_manage": True,
+            "members": [],
+        }
     return data
+
+
+FAMILY_INVITE_ROSTER_REQUIRED = (
+    "Сначала запишитесь к тренеру или добавьтесь в клиенты — нужна связь с тренером для ссылки."
+)
 
 
 @router.post("/client/family-access/invite")
@@ -2746,7 +2762,7 @@ async def post_client_family_access_invite(
     telegram_id = client_catalog_telegram_key(principal)
     cid = await get_client_id_by_telegram_id(session, telegram_id)
     if cid is None:
-        raise HTTPException(status_code=400, detail="Сначала завершите регистрацию.")
+        raise HTTPException(status_code=400, detail=FAMILY_INVITE_ROSTER_REQUIRED)
     url, err = await create_family_access_invite_token(
         session,
         primary_client_id=int(cid),
@@ -2757,10 +2773,7 @@ async def post_client_family_access_invite(
     if err == "limit_reached":
         raise HTTPException(status_code=409, detail="Достигнут лимит приглашённых для семейного доступа.")
     if err == "roster_required":
-        raise HTTPException(
-            status_code=400,
-            detail="Сначала запишитесь к тренеру или добавьтесь в клиенты — нужна связь с тренером для ссылки.",
-        )
+        raise HTTPException(status_code=400, detail=FAMILY_INVITE_ROSTER_REQUIRED)
     if err == "no_bot":
         raise HTTPException(status_code=503, detail="Сервис приглашений временно недоступен.")
     if not url:
@@ -3489,6 +3502,7 @@ async def post_client_certificate_activate(
     x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
 ):
     """
     Client activates a certificate by code.
@@ -3497,9 +3511,8 @@ async def post_client_certificate_activate(
     Auth: client initData.
     """
     client_tid = client_catalog_telegram_key(principal)
-    client_id = await resolve_acting_client_id(session, client_tid, _parse_profile_id_header(x_profile_id))
-    if not client_id:
-        raise HTTPException(status_code=403, detail="Client not found")
+    # Получатель подарка обычно ещё не клиент: строку заводим здесь, а не отвечаем 403.
+    client_id = await ensure_acting_client_id(session, principal, cred.raw, _parse_profile_id_header(x_profile_id))
     code = (body.code or "").strip()
     if not code:
         raise HTTPException(status_code=400, detail="Code is required")

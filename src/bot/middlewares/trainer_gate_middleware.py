@@ -18,6 +18,7 @@ from aiogram import BaseMiddleware
 from aiogram.enums import ChatAction
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, TelegramObject
 
+from src.bot.handlers.service_messages import is_service_message
 from src.application.trainer_access_state import (
     TrainerAccessState,
     get_trainer_access_state,
@@ -152,6 +153,9 @@ class TrainerGateMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         if isinstance(event, Message):
+            if is_service_message(event):
+                # Отметки Telegram (разрешил писать, закреп) — не повод слать «только через сайт».
+                return await handler(event, data)
             return await self._handle_message(handler, event, data)
         if isinstance(event, CallbackQuery):
             return await self._handle_callback(handler, event, data)

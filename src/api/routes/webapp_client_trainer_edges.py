@@ -8,8 +8,10 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.client_bootstrap import ensure_acting_client_id
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
+from src.api.miniapp_auth.deps import MiniappCredentialIn, require_miniapp_credential_in
 from src.api.routes.public import (
     _trainer_public_catalog_exposed,
     assemble_trainer_catalog_payload,
@@ -226,18 +228,12 @@ async def get_client_trainer_edges(
     }
 
 
-async def _resolve_edge_client_id_or_400(
+async def _existing_edge_client_id(
     session: AsyncSession, catalog_tid: int, x_profile_id: str | None
-) -> int:
-    """
-    Edge rows are keyed by client_id now (EPIC1 Slice 5) — a trainer-edge write needs a real
-    ``clients`` row to attach to. Pre-registration accounts (no client row yet) get a clear
-    400 instead of silently writing an edge no read path could ever find again.
-    """
+) -> int | None:
+    """Снятие отметки: нет строки клиента — снимать нечего, это не ошибка."""
     client_id = await resolve_acting_client_id(session, catalog_tid, _parse_profile_id_header(x_profile_id))
-    if client_id is None:
-        raise HTTPException(status_code=400, detail="Сначала завершите регистрацию.")
-    return int(client_id)
+    return int(client_id) if client_id is not None else None
 
 
 @router.post("/client/trainer-edges/save")
@@ -247,10 +243,13 @@ async def post_client_save_trainer(
     x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
 ):
     """Bookmark a trainer (is_saved = true). Idempotent. Auth: client initData."""
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
+    client_id = await ensure_acting_client_id(
+        session, principal, cred.raw, _parse_profile_id_header(x_profile_id)
+    )
     svc_id = body.catalog_service_id
     if svc_id is None:
         sess_row = await read_client_bot_session(catalog_tid, session)
@@ -279,7 +278,9 @@ async def delete_client_save_trainer(
 ):
     """Remove bookmark (is_saved = false). Idempotent. Auth: client initData."""
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
+    client_id = await _existing_edge_client_id(session, catalog_tid, x_profile_id)
+    if client_id is None:
+        return {"edge": None}
     edge = await uc_unsave_trainer(client_id, catalog_tid, trainer_id, session)
     return {"edge": serialize_trainer_edge_row(edge)}
 
@@ -290,10 +291,13 @@ async def post_client_set_primary_trainer(
     x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
 ):
     """Set primary trainer (is_primary = true). Demotes previous primary. Syncs legacy session field."""
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
+    client_id = await ensure_acting_client_id(
+        session, principal, cred.raw, _parse_profile_id_header(x_profile_id)
+    )
     edge = await uc_set_primary_trainer(client_id, catalog_tid, body.trainer_id, session)
     return {"edge": serialize_trainer_edge_row(edge)}
 
@@ -306,7 +310,9 @@ async def delete_client_primary_trainer(
 ):
     """Clear primary designation (no trainer is 'main' now). Auth: client initData."""
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
+    client_id = await _existing_edge_client_id(session, catalog_tid, x_profile_id)
+    if client_id is None:
+        return {"success": True}
     await uc_unset_primary_trainer(client_id, catalog_tid, session)
     return {"success": True}
 
@@ -317,10 +323,13 @@ async def post_client_notify_slots(
     x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
 ):
     """Subscribe to slot-availability notification for a trainer. Idempotent. Auth: client initData."""
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
+    client_id = await ensure_acting_client_id(
+        session, principal, cred.raw, _parse_profile_id_header(x_profile_id)
+    )
     edge = await uc_subscribe_notify_slots(client_id, catalog_tid, body.trainer_id, session)
     return {"edge": serialize_trainer_edge_row(edge)}
 
@@ -334,6 +343,8 @@ async def delete_client_notify_slots(
 ):
     """Cancel slot-availability subscription. Idempotent. Auth: client initData."""
     catalog_tid = client_catalog_telegram_key(principal)
-    client_id = await _resolve_edge_client_id_or_400(session, catalog_tid, x_profile_id)
+    client_id = await _existing_edge_client_id(session, catalog_tid, x_profile_id)
+    if client_id is None:
+        return {"edge": None}
     edge = await uc_unsubscribe_notify_slots(client_id, catalog_tid, trainer_id, session)
     return {"edge": serialize_trainer_edge_row(edge)}

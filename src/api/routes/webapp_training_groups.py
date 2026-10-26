@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.client_bootstrap import ensure_acting_client_id
 from src.api.deps import get_session
+from src.api.miniapp_auth import MiniAppPrincipal
+from src.api.miniapp_auth.types import MiniAppPlatform
 from src.api.miniapp_auth.deps import miniapp_credential_http_exception
 from src.application.trainer_link import get_trainer_id_for_webapp_trainer_operations
 from src.application.training_group_series_notifications import notify_clients_group_series_schedule_updated
@@ -520,9 +523,10 @@ async def post_client_training_group_join_request(
     if not raw:
         raise miniapp_credential_http_exception()
     ctid = _client_tid(raw)
-    client_id = await get_client_id_by_telegram_id(session, ctid)
-    if not client_id:
-        raise HTTPException(status_code=403, detail="Client profile required")
+    # Заявку в группу шлёт и тот, кто пока только смотрит каталог: строку клиента заводим здесь.
+    client_id = await ensure_acting_client_id(
+        session, MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=ctid), raw
+    )
     ok, err = await client_request_join_group(session, group_id, client_id)
     if not ok:
         detail = {

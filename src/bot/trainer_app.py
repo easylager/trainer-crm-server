@@ -17,6 +17,7 @@ from aiogram.types import MenuButtonCommands
 from src.bot import trainer_benchmark_config as bench_cfg
 from src.bot.schedule_notifications import set_client_bot
 from src.bot.handlers.trainer_handlers import router as trainer_router
+from src.bot.handlers.service_messages import build_service_messages_router
 from src.bot.middlewares.trainer_benchmark_middleware import TrainerBenchmarkMiddleware
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.bot.middlewares.service_unavailable_middleware import ServiceUnavailableMiddleware
@@ -89,6 +90,7 @@ async def main() -> None:
     trainer_gate = TrainerGateMiddleware()
     dp.message.outer_middleware(trainer_gate)
     dp.callback_query.outer_middleware(trainer_gate)
+    dp.include_router(build_service_messages_router())
     dp.include_router(trainer_router)
     # Outermost catch: DB down / MAINTENANCE_MODE → user-facing «технические работы».
     dp.update.outer_middleware(ServiceUnavailableMiddleware())
