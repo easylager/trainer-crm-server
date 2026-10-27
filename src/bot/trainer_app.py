@@ -48,9 +48,11 @@ async def setup_menu_and_commands(bot: Bot) -> None:
     )
 
 
-async def main() -> None:
+async def main(*, embedded: bool = False) -> None:
+    """``embedded``: запущен внутри ``all_bots`` — сигналами и Sentry управляет общий процесс."""
     settings = Settings()
-    init_sentry(settings, "bot-trainer")
+    if not embedded:
+        init_sentry(settings, "bot-trainer")
     bot = Bot(
         token=settings.telegram_bot_token_trainer,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -96,7 +98,7 @@ async def main() -> None:
     dp.update.outer_middleware(ServiceUnavailableMiddleware())
     logger.info("Trainer bot polling started (notifications run in notification_service)")
     try:
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, handle_signals=not embedded)
     finally:
         set_client_bot(None)
         await client_bot.session.close()
