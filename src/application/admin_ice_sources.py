@@ -59,13 +59,18 @@ def detect_source_kind(url: str | None) -> str | None:
 
 
 def effective_fetch_mode(
-    explicit: str | None, parser_key: str | None, requires_by_egress: bool
+    explicit: str | None, parser_key: str | None, requires_by_egress: bool, job_enabled: bool = True
 ) -> tuple[str, bool]:
-    """(mode, set_by_admin). No explicit row: derive from the parser job."""
+    """(mode, set_by_admin). No explicit row: derive from the parser job.
+
+    A switched-off job means nobody polls the source, so the schedule is entered by hand.
+    """
     if explicit in FETCH_MODES:
         return explicit, True
     if parser_key is None:
         return "none", False
+    if not job_enabled:
+        return "manual", False
     if parser_key == "manual_schedule_v1":
         return "manual", False
     return ("byip" if requires_by_egress else "server"), False
@@ -92,7 +97,7 @@ _LIST_SQL = text(
     SELECT a.id AS arena_id, a.name, c.name AS city_name, p.slug,
            s.fetch_mode AS explicit_mode, s.source_url, s.source_kind,
            COALESCE(s.publish_days, '{}'::smallint[]) AS publish_days, COALESCE(s.remind, false) AS remind,
-           j.parser_key, j.config, j.last_ok_at, COALESCE(j.failure_streak, 0) AS failure_streak,
+           j.parser_key, j.is_enabled AS job_enabled, j.config, j.last_ok_at, COALESCE(j.failure_streak, 0) AS failure_streak,
            j.last_error_code,
            COALESCE(f.future_count, 0) AS future_sessions, f.last_date
     FROM arenas a
@@ -130,7 +135,9 @@ def _links(row: Any) -> dict[str, str | None]:
 
 def build_source_item(row: Any) -> dict[str, Any]:
     config = row.config if isinstance(row.config, dict) else {}
-    mode, explicit = effective_fetch_mode(row.explicit_mode, row.parser_key, bool(config.get("requires_by_egress")))
+    mode, explicit = effective_fetch_mode(
+        row.explicit_mode, row.parser_key, bool(config.get("requires_by_egress")), row.job_enabled is not False
+    )
     return {
         "arena_id": row.arena_id,
         "name": row.name,

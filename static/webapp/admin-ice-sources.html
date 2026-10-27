@@ -89,17 +89,17 @@
         { id: 'server', title: 'Сервер сам', hint: 'сайт без ограничений' },
         { id: 'byip', title: 'Мой компьютер, BY-IP', hint: 'скрипт на ноутбуке' },
         { id: 'manual', title: 'Ручная проверка', hint: 'открыть ссылку, скрин, отправить' },
-        { id: 'none', title: 'Нет источника', hint: 'сетка только по телефону' }
+        { id: 'none', title: 'Разобраться вручную', hint: 'источник ещё не найден' }
       ];
-      var MODE_LABEL = { server: 'Сервер сам', byip: 'Мой компьютер, BY-IP', manual: 'Вручную', none: 'Нет источника' };
-      var STATUS = { broken: ['✕', 'Сломан'], empty: ['○', 'Пусто'], waiting: ['◔', 'Ждёт данные'], none: ['–', 'Нет источника'], ok: ['✓', 'Свежо'] };
+      var MODE_LABEL = { server: 'Сервер сам', byip: 'Мой компьютер, BY-IP', manual: 'Вручную', none: 'Разобраться вручную' };
+      var STATUS = { broken: ['✕', 'Сломан'], empty: ['○', 'Пусто'], waiting: ['◔', 'Ждёт данные'], none: ['–', 'Разобраться'], ok: ['✓', 'Свежо'] };
       var KIND_LABEL = { site: 'Сайт', vk: 'ВК', instagram: 'Instagram', telegram: 'Telegram', afisha: '24afisha' };
       var FILTERS = [
         { id: 'all', label: 'Все', test: function () { return true; } },
         { id: 'attn', label: 'Требуют внимания', test: function (i) { return i.status === 'broken' || i.status === 'empty' || i.status === 'waiting'; } },
         { id: 'byip', label: 'BY-IP', test: function (i) { return i.mode === 'byip'; } },
         { id: 'manual', label: 'Вручную', test: function (i) { return i.mode === 'manual'; } },
-        { id: 'none', label: 'Без источника', test: function (i) { return i.mode === 'none'; } }
+        { id: 'none', label: 'Разобраться', test: function (i) { return i.mode === 'none'; } }
       ];
       var DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
       var state = { data: null, filter: 'all', edit: null };
