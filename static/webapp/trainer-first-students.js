@@ -232,6 +232,14 @@
     sheet.addEventListener('click', onSheetClick);
     bindSheetDrag(sheet.querySelector('.tfs-sheet'));
     sheet.addEventListener('input', onSheetInput);
+    /* Курсор в поле телефона — после готового кода страны, чтобы он не оказался перед «+7». */
+    sheet.addEventListener('focusin', function (ev) {
+      var t = ev.target;
+      if (!t || t.id !== 'tfsPhone') return;
+      setTimeout(function () {
+        try { t.setSelectionRange(t.value.length, t.value.length); } catch (e) { /* type=tel не везде умеет */ }
+      }, 0);
+    });
     sheet.addEventListener('submit', function (ev) {
       ev.preventDefault();
       submit();
@@ -368,7 +376,7 @@
       '<label class="tfs-field"><span>Имя</span>' +
       '<input id="tfsName" type="text" autocomplete="off" maxlength="64" placeholder="Имя и фамилия" required /></label>' +
       '<label class="tfs-field"><span>Телефон — если хотите звонить из приложения</span>' +
-      '<input id="tfsPhone" type="tel" autocomplete="off" inputmode="tel" placeholder="' + (trainerCurrency() === 'RUB' ? '+7 912 …' : '+375 29 …') + '" /></label>' +
+      '<input id="tfsPhone" type="tel" autocomplete="off" inputmode="tel" value="' + esc(M.phonePrefix(trainerCurrency())) + '" placeholder="' + (trainerCurrency() === 'RUB' ? '+7 912 …' : '+375 29 …') + '" /></label>' +
       '<div class="tfs-field"><span>' + esc(M.slotFieldLabel(state)) + '</span>' +
       '<div class="tfs-chips" id="tfsChips">' + optionChips() + '</div></div>' +
       serviceFieldHtml(hasOptions) +
@@ -531,7 +539,7 @@
     var body = {
       first_name: name.first,
       last_name: name.last,
-      phone: (sheet.querySelector('#tfsPhone').value || '').trim() || null,
+      phone: M.phoneForSave(sheet.querySelector('#tfsPhone').value, trainerCurrency()),
       slot_id: slotId,
       service_id: slotId ? selectedService() : null,
       weekly: !!(slotId && weeklyEl && weeklyEl.checked),

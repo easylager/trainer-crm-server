@@ -125,4 +125,16 @@ describe('«Первые три ученика»: услуга, ошибки, о
     assert.match(M.errorText(err, 'RUB'), /\+7 912/);
     assert.match(M.errorText(err), /\+375 29/);
   });
+
+  it('телефон с готовым кодом страны: только код — номера нет, вставка целиком не дублирует код', () => {
+    assert.equal(M.phonePrefix('RUB'), '+7 ');
+    assert.equal(M.phonePrefix('BYN'), '+375 ');
+    assert.equal(M.phoneForSave('+7 ', 'RUB'), null);
+    assert.equal(M.phoneForSave('+7 912 345-67-89', 'RUB'), '+79123456789');
+    assert.equal(M.phoneForSave('+7 8 912 345-67-89', 'RUB'), '+79123456789');
+    assert.equal(M.phoneForSave('+7 9123456789', 'RUB'), '+79123456789');
+    assert.equal(M.phoneForSave('+375 ', 'BYN'), null);
+    assert.equal(M.phoneForSave('+375 29 123-45-67', 'BYN'), '+375291234567');
+    assert.equal(M.phoneForSave('+375 375291234567', 'BYN'), '+375291234567');
+  });
 });

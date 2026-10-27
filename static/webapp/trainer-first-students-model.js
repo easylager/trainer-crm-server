@@ -158,6 +158,29 @@
     return String(currency || '').toUpperCase() === 'RUB' ? '+7 912 345-67-89' : '+375 29 123-45-67';
   }
 
+  /** Код страны, который стоит в поле заранее: тренеру не нужно вводить «+» и «7»/«375». */
+  function phonePrefix(currency) {
+    return String(currency || '').toUpperCase() === 'RUB' ? '+7 ' : '+375 ';
+  }
+
+  /**
+   * Что отправить на сервер из поля с готовым кодом. Только код — значит, номера нет (null).
+   * Вставили номер целиком («+7 912…», «8 912…», «+375 29…») — берём его как есть, без двойного кода.
+   */
+  function phoneForSave(raw, currency) {
+    var text = String(raw || '').trim();
+    var prefix = phonePrefix(currency);
+    var code = prefix.replace(/\D/g, '');
+    var typed = text.indexOf(prefix.trim()) === 0 ? text.slice(prefix.trim().length) : text;
+    var digits = typed.replace(/\D/g, '');
+    if (!digits) return null;
+    var full = code === '7' ? /^[78]\d{10}$/ : /^375\d{9}$/;
+    if (full.test(digits) && digits.length > (code === '7' ? 10 : 9)) {
+      return (code === '7' ? '+7' + digits.slice(1) : '+' + digits);
+    }
+    return prefix.trim() + digits;
+  }
+
   /** Ошибка сервера человеческими словами: 422 приходит списком полей, а не строкой. */
   function errorText(err, currency) {
     var d = err && err.detail;
@@ -194,6 +217,8 @@
     doneWorks: doneWorks,
     errorText: errorText,
     phoneExample: phoneExample,
+    phonePrefix: phonePrefix,
+    phoneForSave: phoneForSave,
     plural: plural,
     doneKicker: doneKicker,
     inviteMessage: inviteMessage,
