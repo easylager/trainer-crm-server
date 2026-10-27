@@ -141,7 +141,8 @@ async def test_any_day_on_home_and_in_hub(app_use_test_db, db_session) -> None:
     strip = re.search(r'<nav class="b-when.*?</nav>', home.text, re.S).group(0)
     assert 'aria-current="true"' not in strip
     assert f'class="b-city" href="/c/{slug}?w=any"' in home.text
-    assert "На этой неделе" in home.text
+    # один город с сеансами пишет «Город — на этой неделе …», несколько — «На этой неделе в Беларуси …»
+    assert "на этой неделе" in home.text.lower()
     # лист: первая строка «Любой день» с суммой сеансов, отмечена
     row = re.search(r'<a class="b-dayc b-dayc--any" href="/\?when=any" aria-current="true">(.*?)</a>', home.text, re.S)
     assert row and "Любой день" in row.group(1) and "ближайшие 7 дней" in row.group(1)
