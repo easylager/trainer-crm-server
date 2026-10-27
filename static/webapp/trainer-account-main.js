@@ -327,6 +327,9 @@
     if (!hasPhoto()) {
       items.push({ label: 'Фото', hint: 'Ученику спокойнее, когда видно тренера', action: 'Добавить', route: ROUTES.basics });
     }
+    if (!String(profile().phone || '').trim()) {
+      items.push({ label: 'Телефона', hint: 'Нужен для карточки в каталоге', action: 'Указать', route: ROUTES.contacts });
+    }
     var box = el('taMissing');
     var list = el('taMissingList');
     list.innerHTML = '';

@@ -339,6 +339,7 @@ async def test_prices_are_named_as_something_worth_adding(app_use_test_db, db_se
     tid, tg = await _complete_trainer(db_session)
     body = await _get(tg)
     assert "цены на услуги" in body["readiness"]["optional_missing_labels_ru"]
+    assert "prices" in body["readiness"]["optional_missing_fields"]
 
     await db_session.execute(
         text("UPDATE trainer_services SET price_cents = 5000 WHERE trainer_id = :t"), {"t": tid}

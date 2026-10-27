@@ -420,6 +420,7 @@ async def build_catalog_screen_payload(
             "submit_ready": submit_ready,
             "missing_fields": missing,
             "missing_labels_ru": missing_labels_ru(missing, first_name_only=True),
+            "optional_missing_fields": list(optional_keys),
             "optional_missing_labels_ru": missing_labels_ru(optional_keys),
         },
         "preview": await _preview(session, trainer),

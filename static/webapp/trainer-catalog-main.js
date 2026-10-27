@@ -433,15 +433,40 @@
   }
 
   /**
-   * Обычная анкета, без карусели.
-   *
-   * «Можно усилить» — это описание, образование и опыт, и ни одно из них не входит в
-   * submission-рельс. Вести туда `task=catalog` означало открыть карусель с пустым списком
-   * шагов: она мгновенно упиралась в «Базовый профиль готов» и возвращала тренера обратно в
-   * «Каталог». Кнопка выглядела рабочей и не делала ничего.
+   * Куда вести за недостающим полем: раздел нового профиля (одним блоком, с возвратом сюда).
+   * Старая анкета одним списком не открывается нигде, кроме явной ссылки «Вся анкета одним списком».
+   */
+  var FIELD_ROUTE = {
+    full_name: 'trainer-profile?task=basics',
+    first_name: 'trainer-profile?task=basics',
+    photo: 'trainer-profile?task=basics',
+    phone: 'trainer-profile?task=contacts',
+    description: 'trainer-profile?task=about',
+    education: 'trainer-profile?task=experience',
+    experience_years: 'trainer-profile?task=experience',
+    session_duration_minutes: 'trainer-profile?task=booking',
+    min_hours_before_booking: 'trainer-profile?task=booking',
+    city: 'trainer-arenas',
+    arenas: 'trainer-arenas',
+    services: 'trainer-prices',
+    prices: 'trainer-prices',
+  };
+
+  /**
+   * «Дополнить в анкете»: первый недостающий пункт (сначала обязательные, потом «можно усилить»).
+   * Это не карусель: «можно усилить» не входит в её рельс, и она сразу возвращала в «Каталог».
    */
   function openProfileForm() {
-    window.location.href = webappUrl('trainer-profile');
+    var r = (state.payload && state.payload.readiness) || {};
+    var keys = (r.missing_fields || []).concat(r.optional_missing_fields || []);
+    var route = null;
+    for (var i = 0; i < keys.length && !route; i++) route = FIELD_ROUTE[keys[i]] || null;
+    if (!route) {
+      window.location.href = webappUrl('trainer-account');
+      return;
+    }
+    var back = route.indexOf('trainer-profile') === 0 ? '&return=trainer-catalog' : '';
+    window.location.href = webappUrl(route) + back;
   }
 
   function runAction(action) {
