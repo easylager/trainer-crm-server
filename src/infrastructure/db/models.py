@@ -2553,3 +2553,13 @@ class IceCompanyMessage(Base):
     last_render_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     is_group: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
+
+
+class AdminTrainerContact(Base):
+    """Admin marked «написали» for a trainer (journey list). One row per trainer, removed on unmark."""
+
+    __tablename__ = "admin_trainer_contacts"
+
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), primary_key=True)
+    contacted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    admin_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)

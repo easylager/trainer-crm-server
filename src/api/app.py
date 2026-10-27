@@ -536,6 +536,15 @@ def webapp_admin_trainers_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/admin-journey")
+def webapp_admin_journey_page():
+    """Admin trainer journey list — who stopped where, so an admin can write to them."""
+    path = _WEBAPP_DIR / "admin-journey.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/admin-growth")
 def webapp_admin_growth_page():
     """Serve the admin Growth tab Mini App (new trainer cohorts, trial→paid, referral program)."""
