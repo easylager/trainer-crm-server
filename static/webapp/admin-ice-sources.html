@@ -48,6 +48,7 @@
   </div>
   <div id="chips" class="src-chips" hidden></div>
   <div id="list" class="src-list"></div>
+  <input id="shot" type="file" accept="image/*" hidden>
 
   <div id="bg" class="sheet-bg" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <div class="sheet">
@@ -136,6 +137,7 @@
           '<div class="src-sub">' + sub.join(' · ') + '</div></div>' +
           '<span class="src-st st-' + i.status + '"><span aria-hidden="true">' + st[0] + '</span> ' + st[1] + '</span></div>' + why +
           '<div class="src-row">' + src + '<button class="btn primary" type="button" data-edit="' + i.arena_id + '">Источник</button></div>' +
+          '<div class="src-row"><button class="btn" type="button" data-upload="' + i.arena_id + '">Загрузить скрин расписания</button></div>' +
           '<div class="src-row">' +
           '<a class="btn" ' + (i.links.site ? 'href="' + esc(i.links.site) + '" data-open="' + esc(i.links.site) + '"' : 'aria-disabled="true"') + '>На сайте</a>' +
           '<a class="btn" ' + (i.links.app ? 'href="' + esc(i.links.app) + '" data-open="' + esc(i.links.app) + '"' : 'aria-disabled="true"') + '>В приложении</a></div></div>';
@@ -194,10 +196,11 @@
       }
 
       document.addEventListener('click', function (ev) {
-        var el = ev.target.closest('[data-filter],[data-edit],[data-open],[data-mode],[data-day]');
+        var el = ev.target.closest('[data-filter],[data-edit],[data-open],[data-mode],[data-day],[data-upload]');
         if (el && el.dataset.open) { ev.preventDefault(); openLink(el.dataset.open); return; }
         if (el && el.dataset.filter) { state.filter = el.dataset.filter; draw(); return; }
         if (el && el.dataset.edit) { openSheet(+el.dataset.edit); return; }
+        if (el && el.dataset.upload) { state.uploadFor = +el.dataset.upload; el.dataset.btn = '1'; state.uploadBtn = el; document.getElementById('shot').value = ''; document.getElementById('shot').click(); return; }
         if (el && el.dataset.mode) { state.edit.mode = el.dataset.mode; drawSheet(); return; }
         if (el && el.dataset.day) {
           var k = +el.dataset.day, ix = state.edit.days.indexOf(k);
@@ -211,6 +214,19 @@
         }
       });
       document.getElementById('url').addEventListener('input', drawSheet);
+      document.getElementById('shot').addEventListener('change', function (ev) {
+        var f = ev.target.files && ev.target.files[0], btn = state.uploadBtn, id = state.uploadFor;
+        if (!f || !id) return;
+        var fd = new FormData(); fd.append('arena_id', id); fd.append('file', f);
+        var headers = { Accept: 'application/json' };
+        if (A.initData) headers['X-Telegram-Init-Data'] = A.initData;
+        var url = A.apiUrl('/admin/ice-inbox') + (A.initData ? '?init_data=' + encodeURIComponent(A.initData) : '');
+        btn.disabled = true; btn.textContent = 'Отправляем…';
+        fetch(url, { method: 'POST', headers: headers, body: fd, credentials: 'same-origin' }).then(function (r) {
+          if (r.ok) { btn.textContent = 'Отправлено. Ждёт разбора'; return; }
+          return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.detail || ('HTTP ' + r.status)); });
+        }).catch(function (e) { btn.textContent = e.message || 'Не отправилось'; btn.disabled = false; });
+      });
 
       function load() {
         return A.getJson('/admin/ice-sources').then(function (d) { state.data = d; draw(); }).catch(function (e) {

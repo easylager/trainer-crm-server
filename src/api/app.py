@@ -506,6 +506,15 @@ def webapp_admin_ice_sources_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/admin-ice-inbox")
+def webapp_admin_ice_inbox_page():
+    """Admin ice inbox — schedule screenshots from the phone, review and publish."""
+    path = _WEBAPP_DIR / "admin-ice-inbox.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/admin-ice-schedule")
 def webapp_admin_ice_schedule_page():
     """Admin ice session editor (mass skate, OHM, week grid)."""

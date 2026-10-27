@@ -2582,3 +2582,22 @@ class ArenaScheduleSource(Base):
     remind: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+
+class ArenaScheduleInbox(Base):
+    """A schedule screenshot from the admin's phone: pending → parsed (Claude) → published | rejected."""
+
+    __tablename__ = "arena_schedule_inbox"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    file_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    uploaded_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    parsed: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
+    parsed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_count: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

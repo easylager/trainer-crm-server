@@ -1,0 +1,17 @@
+{
+  "arena_id": 35,
+  "source": "афиша ЦОР г. Жлобина (VK vk.com/zor.zhlobin), получено 2026-10-27",
+  "defaults": {
+    "kind": "public_skate",
+    "duration_minutes": 45,
+    "price_adult": "7.00",
+    "price_rental": "5.00"
+  },
+  "sessions": [
+    {"date": "2026-10-30", "start": "18:00", "label": "Ледовый дворец", "capacity_note": "до 160 человек"},
+    {"date": "2026-10-31", "start": "16:30", "label": "Ледовый дворец", "capacity_note": "до 160 человек"},
+    {"date": "2026-10-31", "start": "19:30", "label": "Ледовый дворец", "capacity_note": "до 160 человек"},
+    {"date": "2026-11-01", "start": "14:15", "label": "Ледовый дворец", "capacity_note": "до 160 человек"},
+    {"date": "2026-11-01", "start": "11:00", "label": "Ледовая арена 2", "capacity_note": "до 180 человек"}
+  ]
+}

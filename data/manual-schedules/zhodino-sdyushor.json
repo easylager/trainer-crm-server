@@ -1,0 +1,67 @@
+{
+  "arena_id": 20,
+  "source": "пост катка СДЮШОР Жодино + 24afisha.by/ru/object/5159, получено 2026-10-27; даты — ближайшие выходные (в посте только дни недели)",
+  "defaults": {
+    "kind": "public_skate",
+    "duration_minutes": 45,
+    "price_adult": "6.50",
+    "price_child": "5.50"
+  },
+  "sessions": [
+    {
+      "date": "2026-10-31",
+      "start": "14:00",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/31102026"
+    },
+    {
+      "date": "2026-10-31",
+      "start": "15:30",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/31102026"
+    },
+    {
+      "date": "2026-10-31",
+      "start": "17:00",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/31102026"
+    },
+    {
+      "date": "2026-10-31",
+      "start": "18:30",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/31102026"
+    },
+    {
+      "date": "2026-10-31",
+      "start": "20:00",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/31102026"
+    },
+    {
+      "date": "2026-10-31",
+      "start": "21:15",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/31102026"
+    },
+    {
+      "date": "2026-11-01",
+      "start": "14:00",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/01112026"
+    },
+    {
+      "date": "2026-11-01",
+      "start": "15:30",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/01112026"
+    },
+    {
+      "date": "2026-11-01",
+      "start": "17:00",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/01112026"
+    },
+    {
+      "date": "2026-11-01",
+      "start": "18:30",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/01112026"
+    },
+    {
+      "date": "2026-11-01",
+      "start": "20:00",
+      "external_url": "https://24afisha.by/ru/object/5159-ledovaya-ploshadka-v-g-zhodino/01112026"
+    }
+  ]
+}

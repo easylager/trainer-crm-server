@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Входящие расписания · Админ</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610214"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610214" />
+  <link rel="stylesheet" href="theme.css?v=202610214" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=202610214" />
+  <style>
+    .in-list { display: flex; flex-direction: column; gap: 12px; }
+    .in-h { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--tg-theme-hint-color, #9ca3af); font-weight: 600; margin: 8px 0 -4px; }
+    .in-card { background: var(--tg-theme-secondary-bg-color, #2a2a2a); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; padding: 14px; }
+    .in-card.review { border-color: rgba(69,185,187,.45); }
+    .in-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .in-name { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+    .in-sub, .in-hint { font-size: 12px; color: var(--tg-theme-hint-color, #9ca3af); }
+    .in-st { font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .st-pending { color: #f0b429; } .st-parsed { color: #45b9bb; } .st-published { color: #45b9bb; } .st-rejected { color: #9ca3af; }
+    .in-img { display: block; width: 100%; max-height: 160px; object-fit: cover; border-radius: 10px; margin-top: 12px; background: #1a1a1a; }
+    .in-day { font-size: 14px; font-weight: 600; margin: 12px 0 6px; }
+    .in-times { display: flex; gap: 6px; flex-wrap: wrap; }
+    .in-time { background: var(--tg-theme-bg-color, #1a1a1a); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+    .in-notes { margin-top: 12px; border: 1px solid rgba(240,180,41,.5); background: rgba(240,180,41,.08); border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.5; }
+    .in-notes b { color: #f0b429; display: block; margin-bottom: 4px; }
+    .btns { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+    .btn { display: flex; align-items: center; justify-content: center; min-height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: var(--tg-theme-text-color, #f5f5f5); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; }
+    .btn.primary { background: #45b9bb; border-color: #45b9bb; color: #06292a; }
+    .btn:disabled { opacity: .5; }
+    .err { color: #ff8a80; font-size: 13px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="adm-header">
+    <h1>Входящие расписания</h1>
+    <div class="adm-sub" id="sub">Загрузка…</div>
+  </div>
+  <div id="content" class="in-list"></div>
+  <script src="admin-analytics-shared.js?v=202610214"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics, esc = A.escapeHtml;
+      var STATUS = { pending: ['◔', 'Ждёт разбора'], parsed: ['✓', 'Проверьте'], published: ['✓', 'Опубликовано'], rejected: ['–', 'Отклонено'] };
+      var MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+      var WD = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+      var data = null;
+
+      function dayTitle(iso) {
+        var p = String(iso).split('-'); if (p.length !== 3) return iso;
+        var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+        var w = WD[d.getUTCDay()]; return w.charAt(0).toUpperCase() + w.slice(1) + ', ' + (+p[2]) + ' ' + MONTHS[+p[1] - 1];
+      }
+      function when(iso) {
+        return iso ? new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Minsk' }).replace('.', '') : '';
+      }
+      function imgSrc(i) { return A.apiUrl(i.image_url.replace('/api/webapp', '')) + (A.initData ? '?init_data=' + encodeURIComponent(A.initData) : ''); }
+
+      function card(i) {
+        var st = STATUS[i.status], s = i.summary, h = '';
+        h += '<div class="in-card' + (i.status === 'parsed' ? ' review' : '') + '" data-id="' + i.id + '">';
+        h += '<div class="in-top"><div><div class="in-name">' + esc(i.arena_name) + '</div><div class="in-sub">' + esc(i.city || '') + ' · загружено ' + esc(when(i.uploaded_at)) + '</div></div>';
+        h += '<span class="in-st st-' + i.status + '"><span aria-hidden="true">' + st[0] + '</span> ' + st[1] + '</span></div>';
+        if (i.status === 'pending') {
+          h += '<div class="in-hint" style="margin-top:10px">Скрин ждёт, пока Claude его разберёт. Запустите навык /ice-inbox, и здесь появится результат.</div>';
+        }
+        if (s && (i.status === 'parsed' || i.status === 'published')) {
+          h += '<div class="in-hint" style="margin-top:10px">Нашли ' + s.count + ' сеансов</div>';
+          s.days.forEach(function (d) {
+            h += '<div class="in-day">' + esc(dayTitle(d.date)) + '</div><div class="in-times">' +
+              d.times.map(function (t) { return '<span class="in-time">' + esc(t) + '</span>'; }).join('') + '</div>';
+          });
+          if (s.notes.length) {
+            h += '<div class="in-notes"><b>Проверьте</b>' + s.notes.map(function (n) { return '<div>' + esc(n) + '</div>'; }).join('') + '</div>';
+          }
+        }
+        if (i.status === 'published') h += '<div class="in-hint" style="margin-top:10px">Опубликовано ' + esc(when(i.published_at)) + ', сеансов: ' + (i.published_count || 0) + '</div>';
+        if (i.status === 'rejected' && i.note) h += '<div class="in-hint" style="margin-top:10px">Причина: ' + esc(i.note) + '</div>';
+        h += '<a href="' + esc(imgSrc(i)) + '" target="_blank" rel="noopener"><img class="in-img" alt="Скрин расписания" src="' + esc(imgSrc(i)) + '"></a>';
+        if (i.status === 'parsed') {
+          h += '<div class="btns"><button class="btn primary" type="button" data-publish="' + i.id + '">Опубликовать ' + s.count + ' сеансов</button>' +
+            '<button class="btn" type="button" data-reject="' + i.id + '">Не подходит</button></div>';
+        } else if (i.status === 'pending') {
+          h += '<div class="btns"><button class="btn" type="button" data-reject="' + i.id + '">Убрать скрин</button></div>';
+        }
+        return h + '<div class="err" hidden></div></div>';
+      }
+
+      function draw() {
+        var open = data.items.filter(function (i) { return i.status === 'pending' || i.status === 'parsed'; });
+        var done = data.items.filter(function (i) { return i.status === 'published' || i.status === 'rejected'; });
+        document.getElementById('sub').textContent = open.length ? 'Ждут вас: ' + open.length : 'Всё разобрано';
+        var h = '';
+        if (open.length) h += open.map(card).join('');
+        else h += '<div class="adm-card"><div class="adm-empty">Новых скринов нет. Загрузить скрин можно из «Источников» у нужного катка.</div></div>';
+        if (done.length) h += '<div class="in-h">Недавнее</div>' + done.map(card).join('');
+        document.getElementById('content').innerHTML = h;
+      }
+
+      function post(path, body) {
+        var headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
+        if (A.initData) headers['X-Telegram-Init-Data'] = A.initData;
+        var url = A.apiUrl(path) + (A.initData ? '?init_data=' + encodeURIComponent(A.initData) : '');
+        return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body || {}), credentials: 'same-origin' }).then(function (r) {
+          if (r.ok) return r.json();
+          return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.detail || ('HTTP ' + r.status)); });
+        });
+      }
+      function fail(btn, e) {
+        btn.disabled = false;
+        var err = btn.closest('.in-card').querySelector('.err');
+        err.textContent = e.message || 'Не получилось'; err.hidden = false;
+      }
+
+      document.addEventListener('click', function (ev) {
+        var b = ev.target.closest('[data-publish],[data-reject]');
+        if (!b) return;
+        b.disabled = true;
+        if (b.dataset.publish) {
+          b.textContent = 'Публикуем…';
+          post('/admin/ice-inbox/' + b.dataset.publish + '/publish').then(load).catch(function (e) { b.textContent = 'Опубликовать ещё раз'; fail(b, e); });
+        } else {
+          var note = window.prompt('Что не так? (можно пропустить)') || '';
+          post('/admin/ice-inbox/' + b.dataset.reject + '/reject', { note: note }).then(load).catch(function (e) { fail(b, e); });
+        }
+      });
+
+      function load() {
+        return A.getJson('/admin/ice-inbox').then(function (d) { data = d; draw(); }).catch(function (e) {
+          document.getElementById('sub').textContent = '';
+          document.getElementById('content').innerHTML = '<div class="adm-error">' + esc((e && e.message) || 'Ошибка сети') + '</div>';
+        });
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

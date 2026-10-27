@@ -616,6 +616,26 @@ async def cmd_stats(message: Message) -> None:
     )
 
 
+@router.message(Command("ice_inbox"))
+async def cmd_ice_inbox(message: Message) -> None:
+    """Open the schedule screenshots inbox (review parsed schedules, publish)."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base:
+        await message.answer("WEBAPP_BASE_URL не задан — список недоступен.")
+        return
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Открыть входящие", web_app=WebAppInfo(url=f"{base}/webapp/admin-ice-inbox"))
+    ]])
+    await message.answer(
+        "📥 <b>Скрины расписаний</b>\nПроверьте разобранное и опубликуйте.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+    )
+
+
 @router.message(Command("ice_sources"))
 async def cmd_ice_sources(message: Message) -> None:
     """Open the ice schedule sources list (link, collection mode, posting days)."""

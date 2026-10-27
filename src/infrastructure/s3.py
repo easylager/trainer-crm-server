@@ -227,6 +227,26 @@ def upload_legal_document(body: bytes, content_type: str | None = None) -> str:
     return file_key
 
 
+ICE_INBOX_PREFIX = "ice-inbox/"
+
+
+def upload_ice_inbox_image(body: bytes, content_type: str) -> str | None:
+    """Store an admin's schedule screenshot as-is (no resize: small print must stay legible)."""
+    ext = _ext_from_content_type(content_type) or ".jpg"
+    file_key = f"{ICE_INBOX_PREFIX}{uuid.uuid4().hex}{ext}"
+    settings = Settings()
+    if _use_local():
+        path = Path(settings.local_storage_path).resolve() / file_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        return file_key
+    try:
+        _get_client().put_object(Bucket=settings.s3_bucket, Key=file_key, Body=body, ContentType=content_type)
+    except Exception:
+        return None
+    return file_key
+
+
 def upload_certificate_file(body: bytes, trainer_id: int, certificate_id: int) -> str:
     """Upload certificate PDF to S3/local under certificates/{trainer_id}/{certificate_id}.pdf. Returns file_key."""
     file_key = f"certificates/{trainer_id}/{certificate_id}.pdf"
