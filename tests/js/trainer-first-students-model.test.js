@@ -137,4 +137,14 @@ describe('«Первые три ученика»: услуга, ошибки, о
     assert.equal(M.phoneForSave('+375 29 123-45-67', 'BYN'), '+375291234567');
     assert.equal(M.phoneForSave('+375 375291234567', 'BYN'), '+375291234567');
   });
+
+  it('маска телефона не пускает лишние цифры и не дублирует код', () => {
+    assert.equal(M.phoneMask('+7 ', 'RUB'), '+7 ');
+    assert.equal(M.phoneMask('+7 9123456789999999', 'RUB'), '+7 912 345-67-89');
+    assert.equal(M.phoneMask('89123456789', 'RUB'), '+7 912 345-67-89');
+    assert.equal(M.phoneMask('+7 91', 'RUB'), '+7 91');
+    assert.equal(M.phoneMask('+375 291234567890', 'BYN'), '+375 29 123-45-67');
+    assert.equal(M.phoneMask('+375 375291234567', 'BYN'), '+375 29 123-45-67');
+    assert.equal(M.phoneForSave(M.phoneMask('+7 912 345-67-89', 'RUB'), 'RUB'), '+79123456789');
+  });
 });

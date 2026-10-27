@@ -181,6 +181,34 @@
     return prefix.trim() + digits;
   }
 
+  /**
+   * Маска поля телефона: код страны + не больше цифр, чем бывает в номере (РФ 10, РБ 9).
+   * Вставленный целиком номер («8 912…», «+7 912…», «+375 29…») не дублирует код.
+   */
+  function phoneMask(raw, currency) {
+    var ru = String(currency || '').toUpperCase() === 'RUB';
+    var prefix = phonePrefix(currency);
+    var text = String(raw || '').trim();
+    var head = prefix.trim();
+    var digits = (text.indexOf(head) === 0 ? text.slice(head.length) : text).replace(/\D/g, '');
+    if (ru) {
+      if (digits.length > 10 && /^[78]/.test(digits)) digits = digits.slice(1);
+      digits = digits.slice(0, 10);
+      var r = prefix + digits.slice(0, 3);
+      if (digits.length > 3) r += ' ' + digits.slice(3, 6);
+      if (digits.length > 6) r += '-' + digits.slice(6, 8);
+      if (digits.length > 8) r += '-' + digits.slice(8, 10);
+      return r;
+    }
+    if (digits.length > 9 && digits.indexOf('375') === 0) digits = digits.slice(3);
+    digits = digits.slice(0, 9);
+    var b = prefix + digits.slice(0, 2);
+    if (digits.length > 2) b += ' ' + digits.slice(2, 5);
+    if (digits.length > 5) b += '-' + digits.slice(5, 7);
+    if (digits.length > 7) b += '-' + digits.slice(7, 9);
+    return b;
+  }
+
   /** Ошибка сервера человеческими словами: 422 приходит списком полей, а не строкой. */
   function errorText(err, currency) {
     var d = err && err.detail;
@@ -218,6 +246,7 @@
     errorText: errorText,
     phoneExample: phoneExample,
     phonePrefix: phonePrefix,
+    phoneMask: phoneMask,
     phoneForSave: phoneForSave,
     plural: plural,
     doneKicker: doneKicker,

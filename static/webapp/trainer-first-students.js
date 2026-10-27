@@ -376,7 +376,7 @@
       '<label class="tfs-field"><span>Имя</span>' +
       '<input id="tfsName" type="text" autocomplete="off" maxlength="64" placeholder="Имя и фамилия" required /></label>' +
       '<label class="tfs-field"><span>Телефон — если хотите звонить из приложения</span>' +
-      '<input id="tfsPhone" type="tel" autocomplete="off" inputmode="tel" value="' + esc(M.phonePrefix(trainerCurrency())) + '" placeholder="' + (trainerCurrency() === 'RUB' ? '+7 912 …' : '+375 29 …') + '" /></label>' +
+      '<input id="tfsPhone" type="tel" autocomplete="off" inputmode="tel" maxlength="20" value="' + esc(M.phonePrefix(trainerCurrency())) + '" placeholder="' + (trainerCurrency() === 'RUB' ? '+7 912 …' : '+375 29 …') + '" /></label>' +
       '<div class="tfs-field"><span>' + esc(M.slotFieldLabel(state)) + '</span>' +
       '<div class="tfs-chips" id="tfsChips">' + optionChips() + '</div></div>' +
       serviceFieldHtml(hasOptions) +
@@ -501,6 +501,11 @@
   }
 
   function onSheetInput(ev) {
+    if (ev.target && ev.target.id === 'tfsPhone') {
+      var masked = M.phoneMask(ev.target.value, trainerCurrency());
+      if (masked !== ev.target.value) ev.target.value = masked;
+      return;
+    }
     if (ev.target && ev.target.id === 'tfsPaste') {
       var rows = M.parseStudentList(ev.target.value);
       var prev = sheet.querySelector('#tfsPreview');
