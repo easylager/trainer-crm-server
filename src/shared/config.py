@@ -132,10 +132,14 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     api_rate_limit_page_window_sec: float = 60.0
     api_rate_limit_image_max_requests: int = 40
     api_rate_limit_image_window_sec: float = 60.0
-    # Детектор обхода сайта (scrape_guard): off | log | block. По умолчанию только лог; поисковики и превью не трогаем.
-    scrape_guard_mode: str = "log"
+    # Защита публичного расписания (scrape_guard). Режимы off | log | block; по умолчанию только лог,
+    # поисковики и превью мессенджеров не учитываются и не блокируются никогда.
+    scrape_guard_mode: str = "log"  # бюджеты страниц/арен и ловушка /export/
+    scrape_guard_json_mode: str = "log"  # JSON расписания только со страниц нашего сайта
     scrape_guard_window_sec: float = 600.0
-    scrape_guard_distinct_pages: int = 40
+    scrape_guard_distinct_pages: int = 40  # разных страниц за окно
+    scrape_guard_daily_arenas: int = 30  # разных арен за сутки на посетителя
+    scrape_guard_allowed_hosts: str = "glideclub.by,www.glideclub.by"
     api_rate_limit_bot_max_requests: int = 600
     api_rate_limit_bot_window_sec: float = 60.0
     # TASK-231: создание открытки «Пойдёшь со мной на каток?» — свой бакет, не общий public.

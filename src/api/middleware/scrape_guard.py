@@ -1,20 +1,29 @@
-"""Детектор автоматического обхода публичного сайта.
+"""Защита публичного расписания от массового выкачивания.
 
-Человек за сессию открывает несколько страниц; скрипт, собирающий весь каталог, — десятки разных
-за считаные минуты. Считаем уникальные HTML-страницы (200, ``text/html``) на «посетителя»
-(IP + отпечаток User-Agent) в скользящем окне.
+Три слоя, все на счётчиках в памяти процесса (без БД, на скорость не влияет):
+
+1. Бюджет страниц. Человек за сессию открывает несколько страниц, а скрипт по sitemap — десятки.
+   Считаем уникальные HTML-страницы за короткое окно и уникальные арены за сутки на посетителя
+   (IP + отпечаток User-Agent). Суточное окно ловит и «медленный» обход.
+2. JSON расписания (``/api/public/arenas/{ref}/sessions``) нужен нашим страницам и Mini App.
+   Запрос без признаков того, что он пришёл со страницы сайта (``Sec-Fetch-Site``/``Origin``/``Referer``),
+   считается внешним.
+3. Ловушка: путь ``/export/…`` закрыт в ``robots.txt``, и ссылок на него нет. Заглянул — значит читает
+   robots.txt, чтобы найти, что закрыто, и в блок-режиме закрывается на сутки.
 
 Поисковые боты и превью мессенджеров не учитываются и не блокируются никогда: от них зависят индексация
-и ссылки. Режимы (``SCRAPE_GUARD_MODE``): ``off`` | ``log`` (по умолчанию: только строка в логе) |
-``block`` (ответ 429 после порога). Счётчик в памяти процесса, без обращений к БД, на скорость не влияет.
+и ссылки. Режимы ``SCRAPE_GUARD_MODE`` (бюджеты и ловушка) и ``SCRAPE_GUARD_JSON_MODE`` (проверка JSON):
+``off`` | ``log`` (по умолчанию: только строка в логе) | ``block`` (429 / 403).
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import time
 from collections import deque
+from urllib.parse import urlparse
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -26,44 +35,94 @@ from src.shared.ua_class import UA_PREVIEW, UA_SEARCH, classify_user_agent
 
 logger = logging.getLogger(__name__)
 
-# Не страницы сайта: API, Mini App, статика и картинки.
+# Не страницы сайта: API (кроме JSON расписания ниже), Mini App, статика и картинки.
 _SKIP_PREFIXES = ("/api/", "/webapp/", "/static/", "/logos/", "/assets/", "/health")
+_ARENA_PAGE_RE = re.compile(r"^/p/[^/]+/[^/]+/?$")
+_ARENA_JSON_RE = re.compile(r"^/api/public/arenas/([^/]+)/sessions/?$")
+TRAP_PREFIX = "/export/"
+_DAY_SEC = 86400.0
+_TRAP_BAN_SEC = 86400.0
+_RETRY_AFTER_SEC = 600
 _MAX_ACTORS = 5000
 _MAX_PER_ACTOR = 400
-_RETRY_AFTER_SEC = 600
+_MAX_ARENAS_PER_ACTOR = 64  # дальше порога хранить незачем: посетитель уже над бюджетом
 
 
 class _Tracker:
     def __init__(self) -> None:
-        self._seen: dict[str, deque[tuple[float, str]]] = {}
-        self._flagged: dict[str, float] = {}
+        self._pages: dict[str, deque[tuple[float, str]]] = {}
+        self._arenas: dict[str, dict[tuple[str, str], float]] = {}
+        self._flagged: dict[tuple[str, str], float] = {}
+        self._trapped: dict[str, float] = {}
 
     def reset(self) -> None:
-        self._seen.clear()
+        self._pages.clear()
+        self._arenas.clear()
         self._flagged.clear()
+        self._trapped.clear()
 
-    def distinct(self, key: str, now: float, window: float) -> int:
-        entries = self._seen.get(key)
+    def _evict(self, store: dict) -> None:
+        if len(store) >= _MAX_ACTORS:
+            for stale in list(store)[: _MAX_ACTORS // 2]:
+                store.pop(stale, None)
+
+    # — страницы в коротком окне
+    def pages_distinct(self, key: str, now: float, window: float) -> int:
+        entries = self._pages.get(key)
         if not entries:
             return 0
         while entries and entries[0][0] < now - window:
             entries.popleft()
         return len({path for _, path in entries})
 
-    def record(self, key: str, path: str, now: float, window: float) -> int:
-        if key not in self._seen and len(self._seen) >= _MAX_ACTORS:
-            for stale in list(self._seen)[: _MAX_ACTORS // 2]:
-                self._seen.pop(stale, None)
-                self._flagged.pop(stale, None)
-        entries = self._seen.setdefault(key, deque(maxlen=_MAX_PER_ACTOR))
-        entries.append((now, path))
-        return self.distinct(key, now, window)
+    def record_page(self, key: str, path: str, now: float, window: float) -> int:
+        if key not in self._pages:
+            self._evict(self._pages)
+        self._pages.setdefault(key, deque(maxlen=_MAX_PER_ACTOR)).append((now, path))
+        return self.pages_distinct(key, now, window)
 
-    def first_flag(self, key: str, now: float, window: float) -> bool:
-        """True once per actor per window — keeps the log from filling up."""
-        if now - self._flagged.get(key, float("-inf")) < window:
+    # — арены за сутки (страницы и JSON считаются отдельно: ref арены в них разный)
+    def arenas_distinct(self, key: str, now: float) -> int:
+        seen = self._arenas.get(key)
+        if not seen:
+            return 0
+        for item in [i for i, ts in seen.items() if ts < now - _DAY_SEC]:
+            del seen[item]
+        counts: dict[str, int] = {}
+        for ns, _ in seen:
+            counts[ns] = counts.get(ns, 0) + 1
+        return max(counts.values(), default=0)
+
+    def record_arena(self, key: str, ns: str, ref: str, now: float) -> int:
+        if key not in self._arenas:
+            self._evict(self._arenas)
+        seen = self._arenas.setdefault(key, {})
+        if (ns, ref) in seen or len(seen) < _MAX_ARENAS_PER_ACTOR:
+            seen[(ns, ref)] = now
+        return self.arenas_distinct(key, now)
+
+    # — ловушка и «один раз на окно» для логов
+    def trap(self, key: str, now: float) -> None:
+        if key not in self._trapped:
+            self._evict(self._trapped)
+        self._trapped[key] = now
+
+    def is_trapped(self, key: str, now: float) -> bool:
+        ts = self._trapped.get(key)
+        if ts is None:
             return False
-        self._flagged[key] = now
+        if now - ts >= _TRAP_BAN_SEC:
+            del self._trapped[key]
+            return False
+        return True
+
+    def first_flag(self, key: str, reason: str, now: float, window: float) -> bool:
+        """True один раз на посетителя и причину за окно — лог не засоряется."""
+        if len(self._flagged) >= _MAX_ACTORS * 2:
+            self._flagged.clear()
+        if now - self._flagged.get((key, reason), float("-inf")) < window:
+            return False
+        self._flagged[(key, reason)] = now
         return True
 
 
@@ -74,18 +133,52 @@ def reset_scrape_guard_for_tests() -> None:
     _tracker.reset()
 
 
+def _allowed_hosts(settings: object) -> set[str]:
+    hosts = {h.strip().lower() for h in str(getattr(settings, "scrape_guard_allowed_hosts", "")).split(",") if h.strip()}
+    base = urlparse(str(getattr(settings, "webapp_base_url", "") or "")).hostname
+    if base:
+        hosts.add(base.lower())
+    return hosts
+
+
+def request_comes_from_site(headers: dict[bytes, bytes], allowed: set[str]) -> bool | None:
+    """True/False — по заголовкам браузера; None — их нет вовсе (curl, скрипт, старый клиент)."""
+    fetch_site = headers.get(b"sec-fetch-site", b"").decode("latin-1").lower()
+    if fetch_site:
+        return fetch_site in ("same-origin", "same-site", "none")
+    for name in (b"origin", b"referer"):
+        value = headers.get(name, b"").decode("latin-1")
+        if value:
+            return (urlparse(value).hostname or "").lower() in allowed
+    return None
+
+
+def _forbid(status: int, detail: str, retry_after: bool) -> JSONResponse:
+    return JSONResponse(
+        {"detail": detail},
+        status_code=status,
+        headers={"Retry-After": str(_RETRY_AFTER_SEC)} if retry_after else None,
+    )
+
+
 class ScrapeGuardMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope.get("method") != "GET":
+        if scope["type"] != "http" or scope.get("method") not in ("GET", "HEAD"):
             await self.app(scope, receive, send)
             return
         settings = Settings()
         mode = (settings.scrape_guard_mode or "log").lower()
+        json_mode = (settings.scrape_guard_json_mode or "log").lower()
         path = str(scope.get("path") or "")
-        if mode == "off" or path.startswith(_SKIP_PREFIXES):
+        json_match = _ARENA_JSON_RE.match(path)
+        is_trap = path.startswith(TRAP_PREFIX)
+        is_page = bool(_ARENA_PAGE_RE.match(path)) or (
+            not json_match and not is_trap and not path.startswith(_SKIP_PREFIXES)
+        )
+        if (mode == "off" and json_mode == "off") or not (json_match or is_trap or is_page):
             await self.app(scope, receive, send)
             return
         headers = {k.lower(): v for k, v in scope.get("headers") or []}
@@ -96,29 +189,60 @@ class ScrapeGuardMiddleware:
 
         ip = client_ip_from_request(Request(scope))
         key = f"{ip}|{hashlib.sha1(user_agent.encode('latin-1', 'ignore')).hexdigest()[:8]}"
+        now = time.monotonic()
         window = float(settings.scrape_guard_window_sec)
-        threshold = int(settings.scrape_guard_distinct_pages)
+        page_limit = int(settings.scrape_guard_distinct_pages)
+        arena_limit = int(settings.scrape_guard_daily_arenas)
 
-        if mode == "block" and _tracker.distinct(key, time.monotonic(), window) >= threshold:
-            response = JSONResponse(
-                {"detail": "Too many pages requested. Try again later."},
-                status_code=429,
-                headers={"Retry-After": str(_RETRY_AFTER_SEC)},
-            )
-            await response(scope, receive, send)
+        def flag(reason: str, window_sec: float, **details: object) -> None:
+            if _tracker.first_flag(key, reason, now, window_sec):
+                logger.warning(
+                    "scrape_suspect reason=%s mode=%s ip=%s ua=%r path=%s %s",
+                    reason, json_mode if reason == "external_json" else mode, _mask_client_ip(ip),
+                    user_agent[:80], path, " ".join(f"{k}={v}" for k, v in details.items()),
+                )
+
+        if is_trap and mode != "off":
+            _tracker.trap(key, now)
+            flag("trap", _DAY_SEC)
+            await _forbid(404, "Not Found", False)(scope, receive, send)
+            return
+
+        if mode == "block" and _tracker.is_trapped(key, now):
+            await _forbid(429, "Too many requests. Try again later.", True)(scope, receive, send)
+            return
+
+        if json_match and json_mode != "off":
+            from_site = request_comes_from_site(headers, _allowed_hosts(settings))
+            if from_site is not True:
+                flag("external_json", window, sec_fetch_site=headers.get(b"sec-fetch-site", b"-").decode("latin-1"))
+                if json_mode == "block":
+                    await _forbid(403, "Forbidden", False)(scope, receive, send)
+                    return
+
+        if mode == "block" and (
+            _tracker.pages_distinct(key, now, window) >= page_limit
+            or _tracker.arenas_distinct(key, now) >= arena_limit
+        ):
+            await _forbid(429, "Too many pages requested. Try again later.", True)(scope, receive, send)
             return
 
         async def send_counting(message: Message) -> None:
-            if message["type"] == "http.response.start" and message.get("status") == 200:
+            if mode != "off" and message["type"] == "http.response.start" and message.get("status") == 200:
                 content_type = next((v for k, v in message.get("headers") or [] if k.lower() == b"content-type"), b"")
-                if content_type.startswith(b"text/html"):
-                    now = time.monotonic()
-                    distinct = _tracker.record(key, path, now, window)
-                    if distinct >= threshold and _tracker.first_flag(key, now, window):
-                        logger.warning(
-                            "scrape_suspect mode=%s ip=%s ua=%r distinct_pages=%d window_sec=%d last=%s",
-                            mode, _mask_client_ip(ip), user_agent[:80], distinct, int(window), path,
-                        )
+                t = time.monotonic()
+                if content_type.startswith(b"text/html") and is_page:
+                    distinct = _tracker.record_page(key, path, t, window)
+                    if distinct >= page_limit:
+                        flag("pages_burst", window, distinct_pages=distinct, window_s=int(window))
+                    if _ARENA_PAGE_RE.match(path):
+                        arenas = _tracker.record_arena(key, "page", path, t)
+                        if arenas >= arena_limit:
+                            flag("arenas_daily", _DAY_SEC, distinct_arenas=arenas)
+                elif json_match and content_type.startswith(b"application/json"):
+                    arenas = _tracker.record_arena(key, "json", json_match.group(1), t)
+                    if arenas >= arena_limit:
+                        flag("arenas_daily", _DAY_SEC, distinct_arenas=arenas)
             await send(message)
 
         await self.app(scope, receive, send_counting)
