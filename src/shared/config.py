@@ -132,6 +132,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     api_rate_limit_page_window_sec: float = 60.0
     api_rate_limit_image_max_requests: int = 40
     api_rate_limit_image_window_sec: float = 60.0
+    # Детектор обхода сайта (scrape_guard): off | log | block. По умолчанию только лог; поисковики и превью не трогаем.
+    scrape_guard_mode: str = "log"
+    scrape_guard_window_sec: float = 600.0
+    scrape_guard_distinct_pages: int = 40
     api_rate_limit_bot_max_requests: int = 600
     api_rate_limit_bot_window_sec: float = 60.0
     # TASK-231: создание открытки «Пойдёшь со мной на каток?» — свой бакет, не общий public.

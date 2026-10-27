@@ -12,6 +12,8 @@ from __future__ import annotations
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 HSTS = "max-age=31536000"
+# Сайт не просит камеру, микрофон, оплату и USB; геолокацию не трогаем (ближайший каток).
+PERMISSIONS_POLICY = "camera=(), microphone=(), payment=(), usb=()"
 FRAME_ANCESTORS = "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
 
 _ALL: tuple[tuple[bytes, bytes], ...] = (
@@ -38,6 +40,8 @@ class SecurityHeadersMiddleware:
                 for name, value in _ALL:
                     if name not in present:
                         headers.append((name, value))
+                if not is_webapp and b"permissions-policy" not in present:
+                    headers.append((b"permissions-policy", PERMISSIONS_POLICY.encode()))
                 content_type = next((v for k, v in headers if k.lower() == b"content-type"), b"")
                 if (
                     not is_webapp
