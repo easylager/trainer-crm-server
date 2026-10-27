@@ -226,6 +226,9 @@
     strip().classList.add('is-live');
     if (a.closest('.b-when')) markStrip(a.href);
     closeSheet();
+    // Страница открыта прямо со #when-days: pushState не сбросит :target, лист остался бы открытым.
+    // Переход к пустому фрагменту без новой записи в истории его снимает.
+    if (location.hash === '#when-days') location.replace(location.href.split('#')[0] + '#');
     show(a.href, true);
   });
 
