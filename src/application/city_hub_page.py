@@ -36,7 +36,15 @@ from src.application.city_place_counts import (
     city_place_inventory_line,
 )
 from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, format_price_minor, human_date, plural_ru
-from src.application.ice_time_windows import home_default_when_key, resolve_window
+from src.application.ice_time_windows import (
+    home_default_when_key,
+    home_picker_dates,
+    is_hub_day_key,
+    parse_hub_window,
+    resolve_hub_window,
+    resolve_window,
+)
+from src.application.when_calendar import render_calendar
 from src.application.place_links import (
     catalog_start_param,
     follow_start_param,
@@ -92,6 +100,14 @@ _WINDOW_COUNTS_SQL = text(
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :today_from AND s.starts_at_utc < :today_to)::int AS today_n,
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to)::int AS tomorrow_n,
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to)::int AS weekend_n,
+           COUNT(*) FILTER (WHERE s.starts_at_utc >= :day_from AND s.starts_at_utc < :day_to)::int AS day_n,
+           COUNT(*) FILTER (WHERE s.local_date = :pd0)::int AS pd0_n,
+           COUNT(*) FILTER (WHERE s.local_date = :pd1)::int AS pd1_n,
+           COUNT(*) FILTER (WHERE s.local_date = :pd2)::int AS pd2_n,
+           COUNT(*) FILTER (WHERE s.local_date = :pd3)::int AS pd3_n,
+           COUNT(*) FILTER (WHERE s.local_date = :pd4)::int AS pd4_n,
+           COUNT(*) FILTER (WHERE s.local_date = :pd5)::int AS pd5_n,
+           COUNT(*) FILTER (WHERE s.local_date = :pd6)::int AS pd6_n,
            COUNT(*)::int AS all_n
     FROM ice_sessions s
     JOIN arenas a ON a.id = s.arena_id
@@ -202,13 +218,19 @@ def _as_mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _window_bounds(now: datetime) -> dict[str, datetime]:
-    out: dict[str, datetime] = {}
+def _window_bounds(now: datetime, day_key: str | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {}
     for key in _WINDOW_KEYS:
         tw = resolve_window(key, now)
         assert tw is not None
         out[f"{key}_from"] = tw.starts_at
         out[f"{key}_to"] = tw.ends_at
+    # TASK-337: конкретный день — пятое окно; без дня диапазон пуст и ничего не считает.
+    day = resolve_hub_window(day_key, now) if day_key else None
+    out["day_from"], out["day_to"] = (day.starts_at, day.ends_at) if day else (now, now)
+    # Числа для листа календаря — теми же строками, что остальные счётчики хаба (бюджет запросов).
+    for i, picker_day in enumerate(home_picker_dates(now)):
+        out[f"pd{i}"] = picker_day
     return out
 
 
@@ -267,13 +289,17 @@ async def load_city_hub_view(
 ) -> dict[str, Any]:
     """Вид хаба города.
 
-    ``window`` (PDEC-026): ``today|tomorrow|weekend`` — хаб открыт в этом окне, ``auto`` — в окне
+    ``window`` (PDEC-026, TASK-337): ``today|tomorrow|weekend`` или дата ``YYYY-MM-DD`` — хаб открыт
+    в этом окне, ``auto`` — в окне
     по правилу главной, ``None`` — без окна (хаб Mini App): «Ближайший лёд» — на неделю вперёд.
     """
     now = _aware(now or datetime.now(timezone.utc))
     city_id = int(city["id"])
     city_name = str(city["name"])
     scope = public_scope_params()
+    day_key = window if is_hub_day_key(window) and parse_hub_window(window, now) == window else None
+    if is_hub_day_key(window) and day_key is None:
+        window = parse_hub_window(window, now)  # «сегодня»/«завтра» датой или дата вне недели
 
     count_rows = (
         (
@@ -283,7 +309,7 @@ async def load_city_hub_view(
                     "city_id": city_id,
                     "now": now,
                     "st": STATUS_ACTIVE,
-                    **_window_bounds(now),
+                    **_window_bounds(now, day_key),
                     **scope,
                 },
             )
@@ -292,27 +318,32 @@ async def load_city_hub_view(
         .all()
     )
 
-    skate = {k: 0 for k in (*_WINDOW_KEYS, "all")}
-    ohm = {k: 0 for k in (*_WINDOW_KEYS, "all")}
+    skate = {k: 0 for k in (*_WINDOW_KEYS, "day", "all")}
+    ohm = {k: 0 for k in (*_WINDOW_KEYS, "day", "all")}
     skate_arenas: set[int] = set()
     ohm_arenas: set[int] = set()
     skate_by_arena: dict[int, int] = {}
+    picker_dates = home_picker_dates(now)
+    day_counts: dict[date, int] = {d: 0 for d in picker_dates}
     for row in count_rows:
+        if not row.get("is_ohm"):
+            for i, picker_day in enumerate(picker_dates):
+                day_counts[picker_day] += int(row.get(f"pd{i}_n") or 0)
         aid = int(row["arena_id"])
         target = ohm if row.get("is_ohm") else skate
-        for key in (*_WINDOW_KEYS, "all"):
+        for key in (*_WINDOW_KEYS, "day", "all"):
             target[key] += int(row.get(f"{key}_n") or 0)
         if int(row.get("all_n") or 0) > 0:
             (ohm_arenas if row.get("is_ohm") else skate_arenas).add(aid)
             if not row.get("is_ohm"):
                 skate_by_arena[aid] = skate_by_arena.get(aid, 0) + int(row.get("all_n") or 0)
 
-    when_explicit = window in _WINDOW_KEYS
-    when = window if when_explicit else (hot_window_key(skate, now=now) if window == "auto" else None)
+    when_explicit = window in _WINDOW_KEYS or day_key is not None
+    when = day_key or (window if when_explicit else (hot_window_key(skate, now=now) if window == "auto" else None))
     upcoming_from, upcoming_to = now, now + timedelta(days=_UPCOMING_DAYS)
     window_dates: tuple[date, date] | None = None
     if when:
-        tw = resolve_window(when, now)
+        tw = resolve_hub_window(when, now)
         assert tw is not None
         upcoming_from, upcoming_to = max(now, tw.starts_at), tw.ends_at
         local_tz = ZoneInfo(DEFAULT_TIMEZONE)
@@ -449,9 +480,12 @@ async def load_city_hub_view(
         nearby = await load_nearby(
             session, city_id=city_id, origin=origin, today=local_now.date(), now=now
         )
+    selected_day = date.fromisoformat(day_key) if day_key else None
     return {
         "city": dict(city),
         "slug": city_slug(city_name),
+        "selected_day": selected_day,
+        "day_counts": day_counts,
         "now": now,
         "local_now": local_now,
         "today": local_now.date(),
@@ -796,21 +830,46 @@ def _b_today_kicker(view: Mapping[str, Any]) -> str:
 
 
 _WHEN_PHRASE = {"today": "сегодня", "tomorrow": "завтра", "weekend": "в выходные"}
+_WEEKDAY_ACC = ("в понедельник", "во вторник", "в среду", "в четверг", "в пятницу", "в субботу", "в воскресенье")
+
+
+def _when_phrase(when: str | None) -> str | None:
+    """«сегодня», «в выходные», «в субботу, 31 октября» — для заголовков хаба в окне."""
+    if when in _WHEN_PHRASE:
+        return _WHEN_PHRASE[when]
+    if is_hub_day_key(when):
+        d = date.fromisoformat(str(when))
+        return f"{_WEEKDAY_ACC[d.weekday()]}, {d.day} {_MONTHS_GEN[d.month - 1]}"
+    return None
+
+
+def _when_count(view: Mapping[str, Any], when: str) -> int:
+    return int(view["skate_counts"].get("day" if is_hub_day_key(when) else when) or 0)
 
 
 def _b_window_line(view: Mapping[str, Any]) -> str:
     """Строка героя для хаба, открытого в окне с главной: «В выходные — 2 сеанса»."""
     when = str(view.get("when") or "")
-    n = int(view["skate_counts"].get(when) or 0)
-    phrase = _WHEN_PHRASE[when]
+    n = _when_count(view, when)
+    phrase = _when_phrase(when) or ""
     head = phrase[:1].upper() + phrase[1:]
     if not n:
         return f"{head} сеансов нет"
     return f"{head} — {n} {plural_ru(n, 'сеанс', 'сеанса', 'сеансов')}"
 
 
+def _day_label(d: date) -> str:
+    from src.application.when_calendar import day_chip_label
+
+    return day_chip_label(d)
+
+
+def _day_key_for(d: date, now: datetime) -> str:
+    return parse_hub_window(d.isoformat(), now) or d.isoformat()
+
+
 def _b_when_switch(view: Mapping[str, Any]) -> str:
-    """«Сегодня · Завтра · В выходные» хаба — та же полоса, что на главной (PDEC-026)."""
+    """«Сегодня · Завтра · В выходные» + календарь дня — та же полоса, что на главной (PDEC-026, TASK-337)."""
     when = view.get("when")
     slug = str(view["slug"])
     links = "".join(
@@ -819,9 +878,16 @@ def _b_when_switch(view: Mapping[str, Any]) -> str:
     )
     index = _WINDOW_KEYS.index(when) if when in _WINDOW_KEYS else None
     thumb = "" if index is None else '<span class="b-when__thumb" aria-hidden="true"></span>'
+    now = view["now"]
+    button, sheet = render_calendar(
+        now=now,
+        counts=view.get("day_counts") or {},
+        selected=view.get("selected_day"),
+        href_for=lambda d: _list_href(slug, w=_day_key_for(d, now)),
+    )
     return (
-        f'<div class="b-sec b-sec--when"><nav class="b-when vt-when-strip" style="--when-i: {index or 0}" '
-        f'aria-label="Когда">{thumb}{links}</nav></div>'
+        f'<div class="b-sec b-sec--when"><div class="b-whenrow"><nav class="b-when vt-when-strip" '
+        f'style="--when-i: {index or 0}" aria-label="Когда">{thumb}{links}</nav>{button}</div>{sheet}</div>'
     )
 
 
@@ -864,15 +930,28 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
         if not when or not int(view["skate_counts"].get("all") or 0):
             return ""
         # Окно пустое, а сеансы в городе есть: не прячем блок молча — ведём в полный список.
-        body = (
-            f'<p class="b-text">{_esc(_WHEN_PHRASE[when][:1].upper() + _WHEN_PHRASE[when][1:])} сеансов нет.</p>'
-        )
+        phrase = _when_phrase(when) or ""
+        body = f'<p class="b-text">{_esc(phrase[:1].upper() + phrase[1:])} сеансов нет.</p>'
+        if is_hub_day_key(when):
+            # TASK-337: день остаётся выбранным, а рядом — ближайший день недели, где сеансы есть.
+            chosen = date.fromisoformat(str(when))
+            nearest = next(
+                (d for d in sorted(view.get("day_counts") or {}) if d > chosen and view["day_counts"][d] > 0), None
+            )
+            if nearest is not None:
+                key = parse_hub_window(nearest.isoformat(), view["now"]) or nearest.isoformat()
+                body += (
+                    f'<p class="b-text">Ближайший день с сеансами: '
+                    f'<a href="{_esc(_list_href(slug, w=key))}">{_esc(_day_label(nearest))}</a>, '
+                    f'{view["day_counts"][nearest]}\u00a0{plural_ru(view["day_counts"][nearest], "сеанс", "сеанса", "сеансов")}.</p>'
+                )
         more = f'<a class="b-more" href="{_esc(_list_href(slug, t="ice"))}">Все сеансы</a>'
         return section(_b_upcoming_title(when), body, aside_html=more)
     city_name = str(view["city"]["name"])
     today_n = int(view["skate_counts"].get("today") or 0)
     if when:
-        all_href = _list_href(slug, t="ice", w=when)
+        # Список подборки знает окна, но не дни: для дня «Все» ведёт в общий список льда.
+        all_href = _list_href(slug, t="ice", w=None if is_hub_day_key(when) else when)
     else:
         all_href = _list_href(slug, t="ice", w="today") if today_n else _list_href(slug, t="ice")
     by_slug = {str(p.get("slug") or ""): p for p in view.get("places") or []}
@@ -940,7 +1019,8 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
 
 def _b_upcoming_title(when: str | None) -> str:
     """«Лёд в выходные», если хаб открыт в окне; без окна — «Ближайший лёд»."""
-    return f"Лёд {_WHEN_PHRASE[when]}" if when in _WHEN_PHRASE else t("hub.nearest_ice")
+    phrase = _when_phrase(when)
+    return f"Лёд {phrase}" if phrase else t("hub.nearest_ice")
 
 
 def _b_route_row(*, href: str, icon: str, title: str, line: str, quick: str = "") -> str:

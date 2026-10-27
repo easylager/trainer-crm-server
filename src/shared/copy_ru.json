@@ -2,6 +2,8 @@
   "when.today": "Сегодня",
   "when.tomorrow": "Завтра",
   "when.weekend": "В выходные",
+  "when.pick_day": "Выберите день",
+  "when.pick_day_sub": "Сколько сеансов в этот день",
   "when.day": "День…",
   "when.evening": "Сегодня вечером",
   "basis.live": "с сайта катка",
