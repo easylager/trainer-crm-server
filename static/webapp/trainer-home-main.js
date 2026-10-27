@@ -807,7 +807,7 @@
         } else if (onb && !onb.has_future_available_slots && !onb.has_future_slots) {
           chips.push({ text: 'Слоты · добавьте в расписании', tone: 'warn' });
         }
-        if (hubMtdRevenueText && hubMtdRevenueText !== '—' && hubMtdRevenueText !== '0 BYN') {
+        if (hubMtdRevenueText && hubMtdRevenueText !== '—' && hubMtdRevenueText !== formatHubMoneyCents(0, hubMtdRevenueCurrency)) {
           chips.push({ text: 'С начала месяца · ' + hubMtdRevenueText, tone: 'ok' });
         }
         return chips;
@@ -914,7 +914,7 @@
           chips.push({ text: 'Слоты · добавьте в расписании', tone: 'warn', action: 'schedule' });
         }
 
-        if (hubMtdRevenueText && hubMtdRevenueText !== '—' && hubMtdRevenueText !== '0 BYN') {
+        if (hubMtdRevenueText && hubMtdRevenueText !== '—' && hubMtdRevenueText !== formatHubMoneyCents(0, hubMtdRevenueCurrency)) {
           var revTitle = 'Начислено с начала месяца: занятия, абонементы, сертификаты';
           if (hubMtdRevenuePeriod && hubMtdRevenuePeriod.start && hubMtdRevenuePeriod.end) {
             revTitle =
@@ -3879,7 +3879,14 @@
         };
       }
 
-      function formatHubMoneyCents(cents) {
+      /** Подпись валюты: рубли — «руб.», иначе код («BYN»). Валюта приходит с сервера по городу тренера. */
+      var hubMtdRevenueCurrency = 'BYN';
+      function hubCurrencyLabel(currency) {
+        var c = String(currency || 'BYN').toUpperCase();
+        return c === 'RUB' ? 'руб.' : c;
+      }
+
+      function formatHubMoneyCents(cents, currency) {
         var n = Number(cents);
         var numStr;
         if (!isFinite(n) || n < 0) {
@@ -3888,7 +3895,7 @@
           var v = n / 100;
           numStr = v.toFixed(v % 1 === 0 ? 0 : 2);
         }
-        return numStr + ' BYN';
+        return numStr + ' ' + hubCurrencyLabel(currency);
       }
 
       /** Loads accrual MTD (sessions + pass + cert sales); updates hubMtdRevenueText and footer markers. */
@@ -3922,7 +3929,8 @@
               hubMtdRevenueText = null;
               hubMtdRevenuePeriod = null;
             } else {
-              hubMtdRevenueText = formatHubMoneyCents(d.revenue_total_cents);
+              hubMtdRevenueCurrency = d.currency || 'BYN';
+              hubMtdRevenueText = formatHubMoneyCents(d.revenue_total_cents, d.currency);
               hubMtdRevenuePeriod =
                 d.period_start && d.period_end ? { start: d.period_start, end: d.period_end } : null;
             }
@@ -8968,7 +8976,8 @@
           }
         }
         if (payload.revenue_mtd && payload.revenue_mtd.revenue_total_cents != null) {
-          hubMtdRevenueText = formatHubMoneyCents(payload.revenue_mtd.revenue_total_cents);
+          hubMtdRevenueCurrency = payload.revenue_mtd.currency || 'BYN';
+          hubMtdRevenueText = formatHubMoneyCents(payload.revenue_mtd.revenue_total_cents, payload.revenue_mtd.currency);
           hubMtdRevenuePeriod =
             payload.revenue_mtd.period_start && payload.revenue_mtd.period_end
               ? { start: payload.revenue_mtd.period_start, end: payload.revenue_mtd.period_end }

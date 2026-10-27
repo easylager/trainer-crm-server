@@ -20,6 +20,12 @@ DEFAULT_CURRENCY = CURRENCY_BY_COUNTRY[DEFAULT_COUNTRY]
 DEFAULT_PRICE_GROUP = "BY_BASE"
 
 
+def currency_label_ru(currency: str | None) -> str:
+    """Подпись валюты в тексте: рубли — «руб.», остальное — код как есть («BYN»)."""
+    code = (currency or DEFAULT_CURRENCY).strip().upper() or DEFAULT_CURRENCY
+    return "руб." if code == "RUB" else code
+
+
 def currency_for_country(country: str | None) -> str:
     """Pure lookup — no DB. Unknown/missing country defaults to BYN (today's only market)."""
     return CURRENCY_BY_COUNTRY.get((country or "").upper(), DEFAULT_CURRENCY)
