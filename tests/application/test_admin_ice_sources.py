@@ -196,3 +196,155 @@ async def test_seed_apply_respects_admin_edits(db_session):
     by = {i["arena_id"]: i for i in data["items"]}
     assert by[9932]["source_url"] == "https://vk.com/mine" and by[9932]["publish_days"] == [2]
     assert by[9933]["source_kind"] == "telegram" and by[9933]["mode"] == "manual"
+
+
+# ── Журнал слотов и «N дней без слотов» ──────────────────────────────────
+
+
+def test_staleness_rules():
+    from datetime import date, datetime, timedelta, timezone
+
+    from src.application.admin_ice_sources import log_bounds, staleness
+
+    now = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
+    week = timedelta(days=7)
+    # ровно через неделю без новых слотов — тревога; на минуту раньше — нет
+    assert staleness("manual", now - week, None, now) == (True, 7)
+    assert staleness("manual", now - week + timedelta(minutes=1), None, now) == (False, 6)
+    # слотов не добавлялось ни разу: отсчёт от старта журнала
+    assert staleness("server", None, now - timedelta(days=2), now) == (False, 2)
+    assert staleness("server", None, now - timedelta(days=8), now) == (True, 8)
+    # «разобраться вручную» не краснеет, нет журнала — нет вывода
+    assert staleness("none", now - timedelta(days=30), None, now)[0] is False
+    assert staleness("server", None, None, now) == (False, None)
+
+    assert log_bounds(days=7, today=date(2026, 10, 27)) == (date(2026, 10, 21), date(2026, 10, 27))
+    assert log_bounds(days=1, today=date(2026, 10, 27)) == (date(2026, 10, 27), date(2026, 10, 27))
+    with pytest.raises(SourceValidationError):
+        log_bounds(date_from=date(2026, 10, 5), date_to=date(2026, 10, 1))
+    with pytest.raises(SourceValidationError):
+        log_bounds(date_from=date(2026, 8, 1), date_to=date(2026, 10, 1))
+
+
+async def _arena(db_session, city_id, arena_id, name):
+    await db_session.execute(
+        text("INSERT INTO arenas (id, name, city_id, is_active, is_confirmed, venue_type) VALUES (:i, :n, :c, true, true, 'ice')"),
+        {"i": arena_id, "n": name, "c": city_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO arena_profiles (arena_id, city_id, slug, status) VALUES (:i, :c, :s, 'published')"),
+        {"i": arena_id, "c": city_id, "s": f"slug-{arena_id}"},
+    )
+
+
+async def _slot(db_session, arena_id, *, hours=48, source_id="run:1:x"):
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO ice_sessions (arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local,
+                ends_at_local, currency_code, status, source_id, schedule_basis)
+            VALUES (:a, 'public_skate', now() + make_interval(hours => :h), now() + make_interval(hours => :h + 1),
+                ((now() + make_interval(hours => :h)) AT TIME ZONE 'Europe/Minsk')::date,
+                ((now() + make_interval(hours => :h)) AT TIME ZONE 'Europe/Minsk')::time,
+                ((now() + make_interval(hours => :h + 1)) AT TIME ZONE 'Europe/Minsk')::time, 'BYN', 'active', :src, 'live')
+            """
+        ),
+        {"a": arena_id, "h": hours, "src": source_id},
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_shows_stale_hidden_and_counts(db_session):
+    from src.application.admin_ice_sources import HIDDEN_ARENA_IDS
+
+    await db_session.execute(text("INSERT INTO cities (id, name, country, is_active) VALUES (9941, 'ЖурналГород', 'BY', true)"))
+    await _arena(db_session, 9941, 9942, "Свежая")
+    await _arena(db_session, 9941, 9943, "Старая")
+    await _arena(db_session, 9941, 9944, "Тихая новая")
+    await _arena(db_session, 9941, HIDDEN_ARENA_IDS[0] + 90000, "Скрытая")
+    await db_session.execute(text("UPDATE ice_session_journal_meta SET started_at = now() - interval '10 days'"))
+    await _slot(db_session, 9942, hours=24)
+    await _slot(db_session, 9942, hours=30)
+    await _slot(db_session, 9943, hours=24)
+    # у «Старой» последнее добавление 9 дней назад, у «Тихой новой» событий нет вовсе
+    await db_session.execute(
+        text("UPDATE ice_session_events SET occurred_at = now() - interval '9 days' WHERE arena_id = 9943")
+    )
+    await db_session.execute(
+        text("INSERT INTO arena_schedule_sources (arena_id, fetch_mode) VALUES (9943, 'manual'), (9944, 'manual')")
+    )
+    await db_session.commit()
+
+    data = await list_admin_ice_sources(db_session)
+    by = {i["arena_id"]: i for i in data["items"]}
+    assert by[9942]["added_7d"] == 2 and by[9942]["stale"] is False and by[9942]["days_since_added"] == 0
+    assert by[9943]["stale"] is True and by[9943]["status"] == "stale" and by[9943]["days_since_added"] == 9
+    assert by[9943]["added_7d"] == 0
+    # событий нет: отсчёт от старта журнала (10 дней назад)
+    assert by[9944]["stale"] is True and by[9944]["last_added_at"] is None
+    assert data["counts"]["stale"] >= 2
+    assert not any(i["arena_id"] in HIDDEN_ARENA_IDS for i in data["items"])
+    order = [i["arena_id"] for i in data["items"] if i["arena_id"] in (9942, 9943, 9944)]
+    assert order.index(9943) < order.index(9942)  # проблемные выше
+
+
+@pytest.mark.asyncio
+async def test_journal_groups_batches_and_filters(db_session):
+    from src.application.admin_ice_sources import SourceValidationError, arena_log, journal
+
+    await db_session.execute(text("INSERT INTO cities (id, name, country, is_active) VALUES (9951, 'ЖурналГород2', 'BY', true)"))
+    await _arena(db_session, 9951, 9952, "Каток А")
+    await _arena(db_session, 9951, 9953, "Каток Б")
+    await _slot(db_session, 9952, hours=24)
+    await _slot(db_session, 9952, hours=30)
+    await _slot(db_session, 9953, hours=24, source_id="admin")
+    await db_session.execute(text("DELETE FROM ice_sessions WHERE arena_id = 9952 AND starts_at_utc > now() + interval '29 hours'"))
+    await db_session.commit()
+
+    data = await journal(db_session, days=7, city_id=9951)
+    mine = [b for b in data["batches"] if b["arena_id"] in (9952, 9953)]
+    a = next(b for b in mine if b["arena_id"] == 9952)
+    # вставка и удаление в одной транзакции дают один пакет: +2 и −1
+    assert len(a["added"]) == 2 and len(a["removed"]) == 1 and a["source"] == "parser"
+    assert next(b for b in mine if b["arena_id"] == 9953)["source"] == "manual"
+    assert data["totals"]["added"] == 3 and data["totals"]["removed"] == 1 and data["totals"]["arenas"] == 2
+    assert {c["id"] for c in data["filters"]["cities"]} >= {9951}
+
+    only_manual = await journal(db_session, days=7, city_id=9951, source="manual")
+    assert {b["arena_id"] for b in only_manual["batches"]} == {9953}
+    assert {q["arena_id"] for q in only_manual["quiet"]} == {9952}
+    assert (await journal(db_session, days=7, arena_id=9952))["totals"]["arenas"] == 1
+    with pytest.raises(SourceValidationError):
+        await journal(db_session, source="bogus")
+
+    log = await arena_log(db_session, 9953, days=7)
+    assert log is not None and [b["source"] for b in log["batches"]] == ["manual"]
+    assert await arena_log(db_session, 999999) is None
+
+
+@pytest.mark.asyncio
+async def test_log_api_endpoints(db_session):
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.app import app
+    from src.api.miniapp_auth.deps import get_admin_miniapp_principal
+    from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+
+    await db_session.execute(text("INSERT INTO cities (id, name, country, is_active) VALUES (9961, 'ЖурналГород3', 'BY', true)"))
+    await _arena(db_session, 9961, 9962, "Каток В")
+    await _slot(db_session, 9962)
+    await db_session.commit()
+    app.dependency_overrides[get_admin_miniapp_principal] = lambda: MiniAppPrincipal(
+        platform=MiniAppPlatform.TELEGRAM, user_id=4242
+    )
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.get("/api/webapp/admin/ice-sources/9962/log?days=7")
+            assert r.status_code == 200 and r.json()["batches"][0]["added"]
+            assert (await c.get("/api/webapp/admin/ice-sources/999999/log")).status_code == 404
+            r = await c.get("/api/webapp/admin/ice-log?days=7&arena_id=9962")
+            assert r.status_code == 200 and r.json()["totals"]["added"] == 1
+            assert (await c.get("/api/webapp/admin/ice-log?source=bogus")).status_code == 400
+            assert (await c.get("/api/webapp/admin/ice-log?date_from=2026-10-05&date_to=2026-10-01")).status_code == 400
+    finally:
+        app.dependency_overrides.pop(get_admin_miniapp_principal, None)

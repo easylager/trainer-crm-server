@@ -598,6 +598,7 @@ async def update_ice_session(
     cap = current["capacity_note"] if capacity_note is _UNSET else capacity_note
     url = current["external_url"] if external_url is _UNSET else external_url
     price_minor = compute_price_minor(adult, child, rental)
+    await session.execute(sql_text("SELECT set_config('app.change_source', 'manual', true)"))  # журнал слотов: это правка админа
     updated = await session.execute(
         sql_text(
             f"""
@@ -688,6 +689,7 @@ async def delete_ice_session(session: AsyncSession, session_id: int) -> dict[str
     raw = result.fetchone()
     if not raw:
         raise LookupError("session not found")
+    await session.execute(sql_text("SELECT set_config('app.change_source', 'manual', true)"))  # журнал слотов: это правка админа
     current = _row_to_mapping(raw)
     if current.get("recurrence_key"):
         updated = await session.execute(
