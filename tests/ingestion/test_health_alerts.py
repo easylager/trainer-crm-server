@@ -565,3 +565,18 @@ def test_notification_service_ticks_ice_health_loops() -> None:
     assert "run_ice_health_alert_loop" in svc_src
     assert "run_ice_health_weekly_digest_loop" in svc_src
     assert "http" not in loop_src.lower() or "uvicorn" not in loop_src.lower()
+
+
+@pytest.mark.asyncio
+async def test_russian_job_is_not_silent(db_session) -> None:
+    city_id = await _city(db_session, "IceHealth-ru")
+    await db_session.execute(text("UPDATE cities SET country = 'RU' WHERE id = :id"), {"id": city_id})
+    arena_id = await _arena(db_session, city_id, "Каток-РФ")
+    job_id = await _job_row(db_session, arena_id, "ru_v1", cadence="daily")
+    await _insert_run(
+        db_session, job_id, arena_id, status=RUN_STATUS_OK, finished_at=_NOW - timedelta(days=5)
+    )
+    await db_session.flush()
+
+    silent = await detect_silent_jobs(db_session, now=_NOW)
+    assert all(row.job_id != job_id for row in silent)

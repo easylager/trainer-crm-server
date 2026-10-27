@@ -507,3 +507,18 @@ async def test_admin_sender_without_bot_only_logs(caplog) -> None:
     assert sent is None
     assert factory_calls == []
     assert "🔴 Лёд: тест" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_tick_ignores_russian_cities(db_session) -> None:
+    """Пуши о сбоях источников только по Беларуси: СПб и Москву не мониторим."""
+    arena_id, _job_id = await _setup_failing_source(db_session)
+    await db_session.execute(
+        text("UPDATE cities SET country = 'RU' WHERE id = (SELECT city_id FROM arenas WHERE id = :a)"),
+        {"a": arena_id},
+    )
+    sender = AsyncMock()
+
+    await tick_source_failure_alerts(db_session, now=_NOW, sender=sender)
+
+    assert _texts_for(sender, "Каток Алерт") == []

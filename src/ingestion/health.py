@@ -179,6 +179,7 @@ async def detect_silent_jobs(session: AsyncSession, *, now: datetime) -> list[Si
                 LIMIT 1
             ) AS last_any ON true
             WHERE j.is_enabled = true
+              AND c.country = 'BY'
             ORDER BY j.id
             """
         )

@@ -322,7 +322,8 @@ LEFT JOIN LATERAL (
       AND (s.source_id IS NULL OR s.source_id NOT LIKE 'etalon_%')
       AND (s.source_id IS NULL OR s.source_id <> 'admin')
 ) AS sh ON true
-WHERE j.is_enabled = true OR j.alert_state = :failing
+WHERE (j.is_enabled = true OR j.alert_state = :failing)
+  AND c.country = 'BY'  -- алерты только по Беларуси: RU-источники сейчас не мониторим
 ORDER BY j.id
 """
 
