@@ -34,7 +34,7 @@ describe("client copy uses shared Russian formatters", () => {
     assert.equal(genitiveCountRu(11, "занятия", "занятий"), "11 занятий");
     assert.equal(genitiveCountRu(22, "занятия", "занятий"), "22 занятий");
     assert.equal(formatPrice(50, "BYN"), "50 BYN");
-    assert.equal(formatPrice(55, "RUB"), "55 ₽");
+    assert.equal(formatPrice(55, "RUB"), "55 руб.");
   });
 
   it("routes audited dynamic modules through RuText", () => {

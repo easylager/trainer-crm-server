@@ -2,7 +2,7 @@
   'use strict';
 
   function demoCurrency() {
-    return document.documentElement.dataset.market === 'ru' ? '₽' : 'BYN';
+    return document.documentElement.dataset.market === 'ru' ? 'руб.' : 'BYN';
   }
 
   function demoWeekRange() {

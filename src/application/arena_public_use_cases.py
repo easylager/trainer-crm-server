@@ -96,6 +96,7 @@ from src.shared.dossier_public_text import (
     scrub_dossier_leaks_from_public_text,
 )
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
+from src.shared.currency import currency_label_ru
 
 INTENT_SKATE = "skate"
 INTENT_COACH = "coach"
@@ -354,9 +355,10 @@ def _format_price_minor(minor: int | None, currency: str) -> str:
     if minor is None:
         return ""
     major = int(minor) / 100.0
+    label = currency_label_ru(currency)
     if major == int(major):
-        return f"{int(major)} {currency}"
-    return f"{major:.2f} {currency}"
+        return f"{int(major)} {label}"
+    return f"{major:.2f} {label}"
 
 
 def _date_label(local_date: date, today: date) -> str:

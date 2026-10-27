@@ -38,6 +38,11 @@
     if (typeof d.collective_enabled === 'boolean') {
       global.TRAINER_COLLECTIVE_ENABLED = d.collective_enabled;
     }
+    /* Валюта тренера по городу (BYN/RUB): другим экранам — через TrainerFormat.currencyCode(). */
+    if (typeof d.currency === 'string' && d.currency) {
+      global.TRAINER_CURRENCY = d.currency;
+      try { global.sessionStorage.setItem('trainer_currency_v1', d.currency); } catch (e) { /* */ }
+    }
   }
 
   function rememberAccess(initData, d) {

@@ -13,6 +13,7 @@ from src.application.pass_product_use_cases import (
     SQL_PASS_NOT_EXPIRED,
     _is_expired,
 )
+from src.shared.currency import currency_label_ru, resolve_trainer_currency
 
 _PASS_SCOPE_SQL = """
 COALESCE(
@@ -97,6 +98,7 @@ async def list_trainer_issued_items(
     q = (search or "").strip()
     lim = max(1, min(int(limit or 20), 50))
     off = max(0, int(offset or 0))
+    currency_label = currency_label_ru(await resolve_trainer_currency(session, trainer_id))
 
     items: list[dict[str, Any]] = []
 
@@ -233,9 +235,9 @@ async def list_trainer_issued_items(
             client_id = int(row[10]) if row[10] is not None else None
             client_label = _client_label(row[11], client_id) if client_id else recipient
             if remaining_int is not None:
-                balance_line = f"остаток {remaining_int / 100:.2f}".replace(".00", "") + " BYN"
+                balance_line = f"остаток {remaining_int / 100:.2f}".replace(".00", "") + f" {currency_label}"
             else:
-                balance_line = f"номинал {amount / 100:.2f}".replace(".00", "") + " BYN"
+                balance_line = f"номинал {amount / 100:.2f}".replace(".00", "") + f" {currency_label}"
             bucket = _cert_status_bucket(st)
             items.append(
                 {

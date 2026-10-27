@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Подписка</title>
   <link rel="preload" as="font" type="font/woff2" crossorigin href="/static/fonts/glide-public/onest-cyr.woff2?v=202610236" />
-  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610271" />
+  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610282" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202610271"></script>
-  <script src="mini-app-telegram-chrome.js?v=202610271"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610271" />
-  <link rel="stylesheet" href="theme.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610271" />
+  <script src="mini-app-trainer-theme.js?v=202610282"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610282"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610282" />
+  <link rel="stylesheet" href="theme.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610282" />
   <style>
     /* Subscription: theme.css?v=202610024 tokens + local layout only (constitution). */
     html { height: 100%; overflow-x: hidden; }
@@ -1212,10 +1212,10 @@
       100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
     }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-trainer-section.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610271" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-trainer-section.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610282" />
 </head>
 <body class="subscription-page ar-pilot ar-pilot--trainer-subscription">
   <header class="header" role="banner">
@@ -1334,10 +1334,10 @@
 
   <div id="confetti" class="confetti"></div>
 
-  <script src="mini-app-trainer-gate.js?v=202610271"></script>
-  <script src="mini-app-trainer-celebration.js?v=202610271"></script>
-  <script src="trainer-format.js?v=202610271"></script>
-  <script src="mini-app-trainer-home.js?v=202610271"></script>
+  <script src="mini-app-trainer-gate.js?v=202610282"></script>
+  <script src="mini-app-trainer-celebration.js?v=202610282"></script>
+  <script src="trainer-format.js?v=202610282"></script>
+  <script src="mini-app-trainer-home.js?v=202610282"></script>
   <script>
     (function() {
       'use strict';
@@ -1477,7 +1477,7 @@ banner.innerHTML = '';
             }
             var expiresAt = data.expires_at ? String(data.expires_at).slice(0, 10) : '';
             var priceLine = data.price_cents != null
-              ? (Math.round(data.price_cents / 100) + ' ' + (data.currency === 'RUB' ? '₽' : 'BYN'))
+              ? (Math.round(data.price_cents / 100) + ' ' + (data.currency === 'RUB' ? 'руб.' : 'BYN'))
               : null;
             var included;
             var features;
@@ -1535,7 +1535,7 @@ banner.innerHTML = '';
       function formatPrice(cents, currency) {
         if (cents == null) return '—';
         var amount = (cents / 100).toFixed(0);
-        return amount + ' ' + (currency === 'RUB' ? '₽' : 'BYN');
+        return amount + ' ' + (currency === 'RUB' ? 'руб.' : 'BYN');
       }
       function formatPeriod(days) {
         if (days >= 365) return Math.floor(days / 365) + ' год';
@@ -1623,7 +1623,7 @@ banner.innerHTML = '';
         panel.classList.remove('is-empty');
 
         var base = constructor.base;
-        var sign = base.currency === 'RUB' ? '₽' : 'BYN';
+        var sign = base.currency === 'RUB' ? 'руб.' : 'BYN';
         var baseCents = base.prices_by_period ? base.prices_by_period[String(selectedPeriod)] : null;
         var basePerMonth = baseCents != null && selectedPeriod > 0
           ? Math.round(baseCents / selectedPeriod / 100)
@@ -1953,7 +1953,7 @@ banner.innerHTML = '';
           var savings = (p1c != null && totalCents != null && selectedPeriod > 1)
             ? (p1c * selectedPeriod - totalCents) / 100
             : 0;
-          var tierSign = tier.currency === 'RUB' ? '₽' : 'BYN';
+          var tierSign = tier.currency === 'RUB' ? 'руб.' : 'BYN';
 
           html += '<div class="tier-price">';
           html += '<span class="amount">' + (perMonth != null ? Math.round(perMonth) : '—') + ' ' + tierSign + '</span>';
@@ -2077,7 +2077,7 @@ banner.innerHTML = '';
           ['online', 'analytics', 'groups'].forEach(function(k) {
             if (selectedModules[k]) parts.push(k === 'online' ? 'онлайн' : k === 'analytics' ? 'аналитика' : 'группы');
           });
-          var ctorSign = (constructor && constructor.base && constructor.base.currency === 'RUB') ? '₽' : 'BYN';
+          var ctorSign = (constructor && constructor.base && constructor.base.currency === 'RUB') ? 'руб.' : 'BYN';
           document.getElementById('summaryTier').textContent = parts.join(' · ');
           document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' ' + ctorSign : '—';
           document.getElementById('btnPay').disabled = false;
@@ -2098,7 +2098,7 @@ banner.innerHTML = '';
         var tpc = getTierPeriodCents(tierData, selectedPeriod);
         var totalPrice = tpc != null ? tpc / 100 : null;
         
-        var tierSign2 = tierData.currency === 'RUB' ? '₽' : 'BYN';
+        var tierSign2 = tierData.currency === 'RUB' ? 'руб.' : 'BYN';
         document.getElementById('summaryTier').textContent = tierData.name_ru;
         document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' ' + tierSign2 : '—';
         document.getElementById('btnPay').disabled = totalPrice == null;
@@ -2117,7 +2117,7 @@ banner.innerHTML = '';
           lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Номер счёта (заявка)</span><span class="inv-hint-v">№ ' + escapeHtml(String(data.invoice_id)) + '</span></div>');
         }
         if (data && data.amount_cents != null) {
-          var invSign = data.currency === 'RUB' ? '₽' : 'BYN';
+          var invSign = data.currency === 'RUB' ? 'руб.' : 'BYN';
           lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Сумма</span><span class="inv-hint-v">' + Math.round(data.amount_cents / 100) + ' ' + invSign + '</span></div>');
         }
         if (data && data.plan_name) {

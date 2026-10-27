@@ -9,12 +9,13 @@
   }
 
   // TASK-043/109: currency defaults to 'BYN'. Telegram WebView cannot paint the NBRB
-  // private-use glyph, so BY amounts use the letters "BYN". Pass 'RUB' for ₽.
+  // private-use glyph, so BY amounts use the letters "BYN". Pass 'RUB' for «руб.».
   function formatPriceBynHtml(priceByn, currency) {
     if (priceByn == null) return escapeHtml('по запросу');
     var num = priceByn === Math.floor(priceByn) ? String(priceByn) : priceByn.toFixed(2);
-    if (currency === 'RUB') return escapeHtml(num) + ' ₽';
-    return escapeHtml(num) + ' BYN';
+    /* Валюта не передана — берём валюту тренера (BYN/RUB по его городу), а не «BYN наизусть». */
+    var cur = String(currency || (window.TrainerFormat ? window.TrainerFormat.currencyCode() : 'BYN')).toUpperCase();
+    return escapeHtml(num) + ' ' + escapeHtml(cur === 'RUB' ? 'руб.' : cur);
   }
 
   function buildRatingText(profile) {

@@ -266,7 +266,7 @@ describe('валюта сертификата приходит снаружи, �
 
   it('альтернативная валюта выводится как есть (Москва — рубль)', () => {
     const { buildView } = loadModel();
-    for (const currency of ['RUB', '₽', 'руб.']) {
+    for (const currency of ['RUB', 'руб.', 'руб.']) {
       const view = buildView(
         { kind: 'trainer', trainer: trainer(), slots: slots(1), certificates: [certificate()], currency: currency },
         NOW

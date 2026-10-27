@@ -178,11 +178,11 @@
   function currencySign() {
     var list = services();
     for (var i = 0; i < list.length; i++) {
-      if (list[i].currency_code === 'RUB') return '₽';
+      if (list[i].currency_code === 'RUB') return 'руб.';
       if (list[i].currency_code) return 'BYN';
     }
     var city = cityObj();
-    return city && city.country === 'RU' ? '₽' : 'BYN';
+    return city && city.country === 'RU' ? 'руб.' : 'BYN';
   }
 
   function formatMoney(n) {

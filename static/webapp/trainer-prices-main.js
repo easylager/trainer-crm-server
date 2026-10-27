@@ -244,13 +244,13 @@
   function currency() {
     var sv = trainer().services || [];
     for (var i = 0; i < sv.length; i++) {
-      if (sv[i].currency_code === 'RUB') return '₽';
+      if (sv[i].currency_code === 'RUB') return 'руб.';
       if (sv[i].currency_code) return 'BYN';
     }
     var cid = (trainer().profile || {}).city_id;
     var cities = (((state.boot || {}).refs || {}).cities || {}).items || [];
     for (var j = 0; j < cities.length; j++) {
-      if (Number(cities[j].id) === Number(cid)) return cities[j].country === 'RU' ? '₽' : 'BYN';
+      if (Number(cities[j].id) === Number(cid)) return cities[j].country === 'RU' ? 'руб.' : 'BYN';
     }
     return 'BYN';
   }

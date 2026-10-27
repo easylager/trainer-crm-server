@@ -2293,14 +2293,23 @@
         var ae = document.activeElement;
         if (!ae || !flow.contains(ae)) return;
         var tg = ae.tagName;
-        /* Native <select> on iOS: scrollIntoView fights the wheel picker — skip entirely. */
+        /* Native <select> on iOS: scrolling fights the wheel picker — skip entirely. */
         if (tg === 'SELECT') return;
         if (tg !== 'INPUT' && tg !== 'TEXTAREA') return;
-        // .field has scroll-margin-top/bottom set in CSS; prefer scrolling the field wrapper
+        var K = window.ObFlowKeyboard;
+        var body = document.getElementById('obFlowBody');
+        if (!K || !body) return;
+        /*
+         * Двигаем только тело листа. scrollIntoView прокручивал и саму страницу — на iOS это «скачок»
+         * всего экрана под клавиатуру. Нижняя граница — нижний край видимой области (клавиатура).
+         */
         var target = (ae.closest && ae.closest('.field')) || ae;
-        try {
-          target.scrollIntoView({ block: 'nearest', behavior: 'auto', inline: 'nearest' });
-        } catch (e) {}
+        var r = target.getBoundingClientRect();
+        var b = body.getBoundingClientRect();
+        var vv = window.visualViewport;
+        var boxBottom = vv ? Math.min(b.bottom, (vv.offsetTop || 0) + vv.height) : b.bottom;
+        var delta = K.revealDelta(r.top, r.bottom, b.top, boxBottom);
+        if (K.worthScrolling(delta)) body.scrollTop = body.scrollTop + delta;
       }
 
       /** Schedule a single deferred scroll of the focused input (cancels any pending attempt). */
@@ -2391,7 +2400,14 @@
           /* nearest — минимальный сдвиг при смене тарифа; center давал рывок между соседними полями. */
           tourScrollBlock = 'nearest';
         }
-        if (!skipScroll) {
+        var obBodyEl = document.body.classList.contains('ob-flow-open') ? document.getElementById('obFlowBody') : null;
+        if (!skipScroll && obBodyEl && window.ObFlowKeyboard) {
+          /* Лист открыт: двигаем только его тело, страницу под ним не трогаем (иначе iOS «скачет»). */
+          var fr = scrollTarget.getBoundingClientRect();
+          var br = obBodyEl.getBoundingClientRect();
+          var fd = window.ObFlowKeyboard.topAlignDelta(fr.top, br.top);
+          if (window.ObFlowKeyboard.worthScrolling(fd)) obBodyEl.scrollTop = obBodyEl.scrollTop + fd;
+        } else if (!skipScroll) {
           try {
             /* Tour: instant scroll avoids fighting Telegram/WebView + second delayed focus; smooth elsewhere */
             scrollTarget.scrollIntoView({
@@ -3736,7 +3752,9 @@
         if (flow && !flow.dataset.obFlowInsetWired) {
           flow.dataset.obFlowInsetWired = '1';
           function onFlowResize() {
-            if (!flow.hidden) scheduleProfileTourBarInsetSync();
+            if (flow.hidden) return;
+            scheduleProfileTourBarInsetSync();
+            scheduleObFlowFocusedScroll(160); /* клавиатура доехала — поле снова в видимой части */
           }
           window.addEventListener('resize', onFlowResize);
           window.addEventListener('orientationchange', onFlowResize);
@@ -3748,6 +3766,51 @@
           /* При каждом focusin/focusout пересчитать высоту — iOS показывает клавиатуру не мгновенно. */
           flow.addEventListener('focusin', scheduleProfileTourBarInsetSync);
           flow.addEventListener('focusout', scheduleProfileTourBarInsetSync);
+          /*
+           * Клавиатура и поле ввода. iOS двигает всю страницу, если поле в момент фокуса стоит низко
+           * (клавиатура его закроет) — отсюда «скачок». Поэтому до фокуса, на нажатии, ставим поле
+           * к верху видимой области (запас снизу даёт класс ob-flow--typing), и сдвигать нечего.
+           */
+          flow.addEventListener(
+            'pointerdown',
+            function(ev) {
+              var t = ev.target;
+              var K = window.ObFlowKeyboard;
+              var body = document.getElementById('obFlowBody');
+              if (!t || !t.tagName || !K || !body) return;
+              var tg = t.tagName;
+              if (tg !== 'INPUT' && tg !== 'TEXTAREA') return;
+              if (tg === 'INPUT' && !/^(text|search|tel|email|url|number|password|)$/i.test(t.type || '')) return;
+              if (t.closest && t.closest('#servicesWrap')) return; /* цены — свой механизм */
+              flow.classList.add('ob-flow--typing');
+              var target = (t.closest && t.closest('.field')) || t;
+              var r = target.getBoundingClientRect();
+              var b = body.getBoundingClientRect();
+              /* Поле уже в верхней трети видимой области — не трогаем. */
+              if (r.top - b.top < b.height * 0.35) return;
+              var d = K.topAlignDelta(r.top, b.top);
+              if (K.worthScrolling(d)) body.scrollTop = body.scrollTop + d;
+            },
+            true
+          );
+          flow.addEventListener('focusout', function() {
+            setTimeout(function() {
+              var ae = document.activeElement;
+              var typing = ae && flow.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
+              if (!typing) flow.classList.remove('ob-flow--typing');
+            }, 200);
+          });
+          /* Сама страница под листом не должна прокручиваться никогда: прокрутка — только у тела листа. */
+          window.addEventListener(
+            'scroll',
+            function() {
+              if (flow.hidden) return;
+              if (window.scrollY || (document.scrollingElement && document.scrollingElement.scrollTop)) {
+                try { window.scrollTo(0, 0); } catch (eSt) {}
+              }
+            },
+            { passive: true }
+          );
           /* Пользователь начал править поле — снимаем претензию шага, не дожидаясь «Далее». */
           flow.addEventListener('input', function() {
             setObFlowError('');
@@ -4810,13 +4873,13 @@
 
       /** Per-tier prices from loaded trainer.services (codes -> number|null). */
       // TASK-043/047: price-input suffix follows the trainer's own city currency
-      // (RU cities → ₽), instead of a hardcoded 'BYN'. `state.cities` items carry
+      // (RU cities → «руб.»), instead of a hardcoded 'BYN'. `state.cities` items carry
       // `country` from CatalogRepository.list_cities().
       function getPriceSuffixForTrainer() {
         var cityId = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
         if (cityId == null) return 'BYN';
         var city = (state.cities || []).find(function(c) { return Number(c.id) === Number(cityId); });
-        return (city && city.country === 'RU') ? '₽' : 'BYN';
+        return (city && city.country === 'RU') ? 'руб.' : 'BYN';
       }
 
       function getServiceTierPricesByCode(serviceId) {

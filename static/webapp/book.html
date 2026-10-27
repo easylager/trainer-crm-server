@@ -5,22 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202610271"></script>
-  <script src="mini-app-phone-field.js?v=202610271"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610271" />
-  <link rel="stylesheet" href="theme.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610271" />
-  <link rel="stylesheet" href="booking-client.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610271" />
-  <script src="mini-app-telegram-chrome.js?v=202610271"></script>
-  <script src="client-profile-switcher.js?v=202610271"></script>
-  <script src="write-access.js?v=202610271"></script>
-  <script src="booking-client.js?v=202610271"></script>
-  <script src="booking-deeplink.js?v=202610271"></script>
-  <script src="mini-app-empty-state.js?v=202610271"></script>
-  <script src="mini-app-more-icons.js?v=202610271"></script>
-  <script src="mini-app-client-shell.js?v=202610271"></script>
+  <script src="client-mini-app-theme.js?v=202610282"></script>
+  <script src="mini-app-phone-field.js?v=202610282"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610282" />
+  <link rel="stylesheet" href="theme.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610282" />
+  <link rel="stylesheet" href="booking-client.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610282" />
+  <script src="mini-app-telegram-chrome.js?v=202610282"></script>
+  <script src="client-profile-switcher.js?v=202610282"></script>
+  <script src="write-access.js?v=202610282"></script>
+  <script src="booking-client.js?v=202610282"></script>
+  <script src="booking-deeplink.js?v=202610282"></script>
+  <script src="mini-app-empty-state.js?v=202610282"></script>
+  <script src="mini-app-more-icons.js?v=202610282"></script>
+  <script src="mini-app-client-shell.js?v=202610282"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -738,12 +738,12 @@
       } catch (e) { /* ignore */ }
     })();
   </script>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202610271" />
-<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610271" />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610271" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202610271" />
-  <link rel="stylesheet" href="/static/webapp/glide-skin.css?v=202610271" />
-  <script src="/static/webapp/ga-touch.js?v=202610271"></script>
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202610282" />
+<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610282" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610282" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202610282" />
+  <link rel="stylesheet" href="/static/webapp/glide-skin.css?v=202610282" />
+  <script src="/static/webapp/ga-touch.js?v=202610282"></script>
 </head>
 <body class="ar-pilot ar-pilot--book ga-body glide-skin">
   <div class="header">
@@ -1196,10 +1196,10 @@
 
       /* TASK-196: валюта услуги — код из полезной нагрузки карточки тренера
          (/api/public/trainers/{id}). Отображение — конвенция TASK-109: RUB
-         знаком ₽, BYN буквами. Старые ответы без валюты — BYN. */
+         «руб.», BYN буквами. Старые ответы без валюты — BYN. */
       function priceCurrencyLabel(code) {
         var c = String(code || '').trim().toUpperCase();
-        return c === 'RUB' ? '₽' : (c || 'BYN');
+        return c === 'RUB' ? 'руб.' : (c || 'BYN');
       }
 
       function formatBookServicePrice(s) {
@@ -1496,7 +1496,7 @@
           inp.value = String(tier.id);
           const pb = tier.price_byn;
           const priceNum = pb === Math.floor(pb) ? String(pb) : Number(pb).toFixed(2);
-          // TASK-196: валюта тира — из полезной нагрузки (₽ для RUB), не «BYN» наизусть.
+          // TASK-196: валюта тира — из полезной нагрузки («руб.» для RUB), не «BYN» наизусть.
           const priceHtml = escapeHtmlBook(priceNum) + ' ' + escapeHtmlBook(priceCurrencyLabel(tier.currency_code));
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
@@ -2414,7 +2414,7 @@
       })();
     })();
   </script>
-  <script src="ru-text.js?v=202610271"></script>
-  <script src="mini-app-client-home.js?v=202610271"></script>
+  <script src="ru-text.js?v=202610282"></script>
+  <script src="mini-app-client-home.js?v=202610282"></script>
 </body>
 </html>

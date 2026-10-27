@@ -1553,10 +1553,10 @@
 
   /* TASK-196: валюта услуги — код из полезной нагрузки (как currency_code у
      сеансов льда). Отображение — конвенция TASK-109 для цен тренера: RUB
-     знаком ₽, BYN буквами (глиф НБРБ Telegram не рисует). */
+     «руб.», BYN буквами (глиф НБРБ Telegram не рисует). */
   function priceCurrencyLabel(code) {
     var c = String(code || '').trim().toUpperCase();
-    return c === 'RUB' ? '₽' : (c || 'BYN');
+    return c === 'RUB' ? 'руб.' : (c || 'BYN');
   }
 
   function formatTrainerPriceFrom(item) {

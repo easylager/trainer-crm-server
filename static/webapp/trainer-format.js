@@ -3,7 +3,7 @@
  * десятка самодельных форматтеров по экранам:
  *
  *   phone('375293334455')          → «+375 29 333-44-55»
- *   money(40.5, 'BYN')             → «40,50 BYN»;  money(500, 'RUB') → «500 ₽»
+ *   money(40.5, 'BYN')             → «40,50 BYN»;  money(500, 'RUB') → «500 руб.»
  *   date('2026-10-23', {now})      → «завтра» / «пт, 23 окт»
  *   dateLong('2027-11-26')         → «26 ноября 2027»
  *   time('09:00:00')               → «9:00»
@@ -49,17 +49,37 @@
     return s;
   }
 
-  /** Валюта — код из API. Копейки только когда они есть: «45 BYN», «40,50 BYN». */
+  /**
+   * Валюта тренера (по городу): кладётся при входе (GET /trainer/access) и живёт в сессии.
+   * Беларусь — BYN, Россия — RUB. Без данных — BYN, как было.
+   */
+  function currencyCode() {
+    try {
+      var g = typeof window !== 'undefined' ? window : null;
+      if (g && g.TRAINER_CURRENCY) return String(g.TRAINER_CURRENCY).toUpperCase();
+      var s = g && g.sessionStorage ? g.sessionStorage.getItem('trainer_currency_v1') : null;
+      if (s) return String(s).toUpperCase();
+    } catch (e) { /* storage недоступен */ }
+    return 'BYN';
+  }
+
+  /** Подпись валюты в тексте: рубли — «руб.», остальное — код («BYN»). Без аргумента — валюта тренера. */
+  function currencyLabel(code) {
+    var c = String(code || currencyCode()).toUpperCase();
+    return c === 'RUB' ? 'руб.' : c;
+  }
+
+  /** Валюта — код из API (или валюта тренера). Копейки только когда они есть: «45 BYN», «40,50 BYN». */
   function money(amount, currency) {
     var n = Number(amount);
     if (!isFinite(n)) return '';
-    var cur = String(currency || 'BYN').toUpperCase();
+    var cur = String(currency || currencyCode()).toUpperCase();
     var whole = Math.round(n * 100) % 100 === 0;
     var fixed = whole ? String(Math.round(n)) : n.toFixed(2).replace('.', ',');
     var parts = fixed.split(',');
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
     var num = parts.join(',');
-    if (cur === 'RUB') return num + NBSP + '₽';
+    if (cur === 'RUB') return num + NBSP + 'руб.';
     return num + NBSP + cur;
   }
 
@@ -101,5 +121,8 @@
     return String(Number(m[1])) + ':' + m[2];
   }
 
-  return { plural: plural, phone: phone, money: money, date: date, dateLong: dateLong, time: time };
+  return {
+    plural: plural, phone: phone, money: money, currencyCode: currencyCode, currencyLabel: currencyLabel,
+    date: date, dateLong: dateLong, time: time,
+  };
 });

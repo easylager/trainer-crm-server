@@ -776,12 +776,12 @@
 
       function formatPricePlain(cents) {
         if (cents == null) return '—';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
       }
 
       function formatPrice(cents) {
         if (cents == null) return '—';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
       }
 
       var VALIDITY_PRESETS = { '30': 1, '90': 1, '120': 1, '150': 1, '180': 1, '365': 1 };
@@ -1322,14 +1322,14 @@
       }
 
       function formatCertAmountPlain(c) {
-        return (c.amount_cents / 100) + ' BYN';
+        return (c.amount_cents / 100) + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
       }
 
       function certProductAmountLine(c) {
         var amount = formatCertAmountPlain(c);
         var name = (c.name || '').trim();
         if (!name) return amount;
-        if (name.indexOf('BYN') !== -1) return '';
+        if (name.indexOf('BYN') !== -1 || name.indexOf('руб.') !== -1) return '';
         return amount;
       }
 
@@ -1746,12 +1746,14 @@
       /** Display name for catalog (no separate title field on this screen — was reading missing #certName and crashed). */
       function buildCertProductName(amountCents) {
         var byn = amountCents != null ? Math.round(amountCents / 100) : 0;
-        return byn > 0 ? ('Сертификат ' + byn + ' BYN') : 'Подарочный сертификат';
+        return byn > 0 ? ('Сертификат ' + byn + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN')) : 'Подарочный сертификат';
       }
+      /* Подписи полей «Цена, BYN» / «Сумма, BYN» — в валюте тренера. */
+      Array.prototype.forEach.call(document.querySelectorAll('.js-cur'), function(el) { el.textContent = (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN'); });
       document.getElementById('btnSaveCertForm').onclick = function() {
         if (state.savingCertProduct) return;
         var byn = parseInt(document.getElementById('certAmountByn').value, 10);
-        if (isNaN(byn) || byn < 1) { alert('Укажите сумму в BYN'); return; }
+        if (isNaN(byn) || byn < 1) { alert('Укажите сумму в ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN')); return; }
         var amountCents = byn * 100;
         var titleRaw = (document.getElementById('certTitle').value || '').trim();
         var descRaw = (document.getElementById('certDescription').value || '').trim();
@@ -1846,7 +1848,7 @@
         var priceByn = parseInt(document.getElementById('inputPrice').value, 10);
         if (!name) { alert('Введите название'); return; }
         if (!sessions || sessions < 1) { alert('Укажите количество занятий'); return; }
-        if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в BYN'); return; }
+        if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN')); return; }
         var validity = readValidityDays();
         if (validity.error) { alert(validity.error); return; }
         var priceCents = priceByn * 100;

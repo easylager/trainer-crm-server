@@ -1020,7 +1020,7 @@
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
           tierTxt.className = 'tier-radio-text';
-          // Валюта тира — из полезной нагрузки (TASK-196): RU-город → ₽, иначе BYN.
+          // Валюта тира — из полезной нагрузки (TASK-196): RU-город → «руб.», иначе BYN.
           tierTxt.textContent = catalogTierLabelRu(tier) + ' — ' + priceNum + ' ' + priceCurrencyLabel(tier.currency_code);
           lab.appendChild(tierTxt);
           inp.addEventListener('change', function() {
@@ -1703,10 +1703,10 @@
 
       /* TASK-196: валюта цены — код из полезной нагрузки (как currency_code у
          сеансов льда). Отображение — конвенция TASK-109 для цен тренера: RUB
-         знаком ₽, BYN буквами (глиф НБРБ Telegram не рисует). */
+         «руб.», BYN буквами (глиф НБРБ Telegram не рисует). */
       function priceCurrencyLabel(code) {
         var c = String(code || '').trim().toUpperCase();
-        return c === 'RUB' ? '₽' : (c || 'BYN');
+        return c === 'RUB' ? 'руб.' : (c || 'BYN');
       }
 
       /* Валюта тарифов центра — из полезной нагрузки сеансов (TASK-196): владелец
@@ -5801,7 +5801,7 @@
       function formatCatalogServicePrice(s) {
         var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
         var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
-        // Валюта — из услуги (TASK-196): тренер из RU-города показывает цены в ₽.
+        // Валюта — из услуги (TASK-196): тренер из RU-города показывает цены в рублях.
         // Старые полезные нагрузки без currency_code читаются как BYN.
         var cur = escapeHtml(priceCurrencyLabel(s.currency_code));
         if (minV == null && s.price_byn == null) return escapeHtml('по запросу');

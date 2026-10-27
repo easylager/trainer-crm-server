@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.place_links import place_path
+from src.shared.currency import currency_label_ru
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.notification_hours import NOTIFICATION_TZ
 
@@ -513,10 +514,9 @@ def _local_parts(starts: datetime, ends: datetime) -> dict[str, str]:
 def _format_price(minor: int | None, currency: str | None) -> str | None:
     if minor is None:
         return None
-    code = (currency or "BYN").strip() or "BYN"
     major = int(minor) / 100
     rendered = str(int(major)) if major == int(major) else f"{major:.2f}"
-    return f"{rendered} {code}"
+    return f"{rendered} {currency_label_ru(currency)}"
 
 
 def _attach_price(
