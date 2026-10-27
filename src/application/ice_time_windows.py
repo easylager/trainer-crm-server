@@ -179,7 +179,7 @@ def resolve_list_window(
 _HOME_WEEKEND_FROM = time(15, 0)
 _HOME_NEXT_WEEKEND_FROM = time(18, 0)
 HOME_PICKER_DAYS = 7
-HOME_WHEN_KEYS = ("today", "tomorrow", "weekend", "day")
+HOME_WHEN_KEYS = ("today", "tomorrow", "weekend", "day", "any")
 
 
 def home_default_when_key(now: datetime) -> str:
@@ -256,6 +256,11 @@ def resolve_home_window(
                 raise RuntimeError("today window is required")
             return "today", today, False
         return "day", resolve_day_window(parsed, now), False
+    if key == "any":
+        # «Любой день»: окно в семь дней пикера, от сейчас до конца последнего дня.
+        tz = ZoneInfo(NOTIFICATION_TZ)
+        end = datetime.combine(_minsk_today(now) + timedelta(days=HOME_PICKER_DAYS), time(0, 0), tzinfo=tz)
+        return "any", TimeWindow("any", t("when.any_day"), now, end.astimezone(timezone.utc)), False
     if key not in ("today", "tomorrow", "weekend"):
         key = home_default_when_key(now)
     if key == "weekend":
@@ -264,3 +269,41 @@ def resolve_home_window(
     if window is None:
         raise RuntimeError(f"home window {key!r} is required")
     return key, window, False
+
+
+# TASK-337: конкретный день — окно из одного дня. ``?w=`` хаба принимает ключ окна или дату
+# из тех же семи дат, что пикер главной.
+HUB_STATIC_WINDOW_KEYS = ("today", "tomorrow", "weekend", "any")
+
+
+def parse_hub_window(raw: str | None, now: datetime | None = None) -> str | None:
+    """``today|tomorrow|weekend|any`` либо ``YYYY-MM-DD`` (одна из семи дат пикера); иное — ``None``.
+
+    Дата «сегодня» и «завтра» сводится к ключу окна, чтобы у одного дня был один адрес.
+    """
+    now = now or datetime.now(timezone.utc)
+    key = (raw or "").strip().lower()
+    if key in HUB_STATIC_WINDOW_KEYS:
+        return key
+    parsed = parse_home_picker_day(key, now)
+    if parsed is None:
+        return None
+    today = _minsk_today(now)
+    if parsed == today:
+        return "today"
+    if parsed == today + timedelta(days=1):
+        return "tomorrow"
+    return parsed.isoformat()
+
+
+def is_hub_day_key(key: str | None) -> bool:
+    return bool(key) and bool(_DAY_ISO_RE.match(str(key)))
+
+
+def resolve_hub_window(key: str | None, now: datetime | None = None) -> TimeWindow | None:
+    """Окно хаба по ключу из :func:`parse_hub_window`."""
+    now = now or datetime.now(timezone.utc)
+    if is_hub_day_key(key):
+        parsed = parse_calendar_day(key, now)
+        return resolve_day_window(parsed, now) if parsed else None
+    return resolve_window(key, now)

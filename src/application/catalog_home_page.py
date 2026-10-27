@@ -25,11 +25,14 @@ from src.application.ice_city_day import (
 )
 from src.application.ice_session_use_cases import STATUS_ACTIVE
 from src.application.ice_time_windows import (
+    is_hub_day_key,
+    parse_hub_window,
     home_picker_dates,
     resolve_day_window,
     resolve_home_window,
     resolve_window,
 )
+from src.application.when_calendar import day_session_counts, render_calendar
 from src.application.place_links import (
     catalog_start_param,
     join_public_origin,
@@ -486,6 +489,7 @@ def _period_when_phrase(when_key: str) -> str:
         "tomorrow": t("home.when_phrase.tomorrow"),
         "weekend": t("home.when_phrase.weekend"),
         "day": t("home.when_phrase.day"),
+        "any": t("home.when_phrase.any"),
     }.get(when_key, t("home.when_phrase.today"))
 
 
@@ -510,12 +514,12 @@ def _resolve_user_city(
 
 
 # TASK-326 (PDEC-026): окно, выбранное на главной, едет в город — хаб открывается в нём.
-CITY_WINDOW_KEYS = ("today", "tomorrow", "weekend")
+CITY_WINDOW_KEYS = ("today", "tomorrow", "weekend", "any")
 
 
 def city_hub_href(slug: str, city_when: str | None = None) -> str:
     """``/c/{город}``; с ``city_when`` — хаб в этом окне (``?w=``). Без явного выбора — голый город."""
-    return f"/c/{slug}" + (f"?w={city_when}" if city_when in CITY_WINDOW_KEYS else "")
+    return f"/c/{slug}" + (f"?w={city_when}" if city_when in CITY_WINDOW_KEYS or is_hub_day_key(city_when) else "")
 
 
 def _user_city_button_href(city: Mapping[str, Any], city_when: str | None = None) -> str:
@@ -543,12 +547,16 @@ def _upcoming_more_href(
     slug = str(city["slug"])
     if when_key == "weekend":
         return f"/c/{slug}?w=weekend"
+    if when_key == "any":
+        return f"/c/{slug}?w=any"
     if when_key == "tomorrow":
         return f"/c/{slug}?w=tomorrow"
     if when_key == "today":
         return f"/c/{slug}?w=today"
     if when_key == "day" and selected_day == today:
         return f"/c/{slug}?t=ice&w=today"
+    if when_key == "day" and selected_day is not None:
+        return f"/c/{slug}?w={selected_day.isoformat()}"
     return None
 
 
@@ -592,7 +600,7 @@ def build_city_layout(catalog_cities: list[dict[str, Any]]) -> dict[str, Any]:
 
 def home_map_legend_labels(when_key: str) -> tuple[str, str]:
     """Подписи легенды карты главной — в такт фильтру when (сегодня / завтра / выходные)."""
-    key = when_key if when_key in ("today", "tomorrow", "weekend") else "today"
+    key = when_key if when_key in ("today", "tomorrow", "weekend", "any") else "today"
     return t(f"home.map.legend_on.{key}"), t(f"home.map.legend_off.{key}")
 
 
@@ -901,10 +909,15 @@ async def load_catalog_home_view(
     # Явный выбор окна едет в ссылки на города; умный дефолт — нет: хаб посчитает его сам.
     raw_when = (when or "").strip().lower()
     city_when = when_key if raw_when == when_key and when_key in CITY_WINDOW_KEYS else None
+    if when_key == "day" and raw_when == "day" and selected_day is not None:
+        # TASK-337: выбранный день едет в город, как и окно; сегодня/завтра сводятся к своим ключам.
+        city_when = parse_hub_window(selected_day.isoformat(), now)
     horizon_end = now + timedelta(days=_UPCOMING_HORIZON_DAYS)
 
     cities = await _public_cities(session)
+    day_counts = await day_session_counts(session, now=now, dates=home_picker_dates(now))
     empty: dict[str, Any] = {
+        "day_counts": day_counts,
         "cities": [],
         "city_groups": [],
         "city_layout": {"minsk": None, "oblast_centers": [], "regions": [], "ru_cities": []},
@@ -1165,6 +1178,7 @@ def _counter_when_text(when_key: str, now: datetime) -> str:
         "tomorrow": t("home.counter.when.tomorrow"),
         "weekend": t("home.counter.when.weekend"),
         "day": t("home.counter.when.day"),
+        "any": t("home.counter.when.any"),
     }.get(when_key, t("home.counter.when.today"))
     if when_key == "weekend":
         local = now.astimezone(ZoneInfo(DEFAULT_TIMEZONE))
@@ -1277,6 +1291,14 @@ def _b_home_city_card(user_city: Mapping[str, Any] | None, *, when_key: str = "t
     )
 
 
+def _home_day_href(d: date, today: date) -> str:
+    if d == today:
+        return "/?when=today"
+    if d == today + timedelta(days=1):
+        return "/?when=tomorrow"
+    return f"/?when=day&d={d.isoformat()}"
+
+
 def _b_when_nav(view: Mapping[str, Any]) -> str:
     when_key = str(view.get("when_key") or "today")
     items = (
@@ -1290,11 +1312,22 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
     )
     index = next((i for i, (key, _, _) in enumerate(items) if key == when_key), None)
     # Один ползунок на всех страницах: общее имя перехода сдвигает его под новый пункт.
-    # «День…» убран (PDEC-026); старая ссылка ?when=day открывается без выбранного пункта.
+    # Выбранный день (TASK-337) — не пункт полосы: ползунка нет, активен календарь с датой.
     thumb = "" if index is None else '<span class="b-when__thumb" aria-hidden="true"></span>'
+    now = view["now"]
+    today = _minsk_date(now)
+    selected = date.fromisoformat(view["selected_date"]) if view.get("selected_date") else None
+    button, sheet = render_calendar(
+        now=now,
+        counts=view.get("day_counts") or {},
+        selected=selected if when_key == "day" else None,
+        href_for=lambda d: _home_day_href(d, today),
+        any_href="/?when=any",
+        any_selected=when_key == "any",
+    )
     nav = (
-        f'<nav class="b-when vt-when-strip" style="--when-i: {index or 0}" aria-label="Когда">'
-        f"{thumb}{links}</nav>"
+        f'<div class="b-whenrow"><nav class="b-when vt-when-strip" style="--when-i: {index or 0}" aria-label="Когда">'
+        f"{thumb}{links}</nav>{button}</div>{sheet}"
     )
     if view.get("show_day_picker"):
         days = "".join(

@@ -11,7 +11,8 @@
   var main = document.querySelector('main.b-page');
   if (!main || !main.querySelector('.b-when') || !window.fetch || !window.DOMParser || !history.pushState) return;
 
-  var LINK_SEL = '.b-when a[href], .b-days a[href]';
+  // Лист дней календаря (TASK-337): только кнопки дней; фон и «закрыть» — обычные якоря.
+  var LINK_SEL = '.b-when a[href], .b-days a[href], .b-days-sheet__grid a[href]';
   // Классы, которые вешают скрипты страницы, а не сервер: при сравнении их не видно.
   var LIVE_CLASSES = ['is-ready', 'b-reveal', 'is-in', 'b-press', 'is-hot', 'is-live'];
   var CACHE_MS = 60000;
@@ -70,6 +71,11 @@
       else a[i].removeAttribute('aria-current');
       a[i].setAttribute('href', b[i].getAttribute('href'));
     }
+    // День выбран — у полосы нет активного пункта и нет ползунка (TASK-337); и обратно.
+    var thumb = nav.querySelector('.b-when__thumb');
+    var nextThumb = next.querySelector('.b-when__thumb');
+    if (thumb && !nextThumb) nav.removeChild(thumb);
+    else if (!thumb && nextThumb) nav.insertBefore(document.importNode(nextThumb, true), nav.firstChild);
   }
 
   function key(el) {
@@ -219,8 +225,15 @@
     if (a.href === location.href) return;
     strip().classList.add('is-live');
     if (a.closest('.b-when')) markStrip(a.href);
+    closeSheet();
     show(a.href, true);
   });
+
+  // Лист дней (TASK-337) открывает, закрывает и свайпит b-days-sheet.js; здесь он только закрывается
+  // после выбора дня, потому что страница не перезагружается.
+  function closeSheet() {
+    if (window.glideDaysSheet) window.glideDaysSheet.close();
+  }
 
   history.replaceState({ bWhen: 1 }, '', location.href);
   window.addEventListener('popstate', function (e) {

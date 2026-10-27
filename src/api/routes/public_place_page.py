@@ -562,7 +562,7 @@ async def selection_page(
         selection_path,
         selection_start_param,
     )
-    from src.application.city_hub_page import HUB_WINDOW_KEYS
+    from src.application.ice_time_windows import parse_hub_window
 
     base = _base()
     city = await resolve_city_by_ref(session, city_ref)
@@ -582,7 +582,7 @@ async def selection_page(
     city_name = str(city["name"])
     # TASK-224: /c/{город} без параметров — маршрутизатор потребностей, не список.
     # TASK-326 (PDEC-026): одно окно (?w=today|tomorrow|weekend) — тот же хаб, открытый в этом окне.
-    hub_when = when if when in HUB_WINDOW_KEYS else None
+    hub_when = parse_hub_window(w)
     if t is None and kind is None and svc is None and page is None and seg is None and (w is None or hub_when):
         return await _city_hub(
             session, request, city=city, city_ref=city_ref, base=base, share_src=share_src, when=hub_when
@@ -675,11 +675,13 @@ async def _city_hub(
     if city_ref != slug:
         return RedirectResponse(url=f"/c/{slug}" + (f"?w={when}" if when else ""), status_code=301)
     view = await load_city_hub_view(session, city=city, window=when or "auto")
+    # Картинка и ссылка в бота знают только три окна; день (TASK-337) — вариант страницы без своей картинки.
+    share_when = when if when in ("today", "tomorrow", "weekend") else None
     preview = city_hub_selection_preview_view(view)
     inventory_line = selection_share_description(preview)
     page_url = f"{base}/c/{slug}"
     og_image = base + selection_image_path(
-        city_name=city_name, venue=None, when=when, version=selection_image_version(preview)
+        city_name=city_name, venue=None, when=share_when, version=selection_image_version(preview)
     )
     html = render_city_hub_page(
         view,
@@ -687,7 +689,7 @@ async def _city_hub(
         og_image_url=og_image,
         cta_url=public_telegram_cta_url(
             base,
-            start_param=selection_start_param(city_id=int(city["id"]), venue=None, when=when),
+            start_param=selection_start_param(city_id=int(city["id"]), venue=None, when=share_when),
             surface="selection_page",
             city_id=int(city["id"]),
         ),
