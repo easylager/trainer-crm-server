@@ -19,6 +19,7 @@ SentryComponent = Literal[
     "bot-trainer",
     "bot-admin",
     "bot-org",
+    "bots",
     "notification-service",
 ]
 
