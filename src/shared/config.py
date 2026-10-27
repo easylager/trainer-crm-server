@@ -155,7 +155,7 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # Max request body when Content-Length is set (multipart without length passes through; use reverse proxy limits in prod).
     api_max_body_bytes_default: int = 1_048_576  # 1 MiB JSON / small bodies
     api_max_body_bytes_upload: int = 26_214_400  # ~25 MiB (trainer/client photo uploads)
-    api_max_body_bytes_webhook: int = 2_097_152  # 2 MiB bePaid JSON
+    api_max_body_bytes_webhook: int = 2_097_152  # 2 MiB, /api/webhooks/*
     # Audit log level (logger "audit"); INFO = emit, WARNING+ = suppress
     audit_log_level: str = "INFO"
     # Bot rate limit: max N updates per user per window (seconds)
@@ -196,14 +196,9 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # Plain-text suffix for amounts in bots, Telegram HTML, and Mini App UI (default BYN per ISO 4217).
     byr_display_sign: str = "BYN"
 
-    # Payment (bePaid): checkout token API. When not set, adapter returns stub URL for tests.
-    bepaid_shop_id: str | None = None
-    bepaid_secret_key: str | None = None
-    # Checkout API base, e.g. https://checkout.bepaid.by (sandbox may differ)
-    bepaid_checkout_base_url: str = "https://checkout.bepaid.by"
     payment_sandbox: bool = True
-    # Trainer subscription Mini App: auto | sandbox | bepaid | invoice
-    # auto = sandbox if payment_sandbox; elif bePaid shop+secret then bepaid; else invoice (ERIP / manual confirm).
+    # Trainer subscription Mini App: auto | sandbox | invoice
+    # auto = sandbox if payment_sandbox; else invoice (ERIP / manual confirm).
     trainer_subscription_checkout_mode: str = "auto"
     # Optional: shown in Mini App when checkout is invoice (client escapes HTML).
     subscription_invoice_legal_name: str | None = None
@@ -355,18 +350,12 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # FOR_YOU_CITY_IDS=2,12
     for_you_city_ids: str = ""
 
-    def resolved_trainer_subscription_checkout_mode(self) -> Literal["sandbox", "bepaid", "invoice"]:
+    def resolved_trainer_subscription_checkout_mode(self) -> Literal["sandbox", "invoice"]:
         """How trainer-subscription Mini App should behave for paid checkout."""
         m = (self.trainer_subscription_checkout_mode or "auto").strip().lower()
-        if m in ("sandbox", "bepaid", "invoice"):
+        if m in ("sandbox", "invoice"):
             return m  # type: ignore[return-value]
-        if self.payment_sandbox:
-            return "sandbox"
-        if self.bepaid_shop_id and str(self.bepaid_shop_id).strip() and self.bepaid_secret_key and str(
-            self.bepaid_secret_key
-        ).strip():
-            return "bepaid"
-        return "invoice"
+        return "sandbox" if self.payment_sandbox else "invoice"
 
 
 @lru_cache(maxsize=1)

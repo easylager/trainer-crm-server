@@ -26,7 +26,6 @@ from src.api.routes import (
     trainers_router,
     upload_router,
     webapp_router,
-    webhooks_router,
 )
 from src.api.routes.org_webapp import router as org_webapp_router
 from src.api.routes.public_arenas import router as public_arenas_router
@@ -2827,7 +2826,6 @@ app.include_router(org_webapp_router)
 webapp_router.include_router(webapp_trainer_catalog_router)
 webapp_router.include_router(webapp_trainer_profile_router)
 app.include_router(webapp_router)
-app.include_router(webhooks_router)
 
 
 @app.get("/webapp/kto-kogo")

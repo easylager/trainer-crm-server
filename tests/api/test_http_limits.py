@@ -27,7 +27,7 @@ def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/go/insta") == "public"
     assert rate_limit_bucket_for_path("/go/flyer-olimpik/minsk") == "public"
     assert rate_limit_bucket_for_path("/gopher") == "skip"
-    assert rate_limit_bucket_for_path("/api/webhooks/bepaid") == "skip"
+    assert rate_limit_bucket_for_path("/api/webhooks/payment") == "skip"
     assert rate_limit_bucket_for_path("/api/public/cities") == "public"
     assert rate_limit_bucket_for_path("/api/public/invites") == "invite"
     assert rate_limit_bucket_for_path("/api/public/invites/abcd2345") == "public"
@@ -75,7 +75,7 @@ def test_client_ip_from_x_forwarded_for_is_rightmost_trusted_hop():
 
 
 def test_max_body_bytes_for_path():
-    assert max_body_bytes_for_path("/api/webhooks/bepaid") >= max_body_bytes_for_path("/api/public/cities")
+    assert max_body_bytes_for_path("/api/webhooks/payment") >= max_body_bytes_for_path("/api/public/cities")
     assert max_body_bytes_for_path("/api/upload/photo") >= max_body_bytes_for_path("/api/trainers")
     assert max_body_bytes_for_path("/api/webapp/trainer/photos") >= max_body_bytes_for_path(
         "/api/webapp/client/session"
