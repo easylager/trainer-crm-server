@@ -27,6 +27,11 @@
   var lastWarning = false;
   var bindLinks = {};
 
+  /** Валюта тренера (из /trainer/access): рубли — Россия, иначе Беларусь. */
+  function trainerCurrency() {
+    return global.TrainerFormat && global.TrainerFormat.currencyCode ? global.TrainerFormat.currencyCode() : 'BYN';
+  }
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
@@ -363,7 +368,7 @@
       '<label class="tfs-field"><span>Имя</span>' +
       '<input id="tfsName" type="text" autocomplete="off" maxlength="64" placeholder="Имя и фамилия" required /></label>' +
       '<label class="tfs-field"><span>Телефон — если хотите звонить из приложения</span>' +
-      '<input id="tfsPhone" type="tel" autocomplete="off" inputmode="tel" placeholder="+375 29 …" /></label>' +
+      '<input id="tfsPhone" type="tel" autocomplete="off" inputmode="tel" placeholder="' + (trainerCurrency() === 'RUB' ? '+7 912 …' : '+375 29 …') + '" /></label>' +
       '<div class="tfs-field"><span>' + esc(M.slotFieldLabel(state)) + '</span>' +
       '<div class="tfs-chips" id="tfsChips">' + optionChips() + '</div></div>' +
       serviceFieldHtml(hasOptions) +
@@ -383,7 +388,7 @@
       '<h2 class="tfs-sheet__title" id="tfsSheetTitle">Список учеников</h2>' +
       '<p class="tfs-lead">Вставьте из заметок или переписки — по одному на строку. Телефон можно не писать.</p>' +
       '<form class="tfs-form" novalidate>' +
-      '<textarea id="tfsPaste" rows="5" placeholder="Маша Ковалёва +375 29 111-22-33&#10;Даня&#10;Лиза 29 444 55 66"></textarea>' +
+      '<textarea id="tfsPaste" rows="5" placeholder="' + esc('Маша Ковалёва ' + (trainerCurrency() === 'RUB' ? '+7 912 111-22-33' : '+375 29 111-22-33')) + '&#10;Даня&#10;Лиза ' + (trainerCurrency() === 'RUB' ? '912 444 55 66' : '29 444 55 66') + '"></textarea>' +
       '<p class="tfs-preview" id="tfsPreview" aria-live="polite"></p>' +
       '<p class="tfs-error" id="tfsError" hidden></p>' +
       '<button type="submit" class="btn-block btn-primary" id="tfsSubmit" disabled>Добавить</button>' +
@@ -558,7 +563,7 @@
       })
       .catch(function (err) {
         setBusy(false);
-        showError(M.errorText(err));
+        showError(M.errorText(err, trainerCurrency()));
       });
   }
 

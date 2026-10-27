@@ -288,11 +288,28 @@
     });
   }
 
+  /**
+   * Страна по умолчанию для тренерских экранов: валюта тренера (из /trainer/access) — рубли → RU, иначе BY.
+   * Читается в момент вызова, а не при загрузке страницы: ответ /trainer/access приходит позже разметки.
+   */
+  function trainerDefaultCountry() {
+    var code = '';
+    try {
+      code = String(global.TRAINER_CURRENCY || (global.sessionStorage && global.sessionStorage.getItem('trainer_currency_v1')) || '');
+    } catch (e) { /* storage недоступен */ }
+    return code.toUpperCase() === 'RUB' ? 'RU' : 'BY';
+  }
+
+  function resolveDefaultCountry(wrap, opts) {
+    var def = (opts && opts.defaultCountry) || wrap.getAttribute('data-default-country') || 'BY';
+    if (def === 'trainer') def = trainerDefaultCountry();
+    return COUNTRIES[def] ? def : 'BY';
+  }
+
   function init(wrap, opts) {
     if (!wrap || wrap.dataset.crmPhoneFieldWired === '1') return wrap;
     wrap.dataset.crmPhoneFieldWired = '1';
-    var def = (opts && opts.defaultCountry) || wrap.getAttribute('data-default-country') || 'BY';
-    setWrapCountry(wrap, COUNTRIES[def] ? def : 'BY');
+    setWrapCountry(wrap, resolveDefaultCountry(wrap, opts));
     wireCountryDropdown(wrap);
     wireNationalInput(wrap);
     return wrap;
@@ -325,6 +342,13 @@
           ? wrapOrInput.closest('[data-crm-phone-field]')
           : null;
     if (!wrap) return;
+    if (!stripDigits(e164)) {
+      // Пустое значение — сброс поля: страна снова по умолчанию (для тренера — по его валюте), а не всегда BY.
+      setWrapCountry(wrap, resolveDefaultCountry(wrap));
+      var empty = wrap.querySelector('.crm-phone-national-input');
+      if (empty) empty.value = '';
+      return;
+    }
     var parsed = parseE164ToCountryAndNational(e164);
     setWrapCountry(wrap, parsed.country);
     var input = wrap.querySelector('.crm-phone-national-input');

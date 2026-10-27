@@ -3768,28 +3768,20 @@
           flow.addEventListener('focusout', scheduleProfileTourBarInsetSync);
           /*
            * Клавиатура и поле ввода. iOS двигает всю страницу, если поле в момент фокуса стоит низко
-           * (клавиатура его закроет) — отсюда «скачок». Поэтому до фокуса, на нажатии, ставим поле
-           * к верху видимой области (запас снизу даёт класс ob-flow--typing), и сдвигать нечего.
+           * (клавиатура его закроет) — отсюда «скачок». Поэтому поле ставим к верху видимой области
+           * сразу при фокусе (см. focusin ниже), а на нажатии только даём запас снизу (класс ob-flow--typing).
+           * Двигать поле на самом нажатии нельзя: оно уезжает из-под пальца, тап срывается — приходится тапать трижды.
            */
           flow.addEventListener(
             'pointerdown',
             function(ev) {
               var t = ev.target;
-              var K = window.ObFlowKeyboard;
-              var body = document.getElementById('obFlowBody');
-              if (!t || !t.tagName || !K || !body) return;
+              if (!t || !t.tagName) return;
               var tg = t.tagName;
               if (tg !== 'INPUT' && tg !== 'TEXTAREA') return;
               if (tg === 'INPUT' && !/^(text|search|tel|email|url|number|password|)$/i.test(t.type || '')) return;
               if (t.closest && t.closest('#servicesWrap')) return; /* цены — свой механизм */
               flow.classList.add('ob-flow--typing');
-              var target = (t.closest && t.closest('.field')) || t;
-              var r = target.getBoundingClientRect();
-              var b = body.getBoundingClientRect();
-              /* Поле уже в верхней трети видимой области — не трогаем. */
-              if (r.top - b.top < b.height * 0.35) return;
-              var d = K.topAlignDelta(r.top, b.top);
-              if (K.worthScrolling(d)) body.scrollTop = body.scrollTop + d;
             },
             true
           );
@@ -3829,6 +3821,18 @@
             var tg = t.tagName;
             if (tg !== 'INPUT' && tg !== 'TEXTAREA') return;
             if (t.closest && t.closest('#servicesWrap')) return;
+            /* Синхронно, до того как iOS решит двигать страницу: поле низко — ставим к верху тела листа. */
+            var K = window.ObFlowKeyboard;
+            var body = document.getElementById('obFlowBody');
+            if (K && body) {
+              var target = (t.closest && t.closest('.field')) || t;
+              var r = target.getBoundingClientRect();
+              var b = body.getBoundingClientRect();
+              if (r.top - b.top >= b.height * 0.35) {
+                var d = K.topAlignDelta(r.top, b.top);
+                if (K.worthScrolling(d)) body.scrollTop = body.scrollTop + d;
+              }
+            }
             setTimeout(function() { obFlowScrollFocusedIntoView(); }, 80);
             setTimeout(function() { obFlowScrollFocusedIntoView(); }, 420);
           });
@@ -7760,6 +7764,23 @@
           }, 220);
         }
 
+        /* Запас снизу, чтобы страницу можно было прокрутить так, чтобы поле стояло выше клавиатуры. */
+        root.addEventListener(
+          'pointerdown',
+          function(ev) {
+            var t = ev.target;
+            if (!t || !t.tagName || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) return;
+            if (document.body.classList.contains('ob-flow-open')) return;
+            document.body.classList.add('profile-typing');
+          },
+          true
+        );
+        root.addEventListener('focusout', function() {
+          setTimeout(function() {
+            if (!activeInProfileForm()) document.body.classList.remove('profile-typing');
+          }, 200);
+        });
+
         root.addEventListener(
           'focusin',
           function(ev) {
@@ -7768,7 +7789,20 @@
             if (!t || !t.tagName) return;
             var tg = t.tagName;
             if (tg !== 'INPUT' && tg !== 'TEXTAREA' && tg !== 'SELECT') return;
-            setTimeout(scrollProfileMainFocusedFieldIntoView, 80);
+            /*
+             * Низко стоящее поле ставим выше сразу при фокусе (не на нажатии: из-под пальца поле уезжать не должно).
+             * Иначе iOS сам панорамирует страницу под клавиатуру, а следом наши scrollIntoView — три рывка подряд.
+             */
+            if (tg !== 'SELECT' && window.ObFlowKeyboard) {
+              var target = (t.closest && t.closest('.field')) || t;
+              var r = target.getBoundingClientRect();
+              var vv = window.visualViewport;
+              var vh = (vv && vv.height) || window.innerHeight || 0;
+              if (vh > 0 && r.top > vh * 0.4) {
+                var d = window.ObFlowKeyboard.topAlignDelta(r.top, 0, 140);
+                if (window.ObFlowKeyboard.worthScrolling(d)) window.scrollBy(0, d);
+              }
+            }
             setTimeout(scrollProfileMainFocusedFieldIntoView, 420);
           },
           true

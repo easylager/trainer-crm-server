@@ -117,4 +117,12 @@ describe('«Первые три ученика»: услуга, ошибки, о
     assert.ok(!/окна/.test(M.cardLead({ can_book: false })));
     assert.ok(/подпиской/.test(M.slotFieldLabel({ can_book: false })));
   });
+
+  it('пример номера и подсказка ошибки зависят от страны тренера', () => {
+    assert.equal(M.phoneExample('RUB'), '+7 912 345-67-89');
+    assert.equal(M.phoneExample('BYN'), '+375 29 123-45-67');
+    const err = { detail: [{ loc: ['body', 'phone'], msg: '' }] };
+    assert.match(M.errorText(err, 'RUB'), /\+7 912/);
+    assert.match(M.errorText(err), /\+375 29/);
+  });
 });
