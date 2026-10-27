@@ -1160,7 +1160,7 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-whenrow > .b-when { flex: 1 1 auto; min-width: 0; }
 .b-cal {
   flex: none; display: flex; align-items: center; justify-content: center; gap: 8px;
-  min-width: 52px; min-height: 52px; padding: 0 14px; border-radius: 14px;
+  width: 52px; min-height: 52px; padding: 0; border-radius: 14px;
   background: #e3eaed; color: var(--g-ink) !important; text-decoration: none; font-size: 14px; font-weight: 600;
   box-shadow: inset 0 1px 3px rgba(13, 27, 38, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
 }
@@ -1172,10 +1172,12 @@ body[data-client-shell] .tg-out { display: none !important; }
 }
 @media (hover: hover) { .b-cal:not(.b-cal--day):hover { background: #edf2f4; } }
 .b-cal:is(:active, .b-press) { translate: 0 0; }
-@media (max-width: 380px) { .b-cal--day span { max-width: 74px; overflow: hidden; text-overflow: ellipsis; } }
+.b-cal__date { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.b-cal__date small { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
+.b-cal__date b { font-size: 20px; font-weight: 800; margin-top: 2px; }
 
 .b-sheet { position: fixed; inset: 0; z-index: 60; display: none; }
-.b-sheet:target { display: block; }
+.b-sheet:target, .b-sheet.is-open { display: block; }
 .b-sheet__bg { position: absolute; inset: 0; background: rgba(13, 27, 38, 0.52); }
 .b-sheet__panel {
   position: absolute; left: 0; right: 0; bottom: 0; max-width: 560px; margin: 0 auto;
@@ -1201,6 +1203,6 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-dayc[aria-current="true"] b, .b-dayc[aria-current="true"] small { color: #c3d0d8; }
 @media (hover: hover) { .b-dayc:not([aria-current="true"]):hover { border-color: #9fb3bf; } }
 @media (prefers-reduced-motion: no-preference) {
-  .b-sheet:target .b-sheet__panel { animation: b-sheet-in 200ms ease-out; }
+  .b-sheet:target .b-sheet__panel, .b-sheet.is-open .b-sheet__panel { animation: b-sheet-in 200ms ease-out; }
   @keyframes b-sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 }

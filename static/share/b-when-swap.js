@@ -11,7 +11,8 @@
   var main = document.querySelector('main.b-page');
   if (!main || !main.querySelector('.b-when') || !window.fetch || !window.DOMParser || !history.pushState) return;
 
-  var LINK_SEL = '.b-when a[href], .b-days a[href]';
+  // Лист дней календаря (TASK-337): только кнопки дней; фон и «закрыть» — обычные якоря.
+  var LINK_SEL = '.b-when a[href], .b-days a[href], .b-sheet__grid a[href]';
   // Классы, которые вешают скрипты страницы, а не сервер: при сравнении их не видно.
   var LIVE_CLASSES = ['is-ready', 'b-reveal', 'is-in', 'b-press', 'is-hot', 'is-live'];
   var CACHE_MS = 60000;
@@ -70,6 +71,11 @@
       else a[i].removeAttribute('aria-current');
       a[i].setAttribute('href', b[i].getAttribute('href'));
     }
+    // День выбран — у полосы нет активного пункта и нет ползунка (TASK-337); и обратно.
+    var thumb = nav.querySelector('.b-when__thumb');
+    var nextThumb = next.querySelector('.b-when__thumb');
+    if (thumb && !nextThumb) nav.removeChild(thumb);
+    else if (!thumb && nextThumb) nav.insertBefore(document.importNode(nextThumb, true), nav.firstChild);
   }
 
   function key(el) {
@@ -219,7 +225,38 @@
     if (a.href === location.href) return;
     strip().classList.add('is-live');
     if (a.closest('.b-when')) markStrip(a.href);
+    closeSheet();
     show(a.href, true);
+  });
+
+  // Лист дней календаря (TASK-337). С JS он открывается классом, а не якорем: pushState не сбрасывает
+  // :target, и после выбора дня лист остался бы открытым. Без JS работает якорь #when-days.
+  function sheet() {
+    return document.getElementById('when-days');
+  }
+
+  function closeSheet() {
+    var el = sheet();
+    if (el) el.classList.remove('is-open');
+  }
+
+  document.addEventListener('click', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest('a.b-cal, .b-sheet__bg') : null;
+    if (!el || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (el.classList.contains('b-cal')) {
+      var open = sheet();
+      if (!open) return;
+      open.classList.add('is-open');
+      var current = open.querySelector('.b-dayc[aria-current="true"]') || open.querySelector('.b-dayc');
+      if (current) current.focus({ preventScroll: true });
+    } else {
+      closeSheet();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeSheet();
   });
 
   history.replaceState({ bWhen: 1 }, '', location.href);

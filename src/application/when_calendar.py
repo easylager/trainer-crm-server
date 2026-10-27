@@ -83,10 +83,12 @@ def render_calendar(
     ``href_for`` строит ссылку на день; страница сама сводит «сегодня» и «завтра» к своим ключам.
     """
     if selected is not None:
+        # Квадрат, как без выбора: широкая подпись сжимала полосу («В выходные» уходило на две строки).
+        # Плитка даты: день недели и число; полная дата — в подписи для скринридера и в заголовке героя.
         button = (
             f'<a class="b-cal b-cal--day" href="#{SHEET_ID}" aria-current="true" '
             f'aria-label="Выбран день: {_esc(day_chip_label(selected))}. Выбрать другой">'
-            f"{_ICON}<span>{_esc(day_chip_label(selected))}</span></a>"
+            f'<span class="b-cal__date"><small>{_WEEKDAYS[selected.weekday()]}</small><b>{selected.day}</b></span></a>'
         )
     else:
         button = f'<a class="b-cal" href="#{SHEET_ID}" aria-label="Выбрать день">{_ICON}</a>'
