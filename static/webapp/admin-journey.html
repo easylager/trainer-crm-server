@@ -29,6 +29,8 @@
     .jr-seg.cur { background: rgba(69,185,187,.28); }
     .jr-state { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
     .jr-stall { font-size: 13px; font-weight: 600; color: #f0b429; }
+    .jr-cat { margin-top: 6px; font-size: 13px; color: var(--tg-theme-hint-color, #9ca3af); }
+    .jr-cat.ok { color: #45b9bb; }
     .jr-stall.ok { color: #45b9bb; }
     .jr-steps { margin: 12px 0; display: flex; flex-direction: column; gap: 2px; }
     .jr-step { display: flex; align-items: center; gap: 10px; min-height: 28px; font-size: 14px; }
@@ -69,6 +71,7 @@
         { id: 'all', label: 'Все', test: function () { return true; } },
         { id: 'stuck', label: 'Застряли', test: function (t) { return !t.working; } },
         { id: 'noclient', label: 'Нет клиента', test: function (t) { return t.reached >= 4 && t.reached <= 5; } },
+        { id: 'nocat', label: 'Не в каталоге', test: function (t) { return !t.catalog.listed; } },
         { id: 'fresh', label: 'Мы не писали', test: function (t) { return !t.contacted_at; } }
       ];
       var SORTS = [
@@ -98,6 +101,11 @@
         return 'истёк' + until;
       }
 
+      function catalogLine(c) {
+        var gaps = c.missing && c.missing.length ? ' · не хватает: ' + c.missing.join(', ') : '';
+        return '<div class="jr-cat' + (c.listed ? ' ok' : '') + '">' + esc(c.label + gaps) + '</div>';
+      }
+
       function card(t) {
         var segs = t.steps.map(function (s, i) {
           return '<span class="jr-seg ' + (s.done ? 'done' : i === t.reached ? 'cur' : '') + '"></span>';
@@ -123,6 +131,7 @@
           '<div class="jr-state"><span class="jr-stall' + (t.working ? ' ok' : '') + '">' +
           (t.working ? 'Работает' : 'Стоп: ' + esc(t.stall.toLowerCase())) + '</span>' +
           '<span class="jr-hint">активность ' + esc(dayLabel(t.last_activity_at, false)) + '</span></div>' +
+          catalogLine(t.catalog) +
           '<div class="jr-steps">' + steps + '</div>' +
           '<div class="jr-nums">' +
           '<div class="jr-num"><b>' + A.formatNum(t.slots) + '</b><span>слотов</span></div>' +

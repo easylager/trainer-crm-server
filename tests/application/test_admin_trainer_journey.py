@@ -111,3 +111,30 @@ async def test_admin_endpoints_roundtrip(db_session):
             assert page.status_code == 200
     finally:
         app.dependency_overrides.pop(get_admin_miniapp_principal, None)
+
+
+def test_catalog_listed_has_no_gaps():
+    r = build_journey_row(_row(catalog_state="published"), NOW, ["photo"])
+    assert r["catalog"] == {"state": "published", "listed": True, "label": "В каталоге", "missing": []}
+
+
+def test_catalog_draft_lists_short_gaps_and_skips_unknown_keys():
+    r = build_journey_row(_row(catalog_state="draft"), NOW, ["photo", "phone", "arenas", "weird_key"])
+    assert r["catalog"]["listed"] is False
+    assert r["catalog"]["missing"] == ["фото", "телефон", "арена"]
+    assert r["catalog"]["label"] == "Не в каталоге"
+
+
+def test_catalog_draft_complete_card_says_ready():
+    r = build_journey_row(_row(catalog_state="draft"), NOW, [])
+    assert r["catalog"]["label"] == "Не в каталоге, карточка готова"
+
+
+def test_catalog_draft_that_asked_to_be_listed():
+    r = build_journey_row(_row(catalog_state="draft", catalog_state_reason="trainer_requested"), NOW, ["photo"])
+    assert r["catalog"]["label"] == "Хочет в каталог, не готов"
+
+
+def test_catalog_pending_review_label():
+    r = build_journey_row(_row(catalog_state="pending_review"), NOW, [])
+    assert r["catalog"]["label"] == "На модерации"

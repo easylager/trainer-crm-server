@@ -17,8 +17,24 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+import logging
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.application.trainer_profile_completeness import analyze_moderation_submission_readiness
+from src.application.trainer_use_cases import get_trainer
+from src.shared.catalog_visibility import (
+    CATALOG_STATE_DRAFT,
+    CATALOG_STATE_HIDDEN,
+    CATALOG_STATE_NEEDS_REVISION,
+    CATALOG_STATE_PAUSED,
+    CATALOG_STATE_PENDING_REVIEW,
+    CATALOG_STATE_PUBLISHED,
+    trainer_opted_into_catalog,
+)
+
+logger = logging.getLogger(__name__)
 
 STEP_LABELS: tuple[str, ...] = (
     "Зашёл в бота",
@@ -30,6 +46,26 @@ STEP_LABELS: tuple[str, ...] = (
     "Первая запись",
 )
 STEP_COUNT = len(STEP_LABELS)
+
+# Short admin wording for submission-tier gaps (the trainer-facing labels are sentences).
+_MISSING_SHORT_RU: dict[str, str] = {
+    "full_name": "имя",
+    "phone": "телефон",
+    "photo": "фото",
+    "city": "город",
+    "session_duration_minutes": "длительность занятия",
+    "min_hours_before_booking": "окно записи",
+    "services": "услуга",
+    "arenas": "арена",
+}
+
+_CATALOG_LABEL_RU: dict[str, str] = {
+    CATALOG_STATE_PUBLISHED: "В каталоге",
+    CATALOG_STATE_PENDING_REVIEW: "На модерации",
+    CATALOG_STATE_NEEDS_REVISION: "Нужны правки",
+    CATALOG_STATE_PAUSED: "На паузе",
+    CATALOG_STATE_HIDDEN: "Скрыт",
+}
 
 _STALL_AFTER: tuple[str, ...] = (
     "",
@@ -49,6 +85,8 @@ _JOURNEY_SQL = text(
         t.telegram_id,
         t.telegram_username,
         t.created_at AS joined_at,
+        t.catalog_state,
+        t.catalog_state_reason,
         NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '') AS display_name,
         (p.first_name IS NOT NULL AND TRIM(p.first_name) <> '' AND p.city_id IS NOT NULL) AS has_profile,
         (
@@ -133,7 +171,32 @@ def _plan(sub_raw: str | None, now: datetime) -> dict[str, Any]:
     return {"status": kind, "expires_at": _iso(expires_dt)}
 
 
-def build_journey_row(row: Any, now: datetime) -> dict[str, Any]:
+def build_catalog_info(state: str | None, reason: str | None, missing: list[str] | None) -> dict[str, Any]:
+    """
+    Is the trainer in the public catalog, and if not, what stops the card.
+
+    ``missing`` holds submission-tier field keys (what blocks sending the card to a moderator);
+    ``None`` means "not computed" and is reported as an empty list. Optional extras (bio,
+    education) never appear: they do not block publication.
+    """
+    st = (state or "").strip() or CATALOG_STATE_DRAFT
+    labels = [_MISSING_SHORT_RU[k] for k in (missing or []) if k in _MISSING_SHORT_RU]
+    if st == CATALOG_STATE_DRAFT:
+        wants = trainer_opted_into_catalog({"catalog_state": st, "catalog_state_reason": reason})
+        label = "Не в каталоге" if not wants else "Хочет в каталог, не готов"
+        if not labels and not wants:
+            label = "Не в каталоге, карточка готова"
+    else:
+        label = _CATALOG_LABEL_RU.get(st, st)
+    return {
+        "state": st,
+        "listed": st == CATALOG_STATE_PUBLISHED,
+        "label": label,
+        "missing": labels if st != CATALOG_STATE_PUBLISHED else [],
+    }
+
+
+def build_journey_row(row: Any, now: datetime, missing: list[str] | None = None) -> dict[str, Any]:
     """Pure transform of one SQL row into the API item (unit-tested without a database)."""
     done_flags = [
         True,
@@ -184,7 +247,22 @@ def build_journey_row(row: Any, now: datetime) -> dict[str, Any]:
         "bookings": row.bookings_count,
         "plan": _plan(row.sub_raw, now),
         "contacted_at": _iso(row.contacted_at),
+        "catalog": build_catalog_info(
+            getattr(row, "catalog_state", None), getattr(row, "catalog_state_reason", None), missing
+        ),
     }
+
+
+async def _submission_gaps(session: AsyncSession, trainer_id: int) -> list[str] | None:
+    """Submission-tier gaps for one trainer; None when the aggregate cannot be built."""
+    try:
+        trainer = await get_trainer(session, trainer_id)
+        if trainer is None:
+            return None
+        return analyze_moderation_submission_readiness(trainer)[1]
+    except Exception:  # noqa: BLE001 — one broken card must not blank the whole admin list
+        logger.exception("journey: catalog gaps failed trainer_id=%s", trainer_id)
+        return None
 
 
 async def get_admin_trainer_journey(
@@ -193,7 +271,13 @@ async def get_admin_trainer_journey(
     """All trainers who opened the bot, newest first, with their path through the product."""
     result = await session.execute(_JOURNEY_SQL, {"exclude_ids": list(exclude_telegram_ids or [])})
     now = (await session.execute(text("SELECT CURRENT_TIMESTAMP"))).scalar_one()
-    items = [build_journey_row(r, now) for r in result.all()]
+    rows = result.all()
+    items = []
+    for r in rows:
+        gaps = None
+        if (r.catalog_state or "").strip() != CATALOG_STATE_PUBLISHED:
+            gaps = await _submission_gaps(session, r.id)
+        items.append(build_journey_row(r, now, gaps))
     return {
         "total": len(items),
         "step_labels": list(STEP_LABELS),
