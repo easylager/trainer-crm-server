@@ -28,9 +28,11 @@ async def setup_menu_and_commands(bot: Bot) -> None:
     logger.info("Admin bot: menu button and commands set")
 
 
-async def main() -> None:
+async def main(*, embedded: bool = False) -> None:
+    """``embedded``: запущен внутри ``all_bots`` — сигналами и Sentry управляет общий процесс."""
     settings = Settings()
-    init_sentry(settings, "bot-admin")
+    if not embedded:
+        init_sentry(settings, "bot-admin")
     if not settings.telegram_bot_token_admin:
         raise RuntimeError("telegram_bot_token_admin is not set in settings/.env")
     bot = Bot(
@@ -47,7 +49,7 @@ async def main() -> None:
     dp.update.outer_middleware(ServiceUnavailableMiddleware())
     dp.include_router(admin_router)
     logger.info("Admin bot polling started")
-    await dp.start_polling(bot)
+    await dp.start_polling(bot, handle_signals=not embedded)
 
 
 if __name__ == "__main__":

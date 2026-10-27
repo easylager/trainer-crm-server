@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 import fitz
+from src.shared.currency import currency_label_ru
 
 logger = logging.getLogger(__name__)
 
@@ -171,13 +172,13 @@ def _instructions_block_html(bot_display: Optional[str], *, has_qr: bool = True)
     )
 
 
-def _amount_row_html(amount_cents: int) -> str:
+def _amount_row_html(amount_cents: int, currency: str = "BYN") -> str:
     plain = _format_amount(amount_cents)
     if plain == "Любая сумма":
         return f'<div class="amount-row"><span>{_esc(plain)}</span></div>'
     return (
         f'<div class="amount-row"><span>{_esc(plain)}</span>'
-        f'<span class="curr">&#160;BYN</span></div>'
+        f'<span class="curr">&#160;{_esc(currency_label_ru(currency))}</span></div>'
     )
 
 
@@ -217,6 +218,7 @@ def build_certificate_issue_html(
     activation_url: Optional[str] = None,
     client_bot_display_name: Optional[str] = None,
     brand_powered_by: Optional[str] = None,
+    currency: str = "BYN",
 ) -> str:
     """
     Fill ``static/templates/certificate_issue.html`` with escaped dynamic fields.
@@ -251,7 +253,7 @@ def build_certificate_issue_html(
     html = html.replace("__BRAND__", _esc((brand_display or "").strip() or "GLIDE"))
     html = html.replace("__TAGLINE_HTML__", _nl2br_html(brand_tagline))
     html = html.replace("__RECIPIENT__", _esc((recipient_name or "").strip() or "Получатель"))
-    html = html.replace("__AMOUNT_ROW__", _amount_row_html(amount_cents))
+    html = html.replace("__AMOUNT_ROW__", _amount_row_html(amount_cents, currency))
     html = html.replace("__PRODUCT__", _esc((product_name or "").strip()))
     html = html.replace("__META__", _meta_html(trainer_name, expires_at))
     html = html.replace(

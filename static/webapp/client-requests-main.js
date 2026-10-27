@@ -172,10 +172,10 @@
       }
 
       /* TASK-196: валюта услуги — код из полезной нагрузки заявок. Отображение —
-         конвенция TASK-109 для цен тренера: RUB знаком ₽, BYN буквами. */
+         конвенция TASK-109 для цен тренера: RUB — «руб.», BYN буквами. */
       function priceCurrencyLabel(code) {
         var c = String(code || '').trim().toUpperCase();
-        return c === 'RUB' ? '₽' : (c || 'BYN');
+        return c === 'RUB' ? 'руб.' : (c || 'BYN');
       }
 
       function formatResponderServicePrice(s) {

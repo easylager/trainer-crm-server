@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Студия</title>
   <link rel="preload" as="font" type="font/woff2" crossorigin href="/static/fonts/glide-public/onest-cyr.woff2?v=202610236" />
-  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610271" />
+  <link rel="stylesheet" href="/static/webapp/trainer-onest.css?v=202610287" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202610271"></script>
-  <script src="mini-app-telegram-chrome.js?v=202610271"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610271" />
-  <link rel="stylesheet" href="theme.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610271" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202610271" />
+  <script src="mini-app-trainer-theme.js?v=202610287"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610287"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610287" />
+  <link rel="stylesheet" href="theme.css?v=202610287" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610287" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202610287" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610287" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202610287" />
   <style>
     html { height: 100%; overflow-x: hidden; }
     body.col-page {
@@ -781,7 +781,7 @@
     .col-duty-item__when { font-size: 14px; font-weight: 600; }
     .col-duty-item__meta { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
   </style>
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610271" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610287" />
 </head>
 <body class="col-page ar-pilot ar-pilot--trainer-collective" data-trainer-shell="tabs">
   <div class="trainer-app-topbar trainer-mini-nav">
@@ -1516,47 +1516,6 @@
             .then(function(d) {
               if (d && d.studio) renderStudio(d.studio);
               if (tg && tg.showAlert) tg.showAlert('Подписка студии активирована.');
-              resetBtn();
-            })
-            .catch(function(e) {
-              showPatchError(e);
-              resetBtn();
-            });
-          return;
-        }
-        if (mode === 'bepaid') {
-          fetch(apiUrl('/api/webapp/trainer/collective/subscription/bepaid-checkout'), {
-            method: 'POST',
-            headers: Object.assign({ 'Content-Type': 'application/json' }, headersJson()),
-            body: JSON.stringify(payload),
-          })
-            .then(function(r) {
-              return r.json().then(function(d) {
-                if (!r.ok) throw new Error((d && d.detail) || 'checkout_failed');
-                return d;
-              });
-            })
-            .then(function(res) {
-              if (res.payment_url) {
-                window.location.href = res.payment_url;
-                return;
-              }
-              if (res.invoice_id) {
-                return fetch(apiUrl('/api/webapp/trainer/collective/subscription/stub-confirm'), {
-                  method: 'POST',
-                  headers: Object.assign({ 'Content-Type': 'application/json' }, headersJson()),
-                  body: JSON.stringify({ invoice_id: res.invoice_id }),
-                }).then(function(r2) {
-                  return r2.json().then(function(d2) {
-                    if (!r2.ok) throw new Error((d2 && d2.detail) || 'confirm_failed');
-                    return d2;
-                  });
-                }).then(function(d2) {
-                  if (d2 && d2.studio) renderStudio(d2.studio);
-                  if (tg && tg.showAlert) tg.showAlert('Подписка студии активирована.');
-                  resetBtn();
-                });
-              }
               resetBtn();
             })
             .catch(function(e) {
@@ -2835,8 +2794,8 @@
         });
     })();
   </script>
-  <script src="mini-app-more-icons.js?v=202610271"></script>
-  <script defer src="mini-app-trainer-shell.js?v=202610271"></script>
-  <script src="mini-app-trainer-home.js?v=202610271"></script>
+  <script src="mini-app-more-icons.js?v=202610287"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202610287"></script>
+  <script src="mini-app-trainer-home.js?v=202610287"></script>
 </body>
 </html>

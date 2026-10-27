@@ -153,15 +153,71 @@
     return out;
   }
 
+  /** Пример номера под страну тренера: рубли — Россия, иначе Беларусь. */
+  function phoneExample(currency) {
+    return String(currency || '').toUpperCase() === 'RUB' ? '+7 912 345-67-89' : '+375 29 123-45-67';
+  }
+
+  /** Код страны, который стоит в поле заранее: тренеру не нужно вводить «+» и «7»/«375». */
+  function phonePrefix(currency) {
+    return String(currency || '').toUpperCase() === 'RUB' ? '+7 ' : '+375 ';
+  }
+
+  /**
+   * Что отправить на сервер из поля с готовым кодом. Только код — значит, номера нет (null).
+   * Вставили номер целиком («+7 912…», «8 912…», «+375 29…») — берём его как есть, без двойного кода.
+   */
+  function phoneForSave(raw, currency) {
+    var text = String(raw || '').trim();
+    var prefix = phonePrefix(currency);
+    var code = prefix.replace(/\D/g, '');
+    var typed = text.indexOf(prefix.trim()) === 0 ? text.slice(prefix.trim().length) : text;
+    var digits = typed.replace(/\D/g, '');
+    if (!digits) return null;
+    var full = code === '7' ? /^[78]\d{10}$/ : /^375\d{9}$/;
+    if (full.test(digits) && digits.length > (code === '7' ? 10 : 9)) {
+      return (code === '7' ? '+7' + digits.slice(1) : '+' + digits);
+    }
+    return prefix.trim() + digits;
+  }
+
+  /**
+   * Маска поля телефона: код страны + не больше цифр, чем бывает в номере (РФ 10, РБ 9).
+   * Вставленный целиком номер («8 912…», «+7 912…», «+375 29…») не дублирует код.
+   */
+  function phoneMask(raw, currency) {
+    var ru = String(currency || '').toUpperCase() === 'RUB';
+    var prefix = phonePrefix(currency);
+    var text = String(raw || '').trim();
+    var head = prefix.trim();
+    var digits = (text.indexOf(head) === 0 ? text.slice(head.length) : text).replace(/\D/g, '');
+    if (ru) {
+      if (digits.length > 10 && /^[78]/.test(digits)) digits = digits.slice(1);
+      digits = digits.slice(0, 10);
+      var r = prefix + digits.slice(0, 3);
+      if (digits.length > 3) r += ' ' + digits.slice(3, 6);
+      if (digits.length > 6) r += '-' + digits.slice(6, 8);
+      if (digits.length > 8) r += '-' + digits.slice(8, 10);
+      return r;
+    }
+    if (digits.length > 9 && digits.indexOf('375') === 0) digits = digits.slice(3);
+    digits = digits.slice(0, 9);
+    var b = prefix + digits.slice(0, 2);
+    if (digits.length > 2) b += ' ' + digits.slice(2, 5);
+    if (digits.length > 5) b += '-' + digits.slice(5, 7);
+    if (digits.length > 7) b += '-' + digits.slice(7, 9);
+    return b;
+  }
+
   /** Ошибка сервера человеческими словами: 422 приходит списком полей, а не строкой. */
-  function errorText(err) {
+  function errorText(err, currency) {
     var d = err && err.detail;
     if (Array.isArray(d) && d.length) {
       var first = d[0] || {};
       var loc = first.loc || [];
       var field = loc.length ? loc[loc.length - 1] : '';
       var msg = String(first.msg || '').replace(/^Value error,\s*/i, '');
-      if (field === 'phone') return msg || 'Проверьте номер телефона, например +375 29 123-45-67.';
+      if (field === 'phone') return msg || 'Проверьте номер телефона, например ' + phoneExample(currency) + '.';
       if (field === 'first_name') return 'Впишите имя ученика.';
       return msg || 'Проверьте поля и попробуйте ещё раз.';
     }
@@ -188,6 +244,10 @@
     slotFieldLabel: slotFieldLabel,
     doneWorks: doneWorks,
     errorText: errorText,
+    phoneExample: phoneExample,
+    phonePrefix: phonePrefix,
+    phoneMask: phoneMask,
+    phoneForSave: phoneForSave,
     plural: plural,
     doneKicker: doneKicker,
     inviteMessage: inviteMessage,

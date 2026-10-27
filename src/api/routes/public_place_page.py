@@ -520,6 +520,8 @@ async def robots(request: Request) -> Response:
             "Allow: /webapp/*.js",
             "Disallow: /api/",
             "Disallow: /webapp/",
+            # Ловушка для обходчиков: ссылок сюда нет, вежливые роботы не заходят (см. scrape_guard).
+            "Disallow: /export/",
             f"Sitemap: {_base()}/sitemap.xml",
             "",
         ]

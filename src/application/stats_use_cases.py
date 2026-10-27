@@ -10,6 +10,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.currency import resolve_trainer_currency
 from src.application.admin_moderation_queue import list_trainer_ids_eligible_for_admin_moderation
 from src.application.catalog_consumer_events import get_catalog_demand_pulse
 from src.application.demand_signals_use_cases import get_signals_lifetime_totals
@@ -609,7 +610,10 @@ async def get_trainer_hub_revenue_month_to_date(session: AsyncSession, trainer_i
     """
     today = datetime.now(HUB_REVENUE_TZ).date()
     d_start = _month_start(today)
-    return await get_trainer_revenue_breakdown_for_range(session, trainer_id, d_start, today)
+    out = await get_trainer_revenue_breakdown_for_range(session, trainer_id, d_start, today)
+    # Выручка считается в валюте города тренера (BY → BYN, RU → RUB): экрану нужна подпись.
+    out["currency"] = await resolve_trainer_currency(session, trainer_id)
+    return out
 
 
 async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:

@@ -178,11 +178,11 @@
   function currencySign() {
     var list = services();
     for (var i = 0; i < list.length; i++) {
-      if (list[i].currency_code === 'RUB') return '₽';
+      if (list[i].currency_code === 'RUB') return 'руб.';
       if (list[i].currency_code) return 'BYN';
     }
     var city = cityObj();
-    return city && city.country === 'RU' ? '₽' : 'BYN';
+    return city && city.country === 'RU' ? 'руб.' : 'BYN';
   }
 
   function formatMoney(n) {
@@ -326,6 +326,9 @@
     }
     if (!hasPhoto()) {
       items.push({ label: 'Фото', hint: 'Ученику спокойнее, когда видно тренера', action: 'Добавить', route: ROUTES.basics });
+    }
+    if (!String(profile().phone || '').trim()) {
+      items.push({ label: 'Телефона', hint: 'Нужен для карточки в каталоге', action: 'Указать', route: ROUTES.contacts });
     }
     var box = el('taMissing');
     var list = el('taMissingList');

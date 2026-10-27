@@ -19,14 +19,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.middleware.scrape_guard import ScrapeGuardMiddleware
+from src.api.site_error_pages import site_http_exception_handler
 from src.api.tunnel_css import TunnelCssMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.api.routes import (
     public_router,
     redirects_router,
     trainers_router,
     upload_router,
     webapp_router,
-    webhooks_router,
 )
 from src.api.routes.org_webapp import router as org_webapp_router
 from src.api.routes.public_arenas import router as public_arenas_router
@@ -107,10 +109,14 @@ app.add_middleware(TunnelCssMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
 # HSTS, nosniff, Referrer-Policy на всё; frame-ancestors на HTML сайта (не /webapp/).
 # www.glideclub.by → glideclub.by (301); добавлен раньше SecurityHeaders, т.е. внутри него — редирект получает HSTS.
+app.add_middleware(ScrapeGuardMiddleware)
 app.add_middleware(WwwRedirectMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 # Outermost: full wall time for trainer Mini App API (after gzip/CORS/body/rate-limit stack).
 app.add_middleware(TrainerWebappBenchmarkMiddleware)
+
+
+app.add_exception_handler(StarletteHTTPException, site_http_exception_handler)
 
 
 @app.exception_handler(RequestValidationError)
@@ -1153,6 +1159,19 @@ def webapp_mini_app_telegram_chrome_js():
 def webapp_mini_app_phone_field_js(request: Request):
     """Shared BY/RU phone dropdown + mask; load after mini-app-telegram-chrome.js."""
     path = _WEBAPP_DIR / "mini-app-phone-field.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/ob-flow-keyboard.js")
+def webapp_ob_flow_keyboard_js(request: Request):
+    """Keyboard-aware scrolling for the Profile full-screen sheets (pure helpers)."""
+    path = _WEBAPP_DIR / "ob-flow-keyboard.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
@@ -2827,7 +2846,6 @@ app.include_router(org_webapp_router)
 webapp_router.include_router(webapp_trainer_catalog_router)
 webapp_router.include_router(webapp_trainer_profile_router)
 app.include_router(webapp_router)
-app.include_router(webhooks_router)
 
 
 @app.get("/webapp/kto-kogo")

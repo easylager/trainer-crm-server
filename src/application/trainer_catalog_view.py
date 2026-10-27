@@ -40,18 +40,16 @@ from src.application.trainer_catalog_state import (
     REASON_BACKFILL_0206,
     list_catalog_events,
 )
+from src.application.trainer_invite_links import build_trainer_preview_link
 from src.application.trainer_profile_completeness import (
     analyze_moderation_profile_completeness,
     analyze_moderation_submission_readiness,
     missing_labels_ru,
 )
 from src.application.trainer_profile_pending import (
-    trainer_has_photo_pending_revision,
     trainer_has_pending_text_revision,
+    trainer_has_photo_pending_revision,
 )
-from src.application.trainer_invite_links import build_trainer_preview_link
-from src.shared.config import Settings
-from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.catalog_visibility import (
     CATALOG_STATE_DRAFT,
     CATALOG_STATE_HIDDEN,
@@ -60,6 +58,9 @@ from src.shared.catalog_visibility import (
     CATALOG_STATE_PENDING_REVIEW,
     CATALOG_STATE_PUBLISHED,
 )
+from src.shared.config import Settings
+from src.shared.currency import currency_label_ru, resolve_trainer_currency
+from src.shared.notification_hours import NOTIFICATION_TZ
 
 logger = logging.getLogger(__name__)
 
@@ -190,9 +191,9 @@ def _state_actions(
     return ["submit"] if submit_ready else ["fill"]
 
 
-def _service_line_ru(services: list[Any]) -> str | None:
+def _service_line_ru(services: list[Any], currency: str = "BYN") -> str | None:
     """
-    «Спортивная мотивация: 33 BYN» — ровно то, что рисует карточка списка у клиента
+    «Спортивная мотивация: 33 BYN» (у питерского тренера — «33 руб.») — ровно то, что рисует карточка списка у клиента
     (``catalog-main.js``: первая услуга + её цена, не «от N BYN» по всем услугам).
 
     До этого превью показывало минимальную цену без названия услуги, и тренер видел карточку,
@@ -210,12 +211,13 @@ def _service_line_ru(services: list[Any]) -> str | None:
     if lo is None:
         return f"{name}: по запросу"
     if hi is not None and hi != lo:
-        return f"{name}: от {_money_ru(lo)}"
-    return f"{name}: {_money_ru(lo)}"
+        return f"{name}: от {_money_ru(lo, currency)}"
+    return f"{name}: {_money_ru(lo, currency)}"
 
 
-def _money_ru(value: float) -> str:
-    return (f"{value:.0f}" if float(value).is_integer() else f"{value:.2f}") + " BYN"
+def _money_ru(value: float, currency: str = "BYN") -> str:
+    num = f"{value:.0f}" if float(value).is_integer() else f"{value:.2f}"
+    return f"{num} {currency_label_ru(currency)}"
 
 
 async def _free_slots_14d(session: AsyncSession, trainer_id: int) -> int:
@@ -261,7 +263,9 @@ async def _preview(session: AsyncSession, trainer: dict[str, Any]) -> dict[str, 
         "rating_count": rating_count,
         "experience_years": profile.get("experience_years"),
         "free_slots_14d": await _free_slots_14d(session, int(trainer["id"])),
-        "service_line": _service_line_ru(trainer.get("services") or []),
+        "service_line": _service_line_ru(
+            trainer.get("services") or [], await resolve_trainer_currency(session, int(trainer["id"]))
+        ),
         "arena_names": [a for a in (trainer.get("arena_names") or []) if a][:2],
         "public_arena_count": len(public_arena_ids),
         # Клиентская карточка ставит «Онлайн» вместо площадки (``ice-tab-model.trainerCardView``).
@@ -416,6 +420,7 @@ async def build_catalog_screen_payload(
             "submit_ready": submit_ready,
             "missing_fields": missing,
             "missing_labels_ru": missing_labels_ru(missing, first_name_only=True),
+            "optional_missing_fields": list(optional_keys),
             "optional_missing_labels_ru": missing_labels_ru(optional_keys),
         },
         "preview": await _preview(session, trainer),

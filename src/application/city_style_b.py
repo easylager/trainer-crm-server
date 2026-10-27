@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.ice_city_day import DEFAULT_TIMEZONE
 from src.application.style_b import b_photo_url
 from src.application.week_grid import collapse_even_grid
+from src.shared.currency import currency_label_ru
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.public_display import format_clock
 
@@ -137,7 +138,7 @@ def _money(minor: Any, currency: str) -> str:
         body = str(int(major))
     else:
         body = f"{major:.2f}".replace(".", ",")
-    return f"{body} {currency or 'BYN'}"
+    return f"{body} {currency_label_ru(currency)}"
 
 
 def city_origin(places: list[Mapping[str, Any]]) -> tuple[float, float] | None:

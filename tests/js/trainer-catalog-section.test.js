@@ -175,7 +175,8 @@ describe('draft: сначала действие, объяснение — по�
        усилить», у скрытой площадки и у «Изменить карточку» их нет по определению — карусель
        открывалась пустой, упиралась в «Базовый профиль готов» и возвращала тренера обратно.
        Кнопка выглядела рабочей и не делала ничего. */
-    assert.match(js, /function openProfileForm\(\)[\s\S]{0,200}webappUrl\('trainer-profile'\);/);
+    /* Раздел нового профиля по недостающему полю (см. trainer-catalog-profile-links.test.js), без карусели. */
+    assert.match(js, /function openProfileForm\(\)[\s\S]{0,900}webappUrl\('trainer-account'\)/);
     assert.match(js, /openProfileBtn\.addEventListener\('click', openProfileForm\)/);
     assert.match(js, /edit\.addEventListener\('click', openProfileForm\)/);
     // Карусель остаётся ровно одной дверью — и только там, где пробелы действительно есть.

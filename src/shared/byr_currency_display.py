@@ -6,7 +6,7 @@ ISO 4217 ``BYN`` remains in JSON ``currency``, DB columns, and OpenAPI. Configur
 
 TASK-043: both functions take an optional ``currency`` (default ``"BYN"``, so every existing call
 keeps its exact prior output). Pass ``"RUB"`` for a RU-city trainer/client — resolved via
-``src.shared.currency`` — to show the ruble sign (₽) instead. Names keep the historical "byn" for
+``src.shared.currency`` — to show «руб.» instead. Names keep the historical "byn" for
 now (see TASK-043 DEC-001 on not renaming widely-used identifiers without a concrete need).
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 _byr_sign_cache: str | None = None
 
 _CURRENCY_DISPLAY_SUFFIX: dict[str, str] = {
-    "RUB": "₽",
+    "RUB": "руб.",
 }
 
 

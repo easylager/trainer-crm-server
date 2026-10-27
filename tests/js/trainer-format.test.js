@@ -17,7 +17,7 @@ describe('TrainerFormat', () => {
   it('деньги: копейки только когда есть, рубль знаком', () => {
     assert.equal(F.money(45, 'BYN'), '45' + NB + 'BYN');
     assert.equal(F.money(40.5, 'BYN'), '40,50' + NB + 'BYN');
-    assert.equal(F.money(1500, 'RUB'), '1' + NB + '500' + NB + '₽');
+    assert.equal(F.money(1500, 'RUB'), '1' + NB + '500' + NB + 'руб.');
     assert.equal(F.money('abc'), '');
   });
 

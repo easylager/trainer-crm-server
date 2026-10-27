@@ -2548,7 +2548,7 @@ async def create_collective_subscription_invoice(
     modules: dict[str, bool] | None = None,
 ) -> dict[str, Any] | None:
     """
-    Owner self-service: unpaid pool invoice for ERIP / bePaid.
+    Owner self-service: unpaid pool invoice for ERIP.
 
     Amount = collective_subscription_cents_per_seat_month × seat_limit × period_months.
     """

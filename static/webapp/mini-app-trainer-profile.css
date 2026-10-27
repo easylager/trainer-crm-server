@@ -2716,6 +2716,14 @@
       scroll-padding-top: 20px;
       scroll-padding-bottom: 80px;
     }
+    /* Пока человек вводит текст: запас снизу, чтобы поле можно было поставить к верху видимой области. */
+    .ob-flow--typing .ob-flow__body {
+      padding-bottom: max(28px, 50vh);
+    }
+    /* То же на самой странице профиля: запас снизу, чтобы поле можно было поднять над клавиатурой. */
+    body.profile-typing:not(.ob-flow-open) #mainContent {
+      padding-bottom: 50vh;
+    }
     .ob-flow__card {
       max-width: 520px;
       margin: 0 auto;

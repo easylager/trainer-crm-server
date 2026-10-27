@@ -50,6 +50,19 @@ _SEARCH_TOKENS = (
     "ahrefsbot",
     "semrushbot",
     "dotbot",
+    # Ассистенты и их поиск: хотим, чтобы они читали сайт и цитировали его. Не считаем людьми и не
+    # ограничиваем защитой от обхода (scrape_guard). GoogleOther — служебный краулер Google.
+    "oai-searchbot",
+    "chatgpt-user",
+    "gptbot",
+    "perplexitybot",
+    "perplexity-user",
+    "claudebot",
+    "claude-user",
+    "claude-searchbot",
+    "duckassistbot",
+    "googleother",
+    "google-extended",
 )
 _CRAWLER_TOKENS = (
     "bot/",

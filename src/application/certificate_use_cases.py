@@ -11,16 +11,17 @@ import string
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from src.shared.currency import currency_label_ru, resolve_trainer_currency
 
 logger = logging.getLogger(__name__)
 
 DESCRIPTION_UNSET = object()
 
 
-def default_certificate_product_name(amount_cents: int) -> str:
-    """Fallback label when trainer leaves «Название» empty."""
-    byn = int(amount_cents) // 100
-    return f"Сертификат {byn} BYN" if byn > 0 else "Подарочный сертификат"
+def default_certificate_product_name(amount_cents: int, currency: str = "BYN") -> str:
+    """Fallback label when trainer leaves «Название» empty: «Сертификат 100 BYN» / «Сертификат 100 руб.»."""
+    amount = int(amount_cents) // 100
+    return f"Сертификат {amount} {currency_label_ru(currency)}" if amount > 0 else "Подарочный сертификат"
 
 
 def _normalize_certificate_description(description: str | None) -> str | None:
@@ -77,7 +78,9 @@ async def create_certificate_product(
     """
     if amount_cents is None or int(amount_cents) <= 0:
         raise ValueError("amount_cents must be a positive integer")
-    name_val = (name or "").strip() or default_certificate_product_name(amount_cents)
+    name_val = (name or "").strip() or default_certificate_product_name(
+        amount_cents, await resolve_trainer_currency(session, trainer_id)
+    )
     desc_val = _normalize_certificate_description(description)
     r = await session.execute(
         text("""
@@ -469,6 +472,7 @@ async def process_pending_certificate_files_batch(session: AsyncSession, limit: 
             cert_brand = await resolve_certificate_brand_for_trainer(session, trainer_id)
 
             pdf_bytes = build_certificate_pdf(
+                currency=await resolve_trainer_currency(session, trainer_id),
                 trainer_name=trainer_name,
                 product_name=product_name or "Сертификат",
                 amount_cents=amount_cents or 0,

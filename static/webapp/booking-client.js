@@ -517,7 +517,7 @@
     if (amount == null) return escapePriceHtml('по запросу');
     var n = Number(amount);
     var num = n === Math.floor(n) ? String(n) : n.toFixed(2);
-    if (currency === 'RUB') return escapePriceHtml(num) + ' ₽';
+    if (currency === 'RUB') return escapePriceHtml(num) + ' руб.';
     return escapePriceHtml(num) + ' BYN';
   }
 

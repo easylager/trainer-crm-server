@@ -40,9 +40,11 @@ async def setup_menu_and_commands(bot: Bot) -> None:
     logger.info("Client bot: menu configured")
 
 
-async def main() -> None:
+async def main(*, embedded: bool = False) -> None:
+    """``embedded``: запущен внутри ``all_bots`` — сигналами и Sentry управляет общий процесс."""
     settings = Settings()
-    init_sentry(settings, "bot-client")
+    if not embedded:
+        init_sentry(settings, "bot-client")
     bot = Bot(
         token=settings.telegram_bot_token_client,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -62,7 +64,7 @@ async def main() -> None:
     dp.include_router(ice_company_router)
     dp.include_router(client_router)
     logger.info("Client bot polling started (notifications run in notification_service)")
-    await dp.start_polling(bot)
+    await dp.start_polling(bot, handle_signals=not embedded)
 
 
 if __name__ == "__main__":

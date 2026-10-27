@@ -796,7 +796,7 @@
             if (!isFinite(pb)) pb = 0;
             var numStr = pb === Math.floor(pb) ? String(Math.floor(pb)) : pb.toFixed(2);
             var priceFrag = document.createElement('span');
-            priceFrag.textContent = numStr + ' BYN';
+            priceFrag.textContent = numStr + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
             lab.appendChild(inp);
             lab.appendChild(document.createTextNode(priceTierLabelRu(tier) + ' — '));
             lab.appendChild(priceFrag);
@@ -3635,7 +3635,7 @@
               contentEl.innerHTML = '<div class="tc-passes-stack">' + passHtml + '</div>';
               if (activeCerts.length) {
                 var certLines = activeCerts.map(function(c) {
-                  var amount = typeof c.amount_cents === 'number' ? c.amount_cents / 100 + ' BYN' : '—';
+                  var amount = typeof c.amount_cents === 'number' ? c.amount_cents / 100 + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN') : '—';
                   return amount;
                 });
                 contentEl.innerHTML += '<div class="tc-pass-cert-extra">Сертификаты: ' + activeCerts.length +
@@ -3646,7 +3646,7 @@
               if (passes.length) parts.push('Абонементы: нет активных');
               if (activeCerts.length) {
                 var certLines2 = activeCerts.map(function(c) {
-                  var amount = typeof c.amount_cents === 'number' ? c.amount_cents / 100 + ' BYN' : '—';
+                  var amount = typeof c.amount_cents === 'number' ? c.amount_cents / 100 + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN') : '—';
                   return amount;
                 });
                 parts.push('Сертификаты: ' + activeCerts.length + ' активных (' + certLines2.join(', ') + ')');

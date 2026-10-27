@@ -1926,7 +1926,7 @@
         window.__seEarlyBooking = null;
         var bookingRequest =
           early && String(early.id) === String(bookingId) && early.init === (tg && tg.initData)
-            ? early.promise
+            ? early.promise.catch(function() { return getJsonTrainer('/trainer/bookings/' + bookingId); })
             : getJsonTrainer('/trainer/bookings/' + bookingId);
         bookingRequest.then(function(b) {
           state.selectedBooking = b;

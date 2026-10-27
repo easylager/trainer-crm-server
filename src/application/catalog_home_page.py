@@ -49,6 +49,7 @@ from src.shared.public_display import format_clock, format_public_name
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE, normalize_schedule_basis
+from src.shared.currency import currency_label_ru
 
 _log = logging.getLogger(__name__)
 
@@ -450,7 +451,7 @@ def _price_with_rental(row: Mapping[str, Any]) -> str | None:
     total = int(adult) + int(rental)
     major = total / 100.0
     total_text = str(int(major)) if major == int(major) else f"{major:.2f}"
-    currency = str(row.get("currency_code") or "BYN")
+    currency = currency_label_ru(str(row.get("currency_code") or "BYN"))
     return t("price.with_rental", total=total_text, currency=currency)
 
 
