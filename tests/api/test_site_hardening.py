@@ -194,3 +194,32 @@ def test_robots_txt_closes_the_trap_but_not_pages():
     robots = TestClient(app).get("/robots.txt").text
     assert "Disallow: /export/" in robots and "Allow: /" in robots
     assert "Disallow: /p/" not in robots and "Disallow: /c/" not in robots
+
+
+# ── ИИ-ассистенты и их поиск: читают сайт, их не блокируем ───────────────
+
+AI_AGENTS = {
+    "OAI-SearchBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot",
+    "ChatGPT-User": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
+    "GPTBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.1; +https://openai.com/gptbot",
+    "PerplexityBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)",
+    "Perplexity-User": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)",
+    "ClaudeBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+    "Claude-User": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
+    "DuckAssistBot": "Mozilla/5.0 (compatible; DuckAssistBot/1.2; +http://duckduckgo.com/duckassistbot.html)",
+    "GoogleOther": "Mozilla/5.0 (compatible; GoogleOther)",
+}
+
+
+@pytest.mark.parametrize("name", sorted(AI_AGENTS))
+def test_ai_assistants_are_not_humans_nor_scrapers(name):
+    from src.shared.ua_class import UA_SEARCH, classify_user_agent
+
+    assert classify_user_agent(AI_AGENTS[name]) == UA_SEARCH
+
+
+def test_ai_assistants_are_never_blocked_by_the_guard(monkeypatch):
+    client = _client(monkeypatch, "block", threshold=5, json_mode="block", daily=3)
+    for name, ua in AI_AGENTS.items():
+        assert set(_arenas(client, ua, 20)) == {200}, name
+        assert client.get("/api/public/arenas/2/sessions", headers={"User-Agent": ua}).status_code == 200, name
