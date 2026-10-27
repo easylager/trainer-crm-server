@@ -121,12 +121,12 @@ def render_calendar(
             f'<small>{_esc(sessions_phrase(total))} · {_esc(t("when.any_day_sub"))}</small></a>'
         )
     sheet = (
-        f'<div class="b-sheet" id="{SHEET_ID}" role="dialog" aria-labelledby="{SHEET_ID}-t">'
-        f'<a class="b-sheet__bg" href="#" aria-label="Закрыть"></a>'
-        f'<div class="b-sheet__panel"><span class="b-sheet__grab" aria-hidden="true"></span>'
+        f'<div class="b-days-sheet" id="{SHEET_ID}" role="dialog" aria-labelledby="{SHEET_ID}-t">'
+        f'<a class="b-days-sheet__bg" href="#" aria-label="Закрыть"></a>'
+        f'<div class="b-days-sheet__panel"><span class="b-days-sheet__grab" aria-hidden="true"></span>'
         f'<h2 id="{SHEET_ID}-t">{_esc(t("when.pick_day"))}</h2>'
-        f'<p class="b-sheet__sub">{_esc(t("when.pick_day_sub"))}</p>'
-        f'<div class="b-sheet__grid">{any_row}{"".join(chips)}</div></div></div>'
+        f'<p class="b-days-sheet__sub">{_esc(t("when.pick_day_sub"))}</p>'
+        f'<div class="b-days-sheet__grid">{any_row}{"".join(chips)}</div></div></div>'
     )
     return button, sheet
 

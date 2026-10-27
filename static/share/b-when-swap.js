@@ -12,7 +12,7 @@
   if (!main || !main.querySelector('.b-when') || !window.fetch || !window.DOMParser || !history.pushState) return;
 
   // Лист дней календаря (TASK-337): только кнопки дней; фон и «закрыть» — обычные якоря.
-  var LINK_SEL = '.b-when a[href], .b-days a[href], .b-sheet__grid a[href]';
+  var LINK_SEL = '.b-when a[href], .b-days a[href], .b-days-sheet__grid a[href]';
   // Классы, которые вешают скрипты страницы, а не сервер: при сравнении их не видно.
   var LIVE_CLASSES = ['is-ready', 'b-reveal', 'is-in', 'b-press', 'is-hot', 'is-live'];
   var CACHE_MS = 60000;
@@ -244,7 +244,7 @@
   }
 
   document.addEventListener('click', function (e) {
-    var el = e.target && e.target.closest ? e.target.closest('a.b-cal, .b-sheet__bg') : null;
+    var el = e.target && e.target.closest ? e.target.closest('a.b-cal, .b-days-sheet__bg') : null;
     if (!el || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     if (el.classList.contains('b-cal')) {
