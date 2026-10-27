@@ -366,7 +366,6 @@ from src.shared.webapp_http_messages import (
     WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED,
     WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED,
 )
-from src.billing.payment_gateway import create_checkout
 from src.application.arena_schedule_preset import (
     get_schedule_grid_preset_for_trainer,
     get_schedule_grid_preset_for_trainer_arena,
@@ -4804,91 +4803,6 @@ class SubscriptionConstructorCheckoutBody(BaseModel):
     modules: dict | None = None
 
 
-@router.post("/trainer/subscription/bepaid-checkout")
-async def post_trainer_subscription_bepaid_checkout(
-    body: SubscriptionConstructorCheckoutBody,
-    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """
-    bePaid: create catalog invoice for tier bundle or CRM+modules constructor, return gateway checkout URL.
-    """
-    settings = Settings()
-    if settings.payment_sandbox:
-        raise HTTPException(
-            status_code=400,
-            detail="Режим песочницы: оплата через демо на странице подписки, не через bePaid.",
-        )
-    if settings.resolved_trainer_subscription_checkout_mode() != "bepaid":
-        raise HTTPException(
-            status_code=400,
-            detail="Оплата картой (bePaid) сейчас недоступна — проверьте режим подписки в настройках.",
-        )
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-
-    if body.tier is not None and body.modules is not None:
-        raise HTTPException(status_code=400, detail="Send either tier or modules, not both")
-    if body.tier is None and body.modules is None:
-        raise HTTPException(status_code=400, detail="Specify tier or modules")
-
-    inv = await create_catalog_subscription_invoice_for_trainer(
-        session,
-        trainer_id,
-        tier=body.tier,
-        modules=body.modules,
-        period_months=int(body.period_months),
-    )
-    if not inv:
-        raise HTTPException(status_code=400, detail="Could not create payment for this selection")
-
-    invoice_id = int(inv["invoice_id"])
-    amount_cents = int(inv["amount_cents"])
-    period_start = inv["period_start"]
-    period_end = inv["period_end"]
-    plan_name = str(inv.get("plan_name") or "Подписка")
-    referral_bonus_days_applied = int(inv.get("referral_bonus_days_applied") or 0)
-    amount_cents_before_referral = inv.get("amount_cents_before_referral")
-
-    webapp_base = (settings.webapp_base_url or "").rstrip("/")
-    api_base = (settings.api_base_url or webapp_base).rstrip("/")
-    return_url = f"{webapp_base}/webapp/trainer-subscription?payment_success=1"
-    notification_url = f"{api_base}/api/webhooks/bepaid"
-    tracking_id = f"inv_{invoice_id}"
-
-    def _date_str(d):
-        if d is None:
-            return None
-        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
-
-    out: dict = {
-        "invoice_id": invoice_id,
-        "amount_cents": amount_cents,
-        "plan_name": plan_name,
-        "period_start": _date_str(period_start),
-        "period_end": _date_str(period_end),
-        "referral_bonus_days_applied": referral_bonus_days_applied,
-        "amount_cents_before_referral": amount_cents_before_referral,
-        "referral_fully_covered": bool(amount_cents <= 0 and referral_bonus_days_applied > 0),
-    }
-    if amount_cents <= 0:
-        out["payment_url"] = None
-        return out
-
-    result = await create_checkout(
-        amount_cents=amount_cents,
-        currency=await resolve_trainer_currency(session, trainer_id),
-        description=plan_name[:255],
-        tracking_id=tracking_id,
-        return_url=return_url,
-        notification_url=notification_url,
-        success_url=return_url,
-    )
-    out["payment_url"] = result["payment_url"]
-    return out
-
-
 @router.post("/trainer/subscription/invoice-request")
 async def post_trainer_subscription_invoice_request(
     body: SubscriptionConstructorCheckoutBody,
@@ -4897,7 +4811,7 @@ async def post_trainer_subscription_invoice_request(
 ):
     """
     ERIP / manual: create unpaid catalog invoice (tier or constructor) and notify admins.
-    Mini App calls this when checkout_mode=invoice (not bePaid, not sandbox demo).
+    Mini App calls this when checkout_mode=invoice (not the sandbox demo).
     """
     settings = Settings()
     if settings.resolved_trainer_subscription_checkout_mode() != "invoice":
@@ -4951,7 +4865,7 @@ async def post_trainer_subscription_mock_checkout(
     """
     Mock checkout: legacy tier bundle OR CRM + module constructor.
 
-    Disabled when payment_sandbox is false (production real payments); use bePaid flow instead.
+    Disabled when payment_sandbox is false (production real payments); use the invoice flow instead.
     Auth: trainer initData.
     """
     if not Settings().payment_sandbox:
@@ -10536,74 +10450,6 @@ async def post_trainer_collective_subscription_invoice_request(
     }
 
 
-@router.post("/trainer/collective/subscription/bepaid-checkout")
-async def post_trainer_collective_subscription_bepaid_checkout(
-    body: CollectiveSubscriptionCheckoutBody,
-    collective_slug: CollectiveSlugQuery = None,
-    session: AsyncSession = Depends(get_session),
-    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
-) -> dict[str, Any]:
-    """bePaid: studio pool invoice + checkout URL."""
-    settings = Settings()
-    if settings.payment_sandbox:
-        raise HTTPException(
-            status_code=400,
-            detail="Режим песочницы: оплата через демо на экране студии, не через bePaid.",
-        )
-    if settings.resolved_trainer_subscription_checkout_mode() != "bepaid":
-        raise HTTPException(
-            status_code=400,
-            detail="Оплата картой (bePaid) сейчас недоступна — проверьте режим подписки в настройках.",
-        )
-    trainer_id, membership = await _require_collective_owner(session, principal, collective_slug=collective_slug)
-    inv = await create_collective_subscription_invoice(
-        session,
-        collective_id=membership.collective_id,
-        requested_by_trainer_id=trainer_id,
-        period_months=int(body.period_months),
-    )
-    if not inv or inv.get("error"):
-        raise HTTPException(status_code=400, detail="Could not create studio payment")
-
-    invoice_id = int(inv["invoice_id"])
-    amount_cents = int(inv["amount_cents"])
-    plan_name = str(inv.get("plan_name") or "Подписка студии")
-    webapp_base = (settings.webapp_base_url or "").rstrip("/")
-    api_base = (settings.api_base_url or webapp_base).rstrip("/")
-    return_url = f"{webapp_base}/webapp/trainer-collective?payment_success=1"
-    notification_url = f"{api_base}/api/webhooks/bepaid"
-    tracking_id = f"colinv_{invoice_id}"
-
-    def _date_str(d):
-        if d is None:
-            return None
-        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
-
-    base_out: dict[str, Any] = {
-        "invoice_id": invoice_id,
-        "amount_cents": amount_cents,
-        "plan_name": plan_name,
-        "period_start": _date_str(inv.get("period_start")),
-        "period_end": _date_str(inv.get("period_end")),
-        "period_months": int(body.period_months),
-        "payment_url": None,
-    }
-    if amount_cents <= 0:
-        return base_out
-
-    result = await create_checkout(
-        amount_cents=amount_cents,
-        currency=await resolve_trainer_currency(session, trainer_id),
-        description=plan_name[:255],
-        tracking_id=tracking_id,
-        return_url=return_url,
-        notification_url=notification_url,
-        success_url=return_url,
-    )
-    base_out["payment_url"] = result["payment_url"]
-    return base_out
-
-
 class CollectiveSubscriptionStubConfirmBody(BaseModel):
     invoice_id: int
 
@@ -10615,7 +10461,7 @@ async def post_trainer_collective_subscription_stub_confirm(
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
-    """Sandbox: confirm studio pool invoice without bePaid webhook."""
+    """Sandbox: confirm studio pool invoice without a payment provider."""
     settings = Settings()
     if not settings.payment_sandbox:
         raise HTTPException(status_code=404, detail="Not available when payment_sandbox is false")

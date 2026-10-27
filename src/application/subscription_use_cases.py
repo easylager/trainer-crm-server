@@ -443,7 +443,7 @@ async def create_catalog_subscription_invoice_for_trainer(
     period_months: int,
 ) -> dict | None:
     """
-    Unpaid invoice for the Mini App subscription screen. Payment via ERIP / bePaid / manual:
+    Unpaid invoice for the Mini App subscription screen. Payment via ERIP / manual:
     ops confirm with confirm_subscription_invoice_after_payment.
 
     PDEC-025: one plan — CRM plus every module. ``tier`` / ``modules`` from older clients are
