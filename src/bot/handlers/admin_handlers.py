@@ -616,6 +616,26 @@ async def cmd_stats(message: Message) -> None:
     )
 
 
+@router.message(Command("ice_sources"))
+async def cmd_ice_sources(message: Message) -> None:
+    """Open the ice schedule sources list (link, collection mode, posting days)."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base:
+        await message.answer("WEBAPP_BASE_URL не задан — список недоступен.")
+        return
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Открыть источники", web_app=WebAppInfo(url=f"{base}/webapp/admin-ice-sources"))
+    ]])
+    await message.answer(
+        "🧊 <b>Источники расписаний</b>\nСсылка на источник, как забираем и в какие дни выкладывают.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+    )
+
+
 @router.message(Command("journey"))
 async def cmd_journey(message: Message) -> None:
     """Open the trainer journey list (who stopped at which onboarding step)."""

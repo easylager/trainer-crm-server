@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Источники расписаний · Админ</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610214"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610214" />
+  <link rel="stylesheet" href="theme.css?v=202610214" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=202610214" />
+  <style>
+    .src-chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px 12px; padding: 0 16px; }
+    .src-chip { flex: none; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: var(--tg-theme-text-color, #f5f5f5); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+    .src-chip[aria-pressed="true"] { border-color: #45b9bb; color: #45b9bb; font-weight: 600; }
+    .src-list { display: flex; flex-direction: column; gap: 10px; }
+    .src-card { background: var(--tg-theme-secondary-bg-color, #2a2a2a); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; padding: 14px; }
+    .src-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .src-name { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+    .src-sub, .src-hint { font-size: 12px; color: var(--tg-theme-hint-color, #9ca3af); }
+    .src-st { font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .st-ok { color: #45b9bb; } .st-broken { color: #ff8a80; } .st-empty, .st-waiting { color: #f0b429; } .st-none { color: #9ca3af; }
+    .src-row { display: flex; gap: 8px; margin-top: 12px; }
+    .btn { display: flex; align-items: center; justify-content: center; flex: 1; min-height: 48px; border-radius: 12px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: var(--tg-theme-text-color, #f5f5f5); font: inherit; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; padding: 0 12px; }
+    .btn.primary { background: #45b9bb; border-color: #45b9bb; color: #06292a; }
+    .btn[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+    .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 10; }
+    .sheet-bg.open { display: block; }
+    .sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 92vh; overflow-y: auto; background: var(--tg-theme-bg-color, #1a1a1a); border-radius: 18px 18px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0)); }
+    .f-label { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--tg-theme-hint-color, #9ca3af); font-weight: 600; margin: 16px 0 8px; }
+    .f-input { width: 100%; box-sizing: border-box; min-height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: inherit; font: inherit; font-size: 15px; padding: 0 14px; }
+    .mode { display: block; width: 100%; text-align: left; min-height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: inherit; font: inherit; padding: 8px 14px; margin-bottom: 8px; cursor: pointer; }
+    .mode[aria-pressed="true"] { border-color: #45b9bb; background: rgba(69,185,187,.12); }
+    .mode b { display: block; font-size: 14px; font-weight: 600; } .mode span { font-size: 12px; color: var(--tg-theme-hint-color, #9ca3af); }
+    .mode[aria-pressed="true"] b { color: #45b9bb; }
+    .days { display: flex; gap: 6px; flex-wrap: wrap; }
+    .day { min-width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+    .day[aria-pressed="true"] { border-color: #45b9bb; color: #45b9bb; font-weight: 700; }
+    .toggle-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+    .toggle-row label { flex: 1; font-size: 14px; }
+    .err { color: #ff8a80; font-size: 13px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="adm-header">
+    <h1>Источники расписаний</h1>
+    <div class="adm-sub" id="sub">Загрузка…</div>
+  </div>
+  <div id="chips" class="src-chips" hidden></div>
+  <div id="list" class="src-list"></div>
+
+  <div id="bg" class="sheet-bg" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet">
+      <div class="src-sub" id="sheetCity"></div>
+      <h2 id="sheetTitle" style="margin:2px 0 0;font-size:22px"></h2>
+
+      <div class="f-label">Ссылка на источник</div>
+      <div style="display:flex;gap:8px">
+        <input id="url" class="f-input" type="url" inputmode="url" autocomplete="off" autocapitalize="off" placeholder="instagram.com/…, vk.com/…, сайт катка">
+        <button class="btn" id="paste" type="button" style="flex:none">Вставить</button>
+      </div>
+      <div class="src-hint" id="kind" style="margin-top:8px"></div>
+
+      <div class="f-label">Как забираем</div>
+      <div id="modes"></div>
+
+      <div class="f-label">В какие дни выкладывают</div>
+      <div class="days" id="days"></div>
+
+      <div class="toggle-row">
+        <label for="remind">Напомнить в эти дни в 10:00 в админ-бот</label>
+        <input id="remind" type="checkbox" style="width:24px;height:24px">
+      </div>
+      <div class="err" id="err" hidden></div>
+      <div class="src-row">
+        <button class="btn" id="cancel" type="button">Отмена</button>
+        <button class="btn primary" id="save" type="button">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin-analytics-shared.js?v=202610214"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics, esc = A.escapeHtml;
+      var tg = window.Telegram && window.Telegram.WebApp;
+      var MODES = [
+        { id: 'server', title: 'Сервер сам', hint: 'сайт без ограничений' },
+        { id: 'byip', title: 'Мой компьютер, BY-IP', hint: 'скрипт на ноутбуке' },
+        { id: 'manual', title: 'Ручная проверка', hint: 'открыть ссылку, скрин, отправить' },
+        { id: 'none', title: 'Нет источника', hint: 'сетка только по телефону' }
+      ];
+      var MODE_LABEL = { server: 'Сервер сам', byip: 'Мой компьютер, BY-IP', manual: 'Вручную', none: 'Нет источника' };
+      var STATUS = { broken: ['✕', 'Сломан'], empty: ['○', 'Пусто'], waiting: ['◔', 'Ждёт данные'], none: ['–', 'Нет источника'], ok: ['✓', 'Свежо'] };
+      var KIND_LABEL = { site: 'Сайт', vk: 'ВК', instagram: 'Instagram', telegram: 'Telegram', afisha: '24afisha' };
+      var FILTERS = [
+        { id: 'all', label: 'Все', test: function () { return true; } },
+        { id: 'attn', label: 'Требуют внимания', test: function (i) { return i.status === 'broken' || i.status === 'empty' || i.status === 'waiting'; } },
+        { id: 'byip', label: 'BY-IP', test: function (i) { return i.mode === 'byip'; } },
+        { id: 'manual', label: 'Вручную', test: function (i) { return i.mode === 'manual'; } },
+        { id: 'none', label: 'Без источника', test: function (i) { return i.mode === 'none'; } }
+      ];
+      var DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      var state = { data: null, filter: 'all', edit: null };
+
+      function ruDate(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: 'Europe/Minsk' }).replace('.', '');
+      }
+      function detectKind(url) {
+        var u = (url || '').trim().toLowerCase();
+        if (!u) return '';
+        if (/instagram\.com/.test(u)) return 'instagram';
+        if (/(^|[/.])vk\.(com|ru)/.test(u)) return 'vk';
+        if (/(^|[/.])t\.me|telegram\.me/.test(u)) return 'telegram';
+        if (/24afisha\.by/.test(u)) return 'afisha';
+        return 'site';
+      }
+      function openLink(url) {
+        if (tg && typeof tg.openLink === 'function') tg.openLink(url); else window.open(url, '_blank', 'noopener');
+      }
+
+      function card(i) {
+        var st = STATUS[i.status];
+        var sub = [];
+        sub.push(esc(i.city));
+        sub.push(esc(MODE_LABEL[i.mode]));
+        if (i.future_sessions) sub.push(i.future_sessions + ' сеансов до ' + esc(ruDate(i.last_session_date)));
+        else sub.push('сеансов нет');
+        var src = i.source_url
+          ? '<a class="btn" href="' + esc(i.source_url) + '" data-open="' + esc(i.source_url) + '">Открыть ' + esc(KIND_LABEL[i.source_kind] || 'источник') + '</a>'
+          : '<span class="src-hint" style="flex:1;align-self:center">Ссылка на источник не задана</span>';
+        var why = i.status === 'broken' ? '<div class="src-hint" style="margin-top:6px">' + i.failure_streak + ' сбоев подряд · последний успех ' + esc(ruDate(i.last_ok_at) || 'никогда') + '</div>' : '';
+        return '<div class="src-card"><div class="src-top"><div><div class="src-name">' + esc(i.name) + '</div>' +
+          '<div class="src-sub">' + sub.join(' · ') + '</div></div>' +
+          '<span class="src-st st-' + i.status + '"><span aria-hidden="true">' + st[0] + '</span> ' + st[1] + '</span></div>' + why +
+          '<div class="src-row">' + src + '<button class="btn primary" type="button" data-edit="' + i.arena_id + '">Источник</button></div>' +
+          '<div class="src-row">' +
+          '<a class="btn" ' + (i.links.site ? 'href="' + esc(i.links.site) + '" data-open="' + esc(i.links.site) + '"' : 'aria-disabled="true"') + '>На сайте</a>' +
+          '<a class="btn" ' + (i.links.app ? 'href="' + esc(i.links.app) + '" data-open="' + esc(i.links.app) + '"' : 'aria-disabled="true"') + '>В приложении</a></div></div>';
+      }
+
+      function draw() {
+        var d = state.data;
+        document.getElementById('sub').textContent = d.total + ' катков · сначала то, что требует внимания';
+        var f = FILTERS.filter(function (x) { return x.id === state.filter; })[0];
+        document.getElementById('chips').innerHTML = FILTERS.map(function (x) {
+          return '<button class="src-chip" type="button" data-filter="' + x.id + '" aria-pressed="' + (x.id === state.filter) + '">' +
+            x.label + ' · ' + d.items.filter(x.test).length + '</button>';
+        }).join('');
+        document.getElementById('chips').hidden = false;
+        document.getElementById('list').innerHTML = d.items.filter(f.test).map(card).join('') ||
+          '<div class="adm-card"><div class="adm-empty">Под этот фильтр никого нет</div></div>';
+      }
+
+      function openSheet(id) {
+        var i = state.data.items.filter(function (x) { return x.arena_id === id; })[0];
+        if (!i) return;
+        state.edit = { id: id, mode: i.mode, days: i.publish_days.slice() };
+        document.getElementById('sheetCity').textContent = i.city;
+        document.getElementById('sheetTitle').textContent = i.name;
+        document.getElementById('url').value = i.source_url || '';
+        document.getElementById('remind').checked = i.remind;
+        document.getElementById('err').hidden = true;
+        drawSheet();
+        document.getElementById('bg').classList.add('open');
+      }
+      function drawSheet() {
+        var e = state.edit;
+        document.getElementById('modes').innerHTML = MODES.map(function (m) {
+          return '<button class="mode" type="button" data-mode="' + m.id + '" aria-pressed="' + (e.mode === m.id) + '"><b>' + m.title + '</b><span>' + m.hint + '</span></button>';
+        }).join('');
+        document.getElementById('days').innerHTML = DOW.map(function (n, k) {
+          return '<button class="day" type="button" data-day="' + k + '" aria-pressed="' + (e.days.indexOf(k) >= 0) + '">' + n + '</button>';
+        }).join('');
+        var kind = detectKind(document.getElementById('url').value);
+        document.getElementById('kind').textContent = kind ? 'Распознали: ' + KIND_LABEL[kind] : '';
+      }
+      function closeSheet() { document.getElementById('bg').classList.remove('open'); state.edit = null; }
+
+      function save() {
+        var e = state.edit, err = document.getElementById('err');
+        var body = { source_url: document.getElementById('url').value, fetch_mode: e.mode, publish_days: e.days, remind: document.getElementById('remind').checked };
+        var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+        if (A.initData) headers['X-Telegram-Init-Data'] = A.initData;
+        var url = A.apiUrl('/admin/ice-sources/' + e.id) + (A.initData ? '?init_data=' + encodeURIComponent(A.initData) : '');
+        document.getElementById('save').disabled = true;
+        fetch(url, { method: 'PUT', headers: headers, body: JSON.stringify(body), credentials: 'same-origin' }).then(function (r) {
+          if (r.ok) return load().then(closeSheet);
+          return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.detail || ('HTTP ' + r.status)); });
+        }).catch(function (x) { err.textContent = x.message || 'Не сохранилось'; err.hidden = false; })
+          .then(function () { document.getElementById('save').disabled = false; });
+      }
+
+      document.addEventListener('click', function (ev) {
+        var el = ev.target.closest('[data-filter],[data-edit],[data-open],[data-mode],[data-day]');
+        if (el && el.dataset.open) { ev.preventDefault(); openLink(el.dataset.open); return; }
+        if (el && el.dataset.filter) { state.filter = el.dataset.filter; draw(); return; }
+        if (el && el.dataset.edit) { openSheet(+el.dataset.edit); return; }
+        if (el && el.dataset.mode) { state.edit.mode = el.dataset.mode; drawSheet(); return; }
+        if (el && el.dataset.day) {
+          var k = +el.dataset.day, ix = state.edit.days.indexOf(k);
+          if (ix >= 0) state.edit.days.splice(ix, 1); else state.edit.days.push(k);
+          drawSheet(); return;
+        }
+        if (ev.target.id === 'cancel' || ev.target.id === 'bg') closeSheet();
+        if (ev.target.id === 'save') save();
+        if (ev.target.id === 'paste' && navigator.clipboard && navigator.clipboard.readText) {
+          navigator.clipboard.readText().then(function (t) { document.getElementById('url').value = t.trim(); drawSheet(); }).catch(function () {});
+        }
+      });
+      document.getElementById('url').addEventListener('input', drawSheet);
+
+      function load() {
+        return A.getJson('/admin/ice-sources').then(function (d) { state.data = d; draw(); }).catch(function (e) {
+          document.getElementById('sub').textContent = '';
+          document.getElementById('list').innerHTML = '<div class="adm-error">' + esc((e && e.message) || 'Ошибка сети') + '</div>';
+        });
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

@@ -497,6 +497,15 @@ def webapp_admin_hockey_main_js(request: Request):
     )
 
 
+@app.get("/webapp/admin-ice-sources")
+def webapp_admin_ice_sources_page():
+    """Admin ice schedule sources — link, collection mode, posting days (phone-first)."""
+    path = _WEBAPP_DIR / "admin-ice-sources.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/admin-ice-schedule")
 def webapp_admin_ice_schedule_page():
     """Admin ice session editor (mass skate, OHM, week grid)."""
