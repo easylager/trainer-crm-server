@@ -6048,7 +6048,7 @@
           if (!isFinite(pb)) pb = 0;
           var numStr = pb === Math.floor(pb) ? String(Math.floor(pb)) : pb.toFixed(2);
           var priceFrag = document.createElement('span');
-          priceFrag.textContent = numStr + ' BYN';
+          priceFrag.textContent = numStr + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
           lab.appendChild(inp);
           lab.appendChild(document.createTextNode(hubPriceTierLabelRu(tier) + ' — '));
           lab.appendChild(priceFrag);

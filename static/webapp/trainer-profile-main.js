@@ -4873,13 +4873,13 @@
 
       /** Per-tier prices from loaded trainer.services (codes -> number|null). */
       // TASK-043/047: price-input suffix follows the trainer's own city currency
-      // (RU cities → ₽), instead of a hardcoded 'BYN'. `state.cities` items carry
+      // (RU cities → «руб.»), instead of a hardcoded 'BYN'. `state.cities` items carry
       // `country` from CatalogRepository.list_cities().
       function getPriceSuffixForTrainer() {
         var cityId = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
         if (cityId == null) return 'BYN';
         var city = (state.cities || []).find(function(c) { return Number(c.id) === Number(cityId); });
-        return (city && city.country === 'RU') ? '₽' : 'BYN';
+        return (city && city.country === 'RU') ? 'руб.' : 'BYN';
       }
 
       function getServiceTierPricesByCode(serviceId) {

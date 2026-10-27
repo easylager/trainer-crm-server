@@ -1255,10 +1255,10 @@
   }
 
   /* TASK-196: валюта услуги — код из полезной нагрузки. Отображение — конвенция
-     TASK-109: RUB знаком ₽, BYN буквами. */
+     TASK-109: RUB — «руб.», BYN буквами. */
   function priceCurrencyLabel(code) {
     var c = String(code || '').trim().toUpperCase();
-    return c === 'RUB' ? '₽' : (c || 'BYN');
+    return c === 'RUB' ? 'руб.' : (c || 'BYN');
   }
 
   function trainerSubtitle(trainer) {

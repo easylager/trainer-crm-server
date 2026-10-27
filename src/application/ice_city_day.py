@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_session_use_cases import STATUS_ACTIVE
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
+from src.shared.currency import currency_label_ru
 from src.shared.ice_discovery_scope import (
     PUBLIC_ARENA_VISIBLE_SQL,
     ice_discovery_countries,
@@ -336,9 +337,10 @@ def format_price_minor(minor: int | None, currency: str) -> str:
     if minor is None:
         return ""
     major = int(minor) / 100.0
+    label = currency_label_ru(currency)
     if major == int(major):
-        return f"{int(major)} {currency}"
-    return f"{major:.2f} {currency}".replace(".", ",", 1)
+        return f"{int(major)} {label}"
+    return f"{major:.2f} {label}".replace(".", ",", 1)
 
 
 def plural_ru(n: int, one: str, few: str, many: str) -> str:
@@ -525,7 +527,7 @@ def price_range_compact(day: Mapping[str, Any]) -> str:
         return ""
     if lo == hi:
         return format_price_minor(lo, currency)
-    low_only = format_price_minor(lo, currency).replace(f" {currency}", "")
+    low_only = format_price_minor(lo, currency).replace(f" {currency_label_ru(currency)}", "")
     return f"{low_only}–{format_price_minor(hi, currency)}"
 
 

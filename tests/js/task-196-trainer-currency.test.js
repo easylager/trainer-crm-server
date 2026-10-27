@@ -1,9 +1,9 @@
 /**
- * TASK-196 AC-2: тренер из RU-города показывает цены в RUB (₽).
+ * TASK-196 AC-2: тренер из RU-города показывает цены в RUB (руб.).
  *
  * Валюта приходит с ценой (currency_code на услуге и тире — как у сеансов льда),
  * а не зашита в клиент «BYN». Отображение — конвенция TASK-109 для цен тренера:
- * RUB знаком ₽, BYN буквами. Полезные нагрузки без валюты читаются как BYN —
+ * RUB знаком руб., BYN буквами. Полезные нагрузки без валюты читаются как BYN —
  * это условие совместимости со старым кэшем.
  *
  * Run: node --test tests/js/task-196-trainer-currency.test.js
@@ -50,15 +50,15 @@ function trainerCard(item) {
   return trainerCardView(item);
 }
 
-describe('вкладка «Лёд»: цена тренера из RU-города — в ₽', () => {
-  it('trainerCardView рисует «от 40 ₽» по currency_code услуги', () => {
+describe('вкладка «Лёд»: цена тренера из RU-города — в руб.', () => {
+  it('trainerCardView рисует «от 40 руб.» по currency_code услуги', () => {
     const view = trainerCard({
       id: 1,
       profile: { first_name: 'Алексей', last_name: 'Агуреев' },
       primary_arena_name: 'Арена в Санкт-Петербурге',
       services: [{ service_name: 'Обучение катанию', price_byn_min: 40, currency_code: 'RUB' }],
     });
-    assert.ok(view.meta.includes('от 40 ₽'), 'meta: ' + view.meta);
+    assert.ok(view.meta.includes('от 40 руб.'), 'meta: ' + view.meta);
     assert.ok(!view.meta.includes('BYN'), 'валюта не захардкожена: ' + view.meta);
   });
 
@@ -73,7 +73,7 @@ describe('вкладка «Лёд»: цена тренера из RU-город�
 });
 
 describe('карточка места: строка тренера — в валюте услуги', () => {
-  it('trainerSubtitle подписывает минимальную цену ₽', () => {
+  it('trainerSubtitle подписывает минимальную цену руб.', () => {
     const { trainerSubtitle } = loadArenaCardModel();
     const line = trainerSubtitle({
       services: [
@@ -81,7 +81,7 @@ describe('карточка места: строка тренера — в вал
         { name: 'Фигурное', price_cents: 400000, currency_code: 'RUB' },
       ],
     });
-    assert.ok(line.includes('от 4000 ₽'), 'subtitle: ' + line);
+    assert.ok(line.includes('от 4000 руб.'), 'subtitle: ' + line);
     assert.ok(!line.includes('BYN'), 'валюта не захардкожена: ' + line);
   });
 
@@ -110,22 +110,22 @@ describe('каталог: цена услуги — в валюте услуги
     return ctx.module.exports;
   }
 
-  it('formatCatalogServicePrice подписывает цену ₽ для RUB', () => {
+  it('formatCatalogServicePrice подписывает цену руб. для RUB', () => {
     const { formatCatalogServicePrice, priceCurrencyLabel } = loadCatalogFormatters();
     assert.equal(
       formatCatalogServicePrice({ price_byn_min: 40, price_byn_max: 60, currency_code: 'RUB' }),
-      'от 40 ₽'
+      'от 40 руб.'
     );
     assert.equal(
       formatCatalogServicePrice({ price_byn: 40, currency_code: 'RUB' }),
-      '40 ₽'
+      '40 руб.'
     );
     assert.equal(
       formatCatalogServicePrice({ price_byn: 40 }),
       '40 BYN'
     );
-    // Тир в диалоге записи (tier radio): ₽ для RUB, BYN для старых нагрузок.
-    assert.equal(priceCurrencyLabel('RUB'), '₽');
+    // Тир в диалоге записи (tier radio): руб. для RUB, BYN для старых нагрузок.
+    assert.equal(priceCurrencyLabel('RUB'), 'руб.');
     assert.equal(priceCurrencyLabel(undefined), 'BYN');
     assert.equal(priceCurrencyLabel('BYN'), 'BYN');
   });
@@ -153,12 +153,12 @@ describe('центр (коллектив): тарифы — в валюте вл
     return ctx.module.exports;
   }
 
-  it('цена дорожки и доплаты за гостя — ₽ из tariffs', () => {
+  it('цена дорожки и доплаты за гостя — руб. из tariffs', () => {
     const fns = loadCenterFormatters();
     const rubTariffs = { currency_code: 'RUB', guest_surcharge_cents: 1500 };
-    assert.equal(fns.buildCenterPriceBreakdown('lane_with_guest', 2, rubTariffs), 'Дорожка + 2 гостя × 15 ₽');
-    assert.equal(fns.formatCenterPriceByn(400000), '4000 ₽');
-    assert.equal(fns.centerTariffCurrency(rubTariffs), '₽');
+    assert.equal(fns.buildCenterPriceBreakdown('lane_with_guest', 2, rubTariffs), 'Дорожка + 2 гостя × 15 руб.');
+    assert.equal(fns.formatCenterPriceByn(400000), '4000 руб.');
+    assert.equal(fns.centerTariffCurrency(rubTariffs), 'руб.');
   });
 
   it('tariffs без валюты читаются как BYN', () => {

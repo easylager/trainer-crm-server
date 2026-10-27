@@ -6,23 +6,23 @@
   <title>Записи</title>
   <!-- TASK-306: вкладка «Записи» на языке хаба. Свои шрифты, без Google. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610281" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610281" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610282" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610282" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202610281"></script>
-  <script src="mini-app-phone-field.js?v=202610281"></script>
-  <link rel="stylesheet" href="theme.css?v=202610281" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610281" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610281" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202610281" />
-  <script src="mini-app-telegram-chrome.js?v=202610281"></script>
-  <script src="client-profile-switcher.js?v=202610281"></script>
-  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202610281" />
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202610281" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610281" />
-  <script src="mini-app-empty-state.js?v=202610281"></script>
-  <script src="mini-app-more-icons.js?v=202610281"></script>
-  <script src="mini-app-client-shell.js?v=202610281"></script>
+  <script src="client-mini-app-theme.js?v=202610282"></script>
+  <script src="mini-app-phone-field.js?v=202610282"></script>
+  <link rel="stylesheet" href="theme.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202610282" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202610282" />
+  <script src="mini-app-telegram-chrome.js?v=202610282"></script>
+  <script src="client-profile-switcher.js?v=202610282"></script>
+  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202610282" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610282" />
+  <script src="mini-app-empty-state.js?v=202610282"></script>
+  <script src="mini-app-more-icons.js?v=202610282"></script>
+  <script src="mini-app-client-shell.js?v=202610282"></script>
   <script>
     (function () {
       try {
@@ -579,11 +579,11 @@
       }
 
       /* TASK-196: валюта цены записи — код из полезной нагрузки записей
-         (/client/bookings). Отображение — конвенция TASK-109: RUB знаком ₽,
+         (/client/bookings). Отображение — конвенция TASK-109: RUB — «руб.»,
          BYN буквами. Старые ответы без валюты читаются как BYN. */
       function priceCurrencyLabel(code) {
         var c = String(code || '').trim().toUpperCase();
-        return c === 'RUB' ? '₽' : (c || 'BYN');
+        return c === 'RUB' ? 'руб.' : (c || 'BYN');
       }
 
       function formatBynFromCents(cents, currency) {
@@ -1276,7 +1276,7 @@
       loadBookings();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202610281"></script>
+  <script src="mini-app-client-home.js?v=202610282"></script>
   <script>
     /* TASK-303: серия недель — тихой строкой над записями, тап ведёт в «Вашу активность». */
     (function () {
@@ -1308,6 +1308,6 @@
         .catch(function () { /* без серии — просто без строки */ });
     })();
   </script>
-  <script src="/static/webapp/ga-touch.js?v=202610281"></script>
+  <script src="/static/webapp/ga-touch.js?v=202610282"></script>
 </body>
 </html>

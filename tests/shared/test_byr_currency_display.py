@@ -7,8 +7,8 @@ def test_format_rubles_byn_display_defaults_to_byn():
 
 
 def test_format_rubles_byn_display_rub():
-    assert format_rubles_byn_display(1500, currency="RUB") == "1500 ₽"
-    assert format_rubles_byn_display(990.5, currency="RUB") == "990.5 ₽"
+    assert format_rubles_byn_display(1500, currency="RUB") == "1500 руб."
+    assert format_rubles_byn_display(990.5, currency="RUB") == "990.5 руб."
 
 
 def test_format_kopeks_byn_display_defaults_to_byn():
@@ -18,8 +18,8 @@ def test_format_kopeks_byn_display_defaults_to_byn():
 
 
 def test_format_kopeks_byn_display_rub():
-    assert format_kopeks_byn_display(150000, currency="RUB") == "1500 ₽"
-    assert format_kopeks_byn_display(99050, currency="RUB") == "990,50 ₽"
+    assert format_kopeks_byn_display(150000, currency="RUB") == "1500 руб."
+    assert format_kopeks_byn_display(99050, currency="RUB") == "990,50 руб."
 
 
 def test_format_display_unknown_currency_falls_back_to_code_itself():

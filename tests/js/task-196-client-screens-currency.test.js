@@ -1,6 +1,6 @@
 /**
  * TASK-196 (ревью-доработка): клиентские экраны рисуют цену тренера
- * в валюте его города (RU → ₽, BY → BYN), а не «BYN» наизусть.
+ * в валюте его города (RU → руб., BY → BYN), а не «BYN» наизусть.
  *
  * Четыре экрана: заявки (client-requests-main), сохранённые тренеры
  * (client-saved-trainers-main), запись (book.html), «Мои записи»
@@ -92,13 +92,13 @@ function loadBookingsFormatter() {
 }
 
 describe('заявки: цена услуги отвечающего — в валюте его города', () => {
-  it('тренер из RU-города → «от 40 ₽» и «40 ₽»', () => {
+  it('тренер из RU-города → «от 40 руб.» и «40 руб.»', () => {
     const { formatResponderServicePrice } = loadRequestsFormatter();
     assert.equal(
       formatResponderServicePrice({ price_byn_min: 40, price_byn_max: 60, currency_code: 'RUB' }),
-      'от 40 ₽'
+      'от 40 руб.'
     );
-    assert.equal(formatResponderServicePrice({ price_byn: 40, currency_code: 'RUB' }), '40 ₽');
+    assert.equal(formatResponderServicePrice({ price_byn: 40, currency_code: 'RUB' }), '40 руб.');
   });
 
   it('услуга без валюты читается как BYN', () => {
@@ -108,9 +108,9 @@ describe('заявки: цена услуги отвечающего — в ва
 });
 
 describe('сохранённые тренеры: чип «от X …» — в валюте тренера', () => {
-  it('тренер из RU-города → «от 4000 ₽»', () => {
+  it('тренер из RU-города → «от 4000 руб.»', () => {
     const { priceByn } = loadSavedTrainersFormatter();
-    assert.equal(priceByn(400000, 'RUB'), 'от 4000 ₽');
+    assert.equal(priceByn(400000, 'RUB'), 'от 4000 руб.');
   });
 
   it('ребро без валюты читается как BYN', () => {
@@ -121,14 +121,14 @@ describe('сохранённые тренеры: чип «от X …» — в в
 });
 
 describe('экран записи: цена услуги и тир — в валюте тренера', () => {
-  it('тренер из RU-города → «от 40 ₽» / «40 ₽»', () => {
+  it('тренер из RU-города → «от 40 руб.» / «40 руб.»', () => {
     const { formatBookServicePrice, priceCurrencyLabel } = loadBookFormatters();
     assert.equal(
       formatBookServicePrice({ price_byn_min: 40, price_byn_max: 60, currency_code: 'RUB' }),
-      'от 40 ₽'
+      'от 40 руб.'
     );
-    assert.equal(formatBookServicePrice({ price_byn: 40, currency_code: 'RUB' }), '40 ₽');
-    assert.equal(priceCurrencyLabel('RUB'), '₽');
+    assert.equal(formatBookServicePrice({ price_byn: 40, currency_code: 'RUB' }), '40 руб.');
+    assert.equal(priceCurrencyLabel('RUB'), 'руб.');
   });
 
   it('услуга без валюты читается как BYN', () => {
@@ -138,10 +138,10 @@ describe('экран записи: цена услуги и тир — в вал
 });
 
 describe('«Мои записи»: стоимость записи — в валюте её тренера', () => {
-  it('запись к тренеру из RU-города → «4000 ₽»', () => {
+  it('запись к тренеру из RU-города → «4000 руб.»', () => {
     const { formatBynFromCents } = loadBookingsFormatter();
-    assert.equal(formatBynFromCents(400000, 'RUB'), '4000 ₽');
-    assert.equal(formatBynFromCents(125000, 'RUB'), '1250 ₽');
+    assert.equal(formatBynFromCents(400000, 'RUB'), '4000 руб.');
+    assert.equal(formatBynFromCents(125000, 'RUB'), '1250 руб.');
   });
 
   it('запись без валюты читается как BYN', () => {

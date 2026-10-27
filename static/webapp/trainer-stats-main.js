@@ -187,7 +187,7 @@
       function formatMoney(cents) {
         if (cents == null) return '—';
         var v = (cents || 0) / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2) + ' BYN';
+        return v.toFixed(v % 1 === 0 ? 0 : 2) + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
       }
 
       function rankClass(i) {

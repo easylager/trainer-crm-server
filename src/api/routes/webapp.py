@@ -835,6 +835,8 @@ async def get_trainer_access_for_webapp(
         "schedule_unlocked": schedule_unlocked,
         "force_client_chat_relay": bool(settings.trainer_webapp_force_client_chat_relay),
         "collective_enabled": bool(settings.trainer_collective_enabled),
+        # Валюта по городу тренера (BY → BYN, RU → RUB): экраны подписывают суммы без догадок.
+        "currency": await resolve_trainer_currency(session, tid) if tid is not None else "BYN",
     }
 
 

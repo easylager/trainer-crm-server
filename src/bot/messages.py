@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 from src.shared.byr_currency_display import BYR_SIGN, format_kopeks_byn_display, format_rubles_byn_display
 from src.shared.catalog_entry import client_discovery_webapp_url
+from src.shared.currency import currency_label_ru
 from src.shared.validation import truncate_text
 
 # --- Client bot ---
@@ -3111,12 +3112,12 @@ def ru_time(t) -> str:
 
 
 def money_text(cents: int | None, currency: str = "BYN") -> str:
-    """«45 BYN», «40,50 BYN», «500 ₽»; пусто, если цены нет."""
+    """«45 BYN», «40,50 BYN», «500 руб.»; пусто, если цены нет."""
     if cents is None:
         return ""
     value = int(cents) / 100
     num = f"{value:.0f}" if int(cents) % 100 == 0 else f"{value:.2f}".replace(".", ",")
-    return f"{num}\u00a0₽" if currency == "RUB" else f"{num}\u00a0{currency}"
+    return f"{num}\u00a0{currency_label_ru(currency)}"
 
 
 def format_trainer_new_booking_html(

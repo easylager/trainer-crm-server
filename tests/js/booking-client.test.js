@@ -47,9 +47,9 @@ describe('formatPriceAmountHtml (TASK-109 BYN, no tofu)', () => {
     assert.doesNotMatch(html, /e901|nbrb-icon|\uE901/);
   });
 
-  it('keeps ₽ for RUB', () => {
+  it('keeps руб. for RUB', () => {
     const { formatPriceAmountHtml } = loadBookingClient();
-    assert.equal(formatPriceAmountHtml(55, 'RUB'), '55 ₽');
+    assert.equal(formatPriceAmountHtml(55, 'RUB'), '55 руб.');
   });
 });
 
@@ -58,7 +58,7 @@ describe('catalog-main.js wiring', () => {
     const src = fs.readFileSync(catalogMainPath, 'utf8');
     assert.doesNotMatch(src, /nbrb-icon/);
     assert.doesNotMatch(src, /e901/);
-    // TASK-196: валюта тира — из полезной нагрузки (₽ для RUB), не «BYN» наизусть.
+    // TASK-196: валюта тира — из полезной нагрузки (руб. для RUB), не «BYN» наизусть.
     assert.match(src, /priceNum \+ ' ' \+ priceCurrencyLabel\(tier\.currency_code\)/);
     assert.match(src, /get\('slot_id'\)/);
   });

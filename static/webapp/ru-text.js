@@ -42,7 +42,7 @@
       var code = String(currency || "")
         .trim()
         .toUpperCase();
-      var suffix = code === "RUB" ? "₽" : code;
+      var suffix = code === "RUB" ? "руб." : code;
       return String(amount) + (suffix ? " " + suffix : "");
     }
 

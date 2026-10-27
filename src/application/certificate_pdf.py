@@ -30,6 +30,7 @@ def build_certificate_pdf(
     brand_display: Optional[str] = None,
     brand_tagline: Optional[str] = None,
     brand_powered_by: Optional[str] = None,
+    currency: str = "BYN",
 ) -> bytes:
     """
     Produced PDF matches the client/Telegram HTML certificate (email attachment, S3, sample endpoint).
@@ -53,5 +54,6 @@ def build_certificate_pdf(
         activation_url=activation_url,
         client_bot_display_name=client_bot_display_name,
         brand_powered_by=brand_powered_by,
+        currency=currency,
     )
     return certificate_html_to_pdf_bytes(html)

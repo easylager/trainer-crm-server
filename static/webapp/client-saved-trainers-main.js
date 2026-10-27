@@ -89,7 +89,7 @@
 
   function priceCurrencyLabel(code) {
     var c = String(code || '').trim().toUpperCase();
-    return c === 'RUB' ? '₽' : (c || 'BYN');
+    return c === 'RUB' ? 'руб.' : (c || 'BYN');
   }
 
   function priceByn(cents, currency) {
