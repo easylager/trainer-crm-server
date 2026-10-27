@@ -6,6 +6,8 @@ ADMIN_BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="pending", description="Тренеры на модерацию"),
     BotCommand(command="trainer_welcome_link", description="Ссылка тренеру (trial / подписка)"),
     BotCommand(command="stats", description="Статистика платформы"),
+    BotCommand(command="ice_inbox", description="Скрины расписаний: проверить и опубликовать"),
+    BotCommand(command="ice_sources", description="Источники расписаний катков"),
     BotCommand(command="journey", description="Путь тренеров: кто где застрял"),
     BotCommand(command="support", description="Обращения в поддержку"),
     BotCommand(command="dicts", description="Города и арены"),

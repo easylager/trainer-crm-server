@@ -23,13 +23,16 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
+from src.ingestion import brest_poster
+from src.ingestion.cpu_work import run_cpu_bound
 from src.ingestion.dates import parser_reference_date
 from src.ingestion.htmlutil import parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
-from src.ingestion.source_io import load_source_text
+from src.ingestion.source_io import fetch_http_bytes, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
 # ---------------------------------------------------------------------------
@@ -76,12 +79,12 @@ def _brest_prices(html: str) -> tuple[int | None, int | None]:
 class BrestLdsParser(IceParser):
     """«СВ кат» (свободное катание) — Брестский ЛДС.
 
-    The weekly grid lives only in a JPEG (``IMG_8523.JPG``); per the SPEC
-    dossier the observed week has one fixed daily slot, 21:15–22:15. That
-    window is a ``job.config`` constant (``fixed_start`` / ``fixed_end``),
-    repeated over ``horizon_days`` starting at ``run_date`` — the same
-    horizon-from-a-fixed-start shape as ``ZamokHtmlParser``. Prices are
-    parsed live from the real prices HTML every run.
+    The grid is published only as a picture (``/7x1350.png``, a white ``dd.mm`` over ``HH:MM`` per
+    session day), so the picture is read (``brest_poster``) and every date on it becomes a session.
+    If it cannot be read the run fails loudly: the previous behaviour — the same 21:15 slot repeated
+    daily for ``horizon_days`` — invented sessions on days the poster does not list, so it is kept
+    only for fixtures without a poster file and for jobs that set ``poster: false``. Prices are
+    parsed live from the page's HTML every run.
     """
 
     parser_key = "brest_lds_v1"
@@ -89,20 +92,55 @@ class BrestLdsParser(IceParser):
     async def extract(self, job: ParserJob) -> Extraction:
         prices_html = await load_source_text(job, filename="prices.html", url_keys=("prices_url",))
         adult, child = _brest_prices(prices_html)
+        poster = await self._poster_sessions(job, prices_html)
+        if poster is not None:
+            return self._extraction(job, prices_html, adult, child, poster, projected=False)
         fixed_start = str(job.config.get("fixed_start") or "21:15")
-        fixed_end = str(job.config.get("fixed_end") or "22:00")
         horizon = int(job.config.get("horizon_days") or 7)
         run_date = parser_reference_date(job.config)
+        return self._extraction(
+            job, prices_html, adult, child,
+            [(run_date + timedelta(days=offset), fixed_start) for offset in range(horizon)],
+            projected=True,
+        )
+
+    async def _poster_sessions(self, job: ParserJob, page_html: str) -> list[tuple[date, str]] | None:
+        """(date, start) read from the poster; None when this job does not use the poster."""
+        if job.config.get("poster") is False:
+            return None
+        fixture_dir = job.config.get("fixture_dir")
+        if fixture_dir:
+            path = Path(str(fixture_dir)) / "poster.jpg"
+            if not path.is_file():
+                return None
+            image_bytes = path.read_bytes()
+        else:
+            url = brest_poster.find_poster_url(page_html, str(job.config.get("prices_url") or ""))
+            image_bytes = await fetch_http_bytes(url)
+        reference = parser_reference_date(job.config)
+        try:
+            return await run_cpu_bound(brest_poster.read_poster, image_bytes, reference)
+        except brest_poster.PosterError as exc:
+            raise RuntimeError(f"афиша Бреста не прочиталась: {exc}") from exc
+
+    def _extraction(
+        self, job: ParserJob, snapshot: str, adult, child, sessions: list[tuple[date, str]], *, projected: bool
+    ) -> Extraction:
+        duration = int(job.config.get("default_duration_minutes") or 45)
+        legacy_end = job.config.get("fixed_end")
         session_label = str(job.config.get("session_label") or "").strip() or None
         age_note = str(job.config.get("age_note") or "детям до 12 лет")
         slots: list[ExtractedSlot] = []
-        for offset in range(horizon):
-            local_date = run_date + timedelta(days=offset)
+        for local_date, start in sessions:
+            if projected and legacy_end:
+                end = str(legacy_end)
+            else:
+                end = (datetime.strptime(start, "%H:%M") + timedelta(minutes=duration)).strftime("%H:%M")
             slots.append(
                 ExtractedSlot(
                     local_date=local_date.isoformat(),
-                    starts_at_local=fixed_start,
-                    ends_at_local=fixed_end,
+                    starts_at_local=start,
+                    ends_at_local=end,
                     kind_raw="open_ice",
                     price_adult=adult,
                     price_child=child,
@@ -111,14 +149,14 @@ class BrestLdsParser(IceParser):
                     age_note=age_note,
                 )
             )
-        from src.shared.schedule_basis import SCHEDULE_BASIS_PROJECTED
+        from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE, SCHEDULE_BASIS_PROJECTED
 
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,
-            snapshot=prices_html,
+            snapshot=snapshot,
             slots=slots,
-            schedule_basis=SCHEDULE_BASIS_PROJECTED,
+            schedule_basis=SCHEDULE_BASIS_PROJECTED if projected else SCHEDULE_BASIS_LIVE,
         )
 
 

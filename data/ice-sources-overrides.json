@@ -1,0 +1,45 @@
+{
+  "comment": "Источники, которые назвал владелец 2026-10-27. Ключ: arena_id. Остальное скрипт берёт из карточки катка.",
+  "overrides": {
+    "37": {
+      "name": "Лида, Ледовый дворец",
+      "source_url": "https://www.instagram.com/ledov_dvorezlida/",
+      "fetch_mode": "manual"
+    },
+    "26": {
+      "name": "Берёза, Ледовая арена",
+      "source_url": "https://www.instagram.com/sdushor_bereza/",
+      "fetch_mode": "manual"
+    },
+    "35": {
+      "name": "Жлобин, Металлург",
+      "source_url": "https://vk.ru/zor.zhlobin",
+      "fetch_mode": "manual"
+    },
+    "43": {
+      "name": "Могилёв, Дворец спорта",
+      "source_url": "https://bycard.by/afisha/mogilev/top/massovoe-katanie-v-ledovom-dvortse-sporta-mogileva",
+      "fetch_mode": "server"
+    },
+    "22": {
+      "name": "Брест, Ледовый дворец (афиша читается автоматически)",
+      "source_url": "https://brest.hockey.by/raspisanie-svobodnogo-kataniya/",
+      "fetch_mode": "server"
+    },
+    "8": {
+      "name": "Минск, Юность",
+      "source_url": "https://junost.by/",
+      "fetch_mode": "manual"
+    },
+    "4": {
+      "name": "Минск, СДЮШОР фигурное катание",
+      "source_url": "https://ledlife.by/massovye_kataniya/",
+      "fetch_mode": "byip"
+    },
+    "32": {
+      "name": "Горки, Ледовый дворец",
+      "source_url": "https://gorkiled.by/",
+      "fetch_mode": "byip"
+    }
+  }
+}
