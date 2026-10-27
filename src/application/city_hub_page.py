@@ -297,6 +297,9 @@ async def load_city_hub_view(
     city_id = int(city["id"])
     city_name = str(city["name"])
     scope = public_scope_params()
+    any_day = window == "any"  # TASK-337: «Любой день» — хаб без окна, «Ближайший лёд» на неделю
+    if any_day:
+        window = None
     day_key = window if is_hub_day_key(window) and parse_hub_window(window, now) == window else None
     if is_hub_day_key(window) and day_key is None:
         window = parse_hub_window(window, now)  # «сегодня»/«завтра» датой или дата вне недели
@@ -485,6 +488,7 @@ async def load_city_hub_view(
         "city": dict(city),
         "slug": city_slug(city_name),
         "selected_day": selected_day,
+        "any_day": any_day,
         "day_counts": day_counts,
         "now": now,
         "local_now": local_now,
@@ -790,7 +794,7 @@ def render_city_hub_page(
             "__LANG__": lang,
             "__OG_LOCALE__": og_locale,
             # Хаб в окне (?w=) — вариант той же страницы: канон на голый город, в индекс не идёт.
-            "__ROBOTS__": "noindex, follow" if view.get("when_explicit") else "index, follow",
+            "__ROBOTS__": "noindex, follow" if view.get("when_explicit") or view.get("any_day") else "index, follow",
             "__HEAD_EXTRA__": "",
             "__JSONLD__": ld,
             "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
@@ -884,6 +888,8 @@ def _b_when_switch(view: Mapping[str, Any]) -> str:
         counts=view.get("day_counts") or {},
         selected=view.get("selected_day"),
         href_for=lambda d: _list_href(slug, w=_day_key_for(d, now)),
+        any_href=_list_href(slug, w="any"),
+        any_selected=bool(view.get("any_day")),
     )
     return (
         f'<div class="b-sec b-sec--when"><div class="b-whenrow"><nav class="b-when vt-when-strip" '

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_city_day import ICE_CITY_DAY_SESSION_WHERE_SQL, plural_ru
 from src.application.ice_session_use_cases import STATUS_ACTIVE
-from src.application.ice_time_windows import home_picker_dates
+from src.application.ice_time_windows import HOME_PICKER_DAYS, home_picker_dates
 from src.shared.copy_ru import t
 from src.shared.ice_discovery_scope import public_scope_params
 
@@ -69,6 +69,7 @@ _ICON = (
 )
 
 SHEET_ID = "when-days"
+HOME_PICKER_DAYS_LABEL = f"{HOME_PICKER_DAYS} дн"
 
 
 def render_calendar(
@@ -77,12 +78,21 @@ def render_calendar(
     counts: Mapping[date, int],
     selected: date | None,
     href_for: Callable[[date], str],
+    any_href: str | None = None,
+    any_selected: bool = False,
 ) -> tuple[str, str]:
     """``(кнопка, лист)``. ``selected`` — выбранный день (подпись на кнопке), иначе значок.
 
     ``href_for`` строит ссылку на день; страница сама сводит «сегодня» и «завтра» к своим ключам.
     """
-    if selected is not None:
+    if any_selected:
+        button = (
+            f'<a class="b-cal b-cal--day" href="#{SHEET_ID}" aria-current="true" '
+            f'aria-label="{_esc(t("when.any_day"))}, {_esc(t("when.any_day_sub"))}. Выбрать день">'
+            f'<span class="b-cal__date b-cal__date--any"><small>{_esc(t("when.any_short"))}</small>'
+            f"<b>{HOME_PICKER_DAYS_LABEL}</b></span></a>"
+        )
+    elif selected is not None:
         # Квадрат, как без выбора: широкая подпись сжимала полосу («В выходные» уходило на две строки).
         # Плитка даты: день недели и число; полная дата — в подписи для скринридера и в заголовке героя.
         button = (
@@ -101,13 +111,22 @@ def render_calendar(
             f'<a class="{classes}" href="{_esc(href_for(d))}"{cur}>'
             f"<b>{_WEEKDAYS[d.weekday()]}</b><i>{d.day}</i><small>{n if n else '—'}</small></a>"
         )
+    any_row = ""
+    if any_href is not None:
+        total = sum(int(n) for n in counts.values())
+        cur = ' aria-current="true"' if any_selected else ""
+        any_row = (
+            f'<a class="b-dayc b-dayc--any" href="{_esc(any_href)}"{cur}>'
+            f'<b>{_esc(t("when.any_day"))}</b>'
+            f'<small>{_esc(sessions_phrase(total))} · {_esc(t("when.any_day_sub"))}</small></a>'
+        )
     sheet = (
         f'<div class="b-sheet" id="{SHEET_ID}" role="dialog" aria-labelledby="{SHEET_ID}-t">'
         f'<a class="b-sheet__bg" href="#" aria-label="Закрыть"></a>'
         f'<div class="b-sheet__panel"><span class="b-sheet__grab" aria-hidden="true"></span>'
         f'<h2 id="{SHEET_ID}-t">{_esc(t("when.pick_day"))}</h2>'
         f'<p class="b-sheet__sub">{_esc(t("when.pick_day_sub"))}</p>'
-        f'<div class="b-sheet__grid">{"".join(chips)}</div></div></div>'
+        f'<div class="b-sheet__grid">{any_row}{"".join(chips)}</div></div></div>'
     )
     return button, sheet
 

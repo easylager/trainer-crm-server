@@ -489,6 +489,7 @@ def _period_when_phrase(when_key: str) -> str:
         "tomorrow": t("home.when_phrase.tomorrow"),
         "weekend": t("home.when_phrase.weekend"),
         "day": t("home.when_phrase.day"),
+        "any": t("home.when_phrase.any"),
     }.get(when_key, t("home.when_phrase.today"))
 
 
@@ -513,7 +514,7 @@ def _resolve_user_city(
 
 
 # TASK-326 (PDEC-026): окно, выбранное на главной, едет в город — хаб открывается в нём.
-CITY_WINDOW_KEYS = ("today", "tomorrow", "weekend")
+CITY_WINDOW_KEYS = ("today", "tomorrow", "weekend", "any")
 
 
 def city_hub_href(slug: str, city_when: str | None = None) -> str:
@@ -546,6 +547,8 @@ def _upcoming_more_href(
     slug = str(city["slug"])
     if when_key == "weekend":
         return f"/c/{slug}?w=weekend"
+    if when_key == "any":
+        return f"/c/{slug}?w=any"
     if when_key == "tomorrow":
         return f"/c/{slug}?w=tomorrow"
     if when_key == "today":
@@ -597,7 +600,7 @@ def build_city_layout(catalog_cities: list[dict[str, Any]]) -> dict[str, Any]:
 
 def home_map_legend_labels(when_key: str) -> tuple[str, str]:
     """Подписи легенды карты главной — в такт фильтру when (сегодня / завтра / выходные)."""
-    key = when_key if when_key in ("today", "tomorrow", "weekend") else "today"
+    key = when_key if when_key in ("today", "tomorrow", "weekend", "any") else "today"
     return t(f"home.map.legend_on.{key}"), t(f"home.map.legend_off.{key}")
 
 
@@ -1175,6 +1178,7 @@ def _counter_when_text(when_key: str, now: datetime) -> str:
         "tomorrow": t("home.counter.when.tomorrow"),
         "weekend": t("home.counter.when.weekend"),
         "day": t("home.counter.when.day"),
+        "any": t("home.counter.when.any"),
     }.get(when_key, t("home.counter.when.today"))
     if when_key == "weekend":
         local = now.astimezone(ZoneInfo(DEFAULT_TIMEZONE))
@@ -1318,6 +1322,8 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
         counts=view.get("day_counts") or {},
         selected=selected if when_key == "day" else None,
         href_for=lambda d: _home_day_href(d, today),
+        any_href="/?when=any",
+        any_selected=when_key == "any",
     )
     nav = (
         f'<div class="b-whenrow"><nav class="b-when vt-when-strip" style="--when-i: {index or 0}" aria-label="Когда">'

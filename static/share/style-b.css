@@ -1175,6 +1175,7 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-cal__date { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
 .b-cal__date small { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
 .b-cal__date b { font-size: 20px; font-weight: 800; margin-top: 2px; }
+.b-cal__date--any b { font-size: 15px; margin-top: 3px; white-space: nowrap; }
 
 .b-sheet { position: fixed; inset: 0; z-index: 60; display: none; }
 .b-sheet:target, .b-sheet.is-open { display: block; }
@@ -1196,6 +1197,9 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-dayc b { font-size: 12px; font-weight: 600; text-transform: uppercase; color: #5a6b78; }
 .b-dayc i { font-size: 21px; font-style: normal; font-weight: 800; line-height: 1.1; }
 .b-dayc small { font-size: 12px; color: #5a6b78; }
+.b-dayc--any { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; gap: 12px; min-height: 56px; padding: 0 16px; }
+.b-dayc--any b { font-size: 16px; font-weight: 700; text-transform: none; color: inherit; }
+.b-dayc--any small { font-size: 13px; text-align: right; }
 .b-dayc.is-wk b { color: #a8501c; }
 .b-dayc.is-off { background: #f4f7f8; }
 .b-dayc.is-off i, .b-dayc.is-off small { color: #8396a4; }

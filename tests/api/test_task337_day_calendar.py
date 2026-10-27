@@ -118,3 +118,38 @@ async def test_empty_day_stays_selected_and_points_to_the_nearest_day(app_use_te
     assert response.status_code == 200 and 'class="b-cal b-cal--day"' in html
     assert "сеансов нет" in html
     assert f'href="/c/{slug}?w={target.isoformat()}"' in html and "Ближайший день с сеансами" in html
+
+
+def test_parse_hub_window_any():
+    assert parse_hub_window("any", _NOW) == "any"
+    from src.application.ice_time_windows import resolve_home_window
+
+    key, window, picker = resolve_home_window("any", None, _NOW)
+    assert key == "any" and picker is False and window.label == "Любой день"
+    assert window.ends_at == datetime(2026, 11, 2, 21, 0, tzinfo=timezone.utc)  # конец 2 ноября по Минску
+
+
+@pytest.mark.asyncio
+async def test_any_day_on_home_and_in_hub(app_use_test_db, db_session) -> None:
+    name, slug, target = await _city_with_rinks(db_session)  # 4 сеанса в один из дней недели
+    async with _client() as client:
+        home = await client.get("/", params={"when": "any"}, cookies={"glide_city": slug})
+        hub = await client.get(f"/c/{slug}", params={"w": "any"})
+        default_hub = await client.get(f"/c/{slug}")
+    # главная: плитка «ВСЕ / 7 дн», в полосе ничего не активно, город ведёт в хаб «любой день»
+    assert 'class="b-cal__date b-cal__date--any"' in home.text
+    strip = re.search(r'<nav class="b-when.*?</nav>', home.text, re.S).group(0)
+    assert 'aria-current="true"' not in strip
+    assert f'class="b-city" href="/c/{slug}?w=any"' in home.text
+    assert "На этой неделе" in home.text
+    # лист: первая строка «Любой день» с суммой сеансов, отмечена
+    row = re.search(r'<a class="b-dayc b-dayc--any" href="/\?when=any" aria-current="true">(.*?)</a>', home.text, re.S)
+    assert row and "Любой день" in row.group(1) and "ближайшие 7 дней" in row.group(1)
+    # хаб: тот же режим, noindex, строка отмечена, день не выбран
+    assert hub.status_code == 200
+    assert 'name="robots" content="noindex, follow"' in hub.text
+    assert f'class="b-dayc b-dayc--any" href="/c/{slug}?w=any" aria-current="true"' in hub.text
+    assert 'b-cal__date--any' in hub.text
+    # голый хаб остаётся индексируемым, «любой день» в нём не отмечен
+    assert 'name="robots" content="index, follow"' in default_hub.text
+    assert 'b-dayc--any" href="/c/' in default_hub.text and 'b-cal__date--any' not in default_hub.text
