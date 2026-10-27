@@ -1,7 +1,9 @@
 """Admin ice schedule sources (link, collection mode, posting days). New module — do not grow webapp.py."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +12,8 @@ from src.api.miniapp_auth.deps import get_admin_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
 from src.application.admin_ice_sources import (
     SourceValidationError,
+    arena_log,
+    journal,
     list_admin_ice_sources,
     save_admin_ice_source,
 )
@@ -55,3 +59,43 @@ async def put_admin_ice_source(
     if not ok:
         raise HTTPException(status_code=404, detail="Arena not found")
     return {"ok": True}
+
+
+@router.get("/admin/ice-sources/{arena_id:int}/log")
+async def get_admin_ice_arena_log(
+    arena_id: int,
+    days: int = Query(7, ge=1, le=31),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    del principal
+    try:
+        data = await arena_log(session, arena_id, days=days, date_from=date_from, date_to=date_to)
+    except SourceValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if data is None:
+        raise HTTPException(status_code=404, detail="Arena not found")
+    return data
+
+
+@router.get("/admin/ice-log")
+async def get_admin_ice_log(
+    days: int = Query(7, ge=1, le=31),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    city_id: int | None = None,
+    arena_id: int | None = None,
+    source: str | None = None,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    del principal
+    try:
+        return await journal(
+            session, days=days, date_from=date_from, date_to=date_to, city_id=city_id, arena_id=arena_id,
+            source=source,
+        )
+    except SourceValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

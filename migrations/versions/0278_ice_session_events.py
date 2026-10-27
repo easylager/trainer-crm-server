@@ -88,6 +88,12 @@ def upgrade() -> None:
             "source IN ('parser', 'manual', 'screenshot', 'script')", name="ck_ice_session_events_source"
         ),
     )
+    # Дата старта журнала: до неё «последнего добавления» нет, и это не повод поднимать тревогу.
+    op.create_table(
+        "ice_session_journal_meta",
+        sa.Column("started_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+    )
+    op.execute("INSERT INTO ice_session_journal_meta DEFAULT VALUES")
     op.create_index("ix_ice_session_events_arena_time", "ice_session_events", ["arena_id", sa.text("occurred_at DESC")])
     op.create_index("ix_ice_session_events_time", "ice_session_events", [sa.text("occurred_at DESC")])
     op.execute(_FUNCTION)
@@ -103,3 +109,4 @@ def downgrade() -> None:
     op.drop_index("ix_ice_session_events_time", table_name="ice_session_events")
     op.drop_index("ix_ice_session_events_arena_time", table_name="ice_session_events")
     op.drop_table("ice_session_events")
+    op.execute("DROP TABLE IF EXISTS ice_session_journal_meta")
