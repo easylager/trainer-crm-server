@@ -273,6 +273,7 @@ from src.application.stats_use_cases import (
     get_trainer_revenue_breakdown_for_range,
     get_trainer_stats_dashboard,
 )
+from src.application.admin_trainer_journey import get_admin_trainer_journey, set_trainer_contacted
 from src.application.admin_analytics_use_cases import (
     get_admin_clients_stats,
     get_admin_engagement_stats,
@@ -4566,6 +4567,40 @@ async def get_admin_stats_trainers(
 ):
     """Trainers hub: paying vs trial vs sleeping vs onboarding, top by bookings."""
     return await get_admin_trainers_hub_stats(session)
+
+
+class AdminTrainerContactedBody(BaseModel):
+    contacted: bool
+
+
+@router.get("/admin/trainer-journey")
+async def get_admin_trainer_journey_api(
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Trainer journey list: newest first, milestones reached, where each one stopped."""
+    return await get_admin_trainer_journey(
+        session, exclude_telegram_ids=list(Settings().admin_telegram_ids or [])
+    )
+
+
+@router.post("/admin/trainer-journey/{trainer_id}/contacted")
+async def set_admin_trainer_contacted_api(
+    trainer_id: int,
+    body: AdminTrainerContactedBody,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Admin marks «написали» (or clears it) so nobody gets messaged twice."""
+    ok = await set_trainer_contacted(
+        session,
+        trainer_id=trainer_id,
+        contacted=body.contacted,
+        admin_telegram_id=int(principal.user_id),
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    return {"ok": True, "contacted": body.contacted}
 
 
 @router.get("/admin/stats/growth")

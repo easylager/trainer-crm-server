@@ -11,6 +11,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
+from src.application.admin_trainer_journey import get_admin_trainer_journey
 from src.application.referral_use_cases import (
     admin_adjust_referral_credit,
     get_referral_credit_balance,
@@ -601,13 +602,48 @@ async def cmd_stats(message: Message) -> None:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [_wa("📊 Сейчас", "admin-stats"), _wa("💰 Деньги", "admin-money")],
         [_wa("👥 Тренеры", "admin-trainers"), _wa("🕓 История", "admin-activity")],
+        [_wa("🧭 Путь тренеров", "admin-journey")],
     ])
     await message.answer(
         "📊 <b>Что происходит с системой</b>\n\n"
         "<b>Сейчас</b> — пульс дня и кому ответить.\n"
         "<b>Деньги</b> — MRR, оплаты, висящие счета.\n"
         "<b>Тренеры</b> — кто платит, кто работает, кто молчит.\n"
-        "<b>История</b> — лог действий.",
+        "<b>История</b> — лог действий.\n"
+        "<b>Путь тренеров</b> — кто где остановился, кому написать.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+    )
+
+
+@router.message(Command("journey"))
+async def cmd_journey(message: Message) -> None:
+    """Open the trainer journey list (who stopped at which onboarding step)."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base:
+        await message.answer("WEBAPP_BASE_URL не задан — список недоступен.")
+        return
+    async with async_session_factory() as session:
+        data = await get_admin_trainer_journey(
+            session, exclude_telegram_ids=list(Settings().admin_telegram_ids or [])
+        )
+    items = data["items"]
+    working = sum(1 for i in items if i["working"])
+    no_client = sum(1 for i in items if 4 <= i["reached"] <= 5)
+    not_written = sum(1 for i in items if not i["working"] and not i["contacted_at"])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="Открыть список", web_app=WebAppInfo(url=f"{base}/webapp/admin-journey")
+        )
+    ]])
+    await message.answer(
+        f"🧭 <b>Путь тренеров</b>\n{data['total']} в системе, новые сверху.\n\n"
+        f"Без первого клиента: {no_client}\n"
+        f"Работают с записями: {working}\n"
+        f"Застряли, и мы ещё не писали: {not_written}",
         parse_mode=ParseMode.HTML,
         reply_markup=keyboard,
     )

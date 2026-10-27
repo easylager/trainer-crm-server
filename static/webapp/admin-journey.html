@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Путь тренеров · Админ</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610214"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610214" />
+  <link rel="stylesheet" href="theme.css?v=202610214" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=202610214" />
+  <style>
+    .jr-tabs { display: flex; gap: 6px; background: var(--tg-theme-secondary-bg-color, #2a2a2a); border-radius: 12px; padding: 4px; margin-bottom: 12px; }
+    .jr-tab { flex: 1; min-height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--tg-theme-hint-color, #9ca3af); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .jr-tab[aria-pressed="true"] { background: #3a3a3a; color: var(--tg-theme-text-color, #f5f5f5); }
+    .jr-chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px 12px; padding: 0 16px; }
+    .jr-chip { flex: none; min-height: 44px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: var(--tg-theme-text-color, #f5f5f5); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+    .jr-chip[aria-pressed="true"] { border-color: #45b9bb; color: #45b9bb; font-weight: 600; }
+    .jr-list { display: flex; flex-direction: column; gap: 10px; }
+    .jr-card { background: var(--tg-theme-secondary-bg-color, #2a2a2a); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; padding: 14px; }
+    .jr-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .jr-name { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+    .jr-when, .jr-hint { font-size: 12px; color: var(--tg-theme-hint-color, #9ca3af); }
+    .jr-when { white-space: nowrap; }
+    .jr-handle { font-size: 13px; color: var(--tg-theme-hint-color, #9ca3af); margin-top: 2px; }
+    .jr-segs { display: flex; gap: 3px; margin-top: 12px; }
+    .jr-seg { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); }
+    .jr-seg.done { background: #45b9bb; }
+    .jr-seg.cur { background: rgba(69,185,187,.28); }
+    .jr-state { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
+    .jr-stall { font-size: 13px; font-weight: 600; color: #f0b429; }
+    .jr-stall.ok { color: #45b9bb; }
+    .jr-steps { margin: 12px 0; display: flex; flex-direction: column; gap: 2px; }
+    .jr-step { display: flex; align-items: center; gap: 10px; min-height: 28px; font-size: 14px; }
+    .jr-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); }
+    .jr-step.done .jr-dot { background: #45b9bb; border-color: #45b9bb; }
+    .jr-step.cur { color: #f0b429; font-weight: 600; }
+    .jr-step.cur .jr-dot { border-color: #f0b429; }
+    .jr-step.todo { color: var(--tg-theme-hint-color, #9ca3af); }
+    .jr-step .jr-lbl { flex: 1; }
+    .jr-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .jr-num { background: var(--tg-theme-bg-color, #1a1a1a); border-radius: 10px; padding: 10px; }
+    .jr-num b { display: block; font-size: 18px; }
+    .jr-num span { font-size: 11px; color: var(--tg-theme-hint-color, #9ca3af); }
+    .jr-plan { margin: 10px 0 12px; }
+    .jr-btns { display: flex; flex-direction: column; gap: 8px; }
+    .jr-btn { display: flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 10px; padding: 0 14px; font: inherit; font-size: 14px; font-weight: 600; text-decoration: none; border: 1px solid rgba(255,255,255,.14); background: transparent; color: var(--tg-theme-text-color, #f5f5f5); cursor: pointer; width: 100%; }
+    .jr-btn.primary { background: #45b9bb; border-color: #45b9bb; color: #06292a; }
+    .jr-note { margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="adm-header">
+    <h1>Путь тренеров</h1>
+    <div class="adm-sub" id="sub">Загрузка…</div>
+  </div>
+  <div id="controls" hidden>
+    <div class="jr-tabs" id="sorts"></div>
+    <div class="jr-chips" id="filters"></div>
+  </div>
+  <div id="content"></div>
+  <script src="admin-analytics-shared.js?v=202610214"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics;
+      var esc = A.escapeHtml;
+      var state = { sort: 'new', filter: 'all', data: null };
+      var FILTERS = [
+        { id: 'all', label: 'Все', test: function () { return true; } },
+        { id: 'stuck', label: 'Застряли', test: function (t) { return !t.working; } },
+        { id: 'noclient', label: 'Нет клиента', test: function (t) { return t.reached >= 4 && t.reached <= 5; } },
+        { id: 'fresh', label: 'Мы не писали', test: function (t) { return !t.contacted_at; } }
+      ];
+      var SORTS = [
+        { id: 'new', label: 'Новые сверху', key: 'joined_at' },
+        { id: 'seen', label: 'Заходили недавно', key: 'last_activity_at' }
+      ];
+
+      var dayFmt = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Minsk', day: 'numeric', month: 'short' });
+      var timeFmt = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Minsk', hour: '2-digit', minute: '2-digit' });
+      var ymdFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Minsk' });
+
+      function dayLabel(iso, withTime) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        var today = ymdFmt.format(new Date());
+        var yest = ymdFmt.format(new Date(Date.now() - 86400000));
+        var ymd = ymdFmt.format(d);
+        var day = ymd === today ? 'сегодня' : ymd === yest ? 'вчера' : dayFmt.format(d).replace('.', '');
+        return withTime ? day + ', ' + timeFmt.format(d) : day;
+      }
+
+      function planLabel(p) {
+        if (!p || p.status === 'none') return 'не выбран';
+        var until = p.expires_at ? ' до ' + dayFmt.format(new Date(p.expires_at)).replace('.', '') : '';
+        if (p.status === 'paid') return 'платит' + until;
+        if (p.status === 'trial') return 'триал' + until;
+        return 'истёк' + until;
+      }
+
+      function card(t) {
+        var segs = t.steps.map(function (s, i) {
+          return '<span class="jr-seg ' + (s.done ? 'done' : i === t.reached ? 'cur' : '') + '"></span>';
+        }).join('');
+        var steps = t.steps.map(function (s, i) {
+          var cls = s.done ? 'done' : i === t.reached ? 'cur' : 'todo';
+          var date = s.done ? dayLabel(s.date, false) : (i === t.reached ? 'здесь' : '');
+          return '<div class="jr-step ' + cls + '"><span class="jr-dot"></span><span class="jr-lbl">' +
+            esc(s.label) + '</span><span class="jr-hint">' + esc(date) + '</span></div>';
+        }).join('');
+        var hasNick = !!t.username;
+        var handle = hasNick ? '@' + t.username : 'ника нет · ID ' + t.telegram_id;
+        var name = t.name || (hasNick ? '@' + t.username : 'Без имени');
+        var href = hasNick ? 'https://t.me/' + encodeURIComponent(t.username) : 'tg://user?id=' + t.telegram_id;
+        var write = hasNick ? 'Написать @' + esc(t.username) : 'Открыть по ID';
+        var contacted = t.contacted_at
+          ? '<div class="jr-hint jr-note">Написали ' + esc(dayLabel(t.contacted_at, false)) + '</div>' : '';
+        return '<div class="jr-card">' +
+          '<div class="jr-top"><span class="jr-name">' + esc(name) + '</span>' +
+          '<span class="jr-when">зашёл ' + esc(dayLabel(t.joined_at, true)) + '</span></div>' +
+          '<div class="jr-handle">' + esc(handle) + '</div>' +
+          '<div class="jr-segs">' + segs + '</div>' +
+          '<div class="jr-state"><span class="jr-stall' + (t.working ? ' ok' : '') + '">' +
+          (t.working ? 'Работает' : 'Стоп: ' + esc(t.stall.toLowerCase())) + '</span>' +
+          '<span class="jr-hint">активность ' + esc(dayLabel(t.last_activity_at, false)) + '</span></div>' +
+          '<div class="jr-steps">' + steps + '</div>' +
+          '<div class="jr-nums">' +
+          '<div class="jr-num"><b>' + A.formatNum(t.slots) + '</b><span>слотов</span></div>' +
+          '<div class="jr-num"><b>' + A.formatNum(t.clients) + '</b><span>клиентов</span></div>' +
+          '<div class="jr-num"><b>' + A.formatNum(t.bookings) + '</b><span>записей</span></div></div>' +
+          '<div class="jr-hint jr-plan">Тариф: ' + esc(planLabel(t.plan)) + '</div>' +
+          '<div class="jr-btns"><a class="jr-btn primary" data-write="' + esc(href) + '" href="' + esc(href) + '">' + write + '</a>' +
+          '<button class="jr-btn" type="button" data-mark="' + t.trainer_id + '">' +
+          (t.contacted_at ? 'Снять отметку «написали»' : 'Отметить: написал') + '</button></div>' +
+          contacted + '</div>';
+      }
+
+      function visible() {
+        var f = FILTERS.filter(function (x) { return x.id === state.filter; })[0] || FILTERS[0];
+        var key = SORTS.filter(function (x) { return x.id === state.sort; })[0].key;
+        return state.data.items.filter(f.test).sort(function (a, b) {
+          return String(b[key] || '').localeCompare(String(a[key] || ''));
+        });
+      }
+
+      function draw() {
+        var d = state.data;
+        document.getElementById('sub').textContent = d.total + ' в системе · ' +
+          (state.sort === 'new' ? 'по времени первого входа' : 'по последней активности');
+        document.getElementById('sorts').innerHTML = SORTS.map(function (s) {
+          return '<button class="jr-tab" type="button" data-sort="' + s.id + '" aria-pressed="' + (state.sort === s.id) + '">' + s.label + '</button>';
+        }).join('');
+        document.getElementById('filters').innerHTML = FILTERS.map(function (f) {
+          return '<button class="jr-chip" type="button" data-filter="' + f.id + '" aria-pressed="' + (state.filter === f.id) + '">' +
+            f.label + ' · ' + d.items.filter(f.test).length + '</button>';
+        }).join('');
+        var rows = visible();
+        document.getElementById('content').innerHTML = rows.length
+          ? '<div class="jr-list">' + rows.map(card).join('') + '</div>'
+          : '<div class="adm-card"><div class="adm-empty">Под этот фильтр никого нет</div></div>';
+      }
+
+      function post(path, body) {
+        var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+        if (A.initData) headers['X-Telegram-Init-Data'] = A.initData;
+        var url = A.apiUrl(path) + (A.initData ? '?init_data=' + encodeURIComponent(A.initData) : '');
+        return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body), credentials: 'same-origin' })
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+      }
+
+      document.addEventListener('click', function (ev) {
+        var el = ev.target.closest('[data-sort],[data-filter],[data-mark],[data-write]');
+        if (!el || !state.data) return;
+        if (el.dataset.sort) { state.sort = el.dataset.sort; draw(); return; }
+        if (el.dataset.filter) { state.filter = el.dataset.filter; draw(); return; }
+        if (el.dataset.write) {
+          var tg = window.Telegram && window.Telegram.WebApp;
+          var href = el.dataset.write;
+          if (tg && href.indexOf('https://t.me/') === 0 && typeof tg.openTelegramLink === 'function') {
+            ev.preventDefault();
+            tg.openTelegramLink(href);
+          }
+          return;
+        }
+        var id = +el.dataset.mark;
+        var item = state.data.items.filter(function (t) { return t.trainer_id === id; })[0];
+        if (!item) return;
+        var next = !item.contacted_at;
+        el.disabled = true;
+        post('/admin/trainer-journey/' + id + '/contacted', { contacted: next }).then(function () {
+          item.contacted_at = next ? new Date().toISOString() : null;
+          draw();
+        }).catch(function () { el.disabled = false; el.textContent = 'Не сохранилось, повторите'; });
+      });
+
+      A.getJson('/admin/trainer-journey').then(function (d) {
+        state.data = d;
+        document.getElementById('controls').hidden = false;
+        draw();
+      }).catch(function (e) {
+        document.getElementById('sub').textContent = '';
+        document.getElementById('content').innerHTML = '<div class="adm-error">' + esc((e && e.message) || 'Ошибка сети') + '</div>';
+      });
+    })();
+  </script>
+</body>
+</html>
