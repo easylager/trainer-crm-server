@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.ice_city_day import ICE_CITY_DAY_SESSION_WHERE_SQL, plural_ru
 from src.application.ice_session_use_cases import STATUS_ACTIVE
 from src.application.ice_time_windows import HOME_PICKER_DAYS, home_picker_dates
+from src.application.style_b import days_sheet_script_html
 from src.shared.copy_ru import t
 from src.shared.ice_discovery_scope import public_scope_params
 
@@ -69,6 +70,10 @@ _ICON = (
 )
 
 SHEET_ID = "when-days"
+_CLOSE_ICON = (
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+)
 HOME_PICKER_DAYS_LABEL = f"{HOME_PICKER_DAYS} дн"
 
 
@@ -124,9 +129,10 @@ def render_calendar(
         f'<div class="b-days-sheet" id="{SHEET_ID}" role="dialog" aria-labelledby="{SHEET_ID}-t">'
         f'<a class="b-days-sheet__bg" href="#" aria-label="Закрыть"></a>'
         f'<div class="b-days-sheet__panel"><span class="b-days-sheet__grab" aria-hidden="true"></span>'
+        f'<a class="b-days-sheet__x" href="#" aria-label="Закрыть">{_CLOSE_ICON}</a>'
         f'<h2 id="{SHEET_ID}-t">{_esc(t("when.pick_day"))}</h2>'
         f'<p class="b-days-sheet__sub">{_esc(t("when.pick_day_sub"))}</p>'
-        f'<div class="b-days-sheet__grid">{any_row}{"".join(chips)}</div></div></div>'
+        f'<div class="b-days-sheet__grid">{any_row}{"".join(chips)}</div></div>{days_sheet_script_html()}</div>'
     )
     return button, sheet
 

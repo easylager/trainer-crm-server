@@ -30,6 +30,7 @@ STYLE_VERSION = _file_version("static/share/style-b.css")
 # Отдельной ссылкой, не @import из style-b.css: импорт без ?v= шёл с no-store и ещё одним кругом до первой отрисовки.
 COMPONENTS_VERSION = _file_version("static/shared/glide-components.css")
 DOCK_SCRIPT_VERSION = _file_version("static/share/tg-dock.js")
+DAYS_SHEET_SCRIPT_VERSION = _file_version("static/share/b-days-sheet.js")
 APP_BUTTON_SCRIPT_VERSION = _file_version("static/share/app-button.js")
 COACH_SHEET_SCRIPT_VERSION = _file_version("static/share/coach-sheet.js")
 PRESS_SCRIPT_VERSION = _file_version("static/share/b-press.js")
@@ -471,6 +472,11 @@ def telegram_dock_script_html() -> str:
     """Скрипт плашки Telegram — только вне Mini App."""
     v = DOCK_SCRIPT_VERSION
     return f'<script defer src="/static/share/tg-dock.js?v={esc(v)}"></script>'
+
+
+def days_sheet_script_html() -> str:
+    """Лист «Выберите день» (TASK-337): свайп вниз, крестик, блокировка прокрутки. Главная и хаб города."""
+    return f'<script defer src="/static/share/b-days-sheet.js?v={esc(DAYS_SHEET_SCRIPT_VERSION)}"></script>'
 
 
 def when_swap_script_html() -> str:

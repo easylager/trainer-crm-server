@@ -153,3 +153,18 @@ async def test_any_day_on_home_and_in_hub(app_use_test_db, db_session) -> None:
     # голый хаб остаётся индексируемым, «любой день» в нём не отмечен
     assert 'name="robots" content="index, follow"' in default_hub.text
     assert 'b-dayc--any" href="/c/' in default_hub.text and 'b-cal__date--any' not in default_hub.text
+
+
+@pytest.mark.asyncio
+async def test_day_sheet_script_is_served_on_home_and_hub(app_use_test_db, db_session) -> None:
+    """Скрипт листа подключён тегом внутри листа: без маршрута он отдавал бы 404, а свайп молча не работал бы."""
+    name, slug, target = await _city_with_rinks(db_session)
+    async with _client() as client:
+        for path in ("/", f"/c/{slug}"):
+            page = await client.get(path, cookies={"glide_city": slug})
+            src = re.search(r'<script defer src="(/static/share/b-days-sheet\.js\?v=[^"]+)"', page.text)
+            assert src, f"{path}: тег скрипта листа не найден"
+            script = await client.get(src.group(1))
+            assert script.status_code == 200 and "javascript" in script.headers["content-type"]
+            assert "glideDaysSheet" in script.text
+            assert 'class="b-days-sheet__x"' in page.text, "крестик закрытия"

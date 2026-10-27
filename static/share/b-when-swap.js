@@ -226,41 +226,14 @@
     strip().classList.add('is-live');
     if (a.closest('.b-when')) markStrip(a.href);
     closeSheet();
-    // Страница открыта прямо со #when-days: pushState не сбросит :target, лист остался бы открытым.
-    // Переход к пустому фрагменту без новой записи в истории его снимает.
-    if (location.hash === '#when-days') location.replace(location.href.split('#')[0] + '#');
     show(a.href, true);
   });
 
-  // Лист дней календаря (TASK-337). С JS он открывается классом, а не якорем: pushState не сбрасывает
-  // :target, и после выбора дня лист остался бы открытым. Без JS работает якорь #when-days.
-  function sheet() {
-    return document.getElementById('when-days');
-  }
-
+  // Лист дней (TASK-337) открывает, закрывает и свайпит b-days-sheet.js; здесь он только закрывается
+  // после выбора дня, потому что страница не перезагружается.
   function closeSheet() {
-    var el = sheet();
-    if (el) el.classList.remove('is-open');
+    if (window.glideDaysSheet) window.glideDaysSheet.close();
   }
-
-  document.addEventListener('click', function (e) {
-    var el = e.target && e.target.closest ? e.target.closest('a.b-cal, .b-days-sheet__bg') : null;
-    if (!el || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
-    if (el.classList.contains('b-cal')) {
-      var open = sheet();
-      if (!open) return;
-      open.classList.add('is-open');
-      var current = open.querySelector('.b-dayc[aria-current="true"]') || open.querySelector('.b-dayc');
-      if (current) current.focus({ preventScroll: true });
-    } else {
-      closeSheet();
-    }
-  });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeSheet();
-  });
 
   history.replaceState({ bWhen: 1 }, '', location.href);
   window.addEventListener('popstate', function (e) {
