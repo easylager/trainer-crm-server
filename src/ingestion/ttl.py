@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 RUN_TTL_DAYS = 90
 SESSION_TTL_DAYS = 14
 SESSION_EXPIRE_AFTER = timedelta(days=1)
+EVENT_TTL_DAYS = 30
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class IceTtlStats:
     runs_deleted: int
     sessions_deleted: int
     sessions_expired: int = 0
+    events_deleted: int = 0
 
 
 async def expire_past_ice_sessions(session: AsyncSession, *, now: datetime) -> int:
@@ -88,8 +90,13 @@ async def purge_ice_scrape_ttl(session: AsyncSession, *, now: datetime) -> IceTt
         {"session_cutoff": session_cutoff},
     )
     expired = await expire_past_ice_sessions(session, now=now)
+    events = await session.execute(
+        text("DELETE FROM ice_session_events WHERE occurred_at < :cutoff"),
+        {"cutoff": now - timedelta(days=EVENT_TTL_DAYS)},
+    )
     return IceTtlStats(
         runs_deleted=int(runs.rowcount or 0),
         sessions_deleted=int(sessions.rowcount or 0),
         sessions_expired=expired,
+        events_deleted=int(events.rowcount or 0),
     )
