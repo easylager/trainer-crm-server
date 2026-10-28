@@ -90,7 +90,8 @@ def rate_limit_bucket_for_path(path: str) -> str:
         return "invite_event"
     # PDEC-028: заявка «Предложить место» пишет в базу и шлёт пуш админу — узкий бакет;
     # поиск города ходит в Nominatim — свой, чтобы не делить бюджет ни с заявкой, ни с каталогом.
-    if path == "/api/public/place-suggestions":
+    # Mini App принимает заявку и без initData — иначе это был бы обход лимита сайта.
+    if path in ("/api/public/place-suggestions", "/api/webapp/place-suggestions"):
         return "suggest"
     if path.startswith("/api/public/place-suggestions/"):
         return "suggest_cities"

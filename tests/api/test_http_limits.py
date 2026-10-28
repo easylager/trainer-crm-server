@@ -36,6 +36,7 @@ def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/api/public/photos/trainers/x.jpg") == "photo"
     assert rate_limit_bucket_for_path("/api/public/place-suggestions") == "suggest"
     assert rate_limit_bucket_for_path("/api/public/place-suggestions/cities") == "suggest_cities"
+    assert rate_limit_bucket_for_path("/api/webapp/place-suggestions") == "suggest"
     assert rate_limit_bucket_for_path("/api/webapp/schedule") == "webapp"
     assert rate_limit_bucket_for_path("/api/upload/photo") == "upload"
     assert rate_limit_bucket_for_path("/api/trainers") == "default"
