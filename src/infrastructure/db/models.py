@@ -238,7 +238,7 @@ class Arena(Base):
     address: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
-    #: ice|gym|choreo|pool|outdoor|other|shop — см. src/shared/venue_types.py. Лёд здесь
+    #: ice|gym|choreo|pool|outdoor|other|shop|school — см. src/shared/venue_types.py. Лёд здесь
     #: частный случай, а не синоним арены; дефолт сохраняет поведение старых строк.
     venue_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ice")
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")

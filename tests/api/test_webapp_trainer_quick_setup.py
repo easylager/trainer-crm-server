@@ -716,6 +716,34 @@ async def test_get_lists_arenas_with_their_real_grid(app_use_test_db, db_session
 
 
 @pytest.mark.asyncio
+async def test_get_does_not_list_shops_or_schools(app_use_test_db, db_session) -> None:
+    """Магазин и школа — не место работы тренера (TASK-146, PDEC-028)."""
+    tg = _fresh_trainer_telegram_id()
+    await _bare_linked_trainer(db_session, tg)
+    city_id, zamok, _manege = await _fresh_city_and_arenas(db_session)
+    ids = {}
+    for kind in ("shop", "school"):
+        r = await db_session.execute(
+            text(
+                "INSERT INTO arenas (city_id, name, is_active, venue_type) "
+                "VALUES (:c, :n, true, :k) RETURNING id"
+            ),
+            {"c": city_id, "n": f"{kind} HTTP", "k": kind},
+        )
+        ids[kind] = int(r.fetchone()[0])
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(QUICK_SETUP_URL, headers={"X-Telegram-Init-Data": "mock"})
+
+    listed = {a["id"] for a in resp.json()["arenas"]}
+    assert zamok in listed
+    assert ids["shop"] not in listed
+    assert ids["school"] not in listed
+
+
+@pytest.mark.asyncio
 async def test_post_with_a_single_arena_shifts_slots_and_links_it(app_use_test_db, db_session) -> None:
     tg = _fresh_trainer_telegram_id()
     trainer_id = await _bare_linked_trainer(db_session, tg)
@@ -1071,7 +1099,7 @@ async def test_rink_from_join_does_not_change_a_trainer_who_has_rinks(app_use_te
 
 
 @pytest.mark.asyncio
-async def test_rink_from_join_ignores_shops_and_unknown_ids(app_use_test_db, db_session) -> None:
+async def test_rink_from_join_ignores_shops_schools_and_unknown_ids(app_use_test_db, db_session) -> None:
     from src.application.trainer_quick_setup_use_cases import seed_trainer_arena_from_join
 
     trainer_id = await _bare_linked_trainer(db_session, _fresh_trainer_telegram_id())
@@ -1084,9 +1112,18 @@ async def test_rink_from_join_ignores_shops_and_unknown_ids(app_use_test_db, db_
         {"c": city_id},
     )
     shop = int(r.fetchone()[0])
+    r = await db_session.execute(
+        text(
+            "INSERT INTO arenas (city_id, name, is_active, venue_type) "
+            "VALUES (:c, 'Школа HTTP', true, 'school') RETURNING id"
+        ),
+        {"c": city_id},
+    )
+    school = int(r.fetchone()[0])
     await db_session.commit()
 
     assert await seed_trainer_arena_from_join(db_session, trainer_id, shop) is False
+    assert await seed_trainer_arena_from_join(db_session, trainer_id, school) is False
     assert await seed_trainer_arena_from_join(db_session, trainer_id, 2_000_000_000) is False
     r = await db_session.execute(
         text("SELECT primary_arena_id FROM trainers WHERE id = :t"), {"t": trainer_id}

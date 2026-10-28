@@ -58,7 +58,7 @@ VENUE_TYPES: tuple[Mapping[str, str], ...] = (
     },
     {"key": VENUE_TYPE_OTHER, "chip": "Другое", "noun": "Площадка", "genitive": "места", "icon": "📍"},
     {"key": VENUE_TYPE_SHOP, "chip": "Магазин", "noun": "Магазин", "genitive": "магазина", "icon": "🧰"},
-    {"key": VENUE_TYPE_SCHOOL, "chip": "Школы", "noun": "Школа", "genitive": "школы", "icon": "🎓"},
+    {"key": VENUE_TYPE_SCHOOL, "chip": "Школа", "noun": "Школа", "genitive": "школы", "icon": "🎓"},
 )
 
 VENUE_TYPE_KEYS: tuple[str, ...] = tuple(v["key"] for v in VENUE_TYPES)

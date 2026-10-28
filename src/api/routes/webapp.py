@@ -9086,6 +9086,7 @@ async def get_trainer_onboarding_quick_setup(
     )
     from src.shared.specialist_roles import SUGGESTED_ROLES
     from src.shared.venue_types import (
+        TRAINER_VENUE_TYPE_KEYS,
         normalize_venue_type,
         venue_type_chip,
         venue_type_options,
@@ -9204,12 +9205,12 @@ async def get_trainer_onboarding_quick_setup(
               AND (c.is_active = true OR c.created_by_trainer_id = :tid)
             LEFT JOIN arena_schedule_presets p ON p.arena_id = a.id
             WHERE a.is_active = true
-              -- Магазин — не место работы тренера (TASK-146).
-              AND a.venue_type <> 'shop'
+              -- Магазин и школа — не место работы тренера (TASK-146, PDEC-028).
+              AND a.venue_type = ANY(:trainer_venue_types)
             ORDER BY c.sort_order, c.name, a.sort_order, a.name
             """
         ),
-        {"tid": trainer_id},
+        {"tid": trainer_id, "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS)},
     )
     arenas = [
         {
