@@ -32,6 +32,7 @@ from src.api.routes import (
 )
 from src.api.routes.org_webapp import router as org_webapp_router
 from src.api.routes.public_arenas import router as public_arenas_router
+from src.api.routes.public_place_suggestions import router as public_place_suggestions_router
 from src.api.routes.public_invites import router as public_invites_router
 from src.api.routes.zovi_create_page import router as zovi_create_page_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
@@ -2826,6 +2827,7 @@ async def health():
 
 app.include_router(public_router)
 app.include_router(public_arenas_router)
+app.include_router(public_place_suggestions_router)
 app.include_router(public_invites_router)
 app.include_router(zovi_create_page_router)
 app.include_router(public_ice_page_router)

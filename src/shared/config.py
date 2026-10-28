@@ -148,6 +148,11 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # TASK-237: маячки воронки открытки (до пяти актов + «отправить ответ» на открытие).
     api_rate_limit_invite_event_max_requests: int = 60
     api_rate_limit_invite_event_window_sec: float = 600.0
+    # PDEC-028: «Предложить место» без логина — создание заявки и поиск города раздельно.
+    api_rate_limit_suggest_max_requests: int = 10
+    api_rate_limit_suggest_window_sec: float = 3600.0
+    api_rate_limit_suggest_cities_max_requests: int = 60
+    api_rate_limit_suggest_cities_window_sec: float = 60.0
     # leftmost (по умолчанию: Railway режет клиентский XFF, левая запись — реальный IP) |
     # rightmost_hops (платформа дописывает справа). См. src/shared/client_ip.py, docs/ops.
     client_ip_strategy: str = "leftmost"

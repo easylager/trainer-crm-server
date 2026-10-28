@@ -88,6 +88,12 @@ def rate_limit_bucket_for_path(path: str) -> str:
     # TASK-237: маячок воронки пишет в базу, поэтому не делит бюджет с чтением открытки.
     if path.startswith("/api/public/invites/") and path.endswith("/event"):
         return "invite_event"
+    # PDEC-028: заявка «Предложить место» пишет в базу и шлёт пуш админу — узкий бакет;
+    # поиск города ходит в Nominatim — свой, чтобы не делить бюджет ни с заявкой, ни с каталогом.
+    if path == "/api/public/place-suggestions":
+        return "suggest"
+    if path.startswith("/api/public/place-suggestions/"):
+        return "suggest_cities"
     if path.startswith("/api/public/photos/"):
         return "photo"
     if path.startswith("/api/public"):
@@ -117,6 +123,10 @@ def _get_limiters() -> dict[str, RateLimiter]:
             "invite": RateLimiter(s.api_rate_limit_invite_max_requests, s.api_rate_limit_invite_window_sec),
             "invite_event": RateLimiter(
                 s.api_rate_limit_invite_event_max_requests, s.api_rate_limit_invite_event_window_sec
+            ),
+            "suggest": RateLimiter(s.api_rate_limit_suggest_max_requests, s.api_rate_limit_suggest_window_sec),
+            "suggest_cities": RateLimiter(
+                s.api_rate_limit_suggest_cities_max_requests, s.api_rate_limit_suggest_cities_window_sec
             ),
         }
     return _limiters
