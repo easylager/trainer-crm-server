@@ -3,7 +3,8 @@
 
 Тот же use case, что у сайта, но автор известен из initData: владелец ответит ему через
 клиентского бота, поэтому ни ``bind_token``, ни ссылки на бота в ответе нет. Без initData
-(браузер, сбой подписи) заявка всё равно принимается — без автора. Лимит — общий бакет
+(браузер, сбой подписи) заявка всё равно принимается — без автора, и, как на сайте, в ответе
+``telegram_link`` (``start=sg_<token>``), чтобы автор мог привязаться. Лимит — общий бакет
 ``suggest`` с сайтом (см. ``http_limits``).
 """
 from __future__ import annotations
@@ -15,7 +16,11 @@ from src.api.deps import get_session
 from src.api.middleware.http_limits import client_ip_from_request
 from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
-from src.api.routes.public_place_suggestions import PlaceSuggestionFields, suggestion_error_response
+from src.api.routes.public_place_suggestions import (
+    PlaceSuggestionFields,
+    suggestion_error_response,
+    telegram_bind_link,
+)
 from src.application.place_suggestion_use_cases import create_place_suggestion
 from src.shared.place_suggestion import PlaceSuggestionError
 
@@ -51,4 +56,4 @@ async def post_webapp_place_suggestion(
         )
     except PlaceSuggestionError as exc:
         return suggestion_error_response(exc)
-    return {"ok": True, "id": res["id"]}
+    return {"ok": True, "id": res["id"], "telegram_link": telegram_bind_link(res["bind_token"])}

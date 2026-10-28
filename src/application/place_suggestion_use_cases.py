@@ -13,7 +13,7 @@ from typing import Any, Mapping
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.catalog_consumer_events import _hmac_actor
+from src.application.catalog_consumer_events import hmac_actor
 from src.application.place_suggestion_notify import notify_admins_new_place_suggestion
 from src.application.trainer_city_create_use_cases import find_city_by_name_insensitive
 from src.shared.place_suggestion import (
@@ -47,7 +47,7 @@ def client_ip_hash(client_ip: str | None) -> str | None:
     ip = (client_ip or "").strip()
     if not ip:
         return None
-    return _hmac_actor("suggest-ip", ip)
+    return hmac_actor("suggest-ip", ip)
 
 
 async def create_place_suggestion(
@@ -81,14 +81,17 @@ async def create_place_suggestion(
             raise PlaceSuggestionError("Город не найден.")
         new_city_name = None
     else:
-        existing = await find_city_by_name_insensitive(session, new_city_name or "")
+        # Проверяем страну целиком, до обрезки: «RUS» — это ошибка, а не «RU».
+        country = re.sub(r"\s+", "", str(new_city.get("country") or "")).upper()
+        if not _COUNTRY_RE.match(country):
+            raise PlaceSuggestionError("Укажите страну города.")
+        # Одноимённые города бывают в разных странах (Пушкино и т. п.) — совпадение только с той же страной.
+        existing = await find_city_by_name_insensitive(session, new_city_name or "", country=country)
         if existing:
             city_id = int(existing["id"])
             new_city_name = None
         else:
-            new_country = (_clean(new_city.get("country"), 2) or "").upper()
-            if not _COUNTRY_RE.match(new_country):
-                raise PlaceSuggestionError("Укажите страну города.")
+            new_country = country
             new_region = _clean(new_city.get("region"), 160)
             new_lat = _coord(new_city.get("lat"), 90)
             new_lon = _coord(new_city.get("lon"), 180)

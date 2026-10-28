@@ -71,10 +71,11 @@ async def test_create_rejects_empty_name(db_session):
 @pytest.mark.asyncio
 async def test_new_city_matching_existing_city_is_linked(db_session):
     city_id = await _any_city_id(db_session)
-    name = (await db_session.execute(text("SELECT name FROM cities WHERE id=:id"), {"id": city_id})).scalar_one()
+    name, country = (await db_session.execute(
+        text("SELECT name, country FROM cities WHERE id=:id"), {"id": city_id})).one()
     res = await create_place_suggestion(
         db_session, source="site", kind="outdoor", city_id=None,
-        new_city={"name": f"  {name.upper()} ", "country": "BY"},
+        new_city={"name": f"  {name.upper()} ", "country": country.lower()},
         name="Каток во дворе", address="ул. Ленина, 1", details={}, contact=None,
         author_telegram_id=None, client_ip=None,
     )
@@ -139,3 +140,42 @@ def test_keyboard_offers_approve_only_without_duplicates():
 
     kb = place_suggestion_keyboard(9, base_url="https://x.test", can_approve=False)
     assert [b.text for row in kb.inline_keyboard for b in row] == ["Открыть"]
+
+
+@pytest.mark.asyncio
+async def test_same_name_city_in_another_country_stays_new(db_session):
+    cid = int((await db_session.execute(text(
+        "INSERT INTO cities (name, sort_order, is_active, country) VALUES ('Пситест-Пушкино', 1, true, 'BY') "
+        "RETURNING id"))).scalar_one())
+    res = await create_place_suggestion(
+        db_session, source="site", kind="ice", city_id=None,
+        new_city={"name": "Пситест-Пушкино", "country": "RU"},
+        name="Каток", address=None, details={}, contact=None, author_telegram_id=None, client_ip=None,
+    )
+    row = (await db_session.execute(text(
+        "SELECT city_id, new_city_name, new_city_country FROM place_suggestions WHERE id=:id"),
+        {"id": res["id"]})).one()
+    assert row == (None, "Пситест-Пушкино", "RU")
+    assert cid
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("country", ["RUS", "R1", "", None, "р"])
+async def test_invalid_new_city_country_is_rejected(db_session, country):
+    with pytest.raises(PlaceSuggestionError):
+        await create_place_suggestion(
+            db_session, source="site", kind="ice", city_id=None,
+            new_city={"name": "Пситест-Город", "country": country},
+            name="Каток", address=None, details={}, contact=None, author_telegram_id=None, client_ip=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_non_list_services_do_not_break_create(db_session):
+    city_id = await _any_city_id(db_session)
+    res = await create_place_suggestion(
+        db_session, source="site", kind="shop", city_id=city_id, new_city=None,
+        name="Заточка", address=None, details={"services": 5}, contact=None,
+        author_telegram_id=None, client_ip=None,
+    )
+    assert res["id"]

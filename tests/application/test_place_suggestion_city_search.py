@@ -112,3 +112,17 @@ async def test_nominatim_parses_caches_and_throttles(monkeypatch):
 
     assert await cs.nominatim_cities("Казань") == []  # тот же момент — лимит 1 запрос/с
     assert len(calls) == 1
+
+
+def test_cache_evicts_expired_and_caps_size(monkeypatch):
+    cs._cache.clear()
+    monkeypatch.setattr(cs, "CACHE_MAX_ENTRIES", 3)
+    cs._cache_put("old", 0.0, [])
+    now = cs.CACHE_TTL_SEC + 10
+    cs._cache_put("a", now, [])
+    assert "old" not in cs._cache
+    cs._cache_put("b", now, [])
+    cs._cache_put("c", now, [])
+    cs._cache_put("d", now, [])
+    assert list(cs._cache) == ["b", "c", "d"]
+    cs._cache.clear()

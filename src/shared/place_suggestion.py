@@ -43,6 +43,11 @@ def classify_contact(raw: str | None) -> tuple[str | None, str | None]:
     return s, "other"
 
 
+def _as_list(value: Any) -> list[Any]:
+    """Только настоящий список: строка «sharpening,sale» или число — это «ничего не выбрано»."""
+    return value if isinstance(value, list) else []
+
+
 def normalize_details(kind: str, raw: dict[str, Any] | None) -> dict[str, Any]:
     raw = raw or {}
     out: dict[str, Any] = {}
@@ -51,11 +56,11 @@ def normalize_details(kind: str, raw: dict[str, Any] | None) -> dict[str, Any]:
         if v:
             out[key] = v
     if kind == "shop":
-        picked = [s for s in SHOP_SERVICES if s in (raw.get("services") or [])]
+        picked = [s for s in SHOP_SERVICES if s in _as_list(raw.get("services"))]
         if picked:
             out["services"] = picked
     if kind == "school":
-        picked = [s for s in SCHOOL_DISCIPLINES if s in (raw.get("disciplines") or [])]
+        picked = [s for s in SCHOOL_DISCIPLINES if s in _as_list(raw.get("disciplines"))]
         if picked:
             out["disciplines"] = picked
     return out

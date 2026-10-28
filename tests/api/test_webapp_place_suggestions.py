@@ -53,15 +53,18 @@ async def test_signed_init_data_records_author(app_use_test_db, db_session, monk
     assert resp.json()["ok"] is True
     row = await _row(db_session, resp.json()["id"])
     assert row[0] == "miniapp" and row[1] == 424243 and row[2] is None
+    assert resp.json()["telegram_link"] is None
 
 
 @pytest.mark.asyncio
-async def test_without_init_data_is_accepted_without_author(app_use_test_db, db_session):
+async def test_without_init_data_is_accepted_without_author(app_use_test_db, db_session, monkeypatch):
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_test_bot")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(URL, json=_body())
     assert resp.status_code == 200, resp.text
     row = await _row(db_session, resp.json()["id"])
-    assert row[0] == "miniapp" and row[1] is None
+    assert row[0] == "miniapp" and row[1] is None and row[2]
+    assert resp.json()["telegram_link"] == f"https://t.me/glide_test_bot?start=sg_{row[2]}"
 
 
 @pytest.mark.asyncio

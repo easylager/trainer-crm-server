@@ -32,3 +32,9 @@ def test_core_requires_kind_city_and_name():
     with pytest.raises(PlaceSuggestionError):
         validate_core(kind="ice", city_id=1, new_city_name=None, name="  ")
     assert validate_core(kind="ice", city_id=None, new_city_name=" Уфа ", name=" Арена ") == ("Уфа", "Арена")
+
+
+@pytest.mark.parametrize("bad", [5, "sharpening,sale", {"sharpening": True}, None])
+def test_non_list_services_and_disciplines_are_ignored(bad):
+    assert "services" not in normalize_details("shop", {"services": bad})
+    assert "disciplines" not in normalize_details("school", {"disciplines": bad})

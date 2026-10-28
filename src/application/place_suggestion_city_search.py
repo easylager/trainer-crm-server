@@ -27,11 +27,21 @@ MIN_GEOCODE_QUERY_LEN = 2
 CACHE_TTL_SEC = 3600.0
 MIN_INTERVAL_SEC = 1.0
 GEOCODE_TIMEOUT_SEC = 4.0
+CACHE_MAX_ENTRIES = 1000
 
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _last_request_at: float = 0.0
 
 Geocode = Callable[[str], Awaitable[list[dict[str, Any]]]]
+
+
+def _cache_put(key: str, now: float, result: list[dict[str, Any]]) -> None:
+    """Write with eviction: drop expired entries, then the oldest ones over the cap."""
+    for k in [k for k, (ts, _) in _cache.items() if now - ts >= CACHE_TTL_SEC]:
+        del _cache[k]
+    while len(_cache) >= CACHE_MAX_ENTRIES:
+        del _cache[next(iter(_cache))]  # dict keeps insertion order — first is the oldest
+    _cache[key] = (now, result)
 
 
 def _like_prefix(q: str) -> str:
@@ -99,7 +109,7 @@ async def nominatim_cities(q: str) -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001
         logger.info("place suggestion city search: nominatim failed q=%r", q, exc_info=True)
         return []
-    _cache[key] = (now, result)
+    _cache_put(key, now, result)
     return result
 
 

@@ -25,18 +25,22 @@ def _normalize_city_name(name: str) -> str:
     return s[:CITY_NAME_MAX_LEN]
 
 
-async def find_city_by_name_insensitive(session: AsyncSession, name: str) -> dict[str, Any] | None:
+async def find_city_by_name_insensitive(
+    session: AsyncSession, name: str, *, country: str | None = None
+) -> dict[str, Any] | None:
+    """City by name, ignoring case and edge spaces; ``country`` (ISO2) narrows the match."""
+    country_filter = "AND upper(country) = upper(:c)" if country else ""
     r = await session.execute(
         text(
-            """
+            f"""
             SELECT id, name, is_active, created_by_trainer_id
             FROM cities
-            WHERE lower(trim(name)) = lower(trim(:n))
+            WHERE lower(trim(name)) = lower(trim(:n)) {country_filter}
             ORDER BY is_active DESC, id
             LIMIT 1
             """
         ),
-        {"n": name},
+        {"n": name, **({"c": country} if country else {})},
     )
     row = r.fetchone()
     if not row:
