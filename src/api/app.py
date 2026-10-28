@@ -522,6 +522,15 @@ def webapp_suggest_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/admin-place-suggestions")
+def webapp_admin_place_suggestions_page():
+    """PDEC-028: модерация заявок «мест от людей» — список, карточка, переписка, одобрение."""
+    path = _WEBAPP_DIR / "admin-place-suggestions.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/admin-ice-inbox")
 def webapp_admin_ice_inbox_page():
     """Admin ice inbox — schedule screenshots from the phone, review and publish."""
