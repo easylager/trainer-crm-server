@@ -79,6 +79,8 @@ def test_gamecenter_overtime_final() -> None:
     assert g.periods == ((1, 1), (1, 1), (0, 0), (1, 0))
     assert [(x.minute, x.club_id, x.scorer) for x in g.goals][-1] == ("62:25", "10", "Арсений Ковгореня")
     assert g.goals[2].assists == ("Мурашов Иван", "Соколовский Владислав")
+    # «3 матча подряд с голами» — сайт пишет у каждого гола Ковгорени в матче.
+    assert [x.streak for x in g.goals] == [None, None, None, 3, 3]
     assert (g.shots, g.penalty_minutes, g.attendance) == ((29, 29), (6, 6), 622)
     assert g.best_players == ("А.Ковгореня", "Мурашов")
     # После игры билета в шапке нет.

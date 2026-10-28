@@ -146,6 +146,7 @@ async def test_match_page_sets_tickets_and_official_result(db_session) -> None:
         "side": "home",
         "scorer": "Арсений Ковгореня",
         "assists": [],
+        "streak": 3,
     }
 
     ahead = await _match(db_session, "441978")
@@ -221,3 +222,92 @@ async def test_match_closed_by_calendar_still_gets_its_protocol(db_session) -> N
     assert row.details["official"] is True and len(row.details["goals"]) == 5
     # Официальный протокол есть — больше не ходим.
     assert (await sync_details(db_session, source, now=now + timedelta(hours=2)))["checked"] == 0
+
+
+async def test_old_results_get_protocols_a_few_per_tick(db_session, monkeypatch) -> None:
+    import src.application.extraliga as extraliga
+
+    monkeypatch.setattr(extraliga, "BACKFILL_PER_TICK", 1)
+    now = _minsk(2026, 11, 20, 12, 0)
+    for mid, day in (("441960", 24), ("441964", 27)):
+        played = replace(
+            _yunost_neman(mid, _minsk(2026, 10, day, 19, 0)),
+            status="played",
+            home_score=1,
+            away_score=4,
+            decided_in="regulation",
+        )
+        await upsert_calendar_match(db_session, played, now=now)
+    source = FakeSource(
+        [],
+        {
+            match_page_url("441960"): _page("hockeyby-gamecenter-441960-final.html"),
+            match_page_url("441964"): _page("hockeyby-gamecenter-441964-ot.html"),
+        },
+    )
+    # По одному за тик, свежий первым.
+    assert (await sync_details(db_session, source, now=now))["checked"] == 1
+    assert source.asked == [match_page_url("441964")]
+    assert (await sync_details(db_session, source, now=now + timedelta(minutes=10)))["checked"] == 1
+    assert (await sync_details(db_session, source, now=now + timedelta(minutes=20)))["checked"] == 0
+    streaks = [g["streak"] for g in (await _match(db_session, "441964")).details["goals"]]
+    assert streaks == [None, None, None, 3, 3]
+
+
+async def test_broken_match_page_is_not_hammered(db_session) -> None:
+    now = _minsk(2026, 10, 25, 12, 0)
+    await upsert_calendar_match(db_session, _yunost_neman("441978", _minsk(2026, 10, 29, 19, 0)), now=now)
+    source = FakeSource([], {match_page_url("441978"): "<html>сайт на обслуживании</html>"})
+    assert (await sync_details(db_session, source, now=now))["failed"] == 1
+    assert (await sync_details(db_session, source, now=now + timedelta(minutes=10)))["failed"] == 0
+
+
+async def test_preview_before_the_return_match(db_session) -> None:
+    from src.application.extraliga_preview import match_preview
+
+    now = _minsk(2026, 10, 28, 12, 0)
+    await sync_calendar(db_session, _season(), now=now)
+    first = replace(
+        _yunost_neman("441964", _minsk(2026, 10, 27, 19, 0)),
+        status="played",
+        home_score=3,
+        away_score=2,
+        decided_in="ot",
+    )
+    await upsert_calendar_match(db_session, first, now=now)
+    await upsert_calendar_match(db_session, _yunost_neman("441978", _minsk(2026, 10, 29, 19, 0)), now=now)
+    source = FakeSource(
+        [],
+        {
+            STANDINGS_URL: _page("hockeyby-table-628.html"),
+            match_page_url("441964"): _page("hockeyby-gamecenter-441964-ot.html"),
+            match_page_url("441978"): _page("hockeyby-gamecenter-441978-future.html"),
+        },
+    )
+    await sync_standings(db_session, source, now=now)
+    await sync_details(db_session, source, now=now)
+    mid = (await _match(db_session, "441978")).id
+
+    p = await match_preview(db_session, mid)
+    yu, ne = p["home"], p["away"]
+    assert (yu["place"], yu["points"], ne["place"], ne["points"]) == (13, 9, 7, 18)
+    # В фикстурах из сыгранных у этой пары только вчерашний матч — он и есть свежий в форме.
+    assert yu["form"][-1] == "Во" and ne["form"][-1] == "По"
+    assert [f["name"] for f in yu["leaders"]["forwards"]] == ["Дмитрий Хобян", "Кирилл Бобровских"]
+    assert ne["leaders"]["goalie"]["save_pct"] == 92.2
+    assert yu["streaks"] == [{"player": "Арсений Ковгореня", "matches": 3}]
+    last = p["last_meeting"]
+    assert (last["home_score"], last["away_score"], last["decided_in"], last["same_arena"]) == (3, 2, "ot", True)
+    assert last["winning_goal"] == {"scorer": "Арсений Ковгореня", "minute": 63}
+    assert last["loser"] == "Неман"
+
+
+def test_form_marks_and_winning_goal() -> None:
+    from src.application.extraliga_preview import _Played, form_mark, winning_goal
+
+    so = _Played("Шахтер", "Гомель", 3, 2, "so", _minsk(2026, 10, 1, 19, 0), None, {"goals": []})
+    assert (form_mark(so, "Шахтер"), form_mark(so, "Гомель")) == ("Вб", "Пб")
+    assert winning_goal(so) is None
+    goals = [{"side": s, "scorer": n, "minute": "10:00"} for s, n in (("away", "А"), ("home", "Б"), ("home", "В"))]
+    reg = _Played("Юность", "Лида", 2, 1, "regulation", _minsk(2026, 10, 1, 19, 0), None, {"goals": goals})
+    assert form_mark(reg, "Лида") == "П" and winning_goal(reg)["scorer"] == "В"

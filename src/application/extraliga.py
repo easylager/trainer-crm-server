@@ -59,6 +59,9 @@ CALENDAR_RESULT_AFTER = timedelta(hours=6)
 # Сыгранный матч без официального протокола — страницу дочитываем раз в час, до трёх дней.
 POST_MATCH_WINDOW = timedelta(days=3)
 POST_MATCH_EVERY = timedelta(hours=1)
+# Старые сыгранные без протокола (закрыты календарём до появления цикла) — дочитываем понемногу,
+# свежие сначала: «прошлая встреча» и серии голов нужны на странице матча.
+BACKFILL_PER_TICK = 10
 
 USER_AGENT = "Mozilla/5.0 (compatible; GlideBot/1.0; +https://glideclub.by)"
 
@@ -245,6 +248,16 @@ _DUE_DETAILS = text("""
     ORDER BY starts_at
     """)
 
+_DETAILS_FAILED = text("UPDATE hockey_matches SET details_checked_at = :now WHERE id = :id")
+
+_BACKFILL = text("""
+    SELECT id, source_match_id, starts_at, status, details_checked_at
+    FROM hockey_matches
+    WHERE source = 'hockeyby' AND status = 'final' AND details_checked_at IS NULL AND starts_at < :post_from
+    ORDER BY starts_at DESC
+    LIMIT :limit
+    """)
+
 _UPSERT_STANDING = text("""
     INSERT INTO hockey_standings (league, team, place, games, points, updated_at)
     VALUES ('extraliga', :team, :place, :games, :points, :now)
@@ -365,7 +378,13 @@ def details_json(g: GameCenter) -> dict:
         "official": g.official,
         "periods": [list(p) for p in g.periods],
         "goals": [
-            {"minute": x.minute, "side": sides.get(x.club_id), "scorer": x.scorer, "assists": list(x.assists)}
+            {
+                "minute": x.minute,
+                "side": sides.get(x.club_id),
+                "scorer": x.scorer,
+                "assists": list(x.assists),
+                "streak": x.streak,
+            }
             for x in g.goals
         ],
         "home": _side_json(g.home),
@@ -387,6 +406,13 @@ def details_due(starts_at: datetime, checked_at: datetime | None, *, now: dateti
     return now - _utc(checked_at) >= (MATCH_DAY_EVERY if match_day else DETAILS_EVERY)
 
 
+def _details_wanted(row, *, now: datetime) -> bool:
+    if row.status != "final":
+        return details_due(row.starts_at, row.details_checked_at, now=now)
+    # Сыгранный: дозагрузка (ни разу не читали) или протокол ещё не официальный — раз в час.
+    return row.details_checked_at is None or _utc(now) - _utc(row.details_checked_at) >= POST_MATCH_EVERY
+
+
 async def sync_details(session: AsyncSession, source: Source, *, now: datetime) -> dict[str, int]:
     """Страницы матчей на неделю вперёд и сегодняшних — снимок, билеты, официальный итог."""
     counts = {"checked": 0, "final": 0, "failed": 0}
@@ -395,16 +421,17 @@ async def sync_details(session: AsyncSession, source: Source, *, now: datetime) 
         "until": _utc(now) + DETAILS_AHEAD,
         "post_from": _utc(now) - POST_MATCH_WINDOW,
     }
-    for row in (await session.execute(_DUE_DETAILS, params)).all():
-        if row.status == "final":
-            if row.details_checked_at is not None and _utc(now) - _utc(row.details_checked_at) < POST_MATCH_EVERY:
-                continue
-        elif not details_due(row.starts_at, row.details_checked_at, now=now):
+    rows = list((await session.execute(_DUE_DETAILS, params)).all())
+    backfill = (await session.execute(_BACKFILL, {"post_from": params["post_from"], "limit": BACKFILL_PER_TICK})).all()
+    for row in rows + list(backfill):
+        if not _details_wanted(row, now=now):
             continue
         try:
             g = parse_gamecenter(await source.get(match_page_url(row.source_match_id)), match_id=row.source_match_id)
         except Exception:
             logger.warning("extraliga match %s failed", row.source_match_id, exc_info=True)
+            # Битая страница не дёргается каждый тик: следующая попытка — по обычному расписанию.
+            await session.execute(_DETAILS_FAILED, {"id": row.id, "now": _utc(now)})
             counts["failed"] += 1
             continue
         await session.execute(

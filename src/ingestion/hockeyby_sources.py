@@ -92,6 +92,7 @@ _GC_EVENT_TEAM = re.compile(r'event-item-team"><a href="/new-admin/clubs/(\d+)/"
 _GC_EVENT_TIME = re.compile(r'event-item-date">\s*(\d{1,3}):(\d{2})\s*<')
 _GC_EVENT_PLAYER = re.compile(r'class="event-item-player">([^<]+)</a>')
 # Ассистенты — в подписи события: «18 Мурашов Иван, 98 Соколовский Владислав» (номер, фамилия, имя).
+_GC_GOAL_STREAK = re.compile(r'goal-series">.*?<b>\s*(\d+)\s*</b>')
 _GC_EVENT_ASSISTS = re.compile(r'event-item-type">(.*?)</div>', re.S)
 _GC_ASSIST = re.compile(r"\d+\s+([^,\d]+)")
 _GC_BEST = re.compile(r'<div class="game-best-players(.*?)<!--\.game-best-players-->', re.S)
@@ -152,6 +153,8 @@ class Goal:
     club_id: str
     scorer: str
     assists: tuple[str, ...] = ()
+    # «3 матча подряд с голами» — hockey.by сам считает серию и пишет её у гола.
+    streak: int | None = None
 
 
 @dataclass(frozen=True)
@@ -372,7 +375,16 @@ def parse_gamecenter(page: str, *, match_id: str) -> GameCenter:
             continue
         caption = _GC_EVENT_ASSISTS.search(event)
         assists = tuple(a.strip() for a in _GC_ASSIST.findall(_clean(caption.group(1)))) if caption else ()
-        goals.append(Goal(f"{clock.group(1)}:{clock.group(2)}", team.group(1), _clean(player.group(1)), assists))
+        streak = _GC_GOAL_STREAK.search(event)
+        goals.append(
+            Goal(
+                f"{clock.group(1)}:{clock.group(2)}",
+                team.group(1),
+                _clean(player.group(1)),
+                assists,
+                int(streak.group(1)) if streak else None,
+            )
+        )
 
     leaders: dict[str, list[list[Leader]]] = {}
     best = _GC_BEST.search(page)
