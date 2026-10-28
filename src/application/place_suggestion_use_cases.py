@@ -13,9 +13,12 @@ from typing import Any, Mapping
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.arena_profile import ensure_arena_profile, normalize_hhmm, public_http_url
 from src.application.catalog_consumer_events import hmac_actor
 from src.application.place_suggestion_notify import notify_admins_new_place_suggestion
+from src.application.trainer_arena_create_use_cases import find_possible_duplicate_arenas
 from src.application.trainer_city_create_use_cases import find_city_by_name_insensitive
+from src.shared.currency import resolve_currency
 from src.shared.place_suggestion import (
     PlaceSuggestionError,
     classify_contact,
@@ -141,3 +144,276 @@ async def create_place_suggestion(
         logger.exception("notify admins after place suggestion failed suggestion_id=%s", sid)
 
     return {"id": sid, "bind_token": bind_token}
+
+
+# ---------------------------------------------------------------------------
+# Модерация (админка). Закрытые статусы — approved | rejected | duplicate.
+# ---------------------------------------------------------------------------
+
+OPEN_STATUSES = ("new", "needs_info")
+TABS = {"new": ("new",), "waiting": ("needs_info",), "closed": ("approved", "rejected", "duplicate")}
+REJECT_REASONS = ("spam", "not_ice", "closed", "other")
+DUPLICATE_COPY_FIELDS = ("phone", "website_url", "visitor_prices", "opening_hours")
+_PATCH_KEYS = (
+    "name", "address", "latitude", "longitude", "details", "city_id",
+    "new_city_name", "new_city_country", "new_city_region", "new_city_lat", "new_city_lon",
+)
+_PRICE_FIELDS = (("price_adult", "adult"), ("price_child", "child"), ("price_rental", "rental"))
+_DAILY_HOURS_RE = re.compile(
+    r"^(?:(?:ежедневно|каждый день)[\s,:]*)?(?:с\s*)?"
+    r"(\d{1,2}(?:[:.]\d{2})?)\s*(?:[-–—]|до)\s*(\d{1,2}(?:[:.]\d{2})?)$",
+    re.IGNORECASE,
+)
+_PHONE_RE = re.compile(r"^\+?[\d\s()\-]+$")
+_BARE_DOMAIN_RE = re.compile(r"^(?:www\.)?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?:/\S*)?$")
+
+
+class PlaceSuggestionAdminError(ValueError):
+    """Отказ модерации; ``code`` стабилен для API (not_found | closed | invalid | arena_not_found)."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def daily_hours_from_text(raw: str | None) -> dict[str, Any] | None:
+    """«10:00–22:00» / «ежедневно с 9 до 21» → ``{"daily": {...}}``; всё прочее — ``None``.
+
+    Форма админки понимает только daily-формат и затирает остальное, поэтому часы
+    попадают в ``opening_hours`` лишь когда их можно записать так без потерь.
+    """
+    m = _DAILY_HOURS_RE.match(re.sub(r"\s+", " ", str(raw or "")).strip())
+    if not m:
+        return None
+    open_, close = normalize_hhmm(m.group(1)), normalize_hhmm(m.group(2))
+    if not open_ or not close:
+        return None
+    return {"daily": {"open": open_, "close": close}}
+
+
+def link_profile_fields(raw: str | None) -> dict[str, str]:
+    """Ссылка из заявки: URL → ``website_url``, похожее на телефон → ``phone``, иначе ничего."""
+    value = str(raw or "").strip()
+    if not value:
+        return {}
+    url = public_http_url(value)
+    if url:
+        return {"website_url": url}
+    if _BARE_DOMAIN_RE.match(value):
+        url = public_http_url(f"https://{value}")
+        return {"website_url": url} if url else {}
+    digits = sum(ch.isdigit() for ch in value)
+    if _PHONE_RE.match(value) and 7 <= digits <= 15 and len(value) <= 32:
+        return {"phone": value}
+    return {}
+
+
+def visitor_prices_from_details(details: Mapping[str, Any], currency: str) -> dict[str, str] | None:
+    out = {key: str(details[src]) for src, key in _PRICE_FIELDS if details.get(src)}
+    if not out:
+        return None
+    return {**out, "currency": currency, "source": "visitors"}
+
+
+async def _profile_fields_from_details(
+    session: AsyncSession, details: Mapping[str, Any], city_id: int
+) -> dict[str, Any]:
+    """Кандидаты в поля профиля: phone, website_url, visitor_prices, opening_hours."""
+    fields: dict[str, Any] = dict(link_profile_fields(details.get("link")))
+    prices = visitor_prices_from_details(details, await resolve_currency(session, city_id))
+    if prices:
+        fields["visitor_prices"] = prices
+    hours = daily_hours_from_text(details.get("hours"))
+    if hours:
+        fields["opening_hours"] = hours
+    return fields
+
+
+async def _load_row(session: AsyncSession, sid: int, *, for_update: bool = False) -> dict[str, Any]:
+    r = await session.execute(
+        text(
+            """
+            SELECT s.id, s.kind, s.status, s.source, s.city_id, c.name AS city_name,
+                   c.is_active AS city_is_active, c.country AS city_country,
+                   s.new_city_name, s.new_city_country, s.new_city_region, s.new_city_lat, s.new_city_lon,
+                   s.name, s.address, s.latitude, s.longitude, s.details, s.contact, s.contact_kind,
+                   s.author_telegram_id, s.target_arena_id, s.result_arena_id, s.reject_reason,
+                   s.created_at, s.updated_at, s.closed_at
+            FROM place_suggestions s
+            LEFT JOIN cities c ON c.id = s.city_id
+            WHERE s.id = :id
+            """
+            + (" FOR UPDATE OF s" if for_update else "")
+        ),
+        {"id": int(sid)},
+    )
+    row = r.mappings().first()
+    if not row:
+        raise PlaceSuggestionAdminError("not_found", "Заявка не найдена.")
+    out = dict(row)
+    out["details"] = dict(out.get("details") or {})
+    return out
+
+
+def _require_open(row: Mapping[str, Any]) -> None:
+    if row["status"] not in OPEN_STATUSES:
+        raise PlaceSuggestionAdminError("closed", "Заявка уже закрыта.")
+
+
+async def list_place_suggestions(session: AsyncSession, *, tab: str, limit: int = 50) -> list[dict[str, Any]]:
+    statuses = TABS.get(tab)
+    if statuses is None:
+        raise PlaceSuggestionAdminError("invalid", "Неизвестная вкладка.")
+    r = await session.execute(
+        text(
+            """
+            SELECT s.id, s.kind, s.status, s.name, COALESCE(c.name, s.new_city_name) AS city_label,
+                   s.city_id IS NULL AS is_new_city,
+                   (s.contact IS NOT NULL OR s.author_telegram_id IS NOT NULL) AS has_contact,
+                   s.created_at
+            FROM place_suggestions s
+            LEFT JOIN cities c ON c.id = s.city_id
+            WHERE s.status = ANY(:statuses)
+            ORDER BY s.created_at DESC, s.id DESC
+            LIMIT :limit
+            """
+        ),
+        {"statuses": list(statuses), "limit": max(1, min(int(limit), 200))},
+    )
+    return [dict(m) for m in r.mappings().all()]
+
+
+async def get_place_suggestion(session: AsyncSession, sid: int) -> dict[str, Any]:
+    out = await _load_row(session, sid)
+    msgs = await session.execute(
+        text(
+            "SELECT id, direction, body, created_at FROM place_suggestion_messages "
+            "WHERE suggestion_id = :id ORDER BY created_at, id"
+        ),
+        {"id": int(sid)},
+    )
+    out["messages"] = [dict(m) for m in msgs.mappings().all()]
+    out["similar"] = (
+        await find_possible_duplicate_arenas(
+            session, int(out["city_id"]), name=out["name"],
+            latitude=out["latitude"], longitude=out["longitude"],
+        )
+        if out["city_id"] is not None
+        else []
+    )
+    return out
+
+
+def _patch_value(key: str, value: Any, kind: str) -> Any:
+    if key == "name":
+        nm = _clean(value, 200)
+        if not nm:
+            raise PlaceSuggestionAdminError("invalid", "Название не может быть пустым.")
+        return nm
+    if key == "address":
+        return _clean(value, 300)
+    if key == "new_city_name":
+        return _clean(value, 120)
+    if key == "new_city_region":
+        return _clean(value, 160)
+    if key == "new_city_country":
+        if value is None or value == "":
+            return None
+        country = re.sub(r"\s+", "", str(value)).upper()
+        if not _COUNTRY_RE.match(country):
+            raise PlaceSuggestionAdminError("invalid", "Страна — двухбуквенный код (BY, RU).")
+        return country
+    if key in ("latitude", "longitude", "new_city_lat", "new_city_lon"):
+        if value is None or value == "":
+            return None
+        v = _coord(value, 90 if key in ("latitude", "new_city_lat") else 180)
+        if v is None:
+            raise PlaceSuggestionAdminError("invalid", "Неверные координаты.")
+        return v
+    if key == "details":
+        if not isinstance(value, Mapping):
+            raise PlaceSuggestionAdminError("invalid", "details — объект.")
+        return json.dumps(normalize_details(kind, dict(value)), ensure_ascii=False)
+    if key == "city_id":
+        return int(value) if value is not None else None
+    raise KeyError(key)
+
+
+async def patch_place_suggestion(session: AsyncSession, sid: int, fields: Mapping[str, Any]) -> dict[str, Any]:
+    row = await _load_row(session, sid, for_update=True)
+    _require_open(row)
+    values = {k: _patch_value(k, fields[k], row["kind"]) for k in _PATCH_KEYS if k in fields}
+    if values.get("city_id") is not None:
+        ok = (await session.execute(text("SELECT 1 FROM cities WHERE id = :id"), {"id": values["city_id"]})).first()
+        if not ok:
+            raise PlaceSuggestionAdminError("invalid", "Город не найден.")
+    city_id = values.get("city_id", row["city_id"])
+    new_city_name = values.get("new_city_name", row["new_city_name"])
+    if city_id is None and not new_city_name:
+        raise PlaceSuggestionAdminError("invalid", "Укажите город.")
+    if values:
+        assignments = ", ".join(
+            f"{k} = CAST(:{k} AS jsonb)" if k == "details" else f"{k} = :{k}" for k in values
+        )
+        await session.execute(
+            text(f"UPDATE place_suggestions SET {assignments}, updated_at = now() WHERE id = :sid"),
+            {**values, "sid": int(sid)},
+        )
+        await session.commit()
+    return await get_place_suggestion(session, sid)
+
+
+async def reject_place_suggestion(session: AsyncSession, sid: int, reason: str) -> None:
+    if reason not in REJECT_REASONS:
+        raise PlaceSuggestionAdminError("invalid", "Неизвестная причина отказа.")
+    row = await _load_row(session, sid, for_update=True)
+    _require_open(row)
+    await session.execute(
+        text(
+            "UPDATE place_suggestions SET status = 'rejected', reject_reason = :reason, "
+            "closed_at = now(), updated_at = now() WHERE id = :sid"
+        ),
+        {"reason": reason, "sid": int(sid)},
+    )
+    await session.commit()
+
+
+async def mark_duplicate(
+    session: AsyncSession, sid: int, target_arena_id: int, copy_fields: list[str] | tuple[str, ...]
+) -> None:
+    """Закрыть как дубль; выбранные поля копируются только в пустые поля профиля цели."""
+    unknown = set(copy_fields) - set(DUPLICATE_COPY_FIELDS)
+    if unknown:
+        raise PlaceSuggestionAdminError("invalid", f"Нельзя скопировать: {', '.join(sorted(unknown))}.")
+    row = await _load_row(session, sid, for_update=True)
+    _require_open(row)
+    target = (
+        await session.execute(
+            text("SELECT id, city_id, name FROM arenas WHERE id = :id"), {"id": int(target_arena_id)}
+        )
+    ).first()
+    if not target:
+        raise PlaceSuggestionAdminError("arena_not_found", "Место не найдено.")
+    candidates = await _profile_fields_from_details(session, row["details"], int(target[1]))
+    picked = {k: v for k, v in candidates.items() if k in copy_fields}
+    if picked:
+        await ensure_arena_profile(session, int(target[0]), city_id=int(target[1]), name=str(target[2]))
+        for key, value in picked.items():
+            is_json = key in ("visitor_prices", "opening_hours")
+            await session.execute(
+                text(
+                    f"UPDATE arena_profiles SET {key} = "
+                    + ("CAST(:v AS jsonb)" if is_json else ":v")
+                    + f", updated_at = now() WHERE arena_id = :a AND ({key} IS NULL"
+                    + (f" OR {key} = 'null'::jsonb OR {key} = '{{}}'::jsonb)" if is_json else f" OR btrim({key}) = '')")
+                ),
+                {"v": json.dumps(value, ensure_ascii=False) if is_json else value, "a": int(target[0])},
+            )
+    await session.execute(
+        text(
+            "UPDATE place_suggestions SET status = 'duplicate', target_arena_id = :t, "
+            "closed_at = now(), updated_at = now() WHERE id = :sid"
+        ),
+        {"t": int(target[0]), "sid": int(sid)},
+    )
+    await session.commit()
