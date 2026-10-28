@@ -32,6 +32,7 @@ VENUE_TYPE_POOL = "pool"
 VENUE_TYPE_OUTDOOR = "outdoor"
 VENUE_TYPE_OTHER = "other"
 VENUE_TYPE_SHOP = "shop"
+VENUE_TYPE_SCHOOL = "school"
 
 DEFAULT_VENUE_TYPE = VENUE_TYPE_ICE
 
@@ -57,6 +58,7 @@ VENUE_TYPES: tuple[Mapping[str, str], ...] = (
     },
     {"key": VENUE_TYPE_OTHER, "chip": "Другое", "noun": "Площадка", "genitive": "места", "icon": "📍"},
     {"key": VENUE_TYPE_SHOP, "chip": "Магазин", "noun": "Магазин", "genitive": "магазина", "icon": "🧰"},
+    {"key": VENUE_TYPE_SCHOOL, "chip": "Школы", "noun": "Школа", "genitive": "школы", "icon": "🎓"},
 )
 
 VENUE_TYPE_KEYS: tuple[str, ...] = tuple(v["key"] for v in VENUE_TYPES)
@@ -66,7 +68,10 @@ VENUE_TYPE_KEYS: tuple[str, ...] = tuple(v["key"] for v in VENUE_TYPES)
 SKATING_VENUE_TYPES: frozenset[str] = frozenset({VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR})
 
 #: Где можно тренироваться — и значит, что тренер может выбрать местом работы.
-TRAINER_VENUE_TYPE_KEYS: tuple[str, ...] = tuple(k for k in VENUE_TYPE_KEYS if k != VENUE_TYPE_SHOP)
+#: Школа (``school``, PDEC-028) — организация, а не площадка: место работы тренера — её лёд.
+TRAINER_VENUE_TYPE_KEYS: tuple[str, ...] = tuple(
+    k for k in VENUE_TYPE_KEYS if k not in (VENUE_TYPE_SHOP, VENUE_TYPE_SCHOOL)
+)
 
 #: Типы, которые лента каталога показывает только по явному фильтру. Магазин в
 #: списке «где покататься» — шум для того, кто ищет лёд; но чип «Магазин» в
@@ -123,5 +128,5 @@ def normalize_trainer_venue_type(value: Any) -> str:
 
 
 def venue_type_options(*, include_shop: bool = False) -> list[dict[str, str]]:
-    """Список для селектора: тренеру — без магазина, админке — все типы."""
-    return [dict(v) for v in VENUE_TYPES if include_shop or v["key"] != VENUE_TYPE_SHOP]
+    """Список для селектора: тренеру — без магазина и школы, админке — все типы."""
+    return [dict(v) for v in VENUE_TYPES if include_shop or v["key"] in TRAINER_VENUE_TYPE_KEYS]
