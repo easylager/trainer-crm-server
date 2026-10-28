@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_profile import ensure_arena_profile, normalize_hhmm, public_http_url
 from src.application.catalog_consumer_events import hmac_actor
+from src.application.place_links import place_path
 from src.application.place_suggestion_notify import notify_admins_new_place_suggestion
 from src.application.trainer_arena_create_use_cases import find_possible_duplicate_arenas
 from src.application.trainer_city_create_use_cases import find_city_by_name_insensitive
@@ -417,3 +418,124 @@ async def mark_duplicate(
         {"t": int(target[0]), "sid": int(sid)},
     )
     await session.commit()
+
+
+#: Услуги магазина из заявки → ключи ``arena_profiles.amenities`` (SHOP_AMENITY_KEYS).
+_SHOP_SERVICE_AMENITY = {"sharpening": "skate_sharpening", "rental": "skate_rental", "sale": "retail"}
+_PRICE_GROUP_BY_COUNTRY = {"RU": "RU_BASE"}
+_ARENA_NAME_MAX = 128
+
+
+async def notify_author_approved(sid: int) -> None:
+    """Сообщить автору, что место появилось в каталоге. Заглушка: доставку делает Task 11."""
+    del sid
+
+
+async def _resolve_city_for_approve(session: AsyncSession, row: Mapping[str, Any]) -> tuple[int, str, bool]:
+    """(city_id, city_name, kept_inactive). Существующий скрытый город не включаем (PDEC-018)."""
+    if row["city_id"] is not None:
+        return int(row["city_id"]), str(row["city_name"]), not bool(row["city_is_active"])
+    name = _clean(row["new_city_name"], 120)
+    country = row["new_city_country"]
+    if not name or not country:
+        raise PlaceSuggestionAdminError("invalid", "Укажите город и страну.")
+    existing = await find_city_by_name_insensitive(session, name, country=country)
+    if existing:
+        return int(existing["id"]), str(existing["name"]), not existing["is_active"]
+    r = await session.execute(
+        text(
+            """
+            INSERT INTO cities (name, sort_order, is_active, country, price_group, latitude, longitude, region)
+            VALUES (:name, 9999, true, :country, :pg, :lat, :lon, :region)
+            RETURNING id
+            """
+        ),
+        {
+            "name": name,
+            "country": country,
+            "pg": _PRICE_GROUP_BY_COUNTRY.get(country, "BY_BASE"),
+            "lat": row["new_city_lat"],
+            "lon": row["new_city_lon"],
+            "region": row["new_city_region"],
+        },
+    )
+    return int(r.scalar_one()), name, False
+
+
+async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id: int) -> dict[str, Any]:
+    """Заявка → город (если новый), подтверждённое место и опубликованная карточка; одна транзакция.
+
+    Часы пишутся в ``opening_hours`` только в daily-формате (см. ``daily_hours_from_text``);
+    остальное остаётся в заявке. Свежее место без парсера — ``schedule_mode='phone'``.
+    """
+    try:
+        row = await _load_row(session, sid, for_update=True)
+        _require_open(row)
+        city_id, city_name, kept_inactive = await _resolve_city_for_approve(session, row)
+        name = row["name"][:_ARENA_NAME_MAX].strip()
+        r = await session.execute(
+            text(
+                """
+                INSERT INTO arenas (city_id, name, address, latitude, longitude, venue_type,
+                                    is_active, is_confirmed, confirmed_at, confirmed_by_admin_id)
+                VALUES (:city_id, :name, :address, :lat, :lon, :venue_type, true, true, now(), :admin_id)
+                RETURNING id
+                """
+            ),
+            {
+                "city_id": city_id,
+                "name": name,
+                "address": row["address"],
+                "lat": row["latitude"],
+                "lon": row["longitude"],
+                "venue_type": row["kind"],
+                "admin_id": int(admin_id),
+            },
+        )
+        arena_id = int(r.scalar_one())
+        slug = await ensure_arena_profile(session, arena_id, city_id=city_id, name=name)
+
+        fields = await _profile_fields_from_details(session, row["details"], city_id)
+        if row["kind"] == "shop":
+            amenities = {
+                _SHOP_SERVICE_AMENITY[s]: True for s in row["details"].get("services") or []
+                if s in _SHOP_SERVICE_AMENITY
+            }
+            if amenities:
+                fields["amenities"] = amenities
+        fields["schedule_mode"] = "phone"
+        json_keys = {"visitor_prices", "opening_hours", "amenities"}
+        assignments = ", ".join(
+            f"{k} = CAST(:{k} AS jsonb)" if k in json_keys else f"{k} = :{k}" for k in fields
+        )
+        await session.execute(
+            text(f"UPDATE arena_profiles SET {assignments}, updated_at = now() WHERE arena_id = :arena_id"),
+            {
+                **{k: json.dumps(v, ensure_ascii=False) if k in json_keys else v for k, v in fields.items()},
+                "arena_id": arena_id,
+            },
+        )
+        await session.execute(
+            text(
+                "UPDATE place_suggestions SET status = 'approved', result_arena_id = :a, city_id = :c, "
+                "closed_at = now(), updated_at = now() WHERE id = :sid"
+            ),
+            {"a": arena_id, "c": city_id, "sid": int(sid)},
+        )
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+    try:
+        await notify_author_approved(int(sid))
+    except Exception:  # noqa: BLE001
+        logger.exception("notify author after place suggestion approve failed suggestion_id=%s", sid)
+
+    return {
+        "arena_id": arena_id,
+        "city_id": city_id,
+        "slug": slug,
+        "url": place_path(city_name=city_name, slug=slug),
+        "city_kept_inactive": kept_inactive,
+    }

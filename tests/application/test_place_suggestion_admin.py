@@ -194,3 +194,124 @@ async def test_duplicate_rejects_unknown_field_and_missing_target(db_session):
     with pytest.raises(PlaceSuggestionAdminError) as exc:
         await mark_duplicate(db_session, sid, 99_999_999, [])
     assert exc.value.code == "arena_not_found"
+
+
+@pytest.fixture
+def approved_notices(monkeypatch):
+    calls: list[int] = []
+
+    async def _fake(sid, **_kw):
+        calls.append(sid)
+
+    monkeypatch.setattr(uc, "notify_author_approved", _fake)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_approve_new_city_creates_city_arena_and_profile(db_session, approved_notices):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    sid = await _suggest(
+        db_session,
+        new_city={"name": "Пса-Уфа", "country": "RU", "region": "Башкортостан", "lat": 54.73, "lon": 55.96},
+        name="Ледовая арена Уфа",
+        details={"price_adult": "500", "price_rental": "300", "hours": "ежедневно 10:00–22:00",
+                 "link": "https://ice-ufa.example.ru"},
+        author=777001,
+    )
+    res = await approve_place_suggestion(db_session, sid, admin_id=4242)
+    assert res["city_kept_inactive"] is False and res["slug"]
+    assert res["url"] == f"/p/{res['url'].split('/')[2]}/{res['slug']}"
+
+    city = (await db_session.execute(text(
+        "SELECT name, is_active, country, price_group, latitude, longitude, region FROM cities WHERE id=:id"),
+        {"id": res["city_id"]})).one()
+    assert city[0] == "Пса-Уфа" and city[1] is True and city[2] == "RU" and city[3] == "RU_BASE"
+    assert city[4] == pytest.approx(54.73) and city[5] == pytest.approx(55.96) and city[6] == "Башкортостан"
+
+    arena = (await db_session.execute(text(
+        "SELECT city_id, name, venue_type, is_active, is_confirmed, confirmed_at, confirmed_by_admin_id "
+        "FROM arenas WHERE id=:id"), {"id": res["arena_id"]})).one()
+    assert arena[0] == res["city_id"] and arena[1] == "Ледовая арена Уфа" and arena[2] == "ice"
+    assert arena[3] is True and arena[4] is True and arena[5] is not None and arena[6] == 4242
+
+    prof = (await db_session.execute(text(
+        "SELECT slug, status, visitor_prices, opening_hours, website_url, phone, schedule_mode "
+        "FROM arena_profiles WHERE arena_id=:id"), {"id": res["arena_id"]})).one()
+    assert prof[0] == res["slug"] and prof[1] == "published"
+    assert prof[2] == {"adult": "500", "rental": "300", "currency": "RUB", "source": "visitors"}
+    assert prof[3] == {"daily": {"open": "10:00", "close": "22:00"}}
+    assert prof[4] == "https://ice-ufa.example.ru" and prof[5] is None and prof[6] == "phone"
+
+    st = (await db_session.execute(text(
+        "SELECT status, result_arena_id, city_id, closed_at FROM place_suggestions WHERE id=:id"),
+        {"id": sid})).one()
+    assert st[0] == "approved" and st[1] == res["arena_id"] and st[2] == res["city_id"] and st[3] is not None
+    assert approved_notices == [sid]
+
+
+@pytest.mark.asyncio
+async def test_approve_in_inactive_city_keeps_it_hidden(db_session, approved_notices):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    hidden = await _city(db_session, "Пса-Москва", active=False, country="RU")
+    sid = await _suggest(db_session, city_id=hidden, name="Каток в парке", kind="outdoor",
+                         details={"link": "+7 (495) 123-45-67", "hours": "по выходным, днём"})
+    res = await approve_place_suggestion(db_session, sid, admin_id=1)
+    assert res["city_id"] == hidden and res["city_kept_inactive"] is True
+    assert (await db_session.execute(text("SELECT is_active FROM cities WHERE id=:id"), {"id": hidden})).scalar() is False
+    phone, hours, prices = (await db_session.execute(text(
+        "SELECT phone, opening_hours, visitor_prices FROM arena_profiles WHERE arena_id=:id"),
+        {"id": res["arena_id"]})).one()
+    assert phone == "+7 (495) 123-45-67" and hours is None and prices is None
+
+
+@pytest.mark.asyncio
+async def test_approve_new_city_matching_existing_inactive_city_reuses_it(db_session, approved_notices):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    sid = await _suggest(db_session, new_city={"name": "Пса-Скрытоград", "country": "BY"})
+    hidden = await _city(db_session, "Пса-Скрытоград", active=False)
+    res = await approve_place_suggestion(db_session, sid, admin_id=1)
+    assert res["city_id"] == hidden and res["city_kept_inactive"] is True
+
+
+@pytest.mark.asyncio
+async def test_approve_shop_maps_services_to_amenities(db_session, approved_notices):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    city_id = await _city(db_session, "Пса-Магазин")
+    sid = await _suggest(db_session, city_id=city_id, kind="shop", name="Заточка-пса",
+                         details={"services": ["sharpening", "sale"]})
+    res = await approve_place_suggestion(db_session, sid, admin_id=1)
+    venue, amenities = (await db_session.execute(text(
+        "SELECT a.venue_type, p.amenities FROM arenas a JOIN arena_profiles p ON p.arena_id=a.id WHERE a.id=:id"),
+        {"id": res["arena_id"]})).one()
+    assert venue == "shop" and amenities == {"skate_sharpening": True, "retail": True}
+
+
+@pytest.mark.asyncio
+async def test_approve_closed_fails_and_notify_errors_are_swallowed(db_session, monkeypatch):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    async def _boom(*_a, **_kw):
+        raise RuntimeError("telegram down")
+
+    monkeypatch.setattr(uc, "notify_author_approved", _boom)
+    city_id = await _city(db_session, "Пса-Закрытая")
+    sid = await _suggest(db_session, city_id=city_id, name="Каток-пса-сбой")
+    res = await approve_place_suggestion(db_session, sid, admin_id=1)
+    assert res["arena_id"]
+    with pytest.raises(PlaceSuggestionAdminError) as exc:
+        await approve_place_suggestion(db_session, sid, admin_id=1)
+    assert exc.value.code == "closed"
+    n = (await db_session.execute(text("SELECT count(*) FROM arenas WHERE name='Каток-пса-сбой'"))).scalar()
+    assert n == 1
+
+
+def test_daily_hours_and_link_parsing():
+    assert uc.daily_hours_from_text("с 9 до 21") == {"daily": {"open": "09:00", "close": "21:00"}}
+    assert uc.daily_hours_from_text("Пн-Пт 10:00-20:00") is None
+    assert uc.link_profile_fields("ice.by") == {"website_url": "https://ice.by"}
+    assert uc.link_profile_fields("+375 (29) 111-22-33") == {"phone": "+375 (29) 111-22-33"}
+    assert uc.link_profile_fields("спросить на кассе") == {}
