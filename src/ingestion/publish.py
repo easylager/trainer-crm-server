@@ -77,6 +77,12 @@ class SqlAlchemyIceSessionPublisher:
         # _insert по-прежнему на каждую новую строку: тест устойчивости роняет его
         # посреди savepoint и проверяет, что соседняя джоба не теряется.
         async with self._session.begin_nested():
+            # Журнал слотов: любое изменение отсюда — работа парсера. По source_id это не угадать:
+            # адаптеры пишут туда свои идентификаторы (номер сеанса на сайте арены), а не «run:N».
+            tag = "screenshot" if all(d.schedule_basis == "photo" for d in drafts) else "parser"
+            await self._session.execute(
+                text("SELECT set_config('app.change_source', :tag, true)"), {"tag": tag}
+            )
             existing = await self._load_existing(run.arena_id, window)
             plan = plan_publish(existing, drafts)
             await self._delete_ids(run.arena_id, plan.to_delete_ids)
