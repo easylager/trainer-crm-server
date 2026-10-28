@@ -4,6 +4,7 @@ never touches the catalog until an admin approves it.
 """
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -17,6 +18,7 @@ from src.application.arena_profile import ensure_arena_profile, normalize_hhmm, 
 from src.application.catalog_consumer_events import hmac_actor
 from src.application.place_links import place_path
 from src.application.place_suggestion_notify import notify_admins_new_place_suggestion
+from src.application.trainer_relay_delivery import send_client_plain_notification
 from src.application.trainer_arena_create_use_cases import find_possible_duplicate_arenas
 from src.application.trainer_city_create_use_cases import find_city_by_name_insensitive
 from src.shared.currency import resolve_currency
@@ -538,4 +540,53 @@ async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id:
         "slug": slug,
         "url": place_path(city_name=city_name, slug=slug),
         "city_kept_inactive": kept_inactive,
+    }
+
+
+_MESSAGE_MAX = 2000
+
+
+async def send_message_to_author(session: AsyncSession, sid: int, body: str) -> dict[str, Any]:
+    """Вопрос автору через клиентского бота; заявка переходит в ``needs_info``.
+
+    Доставлено — сообщение ``to_author``. Автор без Telegram (сайт, ник или email: бот не
+    может написать первым) или сбой отправки — ``note`` и ``delivered: false`` с контактом,
+    чтобы админка предложила «Скопировать контакт».
+    """
+    text_body = str(body or "").strip()[:_MESSAGE_MAX]
+    if not text_body:
+        raise PlaceSuggestionAdminError("invalid", "Пустое сообщение.")
+    row = await _load_row(session, sid)
+    _require_open(row)
+    delivered = False
+    if row["author_telegram_id"] is not None:
+        try:
+            await send_client_plain_notification(
+                telegram_chat_id=int(row["author_telegram_id"]),
+                html_text=(
+                    f"Glide · заявка №{int(sid)} «{html.escape(row['name'])}»\n\n"
+                    f"{html.escape(text_body)}\n\nОтветьте прямо здесь."
+                ),
+            )
+            delivered = True
+        except Exception:  # noqa: BLE001
+            logger.exception("place suggestion message to author failed suggestion_id=%s", sid)
+    r = await session.execute(
+        text(
+            "INSERT INTO place_suggestion_messages (suggestion_id, direction, body) "
+            "VALUES (:sid, :direction, :body) RETURNING id, direction, body, created_at"
+        ),
+        {"sid": int(sid), "direction": "to_author" if delivered else "note", "body": text_body},
+    )
+    message = dict(r.mappings().one())
+    await session.execute(
+        text("UPDATE place_suggestions SET status = 'needs_info', updated_at = now() WHERE id = :sid"),
+        {"sid": int(sid)},
+    )
+    await session.commit()
+    return {
+        "delivered": delivered,
+        "contact": None if delivered else row["contact"],
+        "contact_kind": None if delivered else row["contact_kind"],
+        "message": message,
     }
