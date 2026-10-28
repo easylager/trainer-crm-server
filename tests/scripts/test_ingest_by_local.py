@@ -37,3 +37,33 @@ def test_every_listed_key_is_a_registered_parser() -> None:
     registry = default_registry()
     for key in mod.BY_ONLY_SOURCES:
         assert registry.get(key) is not None, key
+
+
+def test_dry_run_reports_results_without_touching_the_store(capsys) -> None:
+    import asyncio
+    from datetime import date
+    from types import SimpleNamespace
+
+    class Store:
+        written = False
+
+        async def list_due(self, now):
+            return [SimpleNamespace(arena_id=32, parser_key="gorki_lds_v1")]
+
+        async def mark_attempted(self, *a, **k):  # не должен вызываться
+            Store.written = True
+
+    class Scheduler:
+        _store = Store()
+
+        async def _run_one(self, job, now):
+            rec = SimpleNamespace(status="ok", http_status=200, error_code=None, error_message=None)
+            drafts = [SimpleNamespace(local_date=date(2026, 10, 30)), SimpleNamespace(local_date=date(2026, 11, 2))]
+            return rec, drafts, []
+
+    out = asyncio.run(mod._dry_run(Scheduler(), ["gorki_lds_v1", "bobruisk_arena_v1"]))
+    text = capsys.readouterr().out
+    assert out == [] and Store.written is False
+    assert "OK" in text and "слотов=2" in text and "30.10–02.11" in text
+    assert "нет задания bobruisk_arena_v1" in text
+    assert "База не менялась" in text

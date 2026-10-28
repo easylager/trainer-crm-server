@@ -6,11 +6,14 @@
 ``parser_key`` независимо от флага, а результат ложится в те же таблицы (слоты, прогоны, состояние
 источника), что и у планировщика, поэтому админка «Источники расписаний» видит свежие даты.
 
-Запуск (VPN выключен, из корня репозитория, Railway CLI залогинен):
+Запуск проще всего через обёртку (VPN выключен, Railway CLI залогинен):
 
-  bash scripts/run_ice_ingest_prod_local.sh scripts/ingest_by_local.py --i-know-this-is-prod
-  ... --only gorki_lds_v1 bobruisk_arena_v1      # только эти источники
-  ... --dry-run                                  # показать, что будет запущено, и выйти
+  bash scripts/by_ingest.sh dry                  # проверка: открыть сайты и разобрать расписание, БЕЗ записи
+  bash scripts/by_ingest.sh run                  # прод: то же, но слоты записываются
+  bash scripts/by_ingest.sh run --only gorki_lds_v1 bobruisk_arena_v1   # только эти источники
+
+``--dry-run`` по-настоящему ходит на сайты арен и разбирает расписание (покажет, сколько слотов найдено
+и на какие даты), но ничего не пишет в базу и не трогает состояние источников.
 
 Перед прогоном проверяется страна текущего IP (ipinfo.io): не Беларусь — скрипт останавливается,
 чтобы не записать в базу пустые ответы. Если задан ``BY_EGRESS_PROXY_URL`` (локальный tinyproxy), он
@@ -72,7 +75,36 @@ def select_keys(only: list[str] | None) -> list[str]:
     return list(dict.fromkeys(only))
 
 
-async def _run(keys: list[str], *, dry_run: bool) -> int:
+async def _dry_run(scheduler, keys: list[str]) -> list:
+    """Открыть сайты и разобрать расписание, ничего не записывая. Возвращает [] (итог уже напечатан)."""
+    now = datetime.now(timezone.utc)
+    jobs = await scheduler._store.list_due(now)  # noqa: SLF001
+    found = {j.parser_key for j in jobs}
+    for k in keys:
+        if k not in found:
+            print(f"ВНИМАНИЕ: в ice_parser_jobs нет задания {k}")
+    ok = 0
+    for job in jobs:
+        # _run_one только достаёт и проверяет расписание: запись в базу делает не он.
+        record, drafts, _sales = await scheduler._run_one(job, now)  # noqa: SLF001
+        good = record.status == "ok"
+        ok += 1 if good else 0
+        line = (
+            f"{'OK  ' if good else 'FAIL'} arena_id={job.arena_id} {job.parser_key} status={record.status} "
+            f"http={record.http_status if record.http_status is not None else '-'} слотов={len(drafts)}"
+        )
+        if drafts:
+            first = min(d.local_date for d in drafts)
+            last = max(d.local_date for d in drafts)
+            line += f" даты {first:%d.%m}–{last:%d.%m}"
+        if not good:
+            line += f" {record.error_code or ''} {record.error_message or ''}"
+        print(line.rstrip())
+    print(f"Проверка без записи: {ok} из {len(jobs)} источников отдали расписание. База не менялась.")
+    return []
+
+
+async def _run(keys: list[str], *, dry_run: bool, list_only: bool = False) -> int:
     from sqlalchemy import text
 
     from src.application.schedule_waves import parser_wave_recorder
@@ -128,17 +160,21 @@ async def _run(keys: list[str], *, dry_run: bool) -> int:
                 max_jobs_per_tick=None,
                 tick_budget_s=None,
             )
-            if dry_run:
+            if list_only:
                 jobs = await scheduler._store.list_due(datetime.now(timezone.utc))  # noqa: SLF001
+                found = {j.parser_key for j in jobs}
                 for job in jobs:
+                    last = f"{job.last_run_at:%d.%m %H:%M}" if job.last_run_at else "не запускался"
                     print(
-                        f"[dry-run] arena_id={job.arena_id} {job.parser_key} "
-                        f"(is_enabled={job.is_enabled}, requires_by_egress={job.config.get('requires_by_egress', False)})"
+                        f"arena_id={job.arena_id} {job.parser_key} is_enabled={job.is_enabled} "
+                        f"requires_by_egress={job.config.get('requires_by_egress', False)} последний запуск: {last}"
                     )
-                missing = [k for k in keys if k not in {j.parser_key for j in jobs}]
-                for k in missing:
-                    print(f"[dry-run] ВНИМАНИЕ: в ice_parser_jobs нет задания {k}")
+                for k in keys:
+                    if k not in found:
+                        print(f"ВНИМАНИЕ: в ice_parser_jobs нет задания {k}")
                 return []
+            if dry_run:
+                return await _dry_run(scheduler, keys)
             outcomes = await scheduler.run_due(datetime.now(timezone.utc))
             await session.commit()
             return outcomes
@@ -167,7 +203,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     add_i_know_this_is_prod_argument(parser)
     parser.add_argument("--only", nargs="+", metavar="PARSER_KEY", help="только эти parser_key")
-    parser.add_argument("--dry-run", action="store_true", help="показать задания и выйти, ничего не запуская")
+    parser.add_argument("--dry-run", action="store_true", help="открыть сайты и разобрать расписание без записи в базу")
+    parser.add_argument("--list", action="store_true", help="показать задания в базе и выйти (сайты не открываются)")
     parser.add_argument("--skip-ip-check", action="store_true", help="не проверять страну IP (только для отладки)")
     args = parser.parse_args()
 
@@ -178,7 +215,7 @@ def main() -> None:
         assert_railway_target_database(url)
         warn_prod_ack()
 
-    if not args.dry_run and not args.skip_ip_check:
+    if not args.skip_ip_check and not args.list:
         country = current_ip_country()
         if country != "BY":
             sys.exit(
@@ -188,7 +225,7 @@ def main() -> None:
         print("IP: BY — можно запускать.")
 
     print("Источники:", ", ".join(f"{k} ({BY_ONLY_SOURCES[k]})" for k in keys))
-    sys.exit(asyncio.run(_run(keys, dry_run=args.dry_run)))
+    sys.exit(asyncio.run(_run(keys, dry_run=args.dry_run, list_only=args.list)))
 
 
 if __name__ == "__main__":
