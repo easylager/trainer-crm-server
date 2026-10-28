@@ -108,7 +108,13 @@ def test_gamecenter_future_match_has_tickets_and_leaders() -> None:
 def test_standings() -> None:
     rows = parse_standings(_page("hockeyby-table-628.html"))
     assert len(rows) == 14
-    assert (rows[0].place, rows[0].name, rows[0].team_id, rows[0].games, rows[0].points) == (1, "Шахтер", "5674", 16, 27)
+    assert (rows[0].place, rows[0].name, rows[0].team_id, rows[0].games, rows[0].points) == (
+        1,
+        "Шахтер",
+        "5674",
+        16,
+        27,
+    )
     by_name = {r.name: r for r in rows}
     assert (by_name["Неман"].place, by_name["Неман"].points) == (7, 18)
     assert (by_name["Юность"].place, by_name["Юность"].points) == (13, 9)

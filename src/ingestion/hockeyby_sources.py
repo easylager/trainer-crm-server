@@ -96,7 +96,8 @@ _GC_EVENT_ASSISTS = re.compile(r'event-item-type">(.*?)</div>', re.S)
 _GC_ASSIST = re.compile(r"\d+\s+([^,\d]+)")
 _GC_BEST = re.compile(r'<div class="game-best-players(.*?)<!--\.game-best-players-->', re.S)
 _GC_BEST_GROUP = re.compile(
-    r'<div class="best-players-group"> ?<div class="h3 centered">([^<]+)</div>(.*?)(?=<div class="best-players-group">|\Z)', re.S
+    r'<div class="best-players-group"> ?<div class="h3 centered">([^<]+)</div>(.*?)(?=<div class="best-players-group">|\Z)',
+    re.S,
 )
 _GC_BEST_COL = re.compile(r'<div class="flx-6 flx-x-12">(.*?)(?=<div class="flx-6 flx-x-12">|\Z)', re.S)
 _GC_PLAYER = re.compile(r'class="game-player-name">([^<]+)</a> ?<div class="game-player-points(?:-label)?">(.*?)</div>')
@@ -211,7 +212,13 @@ def extract_sessid(calendar_html: str) -> str | None:
 
 def calendar_form(sessid: str, *, page: int, season_id: str = SEASON_ID) -> list[tuple[str, str]]:
     """Тело POST, как его шлёт страница календаря (``$('#calendar_filter').serializeArray()``)."""
-    fields = (("SEASON", season_id), ("LEAGUE", LEAGUE_EXTRALIGA), ("DIVISION", DIVISION_REGULAR), ("TEAM", "all"), ("MONTH", ""))
+    fields = (
+        ("SEASON", season_id),
+        ("LEAGUE", LEAGUE_EXTRALIGA),
+        ("DIVISION", DIVISION_REGULAR),
+        ("TEAM", "all"),
+        ("MONTH", ""),
+    )
     out: list[tuple[str, str]] = []
     for i, (name, value) in enumerate(fields):
         out += [(f"arFilter[{i}][name]", name), (f"arFilter[{i}][value]", value)]
@@ -305,7 +312,9 @@ def _leaders(block: str) -> list[list[Leader]]:
                 people.append(Leader(_player_name(name), int(pts.group(1)), int(pts.group(2)), int(pts.group(3))))
             elif "%" in points or "ОБ" in points:
                 pct = _GC_SAVE_PCT.search(points)
-                people.append(Leader(_player_name(name), save_pct=float(pct.group(1).replace(",", ".")) if pct else None))
+                people.append(
+                    Leader(_player_name(name), save_pct=float(pct.group(1).replace(",", ".")) if pct else None)
+                )
         cols.append(people)
     return cols
 
@@ -330,7 +339,11 @@ def parse_gamecenter(page: str, *, match_id: str) -> GameCenter:
     starts_at = None
     if when and when.group(4) in _MONTHS_GENITIVE:
         starts_at = datetime(
-            int(when.group(5)), _MONTHS_GENITIVE[when.group(4)], int(when.group(3)), int(when.group(1)), int(when.group(2)),
+            int(when.group(5)),
+            _MONTHS_GENITIVE[when.group(4)],
+            int(when.group(3)),
+            int(when.group(1)),
+            int(when.group(2)),
             tzinfo=MINSK_TZ,
         )
     place = _GC_PLACE.search(page)
