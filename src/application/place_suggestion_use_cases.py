@@ -765,3 +765,24 @@ async def capture_author_reply(session: AsyncSession, telegram_id: int, body: st
     except Exception:  # noqa: BLE001
         logger.exception("place suggestion reply admin notify failed suggestion_id=%s", sid)
     return int(sid)
+
+
+async def purge_closed_contacts(session: AsyncSession, *, older_than_days: int = 30) -> int:
+    """Стереть контакт и ссылку привязки у заявок, закрытых больше ``older_than_days`` назад.
+
+    ``author_telegram_id`` остаётся: это id в нашем же боте, без него не дойдёт
+    «место появилось» при повторном открытии заявки.
+    """
+    r = await session.execute(
+        text(
+            """
+            UPDATE place_suggestions
+               SET contact = NULL, contact_kind = NULL, bind_token = NULL, updated_at = now()
+             WHERE closed_at < now() - make_interval(days => :d)
+               AND (contact IS NOT NULL OR bind_token IS NOT NULL)
+            """
+        ),
+        {"d": max(0, int(older_than_days))},
+    )
+    await session.commit()
+    return int(r.rowcount or 0)

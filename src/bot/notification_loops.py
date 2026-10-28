@@ -3392,3 +3392,25 @@ async def run_hockey_matches_loop() -> None:
             await asyncio.sleep(delay)
         except asyncio.CancelledError:
             break
+
+
+PLACE_SUGGESTION_PURGE_FIRST_DELAY_SEC = 600
+PLACE_SUGGESTION_PURGE_INTERVAL_SEC = 24 * 3600
+
+
+async def run_place_suggestion_purge_loop() -> None:
+    """Раз в сутки стирает контакты заявок «места от людей», закрытых больше 30 дней назад (PDEC-028)."""
+    from src.application.place_suggestion_use_cases import purge_closed_contacts
+
+    await asyncio.sleep(PLACE_SUGGESTION_PURGE_FIRST_DELAY_SEC)
+    while True:
+        try:
+            async with async_session_factory() as session:
+                purged = await purge_closed_contacts(session)
+            if purged:
+                logger.info("[place_suggestion_purge] cleared contacts of %s suggestions", purged)
+        except asyncio.CancelledError:
+            break
+        except Exception:  # noqa: BLE001
+            logger.exception("[place_suggestion_purge] failed")
+        await asyncio.sleep(PLACE_SUGGESTION_PURGE_INTERVAL_SEC)

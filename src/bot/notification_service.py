@@ -41,6 +41,7 @@ from src.bot.notification_loops import (
     run_care_pulse_loop,
     run_ice_forecast_loop,
     run_hockey_matches_loop,
+    run_place_suggestion_purge_loop,
 )
 from src.bot.ice_company_loop import run_ice_company_loop
 from src.ingestion.loop import (
@@ -137,6 +138,7 @@ async def main() -> None:
         asyncio.create_task(run_ice_health_weekly_digest_loop(), name="ice_health_weekly_digest"),
         asyncio.create_task(run_ice_scheduler_watchdog_loop(), name="ice_scheduler_watchdog"),
         asyncio.create_task(run_hockey_matches_loop(), name="hockey_matches"),
+        asyncio.create_task(run_place_suggestion_purge_loop(), name="place_suggestion_purge"),
     ]
     all_tasks = client_tasks + trainer_tasks + other_tasks
 
