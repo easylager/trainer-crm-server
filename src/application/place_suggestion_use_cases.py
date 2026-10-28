@@ -21,7 +21,9 @@ from src.application.place_suggestion_notify import notify_admins_new_place_sugg
 from src.application.trainer_relay_delivery import send_client_plain_notification
 from src.application.trainer_arena_create_use_cases import find_possible_duplicate_arenas
 from src.application.trainer_city_create_use_cases import find_city_by_name_insensitive
-from src.shared.currency import resolve_currency
+from src.application.ice_city_day import invalidate_public_city_cache
+from src.shared.currency import CURRENCY_BY_COUNTRY
+from src.shared.ice_discovery_scope import ice_discovery_countries
 from src.shared.place_suggestion import (
     PlaceSuggestionError,
     classify_contact,
@@ -211,11 +213,20 @@ def link_profile_fields(raw: str | None) -> dict[str, str]:
     return {}
 
 
-def visitor_prices_from_details(details: Mapping[str, Any], currency: str) -> dict[str, str] | None:
+def visitor_prices_from_details(details: Mapping[str, Any], currency: str | None) -> dict[str, Any] | None:
     out = {key: str(details[src]) for src, key in _PRICE_FIELDS if details.get(src)}
     if not out:
         return None
     return {**out, "currency": currency, "source": "visitors"}
+
+
+async def _city_currency(session: AsyncSession, city_id: int) -> str | None:
+    """Валюта по стране города. ``resolve_currency`` любую страну кроме RU считает BYN
+    (KZ → BYN); для цен посетителей это ложь, поэтому вне BY/RU — ``None``."""
+    country = (
+        await session.execute(text("SELECT country FROM cities WHERE id = :id"), {"id": int(city_id)})
+    ).scalar()
+    return CURRENCY_BY_COUNTRY.get(str(country or "").upper())
 
 
 async def _profile_fields_from_details(
@@ -223,7 +234,7 @@ async def _profile_fields_from_details(
 ) -> dict[str, Any]:
     """Кандидаты в поля профиля: phone, website_url, visitor_prices, opening_hours."""
     fields: dict[str, Any] = dict(link_profile_fields(details.get("link")))
-    prices = visitor_prices_from_details(details, await resolve_currency(session, city_id))
+    prices = visitor_prices_from_details(details, await _city_currency(session, city_id))
     if prices:
         fields["visitor_prices"] = prices
     hours = daily_hours_from_text(details.get("hours"))
@@ -338,7 +349,12 @@ def _patch_value(key: str, value: Any, kind: str) -> Any:
             raise PlaceSuggestionAdminError("invalid", "details — объект.")
         return json.dumps(normalize_details(kind, dict(value)), ensure_ascii=False)
     if key == "city_id":
-        return int(value) if value is not None else None
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise PlaceSuggestionAdminError("invalid", "Неверный город.") from None
     raise KeyError(key)
 
 
@@ -433,17 +449,19 @@ async def notify_author_approved(sid: int) -> None:
     del sid
 
 
-async def _resolve_city_for_approve(session: AsyncSession, row: Mapping[str, Any]) -> tuple[int, str, bool]:
-    """(city_id, city_name, kept_inactive). Существующий скрытый город не включаем (PDEC-018)."""
+async def _resolve_city_for_approve(
+    session: AsyncSession, row: Mapping[str, Any]
+) -> tuple[int, str, bool, bool]:
+    """(city_id, city_name, kept_inactive, created). Существующий скрытый город не включаем (PDEC-018)."""
     if row["city_id"] is not None:
-        return int(row["city_id"]), str(row["city_name"]), not bool(row["city_is_active"])
+        return int(row["city_id"]), str(row["city_name"]), not bool(row["city_is_active"]), False
     name = _clean(row["new_city_name"], 120)
     country = row["new_city_country"]
     if not name or not country:
         raise PlaceSuggestionAdminError("invalid", "Укажите город и страну.")
     existing = await find_city_by_name_insensitive(session, name, country=country)
     if existing:
-        return int(existing["id"]), str(existing["name"]), not existing["is_active"]
+        return int(existing["id"]), str(existing["name"]), not existing["is_active"], False
     r = await session.execute(
         text(
             """
@@ -461,19 +479,22 @@ async def _resolve_city_for_approve(session: AsyncSession, row: Mapping[str, Any
             "region": row["new_city_region"],
         },
     )
-    return int(r.scalar_one()), name, False
+    return int(r.scalar_one()), name, False, True
 
 
 async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id: int) -> dict[str, Any]:
     """Заявка → город (если новый), подтверждённое место и опубликованная карточка; одна транзакция.
 
     Часы пишутся в ``opening_hours`` только в daily-формате (см. ``daily_hours_from_text``);
-    остальное остаётся в заявке. Свежее место без парсера — ``schedule_mode='phone'``.
+    остальное остаётся в заявке: ``schedule_mode_note`` показывается только при
+    ``season_closed`` (в режиме phone — одна строка «Расписание по телефону», а форма
+    админки и ``validate_schedule_mode_patch`` заметку при phone стирают/отвергают).
+    Свежее место без парсера — ``schedule_mode='phone'``.
     """
     try:
         row = await _load_row(session, sid, for_update=True)
         _require_open(row)
-        city_id, city_name, kept_inactive = await _resolve_city_for_approve(session, row)
+        city_id, city_name, kept_inactive, city_created = await _resolve_city_for_approve(session, row)
         name = row["name"][:_ARENA_NAME_MAX].strip()
         r = await session.execute(
             text(
@@ -524,6 +545,15 @@ async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id:
             ),
             {"a": arena_id, "c": city_id, "sid": int(sid)},
         )
+        profile_status, city_country = (
+            await session.execute(
+                text(
+                    "SELECT p.status, c.country FROM arena_profiles p JOIN cities c ON c.id = p.city_id "
+                    "WHERE p.arena_id = :a"
+                ),
+                {"a": arena_id},
+            )
+        ).one()
         await session.commit()
     except Exception:
         await session.rollback()
@@ -533,6 +563,9 @@ async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id:
         await notify_author_approved(int(sid))
     except Exception:  # noqa: BLE001
         logger.exception("notify author after place suggestion approve failed suggestion_id=%s", sid)
+    if city_created:
+        # Иначе /c/{город} и /p/ нового города 404 до конца TTL кэша публичных городов.
+        invalidate_public_city_cache()
 
     return {
         "arena_id": arena_id,
@@ -540,6 +573,10 @@ async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id:
         "slug": slug,
         "url": place_path(city_name=city_name, slug=slug),
         "city_kept_inactive": kept_inactive,
+        "city_created": city_created,
+        "country_not_public": str(city_country or "").upper() not in ice_discovery_countries(),
+        "profile_status": profile_status,
+        "published": profile_status == "published",
     }
 
 
@@ -556,8 +593,13 @@ async def send_message_to_author(session: AsyncSession, sid: int, body: str) -> 
     text_body = str(body or "").strip()[:_MESSAGE_MAX]
     if not text_body:
         raise PlaceSuggestionAdminError("invalid", "Пустое сообщение.")
-    row = await _load_row(session, sid)
-    _require_open(row)
+    # Блокировка строки до коммита: параллельное одобрение не должно быть «переоткрыто» в needs_info.
+    row = await _load_row(session, sid, for_update=True)
+    try:
+        _require_open(row)
+    except PlaceSuggestionAdminError:
+        await session.rollback()
+        raise
     delivered = False
     if row["author_telegram_id"] is not None:
         try:
@@ -580,7 +622,10 @@ async def send_message_to_author(session: AsyncSession, sid: int, body: str) -> 
     )
     message = dict(r.mappings().one())
     await session.execute(
-        text("UPDATE place_suggestions SET status = 'needs_info', updated_at = now() WHERE id = :sid"),
+        text(
+            "UPDATE place_suggestions SET status = 'needs_info', updated_at = now() "
+            "WHERE id = :sid AND status IN ('new', 'needs_info')"
+        ),
         {"sid": int(sid)},
     )
     await session.commit()

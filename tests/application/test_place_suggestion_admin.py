@@ -315,3 +315,80 @@ def test_daily_hours_and_link_parsing():
     assert uc.link_profile_fields("ice.by") == {"website_url": "https://ice.by"}
     assert uc.link_profile_fields("+375 (29) 111-22-33") == {"phone": "+375 (29) 111-22-33"}
     assert uc.link_profile_fields("спросить на кассе") == {}
+
+
+@pytest.mark.asyncio
+async def test_approve_non_daily_hours_stay_out_of_profile(db_session, approved_notices):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    city_id = await _city(db_session, "Пса-Часы")
+    sid = await _suggest(db_session, city_id=city_id, name="Каток-часы",
+                         details={"hours": "Пн–Пт 18:00–22:00, Сб–Вс 10:00–22:00"})
+    res = await approve_place_suggestion(db_session, sid, admin_id=1)
+    hours, note, mode = (await db_session.execute(text(
+        "SELECT opening_hours, schedule_mode_note, schedule_mode FROM arena_profiles WHERE arena_id=:id"),
+        {"id": res["arena_id"]})).one()
+    assert hours is None and note is None and mode == "phone"
+    kept = (await db_session.execute(text(
+        "SELECT details->>'hours' FROM place_suggestions WHERE id=:id"), {"id": sid})).scalar()
+    assert kept.startswith("Пн–Пт")
+
+
+@pytest.mark.asyncio
+async def test_approve_new_city_invalidates_cache_and_flags(db_session, approved_notices, monkeypatch):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    monkeypatch.setenv("ICE_DISCOVERY_COUNTRIES", "BY,RU")
+    cleared: list[bool] = []
+    monkeypatch.setattr(uc, "invalidate_public_city_cache", lambda: cleared.append(True))
+    sid = await _suggest(db_session, new_city={"name": "Пса-Алматы", "country": "KZ"},
+                         details={"price_adult": "2000"})
+    res = await approve_place_suggestion(db_session, sid, admin_id=1)
+    assert cleared == [True] and res["city_created"] is True
+    assert res["country_not_public"] is True
+    assert res["profile_status"] == "published" and res["published"] is True
+    prices = (await db_session.execute(text(
+        "SELECT visitor_prices FROM arena_profiles WHERE arena_id=:id"), {"id": res["arena_id"]})).scalar()
+    assert prices == {"adult": "2000", "currency": None, "source": "visitors"}
+
+    by_city = await _city(db_session, "Пса-Кэш")
+    sid2 = await _suggest(db_session, city_id=by_city, name="Каток-кэш")
+    res2 = await approve_place_suggestion(db_session, sid2, admin_id=1)
+    assert cleared == [True] and res2["city_created"] is False and res2["country_not_public"] is False
+
+
+@pytest.mark.asyncio
+async def test_approve_test_name_reports_draft(db_session, approved_notices):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    city_id = await _city(db_session, "Пса-Черновик")
+    sid = await _suggest(db_session, city_id=city_id, name="Тестовая арена")
+    res = await approve_place_suggestion(db_session, sid, admin_id=1)
+    assert res["profile_status"] == "draft" and res["published"] is False
+
+
+@pytest.mark.asyncio
+async def test_patch_rejects_non_numeric_city_id(db_session):
+    sid = await _suggest(db_session, new_city={"name": "Пса-Номер", "country": "BY"})
+    with pytest.raises(PlaceSuggestionAdminError) as exc:
+        await patch_place_suggestion(db_session, sid, {"city_id": "abc"})
+    assert exc.value.code == "invalid"
+
+
+@pytest.mark.asyncio
+async def test_message_to_closed_suggestion_fails_and_keeps_status(db_session, monkeypatch):
+    sent: list[dict] = []
+
+    async def _fake_send(**kw):
+        sent.append(kw)
+
+    monkeypatch.setattr(uc, "send_client_plain_notification", _fake_send)
+    sid = await _suggest(db_session, new_city={"name": "Пса-Закрытый-чат", "country": "BY"}, author=777002)
+    await reject_place_suggestion(db_session, sid, "spam")
+    with pytest.raises(PlaceSuggestionAdminError) as exc:
+        await uc.send_message_to_author(db_session, sid, "Ещё вопрос")
+    assert exc.value.code == "closed" and sent == []
+    status, *_ = await _status(db_session, sid)
+    n = (await db_session.execute(text(
+        "SELECT count(*) FROM place_suggestion_messages WHERE suggestion_id=:id"), {"id": sid})).scalar()
+    assert status == "rejected" and n == 0
