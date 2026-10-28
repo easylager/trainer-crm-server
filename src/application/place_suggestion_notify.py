@@ -141,3 +141,36 @@ async def notify_admins_new_place_suggestion(suggestion_id: int) -> None:
                 )
     finally:
         await bot.session.close()
+
+
+_REPLY_PREVIEW_MAX = 3500
+
+
+def format_place_suggestion_reply(suggestion_id: int, body: str) -> str:
+    """«Ответ по заявке №12: …» (HTML-safe, длинный ответ обрезан до лимита Telegram)."""
+    text_body = str(body or "").strip()
+    if len(text_body) > _REPLY_PREVIEW_MAX:
+        text_body = text_body[:_REPLY_PREVIEW_MAX].rstrip() + "…"
+    return f"Ответ по заявке №{int(suggestion_id)}: {html.escape(text_body)}"
+
+
+async def notify_admins_place_suggestion_reply(suggestion_id: int, body: str) -> None:
+    """Автор ответил в клиентском боте — карточка с «Открыть» каждому админу; ошибки только в лог."""
+    settings = Settings()
+    token = settings.telegram_bot_token_admin
+    admin_ids = list(dict.fromkeys(settings.admin_telegram_ids or []))
+    if not token or not admin_ids:
+        return
+    caption = format_place_suggestion_reply(suggestion_id, body)
+    kb = place_suggestion_keyboard(suggestion_id, base_url=settings.webapp_base_url or "", can_approve=False)
+    bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    try:
+        for chat_id in admin_ids:
+            try:
+                await bot.send_message(chat_id=chat_id, text=caption, reply_markup=kb)
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "place suggestion reply notify failed chat_id=%s suggestion_id=%s", chat_id, suggestion_id
+                )
+    finally:
+        await bot.session.close()

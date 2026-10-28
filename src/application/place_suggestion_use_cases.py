@@ -17,11 +17,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.arena_profile import ensure_arena_profile, normalize_hhmm, public_http_url
 from src.application.catalog_consumer_events import hmac_actor
 from src.application.place_links import place_path
-from src.application.place_suggestion_notify import notify_admins_new_place_suggestion
+from src.application.place_suggestion_notify import (
+    notify_admins_new_place_suggestion,
+    notify_admins_place_suggestion_reply,
+)
 from src.application.trainer_relay_delivery import send_client_plain_notification
 from src.application.trainer_arena_create_use_cases import find_possible_duplicate_arenas
 from src.application.trainer_city_create_use_cases import find_city_by_name_insensitive
 from src.application.ice_city_day import invalidate_public_city_cache
+from src.infrastructure.db import async_session_factory
+from src.shared.config import Settings
 from src.shared.currency import CURRENCY_BY_COUNTRY
 from src.shared.ice_discovery_scope import ice_discovery_countries
 from src.shared.place_suggestion import (
@@ -445,8 +450,42 @@ _ARENA_NAME_MAX = 128
 
 
 async def notify_author_approved(sid: int) -> None:
-    """Сообщить автору, что место появилось в каталоге. Заглушка: доставку делает Task 11."""
-    del sid
+    """«Ваше место появилось в Glide: <ссылка>» автору в клиентского бота (только Telegram).
+
+    Молчит, если автора нет или страница места ещё не видна снаружи: черновик карточки,
+    скрытый город или страна вне каталога — ссылка вела бы на 404.
+    """
+    async with async_session_factory() as session:
+        r = await session.execute(
+            text(
+                """
+                SELECT s.name, s.author_telegram_id, p.slug, p.status AS profile_status,
+                       c.name AS city_name, c.is_active AS city_is_active, c.country
+                FROM place_suggestions s
+                JOIN arena_profiles p ON p.arena_id = s.result_arena_id
+                JOIN cities c ON c.id = p.city_id
+                WHERE s.id = :id AND s.status = 'approved'
+                """
+            ),
+            {"id": int(sid)},
+        )
+        row = r.mappings().first()
+    if not row or row["author_telegram_id"] is None:
+        return
+    visible = (
+        row["profile_status"] == "published"
+        and bool(row["city_is_active"])
+        and str(row["country"] or "").upper() in ice_discovery_countries()
+    )
+    if not visible or not row["slug"]:
+        logger.info("place suggestion %s approved but not public yet; author not notified", sid)
+        return
+    base = (Settings().webapp_base_url or "").strip().rstrip("/")
+    url = f"{base}{place_path(city_name=str(row['city_name']), slug=str(row['slug']))}"
+    await send_client_plain_notification(
+        telegram_chat_id=int(row["author_telegram_id"]),
+        html_text=f"Ваше место «{html.escape(str(row['name']))}» появилось в Glide: {html.escape(url)}",
+    )
 
 
 async def _resolve_city_for_approve(
@@ -669,3 +708,54 @@ async def bind_suggestion_author(session: AsyncSession, token: str, telegram_id:
     row = r.mappings().first()
     await session.commit()
     return dict(row) if row else None
+
+
+_REPLY_WINDOW_DAYS = 14
+
+
+async def capture_author_reply(session: AsyncSession, telegram_id: int, body: str) -> int | None:
+    """Ответ автора в клиентском боте → ``from_author`` в его заявку и карточка админам.
+
+    Подходит последняя заявка автора в ``needs_info``, которой мы писали (``to_author``)
+    не раньше 14 дней назад; иначе ``None`` — сообщение уходит в обычную поддержку.
+    """
+    text_body = str(body or "").strip()[:_MESSAGE_MAX]
+    if not text_body or not telegram_id:
+        return None
+    r = await session.execute(
+        text(
+            """
+            SELECT s.id
+            FROM place_suggestions s
+            JOIN LATERAL (
+                SELECT max(m.created_at) AS last_to
+                FROM place_suggestion_messages m
+                WHERE m.suggestion_id = s.id AND m.direction = 'to_author'
+            ) q ON true
+            WHERE s.author_telegram_id = :tid AND s.status = 'needs_info'
+              AND q.last_to >= now() - make_interval(days => :days)
+            ORDER BY q.last_to DESC, s.id DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": int(telegram_id), "days": _REPLY_WINDOW_DAYS},
+    )
+    sid = r.scalar()
+    if sid is None:
+        return None
+    await session.execute(
+        text(
+            "INSERT INTO place_suggestion_messages (suggestion_id, direction, body) "
+            "VALUES (:sid, 'from_author', :body)"
+        ),
+        {"sid": int(sid), "body": text_body},
+    )
+    await session.execute(
+        text("UPDATE place_suggestions SET updated_at = now() WHERE id = :sid"), {"sid": int(sid)}
+    )
+    await session.commit()
+    try:
+        await notify_admins_place_suggestion_reply(int(sid), text_body)
+    except Exception:  # noqa: BLE001
+        logger.exception("place suggestion reply admin notify failed suggestion_id=%s", sid)
+    return int(sid)

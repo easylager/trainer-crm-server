@@ -42,7 +42,11 @@ from src.application.subscription_tier_use_cases import trainer_allows_online_bo
 from src.application.certificate_use_cases import activate_certificate_by_code
 from src.application.catalog_deep_links import build_catalog_deep_link_reply, is_catalog_deep_link
 from src.application.ice_watch_bot_start import parse_watch_start, subscribe_from_bot_start
-from src.application.place_suggestion_use_cases import bind_suggestion_author, parse_suggest_start
+from src.application.place_suggestion_use_cases import (
+    bind_suggestion_author,
+    capture_author_reply,
+    parse_suggest_start,
+)
 from src.application.client_invite_use_cases import (
     bind_client_invite_trainer_context as _bind_client_invite_trainer_context,
     client_invite_needs_registration_form,
@@ -3540,6 +3544,18 @@ async def fallback(message: Message) -> None:
     if message.text and getattr(message.chat, "type", None) == ChatType.PRIVATE:
         if await maybe_route_client_relay_text_reply(message):
             return
+        # PDEC-028: ответ автора на вопрос по его заявке «места от людей». Нажатая
+        # «Поддержка» важнее: тогда текст адресован ей, а не заявке.
+        if (
+            telegram_id
+            and telegram_id not in _client_support_awaiting
+            and not message.text.startswith("/")
+        ):
+            async with async_session_factory() as session:
+                suggestion_id = await capture_author_reply(session, telegram_id, message.text)
+            if suggestion_id is not None:
+                await message.answer(msg.CLIENT_SUGGEST_REPLY_SENT)
+                return
     if telegram_id in _client_support_awaiting:
         _client_support_awaiting.discard(telegram_id)
         text = (message.text or "").strip()[: 4000]
