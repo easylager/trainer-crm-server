@@ -65,7 +65,9 @@
   <script>
     (function () {
       var A = window.AdmAnalytics, esc = A.escapeHtml;
-      var KIND = { ice: 'Крытый каток', outdoor: 'Открытый каток', shop: 'Магазин', school: 'Школа' };
+      var KIND = { ice: 'Крытый каток', outdoor: 'Открытый каток', shop: 'Магазин, мастерская', school: 'Школа', other: 'Другое' };
+      var LABEL = { sharpening: 'заточка', repair: 'ремонт', rental: 'прокат', sale: 'продажа', hockey: 'хоккей', figure: 'фигурное', roller: 'ролики' };
+      function labels(list) { return (list || []).map(function (k) { return LABEL[k] || k; }).join(', '); }
       var STATUS = { 'new': 'Новая', needs_info: 'Ждём ответа', approved: 'Опубликована', rejected: 'Отклонена', duplicate: 'Дубль' };
       var REASONS = [['spam', 'Спам'], ['not_ice', 'Не про лёд'], ['closed', 'Закрылось'], ['other', 'Другое']];
       var TABS = [['new', 'Новые'], ['waiting', 'Ждём ответа'], ['closed', 'Закрытые']];
@@ -192,9 +194,10 @@
           h += '<div class="ps-f" style="margin-bottom:-6px">Цена со слов посетителя' + (s.city_country === 'RU' || s.new_city_country === 'RU' ? ', ₽' : (s.city_country === 'BY' || s.new_city_country === 'BY' ? ', BYN' : '')) + '</div>' +
             '<div class="ps-grid3">' + detailInput('price_adult', 'Взрослый', d.price_adult) + detailInput('price_child', 'Детский', d.price_child) + detailInput('price_rental', 'Прокат', d.price_rental) + '</div>';
         }
-        if (s.kind === 'shop' && d.services && d.services.length) h += '<div class="ps-hint" style="margin-top:10px">Услуги: ' + esc(d.services.join(', ')) + '</div>';
+        if (s.kind === 'shop' && d.services && d.services.length) h += '<div class="ps-hint" style="margin-top:10px">Услуги: ' + esc(labels(d.services)) + '</div>';
+        if (s.kind === 'shop' && d.disciplines && d.disciplines.length) h += '<div class="ps-hint" style="margin-top:4px">Для чего: ' + esc(labels(d.disciplines)) + '</div>';
         if (s.kind === 'school') {
-          if (d.disciplines && d.disciplines.length) h += '<div class="ps-hint" style="margin-top:10px">Дисциплины: ' + esc(d.disciplines.join(', ')) + '</div>';
+          if (d.disciplines && d.disciplines.length) h += '<div class="ps-hint" style="margin-top:10px">Дисциплины: ' + esc(labels(d.disciplines)) + '</div>';
           h += detailInput('age', 'Возраст', d.age);
         }
         h += detailInput('hours', 'Часы (в карточку попадут, только если это один интервал «10:00–22:00»)', d.hours, true) +

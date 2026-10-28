@@ -450,7 +450,11 @@ async def mark_duplicate(
 
 
 #: Услуги магазина из заявки → ключи ``arena_profiles.amenities`` (SHOP_AMENITY_KEYS).
-_SHOP_SERVICE_AMENITY = {"sharpening": "skate_sharpening", "rental": "skate_rental", "sale": "retail"}
+_SHOP_SERVICE_AMENITY = {
+    "sharpening": "skate_sharpening", "repair": "repair", "rental": "skate_rental", "sale": "retail",
+}
+#: Специализация магазина из заявки → ``discipline_*`` в amenities.
+_SHOP_DISCIPLINE_AMENITY = {"hockey": "discipline_hockey", "figure": "discipline_figure", "roller": "discipline_roller"}
 _PRICE_GROUP_BY_COUNTRY = {"RU": "RU_BASE"}
 _ARENA_NAME_MAX = 128
 
@@ -587,6 +591,10 @@ async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id:
                 _SHOP_SERVICE_AMENITY[s]: True for s in row["details"].get("services") or []
                 if s in _SHOP_SERVICE_AMENITY
             }
+            amenities.update({
+                _SHOP_DISCIPLINE_AMENITY[d]: True for d in row["details"].get("disciplines") or []
+                if d in _SHOP_DISCIPLINE_AMENITY
+            })
             if amenities:
                 fields["amenities"] = amenities
         fields["schedule_mode"] = "phone"

@@ -14,7 +14,7 @@ down_revision = "0278_ice_session_events"
 branch_labels = None
 depends_on = None
 
-_KINDS = ("ice", "outdoor", "shop", "school")
+_KINDS = ("ice", "outdoor", "shop", "school", "other")
 _STATUSES = ("new", "needs_info", "approved", "rejected", "duplicate")
 _SOURCES = ("site", "miniapp")
 _CONTACT_KINDS = ("email", "telegram", "other")

@@ -4,9 +4,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
-KINDS = ("ice", "outdoor", "shop", "school")
+KINDS = ("ice", "outdoor", "shop", "school", "other")
 RINK_KINDS = frozenset({"ice", "outdoor"})
-SHOP_SERVICES = ("sharpening", "rental", "sale")
+#: «Магазин, мастерская»: мастерская — это услуга «repair», а не отдельный тип места.
+SHOP_SERVICES = ("sharpening", "repair", "rental", "sale")
+#: Для чего магазин — та же специализация, что показывает карточка (discipline_*).
+SHOP_DISCIPLINES = ("hockey", "figure", "roller")
 SCHOOL_DISCIPLINES = ("figure", "hockey")
 
 #: callback_data кнопки «Одобрить как есть» в уведомлении админу: ``psa:<id>``.
@@ -18,6 +21,7 @@ _KIND_TEXT = {
     "outdoor": {"price_adult": 20, "price_child": 20, "price_rental": 20},
     "shop": {},
     "school": {"age": 100},
+    "other": {},
 }
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _TG_RE = re.compile(r"^@?([A-Za-z][A-Za-z0-9_]{4,31})$")
@@ -59,6 +63,9 @@ def normalize_details(kind: str, raw: dict[str, Any] | None) -> dict[str, Any]:
         picked = [s for s in SHOP_SERVICES if s in _as_list(raw.get("services"))]
         if picked:
             out["services"] = picked
+        picked = [s for s in SHOP_DISCIPLINES if s in _as_list(raw.get("disciplines"))]
+        if picked:
+            out["disciplines"] = picked
     if kind == "school":
         picked = [s for s in SCHOOL_DISCIPLINES if s in _as_list(raw.get("disciplines"))]
         if picked:

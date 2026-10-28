@@ -22,21 +22,33 @@
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.905 5h3.418a1 1 0 0 1 .928 .629l1.143 2.856a3 3 0 0 0 2.207 1.83l4.717 .926a2.084 2.084 0 0 1 1.682 2.045v.714a1 1 0 0 1 -1 1h-13.895a1 1 0 0 1 -1 -1.1l.8 -8a1 1 0 0 1 1 -.9z"/><path d="M3 19h17a1 1 0 0 0 1 -1"/><path d="M9 15v4"/><path d="M15 15v4"/></svg>' },
     { key: 'outdoor', title: 'Открытый каток', sub: 'в парке, на стадионе', tone: 'outdoor',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8M8.5 5l3.5 2 3.5-2M8.5 9l3.5 2 3.5-2"/><path d="M3 17.5c2.5-2 15.5-2 18 0"/><path d="M3 20.5h18"/></svg>' },
-    { key: 'shop', title: 'Магазин', sub: 'заточка, прокат, продажа', tone: 'shop',
+    { key: 'shop', title: 'Магазин, мастерская', sub: 'заточка, ремонт, прокат', tone: 'shop',
       icon: '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,160H40V56H216V200ZM176,88a48,48,0,0,1-96,0,8,8,0,0,1,16,0,32,32,0,0,0,64,0,8,8,0,0,1,16,0Z"/></svg>' },
     { key: 'school', title: 'Школа', sub: 'фигурное, хоккей', tone: 'school',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9L12 4.5 21.5 9 12 13.5z"/><path d="M6.5 11v4.5c1.6 1.6 3.4 2.3 5.5 2.3s3.9-.7 5.5-2.3V11"/><path d="M21.5 9v5"/></svg>' }
   ];
-  var KIND_BY_KEY = {};
+  /* «Другое» — отдельной строкой под плитками: на случай, которого мы не придумали. */
+  var OTHER_KIND = { key: 'other', title: 'Другое', sub: 'что-то ещё для тех, кто катается', tone: 'other',
+    icon: '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm48-88a8,8,0,0,1-8,8H136v32a8,8,0,0,1-16,0V136H88a8,8,0,0,1,0-16h32V88a8,8,0,0,1,16,0v32h32A8,8,0,0,1,176,128Z"/></svg>' };
+  var KIND_BY_KEY = { other: OTHER_KIND };
   KINDS.forEach(function (k) { KIND_BY_KEY[k.key] = k; });
 
   var NAME_PH = {
     ice: 'Например: Ледовый дворец спорта',
     outdoor: 'Например: каток в парке Победы',
-    shop: 'Название магазина',
-    school: 'Название школы или клуба'
+    shop: 'Название магазина или мастерской',
+    school: 'Название школы или клуба',
+    other: 'Как это называется'
   };
-  var SHOP_SERVICES = [['sharpening', 'Заточка'], ['rental', 'Прокат'], ['sale', 'Продажа']];
+  var SHOP_SERVICES = [['sharpening', 'Заточка'], ['repair', 'Ремонт'], ['rental', 'Прокат'], ['sale', 'Продажа']];
+  var SHOP_DISCIPLINES = [['hockey', 'Хоккей'], ['figure', 'Фигурное'], ['roller', 'Ролики']];
+  var MORE_PH = {
+    ice: 'Парковка, раздевалки, сезон, что угодно',
+    outdoor: 'Сезон, освещение, раздевалка, что угодно',
+    shop: 'Что продают: коньки, защита, одежда; бренды, цены на заточку',
+    school: 'Группы, тренеры, цены, как записаться',
+    other: 'Например: ледовые сборы, клуб любителей, площадка для роллеров'
+  };
   var SCHOOL_DISCIPLINES = [['figure', 'Фигурное катание'], ['hockey', 'Хоккей']];
 
   var ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -63,7 +75,7 @@
     var citiesUrl = opts.citiesUrl || '/api/public/place-suggestions/cities';
     var s = {
       step: 1, kind: null, city: opts.prefillCity || null, q: '',
-      name: '', address: '', details: {}, services: {}, disciplines: {},
+      name: '', address: '', details: {}, services: {}, disciplines: {}, shopDisciplines: {},
       contact: '', website: '', sending: false, error: '', result: null, sugg: [], geoDone: false, geoLoading: false
     };
     var searchTimer = null;
@@ -122,7 +134,15 @@
             '<span class="psf-tile__icon psf-tone--' + k.tone + '">' + k.icon + '</span>' +
             '<span class="psf-tile__text"><span class="psf-tile__title">' + k.title + '</span><span class="psf-tile__sub">' + k.sub + '</span></span>' +
           '</button>';
-        }).join('') + '</div>';
+        }).join('') + '</div>' + otherTile();
+    }
+
+    function otherTile() {
+      var k = OTHER_KIND, on = s.kind === k.key;
+      return '<button type="button" class="psf-tile psf-tile--row' + (on ? ' is-on' : '') + '" data-kind="' + k.key + '" aria-pressed="' + on + '">' +
+        '<span class="psf-tile__icon psf-tone--' + k.tone + '">' + k.icon + '</span>' +
+        '<span class="psf-tile__text"><span class="psf-tile__title">' + k.title + '</span><span class="psf-tile__sub">' + k.sub + '</span></span>' +
+      '</button>';
     }
 
     function cityBlock() {
@@ -164,13 +184,14 @@
           area('psf-hours', 'Когда можно кататься', d.hours || '', 'Например: сеансы по выходным с 12 до 14', 2, 300);
       } else if (s.kind === 'shop') {
         html += '<fieldset class="psf-set"><legend class="psf-label">Что там есть</legend>' + chips('services', SHOP_SERVICES, s.services) + '</fieldset>' +
+          '<fieldset class="psf-set"><legend class="psf-label">Для чего</legend>' + chips('shopDisciplines', SHOP_DISCIPLINES, s.shopDisciplines) + '</fieldset>' +
           field('psf-hours', 'Часы работы', d.hours || '', 'Например: пн–сб 10–20', ' maxlength="300" data-detail="hours"');
       } else if (s.kind === 'school') {
         html += '<fieldset class="psf-set"><legend class="psf-label">Чему учат</legend>' + chips('disciplines', SCHOOL_DISCIPLINES, s.disciplines) + '</fieldset>' +
           field('psf-age', 'С какого возраста', d.age || '', 'Например: с 4 лет, есть взрослые группы', ' maxlength="100" data-detail="age"');
       }
       html += field('psf-link', 'Телефон, сайт или соцсеть', d.link || '', 'Номер или ссылка', ' maxlength="300" data-detail="link"') +
-        area('psf-more', 'Что ещё стоит знать', d.more || '', 'Парковка, раздевалки, сезон, что угодно', 3, 1000);
+        area('psf-more', s.kind === 'other' ? 'Что это и чем полезно' : 'Что ещё стоит знать', d.more || '', MORE_PH[s.kind] || MORE_PH.ice, s.kind === 'other' ? 4 : 3, 1000);
       return html;
     }
 
@@ -307,7 +328,10 @@
     function payload() {
       var d = {};
       Object.keys(s.details).forEach(function (k) { if (trim(s.details[k])) d[k] = trim(s.details[k]); });
-      if (s.kind === 'shop') d.services = SHOP_SERVICES.map(function (c) { return c[0]; }).filter(function (k) { return s.services[k]; });
+      if (s.kind === 'shop') {
+        d.services = SHOP_SERVICES.map(function (c) { return c[0]; }).filter(function (k) { return s.services[k]; });
+        d.disciplines = SHOP_DISCIPLINES.map(function (c) { return c[0]; }).filter(function (k) { return s.shopDisciplines[k]; });
+      }
       if (s.kind === 'school') d.disciplines = SCHOOL_DISCIPLINES.map(function (c) { return c[0]; }).filter(function (k) { return s.disciplines[k]; });
       var body = { kind: s.kind, name: trim(s.name), address: trim(s.address) || null, details: d };
       if (s.city.city_id) body.city_id = s.city.city_id;
@@ -348,7 +372,7 @@
     function reset() {
       s = {
         step: 1, kind: null, city: opts.prefillCity || null, q: '', name: '', address: '', details: {},
-        services: {}, disciplines: {}, contact: s.contact, website: '', sending: false, error: '', result: null, sugg: []
+        services: {}, disciplines: {}, shopDisciplines: {}, contact: s.contact, website: '', sending: false, error: '', result: null, sugg: []
       };
       go(1);
     }
@@ -380,7 +404,7 @@
         return;
       }
       if (t.dataset.chip) {
-        var bag = t.dataset.chip === 'services' ? s.services : s.disciplines;
+        var bag = s[t.dataset.chip];
         bag[t.dataset.key] = !bag[t.dataset.key];
         t.classList.toggle('is-on', bag[t.dataset.key]);
         t.setAttribute('aria-pressed', String(bag[t.dataset.key]));

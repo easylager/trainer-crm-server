@@ -176,3 +176,8 @@
 /* сайт: форма на высоту экрана, кнопка внизу, футер сайта — ниже сгиба */
 .b-page--suggest { padding-bottom: 0; min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; }
 .b-page--suggest > .psf { flex: 1; }
+
+/* «Другое» — строкой во всю ширину под плитками */
+.psf-tile--row { min-height: 0; margin-top: -8px; width: 100%; flex-direction: row; align-items: center; justify-content: flex-start; padding: 12px 14px; }
+.psf-tile--row .psf-tile__icon { width: 44px; height: 44px; flex: none; }
+.psf-tone--other { --tone: var(--g-muted); }

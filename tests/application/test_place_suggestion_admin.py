@@ -282,12 +282,25 @@ async def test_approve_shop_maps_services_to_amenities(db_session, approved_noti
 
     city_id = await _city(db_session, "Пса-Магазин")
     sid = await _suggest(db_session, city_id=city_id, kind="shop", name="Заточка-пса",
-                         details={"services": ["sharpening", "sale"]})
+                         details={"services": ["sharpening", "repair", "sale"], "disciplines": ["figure"]})
     res = await approve_place_suggestion(db_session, sid, admin_id=1)
     venue, amenities = (await db_session.execute(text(
         "SELECT a.venue_type, p.amenities FROM arenas a JOIN arena_profiles p ON p.arena_id=a.id WHERE a.id=:id"),
         {"id": res["arena_id"]})).one()
-    assert venue == "shop" and amenities == {"skate_sharpening": True, "retail": True}
+    assert venue == "shop" and amenities == {
+        "skate_sharpening": True, "repair": True, "retail": True, "discipline_figure": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_approve_other_kind_creates_other_venue(db_session, approved_notices):
+    from src.application.place_suggestion_use_cases import approve_place_suggestion
+
+    city_id = await _city(db_session, "Пса-Другое")
+    sid = await _suggest(db_session, city_id=city_id, kind="other", name="Ледовый лагерь-пса", details={})
+    res = await approve_place_suggestion(db_session, sid, admin_id=1)
+    venue = (await db_session.execute(text("SELECT venue_type FROM arenas WHERE id=:id"), {"id": res["arena_id"]})).scalar_one()
+    assert venue == "other"
 
 
 @pytest.mark.asyncio
