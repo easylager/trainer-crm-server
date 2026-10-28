@@ -1,13 +1,19 @@
 """
-City picker for a place suggestion (PDEC-028): our public cities first, then Nominatim.
+City picker for a place suggestion (PDEC-028): our public cities as you type, Nominatim on request.
 
-A person may suggest a place in a city we don't have yet, so the picker falls back to the
-geocoder. Nominatim's usage policy allows at most one request per second and asks for
-caching, so: an in-process 1-hour cache and a 1 req/s throttle — over the limit the
-geocoder part is simply empty, never an error. Its failures are swallowed the same way.
+A person may suggest a place in a city we don't have yet, so the picker can ask the geocoder.
+Nominatim's usage policy forbids search-as-you-type ("you must not implement such a service on
+the client side using the API"), allows at most one request per second and requires caching.
+So typing searches only our cities; the geocoder runs once, when the person taps «Найти на
+карте» (``use_geocoder=True``). Requests are serialized at 1 req/s per process and cached for
+an hour. Failures are swallowed — the form then offers a free-text city.
+
+Photon was tried as a typeahead alternative and rejected: it returns local names, so Belarusian
+towns come back in Belarusian («Мазыр») or not at all (Новополоцк).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any, Awaitable, Callable
@@ -31,6 +37,7 @@ CACHE_MAX_ENTRIES = 1000
 
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _last_request_at: float = 0.0
+_throttle_lock = asyncio.Lock()
 
 Geocode = Callable[[str], Awaitable[list[dict[str, Any]]]]
 
@@ -83,13 +90,21 @@ async def nominatim_cities(q: str) -> list[dict[str, Any]]:
     key = (q or "").strip().lower()
     if not key:
         return []
-    now = time.monotonic()
     hit = _cache.get(key)
-    if hit and now - hit[0] < CACHE_TTL_SEC:
+    if hit and time.monotonic() - hit[0] < CACHE_TTL_SEC:
         return hit[1]
-    if now - _last_request_at < MIN_INTERVAL_SEC:
-        return []
-    _last_request_at = now
+    async with _throttle_lock:
+        hit = _cache.get(key)
+        if hit and time.monotonic() - hit[0] < CACHE_TTL_SEC:
+            return hit[1]
+        wait = MIN_INTERVAL_SEC - (time.monotonic() - _last_request_at)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _last_request_at = time.monotonic()
+        return await _fetch_and_cache(q, key)
+
+
+async def _fetch_and_cache(q: str, key: str) -> list[dict[str, Any]]:
     try:
         async with httpx.AsyncClient(timeout=GEOCODE_TIMEOUT_SEC) as client:
             r = await client.get(
@@ -109,11 +124,17 @@ async def nominatim_cities(q: str) -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001
         logger.info("place suggestion city search: nominatim failed q=%r", q, exc_info=True)
         return []
-    _cache_put(key, now, result)
+    _cache_put(key, time.monotonic(), result)
     return result
 
 
-async def search_cities(session: AsyncSession, q: str, *, geocode: Geocode = nominatim_cities) -> list[dict[str, Any]]:
+async def search_cities(
+    session: AsyncSession,
+    q: str,
+    *,
+    use_geocoder: bool = False,
+    geocode: Geocode = nominatim_cities,
+) -> list[dict[str, Any]]:
     query = " ".join((q or "").split())[:120]
     if not query:
         return []
@@ -142,7 +163,7 @@ async def search_cities(session: AsyncSession, q: str, *, geocode: Geocode = nom
         }
         for row in r.fetchall()
     ]
-    if len(query) < MIN_GEOCODE_QUERY_LEN or len(ours) >= TOTAL_LIMIT:
+    if not use_geocoder or len(query) < MIN_GEOCODE_QUERY_LEN or len(ours) >= TOTAL_LIMIT:
         return ours
     try:
         found = await geocode(query)

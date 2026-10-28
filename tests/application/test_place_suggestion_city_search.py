@@ -39,8 +39,15 @@ async def test_our_city_found_by_prefix(db_session, our_city):
 
 
 @pytest.mark.asyncio
+async def test_typing_never_calls_geocoder(db_session, our_city):
+    """Nominatim policy: no search-as-you-type — only an explicit «Найти на карте»."""
+    items = await search_cities(db_session, CITY, geocode=_geocode_must_not_run)
+    assert [i["city_id"] for i in items] == [our_city]
+
+
+@pytest.mark.asyncio
 async def test_short_query_skips_geocoder(db_session, our_city):
-    items = await search_cities(db_session, CITY[:1], geocode=_geocode_must_not_run)
+    items = await search_cities(db_session, CITY[:1], use_geocoder=True, geocode=_geocode_must_not_run)
     assert all(not i["is_new"] for i in items)
 
 
@@ -50,7 +57,7 @@ async def test_geocoder_duplicate_of_our_city_is_dropped(db_session, our_city):
         {"city_id": None, "name": CITY, "region": "Минская", "country": "BY", "lat": 1.0, "lon": 2.0, "is_new": True},
         {"city_id": None, "name": CITY, "region": "Псковская", "country": "RU", "lat": 3.0, "lon": 4.0, "is_new": True},
     ]
-    items = await search_cities(db_session, CITY, geocode=lambda q: _geo(geo))
+    items = await search_cities(db_session, CITY, use_geocoder=True, geocode=lambda q: _geo(geo))
     assert [i for i in items if i["is_new"]] == [geo[1]]
     assert len(items) <= 6
 
@@ -60,7 +67,7 @@ async def test_geocoder_failure_returns_only_ours(db_session, our_city):
     async def boom(_q):
         raise RuntimeError("nominatim down")
 
-    items = await search_cities(db_session, CITY, geocode=boom)
+    items = await search_cities(db_session, CITY, use_geocoder=True, geocode=boom)
     assert [i["city_id"] for i in items] == [our_city]
 
 
@@ -110,8 +117,15 @@ async def test_nominatim_parses_caches_and_throttles(monkeypatch):
     assert await cs.nominatim_cities("уфа") == first  # кэш, без запроса
     assert len(calls) == 1
 
-    assert await cs.nominatim_cities("Казань") == []  # тот же момент — лимит 1 запрос/с
-    assert len(calls) == 1
+    slept = []
+
+    async def fake_sleep(sec):
+        slept.append(sec)
+
+    monkeypatch.setattr(cs.asyncio, "sleep", fake_sleep)
+    await cs.nominatim_cities("Казань")  # тот же момент — ждём до 1 с, а не теряем запрос
+    assert len(calls) == 2
+    assert slept and 0 < slept[0] <= cs.MIN_INTERVAL_SEC
 
 
 def test_cache_evicts_expired_and_caps_size(monkeypatch):

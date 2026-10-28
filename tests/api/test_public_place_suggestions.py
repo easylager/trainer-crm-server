@@ -96,7 +96,7 @@ async def test_city_search_endpoint(app_use_test_db, db_session, monkeypatch):
             "lat": 1.0, "lon": 2.0, "is_new": True}]
     monkeypatch.setitem(cs._cache, "пситестоуфа", (time.monotonic(), geo))
     async with _client() as client:
-        resp = await client.get(f"{URL}/cities", params={"q": "Пситестоуфа"}, headers={"X-Forwarded-For": _ip()})
+        resp = await client.get(f"{URL}/cities", params={"q": "Пситестоуфа", "geo": "1"}, headers={"X-Forwarded-For": _ip()})
     assert resp.status_code == 200, resp.text
     assert resp.headers["cache-control"] == "no-store"
     assert resp.json()["items"][-1]["name"] == "Пситестоуфа"

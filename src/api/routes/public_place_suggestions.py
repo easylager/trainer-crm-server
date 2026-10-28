@@ -65,10 +65,12 @@ def telegram_bind_link(bind_token: str | None) -> str | None:
 async def get_place_suggestion_cities(
     response: Response,
     q: str = Query(default="", max_length=120),
+    geo: bool = Query(default=False),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    """Наши города по префиксу; ``geo=1`` — ещё и геокодер (по кнопке «Найти на карте», не на ввод)."""
     response.headers.update(_NO_STORE)
-    return {"items": await search_cities(session, q)}
+    return {"items": await search_cities(session, q, use_geocoder=geo)}
 
 
 @router.post("")
