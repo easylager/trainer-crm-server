@@ -216,6 +216,10 @@ class City(Base):
     created_by_trainer_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    #: PDEC-028: центр города и регион — для нового города из заявки «места от людей».
+    latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
+    region: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
 
 
 class Arena(Base):
@@ -333,6 +337,8 @@ class ArenaProfile(Base):
     schedule_mode_note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
     visit_info: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    #: PDEC-028: цены для посетителя из одобренной заявки (взрослый/детский/прокат), строки.
+    visitor_prices: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Последняя правка карточки в админке (TASK-146, Q-012). NULL — неизвестно.
@@ -711,6 +717,92 @@ class IceCityInterest(Base):
     intent: Mapped[str] = mapped_column(String(16), nullable=False, server_default="skate")
     source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="coming_soon_cta")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+#: PDEC-028 «места от людей». Держать в синхроне с миграцией 0279.
+PLACE_SUGGESTION_KINDS = ("ice", "outdoor", "shop", "school")
+PLACE_SUGGESTION_STATUSES = ("new", "needs_info", "approved", "rejected", "duplicate")
+PLACE_SUGGESTION_SOURCES = ("site", "miniapp")
+PLACE_SUGGESTION_CONTACT_KINDS = ("email", "telegram", "other")
+PLACE_SUGGESTION_MESSAGE_DIRECTIONS = ("to_author", "from_author", "note")
+
+
+def _sql_in(col: str, values: tuple[str, ...]) -> str:
+    return f"{col} IN ({', '.join(repr(v) for v in values)})"
+
+
+class PlaceSuggestion(Base):
+    """Заявка «предложить место» с сайта или из Mini App. Каталог не трогает до одобрения.
+
+    Город — либо ``city_id``, либо новый (``new_city_*``). ``details`` — поля по типу места,
+    нормализует ``src.shared.place_suggestion.normalize_details``.
+    """
+
+    __tablename__ = "place_suggestions"
+    __table_args__ = (
+        CheckConstraint(_sql_in("kind", PLACE_SUGGESTION_KINDS), name="ck_place_suggestions_kind"),
+        CheckConstraint(_sql_in("status", PLACE_SUGGESTION_STATUSES), name="ck_place_suggestions_status"),
+        CheckConstraint(_sql_in("source", PLACE_SUGGESTION_SOURCES), name="ck_place_suggestions_source"),
+        CheckConstraint(
+            f"contact_kind IS NULL OR {_sql_in('contact_kind', PLACE_SUGGESTION_CONTACT_KINDS)}",
+            name="ck_place_suggestions_contact_kind",
+        ),
+        CheckConstraint("city_id IS NOT NULL OR new_city_name IS NOT NULL", name="ck_place_suggestions_city"),
+        Index("ix_place_suggestions_status", "status", "created_at"),
+        Index("ix_place_suggestions_author", "author_telegram_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="new")
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    city_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cities.id", ondelete="SET NULL"), nullable=True)
+    new_city_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    new_city_country: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    new_city_region: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    new_city_lat: Mapped[Optional[float]] = mapped_column(nullable=True)
+    new_city_lon: Mapped[Optional[float]] = mapped_column(nullable=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    address: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
+    details: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    contact: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    contact_kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    author_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    bind_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True)
+    target_arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True
+    )
+    result_arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True
+    )
+    reject_reason: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    client_ip_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
+class PlaceSuggestionMessage(Base):
+    """Переписка по заявке: владелец → автор, автор → владелец, заметка владельца."""
+
+    __tablename__ = "place_suggestion_messages"
+    __table_args__ = (
+        CheckConstraint(
+            _sql_in("direction", PLACE_SUGGESTION_MESSAGE_DIRECTIONS),
+            name="ck_place_suggestion_messages_direction",
+        ),
+        Index("ix_place_suggestion_messages_sid", "suggestion_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    suggestion_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("place_suggestions.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    body: Mapped[str] = mapped_column(Text(), nullable=False)
 
 
 # M2M: trainer works at these arenas; filter catalog by arena via this table
