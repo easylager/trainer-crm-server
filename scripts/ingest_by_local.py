@@ -17,7 +17,7 @@
 
 Перед прогоном проверяется страна текущего IP (ipinfo.io): не Беларусь — скрипт останавливается,
 чтобы не записать в базу пустые ответы. Если задан ``BY_EGRESS_PROXY_URL`` (локальный tinyproxy), он
-используется для заданий с ``requires_by_egress``; иначе они ходят напрямую с этого компьютера.
+используется только с ``--proxy``; по умолчанию все задания ходят напрямую с этого компьютера.
 
 Юность (``junost_instagram_caption_v1``) здесь не участвует: её расписание берётся из подписи в
 Instagram вручную, см. docs/instructions/ice-ingest-junost-instagram.md.
@@ -104,7 +104,7 @@ async def _dry_run(scheduler, keys: list[str]) -> list:
     return []
 
 
-async def _run(keys: list[str], *, dry_run: bool, list_only: bool = False) -> int:
+async def _run(keys: list[str], *, dry_run: bool, list_only: bool = False, use_proxy: bool = False) -> int:
     from sqlalchemy import text
 
     from src.application.schedule_waves import parser_wave_recorder
@@ -142,8 +142,9 @@ async def _run(keys: list[str], *, dry_run: bool, list_only: bool = False) -> in
 
             return [job_from_row(r) for r in rows.fetchall()]
 
-    settings = Settings()
-    proxy = settings.by_egress_proxy_url or None
+    # IP уже проверен (белорусский), поэтому ходим напрямую. Прокси из .env (локальный tinyproxy на
+    # 127.0.0.1:8888) обычно не запущен и ломал СДЮШОР: «Cannot connect to host 127.0.0.1:8888».
+    proxy = Settings().by_egress_proxy_url or None if use_proxy else None
 
     async def run_jobs():
         async with async_session_factory() as session:
@@ -204,6 +205,7 @@ def main() -> None:
     add_i_know_this_is_prod_argument(parser)
     parser.add_argument("--only", nargs="+", metavar="PARSER_KEY", help="только эти parser_key")
     parser.add_argument("--dry-run", action="store_true", help="открыть сайты и разобрать расписание без записи в базу")
+    parser.add_argument("--proxy", action="store_true", help="идти через BY_EGRESS_PROXY_URL из .env (по умолчанию напрямую)")
     parser.add_argument("--list", action="store_true", help="показать задания в базе и выйти (сайты не открываются)")
     parser.add_argument("--skip-ip-check", action="store_true", help="не проверять страну IP (только для отладки)")
     args = parser.parse_args()
@@ -225,7 +227,7 @@ def main() -> None:
         print("IP: BY — можно запускать.")
 
     print("Источники:", ", ".join(f"{k} ({BY_ONLY_SOURCES[k]})" for k in keys))
-    sys.exit(asyncio.run(_run(keys, dry_run=args.dry_run, list_only=args.list)))
+    sys.exit(asyncio.run(_run(keys, dry_run=args.dry_run, list_only=args.list, use_proxy=args.proxy)))
 
 
 if __name__ == "__main__":
