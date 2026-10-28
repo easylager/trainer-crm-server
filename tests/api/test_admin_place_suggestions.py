@@ -84,6 +84,7 @@ async def test_full_cycle_new_message_approve(app_use_test_db, db_session, sent)
             assert approved.status_code == 200, approved.text
             body = approved.json()
             assert body["url"] == f"/p/{body['url'].split('/')[2]}/{body['slug']}"
+            assert body["public_url"].endswith(body["url"])
             again = await client.post(f"{URL}/{sid}/approve")
             assert again.status_code == 409
 

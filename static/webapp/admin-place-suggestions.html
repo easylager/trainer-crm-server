@@ -78,7 +78,8 @@
       function send(method, path, body) {
         var headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
         if (A.initData) headers['X-Telegram-Init-Data'] = A.initData;
-        var url = A.apiUrl(path) + (A.initData ? '?init_data=' + encodeURIComponent(A.initData) : '');
+        var url = A.apiUrl(path);
+        if (A.initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(A.initData);
         return fetch(url, { method: method, headers: headers, body: body == null ? undefined : JSON.stringify(body), credentials: 'same-origin' }).then(function (r) {
           if (r.ok) return r.json();
           return r.json().catch(function () { return {}; }).then(function (j) { throw new Error((typeof j.detail === 'string' && j.detail) || ('HTTP ' + r.status)); });
@@ -120,7 +121,7 @@
       function loadList() {
         state.detail = null;
         setUrl(null);
-        return A.getJson('/admin/place-suggestions?tab=' + state.tab).then(function (d) { drawList(d.items || []); }).catch(function (e) {
+        return send('GET', '/admin/place-suggestions?tab=' + state.tab).then(function (d) { drawList(d.items || []); }).catch(function (e) {
           document.getElementById('sub').textContent = '';
           document.getElementById('content').innerHTML = '';
           showError(e);
@@ -159,6 +160,12 @@
 
         var h = '<button class="ps-back" type="button" data-act="list">← К списку</button>';
         if (state.lastResult) h += state.lastResult;
+        if (!open) {
+          var why = s.status === 'rejected' ? 'Отклонена: ' + ((REASONS.filter(function (r) { return r[0] === s.reject_reason; })[0] || [0, s.reject_reason || '—'])[1])
+            : s.status === 'duplicate' ? 'Дубль места №' + (s.target_arena_id || '—')
+            : s.status === 'approved' ? 'Опубликована как место №' + (s.result_arena_id || '—') : '';
+          if (why) h += '<div class="ps-hint" style="margin-top:8px">' + esc(why) + (s.closed_at ? ' · ' + esc(when(s.closed_at)) : '') + '</div>';
+        }
         h += '<div class="ps-card">' + mapHtml(s) + '</div>';
 
         h += '<div class="ps-card"><h2>Похоже на</h2>';
@@ -217,7 +224,7 @@
         document.getElementById('content').innerHTML = h;
       }
       function openDetail(id) {
-        return A.getJson('/admin/place-suggestions/' + id).then(drawDetail).catch(function (e) {
+        return send('GET', '/admin/place-suggestions/' + id).then(drawDetail).catch(function (e) {
           document.getElementById('content').innerHTML = '<button class="ps-back" type="button" data-act="list">← К списку</button>';
           showError(e);
         });
@@ -237,7 +244,8 @@
         if (!r.published) warn.push('карточка осталась черновиком (' + esc(r.profile_status || '') + ')');
         if (r.city_kept_inactive) warn.push('город скрыт и не включался');
         if (r.country_not_public) warn.push('страна вне каталога — на сайте не видно');
-        var link = r.url ? ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener" style="color:#45b9bb">' + esc(r.url) + '</a>' : '';
+        var href = r.public_url || r.url;
+        var link = href ? ' <a href="' + esc(href) + '" target="_blank" rel="noopener" style="color:#45b9bb">' + esc(r.url) + '</a>' : '';
         return warn.length
           ? '<div class="ps-warn"><b>Одобрено, но:</b> ' + warn.join('; ') + '.' + link + '</div>'
           : '<div class="ps-ok">Опубликовано' + (r.city_created ? ' вместе с новым городом' : '') + '.' + link + '</div>';
@@ -281,7 +289,7 @@
           if (!text) return;
           t.disabled = true;
           send('POST', '/admin/place-suggestions/' + s.id + '/messages', { body: text }).then(function (r) {
-            state.lastResult = r.delivered ? null : '<div class="ps-warn">Сообщение не ушло в Telegram — сохранено заметкой. Свяжитесь по контакту.</div>';
+            state.lastResult = r.delivered || !s.author_telegram_id ? null : '<div class="ps-warn">Сообщение не ушло в Telegram — сохранено заметкой. Свяжитесь по контакту.</div>';
             return openDetail(s.id);
           }).catch(function (e) { t.disabled = false; window.alert(e.message); });
         }
@@ -302,7 +310,10 @@
         var patch = {};
         if (el.dataset.field) {
           var v = el.value.trim();
-          if (/^new_city_(lat|lon)$/.test(el.dataset.field)) v = v === '' ? null : Number(v.replace(',', '.'));
+          if (/^new_city_(lat|lon)$/.test(el.dataset.field)) {
+            v = v === '' ? null : Number(v.replace(',', '.'));
+            if (v !== null && isNaN(v)) { saved('Неверные координаты — не сохранено'); return; }
+          }
           patch[el.dataset.field] = v;
         } else if (el.dataset.detail) {
           var details = Object.assign({}, s.details || {});

@@ -11,6 +11,7 @@ from src.api.deps import get_session
 from src.api.miniapp_auth.deps import get_admin_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
 from src.application import place_suggestion_use_cases as uc
+from src.shared.config import Settings
 
 router = APIRouter(tags=["webapp-admin-place-suggestions"])
 
@@ -82,9 +83,13 @@ async def post_admin_place_suggestion_approve(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await uc.approve_place_suggestion(session, sid, admin_id=int(principal.user_id))
+        result = await uc.approve_place_suggestion(session, sid, admin_id=int(principal.user_id))
     except uc.PlaceSuggestionAdminError as exc:
         raise _http(exc) from exc
+    # Админский Mini App может жить не на хосте сайта — даём и полную ссылку на карточку.
+    base = (Settings().webapp_base_url or "").strip().rstrip("/")
+    result["public_url"] = f"{base}{result['url']}" if result.get("url") else None
+    return result
 
 
 @router.post(_PREFIX + "/{sid:int}/reject")

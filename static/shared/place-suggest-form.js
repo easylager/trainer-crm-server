@@ -102,9 +102,9 @@
       return '<div class="psf-field"><label class="psf-label" for="' + id + '">' + label + '</label>' +
         '<input class="psf-input" id="' + id + '" value="' + esc(value) + '" placeholder="' + esc(ph) + '"' + (extra || '') + '></div>';
     }
-    function area(id, label, value, ph, rows) {
+    function area(id, label, value, ph, rows, max) {
       return '<div class="psf-field"><label class="psf-label" for="' + id + '">' + label + '</label>' +
-        '<textarea class="psf-input psf-input--area" id="' + id + '" rows="' + rows + '" placeholder="' + esc(ph) + '">' + esc(value) + '</textarea></div>';
+        '<textarea class="psf-input psf-input--area" id="' + id + '" rows="' + rows + '" maxlength="' + max + '" placeholder="' + esc(ph) + '">' + esc(value) + '</textarea></div>';
     }
     function chips(group, list, picked) {
       return '<div class="psf-chips">' + list.map(function (c) {
@@ -134,14 +134,14 @@
           '<button type="button" class="psf-link" data-act="clear-city">Изменить</button></div>';
       }
       return '<div class="psf-search">' + ICON_SEARCH +
-          '<input class="psf-input psf-input--search" id="psf-city" value="' + esc(s.q) + '" placeholder="Начните вводить: Уфа" autocomplete="off" aria-autocomplete="list" aria-controls="psf-sugg"></div>' +
+          '<input class="psf-input psf-input--search" id="psf-city" value="' + esc(s.q) + '" placeholder="Начните вводить: Уфа" maxlength="120" autocomplete="off" aria-autocomplete="list" aria-controls="psf-sugg"></div>' +
         '<div class="psf-sugg" id="psf-sugg" role="listbox" aria-label="Города"></div>' +
         '<p class="psf-hint">Нет вашего города? Ничего — добавим вместе с местом.</p>';
     }
 
     function bodyStep2() {
       var html = '<h1 class="psf-h1">Где это?</h1>' +
-        '<div class="psf-field"><label class="psf-label" for="psf-city">Город</label><div data-slot="city">' + cityBlock() + '</div></div>';
+        '<div class="psf-field"><label class="psf-label"' + (s.city ? '' : ' for="psf-city"') + '>Город</label><div data-slot="city">' + cityBlock() + '</div></div>';
       html += '<div data-slot="place"' + (s.city ? '' : ' hidden') + '>' +
         field('psf-name', 'Название', s.name, NAME_PH[s.kind] || 'Название', ' maxlength="200" data-bind="name"') +
         field('psf-addr', 'Адрес <span class="psf-label__soft">— если знаете</span>', s.address, 'Улица, дом или ориентир', ' maxlength="300" data-bind="address"') +
@@ -161,7 +161,7 @@
               return '<label class="psf-price"><span>' + p[1] + '</span><input class="psf-input" inputmode="decimal" maxlength="20" placeholder="—" value="' + esc(d[p[0]] || '') + '" data-detail="' + p[0] + '"></label>';
             }).join('') +
           '</div></fieldset>' +
-          area('psf-hours', 'Когда можно кататься', d.hours || '', 'Например: сеансы по выходным с 12 до 14', 2);
+          area('psf-hours', 'Когда можно кататься', d.hours || '', 'Например: сеансы по выходным с 12 до 14', 2, 300);
       } else if (s.kind === 'shop') {
         html += '<fieldset class="psf-set"><legend class="psf-label">Что там есть</legend>' + chips('services', SHOP_SERVICES, s.services) + '</fieldset>' +
           field('psf-hours', 'Часы работы', d.hours || '', 'Например: пн–сб 10–20', ' maxlength="300" data-detail="hours"');
@@ -170,7 +170,7 @@
           field('psf-age', 'С какого возраста', d.age || '', 'Например: с 4 лет, есть взрослые группы', ' maxlength="100" data-detail="age"');
       }
       html += field('psf-link', 'Телефон, сайт или соцсеть', d.link || '', 'Номер или ссылка', ' maxlength="300" data-detail="link"') +
-        area('psf-more', 'Что ещё стоит знать', d.more || '', 'Парковка, раздевалки, сезон, что угодно', 3);
+        area('psf-more', 'Что ещё стоит знать', d.more || '', 'Парковка, раздевалки, сезон, что угодно', 3, 1000);
       return html;
     }
 
@@ -196,7 +196,7 @@
     function bodyDone() {
       var r = s.result || {};
       var text;
-      if (!askContact) text = 'Проверим и добавим. Когда место появится в Glide, напишем вам здесь.';
+      if (!askContact && !r.telegram_link) text = 'Проверим и добавим. Когда место появится в Glide, напишем вам здесь.';
       else if (trim(s.contact) || r.telegram_link) text = 'Проверим и добавим. Когда место появится в Glide, напишем вам.';
       else text = 'Проверим и добавим — место появится на странице города.';
       return '<div class="psf-done">' +
