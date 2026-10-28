@@ -25,7 +25,7 @@ def _normalize_city_name(name: str) -> str:
     return s[:CITY_NAME_MAX_LEN]
 
 
-async def _find_city_by_name_insensitive(session: AsyncSession, name: str) -> dict[str, Any] | None:
+async def find_city_by_name_insensitive(session: AsyncSession, name: str) -> dict[str, Any] | None:
     r = await session.execute(
         text(
             """
@@ -47,6 +47,9 @@ async def _find_city_by_name_insensitive(session: AsyncSession, name: str) -> di
         "is_active": bool(row[2]),
         "created_by_trainer_id": int(row[3]) if row[3] is not None else None,
     }
+
+
+_find_city_by_name_insensitive = find_city_by_name_insensitive
 
 
 async def create_trainer_city(

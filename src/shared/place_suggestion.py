@@ -9,6 +9,9 @@ RINK_KINDS = frozenset({"ice", "outdoor"})
 SHOP_SERVICES = ("sharpening", "rental", "sale")
 SCHOOL_DISCIPLINES = ("figure", "hockey")
 
+#: callback_data кнопки «Одобрить как есть» в уведомлении админу: ``psa:<id>``.
+PLACE_SUGGEST_APPROVE_PREFIX = "psa:"
+
 _COMMON_TEXT = {"hours": 300, "link": 300, "more": 1000}
 _KIND_TEXT = {
     "ice": {"price_adult": 20, "price_child": 20, "price_rental": 20},
