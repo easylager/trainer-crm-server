@@ -169,6 +169,7 @@ describe('пустые состояния «Льда» несут действи
     const { formatEmptySearch } = loadIceModel();
     const shape = formatEmptySearch('нету такого катка');
     assert.equal(shape.action.kind, 'clear-search');
+    assert.equal(shape.secondary.kind, 'suggest');
     assert.match(shape.title, /нету такого катка/);
     assert.ok(shape.body);
   });

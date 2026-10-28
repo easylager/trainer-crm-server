@@ -513,6 +513,15 @@ def webapp_admin_ice_sources_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/suggest")
+def webapp_suggest_page():
+    """PDEC-028: «Предложить место» в клиентском Mini App — общая форма с сайтом."""
+    path = _WEBAPP_DIR / "suggest.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/admin-ice-inbox")
 def webapp_admin_ice_inbox_page():
     """Admin ice inbox — schedule screenshots from the phone, review and publish."""

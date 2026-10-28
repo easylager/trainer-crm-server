@@ -2089,6 +2089,19 @@
         showSearch('');
       };
     }
+    if (kind === 'suggest') {
+      return function () {
+        var params = new URLSearchParams();
+        var city = cityFromState(state.cityId);
+        if (state.cityId && state.cityName) {
+          params.set('city_id', String(state.cityId));
+          params.set('city_name', state.cityName);
+          if (city && city.country) params.set('city_country', city.country);
+        }
+        var qs = params.toString();
+        global.location.href = '/webapp/suggest' + (qs ? '?' + qs : '');
+      };
+    }
     if (kind === 'retry') {
       return function () {
         loadList();
