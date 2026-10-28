@@ -61,7 +61,7 @@ def client_ip_from_request(request: Request) -> str:
 
 
 # «/zovi» покрывает и страницу создания, и открытку /zovi/{code}. Второй префикс не нужен.
-_PAGE_PREFIXES = ("/p/", "/c/", "/ice/", "/r/", "/zovi")
+_PAGE_PREFIXES = ("/p/", "/c/", "/ice/", "/r/", "/zovi", "/suggest")
 
 
 def rate_limit_bucket_for_path(path: str) -> str:

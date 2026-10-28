@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="__LANG__">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Предложить место · Glide</title>
+  <meta name="description" content="Знаете каток, магазин или школу, которых нет в Glide? Расскажите — проверим и добавим, даже если вашего города у нас пока нет." />
+  <link rel="canonical" href="/suggest" />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="__OG_LOCALE__" />
+  <meta property="og:site_name" content="Glide" />
+  <meta property="og:title" content="Предложить место в Glide" />
+  <meta property="og:description" content="Каток, магазин или школа в вашем городе — проверим и добавим." />
+  <link rel="icon" href="/favicon.ico" type="image/png" />
+  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />
+  __PUBLIC_FONTS_HEAD__
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=__TOKENS_V__" />
+  <link rel="stylesheet" href="/static/shared/glide-components.css?v=__COMPONENTS_V__" />
+  <link rel="stylesheet" href="/static/share/style-b.css?v=__STYLE_V__" />
+  <link rel="stylesheet" href="/static/shared/place-suggest-form.css?v=__FORM_CSS_V__" />
+</head>
+<body class="b">
+  <main class="b-page b-page--suggest">
+    <div id="psf-root" data-prefill-city="__PREFILL_CITY__">
+      <noscript><p class="b-legal__body">Форме нужен JavaScript. Можно написать нам в Telegram — ссылка внизу страницы.</p></noscript>
+    </div>
+  </main>
+  __SITE_FOOTER__
+  <script src="/static/shared/place-suggest-form.js?v=__FORM_JS_V__"></script>
+  <script>
+  (function () {
+    var root = document.getElementById('psf-root');
+    var prefill = null;
+    try { prefill = JSON.parse(root.getAttribute('data-prefill-city') || 'null'); } catch (e) { prefill = null; }
+    function fail(msg) { var e = new Error(msg); e.userMessage = msg; return e; }
+    window.PlaceSuggestForm.mount(root, {
+      askContact: true,
+      honeypot: true,
+      prefillCity: prefill,
+      citiesUrl: '/api/public/place-suggestions/cities',
+      onClose: function () {
+        var sameOrigin = document.referrer && document.referrer.indexOf(location.origin) === 0;
+        if (sameOrigin && history.length > 1) history.back(); else location.href = '/';
+      },
+      submit: function (payload) {
+        return fetch('/api/public/place-suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(function (r) {
+          if (r.ok) return r.json();
+          if (r.status === 429) throw fail('Слишком много заявок подряд. Попробуйте через час.');
+          return r.json().catch(function () { return {}; }).then(function (b) {
+            throw fail(typeof b.detail === 'string' ? b.detail : 'Не получилось отправить. Попробуйте ещё раз.');
+          });
+        });
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

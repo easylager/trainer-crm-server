@@ -2567,6 +2567,32 @@ def shared_glide_components_css(request: Request):
     )
 
 
+@app.get("/static/shared/place-suggest-form.css")
+def shared_place_suggest_form_css(request: Request):
+    """PDEC-028: стили общей формы «Предложить место» (сайт /suggest и Mini App)."""
+    path = _SHARED_DIR / "place-suggest-form.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/shared/place-suggest-form.js")
+def shared_place_suggest_form_js(request: Request):
+    """PDEC-028: логика общей формы «Предложить место» (сайт /suggest и Mini App)."""
+    path = _SHARED_DIR / "place-suggest-form.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/zovi-model.js")
 def shared_zovi_model_js(request: Request):
     """TASK-232: модель открытки «Пойдёшь со мной на каток?» (вопрос, склонение, вердикт)."""

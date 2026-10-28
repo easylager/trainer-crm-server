@@ -63,6 +63,24 @@ async def privacy_page() -> HTMLResponse:
     )
 
 
+@router.get("/suggest", response_class=HTMLResponse)
+async def suggest_page(
+    city: int | None = Query(default=None, ge=1),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    """«Предложить место» (PDEC-028). ``?city=<id>`` — ссылка со страницы города."""
+    from src.application.public_suggest_page import load_prefill_city, render_suggest_page
+
+    base = _base()
+    trainers = f"{base}/trainers" if base else "/trainers"
+    prefill = await load_prefill_city(session, city)
+    return HTMLResponse(
+        render_suggest_page(trainers_href=trainers, prefill_city=prefill),
+        media_type="text/html",
+        headers=_PAGE_CACHE,
+    )
+
+
 @router.get("/terms", response_class=HTMLResponse)
 async def terms_page() -> HTMLResponse:
     from src.application.public_legal_page import render_legal_page

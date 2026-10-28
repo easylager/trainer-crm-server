@@ -702,6 +702,15 @@ def compose_city_hub_share(
     }
 
 
+def _city_hub_footer_context(view: Mapping[str, Any]) -> str:
+    """Подвал хаба: вся страна + вход «Предложить место» с этим городом (PDEC-028)."""
+    links = ['<a href="/">Массовое катание по всей Беларуси</a>']
+    city_id = (view.get("city") or {}).get("id")
+    if city_id:
+        links.append(f'<a href="/suggest?city={int(city_id)}">Знаете место, которого здесь нет?</a>')
+    return '<div class="elsewhere">' + "".join(links) + "</div>"
+
+
 def _city_hub_site_footer(*, trainers_href: str, telegram_href: str | None, context_html: str = "") -> str:
     from src.application.public_site_footer import render_site_footer_html
 
@@ -804,7 +813,7 @@ def render_city_hub_page(
             "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__SITE_FOOTER__": _city_hub_site_footer(
                 trainers_href=trainers_href or "/trainers",
-                context_html='<a href="/">Массовое катание по всей Беларуси</a>',
+                context_html=_city_hub_footer_context(view),
                 telegram_href=cta_url,
             ),
             "__BODY__": body + _breadcrumbs(view, canonical_url),
