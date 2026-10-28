@@ -1,5 +1,6 @@
 """PDEC-028 Task 8: автор заявки с сайта привязывается к Telegram по ``/start sg_<token>``."""
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -99,3 +100,47 @@ async def test_bot_start_sg_thanks_then_link_used(app_use_test_db, db_session, _
     await client_handlers.cmd_start(second)
     second.answer.assert_awaited_once()
     assert second.answer.await_args.args[0] == msg.CLIENT_SUGGEST_LINK_USED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("closed", ["approved", "rejected"])
+async def test_bot_start_sg_on_closed_suggestion_skips_promise(
+    closed, app_use_test_db, db_session, _test_db_core, monkeypatch
+):
+    monkeypatch.setattr(client_handlers, "async_session_factory", _test_db_core["factory"])
+    monkeypatch.setattr(uc, "notify_author_approved", _noop)
+    monkeypatch.setattr(uc, "Settings", lambda: SimpleNamespace(webapp_base_url="https://glide.example"))
+    city_id = (await db_session.execute(text(
+        "INSERT INTO cities (name, sort_order, is_active, country) VALUES (:n, 9999, true, 'BY') RETURNING id"
+    ), {"n": f"Пса-Закрыто-{uuid.uuid4().hex[:6]}"})).scalar_one()
+    res = await create_place_suggestion(
+        db_session, source="site", kind="ice", city_id=int(city_id), new_city=None, name="Каток Закрытый",
+        address=None, details={}, contact=None, author_telegram_id=None, client_ip=None,
+    )
+    if closed == "approved":
+        out = await uc.approve_place_suggestion(db_session, int(res["id"]), admin_id=1)
+        assert out["published"] is True
+        expected = msg.CLIENT_SUGGEST_BOUND_APPROVED_LINK.format(url="https://glide.example" + out["url"])
+    else:
+        await uc.reject_place_suggestion(db_session, int(res["id"]), "spam")
+        expected = msg.CLIENT_SUGGEST_BOUND_CLOSED.format(id=res["id"], name="Каток Закрытый")
+
+    m = _message(f"sg_{res['bind_token']}", _tid())
+    await client_handlers.cmd_start(m)
+    body = m.answer.await_args.args[0]
+    assert body == expected and "сообщим" not in body
+
+
+@pytest.mark.asyncio
+async def test_bot_start_sg_approved_without_public_page_has_no_link(
+    app_use_test_db, _test_db_core, monkeypatch
+):
+    monkeypatch.setattr(client_handlers, "async_session_factory", MagicMock())
+    monkeypatch.setattr(
+        client_handlers, "bind_suggestion_author",
+        AsyncMock(return_value={"id": 5, "name": "Каток", "status": "approved"}),
+    )
+    monkeypatch.setattr(client_handlers, "approved_place_public_url", AsyncMock(return_value=None))
+    m = _message("sg_abcdefgh123", _tid())
+    await client_handlers.cmd_start(m)
+    assert m.answer.await_args.args[0] == msg.CLIENT_SUGGEST_BOUND_APPROVED

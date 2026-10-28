@@ -455,6 +455,43 @@ _PRICE_GROUP_BY_COUNTRY = {"RU": "RU_BASE"}
 _ARENA_NAME_MAX = 128
 
 
+async def _approved_place_row(session: AsyncSession, sid: int) -> Mapping[str, Any] | None:
+    r = await session.execute(
+        text(
+            """
+            SELECT s.name, s.author_telegram_id, p.slug, p.status AS profile_status,
+                   c.name AS city_name, c.is_active AS city_is_active, c.country
+            FROM place_suggestions s
+            JOIN arena_profiles p ON p.arena_id = s.result_arena_id
+            JOIN cities c ON c.id = p.city_id
+            WHERE s.id = :id AND s.status = 'approved'
+            """
+        ),
+        {"id": int(sid)},
+    )
+    return r.mappings().first()
+
+
+def _public_place_url(row: Mapping[str, Any] | None) -> str | None:
+    """Полная ссылка на страницу места — только если она видна снаружи (иначе 404)."""
+    if not row or not row["slug"]:
+        return None
+    visible = (
+        row["profile_status"] == "published"
+        and bool(row["city_is_active"])
+        and str(row["country"] or "").upper() in ice_discovery_countries()
+    )
+    if not visible:
+        return None
+    base = (Settings().webapp_base_url or "").strip().rstrip("/")
+    return f"{base}{place_path(city_name=str(row['city_name']), slug=str(row['slug']))}"
+
+
+async def approved_place_public_url(session: AsyncSession, sid: int) -> str | None:
+    """Ссылка на место из одобренной заявки, если страница уже открыта для всех."""
+    return _public_place_url(await _approved_place_row(session, sid))
+
+
 async def notify_author_approved(sid: int) -> None:
     """«Ваше место появилось в Glide: <ссылка>» автору в клиентского бота (только Telegram).
 
@@ -462,32 +499,13 @@ async def notify_author_approved(sid: int) -> None:
     скрытый город или страна вне каталога — ссылка вела бы на 404.
     """
     async with async_session_factory() as session:
-        r = await session.execute(
-            text(
-                """
-                SELECT s.name, s.author_telegram_id, p.slug, p.status AS profile_status,
-                       c.name AS city_name, c.is_active AS city_is_active, c.country
-                FROM place_suggestions s
-                JOIN arena_profiles p ON p.arena_id = s.result_arena_id
-                JOIN cities c ON c.id = p.city_id
-                WHERE s.id = :id AND s.status = 'approved'
-                """
-            ),
-            {"id": int(sid)},
-        )
-        row = r.mappings().first()
+        row = await _approved_place_row(session, sid)
     if not row or row["author_telegram_id"] is None:
         return
-    visible = (
-        row["profile_status"] == "published"
-        and bool(row["city_is_active"])
-        and str(row["country"] or "").upper() in ice_discovery_countries()
-    )
-    if not visible or not row["slug"]:
+    url = _public_place_url(row)
+    if url is None:
         logger.info("place suggestion %s approved but not public yet; author not notified", sid)
         return
-    base = (Settings().webapp_base_url or "").strip().rstrip("/")
-    url = f"{base}{place_path(city_name=str(row['city_name']), slug=str(row['slug']))}"
     await send_client_plain_notification(
         telegram_chat_id=int(row["author_telegram_id"]),
         html_text=f"Ваше место «{html.escape(str(row['name']))}» появилось в Glide: {html.escape(url)}",

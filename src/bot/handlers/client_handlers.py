@@ -43,6 +43,7 @@ from src.application.certificate_use_cases import activate_certificate_by_code
 from src.application.catalog_deep_links import build_catalog_deep_link_reply, is_catalog_deep_link
 from src.application.ice_watch_bot_start import parse_watch_start, subscribe_from_bot_start
 from src.application.place_suggestion_use_cases import (
+    approved_place_public_url,
     bind_suggestion_author,
     capture_author_reply,
     parse_suggest_start,
@@ -618,16 +619,27 @@ async def cmd_start(message: Message) -> None:
     suggest_token = parse_suggest_start(payload)
     if suggest_token is not None:
         bound = None
+        place_url = None
         if telegram_id:
             async with async_session_factory() as db_session:
                 bound = await bind_suggestion_author(db_session, suggest_token, telegram_id)
+                if bound is not None and bound["status"] == "approved":
+                    place_url = await approved_place_public_url(db_session, int(bound["id"]))
         if bound is None:
             await message.answer(msg.CLIENT_SUGGEST_LINK_USED)
-        else:
-            await message.answer(
-                msg.CLIENT_SUGGEST_BOUND.format(id=int(bound["id"]), name=html.escape(str(bound["name"]))),
-                parse_mode=ParseMode.HTML,
+            return
+        fmt = {"id": int(bound["id"]), "name": html.escape(str(bound["name"]))}
+        if bound["status"] == "approved":
+            reply = (
+                msg.CLIENT_SUGGEST_BOUND_APPROVED_LINK.format(url=html.escape(place_url))
+                if place_url
+                else msg.CLIENT_SUGGEST_BOUND_APPROVED
             )
+        elif bound["status"] in ("rejected", "duplicate"):
+            reply = msg.CLIENT_SUGGEST_BOUND_CLOSED.format(**fmt)
+        else:
+            reply = msg.CLIENT_SUGGEST_BOUND.format(**fmt)
+        await message.answer(reply, parse_mode=ParseMode.HTML)
         return
 
     # One-time token: welcome_t_<uuid> — burn token, then run cert/pass/generic flow
@@ -3551,8 +3563,13 @@ async def fallback(message: Message) -> None:
             and telegram_id not in _client_support_awaiting
             and not message.text.startswith("/")
         ):
-            async with async_session_factory() as session:
-                suggestion_id = await capture_author_reply(session, telegram_id, message.text)
+            suggestion_id = None
+            try:
+                async with async_session_factory() as session:
+                    suggestion_id = await capture_author_reply(session, telegram_id, message.text)
+            except Exception:  # noqa: BLE001
+                # Сбой заявки не должен глотать сообщение: дальше — обычная поддержка/меню.
+                logger.exception("place suggestion reply capture failed telegram_id=%s", telegram_id)
             if suggestion_id is not None:
                 await message.answer(msg.CLIENT_SUGGEST_REPLY_SENT)
                 return

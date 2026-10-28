@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiogram.types import Message
 from sqlalchemy import text
 
 from src.application import place_suggestion_use_cases as uc
@@ -46,7 +47,7 @@ def _callback(data: str, user_id: int = ADMIN) -> MagicMock:
     cb.data = data
     cb.from_user = MagicMock(id=user_id)
     cb.answer = AsyncMock()
-    cb.message = MagicMock()
+    cb.message = MagicMock(spec=Message)
     cb.message.answer = AsyncMock()
     cb.message.edit_reply_markup = AsyncMock()
     return cb
@@ -120,3 +121,32 @@ async def test_suggestions_command_counts_new_and_opens_webapp(db_session):
     button = message.answer.await_args.kwargs["reply_markup"].inline_keyboard[0][0]
     assert button.web_app.url == f"{BASE}/webapp/admin-place-suggestions"
     assert "suggestions" in [c.command for c in ADMIN_BOT_COMMANDS]
+
+
+@pytest.mark.asyncio
+async def test_approve_unexpected_error_alerts_and_keeps_buttons(db_session, monkeypatch):
+    async def _boom(*_a, **_kw):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(admin_handlers, "approve_place_suggestion", _boom)
+    cb = _callback("psa:1")
+    await admin_handlers.on_place_suggestion_approve(cb)
+    cb.answer.assert_awaited_once_with("Не удалось одобрить, см. логи", show_alert=True)
+    cb.message.edit_reply_markup.assert_not_awaited()
+    cb.message.answer.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_approve_with_inaccessible_message_answers_in_alert(db_session):
+    sid = await _suggest(db_session)
+    cb = _callback(f"psa:{sid}")
+    cb.message = None
+    await admin_handlers.on_place_suggestion_approve(cb)
+    text_arg = cb.answer.await_args.args[0]
+    assert text_arg.startswith(f"Опубликовано: {BASE}/") and len(text_arg) <= 200
+    assert cb.answer.await_args.kwargs == {"show_alert": True}
+
+    again = _callback(f"psa:{sid}")
+    again.message = None
+    await admin_handlers.on_place_suggestion_approve(again)  # закрытая + нет сообщения — без падения
+    again.answer.assert_awaited_once_with("Заявка уже разобрана", show_alert=True)

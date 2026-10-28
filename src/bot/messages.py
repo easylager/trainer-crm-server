@@ -1582,6 +1582,9 @@ CLIENT_SUGGEST_BOUND = (
     "Спасибо! Заявка №{id} «{name}» у нас. Если будут вопросы — напишем здесь, "
     "и сообщим, когда место появится в Glide."
 )
+CLIENT_SUGGEST_BOUND_APPROVED = "Спасибо! Это место уже в Glide."
+CLIENT_SUGGEST_BOUND_APPROVED_LINK = "Спасибо! Это место уже в Glide: {url}"
+CLIENT_SUGGEST_BOUND_CLOSED = "Спасибо! Заявка №{id} «{name}» уже разобрана."
 CLIENT_SUGGEST_LINK_USED = "Эта ссылка уже использована или устарела."
 CLIENT_SUGGEST_REPLY_SENT = "Передали, спасибо!"
 CLIENT_WELCOME_LINK_USED = (

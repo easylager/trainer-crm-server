@@ -682,6 +682,18 @@ def format_place_suggestion_approved(sid: int, result: dict, *, base_url: str) -
     )
 
 
+async def _drop_place_suggestion_buttons(callback: CallbackQuery, sid: int) -> None:
+    if not isinstance(callback.message, Message):
+        return  # сообщение недоступно (старое/удалённое) — кнопки снять нельзя
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:  # noqa: BLE001
+        logger.warning("place suggestion approve: failed to drop markup sid=%s", sid, exc_info=True)
+
+
+_ALERT_MAX = 200  # лимит Telegram на текст show_alert
+
+
 @router.callback_query(lambda c: c.data and c.data.startswith(PLACE_SUGGEST_APPROVE_PREFIX))
 async def on_place_suggestion_approve(callback: CallbackQuery) -> None:
     """«Одобрить как есть» из уведомления о новой заявке — тот же use case, что у админки."""
@@ -699,24 +711,23 @@ async def on_place_suggestion_approve(callback: CallbackQuery) -> None:
     except PlaceSuggestionAdminError as exc:
         if exc.code == "closed":
             await callback.answer("Заявка уже разобрана", show_alert=True)
-            try:
-                await callback.message.edit_reply_markup(reply_markup=None)
-            except Exception:  # noqa: BLE001
-                logger.warning("place suggestion approve: failed to drop markup sid=%s", sid, exc_info=True)
+            await _drop_place_suggestion_buttons(callback, sid)
         else:
-            await callback.answer(str(exc), show_alert=True)
+            await callback.answer(str(exc)[:_ALERT_MAX], show_alert=True)
+        return
+    except Exception:  # noqa: BLE001
+        logger.exception("place suggestion approve failed sid=%s", sid)
+        await callback.answer("Не удалось одобрить, см. логи", show_alert=True)
         return
     audit_log("place_suggestion.approved", ACTOR_ADMIN_BOT, user_id, {"suggestion_id": sid, **{
         k: result.get(k) for k in ("arena_id", "city_id", "city_created")
     }})
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:  # noqa: BLE001
-        logger.warning("place suggestion approve: failed to drop markup sid=%s", sid, exc_info=True)
-    await callback.message.answer(
-        format_place_suggestion_approved(sid, result, base_url=Settings().webapp_base_url or ""),
-        parse_mode=ParseMode.HTML,
-    )
+    reply = format_place_suggestion_approved(sid, result, base_url=Settings().webapp_base_url or "")
+    if not isinstance(callback.message, Message):
+        await callback.answer(html.unescape(reply)[:_ALERT_MAX], show_alert=True)
+        return
+    await _drop_place_suggestion_buttons(callback, sid)
+    await callback.message.answer(reply, parse_mode=ParseMode.HTML)
     await callback.answer()
 
 

@@ -212,3 +212,13 @@ async def test_fallback_captures_reply_before_support(monkeypatch):
         client_handlers._client_support_awaiting.discard(tid)
     capture.assert_not_awaited()
     support.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_fallback_survives_capture_failure(monkeypatch):
+    monkeypatch.setattr(client_handlers, "maybe_route_client_relay_text_reply", AsyncMock(return_value=False))
+    monkeypatch.setattr(client_handlers, "capture_author_reply", AsyncMock(side_effect=RuntimeError("db down")))
+    monkeypatch.setattr(client_handlers, "async_session_factory", MagicMock())
+    m = _private_text(_tid(), "Привет")
+    await client_handlers.fallback(m)
+    m.answer.assert_awaited_once_with(msg.CLIENT_FALLBACK)
