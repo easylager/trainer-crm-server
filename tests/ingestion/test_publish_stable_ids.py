@@ -265,14 +265,17 @@ async def test_admin_and_etalon_rows_keep_their_ids(db_session, seed_city_id) ->
     admin_id = await _insert_row(db_session, arena_id, day, time(12, 0), "admin")
     etalon_id = await _insert_row(db_session, arena_id, day, time(15, 0), "etalon_minsk_v1")
 
-    draft = _draft(arena_id, day, time(12, 0))
-    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[draft]) == 1
-    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[draft]) == 1
+    # Парсер видит слот на то же время, что и ручной: ручной побеждает, второго такого же не появляется.
+    same_as_admin = _draft(arena_id, day, time(12, 0))
+    other = _draft(arena_id, day, time(18, 0), source_id="test:other")
+    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[same_as_admin, other]) == 1
+    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[same_as_admin, other]) == 1
 
     rows = {row["source_id"]: row for row in await _rows(db_session, arena_id)}
     assert rows["admin"]["id"] == admin_id
     assert rows["etalon_minsk_v1"]["id"] == etalon_id
-    assert rows[draft.source_id]["id"] not in {admin_id, etalon_id}
+    assert rows["test:other"]["id"] not in {admin_id, etalon_id}
+    assert same_as_admin.source_id not in rows
     assert len(rows) == 3
 
 

@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_session_use_cases import compute_price_minor
-from src.ingestion.publish_diff import ExistingParserSession, plan_publish
+from src.ingestion.publish_diff import ExistingParserSession, plan_publish, slot_key
 from src.ingestion.publish_horizon import PublishWindow, clip_to_publish_window, publish_window
 from src.ingestion.scrape_runs import assert_can_replace_ice_sessions
 from src.ingestion.types import PARSER_KINDS, RUN_STATUS_OK, CanonicalSlotDraft, ScrapeRunRecord
@@ -73,6 +73,11 @@ class SqlAlchemyIceSessionPublisher:
         if not drafts:
             # Нечего показать в окне — витрину не обнуляем (как пустой прогон, TASK-178).
             return 0
+        # Слот, заведённый вручную (админка, эталон), парсер не заменяет и не дублирует рядом:
+        # на тот же момент и вид уже есть строка, которую он трогать не вправе (иначе два одинаковых слота в день).
+        protected = await self._load_protected_keys(run.arena_id, window)
+        if protected:
+            drafts = [d for d in drafts if slot_key(d.starts_at_utc, d.kind) not in protected]
         # Savepoint: один плохой черновик откатывает только этот прогон, не весь тик.
         # _insert по-прежнему на каждую новую строку: тест устойчивости роняет его
         # посреди savepoint и проверяет, что соседняя джоба не теряется.
@@ -97,6 +102,23 @@ class SqlAlchemyIceSessionPublisher:
 
             await notify_arena_changed(self._session, run.arena_id)
         return len(drafts)
+
+    async def _load_protected_keys(self, arena_id: int, window: PublishWindow) -> set[tuple]:
+        """Ключи (момент, вид) будущих слотов, которые парсер не заменяет: ``admin`` и ``etalon_%``."""
+        result = await self._session.execute(
+            text(f"""
+                SELECT starts_at_utc, kind
+                FROM ice_sessions
+                WHERE arena_id = :arena_id
+                  AND kind IN ({_PUBLISHABLE_KINDS_SQL})
+                  AND status = 'active'
+                  AND local_date >= :today
+                  AND ends_at_utc > :now
+                  AND (source_id = 'admin' OR source_id LIKE 'etalon_%')
+                """),
+            {"arena_id": arena_id, "today": window.today, "now": window.now},
+        )
+        return {slot_key(row["starts_at_utc"], str(row["kind"])) for row in result.mappings()}
 
     async def _load_existing(self, arena_id: int, window: PublishWindow) -> list[ExistingParserSession]:
         """Будущие строки арены в видах парсера. Верхней границы даты нет.
