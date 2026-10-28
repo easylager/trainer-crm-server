@@ -102,6 +102,7 @@
 | [2026-09-09-merge-epics-to-master.md](plans/2026-09-09-merge-epics-to-master.md) | Кат двух эпиков (premium + региональные парсеры) в master/прод |
 | [2026-10-09-reliable-object-share.md](plans/2026-10-09-reliable-object-share.md) | Надёжный шаринг арены/сеанса (TASK-223): гэпы, потоки, контракты |
 | [2026-10-11-hockey-share-design.md](plans/2026-10-11-hockey-share-design.md) | Шаринг на вкладке «Хоккей»: отложен — петля шаринга не подтверждена данными прода |
+| [2026-10-28-place-suggestions-design.md](plans/2026-10-28-place-suggestions-design.md) | Места от людей: форма заявки, модерация, страны `/by/` `/ru/`, город без расписания |
 | [2026-09-04-client-multi-profile-booking.md](plans/2026-09-04-client-multi-profile-booking.md) · [design](plans/2026-09-04-client-multi-profile-booking-design.md) | Запись ребёнка и раздельная статистика |
 | [2026-09-03-mobile-landing-hero-roadmap-design.md](plans/2026-09-03-mobile-landing-hero-roadmap-design.md) · [impl](plans/2026-09-03-mobile-landing-hero-roadmap-implementation.md) | Мобильный лендинг: hero и roadmap |
 | [2026-09-05-trainer-profile-s1-s2-data-guards.md](plans/2026-09-05-trainer-profile-s1-s2-data-guards.md) | Гарды данных профиля тренера |
