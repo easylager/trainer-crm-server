@@ -26,6 +26,12 @@ from src.shared.venue_types import normalize_trainer_venue_type
 logger = logging.getLogger(__name__)
 
 NOMINATIM_SEARCH = "https://nominatim.openstreetmap.org/search"
+
+
+def nominatim_user_agent(purpose: str = "ArenaGeocode") -> str:
+    """Nominatim policy: an identifying UA with a contact (``GEOCODE_CONTACT_EMAIL``)."""
+    contact = os.environ.get("GEOCODE_CONTACT_EMAIL", "").strip() or "ops@local.invalid"
+    return f"TrainerCRM-{purpose}/1.0 ({contact})"
 GEOCODE_TIMEOUT_SEC = 4.0
 DUPLICATE_RADIUS_METERS = 150.0
 _EARTH_RADIUS_M = 6371000.0
@@ -88,8 +94,7 @@ async def _geocode_address(address: str, city_name: str) -> tuple[float, float] 
         return None
     city = (city_name or "").strip()
     query = addr if (city and city.lower() in addr.lower()) else (f"{addr}, {city}" if city else addr)
-    contact = os.environ.get("GEOCODE_CONTACT_EMAIL", "").strip() or "ops@local.invalid"
-    user_agent = f"TrainerCRM-ArenaGeocode/1.0 ({contact})"
+    user_agent = nominatim_user_agent()
     try:
         async with httpx.AsyncClient(timeout=GEOCODE_TIMEOUT_SEC) as client:
             r = await client.get(
