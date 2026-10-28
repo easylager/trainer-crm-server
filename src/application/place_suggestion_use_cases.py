@@ -635,3 +635,37 @@ async def send_message_to_author(session: AsyncSession, sid: int, body: str) -> 
         "contact_kind": None if delivered else row["contact_kind"],
         "message": message,
     }
+
+
+SUGGEST_START_PREFIX = "sg_"
+_BIND_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+
+
+def parse_suggest_start(payload: str | None) -> str | None:
+    """``sg_<token>`` из ``/start`` → токен; всё остальное — ``None``."""
+    raw = (payload or "").strip()
+    if not raw.startswith(SUGGEST_START_PREFIX):
+        return None
+    token = raw[len(SUGGEST_START_PREFIX):]
+    return token if _BIND_TOKEN_RE.match(token) else None
+
+
+async def bind_suggestion_author(session: AsyncSession, token: str, telegram_id: int) -> dict[str, Any] | None:
+    """Автор заявки с сайта открыл бота по ``start=sg_<token>``: токен одноразовый.
+
+    Уже использованный токен или заявка с автором из Mini App → ``None``.
+    """
+    r = await session.execute(
+        text(
+            """
+            UPDATE place_suggestions
+               SET author_telegram_id = :tid, bind_token = NULL, updated_at = now()
+             WHERE bind_token = :t AND author_telegram_id IS NULL
+            RETURNING id, name, status
+            """
+        ),
+        {"tid": int(telegram_id), "t": str(token)},
+    )
+    row = r.mappings().first()
+    await session.commit()
+    return dict(row) if row else None

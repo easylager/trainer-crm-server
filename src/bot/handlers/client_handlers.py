@@ -42,6 +42,7 @@ from src.application.subscription_tier_use_cases import trainer_allows_online_bo
 from src.application.certificate_use_cases import activate_certificate_by_code
 from src.application.catalog_deep_links import build_catalog_deep_link_reply, is_catalog_deep_link
 from src.application.ice_watch_bot_start import parse_watch_start, subscribe_from_bot_start
+from src.application.place_suggestion_use_cases import bind_suggestion_author, parse_suggest_start
 from src.application.client_invite_use_cases import (
     bind_client_invite_trainer_context as _bind_client_invite_trainer_context,
     client_invite_needs_registration_form,
@@ -608,6 +609,22 @@ async def cmd_start(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     parts = (message.text or "").strip().split(maxsplit=1)
     payload = (parts[1].strip() if len(parts) > 1 else "") or ""
+
+    # PDEC-028: sg_<token> — автор заявки «места от людей» с сайта привязывает Telegram.
+    suggest_token = parse_suggest_start(payload)
+    if suggest_token is not None:
+        bound = None
+        if telegram_id:
+            async with async_session_factory() as db_session:
+                bound = await bind_suggestion_author(db_session, suggest_token, telegram_id)
+        if bound is None:
+            await message.answer(msg.CLIENT_SUGGEST_LINK_USED)
+        else:
+            await message.answer(
+                msg.CLIENT_SUGGEST_BOUND.format(id=int(bound["id"]), name=html.escape(str(bound["name"]))),
+                parse_mode=ParseMode.HTML,
+            )
+        return
 
     # One-time token: welcome_t_<uuid> — burn token, then run cert/pass/generic flow
     token_uuid = _parse_welcome_t_token(payload)
