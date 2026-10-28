@@ -102,7 +102,7 @@ _DUE_BEFORE = text("""
            p.side, p.home_score, p.away_score, COALESCE(p.doubled, false) AS doubled
     FROM hockey_player_prefs AS pr
     JOIN hockey_players AS pl ON pl.player_key = pr.player_key
-    JOIN hockey_matches AS m ON m.status = 'scheduled' AND m.starts_at > :now AND m.starts_at <= :until
+    JOIN kk_matches AS m ON m.status = 'scheduled' AND m.starts_at > :now AND m.starts_at <= :until
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = pr.player_key
     WHERE pr.remind
       AND NOT EXISTS (
@@ -118,7 +118,7 @@ _DUE_RESULT = text("""
            p.side, p.home_score, p.away_score, p.doubled, p.points
     FROM hockey_picks AS p
     JOIN hockey_player_prefs AS pr ON pr.player_key = p.player_key AND pr.remind
-    JOIN hockey_matches AS m ON m.id = p.match_id AND m.status = 'final' AND m.finalized_at > :fresh
+    JOIN kk_matches AS m ON m.id = p.match_id AND m.status = 'final' AND m.finalized_at > :fresh
     WHERE p.points IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM hockey_notices AS n

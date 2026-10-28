@@ -96,7 +96,7 @@ _UNSEEN_RESULT = text("""
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
            p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
     FROM hockey_picks AS p
-    JOIN hockey_matches AS m ON m.id = p.match_id
+    JOIN kk_matches AS m ON m.id = p.match_id
     WHERE p.player_key = :player_key
       AND m.status = 'final'
       AND m.finalized_at IS NOT NULL
@@ -111,7 +111,7 @@ _UPCOMING = text("""
            m.home_score, m.away_score, m.decided_in,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
            p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
-    FROM hockey_matches AS m
+    FROM kk_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.status = 'scheduled' AND m.starts_at > :now AND m.starts_at <= :until
       AND (CAST(:home AS text) IS NULL OR m.home_team = :home)
@@ -124,7 +124,7 @@ _LIVE_HOME = text("""
            m.home_score, m.away_score, m.decided_in,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
            p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
-    FROM hockey_matches AS m
+    FROM kk_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.home_team = :home AND m.status IN ('scheduled', 'review')
       AND m.starts_at <= :now AND m.starts_at > :since
@@ -136,7 +136,7 @@ _HAD_PICK = text("SELECT EXISTS(SELECT 1 FROM hockey_picks WHERE player_key = :p
 
 _LAST_FINALS = text("""
     SELECT (p.id IS NOT NULL) AS picked
-    FROM hockey_matches AS m
+    FROM kk_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.status = 'final'
     ORDER BY m.finalized_at DESC NULLS LAST, m.starts_at DESC, m.id DESC
@@ -159,7 +159,7 @@ _BEST_PLACE = text("""
         JOIN my ON my.league_id = mb.league_id
         LEFT JOIN hockey_picks AS p ON p.player_key = mb.player_key AND p.points IS NOT NULL
             AND EXISTS (
-                SELECT 1 FROM hockey_matches AS m
+                SELECT 1 FROM kk_matches AS m
                 WHERE m.id = p.match_id AND m.starts_at >= GREATEST(:since, mb.joined_at) AND m.starts_at < :until
             )
         GROUP BY mb.league_id, mb.player_key
