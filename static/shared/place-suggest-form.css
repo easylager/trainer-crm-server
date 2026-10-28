@@ -181,3 +181,24 @@
 .psf-tile--row { min-height: 0; margin-top: -8px; width: 100%; flex-direction: row; align-items: center; justify-content: flex-start; padding: 12px 14px; }
 .psf-tile--row .psf-tile__icon { width: 44px; height: 44px; flex: none; }
 .psf-tone--other { --tone: var(--g-muted); }
+
+/* фото */
+.psf-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.psf-photo {
+  position: relative; aspect-ratio: 1; border-radius: var(--g-r); overflow: hidden;
+  background: var(--g-chip); display: block;
+}
+.psf-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.psf-photo__del {
+  position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; border: 0; border-radius: var(--g-r-pill);
+  background: rgba(13, 27, 38, .62); color: #fff; display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.psf-photo__del::before { content: ""; position: absolute; inset: -6px; } /* цель касания 44px */
+.psf-photo__del svg { width: 16px; height: 16px; }
+.psf-photo--add {
+  border: 1px dashed var(--g-line-strong); background: var(--g-surface); color: var(--g-accent-ink);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  font-size: 13px; font-weight: 600; padding: 8px; text-align: center;
+}
+.psf-photo--add svg { width: 26px; height: 26px; }
+.psf-set .psf-hint { margin-top: 8px; }

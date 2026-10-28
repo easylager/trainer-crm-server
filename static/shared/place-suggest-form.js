@@ -56,6 +56,24 @@
   var ICON_SEARCH = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>';
   var ICON_CHECK = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg>';
 
+  var MAX_PHOTOS = 3;
+  var PHOTO_MAX_SIDE = 2000;
+  var ICON_CAMERA = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></svg>';
+
+  /* Снимок с телефона — 5–12 МБ. Уменьшаем на устройстве: быстрее по мобильной сети,
+     сервер всё равно пережмёт и сотрёт EXIF (в том числе геометку). */
+  function shrinkPhoto(file) {
+    if (!window.createImageBitmap || !document.createElement('canvas').toBlob) return Promise.resolve(file);
+    return createImageBitmap(file, { imageOrientation: 'from-image' }).then(function (bmp) {
+      var k = Math.min(1, PHOTO_MAX_SIDE / Math.max(bmp.width, bmp.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      if (bmp.close) bmp.close();
+      return new Promise(function (res) { c.toBlob(function (b) { res(b || file); }, 'image/jpeg', 0.86); });
+    }).catch(function () { return file; });
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -76,7 +94,8 @@
     var s = {
       step: 1, kind: null, city: opts.prefillCity || null, q: '',
       name: '', address: '', details: {}, services: {}, disciplines: {}, shopDisciplines: {},
-      contact: '', website: '', sending: false, error: '', result: null, sugg: [], geoDone: false, geoLoading: false
+      contact: '', website: '', sending: false, error: '', result: null, sugg: [], geoDone: false, geoLoading: false,
+      photos: [], progress: ''
     };
     var searchTimer = null;
     var searchSeq = 0;
@@ -190,9 +209,38 @@
         html += '<fieldset class="psf-set"><legend class="psf-label">Чему учат</legend>' + chips('disciplines', SCHOOL_DISCIPLINES, s.disciplines) + '</fieldset>' +
           field('psf-age', 'С какого возраста', d.age || '', 'Например: с 4 лет, есть взрослые группы', ' maxlength="100" data-detail="age"');
       }
+      html += '<fieldset class="psf-set"><legend class="psf-label">Фото <span class="psf-label__soft">— по желанию</span></legend>' +
+          '<div data-slot="photos">' + photosBlock() + '</div>' +
+          '<input type="file" accept="image/*" multiple hidden data-photo-input>' +
+        '</fieldset>';
       html += field('psf-link', 'Телефон, сайт или соцсеть', d.link || '', 'Номер или ссылка', ' maxlength="300" data-detail="link"') +
         area('psf-more', s.kind === 'other' ? 'Что это и чем полезно' : 'Что ещё стоит знать', d.more || '', MORE_PH[s.kind] || MORE_PH.ice, s.kind === 'other' ? 4 : 3, 1000);
       return html;
+    }
+
+    function photosBlock() {
+      var cells = s.photos.map(function (ph, i) {
+        return '<span class="psf-photo"><img src="' + ph.url + '" alt="Фото ' + (i + 1) + '">' +
+          '<button type="button" class="psf-photo__del" data-photo-del="' + i + '" aria-label="Убрать фото ' + (i + 1) + '">' + ICON_CLOSE + '</button></span>';
+      });
+      if (s.photos.length < MAX_PHOTOS) {
+        cells.push('<button type="button" class="psf-photo psf-photo--add" data-act="photo-add">' + ICON_CAMERA +
+          '<span>' + (s.photos.length ? 'Ещё фото' : 'Добавить фото') + '</span></button>');
+      }
+      return '<div class="psf-photos">' + cells.join('') + '</div>' +
+        '<p class="psf-hint">До ' + MAX_PHOTOS + ' снимков: вход, лёд, витрина. Покажем после проверки.</p>';
+    }
+    function renderPhotos() {
+      var slot = root.querySelector('[data-slot="photos"]');
+      if (slot) slot.innerHTML = photosBlock();
+    }
+    function addPhotos(files) {
+      var room = MAX_PHOTOS - s.photos.length;
+      Array.prototype.slice.call(files || [], 0, room).forEach(function (f) {
+        if (!/^image\//.test(f.type || '')) return;
+        s.photos.push({ file: f, url: URL.createObjectURL(f) });
+      });
+      renderPhotos();
     }
 
     function summary() {
@@ -222,7 +270,8 @@
       else text = 'Проверим и добавим — место появится на странице города.';
       return '<div class="psf-done">' +
         '<span class="psf-done__mark">' + ICON_CHECK + '</span>' +
-        '<div class="psf-intro"><h1 class="psf-h1">Спасибо! Заявка у нас</h1><p class="psf-lead">' + esc(text) + '</p></div>' +
+        '<div class="psf-intro"><h1 class="psf-h1">Спасибо! Заявка у нас</h1><p class="psf-lead">' + esc(text) + '</p>' +
+          (r.photosFailed ? '<p class="psf-hint">' + (r.photosFailed === 1 ? 'Одно фото не загрузилось' : 'Часть фото не загрузилась') + ' — заявка всё равно у нас.</p>' : '') + '</div>' +
         summary() +
       '</div>';
     }
@@ -235,7 +284,7 @@
           '<button type="button" class="psf-btn' + (r.telegram_link ? ' psf-btn--ghost' : '') + '" data-act="again">Предложить ещё место</button>' +
         '</div>';
       }
-      var label = isLast() ? (s.sending ? 'Отправляем…' : 'Отправить') : 'Дальше';
+      var label = isLast() ? (s.sending ? (s.progress || 'Отправляем…') : 'Отправить') : 'Дальше';
       return '<div class="psf-foot">' +
         '<p class="psf-error" role="alert" data-slot="error"' + (s.error ? '' : ' hidden') + '>' + esc(s.error) + '</p>' +
         '<button type="button" class="psf-btn" data-act="next"' + (stepOk() && !s.sending ? '' : ' disabled') + '>' + label + '</button>' +
@@ -358,8 +407,12 @@
       Promise.resolve()
         .then(function () { return opts.submit(payload()); })
         .then(function (res) {
-          s.sending = false;
           s.result = res || {};
+          return uploadPhotos(s.result);
+        })
+        .then(function () {
+          s.sending = false;
+          s.progress = '';
           go(total + 1);
         })
         .catch(function (err) {
@@ -369,10 +422,33 @@
         });
     }
 
+    function uploadPhotos(res) {
+      var list = s.photos.slice();
+      res.photosFailed = 0;
+      if (!list.length || !res.id || !res.upload_token) { res.photosFailed = list.length && !res.upload_token ? list.length : 0; return Promise.resolve(); }
+      var url = (opts.photosUrl || '/api/public/place-suggestions/{id}/photos').replace('{id}', encodeURIComponent(res.id));
+      return list.reduce(function (chain, ph, i) {
+        return chain.then(function () {
+          s.progress = 'Загружаем фото ' + (i + 1) + ' из ' + list.length + '…';
+          var btn = root.querySelector('[data-act="next"].psf-btn');
+          if (btn) btn.textContent = s.progress;
+          return shrinkPhoto(ph.file).then(function (blob) {
+            var fd = new FormData();
+            fd.append('upload_token', res.upload_token);
+            fd.append('file', blob, 'photo-' + (i + 1) + '.jpg');
+            return fetch(url, { method: 'POST', body: fd });
+          }).then(function (r) { if (!r.ok) res.photosFailed++; })
+            .catch(function () { res.photosFailed++; });
+        });
+      }, Promise.resolve());
+    }
+
     function reset() {
+      s.photos.forEach(function (ph) { URL.revokeObjectURL(ph.url); });
       s = {
         step: 1, kind: null, city: opts.prefillCity || null, q: '', name: '', address: '', details: {},
-        services: {}, disciplines: {}, shopDisciplines: {}, contact: s.contact, website: '', sending: false, error: '', result: null, sugg: []
+        services: {}, disciplines: {}, shopDisciplines: {}, contact: s.contact, website: '', sending: false, error: '', result: null, sugg: [],
+        photos: [], progress: ''
       };
       go(1);
     }
@@ -411,6 +487,17 @@
         return;
       }
       var act = t.dataset.act;
+      if (act === 'photo-add') {
+        var inp = root.querySelector('[data-photo-input]');
+        if (inp) inp.click();
+        return;
+      }
+      if (t.dataset.photoDel != null) {
+        var gone = s.photos.splice(Number(t.dataset.photoDel), 1)[0];
+        if (gone) URL.revokeObjectURL(gone.url);
+        renderPhotos();
+        return;
+      }
       if (act === 'back') {
         if (s.step === 1) { if (opts.onClose) opts.onClose(); }
         else go(s.step - 1);
@@ -428,6 +515,13 @@
         refreshNext();
       } else if (act === 'again') {
         reset();
+      }
+    });
+
+    root.addEventListener('change', function (e) {
+      if (e.target.matches('[data-photo-input]')) {
+        addPhotos(e.target.files);
+        e.target.value = '';
       }
     });
 
