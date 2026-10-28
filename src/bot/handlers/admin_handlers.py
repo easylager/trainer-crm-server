@@ -77,6 +77,12 @@ from src.application.trainer_link_token_use_cases import (
     issue_trainer_welcome_link_token,
 )
 from src.bot.admin_bot_commands import register_admin_bot_commands
+from src.application.place_suggestion_use_cases import (
+    PlaceSuggestionAdminError,
+    approve_place_suggestion,
+    count_new_place_suggestions,
+)
+from src.shared.place_suggestion import PLACE_SUGGEST_APPROVE_PREFIX
 from src.application.collective_use_cases import (
     admin_confirm_collective_invoice,
     admin_grant_collective_subscription,
@@ -634,6 +640,84 @@ async def cmd_ice_inbox(message: Message) -> None:
         parse_mode=ParseMode.HTML,
         reply_markup=keyboard,
     )
+
+
+@router.message(Command("suggestions"))
+async def cmd_suggestions(message: Message) -> None:
+    """Заявки «места от людей» (PDEC-028): счётчик новых и кнопка в админский Mini App."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base:
+        await message.answer("WEBAPP_BASE_URL не задан — список недоступен.")
+        return
+    async with async_session_factory() as session:
+        new_count = await count_new_place_suggestions(session)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Открыть заявки", web_app=WebAppInfo(url=f"{base}/webapp/admin-place-suggestions"))
+    ]])
+    await message.answer(
+        f"📍 <b>Места от людей</b>\nНовых заявок: {new_count}",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+    )
+
+
+def format_place_suggestion_approved(sid: int, result: dict, *, base_url: str) -> str:
+    """«Опубликовано: <ссылка>» или почему место пока не видно в каталоге."""
+    url = f"{(base_url or '').rstrip('/')}{result.get('url') or ''}"
+    hidden = []
+    if not result.get("published"):
+        hidden.append("карточка — черновик")
+    if result.get("city_kept_inactive"):
+        hidden.append("город скрыт")
+    if result.get("country_not_public"):
+        hidden.append("страна вне каталога")
+    if not hidden:
+        return f"Опубликовано: {html.escape(url)}"
+    return (
+        f"Заявка №{int(sid)} одобрена, но место пока не видно в каталоге: "
+        f"{', '.join(hidden)}.\n{html.escape(url)}"
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(PLACE_SUGGEST_APPROVE_PREFIX))
+async def on_place_suggestion_approve(callback: CallbackQuery) -> None:
+    """«Одобрить как есть» из уведомления о новой заявке — тот же use case, что у админки."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    sid = safe_parse_id(callback.data[len(PLACE_SUGGEST_APPROVE_PREFIX):])
+    if sid is None:
+        await callback.answer()
+        return
+    try:
+        async with async_session_factory() as session:
+            result = await approve_place_suggestion(session, sid, admin_id=user_id)
+    except PlaceSuggestionAdminError as exc:
+        if exc.code == "closed":
+            await callback.answer("Заявка уже разобрана", show_alert=True)
+            try:
+                await callback.message.edit_reply_markup(reply_markup=None)
+            except Exception:  # noqa: BLE001
+                logger.warning("place suggestion approve: failed to drop markup sid=%s", sid, exc_info=True)
+        else:
+            await callback.answer(str(exc), show_alert=True)
+        return
+    audit_log("place_suggestion.approved", ACTOR_ADMIN_BOT, user_id, {"suggestion_id": sid, **{
+        k: result.get(k) for k in ("arena_id", "city_id", "city_created")
+    }})
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:  # noqa: BLE001
+        logger.warning("place suggestion approve: failed to drop markup sid=%s", sid, exc_info=True)
+    await callback.message.answer(
+        format_place_suggestion_approved(sid, result, base_url=Settings().webapp_base_url or ""),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
 
 
 @router.message(Command("ice_sources"))

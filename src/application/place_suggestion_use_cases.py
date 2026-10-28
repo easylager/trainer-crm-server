@@ -302,6 +302,12 @@ async def list_place_suggestions(session: AsyncSession, *, tab: str, limit: int 
     return [dict(m) for m in r.mappings().all()]
 
 
+async def count_new_place_suggestions(session: AsyncSession) -> int:
+    """Сколько заявок ждут первого взгляда (вкладка «Новые»)."""
+    r = await session.execute(text("SELECT count(*) FROM place_suggestions WHERE status = 'new'"))
+    return int(r.scalar() or 0)
+
+
 async def get_place_suggestion(session: AsyncSession, sid: int) -> dict[str, Any]:
     out = await _load_row(session, sid)
     msgs = await session.execute(
