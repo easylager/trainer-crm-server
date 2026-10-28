@@ -461,7 +461,7 @@ async def _validate_and_link_arenas(
     session: AsyncSession, trainer_id: int, arena_ids: list[int]
 ) -> dict[int, dict[str, Any]]:
     """
-    Check every referenced arena is real and active, link it to the trainer (idempotent), and
+    Check every referenced arena is real, active and a trainer workplace (not a shop or school), link it to the trainer (idempotent), and
     return its grid preset keyed by id.
 
     Linking happens here rather than waiting for a separate profile step: a day the trainer just
@@ -471,8 +471,11 @@ async def _validate_and_link_arenas(
     if not arena_ids:
         return {}
     r = await session.execute(
-        text("SELECT id, name FROM arenas WHERE id = ANY(:ids) AND is_active = true"),
-        {"ids": arena_ids},
+        text(
+            "SELECT id, name FROM arenas WHERE id = ANY(:ids) AND is_active = true"
+            " AND venue_type = ANY(:trainer_venue_types)"
+        ),
+        {"ids": arena_ids, "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS)},
     )
     found = {int(row[0]): row[1] for row in r.fetchall()}
     missing = [a for a in arena_ids if a not in found]

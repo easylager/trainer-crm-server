@@ -166,6 +166,22 @@ async def test_trainer_pickers_never_offer_a_shop(app_use_test_db, db_session) -
 
 
 @pytest.mark.asyncio
+async def test_trainer_pickers_never_offer_a_school(app_use_test_db, db_session) -> None:
+    """PDEC-028: школа — организация, а не место работы тренера."""
+    city_id = await _insert_city(db_session, name=f"Школьск {uuid.uuid4().hex[:6]}")
+    rink_id = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:6]}")
+    school_id = await _insert_arena(db_session, city_id, name=f"Школа {uuid.uuid4().hex[:6]}")
+    await db_session.execute(text("UPDATE arenas SET venue_type = 'school' WHERE id = :id"), {"id": school_id})
+    await db_session.commit()
+    service_id = (await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))).scalar()
+
+    for kwargs in ({}, {"include_unconfirmed": True}, {"service_id": service_id} if service_id else {}):
+        ids = {a["id"] for a in await list_arenas(db_session, city_id, **kwargs)}
+        assert rink_id in ids, kwargs
+        assert school_id not in ids, kwargs
+
+
+@pytest.mark.asyncio
 async def test_shop_row_says_what_it_offers_not_schedule_tbd(app_use_test_db, db_session) -> None:
     city_id = await _insert_city(db_session, name=f"Строчинск {uuid.uuid4().hex[:6]}")
     await db_session.commit()

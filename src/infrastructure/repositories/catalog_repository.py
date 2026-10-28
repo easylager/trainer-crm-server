@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+from src.shared.venue_types import TRAINER_VENUE_TYPE_KEYS
 
 # Same eligibility as GET /public/trainers (city + service + arena), without slot/time filters.
 # This one used to read COALESCE(is_catalog_visible, true) — a missing flag counted as visible
@@ -137,8 +138,9 @@ class CatalogRepository:
         (default ``False``, e.g. ``GET /api/public/arenas``) until an admin confirms.
 
         Public callers also hide ``arena_profiles.status != 'published'`` (TASK-048).
-        Shops (``venue_type='shop'``, TASK-146) are never listed: this is the list of
-        places where trainers work, and every caller uses it that way.
+        Shops and schools (``venue_type`` outside ``TRAINER_VENUE_TYPE_KEYS``, TASK-146,
+        PDEC-028) are never listed: this is the list of places where trainers work, and
+        every caller uses it that way.
         Missing profile is treated as published so legacy rows stay listed. ``district``
         may be NULL — the row is still returned.
         """
@@ -157,11 +159,11 @@ class CatalogRepository:
                     FROM arenas a
                     LEFT JOIN arena_profiles p ON p.arena_id = a.id
                     WHERE a.city_id = :cid AND a.is_active {confirmed_filter} {published_filter}
-                      AND a.venue_type <> 'shop'
+                      AND a.venue_type = ANY(:trainer_venue_types)
                     ORDER BY a.sort_order, a.id
                     """
                 ),
-                {"cid": city_id},
+                {"cid": city_id, "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS)},
             )
             return [
                 {
@@ -217,11 +219,11 @@ class CatalogRepository:
                     GROUP BY ta.arena_id
                 ) cnt ON cnt.arena_id = a.id
                 WHERE a.city_id = :city_id AND a.is_active {confirmed_filter} {published_filter}
-                  AND a.venue_type <> 'shop'
+                  AND a.venue_type = ANY(:trainer_venue_types)
                 ORDER BY COALESCE(cnt.trainer_count, 0) DESC, a.sort_order, a.id
                 """
             ),
-            {"city_id": city_id, "service_id": int(service_id)},
+            {"city_id": city_id, "service_id": int(service_id), "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS)},
         )
         return [
             {

@@ -744,6 +744,40 @@ async def test_get_does_not_list_shops_or_schools(app_use_test_db, db_session) -
 
 
 @pytest.mark.asyncio
+async def test_post_rejects_a_school_or_shop_as_workplace(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+    service_id = await _any_service_id(db_session)
+    city_id, _zamok, _manege = await _fresh_city_and_arenas(db_session)
+    for kind in ("school", "shop"):
+        r = await db_session.execute(
+            text(
+                "INSERT INTO arenas (city_id, name, is_active, venue_type) "
+                "VALUES (:c, :n, true, :k) RETURNING id"
+            ),
+            {"c": city_id, "n": f"{kind} POST", "k": kind},
+        )
+        place = int(r.fetchone()[0])
+        await db_session.commit()
+        with patch_trainer_webapp_init(tg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    QUICK_SETUP_URL,
+                    headers={"X-Telegram-Init-Data": "mock"},
+                    json={
+                        "service_ids": [service_id],
+                        "days": [{"day_of_week": 0, "hours": [11], "arena_id": place}],
+                        "duration_minutes": 60,
+                    },
+                )
+        assert resp.status_code == 400, (kind, resp.text)
+    r = await db_session.execute(
+        text("SELECT count(*) FROM trainer_arenas WHERE trainer_id = :t"), {"t": trainer_id}
+    )
+    assert int(r.scalar()) == 0
+
+
+@pytest.mark.asyncio
 async def test_post_with_a_single_arena_shifts_slots_and_links_it(app_use_test_db, db_session) -> None:
     tg = _fresh_trainer_telegram_id()
     trainer_id = await _bare_linked_trainer(db_session, tg)
