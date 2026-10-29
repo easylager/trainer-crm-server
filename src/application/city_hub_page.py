@@ -705,9 +705,6 @@ def compose_city_hub_share(
 def _city_hub_footer_context(view: Mapping[str, Any]) -> str:
     """Подвал хаба: вся страна + вход «Предложить место» с этим городом (PDEC-028)."""
     links = ['<a href="/">Массовое катание по всей Беларуси</a>']
-    city_id = (view.get("city") or {}).get("id")
-    if city_id:
-        links.append(f'<a href="/suggest?city={int(city_id)}">Знаете место, которого здесь нет?</a>')
     return '<div class="elsewhere">' + "".join(links) + "</div>"
 
 
@@ -1193,6 +1190,24 @@ def _b_all_places(view: Mapping[str, Any]) -> str:
     )
 
 
+def _b_city_suggest(view: Mapping[str, Any]) -> str:
+    # Заметный вход в заявку под «Все места города» — не только катки (PDEC-028).
+    city = dict(view.get("city") or {})
+    city_id = city.get("id")
+    if not city_id:
+        return ""
+    name = _esc(city_locative(str(city.get("name") or "")))
+    return (
+        '<section class="b-sec b-city-suggest">'
+        '<p class="b-city-suggest__lead">'
+        f'В {name} чего-то не хватает? Расскажите про него — '
+        'каток, магазин, мастерская или залитый дворовый лёд.</p>'
+        f'<a class="b-city-suggest__link" href="/suggest?city={int(city_id)}">Предложить место →</a>'
+        '<p class="b-city-suggest__sub">Каждое место проверяем и публикуем — так каталог растёт.</p>'
+        '</section>'
+    )
+
+
 def _b_for_you(view: Mapping[str, Any]) -> str:
     """TASK-291: «Для вас» — до трёх мест под «Что нужно», те же плитки, что «Рядом».
 
@@ -1547,6 +1562,7 @@ def _b_body(
             _b_for_you(view),
             empty,
             _b_all_places(view),
+            _b_city_suggest(view),
             _b_trainers(view, base_url=base_url, coach_href=coach_href),
             share_block,
         ]

@@ -1761,6 +1761,10 @@
       link.id = 'iceSuggestFoot';
       link.className = 'ice-season-foot ice-suggest-foot';
       link.textContent = 'Знаете место, которого здесь нет?';
+      var sub = document.createElement('p');
+      sub.className = 'ice-suggest-sub';
+      sub.textContent = 'Каток, магазин, мастерская, дворовый лёд — расскажите, добавим в каталог';
+      link.appendChild(sub);
       link.hidden = true;
       link.addEventListener('click', function () {
         emptyAction('suggest')();
@@ -3021,7 +3025,7 @@
     if (q && !rows.length) {
       box.innerHTML =
         '<p class="ice-picker__label">Такого города у нас пока нет</p>' +
-        '<button type="button" class="ice-season-foot ice-suggest-foot" id="iceCitySuggest">Предложите каток или магазин — добавим город</button>';
+        '<button type="button" class="ice-season-foot ice-suggest-foot" id="iceCitySuggest">Предложите каток, магазин или мастерскую — добавим город</button>';
       var go = $('iceCitySuggest');
       if (go) {
         go.addEventListener('click', function () {

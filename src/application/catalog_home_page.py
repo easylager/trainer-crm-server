@@ -1388,7 +1388,7 @@ def _b_more_cities(rest: list[Mapping[str, Any]]) -> str:
     return (
         f'<details class="b-details"><summary>{_esc(summary)}{icon_svg("down")}</summary>'
         f'<div class="b-details__body">{"".join(lines)}'
-        '<p class="b-details__more"><a href="/suggest">Нет вашего города? Расскажите о катке →</a></p>'
+        '<p class="b-details__more"><a href="/suggest">Нет вашего города или катка? Расскажите — добавим →</a></p>'
         '</div></details>'
     )
 
