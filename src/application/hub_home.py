@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import Any
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -235,6 +235,11 @@ def _dinamo_card(hockey: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return None
 
 
+def _feed_start(item: Mapping[str, Any]) -> datetime:
+    raw = item.get("starts_at") or ((item.get("hockey") or {}).get("match") or {}).get("starts_at")
+    return datetime.fromisoformat(raw).astimezone(timezone.utc) if raw else datetime.max.replace(tzinfo=timezone.utc)
+
+
 def now_slot(
     *,
     bookings: Mapping[str, Any] | None,
@@ -265,6 +270,8 @@ def now_slot(
         items: list[dict[str, Any]] = [dict(m) for m in matches]
         if dinamo is not None:
             items.append(dinamo)
+        # Динамо встаёт по времени среди матчей города, а не в хвост; итог месяца без даты — в конец.
+        items.sort(key=_feed_start)
         count = int((extraliga or {}).get("week_count") or 0)
         if count:
             items.append({"kind": "more", "count": count, "href": (extraliga or {}).get("all_href") or "client-matches"})
