@@ -188,8 +188,9 @@ _ALERTED = text("UPDATE hockey_matches SET review_alerted_at = :now WHERE id = :
 
 _SELECT_ONE = text(f"SELECT {_COLUMNS} FROM hockey_matches WHERE id = :id")
 
+# Итоги ищем только у матчей Динамо: Экстралига закрывается своим циклом по hockey.by (TASK-340).
 _DUE = text(f"""
-    SELECT {_COLUMNS} FROM hockey_matches
+    SELECT {_COLUMNS} FROM kk_matches
     WHERE status IN ('scheduled', 'review')
       AND starts_at <= :check_before
       AND starts_at >= :window_start
@@ -198,7 +199,7 @@ _DUE = text(f"""
 
 # Вышел за окно автоподтверждения без итога (цикл стоял или источники молчали) — только человек.
 _STALE = text(f"""
-    SELECT {_COLUMNS} FROM hockey_matches
+    SELECT {_COLUMNS} FROM kk_matches
     WHERE status = 'scheduled' AND starts_at < :window_start
     ORDER BY starts_at
     """)
@@ -363,7 +364,7 @@ class CalendarEmpty(RuntimeError):
 
 
 _HOT = text("""
-    SELECT 1 FROM hockey_matches
+    SELECT 1 FROM kk_matches
     WHERE status IN ('scheduled', 'review') AND starts_at <= :hot_from AND starts_at >= :hot_to
     LIMIT 1
     """)

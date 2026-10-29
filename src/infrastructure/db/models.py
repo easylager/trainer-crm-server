@@ -520,7 +520,10 @@ class HockeyMatch(Base):
     __table_args__ = (
         UniqueConstraint("source", "source_match_id", name="uq_hockey_matches_source_id"),
         Index("ix_hockey_matches_status_starts", "status", "starts_at"),
-        CheckConstraint("source IN ('hcdinamo')", name="ck_hockey_matches_source"),
+        Index("ix_hockey_matches_league_starts", "league", "starts_at"),
+        # Держать в синхроне с migrations/versions/0280_extraliga_matches.py.
+        CheckConstraint("source IN ('hcdinamo', 'hockeyby')", name="ck_hockey_matches_source"),
+        CheckConstraint("league IN ('khl', 'extraliga')", name="ck_hockey_matches_league"),
         CheckConstraint("status IN ('scheduled', 'final', 'review', 'cancelled')", name="ck_hockey_matches_status"),
         CheckConstraint(
             "decided_in IS NULL OR decided_in IN ('regulation', 'ot', 'so')",
@@ -552,7 +555,30 @@ class HockeyMatch(Base):
     review_alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Экстралига (TASK-340): лига, клубы hockey.by, арена, билеты и снимок страницы матча.
+    league: Mapped[str] = mapped_column(String(16), nullable=False, server_default="khl")
+    home_club_id: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    away_club_id: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    arena: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    city: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    tickets_url: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)
+    details_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyStanding(Base):
+    """Место команды в таблице лиги (TASK-340): страница матча показывает «13-е · 9 очков»."""
+
+    __tablename__ = "hockey_standings"
+    __table_args__ = (CheckConstraint("league IN ('khl', 'extraliga')", name="ck_hockey_standings_league"),)
+
+    league: Mapped[str] = mapped_column(String(16), primary_key=True)
+    team: Mapped[str] = mapped_column(String(64), primary_key=True)
+    place: Mapped[int] = mapped_column(Integer(), nullable=False)
+    games: Mapped[int] = mapped_column(Integer(), nullable=False)
+    points: Mapped[int] = mapped_column(Integer(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

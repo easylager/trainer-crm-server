@@ -24,7 +24,7 @@ _MY_POINTS = text("""
 """)
 
 _NEXT_OPEN = text("""
-    SELECT home_team, away_team, starts_at FROM hockey_matches
+    SELECT home_team, away_team, starts_at FROM kk_matches
     WHERE status = 'scheduled' AND starts_at > :now
     ORDER BY starts_at LIMIT 1
 """)
