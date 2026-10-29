@@ -196,6 +196,7 @@ def max_body_bytes_for_path(path: str) -> int:
         path.startswith("/api/upload")
         or normalized.endswith("/trainer/photos")
         or ("/admin/arenas/" in path and normalized.endswith("/photos"))
+        or (path.startswith("/api/public/place-suggestions/") and normalized.endswith("/photos"))
     ):
         return s.api_max_body_bytes_upload
     return s.api_max_body_bytes_default

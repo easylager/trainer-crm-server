@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.middleware.http_limits import client_ip_from_request
 from src.application.place_suggestion_city_search import search_cities
+from src.application.place_suggestion_photos import SuggestionPhotoError, add_suggestion_photo
 from src.application.place_suggestion_use_cases import create_place_suggestion
 from src.shared.config import Settings
 from src.shared.place_suggestion import PlaceSuggestionError
@@ -100,6 +101,30 @@ async def post_place_suggestion(
     except PlaceSuggestionError as exc:
         return suggestion_error_response(exc)
     return JSONResponse(
-        content={"ok": True, "id": res["id"], "telegram_link": telegram_bind_link(res["bind_token"])},
+        content={
+            "ok": True,
+            "id": res["id"],
+            "telegram_link": telegram_bind_link(res["bind_token"]),
+            "upload_token": res["upload_token"],
+        },
         headers=_NO_STORE,
     )
+
+
+_PHOTO_ERROR_STATUS = {"forbidden": 403, "limit": 409, "too_large": 413, "not_image": 400}
+
+
+@router.post("/{sid:int}/photos")
+async def post_place_suggestion_photo(
+    sid: int,
+    upload_token: str = Form(..., max_length=64),
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+):
+    """Фото к только что созданной заявке (сайт и Mini App): ключ из ответа на создание, до 3 штук."""
+    body = await file.read()
+    try:
+        res = await add_suggestion_photo(session, sid, upload_token, body, file.content_type or "image/jpeg")
+    except SuggestionPhotoError as exc:
+        raise HTTPException(status_code=_PHOTO_ERROR_STATUS.get(exc.code, 400), detail=exc.code) from exc
+    return JSONResponse(content={"ok": True, "id": res["id"]}, headers=_NO_STORE)

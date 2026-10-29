@@ -53,6 +53,11 @@
     .ps-warn { border: 1px solid rgba(240,180,41,.5); background: rgba(240,180,41,.08); border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.5; margin-top: 12px; }
     .ps-ok { border: 1px solid rgba(69,185,187,.5); background: rgba(69,185,187,.1); border-radius: 12px; padding: 12px; font-size: 14px; line-height: 1.5; margin-top: 12px; }
     .err { color: #ff8a80; font-size: 13px; margin-top: 8px; }
+    .ps-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .ps-photo { margin: 0; display: grid; gap: 4px; }
+    .ps-photo img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; display: block; }
+    .ps-photo.off img { opacity: .4; }
+    .ps-photo label { display: flex; gap: 6px; align-items: center; }
   </style>
 </head>
 <body>
@@ -169,6 +174,13 @@
           if (why) h += '<div class="ps-hint" style="margin-top:8px">' + esc(why) + (s.closed_at ? ' · ' + esc(when(s.closed_at)) : '') + '</div>';
         }
         h += '<div class="ps-card">' + mapHtml(s) + '</div>';
+        if (s.photos && s.photos.length) {
+          h += '<div class="ps-card"><h2>Фото от автора</h2><div class="ps-photos">' + s.photos.map(function (p) {
+            var src = A.apiUrl(p.url.replace('/api/webapp', '')) + (A.initData ? '?init_data=' + encodeURIComponent(A.initData) : '');
+            return '<figure class="ps-photo' + (p.publish ? '' : ' off') + '"><a href="' + esc(src) + '" target="_blank" rel="noopener"><img src="' + esc(src) + '" alt="" loading="lazy"></a>' +
+              (open ? '<label class="ps-hint"><input type="checkbox" data-photo-pub="' + p.id + '"' + (p.publish ? ' checked' : '') + '> в карточку</label>' : '') + '</figure>';
+          }).join('') + '</div>' + (open ? '<div class="ps-hint" style="margin-top:6px">Отмеченные фото при одобрении попадут в галерею места с подписью «по данным посетителей».</div>' : '') + '</div>';
+        }
 
         h += '<div class="ps-card"><h2>Похоже на</h2>';
         if (isNewCity) h += '<div class="ps-hint">Город новый — дублей в каталоге быть не может.</div>';
@@ -299,6 +311,14 @@
       });
 
       document.addEventListener('change', function (ev) {
+        var pub = ev.target.closest && ev.target.closest('[data-photo-pub]');
+        if (pub && state.detail) {
+          var fig = pub.closest('.ps-photo');
+          send('PATCH', '/admin/place-suggestions/' + state.detail.id + '/photos/' + pub.dataset.photoPub, { publish: pub.checked })
+            .then(function () { if (fig) fig.classList.toggle('off', !pub.checked); })
+            .catch(function () { pub.checked = !pub.checked; });
+          return;
+        }
         var el = ev.target, s = state.detail;
         if (!s) return;
         if (el.matches('select[data-act="reject"]')) {

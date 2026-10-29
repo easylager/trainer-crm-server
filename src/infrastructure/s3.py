@@ -125,8 +125,22 @@ def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, 
     return file_key, file_key_list
 
 
+SUGGESTIONS_PREFIX = "suggestions/"
+
+
 def upload_arena_photo(arena_id: int, body: bytes, content_type: str) -> dict:
     """Save arena photo as JPEG thumb (~320), card (~800), hero (~1600). Returns keys + pixel size."""
+    return _upload_three_variants(f"arenas/{int(arena_id)}/{uuid.uuid4().hex}", body, content_type)
+
+
+def upload_suggestion_photo(suggestion_id: int, body: bytes, content_type: str) -> dict:
+    """Private photo of a place suggestion (``suggestions/`` is never served publicly)."""
+    return _upload_three_variants(
+        f"{SUGGESTIONS_PREFIX}{int(suggestion_id)}/{uuid.uuid4().hex}", body, content_type, cache_control="private"
+    )
+
+
+def _upload_three_variants(base: str, body: bytes, content_type: str, *, cache_control: str = PHOTO_CACHE_CONTROL) -> dict:
     hero_bytes = _resize_image(body, content_type or "", PHOTO_HERO_MAX_SIZE, PHOTO_MAIN_QUALITY) or body
     card_bytes = _resize_image(hero_bytes, "image/jpeg", PHOTO_MAIN_MAX_SIZE, PHOTO_MAIN_QUALITY) or hero_bytes
     thumb_bytes = _resize_image(card_bytes, "image/jpeg", PHOTO_LIST_MAX_SIZE, PHOTO_LIST_QUALITY) or card_bytes
@@ -138,7 +152,6 @@ def upload_arena_photo(arena_id: int, body: bytes, content_type: str) -> dict:
         width, height = img.size
     except Exception:
         pass
-    base = f"arenas/{int(arena_id)}/{uuid.uuid4().hex}"
     variants = {
         "hero": f"{base}_hero.jpg",
         "card": f"{base}_card.jpg",
@@ -161,7 +174,7 @@ def upload_arena_photo(arena_id: int, body: bytes, content_type: str) -> dict:
             Key=key,
             Body=payloads[kind],
             ContentType=ct,
-            CacheControl=PHOTO_CACHE_CONTROL,
+            CacheControl=cache_control,
         )
     return {"storage_key": variants["hero"], "variants": variants, "width": width, "height": height}
 

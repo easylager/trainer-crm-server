@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.miniapp_auth.deps import get_admin_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
+from src.application import place_suggestion_photos as photos
 from src.application import place_suggestion_use_cases as uc
 from src.shared.config import Settings
 
@@ -134,3 +135,36 @@ async def post_admin_place_suggestion_message(
         return await uc.send_message_to_author(session, sid, body.body)
     except uc.PlaceSuggestionAdminError as exc:
         raise _http(exc) from exc
+
+
+class PhotoPublishBody(BaseModel):
+    publish: bool
+
+
+@router.get(_PREFIX + "/{sid:int}/photos/{photo_id:int}")
+async def get_admin_place_suggestion_photo(
+    sid: int,
+    photo_id: int,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    del principal
+    found = await photos.get_photo_bytes(session, sid, photo_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    body, content_type = found
+    return Response(content=body, media_type=content_type, headers={"Cache-Control": "private, max-age=3600"})
+
+
+@router.patch(_PREFIX + "/{sid:int}/photos/{photo_id:int}")
+async def patch_admin_place_suggestion_photo(
+    sid: int,
+    photo_id: int,
+    body: PhotoPublishBody,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    del principal
+    if not await photos.set_photo_publish(session, sid, photo_id, body.publish):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}

@@ -56,4 +56,9 @@ async def post_webapp_place_suggestion(
         )
     except PlaceSuggestionError as exc:
         return suggestion_error_response(exc)
-    return {"ok": True, "id": res["id"], "telegram_link": telegram_bind_link(res["bind_token"])}
+    return {
+        "ok": True,
+        "id": res["id"],
+        "telegram_link": telegram_bind_link(res["bind_token"]),
+        "upload_token": res["upload_token"],
+    }

@@ -1,4 +1,4 @@
-"""place_suggestions: user-submitted places + moderation thread; city coords.
+"""place_suggestions: user-submitted places + moderation thread + photos; city coords.
 
 Also ``arenas.venue_type`` += ``school`` (``ck_arenas_venue_type``, last set in 0208).
 
@@ -61,6 +61,7 @@ def upgrade() -> None:
         sa.Column("result_arena_id", sa.Integer(), sa.ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True),
         sa.Column("reject_reason", sa.String(32), nullable=True),
         sa.Column("client_ip_hash", sa.String(64), nullable=True),
+        sa.Column("photo_token", sa.String(32), nullable=True),
         sa.CheckConstraint(_in("kind", _KINDS), name="ck_place_suggestions_kind"),
         sa.CheckConstraint(_in("status", _STATUSES), name="ck_place_suggestions_status"),
         sa.CheckConstraint(_in("source", _SOURCES), name="ck_place_suggestions_source"),
@@ -84,6 +85,20 @@ def upgrade() -> None:
     )
     op.create_index("ix_place_suggestion_messages_sid", "place_suggestion_messages", ["suggestion_id", "created_at"])
 
+    op.create_table(
+        "place_suggestion_photos",
+        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("suggestion_id", sa.BigInteger(),
+                  sa.ForeignKey("place_suggestions.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("storage_key", sa.String(255), nullable=False),
+        sa.Column("variants", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default="{}"),
+        sa.Column("width", sa.Integer(), nullable=True),
+        sa.Column("height", sa.Integer(), nullable=True),
+        sa.Column("publish", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+    )
+    op.create_index("ix_place_suggestion_photos_sid", "place_suggestion_photos", ["suggestion_id", "id"])
+
     op.add_column("cities", sa.Column("latitude", sa.Float(), nullable=True))
     op.add_column("cities", sa.Column("longitude", sa.Float(), nullable=True))
     op.add_column("cities", sa.Column("region", sa.String(160), nullable=True))
@@ -96,6 +111,7 @@ def downgrade() -> None:
     op.drop_column("cities", "region")
     op.drop_column("cities", "longitude")
     op.drop_column("cities", "latitude")
+    op.execute("DROP TABLE IF EXISTS place_suggestion_photos")  # индекс уходит вместе с таблицей
     op.drop_index("ix_place_suggestion_messages_sid", table_name="place_suggestion_messages")
     op.drop_table("place_suggestion_messages")
     op.drop_index("ix_place_suggestions_author", table_name="place_suggestions")

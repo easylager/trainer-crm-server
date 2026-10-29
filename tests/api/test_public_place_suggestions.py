@@ -100,3 +100,27 @@ async def test_city_search_endpoint(app_use_test_db, db_session, monkeypatch):
     assert resp.status_code == 200, resp.text
     assert resp.headers["cache-control"] == "no-store"
     assert resp.json()["items"][-1]["name"] == "Пситестоуфа"
+
+
+@pytest.mark.asyncio
+async def test_photo_upload_by_token(app_use_test_db, db_session, monkeypatch, tmp_path):
+    import io
+
+    from PIL import Image
+
+    monkeypatch.setattr("src.infrastructure.s3._use_local", lambda: True)
+    monkeypatch.setenv("LOCAL_STORAGE_PATH", str(tmp_path))
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 30), (200, 40, 40)).save(buf, "JPEG")
+    async with _client() as client:
+        created = (await client.post(URL, json=_body(), headers={"X-Forwarded-For": _ip()})).json()
+        assert created["upload_token"]
+        photo_url = f"{URL}/{created['id']}/photos"
+        files = {"file": ("a.jpg", buf.getvalue(), "image/jpeg")}
+        bad = await client.post(photo_url, data={"upload_token": "wrong"}, files=files, headers={"X-Forwarded-For": _ip()})
+        ok = await client.post(photo_url, data={"upload_token": created["upload_token"]}, files=files, headers={"X-Forwarded-For": _ip()})
+    assert bad.status_code == 403
+    assert ok.status_code == 200, ok.text
+    n = (await db_session.execute(
+        text("SELECT COUNT(*) FROM place_suggestion_photos WHERE suggestion_id=:id"), {"id": created["id"]})).scalar_one()
+    assert n == 1

@@ -27,3 +27,15 @@ async def test_arenas_venue_type_accepts_school(db_session):
         "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_arenas_venue_type'"
     ))).scalar_one()
     assert "'school'" in check
+
+
+@pytest.mark.asyncio
+async def test_place_suggestion_photos_table_and_token(db_session):
+    assert {"id", "suggestion_id", "created_at", "storage_key", "variants", "width", "height",
+            "publish"} <= await _columns(db_session, "place_suggestion_photos")
+    assert "photo_token" in await _columns(db_session, "place_suggestions")
+    rule = (await db_session.execute(text(
+        "SELECT confdeltype::text FROM pg_constraint WHERE conrelid = 'place_suggestion_photos'::regclass "
+        "AND contype = 'f'"
+    ))).scalar_one()
+    assert rule == "c"

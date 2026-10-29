@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.arena_profile import ensure_arena_profile, normalize_hhmm, public_http_url
 from src.application.catalog_consumer_events import hmac_actor
 from src.application.place_links import place_path
+from src.application.place_suggestion_photos import copy_photos_to_arena, list_suggestion_photos, new_photo_token
 from src.application.place_suggestion_notify import (
     notify_admins_new_place_suggestion,
     notify_admins_place_suggestion_reply,
@@ -110,6 +111,7 @@ async def create_place_suggestion(
             new_lon = _coord(new_city.get("lon"), 180)
 
     bind_token = secrets.token_urlsafe(12) if author_telegram_id is None else None
+    photo_token = new_photo_token()
 
     r = await session.execute(
         text(
@@ -117,11 +119,11 @@ async def create_place_suggestion(
             INSERT INTO place_suggestions (
                 kind, source, city_id, new_city_name, new_city_country, new_city_region,
                 new_city_lat, new_city_lon, name, address, details, contact, contact_kind,
-                author_telegram_id, bind_token, client_ip_hash
+                author_telegram_id, bind_token, client_ip_hash, photo_token
             ) VALUES (
                 :kind, :source, :city_id, :new_city_name, :new_city_country, :new_city_region,
                 :new_city_lat, :new_city_lon, :name, :address, CAST(:details AS jsonb), :contact,
-                :contact_kind, :author, :bind_token, :ip_hash
+                :contact_kind, :author, :bind_token, :ip_hash, :photo_token
             )
             RETURNING id
             """
@@ -143,6 +145,7 @@ async def create_place_suggestion(
             "author": int(author_telegram_id) if author_telegram_id is not None else None,
             "bind_token": bind_token,
             "ip_hash": client_ip_hash(client_ip),
+            "photo_token": photo_token,
         },
     )
     sid = int(r.scalar_one())
@@ -153,7 +156,7 @@ async def create_place_suggestion(
     except Exception:  # noqa: BLE001
         logger.exception("notify admins after place suggestion failed suggestion_id=%s", sid)
 
-    return {"id": sid, "bind_token": bind_token}
+    return {"id": sid, "bind_token": bind_token, "upload_token": photo_token}
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +321,7 @@ async def get_place_suggestion(session: AsyncSession, sid: int) -> dict[str, Any
         {"id": int(sid)},
     )
     out["messages"] = [dict(m) for m in msgs.mappings().all()]
+    out["photos"] = await list_suggestion_photos(session, int(sid))
     out["similar"] = (
         await find_possible_duplicate_arenas(
             session, int(out["city_id"]), name=out["name"],
@@ -401,7 +405,7 @@ async def reject_place_suggestion(session: AsyncSession, sid: int, reason: str) 
     await session.execute(
         text(
             "UPDATE place_suggestions SET status = 'rejected', reject_reason = :reason, "
-            "closed_at = now(), updated_at = now() WHERE id = :sid"
+            "closed_at = now(), updated_at = now(), photo_token = NULL WHERE id = :sid"
         ),
         {"reason": reason, "sid": int(sid)},
     )
@@ -442,7 +446,7 @@ async def mark_duplicate(
     await session.execute(
         text(
             "UPDATE place_suggestions SET status = 'duplicate', target_arena_id = :t, "
-            "closed_at = now(), updated_at = now() WHERE id = :sid"
+            "closed_at = now(), updated_at = now(), photo_token = NULL WHERE id = :sid"
         ),
         {"t": int(target[0]), "sid": int(sid)},
     )
@@ -584,6 +588,7 @@ async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id:
         )
         arena_id = int(r.scalar_one())
         slug = await ensure_arena_profile(session, arena_id, city_id=city_id, name=name)
+        photos_copied = await copy_photos_to_arena(session, int(sid), arena_id)
 
         fields = await _profile_fields_from_details(session, row["details"], city_id)
         if row["kind"] == "shop":
@@ -612,7 +617,7 @@ async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id:
         await session.execute(
             text(
                 "UPDATE place_suggestions SET status = 'approved', result_arena_id = :a, city_id = :c, "
-                "closed_at = now(), updated_at = now() WHERE id = :sid"
+                "closed_at = now(), updated_at = now(), photo_token = NULL WHERE id = :sid"
             ),
             {"a": arena_id, "c": city_id, "sid": int(sid)},
         )
@@ -648,6 +653,7 @@ async def approve_place_suggestion(session: AsyncSession, sid: int, *, admin_id:
         "country_not_public": str(city_country or "").upper() not in ice_discovery_countries(),
         "profile_status": profile_status,
         "published": profile_status == "published",
+        "photos_copied": photos_copied,
     }
 
 

@@ -782,6 +782,8 @@ class PlaceSuggestion(Base):
     )
     reject_reason: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     client_ip_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Ключ догрузки фото к свежей заявке (2 ч); стирается при закрытии.
+    photo_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
 
 class PlaceSuggestionMessage(Base):
@@ -803,6 +805,25 @@ class PlaceSuggestionMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     direction: Mapped[str] = mapped_column(String(16), nullable=False)
     body: Mapped[str] = mapped_column(Text(), nullable=False)
+
+
+class PlaceSuggestionPhoto(Base):
+    """Фото к заявке. Приватное (``suggestions/`` не отдаётся публично); при одобрении
+    ``publish=true`` копируются в ``media`` нового места."""
+
+    __tablename__ = "place_suggestion_photos"
+    __table_args__ = (Index("ix_place_suggestion_photos_sid", "suggestion_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    suggestion_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("place_suggestions.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    variants: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    width: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    publish: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("true"))
 
 
 # M2M: trainer works at these arenas; filter catalog by arena via this table
