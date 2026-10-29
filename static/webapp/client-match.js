@@ -92,6 +92,39 @@
 
   // ---------- шапка ----------
 
+  // TASK-340: матч Экстралиги — та же страница, свои блоки (экран 12).
+  function isXl(ev) { return !!ev && ev.league === 'extraliga'; }
+
+  function started(ev) {
+    return !!(ev.match.result || M.status(ev.match).live || ev.match.status === 'cancelled');
+  }
+
+  function logoEl(team) {
+    var s = el('span', 'cm-logo');
+    if (team && team.logo) {
+      var img = el('img');
+      img.src = team.logo;
+      img.alt = '';
+      s.appendChild(img);
+    } else s.textContent = (team && team.short) || '';
+    return s;
+  }
+
+  function openUrl(url) {
+    if (!url) return;
+    if (tg && typeof tg.openLink === 'function') tg.openLink(url);
+    else global.open(url, '_blank', 'noopener');
+  }
+
+  function suffix(decided) {
+    var d = String(decided || '').toLowerCase();
+    if (d === 'ot' || d === 'overtime') return ' ОТ';
+    if (d === 'so' || d === 'shootout') return ' Б';
+    return '';
+  }
+
+  function dayMonth(iso) { return M.heroWhen(iso).split(' · ')[0].replace(/^[а-я]{2}, /, ''); }
+
   function paintHero(ev) {
     var m = ev.match;
     var title = $('cmTitle');
@@ -109,13 +142,114 @@
     } else {
       title.replaceChildren(el('span', null, m.home.name + ' —'), el('span', null, m.away.name));
     }
-    $('cmWhen').textContent = M.heroWhen(m.starts_at) + ' · ' + ((ev.arena && ev.arena.name) || 'Минск-Арена');
+    var xl = isXl(ev);
+    $('cmKicker').textContent = xl ? 'Матч · Экстралига' : 'Матч · КХЛ';
+    var logos = $('cmLogos');
+    logos.hidden = !xl;
+    if (xl) logos.replaceChildren(logoEl(m.home), logoEl(m.away));
+    var place = (ev.arena && ev.arena.name) || 'Минск-Арена';
+    if (xl && ev.arena && ev.arena.city && place.indexOf(ev.arena.city) < 0) place += ', ' + ev.arena.city;
+    $('cmWhen').textContent = M.heroWhen(m.starts_at) + ' · ' + place;
     var st = M.status(m);
     var pill = $('cmStatus');
     pill.textContent = st.text;
     pill.className = 'cm-status' + (st.live ? ' cm-status--live' : '');
     pill.hidden = false;
     doc.title = m.home.name + ' — ' + m.away.name;
+  }
+
+  // ---------- Экстралига: билет, перед матчем, итог ----------
+
+  function paintBuy(ev) {
+    var host = $('cmBuy');
+    if (!isXl(ev) || !ev.tickets_url || started(ev)) return host.replaceChildren();
+    var b = el('button', 'ga-btn ga-btn--dark ga-press cm-buy', 'Купить билет');
+    b.type = 'button';
+    b.addEventListener('click', function () { haptic(); openUrl(ev.tickets_url); });
+    host.replaceChildren(b, el('p', 'cm-hint', 'Билеты продаёт ' + (ev.tickets_note || 'клуб') + ' — откроем их сайт'));
+  }
+
+  function formEl(form) {
+    var box = el('span', 'cm-form');
+    (form || []).forEach(function (f) {
+      box.appendChild(el('span', 'cm-form__m' + (f.charAt(0) === 'В' ? ' cm-form__m--w' : ''), f));
+    });
+    return box;
+  }
+
+  function paintPre(ev) {
+    var p = isXl(ev) && !started(ev) ? ev.preview : null;
+    $('cmPre').hidden = !p;
+    $('cmWatch').hidden = true;
+    if (!p) return;
+    var body = $('cmPreBody');
+    var rows = [ev.match.home, ev.match.away].map(function (team, i) {
+      var t = i ? p.away : p.home;
+      var row = el('div', 'cm-team');
+      row.appendChild(logoEl(team));
+      var txt = el('span', 'cm-team__text');
+      txt.appendChild(el('span', 'cm-team__name', team.name));
+      if (t.place) txt.appendChild(el('span', 'cm-team__sub', t.place + '-е место · ' + t.points + ' ' + M.plural(t.points, 'очко', 'очка', 'очков')));
+      row.appendChild(txt);
+      row.appendChild(formEl(t.form));
+      return row;
+    });
+    body.replaceChildren.apply(body, rows);
+    var lm = p.last_meeting;
+    if (lm) {
+      var line = 'Прошлая встреча, ' + dayMonth(lm.starts_at) + ': ' + lm.home_team + ' — ' + lm.away_team + ' ' +
+        lm.home_score + ':' + lm.away_score + suffix(lm.decided_in) + '.';
+      if (lm.winning_goal) line += ' Победную забросил ' + lm.winning_goal.scorer + (lm.winning_goal.minute ? ' на ' + lm.winning_goal.minute + '-й минуте' : '') + '.';
+      body.appendChild(el('p', 'cm-pre__meet', line));
+    }
+    var watch = [];
+    [p.home, p.away].forEach(function (t) {
+      var l = t.leaders || {};
+      (l.forwards || []).forEach(function (f) {
+        watch.push({ team: t.team, name: f.name, stat: f.points != null ? f.points + ' ' + M.plural(f.points, 'очко', 'очка', 'очков') + (f.goals != null ? ' (' + f.goals + '+' + (f.assists || 0) + ')' : '') : '' });
+      });
+      if (l.goalie && l.goalie.name) {
+        watch.push({ team: t.team, name: l.goalie.name, stat: l.goalie.save_pct != null ? 'вратарь · ' + String(l.goalie.save_pct).replace('.', ',') + '% отражённых' : 'вратарь' });
+      }
+      (t.streaks || []).forEach(function (s) {
+        watch.push({ team: t.team, name: s.player, stat: 'забивает ' + s.matches + ' ' + M.plural(s.matches, 'матч', 'матча', 'матчей') + ' подряд' });
+      });
+    });
+    $('cmWatch').hidden = !watch.length;
+    $('cmWatchBody').replaceChildren.apply($('cmWatchBody'), watch.map(function (w) {
+      var r = el('div', 'cm-watch__row');
+      r.appendChild(el('span', 'cm-watch__name', w.name));
+      r.appendChild(el('span', 'cm-watch__stat', [w.team, w.stat].filter(Boolean).join(' · ')));
+      return r;
+    }));
+  }
+
+  function paintAfter(ev) {
+    var d = isXl(ev) ? ev.details : null;
+    $('cmAfter').hidden = !d;
+    if (!d) return;
+    var body = $('cmAfterBody');
+    var parts = [];
+    if (d.periods && d.periods.length) {
+      parts.push(el('p', 'cm-after__line', 'По периодам: ' + d.periods.map(function (p) { return p[0] + ':' + p[1]; }).join(' · ')));
+    }
+    var goals = el('ol', 'cm-goals');
+    (d.goals || []).forEach(function (g) {
+      var team = g.side === 'away' ? ev.match.away : ev.match.home;
+      var li = el('li', 'cm-goal' + (g.side === 'away' ? ' cm-goal--away' : ''));
+      li.appendChild(el('span', 'cm-goal__min', g.minute != null ? String(g.minute) + '′' : ''));
+      var t = el('span', 'cm-goal__text');
+      t.appendChild(el('span', 'cm-goal__who', g.scorer));
+      t.appendChild(el('span', 'cm-goal__sub', team.name + (g.assists && g.assists.length ? ' · ' + g.assists.join(', ') : '')));
+      li.appendChild(t);
+      goals.appendChild(li);
+    });
+    if (goals.children.length) parts.push(goals);
+    var stats = [];
+    if (d.shots && d.shots.length === 2) stats.push('Броски ' + d.shots[0] + ' — ' + d.shots[1]);
+    if (d.attendance) stats.push('Зрителей ' + String(d.attendance).replace(/\B(?=(\d{3})+(?!\d))/g, ' '));
+    if (stats.length) parts.push(el('p', 'cm-after__line', stats.join(' · ')));
+    body.replaceChildren.apply(body, parts);
   }
 
   // ---------- ответ ----------
@@ -249,7 +383,40 @@
 
   // ---------- кто кого ----------
 
+  // «Кто кого» на Экстралиге ещё нет: строка-подписка «Позвать» по клубу хозяев (срез 5).
+  function paintSubscribe(ev) {
+    var host = $('cmKk');
+    var s = ev.kk_subscribe || {};
+    var card = el('div', 'cm-card cm-kk cm-kk--sub');
+    card.appendChild(el('span', 'cm-kk__tag', 'КТО КОГО?'));
+    var text = el('span', 'cm-kk__text');
+    text.appendChild(el('span', 'cm-kk__title', 'Угадывать Экстралигу'));
+    text.appendChild(el('span', 'cm-kk__sub', s.subscribed ? 'Позовём в боте, как только откроем' : 'Скоро откроем — позвать тебя?'));
+    card.appendChild(text);
+    var b = el('button', 'cm-btn cm-sub' + (s.subscribed ? ' cm-sub--done' : ''), s.subscribed ? 'Позовём' : 'Позвать');
+    b.type = 'button';
+    b.disabled = !!s.subscribed;
+    b.addEventListener('click', function () {
+      haptic();
+      b.disabled = true;
+      api('POST', '/client/hockey/extraliga/subscribe', { club: s.club })
+        .then(function () {
+          state.ev.kk_subscribe = Object.assign({}, s, { subscribed: true });
+          haptic('success');
+          toast('Позовём, когда откроем');
+          paintSubscribe(state.ev);
+        })
+        .catch(function (e) {
+          b.disabled = false;
+          toast(e.status === 403 ? 'Подписаться можно из Telegram' : e.message);
+        });
+    });
+    card.appendChild(b);
+    host.replaceChildren(card);
+  }
+
   function paintKk(ev) {
+    if (isXl(ev)) return paintSubscribe(ev);
     var host = $('cmKk');
     var kk = ev.kk || {};
     if (kk.hidden && state.kk !== 'hidden') {
@@ -325,7 +492,13 @@
   function paintLinks(ev) {
     var tickets = $('cmTickets');
     var started = !!ev.match.result || ev.match.status === 'cancelled';
-    tickets.hidden = !ev.tickets_url || started;
+    tickets.hidden = !ev.tickets_url || started || isXl(ev);
+    var source = $('cmSource');
+    source.hidden = !ev.source_url;
+    if (ev.source_url) {
+      source.href = ev.source_url;
+      source.onclick = function (e) { e.preventDefault(); openUrl(ev.source_url); };
+    }
     if (ev.tickets_url) {
       tickets.href = ev.tickets_url;
       tickets.onclick = function (e) {
@@ -376,7 +549,10 @@
   function paint(ev) {
     paintHero(ev);
     paintRsvp(ev);
+    paintBuy(ev);
     paintWho(ev);
+    paintAfter(ev);
+    paintPre(ev);
     paintKk(ev);
     paintLinks(ev);
     paintIce(ev);
@@ -432,7 +608,7 @@
         paint(ev);
       })
       .catch(function (e) {
-        fail(e.status === 404 ? 'Этот матч не на Минск-Арене или уже убран из календаря.' : 'Не получилось загрузить матч. Попробуйте ещё раз.');
+        fail(e.status === 404 ? 'Матч не найден или уже убран из календаря.' : 'Не получилось загрузить матч. Попробуйте ещё раз.');
       });
   }
 

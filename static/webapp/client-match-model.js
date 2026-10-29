@@ -213,6 +213,7 @@
   ];
 
   var api = {
+    plural: plural,
     heroWhen: heroWhen,
     status: status,
     who: who,

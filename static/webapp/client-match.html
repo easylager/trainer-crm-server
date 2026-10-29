@@ -31,7 +31,8 @@
       <span class="cm-status" id="cmStatus" hidden></span>
     </div>
     <div class="cm-hero__body">
-      <span class="cm-kicker">Матч · КХЛ</span>
+      <span class="cm-kicker" id="cmKicker">Матч</span>
+      <div class="cm-logos" id="cmLogos" hidden></div>
       <h1 class="cm-title" id="cmTitle"><span class="cm-skel-line"></span></h1>
       <div class="cm-score" id="cmScore" hidden></div>
       <span class="cm-when" id="cmWhen">&nbsp;</span>
@@ -47,15 +48,33 @@
       <div class="cm-react" id="cmReact" hidden aria-live="polite"></div>
     </section>
 
+    <div id="cmBuy"></div>
+
     <section class="cm-card cm-who" id="cmWho" hidden aria-labelledby="cmWhoTitle">
       <div class="cm-row-head"><h2 class="cm-h" id="cmWhoTitle">Кто из ваших</h2><span class="cm-count" id="cmWhoCount"></span></div>
       <div class="cm-who__body"><span class="cm-faces" id="cmFaces"></span><span class="cm-who__line" id="cmWhoLine"></span></div>
+    </section>
+
+    <section class="cm-card cm-after" id="cmAfter" hidden aria-labelledby="cmAfterTitle">
+      <h2 class="cm-h" id="cmAfterTitle">Как сыграли</h2>
+      <div id="cmAfterBody"></div>
+    </section>
+
+    <section class="cm-card cm-pre" id="cmPre" hidden aria-labelledby="cmPreTitle">
+      <h2 class="cm-h" id="cmPreTitle">Перед матчем</h2>
+      <div id="cmPreBody"></div>
+    </section>
+
+    <section class="cm-card cm-watch" id="cmWatch" hidden aria-labelledby="cmWatchTitle">
+      <h2 class="cm-h" id="cmWatchTitle">Кого смотреть</h2>
+      <div id="cmWatchBody"></div>
     </section>
 
     <div id="cmKk"></div>
 
     <nav class="cm-card cm-links" aria-label="Как попасть на матч">
       <a class="cm-link" id="cmTickets" href="#" hidden>Билеты <span class="cm-link__end">сайт клуба <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
+      <a class="cm-link" id="cmSource" href="#" hidden>Составы и трансляция <span class="cm-link__end">hockey.by <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
       <a class="cm-link" id="cmRoute" href="#" hidden>Как добраться <span class="cm-link__end"><span id="cmAddress">Минск-Арена</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></a>
     </nav>
 

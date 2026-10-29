@@ -390,6 +390,73 @@
     host.replaceChildren(a);
   }
 
+  // Карточка слота «сейчас» по kind; false — такой карточки нет.
+  function nowCard(item, host) {
+    var kind = item ? item.kind : 'none';
+    if ((kind === 'kk_before' || kind === 'kk_result') && item.hockey && item.hockey.event_href) eventCard(item.hockey, host);
+    else if (kind === 'kk_before') kkBefore(item.hockey, host);
+    else if (kind === 'kk_result') kkResult(item.hockey, host);
+    else if (kind === 'kk_month') kkMonth(item.hockey, host);
+    else if (kind === 'ice') iceCard(item.session, host);
+    else if (kind === 'extraliga') xlCard(item, host);
+    else if (kind === 'more') moreCard(item, host);
+    else return false;
+    return true;
+  }
+
+  /*
+   * TASK-340, экран 11: слот «сейчас» — лента. Матчи города и выезды его клуба, Динамо,
+   * «N матчей на неделе». Каждая карточка рисуется своей функцией в свою ячейку.
+   */
+  function feed(items, host) {
+    var strip = el('div', 'hn__feed');
+    strip.setAttribute('role', 'list');
+    strip.setAttribute('aria-label', 'Матчи на неделе');
+    items.forEach(function (item) {
+      var cell = el('div', 'hn__cell' + (item.kind === 'more' ? ' hn__cell--more' : ''));
+      cell.setAttribute('role', 'listitem');
+      if (nowCard(item, cell) && cell.firstChild) strip.appendChild(cell);
+    });
+    host.replaceChildren(strip);
+  }
+
+  function xlCard(c, host) {
+    var r = c.result;
+    var a = link(el('a', 'hn__card hn__ev hn__xl'), c.href);
+    var tag = c.live ? { text: 'ИДЁТ', dot: true, live: true }
+      : r ? { text: 'ИТОГ ' + r.home_score + ':' + r.away_score }
+      : c.sticker ? { text: c.sticker, dot: c.sticker === 'СЕГОДНЯ' } : null;
+    a.setAttribute('aria-label', c.home.name + ' — ' + c.away.name + ', ' + whenLabel(c.starts_at) + (c.arena ? ', ' + c.arena : ''));
+    var pair = el('span', 'hn__pair');
+    pair.appendChild(teamLogo(c.home, 'hn__logo hn__logo--round'));
+    pair.appendChild(teamLogo(c.away, 'hn__logo hn__logo--round'));
+    a.appendChild(pair);
+    var what = el('span', 'hn__what');
+    what.appendChild(el('span', 'hn__league', 'Экстралига'));
+    what.appendChild(el('span', 'hn__name hn__name--one', c.home.name + ' — ' + c.away.name));
+    var when = c.live ? 'идёт сейчас' : r ? whenLabel(c.starts_at).split(',')[0] : whenLabel(c.starts_at);
+    what.appendChild(el('span', 'hn__sub hn__name--one', when + (c.city ? ' · ' + c.city : '')));
+    a.appendChild(what);
+    if (tag) {
+      var t = el('span', 'hn__tag' + (tag.live ? ' hn__tag--live' : ''));
+      t.setAttribute('aria-hidden', 'true');
+      if (tag.dot) t.appendChild(el('span', 'hn__tag-dot'));
+      t.appendChild(doc.createTextNode(tag.text));
+      a.appendChild(t);
+    }
+    host.replaceChildren(a);
+  }
+
+  function moreCard(c, host) {
+    var a = link(el('a', 'hn__card hn__ev hn__more'), c.href || 'client-matches');
+    var what = el('span', 'hn__what');
+    what.appendChild(el('span', 'hn__more-n hh-display', String(c.count)));
+    what.appendChild(el('span', 'hn__sub', plural(c.count, 'матч', 'матча', 'матчей') + ' на неделе'));
+    what.appendChild(el('span', 'hn__more-go', 'Все матчи →'));
+    a.appendChild(what);
+    host.replaceChildren(a);
+  }
+
   function kkBefore(card, host) {
     var m = card.match;
     var pick = card.my_pick;
@@ -709,11 +776,8 @@
     paintHero(hero);
     var host = $('hubNow');
     var kind = now ? now.kind : 'none';
-    if ((kind === 'kk_before' || kind === 'kk_result') && now.hockey && now.hockey.event_href) eventCard(now.hockey, host);
-    else if (kind === 'kk_before') kkBefore(now.hockey, host);
-    else if (kind === 'kk_result') kkResult(now.hockey, host);
-    else if (kind === 'kk_month') kkMonth(now.hockey, host);
-    else if (kind === 'ice') iceCard(now.session, host);
+    if (kind === 'feed') feed(now.items || [], host);
+    else if (nowCard(now, host)) { /* одна карточка */ }
     else if (!city && hub && hub.ice_teaser) {
       lastTeaserHub = hub;
       showTeaser(hub.ice_teaser);

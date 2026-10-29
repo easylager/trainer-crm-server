@@ -383,6 +383,18 @@ def webapp_client_match_page():
     return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
+@app.get("/webapp/client-matches")
+def webapp_client_matches_page():
+    """Client: матчи Экстралиги на неделе — «Все матчи» из ленты главной (TASK-340)."""
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
+    path = _WEBAPP_DIR / "client-matches.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
+
+
 @app.get("/webapp/client-stats")
 def webapp_client_stats_page():
     """Client: completed-session stats and gentle rhythm hints (motivation, no leaderboards)."""
