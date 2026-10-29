@@ -167,10 +167,10 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
 .hn__go { margin-left: auto; color: var(--g-on-dark-accent); width: 20px; height: 20px; flex: none; }
 /* ── Домашний матч — ивент (TASK-304, холст экран 10) ─────────── */
 .hn__ev { position: relative; flex-direction: row; align-items: center; gap: 14px; padding: 18px 16px; margin-top: 10px; }
-.hn__pair { display: flex; flex: none; }
+.hn__pair { display: flex; flex: none; gap: 4px; }
 .hn__logo--round { width: 42px; height: 42px; border-radius: 50%; box-shadow: 0 0 0 3px var(--g-surface); }
 .hn__logo--round img { width: 30px; height: 30px; }
-.hn__pair .hn__logo--round + .hn__logo--round { margin-left: -12px; }
+
 .hn__name--one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hn__go--ev { color: var(--g-muted); }
 /* Метка — наклейка на краю карточки, как «+50» в игре. Жёлтый — цвет игры (PDEC-022), здесь он метит матч. */

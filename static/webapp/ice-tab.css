@@ -2696,7 +2696,7 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
 .ice-suggest-sub {
   display: block;
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-normal, 400);
   line-height: 1.4;
   color: var(--glide-hint);

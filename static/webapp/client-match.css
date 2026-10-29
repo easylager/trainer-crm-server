@@ -241,10 +241,10 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-day { display: flex; flex-direction: column; gap: 10px; }
 .cm-mrow { min-height: 64px; padding: 10px 16px; display: flex; align-items: center; gap: 12px; color: var(--g-ink); text-decoration: none; }
 .cm-mrow + .cm-mrow { border-top: 1px solid var(--g-line); }
-.cm-mrow__pair { display: flex; flex: none; }
+.cm-mrow__pair { display: flex; flex: none; gap: 4px; }
 .cm-mrow__pair .cm-logo { width: 36px; height: 36px; box-shadow: 0 0 0 2px var(--g-surface); }
 .cm-mrow__pair .cm-logo img { width: 26px; height: 26px; }
-.cm-mrow__pair .cm-logo + .cm-logo { margin-left: -10px; }
+
 .cm-mrow__text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .cm-mrow__name { font: 600 15px/1.25 var(--g-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cm-mrow__sub { font-size: 13px; color: var(--g-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

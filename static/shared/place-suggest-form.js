@@ -111,7 +111,7 @@
     function currency() {
       if (!s.city) return '';
       if (s.city.country === 'BY') return 'BYN';
-      if (s.city.country === 'RU') return '₽';
+      if (s.city.country === 'RU') return 'руб.';
       return '';
     }
 
