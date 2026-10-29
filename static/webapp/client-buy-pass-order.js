@@ -18,7 +18,7 @@
   var MIN_NOMINAL_BYN = 1;
   var MAX_NOMINAL_BYN = 500000;
 
-  function validateCertOrder(fields) {
+  function validateCertOrder(fields, currencyLabel) {
     var email = String((fields && fields.email) || '').trim();
     var name = String((fields && fields.recipientName) || '').trim();
     if (!EMAIL_RE.test(email)) {
@@ -40,10 +40,11 @@
       var raw = String(fields.amountRaw || '').trim().replace(',', '.');
       var n = Number(raw);
       if (!raw || !isFinite(n) || n < MIN_NOMINAL_BYN) {
+        var label = currencyLabel || 'BYN';
         return {
           ok: false,
           field: 'amount',
-          message: 'Укажите сумму не меньше 1 BYN.',
+          message: 'Укажите сумму не меньше 1 ' + label + (label.charAt(label.length - 1) === '.' ? '' : '.'),
         };
       }
       if (n > MAX_NOMINAL_BYN) {

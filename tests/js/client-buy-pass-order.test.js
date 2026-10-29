@@ -81,6 +81,15 @@ describe('заявка с карточки тренера', () => {
     }
   });
 
+  it('ошибка минимального номинала использует валюту тренера', () => {
+    const parsed = api.validateCertOrder({
+      email: 'gift@example.com',
+      anyAmount: true,
+      amountRaw: '0',
+    }, 'руб.');
+    assert.equal(parsed.message, 'Укажите сумму не меньше 1 руб.');
+  });
+
   it('повтор и лимит дня блокируют кнопку, прочие ошибки — нет', () => {
     assert.equal(api.classifyOrderFailure(409, { detail: 'Уже есть' }).lockCard, true);
     assert.equal(api.classifyOrderFailure(429, { detail: 'Сегодня уже' }).lockCard, true);
@@ -106,6 +115,8 @@ describe('страница карточки умеет отправить зая
     assert.match(page, /id="cert-orderModal"/);
     assert.match(page, /passRequestBody/);
     assert.match(page, /certRequestBody/);
+    assert.match(page, /priceCurrencyLabel\(state\.currency\)/);
+    assert.match(page, /passRes\.data\.currency/);
   });
 
   it('модалка переживает открытую клавиатуру', () => {

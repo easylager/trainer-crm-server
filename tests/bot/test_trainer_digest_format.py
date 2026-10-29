@@ -20,7 +20,7 @@ from src.bot.trainer_digest_format import (
     format_morning_digest_lite_owed_only,
     format_weekly_digest,
 )
-from src.shared.byr_currency_display import BYR_SIGN
+from src.shared.byr_currency_display import BYR_SIGN, format_kopeks_byn_display
 
 
 # =============================================================================
@@ -407,6 +407,22 @@ def _weekly_fixture(**overrides) -> dict:
 def test_weekly_has_sunday_hero_emoji() -> None:
     out = format_weekly_digest(_weekly_fixture())
     assert "🌙" in out
+
+
+@pytest.mark.parametrize("currency", ["RUB", "BYN"])
+def test_weekly_digest_money_uses_trainer_currency(currency: str) -> None:
+    out = format_weekly_digest(
+        _weekly_fixture(
+            past_week={
+                "completed_count": 1,
+                "cash_cents": 12000,
+                "pass_sessions_count": 0,
+                "cert_cents": 0,
+            }
+        ),
+        currency=currency,
+    )
+    assert format_kopeks_byn_display(12000, currency) in out
 
 
 def test_weekly_digest_catalog_pulse_uses_week_scope() -> None:

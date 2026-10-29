@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from src.application.trial_roi_recap_use_cases import TrialRoiRecap
 from src.bot.messages import format_trainer_trial_roi_recap_html
 from src.shared.byr_currency_display import BYR_SIGN
+from src.shared.byr_currency_display import format_kopeks_byn_display
 
 
 def _recap(**overrides) -> TrialRoiRecap:
@@ -86,3 +89,11 @@ def test_trial_roi_message_omits_revenue_block_when_zero() -> None:
 
     assert "Деньги, которые уже прошли через систему" not in text
     assert "Итого в учёте" not in text
+
+
+@pytest.mark.parametrize("currency", ["RUB", "BYN"])
+def test_trial_roi_revenue_uses_trainer_currency(currency: str) -> None:
+    text = format_trainer_trial_roi_recap_html(
+        recap=_recap(), expires_date="15.04.2026", currency=currency
+    )
+    assert format_kopeks_byn_display(12000, currency) in text

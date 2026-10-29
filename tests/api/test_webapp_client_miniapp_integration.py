@@ -30,10 +30,11 @@ from src.application.client_trainer_primary_graph import (
     compute_primary_edge_meta,
     hub_booking_primary_ids,
 )
-from src.application.client_use_cases import get_client_id_by_telegram_id, get_or_create_client
+from src.application.client_session_use_cases import get_or_create_session, set_city
 from src.application.client_trainer_edge_use_cases import get_all_edges
 from src.application.subscription_use_cases import create_trial_subscription
 from src.application.trainer_schedule_use_cases import replace_slots_for_day
+from src.application.client_use_cases import get_client_id_by_telegram_id, get_or_create_client
 from src.infrastructure.db.models import (
     SUBSCRIPTION_STATUS_ACTIVE,
     SUBSCRIPTION_STATUS_TRIAL,
@@ -1510,6 +1511,62 @@ async def test_certificate_activate_without_client_row_checks_the_code(app_use_t
                 headers={"X-Telegram-Init-Data": "mock"},
             )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("trainer_country", "client_country", "expected_currency"),
+    [("RU", "BY", "RUB"), ("BY", "RU", "BYN")],
+)
+async def test_client_product_currency_uses_trainer_country_not_client_country(
+    app_use_test_db, db_session, trainer_country, client_country, expected_currency
+) -> None:
+    ref_day, _ = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=4)
+    trainer_id, _service_id, _slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={10}
+    )
+    city_ids = {}
+    for country in {trainer_country, client_country}:
+        result = await db_session.execute(
+            text(
+                """
+                INSERT INTO cities (name, country, price_group, is_active)
+                VALUES (:name, :country, :price_group, true)
+                RETURNING id
+                """
+            ),
+            {
+                "name": f"currency-{country}-{uuid.uuid4().hex[:8]}",
+                "country": country,
+                "price_group": "RU_BASE" if country == "RU" else "BY_BASE",
+            },
+        )
+        city_ids[country] = int(result.scalar_one())
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = :city_id WHERE trainer_id = :trainer_id"),
+        {"city_id": city_ids[trainer_country], "trainer_id": trainer_id},
+    )
+    client_telegram_id = _fresh_client_telegram_id()
+    await get_or_create_session(client_telegram_id, db_session)
+    await set_city(client_telegram_id, city_ids[client_country], db_session)
+    await db_session.commit()
+
+    with patch_client_init_auth(client_telegram_id):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            pass_response = await client.get(
+                f"/api/webapp/client/pass-products?trainer_id={trainer_id}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            cert_response = await client.get(
+                f"/api/webapp/client/certificate-products?trainer_id={trainer_id}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+
+    assert pass_response.status_code == 200, pass_response.text
+    assert cert_response.status_code == 200, cert_response.text
+    assert pass_response.json()["currency"] == expected_currency
+    assert cert_response.json()["currency"] == expected_currency
 
 
 @pytest.mark.asyncio

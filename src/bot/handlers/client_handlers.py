@@ -157,6 +157,7 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 from src.shared.byr_currency_display import format_rubles_byn_display
+from src.shared.currency import resolve_trainer_currency
 from src.shared.validation import MAX_COMMENT_LEN, safe_parse_id, truncate_text
 
 logger = logging.getLogger(__name__)
@@ -248,11 +249,11 @@ def _parse_client_start(payload: str) -> tuple[int, int | None, int] | None:
         return None
 
 
-def _certificate_amount_display(cents: int | None) -> str:
+def _certificate_amount_display(cents: int | None, *, currency: str = "BYN") -> str:
     if cents is None:
         return "—"
     v = int(cents) / 100.0
-    return format_rubles_byn_display(v)
+    return format_rubles_byn_display(v, currency)
 
 
 def _trainer_name(trainer: dict) -> str:
@@ -484,7 +485,7 @@ async def _my_requests_content(telegram_id: int) -> tuple[str, InlineKeyboardMar
     return text, keyboard
 
 
-def _format_services_prices(services: list[dict]) -> str:
+def _format_services_prices(services: list[dict], *, currency: str = "BYN") -> str:
     """Format 'Услуга: X + suffix' or 'Услуга: по запросу' for each; join with ', '. Uses price_byn (rubles)."""
     if not services:
         return "—"
@@ -493,13 +494,13 @@ def _format_services_prices(services: list[dict]) -> str:
         name = (s.get("service_name") or "").strip() or "—"
         byn = s.get("price_byn")
         if byn is not None:
-            parts.append(f"{name}: {format_rubles_byn_display(byn)}")
+            parts.append(f"{name}: {format_rubles_byn_display(byn, currency)}")
         else:
             parts.append(f"{name}: по запросу")
     return ", ".join(parts)
 
 
-def _trainer_caption(trainer: dict) -> str:
+def _trainer_caption(trainer: dict, *, currency: str = "BYN") -> str:
     """Format trainer card caption from profile (name, rating, experience, arenas, services/prices, description)."""
     profile = trainer.get("profile") or {}
     name = (profile.get("first_name") or "") + " " + (profile.get("last_name") or "")
@@ -515,7 +516,7 @@ def _trainer_caption(trainer: dict) -> str:
     experience_block = f"Опыт: {exp} лет\n" if exp is not None else ""
     arena_names = trainer.get("arena_names") or []
     arenas_str = ", ".join(arena_names) if arena_names else "—"
-    services_prices_str = _format_services_prices(trainer.get("services") or [])
+    services_prices_str = _format_services_prices(trainer.get("services") or [], currency=currency)
     desc = (profile.get("description") or "").strip() or "—"
     return msg.CLIENT_TRAINER_CARD.format(
         name=name,
@@ -816,6 +817,9 @@ async def cmd_start(message: Message) -> None:
                     client_id = await get_client_id_by_telegram_id(db_session, telegram_id)
                     bound = await activate_certificate_by_code(db_session, client_id, cert_code) if client_id else None
                     if bound:
+                        currency = await resolve_trainer_currency(
+                            db_session, int(bound["trainer_id"])
+                        )
                         await apply_certificate_recipient_to_client(
                             db_session, client_id,
                             bound.get("recipient_name"), bound.get("recipient_phone"),
@@ -827,7 +831,9 @@ async def cmd_start(message: Message) -> None:
                         trainer = await get_trainer(db_session, int(trainer_id))
                     tname = _trainer_name(trainer) if trainer else "Тренер"
                     cert_body = msg.format_client_certificate_bound_html(
-                        amount_display=_certificate_amount_display(bound.get("amount_cents")),
+                        amount_display=_certificate_amount_display(
+                            bound.get("amount_cents"), currency=currency
+                        ),
                         code=str(cert_code).strip(),
                         trainer_name=tname,
                     )
@@ -995,6 +1001,9 @@ async def cmd_start(message: Message) -> None:
             await db_session.commit()
             bound = await activate_certificate_by_code(db_session, client_id, cert_code)
             if bound:
+                currency = await resolve_trainer_currency(
+                    db_session, int(bound["trainer_id"])
+                )
                 await apply_certificate_recipient_to_client(
                     db_session,
                     client_id,
@@ -1018,7 +1027,9 @@ async def cmd_start(message: Message) -> None:
                 trainer = await get_trainer(db_session, int(trainer_id))
             tname = _trainer_name(trainer) if trainer else "Тренер"
             cert_body = msg.format_client_certificate_bound_html(
-                amount_display=_certificate_amount_display(bound.get("amount_cents")),
+                amount_display=_certificate_amount_display(
+                    bound.get("amount_cents"), currency=currency
+                ),
                 code=str(cert_code).strip(),
                 trainer_name=tname,
             )
@@ -1624,7 +1635,11 @@ async def _send_trainer_card(
     else:
         file_key = first_photo.get("file_key") if first_photo else None
     photo_url = build_photo_url(file_key) if file_key else None
-    caption = _trainer_caption(trainer)
+    currency = trainer.get("currency_code") or trainer.get("currency")
+    if not currency:
+        async with async_session_factory() as session:
+            currency = await resolve_trainer_currency(session, int(trainer["id"]))
+    caption = _trainer_caption(trainer, currency=currency)
     keyboard = reply_markup if reply_markup is not None else _trainer_select_keyboard(
         trainer["id"], select_callback_data=select_callback_data
     )

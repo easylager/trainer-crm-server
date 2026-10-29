@@ -438,6 +438,7 @@ def format_client_trainer_booked_you_html(
     expected_payment_class: str | None = None,
     booked_for_name: str | None = None,
     arena_tickets_url: str | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Rich HTML message for client after trainer books them (ParseMode.HTML)."""
     parts: list[str] = [
@@ -462,6 +463,7 @@ def format_client_trainer_booked_you_html(
     pay_line = format_client_upcoming_payment_display_html(
         expected_payment_class=expected_payment_class,
         booking_price_cents=booking_price_cents,
+        currency=currency,
     )
     if pay_line:
         svc_lines.append(pay_line)
@@ -538,6 +540,7 @@ def format_client_booking_rescheduled_html(
     expected_payment_class: str | None = None,
     booked_for_name: str | None = None,
     arena_tickets_url: str | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Rich HTML message for client when trainer reschedules their booking (ParseMode.HTML).
 
@@ -572,6 +575,7 @@ def format_client_booking_rescheduled_html(
     pay_line = format_client_upcoming_payment_display_html(
         expected_payment_class=expected_payment_class,
         booking_price_cents=booking_price_cents,
+        currency=currency,
     )
     if pay_line:
         svc_lines.append(pay_line)
@@ -992,6 +996,7 @@ def format_client_recurring_set_by_trainer_notification_html(
     materialized_count: int,
     expected_payment_class: str | None = None,
     arena_tickets_url: str | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Single client-bot message when trainer sets recurring from CRM (not one push per auto-booking)."""
     tn = html.escape((trainer_name or "").strip() or "Тренер")
@@ -1006,6 +1011,7 @@ def format_client_recurring_set_by_trainer_notification_html(
             booking_price_cents,
             price_tier_label,
             expected_payment_class=expected_payment_class,
+            currency=currency,
         ),
     ]
     ar = (arena_display or "").strip()
@@ -1328,6 +1334,7 @@ def format_client_booking_confirmed_by_trainer_text(
     duration_minutes: int | None = None,
     expected_payment_class: str | None = None,
     arena_tickets_url: str | None = None,
+    currency: str = "BYN",
 ) -> str:
     """HTML for ParseMode.HTML; escapes user-controlled and venue strings."""
     parts: list[str] = []
@@ -1355,6 +1362,7 @@ def format_client_booking_confirmed_by_trainer_text(
             booking_price_cents,
             price_tier_label,
             expected_payment_class=expected_payment_class,
+            currency=currency,
         )
     )
     parts.append(_format_client_booking_confirmed_venue_block(arena_name, arena_address))
@@ -1373,6 +1381,7 @@ def _format_client_booking_confirmed_service_price_block(
     price_tier_label: str | None,
     *,
     expected_payment_class: str | None = None,
+    currency: str = "BYN",
 ) -> str:
     lines: list[str] = []
     svc = (service_name or "").strip()
@@ -1389,6 +1398,7 @@ def _format_client_booking_confirmed_service_price_block(
     pay_line = format_client_upcoming_payment_display_html(
         expected_payment_class=expected_payment_class,
         booking_price_cents=booking_price_cents,
+        currency=currency,
     )
     if pay_line:
         lines.append(pay_line)
@@ -1638,6 +1648,7 @@ def format_client_booking_reminder_text(
     *,
     is_soon: bool,
     sessions: list[dict],
+    currency: str = "BYN",
 ) -> str:
     """Rich reminder copy with service, payable amount and venue. ``sessions`` is one or more same-day rows."""
     if not sessions:
@@ -1649,6 +1660,7 @@ def format_client_booking_reminder_text(
         service_name = s0.get("service_name")
         booking_price_cents = s0.get("booking_price_cents")
         expected_payment_class = s0.get("expected_payment_class")
+        session_currency = s0.get("currency_code") or currency
         arena_name = s0.get("arena_name")
         arena_address = s0.get("arena_address")
         title = (
@@ -1662,6 +1674,7 @@ def format_client_booking_reminder_text(
         pay_line = format_client_upcoming_payment_display_html(
             expected_payment_class=expected_payment_class,
             booking_price_cents=booking_price_cents,
+            currency=session_currency,
         )
         if not pay_line:
             pay_line = "💳 <b>уточните у тренера</b>"
@@ -1710,9 +1723,11 @@ def format_client_booking_reminder_text(
         t = html.escape(str(s.get("time") or "—"))
         dur = int(s.get("duration") or 0)
         svc = html.escape(((s.get("service_name") or "").strip() or "—"))
+        session_currency = s.get("currency_code") or currency
         pay_line = format_client_upcoming_payment_display_html(
             expected_payment_class=s.get("expected_payment_class"),
             booking_price_cents=s.get("booking_price_cents"),
+            currency=session_currency,
         )
         if not pay_line:
             pay_line = "💳 <b>уточните у тренера</b>"
@@ -1811,6 +1826,7 @@ def format_client_booking_completed_notice_html(
     pass_sessions_remaining: int | None = None,
     cert_amount_cents: int | None = None,
     cert_remaining_cents: int | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Push after session is marked completed (auto or trainer)."""
     ds = html.escape(date)
@@ -1837,6 +1853,7 @@ def format_client_booking_completed_notice_html(
             cert_amount_cents=cert_amount_cents,
             cert_remaining_cents=cert_remaining_cents,
             for_client=True,
+            currency=currency,
         )
         if payment_line:
             payment_line = payment_line.rstrip("\n") + "\n"
@@ -2050,6 +2067,7 @@ def format_client_upcoming_payment_display_html(
     *,
     expected_payment_class: str | None = None,
     booking_price_cents: int | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Single HTML payment line for client pre-session copy (reminders, confirmations, cards)."""
     outcome = _upcoming_payment_outcome_from_class(expected_payment_class)
@@ -2063,12 +2081,13 @@ def format_client_upcoming_payment_display_html(
             outcome="one_off",
             booking_price_cents=booking_price_cents,
             for_client=True,
+            currency=currency,
         ).strip()
         if line:
             return line
     if booking_price_cents is not None:
         byn = booking_price_cents / 100.0
-        return f"💳 <b>{html.escape(format_rubles_byn_display(byn))}</b>"
+        return f"💳 <b>{html.escape(format_rubles_byn_display(byn, currency))}</b>"
     return ""
 
 
@@ -2076,6 +2095,7 @@ def format_trainer_upcoming_payment_display_html(
     *,
     expected_payment_class: str | None = None,
     booking_price_cents: int | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Single HTML payment line for trainer pre-session copy."""
     outcome = _upcoming_payment_outcome_from_class(expected_payment_class)
@@ -2085,6 +2105,7 @@ def format_trainer_upcoming_payment_display_html(
             outcome=outcome,
             booking_price_cents=booking_price_cents,
             for_client=False,
+            currency=currency,
         ).strip()
         if line:
             return line
@@ -2094,6 +2115,7 @@ def format_trainer_upcoming_payment_display_html(
             outcome="one_off",
             booking_price_cents=booking_price_cents,
             for_client=False,
+            currency=currency,
         ).strip()
         if line:
             return line
@@ -2109,6 +2131,7 @@ def format_session_payment_notice_html(
     cert_remaining_cents: int | None = None,
     booking_price_cents: int | None = None,
     for_client: bool = False,
+    currency: str = "BYN",
 ) -> str:
     """
     Payment line for session wrap-up (upcoming) or completion (completed) pushes.
@@ -2134,12 +2157,12 @@ def format_session_payment_notice_html(
     if oc == "cert":
         if ph == "completed":
             if cert_amount_cents is not None and cert_amount_cents > 0:
-                amt = format_rubles_byn_display(cert_amount_cents / 100.0)
+                amt = format_rubles_byn_display(cert_amount_cents / 100.0, currency)
                 line = f"💳 <b>Списано {html.escape(amt)} с сертификата.</b>"
             else:
                 line = "💳 <b>Списание с сертификата выполнено.</b>"
             if cert_remaining_cents is not None and cert_remaining_cents > 0:
-                rem = format_rubles_byn_display(cert_remaining_cents / 100.0)
+                rem = format_rubles_byn_display(cert_remaining_cents / 100.0, currency)
                 line += f" Остаток: <b>{html.escape(rem)}</b>."
             elif cert_remaining_cents == 0:
                 line += " Сертификат использован полностью."
@@ -2149,7 +2172,7 @@ def format_session_payment_notice_html(
 
     if oc == "one_off":
         if booking_price_cents is not None and booking_price_cents > 0:
-            ps = format_rubles_byn_display(booking_price_cents / 100.0)
+            ps = format_rubles_byn_display(booking_price_cents / 100.0, currency)
             if ph == "completed":
                 return f"💳 <b>Оплата:</b> разовое занятие — {html.escape(ps)}\n"
             return f"💳 <b>К оплате:</b> {html.escape(ps)}\n"
@@ -2186,6 +2209,7 @@ def format_trainer_booking_completed_html(
     pass_sessions_remaining: int | None = None,
     cert_amount_cents: int | None = None,
     cert_remaining_cents: int | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Telegram HTML for trainer push after a session is marked completed."""
     cn = html.escape((client_name or "").strip() or "Клиент")
@@ -2226,6 +2250,7 @@ def format_trainer_booking_completed_html(
             cert_amount_cents=cert_amount_cents,
             cert_remaining_cents=cert_remaining_cents,
             for_client=False,
+            currency=currency,
         )
         if payment_line:
             payment_line = "\n\n" + payment_line.rstrip("\n")
@@ -2256,6 +2281,7 @@ def format_trainer_booking_session_wrapup_html(
     include_quick_rebook_line: bool = False,
     expected_payment_class: str | None = None,
     pass_sessions_remaining: int | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Telegram HTML for trainer push before slot end (repeat booking CTA). Timing: notification_service adaptive pre-end window + fast poll."""
     cn = html.escape((client_name or "").strip() or "Клиент")
@@ -2293,6 +2319,7 @@ def format_trainer_booking_session_wrapup_html(
             booking_price_cents=booking_price_cents,
             pass_sessions_remaining=pass_sessions_remaining,
             for_client=False,
+            currency=currency,
         )
     elif booking_price_cents is not None:
         payment_line = format_session_payment_notice_html(
@@ -2300,6 +2327,7 @@ def format_trainer_booking_session_wrapup_html(
             outcome="one_off",
             booking_price_cents=booking_price_cents,
             for_client=False,
+            currency=currency,
         )
     rebook = ""
     if include_quick_rebook_line:
@@ -3192,6 +3220,7 @@ def format_trainer_booking_confirmed_echo_html(
     arena_name: str | None,
     arena_address: str | None,
     expected_payment_class: str | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Echo in trainer chat after confirming a booking (HTML; escape plain-text inputs before call)."""
     cn = html.escape((client_name or "").strip() or "Клиент")
@@ -3220,6 +3249,7 @@ def format_trainer_booking_confirmed_echo_html(
     pay_line = format_trainer_upcoming_payment_display_html(
         expected_payment_class=expected_payment_class,
         booking_price_cents=booking_price_cents,
+        currency=currency,
     )
     if pay_line:
         svc_lines.append(pay_line)
@@ -3318,6 +3348,7 @@ def _milestone_service_tariff_price_html(
     booking_price_cents: int | None,
     *,
     expected_payment_class: str | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Inner HTML lines for service / tariff / pre-session payment (ParseMode.HTML safe)."""
     lines: list[str] = []
@@ -3333,6 +3364,7 @@ def _milestone_service_tariff_price_html(
     pay_line = format_trainer_upcoming_payment_display_html(
         expected_payment_class=expected_payment_class,
         booking_price_cents=booking_price_cents,
+        currency=currency,
     )
     if pay_line:
         lines.append(pay_line)
@@ -3341,7 +3373,11 @@ def _milestone_service_tariff_price_html(
     return "\n".join(lines) + "\n"
 
 
-def _milestone_price_section_html(booking_price_cents: int | None) -> str:
+def _milestone_price_section_html(
+    booking_price_cents: int | None,
+    *,
+    currency: str = "BYN",
+) -> str:
     """
     Price block, or "" when the booking carries no price.
 
@@ -3353,7 +3389,7 @@ def _milestone_price_section_html(booking_price_cents: int | None) -> str:
     if booking_price_cents is None:
         return ""
     byn = booking_price_cents / 100.0
-    return f"💰 <b>Цена</b>\n<b>{html.escape(format_rubles_byn_display(byn))}</b>"
+    return f"💰 <b>Цена</b>\n<b>{html.escape(format_rubles_byn_display(byn, currency))}</b>"
 
 
 def format_trainer_first_booking_milestone_rich_html(
@@ -3376,6 +3412,7 @@ def format_trainer_first_booking_milestone_rich_html(
     sandbox_demo_identity: bool = False,
     expected_payment_class: str | None = None,
     created_by_trainer: bool = True,
+    currency: str = "BYN",
 ) -> str:
     """
     Rich «первая запись» card for trainer bot (HTML). Escapes user-controlled fields.
@@ -3407,7 +3444,7 @@ def format_trainer_first_booking_milestone_rich_html(
         what_parts.append(html.escape(an))
     paid_by_pass = bool(_upcoming_payment_outcome_from_class(expected_payment_class))
     if booking_price_cents is not None and not paid_by_pass:
-        what_parts.append(html.escape(format_rubles_byn_display(booking_price_cents / 100.0)))
+        what_parts.append(html.escape(format_rubles_byn_display(booking_price_cents / 100.0, currency)))
     elif (price_tier_label or "").strip() and not paid_by_pass:
         what_parts.append(html.escape(price_tier_label.strip()))
     what_line = " · ".join(what_parts)
@@ -3419,6 +3456,7 @@ def format_trainer_first_booking_milestone_rich_html(
         pay_line = format_trainer_upcoming_payment_display_html(
             expected_payment_class=expected_payment_class,
             booking_price_cents=booking_price_cents,
+            currency=currency,
         )
         pay_line = re.sub(r"^[^\w<«]+", "", pay_line).strip()
 
@@ -3548,7 +3586,12 @@ def _trainer_slot_time_hhmm(t: object) -> str:
     return s[:5] if len(s) >= 5 else (s or "—")
 
 
-def format_trainer_first_booking_milestone_from_booking_row(info: dict, created_by_trainer: bool = True) -> str:
+def format_trainer_first_booking_milestone_from_booking_row(
+    info: dict,
+    created_by_trainer: bool = True,
+    *,
+    currency: str = "BYN",
+) -> str:
     """HTML card from `get_booking_milestone_display_for_trainer` / `confirm_booking` payload dict."""
     d = info.get("slot_date")
     st = info.get("start_time")
@@ -3577,6 +3620,7 @@ def format_trainer_first_booking_milestone_from_booking_row(info: dict, created_
         sandbox_demo_identity=sandbox_demo,
         expected_payment_class=info.get("expected_payment_class"),
         created_by_trainer=created_by_trainer,
+        currency=info.get("currency_code") or currency,
     )
 
 
@@ -3635,7 +3679,7 @@ TRAINER_STATS_RATING_NONE = "⭐ <b>Рейтинг</b>: пока нет оцен
 TRAINER_STATS_PASSES = "📦 <b>Абонементы</b>: активно {passes_active} (выдано за 30 дн.: {passes_issued_30d})"
 TRAINER_STATS_CERTS = (
     "🎁 <b>Сертификаты</b>: выдано {certificates_issued_total}, с остатком {certificates_with_balance} "
-    "(на сумму {certificate_balance_byn} " + BYR_SIGN + "), погашено за 30 дн.: {certificates_redeemed_30d}"
+    "(на сумму {certificate_balance_display}), погашено за 30 дн.: {certificates_redeemed_30d}"
 )
 TRAINER_STATS_OPEN_APP = "📊 Открой статистику в приложении — графики, тренды и инсайты по работе."
 TRAINER_BUTTON_STATS_APP = "📊 Открыть статистику"
@@ -3741,8 +3785,8 @@ TRAINER_SUBSCRIPTION_REMINDER_TRIAL = (
 )
 
 
-def _money_byn(cents: int | None) -> str:
-    return format_kopeks_byn_display(int(cents or 0))
+def _money_byn(cents: int | None, *, currency: str = "BYN") -> str:
+    return format_kopeks_byn_display(int(cents or 0), currency)
 
 
 def _ru_word(n: int, one: str, few: str, many: str) -> str:
@@ -3762,6 +3806,7 @@ def format_trainer_trial_roi_recap_html(
     recap,
     expires_date: str,
     days_until_expiry: int = 2,
+    currency: str = "BYN",
 ) -> str:
     """
     D-2 message: pure mental anchoring — facts about real value already received, no CTA.
@@ -3816,10 +3861,10 @@ def format_trainer_trial_roi_recap_html(
     if has_revenue:
         revenue_block = (
             "\n\n💼 <b>Деньги, которые уже прошли через систему:</b>\n"
-            f"• Разовые занятия: <b>{_money_byn(recap.revenue_sessions_cents)}</b>\n"
-            f"• Абонементы: <b>{_money_byn(recap.revenue_pass_sales_cents)}</b>\n"
-            f"• Сертификаты: <b>{_money_byn(recap.revenue_certificate_sales_cents)}</b>\n"
-            f"Итого в учёте: <b>{_money_byn(recap.revenue_total_cents)}</b>"
+            f"• Разовые занятия: <b>{_money_byn(recap.revenue_sessions_cents, currency=currency)}</b>\n"
+            f"• Абонементы: <b>{_money_byn(recap.revenue_pass_sales_cents, currency=currency)}</b>\n"
+            f"• Сертификаты: <b>{_money_byn(recap.revenue_certificate_sales_cents, currency=currency)}</b>\n"
+            f"Итого в учёте: <b>{_money_byn(recap.revenue_total_cents, currency=currency)}</b>"
         )
 
     days_n = max(1, int(days_until_expiry))

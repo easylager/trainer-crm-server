@@ -642,7 +642,11 @@ async def _send_trainer_post_booking_feedback(
         if first_booking_milestone:
             info_for_card = await get_booking_milestone_display_for_trainer(session, booking_id, trainer_id)
             if info_for_card:
-                card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card, created_by_trainer=True)
+                card_html = msg.format_trainer_first_booking_milestone_from_booking_row(
+                    info_for_card,
+                    created_by_trainer=True,
+                    currency=await resolve_trainer_currency(session, trainer_id),
+                )
             else:
                 card_html = (
                     "✅ <b>Запись создана.</b>\n\n"
@@ -2482,7 +2486,10 @@ async def get_client_pass_products(
         default_single_reference=default_single,
         price_by_service_tier=price_by_service_tier,
     )
-    return {"items": items}
+    return {
+        "items": items,
+        "currency": await resolve_trainer_currency(session, trainer_id),
+    }
 
 
 class ClientPassOrderRequestBody(BaseModel):
@@ -6457,7 +6464,10 @@ async def get_client_certificate_products(
 ):
     """List active certificate products for a trainer (info only for client). Auth: client initData."""
     items = await list_certificate_products(session, trainer_id, active_only=True)
-    return {"items": items}
+    return {
+        "items": items,
+        "currency": await resolve_trainer_currency(session, trainer_id),
+    }
 
 
 @router.get("/trainer/bookings")
@@ -7625,6 +7635,7 @@ async def post_trainer_client_recurring_from_booking(
             materialized_count=int(materialized),
             expected_payment_class=expected_payment_class,
             arena_tickets_url=tickets_url,
+            currency=await resolve_trainer_currency(session, trainer_id),
         )
         reply_markup = msg.build_client_recurring_set_inline_keyboard(
             trainer_telegram_id=trainer_tid,
