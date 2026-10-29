@@ -1750,6 +1750,36 @@
     }
   }
 
+  /* PDEC-028: тихий вход «Предложить место» под концом списка мест — без кнопки и баннера. */
+  function renderSuggestFoot() {
+    var host = $('iceListSec');
+    if (!host || !document || typeof document.createElement !== 'function') return;
+    var link = $('iceSuggestFoot');
+    if (!link) {
+      link = document.createElement('button');
+      link.type = 'button';
+      link.id = 'iceSuggestFoot';
+      link.className = 'ice-season-foot ice-suggest-foot';
+      link.textContent = 'Знаете место, которого здесь нет?';
+      var sub = document.createElement('p');
+      sub.className = 'ice-suggest-sub';
+      sub.textContent = 'Каток, магазин, мастерская, дворовый лёд — расскажите, добавим в каталог';
+      link.appendChild(sub);
+      link.hidden = true;
+      link.addEventListener('click', function () {
+        emptyAction('suggest')();
+      });
+      host.appendChild(link);
+    }
+    var places = M.catalogScope(state.intent, state.venueTypes) === 'places' && state.placeService !== 'service';
+    link.hidden = !(places && !state.loading && state.loadedIntent === state.intent && state.items.length > 0);
+    var season = $('iceSeasonFoot');
+    var after = season && !season.hidden && season.parentNode === host ? season : $('iceList');
+    if (!link.hidden && after && after.parentNode === host && after.nextSibling !== link) {
+      host.insertBefore(link, after.nextSibling);
+    }
+  }
+
   function renderForYou() {
     var host = $('iceForYou');
     if (!host) return;
@@ -1806,6 +1836,7 @@
     }
     setShareButton();
     renderSeasonFooter();
+    renderSuggestFoot();
     renderForYou();
     if (!list) return;
     var paint = M.listPaintMode({
@@ -2087,6 +2118,19 @@
         var input = $('iceSearchInput');
         if (input) input.value = '';
         showSearch('');
+      };
+    }
+    if (kind === 'suggest') {
+      return function () {
+        var params = new URLSearchParams();
+        var city = cityFromState(state.cityId);
+        if (state.cityId && state.cityName) {
+          params.set('city_id', String(state.cityId));
+          params.set('city_name', state.cityName);
+          if (city && city.country) params.set('city_country', city.country);
+        }
+        var qs = params.toString();
+        global.location.href = '/webapp/suggest' + (qs ? '?' + qs : '');
       };
     }
     if (kind === 'retry') {
@@ -2978,6 +3022,17 @@
         return '<p class="ice-picker__label">' + esc(label) + '</p>' + items;
       })
       .join('');
+    if (q && !rows.length) {
+      box.innerHTML =
+        '<p class="ice-picker__label">Такого города у нас пока нет</p>' +
+        '<button type="button" class="ice-season-foot ice-suggest-foot" id="iceCitySuggest">Предложите каток, магазин или мастерскую — добавим город</button>';
+      var go = $('iceCitySuggest');
+      if (go) {
+        go.addEventListener('click', function () {
+          global.location.href = '/webapp/suggest';
+        });
+      }
+    }
   }
 
   function openCityPicker(open) {

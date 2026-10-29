@@ -61,7 +61,7 @@ def client_ip_from_request(request: Request) -> str:
 
 
 # «/zovi» покрывает и страницу создания, и открытку /zovi/{code}. Второй префикс не нужен.
-_PAGE_PREFIXES = ("/p/", "/c/", "/ice/", "/r/", "/zovi")
+_PAGE_PREFIXES = ("/p/", "/c/", "/ice/", "/r/", "/zovi", "/suggest")
 
 
 def rate_limit_bucket_for_path(path: str) -> str:
@@ -88,6 +88,13 @@ def rate_limit_bucket_for_path(path: str) -> str:
     # TASK-237: маячок воронки пишет в базу, поэтому не делит бюджет с чтением открытки.
     if path.startswith("/api/public/invites/") and path.endswith("/event"):
         return "invite_event"
+    # PDEC-028: заявка «Предложить место» пишет в базу и шлёт пуш админу — узкий бакет;
+    # поиск города ходит в Nominatim — свой, чтобы не делить бюджет ни с заявкой, ни с каталогом.
+    # Mini App принимает заявку и без initData — иначе это был бы обход лимита сайта.
+    if path in ("/api/public/place-suggestions", "/api/webapp/place-suggestions"):
+        return "suggest"
+    if path.startswith("/api/public/place-suggestions/"):
+        return "suggest_cities"
     if path.startswith("/api/public/photos/"):
         return "photo"
     if path.startswith("/api/public"):
@@ -117,6 +124,10 @@ def _get_limiters() -> dict[str, RateLimiter]:
             "invite": RateLimiter(s.api_rate_limit_invite_max_requests, s.api_rate_limit_invite_window_sec),
             "invite_event": RateLimiter(
                 s.api_rate_limit_invite_event_max_requests, s.api_rate_limit_invite_event_window_sec
+            ),
+            "suggest": RateLimiter(s.api_rate_limit_suggest_max_requests, s.api_rate_limit_suggest_window_sec),
+            "suggest_cities": RateLimiter(
+                s.api_rate_limit_suggest_cities_max_requests, s.api_rate_limit_suggest_cities_window_sec
             ),
         }
     return _limiters
@@ -185,6 +196,7 @@ def max_body_bytes_for_path(path: str) -> int:
         path.startswith("/api/upload")
         or normalized.endswith("/trainer/photos")
         or ("/admin/arenas/" in path and normalized.endswith("/photos"))
+        or (path.startswith("/api/public/place-suggestions/") and normalized.endswith("/photos"))
     ):
         return s.api_max_body_bytes_upload
     return s.api_max_body_bytes_default

@@ -598,6 +598,8 @@ async def create_match_company(
     name: str = "",
     now: datetime | None = None,
     settings: Settings | None = None,
+    arena: dict[str, Any] | None = None,
+    venue_label: str = MATCH_VENUE_LABEL,
 ) -> dict[str, Any]:
     """Компания клиента на домашний матч. Одна на организатора и матч: повторный вызов отдаёт ту же."""
     cfg = _settings(settings)
@@ -608,7 +610,7 @@ async def create_match_company(
     starts_at = match["starts_at"]
     if str(match["status"]) != "scheduled" or starts_at <= current:
         raise CompanyRejected("Матч уже начался.", 409)
-    arena = await minsk_arena(session)
+    arena = arena or await minsk_arena(session)
     if arena is None:
         raise CompanyRejected("Арена матчей не найдена.", 503)
     try:
@@ -629,7 +631,7 @@ async def create_match_company(
             starts_at=starts_at,
             ends_at=starts_at + MATCH_DURATION,
             venue_ref=f"arena:{int(arena['id'])}",
-            venue_label=MATCH_VENUE_LABEL,
+            venue_label=venue_label,
             city_id=int(arena["city_id"]),
             cancelled=False,
         )

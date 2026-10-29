@@ -32,6 +32,7 @@ from src.ingestion.hockey_sources import (
     HOCKEY_BY_URL,
     MINSK_TZ,
     TickerResult,
+    hcdinamo_month_url,
     parse_hcdinamo_match,
     parse_hockey_by_ticker,
 )
@@ -187,6 +188,30 @@ async def test_sync_calendar_reads_window(db_session) -> None:
     pages[match_url("1")] = "<html>сломано</html>"
     counts = await sync_calendar(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0))
     assert counts["inserted"] == 2 and counts["failed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_calendar_reads_next_month(db_session) -> None:
+    nav = '<a href="#" class="next a" data-date="1795695269" fff="31.10.2026"></a>'
+    pages = {
+        HCDINAMO_CALENDAR_URL: nav + '<a href="/matches/1218869/">x</a>',
+        hcdinamo_month_url("1795695269"): '<a href="/matches/1218869/">x</a><a href="/matches/1218873/">y</a>',
+        match_url("1218869"): _page("hcdinamo-match-final.html"),
+        match_url("1218873"): _page("hcdinamo-match-upcoming.html"),
+    }
+    counts = await sync_calendar(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0))
+    assert counts["inserted"] == 2 and counts["failed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_sync_calendar_next_month_failure_keeps_current(db_session) -> None:
+    nav = '<a href="#" class="next a" data-date="1795695269"></a>'
+    pages = {
+        HCDINAMO_CALENDAR_URL: nav + '<a href="/matches/1218869/">x</a>',
+        match_url("1218869"): _page("hcdinamo-match-final.html"),
+    }
+    counts = await sync_calendar(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0))
+    assert counts["inserted"] == 1 and counts["failed"] == 1
 
 
 @pytest.mark.asyncio
@@ -360,7 +385,9 @@ async def test_empty_calendar_in_season_is_a_failure_and_off_season_is_quiet(db_
         await sync_calendar(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0))
     counts = await sync_calendar(db_session, _fake_fetch(pages), now=_minsk(2026, 7, 1, 12, 0))
     assert counts["inserted"] == 0
-    tick = await run_tick(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0), alert=_silent, calendar_due=True)
+    tick = await run_tick(
+        db_session, _fake_fetch(pages), now=_minsk(2026, 10, 19, 12, 0), alert=_silent, calendar_due=True
+    )
     assert tick["calendar_failed"] is True and "вёрстка" in str(tick["calendar_error"])
 
 

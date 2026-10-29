@@ -206,7 +206,14 @@ class _Publisher:
             async def __aexit__(self, *a):
                 return False
 
+        class FakeResult:
+            def mappings(self):
+                return []
+
         class FakeSession:
+            async def execute(self, *a, **k):
+                return FakeResult()
+
             def begin_nested(self):
                 return FakeNested()
 

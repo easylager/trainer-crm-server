@@ -148,6 +148,11 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # TASK-237: маячки воронки открытки (до пяти актов + «отправить ответ» на открытие).
     api_rate_limit_invite_event_max_requests: int = 60
     api_rate_limit_invite_event_window_sec: float = 600.0
+    # PDEC-028: «Предложить место» без логина — создание заявки и поиск города раздельно.
+    api_rate_limit_suggest_max_requests: int = 10
+    api_rate_limit_suggest_window_sec: float = 3600.0
+    api_rate_limit_suggest_cities_max_requests: int = 60
+    api_rate_limit_suggest_cities_window_sec: float = 60.0
     # leftmost (по умолчанию: Railway режет клиентский XFF, левая запись — реальный IP) |
     # rightmost_hops (платформа дописывает справа). См. src/shared/client_ip.py, docs/ops.
     client_ip_strategy: str = "leftmost"
@@ -353,6 +358,11 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
 
     # Матчи Динамо-Минск: календарь и итоги. Пока выключено — цикл молчит и в сеть не ходит.
     hockey_matches_enabled: bool = False
+    # Экстралига с hockey.by (TASK-340): календарь, страницы матчей, таблица. Выключено — в сеть не ходим.
+    extraliga_enabled: bool = False
+    # Клубы Экстралиги, чьи матчи видны клиентам, через запятую, партиями. Пусто — не видно ничего.
+    # EXTRALIGA_CLUBS=Юность,Неман
+    extraliga_clubs: str = ""
 
     # Подборка «Для вас». Пусто — ряда нет ни в одном городе. Закрепы при этом хранятся.
     # FOR_YOU_CITY_IDS=2,12

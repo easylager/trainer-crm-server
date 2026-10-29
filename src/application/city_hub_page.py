@@ -702,6 +702,12 @@ def compose_city_hub_share(
     }
 
 
+def _city_hub_footer_context(view: Mapping[str, Any]) -> str:
+    """Подвал хаба: вся страна + вход «Предложить место» с этим городом (PDEC-028)."""
+    links = ['<a href="/">Массовое катание по всей Беларуси</a>']
+    return '<div class="elsewhere">' + "".join(links) + "</div>"
+
+
 def _city_hub_site_footer(*, trainers_href: str, telegram_href: str | None, context_html: str = "") -> str:
     from src.application.public_site_footer import render_site_footer_html
 
@@ -804,7 +810,7 @@ def render_city_hub_page(
             "__COMPONENTS_V__": COMPONENTS_VERSION,
             "__SITE_FOOTER__": _city_hub_site_footer(
                 trainers_href=trainers_href or "/trainers",
-                context_html='<a href="/">Массовое катание по всей Беларуси</a>',
+                context_html=_city_hub_footer_context(view),
                 telegram_href=cta_url,
             ),
             "__BODY__": body + _breadcrumbs(view, canonical_url),
@@ -1171,10 +1177,34 @@ def _b_all_places(view: Mapping[str, Any]) -> str:
             else:
                 links.append(label)
         groups.append(f"<p><b>{title}:</b> {', '.join(links)}</p>")
+    city_id = view["city"].get("id")
+    if city_id:
+        groups.append(
+            f'<p class="b-details__more"><a href="/suggest?city={int(city_id)}">'
+            "Знаете место, которого здесь нет? →</a></p>"
+        )
     return (
         '<section class="b-sec"><details class="b-details">'
         f'<summary>Все места города · {len(places)}{icon_svg("down")}</summary>'
         f'<div class="b-details__body">{"".join(groups)}</div></details></section>'
+    )
+
+
+def _b_city_suggest(view: Mapping[str, Any]) -> str:
+    # Заметный вход в заявку под «Все места города» — не только катки (PDEC-028).
+    city = dict(view.get("city") or {})
+    city_id = city.get("id")
+    if not city_id:
+        return ""
+    name = _esc(city_locative(str(city.get("name") or "")))
+    return (
+        '<section class="b-sec b-city-suggest">'
+        '<p class="b-city-suggest__lead">'
+        f'В {name} чего-то не хватает? Расскажите про него — '
+        'каток, магазин, мастерская или залитый дворовый лёд.</p>'
+        f'<a class="b-city-suggest__link" href="/suggest?city={int(city_id)}">Предложить место →</a>'
+        '<p class="b-city-suggest__sub">Каждое место проверяем и публикуем — так каталог растёт.</p>'
+        '</section>'
     )
 
 
@@ -1532,6 +1562,7 @@ def _b_body(
             _b_for_you(view),
             empty,
             _b_all_places(view),
+            _b_city_suggest(view),
             _b_trainers(view, base_url=base_url, coach_href=coach_href),
             share_block,
         ]

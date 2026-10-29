@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Заявки мест · Админ</title>
+  <!-- PDEC-028: модерация «мест от людей». Макет: холст «Предложить место», артборд «Модерация». -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202610299"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610299" />
+  <link rel="stylesheet" href="theme.css?v=202610299" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=202610299" />
+  <style>
+    .ps-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; }
+    .ps-tab { min-height: 44px; border-radius: 12px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: var(--tg-theme-text-color, #f5f5f5); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .ps-tab[aria-selected="true"] { background: #45b9bb; border-color: #45b9bb; color: #06292a; }
+    .ps-list { display: flex; flex-direction: column; gap: 10px; }
+    .ps-row { display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; background: var(--tg-theme-secondary-bg-color, #2a2a2a); border: 1px solid color-mix(in srgb, currentColor 13%, transparent); border-radius: 14px; padding: 14px; color: inherit; font: inherit; cursor: pointer; }
+    .ps-row.is-newcity { border-color: rgba(240,180,41,.55); }
+    .ps-row__top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+    .ps-row__name { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+    .ps-sub, .ps-hint { font-size: 12px; color: var(--tg-theme-hint-color, #9ca3af); }
+    .ps-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ps-chip { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 10px; background: color-mix(in srgb, currentColor 13%, transparent); }
+    .ps-chip.newcity { background: rgba(240,180,41,.16); color: #f0b429; }
+    .ps-chip.kind { background: rgba(42,167,201,.18); color: #7fd0e6; }
+    .ps-card { background: var(--tg-theme-secondary-bg-color, #2a2a2a); border: 1px solid color-mix(in srgb, currentColor 13%, transparent); border-radius: 14px; padding: 14px; margin-top: 12px; }
+    .ps-card h2 { font-size: 14px; font-weight: 700; margin: 0 0 10px; }
+    .ps-back { min-height: 44px; border: 0; background: transparent; color: #45b9bb; font: inherit; font-size: 15px; font-weight: 600; padding: 0; cursor: pointer; }
+    .ps-map { width: 100%; height: 180px; border: 0; border-radius: 12px; background: #1a1a1a; display: block; }
+    .ps-f { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--tg-theme-hint-color, #9ca3af); }
+    .ps-f input, .ps-f textarea, .ps-f select { min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid color-mix(in srgb, currentColor 26%, transparent); background: var(--tg-theme-bg-color, #1a1a1a); color: var(--tg-theme-text-color, #f5f5f5); font: inherit; font-size: 16px; font-weight: 400; padding: 8px 10px; width: 100%; }
+    .ps-f textarea { resize: vertical; min-height: 64px; }
+    .ps-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .ps-grid2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
+    .ps-saved { font-size: 12px; color: #45b9bb; min-height: 16px; margin-top: 6px; }
+    .ps-sim { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid color-mix(in srgb, currentColor 13%, transparent); }
+    .ps-sim:first-of-type { border-top: 0; }
+    .ps-msgs { display: flex; flex-direction: column; gap: 8px; }
+    .ps-msg { max-width: 85%; padding: 9px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .ps-msg.to_author { align-self: flex-end; background: rgba(69,185,187,.22); border-bottom-right-radius: 4px; }
+    .ps-msg.from_author { align-self: flex-start; background: color-mix(in srgb, currentColor 13%, transparent); border-bottom-left-radius: 4px; }
+    .ps-msg.note { align-self: center; background: transparent; color: var(--tg-theme-hint-color, #9ca3af); font-size: 12px; text-align: center; }
+    .ps-send { display: flex; gap: 8px; margin-top: 10px; }
+    .ps-send textarea { flex: 1; min-height: 44px; box-sizing: border-box; border-radius: 10px; border: 1px solid color-mix(in srgb, currentColor 26%, transparent); background: var(--tg-theme-bg-color, #1a1a1a); color: var(--tg-theme-text-color, #f5f5f5); font: inherit; font-size: 16px; padding: 10px; resize: vertical; }
+    .btn { display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 12px; border: 1px solid color-mix(in srgb, currentColor 29%, transparent); background: transparent; color: var(--tg-theme-text-color, #f5f5f5); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; padding: 0 12px; text-decoration: none; }
+    .btn.primary { background: #45b9bb; border-color: #45b9bb; color: #06292a; min-height: 52px; font-size: 16px; }
+    .btn.danger { color: #ff8a80; }
+    .btn.small { min-height: 40px; width: auto; font-size: 13px; }
+    .btn:disabled { opacity: .5; }
+    .ps-actions { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: var(--tg-theme-bg-color, #1a1a1a); display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .ps-actions__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .ps-warn { border: 1px solid rgba(240,180,41,.5); background: rgba(240,180,41,.08); border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.5; margin-top: 12px; }
+    .ps-ok { border: 1px solid rgba(69,185,187,.5); background: rgba(69,185,187,.1); border-radius: 12px; padding: 12px; font-size: 14px; line-height: 1.5; margin-top: 12px; }
+    .err { color: #ff8a80; font-size: 13px; margin-top: 8px; }
+    .ps-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .ps-photo { margin: 0; display: grid; gap: 4px; }
+    .ps-photo img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; display: block; }
+    .ps-photo.off img { opacity: .4; }
+    .ps-photo label { display: flex; gap: 6px; align-items: center; }
+  </style>
+</head>
+<body>
+  <div class="adm-header">
+    <h1 id="title">Заявки мест</h1>
+    <div class="adm-sub" id="sub">Загрузка…</div>
+  </div>
+  <div id="content"></div>
+  <script src="admin-analytics-shared.js?v=202610299"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics, esc = A.escapeHtml;
+      var KIND = { ice: 'Крытый каток', outdoor: 'Открытый каток', shop: 'Магазин, мастерская', school: 'Школа', other: 'Другое' };
+      var LABEL = { sharpening: 'заточка', repair: 'ремонт', rental: 'прокат', sale: 'продажа', hockey: 'хоккей', figure: 'фигурное', roller: 'ролики' };
+      function labels(list) { return (list || []).map(function (k) { return LABEL[k] || k; }).join(', '); }
+      var STATUS = { 'new': 'Новая', needs_info: 'Ждём ответа', approved: 'Опубликована', rejected: 'Отклонена', duplicate: 'Дубль' };
+      var REASONS = [['spam', 'Спам'], ['not_ice', 'Не про лёд'], ['closed', 'Закрылось'], ['other', 'Другое']];
+      var TABS = [['new', 'Новые'], ['waiting', 'Ждём ответа'], ['closed', 'Закрытые']];
+      var COUNTRY = { BY: 'Беларусь', RU: 'Россия' };
+      var state = { tab: 'new', detail: null, lastResult: null };
+
+      function when(iso) {
+        return iso ? new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Minsk' }).replace('.', '') : '';
+      }
+      function send(method, path, body) {
+        var headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
+        if (A.initData) headers['X-Telegram-Init-Data'] = A.initData;
+        var url = A.apiUrl(path);
+        if (A.initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(A.initData);
+        return fetch(url, { method: method, headers: headers, body: body == null ? undefined : JSON.stringify(body), credentials: 'same-origin' }).then(function (r) {
+          if (r.ok) return r.json();
+          return r.json().catch(function () { return {}; }).then(function (j) { throw new Error((typeof j.detail === 'string' && j.detail) || ('HTTP ' + r.status)); });
+        });
+      }
+      function setUrl(id) {
+        var u = new URL(location.href);
+        if (id) u.searchParams.set('id', id); else u.searchParams.delete('id');
+        history.replaceState(null, '', u.toString());
+      }
+      function showError(e) {
+        document.getElementById('content').insertAdjacentHTML('beforeend', '<div class="adm-error">' + esc((e && e.message) || 'Ошибка сети') + '</div>');
+      }
+
+      /* ---------- список ---------- */
+      function drawList(items) {
+        document.getElementById('title').textContent = 'Заявки мест';
+        document.getElementById('sub').textContent = state.tab === 'new' ? (items.length ? 'Ждут вас: ' + items.length : 'Новых нет') : '';
+        var h = '<div class="ps-tabs" role="tablist">' + TABS.map(function (t) {
+          return '<button class="ps-tab" type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] + '</button>';
+        }).join('') + '</div>';
+        if (!items.length) {
+          h += '<div class="adm-card"><div class="adm-empty">' + (state.tab === 'new' ? 'Новых заявок нет. Форма — на сайте /suggest и в Mini App.' : 'Здесь пусто.') + '</div></div>';
+        } else {
+          h += '<div class="ps-list">' + items.map(function (i) {
+            return '<button class="ps-row' + (i.is_new_city ? ' is-newcity' : '') + '" type="button" data-open="' + i.id + '">' +
+              '<span class="ps-row__top"><span class="ps-row__name">' + esc(i.name) + '</span><span class="ps-sub">№' + i.id + '</span></span>' +
+              '<span class="ps-chips"><span class="ps-chip kind">' + esc(KIND[i.kind] || i.kind) + '</span>' +
+                (i.is_new_city ? '<span class="ps-chip newcity">Новый город</span>' : '') +
+                (i.has_contact ? '<span class="ps-chip">Есть контакт</span>' : '') +
+                (state.tab === 'closed' ? '<span class="ps-chip">' + esc(STATUS[i.status] || i.status) + '</span>' : '') +
+              '</span>' +
+              '<span class="ps-sub">' + esc(i.city_label || '') + ' · ' + esc(when(i.created_at)) + '</span>' +
+            '</button>';
+          }).join('') + '</div>';
+        }
+        document.getElementById('content').innerHTML = h;
+      }
+      function loadList() {
+        state.detail = null;
+        setUrl(null);
+        return send('GET', '/admin/place-suggestions?tab=' + state.tab).then(function (d) { drawList(d.items || []); }).catch(function (e) {
+          document.getElementById('sub').textContent = '';
+          document.getElementById('content').innerHTML = '';
+          showError(e);
+        });
+      }
+
+      /* ---------- карточка ---------- */
+      function mapHtml(s) {
+        var lat = s.latitude != null ? s.latitude : s.new_city_lat;
+        var lon = s.longitude != null ? s.longitude : s.new_city_lon;
+        if (lat == null || lon == null) {
+          return '<div class="ps-hint">Точки нет — геокодер не нашёл, или автор написал город вручную. Координаты города можно вписать ниже.</div>';
+        }
+        var d = s.latitude != null ? 0.01 : 0.12;
+        var bbox = [lon - d, lat - d / 2, lon + d, lat + d / 2].join(',');
+        return '<iframe class="ps-map" title="Карта" loading="lazy" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=' + bbox + '&amp;layer=mapnik&amp;marker=' + lat + ',' + lon + '"></iframe>' +
+          '<div class="ps-hint" style="margin-top:6px">' + (s.latitude != null ? 'Точка места' : 'Точка города из геокодера') + ' · ' + lat.toFixed(4) + ', ' + lon.toFixed(4) + '</div>';
+      }
+      function input(key, label, value, attrs) {
+        return '<label class="ps-f">' + label + '<input data-field="' + key + '" value="' + esc(value == null ? '' : value) + '"' + (attrs || '') + '></label>';
+      }
+      function detailInput(key, label, value, area) {
+        return '<label class="ps-f">' + label + (area
+          ? '<textarea data-detail="' + key + '" rows="2">' + esc(value || '') + '</textarea>'
+          : '<input data-detail="' + key + '" value="' + esc(value || '') + '">') + '</label>';
+      }
+      function drawDetail(s) {
+        state.detail = s;
+        setUrl(s.id);
+        var open = s.status === 'new' || s.status === 'needs_info';
+        var d = s.details || {};
+        var isNewCity = s.city_id == null;
+        var rink = s.kind === 'ice' || s.kind === 'outdoor';
+        document.getElementById('title').textContent = (KIND[s.kind] || 'Место') + ' · ' + (s.city_name || s.new_city_name || '');
+        document.getElementById('sub').textContent = '№' + s.id + ' · ' + (s.source === 'miniapp' ? 'Mini App' : 'сайт') + ' · ' + when(s.created_at) + ' · ' + (STATUS[s.status] || s.status);
+
+        var h = '<button class="ps-back" type="button" data-act="list">← К списку</button>';
+        if (state.lastResult) h += state.lastResult;
+        if (!open) {
+          var why = s.status === 'rejected' ? 'Отклонена: ' + ((REASONS.filter(function (r) { return r[0] === s.reject_reason; })[0] || [0, s.reject_reason || '—'])[1])
+            : s.status === 'duplicate' ? 'Дубль места №' + (s.target_arena_id || '—')
+            : s.status === 'approved' ? 'Опубликована как место №' + (s.result_arena_id || '—') : '';
+          if (why) h += '<div class="ps-hint" style="margin-top:8px">' + esc(why) + (s.closed_at ? ' · ' + esc(when(s.closed_at)) : '') + '</div>';
+        }
+        h += '<div class="ps-card">' + mapHtml(s) + '</div>';
+        if (s.photos && s.photos.length) {
+          h += '<div class="ps-card"><h2>Фото от автора</h2><div class="ps-photos">' + s.photos.map(function (p) {
+            var src = A.apiUrl(p.url.replace('/api/webapp', '')) + (A.initData ? '?init_data=' + encodeURIComponent(A.initData) : '');
+            return '<figure class="ps-photo' + (p.publish ? '' : ' off') + '"><a href="' + esc(src) + '" target="_blank" rel="noopener"><img src="' + esc(src) + '" alt="" loading="lazy"></a>' +
+              (open ? '<label class="ps-hint"><input type="checkbox" data-photo-pub="' + p.id + '"' + (p.publish ? ' checked' : '') + '> в карточку</label>' : '') + '</figure>';
+          }).join('') + '</div>' + (open ? '<div class="ps-hint" style="margin-top:6px">Отмеченные фото при одобрении попадут в галерею места с подписью «по данным посетителей».</div>' : '') + '</div>';
+        }
+
+        h += '<div class="ps-card"><h2>Похоже на</h2>';
+        if (isNewCity) h += '<div class="ps-hint">Город новый — дублей в каталоге быть не может.</div>';
+        else if (!s.similar.length) h += '<div class="ps-hint">Похожих мест в городе нет.</div>';
+        else h += s.similar.map(function (m) {
+          return '<div class="ps-sim"><div><div style="font-weight:600">' + esc(m.name) + '</div><div class="ps-sub">' + esc(m.address || '') +
+            (m.distance_m != null ? ' · ' + Math.round(m.distance_m) + ' м' : '') + '</div></div>' +
+            (open ? '<button class="btn small" type="button" data-dup="' + m.arena_id + '">Это дубль</button>' : '') + '</div>';
+        }).join('') + (open ? '<div class="ps-hint" style="margin-top:6px">«Это дубль» переносит телефон, сайт, цены и часы только в пустые поля найденного места.</div>' : '');
+        h += '</div>';
+
+        h += '<div class="ps-card"><h2>Карточка места</h2>';
+        if (isNewCity) {
+          h += '<div class="ps-grid2">' + input('new_city_name', 'Город (новый)', s.new_city_name) +
+            input('new_city_country', 'Страна', s.new_city_country, ' maxlength="2" autocapitalize="characters"') + '</div>' +
+            input('new_city_region', 'Регион', s.new_city_region) +
+            '<div class="ps-grid2">' + input('new_city_lat', 'Широта города', s.new_city_lat, ' inputmode="decimal"') + input('new_city_lon', 'Долгота', s.new_city_lon, ' inputmode="decimal"') + '</div>';
+        } else {
+          h += '<div class="ps-hint">Город: ' + esc(s.city_name || '') + (s.city_is_active ? '' : ' — <b style="color:#f0b429">скрыт</b>, при одобрении не включится') + '</div>';
+        }
+        h += input('name', 'Название', s.name) + input('address', 'Адрес', s.address, ' placeholder="Автор не указал — допишите"');
+        if (rink) {
+          h += '<div class="ps-f" style="margin-bottom:-6px">Цена со слов посетителя' + (s.city_country === 'RU' || s.new_city_country === 'RU' ? ', руб.' : (s.city_country === 'BY' || s.new_city_country === 'BY' ? ', BYN' : '')) + '</div>' +
+            '<div class="ps-grid3">' + detailInput('price_adult', 'Взрослый', d.price_adult) + detailInput('price_child', 'Детский', d.price_child) + detailInput('price_rental', 'Прокат', d.price_rental) + '</div>';
+        }
+        if (s.kind === 'shop' && d.services && d.services.length) h += '<div class="ps-hint" style="margin-top:10px">Услуги: ' + esc(labels(d.services)) + '</div>';
+        if (s.kind === 'shop' && d.disciplines && d.disciplines.length) h += '<div class="ps-hint" style="margin-top:4px">Для чего: ' + esc(labels(d.disciplines)) + '</div>';
+        if (s.kind === 'school') {
+          if (d.disciplines && d.disciplines.length) h += '<div class="ps-hint" style="margin-top:10px">Дисциплины: ' + esc(labels(d.disciplines)) + '</div>';
+          h += detailInput('age', 'Возраст', d.age);
+        }
+        h += detailInput('hours', 'Часы (в карточку попадут, только если это один интервал «10:00–22:00»)', d.hours, true) +
+          detailInput('link', 'Телефон / сайт', d.link) + detailInput('more', 'Что ещё (от автора)', d.more, true) +
+          '<div class="ps-saved" aria-live="polite" id="saved"></div></div>';
+
+        h += '<div class="ps-card"><h2>Переписка с автором</h2>';
+        if (s.author_telegram_id) h += '<div class="ps-hint" style="margin-bottom:8px">Через клиентского бота — ответ придёт сюда.</div>';
+        else if (s.contact) h += '<div class="ps-hint" style="margin-bottom:8px">Автор не в боте. Контакт: <b>' + esc(s.contact) + '</b> <button class="btn small" type="button" data-copy="' + esc(s.contact) + '" style="display:inline-flex;margin-left:6px">Скопировать</button></div>';
+        else h += '<div class="ps-hint" style="margin-bottom:8px">Автор не оставил контакт.</div>';
+        h += '<div class="ps-msgs">' + (s.messages || []).map(function (m) {
+          return '<div class="ps-msg ' + esc(m.direction) + '">' + esc(m.body) + '</div>';
+        }).join('') + '</div>';
+        if (open && (s.author_telegram_id || s.contact)) {
+          h += '<div class="ps-send"><textarea id="msg" rows="1" placeholder="' + (s.author_telegram_id ? 'Написать автору' : 'Заметка: что спросили по контакту') + '"></textarea>' +
+            '<button class="btn small" type="button" data-act="msg">' + (s.author_telegram_id ? 'Отправить' : 'Сохранить') + '</button></div>';
+        }
+        h += '</div>';
+
+        if (open) {
+          h += '<div class="ps-actions"><div class="err" hidden id="actErr"></div>' +
+            '<button class="btn primary" type="button" data-act="approve">Одобрить и опубликовать</button>' +
+            '<div class="ps-actions__row"><button class="btn" type="button" data-act="ask">Нужно уточнить</button>' +
+            '<label class="ps-f" style="margin:0"><select data-act="reject" aria-label="Отклонить"><option value="">Отклонить…</option>' +
+              REASONS.map(function (r) { return '<option value="' + r[0] + '">' + r[1] + '</option>'; }).join('') + '</select></label></div></div>';
+        }
+        document.getElementById('content').innerHTML = h;
+      }
+      function openDetail(id) {
+        return send('GET', '/admin/place-suggestions/' + id).then(drawDetail).catch(function (e) {
+          document.getElementById('content').innerHTML = '<button class="ps-back" type="button" data-act="list">← К списку</button>';
+          showError(e);
+        });
+      }
+      function actErr(e) {
+        var el = document.getElementById('actErr');
+        if (el) { el.textContent = (e && e.message) || 'Не получилось'; el.hidden = false; }
+        document.querySelectorAll('.ps-actions button').forEach(function (b) { b.disabled = false; });
+      }
+      function saved(text) {
+        var el = document.getElementById('saved');
+        if (el) el.textContent = text;
+      }
+
+      function approveSummary(r) {
+        var warn = [];
+        if (!r.published) warn.push('карточка осталась черновиком (' + esc(r.profile_status || '') + ')');
+        if (r.city_kept_inactive) warn.push('город скрыт и не включался');
+        if (r.country_not_public) warn.push('страна вне каталога — на сайте не видно');
+        var href = r.public_url || r.url;
+        var link = href ? ' <a href="' + esc(href) + '" target="_blank" rel="noopener" style="color:#45b9bb">' + esc(r.url) + '</a>' : '';
+        return warn.length
+          ? '<div class="ps-warn"><b>Одобрено, но:</b> ' + warn.join('; ') + '.' + link + '</div>'
+          : '<div class="ps-ok">Опубликовано' + (r.city_created ? ' вместе с новым городом' : '') + '.' + link + '</div>';
+      }
+
+      /* ---------- события ---------- */
+      document.addEventListener('click', function (ev) {
+        var t = ev.target.closest('button');
+        if (!t) return;
+        if (t.dataset.tab) { state.tab = t.dataset.tab; state.lastResult = null; loadList(); return; }
+        if (t.dataset.open) { state.lastResult = null; openDetail(t.dataset.open); window.scrollTo(0, 0); return; }
+        if (t.dataset.copy) {
+          var v = t.dataset.copy;
+          (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { t.textContent = 'Скопировано'; }).catch(function () { window.prompt('Скопируйте контакт', v); });
+          return;
+        }
+        var s = state.detail;
+        if (t.dataset.dup && s) {
+          if (!window.confirm('Отметить как дубль и перенести данные в пустые поля этого места?')) return;
+          t.disabled = true;
+          send('POST', '/admin/place-suggestions/' + s.id + '/duplicate', { target_arena_id: Number(t.dataset.dup), copy_fields: ['phone', 'website_url', 'visitor_prices', 'opening_hours'] })
+            .then(function () { state.lastResult = '<div class="ps-ok">Отмечено как дубль, данные перенесены.</div>'; return openDetail(s.id); })
+            .catch(function (e) { t.disabled = false; window.alert(e.message); });
+          return;
+        }
+        var act = t.dataset.act;
+        if (act === 'list') { state.lastResult = null; loadList(); return; }
+        if (!s) return;
+        if (act === 'approve') {
+          t.disabled = true; t.textContent = 'Публикуем…';
+          send('POST', '/admin/place-suggestions/' + s.id + '/approve').then(function (r) {
+            state.lastResult = approveSummary(r);
+            return openDetail(s.id);
+          }).catch(function (e) { t.textContent = 'Одобрить и опубликовать'; actErr(e); });
+        } else if (act === 'ask') {
+          var box = document.getElementById('msg');
+          if (box) { box.focus(); box.scrollIntoView({ block: 'center' }); }
+          else window.alert('Связаться не получится: у заявки нет контакта.');
+        } else if (act === 'msg') {
+          var text = (document.getElementById('msg').value || '').trim();
+          if (!text) return;
+          t.disabled = true;
+          send('POST', '/admin/place-suggestions/' + s.id + '/messages', { body: text }).then(function (r) {
+            state.lastResult = r.delivered || !s.author_telegram_id ? null : '<div class="ps-warn">Сообщение не ушло в Telegram — сохранено заметкой. Свяжитесь по контакту.</div>';
+            return openDetail(s.id);
+          }).catch(function (e) { t.disabled = false; window.alert(e.message); });
+        }
+      });
+
+      document.addEventListener('change', function (ev) {
+        var pub = ev.target.closest && ev.target.closest('[data-photo-pub]');
+        if (pub && state.detail) {
+          var fig = pub.closest('.ps-photo');
+          send('PATCH', '/admin/place-suggestions/' + state.detail.id + '/photos/' + pub.dataset.photoPub, { publish: pub.checked })
+            .then(function () { if (fig) fig.classList.toggle('off', !pub.checked); })
+            .catch(function () { pub.checked = !pub.checked; });
+          return;
+        }
+        var el = ev.target, s = state.detail;
+        if (!s) return;
+        if (el.matches('select[data-act="reject"]')) {
+          if (!el.value) return;
+          var label = el.options[el.selectedIndex].text;
+          if (!window.confirm('Отклонить заявку: «' + label + '»?')) { el.value = ''; return; }
+          send('POST', '/admin/place-suggestions/' + s.id + '/reject', { reason: el.value })
+            .then(function () { state.lastResult = '<div class="ps-ok">Отклонено: ' + esc(label) + '.</div>'; return openDetail(s.id); })
+            .catch(function (e) { el.value = ''; actErr(e); });
+          return;
+        }
+        var patch = {};
+        if (el.dataset.field) {
+          var v = el.value.trim();
+          if (/^new_city_(lat|lon)$/.test(el.dataset.field)) {
+            v = v === '' ? null : Number(v.replace(',', '.'));
+            if (v !== null && isNaN(v)) { saved('Неверные координаты — не сохранено'); return; }
+          }
+          patch[el.dataset.field] = v;
+        } else if (el.dataset.detail) {
+          var details = Object.assign({}, s.details || {});
+          details[el.dataset.detail] = el.value.trim();
+          patch.details = details;
+        } else return;
+        saved('Сохраняем…');
+        send('PATCH', '/admin/place-suggestions/' + s.id, patch).then(function (fresh) {
+          if (fresh && fresh.id) state.detail = Object.assign(state.detail, fresh);
+          saved('Сохранено');
+        }).catch(function (e) { saved(''); window.alert(e.message); });
+      });
+
+      var initial = new URLSearchParams(location.search).get('id');
+      if (initial && /^\d+$/.test(initial)) openDetail(initial); else loadList();
+    })();
+  </script>
+</body>
+</html>

@@ -2683,3 +2683,21 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
 @media (prefers-reduced-motion: reduce) {
   .ice-intent-sheet__dim, .ice-intent-sheet__panel { transition: none; }
 }
+
+/* PDEC-028: «Предложить место» в пустом выборе города — по сетке подписей, без разделителя. */
+.ice-picker .ice-suggest-foot {
+  width: auto;
+  margin: 4px 16px 0;
+  padding: 8px 0;
+  border-top: 0;
+}
+
+/* PDEC-028: подпись-пример под строкой «Знаете место…» — меньше и тише самой строки. */
+.ice-suggest-sub {
+  display: block;
+  margin: 4px 0 0;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-normal, 400);
+  line-height: 1.4;
+  color: var(--glide-hint);
+}

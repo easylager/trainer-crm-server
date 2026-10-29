@@ -148,7 +148,7 @@ _PLAYER_UPSERT = text("""
     WHERE hockey_players.display_name IS DISTINCT FROM EXCLUDED.display_name
     """)
 
-_MATCH_OPEN = text("SELECT status, starts_at FROM hockey_matches WHERE id = :match_id")
+_MATCH_OPEN = text("SELECT status, starts_at FROM kk_matches WHERE id = :match_id")
 
 _PICK_UPSERT = text("""
     INSERT INTO hockey_picks (match_id, player_key, side, home_score, away_score)
@@ -171,7 +171,7 @@ _SCORE_FINALS = text("""
                 + CASE WHEN p.away_score = m.away_score THEN :goals ELSE 0 END
               END,
         scored_at = :now
-    FROM hockey_matches AS m
+    FROM kk_matches AS m
     WHERE m.id = p.match_id
       AND m.status = 'final'
       AND (p.scored_at IS NULL OR p.scored_at < m.finalized_at)
@@ -180,7 +180,7 @@ _SCORE_FINALS = text("""
 _UNSCORE_CANCELLED = text("""
     UPDATE hockey_picks AS p
     SET points = NULL, scored_at = :now
-    FROM hockey_matches AS m
+    FROM kk_matches AS m
     WHERE m.id = p.match_id AND m.status = 'cancelled' AND p.points IS NOT NULL
     """)
 
@@ -191,7 +191,7 @@ _STANDINGS = text("""
                COUNT(*) FILTER (WHERE p.points = :exact)::int AS exact,
                COUNT(*)::int AS played
         FROM hockey_picks AS p
-        JOIN hockey_matches AS m ON m.id = p.match_id
+        JOIN kk_matches AS m ON m.id = p.match_id
         WHERE p.points IS NOT NULL AND m.starts_at >= :since AND m.starts_at < :until
         GROUP BY p.player_key
     ), ranked AS (
@@ -214,7 +214,7 @@ _PLAYER_MATCHES = text("""
            p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'away')::int AS away_picks
-    FROM hockey_matches AS m
+    FROM kk_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.status <> 'cancelled' AND m.starts_at >= :since
     ORDER BY m.starts_at
@@ -291,7 +291,7 @@ async def score_finished_matches(session: AsyncSession, *, now: datetime) -> int
 _MY_DOUBLES = text("""
     SELECT p.match_id, m.status, m.starts_at
     FROM hockey_picks AS p
-    JOIN hockey_matches AS m ON m.id = p.match_id
+    JOIN kk_matches AS m ON m.id = p.match_id
     WHERE p.player_key = :player_key AND p.doubled
       AND m.starts_at >= :since AND m.starts_at < :until
     FOR UPDATE OF p
@@ -339,7 +339,7 @@ async def set_double(session: AsyncSession, *, player_key: int, match_id: int, o
 _MY_DOUBLE = text("""
     SELECT p.match_id, m.status, m.starts_at
     FROM hockey_picks AS p
-    JOIN hockey_matches AS m ON m.id = p.match_id
+    JOIN kk_matches AS m ON m.id = p.match_id
     WHERE p.player_key = :player_key AND p.doubled
       AND m.starts_at >= :since AND m.starts_at < :until
     ORDER BY m.starts_at

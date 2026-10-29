@@ -179,6 +179,23 @@ async def fetch_http_bytes(url: str, *, headers: dict[str, str] | None = None, t
     return body
 
 
+async def post_form_text(
+    url: str, form: dict[str, str], *, headers: dict[str, str] | None = None, timeout_s: float = 20
+) -> str:
+    """POST формы без редиректов, с теми же проверками адреса и лимитом тела, что у GET."""
+    await asyncio.to_thread(assert_fetch_url_allowed, url)
+    request_headers = {"User-Agent": _USER_AGENT, **(headers or {})}
+    async with client_session(timeout_s) as session:
+        async with session.post(
+            url, data=form, headers=request_headers, proxy=current_egress_proxy(), allow_redirects=False
+        ) as response:
+            if response.status != 200:
+                raise FetchRejectedError(f"POST {url}: HTTP {response.status}")
+            charset = getattr(response, "charset", None)
+            body = await _read_body_limited(response, MAX_HTTP_RESPONSE_BYTES)
+            return _decode_body(body, charset if isinstance(charset, str) and charset else None)
+
+
 def _decode_body(raw: bytes, charset: str | None) -> str:
     # Same as aiohttp's response.text(): charset from Content-Type, else UTF-8.
     # Regional .by sites still serve windows-1251 — forcing UTF-8 would garble them.

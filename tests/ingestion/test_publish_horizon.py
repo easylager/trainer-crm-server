@@ -199,7 +199,7 @@ async def test_manual_and_etalon_rows_survive_publish(db_session, seed_city_id) 
     await _insert_row(db_session, arena_id, day, time(12, 0), "admin")
     await _insert_row(db_session, arena_id, day, time(15, 0), "etalon_minsk_v1")
 
-    # Черновик парсера на то же начало, что и ручная строка: индекс парсера их не сравнивает.
+    # Черновик парсера на то же начало, что и ручная строка: ручная побеждает, дубля парсера нет.
     await _publish(
         db_session, arena_id=arena_id, job_id=job_id, drafts=[_draft(arena_id, day, time(12, 0))], horizon_days=14
     )
@@ -210,7 +210,7 @@ async def test_manual_and_etalon_rows_survive_publish(db_session, seed_city_id) 
         )
     ).scalars().all()
     assert "admin" in sources and "etalon_minsk_v1" in sources
-    assert len(sources) == 3
+    assert len(sources) == 2
 
 
 async def test_draft_beyond_horizon_published_twice_never_conflicts(db_session, seed_city_id) -> None:

@@ -151,7 +151,7 @@ _LEAGUE_TABLE = text("""
                COUNT(*)::int AS played
         FROM hockey_picks AS p
         JOIN members AS me ON me.player_key = p.player_key
-        JOIN hockey_matches AS m ON m.id = p.match_id
+        JOIN kk_matches AS m ON m.id = p.match_id
         WHERE p.points IS NOT NULL AND m.starts_at >= GREATEST(:since, me.joined_at) AND m.starts_at < :until
         GROUP BY p.player_key
     )
@@ -301,14 +301,14 @@ _TITLE_PICKS = text("""
     SELECT p.player_key, m.id AS match_id, m.starts_at, m.status, m.home_team, p.side, p.points,
            p.home_score AS pick_home, p.away_score AS pick_away
     FROM hockey_picks AS p
-    JOIN hockey_matches AS m ON m.id = p.match_id
+    JOIN kk_matches AS m ON m.id = p.match_id
     WHERE p.player_key IN (SELECT player_key FROM hockey_league_members WHERE league_id = :league_id)
       AND m.starts_at >= :since
     ORDER BY m.starts_at, m.id
     """)
 
 _NEXT_MATCH = text("""
-    SELECT id FROM hockey_matches WHERE status = 'scheduled' AND starts_at > :now
+    SELECT id FROM kk_matches WHERE status = 'scheduled' AND starts_at > :now
     ORDER BY starts_at, id LIMIT 1
     """)
 
@@ -455,7 +455,7 @@ _FRIENDS_MOVES = text("""
            p.doubled, p.points
     FROM hockey_picks AS p
     JOIN hockey_players AS pl ON pl.player_key = p.player_key
-    JOIN hockey_matches AS m ON m.id = p.match_id
+    JOIN kk_matches AS m ON m.id = p.match_id
     WHERE p.match_id = ANY(:match_ids)
       AND p.player_key <> :player_key
       AND (m.status <> 'scheduled' OR m.starts_at <= :now)

@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import Any
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -224,6 +224,22 @@ def _minutes_until(hhmm: str, *, local_now: datetime) -> int | None:
     return int(delta.total_seconds() // 60)
 
 
+def _dinamo_card(hockey: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    mode = (hockey or {}).get("mode")
+    # Итог месяца «Кто кого» (TASK-334) — сутки после финала, пока не открыли.
+    if mode == "race_result" and (hockey or {}).get("race"):
+        return {"kind": "kk_month", "hockey": dict(hockey or {})}
+    # live — идущий домашний матч-событие (TASK-304); рисуется той же карточкой, что before.
+    if mode in ("result", "before", "live") and (hockey or {}).get("match"):
+        return {"kind": "kk_result" if mode == "result" else "kk_before", "hockey": dict(hockey or {})}
+    return None
+
+
+def _feed_start(item: Mapping[str, Any]) -> datetime:
+    raw = item.get("starts_at") or ((item.get("hockey") or {}).get("match") or {}).get("starts_at")
+    return datetime.fromisoformat(raw).astimezone(timezone.utc) if raw else datetime.max.replace(tzinfo=timezone.utc)
+
+
 def now_slot(
     *,
     bookings: Mapping[str, Any] | None,
@@ -232,6 +248,7 @@ def now_slot(
     now: datetime,
     has_city: bool = True,
     tz_name: str = "Europe/Minsk",
+    extraliga: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Одна карточка «сейчас». Порядок — как на листе слота в макете (PDEC-023).
 
@@ -246,13 +263,21 @@ def now_slot(
             "booking": dict(booking),
             "minutes_until": _minutes_until(str(booking.get("start_time") or ""), local_now=local_now),
         }
-    mode = (hockey or {}).get("mode") if has_city else None
-    # Итог месяца «Кто кого» (TASK-334) — сутки после финала, пока не открыли.
-    if mode == "race_result" and (hockey or {}).get("race"):
-        return {"kind": "kk_month", "hockey": dict(hockey or {})}
-    # live — идущий домашний матч-событие (TASK-304); рисуется той же карточкой, что before.
-    if mode in ("result", "before", "live") and (hockey or {}).get("match"):
-        return {"kind": "kk_result" if mode == "result" else "kk_before", "hockey": dict(hockey or {})}
+    dinamo = _dinamo_card(hockey if has_city else None)
+    # Экстралига (TASK-340, экран 11): слот становится лентой — матчи города, Динамо, «все матчи».
+    matches = list((extraliga or {}).get("matches") or []) if has_city else []
+    if matches:
+        items: list[dict[str, Any]] = [dict(m) for m in matches]
+        if dinamo is not None:
+            items.append(dinamo)
+        # Динамо встаёт по времени среди матчей города, а не в хвост; итог месяца без даты — в конец.
+        items.sort(key=_feed_start)
+        count = int((extraliga or {}).get("week_count") or 0)
+        if count:
+            items.append({"kind": "more", "count": count, "href": (extraliga or {}).get("all_href") or "client-matches"})
+        return {"kind": "feed", "items": items}
+    if dinamo is not None:
+        return dinamo
     if upcoming:
         return {"kind": "ice", "session": dict(upcoming[0])}
     return None

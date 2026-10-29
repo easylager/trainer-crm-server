@@ -3189,8 +3189,33 @@ async def get_client_hub_bootstrap(
             logger.exception("client hub hockey card failed")
             return None
 
-    bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey = await asyncio.gather(
-        _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(), _home_hockey()
+    async def _home_extraliga() -> dict[str, Any] | None:
+        """TASK-340: лента матчей Экстралиги города. Сбой ленты не трогает главную."""
+        from src.application.extraliga_home import home_feed
+
+        try:
+            async with async_session_factory() as s:
+                row = await read_client_bot_session(telegram_id, s)
+                city_id = (row or {}).get("city_id")
+                if city_id is None:
+                    return None
+                city = (
+                    await s.execute(text("SELECT name, region FROM cities WHERE id = :id"), {"id": int(city_id)})
+                ).first()
+                if city is None:
+                    return None
+                return await home_feed(
+                    s, city_name=city.name, city_region=city.region, now=datetime.now(timezone.utc)
+                )
+        except Exception:
+            logger.exception("client hub extraliga feed failed")
+            return None
+
+    (
+        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga
+    ) = await asyncio.gather(
+        _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(),
+        _home_hockey(), _home_extraliga(),
     )
     ice_teaser = None
     try:
@@ -3230,6 +3255,7 @@ async def get_client_hub_bootstrap(
                 upcoming=(home_city or {}).get("upcoming") or [],
                 now=datetime.now(timezone.utc),
                 has_city=home_city is not None,
+                extraliga=home_extraliga,
             ),
         },
         "platform": {
@@ -9086,6 +9112,7 @@ async def get_trainer_onboarding_quick_setup(
     )
     from src.shared.specialist_roles import SUGGESTED_ROLES
     from src.shared.venue_types import (
+        TRAINER_VENUE_TYPE_KEYS,
         normalize_venue_type,
         venue_type_chip,
         venue_type_options,
@@ -9204,12 +9231,12 @@ async def get_trainer_onboarding_quick_setup(
               AND (c.is_active = true OR c.created_by_trainer_id = :tid)
             LEFT JOIN arena_schedule_presets p ON p.arena_id = a.id
             WHERE a.is_active = true
-              -- Магазин — не место работы тренера (TASK-146).
-              AND a.venue_type <> 'shop'
+              -- Магазин и школа — не место работы тренера (TASK-146, PDEC-028).
+              AND a.venue_type = ANY(:trainer_venue_types)
             ORDER BY c.sort_order, c.name, a.sort_order, a.name
             """
         ),
-        {"tid": trainer_id},
+        {"tid": trainer_id, "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS)},
     )
     arenas = [
         {
@@ -11263,6 +11290,8 @@ from src.api.routes.webapp_training_groups import router as _webapp_training_gro
 from src.api.routes.admin_ice_sessions import router as _admin_ice_sessions_router
 from src.api.routes.admin_ice_sources import router as _admin_ice_sources_router
 from src.api.routes.admin_ice_inbox import router as _admin_ice_inbox_router
+from src.api.routes.admin_place_suggestions import router as _admin_place_suggestions_router
+from src.api.routes.webapp_place_suggestions import router as _webapp_place_suggestions_router
 from src.api.routes.admin_session_load import router as _admin_session_load_router
 from src.api.routes.admin_city_picks import router as _admin_city_picks_router
 from src.api.routes.admin_hockey import router as _admin_hockey_router
@@ -11277,6 +11306,8 @@ router.include_router(_webapp_training_groups_router)
 router.include_router(_admin_ice_sessions_router)
 router.include_router(_admin_ice_sources_router)
 router.include_router(_admin_ice_inbox_router)
+router.include_router(_admin_place_suggestions_router)
+router.include_router(_webapp_place_suggestions_router)
 router.include_router(_admin_session_load_router)
 router.include_router(_admin_city_picks_router)
 router.include_router(_admin_hockey_router)

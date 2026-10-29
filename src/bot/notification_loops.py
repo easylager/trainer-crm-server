@@ -3327,6 +3327,58 @@ HOCKEY_RESULT_WINDOW_INTERVAL_SEC = 2 * 60
 HOCKEY_CALENDAR_EVERY = timedelta(hours=6)
 
 
+EXTRALIGA_CALENDAR_EVERY = timedelta(hours=24)
+EXTRALIGA_STANDINGS_EVERY = timedelta(hours=24)
+
+
+class ExtraligaPace:
+    """Когда последний раз удались календарь и таблица Экстралиги (сбой — повтор на следующем тике)."""
+
+    def __init__(self) -> None:
+        self.calendar_at: datetime | None = None
+        self.standings_at: datetime | None = None
+
+
+async def _extraliga_pass(pace: ExtraligaPace, health, *, alert) -> dict:
+    """Проход Экстралиги внутри цикла матчей: своя сессия с hockey.by и свой коммит (TASK-340)."""
+    from src.application.extraliga import HockeyByClient
+    from src.application.extraliga import run_tick as extraliga_tick
+
+    now = datetime.now(timezone.utc)
+    calendar_due = pace.calendar_at is None or now - pace.calendar_at >= EXTRALIGA_CALENDAR_EVERY
+    standings_due = pace.standings_at is None or now - pace.standings_at >= EXTRALIGA_STANDINGS_EVERY
+    try:
+        async with HockeyByClient() as client, async_session_factory() as session:
+            out = await extraliga_tick(session, client, now=now, calendar_due=calendar_due, standings_due=standings_due)
+            await session.commit()
+        out["requests"] = client.requests
+    except Exception as e:
+        logger.exception("Extraliga pass: %s", e)
+        text = health.failed("Экстралига", f"{type(e).__name__}: {e}")
+        if text:
+            await alert(text)
+        return {}
+    for what, due, failed_key, error_key in (
+        ("календарь Экстралиги", calendar_due, "calendar_failed", "calendar_error"),
+        ("таблица Экстралиги", standings_due, "standings_failed", "standings_error"),
+    ):
+        if not due:
+            continue
+        if out.get(failed_key):
+            text = health.failed(what, str(out.get(error_key) or ""))
+            if text:
+                await alert(text)
+            continue
+        health.ok(what)
+        if what.startswith("календарь"):
+            pace.calendar_at = now
+        else:
+            pace.standings_at = now
+    health.ok("Экстралига")
+    logger.info("[hockey_matches_loop] extraliga %s", out)
+    return out
+
+
 async def run_hockey_matches_loop() -> None:
     """Каждые 10 минут, в окно итога — каждые 2. Молчит, пока HOCKEY_MATCHES_ENABLED выключен.
 
@@ -3344,11 +3396,14 @@ async def run_hockey_matches_loop() -> None:
 
     logger.info("[hockey_matches_loop] started")
     last_calendar: datetime | None = None
+    extraliga = ExtraligaPace()
     health = LoopHealth()
     while True:
         delay = HOCKEY_MATCHES_INTERVAL_SEC
         try:
             settings = get_settings()
+            if settings.extraliga_enabled:
+                await _extraliga_pass(extraliga, health, alert=send_review_alert)
             if settings.hockey_matches_enabled:
                 now = datetime.now(timezone.utc)
                 calendar_due = last_calendar is None or now - last_calendar >= HOCKEY_CALENDAR_EVERY
@@ -3392,3 +3447,25 @@ async def run_hockey_matches_loop() -> None:
             await asyncio.sleep(delay)
         except asyncio.CancelledError:
             break
+
+
+PLACE_SUGGESTION_PURGE_FIRST_DELAY_SEC = 600
+PLACE_SUGGESTION_PURGE_INTERVAL_SEC = 24 * 3600
+
+
+async def run_place_suggestion_purge_loop() -> None:
+    """Раз в сутки стирает контакты заявок «места от людей», закрытых больше 30 дней назад (PDEC-028)."""
+    from src.application.place_suggestion_use_cases import purge_closed_contacts
+
+    await asyncio.sleep(PLACE_SUGGESTION_PURGE_FIRST_DELAY_SEC)
+    while True:
+        try:
+            async with async_session_factory() as session:
+                purged = await purge_closed_contacts(session)
+            if purged:
+                logger.info("[place_suggestion_purge] cleared contacts of %s suggestions", purged)
+        except asyncio.CancelledError:
+            break
+        except Exception:  # noqa: BLE001
+            logger.exception("[place_suggestion_purge] failed")
+        await asyncio.sleep(PLACE_SUGGESTION_PURGE_INTERVAL_SEC)

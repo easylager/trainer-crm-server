@@ -88,7 +88,7 @@ _DUE = text(f"""
 
 # Матч гонки, у которого ещё нет итога, держит гонку открытой: и не начавшийся, и на ручной проверке.
 _UNFINISHED = text("""
-    SELECT 1 FROM hockey_matches
+    SELECT 1 FROM kk_matches
     WHERE starts_at >= :since AND starts_at < :until
       AND (home_team = :club OR away_team = :club)
       AND status IN ('scheduled', 'review')
@@ -101,7 +101,7 @@ _GLOBAL_CROWNS = text("""
                SUM(p.points * (1 + p.doubled::int))::int AS points,
                COUNT(*) FILTER (WHERE p.points = :exact)::int AS exact
         FROM hockey_picks AS p
-        JOIN hockey_matches AS m ON m.id = p.match_id
+        JOIN kk_matches AS m ON m.id = p.match_id
         WHERE p.points IS NOT NULL AND m.starts_at >= :since AND m.starts_at < :until
           AND (m.home_team = :club OR m.away_team = :club)
         GROUP BY p.player_key
@@ -127,7 +127,7 @@ _LEAGUE_CROWNS = text("""
         FROM hockey_league_members AS mb
         JOIN leagues AS lg ON lg.id = mb.league_id
         JOIN hockey_picks AS p ON p.player_key = mb.player_key AND p.points IS NOT NULL
-        JOIN hockey_matches AS m ON m.id = p.match_id
+        JOIN kk_matches AS m ON m.id = p.match_id
         WHERE m.starts_at >= GREATEST(:since, mb.joined_at) AND m.starts_at < :until
           AND (m.home_team = :club OR m.away_team = :club)
         GROUP BY mb.league_id, p.player_key
@@ -143,7 +143,7 @@ _LEAGUE_CROWNS = text("""
 _CLOSE = text("UPDATE hockey_races SET closed_at = :now WHERE id = :race_id")
 
 _LAST_MATCH = text("""
-    SELECT id FROM hockey_matches
+    SELECT id FROM kk_matches
     WHERE starts_at >= :since AND starts_at < :until
       AND (home_team = :club OR away_team = :club)
       AND status <> 'cancelled'
@@ -173,7 +173,7 @@ _FRESH_RESULT = text(f"""
       AND NOT EXISTS (SELECT 1 FROM hockey_race_seen AS s WHERE s.race_id = r.id AND s.player_key = :player_key)
       AND EXISTS (
           SELECT 1 FROM hockey_picks AS p
-          JOIN hockey_matches AS m ON m.id = p.match_id
+          JOIN kk_matches AS m ON m.id = p.match_id
           WHERE p.player_key = :player_key AND p.points IS NOT NULL
             AND m.starts_at >= r.starts_at AND m.starts_at < r.ends_at
       )
@@ -271,7 +271,7 @@ async def race_final_match_id(session: AsyncSession, race: Race | None) -> int |
     return (await session.execute(_LAST_MATCH, params)).scalar_one_or_none()
 
 
-_MATCH_STATUS = text("SELECT status, starts_at FROM hockey_matches WHERE id = :match_id")
+_MATCH_STATUS = text("SELECT status, starts_at FROM kk_matches WHERE id = :match_id")
 
 
 async def _final_played(session: AsyncSession, race: Race, *, now: datetime) -> bool:
@@ -356,7 +356,7 @@ async def race_winners(session: AsyncSession, *, race_id: int, league_id: int | 
 _RACE_COUNTS = text("""
     SELECT COUNT(*) FILTER (WHERE status = 'final')::int AS played,
            COUNT(*) FILTER (WHERE status <> 'cancelled')::int AS known
-    FROM hockey_matches
+    FROM kk_matches
     WHERE starts_at >= :since AND starts_at < :until AND (home_team = :club OR away_team = :club)
     """)
 

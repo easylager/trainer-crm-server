@@ -143,3 +143,111 @@ async def test_ttl_purges_events_older_than_30_days(db_session) -> None:
     stats = await purge_ice_scrape_ttl(db_session, now=datetime.now(timezone.utc))
     assert stats.events_deleted >= 1
     assert len(await _events(db_session, arena_id)) == 1
+
+
+@pytest.mark.asyncio
+async def test_parser_publish_is_logged_as_parser_even_with_foreign_source_id(db_session) -> None:
+    """Адаптер пишет в source_id номер сеанса с сайта арены, а не «run:N» — всё равно это парсер."""
+    from datetime import time
+    from zoneinfo import ZoneInfo
+
+    from src.ingestion.publish import SqlAlchemyIceSessionPublisher
+    from src.ingestion.scrape_runs import SqlAlchemyScrapeRunRecorder
+    from src.ingestion.types import RUN_STATUS_OK, CanonicalSlotDraft, ScrapeRunRecord
+
+    arena_id = await _arena(db_session)
+    job_id = int(
+        (
+            await db_session.execute(
+                text(
+                    "INSERT INTO ice_parser_jobs (arena_id, parser_key, is_enabled, cadence, next_run_at, config) "
+                    "VALUES (:a, 'test_parser', true, 'daily', now(), '{}'::jsonb) RETURNING id"
+                ),
+                {"a": arena_id},
+            )
+        ).scalar_one()
+    )
+    tz = ZoneInfo("Europe/Minsk")
+    now = datetime.now(timezone.utc)
+    day = (now + timedelta(days=2)).astimezone(tz).date()
+    starts = datetime.combine(day, time(18, 0), tzinfo=tz).astimezone(timezone.utc)
+    ends = starts + timedelta(hours=1)
+    draft = CanonicalSlotDraft(
+        arena_id=arena_id, kind="public_skate", starts_at_utc=starts, ends_at_utc=ends, local_date=day,
+        starts_at_local=time(18, 0), ends_at_local=time(19, 0), price_adult_minor=1000, price_child_minor=None,
+        price_rental_minor=None, currency_code="BYN", status="active", observed_at=now, valid_until=ends,
+        session_label=None, source_id="8078", schedule_basis="live",
+    )
+    run = ScrapeRunRecord(
+        job_id=job_id, arena_id=arena_id, parser_key="test_parser", status=RUN_STATUS_OK, slot_count=1,
+        slots_dropped=0, error_message=None, started_at=now - timedelta(seconds=30), finished_at=now,
+        publish_horizon_days=14, publish_timezone="Europe/Minsk",
+    )
+    run_id = await SqlAlchemyScrapeRunRecorder(db_session).record(run)
+    assert await SqlAlchemyIceSessionPublisher(db_session).publish(run, [draft], run_id=run_id) == 1
+    assert await _events(db_session, arena_id) == [("added", "parser")]
+
+
+async def _publish_one(db_session, arena_id: int, job_id: int, starts, ends, day, *, source_id: str = "8078"):
+    from datetime import time
+
+    from src.ingestion.publish import SqlAlchemyIceSessionPublisher
+    from src.ingestion.scrape_runs import SqlAlchemyScrapeRunRecorder
+    from src.ingestion.types import RUN_STATUS_OK, CanonicalSlotDraft, ScrapeRunRecord
+
+    now = datetime.now(timezone.utc)
+    draft = CanonicalSlotDraft(
+        arena_id=arena_id, kind="public_skate", starts_at_utc=starts, ends_at_utc=ends, local_date=day,
+        starts_at_local=starts.astimezone(__import__("zoneinfo").ZoneInfo("Europe/Minsk")).time().replace(tzinfo=None),
+        ends_at_local=ends.astimezone(__import__("zoneinfo").ZoneInfo("Europe/Minsk")).time().replace(tzinfo=None),
+        price_adult_minor=1000, price_child_minor=None, price_rental_minor=None, currency_code="BYN",
+        status="active", observed_at=now, valid_until=ends, session_label=None, source_id=source_id,
+        schedule_basis="live",
+    )
+    run = ScrapeRunRecord(
+        job_id=job_id, arena_id=arena_id, parser_key="test_parser", status=RUN_STATUS_OK, slot_count=1,
+        slots_dropped=0, error_message=None, started_at=now - timedelta(seconds=30), finished_at=now,
+        publish_horizon_days=14, publish_timezone="Europe/Minsk",
+    )
+    run_id = await SqlAlchemyScrapeRunRecorder(db_session).record(run)
+    return await SqlAlchemyIceSessionPublisher(db_session).publish(run, [draft], run_id=run_id)
+
+
+@pytest.mark.asyncio
+async def test_parser_does_not_duplicate_a_slot_entered_by_hand(db_session) -> None:
+    """Слот из админки (source_id=admin) защищён от замены; парсер не должен класть второй такой же рядом."""
+    arena_id = await _arena(db_session)
+    job_id = int(
+        (
+            await db_session.execute(
+                text(
+                    "INSERT INTO ice_parser_jobs (arena_id, parser_key, is_enabled, cadence, next_run_at, config) "
+                    "VALUES (:a, 'test_parser', true, 'daily', now(), '{}'::jsonb) RETURNING id"
+                ),
+                {"a": arena_id},
+            )
+        ).scalar_one()
+    )
+    start = (datetime.now(timezone.utc) + timedelta(days=2)).replace(minute=0, second=0, microsecond=0)
+    end = start + timedelta(minutes=45)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO ice_sessions (arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local,
+                ends_at_local, currency_code, status, source_id, schedule_basis)
+            VALUES (:a, 'public_skate', :s, :e, (:s AT TIME ZONE 'Europe/Minsk')::date,
+                (:s AT TIME ZONE 'Europe/Minsk')::time, (:e AT TIME ZONE 'Europe/Minsk')::time,
+                'BYN', 'active', 'admin', 'manual')
+            """
+        ),
+        {"a": arena_id, "s": start, "e": end},
+    )
+    day = start.astimezone(__import__("zoneinfo").ZoneInfo("Europe/Minsk")).date()
+    await _publish_one(db_session, arena_id, job_id, start, end, day)
+    count = (
+        await db_session.execute(
+            text("SELECT count(*) FROM ice_sessions WHERE arena_id = :a AND starts_at_utc = :s AND kind = 'public_skate'"),
+            {"a": arena_id, "s": start},
+        )
+    ).scalar_one()
+    assert count == 1

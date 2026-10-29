@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+	<html lang="ru">
+	<head>
+
+		<title>Календарь игр</title>
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<meta name="format-detection" content="telephone=no"/>
+                <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="robots" content="index, follow" />
+<meta name="keywords" content="Календарь игр" />
+<meta name="description" content="Календарь игр" />
+<script data-skip-moving="true">(function(w, d, n) {var cl = "bx-core";var ht = d.documentElement;var htc = ht ? ht.className : undefined;if (htc === undefined || htc.indexOf(cl) !== -1){return;}var ua = n.userAgent;if (/(iPad;)|(iPhone;)/i.test(ua)){cl += " bx-ios";}else if (/Windows/i.test(ua)){cl += ' bx-win';}else if (/Macintosh/i.test(ua)){cl += " bx-mac";}else if (/Linux/i.test(ua) && !/Android/i.test(ua)){cl += " bx-linux";}else if (/Android/i.test(ua)){cl += " bx-android";}cl += (/(ipad|iphone|android|mobile|touch)/i.test(ua) ? " bx-touch" : " bx-no-touch");cl += w.devicePixelRatio && w.devicePixelRatio >= 2? " bx-retina": " bx-no-retina";if (/Safari/i.test(ua) && !/Chrome/i.test(ua)){cl += " bx-safari";}else if (/AppleWebKit/.test(ua)){cl += " bx-chrome";}else if (/Opera/.test(ua)){cl += " bx-opera";}else if (/Firefox/.test(ua)){cl += " bx-firefox";}ht.className = htc ? htc + " " + cl : cl;})(window, document, navigator);</script>
+
+
+<link href="/local/components/2quick/game.calendar/templates/.default/style.css?159921192663" type="text/css" rel="stylesheet"/>
+<link href="/local/templates/test_index/css/normalize.min.css?15843571521842" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/jquery.formstyler.min.css?15843571521783" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/magnific-popup.css?15843571526959" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/slick.css?15843571521729" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/lightgallery.css?158435715224758" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/style.css?1787562491210241" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/calendar.css?160793305024466" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/playoff.css?17119736214012" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/costume.css?179215098016708" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/modal.css?15843571522323" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/bubles.css?15870459691551" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/glossary.css?159551176410196" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/matches.css?173410163444921" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/resp.css?171095012036664" type="text/css" rel="stylesheet" data-template-style="true"/>
+<link href="/local/templates/test_index/css/icons.css?1599039566542" type="text/css" rel="stylesheet" data-template-style="true"/>
+
+
+
+
+
+
+
+<link href="https://fonts.googleapis.com/css?family=Ubuntu:300,300i,400,400i,500,500i,700&amp;subset=cyrillic" rel="stylesheet">
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/jquery-datetimepicker/2.5.20/jquery.datetimepicker.min.css" />
+<link rel="stylesheet" href="//cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css" />
+<link rel="stylesheet" href="/local/templates/test_index/css/jTable.css" />
+                
+
+
+		<!--[if lt IE 9]>
+				<![endif]-->
+	</head>
+<body>
+
+<div id="wrapper" class="wrapper">
+	<header class="header" id="header">
+
+		<div class="h-top">
+			<div class="inner">
+				<div class="flex valign-center align-justify">
+
+					<div class="h-top-socials">
+                        							<a href="https://vk.com/hockey_bel" target="_blank">
+								<svg class="sprite s-vk">
+									<use xlink:href="/local/templates/test_index/svg/svg/symbols.svg#s-vk">
+									</use>
+								</svg>
+							</a>
+                                                							<a href="https://www.facebook.com/hockey.by" target="_blank">
+								<svg class="sprite s-fb">
+									<use xlink:href="/local/templates/test_index/svg/svg/symbols.svg#s-fb">
+									</use>
+								</svg>
+							</a>
+                                                							<a href="https://www.instagram.com/hockey.by/" target="_blank">
+								<svg class="sprite s-insta">
+									<use xlink:href="/local/templates/test_index/svg/svg/symbols.svg#s-insta">
+									</use>
+								</svg>
+							</a>
+                        
+                        							<a href="https://twitter.com/hockey_blr" target="_blank">
+								<svg class="sprite s-tw">
+									<use xlink:href="/local/templates/test_index/svg/svg/symbols.svg#s-tw">
+									</use>
+								</svg>
+							</a>
+                                                							<a href="https://www.youtube.com/channel/UCZ656FSO-sWqPnQfJOLlHhg" target="_blank" class="header-yt">
+								<i></i>
+								<svg class="sprite s-tw">
+									<use xlink:href="/local/templates/test_index/svg/svg/symbols.svg#s-tw">
+									</use>
+								</svg>
+							</a>
+                                                                            <a href="https://t.me/hockeyby" class="header-tg" target="_blank"><i class="icon"></i></a>
+                                                                            <a href="https://www.tiktok.com/@hockey.by" class="header-tik" target="_blank"><i class="icon"></i></a>
+                                                                            <span class="s-title">мы в социальных сетях</span>
+                        					</div>
+
+
+					<div class="h-top-partners">
+						<div class="flex align-right valign-center">
+							
+                            
+	<div class="h-partners">
+        			<div class="item" id="bx_3218110189_2">
+				<a target="_blank" href="https://pm.by/ru/popup/registration?yclid=8608597037211975679&utm_source=context_yandex_branded&t_group=yandex&utm_content=13859663649&utm_medium=cpc&campaign_name=NONSTOP_S_BT_Брендовые%20Betera%20%28CPC%29&keyword=бетера&creative_id=0&campaign_type=type">
+					<img src="/upload/iblock/d31/5pfgrw40rcvhv4180o2je8gp3s7r1uhs/%D0%B8%D0%B7%D0%BE%D0%B1%D1%80%D0%B0%D0%B6%D0%B5%D0%BD%D0%B8%D0%B5_2025-02-19_142925858.png" alt="alt">
+				</a>
+			</div>
+        			<div class="item" id="bx_3218110189_1">
+				<a target="_blank" href="https://belaruskali.by">
+					<img src="/upload/iblock/f9b/belaruskali.png" alt="alt">
+				</a>
+			</div>
+        			<div class="item" id="bx_3218110189_3">
+				<a target="_blank" href="https://evroopt.by/">
+					<img src="/upload/iblock/886/evroopt.png" alt="alt">
+				</a>
+			</div>
+        			<div class="item" id="bx_3218110189_195249">
+				<a target="_blank" href="https://belkart.by">
+					<img src="/upload/iblock/696/fqg87luwporzz8lbfer5jhx038r1eps2/%D0%9B%D0%BE%D0%B3%D0%BE%D1%82%D0%B8%D0%BF-%D0%BD%D0%B0-%D0%BF%D0%BB%D0%B0%D1%88%D0%BA%D0%B5-1.png" alt="alt">
+				</a>
+			</div>
+        
+	</div><!--.h-partners-->
+                            
+							<a href="/search/" class="search-toggler">
+								<svg class="sprite svg-search">
+									<use xlink:href="/local/templates/test_index/svg/svg/symbols.svg#glass">
+								</svg>
+							</a>
+
+						</div>
+					</div>
+
+				</div>
+			</div>
+		</div><!--.h-top-->
+
+        
+<div class="h-teams">
+    <div class="inner">
+        <div class="flex align-justify valign-center">
+            <div class="h-teams-left">
+                <div class="flex align-justify valign-center">
+
+                    	                                        <div class="team-logo" id="bx_651765591_18684">
+                        <a href="https://hcdinamo.by/">
+                            <img src="/upload/iblock/29a/29a0c1d1ee49b799567e678f6a0992d1.png" alt="Динамо-Минск">
+                            <span class="team-hint">Динамо-Минск</span>
+                        </a>
+                    </div>
+                                        	                                        <div class="team-logo" id="bx_651765591_217013">
+                        <a href="http://shinnik.hcdinamo.by">
+                            <img src="/upload/iblock/1f8/sfapg80jta6anreygok0g848ykfyvo7l/D.SH__fin2.png" alt="Динамо-Шинник">
+                            <span class="team-hint">Динамо-Шинник</span>
+                        </a>
+                    </div>
+                                        	                                        <div class="team-logo" id="bx_651765591_18686">
+                        <a href="https://gomel.hockey.by/">
+                            <img src="/upload/iblock/7e1/7e1299a0af27a9f697c2a46e06380ce4.png" alt="Гомель">
+                            <span class="team-hint">Гомель</span>
+                        </a>
+                    </div>
+                                        	                                        <div class="team-logo" id="bx_651765591_37758">
+                        <a href="https://hcmolodechno.hockey.by/">
+                            <img src="/upload/iblock/c66/c66823417c1d8a434423ef46b8a0dd54.png" alt="Динамо-Молодечно">
+                            <span class="team-hint">Динамо-Молодечно</span>
+                        </a>
+                    </div>
+                                        	                                        <div class="team-logo" id="bx_651765591_18699">
+                        <a href="https://lida.hockey.by/">
+                            <img src="/upload/iblock/7d0/7d012612a6e21be23bb4d2f3826fb09b.png" alt="Лида">
+                            <span class="team-hint">Лида</span>
+                        </a>
+                    </div>
+                                        	                                        <div class="team-logo" id="bx_651765591_18697">
+                        <a href="https://metallurg.hockey.by/">
+                            <img src="/upload/iblock/3bc/3bc7381f41fa218765f4c9a423decd92.png" alt="Металлург">
+                            <span class="team-hint">Металлург</span>
+                        </a>
+                    </div>
+                                        	                                        <div class="team-logo" id="bx_651765591_18685">
+                        <a href="https://neman.hockey.by/">
+                            <img src="/upload/iblock/fd2/fd22069c5ccdea33c64374a9413002b1.png" alt="Неман">
+                            <span class="team-hint">Неман</span>
+                        </a>
+                    </div>
+                                        	                                        <div class="team-logo" id="bx_651765591_18689">
+                        <a href="https://shahter.hockey.by/">
+                            <img src="/upload/iblock/585/97p8bvvt0g6uhx1ju4kr628e9mfyvur1/%D0%A5%D0%9A_%D0%A8%D0%B0%D1%85%D1%82%D0%B5%D1%80_60.png" alt="Шахтер">
+                            <span class="team-hint">Шахтер</span>
+                        </a>
+                    </div>
+                                        	                                        	                                        	                                        	                                        	                                        	                                        	                                        	                                        	                                                        </div>
+            </div><!--.h-teams-left-->
+
+            <div class="h-teams-right">
+                <div class="flex align-justify valign-center">
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            <div class="team-logo" id="bx_651765591_18687">
+                                <a href="https://junost.hockey.by/">
+                                    <img src="/upload/iblock/a77/a77f3a0c8cdd3f2dc4f002cfcf378813.png" alt="Юность">
+                                    <span class="team-hint">Юность</span>
+                                </a>
+                            </div>
+                                                                                                                    <div class="team-logo" id="bx_651765591_18693">
+                                <a href="https://baranovichi.hockey.by/">
+                                    <img src="/upload/iblock/186/gdeyvdg65xp5c033xdip4m3egnduyyq6/%D0%90%D0%B2%D0%B8%D0%B0%D1%82%D0%BE%D1%80.png" alt="Авиатор">
+                                    <span class="team-hint">Авиатор</span>
+                                </a>
+                            </div>
+                                                                                                                    <div class="team-logo" id="bx_651765591_18698">
+                                <a href="https://brest.hockey.by/">
+                                    <img src="/upload/iblock/58d/58d0d09c6c4e6e41789404599bb3122d.png" alt="Брест">
+                                    <span class="team-hint">Брест</span>
+                                </a>
+                            </div>
+                                                                                                                    <div class="team-logo" id="bx_651765591_18690">
+                                <a href="https://vitebsk.hockey.by">
+                                    <img src="/upload/iblock/eb6/eb6a2ce9e61d1efcf87d6d3858b36e11.png" alt="Витебск">
+                                    <span class="team-hint">Витебск</span>
+                                </a>
+                            </div>
+                                                                                                                    <div class="team-logo" id="bx_651765591_18692">
+                                <a href="https://lokomotiv.hockey.by/">
+                                    <img src="/upload/iblock/a90/a90a176a326c551a9ebcf72bbd29d3a8.png" alt="Локомотив">
+                                    <span class="team-hint">Локомотив</span>
+                                </a>
+                            </div>
+                                                                                                                    <div class="team-logo" id="bx_651765591_18696">
+                                <a href="https://mogilev.hockey.by/">
+                                    <img src="/upload/iblock/0cb/0cb2bd1efd94bce15e18c7d8e9d97a4c.png" alt="Могилев">
+                                    <span class="team-hint">Могилев</span>
+                                </a>
+                            </div>
+                                                                                                                    <div class="team-logo" id="bx_651765591_303142">
+                                <a href="https://slavutich.hockey.by/">
+                                    <img src="/upload/iblock/ed4/mvhr43q205ggbndyfry0srd7qk87bl8x/slavutich-logo-min.png" alt="Славутич">
+                                    <span class="team-hint">Славутич</span>
+                                </a>
+                            </div>
+                                                                                                                    <div class="team-logo" id="bx_651765591_18694">
+                                <a href="https://pinsk.hockey.by/">
+                                    <img src="/upload/iblock/d0c/d0cd2cc4dfca72cfb7722f26229ed01c.png" alt="Ястребы">
+                                    <span class="team-hint">Ястребы</span>
+                                </a>
+                            </div>
+                                                                                                                    <div class="team-logo" id="bx_651765591_18695">
+                                <a href="https://hchimik.hockey.by/">
+                                    <img src="/upload/iblock/949/9498e233e11fecd281b398bf88569c82.png" alt="Химик">
+                                    <span class="team-hint">Химик</span>
+                                </a>
+                            </div>
+                                                            </div>
+            </div><!--.h-teams-right-->
+        </div>
+    </div>
+</div>
+
+        <div class="h-mid">
+	<div class="inner">
+		<div class="flex align-justify valign-center">
+            <div class="h-mid-logo">
+                <a class="logo " href="/">
+                    <!-- <div class="logo-txt">Федерация хоккея</div> -->
+                                        <img  src="/upload/uf/aef/aeff844791149a5cec35e5b38280b392.svg" alt="">
+                </a>
+            </div>
+            						<ul class="h-menu h-menu-left">
+                            								<li id="bx_1847241719_1">
+									<a href="/federation/history/" ><span>Федерация</span></a>
+
+                                    
+										<ul>
+                                            												<li><a href="/federation/history/">История</a></li>
+                                            												<li><a href="/federation/struktura/">Структура</a></li>
+                                            												<li><a href="/icearenas/">Ледовые арены</a></li>
+                                            												<li><a href="/doc/">Официальные документы</a></li>
+                                            												<li><a href="/contacts/">Контакты</a></li>
+                                            												<li><a href="https://hockey.by/gossimvolika.php">Государственная символика</a></li>
+                                            												<li><a href="/cooperative/">Сотрудничество</a></li>
+                                            												<li><a href="https://hockey.by/doc_rules/">Правила поведения</a></li>
+                                            
+										</ul>
+                                    								</li>
+
+
+                                								<li id="bx_1847241719_3">
+									<a href="/teams/natsionalnaya-sbornaya/" ><span>Сборные</span></a>
+
+                                    
+										<ul>
+                                            												<li><a href="/teams/natsionalnaya-sbornaya/">Национальная</a></li>
+                                            												<li><a href="/teams/molodezhnaya-u20/">Молодежная U20</a></li>
+                                            												<li><a href="/teams/yuniorskaya-u18/">Юниорская U18</a></li>
+                                            												<li><a href="/teams/yuniorskaya-u17/">Юношеская U17</a></li>
+                                            												<li><a href="/teams/yuniorskaya-u16/">Юношеская U16</a></li>
+                                            												<li><a href="/teams/women/">Женский хоккей</a></li>
+                                            												<li><a href="https://hockey.by/teams/kalendar-sbornykh/">Календарь сборных</a></li>
+                                            
+										</ul>
+                                    								</li>
+
+
+                                								<li id="bx_1847241719_4">
+									<a href="/natsionalnyy-chempionat/ekstraliga-a/" ><span>Клубные турниры</span></a>
+
+                                    
+										<ul>
+                                            												<li><a href="/natsionalnyy-chempionat/ekstraliga-a/">Экстралига</a></li>
+                                            												<li><a href="/natsionalnyy-chempionat/vysshaya-liga/">Высшая лига</a></li>
+                                            												<li><a href="/natsionalnyy-chempionat/kubok-ruslana-saleya/">Кубок Руслана Салея</a></li>
+                                            												<li><a href="/natsionalnyy-chempionat/kubok-tsyplakova/">Кубок Цыплакова</a></li>
+                                            												<li><a href="https://hockey.by/natsionalnyy-chempionat/womenshockey/">Женская лига</a></li>
+                                            												<li><a href="https://hockey.by/closing-ceremony/">Церемония закрытия</a></li>
+                                            												<li><a href="/kvalifikatsionnye-predlozheniya/">Квалификационные предложения</a></li>
+                                            
+										</ul>
+                                    								</li>
+
+
+                                						</ul>
+                    						<ul class="h-menu h-menu-right">
+                            								<li id="bx_1847241719_5">
+									<a href="/junior/hockey_schools/" ><span>Детский хоккей</span></a>
+
+                                    
+										<ul>
+                                            												<li><a href="/junior/hockey_schools/">Хоккейные школы</a></li>
+                                            												<li><a href="/glossary/">База упражнений</a></li>
+                                            												<li><a href="/junior/hockey_data/">Методика подготовки</a></li>
+                                            												<li><a href="https://hockey.by/proekt-pyat-zvezd/">Проект «Пять звезд»</a></li>
+                                            												<li><a href="https://hockey.by/statistic_junior/playoff/?competition=20-21">Турнирные таблицы</a></li>
+                                            
+										</ul>
+                                    								</li>
+
+
+                                								<li id="bx_1847241719_3084">
+									<a href="https://hockey.by/transfer-table/" ><span>Таблица переходов</span></a>
+
+                                    								</li>
+
+
+                                								<li id="bx_1847241719_3128">
+									<a href="/referees/" ><span>Судейство</span></a>
+
+                                    
+										<ul>
+                                            												<li><a href="/hochustatarbitrom/">Как стать хоккейным арбитром?</a></li>
+                                            												<li><a href="/referees/">Судьи ОЧБ</a></li>
+                                            												<li><a href="/referees/doc/">Методические пособия</a></li>
+                                            												<li><a href="https://hockey.by/referees/zapros-na-rassmotrenie-igrovogo-epizoda.php">Запрос на рассмотрение игрового эпизода в ОЧБ</a></li>
+                                            												<li><a href="https://hockey.by/disqualification">Дисквалификации ОПРБ и РС</a></li>
+                                            
+										</ul>
+                                    								</li>
+
+
+                                						</ul>
+                    		</div>
+	</div>
+</div><!--.h-mid-->
+        
+    <div class="h-bottom">
+        <div class="inner">
+            <div class="h-new-schedule">
+                <div class="slick-new-schedule">
+
+                                                                    
+                        <div class="hsc-item hsc-completed" id="bx_2109608337_448366" data-time="25.10.26">
+
+
+                            
+                            <a href="/gamecenter/448366/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Высшая лига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/1a4/jhpnctu0xyimgrg91enkkkxnv3g41ip2/Progress-Logo1-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Прогресс</span>
+                                                                                    <span class="hsc-team-points">1</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/25a/yhnnkzz5pi6gbuknkjj2pg2og1ui65el/DneprovskieLvi-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Львы</span>
+                                                                                    <span class="hsc-team-points">2</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-circle"> Бул</div>
+                                        </div>
+                                                                    </div>
+                                                                                                                                                                                    <div class="hsc-date">Вс, 25.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item hsc-completed" id="bx_2109608337_448374" data-time="26.10.26">
+
+
+                            
+                            <a href="/gamecenter/448374/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Высшая лига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/656/a84upj3hqdtca3wynjany7nsdqprxbec/Dinamo-Olimpik-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">ДНМ-Олимпик</span>
+                                                                                    <span class="hsc-team-points">1</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/4fa/lat5npyhi5dcrlw99brm4e23imyc78it/Unior-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Юниор</span>
+                                                                                    <span class="hsc-team-points">3</span>
+                                                                            </div>
+                                    
+                                                                    </div>
+                                                                                                                                                                                    <div class="hsc-date">Пн, 26.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item hsc-completed" id="bx_2109608337_448368" data-time="26.10.26">
+
+
+                            
+                            <a href="/gamecenter/448368/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Высшая лига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/103/3qq0t49n2zc0d4rzazhxduzjrtwftlln/U18-Team-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">U18</span>
+                                                                                    <span class="hsc-team-points">4</span>
+                                                                            </div>
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/929/bsffg1icyx1rikectga1itkbuc1stwld/Belstal-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Белсталь</span>
+                                                                                    <span class="hsc-team-points">2</span>
+                                                                            </div>
+                                    
+                                                                    </div>
+                                                                                                                                                                                    <div class="hsc-date">Пн, 26.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item hsc-completed" id="bx_2109608337_448378" data-time="26.10.26">
+
+
+                            
+                            <a href="/gamecenter/448378/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Высшая лига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/543/yl6mrywv45f0mg34m0al1uazgbfunfon/Yastreby_RGB-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Ястребы</span>
+                                                                                    <span class="hsc-team-points">6</span>
+                                                                            </div>
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/2f3/au8jcz1w9bl93lvi0mroth6559vpg6rx/Risi-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Рыси</span>
+                                                                                    <span class="hsc-team-points">2</span>
+                                                                            </div>
+                                    
+                                                                    </div>
+                                                                                                                                                                                    <div class="hsc-date">Пн, 26.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item hsc-completed" id="bx_2109608337_448372" data-time="26.10.26">
+
+
+                            
+                            <a href="/gamecenter/448372/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Высшая лига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/cde/7jv3rx2hjwlg03nbcmmvabr0bv7ed02o/Neftekhimik-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Нефтехимик</span>
+                                                                                    <span class="hsc-team-points">0</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/08f/x142k0li2nz038deiuabjrdq14h49zwp/Loko-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Локо</span>
+                                                                                    <span class="hsc-team-points">5</span>
+                                                                            </div>
+                                    
+                                                                    </div>
+                                                                                                                                                                                    <div class="hsc-date">Пн, 26.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item hsc-completed" id="bx_2109608337_448370" data-time="26.10.26">
+
+
+                            
+                            <a href="/gamecenter/448370/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Высшая лига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/5df/g3abv86ztkwtpxo342taaer2561qbqxf/Medvedi-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Медведи</span>
+                                                                                    <span class="hsc-team-points">3</span>
+                                                                            </div>
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/5f4/fzh2q4ug51p8jeu6c34sy6i7vq942eei/U17-Team-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">U17</span>
+                                                                                    <span class="hsc-team-points">1</span>
+                                                                            </div>
+                                    
+                                                                    </div>
+                                                                                                                                                                                    <div class="hsc-date">Пн, 26.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item hsc-completed" id="bx_2109608337_448380" data-time="26.10.26">
+
+
+                            
+                            <a href="/gamecenter/448380/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Высшая лига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/1a4/jhpnctu0xyimgrg91enkkkxnv3g41ip2/Progress-Logo1-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Прогресс</span>
+                                                                                    <span class="hsc-team-points">6</span>
+                                                                            </div>
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/25a/yhnnkzz5pi6gbuknkjj2pg2og1ui65el/DneprovskieLvi-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Львы</span>
+                                                                                    <span class="hsc-team-points">1</span>
+                                                                            </div>
+                                    
+                                                                    </div>
+                                                                                                                                                                                    <div class="hsc-date">Пн, 26.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item hsc-completed" id="bx_2109608337_448376" data-time="26.10.26">
+
+
+                            
+                            <a href="/gamecenter/448376/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Высшая лига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/6ee/kp42q9586kqy6p6piul6akxsqw0s9rj9/Zubry-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Зубры</span>
+                                                                                    <span class="hsc-team-points">8</span>
+                                                                            </div>
+                                    <div class="hsc-team  hsc-winner">
+                                                                                    <img src="/cache/upload/iblock/d69/21pju6e909n9cuzskqp4vfcgxpvgdpca/Ritsari-Logo-RGB-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Рыцари</span>
+                                                                                    <span class="hsc-team-points">0</span>
+                                                                            </div>
+                                    
+                                                                    </div>
+                                                                                                                                                                                    <div class="hsc-date">Пн, 26.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441966" data-time="27.10.26">
+
+
+                            
+                            <a href="/gamecenter/441966/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/264/mqcj3ovgayxwlqyr81jjzvr1yd8j7r3c/Могилев-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Могилев</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/7e8/dspk9dr777cci2vj7eg29pqufh2tk7dp/Химик-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Химик</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">18:30</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Вт, 27.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441968" data-time="27.10.26">
+
+
+                            
+                            <a href="/gamecenter/441968/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/d30/gx14iusaeqxilhwnbsr15s40n2lc4mug/Славутич-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Славутич</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/e95/8shl7bhxotzq780bylhvwqnumsazpmrq/Брест-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Брест</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">19:00</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Вт, 27.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441964" data-time="27.10.26">
+
+
+                            
+                            <a href="/gamecenter/441964/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/4e1/48z3n4l8arwz3v2n1nzka6xa2o1sqjl1/Юность-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Юность</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/717/ng1nqz2tpm04ogb4k12yso25t7jv17iv/Неман-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Неман</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">19:00</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Вт, 27.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441970" data-time="28.10.26">
+
+
+                            
+                            <a href="/gamecenter/441970/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/9f7/g6pxzies2g84gbycaquc0m8vtd1vaox4/Локомотив-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Локомотив</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/8d4/bean5fripxqt2n4kbqz0jm3lfic1n1ey/Металлург-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Металлург</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">18:30</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Ср, 28.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441972" data-time="28.10.26">
+
+
+                            
+                            <a href="/gamecenter/441972/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/344/1wbczvson88oqk7ellgxz90m953ue86n/Шахтер-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Шахтер</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/295/ewcava61xeos3sxy31nfvaj77xknl5um/Гомель-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Гомель</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">18:30</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Ср, 28.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_445387" data-time="28.10.26">
+
+
+                            
+                            <a href="/gamecenter/445387/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">КХЛ</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/946/9u6l7uqz6nq6iowvvrpqrlpdmj0rqeh6/logo-main-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Динамо Мн</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/8fb/4uja8whvqap75mcwqbdfherajg7ue6w7/Барыс-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Барыс</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">19:00</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Ср, 28.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441974" data-time="28.10.26">
+
+
+                            
+                            <a href="/gamecenter/441974/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/112/266ntw1c4tby4495txjp28xeesiv3b3v/Витебск-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Витебск</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/6c1/zuga0ubbww5rcvlv08r37kx0i0riem06/Лида-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Лида</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">19:00</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Ср, 28.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441976" data-time="28.10.26">
+
+
+                            
+                            <a href="/gamecenter/441976/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/241/euthkp1yq40t7kvwz6oxm7mjf78z8w6q/Авиатор-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Авиатор</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/bae/nqx4g57mq5xagxs6i29jo70xbu0ziecq/Молодечно-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">ДНМ-Молодечно</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">19:00</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Ср, 28.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441980" data-time="29.10.26">
+
+
+                            
+                            <a href="/gamecenter/441980/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/264/mqcj3ovgayxwlqyr81jjzvr1yd8j7r3c/Могилев-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Могилев</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/7e8/dspk9dr777cci2vj7eg29pqufh2tk7dp/Химик-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Химик</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">18:30</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Чт, 29.10.26</div>
+                                                            </a>
+                        </div>
+
+                                                                    
+                        <div class="hsc-item " id="bx_2109608337_441978" data-time="29.10.26">
+
+
+                            
+                            <a href="/gamecenter/441978/" class="hsc-link" target="_blank" >
+                                <div class="hsc-league">Betera-Экстралига</div>
+                                <div class="hsc-match">
+                                    <div class="hsc-team  ">
+                                                                                    <img src="/cache/upload/iblock/4e1/48z3n4l8arwz3v2n1nzka6xa2o1sqjl1/Юность-24x24.png" alt="" class="hsc-team-logo">
+                                        
+
+                                        <span class="hsc-team-name">Юность</span>
+                                                                            </div>
+                                    <div class="hsc-team ">
+                                                                                    <img src="/cache/upload/iblock/717/ng1nqz2tpm04ogb4k12yso25t7jv17iv/Неман-24x24.png" alt="" class="hsc-team-logo">
+                                                                                <span class="hsc-team-name">Неман</span>
+                                                                            </div>
+                                    
+                                                                            <div class="hsc-match-extd">
+                                            <div class="hsc-match-time">19:00</div>
+                                        </div>
+                                                                        </div>
+                                                                                                                                                                                    <div class="hsc-date">Чт, 29.10.26</div>
+                                                            </a>
+                        </div>
+
+                    
+                </div><!--.slick-schedule-->
+                <div class="to-schedule-link">
+                    <a href="https://hockey.by/calendar/">
+                        <i class="i-calendar-big"></i>
+                        <span>Все матчи</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div><!--.h-bottom-->
+
+
+
+	</header>
+
+	<div id="middle">
+	<div id="container" class="container">
+
+    	<div class="inner">
+
+
+
+
+
+
+
+
+
+
+
+<h1 class="page-title">Календарь игр</h1>
+<div class="game-calendar-wrapper">
+<form class="calendar-filter" id="calendar_filter">
+    <div class="flex-row">
+        <div class="flx-calendar-filter flx-m-3 flx-x-4 flx-u-6">
+            <div class="field">
+                <label for="tq_season_select" class="label-block">Сезон:</label>
+                <select name="SEASON" id="tq_season_select">
+                    <option v-for="season in seasons" v-bind:value="season.ID" v-bind:selected="season.selected">{{
+                        season.UF_NAME }}
+                    </option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flx-calendar-filter flx-m-3 flx-x-4 flx-u-6">
+            <div class="field">
+                <label for="tq_leagues_select" class="label-block">Соревнование:</label>
+                <select name="LEAGUE" id="tq_leagues_select">
+                    <option v-for="league in leagues" v-bind:value="league.ID" v-bind:selected="league.selected">{{
+                        league.UF_NAME }}
+                    </option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flx-calendar-filter flx-m-3 flx-x-4 flx-u-6">
+            <div class="field">
+                <label for="tq_division_select" class="label-block">Дивизион:</label>
+                <select name="DIVISION" id="tq_division_select">
+                    <option v-for="division in divisions" v-bind:value="division.ID"
+                            v-bind:selected="division.selected">{{ division.UF_NAME }}
+                    </option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flx-calendar-filter flx-m-3 flx-x-4 flx-u-6">
+            <div class="field">
+                <label for="tq_team_select" class="label-block">Команды:</label>
+                <select name="TEAM" id="tq_team_select">
+                    <option v-for="team in teams" v-bind:value="team.ID" v-bind:selected="team.selected">{{ team.UF_NAME
+                        }}
+                    </option>
+                </select>
+            </div>
+        </div>
+        <div class="flx-calendar-filter flx-m-3 flx-x-4 flx-u-6">
+            <div class="field">
+                <label for="" class="label-block">Месяц:</label>
+                <select name="MONTH" id="tq_month">
+                                            <option value="" class="option-hide">Все месяцы</option>
+                                                                <option value="1">Январь</option>
+                                            <option value="2">Февраль</option>
+                                            <option value="3">Март</option>
+                                            <option value="4">Апрель</option>
+                                            <option value="5">Май</option>
+                                            <option value="6">Июнь</option>
+                                            <option value="7">Июль</option>
+                                            <option value="8">Август</option>
+                                            <option value="9">Сентябрь</option>
+                                            <option value="10" selected  class="curr-month">Октябрь</option>
+                                            <option value="11">Ноябрь</option>
+                                            <option value="12">Декабрь</option>
+                                    </select>
+            </div>
+        </div>
+
+    </div>
+</form><!--.calendar-filter-->
+
+<div class="calendar-settings flex">
+    <div class="calendar-menu calendar-menu-times">
+                    <a href="javascript:void(0)" class="active"               data-status="current">Текущие и будущие</a>
+                    <a href="javascript:void(0)"               data-status="complete">Прошедшие</a>
+                    <a href="javascript:void(0)"               data-status="all">Все</a>
+            </div>
+
+    <div class="calendar-menu calendar-menu-places tq_place">
+                    <a href="javascript:void(0)" class="active"               data-place="all">Все</a>
+                    <a href="javascript:void(0)"               data-place="home"><i
+                    class="calendar-menu-circle blue"></i>Дома</a>
+                    <a href="javascript:void(0)"               data-place="guest"><i
+                    class="calendar-menu-circle gray"></i>В гостях</a>
+            </div>
+
+    <div class="calendar-views" id="tq_views">
+        <a v-for="view in arViews" href="javascript:void(0)" v-bind:data-view="view.ID" v-bind:disabled="view.DISABLED"
+           v-bind:class="view.CLASS" v-html="view.ICON">
+        </a>
+    </div>
+</div><!--.calendar-settings-->
+<div class="tq_calendar_container" id="tq_calendar_container">
+    <div class="calendar-nav" id="tq_calendar_nav">
+        <a href="javascript:void(0)" class="calendar-nav-prev" v-bind:data-change-month="calendarNav.PREV.ID">{{calendarNav.PREV.NAME}}</a>
+        <span class="calendar-nav-current">{{calendarNav.CUR.NAME}}</span>
+        <a href="javascript:void(0)" class="calendar-nav-next" v-bind:data-change-month="calendarNav.NEXT.ID">{{calendarNav.NEXT.NAME}}</a>
+    </div>
+
+    <div class="calendar-grid">
+        <div class="calendar-grid-days flex">
+                    </div>
+        <div class="calendar-grid-flex flex" id="tq_calendar">
+            <div class="calendar-grid-col" v-for="date in calendar" v-html="date.HTML">
+            </div>
+        </div>
+    </div><!--.calendar-grid-->
+</div>
+<div class="tq_calendar_container" id="tq_current_container">
+    <div class="calendar-current">
+        <div class=" calendar-addlist" id="tq_current_list">
+            <div class="future-game flex" v-for="game in currentGames" v-html="game.HTML">
+
+            </div>
+        </div><!--.row-->
+    </div><!--.current-->
+</div>
+<div class="tq_calendar_container" id="tq_future_container">
+    <div class="calendar-future calendar-addlist" id="tq_future_list">
+        <div class="future-game flex" v-for="game in futureGames" v-html="game.HTML">
+
+        </div><!--.future-game-->
+    </div>
+</div>
+<div class="tq_calendar_container" id="tq_all_container">
+    <div class="calendar-all calendar-all-no-month calendar-addlist" id="tq_all_list">
+            <div class="future-game flex" v-for="game in futureGames" v-html="game.HTML"></div>
+
+    </div>
+</div>
+<div class="tq_calendar_container" id="tq_grid_container">
+    <div class="calendar-all-menu">
+                    <a href="javascript:void(0)"               data-months="7,8,9">июл/авг/сен</a>
+                    <a href="javascript:void(0)" class="active"               data-months="10,11,12">окт/ноя/дек</a>
+                    <a href="javascript:void(0)"               data-months="1,2,3">янв/фев/мар</a>
+                    <a href="javascript:void(0)"               data-months="4,5,6">апр/мая/июн</a>
+            </div>
+
+    <div class="calendar-all" id="tq_games_grid">
+        <div class="flex-row">
+            <div class="flx-4 flx-m-6 flx-x-12" v-for="game in gridGames" v-html="game.HTML"></div>
+
+        </div>
+    </div><!--.calendar-all-->
+</div>
+    <div class="ui-preloader ui-preloader-over">
+        <div class="lds-ellipsis ui-preloader-spinner">
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+        </div>
+        <div class="ui-preloader-hint">Подождите, идет загрузка</div>
+    </div>
+</div><!--.game-calendar-wrapper-->
+<div id="tq_current_pag" v-html="currentNavString">
+</div>
+
+<script data-skip-moving>
+    let seasons = [{'ID':'11','UF_NAME':'2026-2027','UF_SEASONS':['28'],'UF_SORT':'94','UF_SELECTED':'1','selected':true},{'ID':'10','UF_NAME':'2025-2026','UF_SEASONS':['26'],'UF_SORT':'96','UF_SELECTED':'0','selected':false},{'ID':'9','UF_NAME':'2024-2025','UF_SEASONS':['25'],'UF_SORT':'97','UF_SELECTED':'0','selected':false},{'ID':'8','UF_NAME':'2023-2024','UF_SEASONS':['24'],'UF_SORT':'98','UF_SELECTED':'0','selected':false},{'ID':'6','UF_NAME':'2022-2023','UF_SEASONS':['21'],'UF_SORT':'99','UF_SELECTED':'0','selected':false},{'ID':'5','UF_NAME':'2021-2022','UF_SEASONS':['20'],'UF_SORT':'100','UF_SELECTED':'0','selected':false},{'ID':'3','UF_NAME':'2020-2021','UF_SEASONS':['15','16','17'],'UF_SORT':'200','UF_SELECTED':'0','selected':false},{'ID':'2','UF_NAME':'2019-2020','UF_SEASONS':['13','14'],'UF_SORT':'300','UF_SELECTED':'0','selected':false},{'ID':'7','UF_NAME':'2018-2019','UF_SEASONS':['23'],'UF_SORT':'400','UF_SELECTED':'0','selected':false}],
+        leagues = [{'ID':'1','UF_NAME':'Betera-Экстралига','UF_SORT':'32','UF_SELECTED':'1','UF_SCHOOL_LEAGUE':'0','selected':true},{'ID':'3','UF_NAME':'Кубок Руслана Салея','UF_SORT':'33','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'10','UF_NAME':'Кубок Владимира Цыплакова','UF_SORT':'34','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'5','UF_NAME':'Betera-Высшая лига','UF_SORT':'36','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'32','UF_NAME':'Женская лига','UF_SORT':'60','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'39','UF_NAME':'Беларуськалий - Турнир Развития','UF_SORT':'61','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'29','UF_NAME':'КХЛ','UF_SORT':'62','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'27','UF_NAME':'OLIMPBET - МХЛ','UF_SORT':'64','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'8','UF_NAME':'Национальная команда','UF_SORT':'90','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'13','UF_NAME':'U20','UF_SORT':'91','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'9','UF_NAME':'U18','UF_SORT':'92','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'17','UF_NAME':'U16','UF_SORT':'96','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'18','UF_NAME':'U15','UF_SORT':'97','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'19','UF_NAME':'U14','UF_SORT':'98','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'15','UF_NAME':'Женский хоккей','UF_SORT':'1050','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false},{'ID':'20','UF_NAME':'Юниорская лига','UF_SORT':'1200','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'1','selected':false},{'ID':'30','UF_NAME':'Юношеская лига','UF_SORT':'1250','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'1','selected':false},{'ID':'21','UF_NAME':'Детская лига','UF_SORT':'1300','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'1','selected':false},{'ID':'7','UF_NAME':'Турнир Дубко','UF_SORT':'1750','UF_SELECTED':'0','UF_SCHOOL_LEAGUE':'0','selected':false}],
+        divisions = [{'ID':'628','UF_NAME':'1 этап','UF_SORT_LIST':'100','UF_SELECTED':'0','selected':false},{'ID':'615','UF_NAME':'Благотворительный матч','UF_SORT_LIST':'100','UF_SELECTED':'0','selected':false},{'ID':'617','UF_NAME':'Товарищеские матчи','UF_SORT_LIST':'100','UF_SELECTED':'0','selected':false}],
+        teams = [{'ID':'all','UF_NAME':'Все команды','selected':true},{'ID':'5680','UF_NAME':'Авиатор','UF_SHORT_NAME':'Авиатор','selected':false},{'ID':'5672','UF_NAME':'Брест','UF_SHORT_NAME':'Брест','selected':false},{'ID':'5682','UF_NAME':'Витебск','UF_SHORT_NAME':'Витебск','selected':false},{'ID':'5685','UF_NAME':'Гомель','UF_SHORT_NAME':'Гомель','selected':false},{'ID':'5678','UF_NAME':'Динамо-Молодечно','UF_SHORT_NAME':'ДНМ-Молодечно','selected':false},{'ID':'5679','UF_NAME':'Лида','UF_SHORT_NAME':'Лида','selected':false},{'ID':'5687','UF_NAME':'Локомотив','UF_SHORT_NAME':'Локомотив','selected':false},{'ID':'5681','UF_NAME':'Металлург','UF_SHORT_NAME':'Металлург','selected':false},{'ID':'5688','UF_NAME':'Могилев','UF_SHORT_NAME':'Могилев','selected':false},{'ID':'5671','UF_NAME':'Неман','UF_SHORT_NAME':'Неман','selected':false},{'ID':'5683','UF_NAME':'Славутич','UF_SHORT_NAME':'Славутич','selected':false},{'ID':'5686','UF_NAME':'Химик','UF_SHORT_NAME':' Химик','selected':false},{'ID':'5674','UF_NAME':'Шахтер','UF_SHORT_NAME':'Шахтер','selected':false},{'ID':'5676','UF_NAME':'Юность','UF_SHORT_NAME':'Юность','selected':false}],
+        calendar = '',
+        closestmonths = {'PREV':{'ID':'9','NAME':'Сентябрь'},'CUR':{'ID':'10','NAME':'Октябрь 2026'},'NEXT':{'ID':'11','NAME':'Ноябрь'}},
+        arViews = [{'ID':'grid','DISABLED':false,'ICON':'<svg class=\"sprite svg-calendar-view\"><use xlink:href=\"/local/templates/test_index/vectors/svg/symbols.svg#view-grid\"/><\/svg>','CLASS':'calendar-views-link'},{'ID':'list','DISABLED':false,'ICON':'<svg class=\"sprite svg-calendar-view\"><use xlink:href=\"/local/templates/test_index/vectors/svg/symbols.svg#view-list\"/><\/svg>','CLASS':'calendar-views-link active','CHECKED':'Y'},{'ID':'calendar','DISABLED':true,'ICON':'<svg class=\"sprite svg-calendar-view\"><use xlink:href=\"/local/templates/test_index/vectors/svg/symbols.svg#view-calendar\"/><\/svg><div class=\"calendar-views-hint\">Для переключения вида календаря выберите команду<\/div>','CLASS':'calendar-views-link inactive'}],
+        currentGames = '',
+        currentNavString = '<div class=\"pgn-line\">\n    <div class=\"ajax-show-more\">\n		<a href=\"javascript:void(0)\"><span>Больше матчей<\/span><\/a>\n	<\/div>    \n    <div class=\"pgn\" style=\"display:none;\">\n        \n                            <a class=\"pgn-prev\" href=\"javascript:void(0)\"><\/a>\n                <span class=\"pgn-current\">1<\/span>\n            \n                                            <a class=\"pgn-link\" data-page=\"2\"\n                   href=\"/calendar/?page=page-2\">2<\/a>\n                                                                        <a class=\"pgn-link\" data-page=\"3\"\n                   href=\"/calendar/?page=page-3\">3<\/a>\n                                                                        <a class=\"pgn-link\" data-page=\"4\"\n                   href=\"/calendar/?page=page-4\">4<\/a>\n                                        \n                                                <a class=\"pgn-link\" data-page=\"42\"\n                       href=\"/calendar/?page=page-42\">42<\/a>\n                                <a class=\"pgn-next\" data-page=\"2\"\n                   href=\"/calendar/?page=page-2\"><\/a>\n                        <\/div>\n<\/div>',
+        futureGames = [{'HTML':'\n<div class=\"future-game-game flex\" data-id4=\"22990\">\n                 <div class=\"current-game-date\">27<div class=\"current-game-date-month\">Октябрь<\/div><\/div>\n                <div class=\"current-game-body flex\">\n                    <a href=\"/new-admin/clubs/23/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/264/mqcj3ovgayxwlqyr81jjzvr1yd8j7r3c/42_42_1/Могилев.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Могилев<\/div>\n                    <\/a>\n                    <div class=\"current-game-info\"><div class=\"current-game-points\">:<\/div><\/div>\n                    <a href=\"/new-admin/clubs/15/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/7e8/dspk9dr777cci2vj7eg29pqufh2tk7dp/42_42_1/Химик.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\"> Химик<\/div>\n                    <\/a>\n                <\/div>\n            <\/div>\n            <div class=\"future-game-right\">\n                <div class=\"future-game-place\">Ледовый дворец спорта г. Могилев<\/div>\n                <div class=\"future-game-start\">Начало матча в 18:30 (Вторник)<\/div>\n                <div class=\"future-game-link\"><a href=\"/gamecenter/441966/\">Перейти к матчу<\/a><\/div>\n            <\/div>\n'},{'HTML':'\n<div class=\"future-game-game flex\" data-id4=\"22991\">\n                 <div class=\"current-game-date\">27<div class=\"current-game-date-month\">Октябрь<\/div><\/div>\n                <div class=\"current-game-body flex\">\n                    <a href=\"/new-admin/clubs/225/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/d30/gx14iusaeqxilhwnbsr15s40n2lc4mug/42_42_1/Славутич.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Славутич<\/div>\n                    <\/a>\n                    <div class=\"current-game-info\"><div class=\"current-game-points\">:<\/div><\/div>\n                    <a href=\"/new-admin/clubs/11/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/e95/8shl7bhxotzq780bylhvwqnumsazpmrq/42_42_1/Брест.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Брест<\/div>\n                    <\/a>\n                <\/div>\n            <\/div>\n            <div class=\"future-game-right\">\n                <div class=\"future-game-place\">Ледовая арена Дворца спорта «Юбилейный» г. Смоленск<\/div>\n                <div class=\"future-game-start\">Начало матча в 19:00 (Вторник)<\/div>\n                <div class=\"future-game-link\"><a href=\"/gamecenter/441968/\">Перейти к матчу<\/a><\/div>\n            <\/div>\n'},{'HTML':'\n<div class=\"future-game-game flex\" data-id4=\"22989\">\n                 <div class=\"current-game-date\">27<div class=\"current-game-date-month\">Октябрь<\/div><\/div>\n                <div class=\"current-game-body flex\">\n                    <a href=\"/new-admin/clubs/10/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/4e1/48z3n4l8arwz3v2n1nzka6xa2o1sqjl1/42_42_1/Юность.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Юность<\/div>\n                    <\/a>\n                    <div class=\"current-game-info\"><div class=\"current-game-points\">:<\/div><\/div>\n                    <a href=\"/new-admin/clubs/14/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/717/ng1nqz2tpm04ogb4k12yso25t7jv17iv/42_42_1/Неман.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Неман<\/div>\n                    <\/a>\n                <\/div>\n            <\/div>\n            <div class=\"future-game-right\">\n                <div class=\"future-game-place\">Чижовка-Арена<\/div>\n                <div class=\"future-game-start\">Начало матча в 19:00 (Вторник)<\/div>\n                <div class=\"future-game-link\"><a href=\"/gamecenter/441964/\">Перейти к матчу<\/a><\/div>\n            <\/div>\n'},{'HTML':'\n<div class=\"future-game-game flex\" data-id4=\"22993\">\n                 <div class=\"current-game-date\">28<div class=\"current-game-date-month\">Октябрь<\/div><\/div>\n                <div class=\"current-game-body flex\">\n                    <a href=\"/new-admin/clubs/12/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/344/1wbczvson88oqk7ellgxz90m953ue86n/42_42_1/Шахтер.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Шахтер<\/div>\n                    <\/a>\n                    <div class=\"current-game-info\"><div class=\"current-game-points\">:<\/div><\/div>\n                    <a href=\"/new-admin/clubs/1/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/295/ewcava61xeos3sxy31nfvaj77xknl5um/42_42_1/Гомель.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Гомель<\/div>\n                    <\/a>\n                <\/div>\n            <\/div>\n            <div class=\"future-game-right\">\n                <div class=\"future-game-place\">Спортивно-зрелищный комплекс г. Солигорск<\/div>\n                <div class=\"future-game-start\">Начало матча в 18:30 (Среда)<\/div>\n                <div class=\"future-game-link\"><a href=\"/gamecenter/441972/\">Перейти к матчу<\/a><\/div>\n            <\/div>\n'},{'HTML':'\n<div class=\"future-game-game flex\" data-id4=\"22992\">\n                 <div class=\"current-game-date\">28<div class=\"current-game-date-month\">Октябрь<\/div><\/div>\n                <div class=\"current-game-body flex\">\n                    <a href=\"/new-admin/clubs/19/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/9f7/g6pxzies2g84gbycaquc0m8vtd1vaox4/42_42_1/Локомотив.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Локомотив<\/div>\n                    <\/a>\n                    <div class=\"current-game-info\"><div class=\"current-game-points\">:<\/div><\/div>\n                    <a href=\"/new-admin/clubs/16/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/8d4/bean5fripxqt2n4kbqz0jm3lfic1n1ey/42_42_1/Металлург.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Металлург<\/div>\n                    <\/a>\n                <\/div>\n            <\/div>\n            <div class=\"future-game-right\">\n                <div class=\"future-game-place\">Ледовая арена г. Орша<\/div>\n                <div class=\"future-game-start\">Начало матча в 18:30 (Среда)<\/div>\n                <div class=\"future-game-link\"><a href=\"/gamecenter/441970/\">Перейти к матчу<\/a><\/div>\n            <\/div>\n'},{'HTML':'\n<div class=\"future-game-game flex\" data-id4=\"22995\">\n                 <div class=\"current-game-date\">28<div class=\"current-game-date-month\">Октябрь<\/div><\/div>\n                <div class=\"current-game-body flex\">\n                    <a href=\"/new-admin/clubs/21/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/241/euthkp1yq40t7kvwz6oxm7mjf78z8w6q/42_42_1/Авиатор.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">Авиатор<\/div>\n                    <\/a>\n                    <div class=\"current-game-info\"><div class=\"current-game-points\">:<\/div><\/div>\n                    <a href=\"/new-admin/clubs/13/\" class=\"current-game-team\">\n                        <div class=\"current-game-team-logo\"><img src=\"/upload/resize_cache/iblock/bae/nqx4g57mq5xagxs6i29jo70xbu0ziecq/42_42_1/Молодечно.png\" alt=\"alt\" loading=\"lazy\"><\/div>\n                        <div class=\"current-game-team-name\">ДНМ-Молодечно<\/div>\n                    <\/a>\n                <\/div>\n            <\/div>\n            <div class=\"future-game-right\">\n                <div class=\"future-game-place\">Ледовый дворец спорта г. Барановичи<\/div>\n                <div class=\"future-game-start\">Начало матча в 19:00 (Среда)<\/div>\n                <div class=\"future-game-link\"><a href=\"/gamecenter/441976/\">Перейти к матчу<\/a><\/div>\n            <\/div>\n'}],
+        gridGames = '',
+        gridMonths = [{'NAME':'июл/авг/сен','ID':'7,8,9','SELECTED':'N'},{'NAME':'окт/ноя/дек','ID':'10,11,12','SELECTED':'Y'},{'NAME':'янв/фев/мар','ID':'1,2,3','SELECTED':'N'},{'NAME':'апр/мая/июн','ID':'4,5,6','SELECTED':'N'}];
+
+</script>
+	</div><!--.inner-->
+
+
+
+
+
+
+</div><!--.container-->
+</div><!-- #middle -->
+
+<footer id="footer" class="footer">
+
+    
+	<div class="f-partners">
+		<div class="inner">
+			<div class="slick-partners">
+                	                <div class="item" id="bx_1373509569_234516">
+		                <a href="https://sport5.by/">
+			                <img src="/cache/upload/iblock/4c1/lh6e7azs50zpctf61pjrhdc3j3ujoxnr/Sport5-logo-dark-128xauto.png" alt="">
+		                </a>
+	                </div>
+                	                <div class="item" id="bx_1373509569_195248">
+		                <a href="https://belkart.by">
+			                <img src="/cache/upload/iblock/885/ot7zx8wxniox7n7k1mduvqj2jc0p4saf/Лого-основной-2-128xauto.png" alt="">
+		                </a>
+	                </div>
+                	                <div class="item" id="bx_1373509569_9">
+		                <a href="https://kali.by/">
+			                <img src="/cache/upload/iblock/1ec/belaruskali-128xauto.png" alt="">
+		                </a>
+	                </div>
+                	                <div class="item" id="bx_1373509569_12">
+		                <a href="https://evroopt.by/">
+			                <img src="/cache/upload/iblock/ab9/евроопт-128xauto.png" alt="">
+		                </a>
+	                </div>
+                	                <div class="item" id="bx_1373509569_77646">
+		                <a href="https://click.affpart.org/lGanF8v1?landing=4">
+			                <img src="/cache/upload/iblock/bc1/hg919a1yfd3a9i40z1u59dweaam5e2g9/betera_green_hor-128xauto.png" alt="">
+		                </a>
+	                </div>
+                	                <div class="item" id="bx_1373509569_75585">
+		                <a href="https://www.sber-bank.by/">
+			                <img src="/cache/upload/iblock/ba4/Сбер лого-128xauto.png" alt="">
+		                </a>
+	                </div>
+                	                <div class="item" id="bx_1373509569_55612">
+		                <a href="http://sport-tv.by/hokkey">
+			                <img src="/cache/upload/iblock/6d1/6d12336a315d95baf509ef83043ad9c3-128xauto.png" alt="">
+		                </a>
+	                </div>
+                	                <div class="item" id="bx_1373509569_55613">
+		                <a href="https://www.tvr.by/televidenie/belarus-5/">
+			                <img src="/cache/upload/iblock/aa1/aa136e75b3bd5d88685ab5162e148b96-128xauto.png" alt="">
+		                </a>
+	                </div>
+                	                <div class="item" id="bx_1373509569_316303">
+		                <a href="https://darida.by">
+			                <img src="/cache/upload/iblock/062/xs1ctm28p4s5psnzpnx7540e72ikoaz0/Logo_Darida_promo_btl-128xauto.png" alt="">
+		                </a>
+	                </div>
+                			</div>
+		</div>
+	</div>
+   <!--     -->
+	<div class="inner">
+        <div class="f-scroll"><a class="scroll-up" style=""><i class="i-up"></i><span>Подняться вверх сайта</span></a></div>
+
+		<div class="f-menu">
+			<div class="flex-row">
+
+                    	<div id="bx_4145281613_1" class="flx">
+
+		<div class="f-title">Федерация</div>
+        			<ul>
+                					<li id="bx_4145281613_200"><a
+								href="/federation/history/">История</a></li>
+                					<li id="bx_4145281613_201"><a
+								href="/federation/struktura/">Структура</a></li>
+                					<li id="bx_4145281613_202"><a
+								href="/icearenas/">Ледовые арены</a></li>
+                					<li id="bx_4145281613_203"><a
+								href="/doc/">Официальные документы</a></li>
+                					<li id="bx_4145281613_206"><a
+								href="/contacts/">Контакты</a></li>
+                					<li id="bx_4145281613_3181"><a
+								href="https://hockey.by/gossimvolika.php">Государственная символика</a></li>
+                					<li id="bx_4145281613_8"><a
+								href="/cooperative/">Сотрудничество</a></li>
+                					<li id="bx_4145281613_3333"><a
+								href="https://hockey.by/doc_rules/">Правила поведения</a></li>
+                			</ul>
+        	</div>
+    	<div id="bx_4145281613_3" class="flx">
+
+		<div class="f-title">Сборные</div>
+        			<ul>
+                					<li id="bx_4145281613_62"><a
+								href="/teams/natsionalnaya-sbornaya/">Национальная</a></li>
+                					<li id="bx_4145281613_63"><a
+								href="/teams/molodezhnaya-u20/">Молодежная U20</a></li>
+                					<li id="bx_4145281613_64"><a
+								href="/teams/yuniorskaya-u18/">Юниорская U18</a></li>
+                					<li id="bx_4145281613_65"><a
+								href="/teams/yuniorskaya-u17/">Юношеская U17</a></li>
+                					<li id="bx_4145281613_1252"><a
+								href="/teams/yuniorskaya-u16/">Юношеская U16</a></li>
+                					<li id="bx_4145281613_338"><a
+								href="/teams/women/">Женский хоккей</a></li>
+                					<li id="bx_4145281613_2905"><a
+								href="https://hockey.by/teams/kalendar-sbornykh/">Календарь сборных</a></li>
+                			</ul>
+        	</div>
+    	<div id="bx_4145281613_4" class="flx">
+
+		<div class="f-title">Клубные турниры</div>
+        			<ul>
+                					<li id="bx_4145281613_339"><a
+								href="/natsionalnyy-chempionat/ekstraliga-a/">Экстралига</a></li>
+                					<li id="bx_4145281613_165"><a
+								href="/natsionalnyy-chempionat/vysshaya-liga/">Высшая лига</a></li>
+                					<li id="bx_4145281613_166"><a
+								href="/natsionalnyy-chempionat/kubok-ruslana-saleya/">Кубок Руслана Салея</a></li>
+                					<li id="bx_4145281613_3127"><a
+								href="/natsionalnyy-chempionat/kubok-tsyplakova/">Кубок Цыплакова</a></li>
+                					<li id="bx_4145281613_3209"><a
+								href="https://hockey.by/natsionalnyy-chempionat/womenshockey/">Женская лига</a></li>
+                					<li id="bx_4145281613_3068"><a
+								href="https://hockey.by/closing-ceremony/">Церемония закрытия</a></li>
+                					<li id="bx_4145281613_1594"><a
+								href="/kvalifikatsionnye-predlozheniya/">Квалификационные предложения</a></li>
+                			</ul>
+        	</div>
+    	<div id="bx_4145281613_5" class="flx">
+
+		<div class="f-title">Детский хоккей</div>
+        			<ul>
+                					<li id="bx_4145281613_192"><a
+								href="/junior/hockey_schools/">Хоккейные школы</a></li>
+                					<li id="bx_4145281613_2803"><a
+								href="/glossary/">База упражнений</a></li>
+                					<li id="bx_4145281613_2779"><a
+								href="/junior/hockey_data/">Методика подготовки</a></li>
+                					<li id="bx_4145281613_3347"><a
+								href="https://hockey.by/proekt-pyat-zvezd/">Проект «Пять звезд»</a></li>
+                					<li id="bx_4145281613_2794"><a
+								href="https://hockey.by/statistic_junior/playoff/?competition=20-21">Турнирные таблицы</a></li>
+                			</ul>
+        	</div>
+    	<div id="bx_4145281613_3084" class="flx">
+
+		<div class="f-title">Таблица переходов</div>
+        	</div>
+    	<div id="bx_4145281613_3128" class="flx">
+
+		<div class="f-title">Судейство</div>
+        			<ul>
+                					<li id="bx_4145281613_3319"><a
+								href="/hochustatarbitrom/">Как стать хоккейным арбитром?</a></li>
+                					<li id="bx_4145281613_3129"><a
+								href="/referees/">Судьи ОЧБ</a></li>
+                					<li id="bx_4145281613_3130"><a
+								href="/referees/doc/">Методические пособия</a></li>
+                					<li id="bx_4145281613_3144"><a
+								href="https://hockey.by/referees/zapros-na-rassmotrenie-igrovogo-epizoda.php">Запрос на рассмотрение игрового эпизода в ОЧБ</a></li>
+                					<li id="bx_4145281613_3138"><a
+								href="https://hockey.by/disqualification">Дисквалификации ОПРБ и РС</a></li>
+                			</ul>
+        	</div>
+
+
+			</div>
+		</div><!--.f-menu-->
+
+
+		<div class="f-contacts">
+			<div class="flex-row">
+				<div class="flx-4 flx-m-5 flx-x-7">
+					<div class="f-title">Почтовый адрес:</div>
+                    <p>Ассоциация "Федерация хоккея Республики Беларусь"</p>
+<p>220020, г. Минск, пр. Победителей 20, корп. 3</p>				</div>
+				<div class="flx-3 flx-m-4 flx-x-5">
+					<div class="f-title">E-mail</div>
+					<p>
+						<span class="mail-link">
+							info@hockey.by						</span>
+					</p>
+					<a href="javascript:void(0)" data-href="/local/templates/test_index/include/footer/popup-feedback.php?id=30&ibid=17" class="btn ajax-mfp">Форма обратной связи</a>
+				</div>
+                <div class="flx-3 flx-m-4 flx-x-5">
+                    <div class="f-title">Главный редактор</div>
+					<p>Алексей Рогалевич</p>
+                </div>
+
+<!--                <div class="flx-2 flx-m-2 flx-x-12 flx-tibo">-->
+<!--                    <a href="http://tibo.by/" class="tibo-banner" rel="nofollow"><img src="https://hockey.by/images/tibo.png" alt="tibo"></a>-->
+<!--                </div>-->
+                
+	<div class="flx-5 flx-m-12">
+		<div class="f-sponsors flex valign-center align-justify">
+            				<a id="bx_3485106786_4" href="https://www.iihf.com/">
+					<img src="/upload/iblock/58d/58d4df29c41beef8aabc8dfbbf545eed.png" alt="partner">
+				</a>
+            				<a id="bx_3485106786_5" href="http://www.noc.by/">
+					<img src="/upload/iblock/057/0575da4a4be4d38da55bfe04872b7511.png" alt="partner">
+				</a>
+            				<a id="bx_3485106786_6" href="http://www.mst.by/ru/">
+					<img src="/upload/iblock/2dc/2dc39af578ea07fd7016dd63f06cd19b.png" alt="partner">
+				</a>
+            				<a id="bx_3485106786_7" href="http://www.sportclub.by/">
+					<img src="/upload/iblock/aa4/aa4e46e0292fc2a2c068b037a748bf92.png" alt="partner">
+				</a>
+            				<a id="bx_3485106786_8" href="https://minsk.gov.by/ru/">
+					<img src="/upload/iblock/aec/aec9fb2e61356e6f93551103d45dce63.png" alt="partner">
+				</a>
+            		</div>
+	</div>
+			</div>
+		</div>
+
+      
+		<div class="f-bottom">
+			<div class="flex align-justify valign-baseline dds-base">
+				<div class="f-copy">©2012-2018 Ассоциация "Федерация хоккея Республики Беларусь". Все права защищены.</div>
+                
+				<div class="f-fs">
+					<a href="http://www.farba-studio.com/ru/" rel="nofollow">Разработка сайта</a><span>Farba Studio</span>
+				</div>
+                
+                        <!--LiveInternet counter--><!--/LiveInternet-->
+
+
+                			</div>
+		</div>
+
+	</div><!--.inner-->
+
+</footer><!-- #footer -->
+
+</div><!-- #wrapper -->
+
+<div class="arrow-to-top">
+    <svg class="sprite svg-scroll-arrow">
+      <use xlink:href="/local/templates/hokey/svg/svg/symbols.svg#arrow-right-2">
+    </svg>
+</div>
+<div class="arrow-to-bottom">
+    <svg class="sprite svg-scroll-arrow">
+      <use xlink:href="/local/templates/hokey/svg/svg/symbols.svg#arrow-right-2">
+    </svg>
+</div>
+<!-- Yandex.Metrika counter -->
+<noscript><div><img src="https://mc.yandex.ru/watch/52280035" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
+<!-- Yandex.Metrika counter -->
+<noscript><div><img src="https://mc.yandex.ru/watch/96492811" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
+<!-- Meta Pixel Code -->
+<noscript><img height="1" width="1" style="display:none"
+  src="https://www.facebook.com/tr?id=4028917940689109&ev=PageView&noscript=1"
+/></noscript>
+<!-- End Meta Pixel Code -->
+<script>if(!window.BX)window.BX={};if(!window.BX.message)window.BX.message=function(mess){if(typeof mess==='object'){for(let i in mess) {BX.message[i]=mess[i];} return true;}};</script>
+<script>(window.BX||top.BX).message({"JS_CORE_LOADING":"Загрузка...","JS_CORE_NO_DATA":"- Нет данных -","JS_CORE_WINDOW_CLOSE":"Закрыть","JS_CORE_WINDOW_EXPAND":"Развернуть","JS_CORE_WINDOW_NARROW":"Свернуть в окно","JS_CORE_WINDOW_SAVE":"Сохранить","JS_CORE_WINDOW_CANCEL":"Отменить","JS_CORE_WINDOW_CONTINUE":"Продолжить","JS_CORE_H":"ч","JS_CORE_M":"м","JS_CORE_S":"с","JSADM_AI_HIDE_EXTRA":"Скрыть лишние","JSADM_AI_ALL_NOTIF":"Показать все","JSADM_AUTH_REQ":"Требуется авторизация!","JS_CORE_WINDOW_AUTH":"Войти","JS_CORE_IMAGE_FULL":"Полный размер"});</script><script src="/bitrix/js/main/core/core.min.js?1774425542245644"></script><script>BX.Runtime.registerExtension({"name":"main.core","namespace":"BX","loaded":true});</script>
+<script>BX.setJSList(["\/bitrix\/js\/main\/core\/core_ajax.js","\/bitrix\/js\/main\/core\/core_promise.js","\/bitrix\/js\/main\/polyfill\/promise\/js\/promise.js","\/bitrix\/js\/main\/loadext\/loadext.js","\/bitrix\/js\/main\/loadext\/extension.js","\/bitrix\/js\/main\/polyfill\/promise\/js\/promise.js","\/bitrix\/js\/main\/polyfill\/find\/js\/find.js","\/bitrix\/js\/main\/polyfill\/includes\/js\/includes.js","\/bitrix\/js\/main\/polyfill\/matches\/js\/matches.js","\/bitrix\/js\/ui\/polyfill\/closest\/js\/closest.js","\/bitrix\/js\/main\/polyfill\/fill\/main.polyfill.fill.js","\/bitrix\/js\/main\/polyfill\/find\/js\/find.js","\/bitrix\/js\/main\/polyfill\/matches\/js\/matches.js","\/bitrix\/js\/main\/polyfill\/core\/dist\/polyfill.bundle.js","\/bitrix\/js\/main\/core\/core.js","\/bitrix\/js\/main\/polyfill\/intersectionobserver\/js\/intersectionobserver.js","\/bitrix\/js\/main\/lazyload\/dist\/lazyload.bundle.js","\/bitrix\/js\/main\/polyfill\/core\/dist\/polyfill.bundle.js","\/bitrix\/js\/main\/parambag\/dist\/parambag.bundle.js"]);
+</script>
+<script>BX.Runtime.registerExtension({"name":"ui.dexie","namespace":"BX.DexieExport","loaded":true});</script>
+<script>BX.Runtime.registerExtension({"name":"fc","namespace":"window","loaded":true});</script>
+<script>BX.Runtime.registerExtension({"name":"ui.vue","namespace":"BX","loaded":true});</script>
+<script>(window.BX||top.BX).message({"LANGUAGE_ID":"ru","FORMAT_DATE":"DD.MM.YYYY","FORMAT_DATETIME":"DD.MM.YYYY HH:MI:SS","COOKIE_PREFIX":"BITRIX_SM","SERVER_TZ_OFFSET":"10800","UTF_MODE":"Y","SITE_ID":"s1","SITE_DIR":"\/","USER_ID":"","SERVER_TIME":1793038689,"USER_TZ_OFFSET":0,"USER_TZ_AUTO":"Y","bitrix_sessid":"5c1e9923ed1322282d9f22207690990e"});</script><script src="/bitrix/js/ui/dexie/dist/dexie.bundle.min.js?1752746184102530"></script>
+<script src="/bitrix/js/main/core/core_frame_cache.min.js?177442554210246"></script>
+<script src="/bitrix/js/ui/vue/vue2/prod/dist/vue.bundle.min.js?1650360236113213"></script>
+<script src="https://yastatic.net/pcode/adfox/loader.js" crossorigin="anonymous"></script>
+
+
+
+<script src="/local/templates/test_index/js/jquery.min.js?158435715186927"></script>
+<script src="/local/templates/test_index/js/jquery.formstyler.min.js?170118821718137"></script>
+<script src="/local/templates/test_index/js/slick.min.js?158435715142862"></script>
+<script src="/local/templates/test_index/js/jquery.dataTables.js?1710930941450383"></script>
+<script src="/local/templates/test_index/js/tabs.js?17109501203752"></script>
+<script src="/local/templates/test_index/js/jquery.magnific-popup.min.js?158435715123701"></script>
+<script src="/local/templates/test_index/js/lightgallery.js?158435715143818"></script>
+<script src="/local/templates/test_index/js/jquery.validate.min.js?158435715123266"></script>
+<script src="/local/templates/test_index/js/jquery.datetimepicker.full.min.js?158435715156485"></script>
+<script src="/local/templates/test_index/js/script.js?177574054240556"></script>
+<script src="/local/templates/test_index/js/matches.js?17102624986263"></script>
+<script src="/local/templates/test_index/js/resp.js?16028283612731"></script>
+<script src="/local/templates/test_index/js/playoff.js?16473425171251"></script>
+<script src="/local/templates/test_index/js/costume.js?171030628218704"></script>
+<script src="/local/templates/test_index/js/playerjs.js?1584357151446324"></script>
+<script src="/local/components/2quick/game.calendar/templates/.default/script.js?173096362612450"></script>
+
+<script>
+			var e = ("abbr,article,aside,audio,canvas,datalist,details," +
+					"figure,footer,header,hgroup,mark,menu,meter,nav,output," +
+					"progress,section,time,video").split(',');
+			for (var i = 0; i < e.length; i++) {
+				document.createElement(e[i]);
+			}
+		</script>
+<script type="text/javascript">
+                       $(document).ready(function () {
+                           $('.dds-base').append("<a href='//www.liveinternet.ru/click' "+
+                               "target=_blank><img src='//counter.yadro.ru/hit?..."+
+                               escape(document.referrer)+((typeof(screen)=="undefined")?"":
+                                   ";s"+screen.width+"*"+screen.height+"*"+(screen.colorDepth?
+                                   screen.colorDepth:screen.pixelDepth))+";u"+escape(document.URL)+
+                               ";h"+escape(document.title.substring(0,150))+";"+Math.random()+
+                               "' alt='' title='LiveInternet' "+
+                               "border='0' width='31' height='31'><\/a>");
+                       })
+
+
+
+
+                        </script><script type="text/javascript">
+   (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+   m[i].l=1*new Date();k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+   (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+
+   ym(52280035, "init", {
+        id:52280035,
+        clickmap:true,
+        trackLinks:true,
+        accurateTrackBounce:true,
+        webvisor:true
+   });
+</script>
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-58174057-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+<script type="text/javascript" >
+   (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+   m[i].l=1*new Date();
+   for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+   k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+   (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+
+   ym(96492811, "init", {
+        clickmap:true,
+        trackLinks:true,
+        accurateTrackBounce:true,
+        webvisor:true
+   });
+</script>
+<script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '4028917940689109');
+  fbq('track', 'PageView');
+</script>
+</body>
+</html>

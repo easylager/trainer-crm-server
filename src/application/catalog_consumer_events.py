@@ -147,11 +147,15 @@ def _actor_hmac_secret() -> bytes | None:
     return raw.encode("utf-8")
 
 
-def _hmac_actor(prefix: str, payload: str) -> str | None:
+def hmac_actor(prefix: str, payload: str) -> str | None:
+    """HMAC-SHA256 pseudonym on ``CATALOG_ACTOR_HMAC_SECRET``; ``None`` without a secret."""
     secret = _actor_hmac_secret()
     if secret is None:
         return None
     return hmac.new(secret, f"{prefix}|{payload}".encode(), hashlib.sha256).hexdigest()
+
+
+_hmac_actor = hmac_actor
 
 
 def catalog_event_day_minsk(when: datetime | None = None) -> date:

@@ -44,6 +44,7 @@ from src.application.trainer_schedule_use_cases import (
     replace_templates_for_day,
     replace_week_with_template,
 )
+from src.shared.venue_types import TRAINER_VENUE_TYPE_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ async def seed_trainer_arena_from_join(
 
     Только новичку: у тренера ещё нет ни одного катка. Кто уже выбрал свои, тому ссылка
     чужого катка ничего не меняет. Каток — из тех, что онбординг сам предлагает (активный,
-    не магазин, в активном городе); иначе молча ничего. Основной каток ставим, только если
+    не магазин и не школа, в активном городе); иначе молча ничего. Основной каток ставим, только если
     его ещё нет. Returns True, когда каток записан.
     """
     r = await session.execute(
@@ -144,13 +145,13 @@ async def seed_trainer_arena_from_join(
             JOIN cities c ON c.id = a.city_id AND c.is_active = true
             WHERE a.id = :aid
               AND a.is_active = true
-              AND a.venue_type <> 'shop'
+              AND a.venue_type = ANY(:trainer_venue_types)
               AND NOT EXISTS (SELECT 1 FROM trainer_arenas ta WHERE ta.trainer_id = :tid)
             ON CONFLICT (trainer_id, arena_id) DO NOTHING
             RETURNING arena_id
             """
         ),
-        {"tid": trainer_id, "aid": arena_id},
+        {"tid": trainer_id, "aid": arena_id, "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS)},
     )
     wrote = r.fetchone() is not None
     if wrote:
@@ -460,7 +461,7 @@ async def _validate_and_link_arenas(
     session: AsyncSession, trainer_id: int, arena_ids: list[int]
 ) -> dict[int, dict[str, Any]]:
     """
-    Check every referenced arena is real and active, link it to the trainer (idempotent), and
+    Check every referenced arena is real, active and a trainer workplace (not a shop or school), link it to the trainer (idempotent), and
     return its grid preset keyed by id.
 
     Linking happens here rather than waiting for a separate profile step: a day the trainer just
@@ -470,8 +471,11 @@ async def _validate_and_link_arenas(
     if not arena_ids:
         return {}
     r = await session.execute(
-        text("SELECT id, name FROM arenas WHERE id = ANY(:ids) AND is_active = true"),
-        {"ids": arena_ids},
+        text(
+            "SELECT id, name FROM arenas WHERE id = ANY(:ids) AND is_active = true"
+            " AND venue_type = ANY(:trainer_venue_types)"
+        ),
+        {"ids": arena_ids, "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS)},
     )
     found = {int(row[0]): row[1] for row in r.fetchall()}
     missing = [a for a in arena_ids if a not in found]

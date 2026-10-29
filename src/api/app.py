@@ -32,6 +32,7 @@ from src.api.routes import (
 )
 from src.api.routes.org_webapp import router as org_webapp_router
 from src.api.routes.public_arenas import router as public_arenas_router
+from src.api.routes.public_place_suggestions import router as public_place_suggestions_router
 from src.api.routes.public_invites import router as public_invites_router
 from src.api.routes.zovi_create_page import router as zovi_create_page_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
@@ -382,6 +383,18 @@ def webapp_client_match_page():
     return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
+@app.get("/webapp/client-matches")
+def webapp_client_matches_page():
+    """Client: матчи Экстралиги на неделе — «Все матчи» из ленты главной (TASK-340)."""
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
+    path = _WEBAPP_DIR / "client-matches.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
+
+
 @app.get("/webapp/client-stats")
 def webapp_client_stats_page():
     """Client: completed-session stats and gentle rhythm hints (motivation, no leaderboards)."""
@@ -507,6 +520,24 @@ def webapp_admin_hockey_main_js(request: Request):
 def webapp_admin_ice_sources_page():
     """Admin ice schedule sources — link, collection mode, posting days (phone-first)."""
     path = _WEBAPP_DIR / "admin-ice-sources.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/suggest")
+def webapp_suggest_page():
+    """PDEC-028: «Предложить место» в клиентском Mini App — общая форма с сайтом."""
+    path = _WEBAPP_DIR / "suggest.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/admin-place-suggestions")
+def webapp_admin_place_suggestions_page():
+    """PDEC-028: модерация заявок «мест от людей» — список, карточка, переписка, одобрение."""
+    path = _WEBAPP_DIR / "admin-place-suggestions.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
@@ -2566,6 +2597,32 @@ def shared_glide_components_css(request: Request):
     )
 
 
+@app.get("/static/shared/place-suggest-form.css")
+def shared_place_suggest_form_css(request: Request):
+    """PDEC-028: стили общей формы «Предложить место» (сайт /suggest и Mini App)."""
+    path = _SHARED_DIR / "place-suggest-form.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/static/shared/place-suggest-form.js")
+def shared_place_suggest_form_js(request: Request):
+    """PDEC-028: логика общей формы «Предложить место» (сайт /suggest и Mini App)."""
+    path = _SHARED_DIR / "place-suggest-form.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/zovi-model.js")
 def shared_zovi_model_js(request: Request):
     """TASK-232: модель открытки «Пойдёшь со мной на каток?» (вопрос, склонение, вердикт)."""
@@ -2826,6 +2883,7 @@ async def health():
 
 app.include_router(public_router)
 app.include_router(public_arenas_router)
+app.include_router(public_place_suggestions_router)
 app.include_router(public_invites_router)
 app.include_router(zovi_create_page_router)
 app.include_router(public_ice_page_router)

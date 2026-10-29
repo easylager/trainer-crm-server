@@ -69,6 +69,7 @@ def render_site_footer_html(
 
     nav = [
         f'<a class="b-site-foot__link" href="{_esc(trainers_href)}">Для тренеров</a>',
+        '<a class="b-site-foot__link" href="/suggest">Предложить место</a>',
         f'<a class="b-site-foot__link" href="{_esc(schedule_error_mailto())}">{_esc(report_label)}</a>',
     ]
 

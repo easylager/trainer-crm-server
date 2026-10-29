@@ -250,6 +250,11 @@ details.b-details > summary::-webkit-details-marker { display: none; }
 details.b-details[open] > summary .b-icon { transform: rotate(180deg); }
 .b-details__body { padding: 0 16px 14px; font-size: 15px; line-height: 1.9; }
 .b-details__body b { font-weight: 600; }
+.b-details__more {
+  margin: 6px 0 0; padding-top: 10px; border-top: 1px solid var(--g-line);
+  font-size: 15px; line-height: 1.5;
+}
+.b-details__more a { font-weight: 600; text-decoration: none; }
 
 /* ── Список «Что нужно» ───────────────────────────────────────────────── */
 .b-list { display: flex; flex-direction: column; }
@@ -1216,4 +1221,19 @@ html.days-sheet-open, html.days-sheet-open body { overflow: hidden; overscroll-b
 @media (prefers-reduced-motion: no-preference) {
   .b-days-sheet:target .b-days-sheet__panel, .b-days-sheet.is-open .b-days-sheet__panel { animation: b-days-sheet-in 200ms ease-out; }
   @keyframes b-days-sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+}
+
+/* PDEC-028: вход в заявку на странице города — заметнее ссылок, без баннера. */
+.b-city-suggest { text-align: center; }
+.b-city-suggest__lead {
+  margin: 0 auto; max-width: 26em;
+  font-size: 17px; line-height: 1.45; font-weight: 600; color: var(--g-ink);
+}
+.b-city-suggest__link {
+  display: inline-flex; align-items: center; min-height: 48px; margin-top: 8px;
+  font-size: 16px; font-weight: 600; color: var(--g-accent); text-decoration: none;
+}
+.b-city-suggest__sub {
+  margin: 4px auto 0; max-width: 26em;
+  font-size: 13px; line-height: 1.45; color: var(--g-muted);
 }
