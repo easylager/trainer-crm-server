@@ -3189,8 +3189,33 @@ async def get_client_hub_bootstrap(
             logger.exception("client hub hockey card failed")
             return None
 
-    bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey = await asyncio.gather(
-        _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(), _home_hockey()
+    async def _home_extraliga() -> dict[str, Any] | None:
+        """TASK-340: лента матчей Экстралиги города. Сбой ленты не трогает главную."""
+        from src.application.extraliga_home import home_feed
+
+        try:
+            async with async_session_factory() as s:
+                row = await read_client_bot_session(telegram_id, s)
+                city_id = (row or {}).get("city_id")
+                if city_id is None:
+                    return None
+                city = (
+                    await s.execute(text("SELECT name, region FROM cities WHERE id = :id"), {"id": int(city_id)})
+                ).first()
+                if city is None:
+                    return None
+                return await home_feed(
+                    s, city_name=city.name, city_region=city.region, now=datetime.now(timezone.utc)
+                )
+        except Exception:
+            logger.exception("client hub extraliga feed failed")
+            return None
+
+    (
+        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga
+    ) = await asyncio.gather(
+        _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(),
+        _home_hockey(), _home_extraliga(),
     )
     ice_teaser = None
     try:
@@ -3230,6 +3255,7 @@ async def get_client_hub_bootstrap(
                 upcoming=(home_city or {}).get("upcoming") or [],
                 now=datetime.now(timezone.utc),
                 has_city=home_city is not None,
+                extraliga=home_extraliga,
             ),
         },
         "platform": {

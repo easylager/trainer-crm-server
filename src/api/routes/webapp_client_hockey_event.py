@@ -194,3 +194,36 @@ async def put_client_hockey_prefs(
     hidden = await hockey_event.set_kk_hidden(session, client_catalog_telegram_key(principal), body.kk_hidden)
     await session.commit()
     return {"kk_hidden": hidden}
+
+
+class KkSubscribeBody(BaseModel):
+    club: str
+
+
+@router.post("/client/hockey/extraliga/subscribe")
+async def post_client_extraliga_subscribe(
+    body: KkSubscribeBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Позвать, когда откроем» «Кто кого» на Экстралиге (TASK-340, срез 5)."""
+    _require_enabled()
+    try:
+        await hockey_event.kk_subscribe(session, client_catalog_telegram_key(principal), body.club)
+    except hockey_event.MatchNotFound as exc:
+        raise HTTPException(status_code=404, detail="Клуб не найден") from exc
+    await session.commit()
+    return {"ok": True, "subscribed": True}
+
+
+@router.get("/client/hockey/extraliga/week")
+async def get_client_extraliga_week(
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Все матчи» из ленты главной: матчи Экстралиги на 7 дней."""
+    del principal
+    from src.application.extraliga_home import card, week_rows
+
+    now = datetime.now(timezone.utc)
+    return {"matches": [card(r, now=now) for r in await week_rows(session, now=now)]}

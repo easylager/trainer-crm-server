@@ -582,6 +582,17 @@ class HockeyStanding(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class ExtraligaKkSubscription(Base):
+    """«Позвать, когда откроем» — подписка на «Кто кого» по клубу Экстралиги (TASK-340, срез 5)."""
+
+    __tablename__ = "extraliga_kk_subscriptions"
+
+    player_key: Mapped[int] = mapped_column(BigInteger(), primary_key=True)
+    club: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class HockeyPlayer(Base):
     """Игрок «Кто кого»: ключ клиента Mini App и имя для таблиц (TASK-297)."""
 

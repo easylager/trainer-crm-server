@@ -83,3 +83,15 @@ async def post_admin_hockey_result(
     await score_finished_matches(session, now=datetime.now(timezone.utc))
     await session.commit()
     return _match_out(row)
+
+
+@router.get("/admin/hockey/extraliga/subscriptions")
+async def get_admin_extraliga_subscriptions(
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Сводка «Позвать» по клубам Экстралиги: где подписок больше, там «Кто кого» запускаем первым."""
+    del principal
+    from src.application.hockey_event import kk_subscription_counts
+
+    return {"items": await kk_subscription_counts(session)}

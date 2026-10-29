@@ -56,8 +56,18 @@ def upgrade() -> None:
 
     op.execute(_VIEW)
 
+    # «Кто кого» на Экстралиге — пока подписка: считаем по клубу, где запускать первым (срез 5).
+    op.create_table(
+        "extraliga_kk_subscriptions",
+        sa.Column("player_key", sa.BigInteger(), primary_key=True),
+        sa.Column("club", sa.String(64), primary_key=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("notified_at", sa.DateTime(timezone=True), nullable=True),
+    )
+
 
 def downgrade() -> None:
+    op.drop_table("extraliga_kk_subscriptions")
     op.execute("DROP VIEW IF EXISTS kk_matches")
     op.drop_table("hockey_standings")
     op.drop_index("ix_hockey_matches_league_starts", table_name="hockey_matches")

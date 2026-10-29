@@ -53,9 +53,26 @@ TICKETS_FALLBACK_URL = f"{HCDINAMO_BASE}/tickets/"
 
 _MATCH = text("""
     SELECT id, source_match_id, home_team, away_team, starts_at, status,
-           home_score, away_score, decided_in
+           home_score, away_score, decided_in, league, arena, city, tickets_url, details
     FROM hockey_matches
-    WHERE id = :id AND home_team = :home
+    WHERE id = :id AND (home_team = :home OR league = 'extraliga')
+    """)
+# Арена матча Экстралиги в каталоге: город клуба + первое слово названия с hockey.by («Чижовка-Арена»).
+_EXTRALIGA_ARENA = text("""
+    SELECT a.id, a.city_id, a.name, a.address, (lower(a.name) LIKE :pat) AS exact
+    FROM arenas a
+    JOIN cities c ON c.id = a.city_id
+    WHERE lower(replace(c.name, 'ё', 'е')) = :city
+    ORDER BY (lower(a.name) LIKE :pat) DESC, a.id
+    LIMIT 1
+    """)
+_KK_SUBSCRIBED = text("SELECT 1 FROM extraliga_kk_subscriptions WHERE player_key = :player_key AND club = :club")
+_KK_SUBSCRIBE = text("""
+    INSERT INTO extraliga_kk_subscriptions (player_key, club) VALUES (:player_key, :club)
+    ON CONFLICT DO NOTHING
+    """)
+_KK_SUBSCRIPTION_COUNTS = text("""
+    SELECT club, COUNT(*) AS n FROM extraliga_kk_subscriptions GROUP BY club ORDER BY n DESC, club
     """)
 
 # Люди из компаний на этот матч, где я организатор или отвечал сам. Ключи участников наружу не уходят.
@@ -186,10 +203,77 @@ def tickets_url(source_match_id: str | None) -> str:
 
 
 async def _home_match(session: AsyncSession, match_id: int) -> Any:
+    """Домашний матч Динамо или (при включённой Экстралиге) любой матч Экстралиги."""
     row = (await session.execute(_MATCH, {"id": int(match_id), "home": DINAMO})).one_or_none()
-    if row is None:
+    if row is None or (row.league == "extraliga" and not _extraliga_on()):
         raise MatchNotFound(match_id)
     return row
+
+
+def _extraliga_on() -> bool:
+    from src.application.extraliga import enabled_clubs
+
+    cfg = Settings()  # type: ignore[call-arg]
+    return bool(cfg.extraliga_enabled and enabled_clubs(cfg.extraliga_clubs))
+
+
+async def _extraliga_arena(session: AsyncSession, row: Any) -> dict[str, Any] | None:
+    word = ((row.arena or "").replace("-", " ").split() or [""])[0].lower()
+    found = (
+        await session.execute(
+            _EXTRALIGA_ARENA,
+            {"city": (row.city or "").strip().lower().replace("ё", "е"), "pat": f"%{word}%" if word else "\x00"},
+        )
+    ).mappings().first()
+    return dict(found) if found else None
+
+
+async def _match_arena(session: AsyncSession, row: Any) -> dict[str, Any] | None:
+    return await _extraliga_arena(session, row) if row.league == "extraliga" else await minsk_arena(session)
+
+
+def _venue_label(row: Any) -> str:
+    return (row.arena or row.city or "Арена") if row.league == "extraliga" else MATCH_VENUE_LABEL
+
+
+def _host(url: str | None) -> str | None:
+    from urllib.parse import urlparse
+
+    host = urlparse(url or "").hostname or ""
+    return host.removeprefix("www.") or None
+
+
+async def kk_subscribe(session: AsyncSession, player_key: int, club: str) -> None:
+    from src.application.extraliga import CLUBS
+
+    if club not in {c.name for c in CLUBS.values()}:
+        raise MatchNotFound(club)
+    await session.execute(_KK_SUBSCRIBE, {"player_key": int(player_key), "club": club})
+
+
+async def kk_subscription_counts(session: AsyncSession) -> list[dict[str, Any]]:
+    return [{"club": r.club, "count": int(r.n)} for r in (await session.execute(_KK_SUBSCRIPTION_COUNTS)).all()]
+
+
+async def _extraliga_extra(session: AsyncSession, row: Any, *, player_key: int, final: bool) -> dict[str, Any]:
+    from src.application.extraliga import match_page_url
+    from src.application.extraliga_preview import match_preview
+
+    d = row.details or {}
+    subscribed = (
+        await session.execute(_KK_SUBSCRIBED, {"player_key": int(player_key), "club": row.home_team})
+    ).first() is not None
+    return {
+        "league": "extraliga",
+        "preview": None if final else await match_preview(session, int(row.id)),
+        "details": (
+            {k: d.get(k) for k in ("periods", "goals", "shots", "attendance", "best_players")} if final and d else None
+        ),
+        "tickets_url": row.tickets_url,
+        "tickets_note": _host(row.tickets_url),
+        "source_url": match_page_url(row.source_match_id),
+        "kk_subscribe": {"club": row.home_team, "subscribed": subscribed},
+    }
 
 
 def _pick_out(row: Any) -> dict[str, Any]:
@@ -328,12 +412,15 @@ async def event_view(
     )
     crowd = (await session.execute(_CROWD, {"src": f"hockey_match:{row.id}"})).one()
     nxt = (
-        await session.execute(_NEXT_HOME, {"home": DINAMO, "after": max(now, starts_at), "id": row.id})
+        await session.execute(_NEXT_HOME, {"home": row.home_team, "after": max(now, starts_at), "id": row.id})
     ).one_or_none()
 
-    arena = await minsk_arena(session)
+    arena = await _match_arena(session, row)
+    extraliga = row.league == "extraliga"
     final = row.status == "final"
-    return {
+    if extraliga and arena is not None and not arena.get("exact"):
+        arena = None  # чужой каток города не выдаём за арену матча
+    out = {
         "match": {
             "id": row.id,
             "home": team_card(row.home_team),
@@ -345,10 +432,11 @@ async def event_view(
                 if final
                 else None
             ),
-            "is_home": True,
+            "is_home": not extraliga,
+            "league": row.league,
         },
         "arena": {
-            "name": MATCH_VENUE_LABEL,
+            "name": _venue_label(row),
             "arena_id": int(arena["id"]) if arena else None,
             "address": (arena or {}).get("address") or None,
         },
@@ -378,6 +466,10 @@ async def event_view(
             await _ice_after(session, arena, after=max(now, starts_at + MATCH_DURATION), settings=cfg) if arena else []
         ),
     }
+    if extraliga:
+        out["arena"]["city"] = row.city
+        out.update(await _extraliga_extra(session, row, player_key=player_key, final=final))
+    return out
 
 
 async def rsvp(
@@ -398,12 +490,15 @@ async def rsvp(
     cfg = settings or Settings()  # type: ignore[call-arg]
     if status not in STATUSES:
         raise CompanyRejected("Ответ: иду, смотрю дома или не смогу.")
-    await _home_match(session, match_id)
+    row = await _home_match(session, match_id)
+    arena = await _match_arena(session, row)
     view = await create_match_company(
         session,
         telegram_user_id=player_key,
         match_id=match_id,
-        home_team=DINAMO,
+        home_team=row.home_team,
+        arena=arena,
+        venue_label=_venue_label(row),
         display_name=display_name,
         now=now,
         settings=cfg,
@@ -452,12 +547,15 @@ async def invite(
 ) -> dict[str, Any]:
     """Карточка компании клиента на матч для чата: код, текст, кнопки и ссылка на страницу матча."""
     cfg = settings or Settings()  # type: ignore[call-arg]
-    await _home_match(session, match_id)
+    row = await _home_match(session, match_id)
+    arena = await _match_arena(session, row)
     view = await create_match_company(
         session,
         telegram_user_id=player_key,
         match_id=match_id,
-        home_team=DINAMO,
+        home_team=row.home_team,
+        arena=arena,
+        venue_label=_venue_label(row),
         display_name=display_name,
         now=now,
         settings=cfg,
