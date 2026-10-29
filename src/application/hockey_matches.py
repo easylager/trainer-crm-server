@@ -26,8 +26,11 @@ from src.ingestion.hockey_sources import (
     MINSK_TZ,
     HcdinamoMatch,
     TickerResult,
+    hcdinamo_month_stamp,
+    hcdinamo_month_url,
     parse_hcdinamo_calendar,
     parse_hcdinamo_match,
+    parse_hcdinamo_next_month,
     parse_hockey_by_ticker,
 )
 
@@ -343,11 +346,23 @@ def format_review_alert(row: MatchRow, reason: str | None) -> str:
 
 
 async def sync_calendar(session: AsyncSession, fetch: Fetch, *, now: datetime) -> dict[str, int]:
-    """Окно календаря hcdinamo.by → строки матчей. Ошибка одной страницы не роняет остальные."""
+    """Текущий и следующий месяц календаря hcdinamo.by → строки матчей.
+
+    Сайт показывает только текущий месяц: в конце месяца там 0–1 будущих матчей, поэтому
+    дочитываем следующий. Ошибка одной страницы (и следующего месяца) не роняет остальные.
+    """
     counts: dict[str, int] = {"inserted": 0, "moved": 0, "unchanged": 0, "skipped": 0, "failed": 0}
-    ids = parse_hcdinamo_calendar(await fetch(HCDINAMO_CALENDAR_URL))
+    current = await fetch(HCDINAMO_CALENDAR_URL)
+    ids = parse_hcdinamo_calendar(current)
     if not ids and _utc(now).astimezone(MINSK_TZ).month in SEASON_MONTHS:
         raise CalendarEmpty("календарь hcdinamo.by пуст в сезон — похоже, сменилась вёрстка")
+    stamp = parse_hcdinamo_next_month(current)
+    if stamp is not None:
+        try:
+            ids += [i for i in parse_hcdinamo_calendar(await fetch(hcdinamo_month_url(stamp))) if i not in ids]
+        except Exception:
+            logger.warning("hockey calendar: next month %s failed", stamp, exc_info=True)
+            counts["failed"] += 1
     for source_match_id in ids:
         try:
             page = parse_hcdinamo_match(await fetch(match_url(source_match_id)), source_match_id=source_match_id)
@@ -510,9 +525,14 @@ async def send_review_alert(text_body: str) -> bool | None:
 
 
 async def default_fetch(url: str) -> str:
-    from src.ingestion.source_io import fetch_http_text
+    from src.ingestion.source_io import fetch_http_text, post_form_text
 
-    return await fetch_http_text(url, headers={"User-Agent": "Mozilla/5.0 (compatible; GlideBot/1.0)"})
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; GlideBot/1.0)"}
+    stamp = hcdinamo_month_stamp(url)
+    if stamp is not None:
+        form = {"ajax": "Y", "data_calendar": stamp, "type": "cal"}
+        return await post_form_text(HCDINAMO_CALENDAR_URL, form, headers=headers)
+    return await fetch_http_text(url, headers=headers)
 
 
 __all__ = [

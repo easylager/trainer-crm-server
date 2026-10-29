@@ -9,9 +9,12 @@ import pytest
 
 from src.ingestion.hockey_sources import (
     MINSK_TZ,
+    hcdinamo_month_stamp,
+    hcdinamo_month_url,
     parse_hcdinamo_calendar,
     parse_hcdinamo_logo_index,
     parse_hcdinamo_match,
+    parse_hcdinamo_next_month,
     parse_hockey_by_ticker,
 )
 
@@ -96,3 +99,11 @@ def test_ticker_marks_completed_khl_and_overtime() -> None:
     assert ot and ot[0].decided_in == "ot"
     upcoming = [i for i in items if not i.completed]
     assert upcoming and upcoming[0].points == (None, None)
+
+
+def test_calendar_next_month_stamp() -> None:
+    stamp = parse_hcdinamo_next_month(_page("hcdinamo-calendar.html"))
+    assert stamp == "1794779732"
+    assert hcdinamo_month_stamp(hcdinamo_month_url(stamp)) == stamp
+    assert parse_hcdinamo_next_month("<html>без стрелок</html>") is None
+    assert hcdinamo_month_stamp("https://hcdinamo.by/matches/") is None

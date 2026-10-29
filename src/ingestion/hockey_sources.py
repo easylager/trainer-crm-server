@@ -18,6 +18,8 @@ MINSK_TZ = ZoneInfo("Europe/Minsk")
 
 HCDINAMO_BASE = "https://hcdinamo.by"
 HCDINAMO_CALENDAR_URL = f"{HCDINAMO_BASE}/matches/"
+# Следующие месяцы сайт отдаёт только POST-ом; в адресе это лишь ключ, ``default_fetch`` шлёт POST.
+HCDINAMO_MONTH_PREFIX = f"{HCDINAMO_CALENDAR_URL}?data_calendar="
 HOCKEY_BY_URL = "https://hockey.by/"
 
 DECIDED_REGULATION = "regulation"
@@ -43,6 +45,7 @@ _MONTHS_GENITIVE = {
 }
 
 _CALENDAR_LINK = re.compile(r'href="/matches/(\d+)/"')
+_CALENDAR_NEXT = re.compile(r'<a[^>]*class="next a"[^>]*data-date="(\d+)"')
 _MATCH_WRAP = re.compile(r'<div class="match_wrap">(.*?)<div class="periods_wrap">', re.S)
 _KICKOFF = re.compile(r"<p>\s*(\d{1,2}):(\d{2}),\s*(\d{1,2})\s+([а-яё]+)\s+(\d{4})\s*</p>")
 _CLUB_NAME = re.compile(r'<td class="club_name (l|r)">.*?<span class="name">(.*?)</span>', re.S)
@@ -164,6 +167,24 @@ def parse_hcdinamo_calendar(html: str) -> list[str]:
     return list(seen)
 
 
+def parse_hcdinamo_next_month(html: str) -> str | None:
+    """Метка следующего месяца из стрелки «вперёд» календаря; ``None`` — стрелки нет."""
+    found = _CALENDAR_NEXT.search(html)
+    return found.group(1) if found else None
+
+
+def hcdinamo_month_url(stamp: str) -> str:
+    return f"{HCDINAMO_MONTH_PREFIX}{stamp}"
+
+
+def hcdinamo_month_stamp(url: str) -> str | None:
+    """Обратное к ``hcdinamo_month_url``: метка месяца или ``None`` для обычного адреса."""
+    if not url.startswith(HCDINAMO_MONTH_PREFIX):
+        return None
+    stamp = url[len(HCDINAMO_MONTH_PREFIX) :]
+    return stamp if stamp.isdigit() else None
+
+
 def parse_hcdinamo_match(html: str, *, source_match_id: str) -> HcdinamoMatch:
     """Страница матча. ``ValueError`` — если разметка не та, что мы знаем."""
     wrap = _MATCH_WRAP.search(html)
@@ -243,11 +264,15 @@ __all__ = [
     "DECIDED_SO",
     "HCDINAMO_BASE",
     "HCDINAMO_CALENDAR_URL",
+    "HCDINAMO_MONTH_PREFIX",
     "HOCKEY_BY_URL",
     "MINSK_TZ",
     "HcdinamoMatch",
     "TickerResult",
+    "hcdinamo_month_stamp",
+    "hcdinamo_month_url",
     "parse_hcdinamo_calendar",
+    "parse_hcdinamo_next_month",
     "parse_hcdinamo_logo_index",
     "parse_hcdinamo_match",
     "parse_hockey_by_ticker",
