@@ -391,15 +391,15 @@
   }
 
   // Карточка слота «сейчас» по kind; false — такой карточки нет.
-  function nowCard(item, host) {
-    var kind = item ? item.kind : 'none';
-    if ((kind === 'kk_before' || kind === 'kk_result') && item.hockey && item.hockey.event_href) eventCard(item.hockey, host);
-    else if (kind === 'kk_before') kkBefore(item.hockey, host);
-    else if (kind === 'kk_result') kkResult(item.hockey, host);
-    else if (kind === 'kk_month') kkMonth(item.hockey, host);
-    else if (kind === 'ice') iceCard(item.session, host);
-    else if (kind === 'extraliga') xlCard(item, host);
-    else if (kind === 'more') moreCard(item, host);
+  function nowCard(now, host) {
+    var kind = now ? now.kind : 'none';
+    if ((kind === 'kk_before' || kind === 'kk_result') && now.hockey && now.hockey.event_href) eventCard(now.hockey, host);
+    else if (kind === 'kk_before') kkBefore(now.hockey, host);
+    else if (kind === 'kk_result') kkResult(now.hockey, host);
+    else if (kind === 'kk_month') kkMonth(now.hockey, host);
+    else if (kind === 'ice') iceCard(now.session, host);
+    else if (kind === 'extraliga') xlCard(now, host);
+    else if (kind === 'more') moreCard(now, host);
     else return false;
     return true;
   }
