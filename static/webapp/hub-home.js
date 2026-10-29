@@ -418,6 +418,19 @@
       if (nowCard(item, cell) && cell.firstChild) strip.appendChild(cell);
     });
     host.replaceChildren(strip);
+    var n = strip.children.length;
+    if (n < 2) return;
+    var dots = el('div', 'hn__dots');
+    dots.setAttribute('aria-hidden', 'true');
+    for (var i = 0; i < n; i++) dots.appendChild(el('span', 'hn__dot' + (i ? '' : ' hn__dot--on')));
+    host.appendChild(dots);
+    strip.addEventListener('scroll', function () {
+      var w = strip.firstChild.offsetWidth + 12;
+      var at = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4 ? n - 1 : Math.round(strip.scrollLeft / w);
+      Array.prototype.forEach.call(dots.children, function (d, j) {
+        d.className = 'hn__dot' + (j === at ? ' hn__dot--on' : '');
+      });
+    }, { passive: true });
   }
 
   function xlCard(c, host) {
@@ -432,11 +445,12 @@
     pair.appendChild(teamLogo(c.away, 'hn__logo hn__logo--round'));
     a.appendChild(pair);
     var what = el('span', 'hn__what');
-    what.appendChild(el('span', 'hn__league', 'Экстралига'));
     what.appendChild(el('span', 'hn__name hn__name--one', c.home.name + ' — ' + c.away.name));
     var when = c.live ? 'идёт сейчас' : r ? whenLabel(c.starts_at).split(',')[0] : whenLabel(c.starts_at);
-    what.appendChild(el('span', 'hn__sub hn__name--one', when + (c.city ? ' · ' + c.city : '')));
+    var where = c.arena || c.city;
+    what.appendChild(el('span', 'hn__sub hn__name--one', when + (where ? ' · ' + where : '')));
     a.appendChild(what);
+    a.appendChild(icon('chevron', 'hn__go hn__go--ev'));
     if (tag) {
       var t = el('span', 'hn__tag' + (tag.live ? ' hn__tag--live' : ''));
       t.setAttribute('aria-hidden', 'true');

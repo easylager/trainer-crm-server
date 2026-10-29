@@ -124,7 +124,7 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-note { margin: 0; padding: 0 4px; font-size: 14px; line-height: 1.4; color: var(--g-muted); }
 
 /* ── Билеты, дорога ────────────────────────────────────────────── */
-.cm-links { padding: 0; gap: 0; overflow: hidden; }
+.cm-links, .cm-mlist { padding: 0; gap: 0; overflow: hidden; }
 .cm-link {
   min-height: 52px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   color: var(--g-ink); text-decoration: none; font: 500 16px/1.2 var(--g-font);
@@ -166,17 +166,50 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 }
 
 /* ── Экстралига (TASK-340, экран 12) ───────────────────────────── */
-.cm-logos { display: flex; gap: 8px; }
 .cm-logo {
   width: 44px; height: 44px; flex: none; border-radius: 50%; background: #fff; display: inline-flex;
   align-items: center; justify-content: center; font: 400 13px/1 var(--g-font-display); color: #0d1b26;
   box-shadow: inset 0 0 0 1px #e1e8ec;
 }
 .cm-logo img { width: 32px; height: 32px; object-fit: contain; }
-.cm-buy { width: 100%; min-height: 54px; font-size: 17px; background: #ffd23f; color: #0d1424; }
+/* Шапка: логотип · время · логотип */
+.cm-hero--xl { height: auto; min-height: 280px; display: flex; flex-direction: column; }
+.cm-hero--xl .cm-hero__body { position: relative; left: auto; right: auto; bottom: auto; margin-top: auto; padding: 24px 16px 18px; gap: 10px; }
+.cm-duel { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 10px; }
+.cm-duel__team { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
+.cm-duel__team--away { align-items: flex-end; text-align: right; }
+.cm-duel .cm-logo { width: 56px; height: 56px; }
+.cm-duel .cm-logo img { width: 40px; height: 40px; }
+.cm-duel__name { font: 400 18px/1.1 var(--g-font-display); max-width: 100%; hyphens: auto; }
+.cm-duel__mid { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-bottom: 2px; align-self: center; }
+.cm-duel__big { font: 400 40px/1 var(--g-font-display); letter-spacing: -.01em; white-space: nowrap; }
+.cm-duel__small { font-size: 12px; color: var(--g-on-dark-muted); }
+.cm-buy { width: 100%; min-height: 52px; font-size: 16px; gap: 8px; }
+.cm-buy svg { width: 18px; height: 18px; }
 #cmBuy:empty { display: none; }
-#cmBuy { display: flex; flex-direction: column; gap: 8px; }
+#cmBuy { display: flex; flex-direction: column; gap: 10px; }
 #cmBuy .cm-hint { margin: 0; }
+/* Перед матчем: две колонки */
+.cm-pre .cm-h, .cm-watch-card .cm-h, .cm-after .cm-h { font: 400 22px/1.1 var(--g-font-display); }
+.cm-vs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; row-gap: 4px; }
+.cm-vs__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cm-vs__head .cm-logo { width: 26px; height: 26px; box-shadow: none; }
+.cm-vs__head .cm-logo img { width: 22px; height: 22px; }
+.cm-vs__name { font: 700 15px/1.2 var(--g-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-vs__place { margin-top: 6px; font: 400 28px/1 var(--g-font-display); }
+.cm-vs__sub { font-size: 13px; color: var(--g-muted); }
+.cm-vs__label { grid-column: 1 / -1; margin-top: 10px; font: 700 11px/1.2 var(--g-font); letter-spacing: .06em; text-transform: uppercase; color: var(--g-muted); }
+.cm-meet { margin-top: 4px; padding: 12px 14px; border-radius: 14px; background: var(--g-accent-soft, rgba(54, 178, 182, .12)); display: flex; gap: 10px; align-items: flex-start; }
+.cm-meet__icon { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--g-accent-ink, var(--g-accent)); }
+.cm-meet__text { margin: 0; font-size: 14px; line-height: 1.45; color: var(--g-ink); }
+/* Кого смотреть */
+.cm-watch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+.cm-watch__col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cm-watch__foot { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--g-muted); }
+/* «Позвать» вместо «Кто кого» */
+.cm-kksub { align-items: center; text-align: center; gap: 6px; padding: 22px 16px 18px; }
+.cm-kksub .cm-kk__tag { margin-bottom: 8px; }
+.cm-kksub .cm-sub { margin-top: 10px; }
 .cm-team { display: flex; align-items: center; gap: 12px; }
 .cm-team + .cm-team { margin-top: 10px; }
 .cm-team__text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
@@ -187,12 +220,11 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
   min-width: 24px; height: 24px; padding: 0 4px; border-radius: 7px; background: var(--g-chip); color: var(--g-ink-2);
   display: inline-flex; align-items: center; justify-content: center; font: 700 11px/1 var(--g-font);
 }
-.cm-form__m--w { background: var(--g-accent); color: var(--g-on-accent); }
+.cm-form__m--w { background: #2f9e57; color: #fff; }
 .cm-pre__meet, .cm-after__line { margin: 12px 0 0; font-size: 14px; line-height: 1.45; color: var(--g-ink-2); }
 .cm-after__line:first-child { margin-top: 0; }
 .cm-watch__row { display: flex; flex-direction: column; gap: 2px; }
-.cm-watch__row + .cm-watch__row { margin-top: 10px; }
-.cm-watch__name { font: 700 15px/1.25 var(--g-font); }
+.cm-watch__name { font: 700 15px/1.25 var(--g-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cm-watch__stat { font-size: 13px; color: var(--g-muted); }
 .cm-goals { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .cm-goal { display: flex; align-items: baseline; gap: 10px; }
@@ -201,7 +233,6 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-goal__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cm-goal__who { font: 600 15px/1.25 var(--g-font); }
 .cm-goal__sub { font-size: 13px; color: var(--g-muted); }
-.cm-kk--sub { padding: 14px 12px 14px 16px; gap: 12px; }
 .cm-sub { flex: none; min-height: 40px; padding: 0 16px; background: var(--g-ink); color: var(--g-bg); }
 .cm-sub--done { background: var(--g-chip); color: var(--g-muted); cursor: default; }
 /* «Все матчи» */

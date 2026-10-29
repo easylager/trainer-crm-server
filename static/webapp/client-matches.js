@@ -75,7 +75,7 @@
     host.replaceChildren.apply(host, groups.map(function (g) {
       var sec = el('section', 'cm-day');
       sec.appendChild(el('h2', 'cm-h2', g.day));
-      var card = el('div', 'cm-card cm-links');
+      var card = el('div', 'cm-card cm-mlist');
       g.items.forEach(function (m) { card.appendChild(row(m)); });
       sec.appendChild(card);
       return sec;

@@ -6,16 +6,16 @@
   <title>Матч</title>
   <!-- TASK-304: домашний матч Динамо — ивент. Язык нового хаба (PDEC-023): токены сайта, Dela Gothic, свои шрифты. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610287" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610287" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610293" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610293" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202610287"></script>
-  <link rel="stylesheet" href="theme.css?v=202610287" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610287" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202610287" />
-  <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610287" />
-  <link rel="stylesheet" href="/static/webapp/client-match.css?v=202610287" />
-  <script defer src="mini-app-telegram-chrome.js?v=202610287"></script>
+  <script src="client-mini-app-theme.js?v=202610293"></script>
+  <link rel="stylesheet" href="theme.css?v=202610293" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610293" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202610293" />
+  <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610293" />
+  <link rel="stylesheet" href="/static/webapp/client-match.css?v=202610293" />
+  <script defer src="mini-app-telegram-chrome.js?v=202610293"></script>
 </head>
 <body class="cm-body ga-body">
   <header class="cm-hero" id="cmHero">
@@ -32,7 +32,11 @@
     </div>
     <div class="cm-hero__body">
       <span class="cm-kicker" id="cmKicker">Матч</span>
-      <div class="cm-logos" id="cmLogos" hidden></div>
+      <div class="cm-duel" id="cmFace" hidden>
+        <span class="cm-duel__team" id="cmFaceHome"></span>
+        <span class="cm-duel__mid"><span class="cm-duel__big" id="cmFaceBig"></span><span class="cm-duel__small" id="cmFaceSmall"></span></span>
+        <span class="cm-duel__team cm-duel__team--away" id="cmFaceAway"></span>
+      </div>
       <h1 class="cm-title" id="cmTitle"><span class="cm-skel-line"></span></h1>
       <div class="cm-score" id="cmScore" hidden></div>
       <span class="cm-when" id="cmWhen">&nbsp;</span>
@@ -65,7 +69,7 @@
       <div id="cmPreBody"></div>
     </section>
 
-    <section class="cm-card cm-watch" id="cmWatch" hidden aria-labelledby="cmWatchTitle">
+    <section class="cm-card cm-watch-card" id="cmWatch" hidden aria-labelledby="cmWatchTitle">
       <h2 class="cm-h" id="cmWatchTitle">Кого смотреть</h2>
       <div id="cmWatchBody"></div>
     </section>
@@ -74,8 +78,8 @@
 
     <nav class="cm-card cm-links" aria-label="Как попасть на матч">
       <a class="cm-link" id="cmTickets" href="#" hidden>Билеты <span class="cm-link__end">сайт клуба <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
-      <a class="cm-link" id="cmSource" href="#" hidden>Составы и трансляция <span class="cm-link__end">hockey.by <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
       <a class="cm-link" id="cmRoute" href="#" hidden>Как добраться <span class="cm-link__end"><span id="cmAddress">Минск-Арена</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></a>
+      <a class="cm-link" id="cmSource" href="#" hidden>Составы и трансляция <span class="cm-link__end">hockey.by <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></span></a>
     </nav>
 
     <section class="cm-ice" id="cmIce" hidden aria-labelledby="cmIceTitle">
@@ -99,9 +103,9 @@
   </div>
   <div class="cm-toast" id="cmToast" role="status" aria-live="polite" hidden></div>
 
-  <script src="/static/webapp/ga-touch.js?v=202610287"></script>
-  <script src="mini-app-share-sheet.js?v=202610287"></script>
-  <script src="/static/webapp/client-match-model.js?v=202610287"></script>
-  <script src="/static/webapp/client-match.js?v=202610287"></script>
+  <script src="/static/webapp/ga-touch.js?v=202610293"></script>
+  <script src="mini-app-share-sheet.js?v=202610293"></script>
+  <script src="/static/webapp/client-match-model.js?v=202610293"></script>
+  <script src="/static/webapp/client-match.js?v=202610293"></script>
 </body>
 </html>

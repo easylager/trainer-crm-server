@@ -362,6 +362,10 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
 .hn__cell { flex: 0 0 82%; max-width: 330px; display: flex; scroll-snap-align: start; }
 .hn__cell > * { flex: 1; min-width: 0; }
 .hn__cell > .hn__ev { margin-top: 0; }
+.hn__dots { display: flex; justify-content: center; gap: 6px; padding: 2px 0 4px; }
+.hn__dot { width: 6px; height: 6px; border-radius: 3px; background: var(--g-line); transition: width .2s ease, background .2s ease; }
+.hn__dot--on { width: 16px; background: var(--g-muted); }
+.hn__xl .hn__go { margin-left: 0; }
 .hn__league { font: 600 11px/1.2 var(--g-font); letter-spacing: .06em; text-transform: uppercase; color: var(--g-muted); }
 .hn__more { flex: 0 0 auto; min-width: 150px; background: var(--g-dark); color: #fff; }
 .hn__cell--more { flex: 0 0 auto; }
