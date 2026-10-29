@@ -1180,6 +1180,12 @@ def _b_all_places(view: Mapping[str, Any]) -> str:
             else:
                 links.append(label)
         groups.append(f"<p><b>{title}:</b> {', '.join(links)}</p>")
+    city_id = view["city"].get("id")
+    if city_id:
+        groups.append(
+            f'<p class="b-details__more"><a href="/suggest?city={int(city_id)}">'
+            "Знаете место, которого здесь нет? →</a></p>"
+        )
     return (
         '<section class="b-sec"><details class="b-details">'
         f'<summary>Все места города · {len(places)}{icon_svg("down")}</summary>'
