@@ -635,7 +635,7 @@
         if (isNaN(n)) return '';
         var v = n / 100;
         var numStr = v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',');
-        return escapeHtml(numStr) + ' BYN';
+        return escapeHtml(numStr) + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
       }
 
       function formatTrainerBookingPaymentDisplay(booking) {
@@ -3295,7 +3295,7 @@
           if (!isFinite(pb)) pb = 0;
           var numStr = pb === Math.floor(pb) ? String(Math.floor(pb)) : pb.toFixed(2);
           var priceFrag = document.createElement('span');
-          priceFrag.textContent = numStr + ' BYN';
+          priceFrag.textContent = numStr + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
           lab.appendChild(inp);
           lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — '));
           lab.appendChild(priceFrag);
@@ -3348,7 +3348,7 @@
           if (!isFinite(pb)) pb = 0;
           var numStr = pb === Math.floor(pb) ? String(Math.floor(pb)) : pb.toFixed(2);
           var priceFrag = document.createElement('span');
-          priceFrag.textContent = numStr + ' BYN';
+          priceFrag.textContent = numStr + ' ' + (window.TrainerFormat ? window.TrainerFormat.currencyLabel() : 'BYN');
           lab.appendChild(inp);
           lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — '));
           lab.appendChild(priceFrag);

@@ -26,3 +26,5 @@ assert.doesNotMatch(
   /arena_id == null && !!state\.onlineEnabled/,
   'a venue-less slot is online only when the row says so'
 );
+assert.match(src, /window\.TrainerFormat \? window\.TrainerFormat\.currencyLabel\(\) : 'BYN'/);
+assert.doesNotMatch(src, /priceFrag\.textContent = numStr \+ ' BYN'/);

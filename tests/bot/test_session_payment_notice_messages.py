@@ -2,7 +2,88 @@
 
 from __future__ import annotations
 
+from datetime import date, time
+
+import pytest
+
 from src.bot import messages as msg
+from src.bot.handlers.client_handlers import _certificate_amount_display, _format_services_prices
+from src.bot.handlers.trainer_handlers import _format_byn_amount
+from src.bot.trainer_digest_format import _format_money_cents
+from src.shared.byr_currency_display import format_kopeks_byn_display, format_rubles_byn_display
+
+
+@pytest.mark.parametrize("currency", ["RUB", "BYN"])
+def test_trainer_currency_flows_through_booking_and_bot_amount_formatters(currency: str) -> None:
+    rubles = format_rubles_byn_display(50, currency)
+    kopeks = format_kopeks_byn_display(5000, currency)
+
+    assert rubles in msg.format_client_upcoming_payment_display_html(
+        expected_payment_class="ONE_OFF", booking_price_cents=5000, currency=currency
+    )
+    assert rubles in msg.format_trainer_upcoming_payment_display_html(
+        expected_payment_class="ONE_OFF", booking_price_cents=5000, currency=currency
+    )
+    assert rubles in msg.format_session_payment_notice_html(
+        phase="upcoming", outcome="one_off", booking_price_cents=5000, currency=currency
+    )
+    assert rubles in msg.format_client_booking_reminder_text(
+        is_soon=True,
+        sessions=[{
+            "date": "01.05", "day": "Чт", "time": "10:00", "duration": 60,
+            "booking_price_cents": 5000, "expected_payment_class": "ONE_OFF",
+            "currency_code": currency,
+        }],
+    )
+    assert rubles in msg.format_client_booking_completed_notice_html(
+        date="01.05", day="Чт", time="10:00", duration_minutes=60,
+        trainer_name="Мария", service_name="Йога", deduction_outcome="cert",
+        cert_amount_cents=5000, currency=currency,
+    )
+    assert rubles in msg.format_trainer_booking_completed_html(
+        client_name="Иван", date="01.05", day="Чт", time="10:00",
+        duration_minutes=60, service_name="Йога", price_tier_label=None,
+        arena_display=None, deduction_outcome="cert", cert_amount_cents=5000,
+        currency=currency,
+    )
+    assert rubles in msg.format_trainer_booking_session_wrapup_html(
+        client_name="Иван", date="01.05", day="Чт", time="10:00",
+        duration_minutes=60, service_name="Йога", price_tier_label=None,
+        booking_price_cents=5000, arena_display=None,
+        expected_payment_class="ONE_OFF", currency=currency,
+    )
+    assert rubles in msg._format_client_booking_confirmed_service_price_block(
+        "Йога", 5000, None, currency=currency
+    )
+    assert kopeks == msg._money_byn(5000, currency=currency)
+    assert kopeks == _format_money_cents(5000, currency=currency)
+    assert rubles == _certificate_amount_display(5000, currency=currency)
+    assert rubles in _format_services_prices(
+        [{"service_name": "Йога", "price_byn": 50}], currency=currency
+    )
+    assert rubles == _format_byn_amount(5000, currency=currency)
+    assert rubles in msg._milestone_price_section_html(5000, currency=currency)
+    assert rubles in msg.format_trainer_first_booking_milestone_rich_html(
+        client_name="Иван", client_phone="", date_str="01.05", day_label="Чт",
+        time_str="10:00", arena_name=None, arena_address=None, service_name="Йога",
+        price_tier_label=None, booking_price_cents=5000, currency=currency,
+    )
+    assert rubles in msg.format_trainer_first_booking_milestone_from_booking_row(
+        {
+            "slot_date": date(2026, 5, 1), "start_time": time(10, 0),
+            "client_name": "Иван", "booking_price_cents": 5000,
+            "currency_code": currency, "expected_payment_class": "ONE_OFF",
+        }
+    )
+
+
+@pytest.mark.parametrize("currency", ["RUB", "BYN"])
+def test_client_receives_trainers_currency_regardless_of_client_country(currency: str) -> None:
+    expected = format_rubles_byn_display(50, currency)
+    text = msg.format_client_upcoming_payment_display_html(
+        expected_payment_class="ONE_OFF", booking_price_cents=5000, currency=currency
+    )
+    assert expected in text
 
 
 def test_trainer_completed_pass_deduction_line() -> None:

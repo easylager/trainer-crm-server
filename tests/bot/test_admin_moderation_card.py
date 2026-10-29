@@ -1,6 +1,6 @@
 """Admin moderation card HTML: no per-education moderation status, rich profile fields."""
 from src.bot.admin_moderation_card import format_admin_education_block, format_admin_trainer_moderation_caption
-from src.shared.byr_currency_display import BYR_SIGN
+from src.shared.byr_currency_display import BYR_SIGN, format_rubles_byn_display
 
 
 def test_education_block_has_no_moderation_status():
@@ -98,3 +98,19 @@ def test_work_format_rides_alongside_real_arenas():
     )
     assert "Лёд-1" in text
     assert "выезд к клиенту" in text
+
+
+def test_moderation_caption_shows_prices_in_trainer_currency():
+    trainer = {
+        "id": 62,
+        "telegram_id": 1,
+        "profile": {"first_name": "A", "last_name": "B", "city_id": 2},
+        "services": [{"service_id": 1, "service_name": "Фигурное катание", "price_byn": 2500, "price_cents": 250000}],
+        "arena_names": ["Айсбург Арена"],
+        "photos": [],
+    }
+    rub = format_admin_trainer_moderation_caption(trainer, [], city_name="Санкт-Петербург", currency="RUB")
+    assert format_rubles_byn_display(2500, "RUB") in rub
+    assert BYR_SIGN not in rub.split("Услуги")[1].split("Площадки")[0]
+    # без явной валюты поведение прежнее: белорусский рубль
+    assert f"2500 {BYR_SIGN}" in format_admin_trainer_moderation_caption(trainer, [], city_name="Минск")

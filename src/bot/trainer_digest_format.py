@@ -84,9 +84,9 @@ def _format_duration_minutes(minutes: int) -> str:
     return f"{m}\u00a0мин"
 
 
-def _format_money_cents(cents: int) -> str:
-    """Belarusian ruble display suffix from ``byr_currency_display`` (plain text in digest)."""
-    return format_kopeks_byn_display(int(cents))
+def _format_money_cents(cents: int, *, currency: str = "BYN") -> str:
+    """Format cents for the trainer's currency."""
+    return format_kopeks_byn_display(int(cents), currency)
 
 
 def _short_client_name(full_name: str) -> str:
@@ -342,7 +342,7 @@ def format_morning_digest_lite_owed_only(
 # =============================================================================
 
 
-def format_weekly_digest(digest: dict[str, Any]) -> str:
+def format_weekly_digest(digest: dict[str, Any], *, currency: str = "BYN") -> str:
     """
     Structure: hero → 📊 past ledger → 📅 upcoming view → optional drought → 👉 recommendation.
     Always ends with one recommendation so the message doesn't trail off flat.
@@ -354,7 +354,7 @@ def format_weekly_digest(digest: dict[str, Any]) -> str:
         lines.append(catalog_line)
         lines.append("")
 
-    lines.extend(_format_past_section(digest.get("past_week") or {}))
+    lines.extend(_format_past_section(digest.get("past_week") or {}, currency=currency))
     lines.append("")
     lines.extend(_format_upcoming_section(digest.get("upcoming_week") or {}))
 
@@ -367,7 +367,7 @@ def format_weekly_digest(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def _format_past_section(past: dict[str, Any]) -> list[str]:
+def _format_past_section(past: dict[str, Any], *, currency: str = "BYN") -> list[str]:
     """📊 header + bullets. Empty week gets a single neutral 'бывает'-line."""
     completed = int(past.get("completed_count") or 0)
     cash = int(past.get("cash_cents") or 0)
@@ -383,13 +383,21 @@ def _format_past_section(past: dict[str, Any]) -> list[str]:
         count=completed, word=_sessions_word(completed),
     ))
     if cash > 0:
-        out.append(msg.TRAINER_DIGEST_WEEKLY_PAST_CASH.format(cash=_format_money_cents(cash)))
+        out.append(
+            msg.TRAINER_DIGEST_WEEKLY_PAST_CASH.format(
+                cash=_format_money_cents(cash, currency=currency)
+            )
+        )
     if pass_cnt > 0:
         out.append(msg.TRAINER_DIGEST_WEEKLY_PAST_PASSES.format(
             count=pass_cnt, word=_sessions_word(pass_cnt),
         ))
     if cert > 0:
-        out.append(msg.TRAINER_DIGEST_WEEKLY_PAST_CERTS.format(cash=_format_money_cents(cert)))
+        out.append(
+            msg.TRAINER_DIGEST_WEEKLY_PAST_CERTS.format(
+                cash=_format_money_cents(cert, currency=currency)
+            )
+        )
     return out
 
 

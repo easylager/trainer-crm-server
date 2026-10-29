@@ -74,6 +74,7 @@ def format_admin_trainer_moderation_caption(
     education_items: list[dict],
     *,
     city_name: str | None = None,
+    currency: str = "BYN",
 ) -> str:
     """Full HTML body for one moderation card (photo caption or text message)."""
     trainer = build_trainer_profile_for_moderation_card(trainer)
@@ -128,7 +129,7 @@ def format_admin_trainer_moderation_caption(
             sname = html.escape((s.get("service_name") or "—").strip())
             pb = s.get("price_byn")
             if pb is not None:
-                parts.append(f"• {sname} — {html.escape(format_rubles_byn_display(float(pb)))}")
+                parts.append(f"• {sname} — {html.escape(format_rubles_byn_display(float(pb), currency))}")
             else:
                 parts.append(f"• {sname} — цена не указана")
 

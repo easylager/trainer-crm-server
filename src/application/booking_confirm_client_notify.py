@@ -12,6 +12,7 @@ from src.application.booking_payment_notice import classify_booking_expected_pay
 from src.application.trainer_use_cases import get_trainer
 from src.bot import messages as msg
 from src.shared.config import Settings
+from src.shared.currency import resolve_trainer_currency
 
 TRAINER_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ async def notify_client_booking_confirmed_by_trainer(
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     expected_payment_class = await classify_booking_expected_payment_class(session, booking_id, trainer_id)
+    currency = await resolve_trainer_currency(session, trainer_id)
     text_client = msg.format_client_booking_confirmed_by_trainer_text(
         date=date_str,
         day=dow,
@@ -68,6 +70,7 @@ async def notify_client_booking_confirmed_by_trainer(
         trainer_first_booking_milestone=bool(info.get("first_booking_milestone")),
         expected_payment_class=expected_payment_class,
         arena_tickets_url=info.get("arena_tickets_url"),
+        currency=currency,
     )
     reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
         map_url=info.get("map_link"),

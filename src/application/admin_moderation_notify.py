@@ -22,6 +22,7 @@ from src.application.trainer_profile_pending import merge_profile_pending_for_ed
 from src.bot.client_api import resolve_trainer_photo_bytes
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
+from src.shared.currency import resolve_trainer_currency
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +103,10 @@ async def notify_admins_trainer_queued_for_moderation(trainer_id: int) -> None:
         trainer = await get_trainer(session, trainer_id)
         education_items = await list_trainer_education(session, trainer_id, public_only=False)
         city_name = None
+        currency = "BYN"
         if trainer:
             city_name = await fetch_city_name(session, (trainer.get("profile") or {}).get("city_id"))
+            currency = await resolve_trainer_currency(session, trainer_id)
     if not trainer:
         return
     sub_at = trainer.get("moderation_submitted_at")
@@ -114,7 +117,9 @@ async def notify_admins_trainer_queued_for_moderation(trainer_id: int) -> None:
             _moderation_submitted_at_key(sub_at),
         )
         return
-    base_caption = format_admin_trainer_moderation_caption(trainer, education_items or [], city_name=city_name)
+    base_caption = format_admin_trainer_moderation_caption(
+        trainer, education_items or [], city_name=city_name, currency=currency
+    )
     caption = msg.ADMIN_NOTIFY_NEW_MODERATION_PREFIX + base_caption
     profile = merge_profile_pending_for_editor(
         trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {},

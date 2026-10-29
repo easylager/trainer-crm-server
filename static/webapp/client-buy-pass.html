@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Абонементы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202610299"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610299" />
-  <link rel="stylesheet" href="theme.css?v=202610299" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610299" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610299" />
-  <script src="mini-app-empty-state.js?v=202610299"></script>
-  <script src="mini-app-telegram-chrome.js?v=202610299"></script>
-  <script src="client-profile-switcher.js?v=202610299"></script>
+  <script src="client-mini-app-theme.js?v=2026102911"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102911" />
+  <link rel="stylesheet" href="theme.css?v=2026102911" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026102911" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026102911" />
+  <script src="mini-app-empty-state.js?v=2026102911"></script>
+  <script src="mini-app-telegram-chrome.js?v=2026102911"></script>
+  <script src="client-profile-switcher.js?v=2026102911"></script>
   <style>
     /* Page-specific layout only; tokens & bd-* from theme + mini-app-components */
     #screenChoose {
@@ -374,12 +374,12 @@
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
   </style>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202610299" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202610299" />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610299" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202610299" />
-  <link rel="stylesheet" href="/static/webapp/glide-skin.css?v=202610299" />
-  <script src="/static/webapp/ga-touch.js?v=202610299"></script>
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=2026102911" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026102911" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=2026102911" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=2026102911" />
+  <link rel="stylesheet" href="/static/webapp/glide-skin.css?v=2026102911" />
+  <script src="/static/webapp/ga-touch.js?v=2026102911"></script>
 </head>
 <body class="ar-pilot ar-pilot--client-buy-pass ga-body glide-skin">
   <div id="screenChoose" data-screen class="active">
@@ -463,7 +463,7 @@
     </div>
   </div>
 
-  <script src="client-buy-pass-order.js?v=202610299"></script>
+  <script src="client-buy-pass-order.js?v=2026102911"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -475,7 +475,10 @@
         if (id) h['X-Telegram-Init-Data'] = id;
         return h;
       }
-      var state = { trainerId: null, trainerName: '', items: [], certItems: [], returnContext: {}, highlightPassProductId: null };
+      var state = { trainerId: null, trainerName: '', currency: 'BYN', items: [], certItems: [], returnContext: {}, highlightPassProductId: null };
+      function priceCurrencyLabel(currency) {
+        return currency === 'RUB' ? 'руб.' : 'BYN';
+      }
       function getTrainerFromUrl() {
         var p = new URLSearchParams(window.location.search || '');
         var id = p.get('trainer_id');
@@ -516,11 +519,11 @@
       }
       function formatPrice(cents) {
         if (cents == null) return '—';
-        return (cents / 100) + ' BYN';
+        return (cents / 100) + ' ' + priceCurrencyLabel(state.currency);
       }
       function formatCertAmountHtml(c) {
         if (c.amount_cents == null) return escapeHtml('Любая сумма');
-        return escapeHtml(String(c.amount_cents / 100)) + ' BYN';
+        return escapeHtml(String(c.amount_cents / 100)) + ' ' + priceCurrencyLabel(state.currency);
       }
       function escapeAttr(s) {
         return String(s == null ? '' : s)
@@ -627,6 +630,19 @@
           }
           state.items = (passRes.ok && passRes.data.items) ? passRes.data.items : [];
           state.certItems = (certRes.ok && certRes.data.items) ? certRes.data.items : [];
+          state.currency =
+            (passRes.ok && passRes.data.currency) ||
+            (certRes.ok && certRes.data.currency) ||
+            'BYN';
+          var currencyLabel = priceCurrencyLabel(state.currency);
+          var certAmountLabel = document.querySelector('label[for="cert-orderAmount"]');
+          var certAmountHint = document.querySelector('#cert-orderAmountWrap .cert-order-field-hint');
+          if (certAmountLabel) certAmountLabel.textContent = 'Сумма, ' + currencyLabel;
+          if (certAmountHint) {
+            certAmountHint.textContent =
+              'Минимум 1 ' + currencyLabel + (currencyLabel === 'руб.' ? '' : '.') +
+              ' Тренер увидит сумму в заявке.';
+          }
           var hasPasses = state.items.length > 0;
           var hasCerts = state.certItems.length > 0;
           document.getElementById('passSection').style.display = hasPasses ? 'block' : 'none';
@@ -669,7 +685,7 @@
               var passPerSession = p.pass_price_per_session_cents != null ? (p.pass_price_per_session_cents / 100) : null;
               var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents) + ' · ' + (p.validity_days ? (p.validity_days + ' дн.') : 'без срока');
               if (passPerSession != null) {
-                meta += ' · ' + (passPerSession % 1 === 0 ? passPerSession : passPerSession.toFixed(2)) + ' BYN за занятие';
+                meta += ' · ' + (passPerSession % 1 === 0 ? passPerSession : passPerSession.toFixed(2)) + ' ' + priceCurrencyLabel(state.currency) + ' за занятие';
               }
               var savingsHtml = '';
               var savPer = p.savings_per_session_cents != null ? Number(p.savings_per_session_cents) : 0;
@@ -677,8 +693,8 @@
               if (savPer > 0) {
                 var perSession = savPer / 100;
                 var totalSav = savTotal / 100;
-                savingsHtml = '<div class="bp-savings">Экономия ' + (perSession % 1 === 0 ? perSession : perSession.toFixed(2)) + ' BYN за занятие';
-                if (totalSav > perSession) savingsHtml += ' · ' + (totalSav % 1 === 0 ? totalSav : totalSav.toFixed(2)) + ' BYN с абонемента';
+                savingsHtml = '<div class="bp-savings">Экономия ' + (perSession % 1 === 0 ? perSession : perSession.toFixed(2)) + ' ' + priceCurrencyLabel(state.currency) + ' за занятие';
+                if (totalSav > perSession) savingsHtml += ' · ' + (totalSav % 1 === 0 ? totalSav : totalSav.toFixed(2)) + ' ' + priceCurrencyLabel(state.currency) + ' с абонемента';
                 savingsHtml += '</div>';
               }
               var extraClass = '';
@@ -726,6 +742,7 @@
               var showNom =
                 c.amount_cents != null &&
                 certTitle.indexOf('BYN') === -1 &&
+                certTitle.indexOf('руб.') === -1 &&
                 certTitle.indexOf('Любая') === -1;
               certHtml += '<div class="bp-cert-card" style="--bp-delay:' + (cidx * 0.05) + 's">';
               certHtml += '<div class="bp-cert-inner">';
@@ -823,7 +840,11 @@
             'Заявка на <strong>' + escapeHtml(label) + '</strong> уйдёт этому тренеру.'
           ];
           if (certConfirm.anyAmount) {
-            lines.push('Номинал не фиксирован — укажите сумму в BYN.');
+            var currencyLabel = priceCurrencyLabel(state.currency);
+            lines.push(
+              'Номинал не фиксирован — укажите сумму в ' + currencyLabel +
+              (currencyLabel === 'руб.' ? '' : '.')
+            );
           }
           lines.push('Email нужен, чтобы тренер отправил PDF. Имя получателя можно не указывать.');
           text.innerHTML = lines.join('<br>');
@@ -943,7 +964,7 @@
           recipientName: document.getElementById('cert-orderName').value,
           anyAmount: certConfirm.anyAmount,
           amountRaw: document.getElementById('cert-orderAmount').value
-        });
+        }, priceCurrencyLabel(state.currency));
         if (!parsed.ok) {
           showCertFieldError(parsed.field, parsed.message);
           return;
@@ -966,6 +987,6 @@
       loadProducts();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202610299"></script>
+  <script src="mini-app-client-home.js?v=2026102911"></script>
 </body>
 </html>

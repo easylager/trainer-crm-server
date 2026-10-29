@@ -144,6 +144,7 @@ from src.application.trainer_catalog_state import (
 from src.shared.catalog_visibility import trainer_is_listed, trainer_opted_into_catalog
 from src.shared.audit import ACTOR_ADMIN_BOT, audit_log
 from src.shared.config import Settings
+from src.shared.currency import resolve_trainer_currency
 from src.shared.validation import safe_parse_id
 
 
@@ -285,12 +286,16 @@ async def _send_trainer_for_moderation(message: Message, trainer_id: int) -> Non
         trainer = await get_trainer(session, trainer_id)
         education_items = await list_trainer_education(session, trainer_id, public_only=False)
         city_name = None
+        currency = "BYN"
         if trainer:
             city_name = await fetch_city_name(session, (trainer.get("profile") or {}).get("city_id"))
+            currency = await resolve_trainer_currency(session, trainer_id)
     if not trainer:
         await message.answer(f"Тренер #{trainer_id} не найден.")
         return
-    caption = format_admin_trainer_moderation_caption(trainer, education_items or [], city_name=city_name)
+    caption = format_admin_trainer_moderation_caption(
+        trainer, education_items or [], city_name=city_name, currency=currency
+    )
     trainer_named = build_trainer_profile_for_moderation_card(dict(trainer))
     profile = trainer_named.get("profile") or {}
     name_plain = ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip() or "—"

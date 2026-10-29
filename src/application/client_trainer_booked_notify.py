@@ -15,6 +15,7 @@ from src.application.booking_use_cases import (
     release_client_trainer_booked_notification_claim,
 )
 from src.bot import messages as msg
+from src.shared.currency import resolve_trainer_currency
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ async def try_send_client_trainer_booked_push(
     payment_class = await classify_booking_expected_payment_class(
         session, bid, int(trainer_id)
     )
+    currency = await resolve_trainer_currency(session, int(trainer_id))
     await enrich_booking_notification_with_arena_tickets(session, p)
     date_str, day_str, time_str = _slot_display_strings(p.get("slot_date"), p.get("start_time"))
     text = msg.format_client_trainer_booked_you_html(
@@ -70,6 +72,7 @@ async def try_send_client_trainer_booked_push(
         duration_minutes=p.get("duration_minutes"),
         map_link=p.get("map_link"),
         expected_payment_class=payment_class,
+        currency=currency,
         booked_for_name=p.get("booked_for_name"),
         arena_tickets_url=p.get("arena_tickets_url"),
     )

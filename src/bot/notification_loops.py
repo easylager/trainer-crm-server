@@ -168,6 +168,7 @@ from src.shared.config import (
     Settings,
     get_settings,
 )
+from src.shared.currency import resolve_trainer_currency, resolve_trainer_currencies
 from src.shared.map_links import build_yandex_by_map_url
 from src.application.trainer_notification_prefs import is_trainer_push_allowed_now
 from src.shared.notification_hours import NOTIFICATION_TZ, is_within_notification_hours
@@ -796,6 +797,7 @@ async def _send_client_booking_completed_push(
         return
     if not await claim_client_booking_completion_push_sent(session, booking_id):
         return
+    currency = await resolve_trainer_currency(session, int(b["trainer_id"]))
     date_str, day_str, time_str = _slot_display_strings(
         b.get("slot_date"), b.get("start_time")
     )
@@ -823,6 +825,7 @@ async def _send_client_booking_completed_push(
         pass_sessions_remaining=deduction.pass_sessions_remaining,
         cert_amount_cents=deduction.cert_amount_cents,
         cert_remaining_cents=deduction.cert_remaining_cents,
+        currency=currency,
     )
     kb = msg.build_client_booking_completed_inline_keyboard(
         webapp_base_url=(Settings().webapp_base_url or ""),
@@ -1487,6 +1490,7 @@ async def process_trainer_session_wrapup_round(
                 pass_remaining = await load_pass_sessions_remaining_after_booking(
                     session, int(p["booking_id"]), int(p["trainer_id"])
                 )
+            currency = await resolve_trainer_currency(session, int(p["trainer_id"]))
             text = msg.format_trainer_booking_session_wrapup_html(
                 client_name=p.get("client_name") or "Клиент",
                 date=date_str,
@@ -1500,6 +1504,7 @@ async def process_trainer_session_wrapup_round(
                 include_quick_rebook_line=can_quick_rebook,
                 expected_payment_class=payment_class,
                 pass_sessions_remaining=pass_remaining,
+                currency=currency,
             )
             kb = await _build_trainer_post_session_keyboard(
                 session,
@@ -1589,6 +1594,7 @@ async def process_completed_feedback_batch(
             and await trainer_has_crm_access(session, p["trainer_id"])
         )
         deduction = await load_booking_deduction_snapshot(session, int(p["booking_id"]))
+        currency = await resolve_trainer_currency(session, int(p["trainer_id"]))
         text = msg.format_trainer_booking_completed_html(
             client_name=p.get("client_name") or "Клиент",
             date=date_str,
@@ -1603,6 +1609,7 @@ async def process_completed_feedback_batch(
             pass_sessions_remaining=deduction.pass_sessions_remaining,
             cert_amount_cents=deduction.cert_amount_cents,
             cert_remaining_cents=deduction.cert_remaining_cents,
+            currency=currency,
         )
         kb = await _build_trainer_post_session_keyboard(
             session,
@@ -1655,6 +1662,14 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                     kind = p.get("kind") or ""
                     is_soon = kind not in ("before_24h", "before_evening_prior")
                     sessions_payload: list[dict] = []
+                    trainer_ids = {
+                        int(s["trainer_id"])
+                        for s in raw_sessions
+                        if s.get("trainer_id") is not None
+                    }
+                    currencies_by_trainer = await resolve_trainer_currencies(
+                        session, sorted(trainer_ids)
+                    )
                     for s in raw_sessions:
                         availability = None
                         if is_soon and s.get("arena_tickets_url"):
@@ -1679,6 +1694,11 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 "service_name": s.get("service_name"),
                                 "booking_price_cents": s.get("booking_price_cents"),
                                 "expected_payment_class": s.get("expected_payment_class"),
+                                "currency_code": (
+                                    currencies_by_trainer.get(int(s["trainer_id"]), "BYN")
+                                    if s.get("trainer_id") is not None
+                                    else "BYN"
+                                ),
                                 "arena_name": s.get("arena_name"),
                                 "arena_address": s.get("arena_address"),
                                 "booked_for_name": s.get("booked_for_name"),
@@ -2073,7 +2093,6 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                     if not trainer_tid:
                         await mark_booking_notified(session, b["id"])
                         continue
-                    from src.shared.currency import resolve_trainer_currency
                     from src.shared.public_display import format_phone_display
 
                     currency = await resolve_trainer_currency(session, int(b["trainer_id"]))
@@ -2330,6 +2349,9 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
                         recap=recap,
                         expires_date=expires_date,
                         days_until_expiry=days_until_expiry,
+                        currency=await resolve_trainer_currency(
+                            session, int(sub["trainer_id"])
+                        ),
                     )
                     try:
                         # No reply_markup on D-2 by design: the goal is anchoring, not the click.
@@ -3147,7 +3169,8 @@ async def run_weekly_sunday_digest_loop(trainer_bot: Bot) -> None:
                             continue
 
                         weekly = await get_trainer_weekly_digest(session, tid, today)
-                        text_body = format_weekly_digest(weekly)
+                        currency = await resolve_trainer_currency(session, int(tid))
+                        text_body = format_weekly_digest(weekly, currency=currency)
 
                         kb = _digest_overview_keyboard()
                         try:
