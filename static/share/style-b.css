@@ -1057,21 +1057,32 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-buyline--soft { background: var(--g-warn-wash); color: var(--g-warn-ink); }
 .b-buyline--plain { background: var(--g-surface); color: var(--g-ink-2); box-shadow: var(--g-shadow); }
 
-/* ОХМ вкладкой: радио + :has(), без JS; обе панели в разметке. */
+/* Вкладки блока «На льду» (массовое, семейное, свободное фигурное, ОХМ): радио + :has(), без JS;
+   все панели в разметке. Вкладок может быть до четырёх — полоса прокручивается, а не ломает вёрстку. */
 .b-icetabs { display: flex; flex-direction: column; gap: 12px; }
 .b-icetabs__r { position: absolute; opacity: 0; pointer-events: none; }
-.b-seg { display: flex; gap: 4px; padding: 4px; border-radius: var(--g-r-pill); background: var(--g-seg, #e6ecef); }
+.b-seg {
+  display: flex; gap: 4px; padding: 4px; border-radius: var(--g-r-pill); background: var(--g-seg, #e6ecef);
+  overflow-x: auto; scrollbar-width: none;
+}
+.b-seg::-webkit-scrollbar { display: none; }
 .b-seg__i {
-  flex: 1; text-align: center; padding: 9px 6px; border-radius: var(--g-r-pill);
-  font-size: 14px; color: var(--g-ink-2); cursor: pointer;
+  flex: 1 0 auto; text-align: center; padding: 9px 12px; border-radius: var(--g-r-pill);
+  font-size: 14px; color: var(--g-ink-2); cursor: pointer; white-space: nowrap;
 }
 .b-icetabs:has(#icetab-skate:checked) .b-seg__i--skate,
+.b-icetabs:has(#icetab-family:checked) .b-seg__i--family,
+.b-icetabs:has(#icetab-figure:checked) .b-seg__i--figure,
 .b-icetabs:has(#icetab-ohm:checked) .b-seg__i--ohm { background: var(--g-surface); color: var(--g-ink); font-weight: 600; box-shadow: var(--g-shadow); }
 .b-icetabs:has(#icetab-skate:focus-visible) .b-seg__i--skate,
+.b-icetabs:has(#icetab-family:focus-visible) .b-seg__i--family,
+.b-icetabs:has(#icetab-figure:focus-visible) .b-seg__i--figure,
 .b-icetabs:has(#icetab-ohm:focus-visible) .b-seg__i--ohm { outline: 3px solid var(--g-accent); outline-offset: 1px; }
-.b-pane { display: flex; flex-direction: column; gap: 12px; }
-.b-icetabs:has(#icetab-skate:checked) .b-pane--ohm,
-.b-icetabs:has(#icetab-ohm:checked) .b-pane--skate { display: none; }
+.b-pane { display: none; flex-direction: column; gap: 12px; }
+.b-icetabs:has(#icetab-skate:checked) .b-pane--skate,
+.b-icetabs:has(#icetab-family:checked) .b-pane--family,
+.b-icetabs:has(#icetab-figure:checked) .b-pane--figure,
+.b-icetabs:has(#icetab-ohm:checked) .b-pane--ohm { display: flex; }
 .b-pane__aside { margin: 0; font-size: 14px; color: var(--g-ink-2); }
 
 .b-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

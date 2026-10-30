@@ -425,7 +425,8 @@ class IceSession(Base):
             ),
         ),
         CheckConstraint(
-            "kind IN ('public_skate', 'open_ice', 'rental', 'school_group', 'event', 'hockey_practice')",
+            "kind IN ('public_skate', 'open_ice', 'rental', 'school_group', 'event', 'hockey_practice', "
+            "'figure_free', 'family_skate')",
             name="ck_ice_sessions_kind",
         ),
         CheckConstraint(

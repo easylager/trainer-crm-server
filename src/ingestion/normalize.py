@@ -16,6 +16,8 @@ from src.application.ice_session_use_cases import (
     parse_hhmm,
 )
 from src.ingestion.types import (
+    PARSER_KIND_FAMILY_SKATE,
+    PARSER_KIND_FIGURE_FREE,
     PARSER_KIND_HOCKEY_PRACTICE,
     PARSER_KIND_OPEN_ICE,
     PARSER_KIND_PUBLIC_SKATE,
@@ -93,6 +95,12 @@ def map_parser_kind(raw: str) -> str | None:
         return PARSER_KIND_HOCKEY_PRACTICE
     if "отработк" in key and "хоккей" in key:
         return PARSER_KIND_HOCKEY_PRACTICE
+    # Раньше «семейное массовое» и «свободное фигурное» схлопывались в public_skate / open_ice:
+    # на странице арены их нельзя было отделить от обычного массового катания.
+    if key in {PARSER_KIND_FAMILY_SKATE} or ("семейн" in key and "массов" in key):
+        return PARSER_KIND_FAMILY_SKATE
+    if key in {PARSER_KIND_FIGURE_FREE} or ("свободн" in key and "фигурн" in key):
+        return PARSER_KIND_FIGURE_FREE
     if key in {PARSER_KIND_PUBLIC_SKATE, "mk", "мк", "ма", "ба"}:
         return PARSER_KIND_PUBLIC_SKATE
     if key == PARSER_KIND_OPEN_ICE:

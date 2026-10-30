@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.arena_public_use_cases import (
     get_public_arena_card,
     public_arena_session_days,
+    session_days_of_kind,
 )
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
@@ -389,18 +390,24 @@ async def load_place_view(
     all_slots = [s for d in days for s in d.get("sessions") or []]
     next_slot = all_slots[0] if all_slots else None
     ohm_days: list[dict[str, Any]] = []
+    figure_days: list[dict[str, Any]] = []
+    family_days: list[dict[str, Any]] = []
     if _skating(card):
-        ohm_lookup = await public_arena_session_days(
+        # ОХМ, свободное фигурное и семейное массовое (СДЮШОР Минск) — один SQL, дальше делим по виду.
+        extra_lookup = await public_arena_session_days(
             session,
             int(card["id"]),
             date_from=today,
             date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
-            kinds=("hockey_practice",),
+            kinds=("hockey_practice", "figure_free", "family_skate"),
             include_in_progress=True,
         )
-        ohm_days = [d for d in ohm_lookup if (_parse_iso_date(d.get("local_date")) or today) <= week_end]
+        extra_week = [d for d in extra_lookup if (_parse_iso_date(d.get("local_date")) or today) <= week_end]
+        ohm_days = session_days_of_kind(extra_week, "hockey_practice")
+        figure_days = session_days_of_kind(extra_week, "figure_free")
+        family_days = session_days_of_kind(extra_week, "family_skate")
         if session_id is not None and focus is None:
-            for day in ohm_lookup:
+            for day in extra_lookup:
                 for slot in day.get("sessions") or []:
                     if int(slot["id"]) == int(session_id):
                         focus = slot
@@ -426,6 +433,8 @@ async def load_place_view(
         "trainers": trainers,
         "days": days,
         "ohm_days": ohm_days,
+        "figure_days": figure_days,
+        "family_days": family_days,
         "focus": focus,
         "focus_missing": focus_missing,
         "next_slot": next_slot,
@@ -1690,12 +1699,21 @@ def _b_schedule(
     return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
 
 
-def _b_ohm_parts(view: Mapping[str, Any], *, base_path: str, invite: bool) -> tuple[str, str] | None:
-    """(тело, подпись в шапке) ОХМ: те же полоса дней и билеты, только тёмные.
+def _b_kind_parts(
+    view: Mapping[str, Any],
+    *,
+    days_key: str,
+    frag_prefix: str,
+    base_path: str,
+    invite: bool,
+    dark: bool,
+) -> tuple[str, str] | None:
+    """(тело, подпись в шапке) одной вкладки блока «На льду»: полоса дней и билеты.
 
-    Сеанс ОХМ выбирается тапом и уходит в «Позвать», как в Mini App (``arenaOhmDayTabs``).
+    ОХМ — тёмные билеты; свободное фигурное и семейное массовое — светлые. Сеанс выбирается
+    тапом и уходит в «Позвать», как в Mini App.
     """
-    by_date = _sessions_by_date([d for d in (view.get("ohm_days") or []) if d.get("sessions")])
+    by_date = _sessions_by_date([d for d in (view.get(days_key) or []) if d.get("sessions")])
     if not by_date:
         return None
     slots = [s for d in sorted(by_date) for s in by_date[d]]
@@ -1713,7 +1731,7 @@ def _b_ohm_parts(view: Mapping[str, Any], *, base_path: str, invite: bool) -> tu
             aside_bits.append(f"{minutes} мин")
     except ValueError:
         pass
-    strip = _b_day_strip(view, by_date, frag_prefix="o", base_path=base_path, invite=invite, common=price, dark=True)
+    strip = _b_day_strip(view, by_date, frag_prefix=frag_prefix, base_path=base_path, invite=invite, common=price, dark=dark)
     notes: list[str] = []
     for slot in slots:
         for key in ("age_note", "capacity_note", "price_note"):
@@ -1722,6 +1740,11 @@ def _b_ohm_parts(view: Mapping[str, Any], *, base_path: str, invite: bool) -> tu
                 notes.append(note)
     notes_html = f'<p class="b-note">{_esc(" ".join(notes))}</p>' if notes else ""
     return f"{strip}{notes_html}", " · ".join(aside_bits)
+
+
+def _b_ohm_parts(view: Mapping[str, Any], *, base_path: str, invite: bool) -> tuple[str, str] | None:
+    """ОХМ: те же полоса дней и билеты, только тёмные (``arenaOhmDayTabs`` в Mini App)."""
+    return _b_kind_parts(view, days_key="ohm_days", frag_prefix="o", base_path=base_path, invite=invite, dark=True)
 
 
 def _b_ohm(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
@@ -1735,40 +1758,62 @@ def _b_ohm(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
     return section(t("kind.hockey_practice"), body, aside_html=aside, klass="b-sec--place", sec_id="ohm")
 
 
+# Вкладки блока «На льду» после массового катания: (ключ, ключ в view, префикс якоря, тёмные билеты, ключ текста).
+_ICE_EXTRA_TABS: tuple[tuple[str, str, str, bool, str], ...] = (
+    ("family", "family_days", "m", False, "kind.family_skate"),
+    ("figure", "figure_days", "f", False, "kind.figure_free"),
+    ("ohm", "ohm_days", "o", True, "kind.hockey_practice"),
+)
+
+
 def _b_ice(
     view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any], vv: Mapping[str, Any]
 ) -> str:
-    """Блок «На льду»: массовое катание и ОХМ — вкладками одного блока, а не двумя расписаниями.
+    """Блок «На льду»: массовое катание, семейное, свободное фигурное и ОХМ — вкладками одного блока.
 
-    Вкладки без JS: радио-кнопки и :has(). Обе панели в разметке — поисковик видит и ОХМ.
+    Вкладки без JS: радио-кнопки и :has(). Все панели в разметке — поисковик видит каждую.
+    Вкладка появляется, только когда у арены есть такие сеансы.
     """
     from src.application.style_b import section
 
     skate = _b_schedule_parts(view, base_path=base_path, invite=invite, links=links, vv=vv)
-    ohm = _b_ohm_parts(view, base_path=base_path, invite=invite)
-    if skate is None and ohm is None:
+    extras: list[tuple[str, str, str, str]] = []  # (ключ, подпись, тело, подпись в шапке)
+    for key, days_key, prefix, dark, label_key in _ICE_EXTRA_TABS:
+        parts = _b_kind_parts(
+            view, days_key=days_key, frag_prefix=prefix, base_path=base_path, invite=invite, dark=dark
+        )
+        if parts is not None:
+            extras.append((key, t(label_key), parts[0], parts[1]))
+    if skate is None and not extras:
         return ""
-    if ohm is None:
+    if not extras:
         title, body, aside = skate  # type: ignore[misc]
         return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
-    ohm_body, ohm_aside = ohm
-    ohm_label = t("kind.hockey_practice")
-    if skate is None:
-        aside = f'<span class="b-aside">{_esc(ohm_aside)}</span>' if ohm_aside else ""
-        return section(ohm_label, ohm_body, aside_html=aside, klass="b-sec--place", sec_id="ohm")
-    _title, skate_body, buy = skate
-    ohm_head = f'<p class="b-pane__aside">{_esc(ohm_aside)}</p>' if ohm_aside else ""
-    body = (
-        '<div class="b-icetabs">'
-        '<input type="radio" name="icetab" id="icetab-skate" class="b-icetabs__r" checked>'
-        '<input type="radio" name="icetab" id="icetab-ohm" class="b-icetabs__r">'
-        '<div class="b-seg" role="tablist">'
-        f'<label for="icetab-skate" class="b-seg__i b-seg__i--skate">{_esc(t("kind.public_skate"))}</label>'
-        f'<label for="icetab-ohm" class="b-seg__i b-seg__i--ohm">{_esc(ohm_label)}</label></div>'
-        f'<div class="b-pane b-pane--skate">{skate_body}</div>'
-        f'<div class="b-pane b-pane--ohm" id="ohm">{ohm_head}{ohm_body}</div>'
-        "</div>"
+    if skate is None and len(extras) == 1:
+        key, label, extra_body, extra_aside = extras[0]
+        aside = f'<span class="b-aside">{_esc(extra_aside)}</span>' if extra_aside else ""
+        return section(label, extra_body, aside_html=aside, klass="b-sec--place", sec_id=key if key == "ohm" else f"ice-{key}")
+    tabs: list[tuple[str, str, str, str]] = []
+    buy = ""
+    if skate is not None:
+        _title, skate_body, buy = skate
+        tabs.append(("skate", t("kind.public_skate"), skate_body, ""))
+    tabs.extend(extras)
+    radios = "".join(
+        f'<input type="radio" name="icetab" id="icetab-{key}" class="b-icetabs__r"{" checked" if i == 0 else ""}>'
+        for i, (key, _l, _b, _a) in enumerate(tabs)
     )
+    labels = "".join(
+        f'<label for="icetab-{key}" class="b-seg__i b-seg__i--{key}">{_esc(label)}</label>'
+        for key, label, _b, _a in tabs
+    )
+    panes = "".join(
+        f'<div class="b-pane b-pane--{key}"{" id=" + chr(34) + "ohm" + chr(34) if key == "ohm" else ""}>'
+        + (f'<p class="b-pane__aside">{_esc(pane_aside)}</p>' if pane_aside else "")
+        + f"{pane_body}</div>"
+        for key, _label, pane_body, pane_aside in tabs
+    )
+    body = f'<div class="b-icetabs">{radios}<div class="b-seg" role="tablist">{labels}</div>{panes}</div>'
     return section("На льду", body, aside_html=buy, klass="b-sec--place", sec_id="schedule")
 
 

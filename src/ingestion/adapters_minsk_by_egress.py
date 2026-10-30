@@ -24,6 +24,8 @@ _LED_DATE = re.compile(r"(\d{2})\.(\d{2})\.(\d{2})")
 _LED_TIME = re.compile(r"^(\d{1,2})-(\d{2})$")
 _MASS_LABEL = re.compile(r"МАССОВ(ЫЕ|ОЕ)\s+КАТАН", re.IGNORECASE)
 _OHM_LABEL = re.compile(r"ОТРАБОТКА\s+ХОККЕЙНОГО\s+МАСТЕРСТВА", re.IGNORECASE)
+_FAMILY_LABEL = re.compile(r"СЕМЕЙН\w*\s+МАССОВ\w*\s+КАТАН", re.IGNORECASE)
+_FIGURE_FREE_LABEL = re.compile(r"СВОБОДН\w*\s+ФИГУРН\w*\s+КАТАН", re.IGNORECASE)
 _JUNOST_DAY_LINE = re.compile(
     r"(?:понедельник|вторник|среда|четверг|пятница|суббота|воскресенье)"
     r"\s*,?\s*(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)",
@@ -86,8 +88,13 @@ def _parse_ledlife_style_table(
     pivot_year: int | None = None,
     label_re: re.Pattern[str] = _MASS_LABEL,
     kind_raw: str = "Массовое катание",
+    exclude_re: re.Pattern[str] | None = None,
 ) -> list[ExtractedSlot]:
-    """Schedule grid shared by ledlife.by and junost.by origin pages."""
+    """Schedule grid shared by ledlife.by and junost.by origin pages.
+
+    ``exclude_re`` — строки, которые подходят под ``label_re``, но принадлежат другому виду
+    («СЕМЕЙНОЕ МАССОВОЕ КАТАНИЕ» содержит «МАССОВОЕ КАТАНИЕ» и без исключения попало бы в массовое).
+    """
     anchor = pivot_year or minsk_today().year
     slots: list[ExtractedSlot] = []
     current_date: date | None = None
@@ -115,6 +122,8 @@ def _parse_ledlife_style_table(
                     continue
                 start_raw, arena, duration_raw, label = _row_tail(cells, offset=0)
             if not label or not label_re.search(label):
+                continue
+            if exclude_re is not None and exclude_re.search(label):
                 continue
             start = _norm_led_time(start_raw)
             if not start:
@@ -574,13 +583,26 @@ class LedlifeOriginHtmlParser(IceParser):
         blocked = is_by_origin_blocked_snapshot(schedule)
         slots: list[ExtractedSlot] = []
         if not blocked:
-            mk_slots = _parse_ledlife_style_table(schedule)
+            mk_slots = _parse_ledlife_style_table(schedule, exclude_re=_FAMILY_LABEL)
             ohm_slots = _parse_ledlife_style_table(
                 schedule,
                 label_re=_OHM_LABEL,
                 kind_raw="hockey_practice",
             )
-            slots = [*mk_slots, *ohm_slots]
+            # Свободное фигурное и семейное массовое — отдельные виды (вкладки на странице арены).
+            # Цены не выдумываем: на странице цен у них свои тарифы (семейный билет по составу семьи),
+            # а сетка ценовых полос выше — только для обычного массового катания.
+            figure_slots = _parse_ledlife_style_table(
+                schedule,
+                label_re=_FIGURE_FREE_LABEL,
+                kind_raw="figure_free",
+            )
+            family_slots = _parse_ledlife_style_table(
+                schedule,
+                label_re=_FAMILY_LABEL,
+                kind_raw="family_skate",
+            )
+            slots = [*mk_slots, *ohm_slots, *figure_slots, *family_slots]
             if mk_slots:
                 try:
                     prices_html = await _load_ledlife_prices_html(job)

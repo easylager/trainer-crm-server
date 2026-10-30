@@ -20,6 +20,7 @@
     sharePickSessionId: null,
     /* Выбранный день в секции ОХМ (независимо от МК). */
     ohmDay: null,
+    extraDay: {},
     sessionsError: false,
     trainersError: false,
     iceWatchKinds: {},
@@ -718,7 +719,8 @@
     var label = M.shareSlotInviteLabel(combinedScheduleDays(), todayIso(), sid, todayIso()) || '';
     var dayWord = label.slice(0, Math.max(0, label.length - String(time).length)).trim();
     // Массовое катание — вид по умолчанию: подписываем только ОХМ, иначе строка не влезает рядом с кнопкой.
-    var kind = sessionInOhm(sid) ? ohmChipTitle() : '';
+    var extraKind = extraKindOfSession(sid);
+    var kind = sessionInOhm(sid) ? ohmChipTitle() : extraKind ? extraTitle(extraKind) : '';
     return {
       when: [capitalize(dayWord || 'сегодня'), kind].filter(Boolean).join(' · '),
       time: time,
@@ -777,7 +779,7 @@
         } else if (state.sessions == null && state.focus && state.focus.sessionId) {
           /* 404 при фокусе из ссылки — не помечаем расписание «загруженным пустым». */
         } else if (state.sessions == null) {
-          state.sessions = { days: [], ohm_days: [] };
+          state.sessions = { days: [], ohm_days: [], figure_days: [], family_days: [] };
         }
         var days = combinedScheduleDays();
         return {
@@ -1146,7 +1148,116 @@
   }
 
   function combinedScheduleDays() {
-    return combineSessionDayLists(scheduleDays(), ohmScheduleDays());
+    var all = combineSessionDayLists(scheduleDays(), ohmScheduleDays());
+    EXTRA_KINDS.forEach(function (cfg) {
+      all = combineSessionDayLists(all, extraScheduleDays(cfg));
+    });
+    return all;
+  }
+
+  /* Свободное фигурное и семейное массовое (СДЮШОР Минск) — свои секции, как ОХМ. */
+  var EXTRA_KINDS = [
+    { key: 'family', field: 'family_days', copy: 'kind.family_skate', title: 'Семейное массовое катание', none: 'семейного катания' },
+    { key: 'figure', field: 'figure_days', copy: 'kind.figure_free', title: 'Свободное фигурное катание', none: 'свободного фигурного' },
+  ];
+
+  function extraCfg(key) {
+    return EXTRA_KINDS.filter(function (c) { return c.key === key; })[0];
+  }
+
+  function extraScheduleDays(cfg) {
+    return (state.sessions && state.sessions[cfg.field]) || [];
+  }
+
+  function extraTitle(cfg) {
+    var GC = global.GlideCopy;
+    if (GC && typeof GC.t === 'function') {
+      var label = GC.t(cfg.copy);
+      if (label && label !== cfg.copy) return String(label);
+    }
+    return cfg.title;
+  }
+
+  function extraStrip(cfg) {
+    return M.dayStrip(extraScheduleDays(cfg), todayIso(), new Date(), 7);
+  }
+
+  function extraKindOfSession(sid) {
+    var i;
+    for (i = 0; i < EXTRA_KINDS.length; i++) {
+      if (M.dayForSession(extraScheduleDays(EXTRA_KINDS[i]), sid)) return EXTRA_KINDS[i];
+    }
+    return null;
+  }
+
+  function renderExtraShowtimes(cfg) {
+    var iso = state.extraDay[cfg.key] || todayIso();
+    var byDate = {};
+    extraScheduleDays(cfg).forEach(function (d) { byDate[d.local_date] = d.sessions || []; });
+    var view = M.showtimesForDay({
+      sessions: byDate[iso] || [],
+      now: new Date(),
+      ticketsUrl: state.card && state.card.tickets_url,
+      markNext: iso === todayIso(),
+      pickedId: resolvedShareSessionId(),
+    });
+    if (!view.count) {
+      var next = extraStrip(cfg).filter(function (d) { return d.count && d.iso > iso; })[0];
+      return (
+        '<div class="arena-none"><b>' +
+        (iso === todayIso() ? 'Сегодня ' + cfg.none + ' больше нет' : 'В этот день ' + cfg.none + ' нет') +
+        '</b>' +
+        (next
+          ? '<button type="button" class="linkish" data-extra-kind="' + esc(cfg.key) +
+            '" data-extra-day-jump="' + esc(next.iso) + '">Ближайший — ' +
+            esc(next.top.toLowerCase() === 'завтра' ? 'завтра' : next.top + ' ' + next.num) +
+            ' →</button>'
+          : '') +
+        '</div>'
+      );
+    }
+    var html = '';
+    var title = extraTitle(cfg);
+    var dayLabel = ticketDayLabel(extraStrip(cfg), iso);
+    view.groups.forEach(function (g) { html += showGroupHtml(g, title, dayLabel); });
+    return html;
+  }
+
+  function renderExtraSection(cfg) {
+    if (!skatingCard() || state.sessionsError) return '';
+    var has = extraScheduleDays(cfg).some(function (d) { return (d.sessions || []).length; });
+    if (!has) return '';
+    var days = extraStrip(cfg);
+    if (!state.extraDay[cfg.key]) {
+      var focusDay = state.focus && state.focus.day;
+      var inStrip = focusDay && days.some(function (d) { return d.iso === focusDay; });
+      var focusIn =
+        state.focus && state.focus.sessionId &&
+        M.dayForSession(extraScheduleDays(cfg), state.focus.sessionId);
+      state.extraDay[cfg.key] = focusIn || (inStrip ? focusDay : M.defaultScheduleDay(days));
+    }
+    var title = extraTitle(cfg);
+    return (
+      '<div class="arena-sec" id="arenaExtra-' + esc(cfg.key) + '">' +
+      '<div class="arena-h-row"><p class="arena-h">' + esc(title) + '</p></div>' +
+      '<div class="arena-strip" data-extra-tabs="' + esc(cfg.key) + '" role="tablist" aria-label="' + esc(title) + '">' +
+      days
+        .map(function (d) {
+          return (
+            '<button type="button" role="tab" class="arena-strip__day' +
+            (d.count ? '' : ' arena-strip__day--empty') +
+            (d.weekend ? ' arena-strip__day--weekend' : '') +
+            '" data-extra-kind="' + esc(cfg.key) + '" data-extra-day="' + esc(d.iso) +
+            '" aria-pressed="' + (state.extraDay[cfg.key] === d.iso ? 'true' : 'false') + '">' +
+            '<span>' + esc(d.top) + '</span><b>' + esc(d.num) + '</b>' +
+            '<i>' + (d.count ? esc(String(d.count)) : '—') + '</i></button>'
+          );
+        })
+        .join('') +
+      '</div>' +
+      '<div data-extra-rows="' + esc(cfg.key) + '">' + renderExtraShowtimes(cfg) + '</div>' +
+      '</div>'
+    );
   }
 
   function scheduleSlots() {
@@ -1628,6 +1739,9 @@
     var byDate = sessionsByDate();
     Object.keys(byDate).forEach(function (k) { lists.push(byDate[k] || []); });
     ohmScheduleDays().forEach(function (d) { lists.push(d.sessions || []); });
+    EXTRA_KINDS.forEach(function (cfg) {
+      extraScheduleDays(cfg).forEach(function (d) { lists.push(d.sessions || []); });
+    });
     var i;
     var j;
     for (i = 0; i < lists.length; i++) {
@@ -2059,6 +2173,7 @@
       var heroHtml = renderHero();
       var restHtml =
         renderIceSection() +
+        EXTRA_KINDS.map(renderExtraSection).join('') +
         renderOhmSection() +
         // Карточка v2 — порядок PLACE_BLOCKS, как на сайте: на месте → тренеры → партнёры → ещё.
         (visit() && String(state.card.venue_type || '') !== 'shop' ? renderFacts() : renderAmenities()) +
@@ -2108,6 +2223,16 @@
     }
     var ohmEl = document.getElementById('arenaOhmRows');
     if (ohmEl) ohmEl.innerHTML = renderOhmShowtimes();
+    EXTRA_KINDS.forEach(function (cfg) {
+      var rows = document.querySelector('[data-extra-rows="' + cfg.key + '"]');
+      if (rows) rows.innerHTML = renderExtraShowtimes(cfg);
+      var tabsEl = document.querySelector('[data-extra-tabs="' + cfg.key + '"]');
+      if (tabsEl) {
+        [].forEach.call(tabsEl.querySelectorAll('[data-extra-day]'), function (b) {
+          b.setAttribute('aria-pressed', b.getAttribute('data-extra-day') === state.extraDay[cfg.key] ? 'true' : 'false');
+        });
+      }
+    });
     paintShareBar();
     var tabs = document.getElementById('arenaDayTabs');
     if (tabs) {
@@ -2324,6 +2449,13 @@
       paintRowsOnly();
       return;
     }
+    var extraBtn = ev.target.closest('[data-extra-day],[data-extra-day-jump]');
+    if (extraBtn && extraCfg(extraBtn.getAttribute('data-extra-kind'))) {
+      state.extraDay[extraBtn.getAttribute('data-extra-kind')] =
+        extraBtn.getAttribute('data-extra-day') || extraBtn.getAttribute('data-extra-day-jump');
+      paintRowsOnly();
+      return;
+    }
     var jump = ev.target.closest('[data-day-jump]');
     if (jump) {
       state.day = jump.getAttribute('data-day-jump');
@@ -2452,6 +2584,14 @@
           M.dayForSession(state.sessions.days, state.focus.sessionId) ||
           M.dayForSession(state.sessions.ohm_days, state.focus.sessionId);
         if (found) state.focus.day = found;
+      }
+      var extraFocus = extraKindOfSession(state.focus.sessionId);
+      if (extraFocus) {
+        state.extraDay[extraFocus.key] = M.dayForSession(extraScheduleDays(extraFocus), state.focus.sessionId);
+        if (!state.focus.day) state.focus.day = state.extraDay[extraFocus.key];
+        if (sessionExistsInSchedule(state.focus.sessionId)) {
+          state.sharePickSessionId = String(state.focus.sessionId);
+        }
       }
       var ohmDay = M.dayForSession(ohmScheduleDays(), state.focus.sessionId);
       if (ohmDay) {

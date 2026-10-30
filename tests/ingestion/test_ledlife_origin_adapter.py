@@ -57,7 +57,7 @@ async def test_ledlife_fixture_matches_golden() -> None:
     extraction = await LedlifeOriginHtmlParser().extract(_job())
     assert extraction.snapshot["blocked_without_by_egress"] is False
     assert expected["blocked_without_by_egress"] is False
-    mk_slots = [s for s in extraction.slots if s.kind_raw != "hockey_practice"]
+    mk_slots = [s for s in extraction.slots if s.kind_raw == "Массовое катание"]
     gold_mk = [s for s in expected["sessions"] if s["kind"] == "public_skate"]
     assert len(mk_slots) == len(gold_mk)
     for slot, gold in zip(mk_slots, gold_mk, strict=True):
@@ -102,7 +102,7 @@ async def test_ledlife_live_capture_has_future_mass_slots(tmp_path: Path) -> Non
     )
     extraction = await LedlifeOriginHtmlParser().extract(job)
     assert extraction.snapshot["blocked_without_by_egress"] is False
-    mk_slots = [s for s in extraction.slots if s.kind_raw != "hockey_practice"]
+    mk_slots = [s for s in extraction.slots if s.kind_raw == "Массовое катание"]
     assert len(mk_slots) >= 3
     dates = {s.local_date for s in mk_slots}
     assert "2026-10-04" in dates or "2026-10-10" in dates
@@ -119,3 +119,24 @@ def test_ledlife_preiskurant_page_uses_mk_bands() -> None:
     book = _ledlife_prices_from_stoimost(html, job)
     assert book["day_45"] == {"adult": 1000, "child": 800}
     assert book["evening_45"] == {"adult": 1100, "child": 900}
+
+
+@pytest.mark.asyncio
+async def test_ledlife_figure_free_and_family_are_own_kinds_without_prices() -> None:
+    """«Свободное фигурное» и «Семейное массовое» — свои виды, не массовое катание; цены не выдумываем."""
+    extraction = await LedlifeOriginHtmlParser().extract(_job())
+    family = [s for s in extraction.slots if s.kind_raw == "family_skate"]
+    figure = [s for s in extraction.slots if s.kind_raw == "figure_free"]
+    assert [(s.local_date, s.starts_at_local) for s in family] == [
+        ("2025-04-26", "18:00"),
+        ("2025-04-27", "15:00"),
+    ]
+    assert len(figure) >= 1
+    for s in [*family, *figure]:
+        assert s.price_adult is None and s.price_child is None
+    mk_keys = {
+        (s.local_date, s.starts_at_local)
+        for s in extraction.slots
+        if s.kind_raw == "Массовое катание"
+    }
+    assert not mk_keys & {(s.local_date, s.starts_at_local) for s in family}

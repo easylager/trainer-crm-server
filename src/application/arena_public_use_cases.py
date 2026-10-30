@@ -2339,7 +2339,19 @@ async def get_public_arena_card(
     return card
 
 
-_PLACE_SESSION_KINDS = frozenset({"public_skate", "open_ice", "hockey_practice"})
+def session_days_of_kind(days: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
+    """Оставить в днях только сеансы одного вида; пустые дни выбросить (один SQL на несколько видов)."""
+    out: list[dict[str, Any]] = []
+    for day in days:
+        sessions = [s for s in day.get("sessions") or [] if s.get("kind") == kind]
+        if sessions:
+            out.append({**day, "sessions": sessions})
+    return out
+
+
+_PLACE_SESSION_KINDS = frozenset(
+    {"public_skate", "open_ice", "hockey_practice", "figure_free", "family_skate"}
+)
 
 
 def _session_day_where(*, kinds: tuple[str, ...] | None, include_in_progress: bool) -> str:
@@ -2479,6 +2491,18 @@ async def list_public_arena_sessions(
         kinds=("hockey_practice",),
         include_in_progress=True,
     )
+    # Свободное фигурное и семейное массовое — свои вкладки на странице арены (СДЮШОР Минск);
+    # в общие списки города и «Ближайший лёд» эти виды не попадают.
+    extra_days = await public_arena_session_days(
+        session,
+        int(row["id"]),
+        date_from=start,
+        date_to=end,
+        kinds=("figure_free", "family_skate"),
+        include_in_progress=True,
+    )
+    figure_days = session_days_of_kind(extra_days, "figure_free")
+    family_days = session_days_of_kind(extra_days, "family_skate")
     return {
         "arena_id": row["id"],
         "timezone": row.get("timezone") or "Europe/Minsk",
@@ -2486,6 +2510,8 @@ async def list_public_arena_sessions(
         "to": end.isoformat(),
         "days": days,
         "ohm_days": ohm_days,
+        "figure_days": figure_days,
+        "family_days": family_days,
         "kinds": list(CLIENT_ICE_SESSION_KINDS),
         # TASK-146: насколько свежо это расписание (schedule_stale и др.).
         "freshness": _schedule_freshness(row),
