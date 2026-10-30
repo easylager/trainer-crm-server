@@ -3,38 +3,46 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Матчи на неделе</title>
-  <!-- TASK-340: «Все матчи» из ленты главной — Экстралига на 7 дней. -->
+  <title>Матчи</title>
+  <!-- Каталог матчей всех лиг; фильтры team/league/city/arena/when — в адресе. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202610299" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202610299" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=2026102910" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026102910" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202610299"></script>
-  <link rel="stylesheet" href="theme.css?v=202610299" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610299" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202610299" />
-  <link rel="stylesheet" href="/static/webapp/client-match.css?v=202610299" />
-  <script defer src="mini-app-telegram-chrome.js?v=202610299"></script>
+  <script src="client-mini-app-theme.js?v=2026102910"></script>
+  <link rel="stylesheet" href="theme.css?v=2026102910" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026102910" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=2026102910" />
+  <link rel="stylesheet" href="/static/webapp/client-match.css?v=2026102910" />
+  <script defer src="mini-app-telegram-chrome.js?v=2026102910"></script>
 </head>
 <body class="cm-body ga-body">
-  <header class="cm-hero cm-hero--short">
+  <header class="cm-hero cm-hero--short" id="cmHero">
     <div class="cm-hero__top">
       <button type="button" class="cm-round" id="cmBack" aria-label="Назад">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
     </div>
     <div class="cm-hero__body">
-      <span class="cm-kicker">Экстралига</span>
-      <h1 class="cm-title cm-title--one">Матчи на неделе</h1>
+      <span class="cm-kicker" id="cmKicker">Хоккей</span>
+      <h1 class="cm-title cm-title--one" id="cmTitle">Матчи</h1>
     </div>
   </header>
   <main class="cm" id="cmMain" aria-busy="true">
+    <div class="mx-tools">
+      <div class="mx-when" role="group" aria-label="Какие матчи">
+        <button type="button" class="mx-when__b" data-when="upcoming" aria-pressed="true">Ближайшие</button>
+        <button type="button" class="mx-when__b" data-when="results" aria-pressed="false">Результаты</button>
+      </div>
+      <div class="mx-bar" id="cmBar"></div>
+    </div>
     <p class="cm-state" id="cmState" role="status" hidden></p>
     <div id="cmDays"></div>
-    <p class="cm-note">Календарь, время и арены — <a href="https://hockey.by/" target="_blank" rel="noopener">hockey.by</a>.</p>
+    <p class="cm-note">Календарь, время и арены — <a href="https://hockey.by/" target="_blank" rel="noopener">hockey.by</a> и <a href="https://hcdinamo.by/" target="_blank" rel="noopener">hcdinamo.by</a>.</p>
   </main>
-  <script src="/static/webapp/ga-touch.js?v=202610299"></script>
-  <script src="/static/webapp/client-match-model.js?v=202610299"></script>
-  <script src="/static/webapp/client-matches.js?v=202610299"></script>
+  <div id="cmSheet" hidden></div>
+  <script src="/static/webapp/ga-touch.js?v=2026102910"></script>
+  <script src="/static/webapp/client-match-model.js?v=2026102910"></script>
+  <script src="/static/webapp/client-matches.js?v=2026102910"></script>
 </body>
 </html>

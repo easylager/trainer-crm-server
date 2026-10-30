@@ -227,3 +227,21 @@ async def get_client_extraliga_week(
 
     now = datetime.now(timezone.utc)
     return {"matches": [card(r, now=now) for r in await week_rows(session, now=now)]}
+
+
+@router.get("/client/hockey/matches/catalog")
+async def get_client_matches_catalog(
+    team: str | None = Query(default=None, max_length=64),
+    league: str | None = Query(default=None, max_length=16),
+    city: str | None = Query(default=None, max_length=80),
+    arena: str | None = Query(default=None, max_length=160),
+    when: str = Query(default="upcoming", pattern="^(upcoming|results)$"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Каталог «Матчи»: все лиги, фильтры из адреса страницы."""
+    del principal
+    from src.application.matches_catalog import Filters, catalog
+
+    filters = Filters(team=team or None, league=league or None, city=city or None, arena=arena or None, when=when)
+    return await catalog(session, now=datetime.now(timezone.utc), filters=filters)
