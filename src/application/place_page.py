@@ -225,6 +225,10 @@ def slot_plan_prices(slot: Mapping[str, Any]) -> tuple[list[tuple[str, str]], st
     """Цены билета колонками: подпись и сумма. Примечание — отдельно, не в сетке."""
     currency = str(slot.get("currency_code") or "BYN")
     parts: list[tuple[str, str]] = []
+    # Семейные комбинации (ice_sessions.price_tiers) — каждая своей плиткой.
+    for tier in slot.get("price_tiers") or []:
+        if isinstance(tier, Mapping) and tier.get("label") and tier.get("minor"):
+            parts.append((str(tier["label"]), format_price_minor(int(tier["minor"]), currency)))
     adult = slot.get("price_adult_minor")
     if adult is None:
         adult = slot.get("price_minor")
@@ -240,6 +244,9 @@ def slot_plan_prices(slot: Mapping[str, Any]) -> tuple[list[tuple[str, str]], st
 def slot_price_lines(slot: Mapping[str, Any]) -> list[str]:
     currency = str(slot.get("currency_code") or "BYN")
     lines: list[str] = []
+    for tier in slot.get("price_tiers") or []:
+        if isinstance(tier, Mapping) and tier.get("label") and tier.get("minor"):
+            lines.append(f"{tier['label']} — {format_price_minor(int(tier['minor']), currency)}")
     adult = slot.get("price_adult_minor")
     if adult is None:
         adult = slot.get("price_minor")
@@ -546,6 +553,19 @@ _SESSION_KIND_COPY_KEYS: dict[str, str] = {
 
 # Названия залов из колонки «Арена» (ledlife/junost) — не тип сеанса; старые строки в БД их ещё несут.
 _HALL_LABELS = frozenset({"трен.", "трен", "главная", "тренировочная", "главная арена"})
+
+
+def session_hall(slot: Mapping[str, Any]) -> str:
+    """Зал сеанса полным названием; старые строки держат его в session_label («Трен.»)."""
+    hall = str(slot.get("hall") or "").strip()
+    if hall:
+        return hall
+    legacy = str(slot.get("session_label") or "").strip().rstrip(".").lower()
+    if legacy in {"трен", "тренировочная"}:
+        return "Тренировочная арена"
+    if legacy in {"главная", "главная арена"}:
+        return "Главная арена"
+    return ""
 
 
 def _real_session_label(slot: Mapping[str, Any]) -> str:
@@ -1379,6 +1399,10 @@ def _b_ticket(
     start = format_clock(str(slot.get("starts_at_local") or ""))
     end = format_clock(str(slot.get("ends_at_local") or ""))
     sub_bits = [f"до {end}"] if end else []
+    # Зал — только у выбранного сеанса, как в «билете» Mini App: в сетке времён он лишний.
+    hall = session_hall(slot) if focused else ""
+    if hall:
+        sub_bits.append(hall)
     price = slot_price(slot)
     if price and price != common_price:
         sub_bits.append(price)
@@ -2180,7 +2204,7 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
         start = format_clock(str(focus.get("starts_at_local") or ""))
         end = format_clock(str(focus.get("ends_at_local") or ""))
         soon = starts_in_label(focus, now=view["now"])
-        kind_text = session_kind_label(focus)
+        kind_text = " · ".join(x for x in (session_kind_label(focus), session_hall(focus)) if x)
         price_parts, note = slot_plan_prices(focus)
         time_text = f"{start}–{end}" if end else start
     place_name = format_public_name(str(card.get("name") or ""))

@@ -21,7 +21,7 @@
       "price_adult_minor": 800,
       "price_child_minor": 600,
       "price_rental_minor": 700,
-      "session_label": "Главная",
+      "session_label": null,
       "age_note": "детский до 16 лет"
     },
     {
@@ -33,7 +33,7 @@
       "price_adult_minor": 800,
       "price_child_minor": 600,
       "price_rental_minor": 700,
-      "session_label": "Главная",
+      "session_label": null,
       "age_note": "детский до 16 лет"
     }
   ]

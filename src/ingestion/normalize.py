@@ -1,4 +1,5 @@
 """Transform Extraction → CanonicalSlotDraft. Shared across every arena adapter."""
+
 from __future__ import annotations
 
 import hashlib
@@ -141,6 +142,24 @@ def _as_start(local_date: date, value: str | time) -> tuple[date, time]:
     return local_date, _as_time(value)
 
 
+def _clean_price_tiers(raw: Any) -> list[dict[str, Any]] | None:
+    """[{"label": str, "minor": int>0}] — остальное отбрасываем; пусто → None."""
+    if not isinstance(raw, list):
+        return None
+    out: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        label = _clip_text(str(item.get("label") or "").strip(), 64)
+        try:
+            minor = int(item.get("minor"))
+        except (TypeError, ValueError):
+            continue
+        if label and minor > 0:
+            out.append({"label": label, "minor": minor})
+    return out or None
+
+
 def _truthy_minor_flag(config: dict[str, Any]) -> bool:
     raw = config.get("prices_already_minor", False)
     if isinstance(raw, str):
@@ -261,6 +280,8 @@ class IceSessionNormalizer:
                     "session_label": raw.session_label,
                     "age_note": raw.age_note,
                     "capacity_note": raw.capacity_note,
+                    "hall": raw.hall,
+                    "price_tiers": _clean_price_tiers(raw.price_tiers),
                     "external_url": raw.external_url,
                 },
             )
@@ -277,6 +298,8 @@ class IceSessionNormalizer:
                 bucket["ends_at_local"] = raw.ends_at_local
             if raw.age_note and not bucket["age_note"]:
                 bucket["age_note"] = raw.age_note
+            if raw.hall and not bucket.get("hall"):
+                bucket["hall"] = raw.hall
             if raw.capacity_note and not bucket["capacity_note"]:
                 bucket["capacity_note"] = raw.capacity_note
             if raw.source_id and not bucket["source_id"]:
@@ -323,6 +346,8 @@ class IceSessionNormalizer:
                     session_label=_clip_text(bucket["session_label"], _SESSION_LABEL_MAX_LEN),
                     age_note=_clip_text(bucket["age_note"], _AGE_NOTE_MAX_LEN),
                     capacity_note=_clip_text(bucket["capacity_note"], _CAPACITY_NOTE_MAX_LEN),
+                    hall=_clip_text(bucket.get("hall"), 64),
+                    price_tiers=bucket.get("price_tiers"),
                     external_url=_safe_external_url(bucket["external_url"]),
                     source_id=_safe_source_id(bucket["source_id"]),
                     schedule_basis=session_basis,

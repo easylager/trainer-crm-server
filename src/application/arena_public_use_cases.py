@@ -2394,7 +2394,7 @@ async def public_arena_session_days(
             SELECT id, arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                    price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                    price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-                   source_id, observed_at, valid_until, confidence, schedule_basis,
+                   source_id, observed_at, valid_until, confidence, schedule_basis, hall, price_tiers,
                    -- Вместимость зала для «свободно N из M» (TASK-333): остаток уже в capacity_note,
                    -- а «из скольких» знает только снимок кассы. Вместимость не меняется, свежесть не важна.
                    CASE WHEN s.capacity_note IS NOT NULL THEN (
@@ -2446,6 +2446,8 @@ async def public_arena_session_days(
         "valid_until",
         "confidence",
         "schedule_basis",
+        "hall",
+        "price_tiers",
         "seats_capacity",
     ]
     by_date: dict[str, list[dict[str, Any]]] = {}

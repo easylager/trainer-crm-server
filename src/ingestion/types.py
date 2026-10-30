@@ -1,4 +1,5 @@
 """Shared ingestion types. Parsers extract; they never INSERT into ice_sessions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -93,6 +94,10 @@ class ExtractedSlot:
     age_note: str | None = None
     capacity_note: str | None = None
     external_url: str | None = None
+    # Зал катка («Главная арена» / «Тренировочная арена») — не путать с названием сеанса.
+    hall: str | None = None
+    # Тарифы вне сетки взрослый/детский/прокат (семейные комбинации): [{"label", "minor"}].
+    price_tiers: list[dict] | None = None
 
 
 @dataclass
@@ -129,6 +134,10 @@ class CanonicalSlotDraft:
     age_note: str | None = None
     capacity_note: str | None = None
     external_url: str | None = None
+    # Зал катка («Главная арена» / «Тренировочная арена») — не путать с названием сеанса.
+    hall: str | None = None
+    # Тарифы вне сетки взрослый/детский/прокат (семейные комбинации): [{"label", "minor"}].
+    price_tiers: list[dict] | None = None
     source_id: str | None = None
     schedule_basis: str = "live"
     parser_job_id: int | None = None

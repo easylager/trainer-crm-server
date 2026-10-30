@@ -1409,6 +1409,7 @@
         '<div class="arena-ticket' + (String(picked.sessionId) === steadySid ? ' arena-ticket--steady' : '') + '">' +
         '<div class="arena-ticket__top"><span class="arena-ticket__lead">' +
         '<span class="arena-ticket__kick">' + esc([dayLabel, g.duration ? g.duration.toUpperCase() : ''].filter(Boolean).join(' · ')) + '</span>' +
+        (picked.hall ? '<span class="arena-ticket__hall">' + esc(picked.hall) + '</span>' : '') +
         '<b class="arena-ticket__time">' + esc(picked.time) + '</b></span>' +
         (picked.seats
           ? ticketSeatsHtml(picked.seats)

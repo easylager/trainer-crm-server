@@ -111,6 +111,9 @@
     session = session || {};
     var cur = session.currency_code || 'BYN';
     var parts = [];
+    (Array.isArray(session.price_tiers) ? session.price_tiers : []).forEach(function (t) {
+      if (t && t.label && t.minor) parts.push([String(t.label), PD.formatPriceMinor(t.minor, cur)]);
+    });
     var adult = session.price_adult_minor != null ? session.price_adult_minor : session.price_minor;
     if (adult != null) parts.push(['Взрослый', PD.formatPriceMinor(adult, cur)]);
     if (session.price_child_minor != null) parts.push(['Детский', PD.formatPriceMinor(session.price_child_minor, cur)]);
@@ -205,7 +208,7 @@
     var end = PD.formatClock(String(session.ends_at_local || '').slice(0, 5));
     setPlanText(plan, 'day', planDayHeading(session.local_date));
     setPlanText(plan, 'time', end ? start + '–' + end : start);
-    setPlanText(plan, 'kind', planKindLabel(session));
+    setPlanText(plan, 'kind', [planKindLabel(session), String(session.hall || '').trim()].filter(Boolean).join(' · '));
     paintPlanPrices(plan, session);
     setPlanText(plan, 'soon', planSoonLine(session));
     paintPlanLoad(plan, session.typical_load_level, seatsPlanLine(session.capacity_note));

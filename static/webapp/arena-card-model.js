@@ -332,6 +332,17 @@
     return 'Массовое катание';
   }
 
+  /** Зал сеанса полным названием; старые строки держат его в session_label («Трен.», «Главная»). */
+  function sessionHall(session) {
+    session = session || {};
+    var hall = String(session.hall || '').trim();
+    if (hall) return hall;
+    var legacy = String(session.session_label || '').trim().replace(/\.$/, '').toLowerCase();
+    if (legacy === 'трен' || legacy === 'тренировочная') return 'Тренировочная арена';
+    if (legacy === 'главная' || legacy === 'главная арена') return 'Главная арена';
+    return '';
+  }
+
   function scheduleBasisHint(/* session */) {
     // Клиенту не важно, откуда слот (сайт / сетка / фото / вручную).
     return '';
@@ -952,6 +963,12 @@
     var child = formatMinor(session.price_child_minor, cur);
     var rental = formatMinor(session.price_rental_minor, cur);
     var out = [];
+    // Семейные комбинации и прочие тарифы вне сетки взрослый/детский/прокат (ice_sessions.price_tiers).
+    (Array.isArray(session.price_tiers) ? session.price_tiers : []).forEach(function (t) {
+      var v = t && formatMinor(t.minor, cur);
+      if (v && t.label) out.push({ label: String(t.label), value: v.withCurrency });
+    });
+    if (out.length && !adult && !child) return out;
     if (adult) out.push({ label: child ? 'Взрослый' : 'Билет', value: adult.withCurrency });
     if (child) out.push({ label: 'Детский', value: child.withCurrency });
     if (rental) out.push({ label: 'Прокат', value: rental.withCurrency });
@@ -1118,6 +1135,7 @@
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
         prices: priceChips(s),
+        hall: sessionHall(s),
         seats: liveSeats(s.capacity_note, s.seats_capacity),
         load: s.typical_load_level || '',
       });
@@ -1531,6 +1549,8 @@
     compareSessionsByStart: compareSessionsByStart,
     ymdInTimeZone: ymdInTimeZone,
     iceKindLabel: iceKindLabel,
+    sessionHall: sessionHall,
+    priceChips: priceChips,
     scheduleBasisHint: scheduleBasisHint,
     iceRowCta: iceRowCta,
     buildRibbonForDay: buildRibbonForDay,

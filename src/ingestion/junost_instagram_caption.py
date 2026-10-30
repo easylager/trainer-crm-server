@@ -1,4 +1,5 @@
 """Junost (arena_id=8): manual Instagram caption — no IG scrape, no junost.by fetch."""
+
 from __future__ import annotations
 
 import re
@@ -75,7 +76,7 @@ def parse_junost_instagram_caption(
                 starts_at_local=_norm_hhmm(time_match.group(1)),
                 ends_at_local=_norm_hhmm(time_match.group(2)),
                 kind_raw="Массовое катание",
-                session_label="Главная",
+                hall="Главная арена",
             )
         )
     return slots

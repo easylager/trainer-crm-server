@@ -68,6 +68,21 @@ describe('arena card ice section heading', () => {
     assert.deepEqual(view.groups.map((g) => g.title).sort(), ['Свободное фигурное катание', 'Семейное массовое катание']);
   });
 
+  it('carries the hall in full form on each time, from hall or a legacy label', () => {
+    const base = { kind: 'public_skate', local_date: '2099-01-01', starts_at_local: '10:00', ends_at_local: '10:45' };
+    const view = M.showtimesForDay({
+      sessions: [
+        Object.assign({ id: 1, session_label: 'Трен.' }, base),
+        Object.assign({ id: 2, hall: 'Главная арена' }, base, { starts_at_local: '12:00', ends_at_local: '12:45' }),
+      ],
+      now: new Date('2098-12-31T00:00:00Z'),
+      mergePrices: true,
+    });
+    assert.equal(view.groups.length, 1);
+    assert.deepEqual(view.groups[0].times.map((t) => t.hall), ['Тренировочная арена', 'Главная арена']);
+    assert.ok(fnBody('showGroupHtml').includes('arena-ticket__hall'));
+  });
+
   it('model still names plain sessions «Массовое катание» and keeps own labels', () => {
     const day = { local_date: '2099-01-01' };
     const base = { local_date: day.local_date, starts_at_local: '10:00', ends_at_local: '11:00', price_adult_minor: 1000 };
@@ -81,5 +96,24 @@ describe('arena card ice section heading', () => {
     });
     const titles = view.groups.map((g) => g.title).sort();
     assert.deepEqual(titles, ['Малая арена', 'Массовое катание', 'Свободный лёд']);
+  });
+});
+
+describe('price tiles for figure and family', () => {
+  it('family combos become their own tiles', () => {
+    const chips = M.priceChips({
+      currency_code: 'BYN',
+      price_tiers: [
+        { label: '1 взрослый + 1 ребёнок', minor: 1400 },
+        { label: '2 взрослых + 2 детей', minor: 2300 },
+      ],
+    });
+    assert.deepEqual(chips.map((c) => c.label), ['1 взрослый + 1 ребёнок', '2 взрослых + 2 детей']);
+    assert.match(chips[1].value, /23/);
+  });
+  it('figure per-person price is a single ticket tile', () => {
+    const chips = M.priceChips({ currency_code: 'BYN', price_adult_minor: 1800 });
+    assert.equal(chips[0].label, 'Билет');
+    assert.match(chips[0].value, /18/);
   });
 });

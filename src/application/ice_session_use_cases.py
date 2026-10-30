@@ -258,6 +258,8 @@ def serialize_ice_session(row: Mapping[str, Any]) -> dict[str, Any]:
         "price_note": row["price_note"],
         "session_label": row.get("session_label"),
         "age_note": row.get("age_note"),
+        "hall": row.get("hall"),
+        "price_tiers": row.get("price_tiers") or None,
         "capacity_note": row.get("capacity_note"),
         "external_url": row.get("external_url"),
         "recurrence_key": row.get("recurrence_key"),

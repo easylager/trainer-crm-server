@@ -118,6 +118,8 @@ body.arena-hub .arena-ticket__top { display: flex; justify-content: space-betwee
 body.arena-hub .arena-ticket__lead { display: flex; flex-direction: column; gap: 4px; }
 body.arena-hub .arena-ticket__kick { font: 600 12px/1 var(--g-font); letter-spacing: .05em; color: var(--g-accent-ink); }
 body.arena-hub .arena-ticket__time { font: 400 40px/1 var(--g-font-display); }
+/* Зал сеанса («Тренировочная арена») — у ДЮСШ два льда, без него непонятно, куда идти. */
+body.arena-hub .arena-ticket__hall { font: 600 14px/1.2 var(--g-font); color: var(--g-ink-2); }
 body.arena-hub .arena-ticket__seats { font: 600 14px/1.2 var(--g-font); color: var(--g-ink-2); text-align: right; }
 /* «Свободно / 72 из 115» и полоска раскупленного (TASK-333). */
 body.arena-hub .arena-ticket__free { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding-bottom: 2px; }

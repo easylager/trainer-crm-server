@@ -61,6 +61,8 @@ _EXPECTED_FIELDS = frozenset(
         "session_label",
         "age_note",
         "capacity_note",
+        "hall",
+        "price_tiers",
         "external_url",
         "source_id",
         "schedule_basis",

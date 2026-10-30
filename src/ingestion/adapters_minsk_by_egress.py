@@ -143,9 +143,21 @@ def _parse_ledlife_style_table(
                     # Колонка «Арена» — зал («Главная» / «Трен.»), а не название сеанса: в подпись
                     # не кладём, иначе в карточке вместо «Массовое катание» видно «Трен.».
                     session_label=None,
+                    hall=ledlife_hall_name(arena),
                 )
             )
     return slots
+
+
+_HALL_NAMES = {"трен": "Тренировочная арена", "главная": "Главная арена"}
+
+
+def ledlife_hall_name(raw: str | None) -> str | None:
+    """«Трен.» → «Тренировочная арена», «Главная» → «Главная арена»; прочее — как на сайте."""
+    value = " ".join(str(raw or "").replace("\xa0", " ").split()).strip()
+    if not value:
+        return None
+    return _HALL_NAMES.get(value.rstrip(".").lower(), value)
 
 
 def _row_tail(cells: list[str], *, offset: int) -> tuple[str, str, str, str]:
@@ -464,7 +476,7 @@ def _parse_junost_paragraph_schedule(
                     starts_at_local=_norm_junost_hhmm(time_match.group(1)),
                     ends_at_local=_norm_junost_hhmm(time_match.group(2)),
                     kind_raw="Массовое катание",
-                    session_label="Главная",
+                    hall="Главная арена",
                 )
             )
     return slots
@@ -577,6 +589,38 @@ def _apply_ledlife_prices(
             slot.price_rental = rental_major
 
 
+# Прейскурант №3 СДЮШОР по фигурному катанию (ledlife.by), действует с 01.09.2026, цены с НДС.
+# Свободное фигурное — за 1 человека за 1 час; семейное массовое — 45 мин, за комбинацию.
+# Конфиг задачи (figure_free_adult_minor / family_price_tiers) перекрывает эти значения.
+LEDLIFE_PRICES_SOURCE = "https://ledlife.by/stoimost_uslug/"
+LEDLIFE_PRICES_VALID_FROM = "2026-09-01"
+_LEDLIFE_FIGURE_FREE_MINOR = 1800
+_LEDLIFE_FAMILY_TIERS: tuple[tuple[str, int], ...] = (
+    ("1 взрослый + 1 ребёнок", 1400),
+    ("1 взрослый + 2 детей", 1800),
+    ("2 взрослых + 1 ребёнок", 2000),
+    ("2 взрослых + 2 детей", 2300),
+)
+
+
+def _apply_ledlife_figure_family_prices(
+    figure_slots: list[ExtractedSlot],
+    family_slots: list[ExtractedSlot],
+    job: ParserJob,
+) -> None:
+    figure_minor = int(job.config.get("figure_free_adult_minor") or _LEDLIFE_FIGURE_FREE_MINOR)
+    for slot in figure_slots:
+        slot.price_adult = _minor_to_major(figure_minor)
+    raw_tiers = job.config.get("family_price_tiers")
+    tiers = (
+        [{"label": str(t["label"]), "minor": int(t["minor"])} for t in raw_tiers]
+        if isinstance(raw_tiers, list) and raw_tiers
+        else [{"label": label, "minor": minor} for label, minor in _LEDLIFE_FAMILY_TIERS]
+    )
+    for slot in family_slots:
+        slot.price_tiers = [dict(t) for t in tiers]
+
+
 class LedlifeOriginHtmlParser(IceParser):
     parser_key = "ledlife_origin_html_v1"
 
@@ -592,8 +636,7 @@ class LedlifeOriginHtmlParser(IceParser):
                 kind_raw="hockey_practice",
             )
             # Свободное фигурное и семейное массовое — отдельные виды (вкладки на странице арены).
-            # Цены не выдумываем: на странице цен у них свои тарифы (семейный билет по составу семьи),
-            # а сетка ценовых полос выше — только для обычного массового катания.
+            # Цены — из прейскуранта №3 (см. _apply_ledlife_figure_family_prices), не из полос массового.
             figure_slots = _parse_ledlife_style_table(
                 schedule,
                 label_re=_FIGURE_FREE_LABEL,
@@ -615,6 +658,7 @@ class LedlifeOriginHtmlParser(IceParser):
                     _apply_ledlife_prices(mk_slots, book, job)
             if ohm_slots:
                 _apply_ledlife_ohm_prices(ohm_slots, _ledlife_ohm_price_bands(job), job)
+            _apply_ledlife_figure_family_prices(figure_slots, family_slots, job)
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,

@@ -474,6 +474,8 @@ class IceSession(Base):
     session_label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     age_note: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     capacity_note: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    hall: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    price_tiers: Mapped[Optional[list]] = mapped_column(JSONB(), nullable=True)
     external_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
     recurrence_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

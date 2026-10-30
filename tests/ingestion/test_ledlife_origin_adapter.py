@@ -122,8 +122,8 @@ def test_ledlife_preiskurant_page_uses_mk_bands() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ledlife_figure_free_and_family_are_own_kinds_without_prices() -> None:
-    """«Свободное фигурное» и «Семейное массовое» — свои виды, не массовое катание; цены не выдумываем."""
+async def test_ledlife_figure_free_and_family_are_own_kinds_with_preiskurant_prices() -> None:
+    """Свои виды, не массовое; цены — прейскурант №3 (ledlife.by, с 01.09.2026)."""
     extraction = await LedlifeOriginHtmlParser().extract(_job())
     family = [s for s in extraction.slots if s.kind_raw == "family_skate"]
     figure = [s for s in extraction.slots if s.kind_raw == "figure_free"]
@@ -132,11 +132,33 @@ async def test_ledlife_figure_free_and_family_are_own_kinds_without_prices() -> 
         ("2025-04-27", "15:00"),
     ]
     assert len(figure) >= 1
-    for s in [*family, *figure]:
+    for s in figure:
+        assert s.price_adult == 18.0 and s.price_child is None and s.price_tiers is None
+    for s in family:
         assert s.price_adult is None and s.price_child is None
-    mk_keys = {
-        (s.local_date, s.starts_at_local)
-        for s in extraction.slots
-        if s.kind_raw == "Массовое катание"
-    }
+        assert s.price_tiers == [
+            {"label": "1 взрослый + 1 ребёнок", "minor": 1400},
+            {"label": "1 взрослый + 2 детей", "minor": 1800},
+            {"label": "2 взрослых + 1 ребёнок", "minor": 2000},
+            {"label": "2 взрослых + 2 детей", "minor": 2300},
+        ]
+    mk_keys = {(s.local_date, s.starts_at_local) for s in extraction.slots if s.kind_raw == "Массовое катание"}
     assert not mk_keys & {(s.local_date, s.starts_at_local) for s in family}
+
+
+@pytest.mark.asyncio
+async def test_ledlife_hall_is_structured_full_name_not_title() -> None:
+    """«Трен.» / «Главная» из колонки «Арена» — в hall полным названием, не в session_label."""
+    extraction = await LedlifeOriginHtmlParser().extract(_job())
+    halls = {s.hall for s in extraction.slots}
+    assert halls <= {"Тренировочная арена", "Главная арена"}
+    assert "Тренировочная арена" in halls
+    assert all(s.session_label is None for s in extraction.slots)
+
+
+def test_normalizer_keeps_clean_price_tiers_only() -> None:
+    from src.ingestion.normalize import _clean_price_tiers
+
+    assert _clean_price_tiers(None) is None
+    assert _clean_price_tiers([{"label": "", "minor": 1}, {"label": "x", "minor": 0}, "bad"]) is None
+    assert _clean_price_tiers([{"label": " 1+1 ", "minor": "1400"}]) == [{"label": "1+1", "minor": 1400}]

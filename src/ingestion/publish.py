@@ -17,6 +17,8 @@ TASK-223: id сеанса стабилен между прогонами. В т�
 
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -186,6 +188,8 @@ class SqlAlchemyIceSessionPublisher:
                     session_label = :session_label,
                     age_note = :age_note,
                     capacity_note = :capacity_note,
+                    hall = :hall,
+                    price_tiers = CAST(:price_tiers AS jsonb),
                     external_url = :external_url,
                     status = :status,
                     source_id = :source_id,
@@ -207,13 +211,13 @@ class SqlAlchemyIceSessionPublisher:
                     arena_id, kind, starts_at_utc, ends_at_utc, local_date,
                     starts_at_local, ends_at_local,
                     price_adult_minor, price_child_minor, price_rental_minor, price_minor,
-                    currency_code, session_label, age_note, capacity_note, external_url, status,
+                    currency_code, session_label, age_note, capacity_note, hall, price_tiers, external_url, status,
                     source_id, observed_at, valid_until, schedule_basis
                 ) VALUES (
                     :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date,
                     :starts_at_local, :ends_at_local,
                     :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor,
-                    :currency_code, :session_label, :age_note, :capacity_note, :external_url, :status,
+                    :currency_code, :session_label, :age_note, :capacity_note, :hall, CAST(:price_tiers AS jsonb), :external_url, :status,
                     :source_id, :observed_at, :valid_until, :schedule_basis
                 )
                 ON CONFLICT (arena_id, starts_at_utc, kind)
@@ -245,6 +249,8 @@ class SqlAlchemyIceSessionPublisher:
             "session_label": draft.session_label,
             "age_note": draft.age_note,
             "capacity_note": draft.capacity_note,
+            "hall": draft.hall,
+            "price_tiers": json.dumps(draft.price_tiers, ensure_ascii=False) if draft.price_tiers else None,
             "external_url": draft.external_url,
             "status": draft.status,
             "source_id": source_id,
