@@ -258,7 +258,91 @@ def parse_hockey_by_ticker(html: str) -> list[TickerResult]:
     return out
 
 
+HCDINAMO_STANDINGS_URL = f"{HCDINAMO_BASE}/matches/standings/"
+HCDINAMO_STATS_URL = f"{HCDINAMO_BASE}/matches/statistics/"
+_TABLE = re.compile(r'<table class="(?:t_tab|stat_tab[^"]*)"[^>]*>(.*?)</table>', re.S)
+_ROW = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S)
+_TD = re.compile(r"<td[^>]*>(.*?)</td>", re.S)
+_CONFERENCE = re.compile(r"Конференция «[^»]+»$")
+# В таблице клуб пишет короткие имена; в календаре и у нас — полные.
+_KHL_TABLE_NAMES = {"Динамо Мн": "Динамо-Минск", "Динамо М": "Динамо Москва", "Драконы": "Шанхайские Драконы"}
+
+
+@dataclass(frozen=True)
+class KhlStanding:
+    team: str
+    place: int
+    games: int
+    points: int
+
+
+def _flat(fragment: str) -> str:
+    return " ".join(strip_tags(fragment).split())
+
+
+def _titled_tables(page: str) -> list[tuple[str, list[list[str]]]]:
+    """Таблицы страницы с текстом перед каждой (заголовок вкладки: «Конференция «Запад»», «Вратари»)."""
+    out = []
+    for found in _TABLE.finditer(page):
+        title = _flat(page[max(0, found.start() - 400) : found.start()])
+        rows = [[_flat(td) for td in _TD.findall(row)] for row in _ROW.findall(found.group(1))]
+        out.append((title, [r for r in rows if r]))
+    return out
+
+
+def parse_hcdinamo_standings(page: str) -> list[KhlStanding]:
+    """Таблица КХЛ по конференциям: место в своей конференции, игры, очки (последний столбец)."""
+    out: list[KhlStanding] = []
+    for title, rows in _titled_tables(page):
+        if not _CONFERENCE.search(title):
+            continue
+        for r in rows:
+            if len(r) >= 4 and r[0].isdigit() and r[2].isdigit() and r[-1].isdigit() and r[1]:
+                out.append(KhlStanding(_KHL_TABLE_NAMES.get(r[1], r[1]), int(r[0]), int(r[2]), int(r[-1])))
+    return out
+
+
+def _person(raw: str) -> str:
+    """«Тирни Кристофер» → «Кристофер Тирни»; инициал отчества («Прохоров Евгений Д.») опускаем."""
+    parts = raw.split()
+    return f"{parts[1]} {parts[0]}" if len(parts) >= 2 else raw
+
+
+def parse_hcdinamo_leaders(page: str, *, forwards: int = 2) -> dict[str, list[dict]]:
+    """Лидеры Динамо: бомбардиры (очки, голы, передачи) и основной вратарь (больше всех игр, %ОБ)."""
+    scorers: list[dict] = []
+    goalies: list[dict] = []
+    for title, rows in _titled_tables(page):
+        if title.endswith("Бомбардиры") and not scorers:
+            for r in rows:
+                if len(r) >= 6 and all(x.isdigit() for x in r[2:6]):
+                    scorers.append(
+                        {
+                            "name": _person(r[1]),
+                            "games": int(r[2]),
+                            "goals": int(r[3]),
+                            "assists": int(r[4]),
+                            "points": int(r[5]),
+                        }
+                    )
+        elif title.endswith("Вратари") and not goalies:
+            for r in rows:
+                try:
+                    pct = float(r[5].replace(",", "."))
+                except (IndexError, ValueError):
+                    continue
+                if r[2].isdigit():
+                    goalies.append({"name": _person(r[1]), "games": int(r[2]), "save_pct": pct})
+    goalies.sort(key=lambda g: -g["games"])
+    return {"forwards": scorers[:forwards], "goalies": goalies[:1]}
+
+
 __all__ = [
+    "HCDINAMO_STANDINGS_URL",
+    "HCDINAMO_STATS_URL",
+    "KhlStanding",
+    "parse_hcdinamo_leaders",
+    "parse_hcdinamo_standings",
     "DECIDED_OT",
     "DECIDED_REGULATION",
     "DECIDED_SO",

@@ -107,3 +107,22 @@ def test_calendar_next_month_stamp() -> None:
     assert hcdinamo_month_stamp(hcdinamo_month_url(stamp)) == stamp
     assert parse_hcdinamo_next_month("<html>без стрелок</html>") is None
     assert hcdinamo_month_stamp("https://hcdinamo.by/matches/") is None
+
+
+def test_khl_standings_by_conference_with_full_names() -> None:
+    from src.ingestion.hockey_sources import parse_hcdinamo_standings
+
+    rows = parse_hcdinamo_standings((FIXTURES / "hcdinamo-standings.html").read_text(encoding="utf-8"))
+    by_team = {r.team: r for r in rows}
+    assert len(rows) == 22
+    assert (by_team["Динамо-Минск"].place, by_team["Металлург Мг"].place) == (8, 1)
+    assert {"Динамо Москва", "Шанхайские Драконы"} <= set(by_team)
+
+
+def test_dinamo_leaders_forwards_and_main_goalie() -> None:
+    from src.ingestion.hockey_sources import parse_hcdinamo_leaders
+
+    out = parse_hcdinamo_leaders((FIXTURES / "hcdinamo-statistics.html").read_text(encoding="utf-8"))
+    assert [f["name"] for f in out["forwards"]] == ["Кристофер Тирни", "Тай Смит"]
+    assert out["forwards"][0] == {"name": "Кристофер Тирни", "games": 20, "goals": 3, "assists": 16, "points": 19}
+    assert out["goalies"] == [{"name": "Зак Фукале", "games": 13, "save_pct": 89.5}]

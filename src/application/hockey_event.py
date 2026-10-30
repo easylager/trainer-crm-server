@@ -220,11 +220,15 @@ def _extraliga_on() -> bool:
 async def _extraliga_arena(session: AsyncSession, row: Any) -> dict[str, Any] | None:
     word = ((row.arena or "").replace("-", " ").split() or [""])[0].lower()
     found = (
-        await session.execute(
-            _EXTRALIGA_ARENA,
-            {"city": (row.city or "").strip().lower().replace("ё", "е"), "pat": f"%{word}%" if word else "\x00"},
+        (
+            await session.execute(
+                _EXTRALIGA_ARENA,
+                {"city": (row.city or "").strip().lower().replace("ё", "е"), "pat": f"%{word}%" if word else "\x00"},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     return dict(found) if found else None
 
 
@@ -265,7 +269,8 @@ async def _extraliga_extra(session: AsyncSession, row: Any, *, player_key: int, 
     ).first() is not None
     return {
         "league": "extraliga",
-        "preview": None if final else await match_preview(session, int(row.id)),
+        # После финала с протоколом его место занимает «как прошёл матч»; до того — держим и в игре.
+        "preview": None if final and d else await match_preview(session, int(row.id)),
         "details": (
             {k: d.get(k) for k in ("periods", "goals", "shots", "attendance", "best_players")} if final and d else None
         ),
@@ -469,6 +474,10 @@ async def event_view(
     if extraliga:
         out["arena"]["city"] = row.city
         out.update(await _extraliga_extra(session, row, player_key=player_key, final=final))
+    else:
+        from src.application.extraliga_preview import match_preview
+
+        out["preview"] = await match_preview(session, int(row.id))
     return out
 
 

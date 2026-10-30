@@ -494,6 +494,15 @@ async def run_tick(
             logger.warning("hockey calendar sync failed", exc_info=True)
             calendar_failed = True
             calendar_error = str(exc) or type(exc).__name__
+    dinamo_stats: dict[str, int] | None = None
+    if calendar_due:
+        from src.application.dinamo_stats import sync_dinamo_stats
+
+        try:
+            async with session.begin_nested():
+                dinamo_stats = await sync_dinamo_stats(session, fetch, now=now)
+        except Exception:
+            logger.warning("dinamo stats sync failed", exc_info=True)
     results = await check_due_results(session, fetch, now=now, alert=alert)
     from src.application.hockey_game import score_finished_matches
 
@@ -510,6 +519,7 @@ async def run_tick(
         "calendar": calendar,
         "calendar_failed": calendar_failed,
         "calendar_error": calendar_error,
+        "dinamo_stats": dinamo_stats,
         "scored_picks": scored,
         "closed_races": closed_races,
         "checked": len(results),
