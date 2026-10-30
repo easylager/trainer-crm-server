@@ -402,8 +402,12 @@ def _services_view(
         title = row.get("label") or _SERVICE_TITLES.get(kind, "")
         if not title:
             continue
-        rows.append({"kind": kind, "icon": _SERVICE_ICONS[kind], "title": title,
-                     "price": row.get("price") or "", "note": row.get("note") or ""})
+        price = row.get("price") or ""
+        note = row.get("note") or ""
+        if kind == "rental" and not price and rental_price:
+            # Цена проката из сеансов недели (касса ABWS) — не держим её вторым экземпляром в прайсе.
+            price, note = rental_price, "" if note == "цена в кассе" else note
+        rows.append({"kind": kind, "icon": _SERVICE_ICONS[kind], "title": title, "price": price, "note": note})
     if not visit.get("services"):
         # Старый прайс строками «label — price»: показываем как есть, тип не угадываем.
         for row in hours.get("rental_catalog") or []:

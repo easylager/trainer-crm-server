@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import replace
 import json
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -216,6 +217,7 @@ async def test_speed_oval_fixture_joins_rental_by_start() -> None:
         assert slot.price_child_minor == gold["price_child_minor"]
         assert slot.price_rental_minor == gold["price_rental_minor"]
         assert slot.session_label == gold["session_label"]
+        assert slot.hall == gold["hall"]
     hockey = await MinskArenaSaleframeParser().extract(_minsk_arena_job())
     assert all(item.price_rental is None for item in hockey.slots)
 
@@ -670,3 +672,48 @@ def test_speed_oval_live_urls_use_service_139_not_hockey_55() -> None:
     assert "service/55" not in init
     assert "service/55" not in calendar
     assert "service/55" not in events
+
+
+@pytest.mark.asyncio
+async def test_speed_oval_three_mk_areas_are_one_kind_with_hall(tmp_path: Path) -> None:
+    """Дорожка, хоккейная площадка и дискотека: все public_skate, без заголовка, площадка — в hall."""
+    import shutil
+
+    disco_dir = tmp_path / "disco"
+    shutil.copytree(_FIXTURES / "minsk-speed-oval", disco_dir)
+    init = json.loads((disco_dir / "init.json").read_text(encoding="utf-8"))
+    init["performance"]["name"] = "Массовое катание (дискотека на льду)"
+    (disco_dir / "init.json").write_text(json.dumps(init, ensure_ascii=False), encoding="utf-8")
+
+    parser = MinskSpeedOvalParser()
+    job = _minsk_speed_oval_job()
+    both = replace(job, config={**job.config, "hockey_mk_fixture_dir": str(_FIXTURES / "minsk-arena")})
+    extraction = await parser.extract(both)
+    disco_job = replace(job, config={**job.config, "fixture_dir": str(disco_dir)})
+    disco = await parser.extract(disco_job)
+
+    by_hall: dict[str, int] = {}
+    for slot in [*extraction.slots, *disco.slots]:
+        assert slot.session_label is None
+        by_hall[slot.hall] = by_hall.get(slot.hall, 0) + 1
+    assert set(by_hall) == {"Конькобежная дорожка", "Хоккейная площадка", "Дискотека на льду"}
+    assert all(n > 0 for n in by_hall.values())
+
+    now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+    for ext, j in ((extraction, both), (disco, disco_job)):
+        drafts = IceSessionNormalizer().normalize(ext, j, now=now)
+        assert drafts and {d.kind for d in drafts} == {"public_skate"}
+        assert all(d.hall for d in drafts)
+    hockey = [s for s in extraction.slots if s.hall == "Хоккейная площадка"]
+    assert all(s.price_rental is None for s in hockey)  # прокат 138 — только для дорожки
+
+
+def test_speed_oval_hall_names() -> None:
+    from src.shared.minsk_speed_oval import speed_oval_hall
+
+    assert speed_oval_hall("Массовое катание (конькобежная арена)") == "Конькобежная дорожка"
+    assert speed_oval_hall("Массовое катание на конькобежной дорожке") == "Конькобежная дорожка"
+    assert speed_oval_hall("Массовое катание (хоккейная площадка на конькобежной арене)") == "Хоккейная площадка"
+    assert speed_oval_hall("Массовое катание (дискотека на льду)") == "Дискотека на льду"
+    assert speed_oval_hall("Дискотека на хоккейной площадке") == "Хоккейная площадка · дискотека на льду"
+    assert speed_oval_hall("") is None

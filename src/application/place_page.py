@@ -565,12 +565,22 @@ def session_hall(slot: Mapping[str, Any]) -> str:
         return "Тренировочная арена"
     if legacy in {"главная", "главная арена"}:
         return "Главная арена"
+    if _is_area_mk_label(legacy):
+        from src.shared.minsk_speed_oval import speed_oval_hall
+
+        return speed_oval_hall(legacy) or ""
     return ""
+
+
+def _is_area_mk_label(label: str) -> bool:
+    """Старые сеансы Конькобежного: «Массовое катание на хоккейной площадке» — площадка, не название."""
+    low = label.casefold()
+    return low.startswith("массовое катание") and any(x in low for x in ("хоккейн", "дорожк", "конькобежн", "дискотек"))
 
 
 def _real_session_label(slot: Mapping[str, Any]) -> str:
     custom = str(slot.get("session_label") or "").strip()
-    return "" if custom.lower() in _HALL_LABELS else custom
+    return "" if custom.lower() in _HALL_LABELS or _is_area_mk_label(custom) else custom
 
 
 def session_kind_label(slot: Mapping[str, Any] | None) -> str:

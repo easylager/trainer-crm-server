@@ -162,3 +162,33 @@ async def test_repair_speed_oval_identity_moves_cska_row_to_minsk(db_session) ->
     assert float(row["longitude"]) == LONGITUDE
     assert row["slug"] == SLUG
     assert row["website_url"] == WEBSITE_URL
+
+
+def test_speed_oval_services_from_migration_render_with_penguin_and_protection() -> None:
+    import importlib.util
+    from pathlib import Path
+
+    from src.application.arena_visit_info import _services_view
+
+    path = Path(__file__).resolve().parents[2] / "migrations/versions/0284_speed_oval_mk_areas.py"
+    spec = importlib.util.spec_from_file_location("m0284", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    view = _services_view({}, {"services": mod.SERVICES}, {}, rental_price="6,50 BYN")
+    rows = {r["title"]: r for r in view["rows"]}
+    assert rows["Прокат коньков"]["price"] == "6,50 BYN" and rows["Прокат коньков"]["note"] == ""
+    assert rows["Прокат детского тренажёра («Пингвин»)"] | {} == {
+        "kind": "aid", "icon": "penguin", "title": "Прокат детского тренажёра («Пингвин»)",
+        "price": "6,00 BYN", "note": "за сеанс",
+    }
+    assert rows["Прокат защитной экипировки и шлема"]["price"] == "5,00 BYN"
+    assert rows["Прокат защитной экипировки и шлема"]["note"] == "за час"
+    assert rows["Заточка"]["note"] == "цена в кассе"
+
+
+def test_place_page_reads_legacy_area_title_as_hall() -> None:
+    from src.application.place_page import session_hall, session_kind_label
+
+    slot = {"kind": "public_skate", "session_label": "Массовое катание на хоккейной площадке"}
+    assert session_hall(slot) == "Хоккейная площадка"
+    assert session_kind_label(slot) == "Массовое катание"

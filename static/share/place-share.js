@@ -208,7 +208,7 @@
     var end = PD.formatClock(String(session.ends_at_local || '').slice(0, 5));
     setPlanText(plan, 'day', planDayHeading(session.local_date));
     setPlanText(plan, 'time', end ? start + '–' + end : start);
-    setPlanText(plan, 'kind', [planKindLabel(session), String(session.hall || '').trim()].filter(Boolean).join(' · '));
+    setPlanText(plan, 'kind', [planKindLabel(session), String((M.sessionHall ? M.sessionHall(session) : session.hall) || '').trim()].filter(Boolean).join(' · '));
     paintPlanPrices(plan, session);
     setPlanText(plan, 'soon', planSoonLine(session));
     paintPlanLoad(plan, session.typical_load_level, seatsPlanLine(session.capacity_note));

@@ -117,3 +117,18 @@ describe('price tiles for figure and family', () => {
     assert.match(chips[0].value, /18/);
   });
 });
+
+describe('speed oval mass areas', () => {
+  it('legacy area titles collapse into one mass kind with the area as hall', () => {
+    const hockey = { kind: 'public_skate', session_label: 'Массовое катание на хоккейной площадке' };
+    const track = { kind: 'public_skate', session_label: 'Массовое катание на конькобежной дорожке' };
+    assert.equal(M.iceKindLabel(hockey), 'Массовое катание');
+    assert.equal(M.iceKindLabel(track), 'Массовое катание');
+    assert.equal(M.sessionHall(hockey), 'Хоккейная площадка');
+    assert.equal(M.sessionHall(track), 'Конькобежная дорожка');
+    assert.equal(M.speedOvalHall('Массовое катание (дискотека на льду)'), 'Дискотека на льду');
+  });
+  it('structured hall wins', () => {
+    assert.equal(M.sessionHall({ kind: 'public_skate', hall: 'Хоккейная площадка' }), 'Хоккейная площадка');
+  });
+});

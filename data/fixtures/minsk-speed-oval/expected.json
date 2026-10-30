@@ -16,7 +16,8 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "Массовое катание на конькобежной дорожке",
+      "session_label": null,
+      "hall": "Конькобежная дорожка",
       "age_note": "детский до 14 лет",
       "local_date": "2026-09-10",
       "starts_at_local": "14:00",
@@ -29,7 +30,8 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "Массовое катание на конькобежной дорожке",
+      "session_label": null,
+      "hall": "Конькобежная дорожка",
       "age_note": "детский до 14 лет",
       "local_date": "2026-09-11",
       "starts_at_local": "21:15",

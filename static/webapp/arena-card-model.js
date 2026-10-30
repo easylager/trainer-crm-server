@@ -312,7 +312,7 @@
     session = session || {};
     var own = String(session.session_label || '').trim();
     // «Трен.» / «Главная» — зал из колонки «Арена» на ledlife.by, а не название сеанса.
-    if (own && !/^(трен\.?|главная|тренировочная|главная арена)$/i.test(own)) return own;
+    if (own && !/^(трен\.?|главная|тренировочная|главная арена)$/i.test(own) && !isAreaMkLabel(own)) return own;
     var GCk = rootRef.GlideCopy;
     if ((session.kind === 'figure_free' || session.kind === 'family_skate') && GCk && typeof GCk.t === 'function') {
       var kl = GCk.t('kind.' + session.kind);
@@ -340,7 +340,22 @@
     var legacy = String(session.session_label || '').trim().replace(/\.$/, '').toLowerCase();
     if (legacy === 'трен' || legacy === 'тренировочная') return 'Тренировочная арена';
     if (legacy === 'главная' || legacy === 'главная арена') return 'Главная арена';
+    if (isAreaMkLabel(legacy)) return speedOvalHall(legacy);
     return '';
+  }
+
+  /** Старые сеансы Конькобежного: «Массовое катание на хоккейной площадке» — площадка, не название. */
+  function isAreaMkLabel(label) {
+    var low = String(label || '').toLowerCase();
+    return low.indexOf('массовое катание') === 0 && /хоккейн|дорожк|конькобежн|дискотек/.test(low);
+  }
+
+  /** Зеркало src/shared/minsk_speed_oval.speed_oval_hall. */
+  function speedOvalHall(name) {
+    var low = String(name || '').toLowerCase();
+    var area = /хоккейн/.test(low) ? 'Хоккейная площадка' : /дорожк|конькобежн/.test(low) ? 'Конькобежная дорожка' : '';
+    if (/дискотек/.test(low)) return area ? area + ' · дискотека на льду' : 'Дискотека на льду';
+    return area;
   }
 
   function scheduleBasisHint(/* session */) {
@@ -1551,6 +1566,7 @@
     iceKindLabel: iceKindLabel,
     sessionHall: sessionHall,
     priceChips: priceChips,
+    speedOvalHall: speedOvalHall,
     scheduleBasisHint: scheduleBasisHint,
     iceRowCta: iceRowCta,
     buildRibbonForDay: buildRibbonForDay,

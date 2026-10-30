@@ -23,6 +23,7 @@ from src.ingestion.seed_config import (
 from src.ingestion.koronaticket_rink import enrich_zamok_slots, load_korona_rink_html, parse_rink_nuxt_html
 from src.ingestion.source_io import fetch_http_json, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
+from src.shared.minsk_speed_oval import speed_oval_hall
 
 _TIME_RANGE = re.compile(r"(\d{1,2}[:.]\d{2})\s*[-–—]+\s*(\d{1,2}[:.]\d{2})")
 _HHMM = re.compile(r"(\d{1,2})[:.](\d{2})")
@@ -277,7 +278,7 @@ class MinskSpeedOvalParser(MinskArenaSaleframeParser):
         oval = await super().extract(job)
         hockey_cfg = _hockey_mk_saleframe_config(job)
         if hockey_cfg is None:
-            return oval
+            return replace(oval, slots=_speed_oval_areas(oval.slots))
         hockey_job = replace(job, config=hockey_cfg, parser_key=PARSER_KEY_MINSK_ARENA)
         hockey = await MinskArenaSaleframeParser().extract(hockey_job)
         snapshot = dict(oval.snapshot) if isinstance(oval.snapshot, dict) else {"oval": oval.snapshot}
@@ -286,8 +287,21 @@ class MinskSpeedOvalParser(MinskArenaSaleframeParser):
             arena_id=job.arena_id,
             parser_key=self.parser_key,
             snapshot=snapshot,
-            slots=[*oval.slots, *hockey.slots],
+            slots=_speed_oval_areas([*oval.slots, *hockey.slots]),
         )
+
+
+def _speed_oval_areas(slots: list[ExtractedSlot]) -> list[ExtractedSlot]:
+    """Все виды массового на стадионе — один «Массовое катание»; площадка/дискотека уходит в ``hall``.
+
+    Название услуги («Массовое катание на хоккейной площадке») больше не заголовок сеанса: иначе
+    карточка делилась бы на группы по площадкам.
+    """
+    out: list[ExtractedSlot] = []
+    for slot in slots:
+        hall = speed_oval_hall(slot.session_label or slot.kind_raw)
+        out.append(replace(slot, hall=hall or slot.hall, session_label=None))
+    return out
 
 
 class ZamokHtmlParser(IceParser):
