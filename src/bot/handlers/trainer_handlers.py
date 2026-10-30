@@ -90,6 +90,7 @@ from src.application.support_use_cases import create_support_message
 from src.infrastructure.db.models import SUPPORT_FROM_TRAINER
 from src.shared.audit import ACTOR_TRAINER_BOT, audit_log
 from src.shared.byr_currency_display import format_rubles_byn_display
+from src.shared.currency import resolve_trainer_currency
 from src.shared.validation import MAX_COMMENT_LEN, MAX_REVIEW_LEN, safe_parse_id, truncate_text
 from src.application.trainer_schedule_use_cases import (
     add_template,
@@ -1025,7 +1026,13 @@ async def _send_first_booking_milestone_followups(
                     session, milestone_booking_id, trainer_id
                 )
         if info_for_card:
-            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card, created_by_trainer=created_by_trainer)
+            async with async_session_factory() as session:
+                currency = await resolve_trainer_currency(session, trainer_id)
+            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(
+                info_for_card,
+                created_by_trainer=created_by_trainer,
+                currency=currency,
+            )
         else:
             if created_by_trainer:
                 card_html = (
@@ -1579,6 +1586,7 @@ async def cmd_stats(message: Message) -> None:
             await message.answer(msg.TRAINER_STATS_OPEN_APP, reply_markup=kb)
             return
         s = await get_trainer_stats(session, trainer_id)
+        currency = await resolve_trainer_currency(session, trainer_id)
     parts = [msg.TRAINER_STATS_TITLE]
     parts.append(
         msg.TRAINER_STATS_WEEK.format(
@@ -1616,12 +1624,13 @@ async def cmd_stats(message: Message) -> None:
             passes_issued_30d=s["passes_issued_30d"],
         )
     )
-    cert_balance_byn = (s.get("certificate_balance_cents") or 0) / 100
     parts.append(
         msg.TRAINER_STATS_CERTS.format(
             certificates_issued_total=s["certificates_issued_total"],
             certificates_with_balance=s["certificates_with_balance"],
-            certificate_balance_byn=f"{cert_balance_byn:.0f}" if cert_balance_byn == int(cert_balance_byn) else f"{cert_balance_byn:.2f}",
+            certificate_balance_display=msg.money_text(
+                int(s.get("certificate_balance_cents") or 0), currency
+            ),
             certificates_redeemed_30d=s["certificates_redeemed_30d"],
         )
     )
@@ -1912,10 +1921,10 @@ async def schedule_create_booking_choose_client(callback: CallbackQuery) -> None
     )
 
 
-def _format_byn_amount(price_cents: int | None) -> str:
+def _format_byn_amount(price_cents: int | None, *, currency: str = "BYN") -> str:
     if price_cents is None:
         return "цена не указана"
-    return format_rubles_byn_display(price_cents / 100)
+    return format_rubles_byn_display(price_cents / 100, currency)
 
 
 async def _complete_schedule_create_booking(
@@ -1974,8 +1983,11 @@ async def _complete_schedule_create_booking(
             info_for_card = await get_booking_milestone_display_for_trainer(
                 session, booking_id, trainer_id
             )
+            currency = await resolve_trainer_currency(session, trainer_id)
         if info_for_card:
-            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card, created_by_trainer=True)
+            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(
+                info_for_card, created_by_trainer=True, currency=currency
+            )
         else:
             card_html = (
                 "✅ <b>Запись создана.</b>\n\n"
@@ -2071,6 +2083,7 @@ async def schedule_create_booking_choose_tariff(callback: CallbackQuery) -> None
             return
         variants = await list_trainer_service_price_variants(session, trainer_id, service_id)
         client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
+        currency = await resolve_trainer_currency(session, trainer_id)
 
     if not variants:
         await _complete_schedule_create_booking(
@@ -2094,7 +2107,7 @@ async def schedule_create_booking_choose_tariff(callback: CallbackQuery) -> None
         variant_id = int(v["id"])
         is_default = variant_id == default_variant_id
         label = (v.get("label") or "Тариф").strip()
-        price_text = _format_byn_amount(v.get("price_cents"))
+        price_text = _format_byn_amount(v.get("price_cents"), currency=currency)
         prefix = "✅ " if is_default else ""
         suffix = " (по умолчанию)" if is_default else ""
         rows.append(
@@ -2382,6 +2395,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         expected_payment_class = await classify_booking_expected_payment_class(
             session, booking_id, trainer_id
         )
+        currency = await resolve_trainer_currency(session, trainer_id)
     d = info["slot_date"]
     date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
     dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
@@ -2407,6 +2421,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
             arena_name=info.get("arena_name"),
             arena_address=info.get("arena_address"),
             expected_payment_class=expected_payment_class,
+            currency=currency,
         )
         echo_kb = msg.build_trainer_booking_confirmed_echo_reply_markup(
             webapp_base=settings_echo.webapp_base_url or "",
@@ -2422,7 +2437,9 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         )
     else:
         milestone_info = {**info, "expected_payment_class": expected_payment_class}
-        card_html = msg.format_trainer_first_booking_milestone_from_booking_row(milestone_info, created_by_trainer=False)
+        card_html = msg.format_trainer_first_booking_milestone_from_booking_row(
+            milestone_info, created_by_trainer=False, currency=currency
+        )
         milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
             webapp_base=settings_echo.webapp_base_url or "",
             booking_id=booking_id,
@@ -2463,6 +2480,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
             duration_minutes=info.get("duration_minutes"),
             expected_payment_class=expected_payment_class,
             arena_tickets_url=info.get("arena_tickets_url"),
+            currency=currency,
         )
         reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
             map_url=info.get("map_link"),
