@@ -310,7 +310,16 @@
 
   function iceKindLabel(session) {
     session = session || {};
-    if (session.session_label) return session.session_label;
+    var own = String(session.session_label || '').trim();
+    // «Трен.» / «Главная» — зал из колонки «Арена» на ledlife.by, а не название сеанса.
+    if (own && !/^(трен\.?|главная|тренировочная|главная арена)$/i.test(own)) return own;
+    var GCk = rootRef.GlideCopy;
+    if ((session.kind === 'figure_free' || session.kind === 'family_skate') && GCk && typeof GCk.t === 'function') {
+      var kl = GCk.t('kind.' + session.kind);
+      if (kl && kl !== 'kind.' + session.kind) return String(kl);
+    }
+    if (session.kind === 'figure_free') return 'Свободное фигурное катание';
+    if (session.kind === 'family_skate') return 'Семейное массовое катание';
     if (session.kind === 'hockey_practice') {
       var GC = rootRef.GlideCopy;
       if (GC && typeof GC.t === 'function') {
@@ -1071,7 +1080,10 @@
     var nearestId = list.length && list[0].id != null ? String(list[0].id) : null;
     // Заметка про возраст делит сеансы на группы только если в одном «что и почём» их две разные:
     // у одного сеанса заметка есть, у другого парсер её не вернул — это один и тот же тариф.
+    // mergePrices: цены уже показаны плитками над расписанием — сеансы одного вида и длительности
+    // в один день идут одной группой (дневной и вечерний тариф не делят 12:00 и 21:00 на два блока).
     function baseKey(x, dur) {
+      if (opts.mergePrices) return [iceKindLabel(x), dur].join('|');
       return [iceKindLabel(x), x.price_adult_minor, x.price_child_minor, x.price_rental_minor, dur].join('|');
     }
     var notesByBase = {};
@@ -1105,6 +1117,7 @@
         sessionId: s.id != null ? s.id : null,
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
+        prices: priceChips(s),
         seats: liveSeats(s.capacity_note, s.seats_capacity),
         load: s.typical_load_level || '',
       });

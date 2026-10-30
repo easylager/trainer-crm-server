@@ -42,8 +42,30 @@ describe('arena card ice section heading', () => {
 
   it('does not repeat the price tiles as a line under the day strip', () => {
     // Плитки «Вход · Детский · Прокат» уже над расписанием — строка под датами их дублировала.
-    assert.ok(fnBody('renderShowtimes').includes('priceFloors()'));
+    assert.ok(fnBody('renderShowtimes').includes('pricesAboveSchedule()'));
+    assert.ok(fnBody('pricesAboveSchedule').includes('priceFloors()'));
     assert.ok(fnBody('showGroupHtml').includes('!pricesAbove && g.prices.length'));
+  });
+
+  it('merges one day of the same kind into one group when prices sit above (12:00 + 21:00)', () => {
+    const mk = (id, t0, t1, adult) => ({ id, kind: 'public_skate', local_date: '2099-01-01', starts_at_local: t0, ends_at_local: t1, price_adult_minor: adult, session_label: 'Трен.', age_note: 'детский до 16 лет' });
+    const sessions = [mk(1, '12:00', '12:45', 1000), mk(2, '21:00', '21:45', 1100)];
+    const now = new Date('2098-12-31T00:00:00Z');
+    const merged = M.showtimesForDay({ sessions, now, mergePrices: true });
+    assert.equal(merged.groups.length, 1);
+    assert.deepEqual(merged.groups[0].times.map((t) => t.time), ['12:00', '21:00']);
+    assert.equal(merged.groups[0].title, 'Массовое катание');
+    assert.ok(merged.groups[0].times[1].prices.length);
+    assert.equal(M.showtimesForDay({ sessions, now }).groups.length, 2);
+  });
+
+  it('names figure_free and family_skate by kind, not by the hall', () => {
+    const base = { local_date: '2099-01-01', starts_at_local: '10:00', ends_at_local: '11:00', session_label: 'Трен.' };
+    const view = M.showtimesForDay({
+      sessions: [Object.assign({ id: 1, kind: 'figure_free' }, base), Object.assign({ id: 2, kind: 'family_skate' }, base)],
+      now: new Date('2098-12-31T00:00:00Z'),
+    });
+    assert.deepEqual(view.groups.map((g) => g.title).sort(), ['Свободное фигурное катание', 'Семейное массовое катание']);
   });
 
   it('model still names plain sessions «Массовое катание» and keeps own labels', () => {

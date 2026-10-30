@@ -140,7 +140,9 @@ def _parse_ledlife_style_table(
                     starts_at_local=start,
                     ends_at_local=_fmt(end_dt.hour, end_dt.minute),
                     kind_raw=kind_raw,
-                    session_label=arena or None,
+                    # Колонка «Арена» — зал («Главная» / «Трен.»), а не название сеанса: в подпись
+                    # не кладём, иначе в карточке вместо «Массовое катание» видно «Трен.».
+                    session_label=None,
                 )
             )
     return slots

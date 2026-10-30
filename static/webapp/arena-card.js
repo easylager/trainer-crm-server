@@ -713,7 +713,8 @@
         if (!t.picked) return;
         time = t.time || time;
         ticketHref = t.ticketHref || '';
-        price = g.prices.length ? g.prices[0].value : '';
+        var pp = t.prices || g.prices;
+        price = pp.length ? pp[0].value : '';
       });
     });
     var label = M.shareSlotInviteLabel(combinedScheduleDays(), todayIso(), sid, todayIso()) || '';
@@ -1413,8 +1414,8 @@
           ? ticketSeatsHtml(picked.seats)
           : tag ? '<span class="arena-ticket__seats' + (low ? ' arena-seats--low' : '') + '">' + esc(tag) + '</span>' : loadMeterHtml(picked.load)) +
         '</div>' +
-        (g.prices.length
-          ? '<div class="arena-ticket__prices">' + g.prices.map(function (p) {
+        ((picked.prices || g.prices).length
+          ? '<div class="arena-ticket__prices">' + (picked.prices || g.prices).map(function (p) {
               return '<span><small>' + esc(p.label) + '</small><b>' + esc(p.value) + '</b></span>';
             }).join('') + '</div>'
           : '') +
@@ -1444,6 +1445,11 @@
     );
   }
 
+  function pricesAboveSchedule() {
+    var f = priceFloors();
+    return !!(f.adult || f.child || f.rental);
+  }
+
   function renderShowtimes() {
     var iso = state.day || todayIso();
     var byDate = sessionsByDate();
@@ -1453,6 +1459,7 @@
       ticketsUrl: state.card && state.card.tickets_url,
       markNext: iso === todayIso(),
       pickedId: resolvedShareSessionId(),
+      mergePrices: pricesAboveSchedule(),
     });
     var lessons = ribbonForIso(iso).filter(function (r) { return r.nature === 'lesson'; });
     var html = '';
@@ -1465,8 +1472,7 @@
     }
     var sectionTitle = iceSectionTitle();
     var dayLabel = ticketDayLabel(strip(), iso);
-    var f = priceFloors();
-    var pricesAbove = !!(f.adult || f.child || f.rental);
+    var pricesAbove = pricesAboveSchedule();
     view.groups.forEach(function (g) {
       html += showGroupHtml(g, sectionTitle, dayLabel, pricesAbove);
     });

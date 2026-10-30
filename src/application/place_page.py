@@ -540,14 +540,24 @@ _SESSION_KIND_COPY_KEYS: dict[str, str] = {
     "public_skate": "kind.public_skate",
     "open_ice": "kind.public_skate",
     "hockey_practice": "kind.hockey_practice",
+    "figure_free": "kind.figure_free",
+    "family_skate": "kind.family_skate",
 }
+
+# Названия залов из колонки «Арена» (ledlife/junost) — не тип сеанса; старые строки в БД их ещё несут.
+_HALL_LABELS = frozenset({"трен.", "трен", "главная", "тренировочная", "главная арена"})
+
+
+def _real_session_label(slot: Mapping[str, Any]) -> str:
+    custom = str(slot.get("session_label") or "").strip()
+    return "" if custom.lower() in _HALL_LABELS else custom
 
 
 def session_kind_label(slot: Mapping[str, Any] | None) -> str:
     """Человекочитаемый тип сеанса для карточки шеринга и блока «выбранный сеанс»."""
     if slot is None:
         return ""
-    custom = str(slot.get("session_label") or "").strip()
+    custom = _real_session_label(slot)
     key = _SESSION_KIND_COPY_KEYS.get(str(slot.get("kind") or "").strip())
     kind = t(key) if key else ""
     # Зал («Большая арена») не говорит, что это ОХМ, — тип впереди: «ОХМ · Большая арена».

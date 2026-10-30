@@ -21,7 +21,7 @@
       "price_adult_minor": 650,
       "price_child_minor": 450,
       "price_rental_minor": null,
-      "session_label": "Трен.",
+      "session_label": null,
       "age_note": "детский до 16 лет"
     },
     {
@@ -33,7 +33,7 @@
       "price_adult_minor": 650,
       "price_child_minor": 450,
       "price_rental_minor": null,
-      "session_label": "Трен.",
+      "session_label": null,
       "age_note": "детский до 16 лет"
     },
     {
@@ -45,7 +45,7 @@
       "price_adult_minor": 650,
       "price_child_minor": 450,
       "price_rental_minor": null,
-      "session_label": "Трен.",
+      "session_label": null,
       "age_note": "детский до 16 лет"
     },
     {
@@ -57,7 +57,7 @@
       "price_adult_minor": 650,
       "price_child_minor": 450,
       "price_rental_minor": null,
-      "session_label": "Трен.",
+      "session_label": null,
       "age_note": "детский до 16 лет"
     },
     {
@@ -69,7 +69,7 @@
       "price_adult_minor": 750,
       "price_child_minor": 550,
       "price_rental_minor": null,
-      "session_label": "Трен.",
+      "session_label": null,
       "age_note": "детский до 16 лет"
     },
     {
@@ -81,7 +81,7 @@
       "price_adult_minor": 750,
       "price_child_minor": 550,
       "price_rental_minor": null,
-      "session_label": "Трен.",
+      "session_label": null,
       "age_note": "детский до 16 лет"
     }
   ]
