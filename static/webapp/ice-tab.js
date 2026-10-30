@@ -3364,7 +3364,7 @@
       .then(function (data) {
         var days =
           ACM.combineSessionDayLists && typeof ACM.combineSessionDayLists === 'function'
-            ? ACM.combineSessionDayLists((data && data.days) || [], (data && data.ohm_days) || [])
+            ? ACM.combineSessionDayLists((data && data.days) || [], (data && data.ohm_days) || [], (data && data.figure_days) || [], (data && data.family_days) || [])
             : (data && data.days) || [];
         var slots = ACM.shareSlots(days, today, 0);
         var slotSections = ACM.shareSlotsGrouped ? ACM.shareSlotsGrouped(days, today) : null;

@@ -135,3 +135,29 @@ async def test_same_day_kassa_opens_a_sheet_when_today_has_no_sessions(app_use_t
     assert 'class="b-buypill"' in schedule and "data-sameday-open" in schedule
     assert "Онлайн-билет появится в день сеанса" in schedule and "Напомнить в Telegram" in schedule
     assert "Онлайн продают только в день сеанса." in schedule
+
+
+@pytest.mark.asyncio
+async def test_four_ice_tabs_all_visible_and_extra_kinds_pickable(app_use_test_db, db_session) -> None:
+    """СДЮШОР Минск: массовое, семейное, фигурное и ОХМ. Короткие подписи — «ОХМ» не уезжает за край;
+    фигурное и семейное лежат в данных дока — тап по их билету открывает «Выбранный сеанс»."""
+    place = await _rink(db_session, visit=VISIT, ohm=True)
+    day = _minsk_today() + timedelta(days=1)
+    figure = await create_ice_session(
+        db_session, place["arena_id"], local_date=day, starts_at_local="12:00", duration_minutes=45,
+        kind="figure_free", price_adult_minor=1800,
+    )
+    family = await create_ice_session(
+        db_session, place["arena_id"], local_date=day, starts_at_local="14:00", duration_minutes=45,
+        kind="family_skate", price_adult_minor=1000,
+    )
+    await db_session.commit()
+    async with _client() as client:
+        html = (await client.get(place["path"])).text
+    labels = re.findall(r'<label for="icetab-([a-z]+)" class="b-seg__i[^"]*"[^>]*>([^<]+)</label>', html)
+    assert labels == [("skate", "Массовое"), ("family", "Семейное"), ("figure", "Фигурное"), ("ohm", "ОХМ")]
+    boot = json.loads(re.search(r'id="place-share-data">(.*?)</script>', html, re.S).group(1))
+    figure_ids = [s["id"] for d in boot["figureDays"] for s in d["sessions"]]
+    family_ids = [s["id"] for d in boot["familyDays"] for s in d["sessions"]]
+    assert figure["id"] in figure_ids and family["id"] in family_ids
+    assert boot["ohmDays"]

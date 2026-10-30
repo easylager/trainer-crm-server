@@ -34,7 +34,8 @@
   }
 
   function combinedDays() {
-    return M.combineSessionDayLists(boot.days || [], boot.ohmDays || []);
+    // Тап по билету фигурного/семейного ищет сеанс здесь: без этих списков applyPick молча выходил.
+    return M.combineSessionDayLists(boot.days || [], boot.ohmDays || [], boot.figureDays || [], boot.familyDays || []);
   }
 
   function scheduleSlots() {
@@ -399,7 +400,7 @@
               })
               .then(function (data) {
                 if (!data) return payload;
-                var days = M.combineSessionDayLists(data.days || [], data.ohm_days || []);
+                var days = M.combineSessionDayLists(data.days || [], data.ohm_days || [], data.figure_days || [], data.family_days || []);
                 return {
                   slots: M.shareSlots(days, today, 0),
                   slotSections: M.shareSlotsGrouped(days, today),

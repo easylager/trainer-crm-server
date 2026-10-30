@@ -1110,6 +1110,9 @@ def _place_share_scripts_html(
         "today": view["today"].isoformat(),
         "days": view.get("days") or [],
         "ohmDays": view.get("ohm_days") or [],
+        # Без них тап по билету «Свободное фигурное» / «Семейное массовое» не находил сеанс.
+        "figureDays": view.get("figure_days") or [],
+        "familyDays": view.get("family_days") or [],
         "sessionId": int(pick["id"]),
         "focusDay": pick_day.isoformat() if pick_day else "",
         "sessionMissing": bool(view.get("focus_missing")),
@@ -1809,6 +1812,10 @@ _ICE_EXTRA_TABS: tuple[tuple[str, str, str, bool, str], ...] = (
     ("ohm", "ohm_days", "o", True, "kind.hockey_practice"),
 )
 
+# Короткие подписи вкладок: с полными («Семейное массовое катание»…) четвёртая вкладка «ОХМ»
+# уезжала за край полосы без видимой прокрутки — на телефоне её не было видно.
+_ICE_TAB_SHORT = {"skate": "Массовое", "family": "Семейное", "figure": "Фигурное", "ohm": "ОХМ"}
+
 
 def _b_ice(
     view: Mapping[str, Any], *, base_path: str, invite: bool, links: Mapping[str, Any], vv: Mapping[str, Any]
@@ -1848,7 +1855,8 @@ def _b_ice(
         for i, (key, _l, _b, _a) in enumerate(tabs)
     )
     labels = "".join(
-        f'<label for="icetab-{key}" class="b-seg__i b-seg__i--{key}">{_esc(label)}</label>'
+        f'<label for="icetab-{key}" class="b-seg__i b-seg__i--{key}" title="{_esc(label)}">'
+        f"{_esc(_ICE_TAB_SHORT.get(key, label) if len(tabs) > 2 else label)}</label>"
         for key, label, _b, _a in tabs
     )
     panes = "".join(

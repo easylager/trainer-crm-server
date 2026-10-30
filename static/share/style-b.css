@@ -1063,7 +1063,7 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-icetabs__r { position: absolute; opacity: 0; pointer-events: none; }
 .b-seg {
   display: flex; gap: 4px; padding: 4px; border-radius: var(--g-r-pill); background: var(--g-seg, #e6ecef);
-  overflow-x: auto; scrollbar-width: none;
+  flex-wrap: wrap; /* все вкладки видны: прокрутка без полосы прятала «ОХМ» за краем */
 }
 .b-seg::-webkit-scrollbar { display: none; }
 .b-seg__i {

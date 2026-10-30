@@ -1404,7 +1404,15 @@
    * Массовое катание (days) и ОХМ (ohm_days) — в одном списке для share sheet.
    * Без merge каталог на вкладке «С клюшкой» подставлял первый сеанс МК вместо ОХМ.
    */
+  /** Все виды из ответа /sessions (массовое, ОХМ, фигурное, семейное) — одним списком дней. */
+  function allSessionDays(data) {
+    data = data || {};
+    return combineSessionDayLists(data.days || [], data.ohm_days || [], data.figure_days || [], data.family_days || []);
+  }
+
   function combineSessionDayLists(days, ohmDays) {
+    // Свободное фигурное и семейное массовое (figure_days, family_days) — третьим и далее аргументами.
+    var lists = Array.prototype.slice.call(arguments);
     var order = [];
     var byDate = {};
     function add(list) {
@@ -1419,8 +1427,7 @@
         byDate[iso] = byDate[iso].concat(list[i].sessions || []);
       }
     }
-    add(days);
-    add(ohmDays);
+    lists.forEach(add);
     // Массовое и ОХМ приходят двумя списками; в дне — один порядок, по времени.
     order.sort();
     return order.map(function (iso) {
@@ -1606,6 +1613,7 @@
     practiceContacts: practiceContacts,
     startParamFromLocation: startParamFromLocation,
     combineSessionDayLists: combineSessionDayLists,
+    allSessionDays: allSessionDays,
     shareSlots: shareSlots,
     shareSlotsGrouped: shareSlotsGrouped,
     shareSlotInviteLabel: shareSlotInviteLabel,
