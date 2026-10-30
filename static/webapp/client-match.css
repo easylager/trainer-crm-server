@@ -250,3 +250,34 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-mrow__sub { font-size: 13px; color: var(--g-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cm-mrow__time { flex: none; font: 700 15px/1 var(--g-font); }
 .cm-mrow__time--live { color: #c62828; }
+/* Каталог «Матчи»: переключатель, фильтры, шит */
+.mx-tools { display: flex; flex-direction: column; gap: 10px; }
+.mx-when { display: flex; padding: 3px; border-radius: var(--g-r-btn); background: var(--g-chip); }
+.mx-when__b { flex: 1; min-height: 40px; border: 0; border-radius: var(--g-r-sm); background: transparent; color: var(--g-muted); font: 600 14px/1 var(--g-font); cursor: pointer; }
+.mx-when__b[aria-pressed='true'] { background: var(--g-surface); color: var(--g-ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .1); }
+.mx-bar { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+.mx-bar::-webkit-scrollbar { display: none; }
+.mx-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: var(--g-r-pill); border: 1px solid var(--g-line); background: var(--g-surface); color: var(--g-ink); font: 600 14px/1 var(--g-font); cursor: pointer; white-space: nowrap; }
+.mx-chip--on { background: var(--g-ink); border-color: var(--g-ink); color: var(--g-bg); }
+.mx-chip img { width: 20px; height: 20px; object-fit: contain; }
+.mx-chip__x { opacity: .7; font-weight: 400; }
+.mx-tag { display: inline-block; margin-right: 6px; padding: 3px 6px; border-radius: 6px; background: var(--g-chip); color: var(--g-ink-2); font: 700 10px/1 var(--g-font); letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
+.mx-tag--khl { background: rgba(29, 78, 216, .12); color: #1d4ed8; }
+.tg-dark .mx-tag--khl { color: #93b4ff; }
+.mx-ext { font: 600 12px/1 var(--g-font); color: var(--g-muted); }
+.mx-dim { position: fixed; inset: 0; z-index: 40; background: rgba(10, 18, 28, .55); }
+.mx-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; max-height: 86vh; overflow-y: auto; max-width: 560px; margin: 0 auto; padding: 12px 18px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 26px 26px 0 0; background: var(--g-surface); color: var(--g-ink); display: flex; flex-direction: column; gap: 10px; }
+.mx-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--g-line-strong); margin: 0 auto 4px; }
+.mx-sh { margin: 6px 0 0; font: 400 20px/1.1 var(--g-font-display); }
+.mx-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mx-tc { border: 1px solid var(--g-line); border-radius: var(--g-r-sm); padding: 8px 2px 7px; background: var(--g-surface); color: var(--g-ink); font: 600 11px/1.2 var(--g-font); text-align: center; cursor: pointer; overflow-wrap: anywhere; hyphens: auto; }
+.mx-tc img { width: 28px; height: 28px; display: block; margin: 0 auto 4px; object-fit: contain; }
+.mx-tc[aria-pressed='true'] { border-color: var(--g-ink); box-shadow: inset 0 0 0 1px var(--g-ink); }
+.mx-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.mx-arow { display: flex; justify-content: space-between; gap: 12px; padding: 11px 2px; border: 0; border-top: 1px solid var(--g-line); background: none; color: var(--g-ink); font: 600 14px/1.3 var(--g-font); text-align: left; cursor: pointer; }
+.mx-arow span { color: var(--g-muted); font-weight: 400; white-space: nowrap; }
+.mx-arow[aria-pressed='true'] { color: var(--g-accent-ink); }
+.mx-go { min-height: 52px; margin-top: 6px; border: 0; border-radius: var(--g-r-btn); background: var(--g-ink); color: var(--g-bg); font: 700 16px/1 var(--g-font); cursor: pointer; }
+.mx-reset { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--g-accent-ink); font: 700 14px/1.3 var(--g-font); cursor: pointer; }
+.cm-hero--team .cm-title { display: flex; align-items: center; gap: 12px; }
+.cm-hero--team .cm-title .cm-logo { width: 44px; height: 44px; }

@@ -1,4 +1,7 @@
-"""«Перед матчем» для страницы матча Экстралиги (TASK-340, экран 12 холста).
+"""«Перед матчем» для страницы матча Экстралиги (TASK-340, экран 12 холста) и матча Динамо.
+
+У Динамо (source='hcdinamo') место и очки — таблица КХЛ, кого смотреть — снимок ``dinamo_stats``;
+форма — только у Динамо: матчей соперника с другими клубами у нас нет.
 
 Место и очки — из ``hockey_standings``; форма и прошлая встреча — из наших же сыгранных матчей;
 кого смотреть — снимок страницы матча; серии голов — протокол последнего матча команды.
@@ -9,9 +12,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.application.hockey_matches import DINAMO
 
 FORM_SIZE = 5
 # От скольких матчей подряд серия голов — повод сказать о ней.
@@ -21,16 +27,16 @@ STREAK_FROM = 3
 _SUFFIX = {"regulation": "", "ot": "о", "so": "б"}
 
 _MATCH = text("""
-    SELECT id, home_team, away_team, starts_at, arena, details
-    FROM hockey_matches WHERE id = :id AND source = 'hockeyby'
+    SELECT id, source, league, home_team, away_team, starts_at, arena, details
+    FROM hockey_matches WHERE id = :id AND source IN ('hockeyby', 'hcdinamo')
     """)
 
-_STANDING = text("SELECT place, points, games FROM hockey_standings WHERE league = 'extraliga' AND team = :team")
+_STANDING = text("SELECT place, points, games FROM hockey_standings WHERE league = :league AND team = :team")
 
 _PLAYED = text("""
     SELECT id, home_team, away_team, home_score, away_score, decided_in, starts_at, arena, details
     FROM hockey_matches
-    WHERE source = 'hockeyby' AND status = 'final' AND starts_at < :before
+    WHERE source = :source AND status = 'final' AND starts_at < :before
       AND (home_team = :team OR away_team = :team)
     ORDER BY starts_at DESC
     LIMIT :limit
@@ -39,7 +45,7 @@ _PLAYED = text("""
 _LAST_MEETING = text("""
     SELECT id, home_team, away_team, home_score, away_score, decided_in, starts_at, arena, details
     FROM hockey_matches
-    WHERE source = 'hockeyby' AND status = 'final' AND starts_at < :before
+    WHERE source = :source AND status = 'final' AND starts_at < :before
       AND ((home_team = :a AND away_team = :b) OR (home_team = :b AND away_team = :a))
     ORDER BY starts_at DESC
     LIMIT 1
@@ -113,11 +119,12 @@ def _streaks(m: _Played, team: str) -> list[dict]:
     return [{"player": name, "matches": n} for name, n in out.items()]
 
 
-async def _team_block(session: AsyncSession, team: str, *, before: datetime, details: dict | None, side: str) -> dict:
-    standing = (await session.execute(_STANDING, {"team": team})).one_or_none()
-    recent = [
-        _played(r) for r in (await session.execute(_PLAYED, {"team": team, "before": before, "limit": FORM_SIZE})).all()
-    ]
+async def _team_block(session: AsyncSession, team: str, *, record: Any, side: str, history: bool = True) -> dict:
+    """``history`` выключен у соперника Динамо: у нас только его матчи с Динамо — это не форма."""
+    before, details = record.starts_at, record.details
+    standing = (await session.execute(_STANDING, {"league": record.league, "team": team})).one_or_none()
+    params = {"source": record.source, "team": team, "before": before, "limit": FORM_SIZE}
+    recent = [_played(r) for r in (await session.execute(_PLAYED, params)).all()] if history else []
     snapshot = (details or {}).get(side) or {}
     return {
         "team": team,
@@ -139,11 +146,15 @@ async def match_preview(session: AsyncSession, match_id: int) -> dict | None:
     if record is None:
         return None
     before = record.starts_at
-    home = await _team_block(session, record.home_team, before=before, details=record.details, side="home")
-    away = await _team_block(session, record.away_team, before=before, details=record.details, side="away")
-    last = (
-        await session.execute(_LAST_MEETING, {"a": record.home_team, "b": record.away_team, "before": before})
-    ).one_or_none()
+    khl = record.source == "hcdinamo"
+    home = await _team_block(
+        session, record.home_team, record=record, side="home", history=not khl or record.home_team == DINAMO
+    )
+    away = await _team_block(
+        session, record.away_team, record=record, side="away", history=not khl or record.away_team == DINAMO
+    )
+    meeting_params = {"source": record.source, "a": record.home_team, "b": record.away_team, "before": before}
+    last = (await session.execute(_LAST_MEETING, meeting_params)).one_or_none()
     meeting = None
     if last is not None:
         m = _played(last)

@@ -1,4 +1,7 @@
-"""Скачать логотипы команд из окна календаря hcdinamo.by в static/webapp/hockey-logos.
+"""Скачать логотипы команд из календаря hcdinamo.by в static/webapp/hockey-logos.
+
+Читаем не только текущий месяц, а весь сезон (SEASON_MONTHS назад и вперёд): соперники Динамо
+разбросаны по месяцам, в окне одного месяца их меньше половины.
 
 Повторный запуск не перекачивает уже лежащие PNG. В продукте на hcdinamo.by не ссылаемся.
 
@@ -12,6 +15,7 @@ import asyncio
 import io
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -23,6 +27,7 @@ from src.application.hockey_teams import logo_path, slug_for
 from src.ingestion.hockey_sources import (
     HCDINAMO_BASE,
     HCDINAMO_CALENDAR_URL,
+    hcdinamo_month_url,
     parse_hcdinamo_calendar,
     parse_hcdinamo_logo_index,
 )
@@ -32,6 +37,7 @@ from src.ingestion.source_io import fetch_http_bytes
 MANUAL_LOGOS = frozenset({"sochi"})
 
 _UA = {"User-Agent": "Mozilla/5.0 (compatible; GlideBot/1.0)"}
+SEASON_MONTHS = range(-4, 6)
 
 
 def _absolute(src: str) -> str:
@@ -71,10 +77,28 @@ def _write_png(dest: Path, data: bytes) -> None:
     image.convert("RGBA").save(dest, "PNG")
 
 
+def _season_stamps(now: datetime) -> list[str]:
+    """Метки середины месяцев вокруг текущего: сайт отдаёт месяц по любой дате внутри него."""
+    stamps = []
+    for shift in SEASON_MONTHS:
+        index = now.year * 12 + now.month - 1 + shift
+        mid = datetime(index // 12, index % 12 + 1, 15, 12, tzinfo=timezone.utc)
+        stamps.append(str(int(mid.timestamp())))
+    return stamps
+
+
 async def collect_logo_srcs() -> dict[str, str]:
     """Имя команды → абсолютный URL. Сначала календарь, затем страницы матчей окна."""
     calendar = await default_fetch(HCDINAMO_CALENDAR_URL)
     found = {name: _absolute(src) for name, src in parse_hcdinamo_logo_index(calendar).items()}
+    for stamp in _season_stamps(datetime.now(timezone.utc)):
+        try:
+            month = await default_fetch(hcdinamo_month_url(stamp))
+        except Exception as exc:
+            print(f"month {stamp} failed: {exc}")
+            continue
+        for name, src in parse_hcdinamo_logo_index(month).items():
+            found.setdefault(name, _absolute(src))
     for source_match_id in parse_hcdinamo_calendar(calendar):
         page = await default_fetch(match_url(source_match_id))
         # На странице матча логотип у td.club_name l/r крупнее, чем в ленте календаря.

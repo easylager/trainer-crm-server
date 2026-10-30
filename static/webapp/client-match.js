@@ -230,7 +230,8 @@
   }
 
   function paintPre(ev) {
-    var p = isXl(ev) && !started(ev) ? ev.preview : null;
+    // Блок не пропадает, когда матч начался: сервер убирает его только после финала с протоколом.
+    var p = ev.preview || null;
     $('cmPre').hidden = !p;
     $('cmWatch').hidden = true;
     if (!p) return;
