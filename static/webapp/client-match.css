@@ -270,7 +270,7 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .mx-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--g-line-strong); margin: 0 auto 4px; }
 .mx-sh { margin: 6px 0 0; font: 400 20px/1.1 var(--g-font-display); }
 .mx-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.mx-tc { border: 1px solid var(--g-line); border-radius: var(--g-r-sm); padding: 8px 2px 7px; background: var(--g-surface); color: var(--g-ink); font: 600 11px/1.2 var(--g-font); text-align: center; cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
+.mx-tc { border: 1px solid var(--g-line); border-radius: var(--g-r-sm); padding: 8px 2px 7px; background: var(--g-surface); color: var(--g-ink); font: 600 11px/1.2 var(--g-font); text-align: center; cursor: pointer; overflow-wrap: anywhere; hyphens: auto; }
 .mx-tc img { width: 28px; height: 28px; display: block; margin: 0 auto 4px; object-fit: contain; }
 .mx-tc[aria-pressed='true'] { border-color: var(--g-ink); box-shadow: inset 0 0 0 1px var(--g-ink); }
 .mx-chips { display: flex; flex-wrap: wrap; gap: 8px; }

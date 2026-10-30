@@ -112,7 +112,7 @@ def _facets(rows: list[Any], f: Filters) -> dict[str, Any]:
     return {
         "teams": [{**team_card(t), "slug": slug_for(t), "count": teams[t]} for t in team_list],
         "leagues": [{"id": k, "label": LEAGUES.get(k, k), "count": leagues[k]} for k in LEAGUES if leagues[k]],
-        "cities": [{"name": c, "count": n} for c, n in sorted(cities.items(), key=lambda x: (-x[1], x[0]))],
+        "cities": [{"name": c, "count": n} for c, n in sorted(cities.items())],
         "arenas": [{"name": a, "count": n} for a, n in sorted(arenas.items(), key=lambda x: (-x[1], x[0]))],
     }
 

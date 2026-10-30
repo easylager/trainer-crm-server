@@ -205,7 +205,7 @@
           i.alt = '';
           b.appendChild(i);
         }
-        b.appendChild(doc.createTextNode(t.short && t.name.length > 10 ? t.short : t.name));
+        b.appendChild(doc.createTextNode(t.name));
         grid.appendChild(b);
       });
       parts.push(grid);
