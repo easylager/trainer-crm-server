@@ -567,6 +567,12 @@ class HockeyMatch(Base):
     tickets_url: Mapped[str | None] = mapped_column(Text(), nullable=True)
     details: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)
     details_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Итог Экстралиги публикуется после двух одинаковых опросов подряд (TASK-334, миграция 0292).
+    result_probe: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)
+    # Живой счёт: текущий и время опроса; итог и сверка итогов его не трогают (TASK-334 S4).
+    live_home_score: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    live_away_score: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    live_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -648,6 +654,9 @@ class HockeyPick(Base):
     points: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
     # ×2 на матч месяца (TASK-335): ``points`` остаются базовыми, в таблицах умножаются.
     doubled: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    # Козырь недели: понедельник недели матча по Минску; один на игрока и неделю (TASK-334, миграция 0292).
+    trump_week: Mapped[date | None] = mapped_column(Date(), nullable=True)
+    picked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -668,6 +677,13 @@ class HockeyLeague(Base):
         BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
     )
     invite_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Набор команд и срок (TASK-334 S3): all | extraliga | dinamo | clubs (+ clubs), term_kind и окно дат.
+    scope: Mapped[str] = mapped_column(String(12), nullable=False, server_default="dinamo")
+    clubs: Mapped[list[str]] = mapped_column(ARRAY(String(64)), nullable=False, server_default="{}")
+    term_kind: Mapped[str] = mapped_column(String(12), nullable=False, server_default="season")
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    extended_from: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

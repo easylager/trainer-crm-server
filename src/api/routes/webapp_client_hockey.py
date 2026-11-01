@@ -12,24 +12,32 @@ from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.application.hockey_game import (
     DoubleUnavailable,
-    my_double,
-    set_double,
     Pick,
     PicksClosed,
     Standing,
+    live_points,
     make_pick,
+    my_double,
+    my_doubles,
     player_matches,
-    player_standing,
-    standings,
+    set_double,
 )
 from src.application.hockey_hub import hub_card, mark_result_seen
 from src.application.hockey_races import (
-    crown_counts,
     leader_line,
     mark_race_seen,
     race_by_id,
     race_result,
     race_summary,
+)
+from src.application.hockey_slices import (
+    club_scope,
+    crown_totals,
+    parse_period,
+    peaks,
+    slice_rows,
+    stakes,
+    table_view,
 )
 from src.application.hockey_leagues import friends_moves, friends_picks
 from src.application.hockey_teams import team_card
@@ -88,6 +96,28 @@ def _player_name(display_name: str | None, init_raw: str) -> str:
     return f"{first.strip()} {initial}." if initial else first.strip()
 
 
+def _live_out(row: dict) -> dict | None:
+    """Текущий счёт идущего матча: отдельно от итога; очки игрока — «если так закончится»."""
+    if row["status"] == "final" or row.get("live_home_score") is None or row.get("live_away_score") is None:
+        return None
+    pick_points = None
+    if row["pick_side"] is not None:
+        pick_points = live_points(
+            side=row["pick_side"],
+            home_score=row["pick_home_score"],
+            away_score=row["pick_away_score"],
+            live_home=row["live_home_score"],
+            live_away=row["live_away_score"],
+            doubled=bool(row["pick_doubled"]),
+        )
+    return {
+        "home_score": row["live_home_score"],
+        "away_score": row["live_away_score"],
+        "updated_at": None if row.get("live_at") is None else _aware(row["live_at"]).isoformat(),
+        "pick_points_if_ends_now": pick_points,
+    }
+
+
 def _match_out(
     row: dict,
     *,
@@ -125,6 +155,8 @@ def _match_out(
         "sides": {"home": row["home_picks"], "away": row["away_picks"]},
         "friends": friends,
         "race_final": row["id"] == final_id,
+        "league": row.get("league"),
+        "live": _live_out(row),
         # Со стартом матча — счета друзей из моих лиг (TASK-335); до старта сервер их не отдаёт.
         "friend_moves": moves or [],
     }
@@ -132,16 +164,24 @@ def _match_out(
 
 @router.get("/client/hockey/matches")
 async def get_client_hockey_matches(
+    club: str | None = Query(None, description="только матчи клуба, дома и в гостях"),
+    league: str = Query("khl", pattern="^(khl|extraliga|all)$", description="khl — Динамо (по умолчанию)"),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
-    rows = await player_matches(session, player_key, since=now - _MATCH_WINDOW, limit=_LIST_LIMIT)
+    rows = await player_matches(
+        session,
+        player_key,
+        since=now - _MATCH_WINDOW,
+        limit=_LIST_LIMIT,
+        club=club,
+        league=None if league == "all" else league,
+    )
     ids = [int(row["id"]) for row in rows]
     friends = await friends_picks(session, player_key=player_key, match_ids=ids)
     moves = await friends_moves(session, player_key=player_key, match_ids=ids, now=now)
-    me = await player_standing(session, player_key, now=now)
     race = await race_summary(session, now=now)
     final_id = race["final_match_id"]
     final_open = any(row["id"] == final_id and row["status"] == "scheduled" for row in rows)
@@ -150,9 +190,10 @@ async def get_client_hockey_matches(
             _match_out(row, now=now, friends=friends[int(row["id"])], final_id=final_id, moves=moves[int(row["id"])])
             for row in rows
         ],
-        "me": _standing_me(me),
+        "me": _standing_me(await _my_season_row(session, player_key, now)),
         "race": race,
         "double": await my_double(session, player_key=player_key, now=now),
+        "doubles": await my_doubles(session, player_key=player_key, now=now),
         "leader": await leader_line(session, player_key=player_key, now=now) if final_open else None,
     }
 
@@ -213,32 +254,63 @@ async def put_client_hockey_pick(
     return {"my_pick": _pick_out(pick.side, pick.home_score, pick.away_score, pick.points, pick.doubled)}
 
 
+async def _my_season_row(session: AsyncSession, player_key: int, now: datetime):
+    rows = await slice_rows(session, scope=club_scope(None), period=parse_period(None, now))
+    return next((r for r in rows if r.player_key == player_key), None)
+
+
 @router.get("/client/hockey/standings")
 async def get_client_hockey_standings(
+    club: str | None = Query(None, description="клуб — только его матчи; пусто — «Все»"),
+    period: str = Query("season", description="season | month | 2026-11"),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    """Таблица среза «команда × период»: по умолчанию «Все · Сезон».
+
+    ``me`` — ``null``, если игрок в этом срезе не ходил (новичок видит плашку, а не строку с нулём).
+    """
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
-    rows = await standings(session, now=now, limit=_TABLE_LIMIT)
-    me = await player_standing(session, player_key, now=now)
-    crowns = await crown_counts(session, league_id=None)
+    try:
+        chosen = parse_period(period, now)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неизвестный период") from None
+    rows = await slice_rows(session, scope=club_scope(club), period=chosen)
+    crowns = await crown_totals(session, league_id=None)
+    view = table_view(
+        rows, player_key=player_key, crowns=crowns, limit=_TABLE_LIMIT, crown_possible=chosen.kind == "month"
+    )
     return {
+        "club": club,
+        "period": {"key": chosen.key, "kind": chosen.kind, "title": chosen.title, "ends_at": chosen.until.isoformat()},
         "race": await race_summary(session, now=now),
-        "items": [
-            {
-                "rank": row.rank,
-                "display_name": row.display_name,
-                "points": row.points,
-                "exact": row.exact,
-                "played": row.played,
-                "is_me": row.player_key == player_key,
-                "crowns": crowns.get(row.player_key, 0),
-            }
-            for row in rows
-        ],
-        "me": _standing_me(me),
+        **view,
     }
+
+
+@router.get("/client/hockey/peaks")
+async def get_client_hockey_peaks(
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Твои вершины»: три среза, где у игрока лучшее место. Пусто, пока нет среза с тремя игроками и тремя ходами."""
+    return {"items": await peaks(session, player_key=client_catalog_telegram_key(principal), now=datetime.now(timezone.utc))}
+
+
+@router.get("/client/hockey/matches/{match_id}/stakes")
+async def get_client_hockey_stakes(
+    match_id: int,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Если угадаешь» (в коде stakes): места в срезах и лигах, если угадан победитель. Оценка по текущим таблицам."""
+    out = await stakes(
+        session, player_key=client_catalog_telegram_key(principal), match_id=match_id, now=datetime.now(timezone.utc)
+    )
+    if out is None:
+        raise HTTPException(status_code=404, detail="Матч не найден")
+    return out
 
 
 @router.get("/client/hockey/races/{race_id}/result")
@@ -280,7 +352,7 @@ async def put_client_hockey_double(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """×2 на матч месяца (TASK-335): поставить, перенести или снять до начала матча."""
+    """Козырь недели ×2: поставить, перенести на другой матч недели или снять до начала матча."""
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
     try:
@@ -292,12 +364,14 @@ async def put_client_hockey_double(
     except DoubleUnavailable as exc:
         detail = {
             "no_pick": "Сначала тапни за команду",
-            "used": "×2 этого месяца уже сыгран",
-            "no_race": "×2 появится с гонкой месяца",
+            "used": "Козырь этой недели уже на начавшемся матче",
         }[exc.reason]
         raise HTTPException(status_code=409, detail=detail) from None
     await session.commit()
-    return {"double": await my_double(session, player_key=player_key, now=now)}
+    return {
+        "double": await my_double(session, player_key=player_key, now=now),
+        "doubles": await my_doubles(session, player_key=player_key, now=now),
+    }
 
 
 class RemindBody(BaseModel):
