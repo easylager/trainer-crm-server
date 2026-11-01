@@ -2774,7 +2774,7 @@ class SeasonalRink(Base):
     arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), primary_key=True)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     operator: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    is_paid: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    is_paid: Mapped[Optional[bool]] = mapped_column(Boolean(), nullable=True)
     price_note: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     #: школьная коробка: «часто занята под хоккей и занятия школы»
     often_hockey: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))

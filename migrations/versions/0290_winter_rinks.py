@@ -30,7 +30,8 @@ def upgrade() -> None:
         sa.Column("arena_id", sa.Integer(), sa.ForeignKey("arenas.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("kind", sa.String(16), nullable=False),
         sa.Column("operator", sa.String(256), nullable=True),
-        sa.Column("is_paid", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        #: NULL — цена не известна («уточняйте»); false — бесплатно (по умолчанию для seed)
+        sa.Column("is_paid", sa.Boolean(), nullable=True),
         sa.Column("price_note", sa.String(128), nullable=True),
         sa.Column("often_hockey", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("geocode_precision", sa.String(16), nullable=False, server_default="none"),
