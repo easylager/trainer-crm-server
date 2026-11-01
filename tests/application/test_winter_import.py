@@ -59,7 +59,7 @@ def test_candidate_without_address_is_hidden_with_address_is_not():
 def test_twin_rink_and_box_are_linked_not_merged():
     a, b = plan_rows([
         row(address="ул. Брестская, 69/5", type="каток"),
-        row(address="г. Слоним, ул. Брестская, 69/5", city="Тестоград", type="хоккейная коробка"),
+        row(address="г. Тестоград, ул. Брестская, 69/5", type="хоккейная коробка"),
     ])
     assert a.skip_reason is None and b.skip_reason is None and b.same_complex_key == a.key
 
