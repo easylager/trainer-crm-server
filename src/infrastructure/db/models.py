@@ -575,6 +575,9 @@ class HockeyMatch(Base):
     live_home_score: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     live_away_score: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     live_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Сайт (TASK-347): сколько полных прогонов календаря подряд матча не было; время до последнего переноса.
+    missed_runs: Mapped[int] = mapped_column(SmallInteger(), server_default="0", nullable=False)
+    previous_starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

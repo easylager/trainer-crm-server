@@ -7,7 +7,7 @@ import logging
 import re
 import uuid
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote
 
 from aiogram import Bot, F, Router
@@ -891,6 +891,37 @@ async def cmd_start(message: Message) -> None:
                     base, trainer_id, city_id=city_id, service_id=book_url_svc
                 ),
             )
+        return
+
+    # TASK-347: mbell_<матч> — колокольчик на матч с сайта. Подписку ставит бот: сайт не знает, нажали ли «Начать».
+    from src.application.match_bells import parse_bell_start
+
+    bell_match_id = parse_bell_start(payload)
+    if bell_match_id is not None:
+        from src.application.match_bells import reply_buttons, subscribe as subscribe_match_bell
+
+        async with async_session_factory() as db_session:
+            bell_reply = await subscribe_match_bell(
+                db_session,
+                telegram_id=telegram_id,
+                match_id=bell_match_id,
+                now=datetime.now(timezone.utc),
+            )
+            await db_session.commit()
+        if bell_reply is None:
+            await message.answer(msg.CLIENT_START_WELCOME)
+            return
+        rows = reply_buttons(bell_reply, base_url=(Settings().webapp_base_url or "").strip().rstrip("/"))
+        bell_markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=b["text"], url=b.get("url"), callback_data=b.get("callback_data"))
+                    for b in row
+                ]
+                for row in rows
+            ]
+        )
+        await message.answer(bell_reply["text"], parse_mode=ParseMode.HTML, reply_markup=bell_markup if rows else None)
         return
 
     # TASK-328: watch_<arena_id> — колокольчик с сайта. Подписка оформляется здесь, у кого
@@ -3543,6 +3574,28 @@ async def client_relay_reply_callback(callback: CallbackQuery) -> None:
 async def client_relay_close_callback(callback: CallbackQuery) -> None:
     """Client ends bot-mediated chat with trainer."""
     await on_client_bot_relay_close_callback(callback)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("mbell_off:"))
+async def match_bell_off_callback(callback: CallbackQuery) -> None:
+    """«Отписаться» под сообщением о матче (TASK-347): одна кнопка; повторное нажатие — «Уже отключено»."""
+    from src.application.match_bells import parse_off_data, unsubscribe as unsubscribe_match_bell
+
+    match_id = parse_off_data(callback.data)
+    if match_id is None or callback.from_user is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as db_session:
+        changed = await unsubscribe_match_bell(
+            db_session, telegram_id=callback.from_user.id, match_id=match_id, now=datetime.now(timezone.utc)
+        )
+        await db_session.commit()
+    await callback.answer("Напоминание снято" if changed else "Уже отключено")
+    if callback.message:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:  # noqa: BLE001 — сообщение могло устареть; тост уже показан
+            pass
 
 
 @router.callback_query(lambda c: c.data == "ice_forecast:optout")

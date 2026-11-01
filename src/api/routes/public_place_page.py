@@ -500,6 +500,15 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
         # Подборка города — ответ на «где покататься в <город>» (TASK-146).
         urls.append((f"{base}/c/{city_slug(city_name)}", "daily", stamp, "0.9"))
         urls.extend(by_city[city_name])
+    # TASK-347: матчи — страницы событий; за флагом, тот же предикат видимости, что у самих страниц.
+    from src.application import site_matches
+
+    if site_matches.site_enabled():
+        match_rows = await site_matches.sitemap_rows(session, now=datetime.now(timezone.utc))
+        if match_rows:
+            urls.append((f"{base}{site_matches.SITE_PATH}", "daily", max(stamp for _p, stamp in match_rows), "0.6"))
+        for path, stamp in match_rows:
+            urls.append((f"{base}{path}", "daily", stamp, "0.5"))
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for loc, freq, stamp, priority in urls:
         lastmod = _sitemap_lastmod(stamp)

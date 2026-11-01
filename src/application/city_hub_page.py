@@ -280,6 +280,14 @@ def hot_window_key(counts: Mapping[str, int], *, now: datetime) -> str | None:
     return None
 
 
+async def _city_matches(session: AsyncSession, *, city_id: int, city_name: str, now: datetime) -> dict[str, Any] | None:
+    from src.application import site_matches
+
+    if not site_matches.site_enabled():
+        return None
+    return await site_matches.city_feed(session, city_name=city_name, city_id=city_id, now=now)
+
+
 async def load_city_hub_view(
     session: AsyncSession,
     *,
@@ -522,6 +530,8 @@ async def load_city_hub_view(
         "week_rows": week_rows,
         "one_rink_place_view": one_rink_place_view,
         "nearby": nearby,
+        # TASK-347: хоккей города на 7 дней; нет матчей или флаг выключен — None, блоков нет.
+        "matches": await _city_matches(session, city_id=city_id, city_name=city_name, now=now),
     }
 
 
@@ -718,6 +728,14 @@ def _city_hub_site_footer(*, trainers_href: str, telegram_href: str | None, cont
     )
 
 
+def _matches_head(view: Mapping[str, Any]) -> str:
+    if not view.get("matches"):
+        return ""
+    from src.application.site_matches_page import head_extra
+
+    return head_extra()
+
+
 def render_city_hub_page(
     view: Mapping[str, Any],
     *,
@@ -801,7 +819,7 @@ def render_city_hub_page(
             "__OG_LOCALE__": og_locale,
             # Хаб в окне (?w=) — вариант той же страницы: канон на голый город, в индекс не идёт.
             "__ROBOTS__": "noindex, follow" if view.get("when_explicit") or view.get("any_day") else "index, follow",
-            "__HEAD_EXTRA__": "",
+            "__HEAD_EXTRA__": _matches_head(view),
             "__JSONLD__": ld,
             "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
             "__PUBLIC_ANALYTICS_HEAD__": public_analytics_head_html_from_settings(),
@@ -1109,6 +1127,18 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
     elif centers:
         line = f"{centers} {plural_ru(centers, 'центр', 'центра', 'центров')} по записи"
         rows.append(_b_route_row(href=_list_href(slug, kind="ohm", seg="centers"), icon="stick", title=t("chip.hockey"), line=_esc(line)))
+    feed = view.get("matches")
+    if feed:
+        from src.application.site_matches_page import list_href as matches_href, route_row_line
+
+        rows.append(
+            _b_route_row(
+                href=matches_href(str(view["city"]["name"])),
+                icon="ticket",
+                title=t("route.matches"),
+                line=_esc(route_row_line(feed)),
+            )
+        )
     service_n = int(view.get("service_count") or 0)
     if service_n:
         service_places = [p for p in view.get("places") or [] if p.get("in_sharpening")]
@@ -1465,6 +1495,11 @@ def _b_body(
     share_block = share_pick + share_html(
         share, telegram_url=None, story_image_url=story_image_url, telegram_link_only=True
     )
+    from src.application.site_matches_page import feed_section
+
+    matches_block = feed_section(
+        view.get("matches"), city_name=str(view["city"]["name"]), base_url=base_url, city_id=city_id
+    )
     if variant == VARIANT_ONE and rinks:
         rink = rinks[0]
         rink_name = format_public_name(str(rink.get("name") or ""))
@@ -1512,6 +1547,7 @@ def _b_body(
             [
                 hero,
                 schedule_block,
+                matches_block,
                 _b_rink_arrive(rink, base_url=base_url, city_id=city_id),
                 _b_nearby(view, title=t("hub.nearby")),
                 _b_trainers(view, base_url=base_url, coach_href=coach_href),
@@ -1531,7 +1567,7 @@ def _b_body(
             bar_html=_b_bar(view),
             photo_variants=rv if isinstance(rv, Mapping) else None,
         )
-        blocks = [hero]
+        blocks = [hero, matches_block]
         for r in rinks:
             blocks.append(_b_phone_block(view, r, base_url=base_url))
             blocks.append(_b_rink_arrive(r, base_url=base_url, city_id=city_id, show_phone_buttons=False))
@@ -1558,6 +1594,7 @@ def _b_body(
             hero,
             _b_when_switch(view) if int(view["skate_counts"].get("all") or 0) else "",
             _b_upcoming(view),
+            matches_block,
             _b_routes(view, coach_href=coach_href),
             _b_for_you(view),
             empty,

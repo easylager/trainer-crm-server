@@ -14,6 +14,8 @@ from sqlalchemy.exc import IntegrityError
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versions"
 MIGRATION_FILE = "0245_hockey_matches.py"
 DEPENDENT_FILES = (
+    # 0294: колокольчики матчей ссылаются на hockey_matches и добавляют ему столбцы.
+    "0294_match_bells.py",
     # 0292/0293 (TASK-334): представление game_matches, срезы и сроки лиг — снимаем самыми первыми.
     "0293_kk_league_terms.py",
     "0292_kk_slices_crowns.py",

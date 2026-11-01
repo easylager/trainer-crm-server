@@ -218,11 +218,32 @@ _MOVE = text("""
     UPDATE hockey_matches
     SET starts_at = :starts_at, home_team = :home_team, away_team = :away_team,
         home_club_id = :home_club_id, away_club_id = :away_club_id,
-        arena = COALESCE(:arena, arena), city = COALESCE(:city, city), checked_at = :now, updated_at = :now
+        arena = COALESCE(:arena, arena), city = COALESCE(:city, city), checked_at = :now, updated_at = :now,
+        previous_starts_at = CASE WHEN starts_at <> :starts_at THEN starts_at ELSE previous_starts_at END,
+        missed_runs = 0
     WHERE id = :id AND status = 'scheduled'
     """)
 
-_TOUCH = text("UPDATE hockey_matches SET checked_at = :now WHERE id = :id")
+_TOUCH = text("UPDATE hockey_matches SET checked_at = :now, missed_runs = 0 WHERE id = :id")
+
+# Матч будущий, несыгранный, а в полном прогоне календаря его не было (TASK-347). Две такие подряд — на сайте он скрыт.
+_FUTURE_SCHEDULED = text("""
+    SELECT COUNT(*) FROM hockey_matches
+    WHERE source = 'hockeyby' AND status = 'scheduled' AND starts_at > :now
+    """)
+_MARK_MISSED = text("""
+    UPDATE hockey_matches SET missed_runs = LEAST(missed_runs + 1, 100)
+    WHERE source = 'hockeyby' AND status = 'scheduled' AND starts_at > :now
+      AND NOT (source_match_id = ANY(:seen))
+    """)
+_COUNT_MISSED = text("""
+    SELECT COUNT(*) FROM hockey_matches
+    WHERE source = 'hockeyby' AND status = 'scheduled' AND starts_at > :now
+      AND NOT (source_match_id = ANY(:seen))
+    """)
+# Пропавших больше этой доли будущих матчей — признак сбоя разбора, а не настоящих удалений.
+MISSED_SHARE_LIMIT = 0.10
+MISSED_FLOOR = 3
 
 _FINAL = text("""
     UPDATE hockey_matches
@@ -430,7 +451,22 @@ async def sync_calendar(session: AsyncSession, source: Source, *, now: datetime)
         raise CalendarEmpty("календарь Экстралиги пуст — похоже, сменился ответ hockey.by")
     if counts["failed"] > max(3, len(seen) // 20):
         raise CalendarBroken(f"не разобрано {counts['failed']} матчей из {len(seen) + counts['failed']}")
+    counts["missed"] = await mark_missed(session, seen, now=now)
     return counts
+
+
+async def mark_missed(session: AsyncSession, seen: set[str], *, now: datetime) -> int:
+    """Отметить будущие матчи, которых нет в полном прогоне. Много сразу — не трогаем: разбор мог сломаться."""
+    params = {"now": _utc(now), "seen": sorted(seen)}
+    missing = int((await session.execute(_COUNT_MISSED, params)).scalar_one())
+    if not missing:
+        return 0
+    future = int((await session.execute(_FUTURE_SCHEDULED, {"now": _utc(now)})).scalar_one())
+    if missing > max(MISSED_FLOOR, int(future * MISSED_SHARE_LIMIT)):
+        logger.warning("extraliga: %s of %s future matches absent from the calendar — not marking", missing, future)
+        return 0
+    await session.execute(_MARK_MISSED, params)
+    return missing
 
 
 class CalendarEmpty(RuntimeError):

@@ -10,7 +10,7 @@
   живой счёт.
 
 Revision ID: 0292_kk_slices_crowns
-Revises: 0284_speed_oval_mk_areas
+Revises: 0291_winter_subscriptions
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0292_kk_slices_crowns"
-down_revision = "0284_speed_oval_mk_areas"
+down_revision = "0291_winter_subscriptions"
 branch_labels = None
 depends_on = None
 

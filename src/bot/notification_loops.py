@@ -3454,6 +3454,12 @@ async def run_hockey_matches_loop() -> None:
                         await send_review_alert(text)
                 health.ok("цикл матчей")
                 logger.info("[hockey_matches_loop] %s", counts)
+            if settings.site_matches_enabled:
+                # Колокольчики на матчи с сайта (TASK-347): напоминание за 3 часа, перенос, итог.
+                from src.application.match_bells import deliver as deliver_bells, send_bell
+
+                bells = await deliver_bells(async_session_factory, now=datetime.now(timezone.utc), send=send_bell)
+                logger.info("[hockey_matches_loop] bells %s", bells)
         except asyncio.CancelledError:
             logger.info("[hockey_matches_loop] cancelled")
             break

@@ -43,6 +43,8 @@ _ALLOWED_SURFACES = frozenset(
         "selection_page",
         "ice_city_day",
         "catalog_home",
+        "match_page",
+        "matches_list",
     }
 )
 
@@ -105,8 +107,8 @@ async def open_telegram_from_public_page(
         start_param=startapp,
         payload=cta_payload,
     )
-    if parse_watch_start_param(startapp) is not None:
-        # TASK-330: колокольчик ставит бот по /start — мини-апп этот параметр не получила бы.
+    if parse_watch_start_param(startapp) is not None or startapp.startswith("mbell_"):
+        # TASK-330, TASK-347: колокольчик ставит бот по /start — мини-апп этот параметр не получила бы.
         link = telegram_bot_start_link(client_bot_username=settings.client_bot_username, start_param=startapp)
     else:
         link = telegram_open_link(
