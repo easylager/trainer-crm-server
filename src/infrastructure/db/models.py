@@ -567,6 +567,9 @@ class HockeyMatch(Base):
     tickets_url: Mapped[str | None] = mapped_column(Text(), nullable=True)
     details: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)
     details_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Сайт (TASK-347): сколько полных прогонов календаря подряд матча не было; время до последнего переноса.
+    missed_runs: Mapped[int] = mapped_column(SmallInteger(), server_default="0", nullable=False)
+    previous_starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

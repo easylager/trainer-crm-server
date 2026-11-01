@@ -435,8 +435,11 @@ async def load_place_view(
         from src.application.site_trainers import load_site_trainers
 
         trainers, _total = await load_site_trainers(session, arena_id=int(card["id"]))
+    matches = await _arena_matches(session, card, now=now)
     return {
         "card": card,
+        "matches": matches,
+        "matches_by_day": _matches_by_day(matches),
         "trainers": trainers,
         "days": days,
         "ohm_days": ohm_days,
@@ -451,6 +454,25 @@ async def load_place_view(
         "today": today,
         "now": now,
     }
+
+
+async def _arena_matches(session: AsyncSession, card: Mapping[str, Any], *, now: datetime) -> list[dict[str, Any]]:
+    """Матчи этой арены на неделю (TASK-347). Флаг выключен или матчей нет — пусто, блоков нет."""
+    from src.application import site_matches
+
+    if not site_matches.site_enabled() or card.get("id") is None:
+        return []
+    found = await site_matches.arena_matches(session, arena_id=int(card["id"]), now=now)
+    for match in found:
+        match["note"] = await site_matches.ice_clash_note(session, int(card["id"]), match, now=now)
+    return found
+
+
+def _matches_by_day(matches: list[dict[str, Any]]) -> dict[date, list[dict[str, Any]]]:
+    out: dict[date, list[dict[str, Any]]] = {}
+    for match in matches:
+        out.setdefault(match["day"], []).append(match)
+    return out
 
 
 def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
@@ -1160,6 +1182,14 @@ def _place_site_footer(city_link: str, *, telegram_href: str | None, own_dock: b
     )
 
 
+def _matches_head(view: Mapping[str, Any]) -> str:
+    if not view.get("matches"):
+        return ""
+    from src.application.site_matches_page import head_extra
+
+    return head_extra()
+
+
 def render_place_page(
     view: Mapping[str, Any],
     *,
@@ -1212,7 +1242,7 @@ def render_place_page(
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,
         "__ROBOTS__": robots,
-        "__HEAD_EXTRA__": "",
+        "__HEAD_EXTRA__": _matches_head(view),
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
         "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
         "__PUBLIC_ANALYTICS_HEAD__": public_analytics_head_html_from_settings(),
@@ -1578,7 +1608,9 @@ def _b_day_strip(
         d = today + timedelta(days=offset)
         label = short_day_word(d, today=today)
         slots = by_date.get(d, [])
-        n = len(slots)
+        # TASK-347: матч арены — своей строкой в списке дня, и день с одним матчем не «пустой».
+        day_matches = (view.get("matches_by_day") or {}).get(d, []) if frag_prefix == "d" else []
+        n = len(slots) + len(day_matches)
         day_klass = "b-day"
         if d.weekday() >= 5:
             day_klass += " b-day--end"
@@ -1590,20 +1622,29 @@ def _b_day_strip(
         if pick_id is not None and any(int(s["id"]) == pick_id for s in slots):
             page_url = base_path + place_query(session_id=pick_id, invite=invite)
             nojs_share = share_payload(view, page_url=page_url, invite=invite)
-        tickets = "".join(
-            _b_ticket(
-                s,
-                vt_session_id=pick_id,
-                base_path=base_path,
-                invite=invite,
-                focused=(pick_id == int(s["id"])),
-                common_price=common,
-                nojs_share=nojs_share if pick_id == int(s["id"]) else None,
-                dark=dark,
-                soon=soon_html(s, now=now) if isinstance(now, datetime) and soon_id == int(s["id"]) else "",
+        ticket_items = [
+            (
+                str(s.get("starts_at_local") or "")[:5],
+                _b_ticket(
+                    s,
+                    vt_session_id=pick_id,
+                    base_path=base_path,
+                    invite=invite,
+                    focused=(pick_id == int(s["id"])),
+                    common_price=common,
+                    nojs_share=nojs_share if pick_id == int(s["id"]) else None,
+                    dark=dark,
+                    soon=soon_html(s, now=now) if isinstance(now, datetime) and soon_id == int(s["id"]) else "",
+                ),
             )
             for s in slots
-        )
+        ]
+        if day_matches:
+            from src.application.site_matches_page import arena_ticket
+
+            ticket_items += [(m["time"], arena_ticket(m, str(m.get("note") or ""))) for m in day_matches]
+            ticket_items.sort(key=lambda item: item[0])
+        tickets = "".join(html for _t, html in ticket_items)
         frag = f"{frag_prefix}-{d.isoformat()}"
         if d == default_day:
             day_klass += " b-day--current"
@@ -2291,6 +2332,15 @@ def _company_link(view: Mapping[str, Any]) -> str:
     return f'<a class="b-plan__company" href="{_esc(url)}">Собрать компанию</a>'
 
 
+def _b_matches_here(view: Mapping[str, Any]) -> str:
+    matches = view.get("matches") or []
+    if not matches:
+        return ""
+    from src.application.site_matches_page import here_section
+
+    return here_section(matches, today=view.get("today"))
+
+
 def render_place_body_b(
     view: Mapping[str, Any],
     *,
@@ -2348,6 +2398,7 @@ def render_place_body_b(
         _b_hero(card, status_html=_b_status(view), chips_html=_b_hero_chips(card, links)),
         _b_plan(view, invite=invite),
         _b_ice(view, base_path=base_path, invite=invite, links=links, vv=vv),
+        _b_matches_here(view),
         facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
         services_html(vv, title=_rental_section_title(card, hours) if hours.get("rental_title") else "Прокат и услуги"),
         _b_trainers(view, base_url=base_url, school_html=school_in_trainers_html(vv.get("school"))),

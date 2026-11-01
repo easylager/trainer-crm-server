@@ -603,6 +603,8 @@ def normalize_public_page_path(raw: str | None) -> str | None:
         return None
     if p == "/":
         return "/"
+    if p == "/hockey" or (p.startswith("/m/") and len(p) > len("/m/")):
+        return p
     if p.startswith("/c/") and len(p) > len("/c/"):
         return p
     if p.startswith("/p/") and p.count("/") >= 3:

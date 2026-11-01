@@ -363,6 +363,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # Клубы Экстралиги, чьи матчи видны клиентам, через запятую, партиями. Пусто — не видно ничего.
     # EXTRALIGA_CLUBS=Юность,Неман
     extraliga_clubs: str = ""
+    # Матчи как события сайта (TASK-347): страницы /m/…, список /hockey, лента города, sitemap. По умолчанию выкл.
+    site_matches_enabled: bool = False
+    # «Кто кого» на матчах Экстралиги с сайта: пока игровая ветка не влита, там строка «скоро откроем».
+    site_matches_game_extraliga: bool = False
 
     # Подборка «Для вас». Пусто — ряда нет ни в одном городе. Закрепы при этом хранятся.
     # FOR_YOU_CITY_IDS=2,12
