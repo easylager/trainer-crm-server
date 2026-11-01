@@ -229,13 +229,24 @@ async def apply_batch(
     ids = await select_ids(session, sel, season, lock=True)
     if expect_count is not None and expect_count != len(ids):
         raise AdminOpError("stale", f"{len(ids)}")
+    return await set_visibility(session, action, ids, season, admin_id=admin_id, now=now, selection=sel.to_json())
+
+
+async def set_visibility(
+    session: AsyncSession, action: str, ids: list[int], season: int, *, admin_id: int | None, now: datetime,
+    selection: dict[str, Any], batch_action: str | None = None, hidden_reason: str = "admin",
+) -> BatchResult:
+    """Подтвердить / скрыть заданные точки одной записью журнала (с данными для отмены)."""
+    batch_action = batch_action or action
     if not ids:
-        return BatchResult(0, action, 0)
+        return BatchResult(0, batch_action, 0)
+    await session.execute(
+        text("SELECT 1 FROM seasonal_rink_seasons WHERE season=:s AND arena_id = ANY(:ids) FOR UPDATE"),
+        {"s": season, "ids": ids},
+    )
     before = await _snapshot(session, ids, season, STATE_COLS)
     closed_kinds = ("new_point",) if action == CONFIRM else ("gone", "dispute", "new_point")
-    closed_by_arena: dict[int, list[int]] = {}
-    for aid in ids:
-        closed_by_arena[aid] = await _open_item_ids(session, aid, closed_kinds)
+    closed_by_arena = {aid: await _open_item_ids(session, aid, closed_kinds) for aid in ids}
     if action == CONFIRM:
         await session.execute(
             text(
@@ -254,10 +265,10 @@ async def apply_batch(
         await session.execute(
             text(
                 """UPDATE seasonal_rink_seasons SET state = 'hidden', state_source = 'admin', state_at = :n,
-                       hidden_reason = 'admin', doubtful = false, updated_at = now()
+                       hidden_reason = :hr, doubtful = false, updated_at = now()
                    WHERE season = :s AND arena_id = ANY(:ids)"""
             ),
-            {"n": now, "s": season, "ids": ids},
+            {"n": now, "s": season, "ids": ids, "hr": hidden_reason},
         )
         resolution = "hidden"
     await session.execute(
@@ -267,10 +278,10 @@ async def apply_batch(
         ),
         {"r": resolution, "n": now, "by": admin_id, "ids": [i for v in closed_by_arena.values() for i in v]},
     )
-    after = await _snapshot(session, ids, season, _CHECK_COLS[action])
+    after = await _snapshot(session, ids, season, _CHECK_COLS[batch_action])
     items = [(aid, before[aid], after[aid], closed_by_arena[aid]) for aid in ids]
-    batch_id = await _log_batch(session, action, season, admin_id, sel.to_json(), items, now)
-    return BatchResult(batch_id, action, len(ids))
+    batch_id = await _log_batch(session, batch_action, season, admin_id, selection, items, now)
+    return BatchResult(batch_id, batch_action, len(ids))
 
 
 def _restore_value(col: str, value: Any) -> Any:
