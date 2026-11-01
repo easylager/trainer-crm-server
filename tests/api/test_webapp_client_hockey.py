@@ -320,3 +320,26 @@ async def test_remind_toggle_and_double_errors(app_use_test_db, db_session) -> N
             assert (await client.get("/api/webapp/client/hockey/remind")).json() == {"on": True}
             double = await client.put(f"/api/webapp/client/hockey/matches/{match_id}/double", json={"on": True})
             assert double.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_bot_prefs_types_and_fav_club(app_use_test_db, db_session) -> None:
+    """TASK-334 S6: «болею за», тип сообщений отключается отдельно; неизвестное отвергается."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            first = (await client.get("/api/webapp/client/hockey/bot-prefs")).json()
+            assert first["on"] is False and first["fav_club"] is None and all(first["types"].values())
+            put = await client.put(
+                "/api/webapp/client/hockey/bot-prefs",
+                json={"on": True, "fav_club": "Юность", "types": {"nomove": False}, "display_name": "Саша"},
+            )
+            assert put.status_code == 200
+            prefs = put.json()
+            assert prefs["on"] is True and prefs["fav_club"] == "Юность"
+            assert prefs["types"]["nomove"] is False and prefs["types"]["result"] is True
+            bad_club = await client.put("/api/webapp/client/hockey/bot-prefs", json={"fav_club": "Нет такой"})
+            assert bad_club.status_code == 400
+            bad_type = await client.put("/api/webapp/client/hockey/bot-prefs", json={"types": {"spam": True}})
+            assert bad_type.status_code == 400
+            cleared = await client.put("/api/webapp/client/hockey/bot-prefs", json={"clear_fav_club": True})
+            assert cleared.json()["fav_club"] is None

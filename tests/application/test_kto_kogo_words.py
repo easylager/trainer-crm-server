@@ -15,6 +15,8 @@ FILES = (
     "src/application/hockey_game.py",
     "src/api/routes/webapp_client_hockey.py",
     "src/api/routes/webapp_client_hockey_leagues.py",
+    "src/application/hockey_notices.py",
+    "src/bot/handlers/hockey_game_handlers.py",
 )
 # Только то, что видит игрок: строки в кавычках (detail, сообщения), без комментариев и docstring-пояснений.
 _BANNED = re.compile(r"ставк|коэффициент|прогноз|пари\b|выигрыш|букмекер|банк\b|ставь|поставить", re.I)

@@ -3441,10 +3441,13 @@ async def run_hockey_matches_loop() -> None:
                     await session.commit()
                     if await result_window_open(session, now=now):
                         delay = HOCKEY_RESULT_WINDOW_INTERVAL_SEC
-                # Напоминания и итоги в бот (TASK-335) — после коммита: гонка уже закрыта, если был финал.
-                from src.application.hockey_notices import deliver, send_via_client_bot
+                # Сообщения бота «Кто кого» (TASK-334 S6) — после коммита: гонка уже закрыта, если был финал.
+                from src.application.hockey_notices import deliver, deliver_league_notices, send_via_client_bot
 
                 counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot)
+                counts["league_notices"] = await deliver_league_notices(
+                    async_session_factory, now=now, send=send_via_client_bot
+                )
                 if calendar_due and not counts["calendar_failed"]:
                     last_calendar = now
                     health.ok("календарь матчей")
