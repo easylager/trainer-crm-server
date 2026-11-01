@@ -89,6 +89,7 @@
     "route.skate": "Покататься",
     "route.service": "Заточка",
     "route.shops": "Магазины",
+    "route.matches": "Хоккей",
     "route.trainers": "Тренеры",
     "route.skate.hint": "каток, зал или трасса",
     "selection.ice.hint": "катки",
