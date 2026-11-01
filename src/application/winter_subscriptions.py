@@ -167,10 +167,10 @@ async def fan_out_events(session: AsyncSession, now: datetime) -> int:
             for t, reason in targets.items():
                 r = await session.execute(
                     text(
-                        """INSERT INTO winter_notify_queue (telegram_id, arena_id, event_id, reason)
-                           VALUES (:t, :a, :e, :r) ON CONFLICT DO NOTHING"""
+                        """INSERT INTO winter_notify_queue (telegram_id, arena_id, event_id, reason, created_at)
+                           VALUES (:t, :a, :e, :r, :n) ON CONFLICT DO NOTHING"""
                     ),
-                    {"t": t, "a": ev.arena_id, "e": ev.id, "r": reason},
+                    {"t": t, "a": ev.arena_id, "e": ev.id, "r": reason, "n": now},
                 )
                 queued += r.rowcount or 0
         await session.execute(text("UPDATE winter_flood_events SET fanned_out_at=:n WHERE id=:id"), {"n": now, "id": ev.id})

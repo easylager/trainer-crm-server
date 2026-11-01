@@ -69,7 +69,7 @@ async def expire_ignored(session: AsyncSession, now: datetime) -> int:
     for tg in rows:
         await session.execute(
             text(
-                """UPDATE winter_user_prefs SET ignored_streak = ignored_streak + 1,
+                """UPDATE winter_user_prefs SET
                    paused_until = CASE WHEN ignored_streak + 1 >= 2 THEN :p ELSE paused_until END,
                    ignored_streak = CASE WHEN ignored_streak + 1 >= 2 THEN 0 ELSE ignored_streak + 1 END
                    WHERE telegram_id=:t"""
