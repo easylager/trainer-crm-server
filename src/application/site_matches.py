@@ -635,6 +635,22 @@ async def _game(session: AsyncSession, row: Any, card: dict[str, Any], *, now: d
     }
 
 
+_LIVE = text("SELECT live_home_score, live_away_score, live_at FROM hockey_matches WHERE id = :id")
+
+
+async def live_score(session: AsyncSession, match_id: int) -> dict[str, Any] | None:
+    """Промежуточный счёт идущего матча, если его пишет поток игры (``set_live_score``). Колонок нет
+    или пусто — ``None``: страница честно ведёт в протокол, ничего не выдумывая."""
+    try:
+        async with session.begin_nested():
+            row = (await session.execute(_LIVE, {"id": int(match_id)})).one_or_none()
+    except Exception:  # noqa: BLE001 — колонок ещё нет в этой ветке
+        return None
+    if row is None or row.live_home_score is None or row.live_away_score is None or row.live_at is None:
+        return None
+    return {"score": f"{row.live_home_score}:{row.live_away_score}", "at": f"{local(row.live_at):%H:%M}"}
+
+
 async def match_page_data(
     session: AsyncSession, match_id: int, *, now: datetime, settings: Settings | None = None
 ) -> dict[str, Any] | None:
@@ -679,6 +695,7 @@ async def match_page_data(
         "goals": _goals(details, row.home_team, row.away_team) if details else [],
         "tickets": tickets_of(row) if card["phase"] == PHASE_BEFORE and not gone else None,
         "protocol_url": protocol_url(row),
+        "live": await live_score(session, row.id) if card["phase"] == PHASE_LIVE and not gone else None,
         "others": [] if gone else others,
         "game": None if gone else await _game(session, row, card, now=now, cfg=cfg),
     }

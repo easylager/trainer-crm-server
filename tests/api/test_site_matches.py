@@ -562,3 +562,15 @@ async def test_mark_missed_counts_and_guards_against_broken_parse(app_use_test_d
     # пропали сразу почти все — это сбой разбора, ничего не трогаем
     assert await extraliga.mark_missed(db_session, set(sids[:2]), now=NOW) == 0
     assert (await db_session.execute(text("SELECT MAX(missed_runs) FROM hockey_matches"))).scalar_one() == 0
+
+
+@pytest.mark.asyncio
+async def test_live_score_shown_only_when_columns_filled(app_use_test_db, db_session):
+    await _world(db_session)
+    mid = await _match(db_session, starts=NOW - timedelta(minutes=50))
+    data = await site_matches.match_page_data(db_session, mid, now=NOW)
+    assert data["live"] is None  # колонок живого счёта в этой ветке нет — ссылка на протокол
+    await db_session.execute(text("ALTER TABLE hockey_matches ADD COLUMN live_home_score int, ADD COLUMN live_away_score int, ADD COLUMN live_at timestamptz"))
+    await db_session.execute(text("UPDATE hockey_matches SET live_home_score=2, live_away_score=1, live_at=:t WHERE id=:i"), {"t": NOW, "i": mid})
+    html = (await _get(await _path(db_session, mid))).text
+    assert "2 : 1" in html and "обновлено в" in html

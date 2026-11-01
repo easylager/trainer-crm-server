@@ -597,7 +597,10 @@ def _hero(data: Mapping[str, Any], *, city_href: str | None, city_label: str) ->
         sub = {"ot": "в овертайме", "so": "по буллитам"}.get(decided or "", "")
         badge = f"ИТОГ · {badge}"
     elif phase == PHASE_LIVE:
+        live = data.get("live")
         big, sub, badge = "идёт", "счёт — в протоколе", f"● ИДЁТ · {badge}"
+        if live:
+            big, sub = live["score"].replace(":", " : "), f"обновлено в {live['at']}"
     elif phase == PHASE_WAIT:
         big, sub = "—", "матч завершён, итог скоро"
     elif phase == PHASE_REVIEW:
