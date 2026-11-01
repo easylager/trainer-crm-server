@@ -11303,6 +11303,7 @@ from src.api.routes.admin_ice_sources import router as _admin_ice_sources_router
 from src.api.routes.admin_ice_inbox import router as _admin_ice_inbox_router
 from src.api.routes.admin_place_suggestions import router as _admin_place_suggestions_router
 from src.api.routes.webapp_place_suggestions import router as _webapp_place_suggestions_router
+from src.api.routes.winter import webapp_router as _winter_webapp_router
 from src.api.routes.admin_session_load import router as _admin_session_load_router
 from src.api.routes.admin_city_picks import router as _admin_city_picks_router
 from src.api.routes.admin_hockey import router as _admin_hockey_router
@@ -11319,6 +11320,7 @@ router.include_router(_admin_ice_sources_router)
 router.include_router(_admin_ice_inbox_router)
 router.include_router(_admin_place_suggestions_router)
 router.include_router(_webapp_place_suggestions_router)
+router.include_router(_winter_webapp_router)
 router.include_router(_admin_session_load_router)
 router.include_router(_admin_city_picks_router)
 router.include_router(_admin_hockey_router)
