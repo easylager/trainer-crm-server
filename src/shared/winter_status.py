@@ -229,3 +229,10 @@ def season_label(season: int) -> str:
 def gone_signals_reached(signal_actors_in_window: int) -> bool:
     """«Точки больше нет»: 3 сигнала разных Telegram-аккаунтов за 7 дней -> «под вопросом» + очередь."""
     return signal_actors_in_window >= GONE_SIGNALS
+
+
+def live_summary(marks: list[MarkIn], now: datetime) -> dict[str, str | None]:
+    """Загрузка и хоккей «сейчас» (окно 2 ч) — для карточки и списка."""
+    crowd, _ = _live_value(marks, KIND_CROWD, now)
+    hockey, _ = _live_value(marks, KIND_HOCKEY, now)
+    return {"crowd": crowd, "hockey": hockey}
