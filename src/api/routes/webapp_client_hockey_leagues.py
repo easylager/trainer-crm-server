@@ -164,7 +164,12 @@ async def _created_out(session: AsyncSession, league: League, player_key: int, n
         "my_points": mine.points,
         "invite_url": invite_url_for_code(league.invite_code),
         **_terms_out(league.scope, league.clubs, league.term_kind, league.starts_at, league.ends_at),
+        "active": _aware_end(league.ends_at) > now,
     }
+
+
+def _aware_end(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 def _init_raw(init_data: str | None, header: str | None) -> str:

@@ -85,6 +85,8 @@ async def test_create_list_join_and_table_hides_player_key(app_use_test_db) -> N
 
             listed = await client.get("/api/webapp/client/hockey/leagues")
             assert listed.status_code == 200, listed.text
+            league.pop("matches_in_term", None)
+            league.pop("few_matches", None)
             assert listed.json()["items"] == [league]
 
         with patch_client_principal(OTHER):

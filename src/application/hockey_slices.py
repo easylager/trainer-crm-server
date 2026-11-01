@@ -249,7 +249,6 @@ async def crown_totals(session: AsyncSession, *, league_id: int | None) -> dict[
 def _row_out(row: Row, *, me: int | None, crowns: dict[int, int]) -> dict:
     return {
         "rank": row.rank,
-        "player_key": row.player_key,
         "display_name": row.display_name,
         "points": row.points,
         "exact": row.exact,

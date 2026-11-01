@@ -99,7 +99,8 @@ async def test_league_table_counts_only_matches_after_joining(db_session) -> Non
     await _joined(db_session, league.id, LESHA, NOW + timedelta(hours=5))
 
     rows = await league_table(db_session, league_id=league.id, player_key=KATYA, now=NOW)
-    assert [(r.display_name, r.points, r.rank) for r in rows] == [("Саша", 50, 1), ("Катя", 0, 2), ("Лёша", 0, 2)]
+    # При равных очках и точных выше тот, кто сыграл меньше ходов: у Лёши ходов в лиге нет.
+    assert [(r.display_name, r.points, r.rank) for r in rows] == [("Саша", 50, 1), ("Лёша", 0, 2), ("Катя", 0, 3)]
     assert STRANGER not in [r.player_key for r in rows]
     # В общей таблице очки Лёши за сезон на месте.
     global_lesha = next(s for s in await standings(db_session, now=NOW) if s.player_key == LESHA)
