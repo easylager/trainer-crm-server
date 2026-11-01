@@ -344,6 +344,8 @@ class ArenaProfile(Base):
     #: Последняя правка карточки в админке (TASK-146, Q-012). NULL — неизвестно.
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    #: TASK-343: закреп в ветке «Зимой» (1 = первым, Немига). NULL — без закрепа.
+    catalog_pin: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
 
     arena: Mapped["Arena"] = relationship(back_populates="profile", lazy="raise")
 
@@ -2754,3 +2756,278 @@ class ArenaScheduleInbox(Base):
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     published_count: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+
+# --- TASK-343: сезонные (зимние) катки и хоккейные коробки -------------------------
+# Точка = ``arenas`` (venue_type='outdoor') + 1:1 ``seasonal_rinks`` + запись на сезон.
+# Отметки людей — ``seasonal_rink_marks``; статус считает ``src.shared.winter_status``.
+class SeasonalRink(Base):
+    __tablename__ = "seasonal_rinks"
+    __table_args__ = (
+        CheckConstraint("kind IN ('rink', 'hockey_box')", name="ck_seasonal_rinks_kind"),
+        CheckConstraint(
+            "geocode_precision IN ('osm_exact', 'house', 'street', 'city', 'manual', 'none')",
+            name="ck_seasonal_rinks_precision",
+        ),
+    )
+
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    operator: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    is_paid: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    price_note: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    #: школьная коробка: «часто занята под хоккей и занятия школы»
+    often_hockey: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    geocode_precision: Mapped[str] = mapped_column(String(16), nullable=False, server_default="none")
+    #: ключ идемпотентного импорта (хэш города + названия + адреса)
+    source_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
+    name_source: Mapped[str] = mapped_column(String(10), nullable=False, server_default="source")
+    same_complex_id: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    pin_manual: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    #: сигналы «точки больше нет» считаются только после этого момента (админ вернул точку)
+    gone_reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SeasonalRinkSeason(Base):
+    __tablename__ = "seasonal_rink_seasons"
+    __table_args__ = (
+        UniqueConstraint("arena_id", "season", name="uq_seasonal_rink_seasons_arena_season"),
+        CheckConstraint(
+            "state IN ('waiting', 'flooded', 'stale', 'closed', 'hidden')",
+            name="ck_seasonal_rink_seasons_state",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    #: 2026 = сезон 2026/27
+    season: Mapped[int] = mapped_column(SmallInteger(), nullable=False)
+    state: Mapped[str] = mapped_column(String(12), nullable=False, server_default="waiting")
+    state_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    state_source: Mapped[str] = mapped_column(String(12), nullable=False, server_default="import")
+    quality: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    dispute: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    doubtful: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    admin_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    hidden_reason: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    hours_text: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    opening_hours: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
+    hours_known: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    #: из какой зимы часы и телефон («2025/26» -> подпись «прошлой зимой»)
+    hours_season: Mapped[Optional[str]] = mapped_column(String(9), nullable=True)
+    season_from: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+    season_to: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    source_kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    confidence: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SeasonalRinkMark(Base):
+    __tablename__ = "seasonal_rink_marks"
+    __table_args__ = (
+        CheckConstraint("kind IN ('ice', 'crowd', 'hockey')", name="ck_seasonal_rink_marks_kind"),
+        CheckConstraint(
+            "source IN ('site', 'telegram', 'miniapp', 'photo')", name="ck_seasonal_rink_marks_source"
+        ),
+        Index("ix_seasonal_rink_marks_arena", "arena_id", "kind", "created_at"),
+        Index("ix_seasonal_rink_marks_actor", "actor", "arena_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    season: Mapped[int] = mapped_column(SmallInteger(), nullable=False)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    value: Mapped[str] = mapped_column(String(16), nullable=False)
+    source: Mapped[str] = mapped_column(String(10), nullable=False)
+    weight: Mapped[float] = mapped_column(nullable=False)
+    #: ``site:<hash>`` для анонима, ``tg:<id>`` для Telegram / Mini App / фото
+    actor: Mapped[str] = mapped_column(String(80), nullable=False)
+    telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    photo_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    idem_key: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SeasonalRinkPhoto(Base):
+    __tablename__ = "seasonal_rink_photos"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected', 'wrong_place')",
+            name="ck_seasonal_rink_photos_status",
+        ),
+        Index("ix_seasonal_rink_photos_arena", "arena_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    author_telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False, index=True)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    variants: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    width: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    #: «лёд есть?» со слов автора: true/false; NULL — не ответил
+    ice_claim: Mapped[Optional[bool]] = mapped_column(Boolean(), nullable=True)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, server_default="pending")
+    #: показывается на карточке точки (прошло модерацию или автор доверенный)
+    published: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    #: лица размыты (хук ``winter_photos.blur_faces``); публикуем только blurred=true
+    blurred: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    dhash: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    report_count: Mapped[int] = mapped_column(SmallInteger(), nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+
+
+class SeasonalRinkSignal(Base):
+    """«Точки больше нет» от человека. 3 разных человека за 7 дней -> автоскрытие."""
+
+    __tablename__ = "seasonal_rink_signals"
+    __table_args__ = (Index("ix_seasonal_rink_signals_arena", "arena_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    actor: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SeasonalModerationItem(Base):
+    __tablename__ = "seasonal_moderation_items"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('gone', 'dispute', 'photo_first', 'new_point')", name="ck_seasonal_moderation_kind"
+        ),
+        CheckConstraint("status IN ('open', 'done')", name="ck_seasonal_moderation_status"),
+        Index("ix_seasonal_moderation_open", "status", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    arena_id: Mapped[Optional[int]] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=True)
+    ref_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    status: Mapped[str] = mapped_column(String(8), nullable=False, server_default="open")
+    resolution: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+
+
+class WinterSubscription(Base):
+    """«Лёд рядом со мной» (kind=near: lat/lon + radius_m) или колокольчик на точку (kind=point)."""
+
+    __tablename__ = "winter_subscriptions"
+    __table_args__ = (
+        CheckConstraint("kind IN ('near', 'point')", name="ck_winter_subscriptions_kind"),
+        Index("ix_winter_subscriptions_active", "kind", "active"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    arena_id: Mapped[Optional[int]] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
+    radius_m: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deactivated_reason: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+
+
+class WinterPushLog(Base):
+    """Лимит «не больше 1 сообщения в день на человека» по теме «Зимой»."""
+
+    __tablename__ = "winter_push_log"
+    __table_args__ = (Index("ix_winter_push_log_tg", "telegram_id", "sent_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    arena_id: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    topic: Mapped[str] = mapped_column(String(16), nullable=False, server_default="flooded")
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class WinterAsk(Base):
+    """«Были? Как лёд?» через сутки после «Маршрут» / «Ждать»."""
+
+    __tablename__ = "winter_asks"
+    __table_args__ = (
+        CheckConstraint("via IN ('route')", name="ck_winter_asks_via"),
+        CheckConstraint(
+            "status IN ('pending', 'asked', 'answered', 'dismissed')", name="ck_winter_asks_status"
+        ),
+        Index("ix_winter_asks_due", "status", "due_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    via: Mapped[str] = mapped_column(String(8), nullable=False)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="pending")
+    asked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class WinterUserPref(Base):
+    __tablename__ = "winter_user_prefs"
+
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), primary_key=True)
+    no_ask: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    ignored_streak: Mapped[int] = mapped_column(SmallInteger(), nullable=False, server_default="0")
+    paused_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ask_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    photo_arena_id: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    photo_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    photo_banned: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SeasonalRinkPhotoReport(Base):
+    __tablename__ = "seasonal_rink_photo_reports"
+
+    photo_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("seasonal_rink_photos.id", ondelete="CASCADE"), primary_key=True
+    )
+    actor: Mapped[str] = mapped_column(String(80), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class WinterFloodEvent(Base):
+    """Переход точки в подтверждённое «залит»: разовый повод для рассылки."""
+
+    __tablename__ = "winter_flood_events"
+    __table_args__ = (Index("ix_winter_flood_events_arena", "arena_id", "flooded_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    season: Mapped[int] = mapped_column(SmallInteger(), nullable=False)
+    flooded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    fanned_out_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WinterNotifyQueue(Base):
+    """Получатель × событие. Сводка уходит одним сообщением, не по сообщению на точку."""
+
+    __tablename__ = "winter_notify_queue"
+    __table_args__ = (
+        UniqueConstraint("telegram_id", "arena_id", "event_id", name="uq_winter_notify_queue_once"),
+        CheckConstraint("reason IN ('point', 'near')", name="ck_winter_notify_queue_reason"),
+        Index("ix_winter_notify_queue_pending", "sent_at", "telegram_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    event_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("winter_flood_events.id", ondelete="CASCADE"), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

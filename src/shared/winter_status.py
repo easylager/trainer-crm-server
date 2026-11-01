@@ -3,18 +3,22 @@
 Чистые функции без БД. Правила (решение владельца 01.11):
 
 * вес отметки: сайт без входа 0,5; Telegram / Mini App 1; фото со льдом 2;
-* «залит» подтверждён при >= 2 баллах за 72 ч;
-* 2 разных человека «не залит» за 24 ч -> «ждём заливку»;
-* залит, а за 72 ч подтверждений меньше порога -> «давно не отмечали»;
+* «залит» подтверждён при >= 2 баллах за 72 ч И хотя бы одной отметке из Telegram /
+  Mini App / фото (только сайт подтвердить не может, решение координатора 01.11);
+* 2 разных человека «не залит» за 24 ч (тоже с одним Telegram-сигналом) -> «ждём заливку»;
+* оба порога сразу -> спор: статус не меняем, ``dispute=True`` (в очередь админа);
+* залит, а за 72 ч подтверждений меньше порога -> «давно не отмечали»; статус, который
+  поставил админ, держится 7 суток;
+* «плохой лёд» — не статус, а признак на 24 ч; на «залит» не влияет;
 * загрузка (людей) и хоккей живут 2 ч;
 * один человек считается один раз: берём его последнюю отметку в окне.
 
-``closed`` и ``hidden`` ставит человек (админ, автоскрытие); движок их не снимает.
+``closed`` и ``hidden`` ставит человек (админ); движок их не снимает. Всё время — aware UTC.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # --- состояния посезонной записи -------------------------------------------------
 STATE_WAITING = "waiting"  # ждём заливку (по умолчанию)
@@ -48,6 +52,9 @@ WEIGHTS: dict[str, float] = {
 FLOODED_THRESHOLD = 2.0
 FLOODED_WINDOW = timedelta(hours=72)
 NOT_FLOODED_WINDOW = timedelta(hours=24)
+BAD_ICE_WINDOW = timedelta(hours=24)
+ADMIN_STATE_HOLD = timedelta(days=7)
+PHOTO_ACCEPTED_WEIGHT = 2.0
 NOT_FLOODED_ACTORS = 2
 LIVE_WINDOW = timedelta(hours=2)  # людей / хоккей
 SITE_REPEAT_LIMIT = timedelta(hours=3)  # 1 отметка с устройства на точку
@@ -64,6 +71,16 @@ class MarkIn:
     weight: float
     actor: str
     at: datetime
+    source: str = SOURCE_TELEGRAM
+
+    @property
+    def trusted(self) -> bool:
+        """Отметка из Telegram / Mini App / фото (actor ``tg:<id>``), а не аноним с сайта."""
+        return self.actor.startswith("tg:") or self.source in (SOURCE_TELEGRAM, SOURCE_MINIAPP, SOURCE_PHOTO)
+
+    @property
+    def verified_photo(self) -> bool:
+        return self.source == SOURCE_PHOTO and self.weight >= PHOTO_ACCEPTED_WEIGHT
 
 
 @dataclass(frozen=True)
@@ -106,7 +123,7 @@ def _latest_per_actor(marks: list[MarkIn], kind: str, since: datetime, now: date
         if cur is None or m.at >= cur.at:
             best[m.actor] = m
     return [
-        MarkIn(m.kind, m.value, weights[(m.actor, m.value)], m.actor, m.at) for m in best.values()
+        MarkIn(m.kind, m.value, weights[(m.actor, m.value)], m.actor, m.at, m.source) for m in best.values()
     ]
 
 
@@ -123,49 +140,71 @@ def _live_value(marks: list[MarkIn], kind: str, now: datetime) -> tuple[str | No
     return top, newest[top]
 
 
-def compute_state(marks: list[MarkIn], now: datetime, prev_state: str | None) -> Computed:
+def compute_state(
+    marks: list[MarkIn],
+    now: datetime,
+    prev_state: str | None,
+    *,
+    prev_source: str | None = None,
+    prev_at: datetime | None = None,
+) -> Computed:
     prev = prev_state or STATE_WAITING
-    ice = _latest_per_actor(marks, KIND_ICE, now - FLOODED_WINDOW, now)
+    status_marks = [m for m in marks if m.kind == KIND_ICE and m.value != "bad"]
+    ice = _latest_per_actor(status_marks, KIND_ICE, now - FLOODED_WINDOW, now)
     present = [m for m in ice if m.value in ICE_PRESENT]
     score = round(sum(m.weight for m in present), 3)
+    # Проверенное фото со льдом новее «не залит» — «не залит» устарел.
+    newest_photo = max((m.at for m in present if m.verified_photo and m.at >= now - NOT_FLOODED_WINDOW), default=None)
     not_flooded = [
-        m for m in ice if m.value == "not_flooded" and m.at >= now - NOT_FLOODED_WINDOW
+        m
+        for m in ice
+        if m.value == "not_flooded"
+        and m.at >= now - NOT_FLOODED_WINDOW
+        and (newest_photo is None or m.at > newest_photo)
     ]
     nf_actors = len({m.actor for m in not_flooded})
-    nf_hit = nf_actors >= NOT_FLOODED_ACTORS
-    fl_hit = score >= FLOODED_THRESHOLD
-    newest_present = max((m.at for m in present), default=None)
-    newest_nf = max((m.at for m in not_flooded), default=None)
+    fl_hit = score >= FLOODED_THRESHOLD and any(m.trusted for m in present)
+    nf_hit = nf_actors >= NOT_FLOODED_ACTORS and any(m.trusted for m in not_flooded)
     last_ice_at = max((m.at for m in ice), default=None)
     dispute = nf_hit and fl_hit
+
+    # «Плохой лёд» — признак 24 ч (последняя отметка человека среди плохой / залит).
+    q_marks = [m for m in marks if m.kind == KIND_ICE and m.value in ("bad", "flooded")]
+    q_latest = _latest_per_actor(q_marks, KIND_ICE, now - BAD_ICE_WINDOW, now)
+    bad_w = sum(m.weight for m in q_latest if m.value == "bad")
+    ok_w = sum(m.weight for m in q_latest if m.value == "flooded")
+    quality = "bad" if bad_w > 0 and bad_w > ok_w else None
 
     crowd, crowd_at = _live_value(marks, KIND_CROWD, now)
     hockey, hockey_at = _live_value(marks, KIND_HOCKEY, now)
 
+    admin_hold = (
+        prev == STATE_FLOODED
+        and prev_source == "admin"
+        and prev_at is not None
+        and now - prev_at < ADMIN_STATE_HOLD
+    )
     if prev in MANUAL_STATES:
         state = prev
-    elif nf_hit and fl_hit:
-        state = STATE_WAITING if (newest_nf or now) > (newest_present or now) else STATE_FLOODED
+    elif dispute:
+        state = prev
     elif nf_hit:
         state = STATE_WAITING
     elif fl_hit:
+        state = STATE_FLOODED
+    elif admin_hold:
         state = STATE_FLOODED
     elif prev in (STATE_FLOODED, STATE_STALE):
         state = STATE_STALE
     else:
         state = STATE_WAITING
 
-    quality = None
-    if state == STATE_FLOODED:
-        bad = sum(m.weight for m in present if m.value == "bad")
-        ok = sum(m.weight for m in present if m.value == "flooded")
-        quality = "bad" if bad > ok else "ok"
     return Computed(
         state=state,
         quality=quality,
         score=score,
         not_flooded_actors=nf_actors,
-        dispute=dispute and state not in MANUAL_STATES,
+        dispute=dispute and prev not in MANUAL_STATES,
         last_ice_at=last_ice_at,
         crowd=crowd,
         hockey=hockey,
@@ -174,6 +213,19 @@ def compute_state(marks: list[MarkIn], now: datetime, prev_state: str | None) ->
     )
 
 
-def should_auto_hide(signal_actors_in_window: int) -> bool:
-    """«Точки больше нет»: 3 сигнала разных людей за 7 дней."""
+def current_season(now: datetime) -> int:
+    """Сезон 2026/27 = 2026. Порог — 1 июля по Минску (UTC+3, без перехода на летнее)."""
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    local = now.astimezone(timezone(timedelta(hours=3)))
+    return local.year if local.month >= 7 else local.year - 1
+
+
+def season_label(season: int) -> str:
+    """2025 -> «2025/26»."""
+    return f"{season}/{(season + 1) % 100:02d}"
+
+
+def gone_signals_reached(signal_actors_in_window: int) -> bool:
+    """«Точки больше нет»: 3 сигнала разных Telegram-аккаунтов за 7 дней -> «под вопросом» + очередь."""
     return signal_actors_in_window >= GONE_SIGNALS

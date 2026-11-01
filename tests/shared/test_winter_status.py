@@ -8,8 +8,9 @@ from src.shared import winter_status as ws
 NOW = datetime(2026, 12, 10, 12, 0, tzinfo=timezone.utc)
 
 
-def mk(value, source="telegram", actor="a", ago_h=0.0, kind="ice"):
-    return ws.MarkIn(kind, value, ws.weight_for(source), actor, NOW - timedelta(hours=ago_h))
+def mk(value, source="telegram", actor="a", ago_h=0.0, kind="ice", weight=None):
+    w = ws.weight_for(source) if weight is None else weight
+    return ws.MarkIn(kind, value, w, actor, NOW - timedelta(hours=ago_h), source)
 
 
 def state(marks, prev=None):
@@ -29,15 +30,30 @@ def test_two_telegram_marks_flood():
     assert state([mk("flooded", actor="a"), mk("flooded", actor="b")]).state == ws.STATE_FLOODED
 
 
-def test_four_site_marks_flood_but_three_do_not():
-    three = [mk("flooded", "site", f"d{i}") for i in range(3)]
-    four = [mk("flooded", "site", f"d{i}") for i in range(4)]
-    assert state(three).state == ws.STATE_WAITING and state(three).score == 1.5
-    assert state(four).state == ws.STATE_FLOODED and state(four).score == 2.0
+def test_site_alone_never_confirms_flooded():
+    many = [mk("flooded", "site", f"d{i}") for i in range(10)]
+    c = state(many)
+    assert c.score == 5.0 and c.state == ws.STATE_WAITING
 
 
-def test_photo_alone_floods():
+def test_site_plus_one_telegram_can_confirm():
+    marks = [mk("flooded", "site", f"d{i}") for i in range(3)] + [mk("flooded", "telegram", "tg:1")]
+    c = state(marks)
+    assert c.score == 2.5 and c.state == ws.STATE_FLOODED
+
+
+def test_site_marks_below_threshold_with_telegram():
+    marks = [mk("flooded", "site", "d1"), mk("flooded", "telegram", "tg:1")]
+    assert state(marks).state == ws.STATE_WAITING  # 1,5 балла
+
+
+def test_accepted_photo_alone_floods():
     assert state([mk("flooded", "photo")]).state == ws.STATE_FLOODED
+
+
+def test_pending_photo_is_half_a_point():
+    c = state([mk("flooded", "photo", weight=0.5)])
+    assert c.score == 0.5 and c.state == ws.STATE_WAITING
 
 
 def test_same_actor_counts_once():
@@ -58,14 +74,26 @@ def test_boundary_72h_inclusive_and_beyond():
     assert state(outside).state == ws.STATE_WAITING
 
 
-def test_bad_ice_counts_as_present_with_quality():
+def test_bad_ice_is_a_flag_not_a_status():
     c = state([mk("bad", actor="a"), mk("bad", actor="b")])
-    assert c.state == ws.STATE_FLOODED and c.quality == "bad"
+    assert c.state == ws.STATE_WAITING and c.score == 0.0 and c.quality == "bad"
 
 
-def test_mixed_quality_majority_by_weight():
-    c = state([mk("flooded", "photo", "a"), mk("bad", actor="b")])
-    assert c.quality == "ok"
+def test_bad_ice_does_not_break_flooded():
+    marks = [mk("flooded", actor="a"), mk("flooded", actor="b"), mk("bad", actor="c")]
+    c = state(marks, prev=ws.STATE_FLOODED)
+    assert c.state == ws.STATE_FLOODED and c.quality is None  # 1 «плох» < 2 «залит»
+
+
+def test_bad_flag_majority_and_24h_life():
+    assert state([mk("bad", actor="a", ago_h=23), mk("flooded", actor="b", ago_h=1, weight=0.5)]).quality == "bad"
+    assert state([mk("bad", actor="a", ago_h=25)]).quality is None
+    assert state([mk("flooded", "photo", "a"), mk("bad", actor="b")]).quality is None
+
+
+def test_actor_who_said_flooded_then_bad_keeps_flooded_vote():
+    marks = [mk("flooded", actor="a", ago_h=3), mk("bad", actor="a", ago_h=1), mk("flooded", actor="b")]
+    assert state(marks).state == ws.STATE_FLOODED
 
 
 def test_flooded_without_marks_becomes_stale():
@@ -121,22 +149,61 @@ def test_actor_changing_mind_uses_latest():
     assert c.not_flooded_actors == 0 and c.score == 1.0
 
 
-def test_dispute_newer_not_flooded_wins():
+def test_dispute_keeps_previous_status():
     marks = [
         mk("flooded", actor="a", ago_h=10), mk("flooded", actor="b", ago_h=10),
         mk("not_flooded", actor="c", ago_h=2), mk("not_flooded", actor="d", ago_h=1),
     ]
+    for prev in (ws.STATE_FLOODED, ws.STATE_WAITING, ws.STATE_STALE):
+        c = state(marks, prev=prev)
+        assert c.dispute and c.state == prev
+
+
+def test_not_flooded_needs_a_telegram_signal_too():
+    marks = [mk("flooded", actor="a"), mk("flooded", actor="b")]
+    marks += [mk("not_flooded", "site", "d1"), mk("not_flooded", "site", "d2")]
     c = state(marks, prev=ws.STATE_FLOODED)
-    assert c.state == ws.STATE_WAITING and c.dispute
+    assert c.state == ws.STATE_FLOODED and not c.dispute
 
 
-def test_dispute_newer_flooded_wins():
+def test_verified_photo_newer_than_not_flooded_wins():
     marks = [
-        mk("not_flooded", actor="c", ago_h=10), mk("not_flooded", actor="d", ago_h=9),
-        mk("flooded", actor="a", ago_h=2), mk("flooded", actor="b", ago_h=1),
+        mk("not_flooded", actor="c", ago_h=5), mk("not_flooded", actor="d", ago_h=4),
+        mk("flooded", "photo", "tg:9", ago_h=1),
     ]
     c = state(marks, prev=ws.STATE_WAITING)
-    assert c.state == ws.STATE_FLOODED and c.dispute
+    assert c.state == ws.STATE_FLOODED and not c.dispute
+
+
+def test_admin_flooded_holds_seven_days():
+    at = NOW - timedelta(days=6, hours=23)
+    assert state([], prev=ws.STATE_FLOODED).state == ws.STATE_STALE
+    held = ws.compute_state([], NOW, ws.STATE_FLOODED, prev_source="admin", prev_at=at)
+    assert held.state == ws.STATE_FLOODED
+    gone = ws.compute_state([], NOW, ws.STATE_FLOODED, prev_source="admin", prev_at=NOW - timedelta(days=7, minutes=1))
+    assert gone.state == ws.STATE_STALE
+
+
+def test_admin_hold_yields_to_confirmed_not_flooded():
+    marks = [mk("not_flooded", actor="a", ago_h=2), mk("not_flooded", actor="b", ago_h=1)]
+    c = ws.compute_state(marks, NOW, ws.STATE_FLOODED, prev_source="admin", prev_at=NOW - timedelta(days=1))
+    assert c.state == ws.STATE_WAITING
+
+
+def test_current_season_boundaries_use_minsk_time():
+    utc = timezone.utc
+    assert ws.current_season(datetime(2026, 12, 31, 22, 0, tzinfo=utc)) == 2026
+    assert ws.current_season(datetime(2027, 1, 1, 0, 0, tzinfo=utc)) == 2026
+    assert ws.current_season(datetime(2027, 6, 30, 20, 59, tzinfo=utc)) == 2026
+    assert ws.current_season(datetime(2027, 6, 30, 21, 0, tzinfo=utc)) == 2027  # 00:00 1 июля в Минске
+    assert ws.season_label(2025) == "2025/26" and ws.season_label(2099) == "2099/00"
+
+
+def test_naive_datetime_rejected():
+    import pytest
+
+    with pytest.raises(ValueError):
+        ws.current_season(datetime(2026, 12, 1))
 
 
 def test_manual_states_are_not_overridden():
@@ -189,4 +256,4 @@ def test_valid_values_and_weights():
 
 
 def test_gone_threshold():
-    assert not ws.should_auto_hide(2) and ws.should_auto_hide(3)
+    assert not ws.gone_signals_reached(2) and ws.gone_signals_reached(3)
