@@ -527,9 +527,7 @@ async def current_race(session: AsyncSession, *, now: datetime) -> Race | None:
     window = race_window(now)
     if not window.monthly:
         return None
-    record = (
-        await session.execute(_RACE_AT, {"kind": KIND_MONTH, "starts_at": window.since})
-    ).one_or_none()
+    record = (await session.execute(_RACE_AT, {"kind": KIND_MONTH, "starts_at": window.since})).one_or_none()
     return None if record is None else _race(record)
 
 
@@ -619,9 +617,7 @@ def _season_months(first: date, last: date) -> list[tuple[datetime, str]]:
 async def league_crown_wall(session: AsyncSession, *, league_id: int, now: datetime) -> list[dict]:
     """Стена корон лиги: месяцы срока, у каждого — статус и чемпионы лиги."""
     lg = (
-        await session.execute(
-            text("SELECT starts_at, ends_at FROM hockey_leagues WHERE id = :id"), {"id": league_id}
-        )
+        await session.execute(text("SELECT starts_at, ends_at FROM hockey_leagues WHERE id = :id"), {"id": league_id})
     ).one_or_none()
     if lg is None:
         return []
@@ -630,7 +626,10 @@ async def league_crown_wall(session: AsyncSession, *, league_id: int, now: datet
     for r in (await session.execute(_WALL, {"league_id": league_id, "first": first})).all():
         item = winners.setdefault(_utc(r.period_start), {"race_id": r.race_id, "winners": []})
         item["winners"].append({"player_key": r.player_key, "display_name": r.display_name})
-    closed = {_utc(r.period_start) for r in (await session.execute(_WALL_CLOSED, {"league_id": league_id, "first": first})).all()}
+    closed = {
+        _utc(r.period_start)
+        for r in (await session.execute(_WALL_CLOSED, {"league_id": league_id, "first": first})).all()
+    }
     current = race_window(now).since
     last = min(_utc(lg.ends_at), _utc(now) + timedelta(days=366)).astimezone(MINSK_TZ).date()
     wall: list[dict] = []
@@ -683,8 +682,13 @@ async def leader_line(session: AsyncSession, *, player_key: int, now: datetime) 
     if not leagues:
         return None
     best = min(leagues, key=lambda x: (x.my_rank, -x.my_points, x.id))
-    rows = await league_table(session, league_id=best.id, player_key=player_key, now=now, period=month_period(
-        _utc(now).astimezone(MINSK_TZ).date()))
+    rows = await league_table(
+        session,
+        league_id=best.id,
+        player_key=player_key,
+        now=now,
+        period=month_period(_utc(now).astimezone(MINSK_TZ).date()),
+    )
     me = next(r for r in rows if r.player_key == player_key)
     others = [r for r in rows if r.player_key != player_key]
     if not others or not any(r.points for r in rows):

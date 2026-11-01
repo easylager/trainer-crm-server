@@ -647,9 +647,7 @@ async def extend_league(
     if existing is not None:
         return _league(existing), False
     terms = terms or _next_terms(league, now=now)
-    fresh = await _insert_league(
-        session, owner_key=player_key, name=league.name, terms=terms, extended_from=league.id
-    )
+    fresh = await _insert_league(session, owner_key=player_key, name=league.name, terms=terms, extended_from=league.id)
     joined = max(_utc(now), terms.starts_at) if terms.starts_at > _utc(now) else _utc(now)
     for key in (await session.execute(_MEMBERS_OF, {"league_id": league_id})).scalars().all():
         try:

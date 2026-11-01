@@ -295,7 +295,9 @@ async def get_client_hockey_peaks(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """«Твои вершины»: три среза, где у игрока лучшее место. Пусто, пока нет среза с тремя игроками и тремя ходами."""
-    return {"items": await peaks(session, player_key=client_catalog_telegram_key(principal), now=datetime.now(timezone.utc))}
+    return {
+        "items": await peaks(session, player_key=client_catalog_telegram_key(principal), now=datetime.now(timezone.utc))
+    }
 
 
 @router.get("/client/hockey/matches/{match_id}/stakes")

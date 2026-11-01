@@ -332,9 +332,7 @@ async def confirm_result(
     problem = _result_problem(home, away, decided_in)
     probe = {"home": home, "away": away, "decided_in": decided_in, "first_seen_at": now.isoformat()}
     if problem is not None:
-        await session.execute(
-            _TO_REVIEW, {"id": match_id, "reason": problem, "probe": json.dumps(probe), "now": now}
-        )
+        await session.execute(_TO_REVIEW, {"id": match_id, "reason": problem, "probe": json.dumps(probe), "now": now})
         return False
     # Ходов на матч нет — очки считать не из чего, итог ставим сразу (старые матчи при первом чтении календаря).
     if not (await session.execute(_HAS_PICKS, {"id": match_id})).scalar_one():

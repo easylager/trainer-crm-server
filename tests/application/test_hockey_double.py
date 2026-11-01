@@ -89,7 +89,11 @@ async def test_trump_returns_on_cancel_and_technical_defeat(db_session) -> None:
     # Техническое поражение = отмена: без очков, козырь свободен.
     await manual(db_session, m, home_score=5, away_score=0, decided_in="technical", now=NOV)
     await score_finished_matches(db_session, now=NOV)
-    row = (await db_session.execute(text("SELECT doubled, trump_week, points FROM hockey_picks WHERE match_id = :m"), {"m": m})).one()
+    row = (
+        await db_session.execute(
+            text("SELECT doubled, trump_week, points FROM hockey_picks WHERE match_id = :m"), {"m": m}
+        )
+    ).one()
     assert (row.doubled, row.trump_week, row.points) == (False, None, None)
     assert await set_double(db_session, player_key=SASHA, match_id=other, on=True, now=NOV) == other
 
@@ -105,13 +109,19 @@ async def test_trump_follows_a_moved_match_or_returns_on_collision(db_session) -
         await _pick(db_session, x, KATYA, side="home")
     await set_double(db_session, player_key=SASHA, match_id=sun, on=True, now=NOV)
     await set_double(db_session, player_key=KATYA, match_id=sun, on=True, now=NOV)
-    await set_double(db_session, player_key=KATYA, match_id=mon_busy, on=True, now=NOV)  # у Кати уже козырь на следующей неделе? нет — переехал
+    await set_double(
+        db_session, player_key=KATYA, match_id=mon_busy, on=True, now=NOV
+    )  # у Кати уже козырь на следующей неделе? нет — переехал
     # Саша: перенос воскресенья на вторник следующей недели — козырь едет за матчем.
     new = datetime(2026, 11, 24, 17, 0, tzinfo=MINSK_TZ)
     await db_session.execute(text("UPDATE hockey_matches SET starts_at = :t WHERE id = :m"), {"t": new, "m": sun})
     res = await on_match_moved(db_session, match_id=sun, starts_at=new)
     assert res["released"] == [] or KATYA in res["released"]
-    wk = (await db_session.execute(text("SELECT trump_week FROM hockey_picks WHERE match_id = :m AND player_key = :p"), {"m": sun, "p": SASHA})).scalar_one()
+    wk = (
+        await db_session.execute(
+            text("SELECT trump_week FROM hockey_picks WHERE match_id = :m AND player_key = :p"), {"m": sun, "p": SASHA}
+        )
+    ).scalar_one()
     assert wk.isoformat() == "2026-11-23"
 
 
@@ -122,14 +132,22 @@ async def test_pick_closes_a_minute_before_start_and_late_pick_is_voided_on_move
     starts = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
     m = await _match(db_session, "p1", starts)
     with pytest.raises(PicksClosed):
-        await make_pick(db_session, player_key=SASHA, display_name="x", match_id=m, side="home", now=starts - timedelta(seconds=59))
-    await make_pick(db_session, player_key=SASHA, display_name="x", match_id=m, side="home", now=starts - timedelta(minutes=5))
+        await make_pick(
+            db_session, player_key=SASHA, display_name="x", match_id=m, side="home", now=starts - timedelta(seconds=59)
+        )
+    await make_pick(
+        db_session, player_key=SASHA, display_name="x", match_id=m, side="home", now=starts - timedelta(minutes=5)
+    )
     # Перенесли на 17:00 того же дня, ход сделан в 18:55 — после нового срока: аннулируется.
     earlier = datetime(2026, 11, 20, 17, 0, tzinfo=MINSK_TZ)
-    await db_session.execute(text("UPDATE hockey_picks SET picked_at = :t WHERE match_id = :m"), {"t": starts - timedelta(minutes=5), "m": m})
+    await db_session.execute(
+        text("UPDATE hockey_picks SET picked_at = :t WHERE match_id = :m"), {"t": starts - timedelta(minutes=5), "m": m}
+    )
     res = await on_match_moved(db_session, match_id=m, starts_at=earlier)
     assert res["voided"] == [SASHA]
-    assert (await db_session.execute(text("SELECT count(*) FROM hockey_picks WHERE match_id = :m"), {"m": m})).scalar_one() == 0
+    assert (
+        await db_session.execute(text("SELECT count(*) FROM hockey_picks WHERE match_id = :m"), {"m": m})
+    ).scalar_one() == 0
 
 
 @pytest.mark.asyncio

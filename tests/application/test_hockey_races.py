@@ -148,7 +148,10 @@ async def test_same_picks_give_different_places_in_different_slices(db_session) 
     await _pick(db_session, d, P[0], side="away")
     await _finish(db_session, y, t)
     await _finish(db_session, d, t + timedelta(days=1))
-    by_club = {c: _ranks(await slice_rows(db_session, scope=club_scope(c), period=parse_period("season", NOV))) for c in ("Юность", DINAMO, None)}
+    by_club = {
+        c: _ranks(await slice_rows(db_session, scope=club_scope(c), period=parse_period("season", NOV)))
+        for c in ("Юность", DINAMO, None)
+    }
     assert by_club["Юность"][0] == (P[0], 1) and by_club[DINAMO][0] == (P[1], 1)
     # В «Все» P0: 50, P1: 20+50=70 → P1 первый.
     assert by_club[None][0] == (P[1], 1)
@@ -222,7 +225,11 @@ async def test_month_crowns_for_all_and_each_club_once_after_the_correction_wind
     assert await close_due_races(db_session, now=t + timedelta(days=1)) == []
     closed = await close_due_races(db_session, now=t + timedelta(days=8))
     assert len(closed) == 3  # Все, Юность, Неман
-    crowns = (await db_session.execute(text("SELECT club, player_key, kind, race_id FROM hockey_crowns ORDER BY club NULLS FIRST"))).all()
+    crowns = (
+        await db_session.execute(
+            text("SELECT club, player_key, kind, race_id FROM hockey_crowns ORDER BY club NULLS FIRST")
+        )
+    ).all()
     assert [(c.club, c.player_key, c.kind) for c in crowns] == [
         (None, P[0], "month"),
         ("Неман", P[0], "month"),
@@ -245,7 +252,9 @@ async def test_two_players_no_crown_and_late_correction_does_not_move_it(db_sess
     await mark_calendar_synced(db_session, now=SYNC)
     await close_due_races(db_session, now=t + timedelta(days=8))
     assert (await db_session.execute(text("SELECT count(*) FROM hockey_crowns"))).scalar_one() == 0
-    closure = (await db_session.execute(text("SELECT crowned FROM hockey_closures WHERE kind = 'month' AND club IS NULL"))).scalar_one()
+    closure = (
+        await db_session.execute(text("SELECT crowned FROM hockey_closures WHERE kind = 'month' AND club IS NULL"))
+    ).scalar_one()
     assert closure == 0
 
 
@@ -295,7 +304,9 @@ async def test_manual_confirm_closes_before_the_window(db_session) -> None:
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
     await _three_players_game(db_session, t, mid="mc")
     assert await confirm_close_month(db_session, period_start=race.starts_at, club=None, now=t + timedelta(days=1))
-    assert await confirm_close_month(db_session, period_start=race.starts_at, club=None, now=t + timedelta(days=1)) is None
+    assert (
+        await confirm_close_month(db_session, period_start=race.starts_at, club=None, now=t + timedelta(days=1)) is None
+    )
     assert (await db_session.execute(text("SELECT count(*) FROM hockey_crowns"))).scalar_one() == 1
 
 
@@ -311,7 +322,9 @@ async def test_season_titles_after_the_season_and_window_only_once(db_session) -
     await ensure_races(db_session, now=datetime(2027, 7, 20, tzinfo=MINSK_TZ))
     await mark_calendar_synced(db_session, now=datetime(2027, 7, 20, tzinfo=MINSK_TZ))
     await close_due_races(db_session, now=after)
-    titles = (await db_session.execute(text("SELECT season, club, player_key FROM hockey_titles ORDER BY club NULLS FIRST"))).all()
+    titles = (
+        await db_session.execute(text("SELECT season, club, player_key FROM hockey_titles ORDER BY club NULLS FIRST"))
+    ).all()
     assert [(x.season, x.club, x.player_key) for x in titles] == [
         ("2026/27", None, P[0]),
         ("2026/27", "Барыс", P[0]),
@@ -364,7 +377,9 @@ async def test_league_counts_only_chosen_clubs_in_term_and_after_joining(db_sess
     terms = build_terms(scope="clubs", clubs=["Юность", DINAMO], term="month", now=NOV)
     league = await create_league(db_session, owner_key=P[0], owner_name="А", name="Юность+Динамо", terms=terms, now=NOV)
     await join_by_code(db_session, player_key=P[1], display_name="Б", code=league.invite_code)
-    await db_session.execute(text("UPDATE hockey_league_members SET joined_at = :t"), {"t": datetime(2026, 11, 1, tzinfo=MINSK_TZ)})
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :t"), {"t": datetime(2026, 11, 1, tzinfo=MINSK_TZ)}
+    )
     t = datetime(2026, 11, 14, 19, 0, tzinfo=MINSK_TZ)
     games = {
         "yu": await _match(db_session, "l1", t, home="Юность", away="Неман", extraliga=True),
@@ -372,10 +387,14 @@ async def test_league_counts_only_chosen_clubs_in_term_and_after_joining(db_sess
         "ot": await _match(db_session, "l3", t + timedelta(days=2), home="Неман", away="Лида", extraliga=True),
         "dec": await _match(db_session, "l4", datetime(2026, 12, 3, 19, 0, tzinfo=MINSK_TZ)),
     }
-    for key, g in games.items():
+    for g in games.values():
         await _pick(db_session, g, P[0], (3, 1))
     for i, g in enumerate(games.values()):
-        await _finish(db_session, g, [t, t + timedelta(days=1), t + timedelta(days=2), datetime(2026, 12, 3, 19, 0, tzinfo=MINSK_TZ)][i])
+        await _finish(
+            db_session,
+            g,
+            [t, t + timedelta(days=1), t + timedelta(days=2), datetime(2026, 12, 3, 19, 0, tzinfo=MINSK_TZ)][i],
+        )
     rows = await league_table(db_session, league_id=league.id, player_key=P[0], now=NOV)
     me = next(r for r in rows if r.player_key == P[0])
     assert (me.points, me.played) == (100, 2)  # Юность и Динамо; чужой клуб и декабрь не считаются
@@ -391,14 +410,28 @@ def test_terms_validation() -> None:
     with pytest.raises(InvalidTerms):
         build_terms(scope="clubs", clubs=["Несуществующий"], term="season", now=NOV)
     with pytest.raises(InvalidTerms):
-        build_terms(scope="all", term="dates", now=NOV, starts_at=NOV.date() - timedelta(days=5), ends_at=NOV.date() + timedelta(days=5))
+        build_terms(
+            scope="all",
+            term="dates",
+            now=NOV,
+            starts_at=NOV.date() - timedelta(days=5),
+            ends_at=NOV.date() + timedelta(days=5),
+        )
     with pytest.raises(InvalidTerms):
-        build_terms(scope="all", term="dates", now=NOV, starts_at=NOV.date() + timedelta(days=5), ends_at=NOV.date() + timedelta(days=2))
+        build_terms(
+            scope="all",
+            term="dates",
+            now=NOV,
+            starts_at=NOV.date() + timedelta(days=5),
+            ends_at=NOV.date() + timedelta(days=2),
+        )
     with pytest.raises(InvalidTerms):
         build_terms(scope="all", term="dates", now=NOV, starts_at=NOV.date(), ends_at=NOV.date() + timedelta(days=400))
     w4 = build_terms(scope="extraliga", term="weeks4", now=NOV)
     assert w4.ends_at - w4.starts_at == timedelta(days=28)
-    assert build_terms(scope="all", term="month", now=NOV, month="2026-12").starts_at == datetime(2026, 12, 1, tzinfo=MINSK_TZ)
+    assert build_terms(scope="all", term="month", now=NOV, month="2026-12").starts_at == datetime(
+        2026, 12, 1, tzinfo=MINSK_TZ
+    )
 
 
 @pytest.mark.asyncio
@@ -411,7 +444,15 @@ async def test_extend_makes_one_new_league_with_the_same_people(db_session) -> N
     again, created2 = await extend_league(db_session, league_id=league.id, player_key=P[0], now=dec)
     assert created and not created2 and new.id == again.id != league.id
     assert new.starts_at == datetime(2026, 12, 1, tzinfo=MINSK_TZ) and new.scope == "dinamo"
-    members = (await db_session.execute(text("SELECT player_key FROM hockey_league_members WHERE league_id = :l ORDER BY 1"), {"l": new.id})).scalars().all()
+    members = (
+        (
+            await db_session.execute(
+                text("SELECT player_key FROM hockey_league_members WHERE league_id = :l ORDER BY 1"), {"l": new.id}
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert members == [P[0], P[1]]
     with pytest.raises(PermissionError):
         await extend_league(db_session, league_id=league.id, player_key=P[1], now=dec)
@@ -426,12 +467,18 @@ async def test_league_month_and_term_crowns_need_three_players_with_points(db_se
     league = await create_league(db_session, owner_key=P[0], owner_name="А", name="Сезон", now=NOV)
     for k in (P[1], P[2]):
         await join_by_code(db_session, player_key=k, display_name="x", code=league.invite_code)
-    await db_session.execute(text("UPDATE hockey_league_members SET joined_at = :t"), {"t": datetime(2026, 11, 1, tzinfo=MINSK_TZ)})
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :t"), {"t": datetime(2026, 11, 1, tzinfo=MINSK_TZ)}
+    )
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
     await _three_players_game(db_session, t, mid="lm")
     await mark_calendar_synced(db_session, now=SYNC)
     await close_due_races(db_session, now=datetime(2026, 12, 3, tzinfo=MINSK_TZ))
-    row = (await db_session.execute(text("SELECT kind, player_key FROM hockey_crowns WHERE league_id = :l"), {"l": league.id})).all()
+    row = (
+        await db_session.execute(
+            text("SELECT kind, player_key FROM hockey_crowns WHERE league_id = :l"), {"l": league.id}
+        )
+    ).all()
     assert [(r.kind, r.player_key) for r in row] == [("league_month", P[0])]
     assert await crown_counts(db_session, league_id=league.id) == {P[0]: 1}
 
@@ -451,7 +498,9 @@ async def test_migration_keeps_old_leagues_on_dinamo_only(db_session) -> None:
     t = datetime(2026, 11, 14, 19, 0, tzinfo=MINSK_TZ)
     d = await _match(db_session, "o1", t)
     e = await _match(db_session, "o2", t + timedelta(days=1), home="Юность", away="Неман", extraliga=True)
-    await db_session.execute(text("UPDATE hockey_league_members SET joined_at = :t"), {"t": datetime(2026, 11, 1, tzinfo=MINSK_TZ)})
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :t"), {"t": datetime(2026, 11, 1, tzinfo=MINSK_TZ)}
+    )
     for g in (d, e):
         await _pick(db_session, g, P[0], (3, 1))
     await _finish(db_session, d, t)
@@ -468,7 +517,14 @@ async def test_live_score_is_separate_from_the_result(db_session) -> None:
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
     m = await _match(db_session, "lv", t)
     assert await set_live_score(db_session, match_id=m, home=2, away=1, now=t + timedelta(minutes=40))
-    row = (await db_session.execute(text("SELECT live_home_score, live_away_score, live_at, home_score, status FROM hockey_matches WHERE id = :m"), {"m": m})).one()
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT live_home_score, live_away_score, live_at, home_score, status FROM hockey_matches WHERE id = :m"
+            ),
+            {"m": m},
+        )
+    ).one()
     assert (row.live_home_score, row.live_away_score, row.home_score, row.status) == (2, 1, None, "scheduled")
     assert live_points(side="home", home_score=2, away_score=1, live_home=2, live_away=1, doubled=True) == 100
     assert live_points(side="home", home_score=3, away_score=1, live_home=1, live_away=1, doubled=False) is None

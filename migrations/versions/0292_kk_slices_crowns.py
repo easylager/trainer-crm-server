@@ -139,8 +139,7 @@ def upgrade() -> None:
         sa.Column("awarded_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.execute(
-        "CREATE UNIQUE INDEX uq_hockey_titles_slice_player ON hockey_titles "
-        "(season, COALESCE(club, ''), player_key)"
+        "CREATE UNIQUE INDEX uq_hockey_titles_slice_player ON hockey_titles " "(season, COALESCE(club, ''), player_key)"
     )
 
 
@@ -150,8 +149,10 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS uq_hockey_crowns_slice_player")
     op.drop_constraint("ck_hockey_crowns_kind", "hockey_crowns", type_="check")
     # Короны, которых не было в старой модели (клубные срезы, срок лиги), старая схема не вмещает.
-    op.execute(f"DELETE FROM hockey_crowns WHERE kind = 'league_term' OR race_id IS NULL "
-               f"OR COALESCE(club, '{_DINAMO}') <> '{_DINAMO}'")
+    op.execute(
+        f"DELETE FROM hockey_crowns WHERE kind = 'league_term' OR race_id IS NULL "
+        f"OR COALESCE(club, '{_DINAMO}') <> '{_DINAMO}'"
+    )
     op.alter_column("hockey_crowns", "race_id", nullable=False)
     for column in ("played", "period_end", "period_start", "kind", "club"):
         op.drop_column("hockey_crowns", column)

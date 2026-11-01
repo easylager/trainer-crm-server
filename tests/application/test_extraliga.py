@@ -311,3 +311,74 @@ def test_form_marks_and_winning_goal() -> None:
     goals = [{"side": s, "scorer": n, "minute": "10:00"} for s, n in (("away", "А"), ("home", "Б"), ("home", "В"))]
     reg = _Played("Юность", "Лида", 2, 1, "regulation", _minsk(2026, 10, 1, 19, 0), None, {"goals": goals})
     assert form_mark(reg, "Лида") == "П" and winning_goal(reg)["scorer"] == "В"
+
+
+async def _with_pick(db_session, source_match_id: str) -> int:
+    from src.application.hockey_game import make_pick
+
+    row = await _match(db_session, source_match_id)
+    await make_pick(
+        db_session,
+        player_key=881_334_001,
+        display_name="Саша",
+        match_id=row.id,
+        side="home",
+        now=row.starts_at - timedelta(hours=2),
+    )
+    return row.id
+
+
+async def test_result_needs_two_stable_polls_when_there_are_picks(db_session) -> None:
+    """TASK-334 M1: у Экстралиги один источник — итог публикуется после двух одинаковых опросов."""
+    now = _minsk(2026, 10, 27, 22, 0)
+    await upsert_calendar_match(db_session, _yunost_neman("441964", _minsk(2026, 10, 27, 19, 0)), now=now)
+    await _with_pick(db_session, "441964")
+    source = FakeSource([], {match_page_url("441964"): _page("hockeyby-gamecenter-441964-ot.html")})
+    await sync_details(db_session, source, now=now)
+    assert (await _match(db_session, "441964")).status == "scheduled"  # первый опрос: запомнили
+    # Слишком скоро (меньше 15 минут) — ещё не публикуем
+    await db_session.execute(text("UPDATE hockey_matches SET details_checked_at = NULL"))
+    await sync_details(db_session, source, now=now + timedelta(minutes=5))
+    assert (await _match(db_session, "441964")).status == "scheduled"
+    await db_session.execute(text("UPDATE hockey_matches SET details_checked_at = NULL"))
+    await sync_details(db_session, source, now=now + timedelta(minutes=16))
+    done = await _match(db_session, "441964")
+    assert (done.status, done.home_score, done.away_score, done.decided_in) == ("final", 3, 2, "ot")
+
+
+async def test_changed_score_between_polls_goes_to_review(db_session) -> None:
+    from src.application.extraliga import confirm_result
+
+    now = _minsk(2026, 10, 27, 22, 0)
+    await upsert_calendar_match(db_session, _yunost_neman("441964", _minsk(2026, 10, 27, 19, 0)), now=now)
+    mid = await _with_pick(db_session, "441964")
+    assert not await confirm_result(db_session, mid, home=3, away=2, decided_in="ot", now=now)
+    assert not await confirm_result(db_session, mid, home=2, away=3, decided_in="ot", now=now + timedelta(minutes=20))
+    row = await _match(db_session, "441964")
+    assert row.status == "review"
+
+
+async def test_missing_or_odd_ending_goes_to_review(db_session) -> None:
+    from src.application.extraliga import confirm_result
+
+    now = _minsk(2026, 10, 27, 22, 0)
+    await upsert_calendar_match(db_session, _yunost_neman("441964", _minsk(2026, 10, 27, 19, 0)), now=now)
+    mid = await _with_pick(db_session, "441964")
+    assert not await confirm_result(db_session, mid, home=4, away=2, decided_in="ot", now=now)  # разница 2 в ОТ
+    assert (await _match(db_session, "441964")).status == "review"
+    assert not await confirm_result(db_session, mid, home=3, away=2, decided_in=None, now=now)
+
+
+async def test_moved_match_voids_late_picks_and_keeps_early_ones(db_session) -> None:
+    now = _minsk(2026, 10, 28, 12, 0)
+    m = _yunost_neman("441978", _minsk(2026, 10, 29, 19, 0))
+    await upsert_calendar_match(db_session, m, now=now)
+    mid = await _with_pick(db_session, "441978")
+    await db_session.execute(
+        text("UPDATE hockey_picks SET picked_at = :t WHERE match_id = :m"), {"t": _minsk(2026, 10, 29, 18, 0), "m": mid}
+    )
+    # Перенесли на 17:00 того же дня: ход в 18:00 оказался после нового срока — аннулируется.
+    await upsert_calendar_match(db_session, replace(m, starts_at=_minsk(2026, 10, 29, 17, 0)), now=now)
+    assert (
+        await db_session.execute(text("SELECT count(*) FROM hockey_picks WHERE match_id = :m"), {"m": mid})
+    ).scalar_one() == 0

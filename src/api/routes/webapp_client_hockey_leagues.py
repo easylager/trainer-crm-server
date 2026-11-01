@@ -349,9 +349,7 @@ async def post_client_hockey_league_extend(
     player_key = client_catalog_telegram_key(principal)
     try:
         terms = _terms_from(body.terms, now)
-        league, created = await extend_league(
-            session, league_id=league_id, player_key=player_key, now=now, terms=terms
-        )
+        league, created = await extend_league(session, league_id=league_id, player_key=player_key, now=now, terms=terms)
         payload = await _created_out(session, league, player_key, now)
         payload.update(await _terms_hint(session, league, now))
     except (ValueError, LookupError, PermissionError, TooManyLeagues) as exc:

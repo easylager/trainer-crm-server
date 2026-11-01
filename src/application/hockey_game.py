@@ -328,7 +328,9 @@ async def set_double(session: AsyncSession, *, player_key: int, match_id: int, o
     ]
     if not on:
         if any(r.match_id == match_id for r in current):
-            await session.execute(_SET_TRUMP, {"player_key": player_key, "match_id": match_id, "on": False, "week": None})
+            await session.execute(
+                _SET_TRUMP, {"player_key": player_key, "match_id": match_id, "on": False, "week": None}
+            )
             return None
         return next((r.match_id for r in current), None)
     for r in current:
@@ -368,9 +370,7 @@ async def my_doubles(session: AsyncSession, *, player_key: int, now: datetime, w
 
     first = week_start(now)
     weeks = [first + timedelta(days=7 * i) for i in range(weeks_ahead + 1)]
-    placed = {
-        r.week: r for r in (await session.execute(_MY_DOUBLES, {"player_key": player_key, "weeks": weeks})).all()
-    }
+    placed = {r.week: r for r in (await session.execute(_MY_DOUBLES, {"player_key": player_key, "weeks": weeks})).all()}
     out = []
     for week in weeks:
         row = placed.get(week)
