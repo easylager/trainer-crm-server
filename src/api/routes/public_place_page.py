@@ -252,6 +252,22 @@ async def _merged_redirect(session: AsyncSession, arena_id: int, request: Reques
     return RedirectResponse(url=target + (f"?{q}" if q else ""), status_code=301)
 
 
+async def _slug_redirect(session: AsyncSession, city_id: int, slug: str, request: Request) -> RedirectResponse | None:
+    """301 со старого slug (переименование, слияние дублей, TASK-343) на актуальную страницу точки."""
+    from src.application.arena_slug_redirects import lookup_redirect
+
+    arena_id = await lookup_redirect(session, int(city_id), slug)
+    if arena_id is None:
+        return None
+    view = await load_place_view(session, str(arena_id))
+    if view is None or not view["card"].get("slug"):
+        return await _merged_redirect(session, arena_id, request)
+    card = view["card"]
+    target = place_path(city_name=str(card.get("city_name") or ""), slug=str(card["slug"]))
+    q = request.url.query
+    return RedirectResponse(url=target + (f"?{q}" if q else ""), status_code=301)
+
+
 async def _resolve(session: AsyncSession, city_ref: str, slug: str):
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
@@ -287,6 +303,10 @@ async def place_page(
         return Response(status_code=200, headers=_PAGE_CACHE)
     base = _base()
     city, arena_id = await _resolve(session, city_ref, slug)
+    if city is not None and arena_id is None:
+        moved = await _slug_redirect(session, int(city["id"]), slug, request)
+        if moved is not None:
+            return moved
     if city is None or arena_id is None:
         return _not_found(_catalog_home(base))
     session_id = _int_or_none(s)

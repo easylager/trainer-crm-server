@@ -3031,3 +3031,80 @@ class WinterNotifyQueue(Base):
     reason: Mapped[str] = mapped_column(String(8), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WinterAdminBatch(Base):
+    """Пачка админских действий над зимними точками (TASK-343): журнал и отмена 10 минут."""
+
+    __tablename__ = "winter_admin_batches"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('confirm', 'hide', 'import_changed', 'import_missing', 'merge')",
+            name="ck_winter_admin_batches_action",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    season: Mapped[int] = mapped_column(SmallInteger(), nullable=False)
+    admin_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    selection: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    item_count: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    undone_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WinterAdminBatchItem(Base):
+    __tablename__ = "winter_admin_batch_items"
+
+    batch_id: Mapped[int] = mapped_column(
+        ForeignKey("winter_admin_batches.id", ondelete="CASCADE"), primary_key=True
+    )
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), primary_key=True)
+    before: Mapped[dict] = mapped_column(JSONB(), nullable=False)
+    after: Mapped[dict] = mapped_column(JSONB(), nullable=False)
+    closed_items: Mapped[list] = mapped_column(JSONB(), nullable=False, server_default="[]")
+
+
+class WinterImportRun(Base):
+    """Сверка с таблицей нового сезона: дифф и исходные строки до подтверждения админом."""
+
+    __tablename__ = "winter_import_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'applied', 'rejected', 'failed')", name="ck_winter_import_runs_status"
+        ),
+        Index("ix_winter_import_runs_status", "status", "created_at"),
+        Index("ix_winter_import_runs_sha", "season", "file_sha256"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    season: Mapped[int] = mapped_column(SmallInteger(), nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    file_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="pending")
+    error: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    diff: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    rows: Mapped[list] = mapped_column(JSONB(), nullable=False, server_default="[]")
+    applied_parts: Mapped[list] = mapped_column(JSONB(), nullable=False, server_default="[]")
+    created_by: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ArenaSlugRedirect(Base):
+    """Старый slug точки -> актуальная точка: ``/p/<город>/<старый slug>`` отвечает 301."""
+
+    __tablename__ = "arena_slug_redirects"
+    __table_args__ = (
+        UniqueConstraint("city_id", "old_slug", name="uq_arena_slug_redirects_city_slug"),
+        CheckConstraint("reason IN ('rename', 'merge')", name="ck_arena_slug_redirects_reason"),
+        Index("ix_arena_slug_redirects_arena", "arena_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), nullable=False)
+    old_slug: Mapped[str] = mapped_column(String(160), nullable=False)
+    arena_id: Mapped[int] = mapped_column(ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False)
+    reason: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

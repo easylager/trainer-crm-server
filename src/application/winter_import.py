@@ -72,6 +72,11 @@ class PlannedPoint:
     row_no: int = 0
 
 
+def winter_slug(city_name: str, kind: str, arena_id: int) -> str:
+    """``<город>-<korobka|katok>-<id>``: фиксируется при создании, меняется только вместе с типом."""
+    return f"{slugify_arena_name(city_name)}-{'korobka' if kind == 'hockey_box' else 'katok'}-{arena_id}"
+
+
 def _f(value: str | None) -> float | None:
     try:
         return float(value) if value not in (None, "") else None
@@ -247,7 +252,8 @@ def _match_catalog(p: PlannedPoint, arenas: list[dict[str, Any]]) -> dict[str, A
 
 
 async def _upsert_season(
-    session: AsyncSession, arena_id: int, season: int, p: PlannedPoint, *, state: str, hidden_reason: str | None
+    session: AsyncSession, arena_id: int, season: int, p: PlannedPoint, *, state: str, hidden_reason: str | None,
+    source_season: int = SEED_SOURCE_SEASON,
 ) -> None:
     await session.execute(
         text(
@@ -270,7 +276,7 @@ async def _upsert_season(
             "aid": arena_id, "season": season, "state": state, "hr": hidden_reason,
             "ht": (p.hours.raw or None) and p.hours.raw[:256],
             "oh": json.dumps(p.hours.opening_hours) if p.hours.opening_hours else None,
-            "hk": p.hours.known, "hs": season_label(SEED_SOURCE_SEASON),
+            "hk": p.hours.known, "hs": season_label(source_season),
             "sf": p.hours.season_from, "st": p.hours.season_to, "phone": p.phone,
             "url": p.source_url, "conf": p.confidence,
         },
@@ -278,9 +284,13 @@ async def _upsert_season(
 
 
 async def import_points(
-    session: AsyncSession, planned: list[PlannedPoint], *, now: datetime, publish: bool = False
+    session: AsyncSession, planned: list[PlannedPoint], *, now: datetime, publish: bool = False,
+    source_season: int = SEED_SOURCE_SEASON,
 ) -> ImportReport:
-    """Записать точки. ``publish`` -> профиль каталога ``published`` (по умолчанию ``draft``)."""
+    """Записать точки. ``publish`` -> профиль каталога ``published`` (по умолчанию ``draft``).
+
+    ``source_season`` — сезон таблицы-источника (подпись часов): 2025 для seed, 2026 для новой сверки.
+    """
     report = ImportReport()
     season = current_season(now)
     city_cache: dict[str, int] = {}
@@ -310,7 +320,7 @@ async def import_points(
                 )
             ).first()
             if row is None:
-                await _upsert_season(session, aid, season, p, state="waiting", hidden_reason=None)
+                await _upsert_season(session, aid, season, p, state="waiting", hidden_reason=None, source_season=source_season)
             else:
                 await session.execute(
                     text(
@@ -347,8 +357,7 @@ async def import_points(
             ).scalar_one()
         )
         arena_by_key[p.key] = arena_id
-        kind_slug = "korobka" if p.kind == "hockey_box" else "katok"
-        slug = f"{slugify_arena_name(p.city)}-{kind_slug}-{arena_id}"
+        slug = winter_slug(p.city, p.kind, arena_id)
         await session.execute(
             text(
                 """INSERT INTO arena_profiles (arena_id, city_id, slug, district, status, phone, amenities, social_urls)
@@ -369,7 +378,9 @@ async def import_points(
             },
         )
         state = "hidden" if p.hidden_reason else "waiting"
-        await _upsert_season(session, arena_id, season, p, state=state, hidden_reason=p.hidden_reason)
+        await _upsert_season(
+            session, arena_id, season, p, state=state, hidden_reason=p.hidden_reason, source_season=source_season
+        )
         if p.hidden_reason:
             report.hidden_candidates += 1
             await session.execute(
