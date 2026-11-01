@@ -492,9 +492,28 @@ def _details_wanted(row, *, now: datetime) -> bool:
     return row.details_checked_at is None or _utc(now) - _utc(row.details_checked_at) >= POST_MATCH_EVERY
 
 
+async def _record_live_score(session: AsyncSession, row, g: GameCenter, *, now: datetime) -> int:
+    """Счёт идущего матча со страницы — в живые очки игры (TASK-334). Итог и его сверку не трогает.
+
+    Берём неофициальный счёт начавшегося матча: тот же запрос страницы, что и раз в 15 минут в день матча,
+    лишних обращений к hockey.by нет. Любой сбой записи молча пропускается — итог от него не зависит.
+    """
+    if g.official or g.home_score is None or g.away_score is None or _utc(now) < _utc(row.starts_at):
+        return 0
+    from src.application.hockey_game import set_live_score
+
+    try:
+        async with session.begin_nested():
+            ok = await set_live_score(session, match_id=row.id, home=g.home_score, away=g.away_score, now=now)
+    except Exception:
+        logger.warning("extraliga live score %s failed", row.source_match_id, exc_info=True)
+        return 0
+    return int(ok)
+
+
 async def sync_details(session: AsyncSession, source: Source, *, now: datetime) -> dict[str, int]:
     """Страницы матчей на неделю вперёд и сегодняшних — снимок, билеты, официальный итог."""
-    counts = {"checked": 0, "final": 0, "failed": 0}
+    counts = {"checked": 0, "final": 0, "failed": 0, "live": 0}
     params = {
         "from_": _utc(now) - MATCH_DAY_AFTER,
         "until": _utc(now) + DETAILS_AHEAD,
@@ -525,6 +544,8 @@ async def sync_details(session: AsyncSession, source: Source, *, now: datetime) 
             },
         )
         counts["checked"] += 1
+        live = await _record_live_score(session, row, g, now=now)
+        counts["live"] += live
         if (
             g.official
             and g.home_score is not None
