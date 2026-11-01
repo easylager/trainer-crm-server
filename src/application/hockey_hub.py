@@ -20,7 +20,6 @@ from src.application.hockey_event import enabled as hockey_enabled
 from src.application.hockey_event import event_href, is_home, kk_hidden
 from src.application.hockey_matches import DINAMO
 from src.application.hockey_races import current_race, fresh_race_result, race_final_match_id, race_result
-from src.application.hockey_game import POINTS_EXACT, race_window
 from src.application.hockey_teams import team_card
 
 RESULT_WINDOW = timedelta(hours=24)
@@ -143,40 +142,6 @@ _LAST_FINALS = text("""
     LIMIT :limit
     """)
 
-# То же место, что в таблице лиги: очки гонки за матчи после вступления, при равенстве — точные счета.
-# Лучшая лига — меньший rank.
-_BEST_PLACE = text("""
-    WITH my AS (
-        SELECT l.id AS league_id, l.name AS league_name
-        FROM hockey_leagues AS l
-        JOIN hockey_league_members AS me ON me.league_id = l.id AND me.player_key = :player_key
-    ),
-    totals AS (
-        SELECT mb.league_id, mb.player_key,
-               COALESCE(SUM(p.points * (1 + p.doubled::int)), 0)::int AS points,
-               COALESCE(COUNT(p.points) FILTER (WHERE p.points = :exact), 0)::int AS exact
-        FROM hockey_league_members AS mb
-        JOIN my ON my.league_id = mb.league_id
-        LEFT JOIN hockey_picks AS p ON p.player_key = mb.player_key AND p.points IS NOT NULL
-            AND EXISTS (
-                SELECT 1 FROM kk_matches AS m
-                WHERE m.id = p.match_id AND m.starts_at >= GREATEST(:since, mb.joined_at) AND m.starts_at < :until
-            )
-        GROUP BY mb.league_id, mb.player_key
-    ),
-    ranked AS (
-        SELECT league_id, player_key,
-               RANK() OVER (PARTITION BY league_id ORDER BY points DESC, exact DESC)::int AS rank
-        FROM totals
-    )
-    SELECT my.league_name, ranked.rank
-    FROM ranked
-    JOIN my ON my.league_id = ranked.league_id
-    WHERE ranked.player_key = :player_key
-    ORDER BY ranked.rank, my.league_name
-    LIMIT 1
-    """)
-
 _MARK_SEEN = text("""
     UPDATE hockey_picks
     SET result_seen_at = :now
@@ -185,17 +150,14 @@ _MARK_SEEN = text("""
 
 
 async def _best_place(session: AsyncSession, player_key: int, *, at: datetime) -> dict | None:
-    """Место в лучшей лиге в гонке, где был матч ``at``: итог матча 30-го смотрят и 1-го числа."""
-    window = race_window(at)
-    row = (
-        await session.execute(
-            _BEST_PLACE,
-            {"player_key": player_key, "exact": POINTS_EXACT, "since": window.since, "until": window.until},
-        )
-    ).one_or_none()
-    if row is None:
+    """Место в лучшей лиге игрока — то же, что в таблице лиги (весь её срок, матчи после вступления)."""
+    from src.application.hockey_leagues import player_leagues
+
+    leagues = [x for x in await player_leagues(session, player_key=player_key, now=at) if _utc(x.starts_at) <= _utc(at) < _utc(x.ends_at)]  # type: ignore[arg-type]
+    if not leagues:
         return None
-    return {"league_name": row.league_name, "rank": row.rank}
+    best = min(leagues, key=lambda x: (x.my_rank, x.name))
+    return {"league_name": best.name, "rank": best.my_rank}
 
 
 def _event_fields(row) -> dict:

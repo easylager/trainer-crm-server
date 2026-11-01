@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -13,16 +13,21 @@ from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_hockey import _player_name
 from src.application.hockey_leagues import (
+    FEW_MATCHES,
+    InvalidTerms,
     League,
     LeagueFull,
     LeagueRow,
     LeagueSummary,
     TooManyLeagues,
+    build_terms,
     create_league,
+    extend_league,
     join_by_code,
     league_table,
     league_titles,
     leave_league,
+    matches_in_terms,
     player_leagues,
     rename_league,
 )
@@ -39,9 +44,25 @@ _NOT_FOUND = "Лига не найдена"
 _FORBIDDEN = "Нет доступа к этой лиге"
 
 
+class TermsBody(BaseModel):
+    """Набор команд и срок лиги. Без них — «Динамо-Минск, до конца сезона»."""
+
+    scope: Literal["all", "extraliga", "dinamo", "clubs"] = "dinamo"
+    clubs: list[str] = []
+    term: Literal["season", "month", "weeks4", "playoff", "dates"] = "season"
+    month: str | None = None
+    starts_on: date | None = None
+    ends_on: date | None = None
+
+
 class CreateLeagueBody(BaseModel):
     name: str
     display_name: str | None = None
+    terms: TermsBody | None = None
+
+
+class ExtendLeagueBody(BaseModel):
+    terms: TermsBody | None = None
 
 
 class JoinLeagueBody(BaseModel):
@@ -67,7 +88,7 @@ def invite_url_for_code(code: str) -> str | None:
 
 
 def _raise_league(exc: Exception) -> NoReturn:
-    if isinstance(exc, ValueError):
+    if isinstance(exc, ValueError):  # в том числе InvalidTerms
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if isinstance(exc, LookupError):
         raise HTTPException(status_code=404, detail=_NOT_FOUND) from exc
@@ -89,7 +110,33 @@ def _summary_out(row: LeagueSummary) -> dict:
         "my_rank": row.my_rank,
         "my_points": row.my_points,
         "invite_url": invite_url_for_code(row.invite_code),
+        **_terms_out(row.scope, row.clubs, row.term_kind, row.starts_at, row.ends_at),
+        "active": row.active,
     }
+
+
+def _terms_out(scope: str, clubs, term_kind: str, starts_at, ends_at) -> dict:
+    return {
+        "scope": scope,
+        "clubs": list(clubs),
+        "term": term_kind,
+        "starts_at": None if starts_at is None else starts_at.isoformat(),
+        "ends_at": None if ends_at is None else ends_at.isoformat(),
+    }
+
+
+def _terms_from(body: TermsBody | None, now: datetime):
+    if body is None:
+        return None
+    return build_terms(
+        scope=body.scope,
+        clubs=body.clubs,
+        term=body.term,
+        now=now,
+        month=body.month,
+        starts_at=body.starts_on,
+        ends_at=body.ends_on,
+    )
 
 
 def _table_row(row: LeagueRow, player_key: int, titles: dict | None = None) -> dict:
@@ -99,6 +146,7 @@ def _table_row(row: LeagueRow, player_key: int, titles: dict | None = None) -> d
         "points": row.points,
         "exact": row.exact,
         "played": row.played,
+        "correct_percent": None if not row.played else round(100 * row.correct / row.played),
         "is_me": row.player_key == player_key,
         "title": (titles or {}).get(row.player_key),
     }
@@ -115,7 +163,13 @@ async def _created_out(session: AsyncSession, league: League, player_key: int, n
         "my_rank": mine.rank,
         "my_points": mine.points,
         "invite_url": invite_url_for_code(league.invite_code),
+        **_terms_out(league.scope, league.clubs, league.term_kind, league.starts_at, league.ends_at),
+        "active": _aware_end(league.ends_at) > now,
     }
+
+
+def _aware_end(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 def _init_raw(init_data: str | None, header: str | None) -> str:
@@ -144,17 +198,53 @@ async def post_client_hockey_league(
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
     try:
+        terms = _terms_from(body.terms, now)
         league = await create_league(
             session,
             owner_key=player_key,
             owner_name=_player_name(body.display_name, _init_raw(init_data, x_telegram_init_data)),
             name=body.name,
+            terms=terms,
+            now=now,
         )
         payload = await _created_out(session, league, player_key, now)
+        payload.update(await _terms_hint(session, league, now))
     except (ValueError, TooManyLeagues) as exc:
         _raise_league(exc)
     await session.commit()
     return payload
+
+
+async def _terms_hint(session: AsyncSession, league: League, now: datetime) -> dict:
+    """Сколько матчей ещё впереди в сроке; меньше пяти — предупреждаем (пауза, клуб вылетел)."""
+    from src.application.hockey_leagues import Terms
+
+    count = await matches_in_terms(
+        session,
+        Terms(league.scope, league.clubs, league.term_kind, league.starts_at, league.ends_at),  # type: ignore[arg-type]
+        now=now,
+    )
+    return {"matches_in_term": count, "few_matches": count < FEW_MATCHES}
+
+
+@router.post("/client/hockey/leagues/terms-preview")
+async def post_client_hockey_league_terms_preview(
+    body: TermsBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Перед созданием: окно дат и сколько матчей попадёт в срок."""
+    now = datetime.now(timezone.utc)
+    try:
+        terms = _terms_from(body, now)
+    except InvalidTerms as exc:
+        _raise_league(exc)
+    count = await matches_in_terms(session, terms, now=now)  # type: ignore[arg-type]
+    return {
+        **_terms_out(terms.scope, terms.clubs, terms.term_kind, terms.starts_at, terms.ends_at),  # type: ignore[union-attr]
+        "matches_in_term": count,
+        "few_matches": count < FEW_MATCHES,
+    }
 
 
 @router.post("/client/hockey/leagues/join")
@@ -206,6 +296,8 @@ async def get_client_hockey_league(
         "name": summary.name,
         "is_owner": summary.is_owner,
         "invite_url": invite_url_for_code(summary.invite_code),
+        **_terms_out(summary.scope, summary.clubs, summary.term_kind, summary.starts_at, summary.ends_at),
+        "active": summary.active,
         "race": await race_summary(session, now=now),
         "wall": await league_crown_wall(session, league_id=league_id, now=now),
         "items": [{**_table_row(row, player_key, titles), "crowns": crowns.get(row.player_key, 0)} for row in rows],
@@ -243,3 +335,24 @@ async def delete_client_hockey_league_membership(
         _raise_league(exc)
     await session.commit()
     return {"result": result}
+
+
+@router.post("/client/hockey/leagues/{league_id}/extend")
+async def post_client_hockey_league_extend(
+    league_id: int,
+    body: ExtendLeagueBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Продлить»: новая лига с теми же людьми на следующий срок. У лиги одно продолжение — повтор вернёт его."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        terms = _terms_from(body.terms, now)
+        league, created = await extend_league(session, league_id=league_id, player_key=player_key, now=now, terms=terms)
+        payload = await _created_out(session, league, player_key, now)
+        payload.update(await _terms_hint(session, league, now))
+    except (ValueError, LookupError, PermissionError, TooManyLeagues) as exc:
+        _raise_league(exc)
+    await session.commit()
+    return {**payload, "created": created}

@@ -258,6 +258,9 @@ async def upsert_calendar_match(session: AsyncSession, page: HcdinamoMatch, *, n
     if (_utc(row.starts_at), row.home_team, row.away_team) == (params["starts_at"], page.home, page.away):
         return "unchanged"
     await session.execute(_MOVE, {**params, "id": row.id})
+    from src.application.hockey_game import on_match_moved
+
+    await on_match_moved(session, match_id=row.id, starts_at=params["starts_at"])
     return "moved"
 
 
@@ -295,6 +298,27 @@ def validate_result(home_score: int, away_score: int, decided_in: str) -> None:
         raise ValueError("В овертайме и по буллитам разница ровно в одну шайбу")
 
 
+DECIDED_TECHNICAL = "technical"
+
+_CANCEL = text("""
+    UPDATE hockey_matches
+    SET status = 'cancelled', review_reason = :reason, home_score = NULL, away_score = NULL, decided_in = NULL,
+        result_source = NULL, finalized_at = NULL, checked_at = :now, updated_at = :now
+    WHERE id = :id
+    """)
+
+
+async def cancel_match(session: AsyncSession, match_id: int, *, reason: str, now: datetime) -> MatchRow:
+    """Матч не состоялся или засчитан технически: для игры это отмена — очки снимаются, козыри возвращаются
+    (при следующем ``score_finished_matches``), в короны матч не идёт."""
+    if await get_match(session, match_id) is None:
+        raise LookupError(match_id)
+    await session.execute(_CANCEL, {"id": match_id, "reason": reason, "now": _utc(now)})
+    row = await get_match(session, match_id)
+    assert row is not None
+    return row
+
+
 async def set_manual_result(
     session: AsyncSession,
     match_id: int,
@@ -304,7 +328,12 @@ async def set_manual_result(
     decided_in: str,
     now: datetime,
 ) -> MatchRow:
-    """Ручной ввод админа закрывает матч так же, как автомат, и сильнее его."""
+    """Ручной ввод админа закрывает матч так же, как автомат, и сильнее его.
+
+    ``decided_in='technical'`` — техническое поражение или неявка: для игры это отмена (без очков).
+    """
+    if decided_in == DECIDED_TECHNICAL:
+        return await cancel_match(session, match_id, reason="technical", now=now)
     validate_result(home_score, away_score, decided_in)
     if await get_match(session, match_id) is None:
         raise LookupError(match_id)
@@ -547,11 +576,13 @@ async def default_fetch(url: str) -> str:
 
 __all__ = [
     "DECIDED_VALUES",
+    "DECIDED_TECHNICAL",
     "Decision",
     "KIND_FINAL",
     "KIND_REVIEW",
     "KIND_WAIT",
     "apply_decision",
+    "cancel_match",
     "check_due_results",
     "decide_result",
     "default_fetch",

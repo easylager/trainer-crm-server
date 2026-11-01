@@ -91,6 +91,8 @@ async def test_reminder_with_move_and_double_names_the_month_final(db_session) -
 async def test_result_of_the_month_final_tells_who_has_the_crown(db_session) -> None:
     league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
     await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
+    # Корона лиги — от трёх игроков с очками.
+    await join_by_code(db_session, player_key=9360003, display_name="Лёша", code=league.invite_code)
     await db_session.execute(
         text("UPDATE hockey_league_members SET joined_at = :at WHERE league_id = :l"),
         {"at": datetime(2026, 11, 1, tzinfo=MINSK_TZ), "l": league.id},
@@ -98,6 +100,7 @@ async def test_result_of_the_month_final_tells_who_has_the_crown(db_session) -> 
     await ensure_month_race(db_session, now=NOV)
     starts = datetime(2026, 11, 30, 19, 0, tzinfo=MINSK_TZ)
     m = await _match(db_session, "n3", starts)
+    await make_pick(db_session, player_key=9360003, display_name="Лёша", match_id=m, side="home", now=NOV)
     for player, score in ((SASHA, (4, 1)), (KATYA, (2, 1))):
         await make_pick(
             db_session,
@@ -115,7 +118,8 @@ async def test_result_of_the_month_final_tells_who_has_the_crown(db_session) -> 
     done = starts + timedelta(hours=2, minutes=30)
     await set_manual_result(db_session, m, home_score=4, away_score=1, decided_in="regulation", now=done)
     await score_finished_matches(db_session, now=done)
-    assert await close_due_races(db_session, now=done)
+    # Окно исправления итога — 7 суток: корона пишется после него.
+    assert await close_due_races(db_session, now=done + timedelta(days=8))
 
     by_player = {n.player_key: n for n in await due_notices(db_session, now=done) if n.kind == "result"}
     assert by_player[SASHA].text == (

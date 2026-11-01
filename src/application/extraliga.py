@@ -1,8 +1,10 @@
 """Матчи Экстралиги с hockey.by: календарь, страница матча, таблица (TASK-340, PDEC-029).
 
-Матчи лежат в ``hockey_matches`` (source='hockeyby', league='extraliga') рядом с матчами Динамо, но игра
-«Кто кого» их не видит — она читает ``kk_matches``. Итог ставит страница матча, когда на ней
-«Официальные данные»; если её не дождались — счёт из календаря через 6 часов после начала.
+Матчи лежат в ``hockey_matches`` (source='hockeyby', league='extraliga') рядом с матчами Динамо.
+Игра «Кто кого» читает их через ``game_matches`` (Динамо — ещё и ``kk_matches``). Итог ставит страница
+матча, когда на ней «Официальные данные»; если её не дождались — счёт из календаря через 6 часов после
+начала. Второго источника у Экстралиги нет, поэтому итог публикуется только после двух одинаковых
+опросов подряд с разницей не меньше 15 минут (``confirm_result``); иначе матч уходит на ручную проверку.
 
 Календарь хранится целиком, а показ — партиями клубов: ``extraliga_clubs`` в настройках (решение
 владельца 2026-10-28 — включать клубы постепенно).
@@ -56,6 +58,9 @@ MATCH_DAY_AFTER = timedelta(hours=5)
 MATCH_DAY_EVERY = timedelta(minutes=15)
 # Страница матча так и не сказала «официально» — берём счёт из календаря.
 CALENDAR_RESULT_AFTER = timedelta(hours=6)
+# Итог без второго источника: один и тот же счёт и способ в двух опросах не ближе друг к другу, чем это.
+RESULT_STABLE_AFTER = timedelta(minutes=15)
+_DECIDED = ("regulation", "ot", "so")
 # Сыгранный матч без официального протокола — страницу дочитываем раз в час, до трёх дней.
 POST_MATCH_WINDOW = timedelta(days=3)
 POST_MATCH_EVERY = timedelta(hours=1)
@@ -286,6 +291,74 @@ def _params(m: CalendarMatch, now: datetime) -> dict:
     }
 
 
+_PROBE = text("SELECT result_probe, status FROM hockey_matches WHERE id = :id")
+
+_SET_PROBE = text("""
+    UPDATE hockey_matches SET result_probe = CAST(:probe AS jsonb), checked_at = :now, updated_at = :now
+    WHERE id = :id
+    """)
+
+_HAS_PICKS = text("SELECT EXISTS(SELECT 1 FROM hockey_picks WHERE match_id = :id)")
+
+_TO_REVIEW = text("""
+    UPDATE hockey_matches
+    SET status = 'review', review_reason = :reason, result_probe = CAST(:probe AS jsonb),
+        checked_at = :now, updated_at = :now
+    WHERE id = :id AND status IN ('scheduled', 'review')
+    """)
+
+
+def _result_problem(home: int | None, away: int | None, decided_in: str | None) -> str | None:
+    if home is None or away is None or home == away:
+        return "счёт не определён"
+    if decided_in not in _DECIDED:
+        return "нет метки способа окончания (основное время, овертайм, буллиты)"
+    if decided_in != "regulation" and abs(home - away) != 1:
+        return "в овертайме и по буллитам разница должна быть ровно в одну шайбу"
+    return None
+
+
+async def confirm_result(
+    session: AsyncSession, match_id: int, *, home: int | None, away: int | None, decided_in: str | None, now: datetime
+) -> bool:
+    """Можно ли публиковать итог: тот же счёт и способ в двух опросах подряд, между ними не меньше 15 минут.
+
+    Если ходов на матч нет, проверять нечего: итог ставится сразу. Первый опрос запоминает итог и возвращает ``False``. Счёт изменился между опросами или не хватает метки
+    способа — матч на ручную проверку (``review``), запомненный итог заменяется последним. Админ сильнее:
+    ручной ввод закрывает матч без этой проверки.
+    """
+    now = _utc(now)
+    row = (await session.execute(_PROBE, {"id": match_id})).one()
+    problem = _result_problem(home, away, decided_in)
+    probe = {"home": home, "away": away, "decided_in": decided_in, "first_seen_at": now.isoformat()}
+    if problem is not None:
+        await session.execute(_TO_REVIEW, {"id": match_id, "reason": problem, "probe": json.dumps(probe), "now": now})
+        return False
+    # Ходов на матч нет — очки считать не из чего, итог ставим сразу (старые матчи при первом чтении календаря).
+    if not (await session.execute(_HAS_PICKS, {"id": match_id})).scalar_one():
+        return True
+    old = row.result_probe
+    same = bool(old) and (old.get("home"), old.get("away"), old.get("decided_in")) == (home, away, decided_in)
+    if same:
+        first = datetime.fromisoformat(old["first_seen_at"])
+        if now - _utc(first) >= RESULT_STABLE_AFTER:
+            return True
+        return False
+    if old:
+        await session.execute(
+            _TO_REVIEW,
+            {
+                "id": match_id,
+                "reason": f"счёт менялся между опросами: был {old.get('home')}:{old.get('away')}",
+                "probe": json.dumps(probe),
+                "now": now,
+            },
+        )
+        return False
+    await session.execute(_SET_PROBE, {"id": match_id, "probe": json.dumps(probe), "now": now})
+    return False
+
+
 async def upsert_calendar_match(session: AsyncSession, m: CalendarMatch, *, now: datetime) -> str:
     params = _params(m, now)
     record = (await session.execute(_SELECT, {"source_match_id": m.match_id})).one_or_none()
@@ -304,6 +377,9 @@ async def upsert_calendar_match(session: AsyncSession, m: CalendarMatch, *, now:
             )
             if not same:
                 await session.execute(_MOVE, {**params, "id": record.id})
+                from src.application.hockey_game import on_match_moved
+
+                await on_match_moved(session, match_id=record.id, starts_at=params["starts_at"])
                 outcome = "moved"
             else:
                 await session.execute(_TOUCH, {"id": record.id, "now": params["now"]})
@@ -315,6 +391,9 @@ async def upsert_calendar_match(session: AsyncSession, m: CalendarMatch, *, now:
         and m.home_score is not None
         and m.away_score is not None
         and m.home_score != m.away_score
+        and await confirm_result(
+            session, record.id, home=m.home_score, away=m.away_score, decided_in=m.decided_in, now=now
+        )
     ):
         await session.execute(
             _FINAL,
@@ -446,7 +525,15 @@ async def sync_details(session: AsyncSession, source: Source, *, now: datetime) 
             },
         )
         counts["checked"] += 1
-        if g.official and g.home_score is not None and g.away_score is not None and g.home_score != g.away_score:
+        if (
+            g.official
+            and g.home_score is not None
+            and g.away_score is not None
+            and g.home_score != g.away_score
+            and await confirm_result(
+                session, row.id, home=g.home_score, away=g.away_score, decided_in=g.decided_in, now=now
+            )
+        ):
             closed = await session.execute(
                 _FINAL,
                 {

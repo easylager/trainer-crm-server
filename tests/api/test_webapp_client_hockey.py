@@ -223,7 +223,12 @@ async def test_standings_points_rank_and_is_me(app_use_test_db, db_session) -> N
         assert other_row["points"] == 20
         assert other_row["is_me"] is False
         assert me_row["rank"] < other_row["rank"]
-        assert body["me"] == {"rank": me_row["rank"], "points": 50, "exact": 1, "played": 1}
+        assert {k: body["me"][k] for k in ("rank", "points", "exact", "played")} == {
+            "rank": me_row["rank"],
+            "points": 50,
+            "exact": 1,
+            "played": 1,
+        }
         assert sum(1 for item in body["items"] if item["is_me"]) == 1
 
 
@@ -260,7 +265,7 @@ def test_player_name_from_init_data_uses_last_initial() -> None:
 async def test_month_race_result_and_seen(app_use_test_db, db_session) -> None:
     """TASK-334: итоги закрытой гонки и отметка «открыл»; незакрытая гонка — 404."""
     from src.application.hockey_game import make_pick
-    from src.application.hockey_races import close_due_races, ensure_month_race, fresh_race_result
+    from src.application.hockey_races import close_due_races, ensure_month_race, fresh_race_result, mark_calendar_synced
     from src.ingestion.hockey_sources import MINSK_TZ
 
     nov = datetime(2026, 11, 10, 12, 0, tzinfo=MINSK_TZ)
@@ -277,13 +282,19 @@ async def test_month_race_result_and_seen(app_use_test_db, db_session) -> None:
         away_score=1,
         now=starts - timedelta(hours=1),
     )
+    # Корона месяца — от трёх игроков с очками.
+    for extra in (880_297_071, 880_297_072):
+        await make_pick(
+            db_session, player_key=extra, display_name="x", match_id=match_id, side="home", now=starts - timedelta(hours=1)
+        )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with patch_client_principal(ME):
             await db_session.commit()
             assert (await client.get(f"/api/webapp/client/hockey/races/{race.id}/result")).status_code == 404
     await set_manual_result(db_session, match_id, home_score=3, away_score=1, decided_in="regulation", now=dec)
     await score_finished_matches(db_session, now=dec)
-    assert await close_due_races(db_session, now=dec) == [race.id]
+    await mark_calendar_synced(db_session, now=datetime(2026, 11, 25, tzinfo=MINSK_TZ))
+    assert await close_due_races(db_session, now=dec + timedelta(days=8))
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

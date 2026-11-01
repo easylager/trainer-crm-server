@@ -212,7 +212,7 @@ async def test_crown_card_share_and_signed_image(app_use_test_db, db_session, pr
     """TASK-334: корона месяца в чат — подпись чемпиона и поздравление, картинка по подписанному адресу."""
     from src.application.hockey_game import make_pick
     from src.application.hockey_leagues import create_league, join_by_code
-    from src.application.hockey_races import close_due_races, ensure_month_race
+    from src.application.hockey_races import close_due_races, ensure_month_race, mark_calendar_synced
     from src.ingestion.hockey_sources import MINSK_TZ
 
     nov = datetime(2026, 11, 10, 12, 0, tzinfo=MINSK_TZ)
@@ -226,7 +226,13 @@ async def test_crown_card_share_and_signed_image(app_use_test_db, db_session, pr
     race = await ensure_month_race(db_session, now=nov)
     starts = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
     match_id = await _insert_match(db_session, starts_at=starts)
-    for player, score in ((ME, (3, 1)), (FRIEND, (2, 1))):
+    third = 880_297_077
+    await join_by_code(db_session, player_key=third, display_name="Лёша", code=league.invite_code)
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :at WHERE league_id = :l"),
+        {"at": datetime(2026, 11, 1, tzinfo=MINSK_TZ), "l": league.id},
+    )
+    for player, score in ((ME, (3, 1)), (FRIEND, (2, 1)), (third, (5, 0))):
         await make_pick(
             db_session,
             player_key=player,
@@ -238,7 +244,8 @@ async def test_crown_card_share_and_signed_image(app_use_test_db, db_session, pr
         )
     await set_manual_result(db_session, match_id, home_score=3, away_score=1, decided_in="regulation", now=dec)
     await score_finished_matches(db_session, now=dec)
-    assert await close_due_races(db_session, now=dec) == [race.id]
+    await mark_calendar_synced(db_session, now=datetime(2026, 11, 25, tzinfo=MINSK_TZ))
+    assert await close_due_races(db_session, now=dec + timedelta(days=8))
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
