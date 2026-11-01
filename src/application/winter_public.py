@@ -225,3 +225,102 @@ async def get_point(session: AsyncSession, ident: str | int, *, now: datetime, l
     }
     item["noindex"] = bool(r.doubtful)
     return item
+
+
+# --- сайт: итоги города, «чем была точка», sitemap (волна 2) ---------------------------
+INDEXABLE_PRECISIONS = frozenset({"house", "osm_exact", "manual"})
+
+
+def is_indexable(item: dict[str, Any]) -> bool:
+    """O3: в индекс — только точная точка, не «под вопросом», минимум три факта из четырёх.
+
+    Факты: адрес; часы или телефон; тип; цена известна (бесплатно/платно). Остальные страницы
+    открываются людям, но с ``noindex,follow`` и вне sitemap: сотни тонких страниц портят сайт целиком.
+    """
+    if item.get("doubtful") or not item.get("map_allowed"):
+        return False
+    hours = item.get("hours") or {}
+    facts = [
+        bool((item.get("address") or "").strip()),
+        bool(hours.get("known") or item.get("phone")),
+        bool(item.get("kind")),
+        item.get("is_paid") is not None,
+    ]
+    return sum(facts) >= 3
+
+
+async def city_summary(session: AsyncSession, city_id: int, *, now: datetime) -> dict[str, int]:
+    """Сколько зимних точек в городе и сколько залито — для плитки «Зимой» на странице города."""
+    row = (
+        await session.execute(
+            text(
+                """SELECT count(*) AS total, count(*) FILTER (WHERE s.state = 'flooded') AS flooded
+                   FROM seasonal_rinks sr
+                   JOIN arenas a ON a.id = sr.arena_id AND a.is_active
+                   JOIN seasonal_rink_seasons s ON s.arena_id = a.id AND s.season = :season
+                   WHERE a.city_id = :city AND s.state <> 'hidden'"""
+            ),
+            {"season": ws.current_season(now), "city": city_id},
+        )
+    ).one()
+    return {"total": int(row.total), "flooded": int(row.flooded)}
+
+
+async def lookup_any(session: AsyncSession, ident: str | int) -> dict[str, Any] | None:
+    """Точка в любом состоянии, в том числе скрытая: чтобы вместо голого 404 показать понятную страницу.
+
+    ``None`` — такой точки в зимнем каталоге не было. ``hidden`` — была, но сейчас не показывается.
+    """
+    cond, params = ("a.id = :ident", {"ident": int(ident)}) if str(ident).isdigit() else ("p.slug = :ident", {"ident": str(ident)})
+    r = (
+        await session.execute(
+            text(
+                f"""SELECT a.id, a.name, a.is_active, a.city_id, c.name AS city_name, p.slug, s.state
+                    FROM seasonal_rinks sr
+                    JOIN arenas a ON a.id = sr.arena_id
+                    JOIN cities c ON c.id = a.city_id
+                    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                    LEFT JOIN seasonal_rink_seasons s ON s.arena_id = a.id AND s.season = (
+                        SELECT max(season) FROM seasonal_rink_seasons WHERE arena_id = a.id)
+                    WHERE {cond} LIMIT 1"""
+            ),
+            params,
+        )
+    ).first()
+    if r is None:
+        return None
+    return {
+        "id": int(r.id), "name": r.name, "slug": r.slug, "city_id": int(r.city_id), "city": r.city_name,
+        "hidden": (not r.is_active) or r.state in (None, "hidden"),
+    }
+
+
+async def sitemap_points(session: AsyncSession, *, now: datetime) -> list[dict[str, Any]]:
+    """Индексируемые точки (O3) с городом и датой правки — для sitemap.xml."""
+    season = ws.current_season(now)
+    rows = (await session.execute(text(_SELECT + " AND p.status = 'published' AND p.slug IS NOT NULL ORDER BY a.city_id, a.id"),
+                                   {"season": season})).all()
+    settings = Settings()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        item = _shape(r, live={}, photos=[], shared_phone=False, origin=None, settings=settings, detail=False)
+        if is_indexable(item):
+            out.append({"slug": r.slug, "city": r.city_name, "city_id": int(r.city_id)})
+    return out
+
+
+async def cities_with_points(session: AsyncSession, *, now: datetime) -> list[str]:
+    """Названия городов, где есть хотя бы одна показываемая зимняя точка (страница «Зимой в …» не пустая)."""
+    rows = (
+        await session.execute(
+            text(
+                """SELECT DISTINCT c.name, c.sort_order, c.id FROM seasonal_rinks sr
+                   JOIN arenas a ON a.id = sr.arena_id AND a.is_active
+                   JOIN cities c ON c.id = a.city_id AND c.is_active
+                   JOIN seasonal_rink_seasons s ON s.arena_id = a.id AND s.season = :season AND s.state <> 'hidden'
+                   ORDER BY c.sort_order, c.id"""
+            ),
+            {"season": ws.current_season(now)},
+        )
+    ).all()
+    return [str(r.name) for r in rows]

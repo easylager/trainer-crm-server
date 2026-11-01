@@ -158,8 +158,13 @@ async def record_mark(
     idem_key: str | None = None,
     weight: float | None = None,
     now: datetime | None = None,
+    skip_site_limits: bool = False,
 ) -> MarkResult:
-    """Записать отметку и пересчитать статус. Commit — на вызывающем."""
+    """Записать отметку и пересчитать статус. Commit — на вызывающем.
+
+    ``skip_site_limits`` — для попутных отметок той же шторки (людей, хоккей): лимит «1 в 3 ч на точку»
+    уже проверен на главной отметке про лёд, иначе вторая отметка шторки всегда получала бы 429.
+    """
     now = _utc(now)
     if source not in ws.SOURCES:
         raise MarkError("bad_source")
@@ -177,7 +182,7 @@ async def record_mark(
         ).first()
         if dup:
             return MarkResult(arena_id, row.state, False, None, duplicate=True)
-    if source == ws.SOURCE_SITE:
+    if source == ws.SOURCE_SITE and not skip_site_limits:
         await _site_limits(session, actor, arena_id, now)
     w = ws.weight_for(source) if weight is None else float(weight)
     await session.execute(
