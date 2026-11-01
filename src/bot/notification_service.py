@@ -13,6 +13,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+from src.bot.winter_bot import run_winter_loop
 from src.bot.notification_loops import (
     run_booking_complete_loop,
     run_booking_confirmed_notifier_loop,
@@ -102,6 +103,7 @@ async def main() -> None:
         asyncio.create_task(run_booking_complete_loop(client_bot, trainer_bot), name="booking_complete"),
         asyncio.create_task(run_cancel_notifier_loop(client_bot), name="cancel_notifier"),
         asyncio.create_task(run_response_notifier_loop(client_bot), name="response_notifier"),
+        asyncio.create_task(run_winter_loop(client_bot), name="winter_rinks"),
         asyncio.create_task(run_no_response_reminder_loop(client_bot), name="no_response_reminder"),
         asyncio.create_task(run_trainer_booked_notifier_loop(client_bot), name="trainer_booked"),
         asyncio.create_task(run_booking_confirmed_notifier_loop(client_bot), name="booking_confirmed"),

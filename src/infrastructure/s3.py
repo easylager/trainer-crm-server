@@ -126,6 +126,8 @@ def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, 
 
 
 SUGGESTIONS_PREFIX = "suggestions/"
+#: TASK-343: фото зимних точек до модерации. Публично не отдаётся (см. ``get_photo``).
+WINTER_PREFIX = "winter-photos/"
 
 
 def upload_arena_photo(arena_id: int, body: bytes, content_type: str) -> dict:
@@ -137,6 +139,13 @@ def upload_suggestion_photo(suggestion_id: int, body: bytes, content_type: str) 
     """Private photo of a place suggestion (``suggestions/`` is never served publicly)."""
     return _upload_three_variants(
         f"{SUGGESTIONS_PREFIX}{int(suggestion_id)}/{uuid.uuid4().hex}", body, content_type, cache_control="private"
+    )
+
+
+def upload_winter_photo(arena_id: int, body: bytes, content_type: str) -> dict:
+    """Private winter-point photo awaiting moderation (EXIF already stripped by the caller)."""
+    return _upload_three_variants(
+        f"{WINTER_PREFIX}{int(arena_id)}/{uuid.uuid4().hex}", body, content_type, cache_control="private"
     )
 
 

@@ -313,6 +313,17 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # never derived from another secret. Rotating it resets weekly-unique continuity.
     catalog_actor_hmac_secret: str | None = None
 
+    # TASK-343: сезонные (зимние) катки. Флаг выключает публичный API, отметки и рассылки без отката миграций.
+    seasonal_rinks_enabled: bool = False
+    # Аварийный выключатель рассылки «залили» (подписки сохраняются).
+    winter_broadcast_enabled: bool = True
+    # Автопубликация фото после 2 принятых — только вместе с размытием лиц (пока хук-заглушка).
+    winter_photo_autopublish: bool = False
+    # Миниатюры Static API в списке (в шапке страницы точки картинка есть всегда, если ключ задан).
+    winter_static_map_thumbs: bool = False
+    # Яндекс Static API: отдельный ключ, ограниченный по HTTP Referer (не ключ JS API).
+    yandex_static_api_key: str | None = None
+
     # PRD E7: «Проблема с клиентом» — поэтапный rollout (Mini App + API).
     # off = выключено; pilot = только BOOKING_PROBLEM_PILOT_TRAINER_IDS; full = все тренеры.
     booking_problem_rollout: str = "full"

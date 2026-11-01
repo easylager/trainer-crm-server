@@ -616,6 +616,13 @@ async def cmd_start(message: Message) -> None:
     parts = (message.text or "").strip().split(maxsplit=1)
     payload = (parts[1].strip() if len(parts) > 1 else "") or ""
 
+    # TASK-343: зимние точки — wbell_<id> / wnear / wphoto_<id>.
+    if payload:
+        from src.bot.winter_bot import handle_winter_start
+
+        if await handle_winter_start(message, payload):
+            return
+
     # PDEC-028: sg_<token> — автор заявки «места от людей» с сайта привязывает Telegram.
     suggest_token = parse_suggest_start(payload)
     if suggest_token is not None:
