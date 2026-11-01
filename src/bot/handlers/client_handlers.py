@@ -7,7 +7,7 @@ import logging
 import re
 import uuid
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote
 
 from aiogram import Bot, F, Router
