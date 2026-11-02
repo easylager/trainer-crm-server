@@ -39,6 +39,7 @@ from src.ingestion.seed_config import (
 )
 from src.ingestion.types import RUN_STATUS_EMPTY, RUN_STATUS_OK, CanonicalSlotDraft, ParserJob
 from src.ingestion.validate import IceSessionValidator
+from src.ingestion.adapters import _ledby_column_slots, _ledby_disco_prices
 from tests.ingestion.fakes import RecordingParser
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -320,6 +321,71 @@ async def test_ledby_html_adapter_matches_expected_sample() -> None:
     assert disco.price_adult_minor == 1000
     assert disco.price_child_minor == 800
     assert disco.price_rental_minor == 500
+
+
+def _ledby_nov_job(**overrides: object) -> ParserJob:
+    job = _ledby_job()
+    config = dict(job.config, fixture_dir=str(_FIXTURES / "minsk-ledby-2026-11"))
+    config.update(overrides)
+    return replace(job, config=config)
+
+
+_LEDBY_NOV_MK = [
+    ("2026-11-02", "16:00"), ("2026-11-02", "20:00"), ("2026-11-03", "15:45"),
+    ("2026-11-04", "16:15"), ("2026-11-04", "20:15"), ("2026-11-05", "15:45"),
+    ("2026-11-05", "19:45"), ("2026-11-06", "19:30"), ("2026-11-07", "18:00"),
+    ("2026-11-07", "19:15"), ("2026-11-07", "20:30"), ("2026-11-08", "20:00"),
+]
+
+
+@pytest.mark.asyncio
+async def test_ledby_multi_time_cells() -> None:
+    """02–08.11.2026: cells hold 2–3 «HH:MM (1 час)*» split by <br>, bold/red markup — all kept."""
+    extraction = await LedByHtmlParser().extract(_ledby_nov_job())
+    mk = [slot for slot in extraction.slots if slot.kind_raw == "Массовое катание"]
+    assert [(slot.local_date, slot.starts_at_local) for slot in mk] == _LEDBY_NOV_MK
+    assert all(slot.session_label == "дискотека" for slot in mk)
+    assert all(slot.ends_at_local == f"{int(slot.starts_at_local[:2]) + 1:02d}{slot.starts_at_local[2:]}" for slot in mk)
+
+
+@pytest.mark.asyncio
+async def test_ledby_disco_flat_price() -> None:
+    """«*» sessions are priced from the «Массовое катание*» page: 10 / 8 BYN, weekdays included."""
+    extraction = await LedByHtmlParser().extract(_ledby_nov_job())
+    mk = [slot for slot in extraction.slots if slot.kind_raw == "Массовое катание"]
+    assert {(slot.price_adult, slot.price_child, slot.price_rental) for slot in mk} == {(1000, 800, 500)}
+
+
+@pytest.mark.asyncio
+async def test_ledby_disco_page_missing_falls_back_to_regular_price(tmp_path: Path) -> None:
+    src = _FIXTURES / "minsk-ledby-2026-11"
+    for name in ("timetable.html", "mass_skating.html"):
+        (tmp_path / name).write_text((src / name).read_text(encoding="utf-8"), encoding="utf-8")
+    extraction = await LedByHtmlParser().extract(_ledby_nov_job(fixture_dir=str(tmp_path)))
+    tue = next(slot for slot in extraction.slots if slot.local_date == "2026-11-03")
+    assert (tue.price_adult, tue.price_child) == (900, 700)
+    assert len([s for s in extraction.slots if s.kind_raw == "Массовое катание"]) == 12
+
+
+def test_ledby_disco_prices_parsed_from_page() -> None:
+    html = (_FIXTURES / "minsk-ledby-2026-11" / "disco.html").read_text(encoding="utf-8")
+    assert _ledby_disco_prices(html) == {45: {"adult": 800, "child": 600}, 60: {"adult": 1000, "child": 800}}
+
+
+def test_ledby_star_detected_per_time() -> None:
+    table = [
+        ["", "МАССОВОЕ КАТАНИЕ"],
+        ["Пн.02.11.2026", "16:00 (1 час)* 20:00 (1 час)"],
+    ]
+    book = {60: {"weekday": {"adult": 900, "child": 700}, "weekend": {}, "rental": 500}}
+    disco = {60: {"adult": 1000, "child": 800}}
+    slots = _ledby_column_slots(
+        table, 1, kind_raw="Массовое катание", price_book=book, age_note=None, disco_book=disco
+    )
+    assert [(s.starts_at_local, s.session_label, s.price_adult) for s in slots] == [
+        ("16:00", "дискотека", 1000),
+        ("20:00", None, 900),
+    ]
 
 
 @pytest.mark.asyncio

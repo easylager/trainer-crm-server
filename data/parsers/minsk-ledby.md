@@ -18,6 +18,7 @@
 {
   "schedule_url": "http://led.by/category/timetable/",
   "prices_url": "http://led.by/mass_skating/",
+  "disco_prices_url": "https://led.by/%d0%bc%d0%b0%d1%81%d1%81%d0%be%d0%b2%d0%be%d0%b5-%d0%ba%d0%b0%d1%82%d0%b0%d0%bd%d0%b8%d0%b5/",
   "timezone": "Europe/Minsk",
   "kind": "public_skate",
   "schedule_block_start": "МАССОВОЕ КАТАНИЕ",

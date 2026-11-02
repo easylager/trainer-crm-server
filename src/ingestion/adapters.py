@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import replace
 from datetime import date, datetime, timedelta
@@ -23,6 +24,8 @@ from src.ingestion.seed_config import (
 from src.ingestion.koronaticket_rink import enrich_zamok_slots, load_korona_rink_html, parse_rink_nuxt_html
 from src.ingestion.source_io import fetch_http_json, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
+
+_log = logging.getLogger(__name__)
 from src.shared.minsk_speed_oval import speed_oval_hall
 
 _TIME_RANGE = re.compile(r"(\d{1,2}[:.]\d{2})\s*[-–—]+\s*(\d{1,2}[:.]\d{2})")
@@ -46,6 +49,12 @@ _DAY_DATE = re.compile(
     re.IGNORECASE,
 )
 _LED_TIME = re.compile(r"(\d{1,2}:\d{2})\s*\((\d+)\s*час", re.IGNORECASE)
+# «16:00 (1 час)*» — the footnote star sits after the closing paren of *this* time.
+_LED_DISCO_TAIL = re.compile(r"[^)\d]{0,6}\)\s*\*")
+_LED_DISCO_PRICE = re.compile(
+    r"(\d{2})\s*мин\.?\s*:\s*взрослый\s*[—\-]\s*([\d,]+)\s*руб\.?;\s*детский[^—\-]*[—\-]\s*([\d,]+)",
+    re.IGNORECASE,
+)
 # Дефис — как сайт пишет новую неделю («18-30 БА»); точка и двоеточие — старые таблицы.
 _CHIZ_CELL = re.compile(r"(\d{1,2})[-.:](\d{2})\s*(МА|БА)", re.IGNORECASE)
 _CHIZ_RINK_LABELS = {"МА": "Малая арена", "БА": "Большая арена"}
@@ -597,7 +606,13 @@ def _ledby_column_slots(
     age_note: str | None,
     capacity_note: str | None = None,
     ohm_adult_only: bool = False,
+    disco_book: dict[int, dict[str, int]] | None = None,
 ) -> list[ExtractedSlot]:
+    """One slot per «HH:MM (N час)» in the cell — a date may list 2–3 sessions.
+
+    A «*» right after a time marks the disco session («Массовое катание*»), which has its own
+    flat price (``disco_book``, no weekday/weekend split); without it the regular price applies.
+    """
     slots: list[ExtractedSlot] = []
     for row in table[1:]:
         if not row:
@@ -607,41 +622,43 @@ def _ledby_column_slots(
             continue
         local_date = date(int(day_match.group(3)), int(day_match.group(2)), int(day_match.group(1)))
         cell = row[col_idx] if col_idx < len(row) else ""
-        disco = "*" in cell
-        time_match = _LED_TIME.search(cell)
-        if not time_match:
-            continue
-        start = _norm_hhmm(time_match.group(1))
-        hours = int(time_match.group(2))
-        duration = hours * 60
-        hour, minute = (int(part) for part in start.split(":"))
-        end_dt = datetime(2000, 1, 1, hour, minute) + timedelta(minutes=duration)
-        weekend = local_date.weekday() >= 5
-        band = price_book.get(duration) or price_book.get(60) or {}
-        day_key = "weekend" if weekend else "weekday"
-        if ohm_adult_only:
-            adult = band.get(day_key)
-            child = None
-            rental = None
-        else:
-            prices = band.get(day_key) or {}
-            adult = prices.get("adult")
-            child = prices.get("child")
-            rental = band.get("rental")
-        slots.append(
-            ExtractedSlot(
-                local_date=local_date.isoformat(),
-                starts_at_local=start,
-                ends_at_local=_fmt(end_dt.hour, end_dt.minute),
-                kind_raw=kind_raw,
-                price_adult=adult,
-                price_child=child,
-                price_rental=rental,
-                session_label="дискотека" if disco and not ohm_adult_only else None,
-                age_note=age_note,
-                capacity_note=capacity_note,
+        for time_match in _LED_TIME.finditer(cell):
+            disco = bool(_LED_DISCO_TAIL.match(cell, time_match.end()))
+            start = _norm_hhmm(time_match.group(1))
+            hours = int(time_match.group(2))
+            duration = hours * 60
+            hour, minute = (int(part) for part in start.split(":"))
+            end_dt = datetime(2000, 1, 1, hour, minute) + timedelta(minutes=duration)
+            weekend = local_date.weekday() >= 5
+            band = price_book.get(duration) or price_book.get(60) or {}
+            day_key = "weekend" if weekend else "weekday"
+            if ohm_adult_only:
+                adult = band.get(day_key)
+                child = None
+                rental = None
+            else:
+                prices = band.get(day_key) or {}
+                adult = prices.get("adult")
+                child = prices.get("child")
+                rental = band.get("rental")
+                disco_prices = (disco_book or {}).get(duration) if disco else None
+                if disco_prices:
+                    adult = disco_prices.get("adult", adult)
+                    child = disco_prices.get("child", child)
+            slots.append(
+                ExtractedSlot(
+                    local_date=local_date.isoformat(),
+                    starts_at_local=start,
+                    ends_at_local=_fmt(end_dt.hour, end_dt.minute),
+                    kind_raw=kind_raw,
+                    price_adult=adult,
+                    price_child=child,
+                    price_rental=rental,
+                    session_label="дискотека" if disco and not ohm_adult_only else None,
+                    age_note=age_note,
+                    capacity_note=capacity_note,
+                )
             )
-        )
     return slots
 
 
@@ -652,6 +669,8 @@ class LedByHtmlParser(IceParser):
         timetable = await load_source_text(job, filename="timetable.html", url_keys=("schedule_url",))
         prices_html = await load_source_text(job, filename="mass_skating.html", url_keys=("prices_url",))
         price_book = _ledby_prices(prices_html)
+        disco_html = await _ledby_load_disco_html(job)
+        disco_book = _ledby_disco_prices(disco_html) if disco_html else {}
         ohm_price_book = _ledby_ohm_price_bands(job)
         slots: list[ExtractedSlot] = []
         for table in parse_tables(timetable):
@@ -676,6 +695,7 @@ class LedByHtmlParser(IceParser):
                         mk_idx,
                         kind_raw="Массовое катание",
                         price_book=price_book,
+                        disco_book=disco_book,
                         age_note="детский с 3 до 14 лет",
                     )
                 )
@@ -697,9 +717,32 @@ class LedByHtmlParser(IceParser):
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,
-            snapshot={"timetable": timetable, "prices": prices_html},
+            snapshot={"timetable": timetable, "prices": prices_html, "disco_prices": disco_html},
             slots=slots,
         )
+
+
+async def _ledby_load_disco_html(job: ParserJob) -> str:
+    """«Массовое катание*» page; empty when not configured or unreachable (regular price then)."""
+    if not job.config.get("disco_prices_url") and not job.config.get("fixture_dir"):
+        return ""
+    try:
+        return await load_source_text(job, filename="disco.html", url_keys=("disco_prices_url",))
+    except Exception:  # noqa: BLE001 — the disco page is optional; fall back to the regular price
+        _log.warning("ledby: disco price page unavailable, using regular prices", exc_info=True)
+        return ""
+
+
+def _ledby_disco_prices(html: str) -> dict[int, dict[str, int]]:
+    """duration_minutes → adult/child minor units from «Стоимость: 60 мин.: взрослый — 10,0 руб.; …»."""
+    plain = html_unescape_cell(html)
+    book: dict[int, dict[str, int]] = {}
+    for minutes, adult, child in _LED_DISCO_PRICE.findall(plain):
+        book[int(minutes)] = {
+            "adult": parse_price_to_minor(adult + " руб.", already_minor=False),
+            "child": parse_price_to_minor(child + " руб.", already_minor=False),
+        }
+    return book
 
 
 def _ledby_prices(html: str) -> dict[int, dict[str, Any]]:
