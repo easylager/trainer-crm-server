@@ -1,11 +1,15 @@
 """Матчи как события сайта (TASK-347): лента города, список «Хоккей», страница матча, .ics.
 
 Данные те же, что у Mini App: таблица ``hockey_matches``, клубы Экстралиги по ``EXTRALIGA_CLUBS`` и
-домашние матчи Динамо по ``HOCKEY_MATCHES_ENABLED``. Всё за флагом ``SITE_MATCHES_ENABLED``.
+матчи Динамо (дома и в гостях) по ``HOCKEY_MATCHES_ENABLED``. Всё за флагом ``SITE_MATCHES_ENABLED``.
 Здесь нет игрока, поэтому нет и его хода: сайт показывает матч, а ход и напоминание живут в Telegram.
 
 Матч виден на сайте, только если обе команды известны (клубы Экстралиги, Динамо и соперники КХЛ из
-``hockey_teams``) и его арена нашлась в нашем каталоге. Выездные матчи Динамо в сайт не попадают.
+``hockey_teams``) и его арена нашлась в нашем каталоге. Исключение — выезд Динамо: арены в каталоге у него
+нет (чужую, минскую, не подставляем), страница честно ведёт в протокол вместо «Как добраться».
+
+Две разные идеи, чтобы не путать: «матч в городе» (``in_city``) — он физически проходит там, это блок города
+и секция «В Минске»; «матчи клуба» (фильтр ``club``) — все игры команды, дома и в гостях.
 Отменённый матч и матч, пропавший из календаря две синхронизации подряд, скрыт из лент, списка и sitemap;
 его страница остаётся с честной подписью и ``noindex``.
 
@@ -46,6 +50,8 @@ WAIT_WINDOW = timedelta(hours=12)
 # Только что сыгранный матч ещё держится в ленте: счёт виден сразу.
 BEHIND = timedelta(hours=3)
 FEED_AHEAD = timedelta(days=7)
+# Город без матчей на неделе: ближайший в будущем ищем в пределах сезона.
+NEXT_IN_CITY_AHEAD = timedelta(days=200)
 LIST_AHEAD = timedelta(days=30)
 SITEMAP_AHEAD = timedelta(days=45)
 SITEMAP_BACK = timedelta(days=30)
@@ -91,7 +97,7 @@ _COLUMNS = """
 _SCOPE = """
     home_team = ANY(:known) AND away_team = ANY(:known)
     AND ((league = 'extraliga' AND (home_team = ANY(:clubs) OR away_team = ANY(:clubs)))
-         OR (league = 'khl' AND :dinamo AND home_team = :dinamo_name))
+         OR (league = 'khl' AND :dinamo AND (home_team = :dinamo_name OR away_team = :dinamo_name)))
 """
 _RANGE = text(f"""
     SELECT {_COLUMNS} FROM hockey_matches
@@ -188,6 +194,15 @@ def _params(scope: Scope) -> dict[str, Any]:
     }
 
 
+def in_scope(row: Any, scope: Scope) -> bool:
+    """Тот же предикат, что ``_SCOPE``, для строки, уже выбранной из базы (колокольчик). Менять парой с ``_SCOPE``."""
+    if row.home_team not in TEAMS or row.away_team not in TEAMS:
+        return False
+    if row.league == LEAGUE_EXTRALIGA:
+        return row.home_team in scope.clubs or row.away_team in scope.clubs
+    return bool(row.league == LEAGUE_KHL and scope.dinamo and DINAMO in (row.home_team, row.away_team))
+
+
 def hidden(row: Any) -> bool:
     """Отменён или пропал из календаря: из лент скрыт, страница остаётся."""
     return row.status == STATUS_CANCELLED or int(getattr(row, "missed_runs", 0) or 0) >= MISSED_HIDE
@@ -205,11 +220,16 @@ async def arena_index(session: AsyncSession) -> dict[str, list[dict[str, Any]]]:
 
 
 def place_of(row: Any) -> tuple[str | None, str | None]:
-    """(арена, город) матча по данным источника. У Динамо дома — Минск-Арена."""
+    """(арена, город) матча по данным источника. У Динамо дома — Минск-Арена, на выезде места мы не знаем."""
     if row.league == LEAGUE_KHL:
-        return DINAMO_ARENA, DINAMO_CITY
+        return (DINAMO_ARENA, DINAMO_CITY) if row.home_team == DINAMO else (None, None)
     club = _CLUB_BY_NAME.get(row.home_team)
     return row.arena, (row.city or (club.city if club else None))
+
+
+def is_away_trip(row: Any) -> bool:
+    """Выезд Динамо: КХЛ, хозяин — соперник. Места матча в нашей базе нет."""
+    return row.league == LEAGUE_KHL and row.home_team != DINAMO
 
 
 def resolve_arena(row: Any, index: dict[str, list[dict[str, Any]]]) -> dict[str, Any] | None:
@@ -218,6 +238,8 @@ def resolve_arena(row: Any, index: dict[str, list[dict[str, Any]]]) -> dict[str,
     arena_name, city = place_of(row)
     candidates = index.get(_norm(city), [])
     if row.league == LEAGUE_KHL:
+        if row.home_team != DINAMO:
+            return None
         found = [a for a in candidates if a.get("slug") == "minsk-arena" or _norm(a["name"]) in ("минск арена", "минск-арена")]
         return found[0] if found else None
     words = _norm((arena_name or "").replace("-", " ")).split()
@@ -328,6 +350,7 @@ def match_card(row: Any, *, now: datetime, arena: dict[str, Any] | None = None) 
         "result": result,
         "arena": arena_label,
         "arena_id": int(arena["id"]) if arena else None,
+        "away_trip": is_away_trip(row),
         "city": city,
         "where": " · ".join(bit for bit in (city, arena_label) if bit),
     }
@@ -343,8 +366,8 @@ async def visible_rows(
     until: datetime,
     settings: Settings | None = None,
     index: dict[str, list[dict[str, Any]]] | None = None,
-) -> list[tuple[Any, dict[str, Any]]]:
-    """Матчи окна, которые можно показать: в области видимости и с ареной из каталога."""
+) -> list[tuple[Any, dict[str, Any] | None]]:
+    """Матчи окна, которые можно показать: в области видимости и с ареной из каталога (выезд Динамо — без неё)."""
     scope = scope_of(settings)
     if scope.empty:
         return []
@@ -355,7 +378,7 @@ async def visible_rows(
     out = []
     for row in rows:
         arena = resolve_arena(row, arenas)
-        if arena is not None:
+        if arena is not None or is_away_trip(row):
             out.append((row, arena))
     return out
 
@@ -365,9 +388,21 @@ def _club_cities(city: str) -> set[str]:
 
 
 def in_city(row: Any, city: str) -> bool:
-    """Матч «в городе»: играют там или это выезд местного клуба."""
-    mine = _club_cities(city)
-    return _norm(place_of(row)[1]) == _norm(city) or row.home_team in mine or row.away_team in mine
+    """Матч «в городе»: он физически проходит там. Выезд местного клуба в другом городе — не в этом."""
+    return _norm(place_of(row)[1]) == _norm(city)
+
+
+def venue_label(card: dict[str, Any], club_slug: str | None = None) -> str | None:
+    """Метка «где играет»: «Дома · Минск-Арена» / «Выезд · Гомель» — с точки зрения клуба из фильтра.
+
+    Без фильтра метка только у выезда Динамо (там соперник — хозяин, а места мы не знаем): «Выезд».
+    Места нет — метка без «· …», ничего не выдумываем.
+    """
+    if club_slug is None:
+        return "Выезд" if card.get("away_trip") else None
+    if card["home_slug"] == club_slug:
+        return "Дома" + (f" · {card['arena']}" if card.get("arena") else "")
+    return "Выезд" + (f" · {card['city']}" if card.get("city") else "")
 
 
 def day_sticker(starts: datetime, now: datetime) -> str | None:
@@ -383,56 +418,44 @@ async def city_feed(
     now: datetime,
     settings: Settings | None = None,
 ) -> dict[str, Any] | None:
-    """Хоккей города на 7 дней: плитка и лента. ``None`` — в городе и рядом матчей нет, блока нет.
+    """«Хоккей в городе»: где посмотреть живьём. Только матчи, которые проходят в этом городе.
 
-    Порядок: матчи в городе и выезды его клуба; нет таковых — ближайший матч области и домашний
-    матч Динамо («Хоккей рядом»). Идущий и только что сыгранный держатся в ленте (``BEHIND``).
-    Один запрос матчей и один — арен; ``extraliga_preview`` на листингах не зовём.
+    На 7 дней вперёд — плитка и лента (``empty`` ложь). Матчей нет, но в городе они ещё будут — ``empty``
+    истина и ближайший матч в ``next`` («В Минске до 10 ноября матчей нет»). Матчей в городе больше нет
+    вообще — ``None``, блока нет. Никаких чужих выездов и «матчей рядом». Идущий и только что сыгранный
+    держатся в ленте (``BEHIND``). ``city_id`` оставлен для совместимости вызовов.
     """
+    del city_id
     pairs = await visible_rows(session, since=now - BEHIND, until=now + FEED_AHEAD, settings=settings)
-    if not pairs:
-        return None
-    rows = [r for r, _a in pairs]
-    arenas = {int(r.id): a for r, a in pairs}
-    mine = [r for r in rows if in_city(r, city_name)]
-    nearby = False
-    if not mine:
-        picked: list[Any] = []
-        city_region = None
-        if city_id is not None:
-            city_region = (await session.execute(text("SELECT region FROM cities WHERE id = :id"), {"id": int(city_id)})).scalar()
-        if city_region:
-            club_city = {c.name: c.city for c in CLUBS.values()}
-            regions = {
-                _norm(r.name): _norm(r.region)
-                for r in (await session.execute(_REGIONS, {"names": sorted(set(club_city.values()))})).all()
+    mine = [(r, a) for r, a in pairs if in_city(r, city_name)]
+    today = local(now).date()
+    if mine:
+        cards = [match_card(r, now=now, arena=a) for r, a in mine]
+        return {
+            "matches": cards[:CITY_LIMIT],
+            "city_count": len(cards),
+            "week_count": len(cards),
+            "empty": False,
+            "next": None,
+            "first": cards[0],
+            "first_word": day_sticker(cards[0]["starts_at"], now),
+            "today": today,
+        }
+    later = await visible_rows(session, since=now + FEED_AHEAD, until=now + NEXT_IN_CITY_AHEAD, settings=settings)
+    for r, a in later:
+        if in_city(r, city_name):
+            nxt = match_card(r, now=now, arena=a)
+            return {
+                "matches": [],
+                "city_count": 0,
+                "week_count": 0,
+                "empty": True,
+                "next": nxt,
+                "first": nxt,
+                "first_word": None,
+                "today": today,
             }
-            region = _norm(city_region)
-            near = [
-                r
-                for r in rows
-                if r.league == LEAGUE_EXTRALIGA
-                and _utc(r.starts_at) > now
-                and regions.get(_norm(club_city.get(r.home_team) or r.city)) == region
-            ]
-            picked += near[:1]
-        dinamo = next((r for r in rows if r.league == LEAGUE_KHL and _utc(r.starts_at) > now), None)
-        if dinamo is not None and dinamo not in picked:
-            picked.append(dinamo)
-        mine = sorted(picked, key=lambda r: (_utc(r.starts_at), r.id))
-        nearby = True
-    if not mine:
-        return None
-    cards = [match_card(r, now=now, arena=arenas.get(int(r.id))) for r in mine[:CITY_LIMIT]]
-    return {
-        "matches": cards,
-        "city_count": len(mine),
-        "week_count": sum(1 for r in rows if _utc(r.starts_at) > now),
-        "nearby": nearby,
-        "first": cards[0],
-        "first_word": day_sticker(cards[0]["starts_at"], now),
-        "today": local(now).date(),
-    }
+    return None
 
 
 async def arena_matches(
@@ -440,7 +463,7 @@ async def arena_matches(
 ) -> list[dict[str, Any]]:
     """Матчи, которые идут на этой арене в ближайшие 7 дней (блок «Матчи здесь» и строки расписания)."""
     pairs = await visible_rows(session, since=now - BEHIND, until=now + FEED_AHEAD, settings=settings)
-    return [match_card(r, now=now, arena=a) for r, a in pairs if int(a["id"]) == int(arena_id)]
+    return [match_card(r, now=now, arena=a) for r, a in pairs if a is not None and int(a["id"]) == int(arena_id)]
 
 
 async def matches_list(
@@ -451,14 +474,19 @@ async def matches_list(
     club: str | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
-    """Список «Хоккей» по дням: свой город первым, фильтр по клубу (slug)."""
+    """Список «Хоккей» по дням.
+
+    Без города и клуба — одна лента по дням. С городом — две секции: «В <городе>» (матчи там) и «По Беларуси»
+    (остальные, включая выезды Динамо). Клуб (slug) — все матчи команды, дома и в гостях, одним списком по
+    времени, у каждого метка «Дома · …» / «Выезд · …».
+    """
     pairs = [
         (r, a)
         for r, a in await visible_rows(session, since=now - BEHIND, until=now + LIST_AHEAD, settings=settings)
         if not (r.status == STATUS_FINAL and _utc(r.starts_at) < now - BEHIND)
     ]
     cards = [(match_card(r, now=now, arena=a), in_city(r, city) if city else False) for r, a in pairs]
-    # Чипы клубов — из того, что сейчас в списке. Свой город — первым, Динамо — следом.
+    # Чипы клубов — из того, что сейчас в списке. Клуб города — первым, Динамо — следом.
     seen: dict[str, dict[str, Any]] = {}
     for card, _mine in cards:
         for side in ("home", "away"):
@@ -471,16 +499,30 @@ async def matches_list(
     if club:
         cards = [(c, m) for c, m in cards if club in (c["home_slug"], c["away_slug"])]
     today = local(now).date()
-    days: list[dict[str, Any]] = []
-    for card, mine in cards:
-        if not days or days[-1]["day"] != card["day"]:
-            days.append({"day": card["day"], "label": day_heading(card["day"], today), "items": []})
-        days[-1]["items"].append({**card, "mine": mine})
-    for day in days:
-        day["items"].sort(key=lambda m: not m["mine"])  # свой город — наверх дня, внутри — по времени (sort стабилен)
+
+    def by_days(items: list[tuple[dict[str, Any], bool]]) -> list[dict[str, Any]]:
+        days: list[dict[str, Any]] = []
+        for card, mine in items:
+            if not days or days[-1]["day"] != card["day"]:
+                days.append({"day": card["day"], "label": day_heading(card["day"], today), "items": []})
+            days[-1]["items"].append({**card, "mine": mine, "venue": venue_label(card, club)})
+        return days
+
+    days = by_days(cards)
+    sections: list[dict[str, Any]] = []
+    if city and not club:
+        from src.shared.city_locative import city_locative
+
+        where = city_locative(city)
+        sections = [
+            {"key": "city", "title": f"В {where}" if where else city, "days": by_days([x for x in cards if x[1]])},
+            {"key": "country", "title": "По Беларуси", "days": by_days([x for x in cards if not x[1]])},
+        ]
+        sections = [sec for sec in sections if sec["days"]]
     first = cards[0][0] if cards else None
     return {
         "days": days,
+        "sections": sections,
         "clubs": clubs,
         "club": club,
         "city": city,
@@ -647,6 +689,16 @@ async def live_score(session: AsyncSession, match_id: int) -> dict[str, Any] | N
     return {"score": f"{row.live_home_score}:{row.live_away_score}", "at": f"{local(row.live_at):%H:%M}"}
 
 
+def club_links(card: dict[str, Any]) -> list[dict[str, str]]:
+    """Команды матча, у которых есть свой список «все матчи» (Динамо и клубы Экстралиги)."""
+    out = []
+    for side in ("home", "away"):
+        name = card[side]["name"]
+        if name == DINAMO or name in _CLUB_BY_NAME:
+            out.append({"slug": card[f"{side}_slug"], "name": name})
+    return out
+
+
 async def match_page_data(
     session: AsyncSession, match_id: int, *, now: datetime, settings: Settings | None = None
 ) -> dict[str, Any] | None:
@@ -662,7 +714,8 @@ async def match_page_data(
         return None
     index = await arena_index(session)
     arena = resolve_arena(row, index)
-    if arena is None:
+    away = is_away_trip(row)
+    if arena is None and not away:
         return None
     card = match_card(row, now=now, arena=arena)
     after = card["phase"] == PHASE_AFTER
@@ -682,14 +735,20 @@ async def match_page_data(
         "match": card,
         "gone": gone,
         "arena": arena,
+        "away_trip": away,
         "arena_path": arena_path(arena),
-        "arena_name": card["arena"] or arena["name"],
-        "city": arena["city_name"],
-        "ice_before": await ice_before(session, arena, row, now=now) if card["phase"] == PHASE_BEFORE and not gone else None,
+        "arena_name": (card["arena"] or arena["name"]) if arena else "",
+        "city": arena["city_name"] if arena else None,
+        "club_links": club_links(card),
+        "ice_before": (
+            await ice_before(session, arena, row, now=now)
+            if arena is not None and card["phase"] == PHASE_BEFORE and not gone
+            else None
+        ),
         "preview": preview,
         "periods": _periods(details) if details else [],
         "goals": _goals(details, row.home_team, row.away_team) if details else [],
-        "tickets": tickets_of(row) if card["phase"] == PHASE_BEFORE and not gone else None,
+        "tickets": tickets_of(row) if card["phase"] == PHASE_BEFORE and not gone and not away else None,
         "protocol_url": protocol_url(row),
         "live": await live_score(session, row.id) if card["phase"] == PHASE_LIVE and not gone else None,
         "others": [] if gone else others,

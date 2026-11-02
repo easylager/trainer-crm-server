@@ -282,3 +282,10 @@ html body.cm-body, html.trainer-theme-dark body.cm-body, html.trainer-theme-ligh
 .cm-hero--team .cm-title { display: flex; align-items: center; gap: 12px; }
 /* .cm-title span { display: block } иначе перебивает inline-flex круга, и логотип прилипает к верху */
 .cm-hero--team .cm-title .cm-logo { display: inline-flex; width: 44px; height: 44px; }
+
+.cm-clubs { display: flex; flex-wrap: wrap; gap: 0 18px; padding: 0 4px; }
+.cm-clubs[hidden] { display: none; }
+.cm-clubs__a { display: inline-flex; align-items: center; min-height: 44px; font-size: 15px; font-weight: 600; color: var(--g-ink); text-decoration: none; }
+.cm-sec { margin: 18px 4px 0; font: 400 22px/1.1 var(--g-font-display); letter-spacing: -.01em; }
+.cm-sec:first-child { margin-top: 0; }
+.cm-sec-empty { margin: 8px 4px 0; font-size: 15px; color: var(--g-muted); }

@@ -84,6 +84,10 @@
 .m-chip .m-logo img { width: 21px; height: 21px; }
 .m-chip[aria-current="true"] { background: var(--g-ink); color: var(--g-bg) !important; border-color: var(--g-ink); }
 .m-days { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 0; }
+.m-sec { margin: 10px 0 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; color: var(--g-ink); }
+.m-sec:first-child { margin-top: 0; }
+.m-feed-empty { margin: 0 16px 10px; font-size: 15px; color: var(--g-muted); }
+.m-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .m-day { display: flex; flex-direction: column; gap: 6px; }
 .m-day__h { margin: 0; padding-top: 6px; font-size: 12px; font-weight: 600; letter-spacing: .05em; color: var(--g-muted); }
 .m-row {

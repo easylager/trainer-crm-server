@@ -584,10 +584,25 @@
     }));
   }
 
+  // «Все матчи · Юность» под командами: тап ведёт в каталог со всеми играми клуба, дома и на выезде.
+  function paintClubs(ev) {
+    var host = $('cmClubs');
+    var links = ev.club_links || [];
+    host.hidden = !links.length;
+    host.replaceChildren.apply(host, links.map(function (c) {
+      var path = 'client-matches?team=' + encodeURIComponent(c.slug);
+      var a = el('a', 'cm-clubs__a', 'Все матчи · ' + c.name + ' ›');
+      a.href = path;
+      a.addEventListener('click', function (e) { e.preventDefault(); haptic(); go(path); });
+      return a;
+    }));
+  }
+
   // ---------- всё вместе ----------
 
   function paint(ev) {
     paintHero(ev);
+    paintClubs(ev);
     paintRsvp(ev);
     paintBuy(ev);
     paintWho(ev);

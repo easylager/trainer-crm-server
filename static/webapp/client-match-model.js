@@ -212,7 +212,14 @@
     { status: 'cant', label: 'Не смогу', toast: 'Записали: не сможешь' },
   ];
 
+  /** Подпись «где»: метка клуба («Дома · Минск-Арена», «Выезд · Гомель») или «арена · город». Те же слова, что на сайте. */
+  function placeText(m) {
+    if (m.venue) return m.venue === 'Выезд' && m.external_url ? 'Выезд · hcdinamo.by' : m.venue;
+    return [m.arena, m.city].filter(Boolean).join(' · ');
+  }
+
   var api = {
+    placeText: placeText,
     plural: plural,
     heroWhen: heroWhen,
     status: status,

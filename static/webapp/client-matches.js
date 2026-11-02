@@ -97,7 +97,7 @@
     t.appendChild(el('span', 'cm-mrow__name', m.home.name + ' — ' + m.away.name));
     var sub = el('span', 'cm-mrow__sub');
     if (!state.league) sub.appendChild(el('span', 'mx-tag' + (m.league === 'khl' ? ' mx-tag--khl' : ''), m.league_label));
-    sub.appendChild(doc.createTextNode([m.arena, m.city].filter(Boolean).join(' · ') || (m.external_url ? 'выезд · hcdinamo.by' : '')));
+    sub.appendChild(doc.createTextNode(M.placeText(m)));
     t.appendChild(sub);
     a.appendChild(t);
     a.appendChild(el('span', 'cm-mrow__time' + (m.live ? ' cm-mrow__time--live' : ''), timeText(m)));
@@ -142,10 +142,29 @@
     bar.replaceChildren.apply(bar, items);
   }
 
-  function paintList(matches) {
+  function dayGroups(matches) {
+    var groups = [];
+    matches.forEach(function (m) {
+      var day = M.heroWhen(m.starts_at).split(' · ')[0];
+      var g = groups[groups.length - 1];
+      if (!g || g.day !== day) groups.push(g = { day: day, items: [] });
+      g.items.push(m);
+    });
+    return groups.map(function (g) {
+      var sec = el('section', 'cm-day');
+      sec.appendChild(el('h2', 'cm-h2', g.day));
+      var card = el('div', 'cm-card cm-mlist');
+      g.items.forEach(function (m) { card.appendChild(row(m)); });
+      sec.appendChild(card);
+      return sec;
+    });
+  }
+
+  function paintList(matches, others, cityTitle) {
     var host = $('cmDays');
     var s = $('cmState');
-    if (!matches.length) {
+    var split = !!(cityTitle && others);
+    if (!matches.length && !(split && others.length)) {
       var any = KEYS.some(function (k) { return state[k]; });
       s.replaceChildren(doc.createTextNode(state.when === 'results'
         ? 'За последний месяц результатов нет.'
@@ -158,21 +177,18 @@
       return host.replaceChildren();
     }
     s.hidden = true;
-    var groups = [];
-    matches.forEach(function (m) {
-      var day = M.heroWhen(m.starts_at).split(' · ')[0];
-      var g = groups[groups.length - 1];
-      if (!g || g.day !== day) groups.push(g = { day: day, items: [] });
-      g.items.push(m);
-    });
-    host.replaceChildren.apply(host, groups.map(function (g) {
-      var sec = el('section', 'cm-day');
-      sec.appendChild(el('h2', 'cm-h2', g.day));
-      var card = el('div', 'cm-card cm-mlist');
-      g.items.forEach(function (m) { card.appendChild(row(m)); });
-      sec.appendChild(card);
-      return sec;
-    }));
+    var nodes = [];
+    if (split) {
+      // Правило сайта: сначала матчи, которые идут в городе, затем остальные по Беларуси (с метками «Выезд»).
+      nodes.push(el('h2', 'cm-sec', cityTitle));
+      if (matches.length) nodes = nodes.concat(dayGroups(matches));
+      else nodes.push(el('p', 'cm-sec-empty', 'Ближайших матчей здесь нет.'));
+      if (others.length) {
+        nodes.push(el('h2', 'cm-sec', 'По Беларуси'));
+        nodes = nodes.concat(dayGroups(others));
+      }
+    } else nodes = dayGroups(matches);
+    host.replaceChildren.apply(host, nodes);
   }
 
   function closeSheet() {
@@ -282,7 +298,7 @@
         $('cmMain').setAttribute('aria-busy', 'false');
         paintHero(j.filters || {});
         paintBar(j.filters || {});
-        paintList(j.matches || []);
+        paintList(j.matches || [], j.others, j.city_title);
       })
       .catch(function () {
         if (mine !== seq) return;

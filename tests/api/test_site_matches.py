@@ -299,12 +299,156 @@ async def test_city_page_feed_tile_and_bell_only_with_matches(app_use_test_db, d
 
 
 @pytest.mark.asyncio
-async def test_city_without_club_gets_nearby_feed(app_use_test_db, db_session):
+async def test_city_without_matches_has_no_block_and_no_neighbours(app_use_test_db, db_session):
+    """Пинск: ни Динамо, ни «матч области» в его блок не попадают (раньше был «Хоккей рядом»)."""
     await _world(db_session)
     await _insert_city(db_session, name="Пинск")
     dm = await _match(db_session, "Динамо-Минск", "СКА", league="khl", city=None, arena=None)
     html = (await _get("/c/pinsk")).text
-    assert "Хоккей рядом" in html and (await _path(db_session, dm)) in html and "Хоккей в Пинске" not in html
+    assert "Хоккей рядом" not in html and "Хоккей в Пинске" not in html and (await _path(db_session, dm)) not in html
+
+
+async def _gomel(db):
+    gomel = await _insert_city(db, name="Гомель")
+    await _insert_arena(db, gomel, name="Гомель-Арена")
+    return gomel
+
+
+@pytest.mark.asyncio
+async def test_minsk_block_skips_yunost_away_in_gomel(app_use_test_db, db_session):
+    """Гомель — Юность идёт в Гомеле: в «Хоккее в Минске» его нет, а счётчик — число минских матчей."""
+    await _world(db_session)
+    await _gomel(db_session)
+    away = await _match(db_session, "Гомель", "Юность", city="Гомель", arena="Гомель-Арена")
+    home = await _match(db_session, "Юность", "Шахтер", starts=(NOW + timedelta(days=3)).replace(hour=16))
+    feed = await site_matches.city_feed(db_session, city_name="Минск", now=NOW)
+    assert [c["id"] for c in feed["matches"]] == [home]
+    assert feed["city_count"] == 1 and feed["week_count"] == 1 and not feed["empty"]
+    html = (await _get("/c/minsk")).text
+    assert (await _path(db_session, home)) in html and (await _path(db_session, away)) not in html
+
+
+@pytest.mark.asyncio
+async def test_city_empty_week_shows_honest_line_and_next_match(app_use_test_db, db_session):
+    await _world(db_session)
+    await _gomel(db_session)
+    await _match(db_session, "Гомель", "Юность", city="Гомель", arena="Гомель-Арена")  # в Минске не идёт
+    later = (NOW + timedelta(days=12)).replace(hour=16, minute=0)
+    nxt = await _match(db_session, "Динамо-Минск", "Авангард", league="khl", city=None, arena=None, starts=later)
+    feed = await site_matches.city_feed(db_session, city_name="Минск", now=NOW)
+    assert feed["empty"] and feed["matches"] == [] and feed["next"]["id"] == nxt
+    html = (await _get("/c/minsk")).text
+    day = site_matches.local(later).date()
+    assert f"В Минске до {day.day} {site_matches.MONTHS_GEN[day.month - 1]} матчей нет" in html
+    assert (await _path(db_session, nxt)) in html and "Хоккей рядом" not in html
+
+
+@pytest.mark.asyncio
+async def test_city_with_no_future_matches_has_no_block(app_use_test_db, db_session):
+    await _world(db_session)
+    await _gomel(db_session)
+    await _match(db_session, "Гомель", "Юность", city="Гомель", arena="Гомель-Арена")
+    assert await site_matches.city_feed(db_session, city_name="Минск", now=NOW) is None
+    assert "Хоккей в Минске" not in (await _get("/c/minsk")).text
+
+
+async def _dinamo_games(db):
+    """Динамо: одно дома, два в гостях (источник не знает, где гости играют)."""
+    home = await _match(db, "Динамо-Минск", "СКА", league="khl", city=None, arena=None,
+                        starts=(NOW + timedelta(days=2)).replace(hour=16))
+    away1 = await _match(db, "Авангард", "Динамо-Минск", league="khl", city=None, arena=None,
+                         starts=(NOW + timedelta(days=4)).replace(hour=14))
+    away2 = await _match(db, "ЦСКА", "Динамо-Минск", league="khl", city=None, arena=None,
+                         starts=(NOW + timedelta(days=6)).replace(hour=14))
+    return home, away1, away2
+
+
+@pytest.mark.asyncio
+async def test_dinamo_club_filter_includes_away_games_with_labels(app_use_test_db, db_session):
+    """Правило B: фильтр клуба — все матчи, дома и в гостях; у Динамо так же, как у клубов Экстралиги."""
+    await _world(db_session)
+    home, away1, away2 = await _dinamo_games(db_session)
+    data = await site_matches.matches_list(db_session, now=NOW, club="dinamo-minsk")
+    items = [m for d in data["days"] for m in d["items"]]
+    assert [m["id"] for m in items] == [home, away1, away2]
+    assert [m["venue"] for m in items] == ["Дома · Минск-Арена", "Выезд", "Выезд"]
+    html = (await _get("/hockey?club=dinamo-minsk")).text
+    for mid in (home, away1, away2):
+        assert (await _path(db_session, mid)) in html
+    assert "Выезд" in html and "Дома · Минск-Арена" in html
+
+
+@pytest.mark.asyncio
+async def test_extraliga_club_filter_labels_home_and_away_with_city(app_use_test_db, db_session):
+    await _world(db_session)
+    await _gomel(db_session)
+    h = await _match(db_session, "Юность", "Шахтер", starts=(NOW + timedelta(days=2)).replace(hour=16))
+    a = await _match(db_session, "Гомель", "Юность", city="Гомель", arena="Гомель-Арена",
+                     starts=(NOW + timedelta(days=4)).replace(hour=16))
+    data = await site_matches.matches_list(db_session, now=NOW, club="yunost")
+    got = {m["id"]: m["venue"] for d in data["days"] for m in d["items"]}
+    assert got == {h: "Дома · Чижовка-Арена", a: "Выезд · Гомель"}
+
+
+@pytest.mark.asyncio
+async def test_list_with_city_has_two_sections_including_dinamo_away(app_use_test_db, db_session):
+    """Правило C: «В Минске» — то, что идёт в Минске; «По Беларуси» — остальное, с выездами Динамо."""
+    await _world(db_session)
+    await _gomel(db_session)
+    mn = await _match(db_session, "Юность", "Шахтер", starts=(NOW + timedelta(days=2)).replace(hour=16))
+    gm = await _match(db_session, "Гомель", "Юность", city="Гомель", arena="Гомель-Арена",
+                      starts=(NOW + timedelta(days=1)).replace(hour=16))
+    away = await _match(db_session, "Авангард", "Динамо-Минск", league="khl", city=None, arena=None,
+                        starts=(NOW + timedelta(days=3)).replace(hour=14))
+    data = await site_matches.matches_list(db_session, now=NOW, city="Минск")
+    assert [s["title"] for s in data["sections"]] == ["В Минске", "По Беларуси"]
+    ids = [[m["id"] for d in s["days"] for m in d["items"]] for s in data["sections"]]
+    assert ids == [[mn], [gm, away]]
+    html = (await _get("/hockey?city=minsk")).text
+    assert "В Минске" in html and "По Беларуси" in html and "первым" not in html
+    assert html.index(await _path(db_session, mn)) < html.index("По Беларуси") < html.index(await _path(db_session, gm))
+    # без города — одна лента без секций
+    assert (await site_matches.matches_list(db_session, now=NOW))["sections"] == []
+
+
+@pytest.mark.asyncio
+async def test_dinamo_away_match_page_is_honest_and_complete(app_use_test_db, db_session):
+    """Выезд Динамо: нормальная страница /m/..., без минской арены и билетов, с протоколом, колокольчиком и «Все матчи»."""
+    await _world(db_session)
+    _home, away, _ = await _dinamo_games(db_session)
+    await db_session.execute(text("UPDATE hockey_matches SET source_match_id = '4242' WHERE id = :i"), {"i": away})
+    path = await _path(db_session, away)
+    r = await _get(path)
+    assert r.status_code == 200
+    html = r.text
+    assert "КАК ДОБРАТЬСЯ" not in html and "Минск-Арена" not in html and "Билеты" not in html
+    assert "ВЫЕЗД" in html and "Трансляция и протокол" in html and "hcdinamo.by/matches/4242/" in html
+    assert f"startapp=mbell_{away}" in html and f"startapp=kkm_{away}" in html
+    assert "Все матчи · Динамо-Минск" in html and "/hockey?club=dinamo-minsk" in html
+    ld = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S).group(1).replace("\\u003c", "<"))
+    assert "location" not in ld and "offers" not in ld
+    assert (await _get(f"{path}/calendar.ics")).status_code == 200
+    assert path in (await _get("/sitemap.xml")).text
+
+
+@pytest.mark.asyncio
+async def test_match_page_links_to_all_matches_of_both_clubs(app_use_test_db, db_session):
+    await _world(db_session)
+    mid = await _match(db_session)
+    html = (await _get(await _path(db_session, mid))).text
+    assert "Все матчи · Юность" in html and "Все матчи · Шахтер" in html
+    assert "/hockey?club=yunost" in html and "/hockey?club=shakhter" in html
+
+
+@pytest.mark.asyncio
+async def test_bell_scope_covers_dinamo_away(app_use_test_db, db_session):
+    await _world(db_session)
+    _home, away, _ = await _dinamo_games(db_session)
+    row = (await db_session.execute(text("SELECT * FROM hockey_matches WHERE id=:i"), {"i": away})).one()
+    scope = site_matches.scope_of()
+    assert match_bells.in_scope(row, scope) and site_matches.in_scope(row, scope)
+    res = await match_bells.subscribe(db_session, telegram_id=555, match_id=away, now=NOW)
+    assert res is not None and res["state"] == "new"
 
 
 @pytest.mark.asyncio
