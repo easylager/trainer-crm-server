@@ -383,3 +383,4 @@ body:not(.kk-dark) .kk-puck { box-shadow: inset 0 -3px 0 #4a443f; }
   .kk-brand.is-intro .kk-puck, .kk-brand.is-intro .kk-brand__tag, .kk-pop { animation: none; }
   .kk-c { display: none; }
 }
+body.kk-dark .kk-lhead { background: var(--kk-chip); }

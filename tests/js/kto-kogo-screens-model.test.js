@@ -402,7 +402,7 @@ describe('итог и «мимо»', () => {
   it('кнопка «Следующий ход» и чип места в лиге', () => {
     assert.equal(S.nextTurnLabel(next), 'Следующий ход · сб, Динамо — Торпедо');
     assert.equal(S.nextTurnLabel(null), 'Следующий ход');
-    assert.equal(S.bestLeagueChip([{ kind: 'league', league_name: 'Офис', rank_after: 3 }, { kind: 'league', league_name: 'Двор', rank_after: 5 }, { kind: 'slice', rank_after: 1 }]), '3-е место в «Офис»');
+    assert.equal(S.bestLeagueChip([{ kind: 'league', league_name: 'Офис', rank_after: 3 }, { kind: 'league', league_name: 'Двор', rank_after: 5 }, { kind: 'slice', rank_after: 1 }]), '3-е место в' + NBSP + 'лиге «Офис»');
     assert.equal(S.bestLeagueChip([{ kind: 'slice', rank_after: 1 }]), null);
     assert.equal(S.bestLeagueChip([]), null);
   });

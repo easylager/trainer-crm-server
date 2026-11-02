@@ -466,7 +466,7 @@
     (items || []).forEach(function (x) {
       if (x.kind === 'league' && x.rank_after != null && (!best || x.rank_after < best.rank_after)) best = x;
     });
-    return best ? best.rank_after + '-е место в «' + best.league_name + '»' : null;
+    return best ? best.rank_after + '-е место в\u00a0лиге «' + best.league_name + '»' : null;
   }
 
   /** Шторка «Как считаются очки»: числа берём из POINTS, слова — из макета. */
