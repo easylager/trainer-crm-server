@@ -177,3 +177,21 @@ describe('ответ «Ты пойдёшь?» ведёт к следующему
     assert.equal(M.crowdLine({ going: 21 }), 'Уже идёт 21' + NBSP + 'человек из Glide');
   });
 });
+
+describe('матчи: метки места и «Все матчи» (правила B, D)', () => {
+  it('placeText: метка клуба вместо арены и города, те же слова, что на сайте', () => {
+    assert.equal(M.placeText({ venue: 'Дома · Минск-Арена', arena: 'Минск-Арена', city: 'Минск' }), 'Дома · Минск-Арена');
+    assert.equal(M.placeText({ venue: 'Выезд · Гомель' }), 'Выезд · Гомель');
+    assert.equal(M.placeText({ venue: 'Выезд', external_url: 'https://hcdinamo.by/matches/1/' }), 'Выезд · hcdinamo.by');
+    assert.equal(M.placeText({ arena: 'Чижовка-Арена', city: 'Минск' }), 'Чижовка-Арена · Минск');
+    assert.equal(M.placeText({}), '');
+  });
+
+  it('страница матча ведёт в каталог команды, версии ассетов обеих страниц одинаковы', () => {
+    assert.match(pageHtml, /id="cmClubs"/);
+    assert.match(pageJs, /client-matches\?team=/);
+    const list = fs.readFileSync(path.join(webapp, 'client-matches.html'), 'utf8');
+    const versions = new Set([...pageHtml.matchAll(/\?v=(\d+)/g), ...list.matchAll(/\?v=(\d+)/g)].map((m) => m[1]));
+    assert.equal(versions.size, 1);
+  });
+});

@@ -88,3 +88,30 @@ async def test_catalog_results_and_flags(db_session):
     assert [m["result"]["home_score"] for m in res["matches"]] == [3]
     off = Settings(extraliga_enabled=False, hockey_matches_enabled=False)  # type: ignore[call-arg]
     assert (await catalog(db_session, now=NOW, filters=Filters(), settings=off))["matches"] == []
+
+
+@pytest.mark.asyncio
+async def test_catalog_team_filter_labels_home_and_away(db_session):
+    """Фильтр клуба — все матчи; метки «Дома · арена» / «Выезд · город» с точки зрения клуба."""
+    await _seed(db_session)
+    yunost = await catalog(db_session, now=NOW, filters=Filters(team="yunost"), settings=CFG)
+    assert [(m["home"]["name"], m["venue"]) for m in yunost["matches"]] == [
+        ("Гомель", "Выезд · Гомель"),
+        ("Юность", "Дома · Чижовка-Арена"),
+    ]
+    dinamo = await catalog(db_session, now=NOW, filters=Filters(team="dinamo-minsk"), settings=CFG)
+    assert [m["venue"] for m in dinamo["matches"]] == ["Дома · Минск-Арена", "Выезд"]
+
+
+@pytest.mark.asyncio
+async def test_catalog_city_splits_into_city_and_rest_of_country(db_session):
+    """Правило C в Mini App: «В Минске» — то, что идёт там; остальное, в том числе выезд Динамо, — в others с меткой."""
+    await _seed(db_session)
+    out = await catalog(db_session, now=NOW, filters=Filters(city="Минск"), settings=CFG)
+    assert out["city_title"] == "В Минске"
+    assert [m["home"]["name"] for m in out["matches"]] == ["Динамо-Минск", "Юность"]
+    assert [m["home"]["name"] for m in out["others"]] == ["Гомель", "СКА"]
+    assert [m["venue"] for m in out["others"]] == [None, "Выезд"]
+    # С клубом или без города деления нет.
+    assert (await catalog(db_session, now=NOW, filters=Filters(), settings=CFG))["others"] is None
+    assert (await catalog(db_session, now=NOW, filters=Filters(city="Минск", team="yunost"), settings=CFG))["others"] is None

@@ -236,6 +236,15 @@ async def _match_arena(session: AsyncSession, row: Any) -> dict[str, Any] | None
     return await _extraliga_arena(session, row) if row.league == "extraliga" else await minsk_arena(session)
 
 
+def _club_links(row: Any) -> list[dict[str, str]]:
+    """Команды матча со своим списком «все матчи» (Динамо и клубы Экстралиги): тап ведёт в каталог с ?team=."""
+    from src.application.extraliga import CLUBS
+    from src.application.hockey_teams import slug_for
+
+    known = {c.name for c in CLUBS.values()} | {DINAMO}
+    return [{"slug": slug_for(n), "name": n} for n in (row.home_team, row.away_team) if n in known]
+
+
 def _venue_label(row: Any) -> str:
     return (row.arena or row.city or "Арена") if row.league == "extraliga" else MATCH_VENUE_LABEL
 
@@ -445,6 +454,7 @@ async def event_view(
             "arena_id": int(arena["id"]) if arena else None,
             "address": (arena or {}).get("address") or None,
         },
+        "club_links": _club_links(row),
         "my_status": mine["status"] if mine else None,
         "people": people,
         "kk": {

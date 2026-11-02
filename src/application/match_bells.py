@@ -147,12 +147,8 @@ _UNSUBSCRIBE = text("""
 
 
 def in_scope(row: Any, scope: site_matches.Scope) -> bool:
-    """Тот же предикат, что у страницы и ленты (``site_matches._SCOPE``), для строки, уже выбранной из базы."""
-    if row.home_team not in TEAMS or row.away_team not in TEAMS:
-        return False
-    if row.league == "extraliga":
-        return row.home_team in scope.clubs or row.away_team in scope.clubs
-    return bool(row.league == "khl" and scope.dinamo and row.home_team == "Динамо-Минск")
+    """Тот же предикат, что у страницы и ленты (``site_matches._SCOPE``): Динамо дома и в гостях."""
+    return site_matches.in_scope(row, scope)
 
 
 async def subscribe(

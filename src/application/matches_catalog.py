@@ -79,10 +79,27 @@ def _match(row: Any, f: Filters) -> bool:
     return not (f.arena and _norm(arena) != _norm(f.arena))
 
 
-def _card(row: Any, *, now: datetime) -> dict[str, Any]:
+def _venue(row: Any, arena: str | None, city: str | None, team: str | None) -> str | None:
+    """«Дома · Минск-Арена» / «Выезд · Гомель» — с точки зрения команды из фильтра (те же слова, что на сайте).
+    Без команды метка только у выезда Динамо: там хозяин — соперник, а места мы не знаем."""
+    if team is None:
+        return "Выезд" if row.league == LEAGUE_KHL and row.home_team != DINAMO else None
+    if slug_for(row.home_team) == team:
+        return "Дома" + (f" · {arena}" if arena else "")
+    return "Выезд" + (f" · {city}" if city else "")
+
+
+def _card(row: Any, *, now: datetime, team: str | None = None) -> dict[str, Any]:
     arena, city = _place(row)
     out = card(row, now=now)
-    out.update(league=row.league, league_label=LEAGUES.get(row.league, row.league), arena=arena, city=city)
+    out.update(
+        league=row.league,
+        league_label=LEAGUES.get(row.league, row.league),
+        arena=arena,
+        city=city,
+        venue=_venue(row, arena, city, team),
+        away_trip=row.league == LEAGUE_KHL and row.home_team != DINAMO,
+    )
     if row.league == LEAGUE_KHL and row.home_team != DINAMO:
         # Выезд Динамо: своей страницы матча нет — ведём на страницу клуба.
         raw = (row.source_match_id or "").strip()
@@ -90,6 +107,13 @@ def _card(row: Any, *, now: datetime) -> dict[str, Any]:
     else:
         out["href"] = event_href(row.id)
     return out
+
+
+def _city_title(city: str | None) -> str | None:
+    from src.shared.city_locative import city_locative
+
+    where = city_locative(city or "")
+    return f"В {where}" if where else city
 
 
 def _facets(rows: list[Any], f: Filters) -> dict[str, Any]:
@@ -131,6 +155,12 @@ async def catalog(
     else:
         rows = [r for r in rows if not (r.status == "final" and r.starts_at < now - BEHIND)]
     picked = [r for r in rows if _match(r, filters)]
+    # Правило C: с городом (и без клуба, лиги и арены) — «В Минске», затем «По Беларуси» (остальные, в том числе выезды Динамо).
+    split = bool(filters.city and not filters.team and not filters.league and not filters.arena)
+    others = []
+    if split:
+        in_city = {r.id for r in picked}
+        others = [r for r in rows if r.id not in in_city]
     team = next((t for r in picked for t in _teams(r) if filters.team and slug_for(t) == filters.team), None)
     return {
         "when": "results" if results else "upcoming",
@@ -142,7 +172,9 @@ async def catalog(
             "city": filters.city,
             "arena": filters.arena,
         },
-        "matches": [_card(r, now=now) for r in picked],
+        "matches": [_card(r, now=now, team=filters.team) for r in picked],
+        "others": [_card(r, now=now) for r in others] if split else None,
+        "city_title": _city_title(filters.city) if split else None,
         "facets": _facets(rows, filters),
     }
 

@@ -43,7 +43,8 @@ async def _match(db, sid, home, away, starts, city, arena="Чижовка-Аре
 
 
 @pytest.mark.asyncio
-async def test_home_feed_city_and_away_games_with_one_sticker(db_session, monkeypatch):
+async def test_home_feed_only_matches_that_happen_in_the_city(db_session, monkeypatch):
+    """Правило A: выезд местного клуба и матч области в слот города не попадают; счётчик — по этому городу."""
     monkeypatch.setenv("EXTRALIGA_ENABLED", "1")
     monkeypatch.setenv("EXTRALIGA_CLUBS", "Юность,Неман,Брест")
     await db_session.execute(text("DELETE FROM hockey_matches WHERE league = 'extraliga'"))
@@ -52,8 +53,9 @@ async def test_home_feed_city_and_away_games_with_one_sticker(db_session, monkey
     await _match(db_session, "t3", "Неман", "Брест", NOW + timedelta(days=3), "Гродно", "Гродно-Арена")
     await db_session.commit()
     feed = await extraliga_home.home_feed(db_session, city_name="Минск", city_region=None, now=NOW, settings=Settings())
-    assert [(m["home"]["name"], m["sticker"]) for m in feed["matches"]] == [("Юность", "СЕГОДНЯ"), ("Брест", None)]
-    assert feed["week_count"] == 3
+    assert [(m["home"]["name"], m["sticker"]) for m in feed["matches"]] == [("Юность", "СЕГОДНЯ")]
+    assert feed["week_count"] == 1 and feed["all_href"].startswith("client-matches?city=")
     grodno = await extraliga_home.home_feed(db_session, city_name="Гродно", city_region=None, now=NOW, settings=Settings())
-    # Выезд Немана в Минск и домашний матч через 3 дня: наклейка только сегодня/завтра.
-    assert [(m["home"]["name"], m["sticker"]) for m in grodno["matches"]] == [("Юность", None), ("Неман", None)]
+    assert [m["home"]["name"] for m in grodno["matches"]] == ["Неман"] and grodno["week_count"] == 1
+    # В Пинске ничего не идёт: ни «области», ни чужих выездов.
+    assert await extraliga_home.home_feed(db_session, city_name="Пинск", city_region="Брестская", now=NOW, settings=Settings()) is None
