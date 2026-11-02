@@ -34,7 +34,7 @@ class _RaceSession(AsyncSession):
                 cls.gate.set()
             try:
                 await asyncio.wait_for(cls.gate.wait(), timeout=0.7)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
         return await super().execute(statement, *args, **kwargs)
 

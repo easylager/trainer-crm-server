@@ -371,7 +371,7 @@ def gone_keyboard(arena_id: int) -> InlineKeyboardMarkup:
 async def make_sender(bot: Bot):
     async def send(tg: int, body: str, buttons: list[list[tuple[str, str]]], arena_ids: list[int]) -> str:
         await asyncio.sleep(SEND_PAUSE_SEC)
-        for attempt in range(3):
+        for _attempt in range(3):
             try:
                 await bot.send_message(tg, body, reply_markup=flood_keyboard(buttons))
                 return "ok"

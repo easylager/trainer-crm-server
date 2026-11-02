@@ -342,7 +342,7 @@ async def test_delivery_builds_buttons_from_site_data(db_session, monkeypatch):
     await wsub.deliver_pending(db_session, DAY, sink)
     body = sink.sent[0][1]
     assert body.startswith("Каток тест — лёд залит\nПодтвердили сегодня в ")
-    labels = [(l, u) for row in sink.buttons for l, u in row]
+    labels = [(label, u) for row in sink.buttons for label, u in row]
     assert labels[0][0] == "Маршрут" and labels[0][1].startswith("https://yandex.ru/maps/")
     assert labels[1][0] == "Открыть точку" and labels[1][1].startswith("https://glide.example/p/")
 
@@ -356,4 +356,4 @@ async def test_delivery_without_public_base_has_no_page_button(db_session, monke
     await wsub.fan_out_events(db_session, DAY)
     sink = Sink()
     await wsub.deliver_pending(db_session, DAY, sink)
-    assert [l for row in sink.buttons for l, _ in row] == ["Маршрут"]
+    assert [label for row in sink.buttons for label, _ in row] == ["Маршрут"]

@@ -168,7 +168,7 @@ async def test_catalog_arena_pinned_takes_coords_hours_price_from_its_profile(on
         text("UPDATE arena_profiles SET opening_hours = CAST(:h AS jsonb), phone = '+375173647551', "
              "visitor_prices = CAST(:p AS jsonb) WHERE arena_id = :a"),
         {"a": aid, "h": json.dumps({"daily": {"open": "10:00", "close": "22:00"}}),
-         "p": json.dumps({"adult": "12", "child": "8", "currency": "BYN"}), "a": aid},
+         "p": json.dumps({"adult": "12", "child": "8", "currency": "BYN"})},
     )
     city = await city_of(db_session, aid)
     item = (await client.get(f"/api/public/winter/cities/{city}/points")).json()["items"][0]

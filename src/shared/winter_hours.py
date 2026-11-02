@@ -153,7 +153,7 @@ def parse_hours(raw: str | None) -> ParsedHours:
     if not anything:
         # Текст есть, а часов нет: «согласно расписанию», «сеансы по расписанию».
         return ParsedHours(
-            False, "unknown", None, text, s_from, s_to, unparsed=not ("расписан" in low), note=text
+            False, "unknown", None, text, s_from, s_to, unparsed="расписан" not in low, note=text
         )
     full = {k: weekly.get(k, []) for k in WEEKDAY_KEYS}
     distinct = {tuple(map(tuple, v)) for v in full.values()}
