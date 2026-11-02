@@ -99,9 +99,20 @@
    * «Когда отметили». Админский статус — «Проверено DD.MM» (U4); людской — «Отметили 40 мин назад».
    * У «Ждём заливку» без отметок строки нет: импортное время — не отметка человека.
    */
+  function pendingLine(point) {
+    var n = point && point.pending ? Number(point.pending_people) : 0;
+    if (!(n > 0)) return '';
+    var verb = n % 10 === 1 && n % 100 !== 11 ? 'отметил' : 'отметили';
+    return n + ' ' + plural(n, 'человек', 'человека', 'человек') + ' ' + verb + ', что залит · проверяем';
+  }
+
   function checkedLine(point, now) {
-    if (!point || !point.state_at) return '';
-    if (point.checked_by === 'admin') return 'Проверено ' + dayMonth(point.state_at);
+    if (!point) return '';
+    /* Люди отметили «залит», админ ещё не подтвердил: статус остаётся «Ждём заливку», строка нейтральная. */
+    var pend = pendingLine(point);
+    if (pend) return pend;
+    if (!point.state_at) return '';
+    if (point.checked_by === 'admin' || point.checked_by === 'source') return 'Проверено ' + dayMonth(point.state_at);
     if (point.checked_by === 'people' && point.state !== 'waiting') return 'Отметили ' + ago(point.state_at, now);
     return '';
   }
@@ -366,11 +377,11 @@
     var rule;
     if (ice === 'on') {
       if (result && result.state === 'flooded') {
-        rule = 'Статус «Залит» подтверждён. Людей и хоккей видно 2 часа.';
+        rule = 'Статус «Залит» уже подтверждён. Людей и хоккей видно 2 часа.';
       } else if (source === 'site') {
-        rule = 'С сайта отметка весит вполсилы. «Залит» подтвердится, когда отметит кто-то из Telegram или придёт фото со льдом.';
+        rule = 'Спасибо! «Залит» появится у всех после проверки администратором — пока на странице «Ждём заливку».';
       } else {
-        rule = 'Ещё одна отметка «залит» — и покажем всем, что лёд есть. Людей и хоккей видно 2 часа.';
+        rule = 'Спасибо! «Залит» появится у всех после проверки администратором — пока на странице «Ждём заливку».';
       }
     } else if (ice === 'bad') {
       rule = '«Лёд плохой» виден 24 часа и на статус «Залит» не влияет.';
@@ -424,6 +435,7 @@
     ago: ago,
     dayMonth: dayMonth,
     checkedLine: checkedLine,
+    pendingLine: pendingLine,
     liveTags: liveTags,
     liveLabel: liveLabel,
     cardMeta: cardMeta,

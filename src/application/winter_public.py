@@ -36,7 +36,7 @@ SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.city_id, c.name AS ci
        p.visitor_prices,
        sr.kind, sr.operator, sr.is_paid, sr.price_note, sr.often_hockey, sr.geocode_precision, sr.same_complex_id,
        s.state, s.state_at, s.state_source, s.quality, s.dispute, s.doubtful, s.hours_text, s.opening_hours,
-       s.hours_known, s.hours_season, s.season_from, s.season_to, s.phone, s.source_url, s.confidence, s.season
+       s.pending_confirm, s.flood_floor_at, s.hours_known, s.hours_season, s.season_from, s.season_to, s.phone, s.source_url, s.confidence, s.season
 FROM seasonal_rinks sr
 JOIN arenas a ON a.id = sr.arena_id AND a.is_active
 JOIN cities c ON c.id = a.city_id
@@ -94,6 +94,30 @@ async def _live_marks(session: AsyncSession, ids: list[int], now: datetime) -> d
     for r in rows:
         out[int(r.arena_id)].append(ws.MarkIn(r.kind, r.value, float(r.weight), r.actor, r.created_at, r.source))
     return out
+
+
+async def _pending_people(session: AsyncSession, rows: list[Any], now: datetime) -> dict[int, int]:
+    """Сколько разных людей отметили «залит» у точек, которые ждут подтверждения админа."""
+    ids = [int(r.id) for r in rows if r.pending_confirm]
+    if not ids:
+        return {}
+    floors = {int(r.id): r.flood_floor_at for r in rows if r.pending_confirm}
+    found = (
+        await session.execute(
+            text(
+                """SELECT arena_id, actor, max(created_at) AS at FROM seasonal_rink_marks
+                   WHERE arena_id = ANY(:ids) AND kind = 'ice' AND value = 'flooded' AND created_at >= :since
+                   GROUP BY arena_id, actor"""
+            ),
+            {"ids": ids, "since": now - ws.FLOODED_WINDOW},
+        )
+    ).all()
+    out: dict[int, int] = defaultdict(int)
+    for f in found:
+        floor = floors.get(int(f.arena_id))
+        if floor is None or f.at > floor:
+            out[int(f.arena_id)] += 1
+    return dict(out)
 
 
 async def _photos(session: AsyncSession, ids: list[int]) -> dict[int, list[dict[str, Any]]]:
@@ -164,7 +188,7 @@ def arena_price(visitor_prices: Any) -> str | None:
 
 
 def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tuple[float, float] | None,
-           settings: Settings, detail: bool) -> dict[str, Any]:
+           settings: Settings, detail: bool, pending_people: int = 0) -> dict[str, Any]:
     own = has_winter_page(r.slug)
     # Арена каталога (Немига): координаты, часы, телефон и цена — её собственные, зимней оценки у неё нет.
     prec = r.geocode_precision if own or r.latitude is None else "manual"
@@ -192,10 +216,16 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
         "id": int(r.id), "slug": r.slug, "name": display_name(r.name, own), "kind": r.kind, "district": r.district,
         "city_id": int(r.city_id), "city": r.city_name, "address": r.address,
         "state": r.state, "state_at": r.state_at.isoformat() if r.state_at else None,
-        "checked_by": "admin" if r.state_source == "admin" else ("people" if r.state_source == "engine" else None),
+        "checked_by": {"admin": "admin", "parser": "source", "engine": "people"}.get(r.state_source),
         "quality": r.quality, "dispute": bool(r.dispute), "doubtful": bool(r.doubtful),
-        "crowd": live.get("crowd"), "hockey": live.get("hockey"),
-        "crowd_at": live.get("crowd_at"), "hockey_at": live.get("hockey_at"),
+        # Загрузку и хоккей показываем только у залитой точки: у незалитой они ничего не значат.
+        "crowd": live.get("crowd") if r.state == "flooded" else None,
+        "hockey": live.get("hockey") if r.state == "flooded" else None,
+        "crowd_at": live.get("crowd_at") if r.state == "flooded" else None,
+        "hockey_at": live.get("hockey_at") if r.state == "flooded" else None,
+        # Люди отметили «залит», админ ещё не подтвердил: публично «ждём заливку» + нейтральная строка.
+        "pending": bool(r.pending_confirm and r.state in ("waiting", "stale") and pending_people > 0),
+        "pending_people": pending_people if r.pending_confirm else 0,
         "distance_km": dist, "pin": r.catalog_pin,
         "is_paid": is_paid, "price_note": price_note,
         "often_hockey_note": "Часто занята под хоккей и занятия школы" if r.often_hockey else None,
@@ -247,10 +277,12 @@ async def list_points(
     rows = [r for r in rows if (kind is None or r.kind == kind)]
     ids = [int(r.id) for r in rows]
     live, photos, shared = await _live_marks(session, ids, now), await _photos(session, ids), await _shared_phones(session, season)
+    pending = await _pending_people(session, rows, now)
     origin = (lat, lon) if lat is not None and lon is not None else None
     items = [
         _shape(r, live=ws.live_summary(live.get(int(r.id), []), now), photos=photos.get(int(r.id), []),
-               shared_phone=r.phone in shared, origin=origin, settings=settings, detail=False)
+               shared_phone=r.phone in shared, origin=origin, settings=settings, detail=False,
+               pending_people=pending.get(int(r.id), 0))
         for r in rows
     ]
     if only_flooded:
@@ -284,9 +316,11 @@ async def get_point(session: AsyncSession, ident: str | int, *, now: datetime, l
     live = await _live_marks(session, [int(r.id)], now)
     photos = await _photos(session, [int(r.id)])
     shared = await _shared_phones(session, season)
+    pending = await _pending_people(session, [r], now)
     origin = (lat, lon) if lat is not None and lon is not None else None
     item = _shape(r, live=ws.live_summary(live.get(int(r.id), []), now), photos=photos.get(int(r.id), []),
-                  shared_phone=r.phone in shared, origin=origin, settings=settings, detail=True)
+                  shared_phone=r.phone in shared, origin=origin, settings=settings, detail=True,
+                  pending_people=pending.get(int(r.id), 0))
     item["mark_token"] = make_page_token(int(r.id), now)
     item["links"] = {
         "bell": bot_link(settings.client_bot_username, bell_param(int(r.id))),

@@ -185,9 +185,9 @@ describe('шторка «Как там сейчас?»', () => {
     s = W.reportToggle(s, 'crowd', 'few');
     const site = W.reportOutcome(s, { state: 'waiting' }, 'site');
     assert.equal(site.summary, 'Залит · мало людей · только что');
-    assert.match(site.rule, /вполсилы/);
+    assert.match(site.rule, /администратором/);
     const tg = W.reportOutcome(s, { state: 'flooded' }, 'miniapp');
-    assert.match(tg.rule, /подтверждён/);
+    assert.match(tg.rule, /уже подтверждён/);
     const off = W.reportOutcome(W.reportToggle(W.reportInit(), 'ice', 'off'), { state: 'waiting' }, 'site');
     assert.match(off.rule, /две за сутки/);
     const bad = W.reportOutcome(W.reportToggle(W.reportInit(), 'ice', 'bad'), { state: 'flooded' }, 'site');
@@ -213,5 +213,20 @@ describe('шторка «Как там сейчас?»', () => {
     const a = W.newIdemKey();
     assert.match(a, /^[0-9a-f]{16,32}$/);
     assert.notEqual(a, W.newIdemKey());
+  });
+});
+
+describe('pending: люди отметили «залит», админ не подтвердил', () => {
+  it('нейтральная строка вместо «отметили N мин назад», статус «Ждём заливку»', () => {
+    const p = pt({ state: 'waiting', pending: true, pending_people: 3, checked_by: 'people', state_at: '2026-12-10T11:20:00Z' });
+    assert.equal(W.checkedLine(p, new Date('2026-12-10T12:00:00Z')), '3 человека отметили, что залит · проверяем');
+    assert.equal(W.pendingLine(pt({ pending: true, pending_people: 1 })), '1 человек отметил, что залит · проверяем');
+    assert.equal(W.pendingLine(pt({ pending: true, pending_people: 11 })), '11 человек отметили, что залит · проверяем');
+    assert.equal(W.pendingLine(pt({ pending: false, pending_people: 3 })), '');
+    assert.equal(W.stateView(p).label, 'Ждём заливку');
+  });
+
+  it('источник/админ — «Проверено DD.MM»', () => {
+    assert.equal(W.checkedLine(pt({ state: 'flooded', checked_by: 'source', state_at: '2026-12-09T22:30:00Z' }), new Date('2026-12-10T12:00:00Z')), 'Проверено 10.12');
   });
 });

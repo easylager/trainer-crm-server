@@ -181,7 +181,7 @@ def compose_flood_message(points: list[dict[str, Any]]) -> str:
     if len(points) == 1:
         p = points[0]
         where = f" ({p['district']})" if p.get("district") else ""
-        return f"Залили: {p['name']}{where}. Лёд подтвердили люди."
+        return f"Залили: {p['name']}{where}."
     lines = [f"Залито {len(points)} точки рядом:" if len(points) < 5 else f"Залито {len(points)} точек рядом:"]
     lines += [f"- {p['name']}" + (f" ({p['district']})" if p.get("district") else "") for p in points[:8]]
     return "\n".join(lines)
