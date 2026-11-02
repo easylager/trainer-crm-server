@@ -59,6 +59,7 @@ from src.shared.catalog_visibility import (
     CATALOG_STATE_PENDING_REVIEW,
     CATALOG_STATE_PUBLISHED,
 )
+from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
 from src.shared.config import Settings
 from src.shared.currency import currency_label_ru, resolve_trainer_currency
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -84,8 +85,8 @@ STATE_BODY_RU: dict[str, str] = {
     # надо трафик, а не устройство раздела. «Список тренеров» описывал таблицу; тренера
     # интересует, откуда в ней берутся люди.
     CATALOG_STATE_DRAFT: (
-        "Каталог — витрина сервиса: новых учеников на неё приводим мы. Сейчас к вам "
-        "попадают только те, кому вы сами дали ссылку."
+        "Каталог — витрина glideclub.by: клиенты сами находят тренера на катке или в городе "
+        "и записываются в свободные окна. Один тап — и ваша карточка в списке."
     ),
     CATALOG_STATE_PENDING_REVIEW: (
         "Обычно отвечаем в течение рабочего дня — пуш придёт сразу."
@@ -113,7 +114,7 @@ _EVENT_HEADLINE_RU: dict[tuple[str, str], str] = {
     (CATALOG_STATE_PENDING_REVIEW, CATALOG_ACTOR_STUDIO): "Студия отправила карточку на проверку",
     (CATALOG_STATE_PENDING_REVIEW, CATALOG_ACTOR_SYSTEM): "Карточка вернулась на проверку",
     (CATALOG_STATE_PUBLISHED, CATALOG_ACTOR_MODERATOR): "Модератор опубликовал карточку",
-    (CATALOG_STATE_PUBLISHED, CATALOG_ACTOR_TRAINER): "Вы вернули карточку в каталог",
+    (CATALOG_STATE_PUBLISHED, CATALOG_ACTOR_TRAINER): "Вы опубликовали карточку в каталоге",
     (CATALOG_STATE_PUBLISHED, CATALOG_ACTOR_STUDIO): "Студия вернула карточку в каталог",
     (CATALOG_STATE_PUBLISHED, CATALOG_ACTOR_SYSTEM): "Карточка вернулась в каталог",
     (CATALOG_STATE_HIDDEN, CATALOG_ACTOR_TRAINER): "Вы сняли карточку с публикации",
@@ -385,7 +386,9 @@ async def build_catalog_screen_payload(
     # «Можно усилить» — то, что не блокирует публикацию, но меняет карточку в выдаче. Цены сюда
     # попадают отдельным ключом: ни один tier их не проверяет, поэтому до сих пор тренер узнавал
     # про них только из строки «цена не указана» в карточке модератора — которую он не видит.
-    optional_keys = [k for k in full_missing if k in ("description", "education", "experience_years")]
+    optional_keys = [
+        k for k in full_missing if k in ("description", "education", "experience_years", "photo")
+    ]
     profile_row = trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {}
     if not str(profile_row.get("phone") or "").strip():
         optional_keys.append("phone")
@@ -397,6 +400,14 @@ async def build_catalog_screen_payload(
     preview_link, _preview_link_error = build_trainer_preview_link(
         client_bot_username=Settings().client_bot_username, trainer_id=trainer_id
     )
+    share_link_row = await session.execute(
+        text(
+            "SELECT client_invite_link_first_copied_at FROM trainers WHERE id = :tid"
+        ),
+        {"tid": trainer_id},
+    )
+    share_link_copied = share_link_row.scalar() is not None
+    snoozed = await get_active_snoozes(session, trainer_id)
     return {
         # Нужен экрану, чтобы открыть публичную карточку глазами клиента.
         "trainer_id": trainer_id,
@@ -431,6 +442,12 @@ async def build_catalog_screen_payload(
             ],
         },
         "preview": await _preview(session, trainer),
+        # Для контекстных подсказок в кабинете («поделись ссылкой»): копировал ли тренер
+        # пригласительную ссылку хоть раз. Публикации это не мешает — шаг продвижения.
+        "share_link_copied": share_link_copied,
+        # Подсказки шапки кабинета, которые тренер закрыл и они ещё «в тишине» —
+        # серверный сноз, чтобы закрытая подсказка не вернулась при следующем заходе.
+        "snoozed_hint_ids": sorted(snoozed.keys()),
         "revision": _revision(trainer),
         "warnings": _warnings(trainer, state),
         "metrics": metrics,

@@ -1205,7 +1205,7 @@ async def apply_moderator_revision_request(
     return state
 
 
-async def try_submit_trainer_for_moderation_review(
+async def try_publish_trainer_catalog_card(
     session: AsyncSession,
     trainer_id: int,
     *,
@@ -1214,13 +1214,24 @@ async def try_submit_trainer_for_moderation_review(
     requested_by_trainer: bool = False,
 ) -> dict[str, Any]:
     """
-    Queue trainer for admin profile moderation (submission tier: 8 criteria, same as Mini App / REST).
+    «Отправить себя в каталог» — publish-first: один тап, и карточка опубликована.
+
+    Раньше этот вызов ставил карточку в очередь ``pending_review`` и жилую она появлялась
+    только после модератора: 38 из 40 тренеров на проде имели готовую карточку, но до
+    каталога не доходили — потому что между решением и публикацией стоял чужой шаг.
+    Теперь публикуем сразу, а модерация идёт следом (post-moderation): карточка по-прежнему
+    штампуется ``moderation_submitted_at`` и уходит админам той же карточкой — «Одобрить»
+    активирует аккаунт, «Нужны правки» и «Отклонить» работают и по опубликованной карточке.
+
+    Submission tier сужен до того, без чего карточка бессмысленна: имя, город, услуга,
+    место работы (онлайн/выезд считается). Фото, телефон, длительность, окно записи —
+    подсказки «можно усилить», а не условие публикации.
 
     Trainer row stays status=pending_profile (admin /pending lists this). We stamp
     moderation_submitted_at to avoid duplicate admin pings until the trainer changes
     profile/photo/services/education again.
 
-    Returns dict for HTTP/bot. noop reasons: wrong_status | already_submitted
+    Returns dict for HTTP/bot. noop reasons: catalog_opt_out | already_published
     """
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
@@ -1242,22 +1253,15 @@ async def try_submit_trainer_for_moderation_review(
             "trainer_status": (trainer.get("status") or "").strip(),
             "catalog_state": state,
         }
-    if state == CATALOG_STATE_PUBLISHED:
+    # Уже в каталоге и версия уже ушла админам на пост-проверку → noop. А вот если после
+    # публикации карточку правили (moderation_submitted_at снят реальным изменением),
+    # повторная отправка — это «опубликуй обновлённую версию»: ре-штампуем и снова зовём
+    # админов, иначе пост-проверка навсегда смотрела бы на старый текст.
+    if state == CATALOG_STATE_PUBLISHED and trainer.get("moderation_submitted_at"):
         return {
             "ok": True,
             "noop": True,
             "reason": "already_published",
-            "trainer_status": (trainer.get("status") or "").strip(),
-            "catalog_state": state,
-        }
-    if state == CATALOG_STATE_PENDING_REVIEW and trainer.get("moderation_submitted_at") is not None:
-        # In review *and* the queue stamp still stands — admins have been pinged about this exact
-        # card. A real profile change clears the stamp (``clear_moderation_submitted_at``), and
-        # then a resubmit must ping them again: the card they were asked to look at has changed.
-        return {
-            "ok": True,
-            "noop": True,
-            "reason": "already_submitted",
             "trainer_status": (trainer.get("status") or "").strip(),
             "catalog_state": state,
         }
@@ -1280,18 +1284,19 @@ async def try_submit_trainer_for_moderation_review(
     if (trainer.get("moderation_feedback") or "").strip():
         await repo.set_moderation_feedback(trainer_id, None)
     await session.commit()
-    # The card, not the account, is what enters the queue. ``status`` stays where it is —
-    # an approval will move it to ``active`` the first time and leave it there afterwards.
+    # Publish-first: карточка выходит в каталог немедленно. ``status`` аккаунта stays where
+    # it is — an approval will move it to ``active`` the first time and leave it there
+    # afterwards; очередь /pending работает как пост-проверка уже опубликованных карточек.
     await set_catalog_state(
         session,
         trainer_id,
-        CATALOG_STATE_PENDING_REVIEW,
+        CATALOG_STATE_PUBLISHED,
         reason=REASON_TRAINER_SUBMITTED,
         actor_type=CATALOG_ACTOR_TRAINER if requested_by_trainer else CATALOG_ACTOR_SYSTEM,
         actor_id=audit_actor_id,
     )
     audit_log(
-        "trainer.submitted_for_moderation",
+        "trainer.catalog_published",
         audit_actor_type,
         audit_actor_id,
         {"trainer_id": trainer_id},
@@ -1299,13 +1304,17 @@ async def try_submit_trainer_for_moderation_review(
     try:
         await notify_admins_trainer_queued_for_moderation(trainer_id)
     except Exception:  # noqa: BLE001
-        logger.exception("notify admins after moderation submit failed trainer_id=%s", trainer_id)
+        logger.exception("notify admins after catalog publish failed trainer_id=%s", trainer_id)
     return {
         "ok": True,
-        "submitted": True,
+        "published": True,
         "trainer_status": st,
-        "catalog_state": CATALOG_STATE_PENDING_REVIEW,
+        "catalog_state": CATALOG_STATE_PUBLISHED,
     }
+
+
+# Легаси-имя: тот же вызов когда-то ставил карточку в очередь модерации вместо публикации.
+try_submit_trainer_for_moderation_review = try_publish_trainer_catalog_card
 
 
 async def get_trainer_moderation_readiness(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:

@@ -151,7 +151,7 @@ async def test_submit_requires_a_complete_card_and_reports_gaps(app_use_test_db,
 
 @pytest.mark.asyncio
 async def test_submit_without_a_phone_is_accepted(app_use_test_db, db_session) -> None:
-    """Телефон не блокирует каталог: заявка уходит в очередь, а экран предлагает его как совет."""
+    """Телефон не блокирует каталог: карточка публикуется сразу, телефон остаётся советом."""
     tid, tg = await _complete_trainer(db_session)
     await db_session.execute(
         text("UPDATE trainer_profiles SET phone = '' WHERE trainer_id = :t"), {"t": tid}
@@ -159,7 +159,7 @@ async def test_submit_without_a_phone_is_accepted(app_use_test_db, db_session) -
     await db_session.commit()
     status, body = await _post(tg, "submit")
     assert status == 200, body
-    assert body["state"] == CATALOG_STATE_PENDING_REVIEW
+    assert body["state"] == CATALOG_STATE_PUBLISHED
     readiness = body["readiness"]
     assert readiness["submit_ready"] is True
     assert "phone" not in readiness["missing_fields"]
@@ -173,14 +173,9 @@ async def test_submit_then_hide_then_restore_round_trip(app_use_test_db, db_sess
 
     status, body = await _post(tg, "submit")
     assert status == 200, body
-    assert body["state"] == CATALOG_STATE_PENDING_REVIEW
-    assert body["actions"] == ["withdraw"]
+    # Publish-first: один тап — карточка сразу в каталоге, очереди больше нет.
+    assert body["state"] == CATALOG_STATE_PUBLISHED
 
-    # A moderator approves; then the trainer takes it down and puts it back.
-    await set_catalog_state(
-        db_session, tid, CATALOG_STATE_PUBLISHED,
-        reason=REASON_MODERATOR_APPROVED, actor_type=CATALOG_ACTOR_MODERATOR, notify=False,
-    )
     status, body = await _post(tg, "hide")
     assert status == 200, body
     assert body["state"] == CATALOG_STATE_HIDDEN
@@ -210,7 +205,16 @@ async def test_restore_from_paused_returns_422_while_the_gap_is_open(app_use_tes
 @pytest.mark.asyncio
 async def test_withdraw_clears_the_queue_stamp(app_use_test_db, db_session) -> None:
     tid, tg = await _complete_trainer(db_session)
-    await _post(tg, "submit")
+    # Карточка в очереди — легаси-состояние: с publish-first submit публикует сразу,
+    # а pending_review остаётся у уже стоявших там карточек.
+    await db_session.execute(
+        text(
+            "UPDATE trainers SET catalog_state = 'pending_review', "
+            "moderation_submitted_at = now() WHERE id = :t"
+        ),
+        {"t": tid},
+    )
+    await db_session.commit()
     status, body = await _post(tg, "withdraw")
     assert status == 200, body
     assert body["state"] == CATALOG_STATE_DRAFT
@@ -379,7 +383,7 @@ async def test_history_says_what_happened_not_who_checked_whom(app_use_test_db, 
 
     body = await _get(tg)
     headlines = [e["headline"] for e in body["events"]]
-    assert headlines[0] == "Вы отправили карточку на проверку"
+    assert headlines[0] == "Вы опубликовали карточку в каталоге"
     for h in headlines:
         assert "·" not in h
         assert "вами" not in h
@@ -395,8 +399,15 @@ async def test_editing_a_card_in_review_leaves_a_way_to_re_ping_the_moderator(
     заявку»: позвать на проверку заново тренеру было нечем, и ждать он мог бесконечно.
     """
     tid, tg = await _complete_trainer(db_session)
-    status, _ = await _post(tg, "submit")
-    assert status == 200
+    # Карточка, стоящая в очереди (легаси-состояние для тех, кто успел подать до publish-first).
+    await db_session.execute(
+        text(
+            "UPDATE trainers SET catalog_state = 'pending_review', "
+            "moderation_submitted_at = now() WHERE id = :t"
+        ),
+        {"t": tid},
+    )
+    await db_session.commit()
 
     in_queue = await _get(tg)
     assert in_queue["state"] == CATALOG_STATE_PENDING_REVIEW
@@ -414,18 +425,29 @@ async def test_editing_a_card_in_review_leaves_a_way_to_re_ping_the_moderator(
     assert edited["actions"] == ["resubmit", "withdraw"]
     assert "модератор ещё не видел новую версию" in edited["body"].lower()
 
+    # Re-submit публикует обновлённую карточку сразу (publish-first) — очередь снова
+    # не нужна: админы получают пост-проверку той же карточкой.
     status2, _ = await _post(tg, "submit")
     assert status2 == 200
     again = await _get(tg)
-    assert again["actions"] == ["withdraw"]
+    assert again["state"] == CATALOG_STATE_PUBLISHED
+    assert again["actions"] == ["hide"]
 
 
 @pytest.mark.asyncio
 async def test_a_card_in_review_that_was_not_touched_offers_only_withdrawal(
     app_use_test_db, db_session
 ) -> None:
-    """Пока модератор смотрит ровно ту версию, что ему отправили, второй кнопки быть не должно."""
-    _, tg = await _complete_trainer(db_session)
-    await _post(tg, "submit")
+    """Пока модератор смотрит ровно ту версию, что ему отправили, второй кнопки быть не должно.
+    Карточку в очередь ставим напрямую — с publish-first submit публикует сразу."""
+    tid, tg = await _complete_trainer(db_session)
+    await db_session.execute(
+        text(
+            "UPDATE trainers SET catalog_state = 'pending_review', "
+            "moderation_submitted_at = now() WHERE id = :t"
+        ),
+        {"t": tid},
+    )
+    await db_session.commit()
     body = await _get(tg)
     assert body["actions"] == ["withdraw"]

@@ -33,7 +33,7 @@ from src.application.trainer_use_cases import (
     discard_active_trainer_text_revision_with_feedback,
     get_trainer,
     reconcile_catalog_state_for_card,
-    try_submit_trainer_for_moderation_review,
+    try_publish_trainer_catalog_card,
 )
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.catalog_visibility import (
@@ -89,7 +89,9 @@ async def submit_trainer_catalog_card(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict:
     """
-    «Отправить на проверку» — the one deliberate act of publication.
+    «Отправить себя в каталог» — the one deliberate act of publication, и единственный шаг:
+    publish-first, карточка выходит сразу, модерация идёт пост-проверкой (админ получает ту же
+    карточку и может снять её в любой момент).
 
     Deliberate is the point: publication used to be a side effect of saving a complete profile,
     so trainers polishing a card for their own students ended up in the public catalog without
@@ -98,7 +100,7 @@ async def submit_trainer_catalog_card(
     """
     trainer = await _acting_trainer(session, principal)
     trainer_id = int(trainer["id"])
-    result = await try_submit_trainer_for_moderation_review(
+    result = await try_publish_trainer_catalog_card(
         session, trainer_id, requested_by_trainer=True
     )
     if not result.get("ok"):

@@ -180,7 +180,7 @@ async def _approve_as_moderator(db_session, tid: int) -> None:
 
 @pytest.mark.asyncio
 async def test_the_happy_path_end_to_end(app_use_test_db, db_session, admin_pings) -> None:
-    """draft → на проверку → опубликован → снят → возвращён. Каждый шаг виден и обратим."""
+    """draft → опубликован в один тап (publish-first) → снят → возвращён. Каждый шаг виден и обратим."""
     tid, tg, _ = await _new_trainer(db_session)
 
     await _assert_stop(
@@ -188,25 +188,17 @@ async def test_the_happy_path_end_to_end(app_use_test_db, db_session, admin_ping
     )
 
     assert (await _act(tg, "submit"))[0] == 200
-    await _assert_stop(
-        tid,
-        tg,
-        state=CATALOG_STATE_PENDING_REVIEW,
-        actions=["withdraw"],
-        public=False,
-        journal_actor="trainer",
-    )
-    assert admin_pings == [tid], "модератора обязаны позвать ровно один раз"
-
-    await _approve_as_moderator(db_session, tid)
+    # Publish-first: очереди перед публикацией нет — карточка сразу в каталоге,
+    # админы получают её на пост-проверку тем же одним пингом.
     await _assert_stop(
         tid,
         tg,
         state=CATALOG_STATE_PUBLISHED,
         actions=["hide"],
         public=True,
-        journal_actor="moderator",
+        journal_actor="trainer",
     )
+    assert admin_pings == [tid], "админов обязаны позвать ровно один раз"
 
     assert (await _act(tg, "hide"))[0] == 200
     await _assert_stop(
@@ -224,9 +216,20 @@ async def test_the_happy_path_end_to_end(app_use_test_db, db_session, admin_ping
 async def test_withdrawing_a_request_returns_to_draft_and_can_be_repeated(
     app_use_test_db, db_session, admin_pings
 ) -> None:
-    """Отозвал заявку — вернулся в draft, и отправить снова можно: отметка в очереди снята."""
+    """Отозвал заявку — вернулся в draft, и отправить снова можно: отметка в очереди снята.
+
+    pending_review — легаси-состояние (там остались подавшие до publish-first); в очередь
+    карточку ставим напрямую, потому что submit теперь публикует сразу.
+    """
     tid, tg, _ = await _new_trainer(db_session)
-    assert (await _act(tg, "submit"))[0] == 200
+    await db_session.execute(
+        text(
+            "UPDATE trainers SET catalog_state = 'pending_review', "
+            "moderation_submitted_at = now() WHERE id = :t"
+        ),
+        {"t": tid},
+    )
+    await db_session.commit()
     assert (await _act(tg, "withdraw"))[0] == 200
     await _assert_stop(
         tid, tg, state=CATALOG_STATE_DRAFT, actions=["submit"], public=False, journal_actor="trainer"
@@ -234,7 +237,7 @@ async def test_withdrawing_a_request_returns_to_draft_and_can_be_repeated(
 
     admin_pings.clear()
     assert (await _act(tg, "submit"))[0] == 200
-    assert admin_pings == [tid], "повторная заявка обязана снова позвать модератора"
+    assert admin_pings == [tid], "новая отправка обязана снова позвать админов (пост-проверка)"
 
 
 @pytest.mark.asyncio
@@ -304,7 +307,7 @@ async def test_moderator_revision_round_trip_from_any_account_status(
     await _approve_as_moderator(db_session, tid)
     assert (await _act(tg, "hide"))[0] == 200
     assert (await _act(tg, "restore"))[0] == 200
-    # Аккаунт активен, карточка снова уходит на проверку — комбинация из жизни.
+    # Аккаунт активен, карточка стоит в очереди — легаси-комбинация из жизни.
     await db_session.execute(
         text("UPDATE trainers SET catalog_state = 'pending_review' WHERE id = :t"), {"t": tid}
     )
@@ -332,12 +335,13 @@ async def test_moderator_revision_round_trip_from_any_account_status(
 
     admin_pings.clear()
     assert (await _act(tg, "submit"))[0] == 200
+    # Publish-first: исправленная карточка публикуется сразу, админы зовутся на пост-проверку.
     await _assert_stop(
         tid,
         tg,
-        state=CATALOG_STATE_PENDING_REVIEW,
-        actions=["withdraw"],
-        public=False,
+        state=CATALOG_STATE_PUBLISHED,
+        actions=["hide"],
+        public=True,
         journal_actor="trainer",
     )
     assert admin_pings == [tid]
@@ -432,10 +436,9 @@ async def test_a_card_can_break_while_it_waits_in_the_queue(
     assert "город" in (screen["state_detail"] or "").lower()
     assert pushes, "выпадение из очереди обязано прийти пушем"
 
-    # Дорога назад та же, что у любой приостановленной карточки — через проверку, потому что
-    # модератор эту версию не видел.
+    # Дорога назад та же, что у любой приостановленной карточки: починил дыру — вернулась сама.
     admin_pings.clear()
-    await update_trainer_profile(db_session, tid, profile={"phone": "+375291230011"})
+    await update_trainer_profile(db_session, tid, profile={"city_id": city_id})
     await _assert_stop(
         tid,
         tg,

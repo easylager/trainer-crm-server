@@ -120,7 +120,10 @@ class CatalogStateTransitionError(CatalogStateError):
 # Two rules live outside the table: any state may go to ``draft`` (account deactivation), and
 # a transition to the current state is a no-op rather than an error.
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    CATALOG_STATE_DRAFT: frozenset({CATALOG_STATE_PENDING_REVIEW}),
+    # `draft → published` — one-tap publish: модерация больше не стоит между тренером и
+    # каталогом (publish-first), карточка уходит админу на пост-проверку уже опубликованной.
+    # `pending_review` остаётся для переходов, которые подразумевают ревью до показа.
+    CATALOG_STATE_DRAFT: frozenset({CATALOG_STATE_PENDING_REVIEW, CATALOG_STATE_PUBLISHED}),
     # `pending_review → paused` — анкета сломалась, пока карточка стояла в очереди. Ребра тут не
     # было, хотя ``reconcile_catalog_state_for_card`` именно этот переход и делает: тренер,
     # который стёр телефон, ожидая модератора, получал CatalogStateTransitionError прямо из
@@ -140,7 +143,11 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     ),
     CATALOG_STATE_HIDDEN: frozenset({CATALOG_STATE_PUBLISHED}),
     CATALOG_STATE_PAUSED: frozenset({CATALOG_STATE_PUBLISHED, CATALOG_STATE_PENDING_REVIEW}),
-    CATALOG_STATE_NEEDS_REVISION: frozenset({CATALOG_STATE_PENDING_REVIEW}),
+    # `needs_revision → published` — publish-first: тренер исправил и жмёт «Отправить себя
+    # в каталог»; карточка возвращается сразу, без повторного ожидания модератора.
+    CATALOG_STATE_NEEDS_REVISION: frozenset(
+        {CATALOG_STATE_PENDING_REVIEW, CATALOG_STATE_PUBLISHED}
+    ),
 }
 
 

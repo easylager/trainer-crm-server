@@ -72,7 +72,8 @@ async def test_moderation_submitted_at_cleared_but_feedback_kept_when_profile_be
 
     await update_trainer_status(db_session, tid, TRAINER_STATUS_ACTIVE)
     # Immediate published field (not revision_pending): breaks submission tier so demote + reconcile run.
-    await update_trainer_profile(db_session, tid, profile={"session_duration_minutes": 5})
+    # Услуги применяются сразу — publish-first блокер; длительность занятия им больше не является.
+    await update_trainer_profile(db_session, tid, profile={}, service_ids=[])
 
     row2 = await get_trainer(db_session, tid)
     assert row2 is not None
