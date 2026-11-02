@@ -87,6 +87,8 @@ def build_regional_job_seeds() -> list[JobSeed]:
         PARSER_KEY_SOLIGORSK_SZK,
         SHKLOV_ARENA_CONFIG,
         SOLIGORSK_SZK_CONFIG,
+        PARSER_KEY_ZHODINO_SDYUSHOR,
+        ZHODINO_SDYUSHOR_CONFIG,
     )
 
     configs: dict[str, dict] = {
@@ -109,6 +111,7 @@ def build_regional_job_seeds() -> list[JobSeed]:
         PARSER_KEY_SOLIGORSK_SZK: SOLIGORSK_SZK_CONFIG,
         PARSER_KEY_SHKLOV_ARENA: SHKLOV_ARENA_CONFIG,
         PARSER_KEY_GOMEL_LDS: GOMEL_LDS_CONFIG,
+        PARSER_KEY_ZHODINO_SDYUSHOR: ZHODINO_SDYUSHOR_CONFIG,
     }
     by_key = arenas_by_parser_key(ARENAS)
     missing = sorted(set(configs) - set(by_key))

@@ -1,4 +1,4 @@
-"""Regional batch D IceParser strategies (arenas 38/18/19/42/33). Extract only — no DB writes.
+"""Regional batch D IceParser strategies (arenas 38/18/19/42/33/20). Extract only — no DB writes.
 
 Follows the style of ``src/ingestion/adapters.py``. Sources and gotchas: ``.ai/parsers/*.md``.
 """
@@ -21,6 +21,7 @@ from src.ingestion.seed_config_regional_batch_d import (
     PARSER_KEY_MOLODECHNO_SRC,
     PARSER_KEY_SHKLOV_ARENA,
     PARSER_KEY_SOLIGORSK_SZK,
+    PARSER_KEY_ZHODINO_SDYUSHOR,
 )
 from src.shared.schedule_basis import SCHEDULE_BASIS_LIVE
 from src.ingestion.cpu_work import run_cpu_bound
@@ -239,6 +240,7 @@ class BobruiskArenaParser(IceParser):
             parser_key=self.parser_key,
             snapshot={"schedule": schedule_html, "prices": prices_html},
             slots=slots,
+            schedule_basis=SCHEDULE_BASIS_LIVE,
         )
 
 
@@ -805,3 +807,106 @@ class GomelLdsParser(IceParser):
                 )
             )
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+
+
+# ---------------------------------------------------------------------------
+# zhodino-sdyushor (arena_id 20) — WordPress page with weekly <table> grids.
+# Header row: "Понедельник 02.11.2026 г." ... ; body cells hold start times ("18.00").
+# The body markup is broken (missing </tr>), so body cells are read as one flat
+# stream after the header and mapped to columns by position (index % 7).
+# Tables without a dated header (legend, opening hours) are skipped.
+# ---------------------------------------------------------------------------
+
+_ZHODINO_TABLE = re.compile(r"<table\b.*?</table>", re.S | re.I)
+_ZHODINO_CELL = re.compile(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", re.S | re.I)
+_ZHODINO_DATE = re.compile(r"(\d{1,2})\.(\d{1,2})\.(\d{4})")
+_ZHODINO_TIME = re.compile(r"\b(\d{1,2})[.:](\d{2})\b")
+_ZHODINO_DURATION = re.compile(r"сеанс\s*:?\s*(\d{2,3})\s*мин", re.I)
+
+
+def _zhodino_schedule(html: str) -> list[tuple[date, str]]:
+    out: list[tuple[date, str]] = []
+    for table in _ZHODINO_TABLE.findall(html):
+        cells = [html_unescape_cell(c) for c in _ZHODINO_CELL.findall(table)]
+        header: list[date] = []
+        body_start = 0
+        for idx, text in enumerate(cells):
+            m = _ZHODINO_DATE.search(text)
+            if not m:
+                if header:
+                    break
+                continue
+            try:
+                header.append(date(int(m.group(3)), int(m.group(2)), int(m.group(1))))
+            except ValueError:
+                header = []
+                break
+            body_start = idx + 1
+        if len(header) < 2:
+            continue
+        for idx, text in enumerate(cells[body_start:]):
+            day = header[idx % len(header)]
+            for hh, mm in _ZHODINO_TIME.findall(text):
+                h, m_ = int(hh), int(mm)
+                if h < 24 and m_ < 60:
+                    out.append((day, _fmt(h, m_)))
+    return sorted(set(out))
+
+
+def _zhodino_prices(html: str) -> tuple[int | None, int | None, int | None, int | None]:
+    """(adult, child, rental, duration_minutes) from the «цены» page."""
+    adult = child = rental = None
+    for row_html in re.findall(r"<tr\b.*?</tr>", html, re.S | re.I):
+        cells = [html_unescape_cell(c) for c in _ZHODINO_CELL.findall(row_html)]
+        if len(cells) < 2:
+            continue
+        label = cells[0].lower()
+        if "абонемент" in label:
+            continue
+        if "сеанс массового катания" in label:
+            adult = parse_price_to_minor(cells[1], already_minor=False)
+            child = parse_price_to_minor(cells[2], already_minor=False) if len(cells) > 2 else None
+        elif "прокат коньков" in label:
+            rental = parse_price_to_minor(cells[1], already_minor=False)
+    m = _ZHODINO_DURATION.search(html_unescape_cell(html))
+    duration = int(m.group(1)) if m else None
+    return adult, child, rental, duration
+
+
+class ZhodinoSdyushorParser(IceParser):
+    parser_key = PARSER_KEY_ZHODINO_SDYUSHOR
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        schedule_html = await load_source_text(job, filename="raspisanie.html", url_keys=("schedule_url",))
+        try:
+            prices_html = await load_source_text(job, filename="ceny.html", url_keys=("prices_url",))
+        except Exception:  # noqa: BLE001 — prices are optional, schedule still publishes
+            _log.warning("zhodino: prices page unavailable", exc_info=True)
+            prices_html = ""
+        adult, child, rental, page_duration = _zhodino_prices(prices_html)
+        duration = page_duration or int(job.config.get("default_duration_minutes") or 45)
+        age_note = job.config.get("age_note")
+        slots: list[ExtractedSlot] = []
+        for local_date, start in _zhodino_schedule(schedule_html):
+            h, m = (int(x) for x in start.split(":"))
+            end = (datetime(2000, 1, 1, h, m) + timedelta(minutes=duration)).strftime("%H:%M")
+            slots.append(
+                ExtractedSlot(
+                    local_date=local_date.isoformat(),
+                    starts_at_local=start,
+                    ends_at_local=end,
+                    kind_raw="Массовое катание",
+                    price_adult=adult,
+                    price_child=child,
+                    price_rental=rental,
+                    session_label=None,
+                    age_note=age_note,
+                )
+            )
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot={"schedule": schedule_html, "prices": prices_html},
+            slots=slots,
+            schedule_basis=SCHEDULE_BASIS_LIVE,
+        )

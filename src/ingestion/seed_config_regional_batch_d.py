@@ -1,4 +1,4 @@
-"""Regional batch D job.config seeds — arenas 38/19/42/33. See .ai/parsers/*.md dossiers.
+"""Regional batch D job.config seeds — arenas 38/19/42/33/20. See .ai/parsers/*.md dossiers.
 
 Parser keys below match the batch-D wiring table (not the draft keys inside the .ai/parsers/*.md
 dossiers, which predate this batch and use a different naming convention: bobruiskarena_html_v1,
@@ -59,4 +59,21 @@ GOMEL_LDS_CONFIG: dict = {
     "kind": "public_skate",
     "prices_already_minor": True,
     "requires_by_egress": False,
+}
+
+PARSER_KEY_ZHODINO_SDYUSHOR = "zhodino_sdyushor_v1"
+
+ZHODINO_SDYUSHOR_CONFIG: dict = {
+    "schedule_url": (
+        "https://www.xn----8sbkhlnbugdd1c.xn--90ais/"
+        "%D1%80%D0%B0%D1%81%D0%BF%D0%B8%D1%81%D0%B0%D0%BD%D0%B8%D0%B5-2/"
+    ),
+    "prices_url": "https://www.xn----8sbkhlnbugdd1c.xn--90ais/%D1%86%D0%B5%D0%BD%D1%8B/",
+    "timezone": "Europe/Minsk",
+    "kind": "public_skate",
+    # «1 сеанс: 45 минут.» on the prices page; the parser reads it from there, this is the fallback.
+    "default_duration_minutes": 45,
+    "age_note": "детский до 14 лет",
+    "prices_already_minor": True,
+    "requires_by_egress": True,
 }

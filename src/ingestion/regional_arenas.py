@@ -117,7 +117,8 @@ ARENAS: list[SeedArena] = [
         54.0942605,
         28.3262757,
         "zhodino-sdyushor",
-        False,
+        True,
+        "zhodino_sdyushor_v1",
     ),
     SeedArena(28, "Ивацевичи", "Ледовая арена", "Спортивная 3", 52.7211098, 25.3303487, "ivatsevichi-lds", False),
     SeedArena(

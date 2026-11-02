@@ -64,6 +64,7 @@ def default_registry() -> ParserRegistry:
         MolodechnoSrcParser,
         ShklovArenaParser,
         SoligorskSzkParser,
+        ZhodinoSdyushorParser,
     )
     from src.ingestion.adapters_ru_pilot import (
         BalticArenaHtmlParser,
@@ -118,6 +119,7 @@ def default_registry() -> ParserRegistry:
         SoligorskSzkParser(),
         ShklovArenaParser(),
         GomelLdsParser(),
+        ZhodinoSdyushorParser(),
         SokolnikiHtmlParser(),
         LedovyyDvoretsHtmlParser(),
         YubileynyAfishaParser(),

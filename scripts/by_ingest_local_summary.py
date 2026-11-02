@@ -22,6 +22,7 @@ BY_KEYS = (
     "bobruisk_arena_v1",
     "soligorsk_szk_v1",
     "minskarena_speed_oval_v1",
+    "zhodino_sdyushor_v1",
 )
 
 

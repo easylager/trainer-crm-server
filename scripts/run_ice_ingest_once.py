@@ -57,6 +57,7 @@ MINSK_MK_PARSER_KEYS = frozenset(
         "soligorsk_szk_v1",
         "shklov_arena_v1",
         "gomel_lds_v1",
+        "zhodino_sdyushor_v1",
         "ledby_html_v1",
         "diamond_html_v1",
         "minskarena_speed_oval_v1",

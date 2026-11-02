@@ -1,12 +1,12 @@
-# Parser spec (skip): Ледовая площадка ГУ СДЮШОР (Жодино)
+# Parser spec: Ледовая площадка ГУ СДЮШОР (Жодино)
 
 - arena_id: 20
 - arena_slug: zhodino-sdyushor
 - city: Жодино
-- parser_key: zhodino_html_v1
-- cadence: weekly
-- requires_by_egress: false
-- **status: skip / empty** — сезон закрыт, ремонт
+- parser_key: zhodino_sdyushor_v1 (`ZhodinoSdyushorParser`, `src/ingestion/adapters_regional_batch_d.py`)
+- cadence: daily
+- requires_by_egress: true — сайт отвечает только с белорусского IP; гоняется `scripts/by_ingest.sh`
+- status: live (с 2026-11-02)
 
 Punycode-сайт: https://www.xn----8sbkhlnbugdd1c.xn--90ais/ (ледоваяплощадка.бел).
 
@@ -15,12 +15,17 @@ Punycode-сайт: https://www.xn----8sbkhlnbugdd1c.xn--90ais/ (ледоваяп
 - schedule: https://www.xn----8sbkhlnbugdd1c.xn--90ais/расписание-2/
 - prices: https://www.xn----8sbkhlnbugdd1c.xn--90ais/цены/
 
-## Finding (2026-09-05)
+## Разметка (2026-11-02)
 
-На расписании: «в связи с окончанием сезона … завершает свою работу». Времен нет. Прайс живой: МК 6,00 / дет до 14 5,00; прокат 4,50 / 3,50; сеанс 45 мин. Это каталог на reopen, не слоты.
+На странице расписания — по одной `<table>` на неделю (текущая и прошлая), шапка
+«Понедельник 02.11.2026 г.» … «Воскресенье 08.11.2026 г.», в ячейках — время начала сеанса МК
+(«18.00», «21.15»), пустые ячейки — сеансов нет. Разметка тела битая (нет `</tr>`): ячейки после шапки
+читаются одним потоком, колонка = индекс % 7. Ещё две таблицы — легенда («- сеансы массовых катаний»)
+и «Дата / Время работы» (без дат в шапке) — пропускаются.
 
-Не публиковать школу СДЮШОР как МК и не строить сетку. Когда появится таблица сеансов — `public_skate`, 600/500/450 (взр. пара проката).
+Цены (/цены/): МК взр. 6,50 / дет. до 14 5,50; прокат 4,90 (взрослая пара). «1 сеанс: 45 минут.» —
+длительность берётся оттуда, иначе `default_duration_minutes` = 45.
 
 ## Fixture
 
-`.ai/data/fixtures/zhodino-sdyushor/` — `raspisanie.html`, `ceny.html` + `expected.json` (`sessions: []`).
+`data/fixtures/zhodino-sdyushor/` — `raspisanie.html`, `ceny.html` (снято 2026-11-02) + `expected.json`.

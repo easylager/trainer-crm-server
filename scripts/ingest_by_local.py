@@ -50,6 +50,7 @@ BY_ONLY_SOURCES: dict[str, str] = {
     "bobruisk_arena_v1": "Бобруйск-арена",
     "soligorsk_szk_v1": "Спортивно-зрелищный комплекс, Солигорск",
     "minskarena_speed_oval_v1": "Конькобежный стадион, Минск",
+    "zhodino_sdyushor_v1": "Ледовая площадка СДЮШОР, Жодино",
 }
 
 

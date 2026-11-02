@@ -101,6 +101,7 @@ def test_one_shot_bumps_minsk_and_regional_mk_keys(runner) -> None:
         "soligorsk_szk_v1",
         "shklov_arena_v1",
         "gomel_lds_v1",
+        "zhodino_sdyushor_v1",
         "ledby_html_v1",
         "diamond_html_v1",
         "minskarena_speed_oval_v1",

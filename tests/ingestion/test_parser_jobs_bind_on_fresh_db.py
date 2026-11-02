@@ -139,6 +139,7 @@ _PROD_BINDINGS: tuple[tuple[str, str, str, int], ...] = (
     ("vtbarena_qtickets_v1", "Москва/МО", "vtb-arena", 53),
     ("yubileyny_afisha_html_v1", "Санкт-Петербург/ЛО", "skk-yubileynyy", 97),
     ("zamok_html_v1", "Минск", "zamok", 3),
+    ("zhodino_sdyushor_v1", "Жодино", "zhodino-sdyushor", 20),
 )
 
 
@@ -187,7 +188,7 @@ async def _bind(async_url: str, expected: dict[str, tuple[str, str, int]]) -> No
     regional = build_regional_job_seeds()
     seeds = [*minsk, *regional]
     assert {seed.parser_key for seed in seeds} == set(expected)
-    assert len(seeds) == 43
+    assert len(seeds) == 44
     for seed in seeds:
         city_name, slug, _arena_id = expected[seed.parser_key]
         assert seed.config["city_name"] == city_name
@@ -227,9 +228,9 @@ async def test_fresh_database_binds_every_parser_job() -> None:
         raise RuntimeError(BIND_DB)
     expected = _expected()
     _assert_seed_lists_match_prod_table(expected)
-    assert len(expected) == 43
+    assert len(expected) == 44
     assert len(arenas_by_parser_key(CAPITAL_ARENAS)) == 24
-    assert len(arenas_by_parser_key(REGIONAL_ARENAS)) == 19
+    assert len(arenas_by_parser_key(REGIONAL_ARENAS)) == 20
 
     base_sync = _sync_url_from_settings()
     parsed = urlparse(base_sync)
