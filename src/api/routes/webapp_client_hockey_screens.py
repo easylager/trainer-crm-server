@@ -55,8 +55,6 @@ async def get_client_hockey_match(
     friends = await friends_picks(session, player_key=player_key, match_ids=[match_id])
     moves = await friends_moves(session, player_key=player_key, match_ids=[match_id], now=now)
     out = _match_out(data, now=now, friends=friends[match_id], moves=moves[match_id])
-    out["arena"] = data["arena"]
-    out["city"] = data["city"]
     return out
 
 

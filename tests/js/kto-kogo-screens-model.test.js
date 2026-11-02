@@ -149,7 +149,7 @@ describe('матчи дня и пауза', () => {
   it('берёт ближайший день с открытым матчем; закрытые того же дня остаются в списке', () => {
     const list = [mk(1, '2026-11-05T16:00:00Z', { open: false, status: 'final' }), mk(2, '2026-11-06T15:30:00Z', { my_pick: { side: 'home' } }), mk(3, '2026-11-06T16:00:00Z'), mk(4, '2026-11-06T11:00:00Z', { open: false }), mk(5, '2026-11-07T16:00:00Z')];
     const d = S.dayMatches(list, NOW);
-    assert.equal(d.heading, 'МАТЧИ ДНЯ · ПЯТНИЦА');
+    assert.equal(d.heading, 'ЭКСТРАЛИГА · СЕГОДНЯ, ПТ 6 НОЯБРЯ');
     assert.deepEqual(d.items.map((x) => x.id), [4, 2, 3]);
     assert.equal(d.total, 2);
     assert.equal(d.made, 1);
@@ -158,7 +158,7 @@ describe('матчи дня и пауза', () => {
   });
   it('нет матчей сегодня — «ближайшие» с днём недели; нет открытых — null', () => {
     const d = S.dayMatches([mk(1, '2026-11-10T16:00:00Z')], NOW);
-    assert.equal(d.heading, 'БЛИЖАЙШИЕ МАТЧИ · ВТОРНИК');
+    assert.equal(d.heading, 'ЭКСТРАЛИГА · ВТ 10 НОЯБРЯ');
     assert.equal(S.dayMatches([mk(1, '2026-11-10T16:00:00Z', { open: false })], NOW), null);
   });
   it('пауза Экстралиги: следующий матч дальше трёх дней; календаря нет — паузы нет', () => {
@@ -313,7 +313,7 @@ describe('карточка болельщика', () => {
 });
 
 describe('слова игры', () => {
-  const FILES = ['kto-kogo-model.js', 'kto-kogo-screens-model.js', 'kto-kogo.js', 'kto-kogo-views.js', 'kto-kogo-board.js', 'kto-kogo-leagues.js', 'kto-kogo-boot.js'];
+  const FILES = ['kto-kogo-model.js', 'kto-kogo-screens-model.js', 'kto-kogo.js', 'kto-kogo-views.js', 'kto-kogo-hub-cards.js', 'kto-kogo-board.js', 'kto-kogo-leagues.js', 'kto-kogo-boot.js'];
   const BANNED = /ставк|коэффициент|прогноз|пари\b|выигрыш|букмекер|банк\b|ставь|поставить/i;
   it('в строках игроку нет азартных слов', () => {
     for (const f of FILES) {

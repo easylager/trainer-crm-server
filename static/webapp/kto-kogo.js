@@ -27,6 +27,9 @@
     race: null,
     double: null,
     doubles: [],
+    drafts: {}, // id матча → черновик счёта [дома, в гостях], пока он не ушёл на сервер или это ничья
+    scoreOpen: {}, // id матча → раскрыты степперы в строке дня
+    hubReady: false, // хаб прошёл первую загрузку (профиль, матчи, матчи клуба)
     stakes: {}, // id матча → {loading, data}
     movement: {}, // id матча → {loading, data}
     peaks: null,
@@ -334,6 +337,24 @@
     });
   }
 
+  /**
+   * Ближайшие матчи любимого клуба игрока, дома и в гостях: общий список ограничен по числу и может их не вместить.
+   * Недостающие дописываются в state.matches, чтобы ход и козырь работали с теми же объектами.
+   */
+  function loadClubMatches() {
+    var club = state.profile && state.profile.club && state.profile.club.name;
+    if (!club) return Promise.resolve();
+    return api('GET', '/client/hockey/matches?league=all&club=' + encodeURIComponent(club))
+      .then(function (data) {
+        var have = {};
+        state.matches.forEach(function (m) { have[m.id] = true; });
+        var extra = ((data && data.items) || []).filter(function (m) { return !have[m.id]; });
+        if (!extra.length) return;
+        state.matches = state.matches.concat(extra).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : a.id - b.id; });
+      })
+      .catch(function () {});
+  }
+
   function findMatch(id) {
     for (var i = 0; i < state.matches.length; i++) if (state.matches[i].id === id) return state.matches[i];
     return state.matchCache[id] || null;
@@ -523,9 +544,11 @@
     if (panel && !prevSheet) panel.focus();
     else if (focusId) {
       var again = document.getElementById(focusId);
-      if (again && again.tagName === 'INPUT') {
+      if (again && (again.tagName === 'INPUT' || again.hasAttribute('data-keep'))) {
         again.focus();
-        try { again.setSelectionRange(again.value.length, again.value.length); } catch (e) { /* */ }
+        if (again.tagName === 'INPUT') {
+          try { again.setSelectionRange(again.value.length, again.value.length); } catch (e) { /* */ }
+        }
       }
     }
     if (tg && tg.BackButton) tg.BackButton.show();
@@ -606,7 +629,7 @@
     ava: ava, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard,
     sheet: sheet, closeSheet: closeSheet, api: api, toast: toast, fail: fail, haptic: haptic, render: render, register: register,
     go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
-    loadMatches: loadMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,
+    loadMatches: loadMatches, loadClubMatches: loadClubMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,
     loadProfile: loadProfile, loadClubs: loadClubs, loadLeagues: loadLeagues, loadRemind: loadRemind,
     openMatchPage: openMatchPage, sendPick: sendPick, pickSide: pickSide, saveScore: saveScore, toggleTrump: toggleTrump,
     share: share, shareCard: shareCard, copy: copy, boot: boot,

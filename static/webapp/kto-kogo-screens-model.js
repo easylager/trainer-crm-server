@@ -13,6 +13,7 @@
   var WEEKDAY_UP = ['ВОСКРЕСЕНЬЕ', 'ПОНЕДЕЛЬНИК', 'ВТОРНИК', 'СРЕДА', 'ЧЕТВЕРГ', 'ПЯТНИЦА', 'СУББОТА'];
   var WEEKDAY_ON = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
   var MONTH_NOM = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+  var WEEKDAY_ON_IN = ['в воскресенье', 'в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу'];
   var SPELL = { 'Шахтер': 'Шахтёр', 'Могилев': 'Могилёв' };
 
   function pad(n) {
@@ -243,18 +244,41 @@
 
   // ---------- матчи дня ----------
 
-  /** Ближайший день с открытым матчем и все матчи этого дня; null — открытых матчей нет. */
-  function dayMatches(list, now) {
-    var open = (list || []).filter(function (m) { return m.open; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+  var WEEKDAY_SHORT_UP = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
+  var LEAGUE_UP = { khl: 'КХЛ', extraliga: 'ЭКСТРАЛИГА' };
+
+  function leagueUp(m) {
+    return m.league === 'extraliga' ? LEAGUE_UP.extraliga : LEAGUE_UP.khl;
+  }
+
+  /** «СЕГОДНЯ, ВТ 3 НОЯБРЯ» · «ЗАВТРА, СР 4 НОЯБРЯ» · «ЧТ 5 НОЯБРЯ». */
+  function dayLabelUp(iso, now) {
+    var p = Base.minskParts(new Date(iso));
+    var diff = Base.dayIndex(p) - Base.dayIndex(Base.minskParts(now || new Date()));
+    var date = WEEKDAY_SHORT_UP[p.wd] + ' ' + p.d + ' ' + Base.MONTHS[p.m - 1].toUpperCase();
+    return (diff === 0 ? 'СЕГОДНЯ, ' : diff === 1 ? 'ЗАВТРА, ' : '') + date;
+  }
+
+  /**
+   * Ближайший день с открытым матчем и все матчи этого дня; null — открытых матчей нет.
+   * exceptId — матч, который уже показан в блоке «Твоя команда»: из дня он выпадает, а если он был
+   * единственным открытым, день считается по следующему матчу.
+   */
+  function dayMatches(list, now, exceptId) {
+    var rest = (list || []).filter(function (m) { return m.id !== exceptId; });
+    var open = rest.filter(function (m) { return m.open; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
     if (!open.length) return null;
     var first = dayKey(open[0].starts_at);
-    var items = (list || [])
+    var items = rest
       .filter(function (m) { return m.status !== 'cancelled' && dayKey(m.starts_at) === first; })
       .sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : a.id - b.id; });
     var openItems = items.filter(function (m) { return m.open; });
     var made = openItems.filter(function (m) { return m.my_pick; }).length;
     var wd = Base.minskParts(new Date(open[0].starts_at)).wd;
     var today = first === dayKey((now || new Date()).toISOString());
+    var leagues = {};
+    items.forEach(function (m) { leagues[m.league === 'extraliga' ? 'extraliga' : 'khl'] = true; });
+    var names = Object.keys(leagues);
     return {
       day: first,
       today: today,
@@ -262,8 +286,76 @@
       items: items,
       total: openItems.length,
       made: made,
-      heading: (today ? 'МАТЧИ ДНЯ · ' : 'БЛИЖАЙШИЕ МАТЧИ · ') + WEEKDAY_UP[wd],
+      mixed: names.length > 1,
+      heading: (names.length > 1 ? 'МАТЧИ' : LEAGUE_UP[names[0]]) + ' · ' + dayLabelUp(open[0].starts_at, now),
     };
+  }
+
+  // ---------- хаб: «Твоя команда» ----------
+
+  /**
+   * Матч для большой карточки хаба. С клубом — ближайший открытый матч клуба, дома или в гостях.
+   * Без клуба («Все») — матч дня: ближайший открытый матч Динамо, иначе первый открытый. Нет матча — null.
+   */
+  function heroMatch(list, club, now) {
+    var open = (list || []).filter(function (m) { return m.open && m.status !== 'cancelled'; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : a.id - b.id; });
+    if (club) {
+      var own = open.filter(function (m) { return m.home_team === club || m.away_team === club; })[0];
+      return own ? { match: own, tag: 'ТВОЯ КОМАНДА' } : null;
+    }
+    var dinamo = open.filter(function (m) { return m.home_team === Base.DINAMO || m.away_team === Base.DINAMO; })[0];
+    var pick = dinamo || open[0];
+    return pick ? { match: pick, tag: 'МАТЧ ДНЯ' } : null;
+  }
+
+  /** «ЧТ 5 НОЯБРЯ · 19:30 · КХЛ · МИНСК-АРЕНА». */
+  function heroMeta(m) {
+    var p = Base.minskParts(new Date(m.starts_at));
+    var place = m.arena || m.city || '';
+    return [WEEKDAY_SHORT_UP[p.wd] + ' ' + p.d + ' ' + Base.MONTHS[p.m - 1].toUpperCase(), Base.time(p), leagueUp(m), place.toUpperCase()].filter(Boolean).join(' · ');
+  }
+
+  /** «Можно менять до 19:30 в четверг». */
+  function changeUntil(iso, now) {
+    var p = Base.minskParts(new Date(iso));
+    var diff = Base.dayIndex(p) - Base.dayIndex(Base.minskParts(now || new Date()));
+    var day = diff === 0 ? 'сегодня' : diff === 1 ? 'завтра' : diff > 1 && diff < 7 ? WEEKDAY_ON_IN[p.wd] : p.d + NBSP + Base.MONTHS[p.m - 1];
+    return 'Можно менять до ' + Base.time(p) + ' ' + day;
+  }
+
+  /** Черновик счёта после тапа −/+ (idx 0 — хозяева, 1 — гости). Основа: черновик, иначе счёт хода, иначе 0:0. */
+  function stepScore(mine, draft, idx, delta) {
+    var base = draft || (mine && mine.home_score != null && mine.away_score != null ? [mine.home_score, mine.away_score] : [0, 0]);
+    var next = [base[0], base[1]];
+    next[idx] = Base.clampGoals(next[idx] + delta);
+    return next;
+  }
+
+  /**
+   * Ход так, как его видит игрок сейчас: серверный ход плюс черновик счёта.
+   * Счёт с перевесом переключает сторону; ничья — сторона прежняя, tie: true, отправлять нечего.
+   */
+  function effectivePick(mine, draft) {
+    var side = (mine && mine.side) || null;
+    var score = draft || (mine && mine.home_score != null && mine.away_score != null ? [mine.home_score, mine.away_score] : null);
+    var tie = !!score && score[0] === score[1];
+    if (score && !tie) side = score[0] > score[1] ? 'home' : 'away';
+    return { side: side, score: score, tie: tie };
+  }
+
+  /** Тап по кнопке команды: ход меняется, только если это другая сторона (счёт тогда сбрасывается). */
+  function sideTapSends(mine, draft, side) {
+    return effectivePick(mine, draft).side !== side;
+  }
+
+  /** Итог хода под степперами: {text, max}. Без стороны — null. */
+  function moveSummary(eff, doubled, sideName) {
+    if (!eff.side) return null;
+    var k = doubled ? 2 : 1;
+    var tail = doubled ? ' · козырь' : '';
+    if (eff.tie) return { text: 'В хоккее нет ничьей — счёт не засчитаем', max: String(Base.POINTS.winner * k) };
+    if (eff.score) return { text: 'Ход: ' + eff.score[0] + ':' + eff.score[1] + tail, max: 'до ' + Base.POINTS.exact * k };
+    return { text: 'Ход: за ' + sideName + tail, max: String(Base.POINTS.winner * k) };
   }
 
   function dayCount(made, total) {
@@ -570,6 +662,14 @@
     pointsLine: pointsLine,
     questionLine: questionLine,
     dayMatches: dayMatches,
+    heroMatch: heroMatch,
+    heroMeta: heroMeta,
+    changeUntil: changeUntil,
+    stepScore: stepScore,
+    effectivePick: effectivePick,
+    sideTapSends: sideTapSends,
+    moveSummary: moveSummary,
+    dayLabelUp: dayLabelUp,
     dayCount: dayCount,
     pauseInfo: pauseInfo,
     nextMatch: nextMatch,

@@ -113,67 +113,6 @@
     ]);
   }
 
-  function dayRow(m) {
-    var colors = M.pairColors(m.home, m.away);
-    var mine = m.my_pick;
-    function pick(side) {
-      var sel = mine && mine.side === side;
-      return h('button', {
-        type: 'button',
-        class: 'kk-p' + (sel ? ' is-on' : '') + (m.open ? '' : ' is-off'),
-        'aria-pressed': sel ? 'true' : 'false',
-        'aria-label': 'Победит ' + name(m[side]),
-        'aria-disabled': m.open ? null : 'true',
-        style: sel ? 'background:' + colors[side] : '',
-        onclick: function () { if (m.open) K.pickSide(m, side); else K.go('match', { id: m.id }); },
-        text: S.clubShort(m[side].name),
-      });
-    }
-    var moved = M.movedLine(m);
-    var row = h('div', { class: 'kk-m' }, [
-      h('button', { type: 'button', class: 'kk-t', 'aria-label': 'Открыть матч ' + name(m.home) + ' — ' + name(m.away), onclick: function () { K.go('match', { id: m.id }); } }, [
-        h('span', { text: m.open || m.status === 'scheduled' || m.status === 'review' ? S.timeOnly(m.starts_at) : m.result ? m.result.home_score + ':' + m.result.away_score : '' }),
-        h('span', { class: 'kk-t__l', text: m.league === 'extraliga' ? 'ЭКСТРАЛИГА' : 'КХЛ' }),
-      ]),
-      pick('home'),
-      pick('away'),
-    ]);
-    if (!moved) return row;
-    /* Перенос виден прямо в списке; ход при этом сохраняется. */
-    return h('div', { class: 'kk-mw' }, [row, h('span', { class: 'kk-moved', text: moved })]);
-  }
-
-  function pauseCard() {
-    var pause = S.pauseInfo(state.matches, new Date());
-    if (!pause) return null;
-    var dinamo = state.matches.filter(function (m) { return m.open && m.league === 'khl'; })[0];
-    return h('section', { class: 'kk-card kk-note' }, [
-      K.sticker('ПАУЗА', 'kk-tag--soft'),
-      h('span', { class: 'kk-lbl', text: 'ПАУЗА ЭКСТРАЛИГИ' }),
-      h('span', { class: 'kk-tx', text: 'Экстралига отдыхает до ' + pause.until + ' — игра живёт на Динамо.' }),
-      dinamo ? h('b', { class: 'kk-hd', text: M.whenLabel(dinamo.starts_at, new Date()) + ' · ' + name(dinamo.home) + ' — ' + name(dinamo.away) }) : null,
-      dinamo ? h('div', { class: 'kk-two' }, [
-        h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('match', { id: dinamo.id }); }, text: S.clubShort(dinamo.home.name) }),
-        h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('match', { id: dinamo.id }); }, text: S.clubShort(dinamo.away.name) }),
-      ]) : null,
-    ]);
-  }
-
-  function daySection() {
-    if (state.loading && !state.matches.length) return h('div', { class: 'kk-skel kk-skel--card' });
-    var d = S.dayMatches(state.matches, new Date());
-    if (!d) return K.emptyCard('МАТЧИ ДНЯ', 'Ближайших матчей пока нет — календарь обновится, как только клубы их назначат.');
-    var left = d.total - d.made;
-    return h('div', { class: 'kk-sec' }, [
-      h('div', { class: 'kk-sec__head' }, [
-        h('span', { class: 'kk-lbl', text: d.heading }),
-        h('span', { class: 'kk-cnt' + (left === 0 ? ' is-done' : ''), text: S.dayCount(d.made, d.total) }),
-      ]),
-      h('div', { class: 'kk-day' }, d.items.map(dayRow)),
-      h('span', { class: 'kk-sub', text: 'Тап — ход за победителя. Счёт и козырь — в карточке матча. Ходы закрываются со стартом.' }),
-    ]);
-  }
-
   function leaguesSection() {
     var list = state.leagues;
     return h('div', { class: 'kk-sec' }, [
@@ -194,7 +133,9 @@
 
   K.register('hub', {
     enter: function () {
-      Promise.all([K.loadProfile(), K.loadPeaks(), K.loadLeagues(true).catch(function () {}), K.loadMatches().catch(function () {})]).then(K.render, K.fail);
+      Promise.all([K.loadProfile(), K.loadPeaks(), K.loadLeagues(true).catch(function () {}), K.loadMatches().catch(function () {})])
+        .then(K.loadClubMatches)
+        .then(function () { state.hubReady = true; K.render(); }, function (e) { state.hubReady = true; K.fail(e); });
     },
     render: function () {
       return [
@@ -204,9 +145,10 @@
             h('button', { type: 'button', class: 'kk-btn kk-btn--alt kk-btn--sm', onclick: function () { K.go('table', {}); }, text: 'Таблица' }),
           ]),
           fanCard(),
+          K.hubCards.hero(),
+          K.hubCards.day(),
+          K.hubCards.points(),
           peaksBlock(),
-          pauseCard(),
-          daySection(),
           leaguesSection(),
           remindRow(),
           state.kkHidden ? h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: showOnMatches, text: 'Вернуть строку игры на главную' }) : null,

@@ -147,6 +147,8 @@
    * шайбы каждой команды — по 10, точный счёт — 50. Считает сервер; здесь только слова.
    */
   var EXACT = 50;
+  /** Те же числа, что POINTS_* в src/application/hockey_game.py (их сверяет tests/js/kto-kogo-hub-model.test.js). */
+  var POINTS = { winner: 20, diff: 10, goals: 10, exact: EXACT };
   var RULES = 'Победитель — 20 очков, разница шайб — 10, шайбы каждой команды — по 10. Точный счёт — все 50.';
 
   /** Как назвать исход моего хода после матча. Итоги бывают 0, 10, 20, 30, 50. */
@@ -364,6 +366,8 @@
     points: points,
     verdict: verdict,
     EXACT: EXACT,
+    POINTS: POINTS,
+    DINAMO: DINAMO,
     RULES: RULES,
     decidedLabel: decidedLabel,
     clampGoals: clampGoals,

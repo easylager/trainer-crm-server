@@ -176,6 +176,8 @@ def _match_out(
         "friends": friends,
         "race_final": row["id"] == final_id,
         "league": row.get("league"),
+        "arena": row.get("arena"),
+        "city": row.get("city"),
         "live": _live_out(row),
         # Со стартом матча — счета друзей из моих лиг (TASK-335); до старта сервер их не отдаёт.
         "friend_moves": moves or [],
