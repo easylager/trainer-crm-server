@@ -491,6 +491,54 @@ async def confirm_close_month(
     return closure
 
 
+async def pending_month_closures(session: AsyncSession, *, now: datetime, limit: int = 8) -> list[dict]:
+    """Срезы месяца, где всё сыграно и корона возможна, но окно исправления итога ещё не вышло.
+
+    Это то, что админ может закрыть сразу кнопкой (``confirm_close_month``), не дожидаясь 7 суток. Срез без
+    трёх игроков с очками сюда не попадает: короны в нём не будет, подтверждать нечего.
+    """
+    first, _ = month_bounds(FIRST_RACE_MONTH)
+    done = await _closed_set(session, kinds=["month"], first=first)
+    out: list[dict] = []
+    for record in (await session.execute(_OPEN_RACES, {"first": first, "now": _utc(now)})).all():
+        race = _race(record)
+        if not _calendar_covers_end(race):
+            continue
+        give_up = _utc(now) >= race.ends_at + GIVE_UP_AFTER
+        params = {"since": race.starts_at, "until": race.ends_at, "give_up": give_up, "now": _utc(now), "mleague": None}
+        period = Period(PERIOD_MONTH, race.starts_at, race.ends_at, "", race.title)
+        for state in (await session.execute(_SLICE_STATES, params)).all():
+            club = state.club
+            if (KIND_MONTH, _utc(race.starts_at), club, None) in done or state.open_n or not state.finals:
+                continue
+            if _ready(state, now=now, covers=True):
+                continue  # закроется само в ближайшем проходе
+            rows = await slice_rows(session, scope=club_scope(club), period=period)
+            if not crown_eligible(rows):
+                continue
+            out.append(
+                {
+                    "race_id": race.id,
+                    "club": club,
+                    "title": race.title,
+                    "leaders": [(r.display_name, r.points) for r in crown_leaders(rows)],
+                    "auto_at": _utc(state.last_final_at) + CORRECTION_WINDOW,
+                }
+            )
+    out.sort(key=lambda x: (x["club"] is not None, x["club"] or ""))
+    return out[:limit]
+
+
+async def confirm_close_month_by_race(
+    session: AsyncSession, *, race_id: int, club: str | None, now: datetime
+) -> int | None:
+    """Кнопка админ-бота: закрыть срез месяца по номеру гонки. ``LookupError`` — такой гонки нет."""
+    race = await race_by_id(session, race_id)
+    if race is None:
+        raise LookupError(race_id)
+    return await confirm_close_month(session, period_start=race.starts_at, club=club, now=now)
+
+
 # ---------- финал месяца (Динамо): для строки на главной и напоминаний ----------
 
 _LAST_MATCH = text("""
@@ -779,6 +827,7 @@ __all__ = [
     "Race",
     "close_due_races",
     "confirm_close_month",
+    "confirm_close_month_by_race",
     "crown_card_data",
     "crown_counts",
     "current_race",
@@ -789,6 +838,7 @@ __all__ = [
     "league_crown_wall",
     "mark_calendar_synced",
     "mark_race_seen",
+    "pending_month_closures",
     "race_by_id",
     "race_final_match_id",
     "race_result",

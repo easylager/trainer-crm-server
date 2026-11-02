@@ -3427,6 +3427,12 @@ async def run_hockey_matches_loop() -> None:
             settings = get_settings()
             if settings.extraliga_enabled:
                 await _extraliga_pass(extraliga, health, alert=send_review_alert)
+                # Итог Экстралиги ушёл на ручную проверку — карточка с кнопками в админ-бот (один раз на матч).
+                from src.application.hockey_review import notify_new_reviews, send_card_to_admins
+
+                await notify_new_reviews(
+                    async_session_factory, now=datetime.now(timezone.utc), send=send_card_to_admins
+                )
             if settings.hockey_matches_enabled:
                 now = datetime.now(timezone.utc)
                 calendar_due = last_calendar is None or now - last_calendar >= HOCKEY_CALENDAR_EVERY
