@@ -676,7 +676,7 @@ def _where_card(data: Mapping[str, Any]) -> str:
         '<section class="m-panel"><span class="m-lbl">КАК ДОБРАТЬСЯ</span>'
         f"{head}"
         '<div class="m-maps">'
-        f'<a class="m-btn m-btn--soft" href="{_e(yandex_link(arena))}" rel="noopener nofollow" target="_blank">Яндекс Карты</a>'
+        f'<a class="m-btn m-btn--soft" href="{_e(yandex_link(arena))}" rel="noopener nofollow" target="_blank">{icon_svg("route")}Маршрут в Яндекс Картах</a>'
         f"</div>{ice_html}</section>"
     )
 
