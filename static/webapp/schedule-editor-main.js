@@ -9424,7 +9424,9 @@
         });
       })();
 
+      var editDoneInFlight = false;
       document.getElementById('editDone').onclick = function() {
+        if (editDoneInFlight) return; /* double tap / slow network: one save at a time */
         if (!assertScheduleCrmWriteAllowed()) return;
         if (state.editMode === 'calendar' && state.calendarBaselineStarts && !hasCalendarNewSlotSelection()) {
           return;
@@ -9643,6 +9645,7 @@
               postBody.arena_id = aid;
             }
           }
+          editDoneInFlight = true;
           fetch(apiUrlWithQuery('/schedule/slots'), {
             method: 'POST',
             headers: headers(),
@@ -9707,7 +9710,8 @@
                 });
               });
             })
-            .catch(function() { showToast('Ошибка сети'); });
+            .catch(function() { showToast('Ошибка сети'); })
+            .then(function() { editDoneInFlight = false; });
         }
       };
 

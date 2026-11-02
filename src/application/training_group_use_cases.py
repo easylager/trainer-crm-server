@@ -680,6 +680,9 @@ async def materialize_slots_for_group(
     start_d, end_d = _materialize_date_range(season_start, weeks_ahead=weeks_ahead)
     now = datetime.now()
 
+    from src.application.trainer_schedule_use_cases import lock_trainer_slot_writes
+
+    await lock_trainer_slot_writes(session, trainer_id)
     created = 0
     d = start_d
     while d <= end_d:

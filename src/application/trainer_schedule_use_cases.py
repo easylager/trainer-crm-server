@@ -18,6 +18,25 @@ from src.application.arena_schedule_preset import (
 )
 
 
+SLOT_WRITE_LOCK_NAMESPACE = 7301  # first key of the two-int advisory lock; second is trainers.id
+
+
+async def lock_trainer_slot_writes(session: AsyncSession, trainer_id: int) -> None:
+    """
+    Serialise slot writers for one trainer until the current transaction ends.
+
+    Every slot-creating path is read-then-insert («is there already a slot at this time? no →
+    INSERT»). Two requests for the same trainer (a double tap on «Готово», a retried POST on a
+    flaky mobile network, template apply racing a day edit) both read «nothing there» before
+    either commits and both insert — an identical twin of every slot. Transaction-scoped
+    advisory lock makes the second writer wait, then see the first one's rows.
+    """
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(:ns, :tid)"),
+        {"ns": SLOT_WRITE_LOCK_NAMESPACE, "tid": int(trainer_id)},
+    )
+
+
 def this_week_monday() -> date:
     """Monday of the current week (ISO: Mon=0)."""
     today = date.today()
@@ -451,6 +470,7 @@ async def generate_slots_for_week(
     week_start = Monday of that week. Skips if slot already exists.
     Returns number of new slots created.
     """
+    await lock_trainer_slot_writes(session, trainer_id)
     templates = await list_templates(session, trainer_id)
     if not templates:
         return 0
@@ -523,6 +543,7 @@ async def replace_week_with_template(
     new rows are skipped when the interval would overlap an existing non-cancelled slot.
     Returns number of slots created.
     """
+    await lock_trainer_slot_writes(session, trainer_id)
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     fixed_dur = fixed_slot_duration_minutes(preset)
     week_end = week_start + timedelta(days=6)
@@ -610,6 +631,7 @@ async def add_slots_for_week(
     ``start_minutes`` are minutes from midnight (0–1439) for each slot start.
     Returns number of slots created.
     """
+    await lock_trainer_slot_writes(session, trainer_id)
     slot_date = week_start + timedelta(days=day_of_week)
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
     has_in_person = await trainer_has_in_person_service(session, trainer_id)
@@ -687,6 +709,7 @@ async def replace_slots_for_day(
     cap = max(1, min(int(capacity), 500))
     if cap > 1 and group_service_id is None:
         raise ValueError("Group slot requires group_service_id")
+    await lock_trainer_slot_writes(session, trainer_id)
     has_in_person = await trainer_has_in_person_service(session, trainer_id)
     offers_online = await trainer_offers_online_sessions(session, trainer_id)
     group_service_online = False
@@ -932,6 +955,8 @@ async def ensure_individual_slot_for_quick_book(
     new_end = start_minutes + dm
     if new_end > 24 * 60:
         raise ValueError("Некорректная длительность для выбранного времени")
+
+    await lock_trainer_slot_writes(session, trainer_id)
 
     start_t = time_from_minutes(start_minutes)
     end_t = _time_end(start_t, dm)
