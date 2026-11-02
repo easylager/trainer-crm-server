@@ -30,13 +30,13 @@ function ev(kk, extra) {
 
 describe('строка «КТО КОГО?»', () => {
   it('до хода: без компании — без имён; с компанией — без падежей и рода', () => {
-    assert.deepEqual(M.kkRow(ev({ phase: 'open', company_names: [] })), { title: 'Угадай счёт', sub: 'Точный счёт — 50 очков', href: 'kto-kogo' });
+    assert.deepEqual(M.kkRow(ev({ phase: 'open', company_names: [] })), { title: 'Угадай счёт', sub: 'Точный счёт — 50 очков', href: 'kto-kogo?match=7' });
     assert.equal(M.kkRow(ev({ phase: 'open', company_names: ['Аня', 'Петя'] })).sub, 'Уже с' + NBSP + 'ходом: Аня и' + NBSP + 'Петя · точный — 50');
   });
 
   it('ход сделан → «Твой счёт 3:2 · можно изменить до 19:30» (время Минска)', () => {
     const row = M.kkRow(ev({ phase: 'picked', my_pick: { side: 'home', home_score: 3, away_score: 2 } }));
-    assert.deepEqual(row, { title: 'Твой счёт 3:2', sub: 'Можно изменить до 19:30', href: 'kto-kogo' });
+    assert.deepEqual(row, { title: 'Твой счёт 3:2', sub: 'Можно изменить до 19:30', href: 'kto-kogo?match=7' });
     assert.equal(M.kkRow(ev({ phase: 'picked', my_pick: { side: 'away' } })).title, 'Ты за' + NBSP + 'СКА');
   });
 
