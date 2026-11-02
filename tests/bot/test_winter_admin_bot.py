@@ -48,6 +48,11 @@ def bot_env(db_session, monkeypatch):
     monkeypatch.setattr(wab, "async_session_factory", lambda: _Same(db_session))
     monkeypatch.setattr(winter_bot, "_is_admin", lambda uid: uid == 1)
 
+    async def _noop():  # тестовая сессия общая: настоящий rollback стёр бы подготовленные данные
+        return None
+
+    monkeypatch.setattr(db_session, "rollback", _noop)
+
 
 def _datas(markup):
     return [b.callback_data for row in markup.inline_keyboard for b in row]
