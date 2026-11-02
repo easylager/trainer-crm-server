@@ -63,6 +63,18 @@
     return day + ', ' + time(p);
   }
 
+  /**
+   * «Перенесён · было 28 октября, 19:00». Сервер отдаёт moved_from только пока матч не сыгран и не отменён;
+   * ход при переносе сохраняется (правила — on_match_moved), поэтому пометка ничего не сбрасывает.
+   */
+  function movedLine(match) {
+    var from = match && match.moved_from;
+    if (!from || isNaN(Date.parse(from))) return '';
+    if (match.status && match.status !== 'scheduled') return '';
+    var p = minskParts(new Date(from));
+    return 'Перенесён · было ' + p.d + NBSP + MONTHS[p.m - 1] + ', ' + time(p);
+  }
+
   /** Надпись над карточкой: «ЧТ, 22 ОКТЯБРЯ · 19:30» (капсом рисует CSS). */
   function kicker(iso) {
     var p = minskParts(new Date(iso));
@@ -343,6 +355,7 @@
     dayIndex: dayIndex,
     time: time,
     whenLabel: whenLabel,
+    movedLine: movedLine,
     kicker: kicker,
     colorDistance: colorDistance,
     pairColors: pairColors,

@@ -1,6 +1,6 @@
 """Бот-часть «Зимних катков» (TASK-343): подписки, фото, вопрос «Были?», модерация, фоновый цикл.
 
-Клиентский бот: deeplink-и ``wbell_<id>`` / ``wnear`` / ``wphoto_<id>``, кнопки вопроса и
+Клиентский бот: deeplink-и ``wbell_<id>`` / ``wnear`` / ``wphoto_<id>`` / ``wgone_<id>``, кнопки вопроса и
 «Не присылать», ``/stop_ice``, приём геопозиции и фото. Админ-бот: Принять / Отклонить /
 Не та точка / Бан по фото, решения по «точки больше нет». Все колбэки админа проверяют
 ``admin_telegram_ids`` и идемпотентны.
@@ -99,6 +99,22 @@ async def handle_winter_start(message: Message, payload: str) -> bool:
                 "Пришлите место, где вы катаетесь: напишу, когда зальют каток в 2 км по прямой. "
                 "Или напишите «город» — без радиуса пока не подпишу.",
                 reply_markup=kb,
+            )
+        elif kind == "gone":
+            row = (
+                await session.execute(
+                    text("SELECT name FROM arenas WHERE id = :a AND is_active"), {"a": int(arena_id)}
+                )
+            ).first()
+            if row is None:
+                await message.answer("Такой точки уже нет в списке.")
+                return True
+            await message.answer(
+                f"«{html.escape(row.name)}»: точки больше нет? Если так скажут несколько человек, проверим.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="Да, точки больше нет", callback_data=f"w:gone:{int(arena_id)}"),
+                    InlineKeyboardButton(text="Ошибся", callback_data="w:gone:0"),
+                ]]),
             )
         elif kind == "photo":
             ok = await winter_photos.begin_session(session, tg, int(arena_id), _now())
@@ -202,6 +218,36 @@ async def on_photo(message: Message, bot: Bot) -> None:
     ]])
     await message.answer("Принял. Лёд на фото есть?", reply_markup=kb)
     await notify_admins_photo(pid)
+
+
+@client_router.callback_query(F.data.startswith("w:gone:"))
+async def on_gone_signal(query: CallbackQuery) -> None:
+    """Подтверждение «точки больше нет» из ссылки на сайте. Только Telegram-аккаунт; точка сама не скрывается."""
+    try:
+        arena_id = int((query.data or "").split(":")[2])
+    except (ValueError, IndexError):
+        await query.answer()
+        return
+    if arena_id <= 0:
+        await query.answer("Хорошо, ничего не отправляю")
+    else:
+        async with async_session_factory() as session:
+            try:
+                res = await winter_marks.signal_gone(session, arena_id=arena_id, telegram_id=query.from_user.id, now=_now())
+                await session.commit()
+            except winter_marks.MarkError:
+                await query.answer("Такой точки уже нет в списке")
+                return
+        if res.counted:
+            await query.answer("Спасибо, передали. Если так скажут ещё несколько человек, проверим точку.", show_alert=True)
+        elif res.reason == "account_too_new":
+            await query.answer("Сигнал пока не засчитаем: аккаунт в боте совсем новый. Спасибо!", show_alert=True)
+        else:
+            await query.answer("Не получилось отправить.")
+    try:
+        await query.message.edit_reply_markup(reply_markup=None)  # type: ignore[union-attr]
+    except TelegramBadRequest:
+        pass
 
 
 @client_router.callback_query(F.data.startswith("w:ice:"))

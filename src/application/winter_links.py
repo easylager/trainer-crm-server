@@ -15,9 +15,11 @@ MAP_PRECISIONS = frozenset({"house", "osm_exact", "manual"})
 
 BELL_PREFIX = "wbell_"  # колокольчик на точку
 PHOTO_PREFIX = "wphoto_"  # «фото точки N»
+GONE_PREFIX = "wgone_"  # «точки больше нет» с сайта: сигнал принимается только из Telegram
 NEAR_PARAM = "wnear"  # «лёд рядом со мной»
 _BELL_RE = re.compile(r"^wbell_([1-9][0-9]{0,8})$")
 _PHOTO_RE = re.compile(r"^wphoto_([1-9][0-9]{0,8})$")
+_GONE_RE = re.compile(r"^wgone_([1-9][0-9]{0,8})$")
 
 
 def bell_param(arena_id: int) -> str:
@@ -28,8 +30,12 @@ def photo_param(arena_id: int) -> str:
     return f"{PHOTO_PREFIX}{int(arena_id)}"
 
 
+def gone_param(arena_id: int) -> str:
+    return f"{GONE_PREFIX}{int(arena_id)}"
+
+
 def parse_winter_start(payload: str | None) -> tuple[str, int | None] | None:
-    """``wbell_7`` -> ("bell", 7); ``wphoto_7`` -> ("photo", 7); ``wnear`` -> ("near", None)."""
+    """``wbell_7`` -> ("bell", 7); ``wphoto_7`` -> ("photo", 7); ``wgone_7`` -> ("gone", 7); ``wnear`` -> ("near", None)."""
     value = (payload or "").strip()
     if value == NEAR_PARAM:
         return ("near", None)
@@ -39,6 +45,9 @@ def parse_winter_start(payload: str | None) -> tuple[str, int | None] | None:
     m = _PHOTO_RE.match(value)
     if m:
         return ("photo", int(m.group(1)))
+    m = _GONE_RE.match(value)
+    if m:
+        return ("gone", int(m.group(1)))
     return None
 
 

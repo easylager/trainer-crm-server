@@ -53,6 +53,17 @@
     return M.whenLabel(m.starts_at, new Date()) + (place ? ' · ' + place : '');
   }
 
+  /** Пометка переноса под строкой «когда и где»; ход при переносе сохраняется. */
+  function movedNote(m) {
+    var line = M.movedLine(m);
+    return line ? h('span', { class: 'kk-moved', text: line }) : null;
+  }
+
+  /** Страница матча в Mini App: «Иду / Позвать / Билеты» живут там — здесь только вход, кнопок не дублируем. */
+  function matchPageLink(m) {
+    return h('button', { type: 'button', class: 'kk-mini kk-mini--link', onclick: function () { K.openMatchPage(m.id); } }, ['Страница матча: иду, позвать, билеты']);
+  }
+
   function sideButton(m, side, colors, mine) {
     var sel = mine && mine.side === side;
     return h('button', {
@@ -123,6 +134,7 @@
       hero(m, center),
       h('main', { class: 'kk-main' }, [
         h('span', { class: 'kk-meta', text: metaLine(m) }),
+        movedNote(m),
         h('section', { class: 'kk-card kk-card--play' }, [
           K.sticker(m.race_final ? 'ФИНАЛ МЕСЯЦА' : mine ? 'ХОД СДЕЛАН' : 'КТО КОГО?'),
           h('div', { class: 'kk-q' }, [h('span', { class: 'kk-q__t', text: S.questionLine(mine, team) }), h('span', { class: 'kk-sub', text: pts })]),
@@ -141,6 +153,7 @@
           friendsBlock(m),
         ]),
         m.race_final ? h('span', { class: 'kk-sub', text: 'Последний матч этого месяца: корона решится после него.' }) : null,
+        matchPageLink(m),
       ]),
     ];
   }
@@ -197,6 +210,7 @@
             h('span', { class: 'kk-live__st' }, [h('span', { class: 'kk-dot', 'aria-hidden': 'true' }), review ? 'ИТОГ ПРОВЕРЯЕМ' : live ? 'ИДЁТ' : 'ХОДЫ ЗАКРЫТЫ']),
             h('span', { class: 'kk-sub', text: stamp }),
           ]),
+          movedNote(m),
           h('div', { class: 'kk-board' }, [
             h('span', { class: 'kk-board__t' }, [K.logoDisc(m.home, 44), h('span', { text: name(m.home) })]),
             score,
@@ -220,6 +234,7 @@
       body.appendChild(K.emptyCard('ХОДЫ ЗАКРЫТЫ', 'Этот матч без твоего хода. Следующий — в хабе игры.'));
     }
     body.appendChild(crowdBlock(m, colors));
+    body.appendChild(matchPageLink(m));
     return out;
   }
 

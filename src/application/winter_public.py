@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.catalog_consumer_events import hmac_actor
 from src.application.winter_links import (
-    bell_param, bot_link, map_allowed, photo_param, route_url, static_map_url, NEAR_PARAM,
+    bell_param, bot_link, gone_param, map_allowed, photo_param, route_url, static_map_url, NEAR_PARAM,
 )
 from src.shared import winter_status as ws
 from src.shared.config import Settings
@@ -128,6 +128,7 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
         "checked_by": "admin" if r.state_source == "admin" else ("people" if r.state_source == "engine" else None),
         "quality": r.quality, "dispute": bool(r.dispute), "doubtful": bool(r.doubtful),
         "crowd": live.get("crowd"), "hockey": live.get("hockey"),
+        "crowd_at": live.get("crowd_at"), "hockey_at": live.get("hockey_at"),
         "distance_km": dist, "pin": r.catalog_pin,
         "is_paid": r.is_paid, "price_note": r.price_note,
         "often_hockey_note": "Часто занята под хоккей и занятия школы" if r.often_hockey else None,
@@ -224,6 +225,7 @@ async def get_point(session: AsyncSession, ident: str | int, *, now: datetime, l
         "bell": bot_link(settings.client_bot_username, bell_param(int(r.id))),
         "near": bot_link(settings.client_bot_username, NEAR_PARAM),
         "photo": bot_link(settings.client_bot_username, photo_param(int(r.id))),
+        "gone": bot_link(settings.client_bot_username, gone_param(int(r.id))),
     }
     item["noindex"] = bool(r.doubtful)
     return item

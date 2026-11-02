@@ -73,6 +73,7 @@
 
     function paintTimes() {
       var now = new Date();
+      paintLive(document, now);
       Object.keys(items).forEach(function (id) {
         var p = byId[id];
         var li = items[id];
@@ -309,9 +310,19 @@
   }
 
   /* ───────────────────────── страница точки ───────────────────────── */
+  /** «Мало людей» -> «Мало людей · 40 мин назад»; отметка старше окна — тег убираем. */
+  function paintLive(root, now) {
+    $all('[data-w-live-at]', root).forEach(function (el) {
+      var text = W.liveLabel(el.getAttribute('data-w-live-label') || el.textContent, el.getAttribute('data-w-live-at'), now);
+      if (text) el.textContent = text;
+      else if (el.parentNode) el.parentNode.removeChild(el);
+    });
+  }
+
   function initPoint() {
     var page = $('[data-w-page="point"]');
     if (!page) return;
+    paintLive(page, new Date());
     var arenaId = page.getAttribute('data-w-arena');
     var api = page.getAttribute('data-w-api');
     var thanks = $('[data-w-thanks]', page);

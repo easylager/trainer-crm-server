@@ -71,6 +71,13 @@ describe('статус и подписи', () => {
     assert.deepEqual(W.liveTags(pt()), []);
   });
 
+  it('теги «сейчас» со временем отметки: «Мало людей · 40 мин назад», старше 2 ч — нет', () => {
+    const now = new Date('2026-12-10T12:00:00Z');
+    const tags = W.liveTags(pt({ crowd: 'few', crowd_at: '2026-12-10T11:20:00Z', hockey: 'free', hockey_at: '2026-12-10T09:00:00Z' }), now);
+    assert.deepEqual(tags, ['Мало людей · 40 мин назад']);
+    assert.deepEqual(W.liveTags(pt({ hockey: 'playing', hockey_at: '2026-12-10T11:59:40Z' }), now), ['Идёт хоккей · только что']);
+  });
+
   it('неточная точка в карточке честно говорит «точку уточняем»', () => {
     assert.match(W.cardMeta(pt({ locating: true })), /точку уточняем/);
   });

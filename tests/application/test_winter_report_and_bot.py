@@ -10,7 +10,7 @@ from src.application import winter_marks as wm
 from src.application import winter_subscriptions as wsub
 from src.application.winter_report import winter_summary
 from src.bot import winter_bot
-from tests.application.winter_helpers import NOW, make_point
+from tests.application.winter_helpers import NOW, make_client, make_point
 
 
 class FakeBot:
@@ -80,3 +80,46 @@ async def test_start_bell_subscribes_and_unknown_payload_ignored(db_session, mon
     assert len(await wsub.list_subscriptions(db_session, 55)) == 1
     assert await winter_bot.handle_winter_start(Msg(), "wbell_999999")
     assert "нет в списке" in replies[-1]
+
+
+@pytest.mark.asyncio
+async def test_site_gone_link_goes_through_bot_and_counts_only_after_confirm(db_session, monkeypatch):
+    monkeypatch.setenv("SEASONAL_RINKS_ENABLED", "1")
+    monkeypatch.setattr(winter_bot, "async_session_factory", lambda: _Same(db_session))
+    monkeypatch.setattr(winter_bot, "_now", lambda: NOW)
+    a = await make_point(db_session)
+    await make_client(db_session, 77)
+    replies = []
+
+    class Msg:
+        from_user = SimpleNamespace(id=77)
+
+        async def answer(self, text_, **kw):
+            replies.append((text_, kw.get("reply_markup")))
+
+    assert await winter_bot.handle_winter_start(Msg(), f"wgone_{a}")
+    assert "точки больше нет" in replies[-1][0]
+    assert f"w:gone:{a}" in replies[-1][1].inline_keyboard[0][0].callback_data
+    from sqlalchemy import text as sql
+
+    count = lambda: db_session.execute(sql("SELECT count(*) FROM seasonal_rink_signals WHERE arena_id=:a"), {"a": a})  # noqa: E731
+    assert (await count()).scalar_one() == 0  # одной ссылкой сигнал не засчитан
+
+    answers = []
+
+    class Q:
+        data = f"w:gone:{a}"
+        from_user = SimpleNamespace(id=77)
+        message = SimpleNamespace(edit_reply_markup=lambda **kw: _noop())
+
+        async def answer(self, text_=None, **kw):
+            answers.append(text_)
+
+    await winter_bot.on_gone_signal(Q())
+    assert (await count()).scalar_one() == 1 and "передали" in answers[-1]
+    assert await winter_bot.handle_winter_start(Msg(), "wgone_999999")
+    assert "нет в списке" in replies[-1][0]
+
+
+async def _noop():
+    return None

@@ -305,6 +305,14 @@
     location.href = '/webapp/client-home' + (initData && !(tg && tg.initData) ? '?init_data=' + encodeURIComponent(initData) : '');
   }
 
+  /** Страница матча (Иду / Позвать / Билеты) — отдельный экран Mini App; приложение игры её не повторяет. */
+  function openMatchPage(id) {
+    var shell = window.ClientShell;
+    var path = 'client-match?id=' + encodeURIComponent(id);
+    if (shell && typeof shell.navigate === 'function') return shell.navigate(path);
+    location.href = '/webapp/' + path + (initData && !(tg && tg.initData) ? '&init_data=' + encodeURIComponent(initData) : '');
+  }
+
   function register(name, screen) {
     screens[name] = screen;
   }
@@ -600,7 +608,7 @@
     go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
     loadMatches: loadMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,
     loadProfile: loadProfile, loadClubs: loadClubs, loadLeagues: loadLeagues, loadRemind: loadRemind,
-    sendPick: sendPick, pickSide: pickSide, saveScore: saveScore, toggleTrump: toggleTrump,
+    openMatchPage: openMatchPage, sendPick: sendPick, pickSide: pickSide, saveScore: saveScore, toggleTrump: toggleTrump,
     share: share, shareCard: shareCard, copy: copy, boot: boot,
   };
 })();

@@ -58,7 +58,7 @@
   }
 
   function card(p) {
-    var tags = W.liveTags(p).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
+    var tags = W.liveTags(p, new Date()).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
     if (p.dispute) tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>';
     var checked = W.checkedLine(p, new Date());
     var dist = W.distanceLabel(p.distance_km);
@@ -194,7 +194,7 @@
     } else if (p.locating) {
       map = '<p class="w-empty">Точку на карте уточняем</p>';
     }
-    var tags = W.liveTags(p).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
+    var tags = W.liveTags(p, new Date()).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
     var checked = W.checkedLine(p, new Date());
     var known = [
       ['Часы', W.hoursLabel(p)], ['Цена', W.priceLabel(p)], ['Телефон', p.phone || ''], ['Важно', p.often_hockey_note || ''],

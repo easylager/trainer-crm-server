@@ -12,6 +12,21 @@ const M = require('../../static/webapp/kto-kogo-model.js');
 const NBSP = ' ';
 const NOW = new Date('2026-10-19T09:00:00Z'); // понедельник, 12:00 в Минске
 
+describe('movedLine', () => {
+  it('перенесённый несыгранный матч: «Перенесён · было <дата>» в минском времени', () => {
+    const m = { status: 'scheduled', starts_at: '2026-10-30T16:00:00Z', moved_from: '2026-10-28T16:00:00Z' };
+    assert.equal(M.movedLine(m), 'Перенесён · было 28' + NBSP + 'октября, 19:00');
+  });
+
+  it('не перенесён, сыгран или отменён — пометки нет', () => {
+    assert.equal(M.movedLine({ status: 'scheduled', moved_from: null }), '');
+    assert.equal(M.movedLine({ status: 'scheduled' }), '');
+    assert.equal(M.movedLine({ status: 'final', moved_from: '2026-10-28T16:00:00Z' }), '');
+    assert.equal(M.movedLine({ status: 'cancelled', moved_from: '2026-10-28T16:00:00Z' }), '');
+    assert.equal(M.movedLine({ status: 'scheduled', moved_from: 'не дата' }), '');
+  });
+});
+
 describe('whenLabel', () => {
   it('сегодня, завтра, день недели, дата — в минском времени', () => {
     assert.equal(M.whenLabel('2026-10-19T16:30:00Z', NOW), 'сегодня, 19:30');

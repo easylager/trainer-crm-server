@@ -137,3 +137,29 @@ async def test_league_table_by_month(app_use_test_db, db_session) -> None:
             assert month["period"]["key"] and len(month["items"]) == 1
             bad = await client.get(f"{API}/leagues/{league_id}", params={"period": "когда-нибудь"})
             assert bad.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_moved_match_is_marked_until_played(app_use_test_db, db_session) -> None:
+    now = datetime.now(timezone.utc)
+    old, new = now + timedelta(days=2), now + timedelta(days=5)
+    match = await _match(db_session, new)
+    plain = await _match(db_session, new, home="Гомель", away="Витебск")
+    await db_session.execute(
+        text("UPDATE hockey_matches SET previous_starts_at = :p WHERE id = :id"), {"p": old, "id": match}
+    )
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            one = (await client.get(f"{API}/matches/{match}")).json()
+            assert datetime.fromisoformat(one["moved_from"]) == old and one["open"] is True
+            assert (await client.get(f"{API}/matches/{plain}")).json()["moved_from"] is None
+            # Список хаба строится из тех же строк: колонка previous_starts_at в них есть.
+            from src.application.hockey_game import player_matches
+
+            rows = {r["id"]: r for r in await player_matches(db_session, ME, since=now - timedelta(days=1))}
+            assert not rows or rows[match]["previous_starts_at"] is not None
+            # Не состоится или сыгран: пометка уходит.
+            await db_session.execute(text("UPDATE hockey_matches SET status = 'cancelled' WHERE id = :id"), {"id": match})
+            await db_session.commit()
+            assert (await client.get(f"{API}/matches/{match}")).json()["moved_from"] is None

@@ -1693,8 +1693,41 @@
   }
 
   /* TASK-343: зимние катки и коробки внутри «Зимой». Нет модуля или флага — лента как была. */
+  var winterLoading = null;
+  /* Зимний блок (модель, стили, список) тянем только когда открыт фасет «Зимой». */
+  function loadWinter() {
+    if (global.IceWinter) return Promise.resolve();
+    if (winterLoading) return winterLoading;
+    var me = document.querySelector('script[src*="ice-tab.js"]');
+    var v = me && /[?&]v=([^&]+)/.exec(me.getAttribute('src'));
+    var q = v ? '?v=' + v[1] : '';
+    function js(src) {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = src + q;
+        s.onload = resolve;
+        s.onerror = function () { reject(new Error('winter asset failed')); };
+        document.head.appendChild(s);
+      });
+    }
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = '/static/shared/winter.css' + q;
+    document.head.appendChild(css);
+    winterLoading = js('/static/shared/winter-model.js')
+      .then(function () { return js('/static/webapp/winter-points.js'); })
+      .catch(function () { winterLoading = null; });
+    return winterLoading;
+  }
+
   function syncWinter() {
-    if (!global.IceWinter) return;
+    if (!global.IceWinter) {
+      var wp = state.seasonFacet && state.seasonFacet.winter_points;
+      if (state.season === 'winter' && state.intent !== 'coach' && state.placeService !== 'service' && wp > 0 && state.cityId) {
+        loadWinter().then(function () { if (global.IceWinter) syncWinter(); });
+      }
+      return;
+    }
     var on = global.IceWinter.sync({
       season: state.intent === 'coach' || state.placeService === 'service' ? '' : state.season,
       cityId: state.cityId,

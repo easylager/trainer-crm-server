@@ -106,15 +106,25 @@
     return '';
   }
 
-  /** Теги «сейчас»: людей и хоккей живут 2 часа — сервер уже отфильтровал. */
-  function liveTags(point) {
+  /** Подпись + «· 40 мин назад». Старше окна (2 ч) метка неактуальна — пустая строка. */
+  function liveLabel(label, iso, now) {
+    if (!iso) return label;
+    var t = Date.parse(iso);
+    var ref = now instanceof Date ? now.getTime() : Date.now();
+    if (isNaN(t)) return label;
+    if (ref - t > 2 * 3600 * 1000) return '';
+    return label + ' · ' + ago(iso, now);
+  }
+
+  /** Теги «сейчас»: людей и хоккей живут 2 часа; со временем отметки, если API его отдал. */
+  function liveTags(point, now) {
     var out = [];
     var crowd = { few: 'Мало людей', normal: 'Людей нормально', many: 'Много людей' }[point && point.crowd];
     var hockey = { playing: 'Идёт хоккей', free: 'Хоккея нет' }[point && point.hockey];
-    if (crowd) out.push(crowd);
-    if (hockey) out.push(hockey);
+    if (crowd) out.push(liveLabel(crowd, point.crowd_at, now));
+    if (hockey) out.push(liveLabel(hockey, point.hockey_at, now));
     if (point && point.quality === 'bad') out.push('Лёд плохой');
-    return out;
+    return out.filter(Boolean);
   }
 
   /** Вторая строка карточки списка. Неточная точка честно говорит «точку уточняем». */
@@ -415,6 +425,7 @@
     dayMonth: dayMonth,
     checkedLine: checkedLine,
     liveTags: liveTags,
+    liveLabel: liveLabel,
     cardMeta: cardMeta,
     summaryLine: summaryLine,
     headline: headline,

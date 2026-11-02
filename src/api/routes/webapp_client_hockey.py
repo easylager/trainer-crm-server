@@ -118,6 +118,15 @@ def _live_out(row: dict) -> dict | None:
     }
 
 
+def moved_from(row: dict, starts_at: datetime) -> str | None:
+    """Прежнее время перенесённого матча: только пока он не сыгран и время правда другое (иначе ``None``)."""
+    prev = row.get("previous_starts_at")
+    if prev is None or row.get("status") != "scheduled":
+        return None
+    prev = _aware(prev)
+    return prev.isoformat() if prev != starts_at else None
+
+
 def _match_out(
     row: dict,
     *,
@@ -140,6 +149,7 @@ def _match_out(
         "home": team_card(row["home_team"]),
         "away": team_card(row["away_team"]),
         "starts_at": starts_at.isoformat(),
+        "moved_from": moved_from(row, starts_at),
         "status": row["status"],
         "open": row["status"] == "scheduled" and now < starts_at,
         "result": (

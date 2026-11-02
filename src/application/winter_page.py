@@ -15,7 +15,7 @@ from __future__ import annotations
 import html as html_lib
 from pathlib import Path
 from typing import Any, Mapping
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 from src.application.catalog_icons import icon_svg, rink_motif_svg
 from src.application.ice_city_day import city_slug
@@ -72,14 +72,6 @@ def yandex_open_url(lat: float, lon: float) -> str:
     return f"https://yandex.ru/maps/?pt={float(lon):.6f},{float(lat):.6f}&z=16&l=map"
 
 
-def google_route_url(item: Mapping[str, Any]) -> str | None:
-    if item.get("map_allowed") and item.get("lat") is not None:
-        return f"https://www.google.com/maps/dir/?api=1&destination={float(item['lat']):.6f},{float(item['lon']):.6f}"
-    addr = (item.get("address") or "").strip()
-    if not addr:
-        return None
-    return "https://www.google.com/maps/search/?api=1&query=" + quote(f"{item.get('city') or ''} {addr}".strip())
-
 
 def _icon(name: str, extra: str = "") -> str:
     return icon_svg(name, extra_class=extra)
@@ -117,15 +109,24 @@ def _distance(km: float | None) -> str:
     return f"{round(km, 1):g}".replace(".", ",") + f"{NBSP}км"
 
 
-def _tags(item: Mapping[str, Any]) -> list[str]:
-    out: list[str] = []
+def _tags(item: Mapping[str, Any]) -> list[tuple[str, str | None]]:
+    """(подпись, время отметки ISO). Время у людей/хоккея дорисует JS: «Мало людей · 40 мин назад»."""
+    out: list[tuple[str, str | None]] = []
     if item.get("crowd") in CROWD_LABEL:
-        out.append(CROWD_LABEL[item["crowd"]])
+        out.append((CROWD_LABEL[item["crowd"]], item.get("crowd_at")))
     if item.get("hockey") in HOCKEY_LABEL:
-        out.append(HOCKEY_LABEL[item["hockey"]])
+        out.append((HOCKEY_LABEL[item["hockey"]], item.get("hockey_at")))
     if item.get("quality") == "bad":
-        out.append("Лёд плохой")
+        out.append(("Лёд плохой", None))
     return out
+
+
+def _tags_html(item: Mapping[str, Any]) -> str:
+    parts = []
+    for label, at in _tags(item):
+        attr = f' data-w-live-at="{_esc(at)}" data-w-live-label="{_esc(label)}"' if at else ""
+        parts.append(f'<span class="w-tag"{attr}>{_esc(label)}</span>')
+    return "".join(parts)
 
 
 def pill(item: Mapping[str, Any]) -> str:
@@ -206,7 +207,7 @@ def _thumb(item: Mapping[str, Any]) -> str:
 
 def _card(item: Mapping[str, Any], city_name: str) -> str:
     href = place_path(city_name=city_name, slug=str(item["slug"])) if item.get("slug") else f"/p/{int(item['id'])}"
-    tags = "".join(f'<span class="w-tag">{_esc(t)}</span>' for t in _tags(item))
+    tags = _tags_html(item)
     if item.get("dispute"):
         tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>'
     checked = checked_line(item)
@@ -239,6 +240,7 @@ def _client_points(items: list[Mapping[str, Any]], city_name: str) -> list[dict[
                 "href": place_path(city_name=city_name, slug=str(i["slug"])) if i.get("slug") else f"/p/{int(i['id'])}",
                 "state_at": i.get("state_at"), "checked_by": i.get("checked_by"), "quality": i.get("quality"),
                 "crowd": i.get("crowd"), "hockey": i.get("hockey"),
+                "crowd_at": i.get("crowd_at"), "hockey_at": i.get("hockey_at"),
             }
         )
     return out
@@ -411,7 +413,7 @@ def _status_card(item: Mapping[str, Any], *, season_label: str, links: Mapping[s
     parts.append(f"<p data-w-status-note>{_esc(text)}</p>")
     if line:
         parts.append(f'<p class="w-note">{_esc(line)}</p>')
-    tags = "".join(f'<span class="w-tag">{_esc(t)}</span>' for t in _tags(item))
+    tags = _tags_html(item)
     if item.get("dispute"):
         tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>'
     if tags:
@@ -464,15 +466,20 @@ def _gallery(item: Mapping[str, Any]) -> str:
 
 
 def _routes(item: Mapping[str, Any]) -> str:
-    ya, g = item.get("route_url"), google_route_url(item)
-    if not ya and not g:
+    """Маршрут — только Яндекс Карты (решение владельца 02.11: «для всех Яндекс»)."""
+    ya = item.get("route_url")
+    if not ya:
         return ""
-    cells = ""
-    if ya:
-        cells += f'<a class="w-btn w-btn--soft" href="{_esc(ya)}" target="_blank" rel="noopener">Яндекс Карты</a>'
-    if g:
-        cells += f'<a class="w-btn w-btn--soft" href="{_esc(g)}" target="_blank" rel="noopener">Google Maps</a>'
-    return f'<div class="w-card2"><p class="w-lbl">КАК ДОБРАТЬСЯ</p><div class="w-routes">{cells}</div></div>'
+    cell = f'<a class="w-btn w-btn--soft" href="{_esc(ya)}" target="_blank" rel="noopener">Яндекс Карты</a>'
+    return f'<div class="w-card2"><p class="w-lbl">КАК ДОБРАТЬСЯ</p><div class="w-routes">{cell}</div></div>'
+
+
+def _gone_link(links: Mapping[str, Any]) -> str:
+    """«Точки больше нет?» — deeplink в бота: сигнал принимается только из Telegram (сайт его не считает)."""
+    gone = links.get("gone")
+    if not gone:
+        return ""
+    return f'<a class="w-foot" href="{_esc(gone)}" rel="noopener nofollow" data-w-gone-link>Точки больше нет? Сообщить</a>'
 
 
 def _sheet(item: Mapping[str, Any]) -> str:
@@ -524,7 +531,7 @@ def render_point_page(
         f'<h1 class="w-h1">{_esc(item["name"])}</h1>'
         f'<p class="w-addr">{_esc(addr_line)}</p></div>'
         f'{_status_card(item, season_label=season_label, links=links)}'
-        f"{bell_html}{_known(item)}{_gallery(item)}{_routes(item)}"
+        f"{bell_html}{_known(item)}{_gallery(item)}{_routes(item)}{_gone_link(links)}"
         "</div>"
         f"{_sheet(item)}</div>"
     )
