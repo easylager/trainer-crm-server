@@ -218,3 +218,13 @@ def test_indexable_rule_needs_precise_address_and_three_facts():
     assert not winter_public.is_indexable({**base, "doubtful": True})
     assert not winter_public.is_indexable({**base, "is_paid": None, "address": ""})
     assert winter_public.is_indexable({**base, "is_paid": None, "phone": "+375291112233"})
+
+
+@pytest.mark.asyncio
+async def test_city_hub_has_winter_tile_only_with_flag_and_points(on, client, db_session, monkeypatch):
+    await point(db_session, name="Первая")
+    await point(db_session, name="Залитая", state="flooded", state_source="engine")
+    html = (await client.get("/c/minsk")).text
+    assert 'href="/c/minsk/zimoy"' in html and "залиты 1" in html
+    monkeypatch.setenv("SEASONAL_RINKS_ENABLED", "0")
+    assert "/c/minsk/zimoy" not in (await client.get("/c/minsk")).text

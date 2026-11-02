@@ -279,7 +279,235 @@ def render_city_page(
 
     bell_html = ""
     if total and bell:
-        # «Напишем, когда зальют» — только пока не залито; у залитой точки колокольчик ничего бы не обещал.
+        bell_html = (
+            '<div class="w-bell"><span class="w-bell__text"><span class="w-bell__title">Лёд рядом с вами</span>'
+            '<span class="w-bell__hint">Напишем в Telegram, как только зальют в 2 км от дома</span></span>'
+            f'<a class="w-btn w-btn--tg" href="{_esc(bell)}" rel="noopener">{_icon("bell")}Ждать</a></div>'
+        )
+
+    controls = ""
+    list_html = ""
+    if total:
+        controls = (
+            '<div class="w-seg" role="group" aria-label="Вид">'
+            '<button type="button" data-w-view="list" aria-pressed="true">Список</button>'
+            '<button type="button" data-w-view="map" aria-pressed="false">Карта</button></div>'
+            '<div class="w-chips" role="group" aria-label="Фильтры" data-w-chips>'
+            f'<button type="button" class="w-chip" data-w-chip="flooded" aria-pressed="false">Залиты · {flooded}</button>'
+            '<button type="button" class="w-chip" data-w-chip="rink" aria-pressed="false">Катки</button>'
+            '<button type="button" class="w-chip" data-w-chip="hockey_box" aria-pressed="false">Коробки</button>'
+            '<button type="button" class="w-chip" data-w-chip="district" aria-pressed="false" hidden>Район</button></div>'
+            '<div class="w-chips" data-w-districts hidden></div>'
+            '<p class="w-note" data-w-note aria-live="polite">Сначала залитые, потом по районам. Включите геолокацию — покажем ближайшие.</p>'
+        )
+        cards = "".join(_card(i, name) for i in items)
+        list_html = (
+            f'<ul class="w-list" data-w-list>{cards}</ul>'
+            '<p class="w-empty" data-w-empty hidden></p>'
+            '<div class="w-map" data-w-map hidden><div class="w-map__canvas" data-w-canvas></div>'
+            '<p class="w-map__msg" data-w-mapmsg hidden></p>'
+            '<div class="w-mapcard" data-w-mapcard hidden></div></div>'
+            '<div class="w-legend" data-w-legend hidden>'
+            '<span><i class="w-dot w-dot--ok"></i>залит</span><span><i class="w-dot w-dot--wait"></i>ждём заливку</span>'
+            '<span><i class="w-dot w-dot--quiet"></i>давно не отмечали</span></div>'
+        )
+    suggest = (
+        f'<a class="w-suggest" href="{_esc(suggest_href)}"><span>{_icon("route")}</span>'
+        "<span><b>Нет вашего катка или коробки?</b><span>Отметьте точку на карте — проверим и добавим</span></span></a>"
+    )
+    body = (
+        f'<a class="w-back" href="{_esc(city_href)}">{_icon("back")}{_esc(name)}</a>'
+        f'<h1 class="w-title">{("Зимой в " + _esc(where)) if where else ("Зимой: " + _esc(name))}</h1>'
+        f"{head_note}{bell_html}{controls}{list_html}{suggest}"
+    )
+    data_json = ""
+    if total:
+        payload = {"points": _client_points(items, name), "ymapsKey": (ymaps_key or "").strip() or None, "city": name}
+        data_json = f'<script type="application/json" id="w-data">{json_for_script(payload)}</script>'
+    ld = {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "name": f"Зимние катки и хоккейные коробки в {title_where}, сезон {season}",
+        "itemListElement": [
+            {"@type": "ListItem", "position": n + 1, "name": i["name"],
+             "url": _abs(base_url, place_path(city_name=name, slug=str(i["slug"])))}
+            for n, i in enumerate(i for i in items if i.get("slug"))
+        ],
+    }
+    description = (
+        f"Уличные катки и хоккейные коробки {('в ' + where) if where else name}: где залит лёд, часы и цены сезона 2025/26, "
+        "как добраться. Отметки о льде от людей."
+    )
+    return _shell(
+        title=f"Зимой {('в ' + where) if where else name}: катки и хоккейные коробки | Glideclub",
+        description=description,
+        canonical=canonical,
+        robots="index, follow" if total else "noindex, follow",
+        og_image=og_image,
+        body=f'<div class="w-page-inner w-page" data-w-page="city">{body}{data_json}</div>',
+        jsonld=json_for_script(ld),
+        footer=footer if footer is not None else render_site_footer_html(),
+        beacon=beacon,
+        city_pin=city_pin,
+        lang_country=str(city.get("country") or "BY"),
+    )
+
+
+# --- страница точки ---------------------------------------------------------------------
+def _hero(item: Mapping[str, Any], *, list_href: str, suggest_href: str) -> str:
+    back = f'<a class="w-hero__back" href="{_esc(list_href)}">{_icon("back")}Зимой</a>'
+    addr = ", ".join(b for b in (item.get("address"), item.get("city")) if b)
+    route = item.get("route_url")
+    if item.get("locating"):
+        return (
+            f'<div class="w-hero">{back}<div class="w-hero__locating">{_icon("route")}'
+            "<b>Точку на карте уточняем</b>"
+            f'<a href="{_esc(suggest_href)}">Знаете, где именно? Подскажите</a></div></div>'
+        )
+    fb_btn = f'<a class="w-btn w-btn--tg" href="{_esc(route)}" rel="noopener">Маршрут</a>' if route else ""
+    fallback = (
+        f'<div class="w-hero__fallback" id="w-map-fb" hidden>{_icon("route")}<b>Точка на карте</b>'
+        f"<span>{_esc(addr)}</span>{fb_btn}</div>"
+    )
+    if item.get("static_map_url"):
+        open_url = yandex_open_url(item["lat"], item["lon"])
+        img = (
+            f'<a class="w-hero__map" href="{_esc(open_url)}" target="_blank" rel="noopener" aria-label="Открыть в Яндекс Картах">'
+            f'<img src="{_esc(item["static_map_url"])}" width="650" height="450" alt="Карта: {_esc(addr)}" decoding="async" '
+            "onerror=\"var f=document.getElementById('w-map-fb');if(f)f.hidden=false;this.parentNode.remove()\"></a>"
+            f'<a class="w-hero__open" href="{_esc(open_url)}" target="_blank" rel="noopener">Открыть в Картах</a>'
+        )
+        return f'<div class="w-hero">{img}{fallback}{back}</div>'
+    # Ключа Static API нет — не пустая дыра, а плашка с адресом и маршрутом.
+    return f'<div class="w-hero">{fallback.replace(" hidden>", ">", 1)}{back}</div>'
+
+
+def _status_card(item: Mapping[str, Any], *, season_label: str, links: Mapping[str, Any]) -> str:
+    state = str(item.get("state") or "waiting")
+    parts: list[str] = []
+    if item.get("doubtful"):
+        return (
+            '<div class="w-card2 w-card2--doubt"><p class="w-status">'
+            f'{_icon("clock")}Возможно, точки больше нет</p>'
+            "<p>Нам написали, что здесь уже не заливают. Мы проверяем: статус и отметки пока скрыты.</p></div>"
+        )
+    tone = STATE_TONE.get(state, "wait")
+    cls = {"ok": "w-card2--ok", "wait": "w-card2--wait"}.get(tone, "")
+    icon = _icon(STATE_ICON.get(state, "clock"))
+    if state == "flooded":
+        head = f"Лёд залит · сезон {season_label}"
+        text = "Лёд подтвердили люди. Были здесь сегодня? Расскажите, как там сейчас."
+    elif state == "stale":
+        head = f"Давно не отмечали · сезон {season_label}"
+        text = "Последняя отметка была давно, лёд мог измениться. Были здесь? Подскажите другим."
+    elif state == "closed":
+        head = f"Закрыт · сезон {season_label}"
+        text = "На этот сезон точка не работает."
+    else:
+        head = f"Сезон {season_label} — ждём заливку"
+        text = "Лёд ещё не подтвердили. Как только зальют — статус сменится, а подписчикам придёт сообщение."
+    parts.append(f'<p class="w-status">{icon}{_esc(head)}</p>')
+    line = checked_line(item)
+    parts.append(f"<p data-w-status-note>{_esc(text)}</p>")
+    if line:
+        parts.append(f'<p class="w-note">{_esc(line)}</p>')
+    tags = "".join(f'<span class="w-tag">{_esc(t)}</span>' for t in _tags(item))
+    if item.get("dispute"):
+        tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>'
+    if tags:
+        parts.append(f'<span class="w-card__tags">{tags}</span>')
+    if state != "closed":
+        if state in ("waiting", "stale"):
+            parts.append(
+                '<p class="w-ask">Были здесь? Подскажите другим</p>'
+                '<div class="w-quick"><button type="button" class="w-btn" data-w-quick="on">Уже залит</button>'
+                '<button type="button" class="w-btn" data-w-quick="off">Не зальют</button></div>'
+                '<button type="button" class="w-btn w-btn--soft w-btn--wide" data-w-open-sheet>Ещё про людей и хоккей</button>'
+            )
+        else:
+            parts.append('<button type="button" class="w-btn w-btn--dark w-btn--wide" data-w-open-sheet>Как там сейчас?</button>')
+        parts.append('<p class="w-thanks" data-w-thanks hidden role="status"></p><p class="w-error" data-w-error hidden role="alert"></p>')
+    return f'<div class="w-card2 {cls}" data-w-status-card>{"".join(parts)}</div>'
+
+
+def _known(item: Mapping[str, Any]) -> str:
+    rows: list[tuple[str, str]] = []
+    rows.append(("Часы", f"<dd>{_esc(_hours(item))}</dd>"))
+    rows.append(("Цена", f"<dd>{_esc(_price(item))}</dd>"))
+    phone = (item.get("phone") or "").strip()
+    if phone:
+        digits = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+        shared = " <small>общий номер</small>" if item.get("phone_shared") else ""
+        rows.append(("Телефон", f'<dd><a href="tel:{_esc(digits)}">{_esc(phone)}</a>{shared}</dd>'))
+    if item.get("often_hockey_note"):
+        rows.append(("Важно", f"<dd>{_esc(item['often_hockey_note'])}</dd>"))
+    src = (item.get("source_url") or "").strip()
+    if src:
+        host = urlparse(src).netloc.removeprefix("www.") or src
+        if src.lower().startswith(("http://", "https://")):
+            rows.append(("Источник", f'<dd><a href="{_esc(src)}" rel="noopener nofollow" target="_blank">{_esc(host)}</a> · таблица сезона 2025/26</dd>'))
+        else:
+            rows.append(("Источник", f"<dd>{_esc(src)} · таблица сезона 2025/26</dd>"))
+    inner = "".join(f"<dt>{_esc(k)}</dt>{v}" for k, v in rows)
+    return f'<div class="w-card2"><p class="w-lbl">ЧТО ИЗВЕСТНО</p><dl class="w-kv">{inner}</dl></div>'
+
+
+def _gallery(item: Mapping[str, Any]) -> str:
+    figs = []
+    for p in item.get("photos") or []:
+        url = media_url({"variants": p.get("variants")}, size="card")
+        if url:
+            figs.append(f'<figure><img src="{_esc(url)}" alt="Фото от людей: {_esc(item["name"])}" loading="lazy" decoding="async"></figure>')
+    if not figs:
+        return ""
+    return f'<div class="w-card2"><p class="w-lbl">ФОТО ОТ ЛЮДЕЙ</p><div class="w-gallery">{"".join(figs)}</div></div>'
+
+
+def _routes(item: Mapping[str, Any]) -> str:
+    ya, g = item.get("route_url"), google_route_url(item)
+    if not ya and not g:
+        return ""
+    cells = ""
+    if ya:
+        cells += f'<a class="w-btn w-btn--soft" href="{_esc(ya)}" target="_blank" rel="noopener">Яндекс Карты</a>'
+    if g:
+        cells += f'<a class="w-btn w-btn--soft" href="{_esc(g)}" target="_blank" rel="noopener">Google Maps</a>'
+    return f'<div class="w-card2"><p class="w-lbl">КАК ДОБРАТЬСЯ</p><div class="w-routes">{cells}</div></div>'
+
+
+def _sheet(item: Mapping[str, Any]) -> str:
+    return (
+        '<div class="w-sheet" id="w-sheet" data-w-sheet hidden role="dialog" aria-modal="true" aria-labelledby="w-sheet-title">'
+        '<button type="button" class="w-sheet__back" data-w-close aria-label="Закрыть"></button>'
+        '<div class="w-sheet__panel"><span class="w-sheet__grab" aria-hidden="true"></span>'
+        '<button type="button" class="w-sheet__close" data-w-close aria-label="Закрыть">×</button>'
+        '<div><h2 class="w-sheet__title" id="w-sheet-title">Как там сейчас?</h2>'
+        f'<p class="w-sheet__sub">{_esc(item["name"])} · ответ увидят все, кто выбирает, куда пойти</p></div>'
+        '<div data-w-asking><div data-w-questions></div>'
+        '<input class="w-hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" data-w-hp>'
+        '<p class="w-error" data-w-sheet-error hidden role="alert"></p>'
+        '<button type="button" class="w-btn w-btn--dark w-btn--wide" data-w-send aria-disabled="true">Сначала про лёд</button></div>'
+        '<div data-w-done hidden><div class="w-result" role="status"><b>Спасибо! Уже на странице:</b>'
+        '<strong data-w-summary></strong><span data-w-rule></span></div>'
+        '<button type="button" class="w-btn w-btn--soft w-btn--wide" data-w-close>Готово</button></div>'
+        "</div></div>"
+    )
+
+
+def render_point_page(
+    *, city: Mapping[str, Any], item: Mapping[str, Any], base_url: str, indexable: bool, list_href: str, suggest_href: str,
+    beacon: str = "", city_pin: str = "", footer: str | None = None, og_image: str = "",
+) -> str:
+    name = str(city["name"])
+    where = city_locative(name)
+    links = item.get("links") or {}
+    season_label = str(item.get("season_label") or "2026/27")
+    canonical = _abs(base_url, place_path(city_name=name, slug=str(item["slug"])))
+    kind = _kind_label(item)
+    addr_line = " · ".join(b for b in (item.get("address"), (f"{item['district']}, " if item.get("district") else "") + name) if b)
+    price_chip = _price(item)
+    bell = links.get("bell")
+    # «Напишем, когда зальют» — только пока не залито; у залитой точки колокольчик ничего бы не обещал.
     bell_html = (
         f'<a class="w-btn w-btn--tg w-btn--wide" href="{_esc(bell)}" rel="noopener">{_icon("bell")}'
         "Написать в Telegram, когда зальют</a>"
