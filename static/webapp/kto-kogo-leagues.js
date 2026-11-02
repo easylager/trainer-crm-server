@@ -212,7 +212,7 @@
     var sub = (r.title && r.title.label ? r.title.label + (r.title.detail ? ' · ' + r.title.detail : '') + ' · ' : '') + S.rowSub(r);
     return h('div', { class: 'kk-r' + (r.is_me ? ' is-me' : '') }, [
       h('span', { class: 'kk-r__n' + (r.rank === 1 ? ' is-gold' : ''), text: String(r.rank) }),
-      h('span', { class: 'kk-col kk-r__w' }, [h('span', { class: 'kk-r__name' }, [r.display_name + (r.is_me ? ' (ты)' : ''), K.crownTag(r.crowns)]), h('span', { class: 'kk-sub', text: sub })]),
+      h('span', { class: 'kk-col kk-r__w' }, [h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]), h('span', { class: 'kk-sub', text: sub })]),
       h('span', { class: 'kk-r__pt', text: String(r.points) }),
     ]);
   }

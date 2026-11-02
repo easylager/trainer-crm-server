@@ -29,7 +29,7 @@
         .then(function (r) {
           state.remind = !!(r && r.on);
           K.haptic('success');
-          K.toast(on ? 'Напомню за час до каждого матча' : 'Напоминания выключены');
+          K.toast(on ? 'Напомню о ходе за 3 часа до матча твоей команды' : 'Напоминания выключены');
         })
         .catch(K.fail);
     }
@@ -50,10 +50,10 @@
     return h('div', { class: 'kk-card kk-remind' }, [
       icon(I.bell, 20),
       h('span', { class: 'kk-grow kk-col' }, [
-        h('b', { text: state.remind ? 'Напомню за час до матча' : 'Напомнить за час до матча' }),
-        h('span', { class: 'kk-sub', text: 'и прислать итог с местом в таблице' }),
+        h('b', { text: state.remind ? 'Напомню о ходе за 3 часа до матча' : 'Напомнить о ходе за 3 часа до матча' }),
+        h('span', { class: 'kk-sub', text: 'если хода нет — по матчу твоей команды; и пришлю итог с местом в таблице' }),
       ]),
-      h('button', { type: 'button', class: 'kk-toggle' + (state.remind ? ' is-on' : ''), role: 'switch', 'aria-checked': state.remind ? 'true' : 'false', 'aria-label': 'Напоминать за час до матча', onclick: function () { setRemind(!state.remind); } }, [h('span')]),
+      h('button', { type: 'button', class: 'kk-toggle' + (state.remind ? ' is-on' : ''), role: 'switch', 'aria-checked': state.remind ? 'true' : 'false', 'aria-label': 'Напоминать о ходе за 3 часа до матча', onclick: function () { setRemind(!state.remind); } }, [h('span')]),
     ]);
   }
 
@@ -243,7 +243,7 @@
     return h('div', { class: 'kk-r' + (r.is_me ? ' is-me' : '') }, [
       h('span', { class: 'kk-r__n' + (r.rank === 1 ? ' is-gold' : ''), text: String(r.rank) }),
       h('span', { class: 'kk-col kk-r__w' }, [
-        h('span', { class: 'kk-r__name' }, [r.display_name + (r.is_me ? ' (ты)' : ''), K.crownTag(r.crowns)]),
+        h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]),
         h('span', { class: 'kk-sub', text: S.rowSub(r) }),
       ]),
       h('span', { class: 'kk-r__pt', text: S.spaced(r.points) }),

@@ -79,7 +79,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-hero__team { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
 .kk-hero__name { font: 700 16px var(--kk-text); text-align: center; overflow-wrap: anywhere; }
 .kk-hero__mid { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; }
-.kk-hero__time, .kk-hero__score { font: 400 30px/1 var(--kk-display); font-variant-numeric: tabular-nums; }
+.kk-hero__score { font: 400 30px/1 var(--kk-display); font-variant-numeric: tabular-nums; }
+/* Время «17:00» крупно: без tabular-nums и разрядки — у display-шрифта «1» в табличной ширине отрывается от «7». */
+.kk-hero__time { font: 400 30px/1 var(--kk-display); font-variant-numeric: normal; font-feature-settings: normal; letter-spacing: normal; white-space: nowrap; }
 .kk-hero__day { font: 600 13px var(--kk-text); opacity: 0.9; }
 .kk-meta { font: 500 15px var(--kk-text); color: var(--kk-soft); }
 .kk-disc { border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; flex: none; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); color: #0d1424; }
@@ -218,6 +220,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-r__n.is-gold { color: var(--kk-gold-ink); }
 .kk-r__w { min-width: 0; }
 .kk-r__name { font: 600 15px var(--kk-text); display: flex; align-items: center; gap: 5px; overflow: hidden; }
+.kk-r__nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kk-me { flex: none; height: 18px; padding: 0 7px; border-radius: 999px; font: 700 11px/18px var(--kk-text); letter-spacing: 0.02em; background: var(--kk-win); color: #fff; }
 .kk-r__pt { font: 700 16px var(--kk-text); text-align: right; }
 .kk-gap { height: 20px; display: flex; align-items: center; justify-content: center; color: var(--kk-muted); font-weight: 700; letter-spacing: 0.3em; }
 .kk-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
