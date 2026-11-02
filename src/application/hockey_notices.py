@@ -448,13 +448,13 @@ def result_text(
 ) -> str:
     """``points`` — базовые очки хода; ``place`` — готовая строка про место, если есть где его назвать."""
     total = points * (2 if doubled else 1)
-    x2 = " с ×2" if doubled else ""
+    x2 = " с козырем" if doubled else ""
     if points == POINTS_EXACT:
         verdict = f"В точку: +{total}{x2}."
     elif points:
         verdict = f"+{total} {_points_word(total)}{x2}."
     else:
-        verdict = "В этот раз мимо."
+        verdict = "Мимо. Бывает."
     out = f"<b>{html.escape(home)} — {html.escape(away)} {final_home}:{final_away}.</b> {verdict}"
     return out + ("\n" + place if place else "")
 
