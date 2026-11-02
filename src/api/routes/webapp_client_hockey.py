@@ -127,6 +127,15 @@ def moved_from(row: dict, starts_at: datetime) -> str | None:
     return prev.isoformat() if prev != starts_at else None
 
 
+def has_match_page(row: dict) -> bool:
+    """Есть ли у матча страница client-match: домашний матч Динамо или матч Экстралиги при включённой Экстралиге."""
+    from src.application.hockey_event import DINAMO, _extraliga_on
+
+    if row.get("league") == "extraliga":
+        return _extraliga_on()
+    return row.get("home_team") == DINAMO
+
+
 def _match_out(
     row: dict,
     *,
@@ -150,6 +159,7 @@ def _match_out(
         "away": team_card(row["away_team"]),
         "starts_at": starts_at.isoformat(),
         "moved_from": moved_from(row, starts_at),
+        "has_page": has_match_page(row),
         "status": row["status"],
         "open": row["status"] == "scheduled" and now < starts_at,
         "result": (

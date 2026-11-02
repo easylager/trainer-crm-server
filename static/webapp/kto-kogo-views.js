@@ -61,6 +61,7 @@
 
   /** Страница матча в Mini App: «Иду / Позвать / Билеты» живут там — здесь только вход, кнопок не дублируем. */
   function matchPageLink(m) {
+    if (!m.has_page) return null;
     return h('button', { type: 'button', class: 'kk-mini kk-mini--link', onclick: function () { K.openMatchPage(m.id); } }, ['Страница матча: иду, позвать, билеты']);
   }
 
@@ -234,7 +235,8 @@
       body.appendChild(K.emptyCard('ХОДЫ ЗАКРЫТЫ', 'Этот матч без твоего хода. Следующий — в хабе игры.'));
     }
     body.appendChild(crowdBlock(m, colors));
-    body.appendChild(matchPageLink(m));
+    var pageLink = matchPageLink(m);
+    if (pageLink) body.appendChild(pageLink);
     return out;
   }
 
