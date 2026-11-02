@@ -198,7 +198,7 @@
         profileFocusedReturn: 'hub',
         /* 'trainer-catalog' — карусель открыта из раздела «Каталог» (TASK-140). */
         profileFocusedReturnPath: null,
-        /** `?need=full_name,phone` с хаба — запасной список gaps до готовности moderation_readiness. */
+        /** `?need=full_name,photo` с хаба — запасной список gaps до готовности moderation_readiness. */
         catalogNeedFields: null,
       };
 
@@ -1196,11 +1196,8 @@
         }
         var ph = normalizePhoneClient(pr.phone);
         var pmsg = validatePhoneMessage(ph);
-        if (!draft) {
-          if (pmsg) errs.push(['phone', pmsg]);
-        } else if (ph) {
-          if (pmsg) errs.push(['phone', pmsg]);
-        }
+        /* Телефон необязателен: ошибка только если номер введён и он некорректен. */
+        if (ph && pmsg) errs.push(['phone', pmsg]);
         if ((pr.contacts && String(pr.contacts).length) > MAX_DESCRIPTION_CHARS) {
           errs.push(['contacts', 'Текст контактов не длиннее ' + MAX_DESCRIPTION_CHARS + ' символов.']);
         }
@@ -2618,7 +2615,7 @@
           containerId: 'profileNavContacts',
           tabId: 'form',
           title: 'Как с вами связаться',
-          subtitle: 'Телефон нужен для каталога и подтверждения записей.',
+          subtitle: 'Телефон — по желанию: клиенты смогут скопировать его из карточки в каталоге.',
         },
         session_duration_minutes: {
           containerId: 'obSessionDurationWrap',
@@ -2721,9 +2718,9 @@
          * оставляем как алиас — иначе хаб/инбокс открывали витрину без телефона.
          */
         catalog: {
-          rail: ['anketa_main', 'phone', 'photo'],
+          rail: ['anketa_main', 'photo'],
           title: 'Карточка для каталога',
-          subtitle: 'Имя, телефон и фото — чтобы отправить на проверку. Фамилию можно пропустить.',
+          subtitle: 'Имя и фото — чтобы отправить на проверку. Фамилию можно пропустить.',
           stepLabel: 'Каталог',
           nextSave: 'Сохранить',
           nextDone: 'Готово',
@@ -2732,9 +2729,9 @@
           nextDoneReturningToCatalog: 'К предпросмотру',
         },
         vitrine: {
-          rail: ['anketa_main', 'phone', 'photo'],
+          rail: ['anketa_main', 'photo'],
           title: 'Карточка для каталога',
-          subtitle: 'Имя, телефон и фото — чтобы отправить на проверку. Фамилию можно пропустить.',
+          subtitle: 'Имя и фото — чтобы отправить на проверку. Фамилию можно пропустить.',
           stepLabel: 'Каталог',
           nextSave: 'Сохранить',
           nextDone: 'Готово',

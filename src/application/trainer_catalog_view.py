@@ -43,6 +43,7 @@ from src.application.trainer_catalog_state import (
 from src.application.trainer_invite_links import build_trainer_preview_link
 from src.application.trainer_profile_completeness import (
     analyze_moderation_profile_completeness,
+    OPTIONAL_SUGGESTION_LABELS_RU,
     analyze_moderation_submission_readiness,
     missing_labels_ru,
 )
@@ -385,6 +386,9 @@ async def build_catalog_screen_payload(
     # попадают отдельным ключом: ни один tier их не проверяет, поэтому до сих пор тренер узнавал
     # про них только из строки «цена не указана» в карточке модератора — которую он не видит.
     optional_keys = [k for k in full_missing if k in ("description", "education", "experience_years")]
+    profile_row = trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {}
+    if not str(profile_row.get("phone") or "").strip():
+        optional_keys.append("phone")
     if not any(
         isinstance(svc, dict) and svc.get("price_cents") is not None
         for svc in (trainer.get("services") or [])
@@ -421,7 +425,10 @@ async def build_catalog_screen_payload(
             "missing_fields": missing,
             "missing_labels_ru": missing_labels_ru(missing, first_name_only=True),
             "optional_missing_fields": list(optional_keys),
-            "optional_missing_labels_ru": missing_labels_ru(optional_keys),
+            "optional_missing_labels_ru": [
+                OPTIONAL_SUGGESTION_LABELS_RU.get(k) or (missing_labels_ru([k]) or [k])[0]
+                for k in optional_keys
+            ],
         },
         "preview": await _preview(session, trainer),
         "revision": _revision(trainer),

@@ -1,5 +1,5 @@
 /**
- * Catalog entry must open one self-contained carousel (with phone), never vitrine polish.
+ * Catalog entry must open one self-contained carousel (without phone: it is optional), never vitrine polish.
  * Run: node --test tests/js/ice-map-sheet-fab.test.js  (and this file)
  */
 'use strict';
@@ -43,7 +43,7 @@ describe('catalog carousel — одна самодостаточная кару�
       js.indexOf("catalog: {"),
       js.indexOf("vitrine: {")
     );
-    assert.match(catalogBlock, /phone/);
+    assert.doesNotMatch(catalogBlock, /phone/); // телефон необязателен для каталога
     assert.match(catalogBlock, /anketa_main/);
     assert.ok(!/education/.test(catalogBlock));
     assert.ok(!/about/.test(catalogBlock));

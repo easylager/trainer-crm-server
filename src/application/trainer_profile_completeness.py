@@ -10,7 +10,7 @@ online / mobile work format counts — so that working without a fixed venue is 
 being barred from the catalog.
 
 **B — Full profile (catalog trust / dossier):** strict «about the trainer» bar:
-full name (first + last), phone, bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
+full name (first + last), bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
 (text or structured entries), experience_years >= 0, session length [15,240],
 booking window [0,168], at least one service and one arena.
 
@@ -35,7 +35,17 @@ from src.infrastructure.db.models import TRAINER_STATUS_PENDING_PROFILE
 MIN_DESCRIPTION_CHARS = 25
 
 # Distinct checks in analyze_moderation_profile_completeness (full dossier / catalog bar).
-MODERATION_CRITERIA_TOTAL = 11
+# (Phone used to be one of them; it is optional for the catalog now.)
+MODERATION_CRITERIA_TOTAL = 10
+
+# Fields the catalog screen offers as a suggestion, never as a requirement. ``phone`` lives here:
+# a card without one simply has no phone row and no «copy phone» button.
+OPTIONAL_CATALOG_FIELD_KEYS: tuple[str, ...] = ("phone",)
+
+# Wording for the «можно усилить» list, where a bare «телефон» would read as a to-do.
+OPTIONAL_SUGGESTION_LABELS_RU: dict[str, str] = {
+    "phone": "телефон — по желанию: клиенты смогут скопировать его из карточки",
+}
 
 # Submission tier: full checks minus these keys (still validated in full tier).
 # last_name is not a separate key — it rides inside ``full_name`` on the full tier;
@@ -73,7 +83,7 @@ MISSING_FIELD_LABELS_RU: dict[str, str] = {
 
 def analyze_moderation_profile_completeness(trainer: dict[str, Any]) -> tuple[bool, list[str]]:
     """
-    Full-profile tier (11 criteria): dossier / catalog trust bar.
+    Full-profile tier (10 criteria): dossier / catalog trust bar.
 
     `trainer` must match get_trainer shape: profile, photos, service_ids, arena_ids,
     and optional education_entries_count.
@@ -88,9 +98,8 @@ def analyze_moderation_profile_completeness(trainer: dict[str, Any]) -> tuple[bo
     if not fn or not ln:
         missing.append("full_name")
 
-    phone = (profile.get("phone") or "").strip()
-    if not phone:
-        missing.append("phone")
+    # Phone is deliberately NOT a catalog requirement: the public card hides the phone row when
+    # it is empty and keeps the Telegram / request paths. See ``OPTIONAL_CATALOG_FIELD_KEYS``.
 
     desc = (profile.get("description") or "").strip()
     if len(desc) < MIN_DESCRIPTION_CHARS:
@@ -234,7 +243,7 @@ def is_ready_for_moderation_submission(trainer: dict[str, Any]) -> bool:
     return ok
 
 
-# Legacy name: same as submission tier (8 criteria). Keeps imports/bot reloads from breaking.
+# Legacy name: same as submission tier (7 criteria). Keeps imports/bot reloads from breaking.
 is_profile_complete_for_moderation = is_ready_for_moderation_submission
 
 

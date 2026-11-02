@@ -1,6 +1,6 @@
 """TASK-007: checklist exposes «отправлено на модерацию» so the hub strip can hold step 3.
 
-`profile_complete` only means the 8 submission criteria are met — it says nothing about
+`profile_complete` only means the 7 submission criteria are met — it says nothing about
 whether the trainer actually pressed submit. The strip must not disappear on readiness alone,
 so the payload carries a separate `moderation_submitted` flag.
 """
@@ -38,7 +38,7 @@ async def test_checklist_reports_not_submitted_for_fresh_pending_trainer(db_sess
 
 
 async def test_checklist_moderation_submitted_is_independent_of_profile_complete(db_session):
-    """Readiness (8 criteria) must not be mistaken for submission — that conflation is the bug."""
+    """Readiness (7 criteria) must not be mistaken for submission — that conflation is the bug."""
     tid = await _seed_trainer(db_session, status="pending_profile")
 
     checklist = await get_trainer_onboarding_checklist(db_session, tid)
