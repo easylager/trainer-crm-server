@@ -14,6 +14,8 @@ from sqlalchemy.exc import IntegrityError
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versions"
 MIGRATION_FILE = "0245_hockey_matches.py"
 DEPENDENT_FILES = (
+    # 0301: game_matches видит previous_starts_at из 0294 — снимаем до 0294.
+    "0301_game_views_refresh.py",
     # 0295/0297: уведомления бота игры (hockey_notices, ранги, лиги) — снимаем самыми первыми.
     "0297_kk_bot_default_on.py",
     "0295_kk_bot_notices.py",
