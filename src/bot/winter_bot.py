@@ -225,9 +225,11 @@ def _is_admin(user_id: int | None) -> bool:
     return bool(user_id) and user_id in (Settings().admin_telegram_ids or [])
 
 
-async def notify_admins_photo(photo_id: int) -> None:
+async def notify_admins_photo(photo_id: int, chats: list[int] | None = None) -> None:
+    """Карточка фото админам; ``chats`` — только этим чатам (показ из очереди по /winter)."""
     settings = Settings()
-    token, admins = settings.telegram_bot_token_admin, list(dict.fromkeys(settings.admin_telegram_ids or []))
+    token = settings.telegram_bot_token_admin
+    admins = list(dict.fromkeys(chats if chats else (settings.admin_telegram_ids or [])))
     if not token or not admins:
         return
     async with async_session_factory() as session:
