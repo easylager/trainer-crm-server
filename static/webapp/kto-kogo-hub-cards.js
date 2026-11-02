@@ -115,7 +115,7 @@
         'aria-pressed': on ? 'true' : 'false',
         'aria-disabled': t.usable ? null : 'true',
         onclick: function () { K.toggleTrump(m); },
-      }, [icon(I.bolt, 16), on ? 'Козырь на этом матче · ×2' : 'Поставить козырь · ×2']),
+      }, [icon(I.bolt, 16), on ? 'Козырь на этом матче · ×2' : 'Назначить козырь · ×2']),
       !t.usable && !on ? h('span', { class: 'kk-htr__note', text: t.note.charAt(0).toUpperCase() + t.note.slice(1) }) : null,
     ];
   }
