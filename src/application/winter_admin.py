@@ -618,3 +618,41 @@ async def rename_point(
             raise AdminOpError("slug_" + exc.code) from exc
     out["slug"] = (await session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id=:i"), {"i": arena_id})).scalar_one_or_none()
     return out
+
+
+async def resolve_dispute(
+    session: AsyncSession, arena_id: int, state: str, *, admin_id: int | None, now: datetime | None = None
+) -> bool:
+    """Спор отметок: админ сам ставит статус льда (``flooded`` / ``waiting`` / ``hidden``), спор закрыт."""
+    from src.application.winter_marks import _close_items, set_state_admin
+
+    now = _utc(now)
+    if state not in ("flooded", "waiting", "hidden"):
+        raise AdminOpError("bad_state")
+    ok = await set_state_admin(session, arena_id, state, admin_id=admin_id, now=now)
+    if not ok:
+        return False
+    await session.execute(
+        text("UPDATE seasonal_rink_seasons SET dispute=false, updated_at=now() WHERE arena_id=:a AND season=:s"),
+        {"a": arena_id, "s": ws.current_season(now)},
+    )
+    await _close_items(session, "dispute", arena_id, state, admin_id)
+    return True
+
+
+async def merge_preview(session: AsyncSession, source_id: int, target_id: int) -> dict[str, Any]:
+    """Что переедет при слиянии: числа для экрана подтверждения."""
+    row = (
+        await session.execute(
+            text(
+                """SELECT
+                     (SELECT name FROM arenas WHERE id=:s) AS s_name, (SELECT name FROM arenas WHERE id=:t) AS t_name,
+                     (SELECT count(*) FROM seasonal_rink_marks WHERE arena_id=:s) AS marks,
+                     (SELECT count(*) FROM seasonal_rink_photos WHERE arena_id=:s) AS photos,
+                     (SELECT count(*) FROM winter_subscriptions WHERE arena_id=:s AND kind='point') AS subs,
+                     (SELECT count(*) FROM media WHERE owner_type='arena' AND owner_id=:s) AS media"""
+            ),
+            {"s": source_id, "t": target_id},
+        )
+    ).mappings().one()
+    return dict(row)

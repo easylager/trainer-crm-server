@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.winter_photos import queue_health
+from src.application.winter_queue import queue_line, queue_overview
 from src.shared import winter_status as ws
 
 
@@ -26,8 +27,8 @@ async def winter_summary(session: AsyncSession, now: datetime) -> dict[str, Any]
         text("SELECT count(*) FROM seasonal_rink_seasons WHERE season=:s AND state IN ('flooded','waiting','stale') "
              "AND state_source IN ('engine','admin') AND state_at >= :c"),
         {"s": season, "c": now - ws.FLOODED_WINDOW})).scalar_one())
-    queue = {r[0]: int(r[1]) for r in (await session.execute(
-        text("SELECT kind, count(*) FROM seasonal_moderation_items WHERE status='open' GROUP BY kind"))).all()}
+    queue_info = await queue_overview(session, now)
+    queue = dict(queue_info["by_kind"])
     subs = int((await session.execute(text("SELECT count(*) FROM winter_subscriptions WHERE active"))).scalar_one())
     marks24 = int((await session.execute(
         text("SELECT count(*) FROM seasonal_rink_marks WHERE created_at >= :c"), {"c": now - timedelta(hours=24)})).scalar_one())
@@ -35,9 +36,9 @@ async def winter_summary(session: AsyncSession, now: datetime) -> dict[str, Any]
     line = (
         f"Зимой: залито {by_state.get('flooded', 0)} из {visible}, ждём заливку {by_state.get('waiting', 0)}, "
         f"давно не отмечали {by_state.get('stale', 0)}; свежий статус у {fresh}; отметок за сутки {marks24}; "
-        f"очередь админа {sum(queue.values())}; подписок {subs}"
+        f"{queue_line(queue_info)}; подписок {subs}"
     )
     if photos["alarm"]:
         line += f"; ВНИМАНИЕ: фото на проверке {photos['pending']}, старейшее с {photos['oldest']}"
     return {"season": ws.season_label(season), "by_state": by_state, "visible": visible, "fresh_status": fresh,
-            "marks_24h": marks24, "queue": queue, "subscriptions": subs, "photos": photos, "line": line}
+            "marks_24h": marks24, "queue": queue, "queue_info": queue_info, "subscriptions": subs, "photos": photos, "line": line}

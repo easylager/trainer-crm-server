@@ -8,6 +8,8 @@ ADMIN_BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="stats", description="Статистика платформы"),
     BotCommand(command="ice_inbox", description="Скрины расписаний: проверить и опубликовать"),
     BotCommand(command="suggestions", description="Места от людей: заявки"),
+    BotCommand(command="winter", description="Зимние точки: сезон, очередь, дубли"),
+    BotCommand(command="winter_import", description="Сверка с таблицей нового сезона (CSV)"),
     BotCommand(command="ice_sources", description="Источники расписаний катков"),
     BotCommand(command="journey", description="Путь тренеров: кто где застрял"),
     BotCommand(command="support", description="Обращения в поддержку"),
