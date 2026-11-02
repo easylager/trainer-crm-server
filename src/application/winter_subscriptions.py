@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
@@ -19,6 +20,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.place_links import place_path
 from src.application.winter_links import map_allowed
 from src.application.winter_public import haversine_km
 from src.shared import winter_status as ws
@@ -33,7 +35,6 @@ COALESCE_WINDOW = timedelta(minutes=5)
 QUEUE_TTL = timedelta(hours=36)
 SEND_FROM_H, SEND_TO_H = 9, 21
 
-Sender = Callable[[int, str, list[int]], Awaitable[str]]  # -> "ok" | "dead" | "retry"
 
 
 class SubscriptionError(Exception):
@@ -177,14 +178,99 @@ async def fan_out_events(session: AsyncSession, now: datetime) -> int:
     return queued
 
 
-def compose_flood_message(points: list[dict[str, Any]]) -> str:
+MONTHS_GEN = (
+    "января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+MULTI_MAX = 8
+BUTTON_NAME_MAX = 30
+ButtonRows = list[list[tuple[str, str]]]  # [[(подпись, url), ...], ...]; «Больше не присылать» добавляет отправитель
+
+
+Sender = Callable[[int, str, "ButtonRows", list[int]], Awaitable[str]]  # (tg, текст, URL-кнопки, arena_ids) -> "ok" | "dead" | "retry"
+
+
+def _day_word(moment: datetime, now: datetime) -> str:
+    m, n = moment.astimezone(MINSK), now.astimezone(MINSK)
+    delta = (n.date() - m.date()).days
+    if delta == 0:
+        return "сегодня"
+    if delta == 1:
+        return "вчера"
+    return f"{m.day} {MONTHS_GEN[m.month - 1]}"
+
+
+def confirmed_phrase(moments: list[datetime], now: datetime) -> str:
+    """«Подтвердили сегодня в 18:40.»; разные сутки — только слово дня последнего события. Нет времени — пусто."""
+    moments = [m for m in moments if m is not None]
+    if not moments:
+        return ""
+    last = max(moments)
+    same_day = len({m.astimezone(MINSK).date() for m in moments}) == 1
+    word = _day_word(last, now)
+    if same_day:
+        return f"Подтвердили {word} в {last.astimezone(MINSK):%H:%M}."
+    return f"Подтвердили {word}."
+
+
+def short_button_name(name: str) -> str:
+    n = re.sub(r"^(?:Каток|Коробка),\s+", "", name or "").strip() or (name or "")
+    return n if len(n) <= BUTTON_NAME_MAX else n[: BUTTON_NAME_MAX - 1].rstrip() + "…"
+
+
+def _web_base() -> str:
+    base = (Settings().webapp_base_url or "").strip().rstrip("/")
+    return base if base.startswith("https://") else ""  # кнопка с http/localhost Telegram отвергнет
+
+
+def point_page_url(point: dict[str, Any], base: str) -> str | None:
+    if not base or not point.get("slug") or not point.get("city"):
+        return None
+    return base + place_path(city_name=str(point["city"]), slug=str(point["slug"]))
+
+
+def compose_flood_message(points: list[dict[str, Any]], now: datetime | None = None) -> tuple[str, ButtonRows]:
+    """Текст и ряды URL-кнопок. Точка: ``name``, ``district``, ``flooded_at``, ``meta``, ``route_url``, ``page_url``."""
+    now = now or datetime.now(tz=MINSK)
     if len(points) == 1:
         p = points[0]
-        where = f" ({p['district']})" if p.get("district") else ""
-        return f"Залили: {p['name']}{where}."
-    lines = [f"Залито {len(points)} точки рядом:" if len(points) < 5 else f"Залито {len(points)} точек рядом:"]
-    lines += [f"- {p['name']}" + (f" ({p['district']})" if p.get("district") else "") for p in points[:8]]
-    return "\n".join(lines)
+        lines = [f"{p['name']} — лёд залит"]
+        when = confirmed_phrase([p.get("flooded_at")], now)
+        if when:
+            lines.append(when)
+        if p.get("meta"):
+            lines.append(p["meta"])
+        row = [(label, url) for label, url in (("Маршрут", p.get("route_url")), ("Открыть точку", p.get("page_url"))) if url]
+        return "\n".join(lines), ([row] if row else [])
+    shown = points[:MULTI_MAX]
+    lines = [f"Лёд залит на {len(points)} точках рядом:"]
+    lines += [f"— {p['name']}" + (f" ({p['district']})" if p.get("district") else "") for p in shown]
+    when = confirmed_phrase([p.get("flooded_at") for p in shown], now)
+    if when:
+        lines.append(when)
+    rows = [[(short_button_name(p["name"]), p["page_url"])] for p in shown if p.get("page_url")]
+    return "\n".join(lines), rows
+
+
+async def _point_view(session: AsyncSession, row: Any, now: datetime, cache: dict, base: str) -> dict[str, Any]:
+    """Точка для сообщения; «Прошлой зимой», маршрут и страница — те же, что на карточке сайта."""
+    from src.application import winter_public
+    from src.application.winter_page import card_meta
+
+    aid = int(row.arena_id)
+    if aid not in cache:
+        try:
+            cache[aid] = await winter_public.get_point(session, aid, now=now)
+        except Exception:  # noqa: BLE001 — без деталей уходит короткое сообщение
+            logger.exception("winter flood details failed arena=%s", aid)
+            cache[aid] = None
+    item = cache[aid]
+    view: dict[str, Any] = {"id": aid, "name": row.name, "district": row.district, "flooded_at": row.flooded_at}
+    if item:
+        view["meta"] = card_meta({**item, "locating": False})
+        view["route_url"] = item.get("route_url")
+        view["page_url"] = point_page_url(item, base)
+        view["slug"], view["city"] = item.get("slug"), item.get("city")
+    return view
 
 
 async def deliver_pending(session: AsyncSession, now: datetime, send: Sender) -> dict[str, int]:
@@ -201,8 +287,9 @@ async def deliver_pending(session: AsyncSession, now: datetime, send: Sender) ->
     rows = (
         await session.execute(
             text(
-                """SELECT q.id, q.telegram_id, q.arena_id, q.reason, a.name, p.district, s.state
+                """SELECT q.id, q.telegram_id, q.arena_id, q.reason, a.name, p.district, s.state, e.flooded_at
                    FROM winter_notify_queue q
+                   LEFT JOIN winter_flood_events e ON e.id = q.event_id
                    JOIN arenas a ON a.id = q.arena_id
                    LEFT JOIN arena_profiles p ON p.arena_id = a.id
                    JOIN seasonal_rink_seasons s ON s.arena_id = q.arena_id AND s.season = :season
@@ -215,6 +302,8 @@ async def deliver_pending(session: AsyncSession, now: datetime, send: Sender) ->
     for r in rows:
         by_user.setdefault(int(r.telegram_id), []).append(r)
     day_start, day_end = minsk_day_bounds(now)
+    details: dict[int, dict[str, Any] | None] = {}
+    base = _web_base()
     for tg, items in by_user.items():
         live = [i for i in items if i.state == ws.STATE_FLOODED]
         if not live:  # к моменту отправки уже не «залит»
@@ -230,8 +319,9 @@ async def deliver_pending(session: AsyncSession, now: datetime, send: Sender) ->
         if today and not personal:
             stats["held"] += 1
             continue
-        points = [{"id": i.arena_id, "name": i.name, "district": i.district} for i in live]
-        result = await send(tg, compose_flood_message(points), [p["id"] for p in points])
+        points = [await _point_view(session, i, now, details, base) for i in live]
+        body, buttons = compose_flood_message(points, now)
+        result = await send(tg, body, buttons, [p["id"] for p in points])
         ids = [i.id for i in items]
         if result == "ok":
             await session.execute(text("UPDATE winter_notify_queue SET sent_at=:n WHERE id = ANY(:ids)"), {"n": now, "ids": ids})

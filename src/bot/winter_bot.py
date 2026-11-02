@@ -46,8 +46,18 @@ def _enabled() -> bool:
     return bool(Settings().seasonal_rinks_enabled)
 
 
+STOP_LABEL = "Не присылать"
+FLOOD_STOP_LABEL = "Больше не присылать"
+
+
 def stop_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Не присылать", callback_data="w:stop")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=STOP_LABEL, callback_data="w:stop")]])
+
+
+def flood_keyboard(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
+    kb = [[InlineKeyboardButton(text=label, url=url) for label, url in row] for row in rows]
+    kb.append([InlineKeyboardButton(text=FLOOD_STOP_LABEL, callback_data="w:stop")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
 def ask_keyboard(ask_id: int) -> InlineKeyboardMarkup:
@@ -359,11 +369,11 @@ def gone_keyboard(arena_id: int) -> InlineKeyboardMarkup:
 
 # --- фоновый цикл -------------------------------------------------------------------
 async def make_sender(bot: Bot):
-    async def send(tg: int, body: str, arena_ids: list[int]) -> str:
+    async def send(tg: int, body: str, buttons: list[list[tuple[str, str]]], arena_ids: list[int]) -> str:
         await asyncio.sleep(SEND_PAUSE_SEC)
         for attempt in range(3):
             try:
-                await bot.send_message(tg, body, reply_markup=stop_keyboard())
+                await bot.send_message(tg, body, reply_markup=flood_keyboard(buttons))
                 return "ok"
             except TelegramForbiddenError:
                 return "dead"

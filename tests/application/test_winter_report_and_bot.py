@@ -43,7 +43,7 @@ async def test_cycle_sends_flood_summary_once(db_session, monkeypatch):
     await wm.set_state_admin(db_session, a, "flooded", admin_id=1, now=day - timedelta(minutes=10))
     bot = FakeBot()
     out = await winter_bot.run_winter_cycle(bot, day)
-    assert out["delivery"]["sent"] == 1 and bot.sent[0][0] == 77 and "Залили" in bot.sent[0][1]
+    assert out["delivery"]["sent"] == 1 and bot.sent[0][0] == 77 and "лёд залит" in bot.sent[0][1]
     out = await winter_bot.run_winter_cycle(bot, day + timedelta(minutes=5))
     assert out["delivery"]["sent"] == 0 and len(bot.sent) == 1
 
