@@ -85,22 +85,22 @@ async def test_city_page_lists_sorted_with_honest_copy(on, client, db_session):
     assert "Зимой в Минске" in html
     names = re.findall(r'<span class="w-card__name">([^<]+)</span>', html)
     assert names[:2] == ["Закреплённая", "Залит"] and "Скрытая" not in names
-    assert "зимой 2025/26" in html
+    assert "Прошлой зимой: " in html and "зимой 2025/26" not in html
     assert "открыто сейчас" not in html.lower() and "круглосуточно" not in html.lower()
     # неточная точка: честная подпись, без расстояния и координат в данных страницы
-    assert "точку уточняем" in html
+    assert "адрес примерный" in html and "точку уточняем" not in html
     bad = [p for p in data_of(html)["points"] if p["name"] == "Неточная"][0]
     assert bad["lat"] is None and bad["map_allowed"] is False
     assert "index, follow" in html and 'rel="canonical" href="https://glideclub.test/c/minsk/zimoy"' in html
     assert "ItemList" in html
-    assert "Ждать" in html and "t.me/" not in html or "wnear" in html  # подписка «рядом» ведёт в бота
+    assert "Ждать" not in html  # кнопка подписки «рядом» называется «Подписаться» (если бот настроен)
 
 
 @pytest.mark.asyncio
 async def test_city_page_zero_flooded_is_start_of_season_not_a_dead_counter(on, client, db_session):
     await point(db_session, name="Первая")
     html = (await client.get("/c/minsk/zimoy")).text
-    assert "Сезон открывается: ждём первые заливы" in html
+    assert "Сезон открывается: ждём первую заливку" in html
     assert "залиты 0" not in html
 
 
@@ -129,13 +129,16 @@ async def test_point_page_with_map_has_yandex_link_and_no_token_or_status_in_og(
     assert "Хоккейная коробка" in html and "Коробка у школы № 54" in html
     assert "static-maps.yandex.ru/v1" in html and "Открыть в Картах" in html and "yandex.ru/maps/?pt=" in html
     assert "w-map-fb" in html  # запасная плашка на случай недоступного Яндекса
-    assert "зимой 2025/26" in html and "Ежедневно" in html
+    assert "ПРОШЛОЙ ЗИМОЙ · 2025/26" in html and "Ежедневно" in html
+    assert "зимой 2025/26" not in html and "таблица сезона" not in html
     assert "mark_token" not in html and not re.search(r"\d{10}\.[0-9a-f]{32}", html)
     og = re.search(r'property="og:description" content="([^"]*)"', html).group(1)
     assert "Ждём заливку" not in og and "Залит" not in og
     assert re.search(r'rel="canonical" href="https://glideclub.test/p/minsk/' + slug, html)
     assert "index, follow" in html and "openingHours" not in html
-    assert "Сезон 2026/27 — ждём заливку" in html and "Уже залит" in html and "Не зальют" in html
+    assert "Ждём заливку" in html and "Сезон 2026/27" not in html
+    assert "Уже залит" in html and "Ещё не залит" in html and "Не зальют" not in html
+    assert "Ещё про людей и хоккей" not in html and "цена" not in html.split('w-kindbadge">')[1].split("</span>")[0].lower()
     assert r.headers["cache-control"].startswith("private")
 
 
@@ -269,3 +272,67 @@ def test_phones_on_winter_page_use_the_common_display_format():
     assert [d for d, _ in phone_links("+375291112233, +375173647551")] == ["+375 29 111-22-33", "+375 17 364-75-51"]
     html = wp._known({"phone": "+375173647551", "phone_shared": False})
     assert "+375 17 364-75-51" in html and 'href="tel:+375173647551"' in html
+
+
+# --- тексты (чистые функции, без БД) ------------------------------------------------------------
+def _item(**over):
+    base = {
+        "id": 1, "name": "Каток, ул. Плеханова, 70", "kind": "rink", "state": "waiting", "is_paid": False, "phone": None,
+        "hours": {"known": True, "summary": "Ежедневно 07:00–23:00", "label": "зимой 2025/26", "season": "2025/26"},
+    }
+    base.update(over)
+    return base
+
+
+def test_card_meta_prefixes_last_winter_and_drops_unknowns():
+    from src.application import winter_page as wp
+
+    assert wp.card_meta(_item()) == "Прошлой зимой: ежедневно 07:00–23:00 · бесплатно"
+    unknown = _item(is_paid=None, hours={"known": False, "season": "2025/26"})
+    assert wp.card_meta(unknown) == ""
+    assert wp.card_meta({**unknown, "phone": "+375 17 000-00-00"}) == "Часы уточняйте по телефону"
+    assert wp.card_meta(_item(locating=True)).endswith(" · адрес примерный")
+
+
+def test_card_title_drops_kind_prefix_only():
+    from src.application import winter_page as wp
+
+    assert wp.card_title(_item()) == "ул. Плеханова, 70"
+    assert wp.card_title(_item(name="Коробка, пр. Рокоссовского, 128")) == "пр. Рокоссовского, 128"
+    assert wp.card_title(_item(name="Каток Юность")) == "Каток Юность"
+
+
+def test_checked_line_dates_and_dispute_note():
+    from datetime import datetime, timezone
+
+    from src.application import winter_page as wp
+
+    now = datetime(2026, 12, 10, 12, tzinfo=timezone.utc)
+    flooded = _item(state="flooded", checked_by="admin", state_at="2026-11-02T10:00:00+00:00")
+    assert wp.checked_line(flooded, now) == "Заливку подтвердили 2 ноября"
+    assert wp.checked_line({**flooded, "state": "stale"}, now) == "Проверено 2 ноября"
+    assert wp.checked_line({**flooded, "state_at": "2025-11-02T10:00:00+00:00", "state": "closed"}, now) == "Проверено 2 ноября 2025"
+    assert wp.dispute_note({**flooded, "dispute": True}) == "Есть отметки «не залит» · проверяем"
+    assert wp.dispute_note({**flooded, "dispute": True, "state": "waiting"}) == ""
+
+
+def test_live_tags_carry_age_and_expire_after_two_hours():
+    from datetime import datetime, timezone
+
+    from src.application import winter_page as wp
+
+    now = datetime(2026, 12, 10, 12, tzinfo=timezone.utc)
+    html = wp._tags_html(
+        _item(state="flooded", crowd="few", crowd_at="2026-12-10T11:30:00+00:00", hockey="free", hockey_at="2026-12-10T09:00:00+00:00"),
+        now,
+    )
+    assert "Мало людей · 30 мин назад" in html and "Хоккея нет" not in html
+
+
+def test_facts_block_splits_last_winter_from_phone_and_source():
+    from src.application import winter_page as wp
+
+    html = wp._known(_item(phone="+375 17 000-00-00", source_url="https://www.minsksport.by/x"))
+    assert "ПРОШЛОЙ ЗИМОЙ · 2025/26" in html
+    assert html.index("Часы") < html.index("Цена") < html.index("Телефон") < html.index("Источник")
+    assert "minsksport.by</a></dd>" in html and "таблица сезона" not in html and "зимой 2025/26" not in html

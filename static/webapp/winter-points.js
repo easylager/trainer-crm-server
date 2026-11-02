@@ -18,6 +18,7 @@
   var report = W.reportInit();
   var idem = W.newIdemKey();
   var current = null;
+  var opener = null;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -59,8 +60,8 @@
 
   function card(p) {
     var tags = W.liveTags(p, new Date()).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
-    if (p.dispute) tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>';
     var checked = W.checkedLine(p, new Date());
+    var dispute = W.disputeNote(p);
     var dist = W.distanceLabel(p.distance_km);
     var photo = p.photos && p.photos[0] && p.photos[0].variants && (p.photos[0].variants.card || p.photos[0].variants.thumb);
     var thumb = '<span class="w-thumb w-thumb--type"><span class="w-thumb__glyph">' + esc(W.kindLabel(p.kind, true)) + '</span></span>';
@@ -70,9 +71,10 @@
     }
     return '<a class="w-card" href="#" data-w-open="' + p.id + '" aria-label="' + esc(p.name + ', ' + W.stateView(p).label) + '">' + thumb +
       '<span class="w-card__body"><span class="w-card__top"><span>' + esc(W.kindLabel(p.kind, true)) + '</span><span>' + esc(dist) + '</span></span>' +
-      '<span class="w-card__name">' + esc(p.name) + '</span><span class="w-card__tags">' + pill(p) + tags + '</span>' +
+      '<span class="w-card__name">' + esc(W.cardTitle(p)) + '</span><span class="w-card__tags">' + pill(p) + tags + '</span>' +
       '<span class="w-card__meta">' + esc(W.cardMeta(p)) + '</span>' +
-      (checked ? '<span class="w-card__meta">' + esc(checked) + '</span>' : '') + '</span></a>';
+      (checked ? '<span class="w-card__meta">' + esc(checked) + '</span>' : '') +
+      (dispute ? '<span class="w-card__meta">' + esc(dispute) + '</span>' : '') + '</span></a>';
   }
 
   function render() {
@@ -86,8 +88,8 @@
     var bell = data.bell_near_link;
     var bellHtml = bell
       ? '<div class="w-bell"><span class="w-bell__text"><span class="w-bell__title">Лёд рядом с вами</span>' +
-        '<span class="w-bell__hint">Напишем в Telegram, как только зальют в 2 км от дома</span></span>' +
-        '<button type="button" class="w-btn w-btn--tg" data-w-near>Ждать</button></div>'
+        '<span class="w-bell__hint">Напишем в Telegram, когда зальют лёд в 2 км от вас</span></span>' +
+        '<button type="button" class="w-btn w-btn--tg" data-w-near>Подписаться</button></div>'
       : '';
     var chips =
       '<div class="w-chips" role="group" aria-label="Фильтры">' +
@@ -144,9 +146,14 @@
 
   /* ───── карточка точки (шторка) ───── */
   function closeSheet() {
+    var had = !!sheet;
     if (sheet && sheet.parentNode) sheet.parentNode.removeChild(sheet);
     sheet = null;
     document.body.style.overflow = '';
+    if (had) {
+      W.tgVerticalSwipes(true);
+      if (opener && opener.isConnected && opener.focus) opener.focus({ preventScroll: true });
+    }
   }
   function say(el, text, bad) {
     if (!el) return;
@@ -166,7 +173,9 @@
     current = p;
     report = W.reportInit();
     idem = W.newIdemKey();
+    var from = document.activeElement;
     closeSheet();
+    opener = from && from !== document.body ? from : opener;
     sheet = document.createElement('div');
     sheet.className = 'w-sheet';
     sheet.setAttribute('role', 'dialog');
@@ -175,6 +184,8 @@
     document.body.appendChild(sheet);
     document.body.style.overflow = 'hidden';
     sheet.addEventListener('click', onSheetClick);
+    W.tgVerticalSwipes(false);
+    W.attachSwipe({ panel: sheet.querySelector('.w-sheet__panel'), back: sheet.querySelector('.w-sheet__back'), onClose: closeSheet });
     paintSheet(p, null);
     fetch('/api/public/winter/points/' + p.id, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -196,12 +207,20 @@
     }
     var tags = W.liveTags(p, new Date()).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
     var checked = W.checkedLine(p, new Date());
-    var known = [
-      ['Часы', W.hoursLabel(p)], ['Цена', W.priceLabel(p)], ['Телефон', p.phone_display || p.phone || ''], ['Важно', p.often_hockey_note || ''],
-    ].filter(function (r) { return r[1]; }).map(function (r) {
-      var val = r[0] === 'Телефон' ? '<a href="tel:' + esc(String(p.phone).split(/[;,]/)[0].replace(/[^\d+]/g, '')) + '" data-w-ext>' + esc(p.phone_display || p.phone) + '</a>' : esc(r[1]);
-      return '<dt>' + r[0] + '</dt><dd>' + val + '</dd>';
-    }).join('');
+    function rows(list) {
+      return list.filter(function (r) { return r[1]; }).map(function (r) {
+        var val = r[0] === 'Телефон' ? '<a href="tel:' + esc(String(p.phone).split(/[;,]/)[0].replace(/[^\d+]/g, '')) + '" data-w-ext>' + esc(p.phone_display || p.phone) + '</a>' : esc(r[1]);
+        return '<dt>' + r[0] + '</dt><dd>' + val + '</dd>';
+      }).join('');
+    }
+    /* Часы и цена — из таблицы прошлой зимы: отдельный блок с подписью сезона из данных. */
+    var season = W.dataSeason(p);
+    var dataRows = rows([['Часы', W.hoursLabel(p)], ['Цена', W.priceLabel(p)]]);
+    var restRows = rows([['Телефон', p.phone_display || p.phone || ''], ['Важно', p.often_hockey_note || '']]);
+    var known = '<p class="w-lbl">' + (season ? 'ПРОШЛОЙ ЗИМОЙ · ' + esc(season) : 'ЧТО ИЗВЕСТНО') + '</p>' +
+      (dataRows ? '<dl class="w-kv">' + dataRows + '</dl>' : '') +
+      (restRows ? '<dl class="w-kv w-kv--rest">' + restRows + '</dl>' : '');
+    var dispute = W.disputeNote(p);
     var waiting = p.state === 'waiting' || p.state === 'stale';
     panel.innerHTML =
       '<span class="w-sheet__grab" aria-hidden="true"></span><button type="button" class="w-sheet__close" data-w-x aria-label="Закрыть">×</button>' +
@@ -209,10 +228,11 @@
       '<p class="w-sheet__sub">' + esc([p.address, p.district].filter(Boolean).join(' · ')) + '</p></div>' + map +
       '<div class="w-card2 ' + (v.tone === 'ok' ? 'w-card2--ok' : v.tone === 'wait' ? 'w-card2--wait' : '') + '">' +
       '<p class="w-status">' + esc(v.label) + '</p>' + (checked ? '<p class="w-note">' + esc(checked) + '</p>' : '') +
+      (dispute ? '<p class="w-note">' + esc(dispute) + '</p>' : '') +
       (tags ? '<span class="w-card__tags">' + tags + '</span>' : '') + '<div data-w-body></div>' +
       '<p class="w-thanks" data-w-msg hidden role="status"></p></div>' +
-      (waiting ? '<button type="button" class="w-btn w-btn--tg w-btn--wide" data-w-bell>Написать, когда зальют</button>' : '') +
-      '<div class="w-card2"><p class="w-lbl">ЧТО ИЗВЕСТНО</p><dl class="w-kv">' + known + '</dl></div>' +
+      (waiting ? '<button type="button" class="w-btn w-btn--tg w-btn--wide" data-w-bell>Сообщить, когда зальют</button>' : '') +
+      '<div class="w-card2">' + known + '</div>' +
       (p.route_url ? '<a class="w-btn w-btn--soft w-btn--wide" href="' + esc(p.route_url) + '" data-w-ext data-w-route>Маршрут</a>' : '') +
       '<button type="button" class="w-foot" data-w-gone style="background:none;border:0;color:var(--g-accent-ink)">Точки больше нет или ошибка? Сообщить</button>';
     paintBody(p);
@@ -221,7 +241,7 @@
   function paintBody(p) {
     var body = sheet.querySelector('[data-w-body]');
     if (!body) return;
-    var qs = W.questionsView(report).map(function (q) {
+    var qs = W.questionsView(report, { flooded: p.state === 'flooded' }).map(function (q) {
       return '<fieldset class="w-q"><legend>' + esc(q.label) + '</legend><div class="w-q__row">' + q.opts.map(function (o) {
         return '<button type="button" class="w-opt" data-w-q="' + q.key + '" data-w-o="' + o.id + '" aria-pressed="' + o.selected + '">' + esc(o.label) + '</button>';
       }).join('') + '</div></fieldset>';
@@ -255,7 +275,7 @@
         .then(function (res) {
           if (res.status === 200) {
             var out = W.reportOutcome(report, res.body, 'miniapp');
-            sheet.querySelector('[data-w-body]').innerHTML = '<div class="w-result"><b>Спасибо! Ваша отметка:</b><strong>' + esc(out.summary) + '</strong><span>' + esc(out.rule) + '</span></div>';
+            sheet.querySelector('[data-w-body]').innerHTML = '<div class="w-result"><b>Ваша отметка:</b><strong>' + esc(out.summary) + '</strong><span>' + esc(out.rule) + '</span></div>';
             cache.key = '';
           } else {
             say(msg, W.reportErrorText(res.status, res.retry), true);
@@ -274,7 +294,7 @@
       fetch('/api/webapp/winter/points/' + current.id + '/gone', { method: 'POST', headers: headers(), cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (j) {
-          say(msg, j && j.counted ? 'Спасибо, передали. Если так скажут ещё несколько человек, проверим точку.' :
+          say(msg, j && j.counted ? 'Спасибо, передали. Проверим точку.' :
             (j ? 'Спасибо, мы уже учли ваш сигнал.' : 'Не получилось отправить.'), !j);
         });
     }

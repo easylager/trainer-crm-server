@@ -246,10 +246,12 @@
 
     function openCard(p) {
       var v = W.stateView(p);
+      var note = W.checkedLine(p, new Date());
       card.hidden = false;
       card.innerHTML =
         '<a class="w-mapcard__name" href="' + esc(p.href) + '">' + esc(p.name) + '</a>' +
         '<span class="w-card__tags"><span class="w-pill w-pill--' + esc(v.tone) + '">' + esc(v.label) + '</span></span>' +
+        (note ? '<span class="w-card__meta">' + esc(note) + '</span>' : '') +
         '<a class="w-btn w-btn--soft" href="' + esc(p.href) + '">Открыть</a>';
     }
 
@@ -334,6 +336,7 @@
     var idem = W.newIdemKey();
     var busy = false;
     var lastFocus = null;
+    var swipe = null;
 
     function loadToken(force) {
       if (tokenLoaded && !force) return tokenLoaded;
@@ -370,7 +373,7 @@
     function showError(box, status, retry) {
       if (!box) return;
       box.textContent = status === 503
-        ? 'Отметки с сайта сейчас выключены. Отметить можно в Telegram: кнопка «Написать в Telegram» выше.'
+        ? 'Отметки с сайта сейчас выключены. Отметить можно в Telegram: кнопка «Сообщить мне в Telegram» выше.'
         : W.reportErrorText(status, retry);
       box.hidden = false;
     }
@@ -380,7 +383,7 @@
       if (changed) setTimeout(function () { location.reload(); }, 1600);
     }
 
-    /* Быстрые отметки на странице «Ждём заливку»: «Уже залит» / «Не зальют». */
+    /* Быстрые отметки на странице «Ждём заливку»: «Уже залит» / «Ещё не залит». */
     $all('[data-w-quick]', page).forEach(function (btn) {
       btn.addEventListener('click', function () {
         if (busy) return;
@@ -398,7 +401,7 @@
             var st = W.reportInit();
             st.ice = choice;
             var out = W.reportOutcome(st, res.body, 'site');
-            thanks.textContent = 'Спасибо! ' + out.rule;
+            thanks.textContent = out.rule;
             thanks.hidden = false;
             afterSuccess(res);
             idem = W.newIdemKey();
@@ -412,7 +415,7 @@
     /* Шторка */
     function renderQuestions() {
       var host = $('[data-w-questions]', sheet);
-      host.innerHTML = W.questionsView(state)
+      host.innerHTML = W.questionsView(state, { flooded: page.getAttribute('data-w-state') === 'flooded' })
         .map(function (q) {
           return (
             '<fieldset class="w-q"><legend>' + esc(q.label) + '</legend><div class="w-q__row">' +
@@ -442,6 +445,7 @@
       $('[data-w-done]', sheet).hidden = true;
       $('[data-w-sheet-error]', sheet).hidden = true;
       renderQuestions();
+      if (swipe) swipe.reset();
       sheet.hidden = false;
       document.body.style.overflow = 'hidden';
       loadToken();
@@ -449,12 +453,14 @@
       if (first) first.focus();
     }
     function closeSheet() {
+      if (sheet.hidden) return;
       sheet.hidden = true;
       document.body.style.overflow = '';
       if (lastFocus && lastFocus.focus) lastFocus.focus();
     }
     $all('[data-w-open-sheet]', page).forEach(function (b) { b.addEventListener('click', openSheet); });
     if (sheet) {
+      swipe = W.attachSwipe({ panel: $('.w-sheet__panel', sheet), back: $('.w-sheet__back', sheet), onClose: closeSheet });
       sheet.addEventListener('click', function (ev) {
         if (ev.target.closest('[data-w-close]')) {
           closeSheet();

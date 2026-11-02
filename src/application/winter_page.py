@@ -13,6 +13,8 @@
 from __future__ import annotations
 
 import html as html_lib
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlparse
@@ -85,21 +87,64 @@ def _kind_label(item: Mapping[str, Any], *, short: bool = False) -> str:
 
 
 def _price(item: Mapping[str, Any]) -> str:
+    """Неизвестная цена — пустая строка: клиенту про неё не пишем."""
     if item.get("is_paid") is False:
         return "Бесплатно"
     if item.get("is_paid") is True:
         return f"Платно, {item['price_note']}" if item.get("price_note") else "Платно"
-    return str(item.get("price_note") or "Цена уточняется")
+    return str(item.get("price_note") or "")
+
+
+def _hours_known(item: Mapping[str, Any]) -> str:
+    h = item.get("hours") or {}
+    if h.get("known") and h.get("summary"):
+        return str(h["summary"])
+    if h.get("known") and h.get("text"):
+        return str(h["text"])
+    return ""
 
 
 def _hours(item: Mapping[str, Any]) -> str:
+    """Часы без подписи сезона; неизвестны — «Часы уточняйте по телефону» только при наличии телефона."""
+    return _hours_known(item) or ("Часы уточняйте по телефону" if item.get("phone") else "")
+
+
+def _data_season(item: Mapping[str, Any]) -> str:
+    """Сезон, из таблицы которого взяты часы и цена («2025/26»); у арен каталога его нет."""
     h = item.get("hours") or {}
-    label = f" · {h['label']}" if h.get("label") else ""
-    if h.get("known") and h.get("summary"):
-        return f"{h['summary']}{label}"
-    if h.get("known") and h.get("text"):
-        return f"{h['text']}{label}"
-    return str(h.get("fallback") or "Часы уточняйте по телефону")
+    if h.get("season"):
+        return str(h["season"])
+    m = re.search(r"\d{4}/\d{2}", str(h.get("label") or ""))
+    return m.group(0) if m else ""
+
+
+def _lower_first(text: str) -> str:
+    if len(text) > 1 and text[1] != text[1].lower():
+        return text  # аббревиатура
+    return text[:1].lower() + text[1:]
+
+
+def card_meta(item: Mapping[str, Any]) -> str:
+    """Вторая строка карточки; зеркало cardMeta из winter-model.js."""
+    hours, price = _hours_known(item), _price(item)
+    last = bool(_data_season(item))
+    bits = [b for b in (hours, price) if b]
+    line = ""
+    if bits:
+        bits = [_lower_first(b) if (last or i > 0) else b for i, b in enumerate(bits)]
+        line = ("Прошлой зимой: " if last else "") + " · ".join(bits)
+    out = [line]
+    if not hours and item.get("phone"):
+        out.append("Часы уточняйте по телефону")
+    if item.get("locating"):
+        out.append("адрес примерный")
+    return " · ".join(b for b in out if b)
+
+
+def card_title(item: Mapping[str, Any]) -> str:
+    """Слово типа («Каток, », «Коробка, ») уже стоит в надписи над названием."""
+    m = re.match(r"^(?:Каток|Коробка),\s+(.+)$", str(item.get("name") or ""))
+    return m.group(1) if m else str(item.get("name") or "")
 
 
 def _distance(km: float | None) -> str:
@@ -122,11 +167,56 @@ def _tags(item: Mapping[str, Any]) -> list[tuple[str, str | None]]:
     return out
 
 
-def _tags_html(item: Mapping[str, Any]) -> str:
+LIVE_WINDOW = timedelta(hours=2)
+_MSK = timezone(timedelta(hours=3))
+MONTHS_GEN = (
+    "января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+
+
+def _ago(moment: datetime, now: datetime) -> str:
+    """Зеркало ago() из winter-model.js."""
+    minutes = int((now - moment).total_seconds() // 60)
+    if minutes < 1:
+        return "только что"
+    if minutes < 60:
+        return f"{minutes} мин назад"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} {_plural(hours, 'час', 'часа', 'часов')} назад"
+    days = hours // 24
+    return f"{days} {_plural(days, 'день', 'дня', 'дней')} назад"
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def live_label(label: str, at: Any, now: datetime) -> str:
+    """«Мало людей · 30 мин назад»; старше 2 часов — пустая строка (метка неактуальна). Зеркало liveLabel."""
+    if not at:
+        return label
+    moment = _parse_iso(at)
+    if moment is None:
+        return label
+    if now - moment > LIVE_WINDOW:
+        return ""
+    return f"{label} · {_ago(moment, now)}"
+
+
+def _tags_html(item: Mapping[str, Any], now: datetime | None = None) -> str:
+    now = now or datetime.now(timezone.utc)
     parts = []
     for label, at in _tags(item):
+        text = live_label(label, at, now)
+        if not text:
+            continue
         attr = f' data-w-live-at="{_esc(at)}" data-w-live-label="{_esc(label)}"' if at else ""
-        parts.append(f'<span class="w-tag"{attr}>{_esc(label)}</span>')
+        parts.append(f'<span class="w-tag"{attr}>{_esc(text)}</span>')
     return "".join(parts)
 
 
@@ -148,20 +238,31 @@ def pending_line(item: Mapping[str, Any]) -> str:
     return f"{n} {_plural(n, 'человек', 'человека', 'человек')} {verb}, что залит · проверяем"
 
 
-def checked_line(item: Mapping[str, Any]) -> str:
+def day_month_ru(moment: datetime, now: datetime | None = None) -> str:
+    """«2 ноября»; год — только если он не текущий (по Минску)."""
+    local = moment.astimezone(_MSK)
+    ref = (now or datetime.now(timezone.utc)).astimezone(_MSK)
+    out = f"{local.day} {MONTHS_GEN[local.month - 1]}"
+    return out if local.year == ref.year else f"{out} {local.year}"
+
+
+def checked_line(item: Mapping[str, Any], now: datetime | None = None) -> str:
     """Для серверной отрисовки только то, что не стареет: дата проверки админом / источником. «40 мин назад» дорисует JS."""
     pend = pending_line(item)
     if pend:
         return pend
     if item.get("checked_by") in ("admin", "source") and item.get("state_at"):
-        from datetime import datetime, timedelta, timezone
-
-        try:
-            moment = datetime.fromisoformat(str(item["state_at"])).astimezone(timezone(timedelta(hours=3)))
-        except ValueError:
+        moment = _parse_iso(item["state_at"])
+        if moment is None:
             return ""
-        return f"Проверено {moment:%d.%m}"
+        verb = "Заливку подтвердили" if item.get("state") == "flooded" else "Проверено"
+        return f"{verb} {day_month_ru(moment, now)}"
     return ""
+
+
+def dispute_note(item: Mapping[str, Any]) -> str:
+    """Нейтральная строка у залитой точки при отметках «не залит»; у остальных состояний молчим."""
+    return "Есть отметки «не залит» · проверяем" if item.get("dispute") and item.get("state") == "flooded" else ""
 
 
 # --- головы страниц -------------------------------------------------------------------
@@ -221,10 +322,9 @@ def _thumb(item: Mapping[str, Any]) -> str:
 def _card(item: Mapping[str, Any], city_name: str) -> str:
     href = place_path(city_name=city_name, slug=str(item["slug"])) if item.get("slug") else f"/p/{int(item['id'])}"
     tags = _tags_html(item)
-    if item.get("dispute"):
-        tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>'
     checked = checked_line(item)
-    meta = " · ".join(b for b in (_hours(item), _price(item), "точку уточняем" if item.get("locating") else "") if b)
+    dispute = dispute_note(item)
+    meta = card_meta(item)
     dist = _distance(item.get("distance_km"))
     label = f"{item['name']}, {STATE_LABEL.get(item.get('state'), 'Ждём заливку')}"
     return (
@@ -233,10 +333,11 @@ def _card(item: Mapping[str, Any], city_name: str) -> str:
         '<span class="w-card__body">'
         f'<span class="w-card__top"><span>{_esc(_kind_label(item, short=True))}</span>'
         f'<span class="w-card__dist" data-w-dist>{_esc(dist)}</span></span>'
-        f'<span class="w-card__name">{_esc(item["name"])}</span>'
+        f'<span class="w-card__name">{_esc(card_title(item))}</span>'
         f'<span class="w-card__tags">{pill(item)}{tags}</span>'
         f'<span class="w-card__meta">{_esc(meta)}</span>'
         + (f'<span class="w-card__meta" data-w-checked>{_esc(checked)}</span>' if checked else '<span class="w-card__meta" data-w-checked hidden></span>')
+        + (f'<span class="w-card__meta">{_esc(dispute)}</span>' if dispute else "")
         + "</span></a></li>"
     )
 
@@ -285,8 +386,8 @@ def render_city_page(
         sub = _summary_line(total, flooded)
         if flooded == 0:
             head_note = (
-                '<p class="w-sub"><b>Сезон открывается: ждём первые заливы.</b> '
-                "Как только где-то зальют, напишем в Telegram. Были у льда — отметьте, это поможет другим.</p>"
+                '<p class="w-sub"><b>Сезон открывается: ждём первую заливку.</b> '
+                "Как только где-то зальют, напишем в Telegram. Если вы рядом со льдом, отметьте его.</p>"
             )
         else:
             head_note = f'<p class="w-sub">{_esc(sub)}</p>'
@@ -297,8 +398,8 @@ def render_city_page(
     if total and bell:
         bell_html = (
             '<div class="w-bell"><span class="w-bell__text"><span class="w-bell__title">Лёд рядом с вами</span>'
-            '<span class="w-bell__hint">Напишем в Telegram, как только зальют в 2 км от дома</span></span>'
-            f'<a class="w-btn w-btn--tg" href="{_esc(bell)}" rel="noopener">{_icon("bell")}Ждать</a></div>'
+            '<span class="w-bell__hint">Напишем в Telegram, когда зальют лёд в 2 км от вас</span></span>'
+            f'<a class="w-btn w-btn--tg" href="{_esc(bell)}" rel="noopener">{_icon("bell")}Подписаться</a></div>'
         )
 
     controls = ""
@@ -411,8 +512,8 @@ def _status_card(item: Mapping[str, Any], *, season_label: str, links: Mapping[s
     cls = {"ok": "w-card2--ok", "wait": "w-card2--wait"}.get(tone, "")
     icon = _icon(STATE_ICON.get(state, "clock"))
     if state == "flooded":
-        head = f"Лёд залит · сезон {season_label}"
-        text = "Лёд залит. Были здесь сегодня? Расскажите, как там сейчас."
+        head = "Лёд залит"
+        text = "Были здесь сегодня? Расскажите, как там сейчас."
     elif state == "stale":
         head = f"Давно не отмечали · сезон {season_label}"
         text = "Последняя отметка была давно, лёд мог измениться. Были здесь? Подскажите другим."
@@ -420,16 +521,17 @@ def _status_card(item: Mapping[str, Any], *, season_label: str, links: Mapping[s
         head = f"Закрыт · сезон {season_label}"
         text = "На этот сезон точка не работает."
     else:
-        head = f"Сезон {season_label} — ждём заливку"
-        text = "Лёд ещё не подтвердили. Как только зальют — статус сменится, а подписчикам придёт сообщение."
+        head = "Ждём заливку"
+        text = "Заливку ещё никто не подтвердил. Как только подтвердим, напишем тем, кто подписан."
     parts.append(f'<p class="w-status">{icon}{_esc(head)}</p>')
     line = checked_line(item)
     parts.append(f"<p data-w-status-note>{_esc(text)}</p>")
     if line:
         parts.append(f'<p class="w-note">{_esc(line)}</p>')
+    note = dispute_note(item)
+    if note:
+        parts.append(f'<p class="w-note">{_esc(note)}</p>')
     tags = _tags_html(item)
-    if item.get("dispute"):
-        tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>'
     if tags:
         parts.append(f'<span class="w-card__tags">{tags}</span>')
     if state != "closed":
@@ -437,8 +539,7 @@ def _status_card(item: Mapping[str, Any], *, season_label: str, links: Mapping[s
             parts.append(
                 '<p class="w-ask">Были здесь? Подскажите другим</p>'
                 '<div class="w-quick"><button type="button" class="w-btn" data-w-quick="on">Уже залит</button>'
-                '<button type="button" class="w-btn" data-w-quick="off">Не зальют</button></div>'
-                '<button type="button" class="w-btn w-btn--soft w-btn--wide" data-w-open-sheet>Ещё про людей и хоккей</button>'
+                '<button type="button" class="w-btn" data-w-quick="off">Ещё не залит</button></div>'
             )
         else:
             parts.append('<button type="button" class="w-btn w-btn--dark w-btn--wide" data-w-open-sheet>Как там сейчас?</button>')
@@ -447,25 +548,36 @@ def _status_card(item: Mapping[str, Any], *, season_label: str, links: Mapping[s
 
 
 def _known(item: Mapping[str, Any]) -> str:
-    rows: list[tuple[str, str]] = []
-    rows.append(("Часы", f"<dd>{_esc(_hours(item))}</dd>"))
-    rows.append(("Цена", f"<dd>{_esc(_price(item))}</dd>"))
+    """Часы и цена — из таблицы прошлой зимы: свой блок с сезоном из данных; затем телефон и источник."""
+    data_rows: list[tuple[str, str]] = []
+    if _hours(item):
+        data_rows.append(("Часы", f"<dd>{_esc(_hours(item))}</dd>"))
+    if _price(item):
+        data_rows.append(("Цена", f"<dd>{_esc(_price(item))}</dd>"))
+    rest: list[tuple[str, str]] = []
     links = phone_links(item.get("phone"))
     if links:
         shared = " <small>общий номер</small>" if item.get("phone_shared") else ""
         anchors = ", ".join(f'<a href="tel:{_esc(tel)}">{_esc(shown)}</a>' for shown, tel in links)
-        rows.append(("Телефон", f"<dd>{anchors}{shared}</dd>"))
+        rest.append(("Телефон", f"<dd>{anchors}{shared}</dd>"))
     if item.get("often_hockey_note"):
-        rows.append(("Важно", f"<dd>{_esc(item['often_hockey_note'])}</dd>"))
+        rest.append(("Важно", f"<dd>{_esc(item['often_hockey_note'])}</dd>"))
     src = (item.get("source_url") or "").strip()
     if src:
         host = urlparse(src).netloc.removeprefix("www.") or src
         if src.lower().startswith(("http://", "https://")):
-            rows.append(("Источник", f'<dd><a href="{_esc(src)}" rel="noopener nofollow" target="_blank">{_esc(host)}</a> · таблица сезона 2025/26</dd>'))
+            rest.append(("Источник", f'<dd><a href="{_esc(src)}" rel="noopener nofollow" target="_blank">{_esc(host)}</a></dd>'))
         else:
-            rows.append(("Источник", f"<dd>{_esc(src)} · таблица сезона 2025/26</dd>"))
-    inner = "".join(f"<dt>{_esc(k)}</dt>{v}" for k, v in rows)
-    return f'<div class="w-card2"><p class="w-lbl">ЧТО ИЗВЕСТНО</p><dl class="w-kv">{inner}</dl></div>'
+            rest.append(("Источник", f"<dd>{_esc(src)}</dd>"))
+
+    def dl(rows: list[tuple[str, str]], extra: str = "") -> str:
+        if not rows:
+            return ""
+        return f'<dl class="w-kv{extra}">' + "".join(f"<dt>{_esc(k)}</dt>{v}" for k, v in rows) + "</dl>"
+
+    season = _data_season(item)
+    label = f"ПРОШЛОЙ ЗИМОЙ · {_esc(season)}" if season else "ЧТО ИЗВЕСТНО"
+    return f'<div class="w-card2"><p class="w-lbl">{label}</p>{dl(data_rows)}{dl(rest, " w-kv--rest")}</div>'
 
 
 def _gallery(item: Mapping[str, Any]) -> str:
@@ -508,7 +620,7 @@ def _sheet(item: Mapping[str, Any]) -> str:
         '<input class="w-hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" data-w-hp>'
         '<p class="w-error" data-w-sheet-error hidden role="alert"></p>'
         '<button type="button" class="w-btn w-btn--dark w-btn--wide" data-w-send aria-disabled="true">Сначала про лёд</button></div>'
-        '<div data-w-done hidden><div class="w-result" role="status"><b>Спасибо! Ваша отметка:</b>'
+        '<div data-w-done hidden><div class="w-result" role="status"><b>Ваша отметка:</b>'
         '<strong data-w-summary></strong><span data-w-rule></span></div>'
         '<button type="button" class="w-btn w-btn--soft w-btn--wide" data-w-close>Готово</button></div>'
         "</div></div>"
@@ -526,12 +638,11 @@ def render_point_page(
     canonical = _abs(base_url, place_path(city_name=name, slug=str(item["slug"])))
     kind = _kind_label(item)
     addr_line = " · ".join(b for b in (item.get("address"), (f"{item['district']}, " if item.get("district") else "") + name) if b)
-    price_chip = _price(item)
     bell = links.get("bell")
     # «Напишем, когда зальют» — только пока не залито; у залитой точки колокольчик ничего бы не обещал.
     bell_html = (
         f'<a class="w-btn w-btn--tg w-btn--wide" href="{_esc(bell)}" rel="noopener">{_icon("bell")}'
-        "Написать в Telegram, когда зальют</a>"
+        "Сообщить мне в Telegram, когда зальют</a>"
         if bell and item.get("state") in ("waiting", "stale") and not item.get("doubtful")
         else ""
     )
@@ -541,7 +652,7 @@ def render_point_page(
         f'{_hero(item, list_href=list_href, suggest_href=suggest_href)}'
         '<div class="w-pointbody">'
         '<div class="w-head">'
-        f'<span class="w-kindbadge">{_esc(kind)} · {_esc(price_chip.lower() if item.get("is_paid") is not None else "цена уточняется")}</span>'
+        f'<span class="w-kindbadge">{_esc(kind)}</span>'
         f'<h1 class="w-h1">{_esc(item["name"])}</h1>'
         f'<p class="w-addr">{_esc(addr_line)}</p></div>'
         f'{_status_card(item, season_label=season_label, links=links)}'

@@ -37,8 +37,8 @@
   function stateView(point) {
     var base = STATE_VIEW[point && point.state] || STATE_VIEW.waiting;
     var out = { label: base.label, tone: base.tone, icon: base.icon, pin: base.pin };
-    if (point && point.dispute) {
-      /* Отметки расходятся: цвет не меняем, добавляем знак «!» (U1). */
+    if (point && point.dispute && point.state === 'flooded') {
+      /* Есть отметки «не залит»: цвет не меняем, на карте знак «!» (U1); текста тег не добавляет. */
       out.pin = 'dispute';
       out.disputed = true;
     }
@@ -50,20 +50,35 @@
     return 'Каток';
   }
 
-  /** is_paid: false — бесплатно, true — платно, null — не знаем (никогда не «бесплатно» по умолчанию). */
+  /** is_paid: false — бесплатно, true — платно, null — не знаем (никогда не «бесплатно» по умолчанию). Неизвестно — пустая строка. */
   function priceLabel(point) {
     if (!point) return '';
     if (point.is_paid === false) return 'Бесплатно';
     if (point.is_paid === true) return point.price_note ? 'Платно, ' + point.price_note : 'Платно';
-    return point.price_note || 'Цена уточняется';
+    return point.price_note || '';
   }
 
-  /** Часы: известны — «Ежедневно 7:00–23:00 · зимой 2025/26»; нет — «Часы уточняйте по телефону». */
-  function hoursLabel(point) {
+  /** Часы без подписи сезона («Ежедневно 7:00–23:00»); неизвестны — пустая строка. */
+  function hoursKnownText(point) {
     var h = (point && point.hours) || {};
-    if (h.known && h.summary) return h.summary + (h.label ? ' · ' + h.label : '');
-    if (h.known && h.text) return h.text + (h.label ? ' · ' + h.label : '');
-    return h.fallback || 'Часы уточняйте по телефону';
+    if (h.known && h.summary) return h.summary;
+    if (h.known && h.text) return h.text;
+    return '';
+  }
+
+  /** Сезон, из которого взяты часы и цена («2025/26»); у точек с собственным расписанием его нет. */
+  function dataSeason(point) {
+    var h = (point && point.hours) || {};
+    if (h.season) return String(h.season);
+    var m = /(\d{4}\/\d{2})/.exec(h.label || '');
+    return m ? m[1] : '';
+  }
+
+  /** Часы для строки «Что известно»: известны — как есть; нет — «Часы уточняйте по телефону» только если телефон есть. */
+  function hoursLabel(point) {
+    var known = hoursKnownText(point);
+    if (known) return known;
+    return point && point.phone ? 'Часы уточняйте по телефону' : '';
   }
 
   /** Короткое расстояние. Только для точных точек: у неточных distance_km = null и строки нет. */
@@ -95,8 +110,21 @@
     return (dd < 10 ? '0' : '') + dd + '.' + (mm < 10 ? '0' : '') + mm;
   }
 
+  var MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+  /** «2 ноября»; год добавляем только если он не текущий. */
+  function dayMonthRu(iso, now) {
+    var t = Date.parse(iso || '');
+    if (isNaN(t)) return '';
+    var d = new Date(t + MINSK_OFFSET_MS);
+    var ref = new Date((now instanceof Date ? now.getTime() : Date.now()) + MINSK_OFFSET_MS);
+    var out = d.getUTCDate() + ' ' + MONTHS_GEN[d.getUTCMonth()];
+    if (d.getUTCFullYear() !== ref.getUTCFullYear()) out += ' ' + d.getUTCFullYear();
+    return out;
+  }
+
   /**
-   * «Когда отметили». Админский статус — «Проверено DD.MM» (U4); людской — «Отметили 40 мин назад».
+   * «Когда отметили». Админский статус — «Заливку подтвердили 2 ноября» / «Проверено 2 ноября» (U4); людской — «Отметили 40 мин назад».
    * У «Ждём заливку» без отметок строки нет: импортное время — не отметка человека.
    */
   function pendingLine(point) {
@@ -112,7 +140,11 @@
     var pend = pendingLine(point);
     if (pend) return pend;
     if (!point.state_at) return '';
-    if (point.checked_by === 'admin' || point.checked_by === 'source') return 'Проверено ' + dayMonth(point.state_at);
+    if (point.checked_by === 'admin' || point.checked_by === 'source') {
+      var day = dayMonthRu(point.state_at, now);
+      if (!day) return '';
+      return (point.state === 'flooded' ? 'Заливку подтвердили ' : 'Проверено ') + day;
+    }
     if (point.checked_by === 'people' && point.state !== 'waiting') return 'Отметили ' + ago(point.state_at, now);
     return '';
   }
@@ -138,11 +170,45 @@
     return out.filter(Boolean);
   }
 
-  /** Вторая строка карточки списка. Неточная точка честно говорит «точку уточняем». */
+  /** Нейтральная строка у залитой точки, если есть отметки «не залит». Механику (веса, пороги) не показываем. */
+  function disputeNote(point) {
+    return point && point.dispute && point.state === 'flooded' ? 'Есть отметки «не залит» · проверяем' : '';
+  }
+
+  function lowerFirst(text) {
+    if (!text) return text;
+    if (text.length > 1 && text.charAt(1) !== text.charAt(1).toLowerCase()) return text; /* аббревиатура */
+    return text.charAt(0).toLowerCase() + text.slice(1);
+  }
+
+  /**
+   * Вторая строка карточки списка. Часы и цена из таблицы прошлой зимы идут с префиксом
+   * «Прошлой зимой: ежедневно 07:00–23:00 · бесплатно»; неизвестная цена не упоминается,
+   * «Часы уточняйте по телефону» — только когда телефон есть.
+   */
   function cardMeta(point) {
-    var bits = [hoursLabel(point), priceLabel(point)];
-    if (point && point.locating) bits.push('точку уточняем');
-    return bits.filter(Boolean).join(' · ');
+    var hours = hoursKnownText(point);
+    var price = priceLabel(point);
+    var last = !!dataSeason(point);
+    var bits = [];
+    if (hours) bits.push(hours);
+    if (price) bits.push(price);
+    var line = '';
+    if (bits.length) {
+      bits = bits.map(function (b, i) { return last || i > 0 ? lowerFirst(b) : b; });
+      line = (last ? 'Прошлой зимой: ' : '') + bits.join(' · ');
+    }
+    var out = [line];
+    if (!hours && point && point.phone) out.push('Часы уточняйте по телефону');
+    if (point && point.locating) out.push('адрес примерный');
+    return out.filter(Boolean).join(' · ');
+  }
+
+  /** Заголовок карточки: слово типа («Каток, », «Коробка, ») уже есть в надписи над ним. */
+  function cardTitle(point) {
+    var name = String((point && point.name) || '');
+    var m = /^(Каток|Коробка),\s+(.+)$/.exec(name);
+    return m ? m[2] : name;
   }
 
   function summaryLine(total, flooded) {
@@ -157,8 +223,8 @@
   function headline(total, flooded) {
     if (total > 0 && flooded === 0) {
       return {
-        title: 'Сезон открывается: ждём первые заливы',
-        hint: 'Как только где-то зальют, мы напишем в Telegram. Если вы рядом со льдом, отметьте его.',
+        title: 'Сезон открывается: ждём первую заливку',
+        hint: 'Как только где-то зальют, напишем в Telegram. Если вы рядом со льдом, отметьте его.',
         bellFirst: true,
       };
     }
@@ -268,7 +334,7 @@
   var QUESTIONS = [
     {
       key: 'ice',
-      label: 'ЛЁД',
+      label: 'Лёд',
       required: true,
       opts: [
         { id: 'on', label: 'Залит', api: 'flooded' },
@@ -278,7 +344,7 @@
     },
     {
       key: 'crowd',
-      label: 'ЛЮДЕЙ',
+      label: 'Людей',
       required: false,
       opts: [
         { id: 'few', label: 'Мало', api: 'few' },
@@ -288,7 +354,7 @@
     },
     {
       key: 'hockey',
-      label: 'ХОККЕЙ',
+      label: 'Хоккей',
       required: false,
       opts: [
         { id: 'yes', label: 'Идёт', api: 'playing' },
@@ -311,7 +377,7 @@
     return { ice: null, crowd: null, hockey: null };
   }
 
-  /** Повторный тап по выбранному снимает выбор: необязательные вопросы можно «отпустить». */
+  /** Повторный тап по выбранному снимает выбор. */
   function reportToggle(state, key, id) {
     var next = { ice: state.ice, crowd: state.crowd, hockey: state.hockey };
     next[key] = next[key] === id ? null : id;
@@ -326,11 +392,15 @@
     return reportCanSend(state) ? 'Отметить' : 'Сначала про лёд';
   }
 
-  function questionsView(state) {
-    return QUESTIONS.map(function (q) {
+  /** Вопросы шторки. Людей и хоккей спрашиваем только у залитой точки (opts.flooded). */
+  function questionsView(state, opts) {
+    var flooded = !!(opts && opts.flooded);
+    return QUESTIONS.filter(function (q) {
+      return q.key === 'ice' || flooded;
+    }).map(function (q) {
       return {
         key: q.key,
-        label: q.required ? q.label : q.label + ' · необязательно',
+        label: q.label,
         opts: q.opts.map(function (o) {
           return { id: o.id, label: o.label, selected: state[q.key] === o.id };
         }),
@@ -369,24 +439,19 @@
   }
 
   /**
-   * Что сказать после отметки. Не обещаем лишнего: с сайта «залит» весит полголоса и сам статус не меняет
-   * (нужен сигнал из Telegram или фото), поэтому объясняем это прямо, а не «статус изменился».
+   * Что сказать после отметки. Не обещаем лишнего: пока администратор не подтвердил, статус остаётся «Ждём заливку».
    */
-  function reportOutcome(state, result, source) {
+  function reportOutcome(state, result) {
     var ice = state.ice;
     var rule;
     if (ice === 'on') {
-      if (result && result.state === 'flooded') {
-        rule = 'Статус «Залит» уже подтверждён. Людей и хоккей видно 2 часа.';
-      } else if (source === 'site') {
-        rule = 'Спасибо! «Залит» появится у всех после проверки администратором — пока на странице «Ждём заливку».';
-      } else {
-        rule = 'Спасибо! «Залит» появится у всех после проверки администратором — пока на странице «Ждём заливку».';
-      }
+      rule = result && result.state === 'flooded'
+        ? 'Спасибо! Увидят все, кто выбирает, куда пойти.'
+        : 'Спасибо! Передали на проверку. Пока проверяем, на странице остаётся «Ждём заливку».';
     } else if (ice === 'bad') {
-      rule = '«Лёд плохой» виден 24 часа и на статус «Залит» не влияет.';
+      rule = 'Спасибо! Отметку «плохой лёд» увидят все в ближайшие сутки.';
     } else {
-      rule = 'Отметки «не залит» копятся: две за сутки от разных людей — и статус вернётся в «Ждём заливку».';
+      rule = 'Спасибо! Проверим и обновим статус.';
     }
     return { summary: reportSummary(state), rule: rule };
   }
@@ -418,10 +483,126 @@
     return rnd.slice(0, 32);
   }
 
-  /** Выбор «Уже залит / Не зальют» на странице «Ждём заливку» — те же отметки про лёд. */
+  /** Выбор «Уже залит / Ещё не залит» на странице «Ждём заливку» — те же отметки про лёд. */
   var QUICK = { on: 'flooded', off: 'not_flooded' };
   function quickPayload(choice) {
     return QUICK[choice] ? { kind: 'ice', value: QUICK[choice], companions: [] } : null;
+  }
+
+  /* --- свайп вниз по шторке ---------------------------------------------------------- */
+  var SWIPE_DISTANCE = 80; // px
+  var SWIPE_VELOCITY = 0.5; // px/ms
+  var SWIPE_FLICK_MIN = 20; // px: короткий дёрг пальца за пару миллисекунд не считаем смахиванием
+
+  /** Чистое решение: закрыть шторку или вернуть на место. dy — сдвиг вниз (px), ms — время жеста. */
+  function swipeDecision(dy, ms) {
+    if (!(dy > 0)) return 'snap';
+    if (dy > SWIPE_DISTANCE) return 'close';
+    var speed = dy / Math.max(1, ms || 0);
+    return dy >= SWIPE_FLICK_MIN && speed > SWIPE_VELOCITY ? 'close' : 'snap';
+  }
+
+  /** Во встроенном Telegram жест вниз сворачивает окно: на время шторки просим его не трогать. */
+  function tgVerticalSwipes(on) {
+    try {
+      var w = typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp;
+      if (!w) return;
+      if (on && w.enableVerticalSwipes) w.enableVerticalSwipes();
+      else if (!on && w.disableVerticalSwipes) w.disableVerticalSwipes();
+    } catch (e) { /* не мини-апп */ }
+  }
+
+  /**
+   * Свайп вниз по нижней шторке. Тянуть можно за ручку (верх панели) и за саму панель, когда она
+   * прокручена до верха. Панель идёт за пальцем (только вниз); отпустили дальше 80 px или быстро —
+   * закрываем, иначе возвращаем. prefers-reduced-motion: без анимации.
+   * parts: { panel, back, onClose }. Возвращает { reset }.
+   */
+  function attachSwipe(parts) {
+    var panel = parts.panel;
+    var back = parts.back;
+    var drag = null;
+    var HANDLE_ZONE = 40;
+    function reduced() {
+      return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+    function reset() {
+      panel.style.transition = '';
+      panel.style.transform = '';
+      if (back) back.style.opacity = '';
+    }
+    function start(y, target) {
+      var top = panel.getBoundingClientRect().top;
+      var onHandle = y - top <= HANDLE_ZONE || !!(target && target.closest && target.closest('.w-sheet__grab'));
+      if (!onHandle && panel.scrollTop > 0) return;
+      drag = { y0: y, t0: Date.now(), dy: 0, on: false, handle: onHandle };
+    }
+    function move(y, ev) {
+      if (!drag) return;
+      var dy = y - drag.y0;
+      if (!drag.on) {
+        if (dy > 6 && (drag.handle || panel.scrollTop <= 0)) {
+          drag.on = true;
+          drag.y0 = y;
+          drag.t0 = Date.now();
+          dy = 0;
+          panel.style.transition = 'none';
+        } else if (dy < -6) {
+          drag = null;
+          return;
+        } else return;
+      }
+      if (ev && ev.cancelable) ev.preventDefault();
+      drag.dy = Math.max(0, dy);
+      panel.style.transform = 'translateY(' + drag.dy + 'px)';
+      if (back) back.style.opacity = String(Math.max(0.2, 1 - drag.dy / 360));
+    }
+    function end() {
+      var d = drag;
+      drag = null;
+      if (!d || !d.on) return;
+      if (swipeDecision(d.dy, Date.now() - d.t0) === 'close') {
+        if (reduced()) {
+          parts.onClose();
+          reset();
+          return;
+        }
+        panel.style.transition = 'transform 160ms ease-out';
+        panel.style.transform = 'translateY(100%)';
+        setTimeout(function () {
+          parts.onClose();
+          reset();
+        }, 150);
+      } else if (reduced()) {
+        reset();
+      } else {
+        panel.style.transition = 'transform 180ms ease-out';
+        panel.style.transform = '';
+        if (back) back.style.opacity = '';
+      }
+    }
+    panel.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 1) start(e.touches[0].clientY, e.target);
+      else drag = null;
+    }, { passive: true });
+    panel.addEventListener('touchmove', function (e) { move(e.touches[0].clientY, e); }, { passive: false });
+    panel.addEventListener('touchend', end, { passive: true });
+    panel.addEventListener('touchcancel', end, { passive: true });
+    /* Мышь (десктоп, эмуляция): тот же жест через pointer events. */
+    panel.addEventListener('pointerdown', function (e) {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      start(e.clientY, e.target);
+      if (!drag) return;
+      var onMove = function (ev) { move(ev.clientY, ev); };
+      var onUp = function () {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        end();
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+    return { reset: reset };
   }
 
   return {
@@ -434,6 +615,14 @@
     distanceLabel: distanceLabel,
     ago: ago,
     dayMonth: dayMonth,
+    dayMonthRu: dayMonthRu,
+    disputeNote: disputeNote,
+    cardTitle: cardTitle,
+    hoursKnownText: hoursKnownText,
+    dataSeason: dataSeason,
+    swipeDecision: swipeDecision,
+    attachSwipe: attachSwipe,
+    tgVerticalSwipes: tgVerticalSwipes,
     checkedLine: checkedLine,
     pendingLine: pendingLine,
     liveTags: liveTags,

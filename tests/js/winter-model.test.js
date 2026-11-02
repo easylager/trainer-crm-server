@@ -33,24 +33,46 @@ describe('статус и подписи', () => {
     assert.equal(W.stateView(pt({ state: 'waiting' })).label, 'Ждём заливку');
   });
 
-  it('спор отметок даёт знак «!» на пине, статус остаётся', () => {
-    const v = W.stateView(pt({ state: 'flooded', dispute: true }));
+  it('спор отметок у залитой: знак «!» на пине, статус остаётся, текст нейтральный', () => {
+    const p = pt({ state: 'flooded', dispute: true });
+    const v = W.stateView(p);
     assert.equal(v.pin, 'dispute');
     assert.equal(v.label, 'Залит');
+    assert.equal(W.disputeNote(p), 'Есть отметки «не залит» · проверяем');
+    assert.ok(!/расходятся/.test(W.disputeNote(p)));
+  });
+
+  it('спор у не залитой точки ничего не показывает', () => {
+    const p = pt({ state: 'waiting', dispute: true });
+    assert.equal(W.disputeNote(p), '');
+    assert.equal(W.stateView(p).pin, 'wait');
   });
 
   it('цена: бесплатно / платно / неизвестно — «бесплатно» по умолчанию не подставляем', () => {
     assert.equal(W.priceLabel(pt({ is_paid: false })), 'Бесплатно');
     assert.equal(W.priceLabel(pt({ is_paid: true })), 'Платно');
-    assert.equal(W.priceLabel(pt({ is_paid: null })), 'Цена уточняется');
+    assert.equal(W.priceLabel(pt({ is_paid: null })), '');
   });
 
-  it('часы всегда с подписью сезона, без «открыто сейчас»; нет часов — честная строка', () => {
-    const known = pt({ hours: { known: true, summary: 'Ежедневно 7:00–23:00', label: 'зимой 2025/26' } });
-    assert.equal(W.hoursLabel(known), 'Ежедневно 7:00–23:00 · зимой 2025/26');
-    assert.equal(W.hoursLabel(pt()), 'Часы уточняйте по телефону');
+  it('карточка: часы и цена прошлой зимы с префиксом, без «открыто сейчас»', () => {
+    const known = pt({ hours: { known: true, summary: 'Ежедневно 07:00–23:00', label: 'зимой 2025/26', season: '2025/26' } });
+    assert.equal(W.cardMeta(known), 'Прошлой зимой: ежедневно 07:00–23:00 · бесплатно');
+    assert.equal(W.hoursLabel(known), 'Ежедневно 07:00–23:00');
     assert.ok(!/открыт/i.test(W.cardMeta(known)));
-    assert.ok(!/круглосуточ/i.test(W.hoursLabel(pt())));
+    assert.equal(W.dataSeason(known), '2025/26');
+  });
+
+  it('карточка: часов нет — подсказка про телефон только при телефоне; цены нет — молчим', () => {
+    assert.equal(W.cardMeta(pt({ is_paid: null })), '');
+    assert.equal(W.cardMeta(pt({ is_paid: null, phone: '+375 17 000-00-00' })), 'Часы уточняйте по телефону');
+    assert.equal(W.hoursLabel(pt()), '');
+    assert.ok(!/Цена уточняется/.test(W.cardMeta(pt({ is_paid: null }))));
+  });
+
+  it('заголовок карточки без дубля слова «Каток, » / «Коробка, »', () => {
+    assert.equal(W.cardTitle(pt({ name: 'Каток, ул. Плеханова, 70' })), 'ул. Плеханова, 70');
+    assert.equal(W.cardTitle(pt({ name: 'Коробка, пр. Рокоссовского, 128' })), 'пр. Рокоссовского, 128');
+    assert.equal(W.cardTitle(pt({ name: 'Каток Юность' })), 'Каток Юность');
   });
 
   it('расстояние: метры до километра, запятая, неточная точка без расстояния', () => {
@@ -62,7 +84,7 @@ describe('статус и подписи', () => {
   it('строка «когда отметили»: людской статус — давность, админский — дата, ожидание — пусто', () => {
     const now = new Date('2026-12-10T12:00:00Z');
     assert.equal(W.checkedLine(pt({ state: 'flooded', checked_by: 'people', state_at: '2026-12-10T11:20:00Z' }), now), 'Отметили 40 мин назад');
-    assert.equal(W.checkedLine(pt({ state: 'flooded', checked_by: 'admin', state_at: '2026-12-09T22:30:00Z' }), now), 'Проверено 10.12');
+    assert.equal(W.checkedLine(pt({ state: 'flooded', checked_by: 'admin', state_at: '2026-12-09T22:30:00Z' }), now), 'Заливку подтвердили 10 декабря');
     assert.equal(W.checkedLine(pt({ state: 'waiting', checked_by: null, state_at: '2026-12-01T00:00:00Z' }), now), '');
   });
 
@@ -78,15 +100,16 @@ describe('статус и подписи', () => {
     assert.deepEqual(W.liveTags(pt({ hockey: 'playing', hockey_at: '2026-12-10T11:59:40Z' }), now), ['Идёт хоккей · только что']);
   });
 
-  it('неточная точка в карточке честно говорит «точку уточняем»', () => {
-    assert.match(W.cardMeta(pt({ locating: true })), /точку уточняем/);
+  it('неточная точка в карточке честно говорит «адрес примерный»', () => {
+    assert.match(W.cardMeta(pt({ locating: true })), /адрес примерный/);
   });
 });
 
 describe('заголовок и пустое состояние (U4)', () => {
   it('ноль залитых — «Сезон открывается», подписка поднята', () => {
     const h = W.headline(63, 0);
-    assert.equal(h.title, 'Сезон открывается: ждём первые заливы');
+    assert.equal(h.title, 'Сезон открывается: ждём первую заливку');
+    assert.equal(h.hint, 'Как только где-то зальют, напишем в Telegram. Если вы рядом со льдом, отметьте его.');
     assert.equal(h.bellFirst, true);
     assert.equal(W.summaryLine(63, 0).includes('залиты 0'), false);
   });
@@ -173,25 +196,29 @@ describe('шторка «Как там сейчас?»', () => {
     });
   });
 
-  it('вопросов три, необязательные подписаны', () => {
-    const q = W.questionsView(W.reportInit());
-    assert.equal(q.length, 3);
-    assert.equal(q[0].label, 'ЛЁД');
-    assert.match(q[1].label, /необязательно/);
+  it('у залитой точки три вопроса с короткими подписями', () => {
+    const q = W.questionsView(W.reportInit(), { flooded: true });
+    assert.deepEqual(q.map((x) => x.label), ['Лёд', 'Людей', 'Хоккей']);
   });
 
-  it('ответ: что уже на странице и правило; с сайта «залит» не обещает смену статуса', () => {
+  it('у не залитой точки спрашиваем только про лёд', () => {
+    assert.deepEqual(W.questionsView(W.reportInit(), { flooded: false }).map((x) => x.key), ['ice']);
+    assert.deepEqual(W.questionsView(W.reportInit()).map((x) => x.key), ['ice']);
+  });
+
+  it('ответ после отметки: тексты по состояниям', () => {
     let s = W.reportToggle(W.reportInit(), 'ice', 'on');
     s = W.reportToggle(s, 'crowd', 'few');
-    const site = W.reportOutcome(s, { state: 'waiting' }, 'site');
-    assert.equal(site.summary, 'Залит · мало людей · только что');
-    assert.match(site.rule, /администратором/);
-    const tg = W.reportOutcome(s, { state: 'flooded' }, 'miniapp');
-    assert.match(tg.rule, /уже подтверждён/);
+    const pending = W.reportOutcome(s, { state: 'waiting' }, 'site');
+    assert.equal(pending.summary, 'Залит · мало людей · только что');
+    assert.equal(pending.rule, 'Спасибо! Передали на проверку. Пока проверяем, на странице остаётся «Ждём заливку».');
+    assert.equal(W.reportOutcome(s, { state: 'waiting' }, 'miniapp').rule, pending.rule);
+    assert.equal(W.reportOutcome(s, { state: 'flooded' }, 'miniapp').rule, 'Спасибо! Увидят все, кто выбирает, куда пойти.');
     const off = W.reportOutcome(W.reportToggle(W.reportInit(), 'ice', 'off'), { state: 'waiting' }, 'site');
-    assert.match(off.rule, /две за сутки/);
+    assert.equal(off.rule, 'Спасибо! Проверим и обновим статус.');
     const bad = W.reportOutcome(W.reportToggle(W.reportInit(), 'ice', 'bad'), { state: 'flooded' }, 'site');
-    assert.match(bad.rule, /не влияет/);
+    assert.equal(bad.rule, 'Спасибо! Отметку «плохой лёд» увидят все в ближайшие сутки.');
+    assert.ok(!/вес|порог|две за сутки/.test(off.rule + bad.rule));
   });
 
   it('ошибки: лимит с ожиданием, устаревшая страница, снятая точка, сеть', () => {
@@ -203,7 +230,7 @@ describe('шторка «Как там сейчас?»', () => {
     assert.match(W.reportErrorText(0), /Не удалось отправить/);
   });
 
-  it('быстрые отметки «Уже залит / Не зальют» — те же отметки про лёд', () => {
+  it('быстрые отметки «Уже залит / Ещё не залит» — те же отметки про лёд', () => {
     assert.equal(W.quickPayload('on').value, 'flooded');
     assert.equal(W.quickPayload('off').value, 'not_flooded');
     assert.equal(W.quickPayload('x'), null);
@@ -226,7 +253,26 @@ describe('pending: люди отметили «залит», админ не п�
     assert.equal(W.stateView(p).label, 'Ждём заливку');
   });
 
-  it('источник/админ — «Проверено DD.MM»', () => {
-    assert.equal(W.checkedLine(pt({ state: 'flooded', checked_by: 'source', state_at: '2026-12-09T22:30:00Z' }), new Date('2026-12-10T12:00:00Z')), 'Проверено 10.12');
+  it('источник/админ: у залитой «Заливку подтвердили 2 ноября», у остальных «Проверено 2 ноября»', () => {
+    const now = new Date('2026-12-10T12:00:00Z');
+    assert.equal(W.checkedLine(pt({ state: 'flooded', checked_by: 'source', state_at: '2026-11-02T10:00:00Z' }), now), 'Заливку подтвердили 2 ноября');
+    assert.equal(W.checkedLine(pt({ state: 'stale', checked_by: 'admin', state_at: '2026-11-02T10:00:00Z' }), now), 'Проверено 2 ноября');
+    assert.equal(W.checkedLine(pt({ state: 'closed', checked_by: 'admin', state_at: '2025-11-02T10:00:00Z' }), now), 'Проверено 2 ноября 2025');
+  });
+});
+
+describe('свайп вниз по шторке', () => {
+  it('дальше 80 px закрывает', () => {
+    assert.equal(W.swipeDecision(81, 2000), 'close');
+    assert.equal(W.swipeDecision(80, 2000), 'snap');
+  });
+  it('быстрый бросок (> 0.5 px/ms) закрывает, медленный короткий — возвращает', () => {
+    assert.equal(W.swipeDecision(40, 60), 'close');
+    assert.equal(W.swipeDecision(40, 100), 'snap');
+  });
+  it('случайный дёрг на пару пикселей не закрывает; движение вверх — никогда', () => {
+    assert.equal(W.swipeDecision(8, 4), 'snap');
+    assert.equal(W.swipeDecision(0, 10), 'snap');
+    assert.equal(W.swipeDecision(-120, 50), 'snap');
   });
 });

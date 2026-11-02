@@ -194,6 +194,7 @@ body.tg-dark {
 .w-kv dd { margin: 0; overflow-wrap: anywhere; }
 .w-kv dd small { color: var(--g-muted); font-size: 13px; }
 .w-kv a { font-weight: 600; text-decoration: none; }
+.w-kv + .w-kv { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--g-line); }
 .w-routes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .w-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .w-gallery img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--g-r-sm); display: block; }
@@ -219,7 +220,7 @@ body.tg-dark {
 /* Вопросы и кнопка отправки не должны слипаться */
 .w-sheet [data-w-asking], .w-sheet [data-w-questions] { display: flex; flex-direction: column; gap: 18px; }
 .w-q { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
-.w-q legend { padding: 0; font-size: 13px; font-weight: 600; letter-spacing: .04em; color: var(--g-muted); margin-bottom: 8px; }
+.w-q legend { padding: 0; text-transform: uppercase; font-size: 13px; font-weight: 600; letter-spacing: .04em; color: var(--g-muted); margin-bottom: 8px; }
 .w-q__row { display: flex; gap: 6px; }
 .w-opt {
   flex: 1; min-height: 48px; border-radius: var(--g-r-sm); border: 1px solid var(--g-line-strong);

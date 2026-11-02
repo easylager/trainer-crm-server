@@ -235,7 +235,7 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
         "hours": {
             "known": hours_known, "weekly": hours_weekly,
             "summary": hours_summary,
-            "text": hours_text, "label": hours_label,
+            "text": hours_text, "label": hours_label, "season": r.hours_season if hours_label else None,
             "season_from": r.season_from, "season_to": r.season_to,
             "fallback": None if hours_known else "Часы уточняйте по телефону",
         },
