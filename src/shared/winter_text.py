@@ -104,3 +104,48 @@ def phone_links(raw: str | None) -> list[tuple[str, str]]:
             continue
         out.append((format_phone_display(part), tel_href(part) or re.sub(r"[^\d+]", "", part)))
     return out
+
+
+# --- официальные названия -------------------------------------------------------------
+# Юр. формы и аббревиатуры учреждений, которые ничего не говорят человеку на карточке катка.
+_LEGAL_FORMS = r"(?:ГУО|ГКСУ|ГУСК|ГУФК|КУПП|КУП|РУП|ГУ|УО|УП|ООО|ЗАО|ОАО|ОДО|ЧУП|МКСК)"
+_INSTITUTION_ABBR = r"(?:РЦОП(?:\s+по\s+[а-яё]+\s+видам\s+спорта)?|ЦФОР|ЦФК|СДЮШОР|ДЮСШ|НОК\s+РБ|РЦОПсф)"
+_LEGAL_WITH_QUOTE_RE = re.compile(rf"(?<![А-ЯЁа-яё]){_LEGAL_FORMS}\s*«")
+_LEGAL_RE = re.compile(rf"(?<![А-ЯЁа-яё]){_LEGAL_FORMS}(?![А-ЯЁа-яё])")
+_ABBR_RE = re.compile(rf"(?<![А-ЯЁа-яё]){_INSTITUTION_ABBR}(?![А-ЯЁа-яё])")
+_LEGAL_PAREN_RE = re.compile(rf"\s*\([^)]*(?<![А-ЯЁа-яё]){_LEGAL_FORMS}(?![А-ЯЁа-яё])[^)]*\)")
+_TOWN_RE = re.compile(r"\s*\bг\.\s?[А-ЯЁ][А-ЯЁа-яёіўІЎ\-]+")
+_GENERIC_ONLY_RE = re.compile(r"^(?:мобильный\s+)?(?:каток|коробка|хоккейная\s+коробка|ледовая\s+площадка)$", re.IGNORECASE)
+
+
+def clean_official_name(name: str | None) -> str | None:
+    """«Мобильный каток ГУ «ЦФОР Заводского района г.Минска»» -> «Мобильный каток Заводского района».
+
+    Убирает юр. формы (ГУ, ГУО, ГКСУ, УО, УП…), аббревиатуры учреждений (ЦФОР, РЦОП, СДЮШОР…) и «г.Минска».
+    Кавычки-обёртки организации снимаются, кавычки бренда («Динамо», «Замок») остаются.
+    ``None`` — осмысленного имени не осталось (вызывающий строит «Каток/Коробка, <адрес>»).
+    """
+    raw = " ".join((name or "").split())
+    if not raw:
+        return None
+    s = _LEGAL_PAREN_RE.sub("", raw)
+    had_wrapper = bool(_LEGAL_WITH_QUOTE_RE.search(s))
+    s = _LEGAL_WITH_QUOTE_RE.sub("", s, count=1)
+    if had_wrapper and s.count("»") > s.count("«"):
+        i = s.rfind("»")
+        s = s[:i] + s[i + 1:]
+    s = _LEGAL_RE.sub("", s)
+    s = _ABBR_RE.sub("", s)
+    s = _TOWN_RE.sub("", s)
+    s = re.sub(r"\s+", " ", s).strip(" ,;-–—")
+    if s.startswith("«") and s.endswith("»") and s.count("«") == 1:  # вся строка в кавычках бренда
+        s = s[1:-1].strip()
+    s = re.sub(r"«\s+", "«", s)
+    s = re.sub(r"\s+»", "»", s)
+    s = re.sub(r"\s+\)", ")", s)
+    letters = re.sub(r"[^A-Za-zА-Яа-яЁёІіЎў]", "", s)
+    if len(letters) < 4 or not (s[0].isupper() or s[0] in "«№0123456789"):
+        return None  # «по фигурному катанию» — не имя
+    if _GENERIC_ONLY_RE.match(s):
+        return None
+    return s[:128]

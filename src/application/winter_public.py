@@ -24,7 +24,7 @@ from src.application.winter_links import (
 from src.shared import winter_status as ws
 from src.shared.config import Settings
 from src.shared.winter_hours import hours_summary_ru
-from src.shared.winter_text import phone_links
+from src.shared.winter_text import clean_official_name, phone_links
 
 TOKEN_TTL = timedelta(minutes=30)
 SHARED_PHONE_MIN = 3
@@ -116,6 +116,11 @@ async def _photos(session: AsyncSession, ids: list[int]) -> dict[int, list[dict[
     return out
 
 
+def display_name(name: str, own: bool) -> str:
+    """Зимние точки показываем без юр. форм и «г.Минска»; арены каталога (Немига) называются как в каталоге."""
+    return (clean_official_name(name) or name) if own else name
+
+
 def arena_hours_summary(opening_hours: Any) -> str | None:
     """Часы профиля арены каталога: ``weekly`` как у зимних точек или ``daily {open, close}``."""
     if not isinstance(opening_hours, dict):
@@ -166,7 +171,7 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
             is_paid, price_note = True, price
         phone = r.profile_phone or phone
     item: dict[str, Any] = {
-        "id": int(r.id), "slug": r.slug, "name": r.name, "kind": r.kind, "district": r.district,
+        "id": int(r.id), "slug": r.slug, "name": display_name(r.name, own), "kind": r.kind, "district": r.district,
         "city_id": int(r.city_id), "city": r.city_name, "address": r.address,
         "state": r.state, "state_at": r.state_at.isoformat() if r.state_at else None,
         "checked_by": "admin" if r.state_source == "admin" else ("people" if r.state_source == "engine" else None),

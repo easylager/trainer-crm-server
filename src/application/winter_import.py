@@ -33,6 +33,7 @@ from src.shared.winter_hours import ParsedHours, parse_hours
 from src.shared.winter_status import current_season, season_label
 from src.shared.winter_text import (
     first_address,
+    clean_official_name,
     generated_name,
     is_indoor_name,
     is_school_name,
@@ -148,6 +149,14 @@ def plan_rows(rows: Iterable[dict[str, str]]) -> list[PlannedPoint]:
             name = generated_name(kind, address, district, city)
             name_source = "generated"
             operator = raw_name or None
+        else:
+            cleaned = clean_official_name(raw_name)
+            if cleaned is None:
+                name = generated_name(kind, address, district, city)
+                name_source = "generated"
+                operator = raw_name
+            else:
+                name = cleaned
         hours = parse_hours(r.get("hours"))
         paid = (r.get("paid") or "").strip().lower() == "платный"
         key = _source_key(city, kind, norm_addr, name, lat, lon, i)
