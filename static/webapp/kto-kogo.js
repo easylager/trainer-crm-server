@@ -29,6 +29,7 @@
     doubles: [],
     drafts: {}, // id матча → черновик счёта [дома, в гостях], пока он не ушёл на сервер или это ничья
     scoreOpen: {}, // id матча → раскрыты степперы в строке дня
+    matchesFailed: false, // список матчей не загрузился (нет сети) — хаб показывает «Повторить»
     hubReady: false, // хаб прошёл первую загрузку (профиль, матчи, матчи клуба)
     stakes: {}, // id матча → {loading, data}
     movement: {}, // id матча → {loading, data}
@@ -84,11 +85,16 @@
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
-    return fetch((isPublic ? '/api/public' : '/api/webapp') + path, opts).then(function (r) {
+    return fetch((isPublic ? '/api/public' : '/api/webapp') + path, opts).catch(function () {
+      // Нет сети: браузер отдаёт «Failed to fetch» по-английски, игроку это показывать нельзя.
+      var offline = new Error('Нет связи. Проверь интернет и попробуй ещё раз');
+      offline.status = 0;
+      throw offline;
+    }).then(function (r) {
       if (r.status === 204) return null;
       return r.json().catch(function () { return {}; }).then(function (data) {
         if (!r.ok) {
-          var e = new Error((data && typeof data.detail === 'string' && data.detail) || 'Не получилось. Попробуйте ещё раз');
+          var e = new Error((data && typeof data.detail === 'string' && data.detail) || 'Не получилось. Попробуй ещё раз');
           e.status = r.status;
           throw e;
         }
@@ -223,6 +229,11 @@
 
   function loading() {
     return h('div', { class: 'kk-skel', role: 'status', 'aria-label': 'Загружаем' });
+  }
+
+  /** Загрузка не удалась: объясняем и даём повторить, а не оставляем вечную заглушку. */
+  function retryCard(text, onRetry) {
+    return emptyCard('НЕ ЗАГРУЗИЛОСЬ', text || 'Проверь интернет и попробуй ещё раз.', h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: onRetry, text: 'Повторить' }));
   }
 
   function emptyCard(head, text, cta) {
@@ -411,6 +422,8 @@
 
   function sendPick(match, body, optimistic) {
     var before = match.my_pick;
+    // Ответы могут прийти не по порядку: учитываем только последний отправленный ход.
+    var seq = (match.pickSeq = (match.pickSeq || 0) + 1);
     // Козырь живёт на ходе: смена стороны или счёта его не снимает.
     if (before && before.doubled) optimistic.doubled = true;
     match.my_pick = optimistic;
@@ -418,6 +431,7 @@
     render();
     return api('PUT', '/client/hockey/matches/' + match.id + '/pick', body)
       .then(function (data) {
+        if (match.pickSeq !== seq) return;
         match.my_pick = data && data.my_pick;
         delete state.stakes[match.id];
         haptic('success');
@@ -425,7 +439,7 @@
         if (current() && current().name === 'match') loadStakes(match.id, true).then(render);
       })
       .catch(function (e) {
-        match.my_pick = before;
+        if (match.pickSeq === seq) match.my_pick = before;
         if (e.status === 409) match.open = false;
         toast(e.message);
       });
@@ -595,9 +609,12 @@
         toast('Напоминания выключены');
       }, function () {});
     }
-    Promise.all([loadMatches(), loadPrefs(), loadRemind()])
+    var loadError = null;
+    // Список матчей не загрузился — всё равно открываем нужный экран: у каждого есть своё «Повторить».
+    Promise.all([loadMatches().catch(function (e) { loadError = e; state.matchesFailed = true; }), loadPrefs(), loadRemind()])
       .then(function () {
         state.loading = false;
+        if (loadError) fail(loadError);
         var target = pickId && findMatch(pickId);
         // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
         if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
@@ -626,7 +643,7 @@
 
   window.KK = {
     M: M, S: S, tg: tg, params: params, state: state, h: h, icon: icon, I: I, CROWN: CROWN, crownIcon: crownIcon, crownTag: crownTag,
-    ava: ava, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard,
+    ava: ava, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard, retryCard: retryCard,
     sheet: sheet, closeSheet: closeSheet, api: api, toast: toast, fail: fail, haptic: haptic, render: render, register: register,
     go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
     loadMatches: loadMatches, loadClubMatches: loadClubMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,

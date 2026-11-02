@@ -367,7 +367,7 @@ async def test_month_final_message_at_noon_for_top_players(db_session, factory) 
     assert set(by_player) == {SASHA, KATYA, LESHA}  # у Вовы очков нет, он вне тройки
     assert by_player[SASHA].text.startswith(
         "<b>Корона ноября решится сегодня:</b> Юность — Гомель, 19:00, последний матч месяца. "
-        "Ты на 1-м месте, Лёша в 20 очков позади."
+        "Ты на 1-м месте, Лёша позади на 20 очков."
     )
     assert "до короны 30 очков" in by_player[KATYA].text
     assert by_player[SASHA].buttons[0][0]["callback_data"] == f"kk:p:{last}:h"

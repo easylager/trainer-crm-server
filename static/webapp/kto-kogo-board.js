@@ -12,6 +12,7 @@
   var I = K.I;
   var state = K.state;
   var icon = K.icon;
+  var NBSP = '\u00a0';
 
   function name(t) {
     return S.clubName(t.name);
@@ -51,7 +52,7 @@
       icon(I.bell, 20),
       h('span', { class: 'kk-grow kk-col' }, [
         h('b', { text: state.remind ? 'Напомню о ходе за 3 часа до матча' : 'Напомнить о ходе за 3 часа до матча' }),
-        h('span', { class: 'kk-sub', text: 'если хода нет — по матчу твоей команды; и пришлю итог с местом в таблице' }),
+        h('span', { class: 'kk-sub', text: 'Если хода ещё нет — по матчу твоей команды. После матча пришлю итог и твоё место в таблице.' }),
       ]),
       h('button', { type: 'button', class: 'kk-toggle' + (state.remind ? ' is-on' : ''), role: 'switch', 'aria-checked': state.remind ? 'true' : 'false', 'aria-label': 'Напоминать о ходе за 3 часа до матча', onclick: function () { setRemind(!state.remind); } }, [h('span')]),
     ]);
@@ -76,7 +77,7 @@
       return h('section', { class: 'kk-card kk-card--fan kk-card--intro' }, [
         K.sticker('КТО КОГО'),
         h('b', { class: 'kk-hd', text: 'Угадай матч — один тап' }),
-        h('span', { class: 'kk-tx', text: 'Тап за команду в карточке матча — и ты в игре, регистрации нет. В таблице появишься после первого итога, сразу во всех срезах этого матча.' }),
+        h('span', { class: 'kk-tx', text: 'Тап за команду в карточке матча — и ты в игре, регистрации нет. В таблице появишься после первого итога.' }),
       ]);
     }
     var club = p.club;
@@ -87,7 +88,7 @@
       K.sticker('КТО КОГО'),
       club ? K.logoDisc(club, 52) : K.worldDisc(52),
       h('span', { class: 'kk-col kk-grow' }, [
-        h('span', { class: 'kk-fan__t', text: (p.display_name || 'Ты') + (club ? ' · за ' + name(club) : '') }),
+        h('span', { class: 'kk-fan__t' }, [(p.display_name || 'Ты'), club ? ' · ' : null, club ? h('span', { class: 'kk-nowrap', text: 'за ' + name(club) }) : null]),
         h('span', { class: 'kk-fan__s' }, [
           crowns ? h('span', { class: 'kk-crownw kk-crownw--on' }, [K.crownIcon(14), S.crownCount(crowns)]) : null,
           p.streak ? h('span', { text: 'серия ' + p.streak }) : null,
@@ -133,7 +134,7 @@
 
   K.register('hub', {
     enter: function () {
-      Promise.all([K.loadProfile(), K.loadPeaks(), K.loadLeagues(true).catch(function () {}), K.loadMatches().catch(function () {})])
+      Promise.all([K.loadProfile(), K.loadPeaks(), K.loadLeagues(true).catch(function () {}), K.loadMatches().then(function () { state.matchesFailed = false; }, function () { state.matchesFailed = true; })])
         .then(K.loadClubMatches)
         .then(function () { state.hubReady = true; K.render(); }, function (e) { state.hubReady = true; K.fail(e); });
     },
@@ -196,7 +197,8 @@
     enter: function (a) {
       a.club = a.club || null;
       a.period = a.period || 'season';
-      Promise.all([loadTable(a), K.loadClubs().catch(function () {}), K.loadPeaks(), K.loadProfile()]).then(K.render, K.fail);
+      a.failed = false;
+      Promise.all([loadTable(a), K.loadClubs().catch(function () {}), K.loadPeaks(), K.loadProfile()]).then(K.render, function (e) { a.failed = true; K.render(); K.fail(e); });
     },
     render: function (a) {
       var view = state.tables[tableKey(a)];
@@ -214,14 +216,14 @@
         peaks.length ? h('div', { class: 'kk-scs' }, [h('span', { class: 'kk-sub kk-nowrap', text: 'Твои вершины:' })].concat(peaks)) : null,
       ]);
       if (!view) {
-        main.appendChild(K.loading());
+        main.appendChild(a.failed ? K.retryCard('Таблица не загрузилась.', function () { a.failed = false; K.render(); load(a); }) : K.loading());
         return [main];
       }
       main.appendChild(h('div', { class: 'kk-crownbar' }, [K.crownIcon(18), h('span', { text: S.tableCrownLine(view, a.club, a.period, view.period && view.period.kind === 'season' ? view.period.title : seasonTitle) })]));
       var few = S.fewPlayers(view, a.club, a.period);
       if (few) {
         main.appendChild(h('section', { class: 'kk-card kk-note' }, [
-          h('span', { class: 'kk-lbl', text: 'МАЛО ИГРОКОВ В СРЕЗЕ' }),
+          h('span', { class: 'kk-lbl', text: 'МАЛО ИГРОКОВ' }),
           h('b', { class: 'kk-hd', text: few.head }),
           h('span', { class: 'kk-tx', text: few.body }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.go('leagueNew', { club: a.club }); }, text: few.invite }),
@@ -265,21 +267,22 @@
     },
   });
 
-  /** Сменили фильтр: показываем то, что есть, и догружаем срез. */
+  /** Сменили фильтр: показываем то, что есть, и догружаем таблицу. */
   function load(a) {
     K.render();
-    if (!state.tables[tableKey(a)]) loadTable(a).then(K.render, K.fail);
+    if (!state.tables[tableKey(a)]) loadTable(a).then(K.render, function (e) { a.failed = true; K.render(); K.fail(e); });
   }
 
   // ---------- Карточка болельщика ----------
 
   K.register('profile', {
     enter: function () {
-      Promise.all([K.loadProfile(true), K.loadPeaks(), K.loadLeagues().catch(function () {})]).then(K.render, K.fail);
+      state.profileFailed = false;
+      Promise.all([K.loadProfile(true), K.loadPeaks(), K.loadLeagues().catch(function () {})]).then(function () { state.profileFailed = !state.profile; K.render(); }, function (e) { state.profileFailed = true; K.render(); K.fail(e); });
     },
     render: function () {
       var p = state.profile;
-      if (!p) return [h('main', { class: 'kk-main' }, [K.topbar('Болельщик', null), K.loading()])];
+      if (!p) return [h('main', { class: 'kk-main' }, [K.topbar('Болельщик', null), state.profileFailed ? K.retryCard('Карточка болельщика не загрузилась.', function () { K.replace('profile', {}); }) : K.loading()])];
       var club = p.club;
       var best = (state.peaks || [])[0];
       var main = h('main', { class: 'kk-main' }, [K.topbar('Болельщик', 'сезон ' + p.season)]);
@@ -295,14 +298,14 @@
           stat(String(p.exact), M.plural(p.exact, 'точный', 'точных', 'точных')),
           stat(String(p.streak), 'серия · лучшая ' + p.best_streak),
         ]),
-        best ? h('span', { class: 'kk-fan__line', text: 'Лучший срез: ' + S.sliceLabel(best.club, best.period_title) + ' — место ' + best.rank + ' из ' + S.spaced(best.players) }) : null,
+        best ? h('span', { class: 'kk-fan__line', text: 'Лучшее место: ' + S.sliceLabel(best.club, best.period_title) + ' — ' + best.rank + NBSP + 'из' + NBSP + S.spaced(best.players) }) : null,
       ]));
       var crowns = (p.crowns || []).slice(0, 6);
       main.appendChild(h('div', { class: 'kk-sec' }, [
         h('span', { class: 'kk-lbl', text: 'КОРОНЫ' }),
         crowns.length
           ? h('div', { class: 'kk-rows' }, crowns.map(function (c) { return h('div', { class: 'kk-cr' }, [K.crownIcon(20), h('span', { class: 'kk-grow', text: S.crownLabel(c) })]); }))
-          : h('div', { class: 'kk-cr kk-cr--empty' }, [K.crownIcon(20), h('span', { class: 'kk-grow', text: 'Корона — за первое место месяца, когда в срезе очки у троих и больше' })]),
+          : h('div', { class: 'kk-cr kk-cr--empty' }, [K.crownIcon(20), h('span', { class: 'kk-grow', text: 'Корона — за первое место месяца, если очки хотя бы у троих' })]),
       ]));
       var lines = S.seasonTitleLine(p, p.season);
       var earned = (p.titles || []).map(function (t) {

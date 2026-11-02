@@ -163,7 +163,7 @@
           h('span', { class: 'kk-badge-big', 'aria-hidden': 'true', text: l.name.slice(0, 2).toUpperCase() }),
           h('h2', { class: 'kk-h2 kk-h2--xl', text: '«' + l.name + '» готова' }),
           h('span', { class: 'kk-sub', text: S.leagueSub(l) + '. Пока в лиге только ты — позови своих, очки за матчи пойдут и сюда, и в общую таблицу.' }),
-          l.few_matches ? h('span', { class: 'kk-tx kk-tx--warn', text: 'Матчей в сроке мало — таблица будет почти пустой.' }) : null,
+          l.few_matches ? h('span', { class: 'kk-tx kk-tx--warn', text: 'Матчей до конца лиги мало — таблица будет почти пустой.' }) : null,
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l)); }, text: 'Позвать в Telegram' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.copy(l.invite_url); }, text: 'Скопировать ссылку' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'К игре' }),
@@ -238,7 +238,7 @@
           h('h1', { class: 'kk-h1 kk-h1--xl', text: l.name }),
           h('div', { class: 'kk-lmeta' }, [h('span', { class: 'kk-logos' }, clubLogos(l)), h('span', { text: S.leagueMeta(l, items.length) + (l.active ? '' : ' · закончилась') })]),
         ]),
-        seg([['month', monthName], ['all', 'Весь срок']], a.tab, function (id) {
+        seg([['month', monthName], ['all', 'Вся лига']], a.tab, function (id) {
           a.tab = id;
           K.render();
           loadLeague(a).then(K.render, K.fail);
@@ -302,7 +302,7 @@
       }
       if (s.kind === 'extend') {
         return K.sheet('Продлить «' + (l.name || '') + '»', null, [
-          h('span', { class: 'kk-tx', text: 'Появится новая лига с теми же людьми и теми же командами — на следующий срок. Участникам придёт сообщение, выйти можно в один тап. Старая лига и её короны остаются.' }),
+          h('span', { class: 'kk-tx', text: 'Появится новая лига с теми же людьми и теми же командами — на следующий круг. Участникам придёт сообщение, выйти можно в один тап. Старая лига и её короны остаются.' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', text: 'Продлить', onclick: function () {
             K.api('POST', '/client/hockey/leagues/' + a.id + '/extend', {})
               .then(function (next) {

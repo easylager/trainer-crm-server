@@ -126,7 +126,7 @@
     var colors = M.pairColors(m.home, m.away);
     var trump = S.trumpState(m, state.doubles, new Date().toISOString());
     var team = mine ? name(m[mine.side]) : '';
-    var pts = mine ? S.pointsLine(mine) : S.pointsLine(null) + '. Меняй до ' + S.timeOnly(m.starts_at) + '.';
+    var pts = mine ? S.pointsLine(mine) : S.pointsLine(null) + '. Ходы — до ' + S.timeOnly(m.starts_at) + '.';
     var center = h('div', { class: 'kk-hero__mid' }, [
       h('span', { class: 'kk-hero__time', text: S.timeOnly(m.starts_at) }),
       h('span', { class: 'kk-hero__day', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] }),
@@ -274,7 +274,7 @@
         var d = S.duelLive(mine, f, m.live);
         var scoreText = d.me == null || d.they == null ? '—' : d.me + ' : ' + d.they;
         return h('div', { class: 'kk-mv' }, [
-          h('span', { class: 'kk-mv__l', text: 'с ' + f.display_name + ' · за ' + name(m[f.side]) }),
+          h('span', { class: 'kk-mv__l', text: f.display_name + ' · за ' + name(m[f.side]) }),
           h('span', { class: 'kk-mv__r' }, [h('b', { text: scoreText }), h('span', { class: 'kk-pill' + (d.state === 'lead' ? ' kk-pill--gold' : ''), text: d.label })]),
         ]);
       })),
@@ -308,10 +308,10 @@
     if (!done.length || mineTotal == null) return null;
     var f = done[0];
     var res = S.duelFinal(mineTotal, f.points);
-    var head = res === 'win' ? 'Дуэль с ' + f.display_name + ' — твоя' : res === 'lose' ? 'Дуэль с ' + f.display_name + ' — не твоя' : 'Дуэль с ' + f.display_name + ' — ничья';
+    var head = 'Дуэль · ' + f.display_name + ' — ' + (res === 'win' ? 'твоя' : res === 'lose' ? 'не твоя' : 'ничья');
     return h('section', { class: 'kk-card kk-duel' }, [
       K.ava(f.display_name, 36),
-      h('span', { class: 'kk-grow kk-col' }, [h('b', { text: head }), h('span', { class: 'kk-sub', text: mineTotal + ' : ' + f.points + ' · ' + f.display_name + ' был за ' + name(m[f.side]) })]),
+      h('span', { class: 'kk-grow kk-col' }, [h('b', { text: head }), h('span', { class: 'kk-sub', text: mineTotal + ' : ' + f.points + ' · ' + f.display_name + ' — за ' + name(m[f.side]) })]),
     ]);
   }
 
@@ -364,14 +364,14 @@
         var rows = S.movementRows(items);
         main.appendChild(h('div', { class: 'kk-sec' }, [
           h('span', { class: 'kk-lbl', text: 'КУДА СДВИНУЛОСЬ ТВОЁ МЕСТО' }),
-          mv && mv.loading ? h('span', { class: 'kk-skel kk-skel--line' }) : rows.length ? h('div', { class: 'kk-rows' }, rows.map(moveRow)) : h('span', { class: 'kk-sub', text: 'Срезов, где уже соревнуются трое, пока нет — места появятся, когда игроков станет больше.' }),
+          mv && mv.loading ? h('span', { class: 'kk-skel kk-skel--line' }) : rows.length ? h('div', { class: 'kk-rows' }, rows.map(moveRow)) : h('span', { class: 'kk-sub', text: 'Пока в таблицах меньше трёх игроков с очками — места появятся, когда людей станет больше.' }),
           S.crownLineAfter(items) ? h('span', { class: 'kk-crownline', text: S.crownLineAfter(items) }) : null,
         ]));
         var duel = duelCard(m);
         if (duel) main.appendChild(duel);
       }
       main.appendChild(h('div', { class: 'kk-two' }, [
-        h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { brag(m, v); }, text: pts >= 20 ? 'Похвастаться' : 'Позвать на реванш' }),
+        pts == null ? null : h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { brag(m, v); }, text: pts >= 20 ? 'Похвастаться' : 'Позвать на реванш' }),
         h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('table', {}); }, text: 'Таблица' }),
       ]));
     }
@@ -395,9 +395,8 @@
       h('main', { class: 'kk-main' }, [
         h('section', { class: 'kk-card kk-note' }, [
           K.sticker('ОТМЕНА', 'kk-tag--soft'),
-          h('span', { class: 'kk-lbl', text: 'ОТМЕНА' }),
           h('b', { class: 'kk-hd', text: name(m.home) + ' — ' + name(m.away) + ' отменён' }),
-          h('span', { class: 'kk-tx', text: 'Ход без очков, дуэли не считаются. Козырь вернулся — используй его на другом матче недели.' }),
+          h('span', { class: 'kk-tx', text: 'Ход без очков, дуэли не считаются. Если на нём стоял козырь, он свободен: назначь его на другой матч недели.' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.back(); }, text: 'К матчам' }),
         ]),
       ]),
@@ -433,14 +432,28 @@
           });
         }
         if (ph === 'open' && !state.matches.length) K.loadMatches().then(K.render, function () {});
+        if (ph === 'open') {
+          // Ходы закрываются за минуту до старта: экран, открытый заранее, сам переходит в «матч идёт».
+          K.poll('match', 15000, function (args) {
+            var cur = K.findMatch(args.id);
+            if (!cur || new Date(cur.starts_at).getTime() - Date.now() > 70000) return;
+            K.fetchMatch(args.id).then(function (fresh) {
+              if (fresh && phase(fresh) !== 'open') K.replace('match', args);
+            }, function () {});
+          });
+        }
       }, function (e) {
         if (e && e.status === 404) missing[id] = true;
-        else K.fail(e);
+        else {
+          missing[id] = 'error';
+          K.fail(e);
+        }
         K.render();
       });
     },
     render: function (a) {
-      if (missing[a.id]) return notFound();
+      if (missing[a.id] === 'error' && !K.findMatch(a.id)) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.retryCard('Матч не загрузился.', function () { K.replace('match', a); })])];
+      if (missing[a.id] === true) return notFound();
       var m = K.findMatch(a.id);
       if (!m) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.loading()])];
       var ph = phase(m);

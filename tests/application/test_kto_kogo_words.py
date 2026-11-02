@@ -16,10 +16,22 @@ FILES = (
     "src/api/routes/webapp_client_hockey.py",
     "src/api/routes/webapp_client_hockey_leagues.py",
     "src/application/hockey_notices.py",
+    "src/application/hockey_hub.py",
+    "src/application/hockey_event.py",
+    "src/application/hockey_screens.py",
+    "src/application/hockey_cards.py",
+    "src/application/hockey_matches.py",
+    "src/application/hockey_review.py",
+    "src/application/hockey_teams.py",
+    "src/application/hockey_share.py",
+    "src/application/hockey_match_share.py",
+    "src/api/routes/webapp_client_hockey_event.py",
+    "src/api/routes/webapp_client_hockey_screens.py",
+    "src/api/routes/webapp_client_hockey_share.py",
     "src/bot/handlers/hockey_game_handlers.py",
 )
-# Только то, что видит игрок: строки в кавычках (detail, сообщения), без комментариев и docstring-пояснений.
-_BANNED = re.compile(r"ставк|коэффициент|прогноз|пари\b|выигрыш|букмекер|банк\b|ставь|поставить", re.I)
+# «срок» владелец не хочет нигде в игре. Только то, что видит игрок: строки в кавычках (detail, сообщения), без комментариев и docstring-пояснений.
+_BANNED = re.compile(r"ставк|коэффициент|прогноз|пари\b|выигрыш|букмекер|банк\b|ставь|поставить|срок", re.I)
 _STRING = re.compile(r'(?<![\w"])f?"([^"\n]{3,})"')
 
 

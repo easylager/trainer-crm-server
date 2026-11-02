@@ -411,7 +411,10 @@ def _hhmm(value: datetime) -> str:
 
 def _day_word(starts_at: datetime, now: datetime) -> str:
     days = (_local(starts_at).date() - _local(now).date()).days
-    return {0: "сегодня", 1: "завтра"}.get(days, _local(starts_at).strftime("%d.%m"))
+    if days in (0, 1):
+        return "сегодня" if days == 0 else "завтра"
+    day = _local(starts_at)
+    return f"{day.day} {MONTHS_GEN[day.month - 1]}"
 
 
 def _points_word(n: int) -> str:
@@ -758,15 +761,15 @@ async def _mfinal_candidates(session: AsyncSession, *, now: datetime, cache: dic
             second = rivals[0] if rivals else None
             gap = mine.points - second.points if second else 0
             body += f"Ты на 1-м месте" + (
-                f", {html.escape(second.display_name)} в {gap} {_points_word(gap)} позади." if second and gap else "."
+                f", {html.escape(second.display_name)} позади на {gap} {_points_word(gap)}." if second and gap else "."
             )
         else:
             leader = rows[0]
             gap = leader.points - mine.points
             body += (
-                f"Ты на {_ordinal(mine.rank)} месте, до короны {gap} {_points_word(gap)}."
+                f"Ты на {mine.rank}-м месте, до короны {gap} {_points_word(gap)}."
                 if gap
-                else f"Ты на {_ordinal(mine.rank)} месте — в очках вровень с первым."
+                else f"Ты на {mine.rank}-м месте — в очках вровень с первым."
             )
         has_pick = (await session.execute(_HAS_PICK, {"match_id": final.id, "player_key": fan.player_key})).first()
         buttons = _rows(
@@ -973,7 +976,7 @@ def league_extended_text(name: str, starts_at: datetime, ends_at: datetime) -> s
         return f"{d.day} {MONTHS_GEN[d.month - 1]}"
 
     return (
-        f"<b>Лига «{html.escape(name)}» продлена.</b> Те же люди, новый срок: {day(starts_at)} — "
+        f"<b>Лига «{html.escape(name)}» продлена.</b> Те же люди, новый круг: с {day(starts_at)} по "
         f"{day(_local(ends_at) - timedelta(minutes=1))}. Выйти можно в один тап."
     )
 

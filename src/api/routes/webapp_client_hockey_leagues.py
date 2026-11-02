@@ -278,7 +278,7 @@ async def post_client_hockey_league_join(
 @router.get("/client/hockey/leagues/{league_id}")
 async def get_client_hockey_league(
     league_id: int,
-    period: str | None = Query(None, description="month | 2026-11 — часть срока; пусто — весь срок"),
+    period: str | None = Query(None, description="month | 2026-11 — часть периода; пусто — вся лига"),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:

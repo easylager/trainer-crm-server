@@ -169,7 +169,7 @@ describe('гонка месяца (TASK-334)', () => {
     assert.equal(M.monthLine(lost), 'Ты 2-й в общей таблице, до короны не хватило 10' + NBSP + 'очков');
   });
   it('вступил в середине месяца', () => {
-    assert.equal(M.remainingLine(race), 'В этом месяце ещё 4 матча. Очки в лиге — с ближайшего матча, с 1-го числа все с нуля.');
+    assert.equal(M.remainingLine(race), 'В этом месяце ещё 4\u00a0матча. Очки в лиге — с ближайшего матча, с 1-го числа все с нуля.');
     assert.equal(M.remainingLine({ monthly: false }), '');
   });
 });

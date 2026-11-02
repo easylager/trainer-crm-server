@@ -492,7 +492,7 @@ def render_league_card(*, name: str, members: int, names: Sequence[str], next_ma
         match_font = _largest(draw, next_match, lambda s: _text(s, 800), (44, 40, 36, 32), inner)
         draw.text((_PAD, top_h + 80), _ellipsize(draw, next_match, match_font, inner), font=match_font, fill=_NAVY)
     else:
-        draw.text((_PAD, top_h + 58), "угадываем матчи Динамо-Минск", font=_text(44, 800), fill=_NAVY)
+        draw.text((_PAD, top_h + 58), "угадываем хоккейные матчи", font=_text(44, 800), fill=_NAVY)
     return _png(image)
 
 
@@ -538,7 +538,7 @@ def result_caption(*, home: str, away: str, home_score: int, away_score: int, po
 
 
 def league_caption(name: str) -> str:
-    return f"Угадываем матчи Динамо-Минск в лиге «{name}». Тапни за команду — посмотрим, кто кого."
+    return f"Угадываем хоккейные матчи — лига «{name}». Тапни за команду, посмотрим, кто кого."
 
 
 __all__ = [
