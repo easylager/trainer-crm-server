@@ -260,12 +260,14 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-r { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 52px; padding: 4px 12px; border-radius: 14px; font-variant-numeric: tabular-nums; }
 .kk-r:nth-child(odd) { background: var(--kk-row); }
 .kk-r.is-me { background: var(--kk-me); }
+.kk-r.is-me .kk-sub { color: var(--kk-soft); }
 .kk-r__n { font: 400 15px var(--kk-display); text-align: center; color: var(--kk-soft); }
 .kk-r__n.is-gold { color: var(--kk-gold-ink); }
 .kk-r__w { min-width: 0; }
 .kk-r__name { font: 600 15px var(--kk-text); display: flex; align-items: center; gap: 5px; overflow: hidden; }
 .kk-r__nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kk-me { flex: none; height: 18px; padding: 0 7px; border-radius: 999px; font: 700 11px/18px var(--kk-text); letter-spacing: 0.02em; background: var(--kk-win); color: #fff; }
+body.kk-dark .kk .kk-me { color: #0d1424; }
 .kk-r__pt { font: 700 16px var(--kk-text); text-align: right; }
 .kk-gap { height: 20px; display: flex; align-items: center; justify-content: center; color: var(--kk-muted); font-weight: 700; letter-spacing: 0.3em; }
 .kk-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
