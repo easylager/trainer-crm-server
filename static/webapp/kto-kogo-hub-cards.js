@@ -220,7 +220,7 @@
       type: 'button', class: 'kk-ptsl', id: POINTS_LINK_ID, 'aria-haspopup': 'dialog',
       onclick: function () { state.sheet = { kind: 'points', returnId: POINTS_LINK_ID }; K.render(); },
     }, [
-      h('span', { class: 'kk-ptsl__t' }, [K.puck(), 'Как считаются очки?']),
+      h('span', { class: 'kk-ptsl__t' }, [h('span', { class: 'kk-ptsl__q', 'aria-hidden': 'true', text: '?' }), 'Как считаются очки?']),
       icon(I.chev, 18),
     ]);
   }
