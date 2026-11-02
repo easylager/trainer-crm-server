@@ -240,3 +240,11 @@ async def test_miniapp_season_facet_counts_winter_points_only_with_flag(on, clie
     monkeypatch.setenv("SEASONAL_RINKS_ENABLED", "0")
     f2 = (await client.get("/api/public/ice/arenas", params={"city_id": cid})).json()["season_facet"]
     assert "winter_points" not in f2
+
+
+def test_live_tags_carry_mark_time_for_js():
+    from src.application import winter_page as wp
+
+    html = wp._tags_html({"crowd": "few", "crowd_at": "2026-12-10T11:20:00+00:00", "hockey": "free", "hockey_at": None})
+    assert 'data-w-live-at="2026-12-10T11:20:00+00:00"' in html and 'data-w-live-label="Мало людей"' in html
+    assert "Хоккея нет</span>" in html and html.count("data-w-live-at") == 1

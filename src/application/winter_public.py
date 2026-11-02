@@ -128,6 +128,7 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
         "checked_by": "admin" if r.state_source == "admin" else ("people" if r.state_source == "engine" else None),
         "quality": r.quality, "dispute": bool(r.dispute), "doubtful": bool(r.doubtful),
         "crowd": live.get("crowd"), "hockey": live.get("hockey"),
+        "crowd_at": live.get("crowd_at"), "hockey_at": live.get("hockey_at"),
         "distance_km": dist, "pin": r.catalog_pin,
         "is_paid": r.is_paid, "price_note": r.price_note,
         "often_hockey_note": "Часто занята под хоккей и занятия школы" if r.often_hockey else None,

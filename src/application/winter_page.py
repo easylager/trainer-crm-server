@@ -117,15 +117,24 @@ def _distance(km: float | None) -> str:
     return f"{round(km, 1):g}".replace(".", ",") + f"{NBSP}км"
 
 
-def _tags(item: Mapping[str, Any]) -> list[str]:
-    out: list[str] = []
+def _tags(item: Mapping[str, Any]) -> list[tuple[str, str | None]]:
+    """(подпись, время отметки ISO). Время у людей/хоккея дорисует JS: «Мало людей · 40 мин назад»."""
+    out: list[tuple[str, str | None]] = []
     if item.get("crowd") in CROWD_LABEL:
-        out.append(CROWD_LABEL[item["crowd"]])
+        out.append((CROWD_LABEL[item["crowd"]], item.get("crowd_at")))
     if item.get("hockey") in HOCKEY_LABEL:
-        out.append(HOCKEY_LABEL[item["hockey"]])
+        out.append((HOCKEY_LABEL[item["hockey"]], item.get("hockey_at")))
     if item.get("quality") == "bad":
-        out.append("Лёд плохой")
+        out.append(("Лёд плохой", None))
     return out
+
+
+def _tags_html(item: Mapping[str, Any]) -> str:
+    parts = []
+    for label, at in _tags(item):
+        attr = f' data-w-live-at="{_esc(at)}" data-w-live-label="{_esc(label)}"' if at else ""
+        parts.append(f'<span class="w-tag"{attr}>{_esc(label)}</span>')
+    return "".join(parts)
 
 
 def pill(item: Mapping[str, Any]) -> str:
@@ -206,7 +215,7 @@ def _thumb(item: Mapping[str, Any]) -> str:
 
 def _card(item: Mapping[str, Any], city_name: str) -> str:
     href = place_path(city_name=city_name, slug=str(item["slug"])) if item.get("slug") else f"/p/{int(item['id'])}"
-    tags = "".join(f'<span class="w-tag">{_esc(t)}</span>' for t in _tags(item))
+    tags = _tags_html(item)
     if item.get("dispute"):
         tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>'
     checked = checked_line(item)
@@ -239,6 +248,7 @@ def _client_points(items: list[Mapping[str, Any]], city_name: str) -> list[dict[
                 "href": place_path(city_name=city_name, slug=str(i["slug"])) if i.get("slug") else f"/p/{int(i['id'])}",
                 "state_at": i.get("state_at"), "checked_by": i.get("checked_by"), "quality": i.get("quality"),
                 "crowd": i.get("crowd"), "hockey": i.get("hockey"),
+                "crowd_at": i.get("crowd_at"), "hockey_at": i.get("hockey_at"),
             }
         )
     return out
@@ -411,7 +421,7 @@ def _status_card(item: Mapping[str, Any], *, season_label: str, links: Mapping[s
     parts.append(f"<p data-w-status-note>{_esc(text)}</p>")
     if line:
         parts.append(f'<p class="w-note">{_esc(line)}</p>')
-    tags = "".join(f'<span class="w-tag">{_esc(t)}</span>' for t in _tags(item))
+    tags = _tags_html(item)
     if item.get("dispute"):
         tags += '<span class="w-tag w-tag--warn">Отметки расходятся</span>'
     if tags:

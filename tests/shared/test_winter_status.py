@@ -257,3 +257,9 @@ def test_valid_values_and_weights():
 
 def test_gone_threshold():
     assert not ws.gone_signals_reached(2) and ws.gone_signals_reached(3)
+
+
+def test_live_summary_gives_time_of_last_mark():
+    out = ws.live_summary([mk("few", kind="crowd", ago_h=0.5), mk("playing", kind="hockey", actor="b", ago_h=3.0)], NOW)
+    assert out["crowd"] == "few" and out["crowd_at"] == (NOW - timedelta(hours=0.5)).isoformat()
+    assert out["hockey"] is None and out["hockey_at"] is None

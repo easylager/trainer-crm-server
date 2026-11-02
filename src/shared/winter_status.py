@@ -232,7 +232,12 @@ def gone_signals_reached(signal_actors_in_window: int) -> bool:
 
 
 def live_summary(marks: list[MarkIn], now: datetime) -> dict[str, str | None]:
-    """Загрузка и хоккей «сейчас» (окно 2 ч) — для карточки и списка."""
-    crowd, _ = _live_value(marks, KIND_CROWD, now)
-    hockey, _ = _live_value(marks, KIND_HOCKEY, now)
-    return {"crowd": crowd, "hockey": hockey}
+    """Загрузка и хоккей «сейчас» (окно 2 ч) + время последней такой отметки (ISO) — для карточки и списка."""
+    crowd, crowd_at = _live_value(marks, KIND_CROWD, now)
+    hockey, hockey_at = _live_value(marks, KIND_HOCKEY, now)
+    return {
+        "crowd": crowd,
+        "hockey": hockey,
+        "crowd_at": crowd_at.isoformat() if crowd_at else None,
+        "hockey_at": hockey_at.isoformat() if hockey_at else None,
+    }
