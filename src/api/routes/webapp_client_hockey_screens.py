@@ -21,6 +21,7 @@ _ONE_MATCH = text("""
     SELECT m.id, m.home_team, m.away_team, m.starts_at, m.status, m.league, m.arena, m.city,
            m.home_score, m.away_score, m.decided_in,
            m.live_home_score, m.live_away_score, m.live_at,
+           (SELECT hm.previous_starts_at FROM hockey_matches AS hm WHERE hm.id = m.id) AS previous_starts_at,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
            p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,

@@ -129,7 +129,8 @@
         text: S.clubShort(m[side].name),
       });
     }
-    return h('div', { class: 'kk-m' }, [
+    var moved = M.movedLine(m);
+    var row = h('div', { class: 'kk-m' }, [
       h('button', { type: 'button', class: 'kk-t', 'aria-label': 'Открыть матч ' + name(m.home) + ' — ' + name(m.away), onclick: function () { K.go('match', { id: m.id }); } }, [
         h('span', { text: m.open || m.status === 'scheduled' || m.status === 'review' ? S.timeOnly(m.starts_at) : m.result ? m.result.home_score + ':' + m.result.away_score : '' }),
         h('span', { class: 'kk-t__l', text: m.league === 'extraliga' ? 'ЭКСТРАЛИГА' : 'КХЛ' }),
@@ -137,6 +138,9 @@
       pick('home'),
       pick('away'),
     ]);
+    if (!moved) return row;
+    /* Перенос виден прямо в списке; ход при этом сохраняется. */
+    return h('div', { class: 'kk-mw' }, [row, h('span', { class: 'kk-moved', text: moved })]);
   }
 
   function pauseCard() {
