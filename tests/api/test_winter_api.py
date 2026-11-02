@@ -157,3 +157,23 @@ async def test_point_api_gives_time_of_live_marks(on, client, db_session):
     item = (await client.get(f"/api/public/winter/points/{aid}")).json()
     assert item["crowd"] == "few" and item["crowd_at"]
     assert item["hockey"] is None and item["hockey_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_catalog_arena_pinned_takes_coords_hours_price_from_its_profile(on, client, db_session):
+    import json
+
+    aid = await make_point(db_session, name="Немига", lat=53.9, lon=27.55, precision="none", pin=1)
+    await db_session.execute(
+        text("UPDATE arena_profiles SET opening_hours = CAST(:h AS jsonb), phone = '+375173647551', "
+             "visitor_prices = CAST(:p AS jsonb) WHERE arena_id = :a"),
+        {"a": aid, "h": json.dumps({"daily": {"open": "10:00", "close": "22:00"}}),
+         "p": json.dumps({"adult": "12", "child": "8", "currency": "BYN"}), "a": aid},
+    )
+    city = await city_of(db_session, aid)
+    item = (await client.get(f"/api/public/winter/cities/{city}/points")).json()["items"][0]
+    assert item["own_page"] is False and item["locating"] is False and item["map_allowed"] is True
+    assert item["lat"] == 53.9 and item["route_url"]
+    assert item["hours"]["summary"] == "Ежедневно 10:00–22:00" and item["hours"]["label"] is None
+    assert item["is_paid"] is True and item["price_note"] == "взрослый 12 BYN, детский 8 BYN"
+    assert item["phone"] == "+375173647551"

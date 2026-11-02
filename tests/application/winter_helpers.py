@@ -34,7 +34,7 @@ async def make_point(
     )).scalar_one())
     await db.execute(
         text("INSERT INTO arena_profiles (arena_id, city_id, slug, district, status, catalog_pin) VALUES (:a, :c, :s, 'Центр', :st, :pin)"),
-        {"a": aid, "c": cid, "s": slug or f"t-{aid}", "st": status, "pin": pin},
+        {"a": aid, "c": cid, "s": slug or (f"t-{aid}" if pin else f"testograd-katok-{aid}"), "st": status, "pin": pin},
     )
     await db.execute(
         text("INSERT INTO seasonal_rinks (arena_id, kind, is_paid, geocode_precision, often_hockey) VALUES (:a, :k, :p, :g, :oh)"),

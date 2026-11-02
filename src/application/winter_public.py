@@ -31,7 +31,8 @@ _STATE_RANK = {"flooded": 0, "waiting": 1, "stale": 2, "closed": 3}
 
 _SELECT = """
 SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.city_id, c.name AS city_name,
-       p.slug, p.district, p.catalog_pin,
+       p.slug, p.district, p.catalog_pin, p.opening_hours AS profile_hours, p.phone AS profile_phone,
+       p.visitor_prices,
        sr.kind, sr.operator, sr.is_paid, sr.price_note, sr.often_hockey, sr.geocode_precision, sr.same_complex_id,
        s.state, s.state_at, s.state_source, s.quality, s.dispute, s.doubtful, s.hours_text, s.opening_hours,
        s.hours_known, s.hours_season, s.season_from, s.season_to, s.phone, s.source_url, s.confidence, s.season
@@ -114,13 +115,55 @@ async def _photos(session: AsyncSession, ids: list[int]) -> dict[int, list[dict[
     return out
 
 
+def arena_hours_summary(opening_hours: Any) -> str | None:
+    """Часы профиля арены каталога: ``weekly`` как у зимних точек или ``daily {open, close}``."""
+    if not isinstance(opening_hours, dict):
+        return None
+    if isinstance(opening_hours.get("daily"), dict):
+        d = opening_hours["daily"]
+        if d.get("open") and d.get("close"):
+            return f"Ежедневно {d['open']}–{d['close']}"
+    return hours_summary_ru(opening_hours)
+
+
+def arena_price(visitor_prices: Any) -> str | None:
+    """«Взрослый 12 BYN, детский 8 BYN» из цен посетителей профиля; пусто — цены нет."""
+    if not isinstance(visitor_prices, dict):
+        return None
+    cur = (visitor_prices.get("currency") or "").strip()
+    parts = []
+    for key, label in (("adult", "взрослый"), ("child", "детский")):
+        val = str(visitor_prices.get(key) or "").strip()
+        if val:
+            parts.append(f"{label} {val}{' ' + cur if cur and val.replace(' ', '').isdigit() else ''}")
+    return ", ".join(parts) or None
+
+
 def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tuple[float, float] | None,
            settings: Settings, detail: bool) -> dict[str, Any]:
-    precise = map_allowed(r.geocode_precision) and r.latitude is not None
+    own = has_winter_page(r.slug)
+    # Арена каталога (Немига): координаты, часы, телефон и цена — её собственные, зимней оценки у неё нет.
+    prec = r.geocode_precision if own or r.latitude is None else "manual"
+    precise = map_allowed(prec) and r.latitude is not None
     dist = None
     if origin and precise:
         dist = round(haversine_km(origin[0], origin[1], float(r.latitude), float(r.longitude)), 1)
     hours_label = f"зимой {r.hours_season}" if r.hours_season else None
+    hours_known, hours_summary, hours_text, hours_weekly = bool(r.hours_known), None, r.hours_text, None
+    if hours_known:
+        hours_summary, hours_weekly = hours_summary_ru(r.opening_hours), (r.opening_hours or {}).get("weekly")
+    is_paid, price_note, phone = r.is_paid, r.price_note, r.phone
+    if not own:
+        hours_label = None
+        arena_hours = arena_hours_summary(r.profile_hours)
+        if arena_hours:
+            hours_known, hours_summary, hours_text, hours_weekly = True, arena_hours, None, None
+        else:
+            hours_known = False
+        price = arena_price(r.visitor_prices)
+        if price:
+            is_paid, price_note = True, price
+        phone = r.profile_phone or phone
     item: dict[str, Any] = {
         "id": int(r.id), "slug": r.slug, "name": r.name, "kind": r.kind, "district": r.district,
         "city_id": int(r.city_id), "city": r.city_name, "address": r.address,
@@ -130,28 +173,28 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
         "crowd": live.get("crowd"), "hockey": live.get("hockey"),
         "crowd_at": live.get("crowd_at"), "hockey_at": live.get("hockey_at"),
         "distance_km": dist, "pin": r.catalog_pin,
-        "is_paid": r.is_paid, "price_note": r.price_note,
+        "is_paid": is_paid, "price_note": price_note,
         "often_hockey_note": "Часто занята под хоккей и занятия школы" if r.often_hockey else None,
-        "geocode_precision": r.geocode_precision, "map_allowed": precise,
-        "locating": not precise,  # плашка «Точку уточняем»
+        "geocode_precision": prec, "map_allowed": precise,
+        "locating": own and not precise,  # плашка «Точку уточняем»
         "lat": float(r.latitude) if precise else None, "lon": float(r.longitude) if precise else None,
         "hours": {
-            "known": bool(r.hours_known), "weekly": (r.opening_hours or {}).get("weekly") if r.hours_known else None,
-            "summary": hours_summary_ru(r.opening_hours) if r.hours_known else None,
-            "text": r.hours_text, "label": hours_label,
+            "known": hours_known, "weekly": hours_weekly,
+            "summary": hours_summary,
+            "text": hours_text, "label": hours_label,
             "season_from": r.season_from, "season_to": r.season_to,
-            "fallback": None if r.hours_known else "Часы уточняйте по телефону",
+            "fallback": None if hours_known else "Часы уточняйте по телефону",
         },
-        "phone": r.phone, "phone_shared": bool(shared_phone and r.phone),
+        "phone": phone, "phone_shared": bool(shared_phone and phone),
         "source_url": r.source_url, "season": int(r.season), "season_label": ws.season_label(int(r.season)),
         "photos": photos,
-        "route_url": route_url(r.latitude, r.longitude, r.geocode_precision, r.address, r.city_name),
+        "route_url": route_url(r.latitude, r.longitude, prec, r.address, r.city_name),
         "same_complex_id": r.same_complex_id,
-        "own_page": has_winter_page(r.slug),  # у существующих арен (Немига) страница обычная, не зимняя
+        "own_page": own,  # у существующих арен (Немига) страница обычная, не зимняя
     }
     if settings.winter_static_map_thumbs or detail:
         item["static_map_url"] = static_map_url(
-            r.latitude, r.longitude, r.geocode_precision, api_key=settings.yandex_static_api_key,
+            r.latitude, r.longitude, prec, api_key=settings.yandex_static_api_key,
             width=650 if detail else 160, height=450 if detail else 160, zoom=16 if detail else 15,
         )
     return item
