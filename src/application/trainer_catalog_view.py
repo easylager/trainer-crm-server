@@ -168,8 +168,25 @@ def _state_body_ru(state: str, trainer: dict[str, Any]) -> str:
     return STATE_BODY_RU.get(state, "")
 
 
+def _dt(value: Any) -> Any:
+    """Aggregate mixes raw datetimes and isoformat strings — normalize for comparison."""
+    if isinstance(value, str):
+        try:
+            from datetime import datetime
+
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return value
+
+
 def _state_actions(
-    state: str, *, can_act: bool, submit_ready: bool, queue_stamp_held: bool = True
+    state: str,
+    *,
+    can_act: bool,
+    submit_ready: bool,
+    queue_stamp_held: bool = True,
+    revision_addressed: bool = False,
 ) -> list[str]:
     """Which buttons the screen may offer. The trainer's own state, not a permission model."""
     if not can_act:
@@ -182,13 +199,21 @@ def _state_actions(
         # Правка карточки снимает отметку в очереди (``clear_moderation_submitted_at``): модератор
         # держит ссылку на карточку, которой уже нет. Тренер при этом видел единственную кнопку
         # «Отменить заявку» — позвать на проверку заново было нечем, и ждать он мог бесконечно.
-        if not queue_stamp_held and submit_ready:
-            return ["resubmit", "withdraw"]
-        return ["withdraw"]
+        if not queue_stamp_held:
+            return ["resubmit", "withdraw"] if submit_ready else ["withdraw"]
+        # Publish-first: ``pending_review`` — легаси-очередь до публикации. Карточка с целой
+        # отметкой тоже получает «Отправить себя в каталог»: тап публикует её сразу, и застрявшие
+        # в очереди тренеры доходят до каталога тем же одним действием, а не бесконечным ожиданием.
+        return ["submit", "withdraw"] if submit_ready else ["withdraw"]
     if state == CATALOG_STATE_NEEDS_REVISION:
         # Правки — это работа в анкете, а экран каталога её не содержит. Без явной двери
         # тренер читал комментарий модератора и закрывал раздел, чтобы искать анкету руками.
-        return ["edit", "submit"] if submit_ready else ["fill"]
+        # «Отправить снова» появляется только после реальной правки — тот же сигнал, которым
+        # gated и сам submit (``needs_revision_unchanged`` → 409); кнопка до правки давала бы
+        # повторную публикацию без изменений.
+        if not submit_ready:
+            return ["fill"]
+        return ["edit", "submit"] if revision_addressed else ["edit"]
     # draft: publishing is the one deliberate act, and only when ready.
     return ["submit"] if submit_ready else ["fill"]
 
@@ -400,13 +425,8 @@ async def build_catalog_screen_payload(
     preview_link, _preview_link_error = build_trainer_preview_link(
         client_bot_username=Settings().client_bot_username, trainer_id=trainer_id
     )
-    share_link_row = await session.execute(
-        text(
-            "SELECT client_invite_link_first_copied_at FROM trainers WHERE id = :tid"
-        ),
-        {"tid": trainer_id},
-    )
-    share_link_copied = share_link_row.scalar() is not None
+    # Колонка уже в агрегате get_trainer — отдельный SELECT тут не нужен.
+    share_link_copied = trainer.get("client_invite_link_first_copied_at") is not None
     snoozed = await get_active_snoozes(session, trainer_id)
     return {
         # Нужен экрану, чтобы открыть публичную карточку глазами клиента.
@@ -430,6 +450,23 @@ async def build_catalog_screen_payload(
             can_act=not managed_by_studio,
             submit_ready=submit_ready,
             queue_stamp_held=trainer.get("moderation_submitted_at") is not None,
+            # Зеркало гейта в try_publish_trainer_catalog_card: правка после «Нужны правки»
+            # — снятая отметка, свежая отметка или ревизия в profile_pending/photo_pending.
+            revision_addressed=(
+                trainer.get("moderation_submitted_at") is None
+                or bool(trainer.get("profile_pending"))
+                or bool(trainer.get("photo_pending"))
+                or (
+                    _dt(trainer.get("catalog_state_changed_at")) is not None
+                    and _dt(trainer.get("moderation_submitted_at")) is not None
+                    and (
+                        _dt(trainer["catalog_state_changed_at"]).tzinfo is None
+                    )
+                    == (_dt(trainer["moderation_submitted_at"]).tzinfo is None)
+                    and _dt(trainer["moderation_submitted_at"])
+                    > _dt(trainer["catalog_state_changed_at"])
+                )
+            ),
         ),
         "readiness": {
             "submit_ready": submit_ready,

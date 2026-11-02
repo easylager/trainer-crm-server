@@ -710,9 +710,10 @@ async def ensure_trainer_profile_row(session: AsyncSession, trainer_id: int) -> 
 
 async def reconcile_trainer_moderation_queue_if_incomplete(session: AsyncSession, trainer_id: int) -> None:
     """
-    Invariant: moderation_submitted_at only applies when the aggregate meets submission
-    readiness (8 criteria). If submission is incomplete and status is pending_profile, clear the
-    queue stamp so a partial draft never looks «in moderation».
+    Invariant: moderation_submitted_at only applies when the aggregate meets the minimal
+    submission tier (``analyze_moderation_submission_readiness``). If submission is incomplete
+    and status is pending_profile, clear the queue stamp so a partial draft never looks
+    «in moderation».
 
     Does NOT touch moderation_feedback: that is the moderator's own comment, not a queue-state
     flag. A carousel walking several missing fields one PATCH at a time is "incomplete" on every
@@ -1049,8 +1050,9 @@ async def set_trainer_catalog_visibility(
     the request, so the queue stamp goes too, otherwise a later opt-in silently no-ops as
     "already_submitted" instead of queuing afresh.
 
-    ``visible=True`` — ``hidden`` → ``published`` directly: the card was reviewed and its
-    published content has not changed, so asking a moderator again would be theatre. From any
+    ``visible=True`` — ``hidden`` → ``published`` directly: hiding is the trainer's own
+    reversible act (the UI promises one tap back), and publish-first re-stamps the card for
+    post-review anyway — gating the restore behind a moderator would be theatre. From any
     other state it is a publication *request* and goes through ``try_submit_…``.
 
     Every path lands in ``set_catalog_state``, so the admin REST route can no longer take a
@@ -1163,8 +1165,13 @@ async def apply_moderator_revision_request(
     ``pending_review``. Раздел «Каталог» показывал «На проверке», кнопки «отправить снова» не
     появлялось, и тренер застревал: экран врал о состоянии его собственной карточки.
 
-    * карточка ``published`` — снимаем только правку, публикацию не трогаем. Клиенты продолжают
-      видеть прежние значения: опечатка в имени не должна выбивать из выдачи на сутки.
+    * карточка ``published`` у тренера со статусом ``active`` — снимаем только правку,
+      публикацию не трогаем. Клиенты продолжают видеть прежние значения: опечатка в имени
+      не должна выбивать из выдачи на сутки.
+    * карточка ``published`` у ещё не активированного аккаунта (publish-first: карточка уже в
+      каталоге, статус всё ещё ``pending_profile``) — уходит в ``needs_revision``: иначе у
+      пост-модерации против плохой карточки остаётся только «Отклонить», а это деактивация
+      аккаунта целиком.
     * иначе — карточка уходит в ``needs_revision``, состояние с причиной и автором, из которого
       экран каталога предлагает «Отправить на проверку».
 
@@ -1175,22 +1182,26 @@ async def apply_moderator_revision_request(
     if not trainer:
         return None
     detail = (feedback or "").strip() or None
+    state = (trainer.get("catalog_state") or CATALOG_STATE_DRAFT).strip()
+    is_active = (trainer.get("status") or "").strip() == TRAINER_STATUS_ACTIVE
 
-    if trainer_is_listed(trainer):
+    if trainer_is_listed(trainer) and is_active:
         await discard_active_trainer_text_revision_with_feedback(session, trainer_id, feedback)
         return CATALOG_STATE_PUBLISHED
 
     await set_trainer_moderation_feedback(session, trainer_id, feedback)
-    if (trainer.get("status") or "").strip() != TRAINER_STATUS_ACTIVE:
+    if not is_active:
         await update_trainer_status(session, trainer_id, TRAINER_STATUS_PENDING_PROFILE)
-    state = (trainer.get("catalog_state") or CATALOG_STATE_DRAFT).strip()
-    # `needs_revision` имеет смысл ровно из очереди. Условие было «тренер вообще просился в
-    # каталог», а под него подходят и `hidden`, и `paused` — оба перехода машина запрещает, так
-    # что модератор ронял обработчик, а не оставлял комментарий. Да и по смыслу это неверно:
-    # `hidden` — решение тренера снять карточку, и перебивать его «нужны правки» нельзя, а у
-    # `paused` уже есть своя причина, которую «нужны правки» затёрли бы. В обоих случаях
-    # комментарий сохраняется, состояние остаётся своим.
-    if state == CATALOG_STATE_PENDING_REVIEW:
+    # `needs_revision` имеет смысл из очереди и из публикации у неактивированного аккаунта.
+    # Условие было «тренер вообще просился в каталог», а под него подходят и `hidden`, и
+    # `paused` — оба перехода машина запрещает, так что модератор ронял обработчик, а не
+    # оставлял комментарий. Да и по смыслу это неверно: `hidden` — решение тренера снять
+    # карточку, и перебивать его «нужны правки» нельзя, а у `paused` уже есть своя причина,
+    # которую «нужны правки» затёрли бы. В обоих случаях комментарий сохраняется, состояние
+    # остаётся своим.
+    if state == CATALOG_STATE_PENDING_REVIEW or (
+        state == CATALOG_STATE_PUBLISHED and not is_active
+    ):
         await set_catalog_state(
             session,
             trainer_id,
@@ -1217,8 +1228,8 @@ async def try_publish_trainer_catalog_card(
     «Отправить себя в каталог» — publish-first: один тап, и карточка опубликована.
 
     Раньше этот вызов ставил карточку в очередь ``pending_review`` и жилую она появлялась
-    только после модератора: 38 из 40 тренеров на проде имели готовую карточку, но до
-    каталога не доходили — потому что между решением и публикацией стоял чужой шаг.
+    только после модератора: 38 из 40 тренеров на проде застряли на одном из шагов до каталога
+    — потому что между решением и публикацией стоял чужой шаг.
     Теперь публикуем сразу, а модерация идёт следом (post-moderation): карточка по-прежнему
     штампуется ``moderation_submitted_at`` и уходит админам той же карточкой — «Одобрить»
     активирует аккаунт, «Нужны правки» и «Отклонить» работают и по опубликованной карточке.
@@ -1231,7 +1242,9 @@ async def try_publish_trainer_catalog_card(
     moderation_submitted_at to avoid duplicate admin pings until the trainer changes
     profile/photo/services/education again.
 
-    Returns dict for HTTP/bot. noop reasons: catalog_opt_out | already_published
+    Returns dict for HTTP/bot. noop reasons: catalog_opt_out | already_published |
+    requires_trainer_action. ``ok=False`` reasons: not_found | needs_revision_unchanged |
+    missing_fields.
     """
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
@@ -1243,7 +1256,8 @@ async def try_publish_trainer_catalog_card(
     #
     # ``requested_by_trainer`` is that decision arriving explicitly: the catalog screen's
     # «Отправить на проверку». Everything else (a profile save, the legacy REST route) may only
-    # re-submit a card the trainer had already asked for — any state other than ``draft``.
+    # re-submit a card the trainer had already asked for — and even then not from ``hidden``,
+    # ``needs_revision`` or ``paused``, which hold a decision only the trainer can undo.
     state = (trainer.get("catalog_state") or CATALOG_STATE_DRAFT).strip()
     if not requested_by_trainer and not trainer_opted_into_catalog(trainer):
         return {
@@ -1253,6 +1267,69 @@ async def try_publish_trainer_catalog_card(
             "trainer_status": (trainer.get("status") or "").strip(),
             "catalog_state": state,
         }
+    # Вызов «не от тренера» (legacy REST submit, автоматика) не может отменить решения,
+    # которые принадлежат тренеру: ``hidden`` — его собственное «снял с публикации»,
+    # ``paused`` — у карточки дыра, которую залатывает reconcile, а ``needs_revision`` ждёт
+    # правку в анкете, а не стороннюю кнопку. Из этих состояний публикует только сам тренер.
+    if not requested_by_trainer and state in (
+        CATALOG_STATE_HIDDEN,
+        CATALOG_STATE_NEEDS_REVISION,
+        CATALOG_STATE_PAUSED,
+    ):
+        return {
+            "ok": True,
+            "noop": True,
+            "reason": "requires_trainer_action",
+            "trainer_status": (trainer.get("status") or "").strip(),
+            "catalog_state": state,
+        }
+    # ``needs_revision → published`` — только после реальной правки. Базис — отметка
+    # ``moderation_submitted_at`` и момент входа в needs_revision: у неактивированного тренера
+    # правка снимает отметку (``clear_moderation_submitted_at``), у активного — текстовая правка
+    # уходит в ``profile_pending`` и перештамповывает отметку (``mark_queued_for_moderation_review``).
+    # Ни того ни другого = после «Нужны правки» карточку не трогали: переиздать её без изменений
+    # нельзя — publish-first иначе делал бы комментарий модератора бессильным (один тап, и та же
+    # карточка снова живая, а фидбек стёрт). Возвращаем ошибку, ``moderation_feedback`` остаётся —
+    # его читает и экран, и чеклист хаба.
+    if state == CATALOG_STATE_NEEDS_REVISION:
+        sub_at = trainer.get("moderation_submitted_at")
+        has_pending_revision = bool(trainer.get("profile_pending")) or bool(
+            trainer.get("photo_pending")
+        )
+        changed_after_revision = False
+        if sub_at is not None:
+            from datetime import datetime
+
+            state_row = await get_catalog_state(session, trainer_id)
+            changed_at = (state_row or {}).get("catalog_state_changed_at")
+            if isinstance(changed_at, str):
+                try:
+                    changed_at = datetime.fromisoformat(changed_at)
+                except ValueError:
+                    changed_at = None
+            sub_at_cmp = sub_at
+            if isinstance(sub_at_cmp, str):
+                try:
+                    sub_at_cmp = datetime.fromisoformat(sub_at_cmp)
+                except ValueError:
+                    sub_at_cmp = None
+            changed_after_revision = (
+                changed_at is not None
+                and sub_at_cmp is not None
+                and (changed_at.tzinfo is None) == (sub_at_cmp.tzinfo is None)
+                and sub_at_cmp > changed_at
+            )
+        if (
+            sub_at is not None
+            and not has_pending_revision
+            and not changed_after_revision
+        ):
+            return {
+                "ok": False,
+                "error": "needs_revision_unchanged",
+                "trainer_status": (trainer.get("status") or "").strip(),
+                "catalog_state": state,
+            }
     # Уже в каталоге и версия уже ушла админам на пост-проверку → noop. А вот если после
     # публикации карточку правили (moderation_submitted_at снят реальным изменением),
     # повторная отправка — это «опубликуй обновлённую версию»: ре-штампуем и снова зовём

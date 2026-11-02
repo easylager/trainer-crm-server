@@ -321,8 +321,9 @@ async def test_moderator_revision_round_trip_from_any_account_status(
         tid,
         tg,
         state=CATALOG_STATE_NEEDS_REVISION,
-        # «Исправить в анкете» первым: правки живут там, а экран каталога их не содержит.
-        actions=["edit", "submit"],
+        # До реальной правки «отправить снова» нет: иначе один тап переиздал бы ту же карточку
+        # и стёр бы комментарий модератора.
+        actions=["edit"],
         public=False,
         journal_actor="moderator",
     )
@@ -332,6 +333,30 @@ async def test_moderator_revision_round_trip_from_any_account_status(
         text("SELECT status FROM trainers WHERE id = :t"), {"t": tid}
     )
     assert status_row.scalar() == TRAINER_STATUS_ACTIVE
+
+    # Переотправка без правок — отказ, и комментарий модератора на месте.
+    admin_pings.clear()
+    status_code, body = await _act(tg, "submit")
+    assert status_code == 409, body
+    fb = await db_session.execute(
+        text("SELECT moderation_feedback FROM trainers WHERE id = :t"), {"t": tid}
+    )
+    assert fb.scalar() == "Добавьте цены"
+    assert admin_pings == []
+
+    # Реальная правка (у активного тренера текст уходит в profile_pending и перештамповывает
+    # отметку) — и «отправить снова» возвращается.
+    await update_trainer_profile(
+        db_session, tid, profile={"description": "Исправленное описание " + "d" * 20}
+    )
+    await _assert_stop(
+        tid,
+        tg,
+        state=CATALOG_STATE_NEEDS_REVISION,
+        actions=["edit", "submit"],
+        public=False,
+        journal_actor="moderator",
+    )
 
     admin_pings.clear()
     assert (await _act(tg, "submit"))[0] == 200
@@ -376,8 +401,8 @@ async def test_every_state_the_trainer_can_reach_says_what_to_do_next(
     """
     Сквозное свойство: ни в одном состоянии экран не оставляет тренера без ответа «что дальше».
 
-    Состояние без действия допустимо ровно одно — ``pending_review`` с целой отметкой в очереди:
-    там действие за модератором, и экран прямо говорит сколько ждать.
+    ``pending_review`` тоже даёт действие: publish-first сделал очередь легаси-состоянием, и
+    тап по «Отправить себя в каталог» публикует застрявшую в ней карточку сразу.
     """
     tid, tg, _ = await _new_trainer(db_session)
     for state in (
@@ -496,16 +521,21 @@ async def test_no_caller_can_attempt_an_edge_the_machine_forbids(
 
     edges = [
         (CATALOG_STATE_DRAFT, CATALOG_STATE_PENDING_REVIEW),
+        (CATALOG_STATE_DRAFT, CATALOG_STATE_PUBLISHED),
         (CATALOG_STATE_PENDING_REVIEW, CATALOG_STATE_PUBLISHED),
         (CATALOG_STATE_PENDING_REVIEW, CATALOG_STATE_NEEDS_REVISION),
         (CATALOG_STATE_PENDING_REVIEW, CATALOG_STATE_PAUSED),
         (CATALOG_STATE_PUBLISHED, CATALOG_STATE_HIDDEN),
         (CATALOG_STATE_PUBLISHED, CATALOG_STATE_PAUSED),
         (CATALOG_STATE_PUBLISHED, CATALOG_STATE_PENDING_REVIEW),
+        # «Нужны правки» по опубликованной карточке ещё не активированного аккаунта.
+        (CATALOG_STATE_PUBLISHED, CATALOG_STATE_NEEDS_REVISION),
         (CATALOG_STATE_HIDDEN, CATALOG_STATE_PUBLISHED),
         (CATALOG_STATE_PAUSED, CATALOG_STATE_PUBLISHED),
         (CATALOG_STATE_PAUSED, CATALOG_STATE_PENDING_REVIEW),
         (CATALOG_STATE_NEEDS_REVISION, CATALOG_STATE_PENDING_REVIEW),
+        # Publish-first: исправленная карточка возвращается сразу.
+        (CATALOG_STATE_NEEDS_REVISION, CATALOG_STATE_PUBLISHED),
     ]
     for src, dst in edges:
         assert dst in _ALLOWED_TRANSITIONS.get(src, frozenset()), f"{src} → {dst} вне машины"
@@ -531,3 +561,112 @@ async def test_erasing_the_phone_does_not_pause_a_published_card(
         tid, tg, state=CATALOG_STATE_PUBLISHED, actions=["hide"], public=True, journal_actor="moderator"
     )
     assert not pushes
+
+
+@pytest.mark.asyncio
+async def test_a_card_stuck_in_the_legacy_queue_publishes_on_one_tap(
+    app_use_test_db, db_session, admin_pings
+) -> None:
+    """
+    Прод-тренер из ``pending_review``: очередь до publish-first больше никто не разбирает,
+    поэтому тот же один тап «Отправить себя в каталог» публикует застрявшую заявку сразу.
+    """
+    tid, tg, _ = await _new_trainer(db_session)
+    await db_session.execute(
+        text(
+            "UPDATE trainers SET catalog_state = 'pending_review', "
+            "moderation_submitted_at = now() WHERE id = :t"
+        ),
+        {"t": tid},
+    )
+    await db_session.commit()
+
+    await _assert_stop(
+        tid,
+        tg,
+        state=CATALOG_STATE_PENDING_REVIEW,
+        actions=["submit", "withdraw"],
+        public=False,
+        journal_actor=None,
+    )
+
+    assert (await _act(tg, "submit"))[0] == 200
+    await _assert_stop(
+        tid,
+        tg,
+        state=CATALOG_STATE_PUBLISHED,
+        actions=["hide"],
+        public=True,
+        journal_actor="trainer",
+    )
+    assert admin_pings == [tid], "пост-проверка опубликованной карточки обязана позвать админов"
+
+
+@pytest.mark.asyncio
+async def test_revision_on_a_published_card_of_a_not_yet_active_account_unpublishes_it(
+    app_use_test_db, db_session, admin_pings
+) -> None:
+    """
+    «Нужны правки» по опубликованной карточке тренера, который ещё не был ``active``
+    (publish-first: статус остаётся ``pending_profile``) — карточка уходит в
+    ``needs_revision``. Иначе у пост-модерации против такой карточки была бы только
+    деактивация аккаунта.
+    """
+    tid, tg, _ = await _new_trainer(db_session)
+    assert (await _act(tg, "submit"))[0] == 200
+    screen = await _assert_stop(
+        tid, tg, state=CATALOG_STATE_PUBLISHED, actions=["hide"], public=True, journal_actor="trainer"
+    )
+    assert screen["readiness"]["submit_ready"]
+
+    state = await apply_moderator_revision_request(
+        db_session, tid, feedback="Уберите чужой логотип", moderator_id=7
+    )
+    assert state == CATALOG_STATE_NEEDS_REVISION
+    screen = await _assert_stop(
+        tid,
+        tg,
+        state=CATALOG_STATE_NEEDS_REVISION,
+        actions=["edit"],
+        public=False,
+        journal_actor="moderator",
+    )
+    assert screen["state_detail"] == "Уберите чужой логотип"
+
+
+@pytest.mark.asyncio
+async def test_the_legacy_rest_submit_cannot_override_the_trainers_own_decision(
+    app_use_test_db, db_session, admin_pings
+) -> None:
+    """
+    POST /trainers/{id}/submit-for-moderation идёт без ``requested_by_trainer``: он не имеет
+    права публиковать из состояний, где лежит решение самого тренера — ``hidden`` (снял сам),
+    ``paused`` (дыру чинит reconcile), ``needs_revision`` (ждёт правку).
+    """
+    from src.application.trainer_use_cases import try_submit_trainer_for_moderation_review
+
+    for state in (
+        CATALOG_STATE_HIDDEN,
+        CATALOG_STATE_PAUSED,
+        CATALOG_STATE_NEEDS_REVISION,
+    ):
+        tid, _, _ = await _new_trainer(db_session)
+        await db_session.execute(
+            text("UPDATE trainers SET catalog_state = :s WHERE id = :t"), {"s": state, "t": tid}
+        )
+        await db_session.commit()
+
+        result = await try_submit_trainer_for_moderation_review(db_session, tid)
+        assert result["ok"] is True, state
+        assert result["noop"] is True, state
+        assert result["reason"] == "requires_trainer_action", state
+
+        row = (
+            await db_session.execute(
+                text("SELECT catalog_state, is_catalog_visible FROM trainers WHERE id = :t"),
+                {"t": tid},
+            )
+        ).fetchone()
+        assert row[0] == state, f"{state}: сторонний submit не должен был опубликовать карточку"
+        assert row[1] is False, state
+        assert admin_pings == [], f"{state}: админов не должны звать"

@@ -133,13 +133,21 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
         {CATALOG_STATE_PUBLISHED, CATALOG_STATE_NEEDS_REVISION, CATALOG_STATE_PAUSED}
     ),
     # A moderator asking an *active* trainer for edits does not unpublish the card — it only
-    # discards the pending revision. So `published → needs_revision` is intentionally absent.
+    # discards the pending revision. `published → needs_revision` exists for the other case:
+    # a published card whose account never reached ``active`` (publish-first trainer still in
+    # ``pending_profile``) — post-moderation's «Нужны правки» would otherwise have only
+    # «Отклонить» = account deactivation as its teeth (see ``apply_moderator_revision_request``).
     #
     # `published → pending_review` is for the account losing its approval: an admin moving the
     # status out of `active` takes the card back to the queue, where its content is intact and
     # only the approval is missing (see ``update_trainer_status``).
     CATALOG_STATE_PUBLISHED: frozenset(
-        {CATALOG_STATE_HIDDEN, CATALOG_STATE_PAUSED, CATALOG_STATE_PENDING_REVIEW}
+        {
+            CATALOG_STATE_HIDDEN,
+            CATALOG_STATE_PAUSED,
+            CATALOG_STATE_PENDING_REVIEW,
+            CATALOG_STATE_NEEDS_REVISION,
+        }
     ),
     CATALOG_STATE_HIDDEN: frozenset({CATALOG_STATE_PUBLISHED}),
     CATALOG_STATE_PAUSED: frozenset({CATALOG_STATE_PUBLISHED, CATALOG_STATE_PENDING_REVIEW}),

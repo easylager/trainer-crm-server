@@ -1,13 +1,15 @@
-"""Dry-run: trainers stuck in ``catalog_state='draft'`` whose card already passes the
-minimal submission tier (publish-first, TASK: «Отправить себя в каталог»).
+"""Dry-run: trainers stuck in ``catalog_state IN ('draft','pending_review')`` whose card
+already passes the minimal submission tier (publish-first, TASK: «Отправить себя в каталог»).
 
 Before publish-first a trainer could fill everything and still sit outside the catalog —
 the old checklist demanded a copied client link and a phone that were never real
-publication blockers. This report shows how many of those «ready but stuck» drafts exist
-and who they are, so we can decide how to invite them (e.g. show the
-«Отправить себя в каталог» screen at next login) — NOT mass-publish them: a catalog card
-is the trainer's public presence, publishing without their tap presumes consent we
-don't have.
+publication blockers. And the ones who did press «Отправить на проверку» are still sitting
+in ``pending_review``, a queue that post-publish moderation no longer drains: nobody
+approves them out of it. This report shows both groups — who is ready but stuck — so we
+can decide how to invite them (show the «Отправить себя в каталог» screen at next login;
+the same one tap now publishes a pending_review card too) — NOT mass-publish them: a
+catalog card is the trainer's public presence, publishing without their tap presumes
+consent we don't have.
 
 Read-only: everything runs inside one READ ONLY transaction; there is no --apply.
 
@@ -38,12 +40,15 @@ from src.shared.ops_db_guard import (  # noqa: E402
 
 # Same minimal submission tier as SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS semantics in
 # trainer_profile_completeness.analyze_moderation_submission_readiness:
-# first name, city, >=1 service, >=1 place of work (primary arena, own arena row,
-# or non-venue work format like online/mobile).
+# first name, city, >=1 service, >=1 place of work. The place-of-work check mirrors
+# tt_minimal_arenas_satisfied exactly: a real arena row/primary arena, OR
+# arena_work_format 'mobile'/'online', OR 'pending_request' with a filled request text
+# — a bare IS NOT NULL would also pass unknown formats and empty pending requests.
 READY_SQL = text(
     """
     SELECT
         t.id,
+        COALESCE(t.catalog_state, 'draft') AS catalog_state,
         p.first_name,
         c.name AS city_name,
         (SELECT COUNT(*) FROM trainer_services ts WHERE ts.trainer_id = t.id)::int AS services_count,
@@ -55,16 +60,20 @@ READY_SQL = text(
     LEFT JOIN cities c ON c.id = p.city_id
     WHERE t.status <> 'deactivated'
       AND t.telegram_id IS NOT NULL
-      AND COALESCE(t.catalog_state, 'draft') = 'draft'
+      AND COALESCE(t.catalog_state, 'draft') IN ('draft', 'pending_review')
       AND TRIM(COALESCE(p.first_name, '')) <> ''
       AND p.city_id IS NOT NULL
       AND EXISTS (SELECT 1 FROM trainer_services ts WHERE ts.trainer_id = t.id)
       AND (
           t.primary_arena_id IS NOT NULL
-          OR t.arena_work_format IS NOT NULL
+          OR t.arena_work_format IN ('mobile', 'online')
+          OR (
+              t.arena_work_format = 'pending_request'
+              AND TRIM(COALESCE(t.arena_request_text, '')) <> ''
+          )
           OR EXISTS (SELECT 1 FROM trainer_arenas ta WHERE ta.trainer_id = t.id)
       )
-    ORDER BY t.created_at DESC
+    ORDER BY COALESCE(t.catalog_state, 'draft'), t.created_at DESC
     """
 )
 
@@ -86,14 +95,20 @@ STUCK_SQL = text(
             WHERE TRIM(COALESCE(p.first_name, '')) <> '' AND p.city_id IS NOT NULL
               AND EXISTS (SELECT 1 FROM trainer_services ts WHERE ts.trainer_id = t.id)
               AND t.primary_arena_id IS NULL
-              AND t.arena_work_format IS NULL
-              AND NOT EXISTS (SELECT 1 FROM trainer_arenas ta WHERE ta.trainer_id = t.id)
+              AND NOT (
+                  t.arena_work_format IN ('mobile', 'online')
+                  OR (
+                      t.arena_work_format = 'pending_request'
+                      AND TRIM(COALESCE(t.arena_request_text, '')) <> ''
+                  )
+                  OR EXISTS (SELECT 1 FROM trainer_arenas ta WHERE ta.trainer_id = t.id)
+              )
         )::int AS no_place
     FROM trainers t
     JOIN trainer_profiles p ON p.trainer_id = t.id
     WHERE t.status <> 'deactivated'
       AND t.telegram_id IS NOT NULL
-      AND COALESCE(t.catalog_state, 'draft') = 'draft'
+      AND COALESCE(t.catalog_state, 'draft') IN ('draft', 'pending_review')
     """
 )
 
@@ -109,7 +124,9 @@ async def _run(url: str) -> int:
     finally:
         await engine.dispose()
 
-    print(f"Ready-but-stuck drafts: {len(ready)}")
+    drafts = [r for r in ready if r["catalog_state"] == "draft"]
+    queued = [r for r in ready if r["catalog_state"] == "pending_review"]
+    print(f"Ready-but-stuck cards: {len(ready)} (draft={len(drafts)}, pending_review={len(queued)})")
     with_phone = sum(1 for r in ready if r["has_phone"])
     with_link = sum(1 for r in ready if r["link_copied"])
     print(f"  of them without phone: {len(ready) - with_phone}")
@@ -118,7 +135,7 @@ async def _run(url: str) -> int:
     for r in ready[:50]:
         name = (r["first_name"] or "—").strip()
         print(
-            f"  #{r['id']:<5} {name:<20} {r['city_name'] or '—':<18} "
+            f"  #{r['id']:<5} {r['catalog_state']:<15} {name:<20} {r['city_name'] or '—':<18} "
             f"services={r['services_count']} slots={r['slots_count']} "
             f"phone={'yes' if r['has_phone'] else 'no'} link={'copied' if r['link_copied'] else 'never'}"
         )
@@ -132,8 +149,9 @@ async def _run(url: str) -> int:
     )
     print()
     print("Next step suggestion: show these trainers the «Отправить себя в каталог» screen")
-    print("at next login (trainer_dashboard next-step invite already covers drafts) rather")
-    print("than publishing on their behalf — a public card needs the trainer's own tap.")
+    print("at next login — drafts get the post-onboarding invite, pending_review gets the")
+    print("same one-tap submit on the «Каталог» screen (it publishes instantly now) — rather")
+    print("than publishing on their behalf: a public card needs the trainer's own tap.")
     return 0
 
 

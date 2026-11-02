@@ -400,6 +400,8 @@ async def test_editing_a_card_in_review_leaves_a_way_to_re_ping_the_moderator(
     """
     tid, tg = await _complete_trainer(db_session)
     # Карточка, стоящая в очереди (легаси-состояние для тех, кто успел подать до publish-first).
+    # «Отправить себя в каталог» доступна и тут: очередь больше не работает, и тот же один тап
+    # публикует застрявшую заявку сразу — это и есть путь для прод-тренеров из pending_review.
     await db_session.execute(
         text(
             "UPDATE trainers SET catalog_state = 'pending_review', "
@@ -411,7 +413,7 @@ async def test_editing_a_card_in_review_leaves_a_way_to_re_ping_the_moderator(
 
     in_queue = await _get(tg)
     assert in_queue["state"] == CATALOG_STATE_PENDING_REVIEW
-    assert in_queue["actions"] == ["withdraw"]
+    assert in_queue["actions"] == ["submit", "withdraw"]
     assert "изменили карточку" not in in_queue["body"]
 
     # Тренер правит карточку — отметка в очереди слетает.
@@ -438,8 +440,9 @@ async def test_editing_a_card_in_review_leaves_a_way_to_re_ping_the_moderator(
 async def test_a_card_in_review_that_was_not_touched_offers_only_withdrawal(
     app_use_test_db, db_session
 ) -> None:
-    """Пока модератор смотрит ровно ту версию, что ему отправили, второй кнопки быть не должно.
-    Карточку в очередь ставим напрямую — с publish-first submit публикует сразу."""
+    """Карточка в очереди держит «Отправить себя в каталог» — очередь легаси, и один тап
+    публикует заявку сразу. Карточку в очередь ставим напрямую — с publish-first submit
+    публикует сразу."""
     tid, tg = await _complete_trainer(db_session)
     await db_session.execute(
         text(
@@ -450,4 +453,4 @@ async def test_a_card_in_review_that_was_not_touched_offers_only_withdrawal(
     )
     await db_session.commit()
     body = await _get(tg)
-    assert body["actions"] == ["withdraw"]
+    assert body["actions"] == ["submit", "withdraw"]

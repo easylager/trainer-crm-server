@@ -400,6 +400,12 @@
     var done = function () {
       btn.textContent = 'Скопировано';
       setTimeout(function () { btn.textContent = 'Скопировать'; }, 1600);
+      // Fire-and-forget: отметка о первом копировании прячет подсказку и засчитывает шаг воронки.
+      var c = credential();
+      var h = { 'Content-Type': 'application/json' };
+      if (c) h['X-Telegram-Init-Data'] = c;
+      fetch(apiUrl('/trainer/welcome-link/first-copy'), { method: 'POST', headers: h })
+        .catch(function () { /* подсказка доживёт до следующего захода */ });
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(link).then(done, done);

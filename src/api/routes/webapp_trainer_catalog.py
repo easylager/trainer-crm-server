@@ -103,6 +103,11 @@ async def submit_trainer_catalog_card(
     result = await try_publish_trainer_catalog_card(
         session, trainer_id, requested_by_trainer=True
     )
+    if result.get("error") == "needs_revision_unchanged":
+        raise HTTPException(
+            status_code=409,
+            detail="Модератор попросил правки — сначала измените карточку в анкете, потом публикуйте снова.",
+        )
     if not result.get("ok"):
         raise HTTPException(status_code=422, detail=result)
     audit_log("trainer.catalog_submitted", ACTOR_API, "webapp_trainer_catalog", {"trainer_id": trainer_id})
