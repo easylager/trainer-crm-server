@@ -133,8 +133,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5a5f; animation: kk-pulse 1.4s ease-in-out infinite; }
 @keyframes kk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .kk-board { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
-.kk-board__t { display: flex; align-items: center; gap: 8px; font: 700 15px var(--kk-text); min-width: 0; overflow-wrap: anywhere; }
-.kk-board__t--r { justify-content: flex-end; text-align: right; }
+/* Логотип над названием: длинные имена («Динамо-Молодечно») переносятся по словам и дефису, а не посреди слова. */
+.kk-board__t { display: flex; flex-direction: column; align-items: center; gap: 6px; font: 700 14px/1.2 var(--kk-text); min-width: 0; text-align: center; overflow-wrap: normal; word-break: normal; }
+.kk-board__t--r { flex-direction: column-reverse; }
 .kk-score { font: 400 34px/1 var(--kk-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .kk-sec { display: flex; flex-direction: column; gap: 6px; }
 .kk-sec__head { display: flex; justify-content: space-between; align-items: baseline; }
