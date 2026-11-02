@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import math
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -145,6 +146,7 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
         "photos": photos,
         "route_url": route_url(r.latitude, r.longitude, r.geocode_precision, r.address, r.city_name),
         "same_complex_id": r.same_complex_id,
+        "own_page": has_winter_page(r.slug),  # у существующих арен (Немига) страница обычная, не зимняя
     }
     if settings.winter_static_map_thumbs or detail:
         item["static_map_url"] = static_map_url(
@@ -229,6 +231,15 @@ async def get_point(session: AsyncSession, ident: str | int, *, now: datetime, l
 
 # --- сайт: итоги города, «чем была точка», sitemap (волна 2) ---------------------------
 INDEXABLE_PRECISIONS = frozenset({"house", "osm_exact", "manual"})
+_WINTER_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*-(?:korobka|katok)-[0-9]+$")
+
+
+def has_winter_page(slug: str | None) -> bool:
+    """Свой зимний адрес у точек из seed (``<город>-<korobka|katok>-<id>``).
+
+    Немига и другие существующие арены каталога только закреплены в «Зимой»: их страница остаётся обычной.
+    """
+    return bool(slug and _WINTER_SLUG_RE.match(slug))
 
 
 def is_indexable(item: dict[str, Any]) -> bool:
@@ -292,6 +303,7 @@ async def lookup_any(session: AsyncSession, ident: str | int) -> dict[str, Any] 
     return {
         "id": int(r.id), "name": r.name, "slug": r.slug, "city_id": int(r.city_id), "city": r.city_name,
         "hidden": (not r.is_active) or r.state in (None, "hidden"),
+        "own_page": has_winter_page(r.slug),
     }
 
 

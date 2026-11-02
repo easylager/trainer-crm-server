@@ -289,6 +289,12 @@ async def place_page(
     city, arena_id = await _resolve(session, city_ref, slug)
     if city is None or arena_id is None:
         return _not_found(_catalog_home(base))
+    # TASK-343: зимняя точка из seed живёт на этом же адресе, но страница у неё своя.
+    from src.api.routes.winter_pages import maybe_winter_point_response
+
+    winter = await maybe_winter_point_response(session, request, city, arena_id, city_ref=city_ref, slug=slug)
+    if winter is not None:
+        return winter
     session_id = _int_or_none(s)
     invite = _flag(i)
     share_src = clean_share_src(src)
@@ -434,6 +440,8 @@ _SITEMAP_SQL = text(f"""
         GROUP BY arena_id
     ) sess ON sess.arena_id = a.id
     WHERE {SITEMAP_PLACE_WHERE_SQL}
+      -- TASK-343: зимние точки из seed идут в sitemap отдельно и только индексируемые (O3), не пачкой
+      AND p.slug !~ '-(korobka|katok)-[0-9]+$'
     ORDER BY c.sort_order, c.id, a.id
     """)
 
@@ -489,6 +497,17 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
         freq = "daily" if row["venue_type"] == "ice" else "weekly"
         loc = place_page_url(base_url=base, city_name=city_name, slug=str(row["slug"]))
         by_city[city_name].append((loc, freq, stamp, "0.7"))
+    # Зимой (TASK-343): страницы города «Зимой» и индексируемые точки; за флагом, как и сами страницы.
+    winter_urls: list[tuple[str, str, datetime | None, str | None]] = []
+    if Settings().seasonal_rinks_enabled:
+        from src.application import winter_public
+        from src.application.winter_page import winter_city_path
+
+        now = datetime.now(timezone.utc)
+        for city_name in await winter_public.cities_with_points(session, now=now):
+            winter_urls.append((f"{base}{winter_city_path(city_name)}", "daily", None, "0.6"))
+        for point in await winter_public.sitemap_points(session, now=now):
+            winter_urls.append((place_page_url(base_url=base, city_name=point["city"], slug=point["slug"]), "daily", None, "0.5"))
     urls: list[tuple[str, str, datetime | None, str | None]] = [
         (f"{base}/", "daily", site_stamp, "1.0"),
         # Без lastmod: свежесть катков к лендингу отношения не имеет, а ложная дата
@@ -500,6 +519,7 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
         # Подборка города — ответ на «где покататься в <город>» (TASK-146).
         urls.append((f"{base}/c/{city_slug(city_name)}", "daily", stamp, "0.9"))
         urls.extend(by_city[city_name])
+    urls.extend(winter_urls)
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for loc, freq, stamp, priority in urls:
         lastmod = _sitemap_lastmod(stamp)
