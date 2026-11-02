@@ -249,7 +249,17 @@ async def test_a_broken_profile_pauses_the_card_and_fixing_it_brings_the_card_ba
     await _approve_as_moderator(db_session, tid)
     pushes.clear()
 
-    await update_trainer_profile(db_session, tid, profile={"phone": ""})
+    # Телефон каталогу не нужен (см. отдельный тест ниже): дыру делает город.
+    city_id = (
+        await db_session.execute(
+            text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :t"), {"t": tid}
+        )
+    ).scalar_one()
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = NULL WHERE trainer_id = :t"), {"t": tid}
+    )
+    await db_session.commit()
+    await update_trainer_profile(db_session, tid, profile={"contacts": "@coach"})
     screen = await _assert_stop(
         tid,
         tg,
@@ -259,17 +269,17 @@ async def test_a_broken_profile_pauses_the_card_and_fixing_it_brings_the_card_ba
         journal_actor="system",
     )
     # Причина названа полем, а не кодом, и теми же словами, что и в анкете.
-    assert "телефон" in (screen["state_detail"] or "").lower()
+    assert "город" in (screen["state_detail"] or "").lower()
     assert pushes, "выпадение из каталога обязано прийти пушем"
     assert "каталог" in pushes[-1].lower()
 
     # Пока дыра открыта, «вернуть» — не отказ, а следующий шаг: 422 с полями для карусели.
     status, body = await _act(tg, "restore")
     assert status == 422
-    assert "phone" in (body["detail"].get("missing_fields") or [])
+    assert "city" in (body["detail"].get("missing_fields") or [])
 
     pushes.clear()
-    await update_trainer_profile(db_session, tid, profile={"phone": "+375291230011"})
+    await update_trainer_profile(db_session, tid, profile={"city_id": city_id})
     await _assert_stop(
         tid,
         tg,
@@ -400,7 +410,17 @@ async def test_a_card_can_break_while_it_waits_in_the_queue(
     assert (await _act(tg, "submit"))[0] == 200
     pushes.clear()
 
-    await update_trainer_profile(db_session, tid, profile={"phone": ""})
+    # Телефон каталогу не нужен (см. отдельный тест ниже): дыру делает город.
+    city_id = (
+        await db_session.execute(
+            text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :t"), {"t": tid}
+        )
+    ).scalar_one()
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = NULL WHERE trainer_id = :t"), {"t": tid}
+    )
+    await db_session.commit()
+    await update_trainer_profile(db_session, tid, profile={"contacts": "@coach"})
     screen = await _assert_stop(
         tid,
         tg,
@@ -409,7 +429,7 @@ async def test_a_card_can_break_while_it_waits_in_the_queue(
         public=False,
         journal_actor="system",
     )
-    assert "телефон" in (screen["state_detail"] or "").lower()
+    assert "город" in (screen["state_detail"] or "").lower()
     assert pushes, "выпадение из очереди обязано прийти пушем"
 
     # Дорога назад та же, что у любой приостановленной карточки — через проверку, потому что
@@ -491,3 +511,20 @@ async def test_no_caller_can_attempt_an_edge_the_machine_forbids(
     # правилом в set_catalog_state, поэтому в таблице его нет и быть не должно.
     for src in _ALLOWED_TRANSITIONS:
         assert CATALOG_STATE_DRAFT not in _ALLOWED_TRANSITIONS[src], src
+
+
+@pytest.mark.asyncio
+async def test_erasing_the_phone_does_not_pause_a_published_card(
+    app_use_test_db, db_session, pushes
+) -> None:
+    """Телефон необязателен: стёртый номер не выводит карточку из каталога и не шлёт пуш."""
+    tid, tg, _ = await _new_trainer(db_session)
+    assert (await _act(tg, "submit"))[0] == 200
+    await _approve_as_moderator(db_session, tid)
+    pushes.clear()
+
+    await update_trainer_profile(db_session, tid, profile={"phone": ""})
+    await _assert_stop(
+        tid, tg, state=CATALOG_STATE_PUBLISHED, actions=["hide"], public=True, journal_actor="moderator"
+    )
+    assert not pushes

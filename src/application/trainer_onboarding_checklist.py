@@ -1,6 +1,6 @@
 """
 Trainer onboarding checklist: submission readiness, full-profile flag, future slots, booking flags.
-``profile_complete`` = moderation submission tier (8 criteria); ``full_profile_complete`` = dossier (12).
+``profile_complete`` = moderation submission tier (7 criteria); ``full_profile_complete`` = dossier (10).
 ``tt_minimal_complete`` = 5-field TTV gate (schedule/bookings in Mini App before activation).
 ``has_upcoming_booking`` mirrors hub upcoming list logic (pending/confirmed on future-ended slots).
 ``has_any_booking`` = ever created a booking row for this trainer (includes ``cancelled`` /

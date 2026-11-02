@@ -791,7 +791,7 @@ def test_profile_workplace_vitrine_ia() -> None:
     assert 'for="education"><span class="required-dot"' not in html
     assert 'for="first_name"><span class="required-dot"' in html
     assert 'for="city_id"><span class="required-dot"' in html
-    assert 'for="phone"><span class="required-dot"' in html
+    assert 'for="phone"><span class="required-dot"' not in html  # phone is optional for the catalog
 
 
 def test_profile_focused_prices_task_contract() -> None:

@@ -90,11 +90,13 @@ def test_missing_photo() -> None:
     assert analyze_moderation_submission_readiness(t)[0] is False
 
 
-def test_phone_required_contacts_optional() -> None:
+def test_phone_optional_for_catalog_tiers() -> None:
     t = _base()
     t["profile"] = {**t["profile"], "phone": "", "contacts": "  @user  "}
-    assert analyze_moderation_profile_completeness(t)[0] is False
-    assert analyze_moderation_submission_readiness(t)[0] is False
+    ok, missing = analyze_moderation_profile_completeness(t)
+    assert ok is True and "phone" not in missing
+    assert analyze_moderation_submission_readiness(t) == (True, [])
+    assert "phone" not in moderation_readiness_dict(t)["missing_fields"]
     t2 = _base()
     t2["profile"] = {**t2["profile"], "phone": "  123  ", "contacts": ""}
     assert analyze_moderation_profile_completeness(t2)[0] is True

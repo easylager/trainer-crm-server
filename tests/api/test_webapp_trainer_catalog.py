@@ -139,14 +139,32 @@ async def test_published_screen_carries_preview_and_history(app_use_test_db, db_
 async def test_submit_requires_a_complete_card_and_reports_gaps(app_use_test_db, db_session) -> None:
     tid, tg = await _complete_trainer(db_session)
     await db_session.execute(
-        text("UPDATE trainer_profiles SET phone = '' WHERE trainer_id = :t"), {"t": tid}
+        text("UPDATE trainer_profiles SET city_id = NULL WHERE trainer_id = :t"), {"t": tid}
     )
     await db_session.commit()
     status, body = await _post(tg, "submit")
     assert status == 422
     detail = body["detail"]
-    assert "phone" in (detail.get("missing_fields") or [])
-    assert any("телефон" in label for label in detail.get("missing_labels_ru") or [])
+    assert "city" in (detail.get("missing_fields") or [])
+    assert any("город" in label for label in detail.get("missing_labels_ru") or [])
+
+
+@pytest.mark.asyncio
+async def test_submit_without_a_phone_is_accepted(app_use_test_db, db_session) -> None:
+    """Телефон не блокирует каталог: заявка уходит в очередь, а экран предлагает его как совет."""
+    tid, tg = await _complete_trainer(db_session)
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET phone = '' WHERE trainer_id = :t"), {"t": tid}
+    )
+    await db_session.commit()
+    status, body = await _post(tg, "submit")
+    assert status == 200, body
+    assert body["state"] == CATALOG_STATE_PENDING_REVIEW
+    readiness = body["readiness"]
+    assert readiness["submit_ready"] is True
+    assert "phone" not in readiness["missing_fields"]
+    assert "phone" in readiness["optional_missing_fields"]
+    assert any("по желанию" in t for t in readiness["optional_missing_labels_ru"])
 
 
 @pytest.mark.asyncio
@@ -177,7 +195,7 @@ async def test_submit_then_hide_then_restore_round_trip(app_use_test_db, db_sess
 async def test_restore_from_paused_returns_422_while_the_gap_is_open(app_use_test_db, db_session) -> None:
     tid, tg = await _complete_trainer(db_session, published=True)
     await db_session.execute(
-        text("UPDATE trainer_profiles SET phone = '' WHERE trainer_id = :t"), {"t": tid}
+        text("UPDATE trainer_profiles SET city_id = NULL WHERE trainer_id = :t"), {"t": tid}
     )
     await set_catalog_state(
         db_session, tid, CATALOG_STATE_PAUSED,
@@ -186,7 +204,7 @@ async def test_restore_from_paused_returns_422_while_the_gap_is_open(app_use_tes
     await db_session.commit()
     status, body = await _post(tg, "restore")
     assert status == 422
-    assert "phone" in (body["detail"].get("missing_fields") or [])
+    assert "city" in (body["detail"].get("missing_fields") or [])
 
 
 @pytest.mark.asyncio
