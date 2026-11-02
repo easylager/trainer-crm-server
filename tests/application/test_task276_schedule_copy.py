@@ -146,3 +146,14 @@ def test_schedule_section_ignores_unsafe_site() -> None:
         links={},
     )
     assert html == ""
+
+
+def test_prices_never_say_rental_included_with_separate_rental_price() -> None:
+    from src.application.place_visit_blocks import prices_html
+
+    slots = [{"price_adult_minor": 650, "price_child_minor": 550, "price_rental_minor": 490}]
+    html = prices_html(slots, {"rental_included": True, "child_age_max": 14}, currency="BYN")
+    assert "вход + коньки" not in html
+    assert "до 14 лет" in html
+    assert "Прокат" in html
+    assert "с прокатом" in html

@@ -52,7 +52,8 @@ def prices_html(slots: list[Mapping[str, Any]], vv: Mapping[str, Any], *, curren
 
     age = vv.get("child_age_max")
     sizes = vv.get("sizes") or ""
-    included = bool(vv.get("rental_included"))
+    # Отдельная цена проката в сеансах — коньки точно не входят в билет, что бы ни писала админка.
+    included = bool(vv.get("rental_included")) and "rental" not in floors
     cells: list[tuple[str, str, str]] = []
     if "adult" in floors:
         cells.append(("Взрослый", money("adult"), "вход + коньки" if included else ""))
