@@ -1689,6 +1689,25 @@
     if (skate) skate.hidden = coachOn;
     if (coach) coach.hidden = !coachOn;
     renderSeasonFooter();
+    syncWinter();
+  }
+
+  /* TASK-343: зимние катки и коробки внутри «Зимой». Нет модуля или флага — лента как была. */
+  function syncWinter() {
+    if (!global.IceWinter) return;
+    var on = global.IceWinter.sync({
+      season: state.intent === 'coach' || state.placeService === 'service' ? '' : state.season,
+      cityId: state.cityId,
+      near: state.nearOn ? state.near : '',
+      facet: state.seasonFacet,
+      authHeaders: authHeaders,
+      openArena: function (ref) {
+        shellNav('arena?ref=' + encodeURIComponent(ref));
+      },
+    });
+    var list = $('iceList');
+    /* Закрытых арен нет, есть только зимние точки: пустое состояние ленты не нужно. */
+    if (on && list && !state.items.length && !state.loading) list.innerHTML = '';
   }
 
   function commitPlaceFilter(venueKey) {

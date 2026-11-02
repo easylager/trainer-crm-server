@@ -228,3 +228,15 @@ async def test_city_hub_has_winter_tile_only_with_flag_and_points(on, client, db
     assert 'href="/c/minsk/zimoy"' in html and "залиты 1" in html
     monkeypatch.setenv("SEASONAL_RINKS_ENABLED", "0")
     assert "/c/minsk/zimoy" not in (await client.get("/c/minsk")).text
+
+
+@pytest.mark.asyncio
+async def test_miniapp_season_facet_counts_winter_points_only_with_flag(on, client, db_session, monkeypatch):
+    aid = await point(db_session, name="Коробка")
+    await point(db_session, name="Скрытая", state="hidden")
+    cid = (await db_session.execute(text("SELECT city_id FROM arenas WHERE id=:a"), {"a": aid})).scalar_one()
+    f = (await client.get("/api/public/ice/arenas", params={"city_id": cid})).json()["season_facet"]
+    assert f["winter_points"] == 1 and f["count"] >= 1
+    monkeypatch.setenv("SEASONAL_RINKS_ENABLED", "0")
+    f2 = (await client.get("/api/public/ice/arenas", params={"city_id": cid})).json()["season_facet"]
+    assert "winter_points" not in f2
