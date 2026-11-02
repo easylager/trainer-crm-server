@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
@@ -10,6 +10,7 @@ from sqlalchemy import text
 import src.application.hockey_leagues as leagues_mod
 from src.application.hockey_game import make_pick, score_finished_matches, standings
 from src.application.hockey_leagues import (
+    MAX_CLUBS,
     LeagueFull,
     TooManyLeagues,
     clean_name,
@@ -22,6 +23,7 @@ from src.application.hockey_leagues import (
     normalize_code,
     player_leagues,
     rename_league,
+    term_options,
 )
 from src.application.hockey_matches import set_manual_result
 from src.ingestion.hockey_sources import MINSK_TZ
@@ -181,3 +183,33 @@ async def test_friends_on_match_halves_without_me_strangers_or_scores(db_session
     got = await friends_picks(db_session, player_key=SASHA, match_ids=[mid, other])
     # Катя в двух моих лигах — один раз; чужого нет; меня нет.
     assert got == {mid: {"home": ["Дима"], "away": ["Катя"]}, other: {"home": [], "away": []}}
+
+
+def test_term_options_windows_are_minsk_midnights_and_only_season_crowns_monthly() -> None:
+    """Окна сроков для экрана «Новая лига»: границы — минская полночь, корона каждый месяц — только у сезона."""
+    november = datetime(2026, 11, 3, 12, 0, tzinfo=MINSK_TZ)
+    opts = term_options(now=november)
+    assert opts["max_clubs"] == MAX_CLUBS
+    by_term = {i["term"]: i for i in opts["items"]}
+    assert [i["term"] for i in opts["items"]] == ["season", "month", "weeks4", "playoff"]
+    assert [i["term"] for i in opts["items"] if i["monthly_crowns"]] == ["season"]
+    # Календарь игры минский: ноябрь и 4 недели начинаются в минскую полночь.
+    def utc(y, m, d):
+        return datetime(y, m, d, tzinfo=MINSK_TZ).astimezone(timezone.utc).isoformat()
+
+    assert by_term["month"]["starts_at"] == utc(2026, 11, 1)
+    assert by_term["month"]["ends_at"] == utc(2026, 12, 1)
+    assert by_term["weeks4"]["starts_at"] == utc(2026, 11, 3)
+    assert by_term["weeks4"]["ends_at"] == utc(2026, 12, 1)
+    # Плей-офф сезона — 1 марта по 1 июня по Минску года окончания сезона.
+    assert by_term["playoff"]["starts_at"] == utc(2027, 3, 1)
+    assert by_term["playoff"]["ends_at"] == utc(2027, 6, 1)
+    assert opts["season_ends_at"] == utc(2027, 8, 1)
+
+
+def test_term_options_drops_playoff_after_its_end() -> None:
+    """Срок, который уже нельзя создать (плей-офф кончился), из списка пропадает — ещё живой он в списке."""
+    alive_edge = datetime(2027, 5, 31, 23, 59, tzinfo=MINSK_TZ)
+    assert "playoff" in [i["term"] for i in term_options(now=alive_edge)["items"]]
+    gone_edge = datetime(2027, 6, 1, 0, 1, tzinfo=MINSK_TZ)
+    assert [i["term"] for i in term_options(now=gone_edge)["items"]] == ["season", "month", "weeks4"]

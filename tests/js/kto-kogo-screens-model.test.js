@@ -298,21 +298,53 @@ describe('лиги', () => {
     assert.deepEqual(S.termsBody({ scope: 'all', clubs: ['Юность'], term: 'weeks4' }, 'x'), { scope: 'all', clubs: [], term: 'weeks4' });
     assert.deepEqual(S.termsBody({ scope: 'dinamo', clubs: [], term: 'dates', startsOn: '2026-11-10', endsOn: '2026-12-01' }, 'x'), { scope: 'dinamo', clubs: [], term: 'dates', starts_on: '2026-11-10', ends_on: '2026-12-01' });
   });
-  it('форма: без команды и с перепутанными датами создать нельзя', () => {
-    assert.equal(S.formError({ scope: 'pick', clubs: [], term: 'season' }), 'Нужна команда');
-    assert.equal(S.formError({ scope: 'all', clubs: [], term: 'dates', startsOn: '', endsOn: '' }), 'Укажи даты');
-    assert.equal(S.formError({ scope: 'all', clubs: [], term: 'dates', startsOn: '2026-12-01', endsOn: '2026-11-01' }), 'Конец раньше начала');
-    assert.equal(S.formError({ scope: 'all', clubs: [], term: 'season' }), '');
+  it('кнопка формы говорит, чего не хватает: название, команда, даты', () => {
+    assert.equal(S.formError({ name: '', scope: 'all', clubs: [], term: 'season' }), 'Назови лигу');
+    assert.equal(S.formError({ name: 'Офис', scope: 'pick', clubs: [], term: 'season' }), 'Выбери команду');
+    assert.equal(S.formError({ name: 'Офис', scope: 'all', clubs: [], term: 'dates', startsOn: '', endsOn: '' }), 'Укажи даты');
+    assert.equal(S.formError({ name: 'Офис', scope: 'all', clubs: [], term: 'dates', startsOn: '2026-12-01', endsOn: '2026-11-01' }), 'Конец раньше начала');
+    assert.equal(S.formError({ name: 'Офис', scope: 'all', clubs: [], term: 'season' }), '');
+    // Название не мешает превью «Как будет»: окно дат можно показать и без него.
+    assert.equal(S.termsError({ name: '', scope: 'all', clubs: [], term: 'season' }), '');
   });
-  it('«Как будет»: матчи в срок, предупреждение про малое число матчей', () => {
-    const f = { scope: 'pick', clubs: ['Юность'], term: 'weeks4' };
-    const prev = { starts_at: '2026-11-05T21:00:00Z', ends_at: '2026-12-03T21:00:00Z', matches_in_term: 3, few_matches: true };
+  it('сроки с сервера: подписи окон и корона по флагу, «Свои даты» всегда есть', () => {
+    const opts = {
+      items: [
+        { term: 'season', starts_at: '2026-08-01T00:00:00Z', ends_at: '2027-07-31T21:00:00Z', monthly_crowns: true },
+        { term: 'month', starts_at: '2026-11-01T00:00:00Z', ends_at: '2026-11-30T21:00:00Z', monthly_crowns: false },
+        { term: 'weeks4', starts_at: '2026-11-03T00:00:00Z', ends_at: '2026-11-30T21:00:00Z', monthly_crowns: false },
+        { term: 'playoff', starts_at: '2027-03-01T00:00:00Z', ends_at: '2027-05-31T21:00:00Z', monthly_crowns: false },
+      ],
+      season_ends_at: '2027-07-31T21:00:00Z',
+      max_clubs: 20,
+    };
+    const ch = S.termChoices(opts);
+    assert.deepEqual(ch.map((c) => c.term), ['season', 'month', 'weeks4', 'playoff', 'dates']);
+    assert.equal(ch[0].label, 'До конца сезона');
+    assert.match(ch[0].sub, /по 31.июля · корона каждый месяц/);
+    assert.equal(ch[1].label, 'Ноябрь');
+    assert.match(ch[1].sub, /одна корона в конце/);
+    assert.match(ch[2].sub, /с сегодня по 30.ноября/);
+    assert.match(ch[3].sub, /1.марта — 31.мая/);
+    assert.match(ch[4].sub, /не дальше 31.июля/);
+    // Плей-офф кончился — сервер его не прислал: в списке его нет.
+    const noPo = S.termChoices({ items: opts.items.slice(0, 3), season_ends_at: opts.season_ends_at });
+    assert.deepEqual(noPo.map((c) => c.term), ['season', 'month', 'weeks4', 'dates']);
+  });
+  it('«Как будет»: название, матчи, окно, короны, новички', () => {
+    const f = { name: 'Офис', scope: 'pick', clubs: ['Юность'], term: 'weeks4' };
+    const prev = { starts_at: '2026-11-05T21:00:00Z', ends_at: '2026-12-03T21:00:00Z', matches_in_term: 3, few_matches: true, monthly_crowns: false };
     const s = S.termsSummary(f, prev);
-    assert.match(s.what, /^Матчи: Юность · ещё 3.матча до конца лиги$/);
-    assert.match(s.when, /^С 6.ноября по 3.декабря · корона победителю в конце$/);
+    assert.equal(s.title, '«Офис»');
+    assert.equal(s.what, 'Матчи: Юность');
+    assert.match(s.when, /^С 6.ноября по 3.декабря · впереди 3.матча$/);
+    assert.equal(s.crowns, 'Корона чемпиону в конце.');
     assert.match(s.few, /мало/);
-    assert.equal(S.termsSummary({ scope: 'pick', clubs: [], term: 'season' }, null).what, 'Выбери хотя бы одну команду');
-    assert.match(S.termsSummary({ scope: 'all', clubs: [], term: 'season' }, Object.assign({}, prev, { few_matches: false })).when, /корона каждый месяц и чемпион лиги в конце/);
+    assert.match(s.note, /вступит позже/);
+    assert.equal(S.termsSummary({ name: '', scope: 'pick', clubs: [], term: 'season' }, null).what, 'Выбери хотя бы одну команду');
+    const monthly = S.termsSummary({ name: 'X', scope: 'dinamo', clubs: [], term: 'season' }, Object.assign({}, prev, { few_matches: false, monthly_crowns: true }));
+    assert.equal(monthly.crowns, 'Корона лидеру каждого месяца и чемпион лиги в конце.');
+    assert.equal(monthly.what, 'Матчи Динамо-Минск');
   });
   it('строка про корону лиги: месяц и весь срок', () => {
     const l = { term: 'season', ends_at: '2027-07-31T21:00:00Z', period: { key: '2026-11' } };

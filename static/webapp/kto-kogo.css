@@ -385,3 +385,20 @@ body:not(.kk-dark) .kk-puck { box-shadow: inset 0 -3px 0 #3a4756; }
 }
 body.kk-dark .kk-lhead { background: var(--kk-chip); }
 .kk-ptsl__q { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--kk-gold); color: var(--kk-on-gold); display: inline-flex; align-items: center; justify-content: center; font: 400 14px/1 var(--kk-display); }
+
+/* «Новая лига»: строки-варианты, сетка клубов с названиями, прибитая кнопка */
+.kk-opts { display: flex; flex-direction: column; gap: 6px; }
+.kk-opt { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 14px; border-radius: 16px; border: 0; background: var(--kk-card); color: var(--kk-ink); text-align: left; width: 100%; }
+.kk-opt.is-on { box-shadow: inset 0 0 0 2px var(--kk-gold); }
+.kk-opt__t { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.kk-opt__n { font: 600 15px/1.2 var(--kk-text); }
+.kk-opt__s { font: 500 12px/1.3 var(--kk-text); color: var(--kk-muted); }
+.kk-opt__ck { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--kk-line); display: flex; align-items: center; justify-content: center; color: #0d1424; }
+.kk-opt__ck.is-on { background: var(--kk-gold); border-color: var(--kk-gold); }
+.kk-opts .kk-logos .kk-disc + .kk-disc { box-shadow: 0 0 0 2px var(--kk-card); }
+.kk-pick4 { display: grid; grid-template-columns: repeat(2, 18px); gap: 2px; flex: none; }
+.kk-clubgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.kk-club { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 2px; min-height: 72px; border-radius: 14px; border: 0; background: var(--kk-chip); color: var(--kk-ink); font: 600 11px/1.15 var(--kk-text); text-align: center; overflow-wrap: anywhere; }
+.kk-club.is-on { background: var(--kk-line); box-shadow: inset 0 0 0 2px var(--kk-gold); }
+.kk-sum--future { border: 1.5px solid var(--kk-gold); background: var(--kk-crownbg); }
+.kk-cta { position: sticky; bottom: 0; max-width: 480px; margin: 0 auto; padding: 10px 20px 14px; background: var(--kk-bg); }

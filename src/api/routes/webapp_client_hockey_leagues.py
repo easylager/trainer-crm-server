@@ -13,9 +13,8 @@ from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_hockey import _player_name
 from src.application.hockey_leagues import (
-    MONTHLY_CROWN_TERMS,
-    term_options,
     FEW_MATCHES,
+    MONTHLY_CROWN_TERMS,
     InvalidTerms,
     League,
     LeagueFull,
@@ -32,6 +31,7 @@ from src.application.hockey_leagues import (
     matches_in_terms,
     player_leagues,
     rename_league,
+    term_options,
 )
 from src.application.hockey_races import crown_counts, league_crown_wall, race_summary
 from src.application.hockey_share import record_card_event
