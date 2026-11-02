@@ -118,6 +118,7 @@
       ]);
     });
     if (list.length > 3) shown.push(h('span', { class: 'kk-st kk-st--mute', text: 'и ещё ' + (list.length - 3) }));
+    shown.push(h('span', { class: 'kk-sub', text: S.DUEL_HINT }));
     return h('div', { class: 'kk-block' }, shown);
   }
 
@@ -126,7 +127,7 @@
     var colors = M.pairColors(m.home, m.away);
     var trump = S.trumpState(m, state.doubles, new Date().toISOString());
     var team = mine ? name(m[mine.side]) : '';
-    var pts = mine ? S.pointsLine(mine) : S.pointsLine(null) + '. Ходы — до ' + S.timeOnly(m.starts_at) + '.';
+    var pts = mine ? S.pointsLine(mine) : S.pointsLine(null) + '. Ходы — до\u00a0' + S.closeTime(m.starts_at) + '.';
     var center = h('div', { class: 'kk-hero__mid' }, [
       h('span', { class: 'kk-hero__time', text: S.timeOnly(m.starts_at) }),
       h('span', { class: 'kk-hero__day', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] }),
@@ -149,7 +150,7 @@
               onclick: function () { K.toggleTrump(m); },
             }, [icon(I.bolt, 16), trump.label]),
           ]),
-          h('span', { class: 'kk-sub kk-sub--tight', text: 'Козырь: один на неделю, очки за матч ×2 · ' + trump.note }),
+          h('span', { class: 'kk-sub kk-sub--tight', text: S.trumpHint(m, state.doubles, state.matches, new Date().toISOString()) }),
           stakesBlock(m),
           friendsBlock(m),
         ]),
@@ -270,6 +271,7 @@
     if (!moves.length || !m.live) return h('span');
     return h('div', { class: 'kk-sec' }, [
       h('span', { class: 'kk-lbl', text: 'ДУЭЛИ' }),
+      h('span', { class: 'kk-sub', text: S.DUEL_HINT }),
       h('div', { class: 'kk-rows' }, moves.slice(0, 5).map(function (f) {
         var d = S.duelLive(mine, f, m.live);
         var scoreText = d.me == null || d.they == null ? '—' : d.me + ' : ' + d.they;

@@ -25,6 +25,24 @@ describe('очки — те же числа, что на сервере', () => 
     assert.equal(M.POINTS.goals, num('POINTS_GOALS'));
     assert.equal(M.POINTS.exact, M.POINTS.winner + M.POINTS.diff + 2 * M.POINTS.goals);
   });
+  it('закрытие ходов на клиенте равно PICK_CLOSES_BEFORE в hockey_game.py', () => {
+    const sec = Number(/^PICK_CLOSES_BEFORE = timedelta\(seconds=(\d+)\)/m.exec(py)[1]);
+    assert.equal(M.PICK_CLOSES_BEFORE_SEC, sec);
+    assert.equal(M.closesAt('2026-11-05T16:30:00Z').toISOString(), '2026-11-05T16:29:00.000Z');
+    assert.equal(S.closeTime('2026-11-05T16:30:00Z'), '19:29');
+    assert.equal(S.closeTime('2026-11-05T21:00:00Z'), '23:59');
+  });
+  it('козырь: строка под кнопкой — своя на каждый случай', () => {
+    const wk = S.weekKey('2026-11-05T16:30:00Z');
+    const a = { id: 1, starts_at: '2026-11-05T16:30:00Z', home: { name: 'Динамо-Минск' }, away: { name: 'Металлург Жлобин' }, my_pick: { side: 'home' } };
+    const b = { id: 2, starts_at: '2026-11-06T16:30:00Z', home: { name: 'Локомотив Орша' }, away: { name: 'Лида' }, my_pick: { side: 'away' } };
+    const now = NOW.toISOString();
+    const free = [{ week_start: wk, match_id: null, locked: false }];
+    assert.equal(S.trumpHint(a, free, [a, b], now), 'Один на неделю: очки за этот матч удвоятся.');
+    const onB = [{ week_start: wk, match_id: 2, locked: false }];
+    assert.equal(S.trumpHint(a, onB, [a, b], now), 'Козырь этой недели — на матче Локомотив — Лида. Можно перенести до\u00a0его начала.');
+    assert.match(S.trumpHint({ id: 3, starts_at: a.starts_at, my_pick: null }, free, [], now), /^Сначала тапни за команду\.$/);
+  });
 });
 
 describe('heroMatch — «Твоя команда»', () => {
@@ -57,8 +75,8 @@ describe('heroMatch — «Твоя команда»', () => {
     assert.equal(S.heroMeta(mk(1, '2026-11-03T15:30:00Z')), 'ВТ 3 НОЯБРЯ · 18:30 · ЭКСТРАЛИГА');
   });
   it('«Можно менять до»', () => {
-    assert.equal(S.changeUntil('2026-11-05T16:30:00Z', NOW), 'Можно менять до 19:30 в четверг');
-    assert.equal(S.changeUntil('2026-11-03T16:30:00Z', NOW), 'Можно менять до 19:30 сегодня');
+    assert.equal(S.changeUntil('2026-11-05T16:30:00Z', NOW), 'Можно менять до 19:29 в четверг');
+    assert.equal(S.changeUntil('2026-11-03T16:30:00Z', NOW), 'Можно менять до 19:29 сегодня');
   });
 });
 

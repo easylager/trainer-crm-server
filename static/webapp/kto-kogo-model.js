@@ -155,6 +155,12 @@
   var EXACT = 50;
   /** Те же числа, что POINTS_* в src/application/hockey_game.py (их сверяет tests/js/kto-kogo-hub-model.test.js). */
   var POINTS = { winner: 20, diff: 10, goals: 10, exact: EXACT };
+  /** Сервер закрывает ходы за столько секунд до старта: PICK_CLOSES_BEFORE в hockey_game.py (сверяет tests/js/kto-kogo-hub-model.test.js). */
+  var PICK_CLOSES_BEFORE_SEC = 60;
+  /** Когда закрываются ходы на матч: старт минус минута. */
+  function closesAt(startsAt) {
+    return new Date(new Date(startsAt).getTime() - PICK_CLOSES_BEFORE_SEC * 1000);
+  }
   var RULES = 'Победитель — 20 очков, разница шайб — 10, шайбы каждой команды — по 10. Точный счёт — все 50.';
 
   /** Как назвать исход моего хода после матча. Итоги бывают 0, 10, 20, 30, 50. */
@@ -374,6 +380,8 @@
     verdict: verdict,
     EXACT: EXACT,
     POINTS: POINTS,
+    PICK_CLOSES_BEFORE_SEC: PICK_CLOSES_BEFORE_SEC,
+    closesAt: closesAt,
     DINAMO: DINAMO,
     RULES: RULES,
     decidedLabel: decidedLabel,

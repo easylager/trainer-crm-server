@@ -322,6 +322,7 @@
       if ((p.duels || []).length) {
         main.appendChild(h('div', { class: 'kk-sec' }, [
           h('span', { class: 'kk-lbl', text: 'ДУЭЛИ ЗА СЕЗОН' }),
+          h('span', { class: 'kk-sub', text: S.DUEL_HINT }),
           h('div', { class: 'kk-duels' }, p.duels.map(function (d) { return h('span', { class: 'kk-cr kk-cr--c' }, [d.display_name, h('b', { text: d.won + ':' + d.lost })]); })),
         ]));
       }

@@ -116,7 +116,7 @@
         'aria-disabled': t.usable ? null : 'true',
         onclick: function () { K.toggleTrump(m); },
       }, [icon(I.bolt, 16), on ? 'Козырь на этом матче · ×2' : 'Козырь: удвоить очки · ×2']),
-      !t.usable && !on ? h('span', { class: 'kk-htr__note', text: t.note.charAt(0).toUpperCase() + t.note.slice(1) }) : null,
+      h('span', { class: 'kk-htr__note', text: S.trumpHint(m, state.doubles, state.matches, new Date().toISOString()) }),
     ];
   }
 
@@ -208,7 +208,7 @@
         h('span', { class: 'kk-cnt' + (d.total && d.made === d.total ? ' is-done' : ''), text: S.dayCount(d.made, d.total) }),
       ]),
       h('div', { class: 'kk-day' }, d.items.map(function (m) { return dayRow(m, d.mixed); })),
-      h('span', { class: 'kk-sub', text: 'Ходы закрываются за минуту до старта матча. До этого всё можно поменять.' }),
+      h('span', { class: 'kk-sub', text: 'Ходы закрываются за минуту до старта матча. До\u00a0этого всё можно поменять.' }),
     ]);
   }
 

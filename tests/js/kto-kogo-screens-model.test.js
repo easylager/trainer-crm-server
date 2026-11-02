@@ -226,7 +226,7 @@ describe('таблица', () => {
   it('мало игроков: честная плашка и приглашение; три и больше — без плашки', () => {
     const few = S.fewPlayers({ players_with_points: 2 }, 'Лида', '2026-11');
     assert.match(few.head, /^Лида · ноябрь — 2.игрока с очками$/);
-    assert.equal(few.invite, 'Позвать болельщиков Лида');
+    assert.equal(few.invite, 'Создать лигу и\u00a0позвать');
     assert.equal(S.fewPlayers({ players_with_points: 3 }, 'Лида', '2026-11'), null);
     assert.match(S.fewPlayers({ players_with_points: 0 }, null, 'season').head, /пока никого/);
   });

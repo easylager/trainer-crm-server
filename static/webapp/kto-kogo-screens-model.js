@@ -73,6 +73,11 @@
     return Base.time(Base.minskParts(new Date(iso)));
   }
 
+  /** Время закрытия ходов по Минску: «19:29» для старта в 19:30. */
+  function closeTime(iso) {
+    return Base.time(Base.minskParts(Base.closesAt(iso)));
+  }
+
   function monthEndLabel(key) {
     var m = /^(\d{4})-(\d{2})$/.exec(key || '');
     if (!m) return '';
@@ -161,6 +166,9 @@
     return live && live.updated_at ? 'счёт на ' + timeOnly(live.updated_at) : '';
   }
 
+  /** Что такое дуэль: hockey_screens._DUELS — очки за один матч (с козырем) против друга из общей лиги; в счёте только победы и поражения. */
+  var DUEL_HINT = 'Дуэль — у\u00a0кого из\u00a0вас двоих больше очков за\u00a0матч. Соперники — друзья из\u00a0твоих лиг.';
+
   /** Дуэль на живом счёте: мои очки против очков друга по тому же табло. */
   function duelLive(mine, friend, live) {
     var a = livePoints(mine, live);
@@ -212,6 +220,22 @@
     if (d.match_id && d.match_id !== m.id) return { kind: 'other', label: 'Козырь ×2', note: 'стоит на другом матче недели — тап перенесёт сюда', on: false, usable: true };
     var thisWeek = nowIso && weekKey(nowIso) === wk;
     return { kind: 'free', label: 'Козырь ×2', note: thisWeek ? 'есть до воскресенья' : 'на этой неделе свободен', on: false, usable: true };
+  }
+
+  /**
+   * Одна строка под кнопкой козыря. Козырь недели один; пока его матч не начался, он переносится
+   * (set_double в hockey_game.py: перенос запрещён только когда матч с козырем уже стартовал).
+   */
+  function trumpHint(m, doubles, matches, nowIso) {
+    var st = trumpState(m, doubles, nowIso);
+    if (st.kind !== 'other') {
+      return st.usable ? 'Один на неделю: очки за этот матч удвоятся.' : st.note.charAt(0).toUpperCase() + st.note.slice(1) + '.';
+    }
+    var wk = weekKey(m.starts_at);
+    var d = (doubles || []).filter(function (x) { return x.week_start === wk; })[0];
+    var other = (matches || []).filter(function (x) { return x.id === d.match_id; })[0];
+    var where = other ? ' на матче ' + clubShort(other.home.name) + ' — ' + clubShort(other.away.name) : ' на другом матче';
+    return 'Козырь этой недели —' + where + '. Можно перенести до' + NBSP + 'его начала.';
   }
 
   /** Очки хода с учётом козыря: «+20 за победителя · точный счёт — до 50». */
@@ -311,9 +335,9 @@
     return [WEEKDAY_SHORT_UP[p.wd] + ' ' + p.d + ' ' + Base.MONTHS[p.m - 1].toUpperCase(), Base.time(p), leagueUp(m), place.toUpperCase()].filter(Boolean).join(' · ');
   }
 
-  /** «Можно менять до 19:30 в четверг». */
+  /** «Можно менять до 19:29 в четверг»: время закрытия ходов, а не старта. */
   function changeUntil(iso, now) {
-    var p = Base.minskParts(new Date(iso));
+    var p = Base.minskParts(Base.closesAt(iso));
     var diff = Base.dayIndex(p) - Base.dayIndex(Base.minskParts(now || new Date()));
     var day = diff === 0 ? 'сегодня' : diff === 1 ? 'завтра' : diff > 1 && diff < 7 ? WEEKDAY_ON_IN[p.wd] : p.d + NBSP + Base.MONTHS[p.m - 1];
     return 'Можно менять до ' + Base.time(p) + ' ' + day;
@@ -498,7 +522,7 @@
     return {
       head: n ? label + ' — ' + n + NBSP + Base.plural(n, 'игрок', 'игрока', 'игроков') + ' с очками' : label + ' — пока никого',
       body: 'Таблицу видно честно, а корона появится, когда очки будут хотя бы у троих.',
-      invite: club ? 'Позвать болельщиков ' + clubName(club) : 'Позвать друзей',
+      invite: 'Создать лигу и' + NBSP + 'позвать',
     };
   }
 
@@ -651,9 +675,12 @@
     liveStamp: liveStamp,
     duelLive: duelLive,
     duelPill: duelPill,
+    DUEL_HINT: DUEL_HINT,
     duelFinal: duelFinal,
     crowdShare: crowdShare,
     trumpState: trumpState,
+    trumpHint: trumpHint,
+    closeTime: closeTime,
     pointsLine: pointsLine,
     questionLine: questionLine,
     dayMatches: dayMatches,
