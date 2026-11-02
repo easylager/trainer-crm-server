@@ -136,7 +136,7 @@ async def test_match_page_sets_tickets_and_official_result(db_session) -> None:
         },
     )
     counts = await sync_details(db_session, source, now=now)
-    assert counts == {"checked": 2, "final": 1, "failed": 0}
+    assert counts == {"checked": 2, "final": 1, "failed": 0, "live": 0}
 
     done = await _match(db_session, "441964")
     assert (done.status, done.home_score, done.away_score, done.decided_in) == ("final", 3, 2, "ot")
@@ -159,6 +159,7 @@ async def test_match_page_sets_tickets_and_official_result(db_session) -> None:
         "checked": 0,
         "final": 0,
         "failed": 0,
+        "live": 0,
     }
 
 
@@ -382,3 +383,92 @@ async def test_moved_match_voids_late_picks_and_keeps_early_ones(db_session) -> 
     assert (
         await db_session.execute(text("SELECT count(*) FROM hockey_picks WHERE match_id = :m"), {"m": mid})
     ).scalar_one() == 0
+
+
+# ── живой счёт (TASK-334 S6) ─────────────────────────────────────────
+
+
+def _live_page(score: tuple[int, int] | None = None) -> str:
+    page = _page("hockeyby-gamecenter-441964-ot.html").replace(
+        'game-header-info-current">Официальные данные<', 'game-header-info-current">3-й период<'
+    )
+    if score:
+        import re
+
+        page = re.sub(
+            r'(game-header-info-score">\s*<span[^>]*>\s*)\d+(\s*</span>\s*:\s*<span[^>]*>\s*)\d+',
+            rf"\g<1>{score[0]}\g<2>{score[1]}",
+            page,
+        )
+    return page
+
+
+@pytest.mark.asyncio
+async def test_live_score_is_polled_every_15_minutes_and_never_touches_the_result(db_session) -> None:
+    start = _minsk(2026, 10, 27, 19, 0)
+    await upsert_calendar_match(db_session, _yunost_neman("441964", start), now=start - timedelta(days=1))
+    url = match_page_url("441964")
+    now = start + timedelta(minutes=50)
+    counts = await sync_details(db_session, FakeSource([], {url: _live_page((1, 0))}), now=now)
+    assert counts["live"] == 1
+    row = await _match(db_session, "441964")
+    assert (row.status, row.home_score) == ("scheduled", None)
+    live = (
+        await db_session.execute(
+            text("SELECT live_home_score, live_away_score FROM hockey_matches WHERE source_match_id = '441964'")
+        )
+    ).one()
+    assert tuple(live) == (1, 0)
+
+    # Раньше чем через 15 минут страницу не читаем; позже — счёт обновляется.
+    quiet = FakeSource([], {url: _live_page((2, 0))})
+    assert (await sync_details(db_session, quiet, now=now + timedelta(minutes=5)))["checked"] == 0
+    assert quiet.asked == []
+    assert (await sync_details(db_session, quiet, now=now + timedelta(minutes=16)))["live"] == 1
+    live = (
+        await db_session.execute(text("SELECT live_home_score FROM hockey_matches WHERE source_match_id = '441964'"))
+    ).scalar_one()
+    assert live == 2
+
+
+@pytest.mark.asyncio
+async def test_live_poll_failure_keeps_score_and_result(db_session) -> None:
+    start = _minsk(2026, 10, 27, 19, 0)
+    await upsert_calendar_match(db_session, _yunost_neman("441964", start), now=start - timedelta(days=1))
+    url = match_page_url("441964")
+    now = start + timedelta(minutes=50)
+    await sync_details(db_session, FakeSource([], {url: _live_page((1, 0))}), now=now)
+
+    class Broken(FakeSource):
+        async def get(self, url: str) -> str:
+            raise OSError("hockey.by is down")
+
+    counts = await sync_details(db_session, Broken([]), now=now + timedelta(minutes=20))
+    assert counts["failed"] == 1 and counts["live"] == 0
+    row = (
+        await db_session.execute(
+            text("SELECT status, live_home_score FROM hockey_matches WHERE source_match_id = '441964'")
+        )
+    ).one()
+    assert tuple(row) == ("scheduled", 1)
+
+
+@pytest.mark.asyncio
+async def test_live_poll_stops_with_the_final(db_session) -> None:
+    start = _minsk(2026, 10, 27, 19, 0)
+    await upsert_calendar_match(db_session, _yunost_neman("441964", start), now=start - timedelta(days=1))
+    url = match_page_url("441964")
+    now = start + timedelta(minutes=50)
+    await sync_details(db_session, FakeSource([], {url: _live_page((1, 0))}), now=now)
+    official = FakeSource([], {url: _page("hockeyby-gamecenter-441964-ot.html")})
+    counts = await sync_details(db_session, official, now=now + timedelta(hours=2))
+    assert counts["final"] == 1 and counts["live"] == 0
+    # Итог стоит; поздний «неофициальный» ответ счёт уже не пишет.
+    later = FakeSource([], {url: _live_page((9, 9))})
+    await sync_details(db_session, later, now=now + timedelta(hours=4))
+    row = (
+        await db_session.execute(
+            text("SELECT status, home_score, live_home_score FROM hockey_matches WHERE source_match_id = '441964'")
+        )
+    ).one()
+    assert tuple(row) == ("final", 3, 1)

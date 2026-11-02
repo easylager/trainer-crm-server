@@ -3427,6 +3427,12 @@ async def run_hockey_matches_loop() -> None:
             settings = get_settings()
             if settings.extraliga_enabled:
                 await _extraliga_pass(extraliga, health, alert=send_review_alert)
+                # Итог Экстралиги ушёл на ручную проверку — карточка с кнопками в админ-бот (один раз на матч).
+                from src.application.hockey_review import notify_new_reviews, send_card_to_admins
+
+                await notify_new_reviews(
+                    async_session_factory, now=datetime.now(timezone.utc), send=send_card_to_admins
+                )
             if settings.hockey_matches_enabled:
                 now = datetime.now(timezone.utc)
                 calendar_due = last_calendar is None or now - last_calendar >= HOCKEY_CALENDAR_EVERY
@@ -3441,10 +3447,13 @@ async def run_hockey_matches_loop() -> None:
                     await session.commit()
                     if await result_window_open(session, now=now):
                         delay = HOCKEY_RESULT_WINDOW_INTERVAL_SEC
-                # Напоминания и итоги в бот (TASK-335) — после коммита: гонка уже закрыта, если был финал.
-                from src.application.hockey_notices import deliver, send_via_client_bot
+                # Сообщения бота «Кто кого» (TASK-334 S6) — после коммита: гонка уже закрыта, если был финал.
+                from src.application.hockey_notices import deliver, deliver_league_notices, send_via_client_bot
 
                 counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot)
+                counts["league_notices"] = await deliver_league_notices(
+                    async_session_factory, now=now, send=send_via_client_bot
+                )
                 if calendar_due and not counts["calendar_failed"]:
                     last_calendar = now
                     health.ok("календарь матчей")

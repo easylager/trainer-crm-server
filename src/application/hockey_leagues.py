@@ -598,6 +598,12 @@ _ADD_MEMBER_AT = text("""
     """)
 
 
+_QUEUE_EXTENDED_NOTICE = text("""
+    INSERT INTO hockey_league_notices (league_id, player_key, kind) VALUES (:league_id, :player_key, 'extended')
+    ON CONFLICT DO NOTHING
+    """)
+
+
 def _next_terms(league: League, *, now: datetime) -> Terms:
     """Тот же набор команд и тот же вид срока — на следующий период после закончившегося."""
     start, end = _utc(league.starts_at), _utc(league.ends_at)  # type: ignore[arg-type]
@@ -655,6 +661,9 @@ async def extend_league(
         except TooManyLeagues:
             continue
         await session.execute(_ADD_MEMBER_AT, {"league_id": fresh.id, "player_key": key, "joined_at": joined})
+        if key != player_key:
+            # Каждому участнику, кроме нажавшего «Продлить»: «лига продлена, выйти в один тап» (бот, TASK-334 S6).
+            await session.execute(_QUEUE_EXTENDED_NOTICE, {"league_id": fresh.id, "player_key": key})
     return fresh, True
 
 

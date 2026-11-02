@@ -405,3 +405,52 @@ async def put_client_hockey_remind(
     on = await set_remind(session, client_catalog_telegram_key(principal), body.on, display_name=name)
     await session.commit()
     return {"on": on}
+
+
+class BotPrefsBody(BaseModel):
+    on: bool | None = None
+    fav_club: str | None = None
+    clear_fav_club: bool = False
+    types: dict[str, bool] | None = None
+    league: bool | None = None
+    display_name: str | None = None
+
+
+@router.get("/client/hockey/bot-prefs")
+async def get_client_hockey_bot_prefs(
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Бот «Кто кого»: главный выключатель, «болею за» и четыре типа сообщений по отдельности."""
+    from src.application.hockey_notices import get_prefs
+
+    return await get_prefs(session, client_catalog_telegram_key(principal))
+
+
+@router.put("/client/hockey/bot-prefs")
+async def put_client_hockey_bot_prefs(
+    body: BotPrefsBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+) -> dict:
+    from src.application.hockey_notices import TYPE_COLUMN, get_prefs, set_fav_club, set_remind, set_type
+
+    player_key = client_catalog_telegram_key(principal)
+    name = _player_name(body.display_name, x_telegram_init_data or "")
+    unknown = [k for k in (body.types or {}) if k not in TYPE_COLUMN]
+    if unknown:
+        raise HTTPException(status_code=400, detail="Неизвестный тип сообщений")
+    if body.on is not None:
+        await set_remind(session, player_key, body.on, display_name=name)
+    if body.fav_club is not None or body.clear_fav_club:
+        try:
+            await set_fav_club(session, player_key, None if body.clear_fav_club else body.fav_club, display_name=name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    for kind, on in (body.types or {}).items():
+        await set_type(session, player_key, kind, on)
+    if body.league is not None:
+        await set_type(session, player_key, "league", body.league)
+    await session.commit()
+    return await get_prefs(session, player_key)
