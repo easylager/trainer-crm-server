@@ -15,7 +15,7 @@ from __future__ import annotations
 import html as html_lib
 from pathlib import Path
 from typing import Any, Mapping
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 from src.application.catalog_icons import icon_svg, rink_motif_svg
 from src.application.ice_city_day import city_slug
@@ -71,14 +71,6 @@ def _abs(base_url: str, path: str) -> str:
 def yandex_open_url(lat: float, lon: float) -> str:
     return f"https://yandex.ru/maps/?pt={float(lon):.6f},{float(lat):.6f}&z=16&l=map"
 
-
-def google_route_url(item: Mapping[str, Any]) -> str | None:
-    if item.get("map_allowed") and item.get("lat") is not None:
-        return f"https://www.google.com/maps/dir/?api=1&destination={float(item['lat']):.6f},{float(item['lon']):.6f}"
-    addr = (item.get("address") or "").strip()
-    if not addr:
-        return None
-    return "https://www.google.com/maps/search/?api=1&query=" + quote(f"{item.get('city') or ''} {addr}".strip())
 
 
 def _icon(name: str, extra: str = "") -> str:
@@ -474,15 +466,20 @@ def _gallery(item: Mapping[str, Any]) -> str:
 
 
 def _routes(item: Mapping[str, Any]) -> str:
-    ya, g = item.get("route_url"), google_route_url(item)
-    if not ya and not g:
+    """Маршрут — только Яндекс Карты (решение владельца 02.11: «для всех Яндекс»)."""
+    ya = item.get("route_url")
+    if not ya:
         return ""
-    cells = ""
-    if ya:
-        cells += f'<a class="w-btn w-btn--soft" href="{_esc(ya)}" target="_blank" rel="noopener">Яндекс Карты</a>'
-    if g:
-        cells += f'<a class="w-btn w-btn--soft" href="{_esc(g)}" target="_blank" rel="noopener">Google Maps</a>'
-    return f'<div class="w-card2"><p class="w-lbl">КАК ДОБРАТЬСЯ</p><div class="w-routes">{cells}</div></div>'
+    cell = f'<a class="w-btn w-btn--soft" href="{_esc(ya)}" target="_blank" rel="noopener">Яндекс Карты</a>'
+    return f'<div class="w-card2"><p class="w-lbl">КАК ДОБРАТЬСЯ</p><div class="w-routes">{cell}</div></div>'
+
+
+def _gone_link(links: Mapping[str, Any]) -> str:
+    """«Точки больше нет?» — deeplink в бота: сигнал принимается только из Telegram (сайт его не считает)."""
+    gone = links.get("gone")
+    if not gone:
+        return ""
+    return f'<a class="w-foot" href="{_esc(gone)}" rel="noopener nofollow" data-w-gone-link>Точки больше нет? Сообщить</a>'
 
 
 def _sheet(item: Mapping[str, Any]) -> str:
@@ -534,7 +531,7 @@ def render_point_page(
         f'<h1 class="w-h1">{_esc(item["name"])}</h1>'
         f'<p class="w-addr">{_esc(addr_line)}</p></div>'
         f'{_status_card(item, season_label=season_label, links=links)}'
-        f"{bell_html}{_known(item)}{_gallery(item)}{_routes(item)}"
+        f"{bell_html}{_known(item)}{_gallery(item)}{_routes(item)}{_gone_link(links)}"
         "</div>"
         f"{_sheet(item)}</div>"
     )

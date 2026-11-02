@@ -248,3 +248,14 @@ def test_live_tags_carry_mark_time_for_js():
     html = wp._tags_html({"crowd": "few", "crowd_at": "2026-12-10T11:20:00+00:00", "hockey": "free", "hockey_at": None})
     assert 'data-w-live-at="2026-12-10T11:20:00+00:00"' in html and 'data-w-live-label="Мало людей"' in html
     assert "Хоккея нет</span>" in html and html.count("data-w-live-at") == 1
+
+
+def test_point_page_route_is_yandex_only_and_gone_goes_to_bot():
+    from src.application import winter_page as wp
+
+    item = {"route_url": "https://yandex.ru/maps/?rtext=~1,2", "lat": 53.9, "lon": 27.5, "address": "ул. Ленина, 1", "city": "Минск"}
+    html = wp._routes(item)
+    assert "Яндекс Карты" in html and "google" not in html.lower()
+    link = wp._gone_link({"gone": "https://t.me/bot?start=wgone_7"})
+    assert "Точки больше нет? Сообщить" in link and "t.me/bot?start=wgone_7" in link
+    assert wp._gone_link({}) == ""
