@@ -29,8 +29,8 @@ describe('тёмная тема: токены владельца и контра
   const light = tokens('.kk');
   const dark = Object.assign({}, light, tokens('body.kk-dark .kk'));
 
-  it('значения тёмных токенов из утверждённого макета', () => {
-    const want = { 'kk-bg': '#1f1d1b', 'kk-card': '#2a2725', 'kk-row': '#262321', 'kk-chip': '#35312e', 'kk-line': '#4a443f', 'kk-muted': '#b3aba0', 'kk-soft': '#d6cfc4', 'kk-ink': '#f5f0e8', 'kk-scrim': 'rgba(10, 9, 8, 0.6)' };
+  it('значения тёмных токенов: синяя гамма игры (владелец 03.11 вернул синюю)', () => {
+    const want = { 'kk-bg': '#17212b', 'kk-card': '#222c38', 'kk-row': '#1d2733', 'kk-chip': '#2c3846', 'kk-line': '#3a4756', 'kk-muted': '#98adc0', 'kk-soft': '#c3d2dc', 'kk-ink': '#f1f5f7', 'kk-scrim': 'rgba(6, 12, 18, 0.6)' };
     for (const [k, v] of Object.entries(want)) assert.equal(dark[k], v, k);
   });
 
@@ -55,13 +55,6 @@ describe('тёмная тема: токены владельца и контра
     ];
     const low = pairs.filter(([a, b, min]) => ratio(dark[a], dark[b]) < min).map(([a, b, min]) => `${a}/${b} ${ratio(dark[a], dark[b]).toFixed(2)} < ${min}`);
     assert.deepEqual(low, []);
-  });
-
-  it('нет синей гаммы: у тёмных фонов красный канал не меньше синего', () => {
-    for (const k of ['kk-bg', 'kk-card', 'kk-row', 'kk-chip', 'kk-line', 'kk-me']) {
-      const n = dark[k].replace('#', '');
-      assert.ok(parseInt(n.slice(0, 2), 16) >= parseInt(n.slice(4, 6), 16), k);
-    }
   });
 
   it('красный и зелёный не применяются к результатам', () => {

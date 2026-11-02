@@ -13,15 +13,15 @@
 }
 body.kk-dark .kk {
   /* Тёмная тема тёплая, без «беттинговой» синевы (холст SpMeyNMs2GoG29akhF2o6a). Пары текста проверяет tests/js/kto-kogo-dark-contrast.test.js. */
-  --kk-bg: #1f1d1b; --kk-card: #2a2725; --kk-row: #262321; --kk-chip: #35312e; --kk-line: #4a443f;
-  --kk-muted: #b3aba0; --kk-soft: #d6cfc4; --kk-ink: #f5f0e8; --kk-win: #7ee0a1; --kk-lose: #ff8a8d;
-  --kk-crownbg: #2a2410; --kk-crownink: #f6e7a6; --kk-me: #3a3326; --kk-scrim: rgba(10, 9, 8, 0.6);
+  --kk-bg: #17212b; --kk-card: #222c38; --kk-row: #1d2733; --kk-chip: #2c3846; --kk-line: #3a4756;
+  --kk-muted: #98adc0; --kk-soft: #c3d2dc; --kk-ink: #f1f5f7; --kk-win: #7ee0a1; --kk-lose: #ff8a8d;
+  --kk-crownbg: #2a2410; --kk-crownink: #f6e7a6; --kk-me: #24364a; --kk-scrim: rgba(6, 12, 18, 0.6);
   --kk-focus: #ffd23f; --kk-gold-ink: #ffd23f; --kk-danger: #ff8a7a;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: #f2f5fa; }
-body.kk-dark { background: #1f1d1b; }
+body.kk-dark { background: #17212b; }
 button, input { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 button { cursor: pointer; }
@@ -319,7 +319,7 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-puck::after { content: ''; position: absolute; left: 4px; top: 2px; width: 7px; height: 3px; border-radius: 50%; background: rgba(255, 255, 255, 0.38); }
 .kk-puck--lg { width: 30px; height: 19px; box-shadow: inset 0 -4px 0 #3a3632; }
 .kk-puck--lg::after { left: 6px; top: 3px; width: 10px; height: 4px; }
-body:not(.kk-dark) .kk-puck { box-shadow: inset 0 -3px 0 #4a443f; }
+body:not(.kk-dark) .kk-puck { box-shadow: inset 0 -3px 0 #3a4756; }
 
 /* Заставка: шайба влетает слева и бьёт в стикер, стикер качается. 700 мс, один раз за сессию (JS решает, ставить ли .is-intro). */
 .kk-brand { margin: 0; display: flex; align-items: center; gap: 4px; min-height: 44px; }

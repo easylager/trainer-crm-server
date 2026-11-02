@@ -64,8 +64,8 @@
     document.body.classList.toggle('kk-dark', !!dark);
     if (tg && tg.setHeaderColor) {
       try {
-        tg.setHeaderColor(dark ? '#1f1d1b' : '#f2f5fa');
-        tg.setBackgroundColor(dark ? '#1f1d1b' : '#f2f5fa');
+        tg.setHeaderColor(dark ? '#17212b' : '#f2f5fa');
+        tg.setBackgroundColor(dark ? '#17212b' : '#f2f5fa');
       } catch (e) { /* старые клиенты */ }
     }
   }
