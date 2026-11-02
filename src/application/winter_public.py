@@ -129,7 +129,25 @@ def arena_hours_summary(opening_hours: Any) -> str | None:
         d = opening_hours["daily"]
         if d.get("open") and d.get("close"):
             return f"Ежедневно {d['open']}–{d['close']}"
-    return hours_summary_ru(opening_hours)
+    weekly = opening_hours.get("weekly")
+    if not isinstance(weekly, dict):
+        return None
+    # У профилей каталога интервалы бывают парами, словарями {open, close} и строками «10:00-22:00».
+    norm: dict[str, list[list[str]]] = {}
+    for day, spans in weekly.items():
+        out: list[list[str]] = []
+        for sp in spans if isinstance(spans, list) else [spans]:
+            if isinstance(sp, (list, tuple)) and len(sp) == 2:
+                out.append([str(sp[0]), str(sp[1])])
+            elif isinstance(sp, dict) and sp.get("open") and sp.get("close"):
+                out.append([str(sp["open"]), str(sp["close"])])
+            elif isinstance(sp, str) and "-" in sp.replace("–", "-"):
+                a, _, b = sp.replace("–", "-").partition("-")
+                out.append([a.strip(), b.strip()])
+            elif sp:
+                return None  # незнакомый формат — лучше «уточняйте», чем ошибка страницы
+        norm[day] = out
+    return hours_summary_ru({"weekly": norm})
 
 
 def arena_price(visitor_prices: Any) -> str | None:
