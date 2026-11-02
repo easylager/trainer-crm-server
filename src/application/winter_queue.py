@@ -1,6 +1,6 @@
 """Очередь админа «Зимой» с приоритетом (TASK-343, каталог M1, F10).
 
-Порядок разбора (чем выше, тем раньше): споры по льду -> «точки больше нет» (под вопросом) ->
+Порядок разбора (чем выше, тем раньше): подтвердить заливку (люди набрали «залит», решает админ) -> споры по льду -> «точки больше нет» (под вопросом) ->
 фото -> новые точки; сверка с таблицей и неподтверждённые на сезон идут отдельными строками.
 
 Правило молчания: очередь ничего не решает сама. Фото остаётся на проверке, «под вопросом» остаётся
@@ -20,6 +20,7 @@ from src.application import winter_admin, winter_diff
 
 #: (kind, подпись в сводке). Порядок = приоритет.
 PRIORITY: tuple[tuple[str, str], ...] = (
+    ("confirm_flood", "подтвердить заливку"),
     ("dispute", "споры"),
     ("gone", "под вопросом"),
     ("photo_first", "фото"),
@@ -47,7 +48,7 @@ async def next_items(session: AsyncSession, limit: int = 5, *, kinds: tuple[str,
                    LEFT JOIN arenas a ON a.id = m.arena_id
                    LEFT JOIN cities c ON c.id = a.city_id
                    WHERE m.status = 'open' AND (CAST(:kinds AS text[]) IS NULL OR m.kind = ANY(CAST(:kinds AS text[])))
-                   ORDER BY CASE m.kind WHEN 'dispute' THEN 1 WHEN 'gone' THEN 2 WHEN 'photo_first' THEN 3 ELSE 4 END,
+                   ORDER BY CASE m.kind WHEN 'confirm_flood' THEN 0 WHEN 'dispute' THEN 1 WHEN 'gone' THEN 2 WHEN 'photo_first' THEN 3 ELSE 4 END,
                             m.created_at, m.id
                    LIMIT :lim"""
             ),

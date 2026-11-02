@@ -640,6 +640,72 @@ async def resolve_dispute(
     return True
 
 
+async def confirm_flood_card(session: AsyncSession, arena_id: int, now: datetime | None = None) -> dict[str, Any] | None:
+    """Что показать админу в запросе «подтвердить заливку»: сколько отметок, когда, откуда, есть ли фото."""
+    now = _utc(now)
+    season = ws.current_season(now)
+    head = (
+        await session.execute(
+            text(
+                """SELECT a.name, c.name AS city, a.address, s.state, s.pending_confirm, s.flood_floor_at
+                   FROM seasonal_rink_seasons s JOIN arenas a ON a.id = s.arena_id JOIN cities c ON c.id = a.city_id
+                   WHERE s.arena_id = :a AND s.season = :s"""
+            ),
+            {"a": arena_id, "s": season},
+        )
+    ).first()
+    if head is None:
+        return None
+    since = now - ws.FLOODED_WINDOW
+    if head.flood_floor_at is not None and head.flood_floor_at > since:
+        since = head.flood_floor_at
+    marks = (
+        await session.execute(
+            text(
+                """SELECT source, count(DISTINCT actor) AS people, max(created_at) AS last_at, min(created_at) AS first_at
+                   FROM seasonal_rink_marks
+                   WHERE arena_id = :a AND season = :s AND kind = 'ice' AND value = 'flooded' AND created_at > :since
+                   GROUP BY source ORDER BY source"""
+            ),
+            {"a": arena_id, "s": season, "since": since},
+        )
+    ).all()
+    photos = int(
+        (
+            await session.execute(
+                text(
+                    """SELECT count(*) FROM seasonal_rink_photos WHERE arena_id = :a AND created_at > :since
+                       AND status <> 'rejected'"""
+                ),
+                {"a": arena_id, "since": since},
+            )
+        ).scalar_one()
+    )
+    return {
+        "name": head.name, "city": head.city, "address": head.address, "state": head.state,
+        "pending": bool(head.pending_confirm),
+        "people": sum(int(m.people) for m in marks),
+        "by_source": {m.source: int(m.people) for m in marks},
+        "last_at": max((m.last_at for m in marks), default=None),
+        "first_at": min((m.first_at for m in marks), default=None),
+        "photos": photos,
+    }
+
+
+async def resolve_confirm_flood(
+    session: AsyncSession, arena_id: int, decision: str, *, admin_id: int | None, now: datetime | None = None
+) -> bool:
+    """Решение админа по запросу: ``flooded`` (рассылка подписчикам), ``waiting`` или ``ask_more``."""
+    from src.application.winter_marks import ask_more, set_state_admin
+
+    now = _utc(now)
+    if decision == "ask_more":
+        return await ask_more(session, arena_id, admin_id=admin_id, now=now)
+    if decision not in ("flooded", "waiting"):
+        raise AdminOpError("bad_state")
+    return await set_state_admin(session, arena_id, decision, admin_id=admin_id, now=now)
+
+
 async def merge_preview(session: AsyncSession, source_id: int, target_id: int) -> dict[str, Any]:
     """Что переедет при слиянии: числа для экрана подтверждения."""
     row = (

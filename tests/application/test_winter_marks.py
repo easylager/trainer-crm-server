@@ -31,16 +31,14 @@ async def test_site_alone_never_floods(db_session):
 
 
 @pytest.mark.asyncio
-async def test_telegram_pair_floods_and_creates_one_event(db_session):
+async def test_telegram_pair_only_makes_pending_and_no_event(db_session):
     aid = await make_point(db_session)
     r1 = await mark(db_session, aid, "flooded", "telegram", 1)
-    assert not r1.state_changed
+    assert not r1.state_changed and not r1.pending_confirm
     r2 = await mark(db_session, aid, "flooded", "miniapp", 2)
-    assert r2.state == "flooded" and r2.state_changed and r2.flood_event_id
-    r3 = await mark(db_session, aid, "flooded", "telegram", 3)
-    assert not r3.state_changed and r3.flood_event_id is None
+    assert r2.state == "waiting" and r2.pending_confirm and r2.flood_event_id is None
     n = (await db_session.execute(text("SELECT count(*) FROM winter_flood_events WHERE arena_id=:a"), {"a": aid})).scalar_one()
-    assert n == 1
+    assert n == 0
 
 
 @pytest.mark.asyncio
@@ -141,7 +139,7 @@ async def test_bad_ice_is_flag_and_crowd_lives_two_hours(db_session):
 
 @pytest.mark.asyncio
 async def test_stale_after_72h_without_marks(db_session):
-    aid = await make_point(db_session, state="flooded", state_source="engine", state_at=NOW - timedelta(days=4))
+    aid = await make_point(db_session, state="flooded", state_source="parser", state_at=NOW - timedelta(days=8))
     assert await wm.recompute_stale(db_session, NOW) == 1
     assert await state_of(db_session, aid) == "stale"
 

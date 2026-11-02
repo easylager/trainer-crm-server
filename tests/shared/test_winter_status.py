@@ -17,6 +17,11 @@ def state(marks, prev=None):
     return ws.compute_state(marks, NOW, prev)
 
 
+def confirmed(marks, prev=ws.STATE_FLOODED, days=30, source="admin"):
+    """Статус, который когда-то поставил админ/источник (держится 7 суток, по умолчанию срок давно прошёл)."""
+    return ws.compute_state(marks, NOW, prev, prev_source=source, prev_at=NOW - timedelta(days=days))
+
+
 def test_no_marks_defaults_to_waiting():
     assert state([]).state == ws.STATE_WAITING
 
@@ -26,8 +31,18 @@ def test_single_telegram_mark_not_enough():
     assert c.state == ws.STATE_WAITING and c.score == 1.0
 
 
-def test_two_telegram_marks_flood():
-    assert state([mk("flooded", actor="a"), mk("flooded", actor="b")]).state == ws.STATE_FLOODED
+def test_two_telegram_marks_only_ask_the_admin():
+    c = state([mk("flooded", actor="a"), mk("flooded", actor="b")])
+    assert c.state == ws.STATE_WAITING and c.pending_confirm and c.confirm_actors == 2
+
+
+def test_ten_marks_never_make_flooded_without_admin():
+    many = [mk("flooded", "telegram", f"tg:{i}") for i in range(10)] + [mk("flooded", "photo", "tg:99")]
+    c = state(many)
+    assert c.state == ws.STATE_WAITING and c.pending_confirm and c.confirm_actors == 11
+    # даже если прошлый «залит» поставил сам движок (старая запись) — он публично не живёт
+    legacy = ws.compute_state(many, NOW, ws.STATE_FLOODED, prev_source="engine", prev_at=NOW)
+    assert legacy.state == ws.STATE_WAITING and legacy.pending_confirm
 
 
 def test_site_alone_never_confirms_flooded():
@@ -39,7 +54,7 @@ def test_site_alone_never_confirms_flooded():
 def test_site_plus_one_telegram_can_confirm():
     marks = [mk("flooded", "site", f"d{i}") for i in range(3)] + [mk("flooded", "telegram", "tg:1")]
     c = state(marks)
-    assert c.score == 2.5 and c.state == ws.STATE_FLOODED
+    assert c.score == 2.5 and c.state == ws.STATE_WAITING and c.pending_confirm
 
 
 def test_site_marks_below_threshold_with_telegram():
@@ -47,8 +62,9 @@ def test_site_marks_below_threshold_with_telegram():
     assert state(marks).state == ws.STATE_WAITING  # 1,5 балла
 
 
-def test_accepted_photo_alone_floods():
-    assert state([mk("flooded", "photo")]).state == ws.STATE_FLOODED
+def test_accepted_photo_alone_is_pending_not_flooded():
+    c = state([mk("flooded", "photo")])
+    assert c.state == ws.STATE_WAITING and c.pending_confirm
 
 
 def test_pending_photo_is_half_a_point():
@@ -70,8 +86,8 @@ def test_photo_plus_telegram_same_person_is_not_three():
 def test_boundary_72h_inclusive_and_beyond():
     inside = [mk("flooded", actor="a", ago_h=72), mk("flooded", actor="b", ago_h=72)]
     outside = [mk("flooded", actor="a", ago_h=72.01), mk("flooded", actor="b", ago_h=72.01)]
-    assert state(inside).state == ws.STATE_FLOODED
-    assert state(outside).state == ws.STATE_WAITING
+    assert state(inside).pending_confirm
+    assert not state(outside).pending_confirm and state(outside).state == ws.STATE_WAITING
 
 
 def test_bad_ice_is_a_flag_not_a_status():
@@ -81,7 +97,7 @@ def test_bad_ice_is_a_flag_not_a_status():
 
 def test_bad_ice_does_not_break_flooded():
     marks = [mk("flooded", actor="a"), mk("flooded", actor="b"), mk("bad", actor="c")]
-    c = state(marks, prev=ws.STATE_FLOODED)
+    c = confirmed(marks)
     assert c.state == ws.STATE_FLOODED and c.quality is None  # 1 «плох» < 2 «залит»
 
 
@@ -93,26 +109,37 @@ def test_bad_flag_majority_and_24h_life():
 
 def test_actor_who_said_flooded_then_bad_keeps_flooded_vote():
     marks = [mk("flooded", actor="a", ago_h=3), mk("bad", actor="a", ago_h=1), mk("flooded", actor="b")]
-    assert state(marks).state == ws.STATE_FLOODED
+    assert state(marks).pending_confirm and confirmed(marks).state == ws.STATE_FLOODED
 
 
-def test_flooded_without_marks_becomes_stale():
-    assert state([], prev=ws.STATE_FLOODED).state == ws.STATE_STALE
+def test_confirmed_flooded_without_marks_becomes_stale_after_hold():
+    assert confirmed([]).state == ws.STATE_STALE
+
+
+def test_unconfirmed_flooded_is_not_shown_at_all():
+    assert state([], prev=ws.STATE_FLOODED).state == ws.STATE_WAITING
 
 
 def test_flooded_with_old_marks_only_becomes_stale():
     marks = [mk("flooded", actor="a", ago_h=80), mk("flooded", actor="b", ago_h=80)]
-    assert state(marks, prev=ws.STATE_FLOODED).state == ws.STATE_STALE
+    assert confirmed(marks).state == ws.STATE_STALE
 
 
 def test_flooded_loses_confirmation_when_score_drops():
     marks = [mk("flooded", actor="a", ago_h=1)]  # 1 балл < 2
-    assert state(marks, prev=ws.STATE_FLOODED).state == ws.STATE_STALE
+    assert confirmed(marks).state == ws.STATE_STALE
 
 
-def test_stale_returns_to_flooded_on_fresh_confirmation():
+def test_confirmed_flooded_stays_with_fresh_confirming_marks():
     marks = [mk("flooded", actor="a"), mk("flooded", actor="b")]
-    assert state(marks, prev=ws.STATE_STALE).state == ws.STATE_FLOODED
+    c = confirmed(marks)
+    assert c.state == ws.STATE_FLOODED and not c.pending_confirm
+
+
+def test_stale_with_fresh_marks_is_pending_not_flooded():
+    marks = [mk("flooded", actor="a"), mk("flooded", actor="b")]
+    c = state(marks, prev=ws.STATE_STALE)
+    assert c.state == ws.STATE_WAITING and c.pending_confirm
 
 
 def test_stale_stays_stale_without_enough_marks():
@@ -130,7 +157,7 @@ def test_two_not_flooded_in_a_day_waiting_from_flooded():
 
 def test_one_not_flooded_does_not_change_flooded():
     marks = [mk("flooded", actor="a"), mk("flooded", actor="b"), mk("not_flooded", actor="c")]
-    assert state(marks, prev=ws.STATE_FLOODED).state == ws.STATE_FLOODED
+    assert confirmed(marks).state == ws.STATE_FLOODED
 
 
 def test_not_flooded_same_actor_twice_is_one():
@@ -140,7 +167,7 @@ def test_not_flooded_same_actor_twice_is_one():
 
 def test_not_flooded_older_than_a_day_ignored():
     marks = [mk("not_flooded", actor="a", ago_h=25), mk("not_flooded", actor="b", ago_h=26)]
-    assert state(marks, prev=ws.STATE_FLOODED).state == ws.STATE_STALE
+    assert confirmed(marks).state == ws.STATE_STALE
 
 
 def test_actor_changing_mind_uses_latest():
@@ -154,15 +181,17 @@ def test_dispute_keeps_previous_status():
         mk("flooded", actor="a", ago_h=10), mk("flooded", actor="b", ago_h=10),
         mk("not_flooded", actor="c", ago_h=2), mk("not_flooded", actor="d", ago_h=1),
     ]
-    for prev in (ws.STATE_FLOODED, ws.STATE_WAITING, ws.STATE_STALE):
+    for prev in (ws.STATE_WAITING, ws.STATE_STALE):
         c = state(marks, prev=prev)
-        assert c.dispute and c.state == prev
+        assert c.dispute and c.state == prev and not c.pending_confirm
+    c = confirmed(marks)
+    assert c.dispute and c.state == ws.STATE_FLOODED
 
 
 def test_not_flooded_needs_a_telegram_signal_too():
     marks = [mk("flooded", actor="a"), mk("flooded", actor="b")]
     marks += [mk("not_flooded", "site", "d1"), mk("not_flooded", "site", "d2")]
-    c = state(marks, prev=ws.STATE_FLOODED)
+    c = confirmed(marks)
     assert c.state == ws.STATE_FLOODED and not c.dispute
 
 
@@ -172,16 +201,39 @@ def test_verified_photo_newer_than_not_flooded_wins():
         mk("flooded", "photo", "tg:9", ago_h=1),
     ]
     c = state(marks, prev=ws.STATE_WAITING)
-    assert c.state == ws.STATE_FLOODED and not c.dispute
+    assert c.state == ws.STATE_WAITING and c.pending_confirm and not c.dispute
 
 
 def test_admin_flooded_holds_seven_days():
     at = NOW - timedelta(days=6, hours=23)
-    assert state([], prev=ws.STATE_FLOODED).state == ws.STATE_STALE
+    assert confirmed([]).state == ws.STATE_STALE
     held = ws.compute_state([], NOW, ws.STATE_FLOODED, prev_source="admin", prev_at=at)
     assert held.state == ws.STATE_FLOODED
     gone = ws.compute_state([], NOW, ws.STATE_FLOODED, prev_source="admin", prev_at=NOW - timedelta(days=7, minutes=1))
     assert gone.state == ws.STATE_STALE
+
+
+def test_parser_source_flooded_is_trusted_like_admin():
+    held = ws.compute_state([], NOW, ws.STATE_FLOODED, prev_source="parser", prev_at=NOW - timedelta(days=1))
+    assert held.state == ws.STATE_FLOODED and not held.pending_confirm
+
+
+def test_decision_floor_ignores_older_marks():
+    marks = [mk("flooded", actor="a", ago_h=5), mk("flooded", actor="b", ago_h=5)]
+    floor = NOW - timedelta(hours=1)  # админ уже решил после этих отметок
+    c = ws.compute_state(marks, NOW, ws.STATE_WAITING, prev_source="admin", prev_at=floor, floor=floor)
+    assert c.state == ws.STATE_WAITING and not c.pending_confirm
+    fresh = marks + [mk("flooded", actor="c", ago_h=0.2), mk("flooded", actor="d", ago_h=0.1)]
+    assert ws.compute_state(fresh, NOW, ws.STATE_WAITING, prev_source="admin", prev_at=floor, floor=floor).pending_confirm
+
+
+def test_pending_stays_pending_a_week_without_admin():
+    marks = [mk("flooded", actor="a", ago_h=1), mk("flooded", actor="b", ago_h=1)]
+    for _ in range(3):  # любое число пересчётов без админа
+        assert state(marks, prev=ws.STATE_WAITING).state == ws.STATE_WAITING
+    old = [mk("flooded", actor="a", ago_h=24 * 8), mk("flooded", actor="b", ago_h=24 * 8)]
+    c = state(old, prev=ws.STATE_WAITING)
+    assert c.state == ws.STATE_WAITING and not c.pending_confirm  # отметки устарели: запрос гаснет, «залит» не появился
 
 
 def test_admin_hold_yields_to_confirmed_not_flooded():

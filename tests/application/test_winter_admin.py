@@ -213,9 +213,10 @@ async def test_merge_recomputes_status_from_moved_marks(db_session):
     await make_client(db_session, 601)
     await wm.record_mark(db_session, arena_id=dup, kind="ice", value="flooded", source="telegram", actor="tg:601", telegram_id=601, now=NOW)
     await wm.record_mark(db_session, arena_id=dup, kind="ice", value="flooded", source="photo", actor="tg:602", telegram_id=602, now=NOW)
-    assert (await _state(db_session, dup)).state == "flooded"
+    assert (await _state(db_session, dup)).state == "waiting"  # «залит» только после админа
     await wa.merge_points(db_session, dup, keep, admin_id=1, now=NOW + timedelta(minutes=1))
-    assert (await _state(db_session, keep)).state == "flooded"
+    kept = await db_session.execute(text("SELECT state, pending_confirm FROM seasonal_rink_seasons WHERE arena_id=:a"), {"a": keep})
+    assert tuple(kept.one()) == ("waiting", True)  # отметки переехали, запрос на подтверждение — вместе с ними
 
 
 # --- переименование и slug --------------------------------------------------------

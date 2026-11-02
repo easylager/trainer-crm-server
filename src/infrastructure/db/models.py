@@ -2830,6 +2830,10 @@ class SeasonalRinkSeason(Base):
     dispute: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
     doubtful: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
     admin_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: люди набрали баллы «залит», ждём подтверждения админа; публично остаётся «ждём заливку»
+    pending_confirm: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    #: момент последнего решения админа/источника: отметки старше уже учтены
+    flood_floor_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     hidden_reason: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
     hours_text: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     opening_hours: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
@@ -2919,7 +2923,7 @@ class SeasonalModerationItem(Base):
     __tablename__ = "seasonal_moderation_items"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('gone', 'dispute', 'photo_first', 'new_point')", name="ck_seasonal_moderation_kind"
+            "kind IN ('gone', 'dispute', 'photo_first', 'new_point', 'confirm_flood')", name="ck_seasonal_moderation_kind"
         ),
         CheckConstraint("status IN ('open', 'done')", name="ck_seasonal_moderation_status"),
         Index("ix_seasonal_moderation_open", "status", "created_at"),
