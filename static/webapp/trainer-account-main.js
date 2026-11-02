@@ -312,6 +312,118 @@
       if (tg && typeof tg.openTelegramLink === 'function') tg.openTelegramLink(link);
       else window.open(link, '_blank');
     };
+    renderCatalog();
+  }
+
+  /* ─── Каталог в шапке: статус + до двух контекстных подсказок ───────────
+     Publish-first: телефон и «поделись ссылкой» — не блокеры, а советы,
+     которые можно закрыть (серверный сноз через /trainer/hub/rhythm-hint/dismiss). */
+
+  var CATALOG_STATUS = {
+    published: { text: 'В каталоге', on: true },
+    pending_review: { text: 'На проверке', on: false },
+    hidden: { text: 'Снято с публикации', on: false },
+    paused: { text: 'Приостановлено', on: false },
+    needs_revision: { text: 'Попросили поправить', on: false }
+  };
+
+  function renderCatalog() {
+    var box = el('taCatalog');
+    var cat = state.catalog;
+    if (!box || !cat) return;
+    var status = CATALOG_STATUS[cat.state];
+    var ready = cat.readiness && cat.readiness.submit_ready;
+    if (!status && !(cat.state === 'draft' && ready)) return;
+
+    var st = el('taCatalogStatus');
+    if (cat.state === 'draft' && ready) {
+      st.textContent = 'Опубликовать в каталог';
+      st.classList.remove('ta-catalog__status--on');
+    } else if (status) {
+      st.textContent = status.text;
+      st.classList.toggle('ta-catalog__status--on', !!status.on);
+    }
+    st.onclick = function () { go('trainer-catalog'); };
+
+    var snoozed = {};
+    (cat.snoozed_hint_ids || []).forEach(function (id) { snoozed[id] = true; });
+    var tips = [];
+    if (cat.state === 'published') {
+      if (!String(profile().phone || '').trim() && !snoozed.catalog_tip_phone) {
+        tips.push({
+          hintId: 'catalog_tip_phone',
+          text: 'Добавьте телефон — часть клиентов звонит быстрее, чем пишет.',
+          action: 'Указать',
+          run: function () { go(ROUTES.contacts); }
+        });
+      }
+      if (!cat.share_link_copied && !snoozed.catalog_tip_share_link && cat.preview_link) {
+        tips.push({
+          hintId: 'catalog_tip_share_link',
+          text: 'Поделитесь ссылкой — свои клиенты запишутся к вам первыми.',
+          action: 'Скопировать',
+          run: function (btn) { copyCatalogLink(btn, cat.preview_link); }
+        });
+      }
+    }
+    tips = tips.slice(0, 2);
+
+    var host = el('taCatalogTips');
+    host.innerHTML = '';
+    tips.forEach(function (tip) {
+      var row = document.createElement('div');
+      row.className = 'ta-catalog__tip';
+      var txt = document.createElement('span');
+      txt.className = 'ta-catalog__tip-text';
+      txt.textContent = tip.text;
+      var act = document.createElement('button');
+      act.type = 'button';
+      act.className = 'ta-catalog__tip-action';
+      act.textContent = tip.action;
+      act.onclick = function () { tip.run(act); };
+      var x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'ta-catalog__tip-close';
+      x.setAttribute('aria-label', 'Скрыть подсказку');
+      x.textContent = '\u00d7';
+      x.onclick = function () { dismissCatalogTip(tip.hintId, row); };
+      row.appendChild(txt);
+      row.appendChild(act);
+      row.appendChild(x);
+      host.appendChild(row);
+    });
+    box.hidden = false;
+  }
+
+  function copyCatalogLink(btn, link) {
+    haptic();
+    var done = function () {
+      btn.textContent = 'Скопировано';
+      setTimeout(function () { btn.textContent = 'Скопировать'; }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(done, done);
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = link;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* */ }
+      document.body.removeChild(ta);
+      done();
+    }
+  }
+
+  function dismissCatalogTip(hintId, row) {
+    row.remove();
+    var c = credential();
+    var h = { 'Content-Type': 'application/json' };
+    if (c) h['X-Telegram-Init-Data'] = c;
+    fetch(apiUrl('/trainer/hub/rhythm-hint/dismiss'), {
+      method: 'POST',
+      headers: h,
+      body: JSON.stringify({ hint_id: hintId })
+    }).catch(function () { /* строка уже скрыта; сноз добьём при следующем заходе */ });
   }
 
   function renderMissing() {

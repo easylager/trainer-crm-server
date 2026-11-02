@@ -46,6 +46,12 @@ DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS: dict[str, int] = {
     "feature_moment_groups": 30,
     "feature_moment_stats": 30,
     "feature_moment_certificates": 30,
+    # Контекстные подсказки «дозаполнить карточку» в шапке кабинета (publish-first):
+    # телефон и ссылка — не блокеры, а советы; раз тренер закрыл, значит решил не добавлять.
+    # 30 дней — та же логика, что у feature_moment_*: постоянно истинное условие не должно
+    # маячить каждую неделю.
+    "catalog_tip_phone": 30,
+    "catalog_tip_share_link": 30,
 }
 
 DISMISSIBLE_HINT_IDS: frozenset[str] = frozenset(DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS)
