@@ -1508,7 +1508,7 @@
     }
     var alt = '';
     if (feed.mode === 'phone' && feed.callHref) {
-      alt = '<a class="arena-btn" href="' + esc(feed.callHref) + '">' + esc(copyLine('cta.call', 'Позвонить')) + '</a>';
+      alt = '<a class="arena-btn" href="' + esc(feed.callHref) + '" data-action="call">' + esc(copyLine('cta.call', 'Позвонить')) + '</a>';
     } else if (feed.mode === 'site' && feed.siteHref) {
       alt =
         '<a class="arena-btn" href="' + esc(feed.siteHref) + '" data-action="external" data-href="' + esc(feed.siteHref) + '">' +
@@ -1537,7 +1537,7 @@
       action =
         '<a class="arena-btn arena-btn--pri" href="' +
         esc(feed.callHref) +
-        '">' +
+        '" data-action="call">' +
         esc(copyLine('cta.call', 'Позвонить')) +
         '</a>';
     } else if (feed.mode === 'site' && feed.siteHref) {
