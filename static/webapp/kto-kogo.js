@@ -1,51 +1,56 @@
 /**
- * «Кто кого» — экран игры в Mini App (TASK-299). Макет: claude.ai/artifact/QxDWNDDKXcHYJdZFv6uPvt, экраны 1–5, 10–14.
+ * «Кто кого» — Mini App, зимняя модель (TASK-334 S5, PDEC-031). Холст: claude.ai/artifact/R3u6sQZmooPxteuTWcfiKd.
  *
- * Вкладки: матчи, таблица, лиги. Поверх них — лига изнутри, создание лиги, вход по ссылке (?join=КОД или
- * startapp=kk_КОД), итог матча (?reveal=<id матча>, открывается из строки на главной), итоги месяца
- * (?month=<id гонки>, TASK-334; холст гонки месяца: claude.ai/artifact/4h6iFvDSrMtckeduVzj2Vn).
+ * Здесь — ядро: состояние, запросы, навигация по экранам, ход и козырь, общие кирпичики вёрстки.
+ * Экраны подключаются по одному и регистрируются через KK.register:
+ *   kto-kogo-views.js   — матч с ходом, матч идёт, итог, края;
+ *   kto-kogo-board.js   — хаб игры, таблица, карточка болельщика;
+ *   kto-kogo-leagues.js — новая лига, лига изнутри, вход по ссылке, итоги месяца.
  * Чужие имена попадают в DOM только через textContent.
  */
 (function () {
   'use strict';
 
   var M = window.KtoKogoModel;
+  var S = window.KtoKogoScreens;
   var tg = window.Telegram && window.Telegram.WebApp;
   var root = document.getElementById('kk');
   var params = new URLSearchParams(location.search);
   var initData = (tg && tg.initData) || params.get('init_data') || '';
 
-  var IDEAS = ['Раздевалка', 'Офис', 'Двор', 'Субботний лёд'];
-
   var state = {
-    tab: 'matches',
-    view: null, // null | 'league' | 'create' | 'created' | 'join' | 'joined' | 'reveal'
+    stack: [],
     loading: true,
-    matches: [],
+    matches: [], // ближайшие матчи Динамо и Экстралиги (/matches?league=all)
+    matchCache: {}, // матчи вне окна списка: по ссылке, отменённые
     me: null,
-    standings: null,
+    race: null,
+    double: null,
+    doubles: [],
+    stakes: {}, // id матча → {loading, data}
+    movement: {}, // id матча → {loading, data}
+    peaks: null,
+    profile: null,
+    clubs: null,
     leagues: null,
-    tableKey: null, // id лиги или 'all'
-    leagueTables: {},
-    leagueId: null,
+    leagueTables: {}, // 'id|month' | 'id|all'
+    tables: {}, // 'клуб|период'
     created: null,
     joinCode: '',
     joinPreview: null,
     joinError: '',
-    revealId: null,
-    race: null, // гонка месяца из /matches: шапка таблицы, финал
-    leader: null, // строка под финалом месяца
-    month: null, // итоги месяца для экрана ?month=
-    double: null, // ×2 месяца: {match_id, locked}; null — гонки месяца ещё нет (TASK-335)
-    remind: null, // напоминания в бот: true | false | null (не загружено)
-    sheet: null, // {kind:'score', matchId, home, away} | {kind:'menu'} | {kind:'rename', draft} | {kind:'leave'}
-    draftName: '',
-    createError: '',
+    month: null,
+    remind: null,
+    kkHidden: false,
+    fromCard: '',
+    sheet: null,
+    toast: '',
     busy: false,
     sharing: false,
-    fromCard: '', // 'league' | 'result' — открыли с карточки в чате
-    toast: '',
   };
+
+  var screens = {};
+  var pollTimer = null;
 
   // ---------- среда ----------
 
@@ -55,8 +60,8 @@
     document.body.classList.toggle('kk-dark', !!dark);
     if (tg && tg.setHeaderColor) {
       try {
-        tg.setHeaderColor(dark ? '#0b1220' : '#f2f5fa');
-        tg.setBackgroundColor(dark ? '#0b1220' : '#f2f5fa');
+        tg.setHeaderColor(dark ? '#17212b' : '#f2f5fa');
+        tg.setBackgroundColor(dark ? '#17212b' : '#f2f5fa');
       } catch (e) { /* старые клиенты */ }
     }
   }
@@ -100,6 +105,10 @@
     }, 2600);
   }
 
+  function fail(e) {
+    toast((e && e.message) || 'Не получилось загрузить');
+  }
+
   // ---------- DOM ----------
 
   function h(tag, attrs, kids) {
@@ -123,13 +132,13 @@
   }
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
-  function icon(paths, size, label) {
+  function icon(paths, size, label, filled) {
     var s = document.createElementNS(SVG_NS, 'svg');
     s.setAttribute('width', size || 20);
     s.setAttribute('height', size || 20);
     s.setAttribute('viewBox', '0 0 24 24');
-    s.setAttribute('fill', 'none');
-    s.setAttribute('stroke', 'currentColor');
+    s.setAttribute('fill', filled ? 'currentColor' : 'none');
+    s.setAttribute('stroke', filled ? 'none' : 'currentColor');
     s.setAttribute('stroke-width', '2.2');
     s.setAttribute('stroke-linecap', 'round');
     s.setAttribute('stroke-linejoin', 'round');
@@ -144,30 +153,35 @@
     });
     return s;
   }
-  var I_BACK = ['M15 18l-6-6 6-6'];
-  var I_MORE = ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'];
-  var I_INVITE = ['M16 11a4 4 0 1 0-8 0', 'M4 20c1.5-3 4.5-4.5 8-4.5s6.5 1.5 8 4.5', 'M19 3v4', 'M17 5h4'];
-  var I_LOCK = ['M7 11V8a5 5 0 0 1 10 0v3', 'M5 11h14v9H5z'];
-  var I_PLUS = ['M12 5v14', 'M5 12h14'];
-  var I_BELL = ['M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.9 1.9 0 0 0 3.4 0'];
+  var I = {
+    back: ['M15 18l-6-6 6-6'],
+    close: ['M6 6l12 12', 'M18 6L6 18'],
+    more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
+    down: ['M6 9l6 6 6-6'],
+    bolt: ['M13 2L4 14h7l-1 8 9-12h-7z'],
+    up: ['M12 19V5', 'M5 12l7-7 7 7'],
+    swap: ['M7 4v16', 'M17 20V4', 'M3 8l4-4 4 4', 'M13 16l4 4 4-4'],
+    arrow: ['M5 12h14', 'M13 6l6 6-6 6'],
+    check: ['M5 12l5 5 9-10'],
+    send: ['M21 4L3 11l6 2 2 6 3-4 5 4z'],
+    plus: ['M12 5v14', 'M5 12h14'],
+    bell: ['M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.9 1.9 0 0 0 3.4 0'],
+    globe: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M3 12h18', 'M12 3a14 14 0 0 1 0 18', 'M12 3a14 14 0 0 0 0 18'],
+    invite: ['M16 11a4 4 0 1 0-8 0', 'M4 20c1.5-3 4.5-4.5 8-4.5s6.5 1.5 8 4.5', 'M19 3v4', 'M17 5h4'],
+  };
 
-  /** Корона — залитая, не контурная: так она читается на жёлтом и в 11 px. */
-  function crownIcon(size) {
-    var s = document.createElementNS(SVG_NS, 'svg');
-    s.setAttribute('width', size);
-    s.setAttribute('height', size);
-    s.setAttribute('viewBox', '0 0 24 24');
-    s.setAttribute('fill', 'currentColor');
-    s.setAttribute('aria-hidden', 'true');
-    var p = document.createElementNS(SVG_NS, 'path');
-    p.setAttribute('d', 'M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z');
-    s.appendChild(p);
+  /** Корона — залитая, чтобы читалась мелко и на жёлтом. */
+  var CROWN = 'M3 18h18l-1.5-10-4.5 4-3-6-3 6-4.5-4z';
+  function crownIcon(size, label) {
+    var s = icon([CROWN], size, label, true);
+    s.setAttribute('class', 'kk-crown-ic');
     return s;
   }
 
-  function crownTag(r) {
-    if (!r || !r.crowns) return null;
-    return h('span', { class: 'kk-crown', 'aria-label': r.crowns + ' ' + M.plural(r.crowns, 'корона', 'короны', 'корон') }, [crownIcon(11), r.crowns > 1 ? String(r.crowns) : null]);
+  /** Значок «корон у имени»: корона и число. */
+  function crownTag(n) {
+    if (!n) return null;
+    return h('span', { class: 'kk-crownw', role: 'img', 'aria-label': S.crownCount(n) }, [crownIcon(14), String(n)]);
   }
 
   function initials(name) {
@@ -175,164 +189,200 @@
     return ((parts[0] || '?').charAt(0) + (parts[1] ? parts[1].charAt(0) : '')).toUpperCase();
   }
 
-  function ava(name, size, me) {
-    return h('span', {
-      class: 'kk-ava' + (me ? ' kk-ava--me' : ''),
-      style: 'width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.36) + 'px',
-      'aria-hidden': 'true',
-      text: me ? 'Я' : initials(name),
-    });
+  /** Белый круг с логотипом клуба; без логотипа — две буквы. */
+  function logoDisc(team, size) {
+    var t = team || {};
+    var px = 'width:' + size + 'px;height:' + size + 'px';
+    if (t.logo) return h('span', { class: 'kk-disc', style: px }, [h('img', { src: t.logo, alt: '', loading: 'lazy', style: 'width:' + Math.round(size * 0.72) + 'px;height:' + Math.round(size * 0.72) + 'px' })]);
+    return h('span', { class: 'kk-disc kk-disc--txt', style: px + ';font-size:' + Math.round(size * 0.34) + 'px', 'aria-hidden': 'true', text: t.short || initials(t.name) });
   }
 
-  function badge(team, color) {
-    var t = team || {};
-    var style = '--team:' + color;
-    if (t.logo) {
-      return h('span', { class: 'kk-badge kk-badge--logo', style: style }, [h('img', { src: t.logo, alt: '', loading: 'lazy' })]);
+  function worldDisc(size) {
+    return h('span', { class: 'kk-disc kk-disc--world', style: 'width:' + size + 'px;height:' + size + 'px', 'aria-hidden': 'true' }, [icon(I.globe, Math.round(size * 0.58))]);
+  }
+
+  function ava(name, size, cls) {
+    return h('span', { class: 'kk-ava' + (cls ? ' ' + cls : ''), style: 'width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.42) + 'px', 'aria-hidden': 'true', text: initials(name) });
+  }
+
+  function sticker(text, cls) {
+    return h('span', { class: 'kk-tag' + (cls ? ' ' + cls : ''), 'aria-hidden': 'true', text: text });
+  }
+
+  function topbar(title, sub, opts) {
+    opts = opts || {};
+    return h('div', { class: 'kk-top' }, [
+      h('button', { type: 'button', class: 'kk-round', 'aria-label': 'Назад', onclick: back }, [icon(I.back)]),
+      h('span', { class: 'kk-top__t' }, [h('h1', { class: 'kk-h1', text: title }), sub ? h('span', { class: 'kk-sub', text: sub }) : null]),
+      opts.right || null,
+    ]);
+  }
+
+  function loading() {
+    return h('div', { class: 'kk-skel', role: 'status', 'aria-label': 'Загружаем' });
+  }
+
+  function emptyCard(head, text, cta) {
+    return h('section', { class: 'kk-card kk-note' }, [
+      h('span', { class: 'kk-lbl', text: head }),
+      h('span', { class: 'kk-tx', text: text }),
+      cta || null,
+    ]);
+  }
+
+  /** Шторка снизу: тап по затемнению закрывает. */
+  function sheet(title, subtitle, children) {
+    var panel = h('div', { class: 'kk-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title, tabindex: '-1' }, [
+      h('div', { class: 'kk-sheet__head' }, [
+        h('span', { class: 'kk-sheet__t' }, [h('span', { class: 'kk-h2', text: title }), subtitle ? h('span', { class: 'kk-sub', text: subtitle }) : null]),
+        h('button', { type: 'button', class: 'kk-round kk-round--alt', 'aria-label': 'Закрыть', onclick: closeSheet }, [icon(I.close, 18)]),
+      ]),
+    ].concat(children));
+    return h('div', { class: 'kk-scrim', onclick: function (e) { if (e.target === e.currentTarget) closeSheet(); } }, [panel]);
+  }
+
+  function closeSheet() {
+    state.sheet = null;
+    render();
+  }
+
+  // ---------- навигация ----------
+
+  function current() {
+    return state.stack[state.stack.length - 1];
+  }
+
+  function stopPoll() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  /** Периодический опрос, пока открыт экран: сам останавливается, когда экран ушёл. */
+  function poll(name, ms, fn) {
+    stopPoll();
+    pollTimer = setInterval(function () {
+      var c = current();
+      if (!c || c.name !== name) return stopPoll();
+      fn(c.args);
+    }, ms);
+  }
+
+  function enter() {
+    var c = current();
+    var sc = screens[c.name];
+    stopPoll();
+    render();
+    if (sc && sc.enter) sc.enter(c.args);
+  }
+
+  function go(name, args) {
+    state.sheet = null;
+    state.stack.push({ name: name, args: args || {} });
+    enter();
+    window.scrollTo(0, 0);
+  }
+
+  function replace(name, args) {
+    state.sheet = null;
+    state.stack[Math.max(0, state.stack.length - 1)] = { name: name, args: args || {} };
+    enter();
+    window.scrollTo(0, 0);
+  }
+
+  function reset(name, args) {
+    state.sheet = null;
+    state.stack = [{ name: name, args: args || {} }];
+    enter();
+    window.scrollTo(0, 0);
+  }
+
+  function back() {
+    if (state.sheet) return closeSheet();
+    if (state.stack.length > 1) {
+      state.stack.pop();
+      return enter();
     }
-    return h('span', { class: 'kk-badge', style: style, 'aria-hidden': 'true', text: t.short || initials(t.name) });
+    location.href = '/webapp/client-home' + (initData && !(tg && tg.initData) ? '?init_data=' + encodeURIComponent(initData) : '');
+  }
+
+  function register(name, screen) {
+    screens[name] = screen;
   }
 
   // ---------- данные ----------
 
+  function mergeMatches(items) {
+    state.matches = items;
+    items.forEach(function (m) { delete state.matchCache[m.id]; });
+  }
+
   function loadMatches() {
-    return api('GET', '/client/hockey/matches').then(function (data) {
-      state.matches = (data && data.items) || [];
+    return api('GET', '/client/hockey/matches?league=all').then(function (data) {
+      mergeMatches((data && data.items) || []);
       state.me = data && data.me;
       state.race = (data && data.race) || null;
-      state.leader = (data && data.leader) || null;
       state.double = (data && data.double) || null;
+      state.doubles = (data && data.doubles) || [];
     });
-  }
-
-  function loadRemind() {
-    return api('GET', '/client/hockey/remind').then(function (data) {
-      state.remind = !!(data && data.on);
-    }, function () { state.remind = null; });
-  }
-
-  /**
-   * Напоминания в бот (TASK-335). Включает сам игрок: сначала Telegram спрашивает, можно ли боту писать.
-   * Отказ — не включаем: иначе бот промолчит, а игрок будет ждать.
-   */
-  function setRemind(on) {
-    function save() {
-      api('PUT', '/client/hockey/remind', { on: on })
-        .then(function (r) {
-          state.remind = !!(r && r.on);
-          haptic('success');
-          toast(on ? 'Напомню за час до каждого матча' : 'Напоминания выключены');
-          render();
-        })
-        .catch(function (e) { toast(e.message); });
-    }
-    if (!on || !tg || typeof tg.requestWriteAccess !== 'function') return save();
-    try {
-      tg.requestWriteAccess(function (granted) {
-        if (granted === true) save();
-        else toast('Без разрешения бот не сможет напомнить');
-      });
-    } catch (e) {
-      save();
-    }
-  }
-
-  function remindBanner() {
-    if (state.remind === null) return null;
-    if (state.remind) {
-      return h('button', { type: 'button', class: 'kk-remind-on', onclick: function () { setRemind(false); } }, [
-        icon(I_BELL, 16), 'Напомню за час до каждого матча',
-      ]);
-    }
-    return h('div', { class: 'kk-remind' }, [
-      h('span', { class: 'kk-remind__icon', 'aria-hidden': 'true' }, [icon(I_BELL, 20)]),
-      h('span', { class: 'kk-remind__text' }, [
-        h('span', { class: 'kk-remind__title', text: 'Напомнить за час до матча' }),
-        h('span', { class: 'kk-remind__sub', text: 'и прислать итог с местом в лиге' }),
-      ]),
-      h('button', { type: 'button', class: 'kk-toggle', role: 'switch', 'aria-checked': 'false', 'aria-label': 'Напоминать за час до матча', onclick: function () { setRemind(true); } }, [h('span')]),
-    ]);
-  }
-
-  /** ×2 месяца: поставить, перенести или снять до начала матча. */
-  function toggleDouble(m) {
-    var on = !(m.my_pick && m.my_pick.doubled);
-    var before = state.matches.map(function (x) { return x.my_pick ? x.my_pick.doubled : false; });
-    var prevDouble = state.double;
-    state.matches.forEach(function (x) {
-      if (!x.my_pick) return;
-      if (x.id === m.id) x.my_pick.doubled = on;
-      else if (on && x.my_pick.doubled && x.open) x.my_pick.doubled = false;
-    });
-    state.double = { match_id: on ? m.id : null, locked: false };
-    haptic();
-    render();
-    api('PUT', '/client/hockey/matches/' + m.id + '/double', { on: on })
-      .then(function (r) {
-        state.double = (r && r.double) || state.double;
-        render();
-      })
-      .catch(function (e) {
-        state.matches.forEach(function (x, i) { if (x.my_pick) x.my_pick.doubled = before[i]; });
-        state.double = prevDouble;
-        toast(e.message);
-        render();
-      });
-  }
-
-  /** Скрыл строку игры на матче — вернуть её можно здесь, в самой игре («Ещё › Кто кого»). */
-  function loadPrefs() {
-    return api('GET', '/client/hockey/prefs').then(function (data) {
-      state.kkHidden = !!(data && data.kk_hidden);
-    }, function () { state.kkHidden = false; });
-  }
-
-  function showOnMatches() {
-    api('PUT', '/client/hockey/prefs', { kk_hidden: false })
-      .then(function () {
-        state.kkHidden = false;
-        haptic('success');
-        toast('Строка игры снова на матчах');
-        render();
-      })
-      .catch(function (e) { toast(e.message); });
-  }
-
-  function loadStandings() {
-    return api('GET', '/client/hockey/standings').then(function (data) {
-      state.standings = data;
-    });
-  }
-
-  function loadLeagues() {
-    return api('GET', '/client/hockey/leagues').then(function (data) {
-      state.leagues = (data && data.items) || [];
-    });
-  }
-
-  var leagueLoading = {};
-  function loadLeague(id) {
-    if (leagueLoading[id]) return leagueLoading[id];
-    leagueLoading[id] = api('GET', '/client/hockey/leagues/' + id)
-      .then(function (data) {
-        state.leagueTables[id] = data;
-      })
-      .finally(function () {
-        delete leagueLoading[id];
-      });
-    return leagueLoading[id];
   }
 
   function findMatch(id) {
     for (var i = 0; i < state.matches.length; i++) if (state.matches[i].id === id) return state.matches[i];
-    return null;
+    return state.matchCache[id] || null;
+  }
+
+  /** Матч целиком: из списка или отдельным запросом (давний, отменённый, по ссылке). */
+  function fetchMatch(id) {
+    return api('GET', '/client/hockey/matches/' + id).then(function (m) {
+      var own = findMatch(id);
+      if (own && state.matches.indexOf(own) >= 0) Object.keys(m).forEach(function (k) { own[k] = m[k]; });
+      else state.matchCache[id] = m;
+      return findMatch(id);
+    });
+  }
+
+  function loadStakes(id, force) {
+    var cur = state.stakes[id];
+    if (cur && (cur.loading || (cur.data && !force))) return Promise.resolve();
+    state.stakes[id] = { loading: true, data: cur && cur.data };
+    return api('GET', '/client/hockey/matches/' + id + '/stakes')
+      .then(function (data) { state.stakes[id] = { loading: false, data: data }; })
+      .catch(function () { state.stakes[id] = { loading: false, data: null }; });
+  }
+
+  function loadPeaks() {
+    if (state.peaks) return Promise.resolve();
+    return api('GET', '/client/hockey/peaks').then(function (d) { state.peaks = (d && d.items) || []; }).catch(function () { state.peaks = []; });
+  }
+
+  function loadProfile(force) {
+    if (state.profile && !force) return Promise.resolve();
+    return api('GET', '/client/hockey/profile').then(function (d) { state.profile = d; }).catch(function () { state.profile = state.profile || null; });
+  }
+
+  function loadClubs() {
+    if (state.clubs) return Promise.resolve();
+    return api('GET', '/client/hockey/clubs').then(function (d) { state.clubs = (d && d.items) || []; });
+  }
+
+  function loadLeagues(force) {
+    if (state.leagues && !force) return Promise.resolve();
+    return api('GET', '/client/hockey/leagues').then(function (d) { state.leagues = (d && d.items) || []; });
+  }
+
+  function loadRemind() {
+    return api('GET', '/client/hockey/remind').then(function (d) { state.remind = !!(d && d.on); }, function () { state.remind = null; });
+  }
+
+  function loadPrefs() {
+    return api('GET', '/client/hockey/prefs').then(function (d) { state.kkHidden = !!(d && d.kk_hidden); }, function () { state.kkHidden = false; });
   }
 
   // ---------- ход ----------
 
   function sendPick(match, body, optimistic) {
     var before = match.my_pick;
-    // ×2 живёт на ходе: смена стороны или счёта его не снимает (TASK-335).
+    // Козырь живёт на ходе: смена стороны или счёта его не снимает.
     if (before && before.doubled) optimistic.doubled = true;
     match.my_pick = optimistic;
     haptic();
@@ -340,8 +390,10 @@
     return api('PUT', '/client/hockey/matches/' + match.id + '/pick', body)
       .then(function (data) {
         match.my_pick = data && data.my_pick;
+        delete state.stakes[match.id];
         haptic('success');
         render();
+        if (current() && current().name === 'match') loadStakes(match.id, true).then(render);
       })
       .catch(function (e) {
         match.my_pick = before;
@@ -351,503 +403,54 @@
   }
 
   function pickSide(match, side) {
-    if (!match.open) return;
+    if (!match.open) return Promise.resolve();
     var mine = match.my_pick;
-    if (mine && mine.side === side && mine.home_score === null) return;
-    sendPick(match, { side: side }, { side: side, home_score: null, away_score: null, points: null });
+    if (mine && mine.side === side && mine.home_score === null) return Promise.resolve();
+    return sendPick(match, { side: side }, { side: side, home_score: null, away_score: null, points: null, doubled: false });
   }
 
-  function openScore(match) {
-    var mine = match.my_pick || {};
-    var home = mine.home_score != null ? mine.home_score : mine.side === 'home' ? 3 : 1;
-    var away = mine.away_score != null ? mine.away_score : mine.side === 'away' ? 3 : 1;
-    if (home === away) away = home + 1;
-    state.sheet = { kind: 'score', matchId: match.id, home: home, away: away };
-    render();
-  }
-
-  function saveScore() {
-    var s = state.sheet;
-    var match = findMatch(s.matchId);
-    if (!match || M.scoreError(s.home, s.away)) return;
+  function saveScore(match, home, away) {
+    if (M.scoreError(home, away)) return;
     state.sheet = null;
-    var side = s.home > s.away ? 'home' : 'away';
-    sendPick(match, { home_score: s.home, away_score: s.away }, { side: side, home_score: s.home, away_score: s.away, points: null });
+    var side = home > away ? 'home' : 'away';
+    return sendPick(match, { home_score: home, away_score: away }, { side: side, home_score: home, away_score: away, points: null, doubled: false });
   }
 
-  // ---------- шапка и меню ----------
-
-  function top() {
-    var pts = state.me ? state.me.points : 0;
-    var sub = state.me ? state.me.rank + '-й' : 'в игре';
-    return h('header', { class: 'kk-top' }, [
-      h('h1', { class: 'kk-logo', text: 'кто кого' }),
-      h('button', { class: 'kk-pill', type: 'button', onclick: function () { go('table'); }, 'aria-label': 'Мои очки и место' }, [
-        h('span', { class: 'kk-pill__pts', text: String(pts) }),
-        h('span', { text: sub }),
-      ]),
-    ]);
-  }
-
-  function nav() {
-    var items = [['matches', 'Матчи'], ['table', 'Таблица'], ['leagues', 'Лиги']];
-    return h('nav', { class: 'kk-nav', 'aria-label': 'Разделы игры' }, items.map(function (it) {
-      return h('button', {
-        type: 'button',
-        'aria-current': state.tab === it[0] && !state.view ? 'page' : null,
-        onclick: function () { go(it[0]); },
-        text: it[1],
-      });
-    }));
-  }
-
-  function go(tab) {
-    state.tab = tab;
-    state.view = null;
-    state.sheet = null;
+  /** Козырь недели: поставить, перенести с другого матча недели или снять — до начала матча. */
+  function toggleTrump(match) {
+    var st = S.trumpState(match, state.doubles, new Date().toISOString());
+    if (st.kind === 'nopick') return toast('Сначала тапни за команду');
+    if (!st.usable) return toast(st.note.charAt(0).toUpperCase() + st.note.slice(1));
+    var on = !(match.my_pick && match.my_pick.doubled);
+    var wk = S.weekKey(match.starts_at);
+    var touched = [];
+    state.matches.forEach(function (x) {
+      if (!x.my_pick) return;
+      if (x.id === match.id) touched.push([x, x.my_pick.doubled]);
+      else if (on && x.my_pick.doubled && S.weekKey(x.starts_at) === wk && x.open) touched.push([x, x.my_pick.doubled]);
+    });
+    var prevDoubles = state.doubles;
+    touched.forEach(function (t) { t[0].my_pick.doubled = t[0].id === match.id ? on : false; });
+    state.doubles = state.doubles.map(function (d) { return d.week_start === wk ? { week_start: d.week_start, match_id: on ? match.id : null, locked: false } : d; });
+    haptic();
     render();
-    if (tab === 'table' && !state.standings) Promise.all([loadStandings(), state.leagues ? null : loadLeagues()]).then(render, fail);
-    if (tab === 'leagues' && !state.leagues) loadLeagues().then(render, fail);
-    window.scrollTo(0, 0);
-  }
-
-  function fail(e) {
-    toast((e && e.message) || 'Не получилось загрузить');
-  }
-
-  // ---------- матчи ----------
-
-  function orderMatches(list) {
-    var open = [];
-    var live = [];
-    var done = [];
-    list.forEach(function (m) {
-      if (m.result) done.push(m);
-      else if (m.open) open.push(m);
-      else live.push(m);
-    });
-    done.sort(function (a, b) { return a.starts_at < b.starts_at ? 1 : -1; });
-    return open.concat(live, done);
-  }
-
-  function matchCard(m, now, nudge) {
-    var colors = M.pairColors(m.home, m.away);
-    var mine = m.my_pick;
-    var side = M.pickSide(mine);
-    var friends = m.friends || { home: [], away: [] };
-
-    if (m.result) return finalCard(m, colors, mine);
-
-    var started = !m.open;
-    var long = started && now - new Date(m.starts_at).getTime() > 3 * 3600 * 1000;
-    if (long) {
-      return h('div', { class: 'kk-row-card' }, [
-        h('span', { class: 'kk-dot', 'aria-hidden': 'true' }),
-        h('div', { class: 'kk-row-card__main' }, [
-          h('span', { class: 'kk-row-card__title', text: m.home.name + ' — ' + m.away.name }),
-          h('span', { class: 'kk-row-card__sub', text: (M.moveLine(mine, { home: m.home.name, away: m.away.name }) || 'ход не сделан') + ' · сверяем итог' }),
-        ]),
-      ]);
-    }
-
-    function half(which) {
-      var team = m[which];
-      var on = side === which;
-      var dim = !!side && !on;
-      return h('button', {
-        type: 'button',
-        class: 'kk-half' + (dim ? ' kk-half--dim' : ''),
-        style: '--team:' + colors[which],
-        'aria-pressed': on ? 'true' : 'false',
-        'aria-label': (started ? '' : 'Я за ') + team.name,
-        disabled: started,
-        onclick: function () { pickSide(m, which); },
-      }, [
-        badge(team, colors[which]),
-        h('span', { class: 'kk-team', text: team.name }),
-        h('span', { class: 'kk-fans', text: M.fansLine(friends[which], on) }),
-      ]);
-    }
-
-    var doubled = !!(mine && mine.doubled);
-    var stickerText = m.race_final ? (doubled ? 'ФИНАЛ МЕСЯЦА · ×2' : 'ФИНАЛ МЕСЯЦА') : doubled ? '×2 · МОЙ МАТЧ' : '';
-    var final = stickerText ? h('span', { class: 'kk-sticker kk-sticker--final', 'aria-hidden': 'true', text: stickerText }) : null;
-    var kids = [
-      final,
-      h('div', { class: 'kk-kicker' }, started
-        ? [h('span', { class: 'kk-kicker__live', 'aria-hidden': 'true' }), 'матч идёт · ходы закрыты']
-        : [M.kicker(m.starts_at)]),
-      h('div', { class: 'kk-halves' }, [half('home'), half('away')]),
-    ];
-    var names = { home: m.home.name, away: m.away.name };
-    if (started) {
-      kids.push(h('p', { class: 'kk-note', text: M.stakeLine(mine, names, 'live') + (doubled ? ' · ×2' : '') }));
-      var moves = m.friend_moves || [];
-      var cr = M.crowd(m, moves, mine);
-      if (cr) kids.push(crowdBlock(m, cr, colors));
-      if (moves.length) kids.push(movesList(moves, mine, m, colors));
-    } else if (nudge) {
-      kids.push(h('p', { class: 'kk-note', text: M.nudgeLine(friends, names) }));
-    } else if (side) {
-      var has = mine.home_score != null;
-      kids.push(h('p', { class: 'kk-note', text: M.stakeLine(mine, names, 'open') }));
-      var scoreBtn = h('button', { type: 'button', class: 'kk-btn-soft', onclick: function () { openScore(m); } }, [
-        has ? 'Поменять счёт' : 'Угадать счёт',
-        h('span', { class: 'kk-chip', text: has ? 'счёт' : '+' + M.EXACT }),
-      ]);
-      kids.push(state.double ? h('div', { class: 'kk-row2' }, [scoreBtn, x2Button(m, doubled)]) : scoreBtn);
-    }
-    // Финал месяца: одна строка факта, без шансов и подсказок (холст гонки, экран 2).
-    if (m.race_final && !started && state.leader) {
-      kids.push(h('p', { class: 'kk-race-note', text: 'Последний матч месяца · ' + M.leaderNote(state.leader) }));
-    }
-    var cls = 'kk-card' + (m.race_final || doubled ? ' kk-card--final' : '') + (doubled ? ' kk-card--x2' : '');
-    return h('article', { class: cls, 'aria-label': m.home.name + ' — ' + m.away.name + (m.race_final ? ', финал месяца' : '') + (doubled ? ', очки ×2' : '') }, kids);
-  }
-
-  /** Кнопка ×2: стоит здесь — жёлтая; ×2 месяца уже сыгран на другом матче — недоступна. */
-  function x2Button(m, on) {
-    var d = state.double || {};
-    var locked = !on && d.locked;
-    return h('button', {
-      type: 'button',
-      class: 'kk-x2' + (on ? ' kk-x2--on' : ''),
-      'aria-pressed': on ? 'true' : 'false',
-      'aria-label': locked ? '×2 этого месяца уже сыгран' : on ? 'Снять ×2 с этого матча' : 'Двойные очки на этот матч',
-      disabled: locked,
-      onclick: function () { toggleDouble(m); },
-      text: '×2',
-    });
-  }
-
-  /** Расклад друзей со стартом матча: «6 из 8 за Динамо-Минск» и полоса двух цветов. */
-  function crowdBlock(m, cr, colors) {
-    return h('div', { class: 'kk-crowd' }, [
-      h('div', { class: 'kk-crowd__head' }, [h('span', { class: 'kk-crowd__text', text: cr.text }), h('span', { class: 'kk-crowd__sub', text: 'твои лиги' })]),
-      h('div', { class: 'kk-crowd__bar', 'aria-hidden': 'true', style: 'grid-template-columns:' + Math.max(cr.home, 0.0001) + 'fr ' + Math.max(cr.away, 0.0001) + 'fr' }, [
-        h('span', { style: 'background:' + colors.home + (cr.home ? '' : ';display:none') }),
-        h('span', { style: 'background:' + colors.away + (cr.away ? '' : ';display:none') }),
-      ]),
-    ]);
-  }
-
-  /** Счета друзей: открываются со стартом матча (до него сервер их не отдаёт). */
-  function movesList(moves, mine, m, colors) {
-    var rows = [];
-    if (mine && M.pickSide(mine)) rows.push({ display_name: 'Ты', me: true, side: M.pickSide(mine), home_score: mine.home_score, away_score: mine.away_score, doubled: mine.doubled });
-    rows = rows.concat(moves);
-    return h('ol', { class: 'kk-moves', 'aria-label': 'Счета друзей' }, rows.map(function (x) {
-      return h('li', { class: x.me ? 'kk-me' : '' }, [
-        ava(x.display_name, 30, x.me),
-        h('span', { class: 'kk-moves__name' }, [x.me ? 'Ты' : x.display_name, x.doubled ? h('span', { class: 'kk-x2-badge', text: '×2' }) : null]),
-        h('span', { class: 'kk-moves__side', style: 'background:' + colors[x.side], 'aria-label': 'за ' + m[x.side].name }),
-        h('span', { class: x.home_score != null ? 'kk-moves__score' : 'kk-moves__none', text: M.friendMove(x) }),
-      ]);
-    }));
-  }
-
-  function finalCard(m, colors, mine) {
-    var r = m.result;
-    if (!mine) {
-      return h('div', { class: 'kk-row-card' }, [
-        h('div', { class: 'kk-row-card__main' }, [
-          h('span', { class: 'kk-row-card__title', text: m.home.name + ' — ' + m.away.name + ' · ' + r.home_score + ':' + r.away_score }),
-          h('span', { class: 'kk-row-card__sub', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] + ' · этот матч без тебя' }),
-        ]),
-        h('span', { class: 'kk-list__pts', style: 'color:var(--kk-muted)', text: '0' }),
-      ]);
-    }
-    var homeWon = r.home_score > r.away_score;
-    function side(which) {
-      var won = (which === 'home') === homeWon;
-      return h('div', {
-        class: 'kk-half kk-half--small' + (won ? '' : ' kk-half--dim'),
-        style: '--team:' + colors[which] + (won ? ';background:' + colors[which] + ';color:#fff' : ''),
-      }, [badge(m[which], colors[which]), h('span', { class: 'kk-team', text: m[which].name })]);
-    }
-    var pts = mine.points;
-    var total = M.totalPoints(mine);
-    var move = M.moveLine(mine, { home: m.home.name, away: m.away.name });
-    var tail = pts == null ? move + ' · считаем очки' : move + ' · ' + M.verdict(pts).tail + (pts ? ' · +' + total + (mine.doubled ? ' с ×2' : '') : '');
-    return h('article', { class: 'kk-card', 'aria-label': m.home.name + ' — ' + m.away.name + ', ' + r.home_score + ':' + r.away_score }, [
-      h('div', { class: 'kk-kicker', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] + ' · ' + M.decidedLabel(r.decided_in) }),
-      h('div', { class: 'kk-halves kk-halves--result' }, [
-        side('home'),
-        h('span', { class: 'kk-score-big', text: r.home_score + ':' + r.away_score }),
-        side('away'),
-      ]),
-      h('p', { class: 'kk-note', text: tail }),
-      pts != null ? h('span', { class: 'kk-sticker', 'aria-label': M.points(total), text: pts ? '+' + total + (mine.doubled ? ' ×2' : '') : '0' }) : null,
-    ]);
-  }
-
-  function matchesView() {
-    if (state.loading) return [h('div', { class: 'kk-skeleton' }), h('div', { class: 'kk-skeleton' })];
-    if (!state.matches.length) {
-      return [empty('на этой неделе Динамо не играет', 'Следующий матч появится здесь, как только клуб поставит его в календарь. Пока — загляни в таблицу.', 'Открыть таблицу', function () { go('table'); }, ['#dce2ec', '#1747b5'])];
-    }
-    var now = Date.now();
-    var nudged = false;
-    var banner = remindBanner();
-    var cards = orderMatches(state.matches).map(function (m) {
-      var ask = !nudged && m.open && !m.my_pick;
-      if (ask) nudged = true;
-      return matchCard(m, now, ask);
-    });
-    if (banner) cards.unshift(banner);
-    if (state.kkHidden) {
-      cards.push(h('p', { class: 'kk-note', style: 'text-align:center' }, [
-        'На страницах матчей игра скрыта · ',
-        h('button', { type: 'button', class: 'kk-link-btn', onclick: showOnMatches, text: 'Вернуть' }),
-      ]));
-    }
-    return cards;
-  }
-
-  function empty(head, body, cta, onCta, art, second, onSecond) {
-    return h('div', { class: 'kk-empty' }, [
-      h('div', { class: 'kk-empty__art', 'aria-hidden': 'true' }, [
-        h('span', { style: 'background:' + art[0] }),
-        h('span', { style: 'background:' + art[1] }),
-      ]),
-      h('div', { class: 'kk-empty__text' }, [
-        h('p', { class: 'kk-empty__head', text: head }),
-        h('p', { class: 'kk-hint', style: 'max-width:300px', text: body }),
-      ]),
-      h('div', { style: 'display:flex;flex-direction:column;gap:8px' }, [
-        h('button', { type: 'button', class: 'kk-btn kk-btn--dark', onclick: onCta, text: cta }),
-        second ? h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', onclick: onSecond, text: second }) : null,
-      ]),
-    ]);
-  }
-
-  // ---------- шторка счёта ----------
-
-  function scoreSheet() {
-    var s = state.sheet;
-    var match = findMatch(s.matchId);
-    if (!match) return null;
-    var colors = M.pairColors(match.home, match.away);
-    function stepper(which) {
-      return h('div', { class: 'kk-stepper', style: '--team:' + colors[which] }, [
-        h('span', { style: 'font-size:14px;font-weight:800;text-align:center', text: match[which].name }),
-        h('span', { class: 'kk-stepper__num', 'aria-live': 'polite', text: String(s[which]) }),
-        h('div', { class: 'kk-stepper__btns' }, [
-          h('button', { type: 'button', 'aria-label': 'Меньше — ' + match[which].name, text: '−', onclick: function () { s[which] = M.clampGoals(s[which] - 1); haptic(); render(); } }),
-          h('button', { type: 'button', 'aria-label': 'Больше — ' + match[which].name, text: '+', onclick: function () { s[which] = M.clampGoals(s[which] + 1); haptic(); render(); } }),
-        ]),
-      ]);
-    }
-    var err = M.scoreError(s.home, s.away);
-    return sheet([
-      h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:4px' }, [
-        h('h2', { class: 'kk-display', style: 'font-size:20px;margin:0', text: 'Какой счёт?' }),
-        h('p', { class: 'kk-hint', text: M.scoreHint(s.home, s.away) }),
-      ]),
-      h('div', { class: 'kk-steppers' }, [stepper('home'), stepper('away')]),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--dark', disabled: !!err, onclick: saveScore, text: err || 'Это мой ход' }),
-    ]);
-  }
-
-  function sheet(children, menu) {
-    return h('div', { class: 'kk-sheet', role: 'dialog', 'aria-modal': 'true' }, [
-      h('button', { type: 'button', class: 'kk-sheet__scrim', 'aria-label': 'Закрыть', onclick: function () { state.sheet = null; render(); } }),
-      h('div', { class: 'kk-sheet__panel' + (menu ? ' kk-sheet__menu' : '') }, children),
-    ]);
-  }
-
-  // ---------- таблица ----------
-
-  function tableView() {
-    var leagues = state.leagues || [];
-    // Пока игрок сам не выбрал вкладку — своя лига важнее общей таблицы.
-    if (!state.tableKeyChosen) state.tableKey = leagues.length ? leagues[0].id : 'all';
-    var key = state.tableKey;
-    var chips = leagues.map(function (l) { return [l.id, l.name]; }).concat([['all', 'Все']]);
-    var race = (key === 'all' ? state.standings && state.standings.race : state.leagueTables[key] && state.leagueTables[key].race) || state.race;
-    var head = M.raceHead(race);
-    var segs = M.raceSegments(race);
-    var out = [
-      h('div', { class: 'kk-race-head' }, [
-        h('h2', { class: 'kk-h2', text: head.title }),
-        head.left ? h('span', { class: 'kk-race-left', text: head.left }) : null,
-      ]),
-      segs.length ? h('div', { class: 'kk-race-bar', role: 'img', 'aria-label': head.left + (segs[segs.length - 1] === 'final' ? ', последний матч — финал месяца' : ''), style: 'grid-template-columns:repeat(' + segs.length + ',minmax(0,1fr))' }, segs.map(function (x) {
-        return h('span', { class: 'kk-race-bar__seg kk-race-bar__seg--' + x });
-      })) : null,
-      h('div', { class: 'kk-seg', role: 'tablist' }, chips.map(function (c) {
-        return h('button', {
-          type: 'button',
-          role: 'tab',
-          'aria-selected': key === c[0] ? 'true' : 'false',
-          text: c[1],
-          onclick: function () {
-            state.tableKey = c[0];
-            state.tableKeyChosen = true;
-            render();
-            if (c[0] !== 'all' && !state.leagueTables[c[0]]) loadLeague(c[0]).then(render, fail);
-          },
-        });
-      })),
-    ];
-    var rows;
-    if (key === 'all') {
-      if (!state.standings) return out.concat([h('div', { class: 'kk-skeleton' })]);
-      rows = state.standings.items || [];
-      var me = state.standings.me;
-      if (me && !rows.some(function (r) { return r.is_me; })) {
-        rows = rows.concat([{ rank: me.rank, display_name: 'Ты', points: me.points, exact: me.exact, is_me: true, gap: true }]);
-      }
-    } else {
-      var t = state.leagueTables[key];
-      if (!t) {
-        loadLeague(key).then(render, fail);
-        return out.concat([h('div', { class: 'kk-skeleton' })]);
-      }
-      rows = t.items || [];
-    }
-    if (!rows.length) {
-      return out.concat([empty('таблица заполнится после первого матча', 'Тапни за команду — и после финальной сирены ты уже в ней.', 'К матчам', function () { go('matches'); }, ['#e2502c', '#1747b5'])]);
-    }
-    var chase = M.chaseLine(rows);
-    return out.concat([
-      podium(rows.slice(0, 3)),
-      chase ? h('div', { class: 'kk-chase' }, [h('span', { text: chase.text }), chase.num ? h('span', { class: 'kk-chase__num', text: chase.num }) : null]) : null,
-      list(rows.slice(3)),
-    ]);
-  }
-
-  function nameOf(r) {
-    return r.is_me ? 'Ты' : r.display_name;
-  }
-
-  /* Звание в таблице лиги (hockey_leagues.pick_titles). У «Кепки позора» и «В чужом шарфе» — значок на аватарке. */
-  var TITLE_MARK = { cap: '🧢', scarf: '🧣' };
-  function titleTag(r) {
-    var t = r && r.title;
-    if (!t || !t.label) return null;
-    return h('span', { class: 'kk-title kk-title--' + t.id, text: t.label + (t.detail ? ' · ' + t.detail : '') });
-  }
-
-  function avaOf(r, size) {
-    var a = ava(r.display_name, size, r.is_me);
-    var mark = r.title && TITLE_MARK[r.title.id];
-    if (!mark) return a;
-    return h('span', { class: 'kk-capwrap' }, [a, h('span', { class: 'kk-cap kk-cap--' + r.title.id, 'aria-hidden': 'true', text: mark })]);
-  }
-
-  function podium(top3) {
-    var order = [top3[1], top3[0], top3[2]];
-    return h('div', { class: 'kk-podium' }, order.map(function (r, i) {
-      if (!r) return h('div');
-      var place = i === 1 ? 1 : i === 0 ? 2 : 3;
-      return h('div', { class: 'kk-podium__col' }, [
-        avaOf(r, place === 1 ? 60 : 48),
-        h('span', { class: 'kk-podium__name' }, [nameOf(r), crownTag(r)]),
-        titleTag(r),
-        h('div', { class: 'kk-podium__block kk-podium__block--' + place }, [
-          h('span', { class: 'kk-display', style: 'font-size:22px', text: String(r.rank) }),
-          h('span', { style: 'font-size:13px;font-weight:700', text: M.points(r.points) }),
-        ]),
-      ]);
-    }));
-  }
-
-  function list(rows) {
-    if (!rows.length) return null;
-    return h('ol', { class: 'kk-list' }, rows.map(function (r) {
-      return h('li', { class: r.is_me ? 'kk-me' : '' }, [
-        h('span', { class: 'kk-list__pos', text: String(r.rank) }),
-        avaOf(r, 34),
-        h('span', { class: 'kk-list__who' }, [
-          h('span', { class: 'kk-list__name', style: r.is_me ? 'font-weight:800' : '' }, [nameOf(r), crownTag(r)]),
-          titleTag(r),
-        ]),
-        r.exact ? h('span', { class: 'kk-list__meta', text: r.exact + ' ' + M.plural(r.exact, 'точный', 'точных', 'точных') }) : null,
-        h('span', { class: 'kk-list__pts', text: String(r.points) }),
-      ]);
-    }));
-  }
-
-  // ---------- лиги ----------
-
-  function leaguesView() {
-    var out = [h('h2', { class: 'kk-h2', text: 'лиги' })];
-    if (!state.leagues) return out.concat([h('div', { class: 'kk-skeleton' })]);
-    if (!state.leagues.length) {
-      return out.concat([empty('с друзьями веселее', 'Собери лигу — у вас будет своя таблица. Очки те же, что в общей.', 'Создать лигу', startCreate, ['#ffd23f', '#1747b5'], 'У меня есть ссылка от друга', function () { openJoin(''); })]);
-    }
-    state.leagues.forEach(function (l) {
-      out.push(h('button', { type: 'button', class: 'kk-league', onclick: function () { openLeague(l.id); } }, [
-        h('span', { class: 'kk-league__mark', 'aria-hidden': 'true', text: initials(l.name) }),
-        h('span', { style: 'flex:1;display:flex;flex-direction:column;gap:2px;min-width:0' }, [
-          h('span', { class: 'kk-league__name', text: l.name }),
-          h('span', { class: 'kk-league__sub', text: l.members + ' ' + M.plural(l.members, 'человек', 'человека', 'человек') + ' · ты ' + l.my_rank + '-й' }),
-        ]),
-        h('span', { class: 'kk-list__pts', text: String(l.my_points) }),
-      ]));
-    });
-    out.push(h('button', { type: 'button', class: 'kk-add', onclick: startCreate }, [icon(I_PLUS, 22), 'Создать лигу']));
-    return out;
-  }
-
-  function startCreate() {
-    state.view = 'create';
-    state.draftName = '';
-    state.createError = '';
-    render();
-  }
-
-  function createView() {
-    var ok = state.draftName.trim().length > 1;
-    var input = h('input', {
-      id: 'kk-league-name',
-      class: 'kk-field',
-      maxlength: '28',
-      value: state.draftName,
-      autocomplete: 'off',
-      oninput: function (e) {
-        state.draftName = e.target.value;
-        state.createError = '';
-        var btn = document.getElementById('kk-create-go');
-        if (btn) btn.disabled = state.draftName.trim().length < 2 || state.busy;
-      },
-    });
-    return [
-      h('div', { style: 'display:flex;flex-direction:column;gap:8px;padding-top:6px' }, [
-        h('h2', { class: 'kk-display', style: 'font-size:28px;line-height:1.1;margin:0', text: 'как назовём лигу?' }),
-        h('p', { class: 'kk-hint', text: 'Так её увидят друзья в приглашении' }),
-      ]),
-      h('label', { for: 'kk-league-name', class: 'kk-hint', style: 'font-weight:800', text: 'Название' }),
-      input,
-      h('div', { class: 'kk-ideas' }, IDEAS.map(function (idea) {
-        return h('button', { type: 'button', text: idea, onclick: function () { state.draftName = idea; render(); } });
-      })),
-      state.createError ? h('p', { class: 'kk-err', text: state.createError }) : null,
-      h('div', { style: 'margin-top:auto;padding-top:24px' }, [
-        h('button', { id: 'kk-create-go', type: 'button', class: 'kk-btn kk-btn--dark', disabled: !ok || state.busy, onclick: createLeague, text: 'Создать и позвать друзей' }),
-      ]),
-    ];
-  }
-
-  function createLeague() {
-    state.busy = true;
-    render();
-    api('POST', '/client/hockey/leagues', { name: state.draftName })
-      .then(function (l) {
-        state.busy = false;
-        state.created = l;
-        state.view = 'created';
-        state.leagues = null;
-        haptic('success');
+    return api('PUT', '/client/hockey/matches/' + match.id + '/double', { on: on })
+      .then(function (r) {
+        state.double = (r && r.double) || state.double;
+        state.doubles = (r && r.doubles) || state.doubles;
+        delete state.stakes[match.id];
         render();
+        loadStakes(match.id, true).then(render);
       })
       .catch(function (e) {
-        state.busy = false;
-        state.createError = e.message;
+        touched.forEach(function (t) { t[0].my_pick.doubled = t[1]; });
+        state.doubles = prevDoubles;
+        toast(e.message);
         render();
       });
   }
+
+  // ---------- шаринг ----------
 
   function share(inviteUrl, text) {
     if (!inviteUrl) {
@@ -860,8 +463,8 @@
   }
 
   /**
-   * Карточка в чат (TASK-300): сервер готовит фото с кнопкой, Telegram даёт выбрать чат.
-   * Старый клиент или сбой — та же ссылка текстом через t.me/share, как раньше.
+   * Карточка в чат: сервер готовит фото с кнопкой, Telegram даёт выбрать чат.
+   * Старый клиент или сбой — та же ссылка текстом через t.me/share.
    */
   function shareCard(req, fallbackUrl, fallbackText) {
     if (state.sharing) return;
@@ -885,412 +488,51 @@
       });
   }
 
-  function copy(inviteUrl) {
-    if (!inviteUrl) return toast('Ссылка появится, когда бот будет настроен');
+  function copy(url) {
+    if (!url) return toast('Ссылка появится, когда бот будет настроен');
     var done = function () { toast('Ссылка скопирована'); };
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(inviteUrl).then(done, done);
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, done);
     else done();
-  }
-
-  function inviteText(name) {
-    return 'Угадываем матчи Динамо-Минск в лиге «' + name + '». Тапни за команду — посмотрим, кто кого.';
-  }
-
-  function createdView() {
-    var l = state.created;
-    return h('div', { class: 'kk-hero kk-hero--dark' }, [
-      h('div', { class: 'kk-hero__body', style: 'align-items:center;text-align:center' }, [
-        h('span', { class: 'kk-display', style: 'width:96px;height:96px;border-radius:32px;background:#ffd23f;color:#0d1424;display:flex;align-items:center;justify-content:center;font-size:30px;transform:rotate(-6deg)', 'aria-hidden': 'true', text: initials(l.name) }),
-        h('p', { class: 'kk-hero__title', style: 'font-size:28px', text: '«' + l.name + '» готова' }),
-        h('p', { class: 'kk-hero__text', style: 'max-width:280px', text: 'Пока в лиге только ты. Позови друзей — очки за матчи пойдут и сюда, и в общую таблицу.' }),
-      ]),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: function () { shareCard({ card: 'league', league_id: l.id }, l.invite_url, inviteText(l.name)); }, text: 'Позвать в Telegram' }),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', onclick: function () { copy(l.invite_url); }, text: 'Скопировать ссылку' }),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', onclick: function () { go('leagues'); }, text: 'К лигам' }),
-    ]);
-  }
-
-  function openLeague(id) {
-    state.view = 'league';
-    state.leagueId = id;
-    render();
-    loadLeague(id).then(render, fail);
-  }
-
-  function leagueView() {
-    var t = state.leagueTables[state.leagueId];
-    var head = [
-      h('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding-top:6px' }, [
-        h('button', { type: 'button', class: 'kk-icon-btn', 'aria-label': 'Назад', onclick: function () { go('leagues'); } }, [icon(I_BACK)]),
-        h('button', { type: 'button', class: 'kk-icon-btn', 'aria-label': 'Настройки лиги', onclick: function () { state.sheet = { kind: 'menu' }; render(); } }, [icon(I_MORE)]),
-      ]),
-    ];
-    if (!t) return head.concat([h('div', { class: 'kk-skeleton' })]);
-    var me = (t.items || []).filter(function (r) { return r.is_me; })[0];
-    var n = (t.items || []).length;
-    return head.concat([
-      h('div', { style: 'display:flex;flex-direction:column;gap:6px' }, [
-        h('h2', { class: 'kk-display', style: 'font-size:28px;line-height:1.1;margin:0;overflow-wrap:anywhere', text: t.name }),
-        h('p', { class: 'kk-hint', style: 'font-weight:700', text: n + ' ' + M.plural(n, 'человек', 'человека', 'человек') + (me ? ' · ты ' + me.rank + '-й · ' + M.points(me.points) : '') }),
-      ]),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', style: 'min-height:52px;font-size:16px', onclick: function () { shareCard({ card: 'league', league_id: t.id }, t.invite_url, inviteText(t.name)); } }, [icon(I_INVITE), 'Позвать друзей']),
-      crownWall(t.wall),
-      n > 1 ? h('h3', { class: 'kk-h3', text: M.raceHead(t.race).title }) : null,
-      n > 1 ? list(t.items) : h('p', { class: 'kk-hint', text: 'Пока в лиге только ты. Позови друзей — таблица оживёт после первого матча.' }),
-    ]);
-  }
-
-  /** Стена корон лиги: сезон — это короны по месяцам, а не сумма очков (PDEC-027). */
-  function crownWall(wall) {
-    if (!wall || !wall.length) return null;
-    var LABEL = { running: 'идёт', counting: 'считаем', empty: 'без короны', ahead: '' };
-    return h('section', { class: 'kk-wall', 'aria-label': 'Короны лиги' }, [
-      h('h3', { class: 'kk-h3', text: 'короны лиги' }),
-      h('div', { class: 'kk-wall__grid' }, wall.map(function (w) {
-        var who = (w.winners || []).map(function (x) { return x.display_name; }).join(', ');
-        return h('div', { class: 'kk-wall__tile kk-wall__tile--' + w.state }, [
-          h('span', { class: 'kk-wall__mo', text: w.title.toUpperCase() }),
-          w.state === 'crowned'
-            ? h('span', { class: 'kk-wall__who' }, [crownIcon(14), who])
-            : LABEL[w.state] ? h('span', { class: 'kk-wall__note', text: LABEL[w.state] }) : null,
-        ]);
-      })),
-    ]);
-  }
-
-  function leagueMenu() {
-    var t = state.leagueTables[state.leagueId] || {};
-    return sheet([
-      t.is_owner ? h('button', { type: 'button', text: 'Переименовать', onclick: function () { state.sheet = { kind: 'rename', draft: t.name || '' }; render(); } }) : null,
-      h('button', { type: 'button', text: 'Скопировать ссылку', onclick: function () { state.sheet = null; render(); copy(t.invite_url); } }),
-      h('button', { type: 'button', style: 'color:var(--kk-danger)', text: 'Выйти из лиги', onclick: function () { state.sheet = { kind: 'leave' }; render(); } }),
-    ], true);
-  }
-
-  function renameSheet() {
-    var s = state.sheet;
-    return sheet([
-      h('h2', { class: 'kk-display', style: 'font-size:20px;margin:0', text: 'новое название' }),
-      h('label', { for: 'kk-rename', class: 'kk-hint', text: 'Друзья увидят новое название сразу' }),
-      h('input', { id: 'kk-rename', class: 'kk-field', style: 'background:var(--kk-surface-2)', maxlength: '28', value: s.draft, oninput: function (e) { s.draft = e.target.value; } }),
-      s.error ? h('p', { class: 'kk-err', text: s.error }) : null,
-      h('button', { type: 'button', class: 'kk-btn kk-btn--dark', text: 'Сохранить', onclick: function () {
-        api('PATCH', '/client/hockey/leagues/' + state.leagueId, { name: s.draft })
-          .then(function () {
-            state.sheet = null;
-            state.leagues = null;
-            return loadLeague(state.leagueId);
-          })
-          .then(render)
-          .catch(function (e) { s.error = e.message; render(); });
-      } }),
-    ]);
-  }
-
-  function leaveSheet() {
-    var t = state.leagueTables[state.leagueId] || {};
-    var others = (t.items || []).filter(function (r) { return !r.is_me; });
-    var text = 'Твои очки останутся в общей таблице. Вернуться можно по той же ссылке.';
-    if (t.is_owner && others.length) text = 'Твои очки останутся в общей таблице. Лига перейдёт тому, кто здесь дольше всех. Вернуться можно по той же ссылке.';
-    if (!others.length) text = 'Ты здесь один — лига исчезнет. Твои очки останутся в общей таблице.';
-    return sheet([
-      h('h2', { class: 'kk-display', style: 'font-size:20px;line-height:1.2;margin:0;overflow-wrap:anywhere', text: 'выйти из «' + (t.name || '') + '»?' }),
-      h('p', { class: 'kk-hint', style: 'font-size:15px', text: text }),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--dark', text: 'Остаться', onclick: function () { state.sheet = null; render(); } }),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--danger', text: 'Выйти', onclick: function () {
-        api('DELETE', '/client/hockey/leagues/' + state.leagueId + '/membership')
-          .then(function () {
-            delete state.leagueTables[state.leagueId];
-            state.leagues = null;
-            state.tableKey = null;
-            state.tableKeyChosen = false;
-            go('leagues');
-          })
-          .catch(fail);
-      } }),
-    ]);
-  }
-
-  // ---------- вход по ссылке ----------
-
-  function openJoin(code) {
-    state.view = 'join';
-    state.joinCode = code;
-    state.joinPreview = null;
-    state.joinError = '';
-    render();
-    if (code) {
-      api('GET', '/hockey/leagues/' + encodeURIComponent(code), undefined, true)
-        .then(function (p) { state.joinPreview = p; render(); })
-        .catch(function (e) { state.joinError = e.status === 404 ? 'gone' : e.message; render(); });
-    }
-  }
-
-  function joinView() {
-    if (!state.joinCode) return joinByCodeView();
-    if (state.joinError === 'gone') {
-      return h('div', { class: 'kk-hero kk-hero--dark' }, [
-        h('span', { class: 'kk-hero__brand', text: 'кто кого' }),
-        h('div', { class: 'kk-hero__body' }, [
-          h('p', { class: 'kk-hero__title', style: 'font-size:26px', text: 'Этой лиги больше нет' }),
-          h('p', { class: 'kk-hero__text', text: 'Все из неё вышли. Можно угадывать самому или собрать свою.' }),
-        ]),
-        h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', text: 'Создать свою лигу', onclick: startCreate }),
-        h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', text: 'Угадывать самому', onclick: function () { go('matches'); } }),
-      ]);
-    }
-    var p = state.joinPreview;
-    var next = state.matches.filter(function (m) { return m.open; })[0];
-    return h('div', { class: 'kk-hero kk-hero--dark' }, [
-      h('span', { class: 'kk-hero__brand', text: 'кто кого' }),
-      h('div', { class: 'kk-hero__body' }, p ? [
-        h('div', { class: 'kk-faces', 'aria-hidden': 'true' }, (p.names || []).slice(0, 5).map(function (n) { return ava(n, 48); })),
-        h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, [
-          h('p', { class: 'kk-hero__text', style: 'font-size:17px', text: (p.names && p.names[0] ? p.names[0] + ' зовёт тебя в лигу' : 'Тебя зовут в лигу') }),
-          h('p', { class: 'kk-hero__title', text: p.name }),
-          h('p', { class: 'kk-hero__text', text: p.members + ' ' + M.plural(p.members, 'человек', 'человека', 'человек') + ' уже ' + M.plural(p.members, 'угадывает', 'угадывают', 'угадывают') }),
-        ]),
-        next ? h('div', { class: 'kk-hero__box' }, [
-          h('span', { style: 'font-size:13px;font-weight:700;opacity:.7', text: 'ближайший матч' }),
-          h('span', { style: 'font-size:16px;font-weight:800', text: next.home.name + ' — ' + next.away.name }),
-          h('span', { style: 'font-size:13px;opacity:.75', text: M.whenLabel(next.starts_at, new Date()) }),
-        ]) : null,
-        h('p', { class: 'kk-hero__text', style: 'font-size:14px', text: 'Тапаешь за команду или угадываешь счёт. После матча очки приходят сами. ' + M.RULES }),
-      ] : [state.joinError ? h('p', { class: 'kk-hero__text', text: state.joinError }) : h('div', { class: 'kk-skeleton', style: 'opacity:.2' })]),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', disabled: !p || state.busy, onclick: joinLeague, text: 'Вступить в лигу' }),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', onclick: function () { go('matches'); }, text: 'Посмотреть матчи' }),
-    ]);
-  }
-
-  function joinByCodeView() {
-    var value = { v: '' };
-    return [
-      h('div', { style: 'display:flex;flex-direction:column;gap:8px;padding-top:6px' }, [
-        h('h2', { class: 'kk-display', style: 'font-size:28px;line-height:1.1;margin:0', text: 'код лиги' }),
-        h('p', { class: 'kk-hint', text: 'Восемь букв и цифр из ссылки друга' }),
-      ]),
-      h('label', { for: 'kk-code', class: 'kk-hint', style: 'font-weight:800', text: 'Код' }),
-      h('input', { id: 'kk-code', class: 'kk-field', maxlength: '16', autocomplete: 'off', autocapitalize: 'characters', oninput: function (e) { value.v = e.target.value; } }),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--dark', text: 'Найти лигу', onclick: function () {
-        var code = String(value.v || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-        if (code) openJoin(code);
-      } }),
-    ];
-  }
-
-  function joinLeague() {
-    state.busy = true;
-    render();
-    api('POST', '/client/hockey/leagues/join', { code: state.joinCode, from_card: state.fromCard || null })
-      .then(function (l) {
-        state.busy = false;
-        state.created = l;
-        state.view = 'joined';
-        state.leagues = null;
-        haptic('success');
-        render();
-      })
-      .catch(function (e) {
-        state.busy = false;
-        toast(e.message);
-      });
-  }
-
-  function joinedView() {
-    var l = state.created;
-    var next = state.matches.filter(function (m) { return m.open; })[0];
-    return h('div', { class: 'kk-hero kk-hero--blue' }, [
-      h('div', { class: 'kk-hero__body', style: 'align-items:center;text-align:center' }, [
-        h('span', { class: 'kk-display', style: 'background:#ffd23f;color:#0d1424;border-radius:20px;padding:10px 18px;font-size:22px;transform:rotate(-5deg)', text: 'ты в лиге' }),
-        h('p', { class: 'kk-hero__title', style: 'font-size:28px', text: l.name }),
-        M.remainingLine(state.race) ? h('p', { class: 'kk-hero__text', style: 'max-width:300px;opacity:.85', text: M.remainingLine(state.race) }) : null,
-        h('p', { class: 'kk-hero__text', style: 'max-width:290px', text: next ? 'Первый ход — ' + M.whenLabel(next.starts_at, new Date()).split(',')[0] + ': ' + next.home.name + ' или ' + next.away.name + '?' : 'Как только Динамо поставят матч, тапни за команду.' }),
-      ]),
-      h('button', { type: 'button', class: 'kk-btn', style: 'background:#fff;color:#0d1424', onclick: function () { go('matches'); }, text: 'Тапнуть за команду' }),
-    ]);
-  }
-
-  // ---------- итоги месяца (TASK-334) ----------
-
-  function monthView() {
-    var res = state.month;
-    if (!res) return null;
-    var won = res.won;
-    var kicker = 'ИТОГИ: ' + res.title.toUpperCase() + (res.league ? ' · ' + res.league.name.toUpperCase() : '');
-    return h('div', { class: 'kk-hero kk-hero--blue' }, [
-      h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:12px' }, [
-        h('span', { style: 'font-size:13px;font-weight:800;letter-spacing:.06em;opacity:.8;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', text: kicker }),
-        h('button', { type: 'button', class: 'kk-icon-btn', style: 'background:rgba(255,255,255,.14);color:#fff;flex:none', 'aria-label': 'Закрыть', onclick: function () { go('table'); } }, [icon(['M6 6l12 12', 'M18 6L6 18'])]),
-      ]),
-      h('div', { class: 'kk-hero__body', style: 'align-items:center;text-align:center;gap:18px' }, [
-        h('span', { class: 'kk-month-badge' + (won ? '' : ' kk-month-badge--miss') }, [won ? crownIcon(64) : h('span', { class: 'kk-display', text: res.rank ? String(res.rank) : '–' })]),
-        h('p', { class: 'kk-hero__title', style: 'font-size:38px;line-height:1.05', text: M.monthHead(res) }),
-        h('p', { class: 'kk-hero__text', style: 'max-width:300px', text: M.monthLine(res) }),
-      ]),
-      res.podium && res.podium.length ? h('ol', { class: 'kk-month-podium' }, res.podium.map(function (p) {
-        return h('li', { style: p.is_me ? 'font-weight:800' : '' }, [
-          h('span', { class: 'kk-display', style: 'width:20px', text: String(p.rank) }),
-          h('span', { style: 'flex:1;display:flex;align-items:center;gap:6px;min-width:0' }, [p.is_me ? 'Ты' : p.display_name, p.crown ? h('span', { style: 'color:#ffd23f;display:inline-flex' }, [crownIcon(14)]) : null]),
-          h('span', { class: 'kk-display', text: String(p.points) }),
-        ]);
-      })) : null,
-      h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: brag }, [icon(['M21 4L3 11l6 2 2 6 3-4 5 4z']), won ? 'Похвастаться в чате' : res.winners && res.winners.length ? 'Поздравить в чате' : 'Позвать в новый месяц']),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', style: 'background:rgba(255,255,255,.12);opacity:1', onclick: function () { go('matches'); }, text: 'Новый месяц — все с нуля' }),
-    ]);
-
-    function brag() {
-      var leagues = state.leagues || [];
-      var league = (res.league && leagues.filter(function (l) { return l.id === res.league.id; })[0]) || leagues[0];
-      var where = res.league ? ' в «' + res.league.name + '»' : '';
-      var who = (res.winners || []).join(' и ');
-      var text = won
-        ? 'Корона «Кто кого» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
-        : who
-          ? 'Корона «Кто кого» за ' + res.title + where + ' досталась: ' + who + '. Поздравляю! В новом месяце — реванш.'
-          : '«Кто кого» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
-      // Карточка короны с кнопкой в лигу (TASK-334); без бота — та же мысль текстом через t.me/share.
-      shareCard({ card: 'crown', race_id: res.race_id }, league ? league.invite_url : null, text);
-    }
-  }
-
-  // ---------- итог матча ----------
-
-  function revealView() {
-    var m = findMatch(state.revealId);
-    if (!m || !m.result) return null;
-    var pts = m.my_pick ? m.my_pick.points : 0;
-    var v = M.verdict(pts == null ? 0 : pts);
-    var r = m.result;
-    var homeWon = r.home_score > r.away_score;
-    var colors = M.pairColors(m.home, m.away);
-    var mine = m.my_pick;
-    var myLine = M.moveLine(mine, { home: m.home.name, away: m.away.name }) || 'этот матч без тебя';
-    return h('div', { class: 'kk-hero ' + (v.tone === 'miss' ? 'kk-hero--miss' : 'kk-hero--blue') }, [
-      h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, [
-        h('button', { type: 'button', class: 'kk-icon-btn', style: 'background:rgba(255,255,255,.14);color:#fff', 'aria-label': 'Закрыть', onclick: function () { go('matches'); } }, [icon(['M6 6l12 12', 'M18 6L6 18'])]),
-        h('span', { style: 'font-size:13px;font-weight:700;opacity:.8', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] + ' · ' + M.decidedLabel(r.decided_in) }),
-      ]),
-      h('div', { class: 'kk-hero__body', style: 'justify-content:flex-start;padding-top:24px;gap:26px' }, [
-        h('p', { class: 'kk-hero__title', style: 'text-align:center;font-size:42px', text: v.head }),
-        h('div', { class: 'kk-result-card' }, [
-          h('div', { class: 'kk-result-teams' }, [
-            h('div', { class: 'kk-result-team' + (homeWon ? '' : ' kk-result-team--lost') }, [badge(m.home, colors.home), m.home.name]),
-            h('span', { class: 'kk-display', style: 'font-size:46px;text-align:center', text: r.home_score + ':' + r.away_score }),
-            h('div', { class: 'kk-result-team' + (homeWon ? ' kk-result-team--lost' : '') }, [badge(m.away, colors.away), m.away.name]),
-          ]),
-          h('p', { class: 'kk-note', style: 'color:#4b5568', text: myLine }),
-          h('span', { class: 'kk-sticker', 'aria-label': M.points(M.totalPoints(mine) || 0), text: mine && mine.doubled && pts ? '+' + M.totalPoints(mine) + ' ×2' : v.sticker }),
-        ]),
-        friendsBlock(),
-      ]),
-      h('button', { type: 'button', class: 'kk-btn kk-btn--ghost', style: 'background:rgba(255,255,255,.12);opacity:1', onclick: function () { go('table'); }, text: 'Таблица' }),
-      pts >= 20 ? h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: brag, text: 'Похвастаться в чате' }) : h('button', { type: 'button', class: 'kk-btn kk-btn--sticker', onclick: function () { go('matches'); }, text: 'Отыграться в следующем' }),
-    ]);
-
-    // Друзья из лиг: за кого были. Очков друзей API пока не отдаёт — только сторона.
-    function friendsBlock() {
-      // Со счётами друзей (TASK-335) — их очки; без них — как раньше, только стороны.
-      var moves = m.friend_moves || [];
-      if (moves.length) {
-        return h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, [
-          h('span', { style: 'font-size:13px;font-weight:800;opacity:.8;letter-spacing:.04em', text: 'А ДРУЗЬЯ' }),
-          h('ol', { class: 'kk-moves kk-moves--hero' }, moves.slice().sort(function (a, b) { return (b.points || 0) - (a.points || 0); }).slice(0, 8).map(function (x) {
-            return h('li', { style: x.points ? '' : 'opacity:.6' }, [
-              ava(x.display_name, 30),
-              h('span', { class: 'kk-moves__name' }, [x.display_name, x.doubled ? h('span', { class: 'kk-x2-badge', text: '×2' }) : null]),
-              h('span', { class: 'kk-moves__score', text: x.points == null ? M.friendMove(x) : x.points ? '+' + x.points : '0' }),
-            ]);
-          })),
-        ]);
-      }
-      var f = m.friends || { home: [], away: [] };
-      var rows = [];
-      ['home', 'away'].forEach(function (which) {
-        var won = (which === 'home') === homeWon;
-        (f[which] || []).forEach(function (name) { rows.push({ name: name, won: won, team: m[which].name }); });
-      });
-      if (!rows.length) return null;
-      rows.sort(function (a, b) { return a.won === b.won ? 0 : a.won ? -1 : 1; });
-      return h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, [
-        h('span', { style: 'font-size:13px;font-weight:800;opacity:.8;letter-spacing:.04em', text: 'А ДРУЗЬЯ' }),
-        h('div', { class: 'kk-friends' }, rows.slice(0, 8).map(function (r) {
-          return h('div', { class: 'kk-friend', style: r.won ? '' : 'opacity:.55' }, [
-            ava(r.name, 36),
-            h('span', { text: r.name }),
-            h('span', { style: 'font-size:12px;opacity:.85', text: 'за ' + r.team }),
-          ]);
-        })),
-      ]);
-    }
-
-    function brag() {
-      var league = (state.leagues || [])[0];
-      var text = v.head + ' ' + m.home.name + ' — ' + m.away.name + ' ' + r.home_score + ':' + r.away_score + ', ' + v.sticker + '. А ты угадаешь?';
-      shareCard({ card: 'result', match_id: m.id }, league ? league.invite_url : null, text);
-    }
   }
 
   // ---------- сборка ----------
 
   function render() {
+    var c = current();
+    var sc = c && screens[c.name];
     var nodes = [];
-    var bare = state.view === 'created' || state.view === 'joined' || state.view === 'reveal' || state.view === 'month' || (state.view === 'join' && state.joinCode);
-    if (bare) {
-      var v = state.view === 'created' ? createdView() : state.view === 'joined' ? joinedView() : state.view === 'reveal' ? revealView() : state.view === 'month' ? monthView() : joinView();
-      if (v) nodes.push(v);
-      else {
-        state.view = null;
-        return render();
-      }
-    } else {
-      var body;
-      if (state.view === 'create') body = createView();
-      else if (state.view === 'league') body = leagueView();
-      else if (state.view === 'join') body = joinView();
-      else if (state.tab === 'table') body = tableView();
-      else if (state.tab === 'leagues') body = leaguesView();
-      else body = matchesView();
-      if (!state.view && state.tab === 'matches') nodes.push(top());
-      nodes.push(h('main', { class: 'kk-main', style: state.view || state.tab !== 'matches' ? 'padding-top:18px' : '' }, [].concat(body)));
-      nodes.push(nav());
-    }
-    if (state.sheet) {
-      var s = state.sheet.kind === 'score' ? scoreSheet() : state.sheet.kind === 'menu' ? leagueMenu() : state.sheet.kind === 'rename' ? renameSheet() : leaveSheet();
+    var body = sc ? sc.render(c.args) : null;
+    if (body) nodes = nodes.concat(body);
+    var prevSheet = root.querySelector('.kk-sheet');
+    if (state.sheet && sc && sc.sheet) {
+      var s = sc.sheet(state.sheet, c.args);
       if (s) nodes.push(s);
     }
     if (state.toast) nodes.push(h('div', { class: 'kk-toast', role: 'status', text: state.toast }));
     var focusId = document.activeElement && document.activeElement.id;
     root.replaceChildren.apply(root, nodes);
-    if (focusId) {
+    var panel = root.querySelector('.kk-sheet');
+    if (panel && !prevSheet) panel.focus();
+    else if (focusId) {
       var again = document.getElementById(focusId);
       if (again && again.tagName === 'INPUT') {
         again.focus();
         try { again.setSelectionRange(again.value.length, again.value.length); } catch (e) { /* */ }
       }
     }
-    syncBackButton();
-  }
-
-  function syncBackButton() {
-    if (!tg || !tg.BackButton) return;
-    tg.BackButton.show();
-  }
-
-  function onBack() {
-    if (state.sheet) {
-      state.sheet = null;
-      render();
-      return;
-    }
-    if (state.view === 'league' || state.view === 'create' || state.view === 'created') return go('leagues');
-    if (state.view) return go('matches');
-    if (state.tab !== 'matches') return go('matches');
-    location.href = '/webapp/client-home' + (initData && !(tg && tg.initData) ? '?init_data=' + encodeURIComponent(initData) : '');
+    if (tg && tg.BackButton) tg.BackButton.show();
   }
 
   function startParam() {
     var sp = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
     return sp || params.get('tgWebAppStartParam') || params.get('startapp') || '';
+  }
+
+  /** Сообщение, когда игру открыли не из Telegram. */
+  function outsideTelegram() {
+    root.replaceChildren(h('main', { class: 'kk-main' }, [
+      emptyCard('Кто кого — в Telegram', 'Игра открывается из Glide в Telegram: там видно, кто из друзей за кого.'),
+    ]));
   }
 
   function boot() {
@@ -1300,60 +542,49 @@
         tg.expand();
       } catch (e) { /* */ }
       if (tg.onEvent) tg.onEvent('themeChanged', function () { applyTheme(); render(); });
-      if (tg.BackButton && tg.BackButton.onClick) tg.BackButton.onClick(onBack);
+      if (tg.BackButton && tg.BackButton.onClick) tg.BackButton.onClick(back);
     }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && state.sheet) closeSheet();
+    });
     applyTheme();
+    state.stack = [{ name: 'hub', args: {} }];
+    if (!initData) return outsideTelegram();
+    render();
+    state.fromCard = M.cardFrom(startParam(), params.get('from'));
+    if (state.fromCard) api('POST', '/client/hockey/card-opened', { card: state.fromCard }).catch(function () {});
     var code = (params.get('join') || M.inviteCode(startParam()) || '').toUpperCase();
-    var reveal = Number(params.get('reveal')) || null;
+    var matchId = Number(params.get('reveal') || params.get('match')) || null;
     var month = Number(params.get('month')) || null;
     var pickId = Number(params.get('pick')) || null;
     var pickSideParam = params.get('side');
-    var tab = params.get('tab');
-    if (tab === 'table' || tab === 'leagues') state.tab = tab;
-    render();
-    if (!initData) {
-      state.loading = false;
-      root.replaceChildren(h('main', { class: 'kk-main', style: 'padding-top:40px' }, [
-        empty('кто кого — в Telegram', 'Игра открывается из Glide в Telegram: там видно, кто из друзей за кого.', 'Понятно', function () {}, ['#e2502c', '#1747b5']),
-      ]));
-      return;
-    }
-    state.fromCard = M.cardFrom(startParam(), params.get('from'));
-    if (state.fromCard) api('POST', '/client/hockey/card-opened', { card: state.fromCard }).catch(function () {});
-    if (code) openJoin(code);
     if (params.get('remind') === 'off') {
       api('PUT', '/client/hockey/remind', { on: false }).then(function () {
         state.remind = false;
         toast('Напоминания выключены');
-        render();
       }, function () {});
     }
     Promise.all([loadMatches(), loadPrefs(), loadRemind()])
       .then(function () {
         state.loading = false;
-        // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
         var target = pickId && findMatch(pickId);
+        // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
         if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
           pickSide(target, pickSideParam);
-          toast('Ход принят: за ' + target[pickSideParam].name);
+          toast('Ход принят: за ' + S.clubName(target[pickSideParam].name));
         }
-        if (reveal && findMatch(reveal) && findMatch(reveal).result) {
-          state.revealId = reveal;
-          state.view = 'reveal';
-          api('POST', '/client/hockey/matches/' + reveal + '/seen').catch(function () {});
-        }
-        render();
+        var openId = matchId || pickId;
+        enter();
+        if (code) go('join', { code: code });
+        else if (openId) go('match', { id: openId });
+        else if (params.get('tab') === 'table') go('table', {});
         if (month) {
           api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {
             state.month = data;
-            state.view = 'month';
-            render();
+            go('month', {});
             api('POST', '/client/hockey/races/' + month + '/seen').catch(function () {});
           }, function () {});
         }
-        if (state.tab === 'table') go('table');
-        if (state.tab === 'leagues') go('leagues');
-        if (!state.leagues) loadLeagues().then(render, function () {});
       })
       .catch(function (e) {
         state.loading = false;
@@ -1362,5 +593,14 @@
       });
   }
 
-  boot();
+  window.KK = {
+    M: M, S: S, tg: tg, params: params, state: state, h: h, icon: icon, I: I, CROWN: CROWN, crownIcon: crownIcon, crownTag: crownTag,
+    ava: ava, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard,
+    sheet: sheet, closeSheet: closeSheet, api: api, toast: toast, fail: fail, haptic: haptic, render: render, register: register,
+    go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
+    loadMatches: loadMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,
+    loadProfile: loadProfile, loadClubs: loadClubs, loadLeagues: loadLeagues, loadRemind: loadRemind,
+    sendPick: sendPick, pickSide: pickSide, saveScore: saveScore, toggleTrump: toggleTrump,
+    share: share, shareCard: shareCard, copy: copy, boot: boot,
+  };
 })();

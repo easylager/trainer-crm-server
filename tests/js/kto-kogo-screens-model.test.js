@@ -28,6 +28,11 @@ describe('даты и подписи', () => {
   });
   it('«Шахтер» в базе — «Шахтёр» на экране; срез — «Клуб · период»', () => {
     assert.equal(S.clubName('Шахтер'), 'Шахтёр');
+    assert.equal(S.clubShort('Динамо-Минск'), 'Динамо');
+    assert.equal(S.clubShort('Могилев'), 'Могилёв');
+    assert.equal(S.seasonTitleFor('2026-11-06T09:00:00Z'), 'сезон 2026/27');
+    assert.equal(S.seasonTitleFor('2027-03-06T09:00:00Z'), 'сезон 2026/27');
+    assert.equal(S.seasonTitleFor('2027-08-02T09:00:00Z'), 'сезон 2027/28');
     assert.equal(S.sliceLabel('Юность', 'ноябрь'), 'Юность · ноябрь');
     assert.equal(S.sliceLabel(null, 'сезон 2026/27'), 'Все · сезон');
   });
@@ -49,6 +54,19 @@ describe('«Если угадаешь»', () => {
   it('новичок без места: «выйдешь на N»', () => {
     const [l] = S.stakeLines([{ kind: 'slice', club: 'Лида', period_title: 'ноябрь', rank_now: null, rank_if: 2, crown: false }]);
     assert.equal(l.text, 'Лида · ноябрь: выйдешь на 2');
+  });
+});
+
+describe('места вживую', () => {
+  it('победитель угадан сейчас — места с выигрышем, иначе прежние', () => {
+    const items = [
+      { kind: 'slice', club: 'Юность', period_title: 'ноябрь', rank_now: 2, rank_if: 1, crown: true },
+      { kind: 'league', league_name: 'Офис', rank_now: 3, rank_if: 2, crown: false },
+    ];
+    const win = S.livePlaces(items, true);
+    assert.deepEqual(win.map((r) => [r.from, r.to, r.tone, r.crown]), [['2', '1', 'up', true], ['3', '2', 'up', false]]);
+    const hold = S.livePlaces(items, false);
+    assert.deepEqual(hold.map((r) => [r.from, r.to, r.tone, r.crown]), [['2', '2', 'same', false], ['3', '3', 'same', false]]);
   });
 });
 

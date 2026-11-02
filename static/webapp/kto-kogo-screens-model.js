@@ -24,6 +24,20 @@
     return SPELL[name] || name || '';
   }
 
+  var SHORT = { 'Динамо-Минск': 'Динамо', 'Динамо-Молодечно': 'Молодечно', 'Металлург Жлобин': 'Металлург', 'Локомотив Орша': 'Локомотив' };
+
+  /** Короткое имя клуба для плитки: четыре в ряд на 390 px. */
+  function clubShort(name) {
+    return SHORT[name] || clubName(name);
+  }
+
+  /** «сезон 2026/27» по дате: сезон идёт с августа. */
+  function seasonTitleFor(nowIso) {
+    var p = Base.minskParts(new Date(nowIso));
+    var y = p.m >= 8 ? p.y : p.y - 1;
+    return 'сезон ' + y + '/' + pad((y + 1) % 100);
+  }
+
   function cap(s) {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   }
@@ -215,6 +229,16 @@
     if (!pick) return 'Кто победит?';
     if (pick.home_score != null) return 'Ты за ' + teamName + ' · ' + pick.home_score + ':' + pick.away_score;
     return 'Ты за ' + teamName;
+  }
+
+  /** «Твои места прямо сейчас»: места по таблице до матча; если так закончится и победитель угадан — с выигрышем. */
+  function livePlaces(items, winningNow) {
+    return (items || []).map(function (x) {
+      var label = x.kind === 'league' ? 'Лига «' + x.league_name + '»' : sliceLabel(x.club, x.period_title);
+      var from = x.rank_now;
+      var to = winningNow && x.rank_if != null ? x.rank_if : from;
+      return { label: label, from: from == null ? '—' : String(from), to: to == null ? '—' : String(to), tone: from == null || to < from ? 'up' : 'same', crown: !!x.crown && winningNow };
+    });
   }
 
   // ---------- матчи дня ----------
@@ -520,6 +544,8 @@
 
   var api = {
     clubName: clubName,
+    clubShort: clubShort,
+    seasonTitleFor: seasonTitleFor,
     dayKey: dayKey,
     weekKey: weekKey,
     monthKey: monthKey,
@@ -530,6 +556,7 @@
     sliceLabel: sliceLabel,
     stakeLines: stakeLines,
     stakesEmpty: stakesEmpty,
+    livePlaces: livePlaces,
     pickPoints: pickPoints,
     livePoints: livePoints,
     liveParts: liveParts,
