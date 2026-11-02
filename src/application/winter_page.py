@@ -31,6 +31,7 @@ from src.application.style_b import (
 )
 from src.shared.city_locative import city_locative
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
+from src.shared.winter_text import phone_links
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "winter-page.html"
 WINTER_CSS_VERSION = _file_version("static/shared/winter.css")
@@ -436,11 +437,11 @@ def _known(item: Mapping[str, Any]) -> str:
     rows: list[tuple[str, str]] = []
     rows.append(("Часы", f"<dd>{_esc(_hours(item))}</dd>"))
     rows.append(("Цена", f"<dd>{_esc(_price(item))}</dd>"))
-    phone = (item.get("phone") or "").strip()
-    if phone:
-        digits = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+    links = phone_links(item.get("phone"))
+    if links:
         shared = " <small>общий номер</small>" if item.get("phone_shared") else ""
-        rows.append(("Телефон", f'<dd><a href="tel:{_esc(digits)}">{_esc(phone)}</a>{shared}</dd>'))
+        anchors = ", ".join(f'<a href="tel:{_esc(tel)}">{_esc(shown)}</a>' for shown, tel in links)
+        rows.append(("Телефон", f"<dd>{anchors}{shared}</dd>"))
     if item.get("often_hockey_note"):
         rows.append(("Важно", f"<dd>{_esc(item['often_hockey_note'])}</dd>"))
     src = (item.get("source_url") or "").strip()

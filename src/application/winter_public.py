@@ -24,6 +24,7 @@ from src.application.winter_links import (
 from src.shared import winter_status as ws
 from src.shared.config import Settings
 from src.shared.winter_hours import hours_summary_ru
+from src.shared.winter_text import phone_links
 
 TOKEN_TTL = timedelta(minutes=30)
 SHARED_PHONE_MIN = 3
@@ -185,7 +186,7 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
             "season_from": r.season_from, "season_to": r.season_to,
             "fallback": None if hours_known else "Часы уточняйте по телефону",
         },
-        "phone": phone, "phone_shared": bool(shared_phone and phone),
+        "phone": phone, "phone_display": ", ".join(d for d, _ in phone_links(phone)) or None, "phone_shared": bool(shared_phone and phone),
         "source_url": r.source_url, "season": int(r.season), "season_label": ws.season_label(int(r.season)),
         "photos": photos,
         "route_url": route_url(r.latitude, r.longitude, prec, r.address, r.city_name),

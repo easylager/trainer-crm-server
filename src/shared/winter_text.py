@@ -90,3 +90,17 @@ def generated_name(kind: str, address: str | None, district: str | None, city: s
     addr = re.sub(r"^(г\.?|гп\.?|аг\.?)\s*[^,]+,\s*", "", addr, flags=re.IGNORECASE).strip()
     tail = addr or (f"{district} район" if district and "район" not in district.lower() else district) or city
     return f"{kind_noun(kind)}, {tail}"[:128]
+
+
+def phone_links(raw: str | None) -> list[tuple[str, str]]:
+    """«+375173647551, +375291112233» -> [(«+375 17 364-75-51», «+375173647551»), …]: (как показать, для tel:)."""
+    from src.shared.phone_guard import tel_href
+    from src.shared.public_display import format_phone_display
+
+    out: list[tuple[str, str]] = []
+    for part in re.split(r"[;,]", raw or ""):
+        part = part.strip()
+        if not part:
+            continue
+        out.append((format_phone_display(part), tel_href(part) or re.sub(r"[^\d+]", "", part)))
+    return out

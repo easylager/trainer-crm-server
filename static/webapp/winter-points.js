@@ -197,9 +197,9 @@
     var tags = W.liveTags(p, new Date()).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
     var checked = W.checkedLine(p, new Date());
     var known = [
-      ['Часы', W.hoursLabel(p)], ['Цена', W.priceLabel(p)], ['Телефон', p.phone || ''], ['Важно', p.often_hockey_note || ''],
+      ['Часы', W.hoursLabel(p)], ['Цена', W.priceLabel(p)], ['Телефон', p.phone_display || p.phone || ''], ['Важно', p.often_hockey_note || ''],
     ].filter(function (r) { return r[1]; }).map(function (r) {
-      var val = r[0] === 'Телефон' ? '<a href="tel:' + esc(p.phone.replace(/[^\d+]/g, '')) + '" data-w-ext>' + esc(p.phone) + '</a>' : esc(r[1]);
+      var val = r[0] === 'Телефон' ? '<a href="tel:' + esc(String(p.phone).split(/[;,]/)[0].replace(/[^\d+]/g, '')) + '" data-w-ext>' + esc(p.phone_display || p.phone) + '</a>' : esc(r[1]);
       return '<dt>' + r[0] + '</dt><dd>' + val + '</dd>';
     }).join('');
     var waiting = p.state === 'waiting' || p.state === 'stale';

@@ -259,3 +259,13 @@ def test_point_page_route_is_yandex_only_and_gone_goes_to_bot():
     link = wp._gone_link({"gone": "https://t.me/bot?start=wgone_7"})
     assert "Точки больше нет? Сообщить" in link and "t.me/bot?start=wgone_7" in link
     assert wp._gone_link({}) == ""
+
+
+def test_phones_on_winter_page_use_the_common_display_format():
+    from src.application import winter_page as wp
+    from src.shared.winter_text import phone_links
+
+    assert phone_links("+375173647551") == [("+375 17 364-75-51", "+375173647551")]
+    assert [d for d, _ in phone_links("+375291112233, +375173647551")] == ["+375 29 111-22-33", "+375 17 364-75-51"]
+    html = wp._known({"phone": "+375173647551", "phone_shared": False})
+    assert "+375 17 364-75-51" in html and 'href="tel:+375173647551"' in html
