@@ -338,6 +338,10 @@
 
   var api = {
     NEUTRAL: NEUTRAL,
+    MONTHS: MONTHS,
+    minskParts: minskParts,
+    dayIndex: dayIndex,
+    time: time,
     whenLabel: whenLabel,
     kicker: kicker,
     colorDistance: colorDistance,

@@ -33,6 +33,7 @@ from src.application.hockey_leagues import (
 )
 from src.application.hockey_races import crown_counts, league_crown_wall, race_summary
 from src.application.hockey_share import record_card_event
+from src.application.hockey_slices import parse_period
 from src.application.place_links import telegram_open_link
 from src.shared.config import Settings
 
@@ -277,13 +278,20 @@ async def post_client_hockey_league_join(
 @router.get("/client/hockey/leagues/{league_id}")
 async def get_client_hockey_league(
     league_id: int,
+    period: str | None = Query(None, description="month | 2026-11 — часть срока; пусто — весь срок"),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
+    chosen = None
+    if period:
+        try:
+            chosen = parse_period(period, now)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Неизвестный период") from None
     try:
-        rows = await league_table(session, league_id=league_id, player_key=player_key, now=now)
+        rows = await league_table(session, league_id=league_id, player_key=player_key, now=now, period=chosen)
     except (LookupError, PermissionError) as exc:
         _raise_league(exc)
     summary = next(
@@ -298,6 +306,7 @@ async def get_client_hockey_league(
         "invite_url": invite_url_for_code(summary.invite_code),
         **_terms_out(summary.scope, summary.clubs, summary.term_kind, summary.starts_at, summary.ends_at),
         "active": summary.active,
+        "period": None if chosen is None else {"key": chosen.key, "title": chosen.title},
         "race": await race_summary(session, now=now),
         "wall": await league_crown_wall(session, league_id=league_id, now=now),
         "items": [{**_table_row(row, player_key, titles), "crowns": crowns.get(row.player_key, 0)} for row in rows],

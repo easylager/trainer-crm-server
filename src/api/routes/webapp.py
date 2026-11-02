@@ -11294,6 +11294,7 @@ async def get_trainer_referred_list(
 from src.api.routes.webapp_client_hockey import router as _webapp_client_hockey_router
 from src.api.routes.webapp_client_hockey_event import router as _webapp_client_hockey_event_router
 from src.api.routes.webapp_client_hockey_leagues import router as _webapp_client_hockey_leagues_router
+from src.api.routes.webapp_client_hockey_screens import router as _webapp_client_hockey_screens_router
 from src.api.routes.webapp_client_hockey_share import router as _webapp_client_hockey_share_router
 from src.api.routes.webapp_client_trainer_edges import router as _webapp_client_trainer_edges_router
 from src.api.routes.webapp_client_watches import router as _webapp_client_watches_router
@@ -11313,6 +11314,7 @@ router.include_router(_webapp_client_watches_router)
 router.include_router(_webapp_client_hockey_router)
 router.include_router(_webapp_client_hockey_event_router)
 router.include_router(_webapp_client_hockey_leagues_router)
+router.include_router(_webapp_client_hockey_screens_router)
 router.include_router(_webapp_client_hockey_share_router)
 router.include_router(_webapp_training_groups_router)
 router.include_router(_admin_ice_sessions_router)
