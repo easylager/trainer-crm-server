@@ -274,7 +274,7 @@
         var d = S.duelLive(mine, f, m.live);
         var scoreText = d.me == null || d.they == null ? '—' : d.me + ' : ' + d.they;
         return h('div', { class: 'kk-mv' }, [
-          h('span', { class: 'kk-mv__l', text: 'с ' + f.display_name + ' · за ' + name(m[f.side]) }),
+          h('span', { class: 'kk-mv__l', text: f.display_name + ' · за ' + name(m[f.side]) }),
           h('span', { class: 'kk-mv__r' }, [h('b', { text: scoreText }), h('span', { class: 'kk-pill' + (d.state === 'lead' ? ' kk-pill--gold' : ''), text: d.label })]),
         ]);
       })),
@@ -308,10 +308,10 @@
     if (!done.length || mineTotal == null) return null;
     var f = done[0];
     var res = S.duelFinal(mineTotal, f.points);
-    var head = res === 'win' ? 'Дуэль с ' + f.display_name + ' — твоя' : res === 'lose' ? 'Дуэль с ' + f.display_name + ' — не твоя' : 'Дуэль с ' + f.display_name + ' — ничья';
+    var head = 'Дуэль · ' + f.display_name + ' — ' + (res === 'win' ? 'твоя' : res === 'lose' ? 'не твоя' : 'ничья');
     return h('section', { class: 'kk-card kk-duel' }, [
       K.ava(f.display_name, 36),
-      h('span', { class: 'kk-grow kk-col' }, [h('b', { text: head }), h('span', { class: 'kk-sub', text: mineTotal + ' : ' + f.points + ' · ' + f.display_name + ' был за ' + name(m[f.side]) })]),
+      h('span', { class: 'kk-grow kk-col' }, [h('b', { text: head }), h('span', { class: 'kk-sub', text: mineTotal + ' : ' + f.points + ' · ' + f.display_name + ' — за ' + name(m[f.side]) })]),
     ]);
   }
 
@@ -444,12 +444,16 @@
         }
       }, function (e) {
         if (e && e.status === 404) missing[id] = true;
-        else K.fail(e);
+        else {
+          missing[id] = 'error';
+          K.fail(e);
+        }
         K.render();
       });
     },
     render: function (a) {
-      if (missing[a.id]) return notFound();
+      if (missing[a.id] === 'error' && !K.findMatch(a.id)) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.retryCard('Матч не загрузился.', function () { K.replace('match', a); })])];
+      if (missing[a.id] === true) return notFound();
       var m = K.findMatch(a.id);
       if (!m) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.loading()])];
       var ph = phase(m);

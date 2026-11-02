@@ -88,7 +88,7 @@
       K.sticker('КТО КОГО'),
       club ? K.logoDisc(club, 52) : K.worldDisc(52),
       h('span', { class: 'kk-col kk-grow' }, [
-        h('span', { class: 'kk-fan__t', text: (p.display_name || 'Ты') + (club ? ' · за ' + name(club) : '') }),
+        h('span', { class: 'kk-fan__t' }, [(p.display_name || 'Ты'), club ? ' · ' : null, club ? h('span', { class: 'kk-nowrap', text: 'за ' + name(club) }) : null]),
         h('span', { class: 'kk-fan__s' }, [
           crowns ? h('span', { class: 'kk-crownw kk-crownw--on' }, [K.crownIcon(14), S.crownCount(crowns)]) : null,
           p.streak ? h('span', { text: 'серия ' + p.streak }) : null,

@@ -609,9 +609,12 @@
         toast('Напоминания выключены');
       }, function () {});
     }
-    Promise.all([loadMatches(), loadPrefs(), loadRemind()])
+    var loadError = null;
+    // Список матчей не загрузился — всё равно открываем нужный экран: у каждого есть своё «Повторить».
+    Promise.all([loadMatches().catch(function (e) { loadError = e; state.matchesFailed = true; }), loadPrefs(), loadRemind()])
       .then(function () {
         state.loading = false;
+        if (loadError) fail(loadError);
         var target = pickId && findMatch(pickId);
         // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
         if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
