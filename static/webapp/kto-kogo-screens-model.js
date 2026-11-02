@@ -586,12 +586,12 @@
     var few = false;
     if (preview && preview.ends_at) {
       var count = preview.matches_in_term;
-      what += ' · ещё ' + count + NBSP + Base.plural(count, 'матч', 'матча', 'матчей') + ' в срок';
+      what += ' · ещё ' + count + NBSP + Base.plural(count, 'матч', 'матча', 'матчей') + ' до конца лиги';
       var rolling = form.term === 'season' || form.term === 'dates' || form.term === 'playoff';
       when = 'С ' + dateLabel(preview.starts_at) + ' по ' + endLabel(preview.ends_at) + (rolling ? ' · корона каждый месяц и чемпион лиги в конце' : ' · корона победителю в конце');
       few = !!preview.few_matches;
     }
-    return { what: what, when: when, few: few ? 'Матчей в сроке мало — таблица будет почти пустой. Можно взять срок подлиннее.' : '' };
+    return { what: what, when: when, few: few ? 'Матчей до конца лиги мало — таблица будет почти пустой. Можно взять период подлиннее.' : '' };
   }
 
   // ---------- лига изнутри ----------
@@ -606,7 +606,7 @@
       return base + ' Твоё место ' + me.rank + ', до первого ' + Base.points(Math.max(0, leaderPoints - me.points)) + '.';
     }
     if (l.term === 'season' || l.term === 'dates' || l.term === 'playoff') return 'Чемпион лиги — ' + endLabel(l.ends_at) + '. Месячные короны копятся рядом с именем.';
-    return 'Корона лиги — ' + endLabel(l.ends_at) + ', в конце срока.';
+    return 'Корона лиги — ' + endLabel(l.ends_at) + ', когда лига закончится.';
   }
 
   function leagueMeta(l, members) {

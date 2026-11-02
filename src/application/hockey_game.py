@@ -144,7 +144,7 @@ def normalize_pick(
             raise ValueError("Счёт и победитель не совпадают")
         return derived, home_score, away_score
     if side not in (SIDE_HOME, SIDE_AWAY):
-        raise ValueError("Выберите команду")
+        raise ValueError("Выбери команду")
     return side, None, None
 
 

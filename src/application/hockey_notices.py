@@ -973,7 +973,7 @@ def league_extended_text(name: str, starts_at: datetime, ends_at: datetime) -> s
         return f"{d.day} {MONTHS_GEN[d.month - 1]}"
 
     return (
-        f"<b>Лига «{html.escape(name)}» продлена.</b> Те же люди, новый срок: {day(starts_at)} — "
+        f"<b>Лига «{html.escape(name)}» продлена.</b> Те же люди, новый круг: с {day(starts_at)} по "
         f"{day(_local(ends_at) - timedelta(minutes=1))}. Выйти можно в один тап."
     )
 

@@ -281,7 +281,7 @@ describe('лиги', () => {
     const f = { scope: 'pick', clubs: ['Юность'], term: 'weeks4' };
     const prev = { starts_at: '2026-11-05T21:00:00Z', ends_at: '2026-12-03T21:00:00Z', matches_in_term: 3, few_matches: true };
     const s = S.termsSummary(f, prev);
-    assert.match(s.what, /^Матчи: Юность · ещё 3.матча в срок$/);
+    assert.match(s.what, /^Матчи: Юность · ещё 3.матча до конца лиги$/);
     assert.match(s.when, /^С 6.ноября по 3.декабря · корона победителю в конце$/);
     assert.match(s.few, /мало/);
     assert.equal(S.termsSummary({ scope: 'pick', clubs: [], term: 'season' }, null).what, 'Выбери хотя бы одну команду');
@@ -314,7 +314,7 @@ describe('карточка болельщика', () => {
 
 describe('слова игры', () => {
   const FILES = ['kto-kogo-model.js', 'kto-kogo-screens-model.js', 'kto-kogo.js', 'kto-kogo-views.js', 'kto-kogo-hub-cards.js', 'kto-kogo-board.js', 'kto-kogo-leagues.js', 'kto-kogo-boot.js'];
-  const BANNED = /ставк|коэффициент|прогноз|пари\b|выигрыш|букмекер|банк\b|ставь|поставить/i;
+  const BANNED = /ставк|коэффициент|прогноз|пари\b|выигрыш|букмекер|банк\b|ставь|поставить|срок/i;
   it('в строках игроку нет азартных слов', () => {
     for (const f of FILES) {
       const file = path.join(__dirname, '../../static/webapp', f);
