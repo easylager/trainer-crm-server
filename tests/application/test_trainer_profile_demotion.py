@@ -93,12 +93,11 @@ async def _published_trainer(db_session) -> int:
 
 
 @pytest.mark.asyncio
-async def test_clearing_phone_pauses_card_and_leaves_account_active(db_session) -> None:
+async def test_clearing_all_services_pauses_card_and_leaves_account_active(db_session) -> None:
     tid = await _published_trainer(db_session)
 
-    # Phone applies immediately even for an active trainer (it is not a moderated text field),
-    # so clearing it really does break the published card.
-    await update_trainer_profile(db_session, tid, profile={"phone": ""})
+    # Услуги применяются сразу и для активного тренера — publish-first блокер, дыра честная.
+    await update_trainer_profile(db_session, tid, profile={}, service_ids=[])
 
     row = await get_trainer(db_session, tid)
     assert row is not None
@@ -110,7 +109,7 @@ async def test_clearing_phone_pauses_card_and_leaves_account_active(db_session) 
 @pytest.mark.asyncio
 async def test_pause_is_journalled_with_reason_and_author(db_session) -> None:
     tid = await _published_trainer(db_session)
-    await update_trainer_profile(db_session, tid, profile={"phone": ""})
+    await update_trainer_profile(db_session, tid, profile={}, service_ids=[])
 
     events = await list_catalog_events(db_session, tid, limit=5)
     latest = events[0]
@@ -118,15 +117,18 @@ async def test_pause_is_journalled_with_reason_and_author(db_session) -> None:
     assert latest["to_state"] == CATALOG_STATE_PAUSED
     assert latest["reason"] == REASON_MISSING_FIELDS
     # The sentence the trainer reads, naming what went missing — not a bare code.
-    assert "телефон" in (latest["reason_detail"] or "")
+    assert "услуг" in (latest["reason_detail"] or "")
     assert latest["actor_type"] == "system"
 
 
 @pytest.mark.asyncio
 async def test_restoring_the_field_returns_the_card_without_re_review(db_session) -> None:
     tid = await _published_trainer(db_session)
-    await update_trainer_profile(db_session, tid, profile={"phone": ""})
-    await update_trainer_profile(db_session, tid, profile={"phone": "+375291112233"})
+    await update_trainer_profile(db_session, tid, profile={}, service_ids=[])
+    sid = (
+        await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    ).scalar_one()
+    await update_trainer_profile(db_session, tid, profile={}, service_ids=[int(sid)])
 
     row = await get_trainer(db_session, tid)
     assert row is not None

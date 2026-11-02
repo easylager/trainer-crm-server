@@ -63,10 +63,11 @@ def test_is_ready_for_moderation_submission_true(trainer_aggregate_complete: dic
     assert is_ready_for_moderation_submission(trainer_aggregate_complete) is True
 
 
-def test_is_ready_for_moderation_submission_false_without_photo(
+def test_is_ready_for_moderation_submission_true_without_photo(
     trainer_aggregate_incomplete_no_photo: dict,
 ) -> None:
-    assert is_ready_for_moderation_submission(trainer_aggregate_incomplete_no_photo) is False
+    # Publish-first: фото усиливает карточку, но не блокирует её.
+    assert is_ready_for_moderation_submission(trainer_aggregate_incomplete_no_photo) is True
 
 
 def test_is_ready_for_moderation_submission_false_without_services(
@@ -85,9 +86,10 @@ def test_complete_minimal_aggregate() -> None:
 def test_missing_photo() -> None:
     t = _base()
     t["photos"] = []
+    # Полное досье по-прежнему требует фото, а минимальный порог публикации — нет.
     ok, missing = analyze_moderation_profile_completeness(t)
     assert not ok and "photo" in missing
-    assert analyze_moderation_submission_readiness(t)[0] is False
+    assert analyze_moderation_submission_readiness(t)[0] is True
 
 
 def test_phone_optional_for_catalog_tiers() -> None:

@@ -2237,13 +2237,13 @@ async def test_enabling_catalog_queues_a_complete_profile_for_review(
             )
     assert resp.status_code == 200, resp.text
 
-    # The card is queued, not published: a moderator has not seen it yet. Before TASK-140 the
-    # boolean flag went true here, which is exactly the conflation of «попросил» and «в каталоге»
-    # that this task removed.
+    # Publish-first: включил тумблер — карточка сразу в каталоге; отметка ставится для
+    # пост-проверки админами. До TASK-140 флаг шёл в true уже тут — то самое смешение
+    # «попросил» и «в каталоге»; publish-first делает его не нужным, а не возвращает.
     r2 = await db_session.execute(
         text("SELECT catalog_state, moderation_submitted_at FROM trainers WHERE id = :id"),
         {"id": trainer_id},
     )
     row = r2.fetchone()
-    assert row[0] == "pending_review"
+    assert row[0] == "published"
     assert row[1] is not None

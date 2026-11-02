@@ -304,15 +304,26 @@ async def post_submit_for_moderation(
     trainer_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """422 if submission tier (8 criteria) incomplete. Queues for admin review; see try_submit_trainer_for_moderation_review."""
+    """422 if the minimal submission tier is incomplete (see analyze_moderation_submission_readiness).
+
+    Publish-first: a successful call publishes the card immediately and stamps it for
+    post-review. It cannot publish from ``hidden``/``needs_revision``/``paused`` — those
+    states hold a decision only the trainer can undo (Mini App submit), so they return a
+    ``requires_trainer_action`` noop.
+    """
     result = await try_submit_trainer_for_moderation_review(session, trainer_id)
     if result.get("error") == "not_found":
         raise _NOT_FOUND
+    if result.get("error") == "needs_revision_unchanged":
+        raise HTTPException(
+            status_code=409,
+            detail="Moderator asked for changes — edit the card in the Mini App before republishing",
+        )
     if not result.get("ok"):
         raise HTTPException(
             status_code=422,
             detail={
-                "message": "Profile incomplete for moderation submission (8 criteria)",
+                "message": "Profile incomplete for catalog publication (minimal submission tier)",
                 "missing_fields": result.get("missing_fields", []),
                 "missing_labels_ru": result.get("missing_labels_ru", []),
             },

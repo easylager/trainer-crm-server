@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Путь тренеров · Админ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=202611029"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611029" />
-  <link rel="stylesheet" href="theme.css?v=202611029" />
-  <link rel="stylesheet" href="admin-analytics-shared.css?v=202611029" />
+  <script src="mini-app-telegram-chrome.js?v=2026110211"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026110211" />
+  <link rel="stylesheet" href="theme.css?v=2026110211" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=2026110211" />
   <style>
     .jr-tabs { display: flex; gap: 6px; background: var(--tg-theme-secondary-bg-color, #2a2a2a); border-radius: 12px; padding: 4px; margin-bottom: 12px; }
     .jr-tab { flex: 1; min-height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--tg-theme-hint-color, #9ca3af); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -61,7 +61,7 @@
     <div class="jr-chips" id="filters"></div>
   </div>
   <div id="content"></div>
-  <script src="admin-analytics-shared.js?v=202611029"></script>
+  <script src="admin-analytics-shared.js?v=2026110211"></script>
   <script>
     (function () {
       var A = window.AdmAnalytics;
@@ -70,7 +70,7 @@
       var FILTERS = [
         { id: 'all', label: 'Все', test: function () { return true; } },
         { id: 'stuck', label: 'Застряли', test: function (t) { return !t.working; } },
-        { id: 'noclient', label: 'Нет клиента', test: function (t) { return t.reached >= 4 && t.reached <= 5; } },
+        { id: 'noclient', label: 'Нет клиента', test: function (t) { return t.reached >= 4 && t.reached <= 6; } },
         { id: 'nocat', label: 'Не в каталоге', test: function (t) { return !t.catalog.listed; } },
         { id: 'fresh', label: 'Мы не писали', test: function (t) { return !t.contacted_at; } }
       ];
