@@ -472,3 +472,14 @@ async def test_live_poll_stops_with_the_final(db_session) -> None:
         )
     ).one()
     assert tuple(row) == ("final", 3, 1)
+
+
+def test_site_form_pills_have_readable_labels_and_titles() -> None:
+    from src.application.site_matches_page import _form_marks, _where_card
+
+    html = _form_marks(["В", "П", "Во", "По", "Вб", "Пб"])
+    assert [x.split(">")[1].split("<")[0] for x in html.split("</i>")[:-1]] == ["В", "П", "В·ОТ", "П·ОТ", "В·ОТ", "П·ОТ"]
+    assert 'title="Победа в овертайме"' in html and 'title="Поражение по буллитам"' in html
+    assert html.count("data-win") == 3
+    card = _where_card({"arena": {"address": "ул. А, 1", "latitude": 53.9, "longitude": 27.5}, "arena_name": "Арена", "city": "Минск"})
+    assert "Яндекс Карты" in card and "Google" not in card

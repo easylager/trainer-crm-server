@@ -36,7 +36,6 @@ from src.application.site_matches import (
     score_text,
     when_text,
     yandex_link,
-    google_link,
 )
 from src.shared.city_locative import city_locative
 from src.shared.config import Settings
@@ -474,8 +473,23 @@ def match_jsonld(data: Mapping[str, Any], *, canonical: str, now: datetime) -> s
     return json_for_script(payload)
 
 
+_FORM_LABEL = {
+    "В": ("В", "Победа в основное время"),
+    "П": ("П", "Поражение в основное время"),
+    "Во": ("В·ОТ", "Победа в овертайме"),
+    "По": ("П·ОТ", "Поражение в овертайме"),
+    "Вб": ("В·ОТ", "Победа по буллитам"),
+    "Пб": ("П·ОТ", "Поражение по буллитам"),
+}
+
+
 def _form_marks(marks: list[str]) -> str:
-    return "".join(f"<i{' data-win' if mark.startswith('В') else ''}>{_e(mark)}</i>" for mark in marks)
+    out = []
+    for mark in marks:
+        label, title = _FORM_LABEL.get(mark, (mark, mark))
+        win = " data-win" if mark.startswith("В") else ""
+        out.append(f'<i{win} title="{_e(title)}" aria-label="{_e(title)}">{_e(label)}</i>')
+    return "".join(out)
 
 
 def _before_card(data: Mapping[str, Any]) -> str:
@@ -663,7 +677,6 @@ def _where_card(data: Mapping[str, Any]) -> str:
         f"{head}"
         '<div class="m-maps">'
         f'<a class="m-btn m-btn--soft" href="{_e(yandex_link(arena))}" rel="noopener nofollow" target="_blank">Яндекс Карты</a>'
-        f'<a class="m-btn m-btn--soft" href="{_e(google_link(arena))}" rel="noopener nofollow" target="_blank">Google Maps</a>'
         f"</div>{ice_html}</section>"
     )
 
