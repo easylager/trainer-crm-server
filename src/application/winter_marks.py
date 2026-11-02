@@ -41,6 +41,7 @@ class MarkResult:
     duplicate: bool = False
     flood_event_id: int | None = None
     dispute: bool = False
+    pending_confirm: bool = False  # люди набрали «залит», ждём админа; публично «ждём заливку»
 
 
 def _utc(now: datetime | None) -> datetime:
@@ -54,7 +55,8 @@ async def _lock_season(session: AsyncSession, arena_id: int, season: int):
     return (
         await session.execute(
             text(
-                """SELECT s.id, s.state, s.state_source, s.state_at, s.dispute, s.doubtful, s.admin_confirmed_at
+                """SELECT s.id, s.state, s.state_source, s.state_at, s.dispute, s.doubtful, s.admin_confirmed_at,
+                          s.pending_confirm, s.flood_floor_at
                    FROM seasonal_rink_seasons s
                    JOIN arenas a ON a.id = s.arena_id AND a.is_active
                    WHERE s.arena_id = :a AND s.season = :s
@@ -101,29 +103,35 @@ async def recompute_point(session: AsyncSession, arena_id: int, season: int, now
     if row is None:
         return None
     marks = await _load_marks(session, arena_id, season, now)
-    comp = ws.compute_state(marks, now, row.state, prev_source=row.state_source, prev_at=row.state_at)
+    comp = ws.compute_state(
+        marks, now, row.state, prev_source=row.state_source, prev_at=row.state_at, floor=row.flood_floor_at
+    )
     changed = comp.state != row.state
     event_id: int | None = None
     if changed:
         await session.execute(
             text(
                 """UPDATE seasonal_rink_seasons SET state=:st, state_at=:now, state_source='engine',
-                   quality=:q, dispute=:d, updated_at=now() WHERE id=:id"""
+                   quality=:q, dispute=:d, pending_confirm=:pc, updated_at=now() WHERE id=:id"""
             ),
-            {"st": comp.state, "now": now, "q": comp.quality, "d": comp.dispute, "id": row.id},
+            {"st": comp.state, "now": now, "q": comp.quality, "d": comp.dispute, "pc": comp.pending_confirm, "id": row.id},
         )
-        if comp.state == ws.STATE_FLOODED:
-            event_id = await _flood_event(session, arena_id, season, now)
     else:
         await session.execute(
-            text("UPDATE seasonal_rink_seasons SET quality=:q, dispute=:d, updated_at=now() WHERE id=:id"),
-            {"q": comp.quality, "d": comp.dispute, "id": row.id},
+            text("UPDATE seasonal_rink_seasons SET quality=:q, dispute=:d, pending_confirm=:pc, updated_at=now() WHERE id=:id"),
+            {"q": comp.quality, "d": comp.dispute, "pc": comp.pending_confirm, "id": row.id},
         )
+    # Рассылку «залили» движок не запускает никогда: только админ или парсер (set_state_admin / set_state_source).
+    if comp.pending_confirm:
+        await _open_item(session, "confirm_flood", arena_id)
+    elif row.pending_confirm:
+        await _close_items(session, "confirm_flood", arena_id, "auto")
     if comp.dispute:
         await _open_item(session, "dispute", arena_id)
     elif row.dispute:
         await _close_items(session, "dispute", arena_id, "auto")
-    return MarkResult(arena_id, comp.state, changed, comp.quality, dispute=comp.dispute, flood_event_id=event_id)
+    return MarkResult(arena_id, comp.state, changed, comp.quality, dispute=comp.dispute, flood_event_id=event_id,
+                      pending_confirm=comp.pending_confirm)
 
 
 async def _flood_event(session: AsyncSession, arena_id: int, season: int, now: datetime) -> int | None:
@@ -231,26 +239,58 @@ async def _site_limits(session: AsyncSession, actor: str, arena_id: int, now: da
 
 # --- админ ---------------------------------------------------------------------
 async def set_state_admin(
-    session: AsyncSession, arena_id: int, state: str, *, admin_id: int | None, now: datetime | None = None
+    session: AsyncSession, arena_id: int, state: str, *, admin_id: int | None, now: datetime | None = None,
+    source: str = "admin",
 ) -> bool:
-    """Админ ставит статус руками. ``flooded`` держится 7 суток и даёт повод для рассылки."""
+    """Админ (или официальный источник, ``source='parser'``) ставит статус руками.
+
+    ``flooded`` держится 7 суток и единственный даёт повод для рассылки «залили». Решение закрывает запрос
+    «подтвердить заливку»; отметки людей до этого момента уже учтены и новый запрос не поднимают.
+    """
     now = _utc(now)
     if state not in ws.STATES:
         raise MarkError("bad_state")
+    if source not in ws.CONFIRMED_SOURCES:
+        raise MarkError("bad_source")
     season = ws.current_season(now)
     row = await _lock_season(session, arena_id, season)
     if row is None:
         return False
     await session.execute(
         text(
-            """UPDATE seasonal_rink_seasons SET state=CAST(:st AS varchar), state_at=:n, state_source='admin', admin_confirmed_at=:n,
+            """UPDATE seasonal_rink_seasons SET state=CAST(:st AS varchar), state_at=:n, state_source=CAST(:src AS varchar),
+               admin_confirmed_at = CASE WHEN CAST(:src AS varchar)='admin' THEN :n ELSE admin_confirmed_at END,
+               flood_floor_at=:n, pending_confirm=false,
                hidden_reason = CASE WHEN CAST(:st AS varchar)='hidden' THEN COALESCE(hidden_reason, 'admin') ELSE NULL END,
                doubtful=false, updated_at=now() WHERE id=:id"""
         ),
-        {"st": state, "n": now, "id": row.id},
+        {"st": state, "n": now, "id": row.id, "src": source},
     )
+    await _close_items(session, "confirm_flood", arena_id, state, admin_id)
     if state == ws.STATE_FLOODED and row.state != ws.STATE_FLOODED:
         await _flood_event(session, arena_id, season, now)
+    return True
+
+
+async def set_state_source(
+    session: AsyncSession, arena_id: int, state: str, *, now: datetime | None = None
+) -> bool:
+    """Парсер / официальный источник сообщает статус: «залит» верим сразу, рассылка уходит."""
+    return await set_state_admin(session, arena_id, state, admin_id=None, now=now, source="parser")
+
+
+async def ask_more(session: AsyncSession, arena_id: int, *, admin_id: int | None, now: datetime | None = None) -> bool:
+    """«Спросить ещё»: статус не трогаем, запрос закрываем с пометкой; следующая отметка «залит» поднимет новый."""
+    now = _utc(now)
+    season = ws.current_season(now)
+    row = await _lock_season(session, arena_id, season)
+    if row is None:
+        return False
+    await _close_items(session, "confirm_flood", arena_id, "ask_more", admin_id)
+    await session.execute(
+        text("UPDATE seasonal_rink_seasons SET flood_floor_at=:n, pending_confirm=false, updated_at=now() WHERE id=:id"),
+        {"n": now, "id": row.id},
+    )
     return True
 
 
@@ -360,7 +400,7 @@ async def recompute_stale(session: AsyncSession, now: datetime | None = None) ->
         await session.execute(
             text(
                 """SELECT arena_id FROM seasonal_rink_seasons
-                   WHERE season=:s AND state IN ('flooded', 'stale') AND state_at < :cut"""
+                   WHERE season=:s AND (state IN ('flooded', 'stale') OR pending_confirm) AND state_at < :cut"""
             ),
             {"s": season, "cut": now - timedelta(hours=1)},
         )

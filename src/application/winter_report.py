@@ -26,7 +26,7 @@ async def winter_summary(session: AsyncSession, now: datetime) -> dict[str, Any]
     visible = sum(v for k, v in by_state.items() if k != "hidden")
     fresh = int((await session.execute(
         text("SELECT count(*) FROM seasonal_rink_seasons WHERE season=:s AND state IN ('flooded','waiting','stale') "
-             "AND state_source IN ('engine','admin') AND state_at >= :c"),
+             "AND state_source IN ('engine','admin','parser') AND state_at >= :c"),
         {"s": season, "c": now - ws.FLOODED_WINDOW})).scalar_one())
     queue_info = await queue_overview(session, now)
     queue = dict(queue_info["by_kind"])

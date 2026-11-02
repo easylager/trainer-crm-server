@@ -3,8 +3,10 @@
 Чистые функции без БД. Правила (решение владельца 01.11):
 
 * вес отметки: сайт без входа 0,5; Telegram / Mini App 1; фото со льдом 2;
-* «залит» подтверждён при >= 2 баллах за 72 ч И хотя бы одной отметке из Telegram /
-  Mini App / фото (только сайт подтвердить не может, решение координатора 01.11);
+* «залит» показываем ТОЛЬКО если его поставил админ или пришёл из парсера/официального источника
+  (решение владельца 02.11); отметки людей сами «залит» не ставят ни при каком числе баллов;
+* >= 2 баллов «залит» за 72 ч И хотя бы одна отметка из Telegram / Mini App / фото -> ``pending_confirm``:
+  публично остаётся «ждём заливку», админу уходит запрос «подтвердить заливку»;
 * 2 разных человека «не залит» за 24 ч (тоже с одним Telegram-сигналом) -> «ждём заливку»;
 * оба порога сразу -> спор: статус не меняем, ``dispute=True`` (в очередь админа);
 * залит, а за 72 ч подтверждений меньше порога -> «давно не отмечали»; статус, который
@@ -54,6 +56,7 @@ FLOODED_WINDOW = timedelta(hours=72)
 NOT_FLOODED_WINDOW = timedelta(hours=24)
 BAD_ICE_WINDOW = timedelta(hours=24)
 ADMIN_STATE_HOLD = timedelta(days=7)
+CONFIRMED_SOURCES = frozenset({"admin", "parser"})  # state_source, которым «залит» можно верить
 PHOTO_ACCEPTED_WEIGHT = 2.0
 NOT_FLOODED_ACTORS = 2
 LIVE_WINDOW = timedelta(hours=2)  # людей / хоккей
@@ -95,6 +98,9 @@ class Computed:
     hockey: str | None
     crowd_at: datetime | None = None
     hockey_at: datetime | None = None
+    pending_confirm: bool = False  # люди набрали «залит», нужен админ
+    confirm_actors: int = 0  # сколько человек отметили «залит» (для строки «N человек отметили»)
+    confirm_last_at: datetime | None = None
 
 
 def is_valid_mark(kind: str, value: str) -> bool:
@@ -147,8 +153,16 @@ def compute_state(
     *,
     prev_source: str | None = None,
     prev_at: datetime | None = None,
+    floor: datetime | None = None,
 ) -> Computed:
+    """``floor`` — момент решения админа/источника: отметки про лёд, сделанные раньше, уже учтены."""
+    if floor is not None:
+        marks = [m for m in marks if not (m.kind == KIND_ICE and m.at <= floor)]
     prev = prev_state or STATE_WAITING
+    # «Залит» без подтверждения (старая запись движка) публично не живёт.
+    confirmed_flooded = prev == STATE_FLOODED and prev_source in CONFIRMED_SOURCES
+    if prev == STATE_FLOODED and not confirmed_flooded:
+        prev = STATE_WAITING
     status_marks = [m for m in marks if m.kind == KIND_ICE and m.value != "bad"]
     ice = _latest_per_actor(status_marks, KIND_ICE, now - FLOODED_WINDOW, now)
     present = [m for m in ice if m.value in ICE_PRESENT]
@@ -178,26 +192,27 @@ def compute_state(
     crowd, crowd_at = _live_value(marks, KIND_CROWD, now)
     hockey, hockey_at = _live_value(marks, KIND_HOCKEY, now)
 
-    admin_hold = (
-        prev == STATE_FLOODED
-        and prev_source == "admin"
-        and prev_at is not None
-        and now - prev_at < ADMIN_STATE_HOLD
-    )
+    admin_hold = confirmed_flooded and prev_at is not None and now - prev_at < ADMIN_STATE_HOLD
+    pending = False
     if prev in MANUAL_STATES:
         state = prev
     elif dispute:
-        state = prev
+        state = STATE_FLOODED if confirmed_flooded else prev
     elif nf_hit:
         state = STATE_WAITING
     elif fl_hit:
-        state = STATE_FLOODED
+        if confirmed_flooded:
+            state = STATE_FLOODED  # новые отметки подтверждают уже подтверждённый лёд
+        else:
+            state = STATE_WAITING  # баллы набраны, но без админа публично «ждём заливку»
+            pending = True
     elif admin_hold:
         state = STATE_FLOODED
-    elif prev in (STATE_FLOODED, STATE_STALE):
+    elif confirmed_flooded or prev == STATE_STALE:
         state = STATE_STALE
     else:
         state = STATE_WAITING
+    confirm_marks = [m for m in present if m.value == "flooded"] if pending else []
 
     return Computed(
         state=state,
@@ -210,6 +225,9 @@ def compute_state(
         hockey=hockey,
         crowd_at=crowd_at,
         hockey_at=hockey_at,
+        pending_confirm=pending,
+        confirm_actors=len({m.actor for m in confirm_marks}),
+        confirm_last_at=max((m.at for m in confirm_marks), default=None),
     )
 
 

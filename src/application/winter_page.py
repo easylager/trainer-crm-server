@@ -139,9 +139,21 @@ def pill(item: Mapping[str, Any]) -> str:
     )
 
 
+def pending_line(item: Mapping[str, Any]) -> str:
+    """Люди отметили «залит», админ не подтвердил: нейтральная строка, статус остаётся «Ждём заливку»."""
+    n = int(item.get("pending_people") or 0) if item.get("pending") else 0
+    if n <= 0:
+        return ""
+    verb = "отметил" if n % 10 == 1 and n % 100 != 11 else "отметили"
+    return f"{n} {_plural(n, 'человек', 'человека', 'человек')} {verb}, что залит · проверяем"
+
+
 def checked_line(item: Mapping[str, Any]) -> str:
-    """Для серверной отрисовки только то, что не стареет: дата админской проверки. «40 мин назад» дорисует JS."""
-    if item.get("checked_by") == "admin" and item.get("state_at"):
+    """Для серверной отрисовки только то, что не стареет: дата проверки админом / источником. «40 мин назад» дорисует JS."""
+    pend = pending_line(item)
+    if pend:
+        return pend
+    if item.get("checked_by") in ("admin", "source") and item.get("state_at"):
         from datetime import datetime, timedelta, timezone
 
         try:
@@ -242,6 +254,7 @@ def _client_points(items: list[Mapping[str, Any]], city_name: str) -> list[dict[
                 "state_at": i.get("state_at"), "checked_by": i.get("checked_by"), "quality": i.get("quality"),
                 "crowd": i.get("crowd"), "hockey": i.get("hockey"),
                 "crowd_at": i.get("crowd_at"), "hockey_at": i.get("hockey_at"),
+                "pending": bool(i.get("pending")), "pending_people": int(i.get("pending_people") or 0),
             }
         )
     return out
@@ -399,7 +412,7 @@ def _status_card(item: Mapping[str, Any], *, season_label: str, links: Mapping[s
     icon = _icon(STATE_ICON.get(state, "clock"))
     if state == "flooded":
         head = f"Лёд залит · сезон {season_label}"
-        text = "Лёд подтвердили люди. Были здесь сегодня? Расскажите, как там сейчас."
+        text = "Лёд залит. Были здесь сегодня? Расскажите, как там сейчас."
     elif state == "stale":
         head = f"Давно не отмечали · сезон {season_label}"
         text = "Последняя отметка была давно, лёд мог измениться. Были здесь? Подскажите другим."
@@ -495,7 +508,7 @@ def _sheet(item: Mapping[str, Any]) -> str:
         '<input class="w-hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" data-w-hp>'
         '<p class="w-error" data-w-sheet-error hidden role="alert"></p>'
         '<button type="button" class="w-btn w-btn--dark w-btn--wide" data-w-send aria-disabled="true">Сначала про лёд</button></div>'
-        '<div data-w-done hidden><div class="w-result" role="status"><b>Спасибо! Уже на странице:</b>'
+        '<div data-w-done hidden><div class="w-result" role="status"><b>Спасибо! Ваша отметка:</b>'
         '<strong data-w-summary></strong><span data-w-rule></span></div>'
         '<button type="button" class="w-btn w-btn--soft w-btn--wide" data-w-close>Готово</button></div>'
         "</div></div>"

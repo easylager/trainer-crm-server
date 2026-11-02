@@ -243,8 +243,8 @@ async def test_photo_claim_weighs_half_until_accept_then_two(db_session, fake_s3
     assert st == "waiting"
     assert await wp.decide(db_session, pid, "accept", 1, NOW) == "accepted"
     assert await wp.decide(db_session, pid, "accept", 1, NOW) == "already"
-    st = (await db_session.execute(text("SELECT state FROM seasonal_rink_seasons WHERE arena_id=:a"), {"a": a})).scalar_one()
-    assert st == "flooded"  # 2 балла фото, подтверждённое человеком
+    st = (await db_session.execute(text("SELECT state, pending_confirm FROM seasonal_rink_seasons WHERE arena_id=:a"), {"a": a})).one()
+    assert tuple(st) == ("waiting", True)  # 2 балла фото набраны, но «залит» ставит только админ
 
 
 @pytest.mark.asyncio

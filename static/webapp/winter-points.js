@@ -255,7 +255,7 @@
         .then(function (res) {
           if (res.status === 200) {
             var out = W.reportOutcome(report, res.body, 'miniapp');
-            sheet.querySelector('[data-w-body]').innerHTML = '<div class="w-result"><b>Спасибо! Уже на странице:</b><strong>' + esc(out.summary) + '</strong><span>' + esc(out.rule) + '</span></div>';
+            sheet.querySelector('[data-w-body]').innerHTML = '<div class="w-result"><b>Спасибо! Ваша отметка:</b><strong>' + esc(out.summary) + '</strong><span>' + esc(out.rule) + '</span></div>';
             cache.key = '';
           } else {
             say(msg, W.reportErrorText(res.status, res.retry), true);

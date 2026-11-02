@@ -138,3 +138,16 @@ async def test_import_file_shows_diff_and_applies_only_on_button(bot_env, db_ses
     await wab.on_run_apply(q)
     assert "Создано новых точек: 1" in q.message.shown[-1][0]
     assert (await db_session.execute(text("SELECT count(*) FROM seasonal_rinks"))).scalar_one() == 1
+
+
+def test_confirm_flood_card_has_three_decisions_and_neutral_wording():
+    from datetime import datetime, timezone
+
+    from src.bot import winter_admin_bot as bot
+
+    card = {"pending": True, "people": 3, "by_source": {"telegram": 2, "site": 1}, "photos": 1,
+            "last_at": datetime(2026, 12, 10, 12, 0, tzinfo=timezone.utc)}
+    body, kb = bot._confirm_flood_view(card, "Минск, Каток", 7, [])
+    assert "Отметили «залит»: 3" in body and "Telegram 2" in body and "Фото со льдом: 1" in body
+    data = [b.callback_data for row in kb.inline_keyboard for b in row]
+    assert data == ["wa:cf:7:f", "wa:cf:7:w", "wa:cf:7:a"]

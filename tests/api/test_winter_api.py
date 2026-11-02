@@ -150,7 +150,7 @@ async def test_site_sheet_companions_recorded_under_one_rate_limit(on, client, d
 
 @pytest.mark.asyncio
 async def test_point_api_gives_time_of_live_marks(on, client, db_session):
-    aid = await make_point(db_session)
+    aid = await make_point(db_session, state="flooded", state_source="admin")
     tok = (await client.get(f"/api/public/winter/points/{aid}")).json()["mark_token"]
     body = {"kind": "ice", "value": "flooded", "token": tok, "companions": [{"kind": "crowd", "value": "few"}]}
     assert (await client.post(f"/api/public/winter/points/{aid}/marks", json=body, headers=HDR)).status_code == 200

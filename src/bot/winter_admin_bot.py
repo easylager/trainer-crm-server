@@ -400,7 +400,14 @@ async def on_queue(query: CallbackQuery) -> None:
     nxt = [_btn(f"Следующая (осталось {total - 1})", "wa:q")] if total > 1 else []
     where = f"{_esc(it['city'])}, {_esc(it['name'])}" + (f"\n{_esc(row.address)}" if row and row.address else "")
     aid = it["arena_id"]
-    if it["kind"] == "dispute" and row is not None and row.dispute:
+    if it["kind"] == "confirm_flood":
+        async with async_session_factory() as session:
+            card = await wa.confirm_flood_card(session, int(aid), _now())
+        body, kb = _confirm_flood_view(card, where, int(aid), nxt)
+        if card is None or not card["pending"]:
+            body = f"<b>Подтвердить заливку</b>\n{where}\nЗапрос уже не актуален."
+            kb = _kb(*([nxt] if nxt else []), [_btn("Закрыть запрос", f"wa:cf:{aid}:a")])
+    elif it["kind"] == "dispute" and row is not None and row.dispute:
         body = f"<b>Спор по льду</b>\n{where}\nЛюди отмечают по-разному. Статус пока не менял. Что ставим?"
         kb = _kb([_btn("Залит", f"wa:d:{aid}:f"), _btn("Ждём заливку", f"wa:d:{aid}:w")], nxt)
     elif it["kind"] in ("dispute", "gone"):
@@ -419,6 +426,80 @@ async def on_queue(query: CallbackQuery) -> None:
         kb = _kb([_btn("Подтвердить", f"wa:n:ok:{aid}"), _btn("Скрыть", f"wa:n:hide:{aid}")], nxt)
     await _show(query, body, kb)
     await query.answer()
+
+
+_SOURCE_RU = {"telegram": "Telegram", "miniapp": "Mini App", "photo": "фото", "site": "сайт"}
+
+
+def _confirm_flood_view(card: dict[str, Any] | None, where: str, aid: int, nxt: list) -> tuple[str, InlineKeyboardMarkup]:
+    if card is None:
+        return f"<b>Подтвердить заливку</b>\n{where}\nТочки нет в сезоне.", _kb(*([nxt] if nxt else []))
+    src = ", ".join(f"{_SOURCE_RU.get(k, k)} {v}" for k, v in card["by_source"].items()) or "—"
+    last = card["last_at"].astimezone(timezone.utc).strftime("%d.%m %H:%M UTC") if card["last_at"] else "—"
+    photos = f"\nФото со льдом: {card['photos']}" if card["photos"] else ""
+    body = (
+        f"<b>Подтвердить заливку</b>\n{where}\n"
+        f"Отметили «залит»: {card['people']} (откуда: {src}), последняя {last}.{photos}\n"
+        "Публично пока «Ждём заливку». Подписчикам напишем только после вашего «Залит»."
+    )
+    kb = _kb(
+        [_btn("Залит", f"wa:cf:{aid}:f"), _btn("Не залит", f"wa:cf:{aid}:w")],
+        [_btn("Спросить ещё", f"wa:cf:{aid}:a")],
+        *([nxt] if nxt else []),
+    )
+    return body, kb
+
+
+@ops_router.callback_query(F.data.startswith("wa:cf:"))
+async def on_confirm_flood(query: CallbackQuery) -> None:
+    if not await _is_admin_query(query):
+        return
+    _, _, aid, code = (query.data or "").split(":")
+    decision = {"f": "flooded", "w": "waiting", "a": "ask_more"}.get(code)
+    if decision is None:
+        await query.answer()
+        return
+    async with async_session_factory() as session:
+        ok = await wa.resolve_confirm_flood(session, int(aid), decision, admin_id=query.from_user.id, now=_now())
+        await session.commit()
+    text_ = {
+        "flooded": "Готово: «Залит». Подписчики получат сообщение. Держится 7 суток без новых отметок.",
+        "waiting": "Готово: «Ждём заливку». Эти отметки больше не считаются.",
+        "ask_more": "Хорошо, ждём новых отметок. Запрос закрыт, новый появится при следующих «залит».",
+    }[decision]
+    await _show(query, text_ if ok else "Точки уже нет в сезоне.", _kb([_btn("Следующая", "wa:q")]))
+    await query.answer()
+
+
+@ops_router.message(Command("winter_flood"))
+async def cmd_winter_flood(message: Message) -> None:
+    """``/winter_flood <id точки>`` — админ сам ставит «залит» (без отметок людей); ``/winter_wait <id>`` — вернуть «ждём»."""
+    if not message.from_user or not winter_bot._is_admin(message.from_user.id):
+        await message.answer("Нет доступа.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("Формат: /winter_flood <id точки>. Поставит «Залит» и разошлёт подписчикам.")
+        return
+    async with async_session_factory() as session:
+        ok = await wa.resolve_confirm_flood(session, int(parts[1]), "flooded", admin_id=message.from_user.id, now=_now())
+        await session.commit()
+    await message.answer("«Залит» поставлен, подписчикам уйдёт сообщение." if ok else "Точка не найдена в сезоне.")
+
+
+@ops_router.message(Command("winter_wait"))
+async def cmd_winter_wait(message: Message) -> None:
+    if not message.from_user or not winter_bot._is_admin(message.from_user.id):
+        await message.answer("Нет доступа.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("Формат: /winter_wait <id точки>.")
+        return
+    async with async_session_factory() as session:
+        ok = await wa.resolve_confirm_flood(session, int(parts[1]), "waiting", admin_id=message.from_user.id, now=_now())
+        await session.commit()
+    await message.answer("«Ждём заливку» поставлено." if ok else "Точка не найдена в сезоне.")
 
 
 @ops_router.callback_query(F.data.startswith("wa:d:"))
