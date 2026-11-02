@@ -2497,6 +2497,30 @@ def share_b_days_sheet_js(request: Request):
     )
 
 
+# Батч winter-26: стили и скрипты страниц матчей (TASK-347) и «Зимой» (TASK-343).
+_W26_PUBLIC_ASSETS = {
+    "/static/share/matches.css": ("share/matches.css", "text/css"),
+    "/static/share/matches.js": ("share/matches.js", "application/javascript"),
+    "/static/share/winter.js": ("share/winter.js", "application/javascript"),
+    "/static/shared/winter.css": ("shared/winter.css", "text/css"),
+    "/static/shared/winter-model.js": ("shared/winter-model.js", "application/javascript"),
+}
+
+
+def _w26_public_asset_route(url_path: str, rel: str, media_type: str) -> None:
+    def _serve(request: Request):
+        path = Path(__file__).resolve().parent.parent.parent / "static" / rel
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Asset not found")
+        return FileResponse(path, media_type=media_type, headers=_webapp_versioned_asset_cache_headers(request))
+
+    app.add_api_route(url_path, _serve, methods=["GET"], include_in_schema=False)
+
+
+for _w26_url, (_w26_rel, _w26_type) in _W26_PUBLIC_ASSETS.items():
+    _w26_public_asset_route(_w26_url, _w26_rel, _w26_type)
+
+
 @app.get("/static/share/place-share.css")
 def share_place_share_css(request: Request):
     """TASK-252: закреплённая кнопка «Позвать на …» на странице места."""
