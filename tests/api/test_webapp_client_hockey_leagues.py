@@ -175,7 +175,7 @@ async def test_league_errors_and_limits(app_use_test_db, monkeypatch: pytest.Mon
         with patch_client_principal(ME):
             empty = await client.post("/api/webapp/client/hockey/leagues", json={"name": "   "})
             assert empty.status_code == 400
-            assert empty.json()["detail"] == "Назовите лигу"
+            assert empty.json()["detail"] == "Назови лигу"
             bad = await client.post("/api/webapp/client/hockey/leagues/join", json={"code": "неттакого"})
             assert bad.status_code == 404
             assert bad.json()["detail"] == "Лига не найдена"

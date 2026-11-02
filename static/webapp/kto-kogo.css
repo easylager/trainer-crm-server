@@ -181,7 +181,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-peak__s { font: 500 12px var(--kk-text); color: var(--kk-muted); }
 .kk-day { display: flex; flex-direction: column; gap: 6px; }
 .kk-moved { font: 600 12px/1.3 var(--kk-text); color: var(--kk-muted); }
-.kk-mini--link { width: 100%; background: none; color: var(--kk-muted); height: 40px; font-weight: 500; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
+.kk-mini--link { width: 100%; background: none; color: var(--kk-muted); height: 44px; font-weight: 500; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
 .kk-lbl--h { margin: 0; }
 .kk-cnt { font: 600 13px var(--kk-text); color: var(--kk-gold-ink); }
 .kk-cnt.is-done { color: var(--kk-win); }

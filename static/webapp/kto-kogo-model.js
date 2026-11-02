@@ -11,6 +11,12 @@
   var WEEKDAY_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   var NEUTRAL = '#5D7285';
   var NBSP = ' ';
+  var SPELL = { 'Шахтер': 'Шахтёр', 'Могилев': 'Могилёв' };
+
+  /** Имя клуба для глаз: в базе «Шахтер» без ё, на экране — «Шахтёр». В запросы уходит имя из базы. */
+  function clubName(name) {
+    return SPELL[name] || name || '';
+  }
 
   /** Части даты в минском времени — у игроков не всегда минский пояс в телефоне. */
   function minskParts(date) {
@@ -317,7 +323,7 @@
   function remainingLine(race) {
     if (!race || !race.monthly) return '';
     var n = Math.max(0, (race.known || 0) - (race.played || 0));
-    var head = n ? 'В этом месяце ещё ' + n + ' ' + plural(n, 'матч', 'матча', 'матчей') + '. ' : '';
+    var head = n ? 'В этом месяце ещё ' + n + NBSP + plural(n, 'матч', 'матча', 'матчей') + '. ' : '';
     return head + 'Очки в лиге — с ближайшего матча, с 1-го числа все с нуля.';
   }
 
@@ -352,6 +358,7 @@
 
   var api = {
     NEUTRAL: NEUTRAL,
+    clubName: clubName,
     MONTHS: MONTHS,
     minskParts: minskParts,
     dayIndex: dayIndex,

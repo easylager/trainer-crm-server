@@ -122,7 +122,7 @@ def _utc(value: datetime) -> datetime:
 def clean_name(name: str) -> str:
     cleaned = " ".join((name or "").split())
     if not cleaned:
-        raise ValueError("Назовите лигу")
+        raise ValueError("Назови лигу")
     if len(cleaned) > NAME_MAX:
         raise ValueError(f"Название до {NAME_MAX} символов")
     return cleaned

@@ -115,7 +115,7 @@
         'aria-pressed': on ? 'true' : 'false',
         'aria-disabled': t.usable ? null : 'true',
         onclick: function () { K.toggleTrump(m); },
-      }, [icon(I.bolt, 16), on ? 'Козырь на этом матче · ×2' : 'Назначить козырь · ×2']),
+      }, [icon(I.bolt, 16), on ? 'Козырь на этом матче · ×2' : 'Козырь: удвоить очки · ×2']),
       !t.usable && !on ? h('span', { class: 'kk-htr__note', text: t.note.charAt(0).toUpperCase() + t.note.slice(1) }) : null,
     ];
   }
@@ -128,7 +128,7 @@
     var club = state.profile && state.profile.club;
     var eff = effective(m);
     var doubled = !!(m.my_pick && m.my_pick.doubled);
-    var bg = club ? club.color : (m.away_team === M.DINAMO ? m.away : m.home).color;
+    var bg = (club ? club.color : (m.away_team === M.DINAMO ? m.away : m.home).color) || M.NEUTRAL;
     var sum = eff.side ? S.moveSummary(eff, doubled, nm(m[eff.side])) : null;
     var kids = [
       K.sticker(hero.tag),
@@ -185,7 +185,7 @@
     if (m.open && eff.side) {
       if (!state.scoreOpen[m.id] && !eff.score) {
         kids.push(h('button', { type: 'button', class: 'kk-dofr', onclick: function () { state.scoreOpen[m.id] = true; K.render(); } }, [
-          h('span', { text: 'Угадать и счёт' }),
+          h('span', { text: 'Угадать точный счёт' }),
           h('span', { class: 'kk-dofr__m', text: 'до +' + (P.exact - P.winner) }),
         ]));
       } else {
@@ -200,6 +200,7 @@
     if (!state.hubReady) return h('div', { class: 'kk-skel kk-skel--card' });
     var hero = current();
     var d = S.dayMatches(state.matches, new Date(), hero ? hero.match.id : null);
+    if (!d && !hero && !state.matches.length && state.matchesFailed) return K.retryCard('Матчи не загрузились.', function () { K.reset('hub', {}); });
     if (!d) return hero ? null : K.emptyCard('МАТЧИ ДНЯ', 'Ближайших матчей пока нет — календарь обновится, как только клубы их назначат.');
     return h('div', { class: 'kk-sec' }, [
       h('div', { class: 'kk-sec__head' }, [
@@ -207,7 +208,7 @@
         h('span', { class: 'kk-cnt' + (d.total && d.made === d.total ? ' is-done' : ''), text: S.dayCount(d.made, d.total) }),
       ]),
       h('div', { class: 'kk-day' }, d.items.map(function (m) { return dayRow(m, d.mixed); })),
-      h('span', { class: 'kk-sub', text: 'Ходы закрываются со стартом матча. До старта всё можно поменять.' }),
+      h('span', { class: 'kk-sub', text: 'Ходы закрываются за минуту до старта матча. До этого всё можно поменять.' }),
     ]);
   }
 

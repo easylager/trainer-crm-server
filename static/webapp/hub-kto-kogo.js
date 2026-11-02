@@ -98,7 +98,7 @@
       var body = el('span', 'hub-kk__body');
       body.appendChild(el('span', 'hub-kk__head hub-kk__display', v.head));
       var r = m.result || {};
-      var line = m.home.name + ' — ' + m.away.name + ' ' + r.home_score + ':' + r.away_score;
+      var line = M.clubName(m.home.name) + ' — ' + M.clubName(m.away.name) + ' ' + r.home_score + ':' + r.away_score;
       if (card.place) line += ' · ты ' + card.place.rank + '-й в лиге';
       body.appendChild(el('span', 'hub-kk__sub', line));
       a.appendChild(body);
@@ -116,11 +116,11 @@
       mark.classList.add('hub-kk__badge--big');
       q.appendChild(mark);
       var qb = el('span', 'hub-kk__body');
-      qb.appendChild(el('span', 'hub-kk__head', 'Ты за ' + m[side].name));
+      qb.appendChild(el('span', 'hub-kk__head', 'Ты за ' + M.clubName(m[side].name)));
       qb.appendChild(el('span', 'hub-kk__sub', M.whenLabel(m.starts_at, new Date())));
       q.appendChild(qb);
       var hasScore = card.my_pick.home_score != null;
-      q.appendChild(el('span', 'hub-kk__chip', hasScore ? card.my_pick.home_score + ':' + card.my_pick.away_score : 'счёт +5'));
+      q.appendChild(el('span', 'hub-kk__chip', hasScore ? card.my_pick.home_score + ':' + card.my_pick.away_score : 'счёт до +30'));
       node.appendChild(q);
     } else {
       var row = el('div', 'hub-kk__row hub-kk__row--pick');
@@ -128,7 +128,7 @@
         var btn = el('button', 'hub-kk__half');
         btn.type = 'button';
         btn.style.setProperty('--team', colors[which]);
-        btn.setAttribute('aria-label', 'Я за ' + m[which].name);
+        btn.setAttribute('aria-label', 'Я за ' + M.clubName(m[which].name));
         btn.appendChild(badge(m[which], colors[which]));
         btn.addEventListener('click', function () {
           try { tg.HapticFeedback.selectionChanged(); } catch (e) { /* */ }
@@ -145,7 +145,7 @@
             open('');
           });
           mid.appendChild(el('span', 'hub-kk__kicker hub-kk__display', 'кто кого?'));
-          mid.appendChild(el('span', 'hub-kk__teams', m.home.name + ' — ' + m.away.name));
+          mid.appendChild(el('span', 'hub-kk__teams', M.clubName(m.home.name) + ' — ' + M.clubName(m.away.name)));
           mid.appendChild(el('span', 'hub-kk__sub', M.whenLabel(m.starts_at, new Date())));
           row.appendChild(mid);
         }

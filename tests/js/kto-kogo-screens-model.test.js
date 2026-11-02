@@ -193,7 +193,7 @@ describe('итог и движение', () => {
   });
   it('корона месяца: держишь, не хватает, последний матч', () => {
     const base = { kind: 'slice', club: 'Юность', period_title: 'ноябрь', ends_at: '2026-11-30T21:00:00Z', crown: true, left: 3, to_crown: 0 };
-    assert.match(S.crownLineAfter([base]), /твоя, если удержишь до 30.ноября.*ещё 3.матча у Юность/);
+    assert.match(S.crownLineAfter([base]), /твоя, если удержишь до 30.ноября.*ещё 3.матча команды Юность/);
     assert.match(S.crownLineAfter([Object.assign({}, base, { crown: false, to_crown: 10 })]), /^До короны месяца \(ноябрь\) 10.очков/);
     assert.match(S.crownLineAfter([Object.assign({}, base, { left: 0 })]), /последний матч/);
     assert.equal(S.crownLineAfter([{ kind: 'league' }]), '');
@@ -249,7 +249,7 @@ describe('таблица', () => {
     assert.deepEqual(S.peakTile(p, []), { rank: '2', label: 'Юность · ноябрь', note: 'из 38', gold: false });
     const crown = [{ kind: 'month', period: '2026-11', club: 'Юность' }];
     assert.equal(S.peakTile(Object.assign({}, p, { rank: 1 }), crown).note, 'корона твоя');
-    assert.equal(S.peakTile(Object.assign({}, p, { rank: 1 }), []).note, 'лидер среза');
+    assert.equal(S.peakTile(Object.assign({}, p, { rank: 1 }), []).note, 'ты первый');
     assert.equal(S.crownCount(2), '2' + NBSP + 'короны');
   });
 });
@@ -308,7 +308,7 @@ describe('карточка болельщика', () => {
     const lines = S.seasonTitleLine({ overall: { rank: 214, players: 1380, to_first: 900 }, club: { name: 'Юность' }, club_place: { rank: 3, players: 212, to_first: 40 } }, '2026/27');
     assert.equal(lines[0].label, 'Знаток сезона · все матчи');
     assert.equal(lines[1].label, 'Знаток Юность 2026/27');
-    assert.equal(lines[1].note, 'до 1-го 40');
+    assert.equal(lines[1].note, 'до 1-го: 40\u00a0очков');
   });
 });
 
