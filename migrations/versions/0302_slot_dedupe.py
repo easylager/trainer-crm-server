@@ -60,7 +60,7 @@ def upgrade() -> None:
     bind.exec_driver_sql(DEDUPE_SQL)
     remaining = bind.exec_driver_sql(REMAINING_SQL).scalar()
     if remaining:
-        print(f"[0285] {remaining} duplicate slot group(s) with bookings on several twins — unique index skipped")
+        print(f"[0302] {remaining} duplicate slot group(s) with bookings on several twins — unique index skipped")
         return
     op.execute(
         f"""
