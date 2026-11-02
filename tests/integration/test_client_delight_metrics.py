@@ -59,6 +59,14 @@ async def _make_client(session: AsyncSession, telegram_id: int) -> int:
 
 
 async def _make_slot(session: AsyncSession, trainer_id: int, starts_at: datetime) -> int:
+    # Identical live slots of one trainer are forbidden (uq_slots_live_identical); several clients in
+    # one scenario share the start, so each slot gets its own length instead.
+    n_same = (
+        await session.execute(
+            text("SELECT COUNT(*) FROM slots WHERE trainer_id = :tid AND slot_date = :d AND start_time = :st"),
+            {"tid": trainer_id, "d": starts_at.date(), "st": starts_at.time()},
+        )
+    ).scalar_one()
     r = await session.execute(
         text(
             "INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status) "
@@ -68,7 +76,7 @@ async def _make_slot(session: AsyncSession, trainer_id: int, starts_at: datetime
             "tid": trainer_id,
             "d": starts_at.date(),
             "st": starts_at.time(),
-            "et": (starts_at + timedelta(hours=1)).time(),
+            "et": (starts_at + timedelta(hours=1, minutes=int(n_same))).time(),
         },
     )
     (slot_id,) = r.fetchone()

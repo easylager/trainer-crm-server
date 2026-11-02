@@ -1,4 +1,5 @@
 """Wave B: hub inbox-count, bootstrap action_inbox, confirm-batch."""
+import itertools
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
@@ -18,6 +19,9 @@ from tests.api.test_webapp_trainer_schedule_integration import (
 from tests.db_catalog_helpers import require_seed_service_id
 
 
+_SLOT_END_MINUTE = itertools.count(1)
+
+
 async def _insert_pending_booking(db_session, trainer_id: int) -> int:
     service_id = await require_seed_service_id(db_session)
     slot_date = date.today() + timedelta(days=2)
@@ -25,11 +29,12 @@ async def _insert_pending_booking(db_session, trainer_id: int) -> int:
         text(
             """
             INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
-            VALUES (:tid, :sd, '10:00', '11:00', 'booked')
+            VALUES (:tid, :sd, '10:00', make_time(11, :em, 0), 'booked')
             RETURNING id
             """
         ),
-        {"tid": trainer_id, "sd": slot_date},
+        # Distinct window per call: identical live slots of one trainer are forbidden (uq_slots_live_identical).
+        {"tid": trainer_id, "sd": slot_date, "em": next(_SLOT_END_MINUTE)},
     )
     slot_id = int(r_slot.scalar_one())
     tg = 8_000_000_000 + (uuid.uuid4().int % 1_000_000_000)
