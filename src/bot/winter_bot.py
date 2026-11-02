@@ -34,6 +34,7 @@ admin_router = Router(name="winter_admin")
 
 _awaiting_location: set[int] = set()
 LOOP_INTERVAL_SEC = 60
+SUMMARY_LOOP_INTERVAL_SEC = 600
 SEND_PAUSE_SEC = 0.05  # <= 20 сообщений в секунду
 
 
@@ -372,3 +373,26 @@ async def run_winter_loop(client_bot: Bot) -> None:
             break
         except Exception as exc:  # noqa: BLE001
             logger.exception("Winter loop: %s", exc)
+
+
+async def run_winter_summary_loop() -> None:
+    """Раз в сутки (после 10:00 по Минску) — сводка «Зимой» в админ-бот; только при SEASONAL_RINKS_ENABLED."""
+    from src.application.winter_report import tick_winter_daily_summary
+    from src.ingestion.ops_alerts import try_alert_tick_lock
+
+    while True:
+        await asyncio.sleep(SUMMARY_LOOP_INTERVAL_SEC)
+        try:
+            if not _enabled():
+                continue
+            async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "winter_daily_summary"):
+                    continue
+                sent = await tick_winter_daily_summary(session, _now())
+                await session.commit()
+                if sent:
+                    logger.info("winter daily summary sent")
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Winter summary loop: %s", exc)

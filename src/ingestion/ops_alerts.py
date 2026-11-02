@@ -22,10 +22,12 @@ ALERT_TICK_LOCKS = {
     "ice_health_alert": 2,
     "ice_health_weekly_digest": 3,
     "ice_scheduler_watchdog": 4,
+    "winter_daily_summary": 5,
 }
 
 KEY_SILENT_SOURCES_DAILY = "ice_health_silent_daily"
 KEY_WEEKLY_DIGEST = "ice_health_weekly_digest"
+KEY_WINTER_DAILY = "winter_daily_summary"
 
 
 async def try_alert_tick_lock(session: AsyncSession, name: str) -> bool:
@@ -84,6 +86,7 @@ __all__ = [
     "ALERT_TICK_LOCK_NAMESPACE",
     "KEY_SILENT_SOURCES_DAILY",
     "KEY_WEEKLY_DIGEST",
+    "KEY_WINTER_DAILY",
     "mark_ops_alert_sent",
     "minsk_date",
     "ops_alert_sent_at",

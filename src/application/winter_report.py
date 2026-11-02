@@ -1,12 +1,13 @@
 """Сводка «Зимой» для ежедневного отчёта (TASK-344, TASK-343 п.8).
 
-Механизма отчёта TASK-344 в коде пока нет — отдаём готовую функцию: словарь + строка.
+Сводка уходит в админ-бот раз в сутки в 10:00 по Минску (``tick_winter_daily_summary``, цикл ``run_winter_summary_loop``).
 Свой стандарт сезонных точек: статус сезона + свежесть статуса.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Awaitable, Callable
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,3 +43,33 @@ async def winter_summary(session: AsyncSession, now: datetime) -> dict[str, Any]
         line += f"; ВНИМАНИЕ: фото на проверке {photos['pending']}, старейшее с {photos['oldest']}"
     return {"season": ws.season_label(season), "by_state": by_state, "visible": visible, "fresh_status": fresh,
             "marks_24h": marks24, "queue": queue, "queue_info": queue_info, "subscriptions": subs, "photos": photos, "line": line}
+
+
+SUMMARY_HOUR_MINSK = 10
+
+
+async def tick_winter_daily_summary(
+    session: AsyncSession,
+    now: datetime,
+    *,
+    sender: Callable[..., Awaitable[bool | None]] | None = None,
+) -> str | None:
+    """Одно сообщение в сутки в админ-бот после 10:00 по Минску.
+
+    Дедуп — в ``ice_ops_alerts`` (как у недельного дайджеста льда): рестарт воркера и вторая реплика
+    не шлют повторно. Неудачная доставка (``False``) не помечается — следующий тик повторит.
+    Флаг ``SEASONAL_RINKS_ENABLED`` проверяет цикл; здесь только время и дедуп.
+    """
+    from src.ingestion.alerts import send_ice_health_to_admins
+    from src.ingestion.ops_alerts import KEY_WINTER_DAILY, mark_ops_alert_sent, sent_today_minsk
+
+    if now.astimezone(ZoneInfo("Europe/Minsk")).hour < SUMMARY_HOUR_MINSK:
+        return None
+    if await sent_today_minsk(session, KEY_WINTER_DAILY, now=now):
+        return None
+    body = (await winter_summary(session, now))["line"]
+    delivered = await (sender or send_ice_health_to_admins)(body, event="winter daily summary")
+    if delivered is False:
+        return None
+    await mark_ops_alert_sent(session, KEY_WINTER_DAILY, now=now)
+    return body

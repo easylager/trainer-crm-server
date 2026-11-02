@@ -13,7 +13,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from src.bot.winter_bot import run_winter_loop
+from src.bot.winter_bot import run_winter_loop, run_winter_summary_loop
 from src.bot.notification_loops import (
     run_booking_complete_loop,
     run_booking_confirmed_notifier_loop,
@@ -141,6 +141,7 @@ async def main() -> None:
         asyncio.create_task(run_ice_scheduler_watchdog_loop(), name="ice_scheduler_watchdog"),
         asyncio.create_task(run_hockey_matches_loop(), name="hockey_matches"),
         asyncio.create_task(run_place_suggestion_purge_loop(), name="place_suggestion_purge"),
+        asyncio.create_task(run_winter_summary_loop(), name="winter_daily_summary"),
     ]
     all_tasks = client_tasks + trainer_tasks + other_tasks
 
