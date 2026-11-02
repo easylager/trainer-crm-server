@@ -706,7 +706,7 @@ def render_match_page(
     phase = m["phase"]
     gone = data["gone"]
     before = phase == PHASE_BEFORE and not gone
-    city_label = f"‹ {format_public_name(data['city'])}" if data.get("city") else ""
+    city_label = format_public_name(data['city']) if data.get("city") else ""
     h1 = f"{m['title']}, {when_text(m['starts_at'])} · {data['arena_name']}"
 
     actions = ""
