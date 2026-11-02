@@ -418,7 +418,7 @@ async def put_client_hockey_remind(
     session: AsyncSession = Depends(get_session),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
 ) -> dict:
-    """Напоминать за час до матча и присылать итог (TASK-335). Включает только сам игрок."""
+    """Напоминать о ходе за 3 часа до матча своей команды и присылать итог (TASK-335). Включает только сам игрок."""
     from src.application.hockey_notices import set_remind
 
     name = _player_name(body.display_name, x_telegram_init_data or "")
