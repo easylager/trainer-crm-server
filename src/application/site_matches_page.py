@@ -181,8 +181,6 @@ def _feed_card(card: Mapping[str, Any], *, base_url: str, today: Any, city_id: i
 
 
 def feed_title(feed: Mapping[str, Any], city_name: str) -> str:
-    if feed.get("nearby"):
-        return "Хоккей рядом"
     where = city_locative(city_name)
     return f"Хоккей в {where}" if where else f"Хоккей — {format_public_name(city_name)}"
 
@@ -195,12 +193,24 @@ def list_href(city_name: str | None = None, club: str | None = None) -> str:
 
 
 def feed_section(feed: Mapping[str, Any] | None, *, city_name: str, base_url: str, city_id: int | None) -> str:
-    """«Хоккей в Минске» под «Лёд сегодня». Нет матчей — нет блока."""
-    if not feed or not feed.get("matches"):
+    """«Хоккей в Минске» под «Лёд сегодня»: матчи, которые идут в этом городе. Нет матчей на неделе —
+    честная строка и ближайший матч; в городе матчей нет совсем — нет блока."""
+    if not feed:
         return ""
     from src.application.style_b import section
 
     today = feed["today"]
+    if feed.get("empty"):
+        nxt = feed["next"]
+        note = f"{empty_line(feed, city_name)}"
+        return section(
+            feed_title(feed, city_name),
+            f'<p class="m-feed-empty">{_e(note)}</p>'
+            f'<div class="b-scroll">{_feed_card(nxt, base_url=base_url, today=today, city_id=city_id)}</div>',
+            aside_html=f'<a class="b-more" href="{_e(list_href(city_name))}">Все матчи</a>',
+            klass="b-sec--flush",
+            sec_id="hockey",
+        ) + assets_tail()
     cards = "".join(_feed_card(c, base_url=base_url, today=today, city_id=city_id) for c in feed["matches"])
     n = int(feed["week_count"])
     more = (
@@ -216,10 +226,20 @@ def feed_section(feed: Mapping[str, Any] | None, *, city_name: str, base_url: st
     ) + assets_tail()
 
 
+def empty_line(feed: Mapping[str, Any], city_name: str) -> str:
+    """«В Минске до 10 ноября матчей нет» — честно, когда на неделе в городе ничего не идёт."""
+    nxt = feed["next"]
+    day = nxt["day"]
+    where = city_locative(city_name)
+    head = f"В {where}" if where else format_public_name(city_name)
+    return f"{head} до {day.day} {_months(day.month)} матчей нет"
+
+
 def route_row_line(feed: Mapping[str, Any]) -> str:
     first = feed["first"]
-    if feed.get("nearby"):
-        return f"ближайший матч — {first['title']}, {day_word(first['day'], feed['today']).lower()}"
+    if feed.get("empty"):
+        day = first["day"]
+        return f"до {day.day} {_months(day.month)} матчей нет · ближайший — {first['title']}"
     n = int(feed["city_count"])
     base = f"{n} {plural_ru(n, 'матч', 'матча', 'матчей')} на неделе"
     word = feed.get("first_word")
@@ -263,9 +283,9 @@ def here_section(matches: list[Mapping[str, Any]], *, today: Any) -> str:
 def _row(m: Mapping[str, Any]) -> str:
     score = score_text(m["result"]) if m.get("result") else ""
     right = f'<span class="m-row__go">{_e(score)} ›</span>' if score else '<span class="m-row__go">›</span>'
-    where = m["where"]
+    where = m.get("venue") or m["where"]
     if m["league"] != LEAGUE_EXTRALIGA:
-        where = f"{where} · {m['league_label']}"
+        where = f"{where} · {m['league_label']}" if where else m["league_label"]
     klass = "m-row m-row--mine" if m.get("mine") else "m-row"
     return (
         f'<a class="{klass}" href="{_e(m["path"])}"><span class="m-row__time">{_e(m["time"])}</span>'
@@ -301,10 +321,19 @@ def render_matches_list(
             f'<a class="m-chip m-chip--logo" href="{_e(list_href(city_name, club["slug"]))}" aria-current="{cur}">'
             f'{logo({"logo": club["logo"], "short": club["name"][:2]}, "sm")}{_e(club["name"])}</a>'
         )
+    def day_blocks(day_list: list[Mapping[str, Any]]) -> str:
+        out = ""
+        for day in day_list:
+            rows = "".join(_row(m) for m in day["items"])
+            out += f'<section class="m-day"><h2 class="m-day__h">{_e(day["label"])}</h2>{rows}</section>'
+        return out
+
     days = ""
-    for day in data["days"]:
-        rows = "".join(_row(m) for m in day["items"])
-        days += f'<section class="m-day"><h2 class="m-day__h">{_e(day["label"])}</h2>{rows}</section>'
+    if data.get("sections"):
+        for sec in data["sections"]:
+            days += f'<h2 class="m-sec">{_e(sec["title"])}</h2>' + day_blocks(sec["days"])
+    else:
+        days = day_blocks(data["days"])
     if not data["days"]:
         text = "Матчей пока нет."
     elif data["pause"]:
@@ -315,7 +344,9 @@ def render_matches_list(
     back = ""
     if city_name:
         back = f'<a class="m-back" href="/c/{_e(city_slug(city_name))}">‹ {_e(format_public_name(city_name))}</a>'
-    first_line = "Экстралига и Динамо-Минск" + (f" · {format_public_name(city_name)} первым" if city_name else "")
+    first_line = "Экстралига и Динамо-Минск"
+    if data["club"]:
+        first_line = "Все матчи клуба — дома и на выезде"
     body = (
         f'<div class="m-top">{back}<h1 class="m-title">Хоккей</h1><p class="m-lead">{_e(first_line)}</p>'
         f'<nav class="m-chips" aria-label="Клуб">{"".join(chips)}</nav></div>'
@@ -366,6 +397,8 @@ def match_title(data: Mapping[str, Any]) -> str:
     arena = data["arena_name"]
     if data["gone"]:
         return _fit([f"{teams}: матч перенесён или отменён", teams], TITLE_LIMIT)
+    if data.get("away_trip") and m["phase"] == PHASE_BEFORE:
+        return _fit([f"{teams} {day}, {m['time']} · выезд Динамо", f"{teams} {day}, {m['time']}", teams], TITLE_LIMIT)
     phase = m["phase"]
     if phase == PHASE_AFTER:
         score = score_text(m["result"])
@@ -405,6 +438,9 @@ def match_description(data: Mapping[str, Any]) -> str:
         goals = len(data["goals"])
         tail = f" Голы по минутам: {goals}." if goals else ""
         return _fit_text(f"{m['title']}: итог матча {league} {score_text(m['result'])}, {m['day'].day} {_months(m['day'].month)}, {where}.{tail}")
+    if data.get("away_trip"):
+        base = f"Выездной матч {league} {m['title']} {when}."
+        return _fit_text(base + " Трансляция и протокол — у клуба, напомнить о матче можно в Telegram.")
     base = f"Матч {league} {m['title']} {when}, {where}."
     standing = _standing_phrase(data)
     tail = f" {standing}." if standing else " Билеты, как добраться и катание рядом."
@@ -436,16 +472,17 @@ def match_jsonld(data: Mapping[str, Any], *, canonical: str, now: datetime) -> s
         status = "EventPostponed"
     elif previous is not None and previous > now:
         status = "EventRescheduled"
+    arena = data["arena"] or {}
     place: dict[str, Any] = {"@type": "Place", "name": data["arena_name"]}
     address: dict[str, Any] = {"@type": "PostalAddress", "addressLocality": data["city"], "addressCountry": "BY"}
-    if data["arena"].get("address"):
-        address["streetAddress"] = data["arena"]["address"]
+    if arena.get("address"):
+        address["streetAddress"] = arena["address"]
     place["address"] = {k: v for k, v in address.items() if v}
-    if data["arena"].get("latitude") is not None and data["arena"].get("longitude") is not None:
+    if arena.get("latitude") is not None and arena.get("longitude") is not None:
         place["geo"] = {
             "@type": "GeoCoordinates",
-            "latitude": data["arena"]["latitude"],
-            "longitude": data["arena"]["longitude"],
+            "latitude": arena["latitude"],
+            "longitude": arena["longitude"],
         }
     payload: dict[str, Any] = {
         "@context": "https://schema.org",
@@ -456,11 +493,12 @@ def match_jsonld(data: Mapping[str, Any], *, canonical: str, now: datetime) -> s
         "startDate": _iso(m["starts_at"]),
         "eventStatus": f"https://schema.org/{status}",
         "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
-        "location": place,
         "homeTeam": {"@type": "SportsTeam", "name": row.home_team},
         "awayTeam": {"@type": "SportsTeam", "name": row.away_team},
         "description": match_description(data),
     }
+    if arena:  # выезд Динамо: места в каталоге нет — location не выдумываем
+        payload["location"] = place
     if status == "EventRescheduled":
         payload["previousStartDate"] = _iso(previous)
     tickets = data.get("tickets")
@@ -654,7 +692,33 @@ def _tickets_block(data: Mapping[str, Any]) -> str:
     )
 
 
+def _away_card(data: Mapping[str, Any]) -> str:
+    """Выезд Динамо: «Как добраться» тут не нужно — арены у нас нет; смотреть можно по трансляции и протоколу."""
+    url = safe_external_url(data.get("protocol_url") or "")
+    link = (
+        f'<a class="m-text-link" href="{_e(url)}" rel="noopener nofollow" target="_blank">Трансляция и протокол ›</a>'
+        if url
+        else ""
+    )
+    return (
+        '<section class="m-panel"><span class="m-lbl">ВЫЕЗД</span>'
+        f'<div class="m-where"><b>Динамо-Минск в гостях</b><span>Матч проходит не в Минске</span></div>{link}</section>'
+    )
+
+
+def _club_links(data: Mapping[str, Any]) -> str:
+    links = data.get("club_links") or []
+    if not links:
+        return ""
+    items = "".join(
+        f'<a class="m-text-link" href="{_e(list_href(None, c["slug"]))}">Все матчи · {_e(c["name"])} ›</a>' for c in links
+    )
+    return f'<div class="m-links">{items}</div>'
+
+
 def _where_card(data: Mapping[str, Any]) -> str:
+    if not data.get("arena"):
+        return _away_card(data)
     arena = data["arena"]
     address = (arena.get("address") or "").strip()
     name = data["arena_name"]
@@ -707,7 +771,7 @@ def render_match_page(
     gone = data["gone"]
     before = phase == PHASE_BEFORE and not gone
     city_label = format_public_name(data['city']) if data.get("city") else ""
-    h1 = f"{m['title']}, {when_text(m['starts_at'])} · {data['arena_name']}"
+    h1 = f"{m['title']}, {when_text(m['starts_at'])} · {data['arena_name'] or 'выезд'}"
 
     actions = ""
     if before:
@@ -718,7 +782,7 @@ def render_match_page(
             else ""
         )
         tickets = _tickets_block(data)
-        if not tickets:
+        if not tickets and not data.get("away_trip"):
             tickets = '<p class="m-note">Билеты — у клуба и на hockey.by.</p>'
         actions = (
             '<div class="m-actions" data-m-before>'
@@ -750,6 +814,7 @@ def render_match_page(
         + f'<div class="m-body" data-m-start="{_e(m["starts_at"].isoformat())}">'
         + f'<h1 class="m-h1">{_e(h1)}</h1>'
         + gone_html
+        + _club_links(data)
         + actions
         + _game_card(data, base_url=base_url, city_id=city_id)
         + middle

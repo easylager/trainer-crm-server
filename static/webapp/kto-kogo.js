@@ -27,6 +27,10 @@
     race: null,
     double: null,
     doubles: [],
+    drafts: {}, // id матча → черновик счёта [дома, в гостях], пока он не ушёл на сервер или это ничья
+    scoreOpen: {}, // id матча → раскрыты степперы в строке дня
+    matchesFailed: false, // список матчей не загрузился (нет сети) — хаб показывает «Повторить»
+    hubReady: false, // хаб прошёл первую загрузку (профиль, матчи, матчи клуба)
     stakes: {}, // id матча → {loading, data}
     movement: {}, // id матча → {loading, data}
     peaks: null,
@@ -81,11 +85,16 @@
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
-    return fetch((isPublic ? '/api/public' : '/api/webapp') + path, opts).then(function (r) {
+    return fetch((isPublic ? '/api/public' : '/api/webapp') + path, opts).catch(function () {
+      // Нет сети: браузер отдаёт «Failed to fetch» по-английски, игроку это показывать нельзя.
+      var offline = new Error('Нет связи. Проверь интернет и попробуй ещё раз');
+      offline.status = 0;
+      throw offline;
+    }).then(function (r) {
       if (r.status === 204) return null;
       return r.json().catch(function () { return {}; }).then(function (data) {
         if (!r.ok) {
-          var e = new Error((data && typeof data.detail === 'string' && data.detail) || 'Не получилось. Попробуйте ещё раз');
+          var e = new Error((data && typeof data.detail === 'string' && data.detail) || 'Не получилось. Попробуй ещё раз');
           e.status = r.status;
           throw e;
         }
@@ -162,6 +171,7 @@
     up: ['M12 19V5', 'M5 12l7-7 7 7'],
     swap: ['M7 4v16', 'M17 20V4', 'M3 8l4-4 4 4', 'M13 16l4 4 4-4'],
     arrow: ['M5 12h14', 'M13 6l6 6-6 6'],
+    chev: ['M9 6l6 6-6 6'],
     check: ['M5 12l5 5 9-10'],
     send: ['M21 4L3 11l6 2 2 6 3-4 5 4z'],
     plus: ['M12 5v14', 'M5 12h14'],
@@ -205,6 +215,32 @@
     return h('span', { class: 'kk-ava' + (cls ? ' ' + cls : ''), style: 'width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.42) + 'px', 'aria-hidden': 'true', text: initials(name) });
   }
 
+  /** Знак игры — шайба: чёрный овал с бликом, чистый CSS. */
+  function puck(cls) {
+    return h('span', { class: 'kk-puck' + (cls ? ' ' + cls : ''), 'aria-hidden': 'true' });
+  }
+
+  var INTRO_MS = 700;
+  var introStart = null;
+
+  /**
+   * Заставка с шайбой: один раз за сессию. Пока она идёт, возвращает, сколько миллисекунд уже прошло
+   * (экран перерисовывается целиком, и анимация должна продолжаться, а не начинаться заново); иначе null.
+   */
+  function introElapsed() {
+    if (introStart === null) {
+      var seen = false;
+      try {
+        seen = sessionStorage.getItem('kk_puck') === '1';
+        sessionStorage.setItem('kk_puck', '1');
+      } catch (e) { /* хранилище недоступно: играем заставку, она короткая */ }
+      introStart = seen ? -1 : Date.now();
+    }
+    if (introStart < 0) return null;
+    var el = Date.now() - introStart;
+    return el < INTRO_MS ? el : null;
+  }
+
   function sticker(text, cls) {
     return h('span', { class: 'kk-tag' + (cls ? ' ' + cls : ''), 'aria-hidden': 'true', text: text });
   }
@@ -222,6 +258,11 @@
     return h('div', { class: 'kk-skel', role: 'status', 'aria-label': 'Загружаем' });
   }
 
+  /** Загрузка не удалась: объясняем и даём повторить, а не оставляем вечную заглушку. */
+  function retryCard(text, onRetry) {
+    return emptyCard('НЕ ЗАГРУЗИЛОСЬ', text || 'Проверь интернет и попробуй ещё раз.', h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: onRetry, text: 'Повторить' }));
+  }
+
   function emptyCard(head, text, cta) {
     return h('section', { class: 'kk-card kk-note' }, [
       h('span', { class: 'kk-lbl', text: head }),
@@ -231,8 +272,8 @@
   }
 
   /** Шторка снизу: тап по затемнению закрывает. */
-  function sheet(title, subtitle, children) {
-    var panel = h('div', { class: 'kk-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title, tabindex: '-1' }, [
+  function sheet(title, subtitle, children, cls) {
+    var panel = h('div', { class: 'kk-sheet' + (cls ? ' ' + cls : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title, tabindex: '-1' }, [
       h('div', { class: 'kk-sheet__head' }, [
         h('span', { class: 'kk-sheet__t' }, [h('span', { class: 'kk-h2', text: title }), subtitle ? h('span', { class: 'kk-sub', text: subtitle }) : null]),
         h('button', { type: 'button', class: 'kk-round kk-round--alt', 'aria-label': 'Закрыть', onclick: closeSheet }, [icon(I.close, 18)]),
@@ -334,6 +375,24 @@
     });
   }
 
+  /**
+   * Ближайшие матчи любимого клуба игрока, дома и в гостях: общий список ограничен по числу и может их не вместить.
+   * Недостающие дописываются в state.matches, чтобы ход и козырь работали с теми же объектами.
+   */
+  function loadClubMatches() {
+    var club = state.profile && state.profile.club && state.profile.club.name;
+    if (!club) return Promise.resolve();
+    return api('GET', '/client/hockey/matches?league=all&club=' + encodeURIComponent(club))
+      .then(function (data) {
+        var have = {};
+        state.matches.forEach(function (m) { have[m.id] = true; });
+        var extra = ((data && data.items) || []).filter(function (m) { return !have[m.id]; });
+        if (!extra.length) return;
+        state.matches = state.matches.concat(extra).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : a.id - b.id; });
+      })
+      .catch(function () {});
+  }
+
   function findMatch(id) {
     for (var i = 0; i < state.matches.length; i++) if (state.matches[i].id === id) return state.matches[i];
     return state.matchCache[id] || null;
@@ -370,7 +429,15 @@
 
   function loadClubs() {
     if (state.clubs) return Promise.resolve();
-    return api('GET', '/client/hockey/clubs').then(function (d) { state.clubs = (d && d.items) || []; });
+    return api('GET', '/client/hockey/clubs').then(function (d) {
+      state.clubs = (d && d.items) || [];
+      state.maxClubs = (d && d.max_clubs) || null;
+    });
+  }
+
+  function loadTermOptions() {
+    if (state.termOptions) return Promise.resolve();
+    return api('GET', '/client/hockey/leagues/term-options').then(function (d) { state.termOptions = d || { items: [] }; });
   }
 
   function loadLeagues(force) {
@@ -390,6 +457,8 @@
 
   function sendPick(match, body, optimistic) {
     var before = match.my_pick;
+    // Ответы могут прийти не по порядку: учитываем только последний отправленный ход.
+    var seq = (match.pickSeq = (match.pickSeq || 0) + 1);
     // Козырь живёт на ходе: смена стороны или счёта его не снимает.
     if (before && before.doubled) optimistic.doubled = true;
     match.my_pick = optimistic;
@@ -397,6 +466,7 @@
     render();
     return api('PUT', '/client/hockey/matches/' + match.id + '/pick', body)
       .then(function (data) {
+        if (match.pickSeq !== seq) return;
         match.my_pick = data && data.my_pick;
         delete state.stakes[match.id];
         haptic('success');
@@ -404,7 +474,7 @@
         if (current() && current().name === 'match') loadStakes(match.id, true).then(render);
       })
       .catch(function (e) {
-        match.my_pick = before;
+        if (match.pickSeq === seq) match.my_pick = before;
         if (e.status === 409) match.open = false;
         toast(e.message);
       });
@@ -505,6 +575,8 @@
 
   // ---------- сборка ----------
 
+  var sheetReturnId = null;
+
   function render() {
     var c = current();
     var sc = c && screens[c.name];
@@ -514,18 +586,28 @@
     var prevSheet = root.querySelector('.kk-sheet');
     if (state.sheet && sc && sc.sheet) {
       var s = sc.sheet(state.sheet, c.args);
-      if (s) nodes.push(s);
+      if (s) {
+        nodes.push(s);
+        sheetReturnId = state.sheet.returnId || null;
+      }
     }
     if (state.toast) nodes.push(h('div', { class: 'kk-toast', role: 'status', text: state.toast }));
     var focusId = document.activeElement && document.activeElement.id;
     root.replaceChildren.apply(root, nodes);
     var panel = root.querySelector('.kk-sheet');
     if (panel && !prevSheet) panel.focus();
-    else if (focusId) {
+    else if (!panel && prevSheet && sheetReturnId) {
+      // Шторка закрылась: фокус возвращается на кнопку, которая её открыла.
+      var opener = document.getElementById(sheetReturnId);
+      sheetReturnId = null;
+      if (opener) opener.focus();
+    } else if (focusId) {
       var again = document.getElementById(focusId);
-      if (again && again.tagName === 'INPUT') {
+      if (again && (again.tagName === 'INPUT' || again.hasAttribute('data-keep'))) {
         again.focus();
-        try { again.setSelectionRange(again.value.length, again.value.length); } catch (e) { /* */ }
+        if (again.tagName === 'INPUT') {
+          try { again.setSelectionRange(again.value.length, again.value.length); } catch (e) { /* */ }
+        }
       }
     }
     if (tg && tg.BackButton) tg.BackButton.show();
@@ -553,7 +635,26 @@
       if (tg.BackButton && tg.BackButton.onClick) tg.BackButton.onClick(back);
     }
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && state.sheet) closeSheet();
+      if (e.key === 'Escape' && state.sheet) return closeSheet();
+      if (e.key !== 'Tab' || !state.sheet) return;
+      // Фокус не уходит из открытой шторки на страницу под ней.
+      var panel = root.querySelector('.kk-sheet');
+      if (!panel) return;
+      var items = Array.prototype.slice.call(panel.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])'));
+      if (!items.length) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      var active = document.activeElement;
+      if (e.shiftKey && (active === first || active === panel)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (!panel.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     });
     applyTheme();
     state.stack = [{ name: 'hub', args: {} }];
@@ -572,9 +673,12 @@
         toast('Напоминания выключены');
       }, function () {});
     }
-    Promise.all([loadMatches(), loadPrefs(), loadRemind()])
+    var loadError = null;
+    // Список матчей не загрузился — всё равно открываем нужный экран: у каждого есть своё «Повторить».
+    Promise.all([loadMatches().catch(function (e) { loadError = e; state.matchesFailed = true; }), loadPrefs(), loadRemind()])
       .then(function () {
         state.loading = false;
+        if (loadError) fail(loadError);
         var target = pickId && findMatch(pickId);
         // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
         if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
@@ -603,11 +707,11 @@
 
   window.KK = {
     M: M, S: S, tg: tg, params: params, state: state, h: h, icon: icon, I: I, CROWN: CROWN, crownIcon: crownIcon, crownTag: crownTag,
-    ava: ava, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard,
+    ava: ava, puck: puck, introElapsed: introElapsed, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard, retryCard: retryCard,
     sheet: sheet, closeSheet: closeSheet, api: api, toast: toast, fail: fail, haptic: haptic, render: render, register: register,
     go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
-    loadMatches: loadMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,
-    loadProfile: loadProfile, loadClubs: loadClubs, loadLeagues: loadLeagues, loadRemind: loadRemind,
+    loadMatches: loadMatches, loadClubMatches: loadClubMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,
+    loadProfile: loadProfile, loadClubs: loadClubs, loadLeagues: loadLeagues, loadRemind: loadRemind, loadTermOptions: loadTermOptions,
     openMatchPage: openMatchPage, sendPick: sendPick, pickSide: pickSide, saveScore: saveScore, toggleTrump: toggleTrump,
     share: share, shareCard: shareCard, copy: copy, boot: boot,
   };

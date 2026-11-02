@@ -72,7 +72,7 @@ describe('скорость (AC-P2…P5)', () => {
   });
 
   it('модели старых зон и строка игры отдельными файлами не грузятся', () => {
-    for (const f of ['hub-collections-model.js', 'hub-ice-today-model.js', 'hub-kto-kogo.js', 'hub-kto-kogo.css', 'kto-kogo-model.js']) {
+    for (const f of ['hub-collections-model.js', 'hub-ice-today-model.js', 'kto-kogo-model.js']) {
       assert.ok(!homeHtml.includes(f), f);
     }
     assert.ok(homeHtml.indexOf('src="hub-home.js') < homeHtml.lastIndexOf('src="client-home-main.js'));

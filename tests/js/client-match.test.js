@@ -30,13 +30,13 @@ function ev(kk, extra) {
 
 describe('строка «КТО КОГО?»', () => {
   it('до хода: без компании — без имён; с компанией — без падежей и рода', () => {
-    assert.deepEqual(M.kkRow(ev({ phase: 'open', company_names: [] })), { title: 'Угадай счёт', sub: 'Точный счёт — 50 очков', href: 'kto-kogo' });
+    assert.deepEqual(M.kkRow(ev({ phase: 'open', company_names: [] })), { title: 'Угадай счёт', sub: 'Точный счёт — 50 очков', href: 'kto-kogo?match=7' });
     assert.equal(M.kkRow(ev({ phase: 'open', company_names: ['Аня', 'Петя'] })).sub, 'Уже с' + NBSP + 'ходом: Аня и' + NBSP + 'Петя · точный — 50');
   });
 
   it('ход сделан → «Твой счёт 3:2 · можно изменить до 19:30» (время Минска)', () => {
     const row = M.kkRow(ev({ phase: 'picked', my_pick: { side: 'home', home_score: 3, away_score: 2 } }));
-    assert.deepEqual(row, { title: 'Твой счёт 3:2', sub: 'Можно изменить до 19:30', href: 'kto-kogo' });
+    assert.deepEqual(row, { title: 'Твой счёт 3:2', sub: 'Можно изменить до 19:30', href: 'kto-kogo?match=7' });
     assert.equal(M.kkRow(ev({ phase: 'picked', my_pick: { side: 'away' } })).title, 'Ты за' + NBSP + 'СКА');
   });
 
@@ -175,5 +175,23 @@ describe('ответ «Ты пойдёшь?» ведёт к следующему
     assert.equal(M.crowdLine({ going: 2 }), '');
     assert.equal(M.crowdLine({ going: 12 }), 'Уже идут 12' + NBSP + 'человек из Glide');
     assert.equal(M.crowdLine({ going: 21 }), 'Уже идёт 21' + NBSP + 'человек из Glide');
+  });
+});
+
+describe('матчи: метки места и «Все матчи» (правила B, D)', () => {
+  it('placeText: метка клуба вместо арены и города, те же слова, что на сайте', () => {
+    assert.equal(M.placeText({ venue: 'Дома · Минск-Арена', arena: 'Минск-Арена', city: 'Минск' }), 'Дома · Минск-Арена');
+    assert.equal(M.placeText({ venue: 'Выезд · Гомель' }), 'Выезд · Гомель');
+    assert.equal(M.placeText({ venue: 'Выезд', external_url: 'https://hcdinamo.by/matches/1/' }), 'Выезд · hcdinamo.by');
+    assert.equal(M.placeText({ arena: 'Чижовка-Арена', city: 'Минск' }), 'Чижовка-Арена · Минск');
+    assert.equal(M.placeText({}), '');
+  });
+
+  it('страница матча ведёт в каталог команды, версии ассетов обеих страниц одинаковы', () => {
+    assert.match(pageHtml, /id="cmClubs"/);
+    assert.match(pageJs, /client-matches\?team=/);
+    const list = fs.readFileSync(path.join(webapp, 'client-matches.html'), 'utf8');
+    const versions = new Set([...pageHtml.matchAll(/\?v=(\d+)/g), ...list.matchAll(/\?v=(\d+)/g)].map((m) => m[1]));
+    assert.equal(versions.size, 1);
   });
 });

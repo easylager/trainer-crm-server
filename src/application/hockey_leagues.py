@@ -122,7 +122,7 @@ def _utc(value: datetime) -> datetime:
 def clean_name(name: str) -> str:
     cleaned = " ".join((name or "").split())
     if not cleaned:
-        raise ValueError("Назовите лигу")
+        raise ValueError("Назови лигу")
     if len(cleaned) > NAME_MAX:
         raise ValueError(f"Название до {NAME_MAX} символов")
     return cleaned
@@ -297,11 +297,11 @@ def build_terms(
     """
     now = _utc(now)
     if scope not in SCOPES:
-        raise InvalidTerms("Выберите, какие матчи считаем")
+        raise InvalidTerms("Выбери, какие матчи считаем")
     names = tuple(dict.fromkeys(c.strip() for c in (clubs or ()) if c and c.strip()))
     if scope == "clubs":
         if not names:
-            raise InvalidTerms("Выберите хотя бы одну команду")
+            raise InvalidTerms("Выбери хотя бы одну команду")
         if len(names) > MAX_CLUBS:
             raise InvalidTerms(f"Не больше {MAX_CLUBS} команд")
         unknown = sorted(set(names) - _known_clubs())
@@ -310,7 +310,7 @@ def build_terms(
     else:
         names = ()
     if term not in TERM_KINDS:
-        raise InvalidTerms("Выберите срок лиги")
+        raise InvalidTerms("Выбери, сколько идёт лига")
     season = season_period(now)
     today = _minsk_midnight(now.astimezone(MINSK_TZ).date())
     if term == "season":
@@ -330,17 +330,47 @@ def build_terms(
         start, end = start.astimezone(timezone.utc), end.astimezone(timezone.utc)
     else:
         if starts_at is None or ends_at is None:
-            raise InvalidTerms("Укажите даты начала и конца")
+            raise InvalidTerms("Укажи даты начала и конца")
         start, end = _as_instant(starts_at).astimezone(timezone.utc), _as_instant(ends_at).astimezone(timezone.utc)
         if start < today:
             raise InvalidTerms("Лига не может начаться в прошлом")
     if end <= start:
         raise InvalidTerms("Конец раньше начала")
     if end <= now:
-        raise InvalidTerms("Срок лиги уже прошёл")
+        raise InvalidTerms("Эти даты уже прошли")
     if end > season.until and term in ("dates", "playoff"):
         raise InvalidTerms("Лига длится не дальше конца сезона")
     return Terms(scope=scope, clubs=names, term_kind=term, starts_at=start, ends_at=end)
+
+
+# Сроки, где корона идёт каждый месяц: ``hockey_races._close_leagues`` награждает по месяцам только сезонную лигу;
+# у остальных одна корона в конце срока.
+MONTHLY_CROWN_TERMS = frozenset({"season"})
+
+
+def term_options(*, now: datetime) -> dict:
+    """Окна всех сроков для экрана «Новая лига»: даты и правило корон берём у сервера, не у клиента.
+
+    Срок, который сейчас создать нельзя (плей-офф уже прошёл), в список не попадает.
+    """
+    now = _utc(now)
+    items = []
+    for term in TERM_KINDS:
+        if term == "dates":
+            continue
+        try:
+            terms = build_terms(scope="all", term=term, now=now)
+        except InvalidTerms:
+            continue
+        items.append(
+            {
+                "term": term,
+                "starts_at": terms.starts_at.isoformat(),
+                "ends_at": terms.ends_at.isoformat(),
+                "monthly_crowns": term in MONTHLY_CROWN_TERMS,
+            }
+        )
+    return {"items": items, "season_ends_at": season_period(now).until.isoformat(), "max_clubs": MAX_CLUBS}
 
 
 def _parse_month(raw: str) -> Period:
@@ -798,6 +828,8 @@ async def friends_moves(
 
 __all__ = [
     "InvalidTerms",
+    "MONTHLY_CROWN_TERMS",
+    "term_options",
     "FEW_MATCHES",
     "Terms",
     "build_terms",

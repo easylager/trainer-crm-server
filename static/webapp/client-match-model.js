@@ -135,18 +135,18 @@
       return {
         title: 'Угадай счёт',
         sub: friends ? friends + ' · точный — 50' : 'Точный счёт — 50 очков',
-        href: 'kto-kogo',
+        href: 'kto-kogo?match=' + m.id,
       };
     }
     if (kk.phase === 'picked') {
-      return { title: cap(moveText(pick, m)), sub: 'Можно изменить до ' + start.hh + ':' + start.mm, href: 'kto-kogo' };
+      return { title: cap(moveText(pick, m)), sub: 'Можно изменить до ' + start.hh + ':' + start.mm, href: 'kto-kogo?match=' + m.id };
     }
     if (kk.phase === 'live') {
       var mine = moveText(pick, m);
       return {
         title: mine ? 'Ходы закрыты · ' + mine : 'Ходы закрыты',
         sub: names.length ? 'Ходы компании: ' + joinNames(names) : 'Итог — после финальной сирены',
-        href: 'kto-kogo',
+        href: 'kto-kogo?match=' + m.id,
       };
     }
     // final
@@ -212,7 +212,14 @@
     { status: 'cant', label: 'Не смогу', toast: 'Записали: не сможешь' },
   ];
 
+  /** Подпись «где»: метка клуба («Дома · Минск-Арена», «Выезд · Гомель») или «арена · город». Те же слова, что на сайте. */
+  function placeText(m) {
+    if (m.venue) return m.venue === 'Выезд' && m.external_url ? 'Выезд · hcdinamo.by' : m.venue;
+    return [m.arena, m.city].filter(Boolean).join(' · ');
+  }
+
   var api = {
+    placeText: placeText,
     plural: plural,
     heroWhen: heroWhen,
     status: status,

@@ -41,7 +41,7 @@ class PicksClosed(Exception):
 
 
 class DoubleUnavailable(Exception):
-    """Козырь нельзя: нет хода на матч или козырь этой недели уже на начавшемся матче."""
+    """Козырь нельзя: нет хода на матч или козырь этой недели уже на матче, где ходы закрыты."""
 
     def __init__(self, reason: str):
         super().__init__(reason)
@@ -144,7 +144,7 @@ def normalize_pick(
             raise ValueError("Счёт и победитель не совпадают")
         return derived, home_score, away_score
     if side not in (SIDE_HOME, SIDE_AWAY):
-        raise ValueError("Выберите команду")
+        raise ValueError("Выбери команду")
     return side, None, None
 
 
@@ -205,7 +205,7 @@ _PLAYER_MATCHES = text(f"""
     SELECT m.id, m.home_team, m.away_team, m.starts_at, m.status, m.league,
            m.home_score, m.away_score, m.decided_in,
            m.live_home_score, m.live_away_score, m.live_at,
-           m.previous_starts_at,
+           m.previous_starts_at, m.arena, m.city,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
            p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
@@ -290,8 +290,9 @@ async def score_finished_matches(session: AsyncSession, *, now: datetime) -> int
     return int(scored)
 
 
-# Козырь недели ×2 (PDEC-031): один на игрока и неделю пн-вс по Минску, ставится на матч с ходом до его
-# начала. Со стартом матча закреплён. Отмена возвращает козырь; перенос оставляет на матче (realign_trumps).
+# Козырь недели ×2 (PDEC-031): один на игрока и неделю пн-вс по Минску, ставится на матч с ходом, пока ход
+# открыт: за минуту до старта он закрывается вместе с ходами, дальше козырь закреплён. Отмена возвращает
+# козырь; перенос оставляет на матче (realign_trumps).
 _WEEK_TRUMPS = text("""
     SELECT p.match_id, m.status, m.starts_at
     FROM hockey_picks AS p
@@ -308,7 +309,8 @@ _SET_TRUMP = text("""
 
 
 def _trump_started(status: str, starts_at: datetime, now: datetime) -> bool:
-    return status != "scheduled" or _utc(now) >= _utc(starts_at)
+    """Козырь закреплён, когда по матчу закрыты ходы: те же 60 секунд до старта, что и у хода."""
+    return not pick_open(status, starts_at, now)
 
 
 async def set_double(session: AsyncSession, *, player_key: int, match_id: int, on: bool, now: datetime) -> int | None:

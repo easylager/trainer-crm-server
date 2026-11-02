@@ -455,39 +455,7 @@
 
   // ---------- кто кого ----------
 
-  // «Кто кого» на Экстралиге ещё нет: строка-подписка «Позвать» по клубу хозяев (срез 5).
-  function paintSubscribe(ev) {
-    var host = $('cmKk');
-    var s = ev.kk_subscribe || {};
-    var card = el('section', 'cm-card cm-kksub');
-    card.setAttribute('aria-label', 'Кто кого');
-    card.appendChild(el('span', 'cm-kk__tag', 'КТО КОГО?'));
-    card.appendChild(el('span', 'cm-kk__title', 'Угадывать Экстралигу'));
-    card.appendChild(el('span', 'cm-kk__sub', s.subscribed ? 'Позовём в боте, как только откроем' : 'Скоро откроем — позвать тебя?'));
-    var b = el('button', 'cm-btn cm-sub' + (s.subscribed ? ' cm-sub--done' : ''), s.subscribed ? 'Позовём' : 'Позвать');
-    b.type = 'button';
-    b.disabled = !!s.subscribed;
-    b.addEventListener('click', function () {
-      haptic();
-      b.disabled = true;
-      api('POST', '/client/hockey/extraliga/subscribe', { club: s.club })
-        .then(function () {
-          state.ev.kk_subscribe = Object.assign({}, s, { subscribed: true });
-          haptic('success');
-          toast('Позовём, когда откроем');
-          paintSubscribe(state.ev);
-        })
-        .catch(function (e) {
-          b.disabled = false;
-          toast(e.status === 403 ? 'Подписаться можно из Telegram' : e.message);
-        });
-    });
-    card.appendChild(b);
-    host.replaceChildren(card);
-  }
-
   function paintKk(ev) {
-    if (isXl(ev)) return paintSubscribe(ev);
     var host = $('cmKk');
     var kk = ev.kk || {};
     if (kk.hidden && state.kk !== 'hidden') {
@@ -616,10 +584,25 @@
     }));
   }
 
+  // «Все матчи · Юность» под командами: тап ведёт в каталог со всеми играми клуба, дома и на выезде.
+  function paintClubs(ev) {
+    var host = $('cmClubs');
+    var links = ev.club_links || [];
+    host.hidden = !links.length;
+    host.replaceChildren.apply(host, links.map(function (c) {
+      var path = 'client-matches?team=' + encodeURIComponent(c.slug);
+      var a = el('a', 'cm-clubs__a', 'Все матчи · ' + c.name + ' ›');
+      a.href = path;
+      a.addEventListener('click', function (e) { e.preventDefault(); haptic(); go(path); });
+      return a;
+    }));
+  }
+
   // ---------- всё вместе ----------
 
   function paint(ev) {
     paintHero(ev);
+    paintClubs(ev);
     paintRsvp(ev);
     paintBuy(ev);
     paintWho(ev);

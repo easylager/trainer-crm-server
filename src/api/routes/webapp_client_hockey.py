@@ -176,6 +176,8 @@ def _match_out(
         "friends": friends,
         "race_final": row["id"] == final_id,
         "league": row.get("league"),
+        "arena": row.get("arena"),
+        "city": row.get("city"),
         "live": _live_out(row),
         # Со стартом матча — счета друзей из моих лиг (TASK-335); до старта сервер их не отдаёт.
         "friend_moves": moves or [],
@@ -382,11 +384,11 @@ async def put_client_hockey_double(
     except LookupError:
         raise HTTPException(status_code=404, detail="Матч не найден") from None
     except PicksClosed:
-        raise HTTPException(status_code=409, detail="Матч уже начался") from None
+        raise HTTPException(status_code=409, detail="Ходы по матчу уже закрыты") from None
     except DoubleUnavailable as exc:
         detail = {
             "no_pick": "Сначала тапни за команду",
-            "used": "Козырь этой недели уже на начавшемся матче",
+            "used": "Козырь этой недели уже сыграл: ходы по его матчу закрыты",
         }[exc.reason]
         raise HTTPException(status_code=409, detail=detail) from None
     await session.commit()

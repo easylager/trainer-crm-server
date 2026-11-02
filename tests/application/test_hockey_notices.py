@@ -188,7 +188,7 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     assert sasha.kind == "result"
     assert sasha.text.startswith("<b>Юность — Шахтер 3:2.</b> В точку: +50.\nТвоё место: 1-е из 4 · ")
     assert by_player[KATYA].text.startswith("<b>Юность — Шахтер 3:2.</b> +20 очков.")
-    assert by_player[VOVA].text.startswith("<b>Юность — Шахтер 3:2.</b> В этот раз мимо.")
+    assert by_player[VOVA].text.startswith("<b>Юность — Шахтер 3:2.</b> Мимо. Бывает.")
     labels = [b["text"] for row in sasha.buttons for b in row]
     assert "Следующий ход" in labels and "Таблица" in labels
     assert sasha.buttons[0][0]["callback_data"] == "kk:n"
@@ -367,7 +367,7 @@ async def test_month_final_message_at_noon_for_top_players(db_session, factory) 
     assert set(by_player) == {SASHA, KATYA, LESHA}  # у Вовы очков нет, он вне тройки
     assert by_player[SASHA].text.startswith(
         "<b>Корона ноября решится сегодня:</b> Юность — Гомель, 19:00, последний матч месяца. "
-        "Ты на 1-м месте, Лёша в 20 очков позади."
+        "Ты на 1-м месте, Лёша позади на 20 очков."
     )
     assert "до короны 30 очков" in by_player[KATYA].text
     assert by_player[SASHA].buttons[0][0]["callback_data"] == f"kk:p:{last}:h"

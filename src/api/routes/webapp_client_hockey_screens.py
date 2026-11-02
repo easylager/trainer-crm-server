@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_hockey import _match_out
-from src.application.hockey_leagues import friends_moves, friends_picks
+from src.application.hockey_leagues import MAX_CLUBS, friends_moves, friends_picks
 from src.application.hockey_screens import clubs_catalog, fan_profile, match_movement
 
 router = APIRouter(tags=["webapp"])
@@ -37,7 +37,7 @@ async def get_client_hockey_clubs(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> dict:
     """Клубы для фильтра таблицы и новой лиги: Динамо-Минск и вся Экстралига."""
-    return {"items": clubs_catalog()}
+    return {"items": clubs_catalog(), "max_clubs": MAX_CLUBS}
 
 
 @router.get("/client/hockey/matches/{match_id}")
@@ -55,8 +55,6 @@ async def get_client_hockey_match(
     friends = await friends_picks(session, player_key=player_key, match_ids=[match_id])
     moves = await friends_moves(session, player_key=player_key, match_ids=[match_id], now=now)
     out = _match_out(data, now=now, friends=friends[match_id], moves=moves[match_id])
-    out["arena"] = data["arena"]
-    out["city"] = data["city"]
     return out
 
 

@@ -13,16 +13,13 @@
   var WEEKDAY_UP = ['ВОСКРЕСЕНЬЕ', 'ПОНЕДЕЛЬНИК', 'ВТОРНИК', 'СРЕДА', 'ЧЕТВЕРГ', 'ПЯТНИЦА', 'СУББОТА'];
   var WEEKDAY_ON = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
   var MONTH_NOM = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
-  var SPELL = { 'Шахтер': 'Шахтёр', 'Могилев': 'Могилёв' };
+  var WEEKDAY_ON_IN = ['в воскресенье', 'в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу'];
 
   function pad(n) {
     return n < 10 ? '0' + n : String(n);
   }
 
-  /** Имя клуба для глаз: в базе «Шахтер» без ё, на экране — «Шахтёр». В запросы уходит имя из базы. */
-  function clubName(name) {
-    return SPELL[name] || name || '';
-  }
+  var clubName = Base.clubName;
 
   var SHORT = { 'Динамо-Минск': 'Динамо', 'Динамо-Молодечно': 'Молодечно', 'Металлург Жлобин': 'Металлург', 'Локомотив Орша': 'Локомотив' };
 
@@ -74,6 +71,11 @@
 
   function timeOnly(iso) {
     return Base.time(Base.minskParts(new Date(iso)));
+  }
+
+  /** Время закрытия ходов по Минску: «19:29» для старта в 19:30. */
+  function closeTime(iso) {
+    return Base.time(Base.minskParts(Base.closesAt(iso)));
   }
 
   function monthEndLabel(key) {
@@ -152,17 +154,30 @@
     return parts;
   }
 
-  function liveWhy(pick, live) {
+  /**
+   * Что сейчас с ходом, словами и без очков: числа очков — только после финальной сирены.
+   * names — {home, away} коротко. «Пока сходится: Динамо впереди. До «в точку» не хватает одной шайбы.»
+   */
+  function liveWhy(pick, live, names) {
     if (!live) return 'Счёт появится, как только его прочитаем';
     if (live.home_score === live.away_score) return 'Ничья на табло — победитель решится в овертайме или по буллитам';
-    var parts = liveParts(pick, live);
-    return parts.length ? 'Сейчас: ' + parts.join(', ') : 'Пока мимо — до сирены всё может поменяться';
+    var leader = live.home_score > live.away_score ? 'home' : 'away';
+    var lead = names && names[leader] ? names[leader] : leader === 'home' ? 'хозяева' : 'гости';
+    if (!pick || pick.side !== leader) return 'Пока мимо — до сирены всё может поменяться';
+    var head = 'Пока сходится: ' + lead + ' впереди.';
+    if (pick.home_score == null || pick.away_score == null) return head;
+    var miss = Math.abs(pick.home_score - live.home_score) + Math.abs(pick.away_score - live.away_score);
+    if (!miss) return head + ' Счёт сейчас — «в точку».';
+    return head + ' До «в точку» не хватает ' + (miss === 1 ? 'одной шайбы' : miss + NBSP + Base.plural(miss, 'шайба', 'шайбы', 'шайб')) + '.';
   }
 
   /** Время опроса счёта: «счёт на 19:42». */
   function liveStamp(live) {
     return live && live.updated_at ? 'счёт на ' + timeOnly(live.updated_at) : '';
   }
+
+  /** Что такое дуэль: hockey_screens._DUELS — очки за один матч (с козырем) против друга из общей лиги; в счёте только победы и поражения. */
+  var DUEL_HINT = 'Дуэль — у\u00a0кого из\u00a0вас двоих больше очков за\u00a0матч. Соперники — друзья из\u00a0твоих лиг.';
 
   /** Дуэль на живом счёте: мои очки против очков друга по тому же табло. */
   function duelLive(mine, friend, live) {
@@ -187,16 +202,40 @@
     return 'tie';
   }
 
-  /** Доли «за хозяев / за гостей» по всем ходам; без ходов — null. */
-  function crowdShare(sides, names, nameOf) {
-    var h = (sides && sides.home) || 0;
-    var a = (sides && sides.away) || 0;
-    if (h + a === 0) return null;
-    var homePct = Math.round((100 * h) / (h + a));
-    var side = h >= a ? 'home' : 'away';
-    var pct = side === 'home' ? homePct : 100 - homePct;
-    return { home: homePct, away: 100 - homePct, text: pct + '% игроков за ' + clubName(nameOf(side)) };
+  var CROWD_NAMED = 3;
+
+  function firstWord(name) {
+    return String(name || '').trim().split(/\s+/)[0] || '';
   }
+
+  function initialOf(name) {
+    return firstWord(name).charAt(0).toUpperCase() || '?';
+  }
+
+  /**
+   * Кто за эту команду, людьми, без процентов. Сначала «Я», потом друзья из лиг (m.friend_moves — приходят со стартом),
+   * остальные — числом «+N» из m.sides. Подпись: «Ты, Аня, Петя и ещё 12».
+   * Возвращает {faces: [{me, initial, name}], more, caption, total}.
+   */
+  function crowdPeople(m, side) {
+    var total = (m.sides && m.sides[side]) || 0;
+    var named = [];
+    if (m.my_pick && m.my_pick.side === side) named.push({ me: true, initial: 'Я', name: 'Ты' });
+    (m.friend_moves || []).forEach(function (f) {
+      if (f.side === side && named.length < CROWD_NAMED) named.push({ me: false, initial: initialOf(f.display_name), name: firstWord(f.display_name) });
+    });
+    total = Math.max(total, named.length);
+    var more = total - named.length;
+    var caption;
+    if (!total) caption = 'Пока никого';
+    else if (!named.length) caption = total + NBSP + Base.plural(total, 'игрок', 'игрока', 'игроков');
+    else if (more > 0) caption = named.map(function (x) { return x.name; }).join(', ') + ' и' + NBSP + 'ещё' + NBSP + more;
+    else if (named.length === 1) caption = named[0].name === 'Ты' ? 'Пока только ты' : named[0].name;
+    else caption = named.slice(0, -1).map(function (x) { return x.name; }).join(', ') + ' и' + NBSP + named[named.length - 1].name;
+    return { faces: named, more: more, caption: caption, total: total };
+  }
+
+  var CROWD_NOTE = 'Кто за кого — видно со стартом матча. Сначала имена из твоих лиг.';
 
   // ---------- козырь недели ----------
 
@@ -204,31 +243,51 @@
    * Состояние козыря на матче. doubles — ответ /matches: недели с козырем {week_start, match_id, locked}.
    * kind: nopick | on | free | other | locked | na.
    */
+  function trumpLabel(on) {
+    return on ? 'Козырь здесь — очки удвоятся' : 'Козырь — очки за этот матч удвоятся';
+  }
+
   function trumpState(m, doubles, nowIso) {
     var mine = m.my_pick;
-    if (!mine) return { kind: 'nopick', label: 'Козырь ×2', note: 'сначала тапни за команду', on: false, usable: false };
+    if (!mine) return { kind: 'nopick', label: trumpLabel(false), note: 'сначала тапни за команду', on: false, usable: false };
     var wk = weekKey(m.starts_at);
-    if (mine.doubled) return { kind: 'on', label: 'Козырь стоит', note: 'на этой неделе больше нет', on: true, usable: true };
+    if (mine.doubled) return { kind: 'on', label: trumpLabel(true), note: 'тапни ещё раз — снимешь', on: true, usable: true };
     var d = (doubles || []).filter(function (x) { return x.week_start === wk; })[0];
-    if (!d) return { kind: 'na', label: 'Козырь ×2', note: 'откроется ближе к неделе матча', on: false, usable: false };
-    if (d.match_id && d.locked) return { kind: 'locked', label: 'Козырь ×2', note: 'козырь этой недели уже сыграл', on: false, usable: false };
-    if (d.match_id && d.match_id !== m.id) return { kind: 'other', label: 'Козырь ×2', note: 'стоит на другом матче недели — тап перенесёт сюда', on: false, usable: true };
+    if (!d) return { kind: 'na', label: trumpLabel(false), note: 'откроется ближе к неделе матча', on: false, usable: false };
+    if (d.match_id && d.locked) return { kind: 'locked', label: trumpLabel(false), note: 'козырь этой недели уже сыграл', on: false, usable: false };
+    if (d.match_id && d.match_id !== m.id) return { kind: 'other', label: trumpLabel(false), note: 'стоит на другом матче недели — тап перенесёт сюда', on: false, usable: true };
     var thisWeek = nowIso && weekKey(nowIso) === wk;
-    return { kind: 'free', label: 'Козырь ×2', note: thisWeek ? 'есть до воскресенья' : 'на этой неделе свободен', on: false, usable: true };
+    return { kind: 'free', label: trumpLabel(false), note: thisWeek ? 'есть до воскресенья' : 'на этой неделе свободен', on: false, usable: true };
   }
 
-  /** Очки хода с учётом козыря: «+20 за победителя · точный счёт — до 50». */
+  /**
+   * Одна строка под кнопкой козыря. Козырь недели один; пока его матч не начался, он переносится
+   * (set_double в hockey_game.py: перенос запрещён только когда матч с козырем уже стартовал).
+   */
+  function trumpHint(m, doubles, matches, nowIso) {
+    var st = trumpState(m, doubles, nowIso);
+    if (st.kind !== 'other') {
+      return st.usable ? 'Один на неделю: очки за этот матч удвоятся.' : st.note.charAt(0).toUpperCase() + st.note.slice(1) + '.';
+    }
+    var wk = weekKey(m.starts_at);
+    var d = (doubles || []).filter(function (x) { return x.week_start === wk; })[0];
+    var other = (matches || []).filter(function (x) { return x.id === d.match_id; })[0];
+    var where = other ? ' на матче ' + clubShort(other.home.name) + ' — ' + clubShort(other.away.name) : ' на другом матче';
+    // Перенос живёт ровно пока открыт ход на тот матч — те же 60 секунд до его старта.
+    var until = other ? ' до ' + closeTime(other.starts_at) : ' до начала его матча';
+    return 'Козырь этой недели —' + where + '. Можно перенести' + until + '.';
+  }
+
+  /** Подпись хода до матча — без чисел очков: «Тап за команду — и ход сделан». */
   function pointsLine(pick) {
-    if (!pick) return 'Тап за команду — и ход сделан';
-    var k = pick.doubled ? 2 : 1;
-    var exact = pick.home_score != null ? ' · до ' + 50 * k + ' за точный счёт' : ' · точный счёт — до ' + 50 * k;
-    return '+' + 20 * k + ' за победителя' + exact + (pick.doubled ? ' · козырь' : '');
+    return pick ? 'Твой ход принят' : 'Тап за команду — и ход сделан';
   }
 
+  /** «Твой ход: 3:2» / «Твой ход: за Динамо-Минск». */
   function questionLine(pick, teamName) {
     if (!pick) return 'Кто победит?';
-    if (pick.home_score != null) return 'Ты за ' + teamName + ' · ' + pick.home_score + ':' + pick.away_score;
-    return 'Ты за ' + teamName;
+    if (pick.home_score != null) return 'Твой ход: ' + pick.home_score + ':' + pick.away_score;
+    return 'Твой ход: за' + NBSP + teamName;
   }
 
   /** «Твои места прямо сейчас»: места по таблице до матча; если так закончится и победитель угадан — с выигрышем. */
@@ -243,18 +302,41 @@
 
   // ---------- матчи дня ----------
 
-  /** Ближайший день с открытым матчем и все матчи этого дня; null — открытых матчей нет. */
-  function dayMatches(list, now) {
-    var open = (list || []).filter(function (m) { return m.open; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
+  var WEEKDAY_SHORT_UP = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
+  var LEAGUE_UP = { khl: 'КХЛ', extraliga: 'ЭКСТРАЛИГА' };
+
+  function leagueUp(m) {
+    return m.league === 'extraliga' ? LEAGUE_UP.extraliga : LEAGUE_UP.khl;
+  }
+
+  /** «СЕГОДНЯ, ВТ 3 НОЯБРЯ» · «ЗАВТРА, СР 4 НОЯБРЯ» · «ЧТ 5 НОЯБРЯ». */
+  function dayLabelUp(iso, now) {
+    var p = Base.minskParts(new Date(iso));
+    var diff = Base.dayIndex(p) - Base.dayIndex(Base.minskParts(now || new Date()));
+    var date = WEEKDAY_SHORT_UP[p.wd] + ' ' + p.d + ' ' + Base.MONTHS[p.m - 1].toUpperCase();
+    return (diff === 0 ? 'СЕГОДНЯ, ' : diff === 1 ? 'ЗАВТРА, ' : '') + date;
+  }
+
+  /**
+   * Ближайший день с открытым матчем и все матчи этого дня; null — открытых матчей нет.
+   * exceptId — матч, который уже показан в блоке «Твоя команда»: из дня он выпадает, а если он был
+   * единственным открытым, день считается по следующему матчу.
+   */
+  function dayMatches(list, now, exceptId) {
+    var rest = (list || []).filter(function (m) { return m.id !== exceptId; });
+    var open = rest.filter(function (m) { return m.open; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
     if (!open.length) return null;
     var first = dayKey(open[0].starts_at);
-    var items = (list || [])
+    var items = rest
       .filter(function (m) { return m.status !== 'cancelled' && dayKey(m.starts_at) === first; })
       .sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : a.id - b.id; });
     var openItems = items.filter(function (m) { return m.open; });
     var made = openItems.filter(function (m) { return m.my_pick; }).length;
     var wd = Base.minskParts(new Date(open[0].starts_at)).wd;
     var today = first === dayKey((now || new Date()).toISOString());
+    var leagues = {};
+    items.forEach(function (m) { leagues[m.league === 'extraliga' ? 'extraliga' : 'khl'] = true; });
+    var names = Object.keys(leagues);
     return {
       day: first,
       today: today,
@@ -262,14 +344,83 @@
       items: items,
       total: openItems.length,
       made: made,
-      heading: (today ? 'МАТЧИ ДНЯ · ' : 'БЛИЖАЙШИЕ МАТЧИ · ') + WEEKDAY_UP[wd],
+      mixed: names.length > 1,
+      heading: (names.length > 1 ? 'МАТЧИ' : LEAGUE_UP[names[0]]) + ' · ' + dayLabelUp(open[0].starts_at, now),
     };
+  }
+
+  // ---------- хаб: «Твоя команда» ----------
+
+  /**
+   * Матч для большой карточки хаба. С клубом — ближайший открытый матч клуба, дома или в гостях.
+   * Без клуба («Все») — матч дня: ближайший открытый матч Динамо, иначе первый открытый. Нет матча — null.
+   */
+  function heroMatch(list, club, now) {
+    var open = (list || []).filter(function (m) { return m.open && m.status !== 'cancelled'; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : a.id - b.id; });
+    if (club) {
+      var own = open.filter(function (m) { return m.home_team === club || m.away_team === club; })[0];
+      return own ? { match: own, tag: 'ТВОЯ КОМАНДА' } : null;
+    }
+    var dinamo = open.filter(function (m) { return m.home_team === Base.DINAMO || m.away_team === Base.DINAMO; })[0];
+    var pick = dinamo || open[0];
+    return pick ? { match: pick, tag: 'МАТЧ ДНЯ' } : null;
+  }
+
+  /** «ЧТ 5 НОЯБРЯ · 19:30 · КХЛ · МИНСК-АРЕНА». */
+  function heroMeta(m) {
+    var p = Base.minskParts(new Date(m.starts_at));
+    var place = m.arena || m.city || '';
+    return [WEEKDAY_SHORT_UP[p.wd] + ' ' + p.d + ' ' + Base.MONTHS[p.m - 1].toUpperCase(), Base.time(p), leagueUp(m), place.toUpperCase()].filter(Boolean).join(' · ');
+  }
+
+  /** «Можно менять до 19:29 в четверг»: время закрытия ходов, а не старта. */
+  function changeUntil(iso, now) {
+    var p = Base.minskParts(Base.closesAt(iso));
+    var diff = Base.dayIndex(p) - Base.dayIndex(Base.minskParts(now || new Date()));
+    var day = diff === 0 ? 'сегодня' : diff === 1 ? 'завтра' : diff > 1 && diff < 7 ? WEEKDAY_ON_IN[p.wd] : p.d + NBSP + Base.MONTHS[p.m - 1];
+    return 'Можно менять до ' + Base.time(p) + ' ' + day;
+  }
+
+  /** Черновик счёта после тапа −/+ (idx 0 — хозяева, 1 — гости). Основа: черновик, иначе счёт хода, иначе 0:0. */
+  function stepScore(mine, draft, idx, delta) {
+    var base = draft || (mine && mine.home_score != null && mine.away_score != null ? [mine.home_score, mine.away_score] : [0, 0]);
+    var next = [base[0], base[1]];
+    next[idx] = Base.clampGoals(next[idx] + delta);
+    return next;
+  }
+
+  /**
+   * Ход так, как его видит игрок сейчас: серверный ход плюс черновик счёта.
+   * Счёт с перевесом переключает сторону; ничья — сторона прежняя, tie: true, отправлять нечего.
+   */
+  function effectivePick(mine, draft) {
+    var side = (mine && mine.side) || null;
+    var score = draft || (mine && mine.home_score != null && mine.away_score != null ? [mine.home_score, mine.away_score] : null);
+    var tie = !!score && score[0] === score[1];
+    if (score && !tie) side = score[0] > score[1] ? 'home' : 'away';
+    return { side: side, score: score, tie: tie };
+  }
+
+  /** Тап по кнопке команды: ход меняется, только если это другая сторона (счёт тогда сбрасывается). */
+  function sideTapSends(mine, draft, side) {
+    return effectivePick(mine, draft).side !== side;
+  }
+
+  var TIE_LINE = 'Ничьей в хоккее не бывает — поправь счёт';
+
+  /** Итог хода под степперами: {text, sticker}. Без стороны — null. Без чисел очков: козырь — стикером «с козырем». */
+  function moveSummary(eff, doubled, sideName) {
+    if (!eff.side) return null;
+    if (eff.tie) return { text: TIE_LINE, sticker: '' };
+    var sticker = doubled ? 'с козырем' : '';
+    if (eff.score) return { text: 'Твой ход: ' + eff.score[0] + ':' + eff.score[1], sticker: sticker };
+    return { text: 'Твой ход: за' + NBSP + sideName, sticker: sticker };
   }
 
   function dayCount(made, total) {
     if (!total) return '';
     if (total === 1) return made ? 'готово' : 'ход не сделан';
-    return made === total ? 'все ' + total + ' — готово' : made + ' из ' + total;
+    return made === total ? 'все ходы сделаны' : made + ' из ' + total;
   }
 
   /** Экстралига отдыхает: в ближайшие дни её матчей нет, а следующий — позже (или календаря ещё нет). */
@@ -297,6 +448,44 @@
     return cap(Base.verdict(points == null ? 0 : points).head);
   }
 
+  /** После промаха: «Бывает — следующий матч Динамо — Торпедо в субботу.» Нет матча — отсылка к хабу. */
+  function missLine(next, now) {
+    if (!next) return 'Бывает. Следующий ход — в хабе.';
+    var day = Base.whenLabel(next.starts_at, now).split(',')[0];
+    return 'Бывает — следующий матч ' + clubShort(next.home.name) + ' — ' + clubShort(next.away.name) + ' ' + day + '.';
+  }
+
+  /** Кнопка «Следующий ход · сб, Динамо — Торпедо». */
+  function nextTurnLabel(next) {
+    if (!next) return 'Следующий ход';
+    var wd = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][Base.minskParts(new Date(next.starts_at)).wd];
+    return 'Следующий ход · ' + wd + ', ' + clubShort(next.home.name) + ' — ' + clubShort(next.away.name);
+  }
+
+  /** Лучшее место игрока среди лиг в движении после матча: «3-е место в «Офисе»». Нет лиг — null. */
+  function bestLeagueChip(items) {
+    var best = null;
+    (items || []).forEach(function (x) {
+      if (x.kind === 'league' && x.rank_after != null && (!best || x.rank_after < best.rank_after)) best = x;
+    });
+    return best ? best.rank_after + '-е место в\u00a0лиге «' + best.league_name + '»' : null;
+  }
+
+  /** Шторка «Как считаются очки»: числа берём из POINTS, слова — из макета. */
+  function pointsRules() {
+    var P = Base.POINTS;
+    return {
+      rows: [
+        { value: String(P.winner), text: 'Угадал, кто победит.', gold: false },
+        { value: '+' + P.diff, text: 'За каждое попадание в счёт: разница шайб, голы хозяев, голы гостей.', gold: false },
+        { value: String(P.exact), text: 'Счёт угадан целиком — это «в точку».', gold: true },
+      ],
+      trumpTitle: 'Козырь',
+      trumpText: 'Один на неделю. Положи его на матч, в котором уверен, — очки за него удвоятся. Передумал — перенеси на другой, пока тот не начался.',
+      foot: 'Ход можно менять до минуты перед стартом. Очки приходят после финальной сирены.',
+    };
+  }
+
   /** Строки «куда сдвинулась» по ответу /movement. */
   function movementRows(items) {
     return (items || []).map(function (x) {
@@ -320,12 +509,11 @@
     m.sort(function (a, b) { return (a.club ? 0 : 1) - (b.club ? 0 : 1); });
     var x = m[0];
     var month = x.period_title;
-    var who = x.club ? clubName(x.club) : 'всех';
-    var matches = x.left + NBSP + Base.plural(x.left, 'матч', 'матча', 'матчей');
-    if (x.crown && x.left > 0) return 'Корона месяца (' + month + ') твоя, если удержишь до ' + endLabel(x.ends_at) + ': впереди ещё ' + matches + ' ' + (x.club ? 'у ' + clubName(x.club) : 'в срезе') + '.';
-    if (x.crown) return 'Это был последний матч среза «' + sliceLabel(x.club, month) + '»: корона появится после проверки итога.';
-    if (x.left > 0) return 'До короны месяца (' + month + ') ' + Base.points(x.to_crown || 0) + ': впереди ещё ' + matches + ' ' + (x.club ? 'у ' + clubName(x.club) : 'в срезе') + '.';
-    return 'Срез «' + sliceLabel(x.club, month) + '» отыгран' + (who ? '' : '') + '.';
+    var matches = x.left + NBSP + Base.plural(x.left, 'матч', 'матча', 'матчей') + (x.club ? ' команды ' + clubName(x.club) : '');
+    if (x.crown && x.left > 0) return 'Корона месяца (' + month + ') твоя, если удержишь до ' + endLabel(x.ends_at) + ': впереди ещё ' + matches + '.';
+    if (x.crown) return 'Это был последний матч месяца в таблице «' + sliceLabel(x.club, month) + '»: корона появится после проверки итога.';
+    if (x.left > 0) return 'До короны месяца (' + month + ') ' + Base.points(x.to_crown || 0) + ': впереди ещё ' + matches + '.';
+    return 'Матчи месяца в таблице «' + sliceLabel(x.club, month) + '» сыграны.';
   }
 
   // ---------- таблица ----------
@@ -411,14 +599,14 @@
     return {
       head: n ? label + ' — ' + n + NBSP + Base.plural(n, 'игрок', 'игрока', 'игроков') + ' с очками' : label + ' — пока никого',
       body: 'Таблицу видно честно, а корона появится, когда очки будут хотя бы у троих.',
-      invite: club ? 'Позвать болельщиков ' + clubName(club) : 'Позвать друзей',
+      invite: 'Создать лигу и' + NBSP + 'позвать',
     };
   }
 
   /** Плашка вместо строки «ты», если в срезе нет моих ходов. */
   function noMeLine(club, periodKey, nowIso) {
     var closed = periodKey !== 'season' && periodKey !== monthKey(nowIso);
-    if (closed) return 'В этом срезе у тебя не было ходов — загляни в другой период';
+    if (closed) return 'В этом периоде у тебя не было ходов — загляни в другой';
     return 'Сделай первый ход' + (club ? ' на матч ' + clubName(club) : '') + ' — и появишься в этой таблице';
   }
 
@@ -430,7 +618,7 @@
   function peakTile(p, crowns) {
     var isMonth = p.period !== 'season';
     var crowned = isMonth && (crowns || []).some(function (c) { return c.kind === 'month' && c.period === p.period && (c.club || null) === (p.club || null); });
-    var note = crowned ? 'корона твоя' : p.rank === 1 ? 'лидер среза' : 'из ' + spaced(p.players);
+    var note = crowned ? 'корона твоя' : p.rank === 1 ? 'ты первый' : 'из ' + spaced(p.players);
     return { rank: String(p.rank), label: sliceLabel(p.club, p.period_title), note: note, gold: crowned || p.rank === 1 };
   }
 
@@ -474,8 +662,9 @@
     return body;
   }
 
-  function formError(form) {
-    if (form.scope === 'pick' && !form.clubs.length) return 'Нужна команда';
+  /** Ошибки набора команд и окон — то, что мешает спросить у сервера «Как будет». */
+  function termsError(form) {
+    if (form.scope === 'pick' && !form.clubs.length) return 'Выбери команду';
     if (form.term === 'dates') {
       if (!form.startsOn || !form.endsOn) return 'Укажи даты';
       if (form.endsOn <= form.startsOn) return 'Конец раньше начала';
@@ -483,23 +672,68 @@
     return '';
   }
 
-  /** «Как будет»: что считаем, когда и сколько матчей. preview — ответ terms-preview или null. */
+  /** Текст кнопки по состоянию формы: поля экрана идут сверху вниз — название, команды, время. */
+  function formError(form) {
+    if (!(form.name || '').trim()) return 'Назови лигу';
+    return termsError(form);
+  }
+
+  /**
+   * Сроки экрана «Новая лига» по ответу term-options: даты и правило корон — с сервера,
+   * у клиента своего календаря нет. Последней строкой всегда «Свои даты» — окон у неё нет,
+   * игрок выбирает сам, не дальше конца сезона.
+   */
+  function termChoices(options) {
+    var items = (options && options.items) || [];
+    var TITLES = { season: 'До конца сезона', weeks4: '4 недели', playoff: 'Плей-офф' };
+    var out = items.map(function (it) {
+      var range =
+        it.term === 'season' || it.term === 'month'
+          ? 'по ' + endLabel(it.ends_at)
+          : it.term === 'weeks4'
+            ? 'с сегодня по ' + endLabel(it.ends_at)
+            : dateLabel(it.starts_at) + ' — ' + endLabel(it.ends_at);
+      return {
+        term: it.term,
+        label: TITLES[it.term] || periodLabel(monthKey(it.starts_at)),
+        sub: range + ' · ' + (it.monthly_crowns ? 'корона каждый месяц' : 'одна корона в конце'),
+      };
+    });
+    out.push({ term: 'dates', label: 'Свои даты', sub: options && options.season_ends_at ? 'не дальше ' + endLabel(options.season_ends_at) : '' });
+    return out;
+  }
+
+  /** Одна строка «что считаем» для карточки «Как будет». */
+  function scopePhrase(form) {
+    if (form.scope === 'dinamo') return 'Матчи Динамо-Минск';
+    if (form.scope === 'extraliga') return 'Матчи всей Экстралиги — все клубы Беларуси, без Динамо';
+    if (form.scope === 'all') return 'Матчи Динамо-Минск и всей Экстралиги';
+    return (form.clubs || []).length ? 'Матчи: ' + form.clubs.map(clubName).join(', ') : 'Выбери хотя бы одну команду';
+  }
+
+  /**
+   * Карточка «Как будет» на экране «Новая лига». preview — ответ terms-preview или null:
+   * окно дат, число матчей и правило корон честно приходят с сервера.
+   */
   function termsSummary(form, preview) {
-    var what;
-    if (form.scope === 'all') what = 'Все матчи: Динамо-Минск и вся Экстралига';
-    else if (form.scope === 'extraliga') what = 'Вся Экстралига, без Динамо-Минск';
-    else if (form.scope === 'dinamo') what = 'Только матчи Динамо-Минск в КХЛ';
-    else what = form.clubs.length ? 'Матчи: ' + scopeText('clubs', form.clubs).replace(/, /g, ', ') : 'Выбери хотя бы одну команду';
+    var name = (form.name || '').trim();
     var when = '';
-    var few = false;
+    var crowns = '';
+    var few = '';
     if (preview && preview.ends_at) {
       var count = preview.matches_in_term;
-      what += ' · ещё ' + count + NBSP + Base.plural(count, 'матч', 'матча', 'матчей') + ' в срок';
-      var rolling = form.term === 'season' || form.term === 'dates' || form.term === 'playoff';
-      when = 'С ' + dateLabel(preview.starts_at) + ' по ' + endLabel(preview.ends_at) + (rolling ? ' · корона каждый месяц и чемпион лиги в конце' : ' · корона победителю в конце');
-      few = !!preview.few_matches;
+      when = 'С ' + dateLabel(preview.starts_at) + ' по ' + endLabel(preview.ends_at) + ' · впереди ' + count + NBSP + Base.plural(count, 'матч', 'матча', 'матчей');
+      crowns = preview.monthly_crowns ? 'Корона лидеру каждого месяца и чемпион лиги в конце.' : 'Корона чемпиону в конце.';
+      if (preview.few_matches) few = 'Матчей мало — таблица будет почти пустой. Можно взять время подлиннее.';
     }
-    return { what: what, when: when, few: few ? 'Матчей в сроке мало — таблица будет почти пустой. Можно взять срок подлиннее.' : '' };
+    return {
+      title: name ? '«' + name + '»' : '',
+      what: scopePhrase(form),
+      when: when,
+      crowns: crowns,
+      few: few,
+      note: 'Кто вступит позже — считаем с того дня, как вступил.',
+    };
   }
 
   // ---------- лига изнутри ----------
@@ -514,7 +748,7 @@
       return base + ' Твоё место ' + me.rank + ', до первого ' + Base.points(Math.max(0, leaderPoints - me.points)) + '.';
     }
     if (l.term === 'season' || l.term === 'dates' || l.term === 'playoff') return 'Чемпион лиги — ' + endLabel(l.ends_at) + '. Месячные короны копятся рядом с именем.';
-    return 'Корона лиги — ' + endLabel(l.ends_at) + ', в конце срока.';
+    return 'Корона лиги — ' + endLabel(l.ends_at) + ', когда лига закончится.';
   }
 
   function leagueMeta(l, members) {
@@ -522,8 +756,8 @@
   }
 
   function inviteText(name, l) {
-    var what = l ? scopeText(l.scope, l.clubs) : 'Динамо-Минск';
-    return 'Угадываем матчи (' + what + ') в лиге «' + name + '». Тапни за команду — посмотрим, кто кого.';
+    var what = l && l.scope !== 'all' ? ': ' + scopeText(l.scope, l.clubs) : l ? '' : ': Динамо-Минск';
+    return 'Угадываем хоккейные матчи' + what + ' — лига «' + name + '». Тапни за команду, посмотрим, кто кого.';
   }
 
   // ---------- карточка болельщика ----------
@@ -537,8 +771,8 @@
 
   function seasonTitleLine(p, seasonLabelText) {
     var lines = [];
-    if (p.overall) lines.push({ rank: p.overall.rank, label: 'Знаток сезона · все матчи', note: p.overall.to_first ? 'до 1-го ' + p.overall.to_first : 'впереди', total: p.overall.players });
-    if (p.club_place && p.club) lines.push({ rank: p.club_place.rank, label: 'Знаток ' + clubName(p.club.name) + ' ' + seasonLabelText, note: p.club_place.to_first ? 'до 1-го ' + p.club_place.to_first : 'впереди', total: p.club_place.players });
+    if (p.overall) lines.push({ rank: p.overall.rank, label: 'Знаток сезона · все матчи', note: p.overall.to_first ? 'до 1-го: ' + Base.points(p.overall.to_first) : 'впереди', total: p.overall.players });
+    if (p.club_place && p.club) lines.push({ rank: p.club_place.rank, label: 'Знаток ' + clubName(p.club.name) + ' ' + seasonLabelText, note: p.club_place.to_first ? 'до 1-го: ' + Base.points(p.club_place.to_first) : 'впереди', total: p.club_place.players });
     return lines;
   }
 
@@ -564,12 +798,30 @@
     liveStamp: liveStamp,
     duelLive: duelLive,
     duelPill: duelPill,
+    DUEL_HINT: DUEL_HINT,
     duelFinal: duelFinal,
-    crowdShare: crowdShare,
+    crowdPeople: crowdPeople,
+    CROWD_NOTE: CROWD_NOTE,
+    TIE_LINE: TIE_LINE,
+    trumpLabel: trumpLabel,
+    missLine: missLine,
+    nextTurnLabel: nextTurnLabel,
+    bestLeagueChip: bestLeagueChip,
+    pointsRules: pointsRules,
     trumpState: trumpState,
+    trumpHint: trumpHint,
+    closeTime: closeTime,
     pointsLine: pointsLine,
     questionLine: questionLine,
     dayMatches: dayMatches,
+    heroMatch: heroMatch,
+    heroMeta: heroMeta,
+    changeUntil: changeUntil,
+    stepScore: stepScore,
+    effectivePick: effectivePick,
+    sideTapSends: sideTapSends,
+    moveSummary: moveSummary,
+    dayLabelUp: dayLabelUp,
     dayCount: dayCount,
     pauseInfo: pauseInfo,
     nextMatch: nextMatch,
@@ -592,7 +844,10 @@
     termText: termText,
     leagueSub: leagueSub,
     termsBody: termsBody,
+    termsError: termsError,
     formError: formError,
+    termChoices: termChoices,
+    scopePhrase: scopePhrase,
     termsSummary: termsSummary,
     leagueCrownLine: leagueCrownLine,
     leagueMeta: leagueMeta,

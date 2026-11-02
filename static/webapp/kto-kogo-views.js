@@ -118,6 +118,7 @@
       ]);
     });
     if (list.length > 3) shown.push(h('span', { class: 'kk-st kk-st--mute', text: 'и ещё ' + (list.length - 3) }));
+    shown.push(h('span', { class: 'kk-sub', text: S.DUEL_HINT }));
     return h('div', { class: 'kk-block' }, shown);
   }
 
@@ -126,11 +127,12 @@
     var colors = M.pairColors(m.home, m.away);
     var trump = S.trumpState(m, state.doubles, new Date().toISOString());
     var team = mine ? name(m[mine.side]) : '';
-    var pts = mine ? S.pointsLine(mine) : S.pointsLine(null) + '. Меняй до ' + S.timeOnly(m.starts_at) + '.';
+    var sub = mine ? S.changeUntil(m.starts_at, new Date()) : S.pointsLine(null) + '. Ходы — до\u00a0' + S.closeTime(m.starts_at) + '.';
     var center = h('div', { class: 'kk-hero__mid' }, [
       h('span', { class: 'kk-hero__time', text: S.timeOnly(m.starts_at) }),
       h('span', { class: 'kk-hero__day', text: M.whenLabel(m.starts_at, new Date()).split(',')[0] }),
     ]);
+    var doubled = !!(mine && mine.doubled);
     return [
       hero(m, center),
       h('main', { class: 'kk-main' }, [
@@ -138,18 +140,19 @@
         movedNote(m),
         h('section', { class: 'kk-card kk-card--play' }, [
           K.sticker(m.race_final ? 'ФИНАЛ МЕСЯЦА' : mine ? 'ХОД СДЕЛАН' : 'КТО КОГО?'),
-          h('div', { class: 'kk-q' }, [h('span', { class: 'kk-q__t', text: S.questionLine(mine, team) }), h('span', { class: 'kk-sub', text: pts })]),
-          h('div', { class: 'kk-two' }, [sideButton(m, 'home', colors, mine), sideButton(m, 'away', colors, mine)]),
-          h('div', { class: 'kk-two' }, [
-            h('button', { type: 'button', class: 'kk-mini', onclick: function () { openScore(m); } }, [mine && mine.home_score != null ? 'Счёт ' + mine.home_score + ':' + mine.away_score : 'Точный счёт']),
-            h('button', {
-              type: 'button',
-              class: 'kk-mini' + (trump.on ? ' is-gold' : '') + (trump.usable ? '' : ' is-off'),
-              'aria-pressed': trump.on ? 'true' : 'false',
-              onclick: function () { K.toggleTrump(m); },
-            }, [icon(I.bolt, 16), trump.label]),
+          h('div', { class: 'kk-q' }, [
+            h('span', { class: 'kk-q__t' }, [S.questionLine(mine, team), doubled ? h('span', { class: 'kk-tag kk-tag--inline', text: 'с козырем' }) : null]),
+            h('span', { class: 'kk-sub', text: sub }),
           ]),
-          h('span', { class: 'kk-sub kk-sub--tight', text: 'Козырь: один на неделю, очки за матч ×2 · ' + trump.note }),
+          h('div', { class: 'kk-two' }, [sideButton(m, 'home', colors, mine), sideButton(m, 'away', colors, mine)]),
+          h('button', { type: 'button', class: 'kk-mini kk-mini--wide', onclick: function () { openScore(m); } }, [mine && mine.home_score != null ? 'Счёт ' + mine.home_score + ':' + mine.away_score + ' · «в точку»' : 'Угадать точный счёт · «в точку»']),
+          h('button', {
+            type: 'button',
+            class: 'kk-mini kk-mini--wide' + (trump.on ? ' is-gold' : '') + (trump.usable ? '' : ' is-off'),
+            'aria-pressed': trump.on ? 'true' : 'false',
+            onclick: function () { K.toggleTrump(m); },
+          }, [icon(I.bolt, 16), trump.label]),
+          h('span', { class: 'kk-sub kk-sub--tight', text: S.trumpHint(m, state.doubles, state.matches, new Date().toISOString()) }),
           stakesBlock(m),
           friendsBlock(m),
         ]),
@@ -184,8 +187,8 @@
       ]);
     }
     var hint = tie
-      ? 'Ничьих нет: после овертайма или буллитов у победителя на одну шайбу больше.'
-      : 'Победитель по счёту — ' + name(m[s.home > s.away ? 'home' : 'away']) + '. Очки за шайбы каждой команды считаются, даже если победителя не угадаешь. ' + M.scoreHint(s.home, s.away) + '.';
+      ? S.TIE_LINE + ': после овертайма или буллитов у победителя на одну шайбу больше.'
+      : 'Победитель по счёту — ' + name(m[s.home > s.away ? 'home' : 'away']) + '. Шайбы каждой команды считаются, даже если победитель не угадан. ' + M.scoreHint(s.home, s.away) + '.';
     return K.sheet('Точный счёт', null, [
       h('div', { class: 'kk-two' }, [stepper('home', 'home'), stepper('away', 'away')]),
       h('span', { class: 'kk-sub', text: hint }),
@@ -201,7 +204,7 @@
     var review = m.status === 'review';
     var colors = M.pairColors(m.home, m.away);
     var stamp = S.liveStamp(live);
-    var points = live && mine ? S.livePoints(mine, live) : null;
+    var points = live && mine ? S.livePoints(mine, live) : null; // только для мест в таблицах, на экране не показываем
     var score = h('span', { class: 'kk-score', 'aria-live': 'polite', text: live ? live.home_score + ' : ' + live.away_score : '– : –' });
     var out = [
       h('main', { class: 'kk-main' }, [
@@ -225,16 +228,15 @@
       var bg = colors[mine.side];
       body.appendChild(h('section', { class: 'kk-card kk-card--hero', style: 'background:' + bg }, [
         K.sticker('ТЫ ЗА ' + name(m[mine.side]).toUpperCase() + (mine.home_score != null ? ' · ' + mine.home_score + ':' + mine.away_score : '')),
-        h('span', { class: 'kk-lbl kk-lbl--on', text: 'ЕСЛИ ТАК И ЗАКОНЧИТСЯ' }),
-        h('span', { class: 'kk-big', text: points == null ? '—' : '+' + points }),
-        h('span', { class: 'kk-hero-tx', text: S.liveWhy(mine, live) }),
+        mine.doubled ? h('span', { class: 'kk-lbl kk-lbl--on', text: 'С КОЗЫРЕМ' }) : null,
+        h('span', { class: 'kk-hero-tx kk-hero-tx--lg', text: S.liveWhy(mine, live, { home: name(m.home), away: name(m.away) }) }),
       ]));
       body.appendChild(placesBlock(m, points));
       body.appendChild(duelsBlock(m));
     } else {
       body.appendChild(K.emptyCard('ХОДЫ ЗАКРЫТЫ', 'Этот матч без твоего хода. Следующий — в хабе игры.'));
     }
-    body.appendChild(crowdBlock(m, colors));
+    body.appendChild(crowdBlock(m));
     var pageLink = matchPageLink(m);
     if (pageLink) body.appendChild(pageLink);
     return out;
@@ -270,23 +272,39 @@
     if (!moves.length || !m.live) return h('span');
     return h('div', { class: 'kk-sec' }, [
       h('span', { class: 'kk-lbl', text: 'ДУЭЛИ' }),
+      h('span', { class: 'kk-sub', text: S.DUEL_HINT }),
       h('div', { class: 'kk-rows' }, moves.slice(0, 5).map(function (f) {
         var d = S.duelLive(mine, f, m.live);
-        var scoreText = d.me == null || d.they == null ? '—' : d.me + ' : ' + d.they;
         return h('div', { class: 'kk-mv' }, [
-          h('span', { class: 'kk-mv__l', text: 'с ' + f.display_name + ' · за ' + name(m[f.side]) }),
-          h('span', { class: 'kk-mv__r' }, [h('b', { text: scoreText }), h('span', { class: 'kk-pill' + (d.state === 'lead' ? ' kk-pill--gold' : ''), text: d.label })]),
+          h('span', { class: 'kk-mv__l', text: f.display_name + ' · за ' + name(m[f.side]) }),
+          h('span', { class: 'kk-mv__r' }, [h('span', { class: 'kk-pill' + (d.state === 'lead' ? ' kk-pill--gold' : ''), text: d.label })]),
         ]);
       })),
     ]);
   }
 
-  function crowdBlock(m, colors) {
-    var c = S.crowdShare(m.sides, null, function (side) { return m[side].name; });
-    if (!c) return h('span');
-    return h('div', { class: 'kk-sec' }, [
-      h('div', { class: 'kk-bar', 'aria-hidden': 'true' }, [h('span', { style: 'width:' + c.home + '%;background:' + colors.home }), h('span', { style: 'width:' + c.away + '%;background:' + colors.away })]),
-      h('span', { class: 'kk-sub', text: c.text + ' · проценты открылись со стартом матча' }),
+  /** «Кто за кого»: по команде строка с логотипом и людьми. Одноцветно, без процентов. */
+  function crowdBlock(m) {
+    if (!((m.sides && (m.sides.home || m.sides.away)) || (m.friend_moves || []).length || m.my_pick)) return h('span');
+    function row(side) {
+      var c = S.crowdPeople(m, side);
+      var faces = c.faces.map(function (f) {
+        return h('span', { class: 'kk-cf' + (f.me ? ' is-me' : ''), text: f.initial });
+      });
+      if (c.more > 0) faces.push(h('span', { class: 'kk-cf kk-cf--more', text: '+' + c.more }));
+      return h('div', { class: 'kk-crowd' }, [
+        h('div', { class: 'kk-crowd__h' }, [K.logoDisc(m[side], 28), h('b', { text: 'За' + '\u00a0' + name(m[side]) })]),
+        h('div', { class: 'kk-crowd__p' }, [
+          faces.length ? h('span', { class: 'kk-cfs', 'aria-hidden': 'true' }, faces) : null,
+          h('span', { class: 'kk-crowd__c', text: c.caption }),
+        ]),
+      ]);
+    }
+    return h('section', { class: 'kk-sec', 'aria-label': 'Кто за кого' }, [
+      h('h2', { class: 'kk-lbl kk-lbl--h', text: 'КТО ЗА КОГО' }),
+      row('home'),
+      row('away'),
+      h('span', { class: 'kk-sub', text: S.CROWD_NOTE }),
     ]);
   }
 
@@ -308,10 +326,10 @@
     if (!done.length || mineTotal == null) return null;
     var f = done[0];
     var res = S.duelFinal(mineTotal, f.points);
-    var head = res === 'win' ? 'Дуэль с ' + f.display_name + ' — твоя' : res === 'lose' ? 'Дуэль с ' + f.display_name + ' — не твоя' : 'Дуэль с ' + f.display_name + ' — ничья';
+    var head = 'Дуэль · ' + f.display_name + ' — ' + (res === 'win' ? 'твоя' : res === 'lose' ? 'не твоя' : 'ничья');
     return h('section', { class: 'kk-card kk-duel' }, [
       K.ava(f.display_name, 36),
-      h('span', { class: 'kk-grow kk-col' }, [h('b', { text: head }), h('span', { class: 'kk-sub', text: mineTotal + ' : ' + f.points + ' · ' + f.display_name + ' был за ' + name(m[f.side]) })]),
+      h('span', { class: 'kk-grow kk-col' }, [h('b', { text: head }), h('span', { class: 'kk-sub', text: mineTotal + ' : ' + f.points + ' · ' + f.display_name + ' — за ' + name(m[f.side]) })]),
     ]);
   }
 
@@ -336,6 +354,43 @@
     ]);
   }
 
+  /** Цвет «угадал»: клуб игрока, а без клуба — жёлтый игры. */
+  function winTone() {
+    var club = state.profile && state.profile.club;
+    return club && club.color ? { bg: club.color, ink: '#fff', club: true } : { bg: 'var(--kk-gold)', ink: 'var(--kk-on-gold)', club: false };
+  }
+
+  /** Салют для «в точку»: 8 частиц в цветах клуба, жёлтом игры и белом. Движение задаёт CSS, при reduced-motion его нет. */
+  var BURST = [[-150, -110, 220], [140, -120, -160], [160, 40, 300], [-160, 60, -260], [-60, -150, 120], [70, -150, -90], [110, 100, 180], [-110, 110, -200]];
+  function burst(tone) {
+    var club = tone.club ? '#7fb2ff' : '#ffffff';
+    var colors = ['#ffd23f', '#ffffff', '#ffd23f', club, '#ffffff', club, '#ffd23f', '#ffffff'];
+    return BURST.map(function (b, i) {
+      return h('span', { class: 'kk-c', 'aria-hidden': 'true', style: 'background:' + colors[i] + ';--dx:' + b[0] + 'px;--dy:' + b[1] + 'px;--r:' + b[2] + 'deg;animation-delay:' + (i * 0.04).toFixed(2) + 's' });
+    });
+  }
+
+  function exactCard(m, mine, total, items) {
+    var r = m.result;
+    var tone = winTone();
+    var chips = [h('span', { class: 'kk-chipx', text: '+' + total + (mine.doubled ? ' с козырем' : '') })];
+    var place = S.bestLeagueChip(items);
+    if (place) chips.push(h('span', { class: 'kk-chipx', text: place }));
+    return h('section', { class: 'kk-cel', 'aria-label': 'Итог хода', style: 'background:' + tone.bg + ';color:' + tone.ink }, burst(tone).concat([
+      h('span', { class: 'kk-cel__d', text: S.dayLabelUp(m.starts_at) + ' · ФИНАЛ' }),
+      h('div', { class: 'kk-cel__s' }, [K.logoDisc(m.home, 60), h('span', { class: 'kk-cel__n', text: r.home_score + ':' + r.away_score }), K.logoDisc(m.away, 60)]),
+      h('span', { class: 'kk-pop', text: 'В ТОЧКУ!' }),
+      h('span', { class: 'kk-cel__l', text: 'Твой ход ' + mine.home_score + ':' + mine.away_score + ' — так и вышло.' }),
+      h('div', { class: 'kk-cel__c' }, chips),
+    ]));
+  }
+
+  function nextTurnLink(m) {
+    var nm = S.nextMatch(state.matches, m);
+    if (!nm) return null;
+    return h('button', { type: 'button', class: 'kk-nextl', onclick: function () { K.go('match', { id: nm.id }); } }, [h('span', { text: S.nextTurnLabel(nm) }), icon(I.chev, 18)]);
+  }
+
   function finalView(m) {
     var mine = m.my_pick;
     var r = m.result;
@@ -344,6 +399,7 @@
     var total = pts == null ? null : M.totalPoints(mine);
     var mv = state.movement[m.id];
     var items = mv && mv.data ? mv.data.items : [];
+    var exact = !!mine && pts === M.EXACT;
     var center = h('div', { class: 'kk-hero__mid' }, [
       h('span', { class: 'kk-hero__score', text: r.home_score + ' : ' + r.away_score }),
       h('span', { class: 'kk-hero__day', text: M.decidedLabel(r.decided_in) }),
@@ -352,31 +408,47 @@
     if (!mine) {
       main.appendChild(K.emptyCard('ЭТОТ МАТЧ БЕЗ ТЕБЯ', 'Хода на матч не было, очков нет. Следующий матч — в хабе игры.'));
     } else {
-      var stk = pts == null ? '…' : (total ? '+' + total : '0') + (mine.doubled && total ? ' ×2' : '');
-      main.appendChild(h('div', { class: 'kk-resh' }, [
-        h('div', { class: 'kk-col' }, [
-          h('span', { class: 'kk-lbl', text: 'ТВОЙ ХОД ' + (mine.home_score != null ? mine.home_score + ':' + mine.away_score : 'ЗА ' + name(m[mine.side]).toUpperCase()) }),
-          h('h2', { class: 'kk-h2 kk-h2--xl', text: pts == null ? 'Считаем очки' : S.resultHead(pts) }),
-        ]),
-        h('span', { class: 'kk-stk kk-stk--' + v.tone, 'aria-label': pts == null ? 'очки считаются' : M.points(total || 0), text: stk }),
-      ]));
+      var tone = winTone();
+      if (exact) {
+        main.appendChild(h('div', { class: 'kk-top' }, [h('button', { type: 'button', class: 'kk-round', 'aria-label': 'Назад', onclick: K.back }, [icon(I.back)]), h('span', { class: 'kk-sub', text: leagueTag(m) })]));
+        main.appendChild(exactCard(m, mine, total, items));
+      } else {
+        var stkStyle = v.tone === 'ok' && tone.club ? 'background:' + tone.bg + ';color:' + tone.ink : null;
+        var next = pts === 0 ? S.nextMatch(state.matches, m) : null;
+        main.appendChild(h('div', { class: 'kk-resh' }, [
+          h('div', { class: 'kk-col' }, [
+            h('span', { class: 'kk-lbl', text: 'ТВОЙ ХОД ' + (mine.home_score != null ? mine.home_score + ':' + mine.away_score : 'ЗА ' + name(m[mine.side]).toUpperCase()) }),
+            h('h2', { class: 'kk-h2 kk-h2--xl', text: pts == null ? 'Считаем очки' : S.resultHead(pts) }),
+            pts === 0 ? h('span', { class: 'kk-tx', text: S.missLine(next, new Date()) }) : null,
+            pts && mine.doubled ? h('span', { class: 'kk-sub', text: 'с козырем' }) : null,
+          ]),
+          h('span', { class: 'kk-stk kk-stk--' + v.tone, style: stkStyle, 'aria-label': pts == null ? 'очки считаются' : M.points(total || 0), text: pts == null ? '…' : total ? '+' + total : '0' }),
+        ]));
+      }
       if (pts != null) {
         var rows = S.movementRows(items);
         main.appendChild(h('div', { class: 'kk-sec' }, [
           h('span', { class: 'kk-lbl', text: 'КУДА СДВИНУЛОСЬ ТВОЁ МЕСТО' }),
-          mv && mv.loading ? h('span', { class: 'kk-skel kk-skel--line' }) : rows.length ? h('div', { class: 'kk-rows' }, rows.map(moveRow)) : h('span', { class: 'kk-sub', text: 'Срезов, где уже соревнуются трое, пока нет — места появятся, когда игроков станет больше.' }),
+          mv && mv.loading ? h('span', { class: 'kk-skel kk-skel--line' }) : rows.length ? h('div', { class: 'kk-rows' }, rows.map(moveRow)) : h('span', { class: 'kk-sub', text: 'Пока в таблицах меньше трёх игроков с очками — места появятся, когда людей станет больше.' }),
           S.crownLineAfter(items) ? h('span', { class: 'kk-crownline', text: S.crownLineAfter(items) }) : null,
         ]));
         var duel = duelCard(m);
         if (duel) main.appendChild(duel);
       }
-      main.appendChild(h('div', { class: 'kk-two' }, [
-        h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { brag(m, v); }, text: pts >= 20 ? 'Похвастаться' : 'Позвать на реванш' }),
-        h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('table', {}); }, text: 'Таблица' }),
-      ]));
+      if (exact) {
+        main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--gold kk-btn--lg', onclick: function () { brag(m, v); } }, [icon(I.send, 20), 'Похвастаться в чате']));
+        var nl = nextTurnLink(m);
+        if (nl) main.appendChild(nl);
+        main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('table', {}); }, text: 'Таблица' }));
+      } else {
+        main.appendChild(h('div', { class: 'kk-two' }, [
+          pts == null ? null : h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { brag(m, v); }, text: pts >= 20 ? 'Похвастаться' : 'Позвать на реванш' }),
+          h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('table', {}); }, text: 'Таблица' }),
+        ]));
+      }
     }
-    main.appendChild(nextCard(m));
-    return [hero(m, center), main];
+    if (!exact || !mine) main.appendChild(nextCard(m));
+    return exact ? [main] : [hero(m, center), main];
   }
 
   function brag(m, v) {
@@ -395,9 +467,8 @@
       h('main', { class: 'kk-main' }, [
         h('section', { class: 'kk-card kk-note' }, [
           K.sticker('ОТМЕНА', 'kk-tag--soft'),
-          h('span', { class: 'kk-lbl', text: 'ОТМЕНА' }),
           h('b', { class: 'kk-hd', text: name(m.home) + ' — ' + name(m.away) + ' отменён' }),
-          h('span', { class: 'kk-tx', text: 'Ход без очков, дуэли не считаются. Козырь вернулся — используй его на другом матче недели.' }),
+          h('span', { class: 'kk-tx', text: 'Ход без очков, дуэли не считаются. Если на нём стоял козырь, он свободен: назначь его на другой матч недели.' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.back(); }, text: 'К матчам' }),
         ]),
       ]),
@@ -433,14 +504,28 @@
           });
         }
         if (ph === 'open' && !state.matches.length) K.loadMatches().then(K.render, function () {});
+        if (ph === 'open') {
+          // Ходы закрываются за минуту до старта: экран, открытый заранее, сам переходит в «матч идёт».
+          K.poll('match', 15000, function (args) {
+            var cur = K.findMatch(args.id);
+            if (!cur || new Date(cur.starts_at).getTime() - Date.now() > 70000) return;
+            K.fetchMatch(args.id).then(function (fresh) {
+              if (fresh && phase(fresh) !== 'open') K.replace('match', args);
+            }, function () {});
+          });
+        }
       }, function (e) {
         if (e && e.status === 404) missing[id] = true;
-        else K.fail(e);
+        else {
+          missing[id] = 'error';
+          K.fail(e);
+        }
         K.render();
       });
     },
     render: function (a) {
-      if (missing[a.id]) return notFound();
+      if (missing[a.id] === 'error' && !K.findMatch(a.id)) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.retryCard('Матч не загрузился.', function () { K.replace('match', a); })])];
+      if (missing[a.id] === true) return notFound();
       var m = K.findMatch(a.id);
       if (!m) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.loading()])];
       var ph = phase(m);

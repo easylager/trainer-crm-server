@@ -11,6 +11,12 @@
   var WEEKDAY_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   var NEUTRAL = '#5D7285';
   var NBSP = ' ';
+  var SPELL = { 'Шахтер': 'Шахтёр', 'Могилев': 'Могилёв' };
+
+  /** Имя клуба для глаз: в базе «Шахтер» без ё, на экране — «Шахтёр». В запросы уходит имя из базы. */
+  function clubName(name) {
+    return SPELL[name] || name || '';
+  }
 
   /** Части даты в минском времени — у игроков не всегда минский пояс в телефоне. */
   function minskParts(date) {
@@ -147,6 +153,14 @@
    * шайбы каждой команды — по 10, точный счёт — 50. Считает сервер; здесь только слова.
    */
   var EXACT = 50;
+  /** Те же числа, что POINTS_* в src/application/hockey_game.py (их сверяет tests/js/kto-kogo-hub-model.test.js). */
+  var POINTS = { winner: 20, diff: 10, goals: 10, exact: EXACT };
+  /** Сервер закрывает ходы за столько секунд до старта: PICK_CLOSES_BEFORE в hockey_game.py (сверяет tests/js/kto-kogo-hub-model.test.js). */
+  var PICK_CLOSES_BEFORE_SEC = 60;
+  /** Когда закрываются ходы на матч: старт минус минута. */
+  function closesAt(startsAt) {
+    return new Date(new Date(startsAt).getTime() - PICK_CLOSES_BEFORE_SEC * 1000);
+  }
   var RULES = 'Победитель — 20 очков, разница шайб — 10, шайбы каждой команды — по 10. Точный счёт — все 50.';
 
   /** Как назвать исход моего хода после матча. Итоги бывают 0, 10, 20, 30, 50. */
@@ -155,7 +169,7 @@
     if (pointsWon === 30) return { head: 'почти в точку', sticker: '+30', tone: 'ok', tail: 'победитель и ещё часть счёта' };
     if (pointsWon === 20) return { head: 'есть победитель', sticker: '+20', tone: 'ok', tail: 'победитель угадан' };
     if (pointsWon === 10) return { head: 'шайбы угаданы', sticker: '+10', tone: 'ok', tail: 'шайбы одной команды' };
-    return { head: 'в этот раз мимо', sticker: '0', tone: 'miss', tail: 'в этот раз мимо' };
+    return { head: 'мимо', sticker: '0', tone: 'miss', tail: 'бывает' };
   }
 
   function decidedLabel(d) {
@@ -171,7 +185,7 @@
   }
 
   function scoreError(home, away) {
-    if (home === away) return 'В хоккее ничьих нет';
+    if (home === away) return 'Ничьей в хоккее не бывает — поправь счёт';
     return '';
   }
 
@@ -192,35 +206,30 @@
     var move = moveLine(pick, names);
     if (!move) return live ? 'ходы закрыты · этот матч без тебя' : '';
     if (live) return move + ' · ждём сирену';
-    // ×2 (TASK-335): ставка не меняется, удваиваются очки — пишем итоговое число.
-    if (pick.home_score != null) {
-      return 'ход принят · ' + pick.home_score + ':' + pick.away_score + ' · в точку — ' + (pick.doubled ? 100 : 50);
-    }
-    return 'ход принят · ' + move + (pick.doubled ? ' · очки ×2' : '');
+    // Козырь не меняет ход, только очки — до матча числа очков не пишем.
+    var what = pick.home_score != null ? pick.home_score + ':' + pick.away_score : move;
+    return 'ход принят · ' + what + (pick.doubled ? ' · с козырем' : '');
   }
 
-  /**
-   * Зачем тапнуть, пока хода нет. Друзья — уже сделанные ходы {home, away: имена}.
-   * Очки те же, что в правилах: победитель даёт 20.
-   */
+  /** Зачем тапнуть, пока хода нет. Друзья — уже сделанные ходы {home, away: имена}. */
   function nudgeLine(friends, names) {
     var home = (friends && friends.home) || [];
     var away = (friends && friends.away) || [];
     var n = home.length + away.length;
-    if (!n) return 'без хода очков не будет · победитель — 20';
+    if (!n) return 'Без хода очков не будет';
     if (n === 1) {
       var who = home[0] || away[0];
       var team = home.length ? names && names.home : names && names.away;
-      return who + ' уже за' + NBSP + (team || '') + ' · твой ход — 20';
+      return who + ' уже за' + NBSP + (team || '') + ' · а ты?';
     }
     var first = home[0] || away[0];
-    return first + ' и' + NBSP + 'ещё' + NBSP + (n - 1) + ' уже сделали ход · твой — 20';
+    return first + ' и' + NBSP + 'ещё' + NBSP + (n - 1) + ' уже сделали ход · а ты?';
   }
 
   /** Подсказка в шторке счёта: этот черновик, не правила целиком. */
   function scoreHint(home, away) {
-    if (home === away) return 'В хоккее ничьих нет';
-    return home + ':' + away + ' · в точку — 50';
+    if (home === away) return 'Ничьей в хоккее не бывает — поправь счёт';
+    return home + ':' + away + ' — так будет «в точку»';
   }
 
   /** startapp=kk_<КОД> → код лиги или ''. */
@@ -304,7 +313,7 @@
   }
 
   function monthLine(res) {
-    var where = res.league ? 'в «' + res.league.name + '»' : 'в общей таблице';
+    var where = res.league ? 'в' + NBSP + 'лиге «' + res.league.name + '»' : 'в общей таблице';
     if (res.won) return 'Первое место ' + where + NBSP + '· ' + points(res.points);
     if (res.rank == null) return 'В этом месяце без твоих ходов ' + where;
     if (!res.gap) return 'Ты ' + res.rank + '-й ' + where;
@@ -315,7 +324,7 @@
   function remainingLine(race) {
     if (!race || !race.monthly) return '';
     var n = Math.max(0, (race.known || 0) - (race.played || 0));
-    var head = n ? 'В этом месяце ещё ' + n + ' ' + plural(n, 'матч', 'матча', 'матчей') + '. ' : '';
+    var head = n ? 'В этом месяце ещё ' + n + NBSP + plural(n, 'матч', 'матча', 'матчей') + '. ' : '';
     return head + 'Очки в лиге — с ближайшего матча, с 1-го числа все с нуля.';
   }
 
@@ -350,6 +359,7 @@
 
   var api = {
     NEUTRAL: NEUTRAL,
+    clubName: clubName,
     MONTHS: MONTHS,
     minskParts: minskParts,
     dayIndex: dayIndex,
@@ -364,6 +374,10 @@
     points: points,
     verdict: verdict,
     EXACT: EXACT,
+    POINTS: POINTS,
+    PICK_CLOSES_BEFORE_SEC: PICK_CLOSES_BEFORE_SEC,
+    closesAt: closesAt,
+    DINAMO: DINAMO,
     RULES: RULES,
     decidedLabel: decidedLabel,
     clampGoals: clampGoals,

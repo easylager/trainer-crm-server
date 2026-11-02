@@ -114,7 +114,7 @@ async def match_ics(ref: str, session: AsyncSession = Depends(get_session)):
         row=data["row"],
         url=f"{_base()}{match['path']}",
         arena_name=str(data["arena_name"]),
-        address=data["arena"].get("address"),
+        address=(data["arena"] or {}).get("address"),
         now=_now(),
     )
     return Response(

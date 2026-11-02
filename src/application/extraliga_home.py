@@ -1,18 +1,19 @@
 """Лента матчей Экстралиги в слоте «сейчас» главной (TASK-340, срез 3; холст — экран 11).
 
-Порядок: матчи в городе клиента и выезды его клуба на 7 дней → (Динамо добавляет now_slot) →
-«N матчей на неделе». В городе без клуба — ближайший матч области. Без города ленты нет.
+Порядок: матчи, которые идут в городе клиента, на 7 дней → (Динамо добавляет now_slot) →
+«N матчей на неделе» по этому городу. Выездов и «матчей области» нет. Без города ленты нет.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.extraliga import CLUBS, LEAGUE_EXTRALIGA, enabled_clubs
+from src.application.extraliga import LEAGUE_EXTRALIGA, enabled_clubs
 from src.application.hockey_event import event_href
 from src.application.hockey_teams import team_card
 from src.shared.config import Settings
@@ -31,7 +32,6 @@ _WEEK = text("""
       AND (home_team = ANY(:clubs) OR away_team = ANY(:clubs))
     ORDER BY starts_at, id
     """)
-_REGIONS = text("SELECT name, region FROM cities WHERE region IS NOT NULL AND name = ANY(:names)")
 
 
 def _norm(name: str | None) -> str:
@@ -79,35 +79,31 @@ async def home_feed(
     now: datetime,
     settings: Settings | None = None,
 ) -> dict[str, Any] | None:
+    """Матчи, которые идут в городе клиента (правило A: «где посмотреть живьём»).
+
+    Выезды местного клуба и «ближайший матч области» сюда не попадают: в слоте только то, что можно
+    увидеть в этом городе. ``city_region`` оставлен для совместимости вызова.
+    """
+    del city_region
     if not city_name:
         return None
     rows = await week_rows(session, now=now, settings=settings)
-    if not rows:
-        return None
     city = _norm(city_name)
-    my_clubs = {c.name for c in CLUBS.values() if _norm(c.city) == city}
-    mine = [r for r in rows if _norm(r.city) == city or r.home_team in my_clubs or r.away_team in my_clubs]
-    if not mine and city_region:
-        # Пинск: своего клуба нет — ближайший матч области (Брест, Барановичи).
-        club_city = {c.name: c.city for c in CLUBS.values()}
-        regions = {
-            _norm(r.name): _norm(r.region)
-            for r in (await session.execute(_REGIONS, {"names": sorted(set(club_city.values()))})).all()
-        }
-        region = _norm(city_region)
-        near = [
-            r for r in rows
-            if r.starts_at > now and regions.get(_norm(club_city.get(r.home_team) or r.city)) == region
-        ]
-        mine = near[:1]
+    mine = [r for r in rows if _norm(r.city) == city]
+    if not mine:
+        return None
+    total = len(mine)
     mine = mine[:CITY_LIMIT]
-    first_home = next((r for r in mine if _norm(r.city) == city and r.starts_at > now), None)
+    first_home = next((r for r in mine if r.starts_at > now), None)
     cards = [
         card(r, now=now, sticker=_day_sticker(r.starts_at, now) if first_home is not None and r.id == first_home.id else None)
         for r in mine
     ]
-    upcoming = sum(1 for r in rows if r.starts_at > now)
-    return {"matches": cards, "week_count": upcoming, "all_href": "client-matches"}
+    return {
+        "matches": cards,
+        "week_count": total,
+        "all_href": "client-matches?city=" + quote(city_name),
+    }
 
 
 __all__ = ["home_feed", "week_rows", "card"]

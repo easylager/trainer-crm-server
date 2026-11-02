@@ -109,6 +109,33 @@ async def test_matches_show_own_pick_open_result_and_sides(app_use_test_db, db_s
 
 
 @pytest.mark.asyncio
+async def test_matches_list_has_arena_and_club_filter_includes_away(app_use_test_db, db_session) -> None:
+    """Хаб игры: «Твоя команда» — выездной матч клуба приходит по ?club=, а арена и город есть уже в списке."""
+    now = datetime.now(timezone.utc)
+    away_game = await _insert_match(db_session, starts_at=now + timedelta(days=2))
+    await db_session.execute(
+        text("UPDATE hockey_matches SET home_team = 'СКА', away_team = 'Динамо-Минск', arena = 'Ледовый дворец', city = 'Санкт-Петербург' WHERE id = :id"),
+        {"id": away_game},
+    )
+    other = await _insert_match(db_session, starts_at=now + timedelta(days=1))
+    await db_session.execute(text("UPDATE hockey_matches SET home_team = 'Химик', away_team = 'Юность' WHERE id = :id"), {"id": other})
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            listed = await client.get("/api/webapp/client/hockey/matches", params={"league": "all", "club": "Динамо-Минск"})
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    ids = {item["id"] for item in body["items"]}
+    assert away_game in ids
+    assert other not in ids
+    got = _by_id(body, away_game)
+    assert got["arena"] == "Ледовый дворец"
+    assert got["city"] == "Санкт-Петербург"
+    assert got["open"] is True
+
+
+@pytest.mark.asyncio
 async def test_pick_side_exact_replace_and_errors(app_use_test_db, db_session) -> None:
     now = datetime.now(timezone.utc)
     future = await _insert_match(db_session, starts_at=now + timedelta(days=1))
