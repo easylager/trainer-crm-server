@@ -5,7 +5,7 @@ twins would be dropped. DRY RUN by default: connection is read-only, nothing is 
 
     DBURL=postgresql://... python3 scripts/dedupe_slots_dry_run.py [--from-date YYYY-MM-DD]
 
-Rules (same as migration 0285_slot_dedupe_hotfix):
+Rules (same as migration 0302_slot_dedupe):
   * keep the twin that has a booking (any status), else the one with status 'booked', else the lowest id;
   * drop only twins with status 'available' and no bookings at all — a booked slot is never dropped;
   * a group where several twins carry bookings is reported as MANUAL and left alone.

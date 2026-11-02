@@ -1,7 +1,7 @@
 """slots: drop free identical twins, forbid new ones (unique index on live slots).
 
-Revision ID: 0285_slot_dedupe_hotfix
-Revises: 0284_speed_oval_mk_areas
+Revision ID: 0302_slot_dedupe
+Revises: 0301_game_views_refresh
 Create Date: 2026-11-02
 
 Hotfix numbering: a release batch branch already uses revisions up to 0301 — the coordinator
@@ -17,8 +17,8 @@ those groups have to be resolved by hand (see scripts/dedupe_slots_dry_run.py).
 """
 from alembic import op
 
-revision = "0285_slot_dedupe_hotfix"
-down_revision = "0284_speed_oval_mk_areas"
+revision = "0302_slot_dedupe"
+down_revision = "0301_game_views_refresh"
 branch_labels = None
 depends_on = None
 
