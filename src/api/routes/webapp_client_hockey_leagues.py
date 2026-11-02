@@ -13,6 +13,8 @@ from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_hockey import _player_name
 from src.application.hockey_leagues import (
+    MONTHLY_CROWN_TERMS,
+    term_options,
     FEW_MATCHES,
     InvalidTerms,
     League,
@@ -245,7 +247,16 @@ async def post_client_hockey_league_terms_preview(
         **_terms_out(terms.scope, terms.clubs, terms.term_kind, terms.starts_at, terms.ends_at),  # type: ignore[union-attr]
         "matches_in_term": count,
         "few_matches": count < FEW_MATCHES,
+        "monthly_crowns": terms.term_kind in MONTHLY_CROWN_TERMS,
     }
+
+
+@router.get("/client/hockey/leagues/term-options")
+async def get_client_hockey_league_term_options(
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+) -> dict:
+    """Окна сроков «до конца сезона / месяц / 4 недели / плей-офф», правило корон и лимит команд для новой лиги."""
+    return term_options(now=datetime.now(timezone.utc))
 
 
 @router.post("/client/hockey/leagues/join")

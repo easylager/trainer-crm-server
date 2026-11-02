@@ -206,3 +206,38 @@ async def test_friends_scores_open_at_kickoff_only_for_my_leagues(db_session) ->
     await score_finished_matches(db_session, now=done)
     after = await friends_moves(db_session, player_key=SASHA, match_ids=[m], now=done)
     assert after[m][0]["points"] == 100
+
+
+@pytest.mark.asyncio
+async def test_trump_closes_with_the_picks_a_minute_before_start(db_session) -> None:
+    """Козырь ставится, снимается и переносится ровно пока открыт ход: граница та же, 60 секунд до старта."""
+    start = datetime(2026, 11, 17, 19, 0, tzinfo=MINSK_TZ)
+    first = await _match(db_session, "b1", start)
+    second = await _match(db_session, "b2", datetime(2026, 11, 19, 19, 0, tzinfo=MINSK_TZ))
+    for m in (first, second):
+        await _pick(db_session, m, SASHA, side="home")
+    open_at = start - timedelta(seconds=61)
+    closed_at = start - timedelta(seconds=59)
+
+    # За 61 с — ставится; за 59 с — уже нет.
+    assert await set_double(db_session, player_key=SASHA, match_id=first, on=True, now=open_at) == first
+    await _pick(db_session, first, KATYA, side="home")
+    with pytest.raises(PicksClosed):
+        await set_double(db_session, player_key=KATYA, match_id=first, on=True, now=closed_at)
+
+    # Закрепление видно клиенту: за 61 с не закреплён, за 59 с закреплён.
+    assert (await my_double(db_session, player_key=SASHA, now=open_at))["locked"] is False
+    assert (await my_double(db_session, player_key=SASHA, now=closed_at))["locked"] is True
+
+    # За 59 с козырь с этого матча не снять и не перенести.
+    with pytest.raises(PicksClosed):
+        await set_double(db_session, player_key=SASHA, match_id=first, on=False, now=closed_at)
+    with pytest.raises(DoubleUnavailable) as locked:
+        await set_double(db_session, player_key=SASHA, match_id=second, on=True, now=closed_at)
+    assert locked.value.reason == "used"
+    doubled = (await db_session.execute(text("SELECT match_id FROM hockey_picks WHERE doubled"))).scalars().all()
+    assert doubled == [first]
+
+    # За 61 с перенос ещё работает, а снять козырь можно.
+    assert await set_double(db_session, player_key=SASHA, match_id=second, on=True, now=open_at) == second
+    assert await set_double(db_session, player_key=SASHA, match_id=second, on=False, now=open_at) is None
