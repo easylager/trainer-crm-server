@@ -70,6 +70,15 @@
 
   // ---------- Хаб ----------
 
+  /** Знак игры: шайба влетает в стикер «КТО КОГО?». Заставка один раз за сессию, дальше шайба просто стоит рядом. */
+  function brand() {
+    var el = K.introElapsed();
+    return h('h1', { class: 'kk-brand kk-grow' + (el === null ? '' : ' is-intro'), 'aria-label': 'Кто кого', style: el === null ? null : '--kk-el:' + el + 'ms' }, [
+      K.puck('kk-puck--lg'),
+      h('span', { class: 'kk-brand__tag', 'aria-hidden': 'true', text: 'КТО КОГО?' }),
+    ]);
+  }
+
   function fanCard() {
     var p = state.profile;
     if (!p) return h('div', { class: 'kk-skel kk-skel--card' });
@@ -142,19 +151,22 @@
       return [
         h('main', { class: 'kk-main' }, [
           h('div', { class: 'kk-top' }, [
-            h('h1', { class: 'kk-h1 kk-grow', text: 'Кто кого' }),
+            brand(),
             h('button', { type: 'button', class: 'kk-btn kk-btn--alt kk-btn--sm', onclick: function () { K.go('table', {}); }, text: 'Таблица' }),
           ]),
           fanCard(),
           K.hubCards.hero(),
           K.hubCards.day(),
-          K.hubCards.points(),
+          K.hubCards.pointsLink(),
           peaksBlock(),
           leaguesSection(),
           remindRow(),
           state.kkHidden ? h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: showOnMatches, text: 'Вернуть строку игры на главную' }) : null,
         ]),
       ];
+    },
+    sheet: function (s) {
+      return s.kind === 'points' ? K.hubCards.pointsSheet() : null;
     },
   });
 

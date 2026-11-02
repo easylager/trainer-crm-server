@@ -12,15 +12,16 @@
   --kk-text: 'Golos Text', var(--app-font-sans, system-ui), sans-serif;
 }
 body.kk-dark .kk {
-  --kk-bg: #17212b; --kk-card: #222c38; --kk-row: #1d2733; --kk-chip: #2c3846; --kk-line: #3a4756;
-  --kk-muted: #8aa0b3; --kk-ink: #f1f5f7; --kk-soft: #c3d2dc; --kk-win: #7ee0a1; --kk-lose: #ff8a8d;
-  --kk-crownbg: #2a2410; --kk-crownink: #f6e7a6; --kk-me: #2c3a2a; --kk-scrim: rgba(6, 12, 18, 0.6);
+  /* Тёмная тема тёплая, без «беттинговой» синевы (холст SpMeyNMs2GoG29akhF2o6a). Пары текста проверяет tests/js/kto-kogo-dark-contrast.test.js. */
+  --kk-bg: #1f1d1b; --kk-card: #2a2725; --kk-row: #262321; --kk-chip: #35312e; --kk-line: #4a443f;
+  --kk-muted: #b3aba0; --kk-soft: #d6cfc4; --kk-ink: #f5f0e8; --kk-win: #7ee0a1; --kk-lose: #ff8a8d;
+  --kk-crownbg: #2a2410; --kk-crownink: #f6e7a6; --kk-me: #3a3326; --kk-scrim: rgba(10, 9, 8, 0.6);
   --kk-focus: #ffd23f; --kk-gold-ink: #ffd23f; --kk-danger: #ff8a7a;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: #f2f5fa; }
-body.kk-dark { background: #17212b; }
+body.kk-dark { background: #1f1d1b; }
 button, input { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 button { cursor: pointer; }
@@ -127,11 +128,12 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-btn--danger { background: var(--kk-danger); color: #fff; }
 .kk-btn--sm { height: 44px; border-radius: 14px; font-size: 14px; }
 .kk-btn[aria-disabled='true'], .kk-btn:disabled { background: var(--kk-line); color: var(--kk-muted); }
+body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disabled { color: var(--kk-soft); }
 
 /* Матч идёт */
 .kk-live { display: flex; justify-content: space-between; align-items: center; }
-.kk-live__st { display: flex; align-items: center; gap: 6px; font: 700 12px var(--kk-text); letter-spacing: 0.06em; color: var(--kk-lose); }
-.kk-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5a5f; animation: kk-pulse 1.4s ease-in-out infinite; }
+.kk-live__st { display: flex; align-items: center; gap: 6px; font: 700 12px var(--kk-text); letter-spacing: 0.06em; color: var(--kk-gold-ink); }
+.kk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--kk-gold); animation: kk-pulse 1.4s ease-in-out infinite; }
 @keyframes kk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .kk-board { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
 /* Логотип над названием: длинные имена («Динамо-Молодечно») переносятся по словам и дефису, а не посреди слова. */
@@ -144,14 +146,15 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-mv { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 44px; padding: 4px 12px; border-radius: 14px; background: var(--kk-row); font-variant-numeric: tabular-nums; }
 .kk-mv__l { font: 600 14px var(--kk-text); overflow-wrap: anywhere; }
 .kk-mv__r { display: flex; align-items: center; gap: 6px; font: 700 14px var(--kk-text); }
-.kk-tone--up { color: var(--kk-win); }
-.kk-tone--down { color: var(--kk-lose); }
+.kk-tone--up { color: var(--kk-gold-ink); }
+.kk-tone--down { color: var(--kk-muted); }
 .kk-tone--same { color: var(--kk-soft); }
 .kk-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; }
 .kk-resh { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .kk-stk { flex: none; min-width: 84px; height: 62px; padding: 0 10px; border-radius: 14px; font: 400 28px/62px var(--kk-display); text-align: center; background: var(--kk-chip); color: var(--kk-ink); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25); transform: rotate(-4deg); animation: kk-drop 0.6s cubic-bezier(0.2, 0.8, 0.3, 1.2) both; }
 .kk-stk--win { background: var(--kk-gold); color: var(--kk-on-gold); }
 .kk-stk--ok { background: #f1f5f7; color: #0d1424; }
+.kk-stk--miss { background: var(--kk-chip); color: var(--kk-soft); box-shadow: none; }
 @keyframes kk-drop { 0% { transform: translateY(-30px) rotate(-12deg) scale(1.3); opacity: 0; } 60% { transform: translateY(3px) rotate(-2deg) scale(0.96); opacity: 1; } 100% { transform: rotate(-4deg) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .kk-stk { animation: none; } .kk-dot { animation: none; } }
 .kk-crownline { font: 500 13px/1.35 var(--kk-text); color: var(--kk-crownink); }
@@ -184,7 +187,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-mini--link { width: 100%; background: none; color: var(--kk-muted); height: 44px; font-weight: 500; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
 .kk-lbl--h { margin: 0; }
 .kk-cnt { font: 600 13px var(--kk-text); color: var(--kk-gold-ink); }
-.kk-cnt.is-done { color: var(--kk-win); }
+.kk-cnt.is-done { color: var(--kk-soft); }
 .kk-linkbtn { min-height: 44px; border: 0; background: none; font: 600 14px var(--kk-text); color: var(--kk-gold-ink); padding: 0 4px; }
 .kk-lg { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border-radius: 16px; border: 0; background: var(--kk-card); color: var(--kk-ink); text-align: left; }
 .kk-lg.is-ended { opacity: 0.7; }
@@ -241,11 +244,6 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-hsr--sm .kk-hsr__c { font-size: 20px; color: var(--kk-muted); }
 .kk-hsr--sm .kk-hs { background: var(--kk-chip); color: var(--kk-ink); font-size: 20px; }
 
-.kk-pts { border-radius: 20px; background: var(--kk-row); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
-.kk-pts__g2 { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; column-gap: 12px; font: 500 14px/1.3 var(--kk-text); }
-.kk-pts__g2 b { font-weight: 700; }
-.kk-pts__g { color: var(--kk-gold-ink); }
-
 /* Таблица */
 .kk-chip { height: 44px; padding: 0 12px 0 8px; border-radius: 999px; border: 0; display: flex; align-items: center; gap: 8px; font: 600 15px var(--kk-text); background: var(--kk-card); color: var(--kk-ink); min-width: 0; }
 .kk-chip--alt { padding-left: 14px; background: var(--kk-chip); }
@@ -266,8 +264,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-r__w { min-width: 0; }
 .kk-r__name { font: 600 15px var(--kk-text); display: flex; align-items: center; gap: 5px; overflow: hidden; }
 .kk-r__nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kk-me { flex: none; height: 18px; padding: 0 7px; border-radius: 999px; font: 700 11px/18px var(--kk-text); letter-spacing: 0.02em; background: var(--kk-win); color: #fff; }
-body.kk-dark .kk .kk-me { color: #0d1424; }
+.kk-me { flex: none; height: 18px; padding: 0 7px; border-radius: 999px; font: 700 11px/18px var(--kk-text); letter-spacing: 0.02em; background: var(--kk-gold); color: var(--kk-on-gold); }
 .kk-r__pt { font: 700 16px var(--kk-text); text-align: right; }
 .kk-gap { height: 20px; display: flex; align-items: center; justify-content: center; color: var(--kk-muted); font-weight: 700; letter-spacing: 0.3em; }
 .kk-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
@@ -316,3 +313,73 @@ body.kk-dark .kk .kk-me { color: #0d1424; }
 .kk-faces { display: flex; gap: 6px; }
 
 .kk-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: 90vw; background: var(--kk-ink); color: var(--kk-bg); padding: 12px 16px; border-radius: 14px; font: 600 14px var(--kk-text); z-index: 30; }
+
+/* Шайба — знак игры (макет Main/Points): чёрный овал с бликом, без картинок. */
+.kk-puck { position: relative; display: inline-block; flex: none; width: 22px; height: 14px; border-radius: 50%; background: #0d0c0b; box-shadow: inset 0 -3px 0 #3a3632; }
+.kk-puck::after { content: ''; position: absolute; left: 4px; top: 2px; width: 7px; height: 3px; border-radius: 50%; background: rgba(255, 255, 255, 0.38); }
+.kk-puck--lg { width: 30px; height: 19px; box-shadow: inset 0 -4px 0 #3a3632; }
+.kk-puck--lg::after { left: 6px; top: 3px; width: 10px; height: 4px; }
+body:not(.kk-dark) .kk-puck { box-shadow: inset 0 -3px 0 #4a443f; }
+
+/* Заставка: шайба влетает слева и бьёт в стикер, стикер качается. 700 мс, один раз за сессию (JS решает, ставить ли .is-intro). */
+.kk-brand { margin: 0; display: flex; align-items: center; gap: 4px; min-height: 44px; }
+.kk-brand__tag { height: 32px; padding: 0 12px; border-radius: 9px; background: var(--kk-gold); color: var(--kk-on-gold); font: 400 17px/32px var(--kk-display); transform: rotate(-3deg); white-space: nowrap; }
+.kk-brand.is-intro .kk-puck { animation: kk-puck-fly 0.42s cubic-bezier(0.3, 0.1, 0.5, 1) calc(0ms - var(--kk-el, 0ms)) both; }
+.kk-brand.is-intro .kk-brand__tag { animation: kk-wobble 0.28s ease-out calc(0.42s - var(--kk-el, 0ms)) both; }
+@keyframes kk-puck-fly { 0% { transform: translateX(-150px) rotate(-200deg) scaleX(0.7); opacity: 0; } 20% { opacity: 1; } 80% { transform: translateX(2px) rotate(0) scaleX(1); } 100% { transform: translateX(0); } }
+@keyframes kk-wobble { 0% { transform: rotate(-3deg); } 30% { transform: rotate(-8deg) scale(1.06); } 65% { transform: rotate(1deg); } 100% { transform: rotate(-3deg); } }
+
+/* Ссылка «Как считаются очки?» и шторка правил */
+.kk-ptsl { min-height: 52px; width: 100%; border: 0; border-radius: 16px; background: var(--kk-card); color: var(--kk-ink); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; text-align: left; font: 600 15px/1.2 var(--kk-text); }
+.kk-ptsl__t { display: inline-flex; align-items: center; gap: 10px; }
+.kk-ptsl svg { color: var(--kk-muted); }
+.kk-sheet--pts { gap: 16px; padding-top: 12px; }
+.kk-sheet--pts::before { content: ''; align-self: center; width: 40px; height: 4px; border-radius: 2px; background: var(--kk-line); }
+.kk-sheet--pts .kk-h2 { font-size: 22px; }
+.kk-rl { display: flex; flex-direction: column; gap: 12px; }
+.kk-rl__r { display: flex; gap: 12px; align-items: flex-start; }
+.kk-rl__v { flex: none; min-width: 48px; height: 28px; border-radius: 8px; background: var(--kk-chip); color: var(--kk-ink); display: inline-flex; align-items: center; justify-content: center; font: 700 14px/1 var(--kk-text); }
+.kk-rl__v.is-gold { background: var(--kk-gold); color: var(--kk-on-gold); }
+.kk-rl__t { font: 500 15px/1.4 var(--kk-text); }
+.kk-rl__trump { border-radius: 18px; background: var(--kk-chip); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.kk-rl__trump b { font: 700 15px/1.2 var(--kk-text); }
+.kk-rl__trump span { font: 500 14px/1.4 var(--kk-text); color: var(--kk-soft); }
+
+/* Стикер в строке и широкие кнопки хода */
+.kk-tag--inline { position: static; display: inline-block; vertical-align: middle; margin-left: 8px; height: 24px; line-height: 24px; font-size: 10px; padding: 0 8px; }
+.kk-q__t .kk-tag--inline { margin-top: -2px; }
+.kk-hsum .kk-tag--inline { margin-left: 0; flex: none; }
+.kk-mini--wide { width: 100%; min-height: 44px; height: auto; padding: 8px 12px; text-align: center; line-height: 1.25; }
+.kk-hero-tx--lg { font-size: 16px; font-weight: 600; }
+
+/* Кто за кого: люди вместо процентов, одноцветно */
+.kk-crowd { border-radius: 20px; background: var(--kk-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.kk-crowd__h { display: flex; align-items: center; gap: 10px; font: 700 15px/1.2 var(--kk-text); }
+.kk-crowd__p { display: flex; align-items: center; gap: 10px; }
+.kk-cfs { display: flex; flex: none; }
+.kk-cf { width: 34px; height: 34px; border-radius: 50%; background: var(--kk-line); color: var(--kk-ink); display: inline-flex; align-items: center; justify-content: center; font: 700 13px/1 var(--kk-text); box-shadow: 0 0 0 2px var(--kk-card); }
+.kk-cf + .kk-cf { margin-left: -8px; }
+.kk-cf.is-me { background: var(--kk-gold); color: var(--kk-on-gold); }
+.kk-cf--more { background: var(--kk-chip); color: var(--kk-soft); font-size: 12px; }
+.kk-crowd__c { font: 500 14px/1.3 var(--kk-text); color: var(--kk-soft); min-width: 0; }
+
+/* «В точку!»: главный момент игры */
+.kk-cel { position: relative; overflow: hidden; border-radius: 28px; padding: 28px 16px 20px; min-height: 400px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.kk-cel__d { font: 700 12px/1.2 var(--kk-text); letter-spacing: 0.06em; opacity: 0.85; }
+.kk-cel__s { display: flex; align-items: center; gap: 16px; }
+.kk-cel__n { font: 400 48px/1 var(--kk-display); letter-spacing: -0.02em; }
+.kk-pop { margin-top: 6px; padding: 8px 16px; border-radius: 12px; background: var(--kk-gold); color: var(--kk-on-gold); font: 400 30px/1 var(--kk-display); transform: rotate(-3deg); display: inline-block; animation: kk-pop 0.6s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.kk-cel__l { font: 600 16px/1.35 var(--kk-text); text-align: center; }
+.kk-cel__c { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.kk-chipx { height: 34px; padding: 0 12px; border-radius: 17px; background: rgba(255, 255, 255, 0.16); display: inline-flex; align-items: center; font: 700 15px/1 var(--kk-text); }
+.kk-c { position: absolute; left: 50%; top: 150px; width: 10px; height: 16px; border-radius: 3px; opacity: 0; animation: kk-burst 1.6s cubic-bezier(0.2, 0.7, 0.3, 1) 2 both; pointer-events: none; }
+@keyframes kk-burst { 0% { transform: translate(0, 0) scale(0.2); opacity: 0; } 15% { opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r)); opacity: 0; } }
+@keyframes kk-pop { 0% { transform: rotate(-3deg) scale(0.4); } 60% { transform: rotate(-6deg) scale(1.12); } 100% { transform: rotate(-3deg) scale(1); } }
+.kk-btn--lg { height: 56px; font-size: 17px; }
+.kk-nextl { min-height: 52px; width: 100%; border: 0; border-radius: 16px; background: var(--kk-card); color: var(--kk-ink); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; text-align: left; font: 600 15px/1.2 var(--kk-text); }
+.kk-nextl svg { color: var(--kk-muted); flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kk-brand.is-intro .kk-puck, .kk-brand.is-intro .kk-brand__tag, .kk-pop { animation: none; }
+  .kk-c { display: none; }
+}

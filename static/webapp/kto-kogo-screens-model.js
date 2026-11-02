@@ -154,11 +154,21 @@
     return parts;
   }
 
-  function liveWhy(pick, live) {
+  /**
+   * Что сейчас с ходом, словами и без очков: числа очков — только после финальной сирены.
+   * names — {home, away} коротко. «Пока сходится: Динамо впереди. До «в точку» не хватает одной шайбы.»
+   */
+  function liveWhy(pick, live, names) {
     if (!live) return 'Счёт появится, как только его прочитаем';
     if (live.home_score === live.away_score) return 'Ничья на табло — победитель решится в овертайме или по буллитам';
-    var parts = liveParts(pick, live);
-    return parts.length ? 'Сейчас: ' + parts.join(', ') : 'Пока мимо — до сирены всё может поменяться';
+    var leader = live.home_score > live.away_score ? 'home' : 'away';
+    var lead = names && names[leader] ? names[leader] : leader === 'home' ? 'хозяева' : 'гости';
+    if (!pick || pick.side !== leader) return 'Пока мимо — до сирены всё может поменяться';
+    var head = 'Пока сходится: ' + lead + ' впереди.';
+    if (pick.home_score == null || pick.away_score == null) return head;
+    var miss = Math.abs(pick.home_score - live.home_score) + Math.abs(pick.away_score - live.away_score);
+    if (!miss) return head + ' Счёт сейчас — «в точку».';
+    return head + ' До «в точку» не хватает ' + (miss === 1 ? 'одной шайбы' : miss + NBSP + Base.plural(miss, 'шайба', 'шайбы', 'шайб')) + '.';
   }
 
   /** Время опроса счёта: «счёт на 19:42». */
@@ -192,16 +202,40 @@
     return 'tie';
   }
 
-  /** Доли «за хозяев / за гостей» по всем ходам; без ходов — null. */
-  function crowdShare(sides, names, nameOf) {
-    var h = (sides && sides.home) || 0;
-    var a = (sides && sides.away) || 0;
-    if (h + a === 0) return null;
-    var homePct = Math.round((100 * h) / (h + a));
-    var side = h >= a ? 'home' : 'away';
-    var pct = side === 'home' ? homePct : 100 - homePct;
-    return { home: homePct, away: 100 - homePct, text: pct + '% игроков за ' + clubName(nameOf(side)) };
+  var CROWD_NAMED = 3;
+
+  function firstWord(name) {
+    return String(name || '').trim().split(/\s+/)[0] || '';
   }
+
+  function initialOf(name) {
+    return firstWord(name).charAt(0).toUpperCase() || '?';
+  }
+
+  /**
+   * Кто за эту команду, людьми, без процентов. Сначала «Я», потом друзья из лиг (m.friend_moves — приходят со стартом),
+   * остальные — числом «+N» из m.sides. Подпись: «Ты, Аня, Петя и ещё 12».
+   * Возвращает {faces: [{me, initial, name}], more, caption, total}.
+   */
+  function crowdPeople(m, side) {
+    var total = (m.sides && m.sides[side]) || 0;
+    var named = [];
+    if (m.my_pick && m.my_pick.side === side) named.push({ me: true, initial: 'Я', name: 'Ты' });
+    (m.friend_moves || []).forEach(function (f) {
+      if (f.side === side && named.length < CROWD_NAMED) named.push({ me: false, initial: initialOf(f.display_name), name: firstWord(f.display_name) });
+    });
+    total = Math.max(total, named.length);
+    var more = total - named.length;
+    var caption;
+    if (!total) caption = 'Пока никого';
+    else if (!named.length) caption = total + NBSP + Base.plural(total, 'игрок', 'игрока', 'игроков');
+    else if (more > 0) caption = named.map(function (x) { return x.name; }).join(', ') + ' и' + NBSP + 'ещё' + NBSP + more;
+    else if (named.length === 1) caption = named[0].name === 'Ты' ? 'Пока только ты' : named[0].name;
+    else caption = named.slice(0, -1).map(function (x) { return x.name; }).join(', ') + ' и' + NBSP + named[named.length - 1].name;
+    return { faces: named, more: more, caption: caption, total: total };
+  }
+
+  var CROWD_NOTE = 'Кто за кого — видно со стартом матча. Сначала имена из твоих лиг.';
 
   // ---------- козырь недели ----------
 
@@ -209,17 +243,21 @@
    * Состояние козыря на матче. doubles — ответ /matches: недели с козырем {week_start, match_id, locked}.
    * kind: nopick | on | free | other | locked | na.
    */
+  function trumpLabel(on) {
+    return on ? 'Козырь здесь — очки удвоятся' : 'Козырь — очки за этот матч удвоятся';
+  }
+
   function trumpState(m, doubles, nowIso) {
     var mine = m.my_pick;
-    if (!mine) return { kind: 'nopick', label: 'Козырь ×2', note: 'сначала тапни за команду', on: false, usable: false };
+    if (!mine) return { kind: 'nopick', label: trumpLabel(false), note: 'сначала тапни за команду', on: false, usable: false };
     var wk = weekKey(m.starts_at);
-    if (mine.doubled) return { kind: 'on', label: 'Козырь стоит', note: 'тапни ещё раз — снимешь', on: true, usable: true };
+    if (mine.doubled) return { kind: 'on', label: trumpLabel(true), note: 'тапни ещё раз — снимешь', on: true, usable: true };
     var d = (doubles || []).filter(function (x) { return x.week_start === wk; })[0];
-    if (!d) return { kind: 'na', label: 'Козырь ×2', note: 'откроется ближе к неделе матча', on: false, usable: false };
-    if (d.match_id && d.locked) return { kind: 'locked', label: 'Козырь ×2', note: 'козырь этой недели уже сыграл', on: false, usable: false };
-    if (d.match_id && d.match_id !== m.id) return { kind: 'other', label: 'Козырь ×2', note: 'стоит на другом матче недели — тап перенесёт сюда', on: false, usable: true };
+    if (!d) return { kind: 'na', label: trumpLabel(false), note: 'откроется ближе к неделе матча', on: false, usable: false };
+    if (d.match_id && d.locked) return { kind: 'locked', label: trumpLabel(false), note: 'козырь этой недели уже сыграл', on: false, usable: false };
+    if (d.match_id && d.match_id !== m.id) return { kind: 'other', label: trumpLabel(false), note: 'стоит на другом матче недели — тап перенесёт сюда', on: false, usable: true };
     var thisWeek = nowIso && weekKey(nowIso) === wk;
-    return { kind: 'free', label: 'Козырь ×2', note: thisWeek ? 'есть до воскресенья' : 'на этой неделе свободен', on: false, usable: true };
+    return { kind: 'free', label: trumpLabel(false), note: thisWeek ? 'есть до воскресенья' : 'на этой неделе свободен', on: false, usable: true };
   }
 
   /**
@@ -238,18 +276,16 @@
     return 'Козырь этой недели —' + where + '. Можно перенести до' + NBSP + 'его начала.';
   }
 
-  /** Очки хода с учётом козыря: «+20 за победителя · точный счёт — до 50». */
+  /** Подпись хода до матча — без чисел очков: «Тап за команду — и ход сделан». */
   function pointsLine(pick) {
-    if (!pick) return 'Тап за команду — и ход сделан';
-    var k = pick.doubled ? 2 : 1;
-    var exact = pick.home_score != null ? ' · до ' + 50 * k + ' за точный счёт' : ' · точный счёт — до ' + 50 * k;
-    return '+' + 20 * k + ' за победителя' + exact + (pick.doubled ? ' · козырь' : '');
+    return pick ? 'Твой ход принят' : 'Тап за команду — и ход сделан';
   }
 
+  /** «Твой ход: 3:2» / «Твой ход: за Динамо-Минск». */
   function questionLine(pick, teamName) {
     if (!pick) return 'Кто победит?';
-    if (pick.home_score != null) return 'Ты за ' + teamName + ' · ' + pick.home_score + ':' + pick.away_score;
-    return 'Ты за ' + teamName;
+    if (pick.home_score != null) return 'Твой ход: ' + pick.home_score + ':' + pick.away_score;
+    return 'Твой ход: за' + NBSP + teamName;
   }
 
   /** «Твои места прямо сейчас»: места по таблице до матча; если так закончится и победитель угадан — с выигрышем. */
@@ -368,20 +404,21 @@
     return effectivePick(mine, draft).side !== side;
   }
 
-  /** Итог хода под степперами: {text, max}. Без стороны — null. */
+  var TIE_LINE = 'Ничьей в хоккее не бывает — поправь счёт';
+
+  /** Итог хода под степперами: {text, sticker}. Без стороны — null. Без чисел очков: козырь — стикером «с козырем». */
   function moveSummary(eff, doubled, sideName) {
     if (!eff.side) return null;
-    var k = doubled ? 2 : 1;
-    var tail = doubled ? ' · козырь' : '';
-    if (eff.tie) return { text: 'В хоккее нет ничьей — счёт не засчитаем', max: String(Base.POINTS.winner * k) };
-    if (eff.score) return { text: 'Ход: ' + eff.score[0] + ':' + eff.score[1] + tail, max: 'до ' + Base.POINTS.exact * k };
-    return { text: 'Ход: за ' + sideName + tail, max: String(Base.POINTS.winner * k) };
+    if (eff.tie) return { text: TIE_LINE, sticker: '' };
+    var sticker = doubled ? 'с козырем' : '';
+    if (eff.score) return { text: 'Твой ход: ' + eff.score[0] + ':' + eff.score[1], sticker: sticker };
+    return { text: 'Твой ход: за' + NBSP + sideName, sticker: sticker };
   }
 
   function dayCount(made, total) {
     if (!total) return '';
     if (total === 1) return made ? 'готово' : 'ход не сделан';
-    return made === total ? 'все ' + total + ' — готово' : made + ' из ' + total;
+    return made === total ? 'все ходы сделаны' : made + ' из ' + total;
   }
 
   /** Экстралига отдыхает: в ближайшие дни её матчей нет, а следующий — позже (или календаря ещё нет). */
@@ -407,6 +444,44 @@
 
   function resultHead(points) {
     return cap(Base.verdict(points == null ? 0 : points).head);
+  }
+
+  /** После промаха: «Бывает — следующий матч Динамо — Торпедо в субботу.» Нет матча — отсылка к хабу. */
+  function missLine(next, now) {
+    if (!next) return 'Бывает. Следующий ход — в хабе.';
+    var day = Base.whenLabel(next.starts_at, now).split(',')[0];
+    return 'Бывает — следующий матч ' + clubShort(next.home.name) + ' — ' + clubShort(next.away.name) + ' ' + day + '.';
+  }
+
+  /** Кнопка «Следующий ход · сб, Динамо — Торпедо». */
+  function nextTurnLabel(next) {
+    if (!next) return 'Следующий ход';
+    var wd = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][Base.minskParts(new Date(next.starts_at)).wd];
+    return 'Следующий ход · ' + wd + ', ' + clubShort(next.home.name) + ' — ' + clubShort(next.away.name);
+  }
+
+  /** Лучшее место игрока среди лиг в движении после матча: «3-е место в «Офисе»». Нет лиг — null. */
+  function bestLeagueChip(items) {
+    var best = null;
+    (items || []).forEach(function (x) {
+      if (x.kind === 'league' && x.rank_after != null && (!best || x.rank_after < best.rank_after)) best = x;
+    });
+    return best ? best.rank_after + '-е место в «' + best.league_name + '»' : null;
+  }
+
+  /** Шторка «Как считаются очки»: числа берём из POINTS, слова — из макета. */
+  function pointsRules() {
+    var P = Base.POINTS;
+    return {
+      rows: [
+        { value: String(P.winner), text: 'Угадал, кто победит.', gold: false },
+        { value: '+' + P.diff, text: 'За каждое попадание в счёт: разница шайб, голы хозяев, голы гостей.', gold: false },
+        { value: String(P.exact), text: 'Счёт угадан целиком — это «в точку».', gold: true },
+      ],
+      trumpTitle: 'Козырь',
+      trumpText: 'Один на неделю. Положи его на матч, в котором уверен, — очки за него удвоятся. Передумал — перенеси на другой, пока тот не начался.',
+      foot: 'Ход можно менять до минуты перед стартом. Очки приходят после финальной сирены.',
+    };
   }
 
   /** Строки «куда сдвинулась» по ответу /movement. */
@@ -677,7 +752,14 @@
     duelPill: duelPill,
     DUEL_HINT: DUEL_HINT,
     duelFinal: duelFinal,
-    crowdShare: crowdShare,
+    crowdPeople: crowdPeople,
+    CROWD_NOTE: CROWD_NOTE,
+    TIE_LINE: TIE_LINE,
+    trumpLabel: trumpLabel,
+    missLine: missLine,
+    nextTurnLabel: nextTurnLabel,
+    bestLeagueChip: bestLeagueChip,
+    pointsRules: pointsRules,
     trumpState: trumpState,
     trumpHint: trumpHint,
     closeTime: closeTime,

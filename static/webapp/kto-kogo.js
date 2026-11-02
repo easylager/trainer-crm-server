@@ -64,8 +64,8 @@
     document.body.classList.toggle('kk-dark', !!dark);
     if (tg && tg.setHeaderColor) {
       try {
-        tg.setHeaderColor(dark ? '#17212b' : '#f2f5fa');
-        tg.setBackgroundColor(dark ? '#17212b' : '#f2f5fa');
+        tg.setHeaderColor(dark ? '#1f1d1b' : '#f2f5fa');
+        tg.setBackgroundColor(dark ? '#1f1d1b' : '#f2f5fa');
       } catch (e) { /* старые клиенты */ }
     }
   }
@@ -171,6 +171,7 @@
     up: ['M12 19V5', 'M5 12l7-7 7 7'],
     swap: ['M7 4v16', 'M17 20V4', 'M3 8l4-4 4 4', 'M13 16l4 4 4-4'],
     arrow: ['M5 12h14', 'M13 6l6 6-6 6'],
+    chev: ['M9 6l6 6-6 6'],
     check: ['M5 12l5 5 9-10'],
     send: ['M21 4L3 11l6 2 2 6 3-4 5 4z'],
     plus: ['M12 5v14', 'M5 12h14'],
@@ -214,6 +215,32 @@
     return h('span', { class: 'kk-ava' + (cls ? ' ' + cls : ''), style: 'width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.42) + 'px', 'aria-hidden': 'true', text: initials(name) });
   }
 
+  /** Знак игры — шайба: чёрный овал с бликом, чистый CSS. */
+  function puck(cls) {
+    return h('span', { class: 'kk-puck' + (cls ? ' ' + cls : ''), 'aria-hidden': 'true' });
+  }
+
+  var INTRO_MS = 700;
+  var introStart = null;
+
+  /**
+   * Заставка с шайбой: один раз за сессию. Пока она идёт, возвращает, сколько миллисекунд уже прошло
+   * (экран перерисовывается целиком, и анимация должна продолжаться, а не начинаться заново); иначе null.
+   */
+  function introElapsed() {
+    if (introStart === null) {
+      var seen = false;
+      try {
+        seen = sessionStorage.getItem('kk_puck') === '1';
+        sessionStorage.setItem('kk_puck', '1');
+      } catch (e) { /* хранилище недоступно: играем заставку, она короткая */ }
+      introStart = seen ? -1 : Date.now();
+    }
+    if (introStart < 0) return null;
+    var el = Date.now() - introStart;
+    return el < INTRO_MS ? el : null;
+  }
+
   function sticker(text, cls) {
     return h('span', { class: 'kk-tag' + (cls ? ' ' + cls : ''), 'aria-hidden': 'true', text: text });
   }
@@ -245,8 +272,8 @@
   }
 
   /** Шторка снизу: тап по затемнению закрывает. */
-  function sheet(title, subtitle, children) {
-    var panel = h('div', { class: 'kk-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title, tabindex: '-1' }, [
+  function sheet(title, subtitle, children, cls) {
+    var panel = h('div', { class: 'kk-sheet' + (cls ? ' ' + cls : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title, tabindex: '-1' }, [
       h('div', { class: 'kk-sheet__head' }, [
         h('span', { class: 'kk-sheet__t' }, [h('span', { class: 'kk-h2', text: title }), subtitle ? h('span', { class: 'kk-sub', text: subtitle }) : null]),
         h('button', { type: 'button', class: 'kk-round kk-round--alt', 'aria-label': 'Закрыть', onclick: closeSheet }, [icon(I.close, 18)]),
@@ -540,6 +567,8 @@
 
   // ---------- сборка ----------
 
+  var sheetReturnId = null;
+
   function render() {
     var c = current();
     var sc = c && screens[c.name];
@@ -549,14 +578,22 @@
     var prevSheet = root.querySelector('.kk-sheet');
     if (state.sheet && sc && sc.sheet) {
       var s = sc.sheet(state.sheet, c.args);
-      if (s) nodes.push(s);
+      if (s) {
+        nodes.push(s);
+        sheetReturnId = state.sheet.returnId || null;
+      }
     }
     if (state.toast) nodes.push(h('div', { class: 'kk-toast', role: 'status', text: state.toast }));
     var focusId = document.activeElement && document.activeElement.id;
     root.replaceChildren.apply(root, nodes);
     var panel = root.querySelector('.kk-sheet');
     if (panel && !prevSheet) panel.focus();
-    else if (focusId) {
+    else if (!panel && prevSheet && sheetReturnId) {
+      // Шторка закрылась: фокус возвращается на кнопку, которая её открыла.
+      var opener = document.getElementById(sheetReturnId);
+      sheetReturnId = null;
+      if (opener) opener.focus();
+    } else if (focusId) {
       var again = document.getElementById(focusId);
       if (again && (again.tagName === 'INPUT' || again.hasAttribute('data-keep'))) {
         again.focus();
@@ -590,7 +627,26 @@
       if (tg.BackButton && tg.BackButton.onClick) tg.BackButton.onClick(back);
     }
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && state.sheet) closeSheet();
+      if (e.key === 'Escape' && state.sheet) return closeSheet();
+      if (e.key !== 'Tab' || !state.sheet) return;
+      // Фокус не уходит из открытой шторки на страницу под ней.
+      var panel = root.querySelector('.kk-sheet');
+      if (!panel) return;
+      var items = Array.prototype.slice.call(panel.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])'));
+      if (!items.length) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      var active = document.activeElement;
+      if (e.shiftKey && (active === first || active === panel)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (!panel.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     });
     applyTheme();
     state.stack = [{ name: 'hub', args: {} }];
@@ -643,7 +699,7 @@
 
   window.KK = {
     M: M, S: S, tg: tg, params: params, state: state, h: h, icon: icon, I: I, CROWN: CROWN, crownIcon: crownIcon, crownTag: crownTag,
-    ava: ava, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard, retryCard: retryCard,
+    ava: ava, puck: puck, introElapsed: introElapsed, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard, retryCard: retryCard,
     sheet: sheet, closeSheet: closeSheet, api: api, toast: toast, fail: fail, haptic: haptic, render: render, register: register,
     go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
     loadMatches: loadMatches, loadClubMatches: loadClubMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,

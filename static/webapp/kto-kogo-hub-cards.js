@@ -1,6 +1,6 @@
 /**
  * «Кто кого» — карточки хаба v2: «Твоя команда» (счёт и козырь прямо в хабе), матчи дня и таблица очков.
- * Холст: claude.ai/artifact/SpMeyNMs2GoG29akhF2o6a. Логика выбора матча и счёта — в kto-kogo-screens-model.js
+ * Холст: claude.ai/artifact/SpMeyNMs2GoG29akhF2o6a (Main, Points). Логика выбора матча и счёта — в kto-kogo-screens-model.js
  * (heroMatch, dayMatches, stepScore, effectivePick); здесь только вёрстка и отправка ходов теми же вызовами,
  * что у карточки матча: K.pickSide, K.saveScore, K.toggleTrump.
  */
@@ -14,7 +14,6 @@
   var I = K.I;
   var state = K.state;
   var icon = K.icon;
-  var P = M.POINTS;
   var timers = {};
   /** Счёт уходит на сервер, когда игрок перестал тапать: серия тапов — один запрос, а не десять. */
   var SEND_AFTER_MS = 350;
@@ -115,7 +114,7 @@
         'aria-pressed': on ? 'true' : 'false',
         'aria-disabled': t.usable ? null : 'true',
         onclick: function () { K.toggleTrump(m); },
-      }, [icon(I.bolt, 16), on ? 'Козырь на этом матче · ×2' : 'Козырь: удвоить очки · ×2']),
+      }, [icon(I.bolt, 16), S.trumpLabel(on)]),
       h('span', { class: 'kk-htr__note', text: S.trumpHint(m, state.doubles, state.matches, new Date().toISOString()) }),
     ];
   }
@@ -135,18 +134,18 @@
       h('button', { type: 'button', class: 'kk-hm', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); }, text: S.heroMeta(m) }),
       h('div', { class: 'kk-two kk-two--hero' }, [teamBtn(m, 'home', eff), teamBtn(m, 'away', eff)]),
     ];
-    if (!eff.side) kids.push(h('span', { class: 'kk-hh', text: 'Тапни, кто победит. Угадал — ' + P.winner + ' очков.' }));
+    if (!eff.side) kids.push(h('span', { class: 'kk-hh', text: 'Тапни, кто победит.' }));
     else {
       kids.push(h('div', { class: 'kk-hbox' }, [
         h('div', { class: 'kk-hbox__head' }, [
           h('span', { class: 'kk-hbox__t', text: 'Точный счёт' }),
-          h('span', { class: 'kk-hbox__s', text: 'до +' + (P.exact - P.winner) + ' к победе' }),
+          h('span', { class: 'kk-hbox__s', text: 'будет «в точку»' }),
         ]),
         scoreRow(m, eff, 'lg'),
       ].concat(trumpButton(m))));
       kids.push(h('div', { class: 'kk-hsum' }, [
         h('span', { class: 'kk-hsum__t', 'aria-live': 'polite', text: sum.text }),
-        h('span', { class: 'kk-hsum__m', text: sum.max }),
+        sum.sticker ? h('span', { class: 'kk-tag kk-tag--inline', text: sum.sticker }) : null,
       ]));
       kids.push(h('span', { class: 'kk-hnote', text: S.changeUntil(m.starts_at, new Date()) }));
     }
@@ -186,11 +185,11 @@
       if (!state.scoreOpen[m.id] && !eff.score) {
         kids.push(h('button', { type: 'button', class: 'kk-dofr', onclick: function () { state.scoreOpen[m.id] = true; K.render(); } }, [
           h('span', { text: 'Угадать точный счёт' }),
-          h('span', { class: 'kk-dofr__m', text: 'до +' + (P.exact - P.winner) }),
+          h('span', { class: 'kk-dofr__m', text: '«в точку»' }),
         ]));
       } else {
         kids.push(h('div', { class: 'kk-dsc' }, [h('span', { class: 'kk-dsc__l', text: 'Счёт' }), scoreRow(m, eff, 'sm')]));
-        if (eff.tie) kids.push(h('span', { class: 'kk-sub', text: 'В хоккее нет ничьей — счёт не засчитаем' }));
+        if (eff.tie) kids.push(h('span', { class: 'kk-sub', text: S.TIE_LINE }));
       }
     }
     return h('div', { class: 'kk-dr' }, kids);
@@ -212,23 +211,30 @@
     ]);
   }
 
-  // ---------- очки ----------
+  // ---------- очки: ссылка и шторка ----------
 
-  function pointsCard() {
-    function row(label, value, gold) {
-      return [h('span', { class: gold ? 'kk-pts__g' : null, text: label }), h('b', { class: gold ? 'kk-pts__g' : null, text: value })];
-    }
-    return h('section', { class: 'kk-pts', 'aria-label': 'Как считаются очки' }, [
-      h('h2', { class: 'kk-lbl kk-lbl--h', text: 'ОЧКИ' }),
-      h('div', { class: 'kk-pts__g2' }, [].concat(
-        row('Угадал победителя', String(P.winner)),
-        row('+ разница в счёте', String(P.diff)),
-        row('+ голы каждой команды', 'по ' + P.goals),
-        row('Точный счёт', String(P.exact), true),
-        row('Козырь — один на неделю', '×2')
-      )),
+  var POINTS_LINK_ID = 'kk-points-link';
+
+  function pointsLink() {
+    return h('button', {
+      type: 'button', class: 'kk-ptsl', id: POINTS_LINK_ID, 'aria-haspopup': 'dialog',
+      onclick: function () { state.sheet = { kind: 'points', returnId: POINTS_LINK_ID }; K.render(); },
+    }, [
+      h('span', { class: 'kk-ptsl__t' }, [K.puck(), 'Как считаются очки?']),
+      icon(I.chev, 18),
     ]);
   }
 
-  K.hubCards = { hero: heroCard, day: daySection, points: pointsCard };
+  function pointsSheet() {
+    var r = S.pointsRules();
+    return K.sheet('Как считаются очки', null, [
+      h('div', { class: 'kk-rl' }, r.rows.map(function (x) {
+        return h('div', { class: 'kk-rl__r' }, [h('span', { class: 'kk-rl__v' + (x.gold ? ' is-gold' : ''), text: x.value }), h('span', { class: 'kk-rl__t', text: x.text })]);
+      })),
+      h('div', { class: 'kk-rl__trump' }, [h('b', { text: r.trumpTitle }), h('span', { text: r.trumpText })]),
+      h('span', { class: 'kk-sub', text: r.foot }),
+    ], 'kk-sheet--pts');
+  }
+
+  K.hubCards = { hero: heroCard, day: daySection, pointsLink: pointsLink, pointsSheet: pointsSheet };
 })();

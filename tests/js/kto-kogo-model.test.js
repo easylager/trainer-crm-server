@@ -81,6 +81,7 @@ describe('тексты', () => {
     assert.equal(M.verdict(20).sticker, '+20');
     assert.equal(M.verdict(10).head, 'шайбы угаданы');
     assert.equal(M.verdict(0).tone, 'miss');
+    assert.equal(M.verdict(0).head, 'мимо');
     for (const p of [0, 10, 20, 30]) assert.notEqual(M.verdict(p).head, 'в точку!');
     // Род собеседника неизвестен — подписи без «угадал/угадала».
     for (const p of [0, 10, 20, 30, 50]) assert.ok(!/угадал[аи]?\b/.test(M.verdict(p).tail), M.verdict(p).tail);
@@ -95,26 +96,26 @@ describe('счёт и ссылки', () => {
     const score = { side: 'home', home_score: 3, away_score: 1 };
     assert.equal(M.stakeLine(null, names, 'open'), '');
     assert.equal(M.stakeLine(side, names, 'open'), 'ход принят · ты за' + NBSP + 'Динамо-Минск');
-    assert.equal(M.stakeLine(score, names, 'open'), 'ход принят · 3:1 · в точку — 50');
+    assert.equal(M.stakeLine(score, names, 'open'), 'ход принят · 3:1');
     assert.equal(M.stakeLine(score, names, 'live'), 'твой счёт 3:1 · ждём сирену');
     assert.equal(M.stakeLine(null, names, 'live'), 'ходы закрыты · этот матч без тебя');
     assert.equal(M.moveLine(score, names), 'твой счёт 3:1');
-    assert.equal(M.scoreHint(3, 1), '3:1 · в точку — 50');
-    assert.equal(M.scoreHint(2, 2), 'В хоккее ничьих нет');
-    assert.equal(M.nudgeLine({ home: [], away: [] }, names), 'без хода очков не будет · победитель — 20');
+    assert.equal(M.scoreHint(3, 1), '3:1 — так будет «в точку»');
+    assert.equal(M.scoreHint(2, 2), 'Ничьей в хоккее не бывает — поправь счёт');
+    assert.equal(M.nudgeLine({ home: [], away: [] }, names), 'Без хода очков не будет');
     assert.equal(
       M.nudgeLine({ home: ['Катя'], away: [] }, names),
-      'Катя уже за' + NBSP + 'Динамо-Минск · твой ход — 20'
+      'Катя уже за' + NBSP + 'Динамо-Минск · а ты?'
     );
     assert.equal(
       M.nudgeLine({ home: ['Катя'], away: ['Саша'] }, names),
-      'Катя и' + NBSP + 'ещё' + NBSP + '1 уже сделали ход · твой — 20'
+      'Катя и' + NBSP + 'ещё' + NBSP + '1 уже сделали ход · а ты?'
     );
   });
   it('черновик счёта 0…20', () => {
     assert.equal(M.clampGoals(-1), 0);
     assert.equal(M.clampGoals(25), 20);
-    assert.equal(M.scoreError(2, 2), 'В хоккее ничьих нет');
+    assert.equal(M.scoreError(2, 2), 'Ничьей в хоккее не бывает — поправь счёт');
     assert.equal(M.scoreError(2, 3), '');
   });
   it('kk_<код>', () => {
@@ -176,7 +177,7 @@ describe('гонка месяца (TASK-334)', () => {
 
 describe('волна 2 (TASK-335)', () => {
   const m = { home: { name: 'СКА' }, away: { name: 'Динамо-Минск' } };
-  it('очки с ×2', () => {
+  it('очки с козырем', () => {
     assert.equal(M.totalPoints({ points: 50, doubled: true }), 100);
     assert.equal(M.totalPoints({ points: 20 }), 20);
     assert.equal(M.totalPoints({ points: null }), null);
@@ -192,10 +193,10 @@ describe('волна 2 (TASK-335)', () => {
   });
 });
 
-describe('строка хода с ×2 (TASK-335)', () => {
+describe('строка хода с козырем (TASK-335)', () => {
   const names = { home: 'Динамо-Минск', away: 'Трактор' };
-  it('точный счёт — итоговое число, сторона — пометка ×2', () => {
-    assert.equal(M.stakeLine({ side: 'home', home_score: 4, away_score: 1, doubled: true }, names, 'open'), 'ход принят · 4:1 · в точку — 100');
-    assert.match(M.stakeLine({ side: 'home', home_score: null, away_score: null, doubled: true }, names, 'open'), /очки ×2$/);
+  it('до матча — без чисел очков, козырь словами', () => {
+    assert.equal(M.stakeLine({ side: 'home', home_score: 4, away_score: 1, doubled: true }, names, 'open'), 'ход принят · 4:1 · с козырем');
+    assert.match(M.stakeLine({ side: 'home', home_score: null, away_score: null, doubled: true }, names, 'open'), /с козырем$/);
   });
 });

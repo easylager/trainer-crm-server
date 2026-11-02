@@ -138,11 +138,11 @@ describe('счёт и сторона согласованы', () => {
   });
   it('итог хода: счёт, козырь, без счёта, ничья', () => {
     const eff = (mineP, d) => S.effectivePick(mineP, d);
-    assert.deepEqual(S.moveSummary(eff({ side: 'home' }, [3, 2]), true, 'Динамо-Минск'), { text: 'Ход: 3:2 · козырь', max: 'до 100' });
-    assert.deepEqual(S.moveSummary(eff({ side: 'home' }, [3, 2]), false, 'Динамо-Минск'), { text: 'Ход: 3:2', max: 'до 50' });
-    assert.deepEqual(S.moveSummary(eff({ side: 'away' }, null), false, 'СКА'), { text: 'Ход: за СКА', max: '20' });
-    assert.deepEqual(S.moveSummary(eff({ side: 'away' }, null), true, 'СКА'), { text: 'Ход: за СКА · козырь', max: '40' });
-    assert.equal(S.moveSummary(eff({ side: 'home' }, [2, 2]), false, 'X').text, 'В хоккее нет ничьей — счёт не засчитаем');
+    assert.deepEqual(S.moveSummary(eff({ side: 'home' }, [3, 2]), true, 'Динамо-Минск'), { text: 'Твой ход: 3:2', sticker: 'с козырем' });
+    assert.deepEqual(S.moveSummary(eff({ side: 'home' }, [3, 2]), false, 'Динамо-Минск'), { text: 'Твой ход: 3:2', sticker: '' });
+    assert.deepEqual(S.moveSummary(eff({ side: 'away' }, null), false, 'СКА'), { text: 'Твой ход: за\u00a0СКА', sticker: '' });
+    assert.deepEqual(S.moveSummary(eff({ side: 'away' }, null), true, 'СКА'), { text: 'Твой ход: за\u00a0СКА', sticker: 'с козырем' });
+    assert.deepEqual(S.moveSummary(eff({ side: 'home' }, [2, 2]), true, 'X'), { text: 'Ничьей в хоккее не бывает — поправь счёт', sticker: '' });
     assert.equal(S.moveSummary(eff(null, null), false, 'X'), null);
   });
 });

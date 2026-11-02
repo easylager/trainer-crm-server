@@ -94,6 +94,11 @@ describe('очки и живой счёт', () => {
     assert.deepEqual(S.liveParts(pick('home', 3, 2), { home_score: 2, away_score: 1 }), ['победитель', 'разница']);
     assert.deepEqual(S.liveParts(pick('home', 3, 2), { home_score: 3, away_score: 2 }), ['точный счёт']);
     assert.equal(S.liveWhy(pick('home', 3, 2), { home_score: 0, away_score: 4 }), 'Пока мимо — до сирены всё может поменяться');
+    const names = { home: 'Динамо', away: 'СКА' };
+    assert.equal(S.liveWhy(pick('home', 3, 1), { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди. До «в точку» не хватает одной шайбы.');
+    assert.equal(S.liveWhy(pick('home', 4, 1), { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди. До «в точку» не хватает 2\u00a0шайбы.');
+    assert.match(S.liveWhy(pick('home', 2, 1), { home_score: 2, away_score: 1 }, names), /«в точку»/);
+    assert.equal(S.liveWhy({ side: 'home', home_score: null }, { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди.');
     assert.match(S.liveWhy(pick('home', 3, 2), null), /прочитаем/);
   });
   it('метка времени опроса — по Минску', () => {
@@ -114,11 +119,24 @@ describe('очки и живой счёт', () => {
     assert.equal(S.duelFinal(20, 20), 'tie');
     assert.equal(S.duelFinal(null, 20), null);
   });
-  it('доля игроков: без ходов молчим', () => {
-    const name = (side) => (side === 'home' ? 'Юность' : 'Шахтер');
-    assert.equal(S.crowdShare({ home: 0, away: 0 }, null, name), null);
-    assert.equal(S.crowdShare({ home: 3, away: 1 }, null, name).text, '75% игроков за Юность');
-    assert.equal(S.crowdShare({ home: 1, away: 3 }, null, name).text, '75% игроков за Шахтёр');
+  it('кто за кого: люди, а не проценты — «Я», друзья, «+N» из счётчика сторон', () => {
+    const mk = (over) => Object.assign({ sides: { home: 15, away: 4 }, my_pick: { side: 'home' }, friend_moves: [
+      { display_name: 'Аня К.', side: 'home' }, { display_name: 'Петя', side: 'home' }, { display_name: 'Лёша', side: 'away' }, { display_name: 'Оля', side: 'home' },
+    ] }, over || {});
+    const home = S.crowdPeople(mk(), 'home');
+    assert.deepEqual(home.faces.map((f) => f.initial), ['Я', 'А', 'П']);
+    assert.equal(home.faces[0].me, true);
+    assert.equal(home.more, 12);
+    assert.equal(home.caption, 'Ты, Аня, Петя и\u00a0ещё\u00a012');
+    const away = S.crowdPeople(mk(), 'away');
+    assert.deepEqual(away.faces.map((f) => f.initial), ['Л']);
+    assert.equal(away.caption, 'Лёша и\u00a0ещё\u00a03');
+    assert.equal(S.crowdPeople({ sides: { home: 0, away: 0 }, friend_moves: [] }, 'home').caption, 'Пока никого');
+    assert.equal(S.crowdPeople({ sides: { home: 5, away: 0 }, friend_moves: [] }, 'home').caption, '5\u00a0игроков');
+    // Сервер отстал со счётчиком — людей не меньше, чем названных.
+    assert.equal(S.crowdPeople(mk({ sides: { home: 1, away: 0 } }), 'home').total, 3);
+    const all = JSON.stringify([home, away, S.CROWD_NOTE]);
+    assert.ok(!/%|процент/i.test(all), all);
   });
 });
 
@@ -136,11 +154,18 @@ describe('козырь недели', () => {
     assert.equal(S.trumpState(m(1), [{ week_start: '2026-11-02', match_id: 9, locked: true }]).usable, false);
     assert.equal(S.trumpState(m(1, { starts_at: '2026-11-20T16:00:00Z' }), week).kind, 'na');
   });
-  it('очки хода с козырем удваиваются в подписи', () => {
+  it('до матча в подписи хода нет чисел очков, козырь — словами', () => {
     assert.equal(S.pointsLine(null), 'Тап за команду — и ход сделан');
-    assert.equal(S.pointsLine({ side: 'home', home_score: null, doubled: false }), '+20 за победителя · точный счёт — до 50');
-    assert.equal(S.pointsLine({ side: 'home', home_score: 3, doubled: true }), '+40 за победителя · до 100 за точный счёт · козырь');
-    assert.equal(S.questionLine({ side: 'home', home_score: 3, away_score: 2 }, 'Юность'), 'Ты за Юность · 3:2');
+    assert.equal(S.questionLine({ side: 'home', home_score: 3, away_score: 2 }, 'Юность'), 'Твой ход: 3:2');
+    assert.equal(S.questionLine({ side: 'home', home_score: null }, 'Юность'), 'Твой ход: за\u00a0Юность');
+    assert.equal(S.trumpLabel(false), 'Козырь — очки за этот матч удвоятся');
+    assert.equal(S.trumpLabel(true), 'Козырь здесь — очки удвоятся');
+    for (const k of ['nopick', 'on', 'free', 'other', 'locked', 'na']) {
+      const pick = k === 'nopick' ? null : { side: 'home', doubled: k === 'on' };
+      const doubles = k === 'na' ? [] : [{ week_start: '2026-11-02', match_id: k === 'other' || k === 'locked' ? (k === 'other' ? 9 : 1) : null, locked: k === 'locked' }];
+      const st = S.trumpState(m(1, { my_pick: pick }), doubles, NOW.toISOString());
+      assert.equal(st.label, S.trumpLabel(k === 'on'), k);
+    }
   });
 });
 
@@ -154,7 +179,7 @@ describe('матчи дня и пауза', () => {
     assert.equal(d.total, 2);
     assert.equal(d.made, 1);
     assert.equal(S.dayCount(d.made, d.total), '1 из 2');
-    assert.equal(S.dayCount(2, 2), 'все 2 — готово');
+    assert.equal(S.dayCount(2, 2), 'все ходы сделаны');
   });
   it('нет матчей сегодня — «ближайшие» с днём недели; нет открытых — null', () => {
     const d = S.dayMatches([mk(1, '2026-11-10T16:00:00Z')], NOW);
@@ -179,7 +204,9 @@ describe('матчи дня и пауза', () => {
 describe('итог и движение', () => {
   it('голова итога по очкам, строки движения с короной', () => {
     assert.equal(S.resultHead(50), 'В точку!');
-    assert.equal(S.resultHead(0), 'В этот раз мимо');
+    assert.equal(S.resultHead(0), 'Мимо');
+    assert.equal(S.resultHead(30), 'Почти в точку');
+    assert.equal(S.resultHead(20), 'Есть победитель');
     const rows = S.movementRows([
       { kind: 'slice', club: 'Юность', period_title: 'ноябрь', rank_before: 2, rank_after: 1, crown: true },
       { kind: 'slice', club: null, period_title: 'сезон 2026/27', rank_before: 214, rank_after: 214, crown: false },
@@ -324,5 +351,74 @@ describe('слова игры', () => {
       const hits = strings.filter((s) => BANNED.test(s));
       assert.deepEqual(hits, [], f);
     }
+  });
+
+  // Стиль «весёлая игра» (владелец): до матча нигде нет «×2» и «до N очков»; числа очков — только как результат после матча.
+  const MULT = /×|х2(?![а-яё\d])|(^|[^а-яё])до\s+\+\d|(^|[^а-яё])до\s+\d+\s*(очк|за\s|к\s|$)/i;
+  it('в исходных строках игры нет множителей и «до N»', () => {
+    for (const f of FILES) {
+      const file = path.join(__dirname, '../../static/webapp', f);
+      if (!fs.existsSync(file)) continue;
+      const src = fs.readFileSync(file, 'utf8');
+      const strings = [...src.matchAll(/'((?:[^'\\\n]|\\.){2,})'/g)].map((m) => m[1]);
+      assert.deepEqual(strings.filter((s) => MULT.test(s)), [], f);
+    }
+  });
+  it('собранные тексты хода до матча — без множителей и чисел очков', () => {
+    const M = require('../../static/webapp/kto-kogo-model.js');
+    const texts = [];
+    for (const doubled of [false, true]) {
+      const pick = { side: 'home', home_score: 3, away_score: 2, doubled };
+      const side = { side: 'home', home_score: null, away_score: null, doubled };
+      for (const p of [pick, side, null]) {
+        texts.push(S.pointsLine(p), S.questionLine(p, 'Динамо'), M.stakeLine(p, { home: 'Динамо', away: 'СКА' }, 'open'), M.moveLine(p, {}));
+      }
+      for (const eff of [S.effectivePick(side, [3, 2]), S.effectivePick(side, [2, 2]), S.effectivePick(side, null)]) {
+        const sum = S.moveSummary(eff, doubled, 'Динамо');
+        texts.push(sum.text, sum.sticker);
+      }
+      texts.push(S.trumpLabel(doubled));
+    }
+    const wk = '2026-11-02';
+    const m = { id: 1, starts_at: '2026-11-07T16:00:00Z', home: { name: 'Динамо-Минск' }, away: { name: 'СКА' }, my_pick: { side: 'home' } };
+    for (const d of [[], [{ week_start: wk, match_id: null, locked: false }], [{ week_start: wk, match_id: 9, locked: false }], [{ week_start: wk, match_id: 1, locked: true }]]) {
+      const st = S.trumpState(m, d, '2026-11-03T10:00:00Z');
+      texts.push(st.label, st.note, S.trumpHint(m, d, [m], '2026-11-03T10:00:00Z'));
+    }
+    texts.push(M.scoreHint(3, 2), M.scoreHint(2, 2), M.nudgeLine({ home: [], away: [] }, {}), M.nudgeLine({ home: ['Аня'], away: [] }, { home: 'Динамо' }), M.nudgeLine({ home: ['Аня'], away: ['Лёша'] }, {}));
+    texts.push(S.liveWhy({ side: 'home', home_score: 3, away_score: 2 }, { home_score: 2, away_score: 1 }, { home: 'Динамо', away: 'СКА' }));
+    for (const s of texts) assert.ok(!MULT.test(s) && !/%/.test(s), s);
+  });
+});
+
+describe('итог и «мимо»', () => {
+  const next = { starts_at: '2026-11-07T16:00:00Z', home: { name: 'Динамо-Минск' }, away: { name: 'Торпедо' } };
+  it('мимо — без красного голоса: бывает, следующий матч', () => {
+    assert.equal(S.missLine(next, new Date('2026-11-05T10:00:00Z')), 'Бывает — следующий матч Динамо — Торпедо в субботу.');
+    assert.equal(S.missLine(next, new Date('2026-11-06T10:00:00Z')), 'Бывает — следующий матч Динамо — Торпедо завтра.');
+    assert.equal(S.missLine(null, new Date()), 'Бывает. Следующий ход — в хабе.');
+    assert.ok(!/угадал/i.test(S.missLine(next, new Date())));
+  });
+  it('кнопка «Следующий ход» и чип места в лиге', () => {
+    assert.equal(S.nextTurnLabel(next), 'Следующий ход · сб, Динамо — Торпедо');
+    assert.equal(S.nextTurnLabel(null), 'Следующий ход');
+    assert.equal(S.bestLeagueChip([{ kind: 'league', league_name: 'Офис', rank_after: 3 }, { kind: 'league', league_name: 'Двор', rank_after: 5 }, { kind: 'slice', rank_after: 1 }]), '3-е место в «Офис»');
+    assert.equal(S.bestLeagueChip([{ kind: 'slice', rank_after: 1 }]), null);
+    assert.equal(S.bestLeagueChip([]), null);
+  });
+});
+
+describe('шторка «Как считаются очки»', () => {
+  it('числа — из POINTS, слова — из макета, минута закрытия сходится', () => {
+    const M = require('../../static/webapp/kto-kogo-model.js');
+    const r = S.pointsRules();
+    assert.deepEqual(r.rows.map((x) => x.value), [String(M.POINTS.winner), '+' + M.POINTS.diff, String(M.POINTS.exact)]);
+    assert.equal(M.POINTS.diff, M.POINTS.goals); // одна строка «+10» говорит и про разницу, и про голы
+    assert.equal(r.rows[2].gold, true);
+    assert.equal(r.rows[0].text, 'Угадал, кто победит.');
+    assert.equal(r.trumpTitle, 'Козырь');
+    assert.match(r.trumpText, /удвоятся/);
+    assert.equal(M.PICK_CLOSES_BEFORE_SEC, 60);
+    assert.match(r.foot, /до минуты перед стартом/);
   });
 });
