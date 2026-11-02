@@ -4,8 +4,8 @@ People's marks no longer set "flooded" by themselves: the engine keeps the publi
 ``pending_confirm``; an admin queue item ``confirm_flood`` asks the admin. ``flood_floor_at`` is the moment of the
 last admin/source decision: marks older than it are already accounted for and do not raise pending again.
 
-Revision ID: 0299_winter_pending_confirm
-Revises: 0298_zhodino_sdyushor_parser
+Revision ID: 0300_winter_pending_confirm
+Revises: 0299_ledby_disco_prices_url
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0299_winter_pending_confirm"
-down_revision = "0298_zhodino_sdyushor_parser"
+revision = "0300_winter_pending_confirm"
+down_revision = "0299_ledby_disco_prices_url"
 branch_labels = None
 depends_on = None
 
