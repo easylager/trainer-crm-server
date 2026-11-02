@@ -484,3 +484,21 @@ async def test_extend_notifies_every_member_except_the_owner_once(db_session, fa
     await extend_league(db_session, league_id=league.id, player_key=SASHA, now=at(13))
     assert (await deliver_league_notices(factory, now=at(13, 5), send=out))["sent"] == 0
     assert len(out.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_default_on_for_anyone_with_a_move_off_stays_off(db_session) -> None:
+    """Решение координатора: без настроек пишем всем, у кого есть ход; без ходов — нет; явное «выкл» уважаем."""
+    old = await _match(db_session, "df0", DAY - timedelta(days=5), home="Юность", away="Неман")
+    for player in (SASHA, KATYA):
+        await make_pick(
+            db_session, player_key=player, display_name="И", match_id=old, side="home", now=DAY - timedelta(days=6)
+        )
+    await db_session.execute(
+        text("INSERT INTO hockey_players (player_key, display_name) VALUES (:p, 'Без ходов')"), {"p": VOVA}
+    )
+    await set_remind(db_session, KATYA, False)
+    mine = await _match(db_session, "df1", at(19))
+    assert (await get_prefs(db_session, SASHA))["on"] is True  # строки настроек нет — включено
+    notices = await due_notices(db_session, now=at(16, 5))
+    assert [(n.player_key, n.match_id) for n in notices] == [(SASHA, mine)]

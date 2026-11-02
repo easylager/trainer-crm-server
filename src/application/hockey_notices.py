@@ -214,7 +214,7 @@ _CLEAR_BLOCKED = text("""
 
 async def remind_on(session: AsyncSession, player_key: int) -> bool:
     row = (await session.execute(_PREFS, {"player_key": player_key})).one_or_none()
-    return bool(row and row.remind)
+    return True if row is None else bool(row.remind)
 
 
 async def set_remind(session: AsyncSession, player_key: int, on: bool, *, display_name: str = "") -> bool:
@@ -230,7 +230,7 @@ async def set_remind(session: AsyncSession, player_key: int, on: bool, *, displa
 async def get_prefs(session: AsyncSession, player_key: int) -> dict:
     row = (await session.execute(_PREFS, {"player_key": player_key})).one_or_none()
     return {
-        "on": bool(row and row.remind),
+        "on": True if row is None else bool(row.remind),
         "fav_club": row.fav_club if row else None,
         "types": {kind: (True if row is None else bool(getattr(row, col))) for kind, col in TYPE_COLUMN.items()},
         "league": True if row is None else bool(row.notify_league),
@@ -283,27 +283,32 @@ _FAN_CLUB = """
         pr.fav_club,
         (SELECT CASE x.side WHEN 'home' THEN xm.home_team ELSE xm.away_team END
          FROM hockey_picks AS x JOIN game_matches AS xm ON xm.id = x.match_id
-         WHERE x.player_key = pr.player_key AND xm.starts_at >= :fan_since AND xm.starts_at <= :now
+         WHERE x.player_key = pl.player_key AND xm.starts_at >= :fan_since AND xm.starts_at <= :now
          GROUP BY 1 ORDER BY COUNT(*) DESC, MAX(x.picked_at) DESC, 1
          LIMIT 1)
     )"""
 
-_ELIGIBLE = "pr.remind AND pr.bot_blocked_at IS NULL"
+# По умолчанию пишем всем, у кого есть хоть один ход (решение координатора); без ходов — не пишем.
+# Строки настроек может не быть: тогда всё включено. Главный выключатель — ``remind``.
+_ELIGIBLE = (
+    "COALESCE(pr.remind, true) AND pr.bot_blocked_at IS NULL"
+    " AND EXISTS (SELECT 1 FROM hockey_picks AS hp WHERE hp.player_key = pl.player_key)"
+)
 
 _DUE_NOMOVE = text(f"""
-    SELECT pr.player_key, m.id AS match_id, m.home_team, m.away_team, m.starts_at
-    FROM hockey_player_prefs AS pr
-    JOIN hockey_players AS pl ON pl.player_key = pr.player_key
+    SELECT pl.player_key, m.id AS match_id, m.home_team, m.away_team, m.starts_at
+    FROM hockey_players AS pl
+    LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key
     JOIN game_matches AS m ON m.status = 'scheduled'
          AND m.starts_at > :from_ AND m.starts_at <= :until
          AND {_FAN_CLUB} IN (m.home_team, m.away_team)
-    WHERE {_ELIGIBLE} AND pr.notify_nomove
-      AND NOT EXISTS (SELECT 1 FROM hockey_picks AS p WHERE p.match_id = m.id AND p.player_key = pr.player_key)
+    WHERE {_ELIGIBLE} AND COALESCE(pr.notify_nomove, true)
+      AND NOT EXISTS (SELECT 1 FROM hockey_picks AS p WHERE p.match_id = m.id AND p.player_key = pl.player_key)
       AND NOT EXISTS (
           SELECT 1 FROM hockey_notices AS n
-          WHERE n.player_key = pr.player_key AND n.match_id = m.id AND n.kind = 'nomove'
+          WHERE n.player_key = pl.player_key AND n.match_id = m.id AND n.kind = 'nomove'
       )
-    ORDER BY pr.player_key, m.starts_at
+    ORDER BY pl.player_key, m.starts_at
     """)
 
 _DUE_RESULT = text(f"""
@@ -311,9 +316,10 @@ _DUE_RESULT = text(f"""
            m.home_score AS final_home, m.away_score AS final_away,
            p.side, p.home_score, p.away_score, p.doubled, p.points
     FROM hockey_picks AS p
-    JOIN hockey_player_prefs AS pr ON pr.player_key = p.player_key
+    JOIN hockey_players AS pl ON pl.player_key = p.player_key
+    LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = p.player_key
     JOIN game_matches AS m ON m.id = p.match_id AND m.status = 'final' AND m.finalized_at > :fresh
-    WHERE {_ELIGIBLE} AND pr.notify_result AND p.points IS NOT NULL
+    WHERE {_ELIGIBLE} AND COALESCE(pr.notify_result, true) AND p.points IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM hockey_notices AS n
           WHERE n.player_key = p.player_key AND n.match_id = m.id AND n.kind = 'result'
@@ -332,10 +338,10 @@ _FINAL_OF_MONTH = text("""
     """)
 
 _MFINAL_FANS = text(f"""
-    SELECT pr.player_key, {_FAN_CLUB} AS club
-    FROM hockey_player_prefs AS pr
-    JOIN hockey_players AS pl ON pl.player_key = pr.player_key
-    WHERE {_ELIGIBLE} AND pr.notify_mfinal
+    SELECT pl.player_key, {_FAN_CLUB} AS club
+    FROM hockey_players AS pl
+    LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key
+    WHERE {_ELIGIBLE} AND COALESCE(pr.notify_mfinal, true)
     """)
 
 _SENT_TODAY = text("""
@@ -356,7 +362,7 @@ _NEXT_FOR_CLUB = text("""
     """)
 
 _FAN_CLUB_OF = text(f"""
-    SELECT {_FAN_CLUB} AS club FROM hockey_player_prefs AS pr WHERE pr.player_key = :player_key
+    SELECT {_FAN_CLUB} AS club FROM hockey_players AS pl LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key WHERE pl.player_key = :player_key
     """)
 
 
@@ -610,8 +616,9 @@ async def scan_league_ranks(session: AsyncSession, *, now: datetime) -> list[Ove
 
 
 _PREFS_OF = text(f"""
-    SELECT pr.player_key FROM hockey_player_prefs AS pr
-    WHERE pr.player_key = ANY(:keys) AND {_ELIGIBLE} AND pr.notify_overtook
+    SELECT pl.player_key FROM hockey_players AS pl
+    LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key
+    WHERE pl.player_key = ANY(:keys) AND {_ELIGIBLE} AND COALESCE(pr.notify_overtook, true)
     """)
 
 _NEXT_IN_SCOPE = text(f"""

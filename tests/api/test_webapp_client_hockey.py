@@ -314,7 +314,9 @@ async def test_remind_toggle_and_double_errors(app_use_test_db, db_session) -> N
     await db_session.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with patch_client_principal(ME):
-            assert (await client.get("/api/webapp/client/hockey/remind")).json() == {"on": False}
+            assert (await client.get("/api/webapp/client/hockey/remind")).json() == {"on": True}
+            off = await client.put("/api/webapp/client/hockey/remind", json={"on": False, "display_name": "Саша"})
+            assert off.status_code == 200 and off.json() == {"on": False}
             on = await client.put("/api/webapp/client/hockey/remind", json={"on": True, "display_name": "Саша"})
             assert on.status_code == 200 and on.json() == {"on": True}
             assert (await client.get("/api/webapp/client/hockey/remind")).json() == {"on": True}
@@ -328,7 +330,7 @@ async def test_bot_prefs_types_and_fav_club(app_use_test_db, db_session) -> None
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with patch_client_principal(ME):
             first = (await client.get("/api/webapp/client/hockey/bot-prefs")).json()
-            assert first["on"] is False and first["fav_club"] is None and all(first["types"].values())
+            assert first["on"] is True and first["fav_club"] is None and all(first["types"].values())
             put = await client.put(
                 "/api/webapp/client/hockey/bot-prefs",
                 json={"on": True, "fav_club": "Юность", "types": {"nomove": False}, "display_name": "Саша"},
