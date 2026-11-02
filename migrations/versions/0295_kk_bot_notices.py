@@ -1,7 +1,7 @@
 """Игра «Кто кого»: бот — четыре повода, отключение по типу, «болею за», метки мест, письма о продлении (TASK-334 S6).
 
 Revision ID: 0295_kk_bot_notices
-Revises: 0293_kk_league_terms
+Revises: 0294_match_bells
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0295_kk_bot_notices"
-down_revision = "0293_kk_league_terms"
+down_revision = "0294_match_bells"
 branch_labels = None
 depends_on = None
 

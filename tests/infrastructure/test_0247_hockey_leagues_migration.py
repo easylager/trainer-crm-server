@@ -37,6 +37,8 @@ async def _tables(db_session) -> list[str]:
 @pytest.mark.asyncio
 async def test_hockey_leagues_roundtrip_and_guards(db_session) -> None:
     # Короны лиг (0270) ссылаются на лиги — снимаем их первыми.
+    await _run_migration_step(db_session, "downgrade", "0297_kk_bot_default_on.py")
+    await _run_migration_step(db_session, "downgrade", "0295_kk_bot_notices.py")
     await _run_migration_step(db_session, "downgrade", "0293_kk_league_terms.py")
     await _run_migration_step(db_session, "downgrade", "0292_kk_slices_crowns.py")
     await _run_migration_step(db_session, "downgrade", "0270_hockey_races.py")

@@ -8,14 +8,14 @@
 * ``arena_slug_redirects`` — старый slug -> актуальная точка (переименование, слияние дублей).
 
 Revision ID: 0296_winter_admin_ops
-Revises: 0291_winter_subscriptions
+Revises: 0295_kk_bot_notices
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0296_winter_admin_ops"
-down_revision = "0291_winter_subscriptions"
+down_revision = "0295_kk_bot_notices"
 branch_labels = None
 depends_on = None
 

@@ -32,7 +32,7 @@ async def test_double_remind_notices_roundtrip(db_session) -> None:
     await db_session.execute(text("INSERT INTO hockey_player_prefs (player_key) VALUES (880271001)"))
     assert (
         await db_session.execute(text("SELECT remind FROM hockey_player_prefs WHERE player_key = 880271001"))
-    ).scalar_one() is False
+    ).scalar_one() is True  # 0297: напоминания у нового игрока включены по умолчанию
     match_id = (
         await db_session.execute(
             text("""

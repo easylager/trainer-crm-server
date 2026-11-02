@@ -34,7 +34,7 @@ async def _exists(db_session, name: str) -> bool:
 @pytest.mark.asyncio
 async def test_races_crowns_unique_and_roundtrip(db_session) -> None:
     # Зимняя модель (0292/0293, TASK-334) стоит поверх — снимаем её, чтобы проверить схему 0270.
-    for newer in ("0293_kk_league_terms.py", "0292_kk_slices_crowns.py"):
+    for newer in ("0297_kk_bot_default_on.py", "0295_kk_bot_notices.py", "0293_kk_league_terms.py", "0292_kk_slices_crowns.py"):
         newer_migration = runpy.run_path(str(MIGRATIONS / newer))
         connection = await db_session.connection()
 
