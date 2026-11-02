@@ -480,7 +480,11 @@ async def test_league_month_and_term_crowns_need_three_players_with_points(db_se
         )
     ).all()
     assert [(r.kind, r.player_key) for r in row] == [("league_month", P[0])]
-    assert await crown_counts(db_session, league_id=league.id) == {P[0]: 1}
+    # Значок у имени — все короны игрока (общие, клубные, лига), как в профиле, а не только этой лиги.
+    total = (await db_session.execute(text("SELECT count(*) FROM hockey_crowns WHERE player_key = :p"), {"p": P[0]})).scalar_one()
+    assert total > 1
+    assert await crown_counts(db_session, league_id=league.id) == {P[0]: total}
+    assert await crown_counts(db_session, league_id=None) == {P[0]: total}
 
 
 @pytest.mark.asyncio

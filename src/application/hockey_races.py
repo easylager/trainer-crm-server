@@ -596,12 +596,6 @@ async def race_summary(session: AsyncSession, *, now: datetime, club: str = DINA
 
 # ---------- короны: счётчики, стена, итоги ----------
 
-_CROWN_COUNTS = text("""
-    SELECT player_key, COUNT(*)::int AS crowns FROM hockey_crowns
-    WHERE (CAST(:league_id AS BIGINT) IS NULL AND league_id IS NULL) OR league_id = CAST(:league_id AS BIGINT)
-    GROUP BY player_key
-    """)
-
 _WALL = text("""
     SELECT c.period_start, c.race_id, pl.display_name, c.player_key
     FROM hockey_crowns AS c
@@ -646,10 +640,11 @@ _WINNERS = text("""
     """)
 
 
-async def crown_counts(session: AsyncSession, *, league_id: int | None) -> dict[int, int]:
-    """Сколько корон у каждого: в лиге — короны этой лиги, без лиги — короны общей таблицы (одним запросом)."""
-    rows = (await session.execute(_CROWN_COUNTS, {"league_id": league_id})).all()
-    return {r.player_key: r.crowns for r in rows}
+async def crown_counts(session: AsyncSession, *, league_id: int | None = None) -> dict[int, int]:
+    """Короны у каждого — те же, что и в общей таблице и профиле (один источник: ``crown_totals``)."""
+    from src.application.hockey_slices import crown_totals
+
+    return await crown_totals(session)
 
 
 def _season_months(first: date, last: date) -> list[tuple[datetime, str]]:

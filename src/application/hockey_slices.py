@@ -236,14 +236,14 @@ def correct_percent(row: Row | None) -> int | None:
     return round(100 * row.correct / row.played)
 
 
-async def crown_totals(session: AsyncSession, *, league_id: int | None) -> dict[int, int]:
-    """Число корон у каждого одним запросом: общая таблица — короны вне лиг, лига — короны этой лиги."""
-    stmt = text("""
-        SELECT player_key, COUNT(*)::int AS crowns FROM hockey_crowns
-        WHERE (CAST(:league_id AS BIGINT) IS NULL AND league_id IS NULL) OR league_id = CAST(:league_id AS BIGINT)
-        GROUP BY player_key
-        """)
-    return {r.player_key: r.crowns for r in (await session.execute(stmt, {"league_id": league_id})).all()}
+async def crown_totals(session: AsyncSession, *, league_id: int | None = None) -> dict[int, int]:
+    """Число корон у каждого игрока одним запросом — ВСЕ его короны (месяцы, клубы, лиги).
+
+    Значок у имени один на всё приложение: в хабе, таблице, лиге и профиле он считает одно и то же.
+    ``league_id`` оставлен для совместимости вызовов и на счёт не влияет.
+    """
+    stmt = text("SELECT player_key, COUNT(*)::int AS crowns FROM hockey_crowns GROUP BY player_key")
+    return {r.player_key: r.crowns for r in (await session.execute(stmt)).all()}
 
 
 def _row_out(row: Row, *, me: int | None, crowns: dict[int, int]) -> dict:
