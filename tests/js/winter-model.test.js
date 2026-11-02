@@ -101,7 +101,7 @@ describe('статус и подписи', () => {
   });
 
   it('неточная точка в карточке честно говорит «адрес примерный»', () => {
-    assert.match(W.cardMeta(pt({ locating: true })), /адрес примерный/);
+    assert.match(W.cardMeta(pt({ locating: true })), /^Адрес примерный · /);
   });
 });
 

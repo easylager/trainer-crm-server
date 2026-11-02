@@ -118,7 +118,12 @@ def _data_season(item: Mapping[str, Any]) -> str:
     return m.group(0) if m else ""
 
 
+_WEEKDAY_START = re.compile(r"^(Пн|Вт|Ср|Чт|Пт|Сб|Вс)\b")
+
+
 def _lower_first(text: str) -> str:
+    if _WEEKDAY_START.match(text):
+        return text  # «Пн 11:00–23:00; Вт …» — дни недели оставляем как есть
     if len(text) > 1 and text[1] != text[1].lower():
         return text  # аббревиатура
     return text[:1].lower() + text[1:]
@@ -133,11 +138,10 @@ def card_meta(item: Mapping[str, Any]) -> str:
     if bits:
         bits = [_lower_first(b) if (last or i > 0) else b for i, b in enumerate(bits)]
         line = ("Прошлой зимой: " if last else "") + " · ".join(bits)
-    out = [line]
+    out = ["Адрес примерный"] if item.get("locating") else []
+    out.append(line)
     if not hours and item.get("phone"):
         out.append("Часы уточняйте по телефону")
-    if item.get("locating"):
-        out.append("адрес примерный")
     return " · ".join(b for b in out if b)
 
 

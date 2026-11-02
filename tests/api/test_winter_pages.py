@@ -88,7 +88,7 @@ async def test_city_page_lists_sorted_with_honest_copy(on, client, db_session):
     assert "Прошлой зимой: " in html and "зимой 2025/26" not in html
     assert "открыто сейчас" not in html.lower() and "круглосуточно" not in html.lower()
     # неточная точка: честная подпись, без расстояния и координат в данных страницы
-    assert "адрес примерный" in html and "точку уточняем" not in html
+    assert "Адрес примерный" in html and "точку уточняем" not in html
     bad = [p for p in data_of(html)["points"] if p["name"] == "Неточная"][0]
     assert bad["lat"] is None and bad["map_allowed"] is False
     assert "index, follow" in html and 'rel="canonical" href="https://glideclub.test/c/minsk/zimoy"' in html
@@ -291,7 +291,14 @@ def test_card_meta_prefixes_last_winter_and_drops_unknowns():
     unknown = _item(is_paid=None, hours={"known": False, "season": "2025/26"})
     assert wp.card_meta(unknown) == ""
     assert wp.card_meta({**unknown, "phone": "+375 17 000-00-00"}) == "Часы уточняйте по телефону"
-    assert wp.card_meta(_item(locating=True)).endswith(" · адрес примерный")
+    assert wp.card_meta(_item(locating=True)).startswith("Адрес примерный · ")
+
+
+def test_card_meta_keeps_weekday_capitals():
+    from src.application import winter_page as wp
+
+    assert wp._lower_first("Пн 11:00–23:00; Вт 10:00–23:00") == "Пн 11:00–23:00; Вт 10:00–23:00"
+    assert wp._lower_first("Ежедневно 07:00–23:00") == "ежедневно 07:00–23:00"
 
 
 def test_card_title_drops_kind_prefix_only():

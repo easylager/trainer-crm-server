@@ -177,6 +177,7 @@
 
   function lowerFirst(text) {
     if (!text) return text;
+    if (/^(Пн|Вт|Ср|Чт|Пт|Сб|Вс)(?![а-яё])/.test(text)) return text; /* дни недели оставляем как есть */
     if (text.length > 1 && text.charAt(1) !== text.charAt(1).toLowerCase()) return text; /* аббревиатура */
     return text.charAt(0).toLowerCase() + text.slice(1);
   }
@@ -198,9 +199,9 @@
       bits = bits.map(function (b, i) { return last || i > 0 ? lowerFirst(b) : b; });
       line = (last ? 'Прошлой зимой: ' : '') + bits.join(' · ');
     }
-    var out = [line];
+    var out = point && point.locating ? ['Адрес примерный'] : [];
+    out.push(line);
     if (!hours && point && point.phone) out.push('Часы уточняйте по телефону');
-    if (point && point.locating) out.push('адрес примерный');
     return out.filter(Boolean).join(' · ');
   }
 
