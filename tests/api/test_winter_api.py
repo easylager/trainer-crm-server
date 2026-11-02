@@ -130,3 +130,19 @@ def test_page_token_expiry_and_binding(monkeypatch):
 
     assert not winter_public.check_page_token(7, tok, now + timedelta(minutes=31))
     assert not winter_public.check_page_token(7, None, now)
+
+
+@pytest.mark.asyncio
+async def test_site_sheet_companions_recorded_under_one_rate_limit(on, client, db_session):
+    aid = await make_point(db_session)
+    tok = (await client.get(f"/api/public/winter/points/{aid}")).json()["mark_token"]
+    url = f"/api/public/winter/points/{aid}/marks"
+    body = {"kind": "ice", "value": "flooded", "token": tok,
+            "companions": [{"kind": "crowd", "value": "few"}, {"kind": "hockey", "value": "playing"}]}
+    assert (await client.post(url, json=body, headers=HDR)).status_code == 200
+    n = (await db_session.execute(text("SELECT count(*) FROM seasonal_rink_marks WHERE arena_id=:a"), {"a": aid})).scalar_one()
+    assert n == 3
+    again = await client.post(url, json={"kind": "ice", "value": "bad", "token": tok}, headers=HDR)
+    assert again.status_code == 429
+    bad = await client.post(url, json={**body, "companions": [{"kind": "ice", "value": "bad"}]}, headers=HDR)
+    assert bad.status_code in (422, 429)

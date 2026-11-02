@@ -34,11 +34,18 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class Companion(BaseModel):
+    kind: str = Field(max_length=8)
+    value: str = Field(max_length=16)
+
+
 class MarkBody(BaseModel):
     kind: str = Field(max_length=8)
     value: str = Field(max_length=16)
     token: str | None = Field(default=None, max_length=80)
     idem_key: str | None = Field(default=None, max_length=40)
+    # Попутные отметки шторки «Как там сейчас?» (людей, хоккей): главная — про лёд, лимит считается один раз.
+    companions: list[Companion] = Field(default_factory=list, max_length=2)
     website: str | None = Field(default=None, max_length=100)  # honeypot
 
 
@@ -46,6 +53,23 @@ def _mark_http(exc: winter_marks.MarkError) -> HTTPException:
     status = {"not_found": 404, "rate_limited": 429, "bad_value": 422, "bad_source": 422}.get(exc.code, 400)
     headers = {"Retry-After": str(exc.retry_after_sec)} if exc.retry_after_sec else None
     return HTTPException(status_code=status, detail=exc.code, headers=headers)
+
+
+async def _record_companions(session, body: MarkBody, *, arena_id: int, source: str, actor: str, telegram_id: int | None, now) -> None:
+    """Людей / хоккей из той же шторки. Лёд сюда не попадает: он главная отметка."""
+    seen: set[str] = set()
+    for c in body.companions:
+        if c.kind not in (ws.KIND_CROWD, ws.KIND_HOCKEY) or c.kind in seen:
+            raise HTTPException(status_code=422, detail="bad_value")
+        seen.add(c.kind)
+        try:
+            await winter_marks.record_mark(
+                session, arena_id=arena_id, kind=c.kind, value=c.value, source=source, actor=actor,
+                telegram_id=telegram_id, idem_key=f"{body.idem_key}:{c.kind}" if body.idem_key else None,
+                now=now, skip_site_limits=True,
+            )
+        except winter_marks.MarkError as exc:
+            raise _mark_http(exc) from exc
 
 
 def _result(res: winter_marks.MarkResult) -> dict:
@@ -109,6 +133,7 @@ async def post_site_mark(arena_id: int, body: MarkBody, request: Request, sessio
         )
     except winter_marks.MarkError as exc:
         raise _mark_http(exc) from exc
+    await _record_companions(session, body, arena_id=arena_id, source=ws.SOURCE_SITE, actor=actor, telegram_id=None, now=now)
     await session.commit()
     return _result(res)
 
@@ -144,6 +169,9 @@ async def post_miniapp_mark(
         )
     except winter_marks.MarkError as exc:
         raise _mark_http(exc) from exc
+    await _record_companions(
+        session, body, arena_id=arena_id, source=ws.SOURCE_MINIAPP, actor=f"tg:{tg}", telegram_id=tg, now=_now()
+    )
     await session.commit()
     return _result(res)
 

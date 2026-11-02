@@ -1705,6 +1705,15 @@ async def list_public_ice_arenas(
     # — только то, чем можно пользоваться сейчас. «Зимой» — отдельный счётчик.
     month = today.month
     season_facet_count = sum(1 for r in rows if _is_closed_season_row(r, month=month))
+    # TASK-343: зимние точки (катки и коробки) живут в том же фасете «Зимой»; карточки фронт берёт у /api/public/winter.
+    winter_points = 0
+    if city_id is not None:
+        from src.shared.config import Settings
+
+        if Settings().seasonal_rinks_enabled:
+            from src.application import winter_public
+
+            winter_points = (await winter_public.city_summary(session, int(city_id), now=now))["total"]
     usable_rows = [r for r in rows if not _is_closed_season_row(r, month=month)]
     facets = _venue_type_facets(usable_rows)
     # Шапка (типы мест) считает места, которыми можно пользоваться сейчас.
@@ -1765,7 +1774,7 @@ async def list_public_ice_arenas(
         "intent": intent_value,
         "venue_type": sorted(venue_filter) if venue_filter else None,
         "venue_type_facets": facets,
-        "season_facet": {"key": "winter", "count": season_facet_count},
+        "season_facet": {"key": "winter", "count": season_facet_count + winter_points, **({"winter_points": winter_points} if winter_points else {})},
         "service_count": service_count,
         "next_cursor": next_cursor,
         # TASK-146 (Q-006): какое окно применено и сколько мест в нём реально есть.

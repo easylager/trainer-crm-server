@@ -532,7 +532,20 @@ async def load_city_hub_view(
         "nearby": nearby,
         # TASK-347: хоккей города на 7 дней; нет матчей или флаг выключен — None, блоков нет.
         "matches": await _city_matches(session, city_id=city_id, city_name=city_name, now=now),
+        "winter": await _winter_summary(session, city_id, now=now),
     }
+
+
+async def _winter_summary(session: AsyncSession, city_id: int, *, now: datetime) -> dict[str, int] | None:
+    """Плитка «Зимой» (TASK-343): только при включённом флаге и если в городе есть показываемые точки."""
+    from src.shared.config import Settings
+
+    if not Settings().seasonal_rinks_enabled:
+        return None
+    from src.application import winter_public
+
+    summary = await winter_public.city_summary(session, city_id, now=now)
+    return summary if summary["total"] > 0 else None
 
 
 # ---------------------------------------------------------------------------
@@ -1160,6 +1173,17 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
     if trainers and trainers_href:
         line = f"{trainers} {plural_ru(trainers, 'тренер', 'тренера', 'тренеров')}"
         rows.append(_b_route_row(href=trainers_href, icon="person", title=t("route.trainers"), line=_esc(line)))
+    winter = view.get("winter")
+    if winter:
+        from src.application.winter_page import winter_city_path
+
+        total, flooded = int(winter["total"]), int(winter["flooded"])
+        line = f"{total}\u00a0{plural_ru(total, 'точка', 'точки', 'точек')} · " + (
+            f"залиты {flooded}" if flooded else "ждём заливку"
+        )
+        rows.append(
+            _b_route_row(href=winter_city_path(str(view["city"]["name"])), icon="rink", title="Зимой", line=_esc(line))
+        )
     if not rows:
         return ""
     return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>')
