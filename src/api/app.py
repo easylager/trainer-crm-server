@@ -2957,20 +2957,31 @@ async def _static_webapp_cache_align(request: Request, call_next):
     if path.startswith("/static/webapp"):
         for k, v in _webapp_versioned_asset_cache_headers(request).items():
             response.headers[k] = v
-    elif path.startswith("/logos") or path == "/favicon.ico":
+    elif path.startswith("/logos") or path in ("/favicon.ico", "/favicon-120.png"):
         response.headers["Cache-Control"] = "public, max-age=604800"
     return response
 
 
 # Alias for repo path static/webapp — same files as explicit /webapp/* routes above (cache via middleware).
 app.mount("/static/webapp", StaticFiles(directory=str(_WEBAPP_DIR)), name="static_webapp")
-@app.get("/favicon.ico", include_in_schema=False)
-def favicon_ico():
-    """Иконка вкладки. Файл бренда, не отдельный .ico."""
-    path = _LOGOS_DIR / "01-icon" / "glide-icon-teal-transparent-128.png"
+def _icon_file(name: str) -> FileResponse:
+    path = _LOGOS_DIR / "01-icon" / name
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(path, media_type="image/png")
+
+
+# GET + HEAD: краулеры (Яндекс) проверяют иконку HEAD-запросом; 405 ломает фавикон в выдаче.
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)
+def favicon_ico():
+    """Иконка вкладки. Файл бренда, не отдельный .ico."""
+    return _icon_file("glide-icon-teal-transparent-128.png")
+
+
+@app.api_route("/favicon-120.png", methods=["GET", "HEAD"], include_in_schema=False)
+def favicon_120_png():
+    """Иконка 120×120 — рекомендованный Яндексом размер для сниппета."""
+    return _icon_file("glide-icon-teal-square-120.png")
 
 
 if _LOGOS_DIR.is_dir():

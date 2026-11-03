@@ -112,6 +112,7 @@ def render_unknown_city_html(cities: list[dict[str, Any]], *, home: str) -> str:
 <meta name="robots" content="noindex" />
 <title>{title}</title>
 <link rel="icon" href="/favicon.ico" type="image/png" />
+<link rel="icon" type="image/png" sizes="120x120" href="/favicon-120.png" />
 <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />
 __PUBLIC_FONTS_HEAD__
 <style>body{{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;

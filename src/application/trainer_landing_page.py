@@ -641,6 +641,7 @@ def render_trainer_landing_page(
   <meta name="twitter:description" content="{d}">
   <meta name="twitter:image" content="{_esc(og_image)}">
   <link rel="icon" href="/favicon.ico" type="image/png">
+  <link rel="icon" type="image/png" sizes="120x120" href="/favicon-120.png">
   <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png">
 {_landing_site_head_html()}
   <link rel="stylesheet" href="/landing/trainer-landing.css?v={css_v}">

@@ -22,7 +22,7 @@ from tests.api.test_public_ice_city_day import _add_today_session, _minsk_now
 from tests.api.test_public_arenas import _insert_arena, _insert_city
 from tests.api.test_public_place_page import _meta
 
-_HOME_SQL_MAX = 8
+_HOME_SQL_MAX = 9  # +1: время последнего удачного прогона парсера (сигнал свежести)
 
 
 def _client() -> AsyncClient:

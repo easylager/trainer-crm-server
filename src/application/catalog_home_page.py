@@ -425,6 +425,45 @@ def _minsk_date(now: datetime) -> date:
     return now.astimezone(ZoneInfo(DEFAULT_TIMEZONE)).date()
 
 
+_LAST_INGEST_SQL = text(
+    "SELECT MAX(finished_at) FROM ice_scrape_runs WHERE status = 'ok' AND slots_found > 0"
+)
+
+
+async def last_successful_ingest_at(session: AsyncSession) -> datetime | None:
+    """Время последнего удачного прогона парсера (нашёл сеансы). Нет данных — None."""
+    value = (await session.execute(_LAST_INGEST_SQL)).scalar()
+    return _aware_utc(value) if isinstance(value, datetime) else None
+
+
+_FRESH_MAX_AGE = timedelta(days=2)
+_FRESH_FALLBACK = "Актуальное расписание массового катания по всей Беларуси"
+_MONTHS_GEN = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+
+
+def home_freshness_text(last_ingest_at: datetime | None, now: datetime) -> str:
+    """Честный сигнал свежести: «сегодня в HH:MM» / «вчера в HH:MM»; старше 2 суток — без времени."""
+    if not isinstance(last_ingest_at, datetime):
+        return _FRESH_FALLBACK
+    tz = ZoneInfo(DEFAULT_TIMEZONE)
+    local = _aware_utc(last_ingest_at).astimezone(tz)
+    now_local = _aware_utc(now).astimezone(tz)
+    if local > now_local + timedelta(minutes=5) or now_local - local > _FRESH_MAX_AGE:
+        return _FRESH_FALLBACK
+    hhmm = local.strftime("%H:%M")
+    days = (now_local.date() - local.date()).days
+    if days == 0:
+        when = f"сегодня в {hhmm}"
+    elif days == 1:
+        when = f"вчера в {hhmm}"
+    else:
+        when = f"{local.day} {_MONTHS_GEN[local.month - 1]} в {hhmm}"
+    return f"Актуальное расписание массового катания · обновлено {when}"
+
+
 def _aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
@@ -917,7 +956,9 @@ async def load_catalog_home_view(
 
     cities = await _public_cities(session)
     day_counts = await day_session_counts(session, now=now, dates=home_picker_dates(now))
+    last_ingest_at = await last_successful_ingest_at(session)
     empty: dict[str, Any] = {
+        "last_ingest_at": last_ingest_at,
         "day_counts": day_counts,
         "cities": [],
         "city_groups": [],
@@ -1021,6 +1062,7 @@ async def load_catalog_home_view(
     from src.application.selection_page import selection_path
 
     return {
+        "last_ingest_at": last_ingest_at,
         **empty,
         "cities": catalog_cities,
         "city_groups": city_groups,
@@ -1476,6 +1518,11 @@ def render_catalog_home_page(
         bar_html=brand_link() + f'<a class="b-pill b-pill--end" href="{_esc(trainers_url)}">Для тренеров</a>',
         variant="tall",
         photo_variants=hero_variants,
+        # SSR, не JS: поисковик видит сигнал свежести в тексте страницы.
+        extra_html=(
+            '<p class="b-hero__fresh">'
+            f'{_esc(home_freshness_text(view.get("last_ingest_at"), now))}</p>'
+        ),
     )
 
     tiles, rest = split_home_tiles(cities, user_city_slug=user_slug)

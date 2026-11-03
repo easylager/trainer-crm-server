@@ -18,6 +18,7 @@ _PLACEHOLDER_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
 # Иконка бренда на каждой SSR-странице. Файл отдаёт маршрут ``/favicon.ico``.
 PUBLIC_ICON_LINKS = (
     '<link rel="icon" href="/favicon.ico" type="image/png" />\n'
+    '  <link rel="icon" type="image/png" sizes="120x120" href="/favicon-120.png" />\n'
     '  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />'
 )
 
