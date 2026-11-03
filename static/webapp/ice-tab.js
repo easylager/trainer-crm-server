@@ -660,7 +660,9 @@
     var host = $('iceWhenChips');
     if (!host) return;
     var scope = M.catalogScope(state.intent, state.venueTypes);
-    var show = sessionWhenActive() && scope !== 'shop' && scope !== 'coach' && state.placeService !== 'service';
+    /* У зимних точек нет сеансов: «Сегодня / Завтра» там ничего не фильтруют. */
+    var show =
+      sessionWhenActive() && scope !== 'shop' && scope !== 'coach' && state.placeService !== 'service' && !winterMapPending();
     host.hidden = !show;
     if (!show) {
       host.innerHTML = '';
@@ -1868,12 +1870,14 @@
   function renderForYou() {
     var host = $('iceForYou');
     if (!host) return;
-    var show = M.showForYou({
-      intent: state.intent,
-      scope: M.catalogScope(state.intent, state.venueTypes),
-      placeService: state.placeService,
-      items: state.forYou,
-    });
+    var show =
+      !winterMapPending() &&
+      M.showForYou({
+        intent: state.intent,
+        scope: M.catalogScope(state.intent, state.venueTypes),
+        placeService: state.placeService,
+        items: state.forYou,
+      });
     var html = show ? M.forYouStripHtml(state.forYou) : '';
     if (host.getAttribute('data-sig') !== html) {
       host.innerHTML = html;
@@ -1907,7 +1911,8 @@
     var list = listEl();
     var cap = $('iceCaption');
     if (cap) {
-      cap.textContent = M.formatSortCaption({
+      /* Зимний блок сам говорит, сколько точек; «Пока нет катков» над ним — неправда. */
+      cap.textContent = winterMapPending() ? '' : M.formatSortCaption({
         total: state.total,
         items: state.items,
         intent: state.intent,
