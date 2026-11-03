@@ -929,7 +929,14 @@
       '</button>';
   }
 
+  /* Пилюля «Карта» прячется, когда вид переключает зимний сегмент. */
+  function syncViewSwitch() {
+    var sw = $('iceViewSwitch');
+    if (sw) sw.hidden = !mapAllowed() || mapViewActive() || winterMapPending();
+  }
+
   function renderCatalogHeader() {
+    syncViewSwitch();
     var counts = cityCountsForModes();
     var modes = M.catalogModesView({
       facets: state.venueFacets,
@@ -1325,7 +1332,8 @@
     var sw = $('iceViewSwitch');
     if (sw) {
       // TASK-147: в режиме карты пилюля скрыта — её роль у шторки.
-      sw.hidden = !allowed || showMapView;
+      /* Зимой «Список | Карта» — сегмент в самом блоке, плавающая пилюля не нужна. */
+      sw.hidden = !allowed || showMapView || winterMapPending();
       // aria-pressed отвечает на «карта включена?», а подпись зовёт в другое
       // состояние — иначе кнопка называлась бы тем, что уже видно на экране.
       sw.setAttribute('aria-pressed', showMapView ? 'true' : 'false');
@@ -1768,6 +1776,7 @@
       onData: function () {
         if (mapViewActive()) showMap();
       },
+      setView: setView,
       authHeaders: authHeaders,
       openArena: function (ref) {
         shellNav('arena?ref=' + encodeURIComponent(ref));

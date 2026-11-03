@@ -62,6 +62,17 @@ async def test_list_sort_pin_first_then_flooded_then_distance(on, client, db_ses
 
 
 @pytest.mark.asyncio
+async def test_list_gives_the_city_in_locative_for_the_title(on, client, db_session):
+    aid = await make_point(db_session, name="Каток", state="waiting")
+    city = await city_of(db_session, aid)
+    name = (await db_session.execute(text("SELECT name FROM cities WHERE id=:c"), {"c": city})).scalar_one()
+    body = (await client.get(f"/api/public/winter/cities/{city}/points")).json()
+    from src.shared.city_locative import city_locative
+
+    assert body["where"] == city_locative(name)
+
+
+@pytest.mark.asyncio
 async def test_imprecise_point_has_no_distance_map_or_pin(on, client, db_session):
     aid = await make_point(db_session, precision="city", lat=None, lon=None)
     d = (await client.get(f"/api/public/winter/points/{aid}", params={"lat": 53.9, "lon": 27.5})).json()

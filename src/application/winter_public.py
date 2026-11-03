@@ -22,6 +22,7 @@ from src.application.winter_links import (
     bell_param, bot_link, gone_param, map_allowed, photo_param, route_url, static_map_url, NEAR_PARAM,
 )
 from src.shared import winter_status as ws
+from src.shared.city_locative import city_locative
 from src.shared.config import Settings
 from src.shared.winter_hours import hours_summary_ru
 from src.shared.winter_text import clean_official_name, phone_links
@@ -298,7 +299,10 @@ async def list_points(
 
     items.sort(key=key)
     flooded = sum(1 for i in items if i["state"] == "flooded")
+    city_name = rows[0].city_name if rows else None
     return {"items": items, "total": len(items), "flooded": flooded, "season_label": ws.season_label(season),
+            # «Зимой в Минске»: заголовок Mini App не склоняет названия сам.
+            "where": city_locative(city_name) if city_name else None,
             "bell_near_link": bot_link(settings.client_bot_username, NEAR_PARAM)}
 
 

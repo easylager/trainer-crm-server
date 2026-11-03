@@ -65,7 +65,7 @@
 
   function pill(p) {
     var v = W.stateView(p);
-    return '<span class="w-pill w-pill--' + v.tone + '">' + esc(v.label) + '</span>';
+    return '<span class="w-pill w-pill--' + v.tone + '">' + (ICON[v.tone] || '') + esc(v.label) + '</span>';
   }
 
   function card(p) {
@@ -89,23 +89,22 @@
       (dispute ? '<span class="w-card__meta">' + esc(dispute) + '</span>' : '') + '</span></a>';
   }
 
-  function render() {
-    var h = ensureHost();
-    var data = cache.data;
-    if (!h || !data) return;
-    var points = data.items || [];
-    var origin = f.origin || ctx.origin;
-    var districts = W.districtList(points);
-    var list = W.applyFilters(points, { flooded: f.flooded, kind: f.kind, district: f.district, origin: origin });
-    var head = W.headline(points.length, data.flooded || 0);
-    var bell = data.bell_near_link;
-    var bellHtml = bell
-      ? '<div class="w-bell"><span class="w-bell__text"><span class="w-bell__title">Лёд рядом с вами</span>' +
-        '<span class="w-bell__hint">Напишем в Telegram, когда зальют лёд в 2 км от вас</span></span>' +
-        '<button type="button" class="w-btn w-btn--tg" data-w-near>Подписаться</button></div>'
-      : '';
-    var chips =
-      '<div class="w-chips" role="group" aria-label="Фильтры">' +
+  var ICON = {
+    wait: '<svg class="w-pill__i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    ok: '<svg class="w-pill__i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  };
+  var BELL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15z"/><path d="M10 21h4"/></svg>';
+
+  function segHtml(active) {
+    function b(v, label) {
+      return '<button type="button" data-w-view="' + v + '" aria-pressed="' + (active === v) + '">' + label + '</button>';
+    }
+    return '<div class="w-seg" role="group" aria-label="Вид">' + b('list', 'Список') + b('map', 'Карта') + '</div>';
+  }
+
+  function chipsHtml(data, points, origin, withDistricts) {
+    var districts = withDistricts ? W.districtList(points) : [];
+    return '<div class="w-chips" role="group" aria-label="Фильтры">' +
       '<button type="button" class="w-chip" data-w-f="near" aria-pressed="' + !!origin + '">Ближе ко мне</button>' +
       '<button type="button" class="w-chip" data-w-f="flooded" aria-pressed="' + f.flooded + '">Залиты · ' + (data.flooded || 0) + '</button>' +
       '<button type="button" class="w-chip" data-w-f="rink" aria-pressed="' + (f.kind === 'rink') + '">Катки</button>' +
@@ -119,15 +118,35 @@
               (f.district === d.name) + '">' + esc(d.name) + ' · ' + d.count + '</button>';
           }).join('') + '</div>'
         : '');
+  }
+
+  function render() {
+    var h = ensureHost();
+    var data = cache.data;
+    if (!h || !data) return;
+    var points = data.items || [];
+    var origin = f.origin || ctx.origin;
+    var list = W.applyFilters(points, { flooded: f.flooded, kind: f.kind, district: f.district, origin: origin });
+    var head = W.headline(points.length, data.flooded || 0);
+    var bell = data.bell_near_link;
+    /* Колокольчик — после списка: карточки должны быть над сгибом. */
+    var bellHtml = bell
+      ? '<div class="w-bell"><span class="w-bell__text"><span class="w-bell__title">Лёд рядом с вами</span>' +
+        '<span class="w-bell__hint">Напишем, когда зальют лёд в 2 км от вас</span></span>' +
+        '<button type="button" class="w-btn w-btn--tg" data-w-near>' + BELL + 'Подписаться</button></div>'
+      : '';
+    var lead = head.title
+      ? '<b>' + esc(head.title) + '.</b> ' + esc(head.hint)
+      : esc(W.summaryLine(points.length, data.flooded || 0));
     h.innerHTML =
       '<div class="w-page" style="padding:0 0 12px">' +
-      '<p class="w-sub">' + esc(head.title || W.summaryLine(points.length, data.flooded || 0)) + '</p>' +
-      (head.hint ? '<p class="w-sub">' + esc(head.hint) + '</p>' : '') +
-      (head.bellFirst ? bellHtml : '') + chips +
+      '<h2 class="w-title">' + esc(data.where ? 'Зимой в ' + data.where : 'Зимой') + '</h2>' +
+      '<p class="w-lead">' + lead + '</p>' +
+      segHtml('list') + chipsHtml(data, points, origin, true) +
       '<p class="w-note">' + esc(geoNote || W.sortNote({ flooded: f.flooded, kind: f.kind, district: f.district, origin: origin })) + '</p>' +
       (list.length ? '<ul class="w-list" style="padding:0;margin:0">' + list.map(function (p) { return '<li>' + card(p) + '</li>'; }).join('') + '</ul>'
         : '<p class="w-empty">' + esc(W.emptyFilterText({ flooded: f.flooded })) + '</p>') +
-      (head.bellFirst ? '' : bellHtml) +
+      bellHtml +
       '</div>';
     if (ctx.onData) ctx.onData();
   }
@@ -233,15 +252,10 @@
     var h = document.createElement('div');
     h.id = 'iceWinterMap';
     h.className = 'w-app w-fullmap';
-    h.innerHTML = '<div class="w-map__canvas"></div><p class="w-map__msg" hidden></p><div class="w-mapcard" hidden></div>' +
+    h.innerHTML = '<div class="w-map__canvas"></div><p class="w-map__msg" hidden></p><div class="w-fullmap__bar"></div><div class="w-mapcard" hidden></div>' +
       '<p class="w-fullmap__attrib">© Яндекс · <a href="https://yandex.ru/legal/maps_termsofuse/" target="_blank" rel="noopener">Условия</a></p>';
     sec.appendChild(h);
-    h.addEventListener('click', function (ev) {
-      var open = ev.target.closest('[data-w-open]');
-      if (!open) return;
-      ev.preventDefault();
-      openPoint(Number(open.getAttribute('data-w-open')));
-    });
+    h.addEventListener('click', onClick);
     mapState.host = h;
     mapState.map = null;
     mapState.clusterer = null;
@@ -304,6 +318,9 @@
     sec.classList.add('ice-map-wrap--winter');
     mapState.sec = sec;
     mapHost(sec).hidden = false;
+    /* Верх карты: «Список | Карта» и те же фильтры, что в списке. */
+    mapState.host.querySelector('.w-fullmap__bar').innerHTML =
+      segHtml('map') + chipsHtml(cache.data, cache.data.items || [], f.origin || ctx.origin, false);
     if (mapState.ym) {
       drawMap();
       return true;
@@ -491,6 +508,11 @@
     if (open) {
       ev.preventDefault();
       return openPoint(Number(open.getAttribute('data-w-open')));
+    }
+    var view = ev.target.closest('[data-w-view]');
+    if (view) {
+      if (ctx.setView) ctx.setView(view.getAttribute('data-w-view'));
+      return;
     }
     if (ev.target.closest('[data-w-retry]')) {
       cache = { key: '', data: null };

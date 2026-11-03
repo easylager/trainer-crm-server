@@ -8,6 +8,9 @@ html body.ice-hub, html.trainer-theme-dark body.ice-hub, html.trainer-theme-ligh
   background: var(--g-bg) !important; color: var(--g-ink); font-family: var(--g-font);
 }
 
+/* Поля задаёт сама вкладка (16px, как на сайте). Общие 12px у body давали 28px по бокам: экран выглядел уже сайта. */
+html body.ice-hub { padding-left: 0; padding-right: 0; }
+
 /* Заголовок вкладки — шрифтом сайта; «Главная» в шапке не нужна: внизу меню. */
 body.ice-hub .client-app-header { background: transparent; box-shadow: none; border: 0; padding: 20px 16px 4px; min-height: 0; }
 body.ice-hub .client-app-header__title { font: 400 30px/1 var(--g-font-display); letter-spacing: -.01em; color: var(--g-ink); }
