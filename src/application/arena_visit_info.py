@@ -141,6 +141,12 @@ def normalize_visit_info(raw: Any) -> dict[str, Any]:
     if child_age is not None:
         out["child_age_max"] = child_age
 
+    # Вместимость зала для «свободно N из M»: касса может считать в `count` резерв
+    # (ТЦ «Замок»: 115 против реальных 110) — значение карточки перекрывает снимок кассы.
+    seats_total = _opt_int(raw.get("seats_total"), lo=1, hi=5000, field="seats_total")
+    if seats_total is not None:
+        out["seats_total"] = seats_total
+
     f = raw.get("facts") if isinstance(raw.get("facts"), Mapping) else {}
     facts: dict[str, Any] = {}
     for key, *_ in _FACTS:

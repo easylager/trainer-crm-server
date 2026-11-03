@@ -222,3 +222,18 @@ async def test_public_session_carries_seats_capacity_from_korona_snapshot(db_ses
     by_time = {s["starts_at_local"][:5]: s for s in resp.json()["days"][0]["sessions"]}
     assert by_time["14:00"]["seats_capacity"] == 115
     assert "seats_capacity" not in by_time["16:00"]
+
+    # «Вместимость зала» в карточке арены главнее кассы: у «Замка» касса считает 115, в зале 110.
+    await db_session.execute(
+        text("UPDATE arena_profiles SET visit_info = CAST(:v AS jsonb) WHERE arena_id = :aid"),
+        {"v": '{"seats_total": 110}', "aid": aid},
+    )
+    await db_session.commit()
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get(
+            f"/api/public/arenas/{slug}/sessions",
+            params={"from": day.isoformat(), "to": day.isoformat()},
+        )
+    by_time = {s["starts_at_local"][:5]: s for s in resp.json()["days"][0]["sessions"]}
+    assert by_time["14:00"]["seats_capacity"] == 110
+    assert "seats_capacity" not in by_time["16:00"]

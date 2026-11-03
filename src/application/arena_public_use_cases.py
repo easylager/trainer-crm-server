@@ -2406,13 +2406,22 @@ async def public_arena_session_days(
                    source_id, observed_at, valid_until, confidence, schedule_basis, hall, price_tiers,
                    -- Вместимость зала для «свободно N из M» (TASK-333): остаток уже в capacity_note,
                    -- а «из скольких» знает только снимок кассы. Вместимость не меняется, свежесть не важна.
-                   CASE WHEN s.capacity_note IS NOT NULL THEN (
-                       SELECT snap.capacity FROM ice_sales_snapshots snap
-                       WHERE snap.arena_id = s.arena_id
-                         AND snap.local_date = s.local_date
-                         AND snap.starts_at_local = s.starts_at_local
-                       ORDER BY snap.observed_at DESC
-                       LIMIT 1
+                   -- Если в карточке арены задано visit_info.seats_total — оно главнее кассы: у «Замка»
+                   -- касса считает 115, а в зале 110.
+                   CASE WHEN s.capacity_note IS NOT NULL THEN COALESCE(
+                       (
+                           SELECT (ap.visit_info->>'seats_total')::int FROM arena_profiles ap
+                           WHERE ap.arena_id = s.arena_id
+                             AND ap.visit_info->>'seats_total' ~ '^[0-9]{{1,4}}$'
+                       ),
+                       (
+                           SELECT snap.capacity FROM ice_sales_snapshots snap
+                           WHERE snap.arena_id = s.arena_id
+                             AND snap.local_date = s.local_date
+                             AND snap.starts_at_local = s.starts_at_local
+                           ORDER BY snap.observed_at DESC
+                           LIMIT 1
+                       )
                    ) END AS seats_capacity
             FROM ice_sessions s
             WHERE s.arena_id = :aid
