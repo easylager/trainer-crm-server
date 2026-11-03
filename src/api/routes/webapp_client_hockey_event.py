@@ -160,7 +160,7 @@ async def post_client_hockey_invite(
     except CompanyRejected as exc:
         raise _http(exc) from None
     if not card["url"].startswith("http"):
-        raise HTTPException(status_code=503, detail="Ссылка появится, когда бот будет настроен")
+        raise HTTPException(status_code=503, detail="Ссылка пока недоступна")
     prepared = await save_prepared(
         settings.telegram_bot_token_client,
         player_key,

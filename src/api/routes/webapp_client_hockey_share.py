@@ -199,7 +199,7 @@ async def post_client_hockey_share(
         league_id, match_id = body.league_id, None
 
     if not url:
-        raise HTTPException(status_code=503, detail="Ссылка появится, когда бот будет настроен")
+        raise HTTPException(status_code=503, detail="Ссылка пока недоступна")
     prepared = None
     if principal.platform == MiniAppPlatform.TELEGRAM:
         prepared = await _prepare(settings.telegram_bot_token_client, player_key, result_id, photo, caption, button)
