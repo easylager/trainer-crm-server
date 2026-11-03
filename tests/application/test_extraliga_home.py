@@ -19,6 +19,13 @@ def test_now_slot_feed_orders_city_matches_dinamo_then_more():
     assert out["items"][-1]["count"] == 17
 
 
+def test_now_slot_feed_keeps_all_matches_entry_when_nothing_this_week():
+    hockey = {"mode": "before", "match": {"id": 1, "starts_at": "2026-11-10T16:00:00+00:00"}}
+    feed = {"matches": [{"kind": "extraliga", "id": 7}], "week_count": 0, "all_href": "client-matches?city=2"}
+    out = now_slot(bookings=None, hockey=hockey, upcoming=[], now=NOW, extraliga=feed)
+    assert out["items"][-1] == {"kind": "more", "count": 0, "href": "client-matches?city=2"}
+
+
 def test_now_slot_feed_is_chronological_with_dinamo():
     hockey = {"mode": "before", "match": {"id": 1, "starts_at": (NOW + timedelta(days=1)).isoformat()}}
     week = {"kind": "extraliga", "id": 8, "starts_at": (NOW + timedelta(days=6)).isoformat()}

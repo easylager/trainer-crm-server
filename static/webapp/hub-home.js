@@ -464,8 +464,11 @@
   function moreCard(c, host) {
     var a = link(el('a', 'hn__card hn__ev hn__more'), c.href || 'client-matches');
     var what = el('span', 'hn__what');
-    what.appendChild(el('span', 'hn__more-n hh-display', String(c.count)));
-    what.appendChild(el('span', 'hn__sub', plural(c.count, 'матч', 'матча', 'матчей') + ' на неделе'));
+    /* Матчей на этой неделе нет — число не рисуем, остаётся только вход на расписание. */
+    if (c.count > 0) {
+      what.appendChild(el('span', 'hn__more-n hh-display', String(c.count)));
+      what.appendChild(el('span', 'hn__sub', plural(c.count, 'матч', 'матча', 'матчей') + ' на неделе'));
+    } else what.appendChild(el('span', 'hn__sub', 'Расписание'));
     what.appendChild(el('span', 'hn__more-go', 'Все матчи →'));
     a.appendChild(what);
     host.replaceChildren(a);
@@ -791,6 +794,10 @@
     var host = $('hubNow');
     var kind = now ? now.kind : 'none';
     if (kind === 'feed') feed(now.items || [], host);
+    /* Один матч (Динамо без матчей города): рядом всё равно вход на расписание. */
+    else if (kind === 'kk_before' || kind === 'kk_result' || kind === 'extraliga') {
+      feed([now, { kind: 'more', count: 0, href: 'client-matches' }], host);
+    }
     else if (nowCard(now, host)) { /* одна карточка */ }
     else if (!city && hub && hub.ice_teaser) {
       lastTeaserHub = hub;

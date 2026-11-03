@@ -272,9 +272,9 @@ def now_slot(
             items.append(dinamo)
         # Динамо встаёт по времени среди матчей города, а не в хвост; итог месяца без даты — в конец.
         items.sort(key=_feed_start)
+        # Вход на расписание есть всегда: ближайший матч может быть на следующей неделе (count = 0).
         count = int((extraliga or {}).get("week_count") or 0)
-        if count:
-            items.append({"kind": "more", "count": count, "href": (extraliga or {}).get("all_href") or "client-matches"})
+        items.append({"kind": "more", "count": count, "href": (extraliga or {}).get("all_href") or "client-matches"})
         return {"kind": "feed", "items": items}
     if dinamo is not None:
         return dinamo

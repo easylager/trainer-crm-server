@@ -98,6 +98,13 @@ describe('скорость (AC-P2…P5)', () => {
     assert.ok(!/cacheWrite\(\{ city: hero\.city/.test(apply.replace(/hero\.onPhoto = function[\s\S]*?\};/, '')));
   });
 
+  it('один матч в слоте — рядом вход «Все матчи», а при нуле на неделе нет числа', () => {
+    assert.match(hubJs, /kind === 'kk_before' \|\| kind === 'kk_result' \|\| kind === 'extraliga'\) \{\s*feed\(\[now, \{ kind: 'more', count: 0, href: 'client-matches' \}\], host\);/);
+    const more = hubJs.slice(hubJs.indexOf('function moreCard('), hubJs.indexOf('function kkBefore('));
+    assert.match(more, /if \(c\.count > 0\)/);
+    assert.match(more, /Все матчи →/);
+  });
+
   it('префетч других вкладок — после load, а не вместе с первым экраном', () => {
     const finish = fnBody('finishHubInitialLoading');
     assert.match(finish, /window\.HubHome\.ready\(\)/);
