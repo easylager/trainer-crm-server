@@ -282,6 +282,9 @@ describe('TASK-182 AC-1: магазины не превращаются в тр�
     assert.equal(M.noIceInCity('skate', [], { items: [], total: 3 }), false);
     assert.equal(M.noIceInCity('skate', [], null), false);
     assert.equal(M.noIceInCity('coach', [], { items: [], total: 0 }), false);
+    /* «Зимой» отдаёт ноль арен — это не «льда в городе нет», тренеров открывать нельзя. */
+    assert.equal(M.noIceInCity('skate', [], { items: [], total: 0 }, 'winter'), false);
+    assert.equal(M.noIceInCity('skate', [], { items: [], total: 0 }, ''), true);
   });
 });
 

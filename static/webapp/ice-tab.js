@@ -2576,7 +2576,7 @@
         state.loadedIntent = lens;
         /* TASK-182 (F1): только честное «в городе нет льда» от сервера. Не магазины
            и не пустота после клиентских фильтров. */
-        if (M.noIceInCity(state.intent, state.venueTypes, data)) {
+        if (M.noIceInCity(state.intent, state.venueTypes, data, state.season)) {
           return maybeOpenTrainersWhenNoSkate(gen);
         }
         onListLoaded();

@@ -1253,11 +1253,10 @@ def _b_city_suggest(view: Mapping[str, Any]) -> str:
     name = _esc(city_locative(str(city.get("name") or "")))
     return (
         '<section class="b-sec b-city-suggest">'
-        '<p class="b-city-suggest__lead">'
-        f'В {name} чего-то не хватает? Расскажите про него — '
-        'каток, магазин, мастерская или залитый дворовый лёд.</p>'
-        f'<a class="b-city-suggest__link" href="/suggest?city={int(city_id)}">Предложить место →</a>'
-        '<p class="b-city-suggest__sub">Каждое место проверяем и публикуем — так каталог растёт.</p>'
+        f'<h2 class="b-city-suggest__title">Нет нужного места в {name}?</h2>'
+        '<p class="b-city-suggest__lead">Каток, магазин, мастерская или двор, где залили лёд, — '
+        'расскажите, мы проверим и добавим.</p>'
+        f'<a class="b-city-suggest__link" href="/suggest?city={int(city_id)}">Предложить место</a>'
         '</section>'
     )
 

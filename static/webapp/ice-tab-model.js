@@ -243,8 +243,10 @@
    * в ответе сервера. Пустота после клиентских фильтров (магазины + «Открыто сейчас»
    * в 23:30) — это пустой результат фильтра, а не повод менять выбор человека.
    */
-  function noIceInCity(intent, venueTypes, data) {
+  function noIceInCity(intent, venueTypes, data, season) {
     if (coerceIntent(intent) !== INTENTS.skate) return false;
+    /* «Зимой»: закрытых арен в ответе нет по построению, лёд — это зимние точки отдельным блоком. */
+    if (String(season || '').toLowerCase() === 'winter') return false;
     if (catalogScope(intent, venueTypes) !== 'places') return false;
     var v = venueTypes || [];
     if (v.length && !(v.length === 1 && v[0] === 'ice')) return false;
