@@ -416,6 +416,7 @@ class IceIngestScheduler:
                 snapshot=extraction.snapshot,
                 error_code=error_code,
                 error_message=error_message,
+                replace_dates=getattr(extraction, "replace_dates", None),
             ),
             validated,
             list(extraction.korona_sales or []),
@@ -472,6 +473,7 @@ class IceIngestScheduler:
         slot_count: int = 0,
         slots_dropped: int = 0,
         snapshot=None,
+        replace_dates=None,
     ) -> ScrapeRunRecord:
         return ScrapeRunRecord(
             job_id=job.id,
@@ -487,6 +489,7 @@ class IceIngestScheduler:
             error_code=error_code,
             publish_horizon_days=publish_horizon_days(job.config),
             publish_timezone=publish_timezone(job.config),
+            replace_dates=replace_dates,
         )
 
 

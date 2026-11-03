@@ -110,6 +110,9 @@ class Extraction:
     schedule_basis: str | None = None
     # TASK-295: счётчики продаж Korona у Замка; пишутся отдельно от ice_sessions.
     korona_sales: list[Any] = field(default_factory=list)
+    # Источник прочитан частично: публикатор удаляет пропавшие сеансы только в этих датах.
+    # None — источник целый, прежняя замена всего окна.
+    replace_dates: frozenset[date] | None = None
 
 
 @dataclass(frozen=True)
@@ -163,3 +166,5 @@ class ScrapeRunRecord:
     # None → дефолты publish_horizon (14 дней, Europe/Minsk).
     publish_horizon_days: int | None = None
     publish_timezone: str | None = None
+    # Из Extraction.replace_dates (только в памяти).
+    replace_dates: frozenset[date] | None = None

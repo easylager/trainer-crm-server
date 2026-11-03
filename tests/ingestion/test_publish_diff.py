@@ -8,7 +8,12 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from src.ingestion.publish import _PUBLISHABLE_KINDS_SQL
-from src.ingestion.publish_diff import ExistingParserSession, is_replaceable_parser_row, plan_publish
+from src.ingestion.publish_diff import (
+    ExistingParserSession,
+    is_replaceable_parser_row,
+    keep_known_prices,
+    plan_publish,
+)
 from src.ingestion.types import PARSER_KINDS, CanonicalSlotDraft
 
 _START = datetime(2026, 3, 16, 9, 0, tzinfo=timezone.utc)
@@ -174,3 +179,76 @@ def test_publishable_kinds_follow_parser_kinds() -> None:
     assert "hockey_practice" in PARSER_KINDS
     for kind in PARSER_KINDS:
         assert f"'{kind}'" in _PUBLISHABLE_KINDS_SQL
+
+
+# --- runs never erase data: prices and unread days -------------------------------------------
+
+from dataclasses import replace as _replace  # noqa: E402
+
+
+def _priced_row(session_id: int, *, starts=_START, adult=630, child=530, rental=680):
+    return _replace(
+        _row(session_id, starts=starts),
+        local_date=starts.date(),
+        price_adult_minor=adult,
+        price_child_minor=child,
+        price_rental_minor=rental,
+    )
+
+
+def _priced_draft(*, starts=_START, adult, child=None, rental=None):
+    return _replace(_draft(starts=starts), price_adult_minor=adult, price_child_minor=child, price_rental_minor=rental)
+
+
+@pytest.mark.parametrize("empty", [None, 0])
+def test_empty_draft_prices_keep_stored_prices(empty):
+    plan = plan_publish([_priced_row(7)], [_priced_draft(adult=empty, child=empty, rental=empty)])
+    (sid, merged), = plan.to_update
+    assert sid == 7
+    assert (merged.price_adult_minor, merged.price_child_minor, merged.price_rental_minor) == (630, 530, 680)
+
+
+def test_real_price_change_is_accepted_and_missing_one_kept():
+    plan = plan_publish([_priced_row(7)], [_priced_draft(adult=700, child=None, rental=750)])
+    (_, merged), = plan.to_update
+    assert (merged.price_adult_minor, merged.price_child_minor, merged.price_rental_minor) == (700, 530, 750)
+
+
+def test_unknown_stored_price_takes_draft_value_and_none_stays_none():
+    row = _priced_row(7, adult=None, child=None, rental=None)
+    (_, merged), = plan_publish([row], [_priced_draft(adult=630)]).to_update
+    assert (merged.price_adult_minor, merged.price_child_minor, merged.price_rental_minor) == (630, None, None)
+
+
+def test_keep_known_prices_returns_same_draft_when_nothing_to_keep():
+    draft = _priced_draft(adult=630, child=530, rental=680)
+    assert keep_known_prices(_priced_row(1), draft) is draft
+
+
+def test_inserted_slot_keeps_its_own_prices():
+    later = _START + timedelta(days=1)
+    plan = plan_publish([_priced_row(7)], [_priced_draft(adult=630), _priced_draft(starts=later, adult=None)])
+    assert plan.to_insert[0].price_adult_minor is None  # no stored row to inherit from
+
+
+def test_replace_dates_keeps_sessions_of_unread_days():
+    day2 = _START + timedelta(days=2)
+    day3 = _START + timedelta(days=3)
+    rows = [_priced_row(1), _priced_row(2, starts=day2), _priced_row(3, starts=day3)]
+    drafts = [_priced_draft(adult=630)]  # only day 0 read; day 2 unreadable
+    plan = plan_publish(rows, drafts, replace_dates=frozenset({_START.date(), day3.date()}))
+    assert plan.to_delete_ids == (3,)  # read day without the session → removed; day 2 kept
+    assert [sid for sid, _ in plan.to_update] == [1]
+
+
+def test_without_replace_dates_whole_window_is_replaced_as_before():
+    day2 = _START + timedelta(days=2)
+    plan = plan_publish([_priced_row(1), _priced_row(2, starts=day2)], [_priced_draft(adult=630)])
+    assert plan.to_delete_ids == (2,)
+
+
+def test_replace_dates_still_drops_duplicates_of_matched_key():
+    plan = plan_publish(
+        [_priced_row(1), _priced_row(2)], [_priced_draft(adult=630)], replace_dates=frozenset()
+    )
+    assert plan.to_delete_ids == (2,)

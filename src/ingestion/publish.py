@@ -7,7 +7,9 @@ TASK-223: id сеанса стабилен между прогонами. В т�
   (``source_id IS NULL`` входит, ``admin`` и ``etalon_%`` нет);
 * ключ ``(starts_at_utc, kind)`` есть и в базе, и в черновиках — UPDATE на месте;
 * ключ только в черновиках — INSERT;
-* ключ только в базе — DELETE (сеанс исчез из источника).
+* ключ только в базе — DELETE (сеанс исчез из источника); при частично прочитанном
+  источнике (``run.replace_dates``) — только в прочитанных датах;
+* пустая (None/0) цена черновика не затирает известную цену строки (``keep_known_prices``).
 
 Пустые черновики и черновики целиком вне окна показа возвращают 0 и витрину
 не обнуляют. ``ON CONFLICT DO NOTHING`` остаётся страховкой: гонка двух
@@ -91,7 +93,7 @@ class SqlAlchemyIceSessionPublisher:
                 text("SELECT set_config('app.change_source', :tag, true)"), {"tag": tag}
             )
             existing = await self._load_existing(run.arena_id, window)
-            plan = plan_publish(existing, drafts)
+            plan = plan_publish(existing, drafts, replace_dates=run.replace_dates)
             await self._delete_ids(run.arena_id, plan.to_delete_ids)
             for session_id, draft in plan.to_update:
                 await self._update(session_id, draft, scrape_run_id=run_id)
@@ -131,7 +133,8 @@ class SqlAlchemyIceSessionPublisher:
         """
         result = await self._session.execute(
             text(f"""
-                SELECT id, starts_at_utc, kind, status, source_id
+                SELECT id, starts_at_utc, kind, status, source_id, local_date,
+                       price_adult_minor, price_child_minor, price_rental_minor
                 FROM ice_sessions
                 WHERE arena_id = :arena_id
                   AND kind IN ({_PUBLISHABLE_KINDS_SQL})
@@ -151,6 +154,10 @@ class SqlAlchemyIceSessionPublisher:
                     kind=str(row["kind"]),
                     source_id=row["source_id"],
                     status=str(row["status"] or "active"),
+                    local_date=row["local_date"],
+                    price_adult_minor=row["price_adult_minor"],
+                    price_child_minor=row["price_child_minor"],
+                    price_rental_minor=row["price_rental_minor"],
                 )
             )
         return rows

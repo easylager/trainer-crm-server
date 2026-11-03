@@ -11,8 +11,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timezone
 from typing import Sequence
 
 from src.ingestion.types import CanonicalSlotDraft
@@ -31,6 +31,10 @@ class ExistingParserSession:
     kind: str
     source_id: str | None = None
     status: str = "active"
+    local_date: date | None = None
+    price_adult_minor: int | None = None
+    price_child_minor: int | None = None
+    price_rental_minor: int | None = None
 
 
 @dataclass(frozen=True)
@@ -70,9 +74,34 @@ def slot_key(starts_at_utc: datetime, kind: str) -> tuple[datetime, str]:
     return (moment, kind)
 
 
+_PRICE_FIELDS = ("price_adult_minor", "price_child_minor", "price_rental_minor")
+
+
+def _known_price(value: int | None) -> bool:
+    return value is not None and int(value) > 0
+
+
+def keep_known_prices(row: ExistingParserSession, draft: CanonicalSlotDraft) -> CanonicalSlotDraft:
+    """A run never erases a price: an empty (None/0) price in the draft keeps the stored one.
+
+    A broken price block (site redesign, OCR miss) yields None or 0 for every slot; writing that
+    over a known price hides it from visitors and from price filters. A real change is a positive
+    number and still wins. Known limit: a session that really became free (0) keeps its old price
+    until an admin edits it — no parser emits 0 for «free» today.
+    """
+    changes = {
+        name: getattr(row, name)
+        for name in _PRICE_FIELDS
+        if not _known_price(getattr(draft, name)) and _known_price(getattr(row, name))
+    }
+    return replace(draft, **changes) if changes else draft
+
+
 def plan_publish(
     existing: Sequence[ExistingParserSession],
     drafts: Sequence[CanonicalSlotDraft],
+    *,
+    replace_dates: frozenset[date] | None = None,
 ) -> PublishPlan:
     """Свести текущие строки и черновики по ``(starts_at_utc, kind)``.
 
@@ -82,6 +111,11 @@ def plan_publish(
     ``admin`` / ``etalon_%`` в план не попадают, даже если их передали.
     Статус в UPDATE всегда берётся из черновика: ``expired`` / ``cancelled`` /
     ``superseded`` снова становятся ``active``, если источник вернул сеанс.
+
+    ``replace_dates``: источник прочитан не целиком (например, афиша, где одна колонка не
+    распозналась). Удаляются только строки этих дат; остальные дни остаются как были —
+    нечитаемый день не должен стирать уже опубликованные сеансы. ``None`` — как раньше.
+    Цены в UPDATE проходят ``keep_known_prices``: пустая цена черновика не затирает известную.
     """
     by_key: dict[tuple[datetime, str], list[ExistingParserSession]] = {}
     for row in existing:
@@ -105,15 +139,19 @@ def plan_publish(
             continue
         matched.add(key)
         keeper = min(rows, key=lambda row: row.id)
-        to_update.append((keeper.id, draft))
+        to_update.append((keeper.id, keep_known_prices(keeper, draft)))
 
     to_delete: list[int] = []
     for key, rows in by_key.items():
         if key in matched:
             keeper_id = min(row.id for row in rows)
             to_delete.extend(row.id for row in rows if row.id != keeper_id)
-        else:
+        elif replace_dates is None:
             to_delete.extend(row.id for row in rows)
+        else:
+            to_delete.extend(
+                row.id for row in rows if row.local_date is not None and row.local_date in replace_dates
+            )
 
     return PublishPlan(
         to_insert=tuple(to_insert),
