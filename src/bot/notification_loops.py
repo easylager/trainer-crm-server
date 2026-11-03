@@ -3397,6 +3397,17 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert) -> dict:
             pace.calendar_at = now
         else:
             pace.standings_at = now
+    # Страницы матчей: разовый сбой одной страницы нормален, массовый — признак сломанного парсера hockey.by.
+    det = out.get("details") or {}
+    if det.get("checked") and det.get("failed", 0) >= det["checked"]:
+        text = health.failed(
+            "детали Экстралиги",
+            f"все {det['failed']} страниц матчей не распарсились — похоже, поменялась разметка hockey.by",
+        )
+        if text:
+            await alert(text)
+    else:
+        health.ok("детали Экстралиги")
     health.ok("Экстралига")
     logger.info("[hockey_matches_loop] extraliga %s", out)
     return out

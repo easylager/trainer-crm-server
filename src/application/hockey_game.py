@@ -396,7 +396,7 @@ async def my_double(session: AsyncSession, *, player_key: int, now: datetime) ->
 _PICKS_AFTER_CLOSE = text("""
     DELETE FROM hockey_picks
     WHERE match_id = :match_id AND picked_at >= :closes_at
-    RETURNING player_key
+    RETURNING player_key, doubled
     """)
 
 _MATCH_TRUMPS = text("""
@@ -414,14 +414,12 @@ async def on_match_moved(session: AsyncSession, *, match_id: int, starts_at: dat
     неделю, а если там у игрока уже стоит козырь — возвращается ему. Возвращает ``voided`` и ``released``."""
     from src.application.hockey_slices import week_start
 
-    voided = [
-        r.player_key
-        for r in (
-            await session.execute(
-                _PICKS_AFTER_CLOSE, {"match_id": match_id, "closes_at": _utc(starts_at) - PICK_CLOSES_BEFORE}
-            )
-        ).all()
-    ]
+    voided_rows = (
+        await session.execute(
+            _PICKS_AFTER_CLOSE, {"match_id": match_id, "closes_at": _utc(starts_at) - PICK_CLOSES_BEFORE}
+        )
+    ).all()
+    voided = [r.player_key for r in voided_rows]
     week = week_start(starts_at)
     released: list[int] = []
     for r in (await session.execute(_MATCH_TRUMPS, {"match_id": match_id})).all():
@@ -439,6 +437,12 @@ async def on_match_moved(session: AsyncSession, *, match_id: int, starts_at: dat
             released.append(r.player_key)
     if voided or released:
         logger.info("hockey match %s moved: voided=%s released=%s", match_id, voided, released)
+        # Уведомить: ход исчез без объяснения — иначе игрок решает, что игра его потеряла (аудит игры, п.2).
+        from src.application.hockey_notices import queue_moved
+
+        await queue_moved(
+            session, match_id=match_id, voided=voided_rows, released=released, starts_at=starts_at
+        )
     return {"voided": voided, "released": released}
 
 

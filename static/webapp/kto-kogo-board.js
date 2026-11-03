@@ -321,7 +321,7 @@
       ]));
       var lines = S.seasonTitleLine(p, p.season);
       var earned = (p.titles || []).map(function (t) {
-        return h('div', { class: 'kk-cr' }, [icon(I.check, 18), h('span', { class: 'kk-grow', text: 'Знаток ' + (t.club ? S.clubName(t.club) : 'сезона') + ' ' + t.season })]);
+        return h('div', { class: 'kk-cr' }, [icon(I.check, 18), h('span', { class: 'kk-grow', text: 'Знаток ' + (t.club ? S.clubGen(t.club) : 'сезона') + ' ' + t.season })]);
       });
       if (lines.length || earned.length) {
         main.appendChild(h('div', { class: 'kk-sec' }, [

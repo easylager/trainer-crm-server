@@ -66,7 +66,7 @@ describe('тексты', () => {
     assert.equal(M.points(22), '22' + NBSP + 'очка');
   });
   it('друзья на половинке', () => {
-    assert.equal(M.fansLine([], true), 'ты первый');
+    assert.equal(M.fansLine([], true), 'пока только ты');
     assert.equal(M.fansLine(['Катя'], true), 'ты и' + NBSP + 'Катя');
     assert.equal(M.fansLine(['Катя', 'Саша'], true), 'ты и' + NBSP + 'ещё' + NBSP + '2');
     assert.equal(M.fansLine(['Катя', 'Саша'], false), 'Катя, Саша');

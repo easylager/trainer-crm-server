@@ -19,6 +19,7 @@ from src.application.hockey_game import (
     make_pick,
     my_double,
     my_doubles,
+    pick_open,
     player_matches,
     set_double,
 )
@@ -161,7 +162,7 @@ def _match_out(
         "moved_from": moved_from(row, starts_at),
         "has_page": has_match_page(row),
         "status": row["status"],
-        "open": row["status"] == "scheduled" and now < starts_at,
+        "open": pick_open(row["status"], starts_at, now),
         "result": (
             {
                 "home_score": row["home_score"],

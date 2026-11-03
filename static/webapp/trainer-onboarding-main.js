@@ -206,6 +206,7 @@
       'obShell', 'obWeek', 'obWindowPanel', 'obWindowTitle', 'obWindowClear', 'obWindowSlots',
       'obWeekHint', 'obWeekSummary',
       'obDoneTitle', 'obDoneLead', 'obDoneScheduleLink', 'obDonePricesBtn',
+      'obDoneCatalog', 'obDoneCatalogCard', 'obDoneCatalogBtn', 'obDoneCatalogNote',
       'obRole', 'obRoleCustomWrap', 'obRoleCustom',
       'obRoleAddBtn', 'obRoleAddSubmit', 'obRoleAddCancel', 'obRoleAddStatus',
       'obServiceAddWrap', 'obServiceAddInput',
@@ -2506,6 +2507,97 @@
     if (el.obDonePricesBtn) {
       el.obDonePricesBtn.onclick = goSetPrices;
     }
+    loadDoneCatalogInvite();
+  }
+
+  /* ── «Отправить себя в каталог»: publish-first, один тап прямо с экрана «Готово» ── */
+
+  function loadDoneCatalogInvite() {
+    if (!el.obDoneCatalog) return;
+    fetch(apiUrl('/trainer/catalog'), { headers: apiHeaders() })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (o) {
+        if (!o.ok || !o.data) return;
+        renderDoneCatalogInvite(o.data);
+      })
+      .catch(function () { /* блок вспомогательный — без него экран не ломается */ });
+  }
+
+  function renderDoneCatalogInvite(p) {
+    if (!el.obDoneCatalog || !p) return;
+    /* Показываем блок только тому, кто ещё не просился в каталог и может решать сам
+       (студия-управляемым решение принадлежит студии). Готовность карточки проверяем
+       по readiness — без неё кнопка вернула бы 422. */
+    var state = String(p.state || 'draft');
+    var ready = !!(p.readiness && p.readiness.submit_ready);
+    if (state !== 'draft' || !p.can_act || !ready) return;
+
+    var pv = p.preview || {};
+    var name = [pv.first_name, pv.last_name].filter(Boolean).join(' ').trim();
+    var lines = [];
+    if (pv.service_line) lines.push(pv.service_line);
+    if (pv.arena_work_format === 'online') lines.push('Онлайн');
+    else if (pv.arena_names && pv.arena_names.length) lines.push(pv.arena_names.slice(0, 2).join(', '));
+    if (pv.free_slots_14d) lines.push('Свободных окон: ' + pv.free_slots_14d);
+
+    var avaHtml = name ? escTxt(name.split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase()) : '·';
+    if (pv.photo_file_key) {
+      avaHtml = '<img src="/api/public/photos/' + encodeURIComponent(pv.photo_file_key) + '" alt="">';
+    }
+    if (el.obDoneCatalogCard) {
+      el.obDoneCatalogCard.innerHTML =
+        '<span class="ob-done-catalog__ava">' + avaHtml + '</span>' +
+        '<span>' +
+        '<span class="ob-done-catalog__name">' + escTxt(name || 'Ваша карточка') + '</span>' +
+        '<div class="ob-done-catalog__line">' + escTxt(lines.join(' · ') || 'Так вас увидят в каталоге') + '</div>' +
+        '</span>';
+    }
+    el.obDoneCatalog.hidden = false;
+    if (el.obDoneCatalogBtn) {
+      el.obDoneCatalogBtn.onclick = publishDoneCatalog;
+    }
+  }
+
+  function publishDoneCatalog() {
+    if (!el.obDoneCatalogBtn || el.obDoneCatalogBtn.disabled) return;
+    el.obDoneCatalogBtn.disabled = true;
+    el.obDoneCatalogBtn.textContent = 'Публикуем…';
+    fetch(apiUrl('/trainer/catalog/submit'), { method: 'POST', headers: apiHeaders() })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (o) {
+        if (!o.ok || !o.data || o.data.state !== 'published') {
+          el.obDoneCatalogBtn.disabled = false;
+          el.obDoneCatalogBtn.textContent = 'Отправить себя в каталог';
+          if (el.obDoneCatalogNote) {
+            var labels = o.data && o.data.detail && o.data.detail.missing_labels_ru;
+            el.obDoneCatalogNote.textContent = (labels && labels.length)
+              ? 'Сначала заполните: ' + labels.join(', ') + '.'
+              : 'Не получилось — попробуйте ещё раз из раздела «Каталог».';
+          }
+          return;
+        }
+        markDoneCatalogPublished();
+      })
+      .catch(function () {
+        el.obDoneCatalogBtn.disabled = false;
+        el.obDoneCatalogBtn.textContent = 'Отправить себя в каталог';
+        if (el.obDoneCatalogNote) el.obDoneCatalogNote.textContent = 'Нет связи — попробуйте ещё раз.';
+      });
+  }
+
+  function markDoneCatalogPublished() {
+    if (!el.obDoneCatalog) return;
+    el.obDoneCatalog.innerHTML =
+      '<h2 class="ob-done-catalog__title">Вы в каталоге</h2>' +
+      '<p class="ob-done-catalog__lead">Клиенты найдут вас в списке на glideclub.by и запишутся в свободные окна. Карточку можно дополнять когда угодно — публикации это не мешает.</p>' +
+      '<p class="ob-done-catalog__ok">✓ Опубликовано</p>';
+    el.obDoneCatalog.hidden = false;
+  }
+
+  function escTxt(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
   function share(link, text, shareBody) {

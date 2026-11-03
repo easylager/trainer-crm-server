@@ -145,13 +145,27 @@ async def test_any_state_may_drop_to_draft(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_transition_outside_the_machine_is_refused(db_session) -> None:
-    """A draft cannot skip review. An unlisted edge is a caller bug, not a case to tolerate."""
+    """An unlisted edge is a caller bug, not a case to tolerate: publish-first made
+    ``draft → published`` legal (one-tap publish), so the refusal check now uses
+    ``draft → hidden`` — a card that was never listed cannot be hidden."""
     tid = await _bare_trainer(db_session)
     with pytest.raises(CatalogStateTransitionError):
         await set_catalog_state(
-            db_session, tid, CATALOG_STATE_PUBLISHED,
-            reason=REASON_MODERATOR_APPROVED, actor_type=CATALOG_ACTOR_MODERATOR, notify=False,
+            db_session, tid, CATALOG_STATE_HIDDEN,
+            reason=REASON_TRAINER_HIDDEN, actor_type=CATALOG_ACTOR_TRAINER, notify=False,
         )
+
+
+@pytest.mark.asyncio
+async def test_draft_publishes_in_one_tap(db_session) -> None:
+    """Publish-first: «Отправить себя в каталог» — draft → published без очереди модерации."""
+    tid = await _bare_trainer(db_session)
+    await set_catalog_state(
+        db_session, tid, CATALOG_STATE_PUBLISHED,
+        reason=REASON_TRAINER_SUBMITTED, actor_type=CATALOG_ACTOR_TRAINER, notify=False,
+    )
+    row = await get_catalog_state(db_session, tid)
+    assert row["catalog_state"] == CATALOG_STATE_PUBLISHED
 
 
 @pytest.mark.asyncio

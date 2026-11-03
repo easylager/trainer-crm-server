@@ -3,11 +3,13 @@ Single source of truth: trainer profile completeness for moderation submit vs fu
 
 Two tiers (same aggregate shape as get_trainer() / TrainerRepository.get_by_id):
 
-**A — Submission readiness (queue / submit-for-moderation):** checks all full-profile rules
-except optional-for-submit fields: description, education, experience_years, **and last name**
-(first name is enough for the public catalog queue). «Arenas» is also read the TTV way here —
-online / mobile work format counts — so that working without a fixed venue is not the same as
-being barred from the catalog.
+**A — Submission readiness (publish / submit):** the bar below which a catalog card is
+meaningless — first name, city, at least one service, at least one place of work. «Arenas» is
+read the TTV way here — online / mobile work format counts — so that working without a fixed
+venue is not the same as being barred from the catalog. Photo, session length and booking
+window are deliberately NOT here: a card without a photo still carries name + offer + book
+button, and the last two ride on product defaults until the trainer adjusts them (full tier
+still validates all of it).
 
 **B — Full profile (catalog trust / dossier):** strict «about the trainer» bar:
 full name (first + last), bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
@@ -38,20 +40,32 @@ MIN_DESCRIPTION_CHARS = 25
 # (Phone used to be one of them; it is optional for the catalog now.)
 MODERATION_CRITERIA_TOTAL = 10
 
-# Fields the catalog screen offers as a suggestion, never as a requirement. ``phone`` lives here:
-# a card without one simply has no phone row and no «copy phone» button.
-OPTIONAL_CATALOG_FIELD_KEYS: tuple[str, ...] = ("phone",)
+# Fields the catalog screen offers as a suggestion, never as a requirement. ``phone`` and
+# ``photo`` live here: a card without a phone simply has no phone row and no «copy phone»
+# button, and a card without a photo still works — it just converts worse.
+OPTIONAL_CATALOG_FIELD_KEYS: tuple[str, ...] = ("phone", "photo")
 
 # Wording for the «можно усилить» list, where a bare «телефон» would read as a to-do.
 OPTIONAL_SUGGESTION_LABELS_RU: dict[str, str] = {
     "phone": "телефон — по желанию: клиенты смогут скопировать его из карточки",
+    "photo": "фото — карточки с фото выбирают чаще",
 }
 
 # Submission tier: full checks minus these keys (still validated in full tier).
 # last_name is not a separate key — it rides inside ``full_name`` on the full tier;
 # submission relaxes that to first_name-only (see analyze_moderation_submission_readiness).
+# ``photo`` is a suggestion, not a gate: без него карточка посредственная, но не бессмысленная.
+# ``session_duration_minutes`` и ``min_hours_before_booking`` имеют продуктовые дефолты —
+# требовать их до публикации значит требовать решения, которые тренер ещё не принимал.
 SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS: frozenset[str] = frozenset(
-    {"description", "education", "experience_years"}
+    {
+        "description",
+        "education",
+        "experience_years",
+        "photo",
+        "session_duration_minutes",
+        "min_hours_before_booking",
+    }
 )
 
 MODERATION_SUBMISSION_CRITERIA_TOTAL = MODERATION_CRITERIA_TOTAL - len(SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS)

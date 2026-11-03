@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.hockey_event import enabled as hockey_enabled
 from src.application.hockey_event import event_href, is_home, kk_hidden
+from src.application.hockey_game import pick_open
 from src.application.hockey_matches import DINAMO
 from src.application.hockey_races import current_race, fresh_race_result, race_final_match_id, race_result
 from src.application.hockey_teams import team_card
@@ -76,7 +77,7 @@ def _match(row, *, now: datetime) -> dict:
         "away": team_card(row["away_team"]),
         "starts_at": starts_at.isoformat(),
         "status": row["status"],
-        "open": row["status"] == "scheduled" and now < starts_at,
+        "open": pick_open(row["status"], starts_at, now),
         "result": (
             {
                 "home_score": row["home_score"],
