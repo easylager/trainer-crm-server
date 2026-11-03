@@ -166,7 +166,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   flex-shrink: 0;
 }
 
-.client-tab-bar__btn:active {
+.client-tab-bar .client-tab-bar__btn:is(:active, .b-press) {
   transform: scale(0.94);
 }
 

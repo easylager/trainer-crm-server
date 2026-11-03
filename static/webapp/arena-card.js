@@ -2339,7 +2339,10 @@
     var modal = document.getElementById('arenaModal');
     if (!modal) return;
     modal.classList.remove('is-open');
-    modal.hidden = true;
+    // Шторка уезжает вниз, затем скрывается (transition в arena-card.css — 0.18s).
+    global.setTimeout(function () {
+      if (!modal.classList.contains('is-open')) modal.hidden = true;
+    }, 200);
   }
 
   function storeLocalReport(payload) {

@@ -9,6 +9,7 @@
 
   var M = global.IceTabModel;
   var lastArenaListSig = '';
+  var listWasSkeleton = false;
   var state = {
     forYou: [],
     intent: 'skate',
@@ -1176,12 +1177,16 @@
     var chip = $('iceIntentChip');
     if (!sheet) return;
     if (open) paintIntentSheet();
-    sheet.hidden = !open;
     if (chip) chip.setAttribute('aria-expanded', open ? 'true' : 'false');
     if (open) {
+      sheet.hidden = false;
       global.requestAnimationFrame(function () { sheet.classList.add('is-open'); });
     } else {
+      // Шторка уезжает вниз и только потом скрывается: без этого она пропадала рывком.
       sheet.classList.remove('is-open');
+      global.setTimeout(function () {
+        if (!sheet.classList.contains('is-open')) sheet.hidden = true;
+      }, 240);
     }
   }
 
@@ -1957,6 +1962,7 @@
       parkShareButton();
       lastArenaListSig = '';
       list.innerHTML = state.intent === 'coach' ? trainerSkeletons(4) : boardSkeletons(3);
+      listWasSkeleton = true;
       if (cap) cap.innerHTML = CAPTION_SKELETON;
       showActiveList();
       return;
@@ -1992,7 +1998,7 @@
       parkShareButton();
       lastArenaListSig = '';
       list.innerHTML = state.items.map(renderTrainerCard).join('') + loadMoreHtml();
-      markListRefresh(list);
+      markListPaint(list);
       showActiveList();
       return;
     }
@@ -2057,8 +2063,21 @@
     /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
        а приглушённые места без нужных сеансов идут уже после неё. */
     placeShareBeforeBreak(list);
-    markListRefresh(list);
+    markListPaint(list);
     showActiveList();
+  }
+
+  /* Первые карточки после заглушек проявляются лесенкой; дальше — обычная вспышка обновления. */
+  function markListPaint(list) {
+    if (!listWasSkeleton) {
+      markListRefresh(list);
+      return;
+    }
+    listWasSkeleton = false;
+    if (!list || !list.classList) return;
+    list.classList.remove('is-refresh');
+    list.classList.add('is-enter');
+    global.setTimeout(function () { list.classList.remove('is-enter'); }, 700);
   }
 
   function markListRefresh(list) {
@@ -3592,6 +3611,26 @@
     var photo = card.querySelector('.ice-board__photo');
     if (photo) photo.setAttribute('data-vt-hero', '1');
   }
+
+  /* Возврат с арены: кадр той же карточки принимает шапку арены обратно. Только если
+     карточка уже на экране — иначе обычный переход. */
+  function bindBackHero() {
+    if (!('onpagereveal' in global)) return;
+    global.addEventListener('pagereveal', function (ev) {
+      if (!ev.viewTransition) return;
+      var hero = null;
+      try { hero = JSON.parse(global.sessionStorage.getItem('glideArenaHero') || 'null'); } catch (e) { hero = null; }
+      if (!hero || hero.id == null) return;
+      var card = document.querySelector('.ice-board[data-arena-ref="' + String(hero.id).replace(/"/g, '') + '"]');
+      if (!card || !card.getBoundingClientRect) return;
+      var r = card.getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= (global.innerHeight || 0)) return;
+      markHeroForTransition(card);
+      var done = function () { markHeroForTransition(null); };
+      if (ev.viewTransition.finished) ev.viewTransition.finished.then(done, done);
+    });
+  }
+  bindBackHero();
 
   function bind() {
     bindIntentSheet();

@@ -27,7 +27,15 @@ function makeElement(id) {
     style: {},
     dataset: {},
     children: [],
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    classList: (() => {
+      const set = new Set();
+      return {
+        add: (c) => set.add(c),
+        remove: (c) => set.delete(c),
+        toggle: (c, on) => ((on === undefined ? !set.has(c) : on) ? set.add(c) : set.delete(c)),
+        contains: (c) => set.has(c),
+      };
+    })(),
     querySelector: () => null,
     querySelectorAll: () => [],
     setAttribute() {},
@@ -83,7 +91,7 @@ function boot(arenas) {
     localStorage: { getItem: () => null, setItem() {} },
     addEventListener() {},
     setTimeout: (fn, ms) => {
-      if (ms > 1000) return 0;
+      if (ms >= 700) return 0;
       fn();
       return 0;
     },
@@ -157,6 +165,13 @@ describe('лента: заглушки до ответа', () => {
     assert.doesNotMatch(html, /ice-board--skel/);
     assert.match(html, /ТЦ Замок/);
     assert.match(html, /Чижовка/);
+  });
+
+  it('карточки после заглушек проявляются лесенкой (is-enter), а не вспышкой обновления', async () => {
+    const { elements, respond } = await boot(ARENAS);
+    await respond();
+    assert.equal(elements.iceListSkate.classList.contains('is-enter'), true);
+    assert.equal(elements.iceListSkate.classList.contains('is-refresh'), false);
   });
 
   it('уже загруженная лента при перезапросе не мигает заглушками', () => {
