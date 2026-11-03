@@ -1328,3 +1328,49 @@ button.arena-info__tel--copy {
 .linkish:active {
   opacity: .6;
 }
+
+/* Вкладки блока «На льду»: массовое / семейное / фигурное / ОХМ — как сегмент на сайте.
+   Панели в разметке, неактивные скрыты; свои заголовки панелей не повторяют вкладку. */
+.arena-icetabs {
+  border-top: 1px solid var(--glide-line);
+}
+.arena-icetabs__head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 0;
+}
+.arena-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-card-bg);
+}
+.arena-seg__i {
+  flex: 1 0 auto;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: transparent;
+  color: var(--glide-hint);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.arena-seg__i[aria-selected="true"] {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font-weight: var(--app-weight-semibold);
+}
+.arena-icepane[hidden] { display: none; }
+.arena-icepane > .arena-sec { border-top: 0; }
+.arena-icepane .arena-sec > .arena-h,
+.arena-icepane .arena-h-row .arena-h { display: none; }
+.arena-icepane .arena-h-row { justify-content: flex-end; }
+.arena-icepane .arena-h-row:not(:has(> :not(.arena-h))) { display: none; }

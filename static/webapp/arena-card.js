@@ -21,6 +21,7 @@
     /* Выбранный день в секции ОХМ (независимо от МК). */
     ohmDay: null,
     extraDay: {},
+    iceTab: null,
     sessionsError: false,
     trainersError: false,
     iceWatchKinds: {},
@@ -1261,6 +1262,69 @@
     );
   }
 
+  /**
+   * Блок «На льду»: массовое, семейное, свободное фигурное и ОХМ — вкладками, как на сайте.
+   * Вкладка есть, только когда у арены есть такие сеансы; одна — без вкладок, как раньше.
+   * Панели остаются в DOM (скрыты атрибутом hidden): обновление строк по id работает как прежде.
+   */
+  function renderIceTabs() {
+    var panes = [];
+    var skate = renderIceSection();
+    if (skate) panes.push({ key: 'skate', full: iceSectionTitle(), html: skate });
+    EXTRA_KINDS.forEach(function (cfg) {
+      var html = renderExtraSection(cfg);
+      if (html) panes.push({ key: cfg.key, full: extraTitle(cfg), html: html });
+    });
+    var ohm = renderOhmSection();
+    if (ohm) panes.push({ key: 'ohm', full: ohmChipTitle(), html: ohm });
+    // Сеанс из ссылки открывает свою вкладку.
+    var sid = state.focus && state.focus.sessionId;
+    var focusKey = '';
+    if (sid) {
+      var fk = extraKindOfSession(sid);
+      focusKey = fk ? fk.key : sessionInOhm(sid) ? 'ohm' : 'skate';
+    }
+    var view = M.iceTabsView(panes, state.iceTab, focusKey);
+    if (!view.show) {
+      return panes.map(function (p) { return p.html; }).join('');
+    }
+    state.iceTab = view.active;
+    return (
+      '<div class="arena-icetabs" id="arenaIceTabs">' +
+      '<div class="arena-icetabs__head"><p class="arena-h">На льду</p>' +
+      '<div class="arena-seg" role="tablist" aria-label="На льду">' +
+      view.items
+        .map(function (it) {
+          return (
+            '<button type="button" role="tab" class="arena-seg__i" data-ice-tab="' + esc(it.key) +
+            '" aria-selected="' + (view.active === it.key ? 'true' : 'false') +
+            '" title="' + esc(it.full) + '">' + esc(it.label) + '</button>'
+          );
+        })
+        .join('') +
+      '</div></div>' +
+      panes
+        .map(function (p) {
+          return (
+            '<div class="arena-icepane" role="tabpanel" data-ice-pane="' + esc(p.key) + '"' +
+            (view.active === p.key ? '' : ' hidden') + '>' + p.html + '</div>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function selectIceTab(key) {
+    state.iceTab = key;
+    [].forEach.call(document.querySelectorAll('[data-ice-tab]'), function (b) {
+      b.setAttribute('aria-selected', b.getAttribute('data-ice-tab') === key ? 'true' : 'false');
+    });
+    [].forEach.call(document.querySelectorAll('[data-ice-pane]'), function (pane) {
+      pane.hidden = pane.getAttribute('data-ice-pane') !== key;
+    });
+  }
+
   function scheduleSlots() {
     return skatingCard() ? M.shareSlots(combinedScheduleDays(), todayIso(), 0) : [];
   }
@@ -2186,9 +2250,7 @@
     try {
       var heroHtml = renderHero();
       var restHtml =
-        renderIceSection() +
-        EXTRA_KINDS.map(renderExtraSection).join('') +
-        renderOhmSection() +
+        renderIceTabs() +
         // Карточка v2 — порядок PLACE_BLOCKS, как на сайте: на месте → тренеры → партнёры → ещё.
         (visit() && String(state.card.venue_type || '') !== 'shop' ? renderFacts() : renderAmenities()) +
         renderServices() +
@@ -2452,6 +2514,11 @@
           placeName: state.card.name || '',
         });
       }
+      return;
+    }
+    var iceTabBtn = ev.target.closest('[data-ice-tab]');
+    if (iceTabBtn) {
+      selectIceTab(iceTabBtn.getAttribute('data-ice-tab'));
       return;
     }
     var dayBtn = ev.target.closest('[data-day]');

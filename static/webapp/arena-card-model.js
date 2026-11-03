@@ -1563,7 +1563,33 @@
     return null;
   }
 
+  /* Подписи вкладок «На льду» — как на сайте (place_page._ICE_TAB_SHORT). */
+  var ICE_TAB_SHORT = { skate: 'Массовое', family: 'Семейное', figure: 'Фигурное', ohm: 'ОХМ' };
+
+  /**
+   * Вкладки блока «На льду». ``panes`` — [{key, full}] только тех видов, где есть сеансы.
+   * Меньше двух — вкладок нет. Активная: текущая, если она есть, иначе вид сеанса из ссылки
+   * (``focusKey``), иначе первая. Короткие подписи — когда вкладок больше двух.
+   */
+  function iceTabsView(panes, current, focusKey) {
+    panes = panes || [];
+    if (panes.length < 2) return { show: false, active: panes.length ? panes[0].key : '', items: [] };
+    var has = function (key) {
+      return panes.some(function (p) { return p.key === key; });
+    };
+    var active = has(current) ? current : has(focusKey) ? focusKey : panes[0].key;
+    var short = panes.length > 2;
+    return {
+      show: true,
+      active: active,
+      items: panes.map(function (p) {
+        return { key: p.key, full: p.full, label: short ? ICE_TAB_SHORT[p.key] || p.full : p.full };
+      }),
+    };
+  }
+
   return {
+    iceTabsView: iceTabsView,
     AMENITY_ORDER: AMENITY_ORDER,
     formatSessionPrices: formatSessionPrices,
     sessionNowState: sessionNowState,
