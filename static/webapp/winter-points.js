@@ -408,6 +408,7 @@
     mapHost(sec).hidden = false;
     /* Верх карты: «Список | Карта» и те же фильтры, что в списке. */
     mapState.host.querySelector('.w-fullmap__bar').innerHTML =
+      W.navRowHtml({ exit: !!ctx.exit, categories: !!ctx.openCategories }) +
       chipsHtml(cache.data, cache.data.items || [], f.origin || ctx.origin, false);
     paintDrawer();
     if (mapState.ym) {
@@ -717,6 +718,14 @@
     if (open) {
       ev.preventDefault();
       return openPoint(Number(open.getAttribute('data-w-open')));
+    }
+    if (ev.target.closest('[data-w-exit]')) {
+      if (ctx.exit) ctx.exit();
+      return;
+    }
+    if (ev.target.closest('[data-w-cats]')) {
+      if (ctx.openCategories) ctx.openCategories();
+      return;
     }
     var view = ev.target.closest('[data-w-view]');
     if (view) {

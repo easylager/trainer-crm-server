@@ -329,6 +329,7 @@ body.ice-view-map.w-map-on { overscroll-behavior: none; }
 .w-fullmap__bar > * { pointer-events: auto; }
 .w-fullmap__bar .w-seg button { min-height: 40px; }
 .w-fullmap__bar .w-chips { margin: 0; }
+.w-chip--nav { font-weight: 700; }
 /* Десктоп Telegram: панель не растягивается на всю ширину окна. */
 .w-fullmap__bar > .w-seg, .w-fullmap__bar > .w-chips { width: 100%; max-width: 480px; }
 .w-fullmap .w-mapcard { z-index: 4; }

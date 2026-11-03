@@ -701,6 +701,21 @@
     return { reset: reset };
   }
 
+  /**
+   * Верх зимней карты: шапка каталога на ней скрыта, поэтому выход — здесь.
+   * «Назад» — из «Зимой» в категорию, где человек был; «Что ищем» — к другим категориям.
+   * Кнопки есть, только когда экран дал, что вызвать.
+   */
+  function navRowHtml(can) {
+    can = can || {};
+    var out = '';
+    if (can.exit) out += '<button type="button" class="w-chip w-chip--nav" data-w-exit>\u2039 Назад</button>';
+    if (can.categories) {
+      out += '<button type="button" class="w-chip w-chip--nav" data-w-cats aria-haspopup="dialog">Что ищем <span aria-hidden="true">\u2304</span></button>';
+    }
+    return out ? '<div class="w-chips" role="group" aria-label="Навигация">' + out + '</div>' : '';
+  }
+
   return {
     NBSP: NBSP,
     plural: plural,
@@ -752,5 +767,6 @@
     waitText: waitText,
     newIdemKey: newIdemKey,
     quickPayload: quickPayload,
+    navRowHtml: navRowHtml,
   };
 });

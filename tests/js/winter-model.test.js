@@ -333,3 +333,23 @@ it('drawerTitle: счёт залитых и ждущих, «рядом» тол�
   assert.equal(W.drawerTitle([g('off', 2)], false), '2 без свежих отметок');
   assert.equal(W.drawerTitle([], false), 'По этому фильтру ничего нет');
 });
+
+describe('navRowHtml — выход с зимней карты', () => {
+  const W = require(require('node:path').resolve(__dirname, '../../static/shared/winter-model.js'));
+  const assert = require('node:assert/strict');
+  const { it } = require('node:test');
+  it('даёт «Назад» и «Что ищем», когда экран умеет и то и другое', () => {
+    const html = W.navRowHtml({ exit: true, categories: true });
+    assert.ok(html.includes('data-w-exit'));
+    assert.ok(html.includes('data-w-cats'));
+  });
+  it('без колбэков ряда нет вовсе', () => {
+    assert.equal(W.navRowHtml({}), '');
+    assert.equal(W.navRowHtml(), '');
+  });
+  it('только то, что экран умеет', () => {
+    const html = W.navRowHtml({ exit: true });
+    assert.ok(html.includes('data-w-exit'));
+    assert.ok(!html.includes('data-w-cats'));
+  });
+});

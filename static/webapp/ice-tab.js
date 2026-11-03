@@ -1787,6 +1787,12 @@
         if (mapViewActive()) showMap();
       },
       setView: setView,
+      /* Шапка каталога на зимней карте скрыта — выход и смена категории живут на самой карте. */
+      exit: function () {
+        setView('list');
+        commitPlaceFilter('');
+      },
+      openCategories: function () { openIntentSheet(true); },
       authHeaders: authHeaders,
       openArena: function (ref) {
         shellNav('arena?ref=' + encodeURIComponent(ref));
