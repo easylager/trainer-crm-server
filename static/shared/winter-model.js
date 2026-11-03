@@ -416,6 +416,45 @@
     no: 'хоккея нет',
   };
 
+  /* Mini App, шторка точки. Пока заливку не подтвердили, оценивать качество нечего: «Залили / Ещё не залит»
+     уходят одним нажатием. У залитой точки сначала выбирают лёд, затем по желанию людей и хоккей, и отправляют. */
+  var MARK_ICE = {
+    wait: [
+      { id: 'on', label: 'Залили' },
+      { id: 'off', label: 'Ещё не залит' },
+    ],
+    now: [
+      { id: 'on', label: 'Хороший' },
+      { id: 'bad', label: 'Плохой' },
+      { id: 'off', label: 'Льда нет' },
+    ],
+  };
+
+  function markView(point, state) {
+    var flooded = !!(point && point.state === 'flooded');
+    state = state || reportInit();
+    return {
+      title: flooded ? 'Вы у катка? Какой сейчас лёд?' : 'Вы у катка? Залили лёд?',
+      hint: flooded
+        ? 'Вашу отметку сразу увидят все, кто выбирает, куда пойти.'
+        : 'Отметьте, что видите. Когда заливку подтвердят, подписчики получат сообщение.',
+      oneTap: !flooded,
+      ice: MARK_ICE[flooded ? 'now' : 'wait'].map(function (o) {
+        return { id: o.id, label: o.label, selected: state.ice === o.id };
+      }),
+      extras: flooded && state.ice ? questionsView(state, { flooded: true }).filter(function (q) {
+        return q.key !== 'ice';
+      }) : [],
+      canSend: flooded && !!state.ice,
+    };
+  }
+
+  function hasPointSub(items, id) {
+    return (items || []).some(function (s) {
+      return s && s.kind === 'point' && Number(s.arena_id) === Number(id);
+    });
+  }
+
   function reportInit() {
     return { ice: null, crowd: null, hockey: null };
   }
@@ -682,6 +721,8 @@
     listGroups: listGroups,
     bellSlot: bellSlot,
     hasNearSub: hasNearSub,
+    hasPointSub: hasPointSub,
+    markView: markView,
     emptyFilterText: emptyFilterText,
     QUESTIONS: QUESTIONS,
     reportInit: reportInit,

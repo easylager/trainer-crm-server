@@ -296,3 +296,32 @@ describe('группы списка и место подписки', () => {
     assert.equal(W.hasNearSub(null), false);
   });
 });
+
+it('markView: пока ждём заливку — «Залили / Ещё не залит» одним нажатием, без оценки качества', () => {
+  const v = W.markView({ state: 'waiting' });
+  assert.equal(v.oneTap, true);
+  assert.deepEqual(v.ice.map((o) => o.label), ['Залили', 'Ещё не залит']);
+  assert.equal(v.extras.length, 0);
+  assert.equal(v.canSend, false);
+});
+
+it('markView: у залитой точки людей и хоккей спрашиваем только после выбора льда', () => {
+  const before = W.markView({ state: 'flooded' });
+  assert.equal(before.oneTap, false);
+  assert.deepEqual(before.ice.map((o) => o.id), ['on', 'bad', 'off']);
+  assert.equal(before.extras.length, 0);
+  assert.equal(before.canSend, false);
+  const after = W.markView({ state: 'flooded' }, { ice: 'bad', crowd: 'many', hockey: null });
+  assert.equal(after.ice.find((o) => o.id === 'bad').selected, true);
+  assert.deepEqual(after.extras.map((q) => q.key), ['crowd', 'hockey']);
+  assert.equal(after.extras[0].opts.find((o) => o.id === 'many').selected, true);
+  assert.equal(after.canSend, true);
+});
+
+it('hasPointSub: подписка именно на эту точку', () => {
+  const items = [{ kind: 'near', radius_m: 3000 }, { kind: 'point', arena_id: 7 }];
+  assert.equal(W.hasPointSub(items, 7), true);
+  assert.equal(W.hasPointSub(items, '7'), true);
+  assert.equal(W.hasPointSub(items, 8), false);
+  assert.equal(W.hasPointSub(null, 7), false);
+});
