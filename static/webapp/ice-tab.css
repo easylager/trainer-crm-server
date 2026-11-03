@@ -266,6 +266,7 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-seg button {
+  position: relative;
   border: 0;
   background: transparent;
   color: var(--glide-hint);
@@ -1249,6 +1250,22 @@ body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
 }
 
 .ice-skel--short { width: 38%; margin-top: 6px; }
+
+/* Строка-заглушка внутри текстового класса карточки: высота = строка его шрифта. */
+.ice-skel--text {
+  width: 62%;
+  height: 1.2em;
+  height: 1lh;
+  border-radius: var(--app-radius-pill);
+}
+.ice-board__where .ice-skel--short { width: 44%; margin-top: 0; }
+.ice-skel--text.ice-skel--wide { width: 34%; }
+.ice-skel--cap {
+  display: inline-block;
+  width: 7.5em;
+  height: 1em;
+  vertical-align: middle;
+}
 .ice-skel--wide { width: 72%; }
 
 @keyframes ice-skel-pulse {
@@ -2456,6 +2473,12 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
   backdrop-filter: blur(6px);
 }
 .ice-board__invite::before { content: "⛸ "; }
+/* Зона пальца 44px+ без раздувания самой пилюли. */
+.ice-board__invite::after {
+  content: "";
+  position: absolute;
+  inset: -8px -6px;
+}
 
 /*
  * TASK-146: окно времени сортирует, а не фильтрует. Карточки вне окна — «афиша
@@ -2700,4 +2723,29 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
   font-weight: var(--app-weight-normal, 400);
   line-height: 1.4;
   color: var(--glide-hint);
+}
+
+/* Зона нажатия сегмента — 44px, видимая пилюля остаётся 32px. */
+.ice-seg button::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
+}
+
+/*
+ * Отклик на касание, как на сайте: класс b-press ставит /static/share/b-press.js
+ * в момент pointerdown, :active — запасной путь. Сжатие 0.98 за 0.12 s.
+ */
+.ga-press {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .12s ease-out, background-color .15s ease, color .15s ease,
+    border-color .15s ease, box-shadow .15s ease;
+}
+.ga-press:is(:active, .b-press) {
+  transform: scale(.98);
+  transition-duration: .12s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ga-press { transition: none; }
+  .ga-press:is(:active, .b-press) { transform: none; }
 }

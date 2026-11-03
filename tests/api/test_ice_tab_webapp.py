@@ -126,7 +126,7 @@ def test_shell_second_tab_is_ice() -> None:
     assert "label: 'Тренеры', path: 'catalog?tab=catalog'" not in shell
     ice_tab = (REPO_ROOT / "static/webapp/ice-tab.js").read_text(encoding="utf-8")
     ice_model = (REPO_ROOT / "static/webapp/ice-tab-model.js").read_text(encoding="utf-8")
-    assert "class=\"ice-acard\" href=\"" in ice_tab
+    assert "class=\"ice-acard ga-press\" href=\"" in ice_tab
     # Здесь раньше проверялся deep-link ?view=map. TASK-103 его убрала осознанно:
     # AC-001 требует, чтобы список был стартовым видом всегда, а «открыть экран сразу
     # картой» — это ровно тот случай, ради которого в TASK-084 стоял флаг MAP_ENABLED.

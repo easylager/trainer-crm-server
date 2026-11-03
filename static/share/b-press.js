@@ -1,6 +1,6 @@
 /**
  * Отклик нажатия на публичке: iOS нужен пустой touchstart (passive), иначе :active/класс не срабатывает.
- * Класс b-press — после 80 ms удержания; короткий тап — мигание ~100 ms; сброс при движении >8 px, scroll, pagehide.
+ * Класс b-press — после 80 ms удержания (.ga-press — то же в Telegram Mini App); короткий тап — мигание ~100 ms; сброс при движении >8 px, scroll, pagehide.
  */
 (function () {
   'use strict';
@@ -12,7 +12,7 @@
   document.addEventListener('touchstart', function () {}, { passive: true });
 
   var PRESS_SEL =
-    '.b-city,.b-when a,.b-toggle,.b-day,.b-btn,.b-pill,a.b-tile,a.b-row,a.b-slot,a.b-table__row,a.b-ticket,a.b-card,.b-card2,a.b-card2__cover,a.b-card2__thumb,.b-site-foot__tg,.home-map__city';
+    '.ga-press,.b-city,.b-when a,.b-toggle,.b-day,.b-btn,.b-pill,a.b-tile,a.b-row,a.b-slot,a.b-table__row,a.b-ticket,a.b-card,.b-card2,a.b-card2__cover,a.b-card2__thumb,.b-site-foot__tg,.home-map__city';
   var DELAY_MS = 0;
   var FLASH_MS = 100;
   var MOVE_PX = 8;

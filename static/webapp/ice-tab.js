@@ -542,7 +542,7 @@
 
   function folderTabHtml(mode, counts) {
     return (
-      '<button type="button" class="hdr-folder" role="tab" data-catalog-mode="' +
+      '<button type="button" class="hdr-folder ga-press" data-haptic="select" role="tab" data-catalog-mode="' +
       esc(mode.id) +
       '" data-folder-sig="' +
       esc(folderTabSig(mode, counts)) +
@@ -672,7 +672,7 @@
     function chip(key, label) {
       var on = w === key;
       return (
-        '<button type="button" class="ice-chip" data-when-chip="' +
+        '<button type="button" class="ice-chip ga-press" data-haptic="select" data-when-chip="' +
         esc(key) +
         '" aria-pressed="' +
         (on ? 'true' : 'false') +
@@ -689,7 +689,7 @@
       chip('today', 'Сегодня') +
       chip('tomorrow', 'Завтра') +
       chip('weekend', 'Сб–Вс') +
-      '<button type="button" class="ice-chip" data-when-chip="date" aria-pressed="' +
+      '<button type="button" class="ice-chip ga-press" data-haptic="select" data-when-chip="date" aria-pressed="' +
       (dateOn ? 'true' : 'false') +
       '" aria-expanded="' +
       (dateOpen ? 'true' : 'false') +
@@ -848,7 +848,7 @@
       serviceBox.innerHTML = serviceChips
         .map(function (c) {
           return (
-            '<button type="button" class="ice-chip" data-shop-service="' +
+            '<button type="button" class="ice-chip ga-press" data-haptic="select" data-shop-service="' +
             esc(c.key) +
             '" aria-pressed="' +
             (c.active ? 'true' : 'false') +
@@ -919,10 +919,10 @@
     var n = view.centerCount;
     host.hidden = false;
     host.innerHTML =
-      '<button type="button" class="ice-chip" data-hockey-seg="ohm" aria-pressed="' +
+      '<button type="button" class="ice-chip ga-press" data-haptic="select" data-hockey-seg="ohm" aria-pressed="' +
       (seg === 'ohm' ? 'true' : 'false') +
       '">ОХМ</button>' +
-      '<button type="button" class="ice-chip" data-hockey-seg="centers" aria-pressed="' +
+      '<button type="button" class="ice-chip ga-press" data-haptic="select" data-hockey-seg="centers" aria-pressed="' +
       (seg === 'centers' ? 'true' : 'false') +
       '">Центры' +
       (n ? ' <span class="ice-chip__n">' + esc(String(n)) + '</span>' : '') +
@@ -976,7 +976,7 @@
         tabs.innerHTML = tabItems
           .map(function (c) {
             return (
-              '<button type="button" class="ice-chip" role="tab" data-place-type="' +
+              '<button type="button" class="ice-chip ga-press" data-haptic="select" role="tab" data-place-type="' +
               esc(c.key) +
               '" aria-pressed="' +
               (c.active ? 'true' : 'false') +
@@ -1019,7 +1019,7 @@
     if (needPlaceTool) {
       var placeOpen = state.uiPicker === 'place';
       toolHtml +=
-        '<button type="button" class="ice-chip ice-tool" data-ui-picker="place" aria-expanded="' +
+        '<button type="button" class="ice-chip ice-tool ga-press" data-ui-picker="place" aria-expanded="' +
         (placeOpen ? 'true' : 'false') +
         '"' +
         (winterOn ? ' aria-pressed="true"' : '') +
@@ -1150,7 +1150,7 @@
       var small = b.querySelector('small');
       var on = b.getAttribute('aria-pressed') === 'true';
       return (
-        '<button type="button" class="ice-intent-opt ga-press" data-intent-mode="' + esc(id) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+        '<button type="button" class="ice-intent-opt ga-press" data-haptic="select" data-intent-mode="' + esc(id) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
         '<span class="ice-intent-opt__ic"><svg viewBox="0 0 24 24" aria-hidden="true">' + (INTENT_ICONS[id] || INTENT_ICONS.places) + '</svg></span>' +
         '<span class="ice-intent-opt__name">' + esc(folderLabel(b)) + '</span>' +
         (small ? '<span class="ice-intent-opt__n">' + esc(small.textContent) + '</span>' : '<span></span>') +
@@ -1163,7 +1163,7 @@
       placesHost.innerHTML = places.map(function (b, i) {
         var n = b.querySelector('b');
         return (
-          '<button type="button" class="ice-chip" data-intent-place="' + i + '" aria-pressed="' + esc(b.getAttribute('aria-pressed') || 'false') + '">' +
+          '<button type="button" class="ice-chip ga-press" data-haptic="select" data-intent-place="' + i + '" aria-pressed="' + esc(b.getAttribute('aria-pressed') || 'false') + '">' +
           esc(folderLabel(b)) + (n && n.textContent ? ' <small>' + esc(n.textContent) + '</small>' : '') +
           '</button>'
         );
@@ -1626,7 +1626,7 @@
        клик на iOS, а тап должен звать друга, а не открывать карточку. */
     var invite =
       v.sessionId != null && global.GlideShareSheet
-        ? '<button type="button" class="ice-board__invite" data-invite-arena="' + esc(v.arenaId) +
+        ? '<button type="button" class="ice-board__invite ga-press" data-invite-arena="' + esc(v.arenaId) +
           '" data-invite-session="' + esc(v.sessionId) + '" data-invite-label="' + esc(v.inviteLabel) +
           '" data-invite-place="' + esc(v.name) +
           '">Позвать</button>'
@@ -1634,7 +1634,7 @@
     return (
       '<div class="ice-board-wrap">' +
       invite +
-      '<a class="ice-board ice-board--type-' + esc(v.venueType) + (v.offWindow ? ' ice-board--off' : '') + '" href="' +
+      '<a class="ice-board ga-press ice-board--type-' + esc(v.venueType) + (v.offWindow ? ' ice-board--off' : '') + '" href="' +
       esc(v.href) +
       '" data-href="' +
       esc(v.href) +
@@ -1660,7 +1660,7 @@
   function renderTrainerCard(item) {
     var view = M.trainerCardView(item);
     return (
-      '<a class="ice-acard" href="' +
+      '<a class="ice-acard ga-press" href="' +
       esc(view.href) +
       '" data-href="' +
       esc(view.href) +
@@ -1698,12 +1698,17 @@
    * построению: правка карточки автоматически правит и её скелетон.
    */
   function boardSkeletons(n) {
+    /* Строки-заглушки лежат внутри тех же текстовых классов, что и живые: высота строки
+       берётся из их шрифта, и настоящая карточка встаёт на место без сдвига. */
     var one =
-      '<div class="ice-board ice-board--skel" aria-hidden="true">' +
+      '<div class="ice-board-wrap ice-board-wrap--skel" aria-hidden="true"><div class="ice-board ice-board--skel">' +
       '<span class="ice-board__photo ice-skel"></span>' +
-      '<span class="ice-board__facts"><span class="ice-skel ice-skel--line"></span></span>' +
-      '<span class="ice-board__depth"><span class="ice-skel ice-skel--line ice-skel--wide"></span></span>' +
-      '</div>';
+      '<span class="ice-board__head">' +
+      '<span class="ice-board__name"><span class="ice-skel ice-skel--text"></span></span>' +
+      '<span class="ice-board__where"><span class="ice-skel ice-skel--text ice-skel--short"></span></span>' +
+      '</span>' +
+      '<span class="ice-board__depth"><span class="ice-skel ice-skel--text ice-skel--wide"></span></span>' +
+      '</div></div>';
     return new Array(n + 1).join(one);
   }
 
@@ -1912,6 +1917,8 @@
   }
   if (typeof window.setTimeout === 'function') window.setTimeout(releaseBoot, 8000);
 
+  var CAPTION_SKELETON = '<span class="ice-skel ice-skel--text ice-skel--cap" aria-hidden="true"></span>';
+
   function renderList() {
     if (!state.loading) {
       if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(releaseBoot);
@@ -1949,7 +1956,8 @@
       // Текстовая строка обещала одну форму, а приходила совсем другая.
       parkShareButton();
       lastArenaListSig = '';
-      list.innerHTML = state.intent === 'coach' ? trainerSkeletons(3) : boardSkeletons(2);
+      list.innerHTML = state.intent === 'coach' ? trainerSkeletons(4) : boardSkeletons(3);
+      if (cap) cap.innerHTML = CAPTION_SKELETON;
       showActiveList();
       return;
     }
@@ -2841,14 +2849,14 @@
     }
     box.hidden = false;
     var html =
-      '<button type="button" class="ice-chip" data-service-id="" aria-pressed="' +
+      '<button type="button" class="ice-chip ga-press" data-haptic="select" data-service-id="" aria-pressed="' +
       (state.serviceIds.length ? 'false' : 'true') +
       '">Все</button>';
     (state.services || []).forEach(function (s) {
       var id = String(s.id);
       var pressed = state.serviceIds.indexOf(Number(id)) >= 0;
       html +=
-        '<button type="button" class="ice-chip" data-service-id="' +
+        '<button type="button" class="ice-chip ga-press" data-haptic="select" data-service-id="' +
         esc(id) +
         '" aria-pressed="' +
         (pressed ? 'true' : 'false') +
