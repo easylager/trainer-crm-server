@@ -114,7 +114,7 @@ def render_calendar(
         cur = ' aria-current="true"' if d == selected else ""
         chips.append(
             f'<a class="{classes}" href="{_esc(href_for(d))}"{cur}>'
-            f"<b>{_WEEKDAYS[d.weekday()]}</b><i>{d.day}</i><small>{n if n else '—'}</small></a>"
+            f"<b>{_WEEKDAYS[d.weekday()]}</b>\n<i>{d.day}</i>\n<small>{n if n else '—'}</small></a>"
         )
     any_row = ""
     if any_href is not None:
@@ -122,17 +122,17 @@ def render_calendar(
         cur = ' aria-current="true"' if any_selected else ""
         any_row = (
             f'<a class="b-dayc b-dayc--any" href="{_esc(any_href)}"{cur}>'
-            f'<b>{_esc(t("when.any_day"))}</b>'
+            f'<b>{_esc(t("when.any_day"))}</b>\n'
             f'<small>{_esc(sessions_phrase(total))} · {_esc(t("when.any_day_sub"))}</small></a>'
         )
     sheet = (
-        f'<div class="b-days-sheet" id="{SHEET_ID}" role="dialog" aria-labelledby="{SHEET_ID}-t">'
+        f'<div class="b-days-sheet" id="{SHEET_ID}" role="dialog" aria-labelledby="{SHEET_ID}-t" data-nosnippet>'
         f'<a class="b-days-sheet__bg" href="#" aria-label="Закрыть"></a>'
         f'<div class="b-days-sheet__panel"><span class="b-days-sheet__grab" aria-hidden="true"></span>'
         f'<a class="b-days-sheet__x" href="#" aria-label="Закрыть">{_CLOSE_ICON}</a>'
         f'<h2 id="{SHEET_ID}-t">{_esc(t("when.pick_day"))}</h2>'
         f'<p class="b-days-sheet__sub">{_esc(t("when.pick_day_sub"))}</p>'
-        f'<div class="b-days-sheet__grid">{any_row}{"".join(chips)}</div></div>{days_sheet_script_html()}</div>'
+        f'<div class="b-days-sheet__grid">{any_row}\n{"\n".join(chips)}</div></div>{days_sheet_script_html()}</div>'
     )
     return button, sheet
 

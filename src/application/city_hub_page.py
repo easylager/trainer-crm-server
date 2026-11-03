@@ -655,31 +655,24 @@ def city_hub_search_description(view: Mapping[str, Any]) -> str:
     og:description остаётся счётом «N мест · M сеансов» — тем же, что в тексте шера.
 
     Счётчик сеансов меняется каждый час, а поисковик перечитывает страницу раз
-    в несколько недель, поэтому здесь — что есть в городе, а не сколько сегодня.
-    Катки называем по числу сеансов: первыми те, где льда больше всего.
+    в несколько недель, поэтому здесь — что есть в городе, а не сколько сегодня:
+    без «сегодня/завтра» и без порядка по живому расписанию. Катки — три самых давно заведённых (по id).
     """
     raw_city = str(view["city"]["name"])
     city_name = format_public_name(raw_city)
     where = city_locative(raw_city)
     in_city = f"в {where}" if where else city_name
-    by_arena = view.get("skate_by_arena") or {}
     rinks = [p for p in view.get("places") or [] if _is_rink(str(p.get("venue_type") or "ice"))]
-    live = sorted(
-        (p for p in rinks if int(by_arena.get(int(p["id"]), 0)) > 0),
-        key=lambda p: (-int(by_arena.get(int(p["id"]), 0)), str(p.get("name") or "")),
-    )
     sentences: list[str] = []
-    if live:
-        names = [format_public_name(str(p.get("name") or "")) for p in live[:3]]
+    if rinks:
+        # Одно и то же в любой день: не зависит ни от сеансов сегодня, ни от порядка «по льду сейчас».
+        sentences.append(f"Массовое катание {in_city}: расписание сеансов, цены и адреса")
+        names = [format_public_name(str(p.get("name") or "")) for p in sorted(rinks, key=lambda p: int(p["id"]))[:3]]
         rest = len(rinks) - len(names)
         listed = ", ".join(names)
         if rest > 0:
             listed += f" и\u00a0ещё {rest}\u00a0{plural_ru(rest, 'каток', 'катка', 'катков')}"
-        sentences.append(f"Массовое катание {in_city}: расписание сеансов на сегодня, завтра и выходные")
-        sentences.append(f"{listed} — цены и адреса")
-    elif rinks:
-        n = len(rinks)
-        sentences.append(f"{n}\u00a0{plural_ru(n, 'каток', 'катка', 'катков')} {in_city}: адреса, телефоны и часы работы")
+        sentences.append(listed)
     # ОХМ — свой запрос («охм минск»): список ОХМ закрыт от индекса, поэтому слово
     # должно быть хотя бы в сниппете города.
     ohm_n = int(view.get("ohm_arena_count") or 0) if int((view.get("ohm_counts") or {}).get("all") or 0) else 0
@@ -913,7 +906,7 @@ def _b_when_switch(view: Mapping[str, Any]) -> str:
     """«Сегодня · Завтра · В выходные» + календарь дня — та же полоса, что на главной (PDEC-026, TASK-337)."""
     when = view.get("when")
     slug = str(view["slug"])
-    links = "".join(
+    links = "\n".join(
         f'<a href="{_esc(_list_href(slug, w=key))}"' + (' aria-current="true"' if key == when else "") + f">{_esc(label)}</a>"
         for key, label in (("today", t("when.today")), ("tomorrow", t("when.tomorrow")), ("weekend", t("when.weekend")))
     )
@@ -929,7 +922,7 @@ def _b_when_switch(view: Mapping[str, Any]) -> str:
         any_selected=bool(view.get("any_day")),
     )
     return (
-        f'<div class="b-sec b-sec--when"><div class="b-whenrow"><nav class="b-when vt-when-strip" '
+        f'<div class="b-sec b-sec--when" data-nosnippet><div class="b-whenrow"><nav class="b-when vt-when-strip" '
         f'style="--when-i: {index or 0}" aria-label="Когда">{thumb}{links}</nav>{button}</div>{sheet}</div>'
     )
 
@@ -989,7 +982,7 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
                     f'{view["day_counts"][nearest]}\u00a0{plural_ru(view["day_counts"][nearest], "сеанс", "сеанса", "сеансов")}.</p>'
                 )
         more = f'<a class="b-more" href="{_esc(_list_href(slug, t="ice"))}">Все сеансы</a>'
-        return section(_b_upcoming_title(when), body, aside_html=more)
+        return section(_b_upcoming_title(when), body, aside_html=more, nosnippet=True)
     city_name = str(view["city"]["name"])
     today_n = int(view["skate_counts"].get("today") or 0)
     if when:
@@ -1380,7 +1373,7 @@ def _b_one_today(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
     else:
         body = f'<div class="b-tickets">{"".join(tickets)}</div>{price_html}'
     aside = f'<span class="b-aside">{_esc(_b_today_kicker(view))}</span>'
-    return section(t("hub.today"), body, aside_html=aside)
+    return section(t("hub.today"), body, aside_html=aside, nosnippet=True)
 
 
 def _b_one_week(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
@@ -1416,7 +1409,7 @@ def _b_one_week(view: Mapping[str, Any], rink: Mapping[str, Any]) -> str:
             f'<div class="b-table__times">{times_html}</div>'
             f'<span class="b-table__count">{len(d["times"])}</span></div>'
         )
-    return section(t("hub.week"), f'<div class="b-table">{"".join(rows)}</div>')
+    return section(t("hub.week"), f'<div class="b-table">{"".join(rows)}</div>', nosnippet=True)
 
 
 def _b_rink_arrive(rink: Mapping[str, Any], *, base_url: str, city_id: int, show_phone_buttons: bool = True) -> str:
@@ -1482,7 +1475,7 @@ def _b_phone_block(view: Mapping[str, Any], rink: Mapping[str, Any], *, base_url
                 f'<b>{_esc(t("cta.follow_rink"))}</b><span>Напишем в Telegram, когда появится расписание</span></span></a>'
             )
     body = f'<p class="b-text">{_esc(t("hub.phone_when", name=name))}</p>' + "".join(calls) + follow
-    return section(t("hub.when_title"), body)
+    return section(t("hub.when_title"), body, nosnippet=True)
 
 
 def _b_body(
@@ -1543,7 +1536,7 @@ def _b_body(
         hero = hero_html(
             title=t("hub.on_ice", city=city_name),
             title_break="на льду",
-            sub_html=sub,
+            sub_html=f"<span data-nosnippet>{sub}</span>",
             photo_url=rink.get("photo_hero"),
             photo_alt=rink_name,
             toned=bool(rink.get("display_tone")),
@@ -1601,7 +1594,7 @@ def _b_body(
     hero = hero_html(
         title=t("hub.on_ice", city=city_name),
             title_break="на льду",
-        sub_html=_esc(_b_counts_line(view)),
+        sub_html=f"<span data-nosnippet>{_esc(_b_counts_line(view))}</span>",
         kicker=_b_today_kicker(view),
         photo_url=photo,
         photo_alt=alt,

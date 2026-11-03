@@ -51,7 +51,7 @@ def test_schedule_section_without_sessions_is_not_nested_or_titled_twice() -> No
         links={"tel": "tel:+375291112233"},
     )
 
-    assert html.count('<section class="b-sec b-sec--place" id="schedule">') == 1
+    assert html.count('<section class="b-sec b-sec--place" id="schedule" data-nosnippet>') == 1
     assert html.count('<h2 class="b-h2">Массовое катание</h2>') == 1
 
 

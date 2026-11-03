@@ -1312,7 +1312,7 @@ def _b_when_nav(view: Mapping[str, Any]) -> str:
         ("tomorrow", t("when.tomorrow"), "/?when=tomorrow"),
         ("weekend", t("when.weekend"), "/?when=weekend"),
     )
-    links = "".join(
+    links = "\n".join(
         f'<a href="{href}"' + (' aria-current="true"' if key == when_key else "") + f">{_esc(label)}</a>"
         for key, label, href in items
     )
@@ -1565,7 +1565,7 @@ def _b_elsewhere(cities: list[Mapping[str, Any]]) -> str:
     ru = [c for c in cities if str(c.get("country") or "").upper() == "RU"]
     if not ru:
         return ""
-    links = "".join(
+    links = "\n".join(
         f'<a href="/c/{_esc(c["slug"])}">{_esc(format_public_name(str(c["name"])))}</a>'
         for c in sorted(ru, key=lambda c: str(c.get("name")))
     )

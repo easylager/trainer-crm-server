@@ -220,14 +220,18 @@ def city_pill(href: str, label: str) -> str:
     return f'<a class="b-pill b-pill--end" href="{esc(href)}">{esc(label)}{icon_svg("down")}</a>'
 
 
-def section(title: str, body: str, *, aside_html: str = "", klass: str = "", sec_id: str = "") -> str:
+def section(
+    title: str, body: str, *, aside_html: str = "", klass: str = "", sec_id: str = "", nosnippet: bool = False
+) -> str:
+    """``nosnippet`` — живой блок (сеансы, счётчики): Google не берёт его в сниппет, там остаётся описание."""
     if not body:
         return ""
     id_attr = f' id="{esc(sec_id)}"' if sec_id else ""
     extra = f" {klass}" if klass else ""
     aside = aside_html if aside_html else ""
     head = f'<div class="b-sec__head"><h2 class="b-h2">{esc(title)}</h2>{aside}</div>'
-    return f'<section class="b-sec{extra}"{id_attr}>{head}{body}</section>'
+    snippet_attr = " data-nosnippet" if nosnippet else ""
+    return f'<section class="b-sec{extra}"{id_attr}{snippet_attr}>{head}{body}</section>'
 
 
 def tile_html(

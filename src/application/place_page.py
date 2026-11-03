@@ -1784,7 +1784,7 @@ def _b_schedule(
     if parts is None:
         return ""
     title, body, aside = parts
-    return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
+    return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule", nosnippet=True)
 
 
 def _b_kind_parts(
@@ -1880,7 +1880,7 @@ def _b_ice(
         return ""
     if not extras:
         title, body, aside = skate  # type: ignore[misc]
-        return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule")
+        return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule", nosnippet=True)
     if skate is None and len(extras) == 1:
         key, label, extra_body, extra_aside = extras[0]
         aside = f'<span class="b-aside">{_esc(extra_aside)}</span>' if extra_aside else ""

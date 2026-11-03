@@ -71,8 +71,8 @@ def test_catalog_home_snippet_leads_with_mass_skating_keyword() -> None:
 def test_city_search_description_has_no_session_counts() -> None:
     text = city_hub_search_description(_hub()).replace(" ", " ")
     assert text == (
-        "Массовое катание в Минске: расписание сеансов на сегодня, завтра и выходные. "
-        "ТЦ Замок, Чижовка-арена, ТЦ DiaMond city и ещё 2 катка — цены и адреса. "
+        "Массовое катание в Минске: расписание сеансов, цены и адреса. "
+        "Чижовка-арена, ТЦ Замок, ТЦ DiaMond city и ещё 2 катка. "
         "Заточка коньков — 3 места."
     )
     assert "131" not in text

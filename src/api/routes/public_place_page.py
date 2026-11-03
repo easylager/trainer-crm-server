@@ -211,7 +211,7 @@ _NOT_FOUND_HTML = """<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>Место не найдено — Glide</title>
+<title>Место не найдено — Glideclub</title>
 <meta property="og:title" content="Glide — карта льда" />
 <meta property="og:description" content="Где покататься сегодня: катки, расписание и цены." />
 __PUBLIC_FONTS_HEAD__
