@@ -21,6 +21,7 @@
   var pending = '';
   var report = W.reportInit();
   var sending = false;
+  var autoMap = false;
   var pointSub = { id: null, on: false };
   var idem = W.newIdemKey();
   var current = null;
@@ -150,22 +151,14 @@
         : '');
   }
 
-  function render() {
-    var h = ensureHost();
+  /* Группы точек и подписка «рядом» между ними: одно и то же в списке и в шторке на карте. */
+  function listBody(list) {
     var data = cache.data;
-    if (!h || !data) return;
-    var points = data.items || [];
-    var origin = f.origin || ctx.origin;
-    var list = W.applyFilters(points, { flooded: f.flooded, kind: f.kind, district: f.district, origin: origin });
-    var head = W.headline(points.length, data.flooded || 0);
     var bellHtml = data.bell_near_link && !nearSub.on
       ? '<div class="w-bell"><span class="w-bell__text"><span class="w-bell__title">Лёд рядом с вами</span>' +
         '<span class="w-bell__hint">Напишем в Telegram, когда зальют лёд в 2 км от вас</span></span>' +
         '<button type="button" class="w-btn w-btn--tg" data-w-near>' + BELL + 'Подписаться</button></div>'
       : '';
-    var lead = head.title
-      ? '<b>' + esc(head.title) + '.</b> ' + esc(head.hint)
-      : esc(W.summaryLine(points.length, data.flooded || 0));
     var groups = W.listGroups(list);
     var slot = W.bellSlot(groups);
     var body = groups.map(function (g) {
@@ -177,17 +170,32 @@
         '<ul class="w-list w-list--' + (g.key === 'now' ? 'cards' : 'rows') + '">' + items + '</ul></section>' +
         (g.key === 'now' && slot === 'now' ? bellHtml : '');
     }).join('');
+    return list.length
+      ? (slot === 'top' ? bellHtml : '') + body
+      : '<p class="w-empty">' + esc(W.emptyFilterText({ flooded: f.flooded })) + '</p>' + bellHtml;
+  }
+
+  function render() {
+    var h = ensureHost();
+    var data = cache.data;
+    if (!h || !data) return;
+    var points = data.items || [];
+    var origin = f.origin || ctx.origin;
+    var list = W.applyFilters(points, { flooded: f.flooded, kind: f.kind, district: f.district, origin: origin });
+    var head = W.headline(points.length, data.flooded || 0);
+    var lead = head.title
+      ? '<b>' + esc(head.title) + '.</b> ' + esc(head.hint)
+      : esc(W.summaryLine(points.length, data.flooded || 0));
     h.innerHTML =
       '<div class="w-page w-page--app">' +
       '<h2 class="w-title">' + esc(data.where ? 'Зимой в ' + data.where : 'Зимой') + '</h2>' +
       '<p class="w-lead">' + lead + '</p>' +
       segHtml('list') + chipsHtml(data, points, origin, true) +
       '<p class="w-note">' + esc(geoNote || W.sortNote({ flooded: f.flooded, kind: f.kind, district: f.district, origin: origin })) + '</p>' +
-      (list.length
-        ? (slot === 'top' ? bellHtml : '') + body
-        : '<p class="w-empty">' + esc(W.emptyFilterText({ flooded: f.flooded })) + '</p>' + bellHtml) +
+      listBody(list) +
       '</div>';
     askNearSub();
+    paintDrawer();
     if (ctx.onData) ctx.onData();
   }
 
@@ -237,6 +245,11 @@
         if (!d) return status('Не получилось загрузить зимние точки.', true);
         cache = { key: key, data: d };
         render();
+        /* Зимой главный экран — карта: человек ищет лёд рядом. Один раз за вход; «Списком» остаётся в шторке. */
+        if (!autoMap && ctx.setView && mapWanted()) {
+          autoMap = true;
+          ctx.setView('map');
+        }
       })
       .catch(function () { if (my === seq) { pending = ''; status('Не получилось загрузить зимние точки.', true); } });
   }
@@ -314,7 +327,10 @@
       '<div class="w-mapctl" role="group" aria-label="Масштаб">' +
       '<button type="button" data-w-zoom="1" aria-label="Приблизить">+</button>' +
       '<button type="button" data-w-zoom="-1" aria-label="Отдалить">−</button></div>' +
-      '<div class="w-mapcard" hidden></div>';
+      '<div class="w-mapcard" hidden></div>' +
+      '<div class="w-drawer"><button type="button" class="w-drawer__head" data-w-drawer aria-expanded="false">' +
+      '<span class="w-sheet__grab" aria-hidden="true"></span><span class="w-drawer__title"></span>' +
+      '<span class="w-drawer__hint">Списком</span></button><div class="w-drawer__body"></div></div>';
     sec.appendChild(h);
     h.addEventListener('click', onClick);
     mapState.host = h;
@@ -332,6 +348,7 @@
 
   function mapCard(p) {
     var card = mapState.host.querySelector('.w-mapcard');
+    drawerOpen(false);
     var v = W.stateView(p);
     var note = W.checkedLine(p, new Date());
     card.hidden = false;
@@ -390,7 +407,8 @@
     mapHost(sec).hidden = false;
     /* Верх карты: «Список | Карта» и те же фильтры, что в списке. */
     mapState.host.querySelector('.w-fullmap__bar').innerHTML =
-      segHtml('map') + chipsHtml(cache.data, cache.data.items || [], f.origin || ctx.origin, false);
+      chipsHtml(cache.data, cache.data.items || [], f.origin || ctx.origin, false);
+    paintDrawer();
     if (mapState.ym) {
       drawMap();
       return true;
@@ -410,6 +428,27 @@
       function () { mapSay('Карта не загрузилась. Список работает как обычно.'); }
     );
     return true;
+  }
+
+  /* Список на карте — шторкой снизу: свёрнута — счёт «залито · ждут», развёрнута — те же группы, что в списке.
+     В ней же точки без точного адреса, которых нет на карте. */
+  function paintDrawer() {
+    var h = mapState.host;
+    if (!h || h.hidden || !cache.data) return;
+    var list = filtered();
+    var origin = f.origin || ctx.origin;
+    h.querySelector('.w-drawer__title').textContent = W.drawerTitle(W.listGroups(list), !!origin);
+    h.querySelector('.w-drawer__body').innerHTML = '<div class="w-page w-page--app">' + listBody(list) + '</div>';
+  }
+
+  function drawerOpen(on) {
+    var h = mapState.host;
+    var d = h && h.querySelector('.w-drawer');
+    if (!d) return;
+    if (d.classList) d.classList.toggle('w-drawer--open', on);
+    h.querySelector('[data-w-drawer]').setAttribute('aria-expanded', String(on));
+    h.querySelector('.w-drawer__hint').textContent = on ? 'К карте' : 'Списком';
+    if (on) h.querySelector('.w-mapcard').hidden = true;
   }
 
   function bodyClass(name, on) {
@@ -671,6 +710,8 @@
   function onClick(ev) {
     var zb = ev.target.closest('[data-w-zoom]');
     if (zb) return zoomBy(Number(zb.getAttribute('data-w-zoom')));
+    var dr = ev.target.closest('[data-w-drawer]');
+    if (dr) return drawerOpen(dr.getAttribute('aria-expanded') !== 'true');
     var open = ev.target.closest('[data-w-open]');
     if (open) {
       ev.preventDefault();

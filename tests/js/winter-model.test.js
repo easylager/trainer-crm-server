@@ -325,3 +325,11 @@ it('hasPointSub: подписка именно на эту точку', () => {
   assert.equal(W.hasPointSub(items, 8), false);
   assert.equal(W.hasPointSub(null, 7), false);
 });
+
+it('drawerTitle: счёт залитых и ждущих, «рядом» только с геолокацией', () => {
+  const g = (key, n) => ({ key, items: Array.from({ length: n }, (_, i) => ({ id: i })) });
+  assert.equal(W.drawerTitle([g('now', 3), g('wait', 5)], false), '3 залито · 5 ждут заливку');
+  assert.equal(W.drawerTitle([g('now', 1), g('wait', 1)], true), 'Рядом с вами: 1 залит · 1 ждёт заливку');
+  assert.equal(W.drawerTitle([g('off', 2)], false), '2 без свежих отметок');
+  assert.equal(W.drawerTitle([], false), 'По этому фильтру ничего нет');
+});

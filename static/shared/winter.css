@@ -365,3 +365,24 @@ body.ice-view-map.w-map-on { overscroll-behavior: none; }
 /* Шторка в Mini App не уходит под таб-бар оболочки. */
 .w-sheet--app .w-sheet__panel { padding-bottom: calc(var(--client-shell-tab-inset, 80px) + 16px); max-height: 94vh; }
 .w-sheet--app .w-foot { background: none; border: 0; color: var(--g-accent-ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+/* Шторка списка на зимней карте: свёрнута — одна строка со счётом над таб-баром, развёрнута — список. */
+.w-drawer {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; flex-direction: column;
+  max-height: 64px; background: var(--g-bg); border-radius: 22px 22px 0 0; box-shadow: 0 -4px 18px rgba(13, 27, 38, .18);
+  transition: max-height .22s ease-out; touch-action: pan-y;
+}
+.w-drawer--open { max-height: 68%; }
+.w-drawer__head {
+  flex: none; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; min-height: 64px;
+  padding: 8px 18px 10px; border: 0; background: none; color: var(--g-ink); font: inherit; text-align: left; cursor: pointer;
+  touch-action: manipulation;
+}
+.w-drawer__head .w-sheet__grab { grid-column: 1 / -1; justify-self: center; }
+.w-drawer__title { font-size: 15px; font-weight: 700; }
+.w-drawer__hint { font-size: 14px; font-weight: 600; color: var(--g-accent-ink); }
+.w-drawer__body { overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 16px; touch-action: pan-y; }
+.w-drawer:not(.w-drawer--open) .w-drawer__body { display: none; }
+.w-fullmap .w-mapcard { bottom: 76px; }
+@media (min-width: 720px) {
+  .w-drawer { left: 12px; right: auto; width: 420px; }
+}

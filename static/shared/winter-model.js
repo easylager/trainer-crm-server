@@ -268,6 +268,20 @@
   }
 
   /** Подписка «рядом» уже есть: ответ GET /api/webapp/winter/subscriptions. */
+  /** Заголовок шторки списка на карте: сколько можно кататься и сколько ждут, без прокрутки. */
+  function drawerTitle(groups, near) {
+    var n = { now: 0, wait: 0, off: 0 };
+    (groups || []).forEach(function (g) {
+      n[g.key] = g.items.length;
+    });
+    var parts = [];
+    if (n.now) parts.push(n.now + ' ' + plural(n.now, 'залит', 'залито', 'залито'));
+    if (n.wait) parts.push(n.wait + ' ' + plural(n.wait, 'ждёт', 'ждут', 'ждут') + ' заливку');
+    if (!parts.length && n.off) parts.push(n.off + ' без свежих отметок');
+    if (!parts.length) return 'По этому фильтру ничего нет';
+    return (near ? 'Рядом с вами: ' : '') + parts.join(' · ');
+  }
+
   function hasNearSub(items) {
     return (items || []).some(function (s) {
       return s && s.kind === 'near';
@@ -722,6 +736,7 @@
     bellSlot: bellSlot,
     hasNearSub: hasNearSub,
     hasPointSub: hasPointSub,
+    drawerTitle: drawerTitle,
     markView: markView,
     emptyFilterText: emptyFilterText,
     QUESTIONS: QUESTIONS,
