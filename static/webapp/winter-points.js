@@ -355,7 +355,8 @@
     card.innerHTML = '<a class="w-mapcard__name" href="#" data-w-open="' + p.id + '">' + esc(W.cardTitle(p)) + '</a>' +
       '<span class="w-card__tags"><span class="w-pill w-pill--' + v.tone + '">' + esc(v.label) + '</span></span>' +
       (note ? '<span class="w-card__meta">' + esc(note) + '</span>' : '') +
-      '<a class="w-btn w-btn--soft" href="#" data-w-open="' + p.id + '">Открыть</a>';
+      '<a class="w-btn ' + (p.state === 'flooded' ? 'w-btn--soft' : 'w-btn--dark') + '" href="#" data-w-open="' + p.id + '">' +
+      (p.state === 'flooded' ? 'Подробнее' : 'Залили? Отметьте') + '</a>';
   }
 
   function drawMap() {

@@ -386,3 +386,6 @@ body.ice-view-map.w-map-on { overscroll-behavior: none; }
 @media (min-width: 720px) {
   .w-drawer { left: 12px; right: auto; width: 420px; }
 }
+@media (min-width: 720px) {
+  .w-fullmap .w-mapcard { left: 12px; right: auto; width: 420px; bottom: 76px; }
+}
