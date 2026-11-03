@@ -533,6 +533,48 @@ async def test_arena_setup_mode_create_creates_real_arena_and_hides_from_public_
 
 
 @pytest.mark.asyncio
+async def test_trainer_arena_picker_hides_outdoor_unless_linked(app_use_test_db, db_session) -> None:
+    cid = (
+        await db_session.execute(
+            text("INSERT INTO cities (name, is_active, sort_order) VALUES ('Picker-city', true, 0) RETURNING id")
+        )
+    ).scalar()
+    trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+    ids = {}
+    for key, venue in (("free", "outdoor"), ("linked", "outdoor"), ("ice", "ice")):
+        ids[key] = (
+            await db_session.execute(
+                text(
+                    "INSERT INTO arenas (city_id, name, venue_type, is_active, is_confirmed, sort_order) "
+                    "VALUES (:c, :n, :v, true, true, 0) RETURNING id"
+                ),
+                {"c": cid, "n": f"picker-{key}", "v": venue},
+            )
+        ).scalar()
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:t, :a)"),
+        {"t": trainer_id, "a": ids["linked"]},
+    )
+    await db_session.commit()
+
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/profile/arenas",
+                headers={"X-Telegram-Init-Data": "mock"},
+                params={"city_id": cid},
+            )
+            assert resp.status_code == 200
+            got = {a["id"] for a in resp.json()["items"]}
+            assert ids["ice"] in got
+            assert ids["linked"] in got
+            assert ids["free"] not in got
+
+            public = await client.get("/api/public/arenas", params={"city_id": cid})
+            assert ids["free"] in {a["id"] for a in public.json()["items"]}
+
+
+@pytest.mark.asyncio
 async def test_arena_setup_mode_create_duplicate_warns_then_confirm_creates(
     app_use_test_db,
     db_session,

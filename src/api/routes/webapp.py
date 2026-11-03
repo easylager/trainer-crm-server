@@ -9280,6 +9280,11 @@ async def get_trainer_onboarding_quick_setup(
             WHERE a.is_active = true
               -- Магазин и школа — не место работы тренера (TASK-146, PDEC-028).
               AND a.venue_type = ANY(:trainer_venue_types)
+              -- Зимние катки и коробки тренеру пока не предлагаются, кроме уже привязанных.
+              AND (
+                a.venue_type <> 'outdoor'
+                OR a.id IN (SELECT ta.arena_id FROM trainer_arenas ta WHERE ta.trainer_id = :tid)
+              )
             ORDER BY c.sort_order, c.name, a.sort_order, a.name
             """
         ),
