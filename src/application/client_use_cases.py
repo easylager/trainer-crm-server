@@ -465,6 +465,89 @@ async def merge_clients(
     return snapshot
 
 
+async def _absorb_telegram_stub_into_phone_client_if_needed(
+    session: AsyncSession,
+    telegram_id: int,
+    *,
+    phone_norm: str,
+    phone_val: str | None,
+    first_name_val: str | None,
+    last_name_val: str | None,
+    vk_user_id: int | None,
+    telegram_username_val: str | None,
+) -> int | None:
+    """
+    Telegram-only row (e.g. /start) + trainer row with same phone (telegram NULL) → one canonical client.
+
+    Without this, get_or_create_client updates the stub and hits unique ``phone_normalized``.
+    """
+    r_stub = await session.execute(
+        text("SELECT id, vk_user_id, telegram_username FROM clients WHERE telegram_id = :tid"),
+        {"tid": telegram_id},
+    )
+    row_stub = r_stub.fetchone()
+    if not row_stub:
+        return None
+    stub_id = int(row_stub[0])
+    stub_vk = row_stub[1]
+    stub_raw_tuname = row_stub[2]
+    stub_tuname = (
+        (str(stub_raw_tuname).strip()[:64] if stub_raw_tuname else None) or None
+    )
+    merged_tuname = stub_tuname or telegram_username_val
+
+    r_phone = await session.execute(
+        text(
+            """
+            SELECT id, telegram_id
+            FROM clients
+            WHERE phone_normalized = :pn
+            ORDER BY CASE WHEN telegram_id IS NULL THEN 0 ELSE 1 END, id
+            LIMIT 1
+            """
+        ),
+        {"pn": phone_norm},
+    )
+    row_phone = r_phone.fetchone()
+    if not row_phone:
+        return None
+    phone_row_id = int(row_phone[0])
+    phone_row_tg = row_phone[1]
+    if phone_row_id == stub_id:
+        return None
+    if phone_row_tg is not None and int(phone_row_tg) != int(telegram_id):
+        return None
+
+    await _repoint_client_fks_for_merge(session, stub_id, phone_row_id)
+    await session.execute(text("DELETE FROM clients WHERE id = :sid"), {"sid": stub_id})
+
+    await session.execute(
+        text("""
+            UPDATE clients SET
+              telegram_id = :tid,
+              phone = :phone,
+              phone_normalized = :pn,
+              first_name = COALESCE(NULLIF(TRIM(first_name), ''), :fn),
+              last_name = COALESCE(NULLIF(TRIM(last_name), ''), :ln),
+              vk_user_id = COALESCE(:vk, vk_user_id),
+              telegram_username = COALESCE(:tuname, telegram_username),
+              updated_at = now()
+            WHERE id = :cid
+        """),
+        {
+            "tid": telegram_id,
+            "phone": phone_val,
+            "pn": phone_norm,
+            "fn": first_name_val,
+            "ln": last_name_val,
+            "vk": stub_vk,
+            "tuname": merged_tuname,
+            "cid": phone_row_id,
+        },
+    )
+    return phone_row_id
+
+
 async def get_or_create_client(
     session: AsyncSession,
     telegram_id: int,
@@ -477,9 +560,7 @@ async def get_or_create_client(
 ) -> int:
     """
     Resolve client by telegram_id (surrogate for MAX catalog) or vk_user_id. Create if missing; optionally update name/phone.
-    A typed phone is only a contact: it never binds this account to a trainer-added client with
-    the same number — anyone can type any number. That binding happens through the trainer's
-    personal link or the trainer's own «это тот же человек» (``trainer_client_matches``).
+    If telegram row is missing but phone matches an offline row (telegram_id IS NULL), bind Telegram to it.
     ``first_name`` / ``last_name`` only fill empty CRM fields — never overwrite trainer or self-register data.
     Returns client_id. Caller must commit (we do not commit here to allow same transaction as booking/request).
     """
@@ -490,6 +571,20 @@ async def get_or_create_client(
     first_name_val = (first_name or "").strip()[:64] or None
     last_name_val = (last_name or "").strip()[:64] or None
     telegram_username_val = (telegram_username or "").strip()[:64] or None
+
+    if phone_norm is not None:
+        absorbed_id = await _absorb_telegram_stub_into_phone_client_if_needed(
+            session,
+            telegram_id,
+            phone_norm=phone_norm,
+            phone_val=phone_val,
+            first_name_val=first_name_val,
+            last_name_val=last_name_val,
+            vk_user_id=vk_user_id,
+            telegram_username_val=telegram_username_val,
+        )
+        if absorbed_id is not None:
+            return absorbed_id
 
     fam_cid = await get_family_primary_client_id_for_telegram(session, telegram_id)
     if fam_cid is not None:
@@ -550,6 +645,53 @@ async def get_or_create_client(
                 params,
             )
         return client_id
+
+    if phone_norm is not None:
+        # Merge path: trainer-created offline client enters Mini App via public link.
+        # Attach telegram_id to the existing phone row to keep bookings/history in one profile.
+        r_phone = await session.execute(
+            text(
+                """
+                SELECT id, telegram_id
+                FROM clients
+                WHERE phone_normalized = :pn
+                ORDER BY CASE WHEN telegram_id IS NULL THEN 0 ELSE 1 END, id
+                LIMIT 1
+                """
+            ),
+            {"pn": phone_norm},
+        )
+        row_phone = r_phone.fetchone()
+        if row_phone and (row_phone[1] is None or int(row_phone[1]) == int(telegram_id)):
+            client_id = int(row_phone[0])
+            updates = ["telegram_id = :tid"]
+            params = {"cid": client_id, "tid": telegram_id}
+            if vk_user_id is not None:
+                updates.append("vk_user_id = :vk")
+                params["vk"] = vk_user_id
+            if phone is not None and phone_val is not None:
+                updates.append("phone = :phone")
+                params["phone"] = phone_val
+                updates.append("phone_normalized = :phone_normalized")
+                params["phone_normalized"] = phone_norm
+            if first_name is not None and first_name_val is not None:
+                updates.append(
+                    "first_name = COALESCE(NULLIF(TRIM(first_name), ''), :first_name)"
+                )
+                params["first_name"] = first_name_val
+            if last_name is not None and last_name_val is not None:
+                updates.append(
+                    "last_name = COALESCE(NULLIF(TRIM(last_name), ''), :last_name)"
+                )
+                params["last_name"] = last_name_val
+            if telegram_username is not None:
+                updates.append("telegram_username = :telegram_username")
+                params["telegram_username"] = telegram_username_val
+            await session.execute(
+                text("UPDATE clients SET updated_at = now(), " + ", ".join(updates) + " WHERE id = :cid"),
+                params,
+            )
+            return client_id
 
     # Insert new client (with phone_normalized if phone provided)
     r = await session.execute(
@@ -750,6 +892,30 @@ async def get_or_create_sandbox_client_for_trainer(
         is_sandbox=True,
         trainer_id=trainer_id,
     )
+
+
+async def get_client_by_phone(session: AsyncSession, phone: str) -> dict | None:
+    """Find client by normalized phone. Returns id, telegram_id, first_name, last_name, phone or None."""
+    phone_norm = normalize_phone(phone)
+    if not phone_norm:
+        return None
+    r = await session.execute(
+        text("""
+            SELECT id, telegram_id, first_name, last_name, phone
+            FROM clients WHERE phone_normalized = :pn
+        """),
+        {"pn": phone_norm},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "telegram_id": row[1],
+        "first_name": row[2] or "",
+        "last_name": row[3] or "",
+        "phone": (row[4] or "").strip(),
+    }
 
 
 async def attach_telegram_id_to_client(

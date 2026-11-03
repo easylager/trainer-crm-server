@@ -72,19 +72,31 @@ async def test_second_parent_books_with_the_family_number(db_session: AsyncSessi
 
 
 @pytest.mark.asyncio
-async def test_typed_phone_does_not_take_over_a_trainers_student(db_session: AsyncSession) -> None:
+async def test_typed_phone_binds_account_to_a_trainers_student(db_session: AsyncSession) -> None:
+    """Auto-bind by phone is back (owner decision, low traffic): the account lands on the trainer's row."""
     t = await _trainer(db_session)
     anna = await _add(db_session, t, "Анна")
     mom = await get_or_create_client(db_session, 830003, phone=MOM, first_name="Ольга")
-    assert mom != anna
+    assert mom == anna
     tid = (await db_session.execute(text("SELECT telegram_id FROM clients WHERE id = :c"), {"c": anna})).scalar()
-    assert tid is None
+    assert tid == 830003
 
 
 async def _pair(s: AsyncSession) -> tuple[int, int, int]:
     t = await _trainer(s)
     anna = await _add(s, t, "Анна")
-    mom = await get_or_create_client(s, 830010 + t, phone=MOM, first_name="Ольга")
+    # A phone alone binds again, so build the leftover duplicate directly (older data, family number).
+    mom = int(
+        (
+            await s.execute(
+                text(
+                    "INSERT INTO clients (telegram_id, first_name, phone, phone_normalized) "
+                    "VALUES (:tg, 'Ольга', :ph, :pn) RETURNING id"
+                ),
+                {"tg": 830010 + t, "ph": MOM, "pn": "375291112233"},
+            )
+        ).scalar_one()
+    )
     await link_trainer_client_roster(s, t, mom)
     return t, mom, anna
 

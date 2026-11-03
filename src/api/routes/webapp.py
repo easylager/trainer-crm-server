@@ -125,6 +125,7 @@ from src.application.booking_use_cases import (
     get_trainer_slot_for_mass_client_invite,
     is_slot_start_in_past_local,
     get_first_service_id_for_trainer,
+    trainer_client_roster_link_exists,
 )
 from src.application.client_username_enrich import enrich_booking_dicts_with_client_telegram_usernames
 from src.application.family_access_use_cases import (
@@ -156,6 +157,7 @@ from src.application.trainer_client_registration_notify import (
 from src.application.client_stats_use_cases import get_client_activity_snapshot
 from src.application.client_use_cases import (
     attach_telegram_id_to_client,
+    get_client_by_phone,
     get_client_id_by_telegram_id,
     reset_orphan_client_miniapp_trainer_pointers,
     trainer_id_belongs_to_telegram,
@@ -6234,9 +6236,8 @@ async def post_client_self_register(
 ):
     """
     Client self-registration via the trainer's universal invite link.
-    Creates (or reuses) this account's own client row and adds it to the trainer's roster.
-    The typed phone is stored as a contact only; a match with a client from the trainer's
-    list is resolved by the trainer, not by whoever typed the number.
+    Looks up by phone: links Telegram ID to existing trainer-created client,
+    or creates a new client row and adds them to the trainer's roster.
     """
     telegram_id = client_catalog_telegram_key(principal)
 
@@ -6246,6 +6247,7 @@ async def post_client_self_register(
     phone_ok, phone_err = validate_phone_non_empty(phone_e164)
     if phone_err or not phone_ok:
         raise HTTPException(status_code=422, detail=phone_err or "Некорректный номер телефона.")
+    phone_norm = normalize_phone(phone_ok)
 
     first_name = (body.first_name or "").strip()[:64]
     if not first_name:
@@ -6255,6 +6257,23 @@ async def post_client_self_register(
     if not trainer:
         raise HTTPException(status_code=404, detail="Тренер не найден.")
 
+    existing_by_phone = await get_client_by_phone(session, body.phone)
+    if (
+        existing_by_phone
+        and existing_by_phone.get("telegram_id") is not None
+        and int(existing_by_phone["telegram_id"]) != telegram_id
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Этот номер уже используется другим аккаунтом Telegram.",
+        )
+
+    existing_phone_client_id = int(existing_by_phone["id"]) if existing_by_phone else None
+    had_roster_before = (
+        await trainer_client_roster_link_exists(session, body.trainer_id, existing_phone_client_id)
+        if existing_phone_client_id is not None
+        else False
+    )
     prior_tid_client_id = await get_client_id_by_telegram_id(session, telegram_id)
     last_name = (body.last_name or "").strip()[:64] or None
     client_id = await get_or_create_client(
@@ -6277,9 +6296,17 @@ async def post_client_self_register(
     await session.commit()
     await clear_pending_referral(telegram_id, session)
 
-    # A typed number never binds this account to a client from the trainer's list: if it
-    # matches one, the trainer decides in «Дела» (``trainer_client_matches``).
-    notify_event = "new_client" if roster_link_created else None
+    notify_event = None
+    if roster_link_created:
+        notify_event = "new_client"
+    elif (
+        existing_by_phone
+        and existing_phone_client_id == client_id
+        and existing_by_phone.get("telegram_id") is None
+        and had_roster_before
+    ):
+        notify_event = "telegram_linked"
+
 
     if notify_event is not None:
         await notify_trainer_client_registered_from_invite(
@@ -6289,7 +6316,16 @@ async def post_client_self_register(
             event=notify_event,
         )
 
-    status = "created" if prior_tid_client_id is None else "already_registered"
+    if existing_by_phone and int(existing_by_phone["id"]) == client_id:
+        if existing_by_phone.get("telegram_id") is None:
+            status = "linked"
+        else:
+            status = "already_registered"
+    elif prior_tid_client_id is None and existing_by_phone is None:
+        status = "created"
+    else:
+        status = "already_registered"
+
 
     logger.info(
         "client self-register done status=%s telegram_id=%s client_id=%s trainer_id=%s notify_event=%s",
