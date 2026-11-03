@@ -1403,7 +1403,7 @@ _SERP_BRAND = "Glideclub"
 
 def catalog_home_document_title() -> str:
     """Заголовок в выдаче: запрос «массовое катание» — без города, чаще бьёт в корень."""
-    return f"Массовое катание — расписание катков по Беларуси | {_SERP_BRAND}"
+    return f"Массовое катание — актуальное расписание катков по Беларуси | {_SERP_BRAND}"
 
 
 def catalog_home_search_description(cities: list[Mapping[str, Any]]) -> str:
