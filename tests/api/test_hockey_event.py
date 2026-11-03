@@ -16,7 +16,7 @@ from src.api.app import app
 from src.api.miniapp_auth.deps import get_client_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.api.routes import webapp_client_hockey_event as event_routes
-from src.application.hockey_event import event_view
+from src.application.hockey_event import event_view, invite, rsvp
 from src.application.hockey_hub import hub_card
 from src.application.ice_company import service as company_service
 from src.application.ice_company.codes import tg_participant_key
@@ -739,8 +739,9 @@ async def test_event_says_a_company_is_waiting_before_anyone_answers(db_session,
     match_id = await _match(db_session)
     now = datetime.now(timezone.utc)
     assert (await event_view(db_session, player_key=ME, match_id=match_id, now=now))["company_open"] is False
-    await create_match_company(
-        db_session, telegram_user_id=ME, match_id=match_id, home_team="Динамо-Минск", display_name="Макс"
-    )
+    await rsvp(db_session, player_key=ME, match_id=match_id, status="cant", display_name="Макс", now=now)
+    ev = await event_view(db_session, player_key=ME, match_id=match_id, now=now)
+    assert ev["company_open"] is False, "ответ сам по себе карточку в чат не отправляет"
+    await invite(db_session, player_key=ME, match_id=match_id, display_name="Макс", now=now)
     ev = await event_view(db_session, player_key=ME, match_id=match_id, now=now)
     assert ev["company_open"] is True and ev["people"] == []

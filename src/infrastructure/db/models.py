@@ -2677,6 +2677,8 @@ class IceCompany(Base):
     card_dirty: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Организатор получил карточку для чата. Пустое — компания заведена молча, ради ответа «Иду/Не смогу».
+    invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IceCompanyResponse(Base):

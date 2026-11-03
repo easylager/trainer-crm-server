@@ -102,6 +102,15 @@ _MY_OTHER_COMPANIES = text("""
     ORDER BY c.id
     """)
 
+# Карточка ушла организатору: только тогда страница матча говорит «карточка в чате».
+_MY_INVITED_COMPANY = text("""
+    SELECT 1
+    FROM ice_companies c
+    JOIN ice_company_events e ON e.id = c.event_id
+    WHERE e.source_ref = :src AND c.status = 'open' AND c.organizer_ref = :me AND c.invited_at IS NOT NULL
+    LIMIT 1
+    """)
+
 _PICKS_OF = text("""
     SELECT player_key, side, home_score, away_score, points
     FROM hockey_picks
@@ -420,10 +429,11 @@ async def event_view(
         if key != me and (n := _key_number(key)) is not None and n in picks
     ][:2]
 
-    # Компания уже собрана, но ответов ещё нет — страница показывает «ждём ответов», а не пустоту.
-    my_companies = (
-        (await session.execute(_MY_OTHER_COMPANIES, {"src": f"hockey_match:{row.id}", "me": me})).scalars().all()
-    )
+    # Карточка отправлена, но ответов ещё нет — страница показывает «ждём ответов», а не пустоту.
+    # Компания, заведённая молча ответом «Иду/Не смогу», сюда не попадает.
+    company_open = (
+        await session.execute(_MY_INVITED_COMPANY, {"src": f"hockey_match:{row.id}", "me": me})
+    ).first() is not None
     crowd = (await session.execute(_CROWD, {"src": f"hockey_match:{row.id}"})).one()
     nxt = (
         await session.execute(_NEXT_HOME, {"home": row.home_team, "after": max(now, starts_at), "id": row.id})
@@ -465,7 +475,7 @@ async def event_view(
             "company_names": company_names,
         },
         "crowd": {"going": int(crowd.going or 0), "maybe": int(crowd.maybe or 0)},
-        "company_open": bool(my_companies),
+        "company_open": company_open,
         "next_home": (
             {
                 "id": nxt.id,
@@ -580,6 +590,10 @@ async def invite(
         settings=cfg,
     )
     code = str(view["public_code"])
+    await session.execute(
+        text("UPDATE ice_companies SET invited_at = COALESCE(invited_at, now()) WHERE public_code = :code"),
+        {"code": code},
+    )
     company = await _load(session, code)
     assert company is not None
     snap = snap_from(company, await _responses(session, int(company["id"])))
