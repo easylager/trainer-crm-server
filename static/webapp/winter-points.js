@@ -20,6 +20,9 @@
   var seq = 0;
   var pending = '';
   var report = W.reportInit();
+  var sending = false;
+  var autoMap = false;
+  var pointSub = { id: null, on: false };
   var idem = W.newIdemKey();
   var current = null;
   var opener = null;
@@ -148,22 +151,14 @@
         : '');
   }
 
-  function render() {
-    var h = ensureHost();
+  /* Группы точек и подписка «рядом» между ними: одно и то же в списке и в шторке на карте. */
+  function listBody(list) {
     var data = cache.data;
-    if (!h || !data) return;
-    var points = data.items || [];
-    var origin = f.origin || ctx.origin;
-    var list = W.applyFilters(points, { flooded: f.flooded, kind: f.kind, district: f.district, origin: origin });
-    var head = W.headline(points.length, data.flooded || 0);
     var bellHtml = data.bell_near_link && !nearSub.on
       ? '<div class="w-bell"><span class="w-bell__text"><span class="w-bell__title">Лёд рядом с вами</span>' +
         '<span class="w-bell__hint">Напишем в Telegram, когда зальют лёд в 2 км от вас</span></span>' +
         '<button type="button" class="w-btn w-btn--tg" data-w-near>' + BELL + 'Подписаться</button></div>'
       : '';
-    var lead = head.title
-      ? '<b>' + esc(head.title) + '.</b> ' + esc(head.hint)
-      : esc(W.summaryLine(points.length, data.flooded || 0));
     var groups = W.listGroups(list);
     var slot = W.bellSlot(groups);
     var body = groups.map(function (g) {
@@ -175,17 +170,32 @@
         '<ul class="w-list w-list--' + (g.key === 'now' ? 'cards' : 'rows') + '">' + items + '</ul></section>' +
         (g.key === 'now' && slot === 'now' ? bellHtml : '');
     }).join('');
+    return list.length
+      ? (slot === 'top' ? bellHtml : '') + body
+      : '<p class="w-empty">' + esc(W.emptyFilterText({ flooded: f.flooded })) + '</p>' + bellHtml;
+  }
+
+  function render() {
+    var h = ensureHost();
+    var data = cache.data;
+    if (!h || !data) return;
+    var points = data.items || [];
+    var origin = f.origin || ctx.origin;
+    var list = W.applyFilters(points, { flooded: f.flooded, kind: f.kind, district: f.district, origin: origin });
+    var head = W.headline(points.length, data.flooded || 0);
+    var lead = head.title
+      ? '<b>' + esc(head.title) + '.</b> ' + esc(head.hint)
+      : esc(W.summaryLine(points.length, data.flooded || 0));
     h.innerHTML =
       '<div class="w-page w-page--app">' +
       '<h2 class="w-title">' + esc(data.where ? 'Зимой в ' + data.where : 'Зимой') + '</h2>' +
       '<p class="w-lead">' + lead + '</p>' +
       segHtml('list') + chipsHtml(data, points, origin, true) +
       '<p class="w-note">' + esc(geoNote || W.sortNote({ flooded: f.flooded, kind: f.kind, district: f.district, origin: origin })) + '</p>' +
-      (list.length
-        ? (slot === 'top' ? bellHtml : '') + body
-        : '<p class="w-empty">' + esc(W.emptyFilterText({ flooded: f.flooded })) + '</p>' + bellHtml) +
+      listBody(list) +
       '</div>';
     askNearSub();
+    paintDrawer();
     if (ctx.onData) ctx.onData();
   }
 
@@ -235,6 +245,11 @@
         if (!d) return status('Не получилось загрузить зимние точки.', true);
         cache = { key: key, data: d };
         render();
+        /* Зимой главный экран — карта: человек ищет лёд рядом. Один раз за вход; «Списком» остаётся в шторке. */
+        if (!autoMap && ctx.setView && mapWanted()) {
+          autoMap = true;
+          ctx.setView('map');
+        }
       })
       .catch(function () { if (my === seq) { pending = ''; status('Не получилось загрузить зимние точки.', true); } });
   }
@@ -312,7 +327,10 @@
       '<div class="w-mapctl" role="group" aria-label="Масштаб">' +
       '<button type="button" data-w-zoom="1" aria-label="Приблизить">+</button>' +
       '<button type="button" data-w-zoom="-1" aria-label="Отдалить">−</button></div>' +
-      '<div class="w-mapcard" hidden></div>';
+      '<div class="w-mapcard" hidden></div>' +
+      '<div class="w-drawer"><button type="button" class="w-drawer__head" data-w-drawer aria-expanded="false">' +
+      '<span class="w-sheet__grab" aria-hidden="true"></span><span class="w-drawer__title"></span>' +
+      '<span class="w-drawer__hint">Списком</span></button><div class="w-drawer__body"></div></div>';
     sec.appendChild(h);
     h.addEventListener('click', onClick);
     mapState.host = h;
@@ -330,13 +348,15 @@
 
   function mapCard(p) {
     var card = mapState.host.querySelector('.w-mapcard');
+    drawerOpen(false);
     var v = W.stateView(p);
     var note = W.checkedLine(p, new Date());
     card.hidden = false;
     card.innerHTML = '<a class="w-mapcard__name" href="#" data-w-open="' + p.id + '">' + esc(W.cardTitle(p)) + '</a>' +
       '<span class="w-card__tags"><span class="w-pill w-pill--' + v.tone + '">' + esc(v.label) + '</span></span>' +
       (note ? '<span class="w-card__meta">' + esc(note) + '</span>' : '') +
-      '<a class="w-btn w-btn--soft" href="#" data-w-open="' + p.id + '">Открыть</a>';
+      '<a class="w-btn ' + (p.state === 'flooded' ? 'w-btn--soft' : 'w-btn--dark') + '" href="#" data-w-open="' + p.id + '">' +
+      (p.state === 'flooded' ? 'Подробнее' : 'Залили? Отметьте') + '</a>';
   }
 
   function drawMap() {
@@ -363,7 +383,7 @@
     cl.add(pts.map(function (p) {
       var v = W.stateView(p);
       var pm = new ym.Placemark([p.lat, p.lon], { pin: v.pin, glyph: GLYPH[v.pin] || '', hintContent: p.name },
-        { iconLayout: Layout, iconShape: { type: 'Circle', coordinates: [0, -6], radius: 22 }, hasBalloon: false });
+        { iconLayout: Layout, iconShape: { type: 'Circle', coordinates: [0, -22], radius: 24 }, hasBalloon: false });
       pm.events.add('click', function () { mapCard(p); });
       return pm;
     }));
@@ -388,7 +408,8 @@
     mapHost(sec).hidden = false;
     /* Верх карты: «Список | Карта» и те же фильтры, что в списке. */
     mapState.host.querySelector('.w-fullmap__bar').innerHTML =
-      segHtml('map') + chipsHtml(cache.data, cache.data.items || [], f.origin || ctx.origin, false);
+      chipsHtml(cache.data, cache.data.items || [], f.origin || ctx.origin, false);
+    paintDrawer();
     if (mapState.ym) {
       drawMap();
       return true;
@@ -408,6 +429,27 @@
       function () { mapSay('Карта не загрузилась. Список работает как обычно.'); }
     );
     return true;
+  }
+
+  /* Список на карте — шторкой снизу: свёрнута — счёт «залито · ждут», развёрнута — те же группы, что в списке.
+     В ней же точки без точного адреса, которых нет на карте. */
+  function paintDrawer() {
+    var h = mapState.host;
+    if (!h || h.hidden || !cache.data) return;
+    var list = filtered();
+    var origin = f.origin || ctx.origin;
+    h.querySelector('.w-drawer__title').textContent = W.drawerTitle(W.listGroups(list), !!origin);
+    h.querySelector('.w-drawer__body').innerHTML = '<div class="w-page w-page--app">' + listBody(list) + '</div>';
+  }
+
+  function drawerOpen(on) {
+    var h = mapState.host;
+    var d = h && h.querySelector('.w-drawer');
+    if (!d) return;
+    if (d.classList) d.classList.toggle('w-drawer--open', on);
+    h.querySelector('[data-w-drawer]').setAttribute('aria-expanded', String(on));
+    h.querySelector('.w-drawer__hint').textContent = on ? 'К карте' : 'Списком';
+    if (on) h.querySelector('.w-mapcard').hidden = true;
   }
 
   function bodyClass(name, on) {
@@ -449,12 +491,13 @@
     }
     current = p;
     report = W.reportInit();
+    sending = false;
     idem = W.newIdemKey();
     var from = document.activeElement;
     closeSheet();
     opener = from && from !== document.body ? from : opener;
     sheet = document.createElement('div');
-    sheet.className = 'w-sheet';
+    sheet.className = 'w-sheet w-sheet--app';
     sheet.setAttribute('role', 'dialog');
     sheet.setAttribute('aria-modal', 'true');
     sheet.innerHTML = '<button type="button" class="w-sheet__back" data-w-x aria-label="Закрыть"></button><div class="w-sheet__panel"></div>';
@@ -473,58 +516,138 @@
   function paintSheet(p, full) {
     var panel = sheet.querySelector('.w-sheet__panel');
     var v = W.stateView(p);
+    var now = new Date();
     var map = '';
     if (full && full.static_map_url) {
       var open = 'https://yandex.ru/maps/?pt=' + full.lon + ',' + full.lat + '&z=16&l=map';
-      map = '<a href="' + esc(open) + '" data-w-ext class="w-hero__map" style="position:relative;display:block;height:160px;border-radius:14px;overflow:hidden">' +
-        '<img src="' + esc(full.static_map_url) + '" alt="Карта" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.remove()">' +
+      map = '<a href="' + esc(open) + '" data-w-ext class="w-hero__map w-sh-map">' +
+        '<img src="' + esc(full.static_map_url) + '" alt="Карта" onerror="this.parentNode.remove()">' +
         '<span class="w-hero__open">Открыть в Картах</span></a>';
     } else if (p.locating) {
-      map = '<p class="w-empty">Точку на карте уточняем</p>';
+      map = '<p class="w-sh-note">Точку на карте уточняем, маршрут может быть неточным.</p>';
     }
-    var tags = W.liveTags(p, new Date()).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
-    var checked = W.checkedLine(p, new Date());
+    var tags = W.liveTags(p, now).map(function (t) { return '<span class="w-tag">' + esc(t) + '</span>'; }).join('');
+    var checked = W.checkedLine(p, now);
+    var dispute = W.disputeNote(p);
     function rows(list) {
       return list.filter(function (r) { return r[1]; }).map(function (r) {
         var val = r[0] === 'Телефон' ? '<a href="tel:' + esc(String(p.phone).split(/[;,]/)[0].replace(/[^\d+]/g, '')) + '" data-w-ext>' + esc(p.phone_display || p.phone) + '</a>' : esc(r[1]);
         return '<dt>' + r[0] + '</dt><dd>' + val + '</dd>';
       }).join('');
     }
-    /* Часы и цена — из таблицы прошлой зимы: отдельный блок с подписью сезона из данных. */
+    /* Часы и цена — из таблицы прошлой зимы: сезон называем словами, а не служебной подписью. */
     var season = W.dataSeason(p);
     var dataRows = rows([['Часы', W.hoursLabel(p)], ['Цена', W.priceLabel(p)]]);
     var restRows = rows([['Телефон', p.phone_display || p.phone || ''], ['Важно', p.often_hockey_note || '']]);
-    var known = '<p class="w-lbl">' + (season ? 'ПРОШЛОЙ ЗИМОЙ · ' + esc(season) : 'ЧТО ИЗВЕСТНО') + '</p>' +
+    var known = (dataRows || restRows) ? '<section class="w-card2 w-sh-sec">' +
+      '<h3 class="w-sh-h">' + (dataRows ? 'Часы и цена' : 'Контакты') + '</h3>' +
+      (dataRows && season ? '<p class="w-sh-hint">По данным прошлой зимы, ' + esc(season) + '. Этой зимой могут измениться.</p>' : '') +
       (dataRows ? '<dl class="w-kv">' + dataRows + '</dl>' : '') +
-      (restRows ? '<dl class="w-kv w-kv--rest">' + restRows + '</dl>' : '');
-    var dispute = W.disputeNote(p);
-    var waiting = p.state === 'waiting' || p.state === 'stale';
+      (restRows ? '<dl class="w-kv w-kv--rest">' + restRows + '</dl>' : '') + '</section>' : '';
+    var bell = p.state !== 'flooded' ? '<section class="w-card2 w-sh-sec" data-w-bellbox>' +
+      '<h3 class="w-sh-h">Не у катка?</h3>' +
+      '<p class="w-sh-hint">Напишем вам в Telegram, как только заливку подтвердят.</p>' +
+      '<div data-w-bellslot>' + bellSlotHtml() + '</div></section>' : '';
     panel.innerHTML =
       '<span class="w-sheet__grab" aria-hidden="true"></span><button type="button" class="w-sheet__close" data-w-x aria-label="Закрыть">×</button>' +
-      '<div><span class="w-kindbadge">' + esc(W.kindLabel(p.kind)) + '</span><h2 class="w-sheet__title" style="margin-top:8px">' + esc(p.name) + '</h2>' +
-      '<p class="w-sheet__sub">' + esc([p.address, p.district].filter(Boolean).join(' · ')) + '</p></div>' + map +
-      '<div class="w-card2 ' + (v.tone === 'ok' ? 'w-card2--ok' : v.tone === 'wait' ? 'w-card2--wait' : '') + '">' +
-      '<p class="w-status">' + esc(v.label) + '</p>' + (checked ? '<p class="w-note">' + esc(checked) + '</p>' : '') +
-      (dispute ? '<p class="w-note">' + esc(dispute) + '</p>' : '') +
-      (tags ? '<span class="w-card__tags">' + tags + '</span>' : '') + '<div data-w-body></div>' +
-      '<p class="w-thanks" data-w-msg hidden role="status"></p></div>' +
-      (waiting ? '<button type="button" class="w-btn w-btn--tg w-btn--wide" data-w-bell>Сообщить, когда зальют</button>' : '') +
-      '<div class="w-card2">' + known + '</div>' +
+      '<div class="w-sh-head"><span class="w-sh-kind">' + esc(W.kindLabel(p.kind)) + (p.district ? ' · ' + esc(p.district) : '') + '</span>' +
+      '<h2 class="w-sheet__title">' + esc(p.name) + '</h2>' +
+      (p.address && String(p.name).indexOf(p.address) < 0 ? '<p class="w-sheet__sub">' + esc(p.address) + '</p>' : '') + '</div>' +
+      '<div class="w-sh-status"><span class="w-pill w-pill--' + v.tone + '">' + esc(v.label) + '</span>' + tags + '</div>' +
+      (checked || dispute ? '<p class="w-sh-note">' + esc([checked, dispute].filter(Boolean).join('. ')) + '</p>' : '') +
+      map +
+      '<section class="w-card2 w-sh-sec w-mark" data-w-body></section>' +
+      bell + known +
       (p.route_url ? '<a class="w-btn w-btn--soft w-btn--wide" href="' + esc(p.route_url) + '" data-w-ext data-w-route>Маршрут</a>' : '') +
-      '<button type="button" class="w-foot" data-w-gone style="background:none;border:0;color:var(--g-accent-ink)">Точки больше нет или ошибка? Сообщить</button>';
+      '<button type="button" class="w-foot" data-w-gone>Точки больше нет или ошибка? Сообщить</button>' +
+      '<p class="w-sh-note w-sh-foot" data-w-gonemsg hidden role="status"></p>';
     paintBody(p);
+    askPointSub(p.id);
+  }
+
+  function bellSlotHtml() {
+    return pointSub.on
+      ? '<p class="w-sh-done" role="status">Вы подписаны. Напишем, когда зальют.</p>'
+      : '<button type="button" class="w-btn w-btn--tg w-btn--wide" data-w-bell>Сообщить мне</button>';
+  }
+
+  function paintBellSlot() {
+    var slot = sheet && sheet.querySelector('[data-w-bellslot]');
+    if (slot) slot.innerHTML = bellSlotHtml();
+  }
+
+  /* Уже подписанным на эту точку вместо кнопки — «Вы подписаны». */
+  function askPointSub(id) {
+    pointSub = { id: id, on: false };
+    if (!ctx || !ctx.authHeaders || !current || current.state === 'flooded') return;
+    fetch('/api/webapp/winter/subscriptions', { headers: headers(), cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && pointSub.id === id && W.hasPointSub(d.items, id)) {
+          pointSub.on = true;
+          paintBellSlot();
+        }
+      })
+      .catch(function () {});
   }
 
   function paintBody(p) {
     var body = sheet.querySelector('[data-w-body]');
     if (!body) return;
-    var qs = W.questionsView(report, { flooded: p.state === 'flooded' }).map(function (q) {
+    var mv = W.markView(p, report);
+    var extras = mv.extras.map(function (q) {
       return '<fieldset class="w-q"><legend>' + esc(q.label) + '</legend><div class="w-q__row">' + q.opts.map(function (o) {
         return '<button type="button" class="w-opt" data-w-q="' + q.key + '" data-w-o="' + o.id + '" aria-pressed="' + o.selected + '">' + esc(o.label) + '</button>';
       }).join('') + '</div></fieldset>';
     }).join('');
-    body.innerHTML = '<p class="w-ask" style="margin:0;font-weight:700">Как там сейчас?</p>' + qs +
-      '<button type="button" class="w-btn w-btn--dark w-btn--wide" data-w-send aria-disabled="' + !W.reportCanSend(report) + '">' + esc(W.reportSendLabel(report)) + '</button>';
+    body.innerHTML = '<h3 class="w-sh-h">' + esc(mv.title) + '</h3><p class="w-sh-hint">' + esc(mv.hint) + '</p>' +
+      '<div class="w-mark__ice' + (mv.ice.length === 2 ? ' w-mark__ice--2' : '') + (mv.oneTap ? ' w-mark__ice--tap' : '') + '">' + mv.ice.map(function (o) {
+        return '<button type="button" class="w-mark__btn w-mark__btn--' + o.id + '" data-w-ice="' + o.id + '"' +
+          (mv.oneTap ? '' : ' aria-pressed="' + o.selected + '"') + (sending ? ' disabled' : '') + '>' + esc(o.label) + '</button>';
+      }).join('') + '</div>' +
+      (extras ? '<div class="w-mark__extra"><p class="w-sh-sub">Можно добавить, по желанию</p>' + extras + '</div>' : '') +
+      (mv.canSend ? '<button type="button" class="w-btn w-btn--dark w-btn--wide" data-w-send' + (sending ? ' disabled' : '') + '>Отправить отметку</button>' : '') +
+      '<p class="w-error" data-w-msg hidden role="status"></p>';
+  }
+
+  function onIce(iceId) {
+    if (sending || !current) return;
+    if (W.markView(current, report).oneTap) {
+      report = { ice: iceId, crowd: null, hockey: null };
+      return sendMark();
+    }
+    report = W.reportToggle(report, 'ice', iceId);
+    paintBody(current);
+  }
+
+  function sendMark() {
+    if (sending || !current) return;
+    var payload = W.reportPayload(report, { idem_key: idem });
+    if (!payload) return;
+    sending = true;
+    paintBody(current);
+    var id = current.id;
+    fetch('/api/webapp/winter/points/' + id + '/marks', { method: 'POST', headers: headers(true), body: JSON.stringify(payload) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, body: j, retry: Number(r.headers.get('Retry-After')) || 0 }; }); })
+      .then(function (res) {
+        sending = false;
+        if (!sheet || !current || current.id !== id) return;
+        if (res.status === 200) {
+          var out = W.reportOutcome(report, res.body, 'miniapp');
+          sheet.querySelector('[data-w-body]').innerHTML = '<div class="w-result"><b>Ваша отметка: ' + esc(out.summary) + '</b><span>' + esc(out.rule) + '</span></div>';
+          cache.key = '';
+        } else {
+          report = W.reportInit();
+          paintBody(current);
+          say(sheet.querySelector('[data-w-msg]'), W.reportErrorText(res.status, res.retry), true);
+        }
+      })
+      .catch(function () {
+        sending = false;
+        if (!sheet || !current || current.id !== id) return;
+        paintBody(current);
+        say(sheet.querySelector('[data-w-msg]'), W.reportErrorText(0), true);
+      });
   }
 
   function onSheetClick(ev) {
@@ -538,40 +661,41 @@
       }
       return openExternal(ext.getAttribute('href'));
     }
-    var msg = sheet.querySelector('[data-w-msg]');
     var opt = t.closest('[data-w-o]');
     if (opt) {
       report = W.reportToggle(report, opt.getAttribute('data-w-q'), opt.getAttribute('data-w-o'));
       return paintBody(current);
     }
-    if (t.closest('[data-w-send]')) {
-      if (!W.reportCanSend(report)) return;
-      var payload = W.reportPayload(report, { idem_key: idem });
-      fetch('/api/webapp/winter/points/' + current.id + '/marks', { method: 'POST', headers: headers(true), body: JSON.stringify(payload) })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, body: j, retry: Number(r.headers.get('Retry-After')) || 0 }; }); })
-        .then(function (res) {
-          if (res.status === 200) {
-            var out = W.reportOutcome(report, res.body, 'miniapp');
-            sheet.querySelector('[data-w-body]').innerHTML = '<div class="w-result"><b>Ваша отметка:</b><strong>' + esc(out.summary) + '</strong><span>' + esc(out.rule) + '</span></div>';
-            cache.key = '';
-          } else {
-            say(msg, W.reportErrorText(res.status, res.retry), true);
-          }
-        })
-        .catch(function () { say(msg, W.reportErrorText(0), true); });
-      return;
-    }
-    if (t.closest('[data-w-bell]')) {
-      fetch('/api/webapp/winter/subscriptions/point', { method: 'POST', headers: headers(true), body: JSON.stringify({ arena_id: current.id }) })
+    var ice = t.closest('[data-w-ice]');
+    if (ice) return onIce(ice.getAttribute('data-w-ice'));
+    if (t.closest('[data-w-send]')) return sendMark();
+    var bellBtn = t.closest('[data-w-bell]');
+    if (bellBtn) {
+      if (bellBtn.disabled) return;
+      bellBtn.disabled = true;
+      var id = current.id;
+      fetch('/api/webapp/winter/subscriptions/point', { method: 'POST', headers: headers(true), body: JSON.stringify({ arena_id: id }) })
         .then(function (r) { return r.ok; })
-        .then(function (ok) { say(msg, ok ? 'Готово. Напишем в Telegram, когда зальют.' : 'Не получилось подписаться. Попробуйте ещё раз.', !ok); });
+        .catch(function () { return false; })
+        .then(function (ok) {
+          if (!sheet || !current || current.id !== id) return;
+          if (ok) {
+            pointSub = { id: id, on: true };
+            return paintBellSlot();
+          }
+          bellBtn.disabled = false;
+          var slot = sheet.querySelector('[data-w-bellslot]');
+          if (slot && !slot.querySelector('.w-error')) slot.insertAdjacentHTML('beforeend', '<p class="w-error" role="status">Не получилось подписаться. Попробуйте ещё раз.</p>');
+        });
       return;
     }
     if (t.closest('[data-w-gone]')) {
+      var gm = sheet.querySelector('[data-w-gonemsg]');
       fetch('/api/webapp/winter/points/' + current.id + '/gone', { method: 'POST', headers: headers(), cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; })
         .then(function (j) {
-          say(msg, j && j.counted ? 'Спасибо, передали. Проверим точку.' :
+          say(gm, j && j.counted ? 'Спасибо, передали. Проверим точку.' :
             (j ? 'Спасибо, мы уже учли ваш сигнал.' : 'Не получилось отправить.'), !j);
         });
     }
@@ -587,6 +711,8 @@
   function onClick(ev) {
     var zb = ev.target.closest('[data-w-zoom]');
     if (zb) return zoomBy(Number(zb.getAttribute('data-w-zoom')));
+    var dr = ev.target.closest('[data-w-drawer]');
+    if (dr) return drawerOpen(dr.getAttribute('aria-expanded') !== 'true');
     var open = ev.target.closest('[data-w-open]');
     if (open) {
       ev.preventDefault();

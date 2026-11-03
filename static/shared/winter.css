@@ -159,7 +159,10 @@ body.tg-dark {
 .w-dot--wait { background: var(--w-wait-fill); border-radius: 3px; }
 .w-dot--quiet { background: var(--w-quiet-fill); border-radius: 2px; transform: rotate(45deg) scale(.85); }
 /* Пин: форма и знак, не только цвет (U1) */
+/* Слой метки Яндекса ставит левый верхний угол в координату точки: сдвигаем пин так, чтобы остриё
+   было в точке, а центр — там же, где iconShape (0, -22). Иначе зона клика и видимый пин расходились. */
 .w-pin {
+  position: absolute; left: -15px; top: -37px; box-sizing: border-box;
   width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
   border: 3px solid #fff; box-shadow: 0 2px 6px rgba(13, 27, 38, .35);
   display: flex; align-items: center; justify-content: center;
@@ -329,3 +332,60 @@ body.ice-view-map.w-map-on { overscroll-behavior: none; }
 /* Десктоп Telegram: панель не растягивается на всю ширину окна. */
 .w-fullmap__bar > .w-seg, .w-fullmap__bar > .w-chips { width: 100%; max-width: 480px; }
 .w-fullmap .w-mapcard { z-index: 4; }
+
+/* Шторка точки в Mini App: шапка → статус → «Вы у катка?» → подписка → часы и цена. */
+.w-sh-head { display: flex; flex-direction: column; gap: 6px; padding-right: 40px; }
+.w-sh-kind { font-size: 13px; font-weight: 600; color: var(--g-muted); }
+.w-sh-head .w-sheet__sub { margin: 0; }
+.w-sh-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.w-sh-note { margin: 0; font-size: 14px; line-height: 1.35; color: var(--g-ink-2); }
+.w-sh-map { position: relative; display: block; height: 150px; border-radius: var(--g-r-md); overflow: hidden; }
+.w-sh-map img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.w-sh-sec { gap: 12px; }
+.w-sh-h { margin: 0; font-size: 17px; line-height: 1.25; font-weight: 700; color: var(--g-ink); }
+.w-sh-sec .w-sh-hint { margin: -6px 0 0; font-size: 14px; line-height: 1.4; color: var(--g-muted); }
+.w-sh-sub { margin: 0; font-size: 13px; font-weight: 600; color: var(--g-muted); }
+.w-sh-done { margin: 0; padding: 12px 14px; border-radius: var(--g-r-sm); background: var(--w-ok-wash); color: var(--w-ok-ink); font-size: 15px; font-weight: 600; }
+.w-sh-foot { text-align: center; }
+.w-mark__extra { display: flex; flex-direction: column; gap: 10px; }
+.w-mark .w-q legend { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--g-ink-2); margin-bottom: 6px; }
+.w-mark .w-opt { min-height: 44px; }
+.w-mark__ice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.w-mark__ice--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.w-mark__btn {
+  min-height: 52px; padding: 0 8px; border-radius: var(--g-r-sm); border: 1px solid var(--g-line-strong);
+  background: var(--g-surface); color: var(--g-ink); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+  touch-action: manipulation;
+}
+.w-mark__ice--tap .w-mark__btn--on { background: var(--w-ok-fill); border-color: var(--w-ok-fill); color: #fff; }
+.w-mark__btn[aria-pressed="true"] { background: var(--g-dark); border-color: var(--g-dark); color: var(--g-on-photo); }
+.w-mark__btn:active { transform: scale(.98); }
+.w-mark__btn[disabled] { opacity: .55; cursor: default; }
+.w-mark .w-result { gap: 4px; }
+/* Шторка в Mini App не уходит под таб-бар оболочки. */
+.w-sheet--app .w-sheet__panel { padding-bottom: calc(var(--client-shell-tab-inset, 80px) + 16px); max-height: 94vh; }
+.w-sheet--app .w-foot { background: none; border: 0; color: var(--g-accent-ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+/* Шторка списка на зимней карте: свёрнута — одна строка со счётом над таб-баром, развёрнута — список. */
+.w-drawer {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; flex-direction: column;
+  max-height: 64px; background: var(--g-bg); border-radius: 22px 22px 0 0; box-shadow: 0 -4px 18px rgba(13, 27, 38, .18);
+  transition: max-height .22s ease-out; touch-action: pan-y;
+}
+.w-drawer--open { max-height: 68%; }
+.w-drawer__head {
+  flex: none; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; min-height: 64px;
+  padding: 8px 18px 10px; border: 0; background: none; color: var(--g-ink); font: inherit; text-align: left; cursor: pointer;
+  touch-action: manipulation;
+}
+.w-drawer__head .w-sheet__grab { grid-column: 1 / -1; justify-self: center; }
+.w-drawer__title { font-size: 15px; font-weight: 700; }
+.w-drawer__hint { font-size: 14px; font-weight: 600; color: var(--g-accent-ink); }
+.w-drawer__body { overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 16px; touch-action: pan-y; }
+.w-drawer:not(.w-drawer--open) .w-drawer__body { display: none; }
+.w-fullmap .w-mapcard { bottom: 76px; }
+@media (min-width: 720px) {
+  .w-drawer { left: 12px; right: auto; width: 420px; }
+}
+@media (min-width: 720px) {
+  .w-fullmap .w-mapcard { left: 12px; right: auto; width: 420px; bottom: 76px; }
+}
