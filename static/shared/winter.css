@@ -68,8 +68,17 @@ body.tg-dark {
 /* Чипы: горизонтальный скролл, фокус виден (U2) */
 .w-chips { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; scrollbar-width: none; }
 .w-chips::-webkit-scrollbar { display: none; }
+/* Mini App: все фильтры видны сразу (переносятся, а не уезжают за край). Листается только ряд районов, справа затухание. */
+.w-app .w-chips { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; }
+.w-app .w-chips--sub {
+  flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; scrollbar-width: none;
+  overscroll-behavior-x: contain; scroll-padding: 0 16px;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+.w-app .w-chips--sub::-webkit-scrollbar { display: none; }
 .w-chip {
-  flex: none; min-height: 44px; padding: 0 14px; border-radius: 999px;
+  flex: none; min-height: 44px; padding: 0 13px; border-radius: 999px;
   border: 1px solid var(--g-line-strong); background: var(--g-surface); color: var(--g-ink);
   font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
 }
@@ -100,6 +109,28 @@ body.tg-dark {
 }
 .w-card__body { padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .w-card__top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; color: var(--g-muted); }
+.w-card__top > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w-card__dist { flex: none; color: var(--g-ink); font-weight: 700; }
+.w-card--plain { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+.w-card--plain .w-card__body { padding: 12px 14px; }
+.w-card__meta--ink { color: var(--g-ink-2); }
+.w-card__meta--warn { color: var(--g-warn-ink); }
+
+/* Группы списка: «Можно кататься» — карточки, «Ждём заливку» и остальное — короткие строки. */
+.w-group { display: flex; flex-direction: column; gap: 8px; }
+.w-group__h { margin: 6px 0 0; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--g-muted); }
+.w-group__h span { color: var(--g-ink-2); }
+.w-list--rows { gap: 0; border-radius: var(--g-r-card); background: var(--g-surface); border: 1px solid var(--g-line); overflow: hidden; }
+.w-list--rows > li + li { border-top: 1px solid var(--g-line); }
+.w-row {
+  display: flex; flex-direction: column; gap: 3px; min-height: 64px; padding: 10px 14px; justify-content: center;
+  color: var(--g-ink) !important; text-decoration: none;
+}
+.w-row__name { font-size: 15px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.w-row__note { font-size: 13px; line-height: 1.35; color: var(--g-muted); }
+.w-row--hot .w-row__note { color: var(--g-warn-ink); font-weight: 600; }
+.w-row--quiet .w-row__name { color: var(--g-ink-2); font-weight: 600; }
+.w-row:active, .w-card:active { background: var(--g-chip); }
 .w-card__name { font-size: 16px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
 .w-card__tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .w-card__meta { font-size: 12px; line-height: 1.35; color: var(--g-muted); }
@@ -118,7 +149,9 @@ body.tg-dark {
 .w-map { position: relative; height: 420px; border-radius: var(--g-r-card); overflow: hidden; border: 1px solid var(--g-line); background: var(--w-thumb); }
 .w-map[hidden] { display: none; }
 .w-map__canvas { position: absolute; inset: 0; }
-.w-map__msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--g-ink-2); font-size: 14px; }
+/* [hidden] обязан побеждать display:flex: раньше пустая надпись лежала поверх всей карты и съедала касания и щипок. */
+.w-map__msg[hidden] { display: none; }
+.w-map__msg { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--g-ink-2); font-size: 14px; }
 .w-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; font-weight: 600; color: var(--g-ink-2); }
 .w-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .w-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
@@ -253,17 +286,46 @@ body.tg-dark {
 
 /* Mini App: зимняя карта занимает место карты каталога; общая карта и шторка в это время скрыты. */
 .ice-map-wrap--winter > :not(.w-fullmap) { display: none !important; }
-.w-fullmap { position: fixed; inset: 0; bottom: var(--client-shell-tab-inset, 80px); background: var(--w-thumb); z-index: 1; }
+.w-fullmap {
+  position: fixed; inset: 0; bottom: var(--client-shell-tab-inset, 80px); background: var(--w-thumb); z-index: 1;
+  /* Жесты внутри карты — только карте: браузер не скроллит страницу и не масштабирует её. */
+  touch-action: none; overscroll-behavior: none;
+}
+.w-fullmap .w-map__canvas { touch-action: none; }
+.w-fullmap .w-chips, .w-fullmap .w-seg, .w-fullmap .w-mapcard { touch-action: manipulation; }
+body.ice-view-map.w-map-on .ice-sec--hero { display: none; }
+body.ice-view-map.w-map-on { overscroll-behavior: none; }
+.w-mapctl {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 3;
+  display: flex; flex-direction: column; border-radius: 14px; overflow: hidden;
+  background: var(--g-surface); box-shadow: 0 2px 10px rgba(13, 27, 38, .22);
+}
+.w-mapctl button {
+  width: 48px; height: 48px; border: 0; background: transparent; color: var(--g-ink);
+  font: 500 26px/1 var(--g-font); cursor: pointer; touch-action: manipulation;
+}
+.w-mapctl button + button { border-top: 1px solid var(--g-line); }
+.w-mapctl button:active { background: var(--g-chip); }
+.w-mapctl button:focus-visible { outline: 3px solid var(--g-accent); outline-offset: -3px; }
 .w-fullmap[hidden] { display: none; }
 .w-fullmap .w-mapcard { bottom: 12px; }
-.w-fullmap__attrib { position: absolute; left: 12px; bottom: 4px; z-index: 2; margin: 0; font-size: 11px; color: var(--g-muted); }
-.w-fullmap__attrib a { color: inherit; text-decoration: underline; }
 
 /* Mini App: заголовок и один абзац вместо трёх строк пояснений; переключатель вида — в самом блоке. */
+.w-page--app { padding: 0 0 12px; }
+.ice-sec--winter > .ice-listhead { display: none; }
 .w-app .w-lead { margin: -4px 0 0; font-size: 15px; line-height: 1.4; color: var(--g-muted); }
 .w-app .w-lead b { color: var(--g-ink); font-weight: 700; }
 .w-pill__i { flex: none; }
 .w-bell .w-btn--tg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.w-fullmap__bar { position: absolute; left: 0; right: 0; top: 0; z-index: 3; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 24px; background: linear-gradient(var(--g-bg) 65%, transparent); }
-.w-fullmap__bar .w-chips { margin: 0 -16px; }
+/* Панель над картой: сама пропускает касания к карте, кликабельны только кнопки. Верх — под шапку Telegram в fullscreen. */
+.w-fullmap__bar {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 3; display: flex; flex-direction: column; gap: 8px;
+  padding: calc(10px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)) 16px 18px;
+  background: linear-gradient(var(--g-bg) 70%, transparent); pointer-events: none;
+}
+.w-fullmap__bar > * { pointer-events: auto; }
+.w-fullmap__bar .w-seg button { min-height: 40px; }
+.w-fullmap__bar .w-chips { margin: 0; }
+/* Десктоп Telegram: панель не растягивается на всю ширину окна. */
+.w-fullmap__bar > .w-seg, .w-fullmap__bar > .w-chips { width: 100%; max-width: 480px; }
 .w-fullmap .w-mapcard { z-index: 4; }

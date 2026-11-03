@@ -276,3 +276,23 @@ describe('свайп вниз по шторке', () => {
     assert.equal(W.swipeDecision(-120, 50), 'snap');
   });
 });
+
+describe('группы списка и место подписки', () => {
+  it('залитые → ждём → закрытые/давно без отметок; пустых групп нет; порядок внутри сохраняется', () => {
+    const g = W.listGroups([pt({ id: 1, state: 'flooded' }), pt({ id: 2 }), pt({ id: 3, state: 'closed' }), pt({ id: 4, state: 'flooded' }), pt({ id: 5, state: 'stale' })]);
+    assert.deepEqual(g.map((x) => x.key), ['now', 'wait', 'off']);
+    assert.deepEqual(g[0].items.map((p) => p.id), [1, 4]);
+    assert.deepEqual(g[2].items.map((p) => p.id), [3, 5]);
+    assert.deepEqual(W.listGroups([pt()]).map((x) => x.key), ['wait']);
+  });
+  it('подписка — после залитых, а без них — над списком', () => {
+    assert.equal(W.bellSlot(W.listGroups([pt({ state: 'flooded' }), pt()])), 'now');
+    assert.equal(W.bellSlot(W.listGroups([pt(), pt({ state: 'closed' })])), 'top');
+    assert.equal(W.bellSlot([]), 'top');
+  });
+  it('подписка «рядом» узнаётся по kind, подписка на точку — нет', () => {
+    assert.equal(W.hasNearSub([{ kind: 'point', arena_id: 1 }]), false);
+    assert.equal(W.hasNearSub([{ kind: 'point' }, { kind: 'near' }]), true);
+    assert.equal(W.hasNearSub(null), false);
+  });
+});

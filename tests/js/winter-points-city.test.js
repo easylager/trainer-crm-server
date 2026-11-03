@@ -75,7 +75,7 @@ describe('IceWinter: смена города', () => {
     assert.equal(global.IceWinter.mapWanted(), true);
   });
 
-  it('заголовок с городом, один абзац, сегмент «Список | Карта», колокольчик после списка', async () => {
+  it('заголовок с городом, один абзац, сегмент «Список | Карта»; без залитых подписка — над списком', async () => {
     global.fetch = async () => ({
       ok: true,
       json: async () => ({ items: [point(8, 'Точка')], total: 1, flooded: 0, where: 'Минске', bell_near_link: 'https://t.me/x' }),
@@ -87,9 +87,41 @@ describe('IceWinter: смена города', () => {
     assert.match(html, /<h2 class="w-title">Зимой в Минске<\/h2>/);
     assert.equal((html.match(/class="w-lead"/g) || []).length, 1);
     assert.ok(html.indexOf('data-w-view="list"') < html.indexOf('w-list'));
-    assert.ok(html.indexOf('w-list') < html.indexOf('w-bell'), 'колокольчик ниже карточек');
+    assert.ok(html.indexOf('w-bell') > -1 && html.indexOf('w-bell') < html.indexOf('w-list'), 'ждём заливку — подписка первой');
     hostEl()._click({ target: { closest: (sel) => (sel === '[data-w-view]' ? { getAttribute: () => 'map' } : null) } });
     assert.deepEqual(seen, ['map']);
+  });
+
+  it('залитые — карточками, подписка сразу после них, «Ждём заливку» — строками ниже', async () => {
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        items: [{ ...point(11, 'Залитый'), state: 'flooded' }, point(12, 'Ждёт'), { ...point(13, 'Закрытый'), state: 'closed' }],
+        total: 3, flooded: 1, bell_near_link: 'https://t.me/x',
+      }),
+    });
+    global.IceWinter.sync(ctx(11));
+    await tick(); await tick();
+    const html = hostEl().innerHTML;
+    const at = (s) => html.indexOf(s);
+    assert.ok(at('Можно кататься') < at('Залитый'));
+    assert.ok(at('Залитый') < at('w-bell') && at('w-bell') < at('Ждём заливку'), 'подписка между залитыми и ожидающими');
+    assert.ok(at('class="w-card') > -1 && at('class="w-card') < at('w-bell'));
+    assert.ok(at('class="w-row"') > at('Ждём заливку'));
+    assert.ok(at('w-row--quiet') > at('Закрыты или давно без отметок'));
+    assert.doesNotMatch(html, /w-thumb--type/, 'без фото — без заглушки');
+  });
+
+  it('подписка «рядом» уже есть — блока подписки нет', async () => {
+    global.fetch = async (url) => ({
+      ok: true,
+      json: async () => (/subscriptions/.test(url)
+        ? { items: [{ id: 1, kind: 'near' }] }
+        : { items: [point(14, 'Т')], total: 1, flooded: 0, bell_near_link: 'https://t.me/x' }),
+    });
+    global.IceWinter.sync(ctx(14));
+    await tick(); await tick(); await tick(); await tick();
+    assert.doesNotMatch(hostEl().innerHTML, /w-bell/);
   });
 
   it('без названия города в ответе заголовок — просто «Зимой»', async () => {

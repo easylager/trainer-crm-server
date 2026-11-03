@@ -232,6 +232,48 @@
     return { title: '', hint: '', bellFirst: false };
   }
 
+  /* Список делится по смыслу: где кататься сейчас, где ждём заливку, остальное — внизу и тише. */
+  var GROUPS = [
+    { key: 'now', title: 'Можно кататься' },
+    { key: 'wait', title: 'Ждём заливку' },
+    { key: 'off', title: 'Закрыты или давно без отметок' },
+  ];
+
+  function groupKey(point) {
+    var s = point && point.state;
+    if (s === 'flooded') return 'now';
+    if (s === 'stale' || s === 'closed') return 'off';
+    return 'wait';
+  }
+
+  /** Уже отсортированный список → непустые группы в порядке GROUPS; порядок внутри группы сохраняется. */
+  function listGroups(points) {
+    var by = { now: [], wait: [], off: [] };
+    (points || []).forEach(function (p) {
+      by[groupKey(p)].push(p);
+    });
+    return GROUPS.filter(function (g) {
+      return by[g.key].length > 0;
+    }).map(function (g) {
+      return { key: g.key, title: g.title, items: by[g.key] };
+    });
+  }
+
+  /**
+   * Где показать подписку «лёд рядом»: сразу после «Можно кататься» (её видно на первом-втором экране),
+   * а если залитых нет — над списком: ждать заливку и есть главный повод подписаться.
+   */
+  function bellSlot(groups) {
+    return groups && groups.length && groups[0].key === 'now' ? 'now' : 'top';
+  }
+
+  /** Подписка «рядом» уже есть: ответ GET /api/webapp/winter/subscriptions. */
+  function hasNearSub(items) {
+    return (items || []).some(function (s) {
+      return s && s.kind === 'near';
+    });
+  }
+
   /** U6: чип «Район» только там, где известно хотя бы два района с двумя точками и больше. */
   function districtList(points) {
     var count = {};
@@ -636,6 +678,10 @@
     applyFilters: applyFilters,
     sortNote: sortNote,
     mapPoints: mapPoints,
+    groupKey: groupKey,
+    listGroups: listGroups,
+    bellSlot: bellSlot,
+    hasNearSub: hasNearSub,
     emptyFilterText: emptyFilterText,
     QUESTIONS: QUESTIONS,
     reportInit: reportInit,
