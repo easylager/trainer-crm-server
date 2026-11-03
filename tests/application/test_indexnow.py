@@ -258,6 +258,7 @@ async def test_publisher_pings_only_on_change(monkeypatch):
         publish_timezone="Europe/Minsk",
         publish_horizon_days=14,
         arena_id=7,
+        replace_dates=None,
     )
     day = _TODAY + timedelta(days=1)
     draft = _draft(7, day, time(10, 0))
